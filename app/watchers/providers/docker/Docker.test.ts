@@ -263,6 +263,7 @@ describe('Docker Watcher', () => {
     event.emitWatcherStop.mockImplementation(() => {});
     event.emitContainerReport.mockImplementation(() => {});
     event.emitContainerReports.mockImplementation(() => {});
+    event.registerContainerUpdateApplied.mockReturnValue(vi.fn());
 
     // Setup tag mock
     mockTag.parse.mockReturnValue({ major: 1, minor: 0, patch: 0 });
@@ -716,6 +717,89 @@ describe('Docker Watcher', () => {
       docker.listenDockerEventsTimeout = undefined;
 
       await expect(docker.deregisterComponent()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('maybeFastResyncAfterUpdate (dd:container-update-applied)', () => {
+    test('init() registers containerUpdateApplied subscriber', async () => {
+      await docker.register('watcher', 'docker', 'test', {});
+      await docker.init();
+      expect(event.registerContainerUpdateApplied).toHaveBeenCalledWith(
+        expect.any(Function),
+        expect.objectContaining({ order: 0 }),
+      );
+    });
+
+    test('deregisterComponent() calls the unsubscribe function', async () => {
+      const unsubscribe = vi.fn();
+      event.registerContainerUpdateApplied.mockReturnValue(unsubscribe);
+      await docker.register('watcher', 'docker', 'test', {});
+      await docker.init();
+      await docker.deregisterComponent();
+      expect(unsubscribe).toHaveBeenCalled();
+      expect(docker.unregisterContainerUpdateApplied).toBeUndefined();
+    });
+
+    test('callback triggers watchContainer when container full-name matches', async () => {
+      await docker.register('watcher', 'docker', 'test', {});
+      await docker.init();
+
+      const matchedContainer = { name: 'myapp', watcher: 'test' };
+      storeContainer.getContainers.mockReturnValue([matchedContainer]);
+      event.getContainerUpdateAppliedEventContainerName.mockReturnValue('test_myapp');
+
+      docker.watchContainer = vi.fn().mockResolvedValue({});
+
+      const registeredCallback = event.registerContainerUpdateApplied.mock.calls[0][0];
+      await registeredCallback('test_myapp');
+
+      expect(docker.watchContainer).toHaveBeenCalledWith(matchedContainer, {
+        emitBatchEvent: false,
+      });
+    });
+
+    test('callback does not call watchContainer when no matching container found', async () => {
+      await docker.register('watcher', 'docker', 'test', {});
+      await docker.init();
+
+      storeContainer.getContainers.mockReturnValue([{ name: 'other', watcher: 'test' }]);
+      event.getContainerUpdateAppliedEventContainerName.mockReturnValue('test_myapp');
+
+      docker.watchContainer = vi.fn().mockResolvedValue({});
+
+      const registeredCallback = event.registerContainerUpdateApplied.mock.calls[0][0];
+      await registeredCallback('test_myapp');
+
+      expect(docker.watchContainer).not.toHaveBeenCalled();
+    });
+
+    test('callback does not call watchContainer when payload has no container name', async () => {
+      await docker.register('watcher', 'docker', 'test', {});
+      await docker.init();
+
+      storeContainer.getContainers.mockReturnValue([{ name: 'myapp', watcher: 'test' }]);
+      event.getContainerUpdateAppliedEventContainerName.mockReturnValue(undefined);
+
+      docker.watchContainer = vi.fn().mockResolvedValue({});
+
+      const registeredCallback = event.registerContainerUpdateApplied.mock.calls[0][0];
+      await registeredCallback({});
+
+      expect(docker.watchContainer).not.toHaveBeenCalled();
+    });
+
+    test('callback errors are swallowed and do not propagate', async () => {
+      await docker.register('watcher', 'docker', 'test', {});
+      await docker.init();
+
+      const matchedContainer = { name: 'myapp', watcher: 'test' };
+      storeContainer.getContainers.mockReturnValue([matchedContainer]);
+      event.getContainerUpdateAppliedEventContainerName.mockReturnValue('test_myapp');
+
+      docker.watchContainer = vi.fn().mockRejectedValue(new Error('registry timeout'));
+
+      const registeredCallback = event.registerContainerUpdateApplied.mock.calls[0][0];
+      await expect(registeredCallback('test_myapp')).resolves.toBeUndefined();
     });
   });
 

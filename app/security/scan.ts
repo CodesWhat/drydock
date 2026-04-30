@@ -286,6 +286,8 @@ function buildTrivyArgs(
     toTrivyFormat(outputFormat),
     '--timeout',
     toTrivyTimeout(configuration.trivy.timeout),
+    '--image-src',
+    'docker',
   ];
 
   if (outputFormat === 'json') {

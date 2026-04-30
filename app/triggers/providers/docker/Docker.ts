@@ -14,11 +14,14 @@ import { fullName } from '../../../model/container.js';
 import { getAuditCounter } from '../../../prometheus/audit.js';
 import { getRollbackCounter } from '../../../prometheus/rollback.js';
 import { getState } from '../../../registry/index.js';
+import { getTrivyDatabaseStatus } from '../../../security/runtime.js';
 import {
   generateImageSbom,
   scanImageForVulnerabilities,
+  scanImageWithDedup,
   verifyImageSignature,
 } from '../../../security/scan.js';
+import { getSchedulerScanIntervalMs } from '../../../security/scheduler.js';
 import * as auditStore from '../../../store/audit.js';
 import * as backupStore from '../../../store/backup.js';
 import * as storeContainer from '../../../store/container.js';
@@ -172,6 +175,8 @@ const ROLLBACK_MONITOR_ORCHESTRATOR_METHODS = ['getCurrentContainer', 'inspectCo
 const UPDATE_LIFECYCLE_ORCHESTRATOR_METHODS = [
   'createTriggerContext',
   'maybeScanAndGateUpdate',
+  'verifySignaturePreUpdate',
+  'scanAndGatePostPull',
   'buildHookConfig',
   'recordHookConfigurationAudit',
   'runPreUpdateHook',
@@ -365,6 +370,8 @@ class Docker<
       },
       security: {
         maybeScanAndGateUpdate: updateLifecycleCallbacks.maybeScanAndGateUpdate,
+        verifySignaturePreUpdate: updateLifecycleCallbacks.verifySignaturePreUpdate,
+        scanAndGatePostPull: updateLifecycleCallbacks.scanAndGatePostPull,
       },
       hooks: {
         buildHookConfig: updateLifecycleCallbacks.buildHookConfig,
@@ -383,6 +390,9 @@ class Docker<
       runtimeUpdate: {
         runPreRuntimeUpdateLifecycle: updateLifecycleCallbacks.runPreRuntimeUpdateLifecycle,
         performContainerUpdate: updateLifecycleCallbacks.performContainerUpdate,
+        setOperationPhase: (operationId: string, phase: 'scanning' | 'sbom-generating') => {
+          updateOperationStore.updateOperation(operationId, { phase });
+        },
       },
       postUpdate: {
         cleanupOldImages: updateLifecycleCallbacks.cleanupOldImages,
@@ -410,6 +420,19 @@ class Docker<
         cacheSecurityState,
         emitSecurityAlert,
         fullName,
+        scanImageWithDedup,
+        getTrivyDbUpdatedAt: async () => {
+          const status = await getTrivyDatabaseStatus();
+          return status?.updatedAt;
+        },
+        getScanIntervalMs: () => getSchedulerScanIntervalMs(),
+        pruneImage: async (image, dockerApi) => {
+          try {
+            await dockerApi?.getImage(image).remove();
+          } catch {
+            /* swallow */
+          }
+        },
         ...pickOrchestratorCallbacks(this, SECURITY_GATE_ORCHESTRATOR_METHODS),
       });
     }
@@ -1208,6 +1231,14 @@ class Docker<
     await this.getSecurityGate().maybeScanAndGateUpdate(context, container, logContainer);
   }
 
+  async verifySignaturePreUpdate(context, container, logContainer) {
+    await this.getSecurityGate().verifySignaturePreUpdate(context, container, logContainer);
+  }
+
+  async scanAndGatePostPull(context, container, logContainer, options?) {
+    await this.getSecurityGate().scanAndGatePostPull(context, container, logContainer, options);
+  }
+
   async createTriggerContext(container, logContainer, _runtimeContext?: unknown) {
     const watcher = this.getWatcher(container);
     const { dockerApi } = watcher;
@@ -1270,11 +1301,29 @@ class Docker<
     this.insertContainerImageBackup(context, container);
   }
 
-  async executeContainerUpdate(context, container, logContainer, runtimeContext?: unknown) {
+  async executeContainerUpdate(
+    context,
+    container,
+    logContainer,
+    runtimeContext?: unknown,
+    postPullHook?: (operationId: string) => Promise<void>,
+  ) {
     if (runtimeContext === undefined) {
-      return this.containerUpdateExecutor.execute(context, container, logContainer);
+      return this.containerUpdateExecutor.execute(
+        context,
+        container,
+        logContainer,
+        undefined,
+        postPullHook,
+      );
     }
-    return this.containerUpdateExecutor.execute(context, container, logContainer, runtimeContext);
+    return this.containerUpdateExecutor.execute(
+      context,
+      container,
+      logContainer,
+      runtimeContext,
+      postPullHook,
+    );
   }
 
   /**
@@ -1282,11 +1331,29 @@ class Docker<
    * Subclasses (e.g. Dockercompose) override this to use their own runtime
    * mechanics while reusing the shared lifecycle orchestrator.
    */
-  async performContainerUpdate(context, container, logContainer, runtimeContext?: unknown) {
+  async performContainerUpdate(
+    context,
+    container,
+    logContainer,
+    runtimeContext?: unknown,
+    postPullHook?: (operationId: string) => Promise<void>,
+  ) {
     const updated =
       runtimeContext === undefined
-        ? await this.executeContainerUpdate(context, container, logContainer)
-        : await this.executeContainerUpdate(context, container, logContainer, runtimeContext);
+        ? await this.executeContainerUpdate(
+            context,
+            container,
+            logContainer,
+            undefined,
+            postPullHook,
+          )
+        : await this.executeContainerUpdate(
+            context,
+            container,
+            logContainer,
+            runtimeContext,
+            postPullHook,
+          );
     /* v8 ignore next -- V8 mis-maps an import destructuring branch to this line */
     if (updated && container.updateKind?.kind === 'tag') {
       await syncComposeFileTag({

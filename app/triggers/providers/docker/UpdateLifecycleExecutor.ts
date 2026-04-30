@@ -40,6 +40,17 @@ type UpdateLifecycleExecutorCallbacks = {
     container: UpdateLifecycleContainer,
     logger: UpdateLifecycleOperationLogger,
   ) => Promise<void>;
+  verifySignaturePreUpdate: (
+    context: UpdateLifecycleContext,
+    container: UpdateLifecycleContainer,
+    logger: UpdateLifecycleOperationLogger,
+  ) => Promise<void>;
+  scanAndGatePostPull: (
+    context: UpdateLifecycleContext,
+    container: UpdateLifecycleContainer,
+    logger: UpdateLifecycleOperationLogger,
+    options?: { setPhase?: (phase: 'scanning' | 'sbom-generating') => void },
+  ) => Promise<void>;
   buildHookConfig: (container: UpdateLifecycleContainer) => Record<string, unknown>;
   recordHookConfigurationAudit: (
     container: UpdateLifecycleContainer,
@@ -82,6 +93,7 @@ type UpdateLifecycleExecutorCallbacks = {
     container: UpdateLifecycleContainer,
     logger: UpdateLifecycleOperationLogger,
     runtimeContext?: unknown,
+    postPullHook?: (operationId: string) => Promise<void>,
   ) => Promise<boolean>;
   runPostUpdateHook: (
     container: UpdateLifecycleContainer,
@@ -116,7 +128,7 @@ type UpdateLifecycleContextServices = Pick<
 
 type UpdateLifecycleSecurityServices = Pick<
   UpdateLifecycleExecutorCallbacks,
-  'maybeScanAndGateUpdate'
+  'maybeScanAndGateUpdate' | 'verifySignaturePreUpdate' | 'scanAndGatePostPull'
 >;
 
 type UpdateLifecycleHookServices = Pick<
@@ -137,7 +149,9 @@ type UpdateLifecycleSelfUpdateServices = Pick<
 type UpdateLifecycleRuntimeUpdateServices = Pick<
   UpdateLifecycleExecutorCallbacks,
   'runPreRuntimeUpdateLifecycle' | 'performContainerUpdate'
->;
+> & {
+  setOperationPhase?: (operationId: string, phase: 'scanning' | 'sbom-generating') => void;
+};
 
 type UpdateLifecyclePostUpdateServices = Pick<
   UpdateLifecycleExecutorCallbacks,
@@ -172,7 +186,7 @@ type UpdateLifecycleExecutorConstructorOptions = {
 
 const REQUIRED_UPDATE_LIFECYCLE_EXECUTOR_DEPENDENCY_KEYS = {
   context: ['getContainerFullName', 'createTriggerContext'],
-  security: ['maybeScanAndGateUpdate'],
+  security: ['maybeScanAndGateUpdate', 'verifySignaturePreUpdate', 'scanAndGatePostPull'],
   hooks: [
     'buildHookConfig',
     'recordHookConfigurationAudit',
@@ -270,7 +284,7 @@ class UpdateLifecycleExecutor {
         return;
       }
 
-      await this.security.maybeScanAndGateUpdate(context, container, containerLogger);
+      await this.security.verifySignaturePreUpdate(context, container, containerLogger);
 
       const hookConfig = this.hooks.buildHookConfig(container);
       this.hooks.recordHookConfigurationAudit(container, hookConfig);
@@ -320,6 +334,14 @@ class UpdateLifecycleExecutor {
         }
       }
 
+      const postPullHook = async (operationId: string) => {
+        await this.security.scanAndGatePostPull(context, container, containerLogger, {
+          setPhase: (phase) => {
+            this.runtimeUpdate.setOperationPhase?.(operationId, phase);
+          },
+        });
+      };
+
       await this.runtimeUpdate.runPreRuntimeUpdateLifecycle(
         context,
         container,
@@ -331,6 +353,7 @@ class UpdateLifecycleExecutor {
         container,
         containerLogger,
         runtimeContext,
+        postPullHook,
       );
       if (!updated) {
         return;

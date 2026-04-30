@@ -30,6 +30,8 @@ function createHarness(overrides = {}) {
     getContainerFullName: vi.fn((container) => `docker.local_${container.name}`),
     createTriggerContext: vi.fn().mockResolvedValue(createContext()),
     maybeScanAndGateUpdate: vi.fn().mockResolvedValue(undefined),
+    verifySignaturePreUpdate: vi.fn().mockResolvedValue(undefined),
+    scanAndGatePostPull: vi.fn().mockResolvedValue(undefined),
     buildHookConfig: vi.fn(() => ({ hookPre: 'pre', hookPost: 'post' })),
     recordHookConfigurationAudit: vi.fn(),
     runPreUpdateHook: vi.fn().mockResolvedValue(undefined),
@@ -62,6 +64,8 @@ function createHarness(overrides = {}) {
     },
     security: {
       maybeScanAndGateUpdate: deps.maybeScanAndGateUpdate,
+      verifySignaturePreUpdate: deps.verifySignaturePreUpdate,
+      scanAndGatePostPull: deps.scanAndGatePostPull,
     },
     hooks: {
       buildHookConfig: deps.buildHookConfig,
@@ -116,6 +120,8 @@ describe('UpdateLifecycleExecutor', () => {
       },
       security: {
         maybeScanAndGateUpdate: vi.fn().mockResolvedValue(undefined),
+        verifySignaturePreUpdate: vi.fn().mockResolvedValue(undefined),
+        scanAndGatePostPull: vi.fn().mockResolvedValue(undefined),
       },
       hooks: {
         buildHookConfig: vi.fn(() => ({})),
@@ -164,6 +170,8 @@ describe('UpdateLifecycleExecutor', () => {
       },
       security: {
         maybeScanAndGateUpdate: vi.fn(),
+        verifySignaturePreUpdate: vi.fn(),
+        scanAndGatePostPull: vi.fn(),
       },
       hooks: {
         buildHookConfig: vi.fn(() => ({})),
@@ -206,6 +214,8 @@ describe('UpdateLifecycleExecutor', () => {
       },
       security: {
         maybeScanAndGateUpdate: vi.fn().mockResolvedValue(undefined),
+        verifySignaturePreUpdate: vi.fn().mockResolvedValue(undefined),
+        scanAndGatePostPull: vi.fn().mockResolvedValue(undefined),
       },
       hooks: {
         buildHookConfig: vi.fn(() => ({})),
@@ -260,6 +270,8 @@ describe('UpdateLifecycleExecutor', () => {
       },
       security: {
         maybeScanAndGateUpdate: vi.fn().mockResolvedValue(undefined),
+        verifySignaturePreUpdate: vi.fn().mockResolvedValue(undefined),
+        scanAndGatePostPull: vi.fn().mockResolvedValue(undefined),
       },
       hooks: {
         buildHookConfig: vi.fn(() => ({})),
@@ -379,7 +391,7 @@ describe('UpdateLifecycleExecutor', () => {
 
     await harness.executor.run(container, { runtime: true });
 
-    expect(harness.maybeScanAndGateUpdate).toHaveBeenCalledWith(
+    expect(harness.verifySignaturePreUpdate).toHaveBeenCalledWith(
       context,
       container,
       expect.anything(),
@@ -397,6 +409,7 @@ describe('UpdateLifecycleExecutor', () => {
       container,
       expect.anything(),
       { runtime: true },
+      expect.any(Function),
     );
     expect(harness.runPostUpdateHook).toHaveBeenCalledWith(
       container,
@@ -449,7 +462,7 @@ describe('UpdateLifecycleExecutor', () => {
   test('emits fallback update-failed and rethrows when lifecycle processing throws without operation id', async () => {
     const failure = new Error('scan failed hard');
     const harness = createHarness({
-      maybeScanAndGateUpdate: vi.fn().mockRejectedValue(failure),
+      verifySignaturePreUpdate: vi.fn().mockRejectedValue(failure),
     });
 
     await expect(harness.executor.run(createContainer(), { runtime: true })).rejects.toThrow(
@@ -466,7 +479,7 @@ describe('UpdateLifecycleExecutor', () => {
   test('rethrows original lifecycle error when failure-path backup pruning throws', async () => {
     const failure = new Error('scan failed hard');
     const harness = createHarness({
-      maybeScanAndGateUpdate: vi.fn().mockRejectedValue(failure),
+      verifySignaturePreUpdate: vi.fn().mockRejectedValue(failure),
       pruneOldBackups: vi.fn(() => {
         throw new Error('prune blew up');
       }),
@@ -486,7 +499,7 @@ describe('UpdateLifecycleExecutor', () => {
     const failure = new Error('scan failed hard');
     const warn = vi.fn();
     const harness = createHarness({
-      maybeScanAndGateUpdate: vi.fn().mockRejectedValue(failure),
+      verifySignaturePreUpdate: vi.fn().mockRejectedValue(failure),
       pruneOldBackups: vi.fn(() => {
         throw 503;
       }),
@@ -503,7 +516,7 @@ describe('UpdateLifecycleExecutor', () => {
 
   test('does not directly emit update-failed events when operation id owns the failed commit', async () => {
     const harness = createHarness({
-      maybeScanAndGateUpdate: vi.fn().mockRejectedValue(new Error('scan failed hard')),
+      verifySignaturePreUpdate: vi.fn().mockRejectedValue(new Error('scan failed hard')),
     });
 
     await expect(harness.executor.run(createContainer(), { operationId: 'op-1' })).rejects.toThrow(
@@ -514,7 +527,7 @@ describe('UpdateLifecycleExecutor', () => {
 
   test('stringifies non-Error failures when emitting fallback update-failed events', async () => {
     const harness = createHarness({
-      maybeScanAndGateUpdate: vi.fn().mockRejectedValue(503),
+      verifySignaturePreUpdate: vi.fn().mockRejectedValue(503),
     });
 
     await expect(harness.executor.run(createContainer(), { runtime: true })).rejects.toBe(503);
@@ -607,5 +620,52 @@ describe('UpdateLifecycleExecutor', () => {
         'Failed to mark self-update operation op-self-update-mark-noe as failed: 404',
       ),
     );
+  });
+
+  test('verifySignaturePreUpdate runs before hooks at the old maybeScanAndGateUpdate position', async () => {
+    const callOrder: string[] = [];
+    const harness = createHarness({
+      verifySignaturePreUpdate: vi.fn().mockImplementation(async () => {
+        callOrder.push('verifySignaturePreUpdate');
+      }),
+      runPreUpdateHook: vi.fn().mockImplementation(async () => {
+        callOrder.push('runPreUpdateHook');
+      }),
+      performContainerUpdate: vi.fn().mockImplementation(async () => {
+        callOrder.push('performContainerUpdate');
+        return true;
+      }),
+    });
+
+    await harness.executor.run(createContainer());
+
+    const verifyIdx = callOrder.indexOf('verifySignaturePreUpdate');
+    const hookIdx = callOrder.indexOf('runPreUpdateHook');
+    const updateIdx = callOrder.indexOf('performContainerUpdate');
+    expect(verifyIdx).toBeGreaterThanOrEqual(0);
+    expect(hookIdx).toBeGreaterThan(verifyIdx);
+    expect(updateIdx).toBeGreaterThan(hookIdx);
+  });
+
+  test('scanAndGatePostPull is passed through postPullHook to performContainerUpdate', async () => {
+    let capturedPostPullHook: ((operationId: string) => Promise<void>) | undefined;
+    const scanAndGatePostPull = vi.fn().mockResolvedValue(undefined);
+    const harness = createHarness({
+      scanAndGatePostPull,
+      performContainerUpdate: vi
+        .fn()
+        .mockImplementation(
+          async (_context, _container, _logger, _runtimeContext, postPullHook) => {
+            capturedPostPullHook = postPullHook;
+            return true;
+          },
+        ),
+    });
+
+    await harness.executor.run(createContainer());
+
+    expect(capturedPostPullHook).toBeDefined();
+    await capturedPostPullHook?.('op-123');
+    expect(scanAndGatePostPull).toHaveBeenCalledTimes(1);
   });
 });

@@ -1741,7 +1741,7 @@ describe('ContainersGroupedViews', () => {
     expect(updatingWrapper.classes()).toContain('opacity-30');
     const updatingOverlay = cards[0]!.find('.absolute.inset-0');
     expect(updatingOverlay.exists()).toBe(true);
-    expect(updatingOverlay.text()).toBe('Updating');
+    expect(updatingOverlay.text()).toBe('Pulling…');
 
     const queuedWrapper = cards[1]!.find('.transition-opacity');
     expect(queuedWrapper.classes()).toContain('opacity-30');
@@ -2147,5 +2147,66 @@ describe('ContainersGroupedViews', () => {
     expect(useUpdateBatches().getBatch('stack-a')).toBeUndefined();
 
     vi.useRealTimers();
+  });
+
+  describe('phase-aware in-progress badge labels', () => {
+    function mountWithPhase(phase: string | undefined) {
+      const container = makeContainer({
+        id: 'c-phase-1',
+        name: 'alpha',
+        newTag: '2.0.0',
+        updateKind: 'major',
+        bouncer: 'safe',
+        status: 'running',
+        updateOperation: {
+          id: 'op-1',
+          status: 'in-progress',
+          phase: phase as any,
+          updatedAt: '2026-04-01T12:00:00.000Z',
+        },
+      });
+
+      const { context, refs } = makeContext();
+      refs.filteredContainers.value = [container];
+      refs.displayContainers.value = [container];
+      refs.renderGroups.value = [
+        {
+          key: '__flat__',
+          name: null,
+          containers: [container],
+          containerCount: 1,
+          updatesAvailable: 1,
+          updatableCount: 1,
+        },
+      ];
+      refs.containerViewMode.value = 'table';
+      mocked.context = context;
+      return mountSubject();
+    }
+
+    it('shows "Scanning…" badge for phase scanning', () => {
+      const wrapper = mountWithPhase('scanning');
+      expect(rowByName(wrapper, 'alpha').text()).toContain('Scanning…');
+    });
+
+    it('shows "Pulling…" badge for phase pulling', () => {
+      const wrapper = mountWithPhase('pulling');
+      expect(rowByName(wrapper, 'alpha').text()).toContain('Pulling…');
+    });
+
+    it('shows "Verifying signature…" badge for phase signature-verifying', () => {
+      const wrapper = mountWithPhase('signature-verifying');
+      expect(rowByName(wrapper, 'alpha').text()).toContain('Verifying signature…');
+    });
+
+    it('shows "Generating SBOM…" badge for phase sbom-generating', () => {
+      const wrapper = mountWithPhase('sbom-generating');
+      expect(rowByName(wrapper, 'alpha').text()).toContain('Generating SBOM…');
+    });
+
+    it('shows "Updating" badge for an unknown phase', () => {
+      const wrapper = mountWithPhase('some-unknown-phase');
+      expect(rowByName(wrapper, 'alpha').text()).toContain('Updating');
+    });
   });
 });

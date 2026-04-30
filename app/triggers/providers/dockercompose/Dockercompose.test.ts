@@ -265,7 +265,8 @@ function spyOnProcessComposeHelpers(
   const hooksSpy = vi.spyOn(triggerInstance, 'runServicePostStartHooks').mockResolvedValue();
   const backupSpy = vi.spyOn(triggerInstance, 'backup').mockResolvedValue();
   // Lifecycle methods inherited from Docker trigger
-  const maybeScanSpy = vi.spyOn(triggerInstance, 'maybeScanAndGateUpdate').mockResolvedValue();
+  const verifySigSpy = vi.spyOn(triggerInstance, 'verifySignaturePreUpdate').mockResolvedValue();
+  const scanAndGateSpy = vi.spyOn(triggerInstance, 'scanAndGatePostPull').mockResolvedValue();
   const preHookSpy = vi.spyOn(triggerInstance, 'runPreUpdateHook').mockResolvedValue();
   const postHookSpy = vi.spyOn(triggerInstance, 'runPostUpdateHook').mockResolvedValue();
   const pruneImagesSpy = vi.spyOn(triggerInstance, 'pruneImages').mockResolvedValue();
@@ -279,7 +280,8 @@ function spyOnProcessComposeHelpers(
     composeUpdateSpy,
     hooksSpy,
     backupSpy,
-    maybeScanSpy,
+    verifySigSpy,
+    scanAndGateSpy,
     preHookSpy,
     postHookSpy,
     pruneImagesSpy,
@@ -4040,7 +4042,8 @@ describe('Dockercompose Trigger', () => {
     const runContainerUpdateLifecycleSpy = vi
       .spyOn(trigger, 'runContainerUpdateLifecycle')
       .mockResolvedValue();
-    vi.spyOn(trigger, 'maybeScanAndGateUpdate').mockResolvedValue();
+    vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockResolvedValue();
     vi.spyOn(trigger, 'runPreUpdateHook').mockResolvedValue();
     vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();
     vi.spyOn(trigger, 'cleanupOldImages').mockResolvedValue();
@@ -4168,7 +4171,8 @@ describe('Dockercompose Trigger', () => {
       .spyOn(trigger, 'updateContainerWithCompose')
       .mockResolvedValue();
     vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
-    vi.spyOn(trigger, 'maybeScanAndGateUpdate').mockResolvedValue();
+    vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockResolvedValue();
     vi.spyOn(trigger, 'runPreUpdateHook').mockResolvedValue();
     vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();
     vi.spyOn(trigger, 'cleanupOldImages').mockResolvedValue();
@@ -4327,13 +4331,13 @@ describe('Dockercompose Trigger', () => {
     vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
       makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
     );
-    const { maybeScanSpy, preHookSpy, postHookSpy, composeUpdateSpy, rollbackMonitorSpy } =
+    const { scanAndGateSpy, preHookSpy, postHookSpy, composeUpdateSpy, rollbackMonitorSpy } =
       spyOnProcessComposeHelpers(trigger);
 
     await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
 
-    // Security scanning
-    expect(maybeScanSpy).toHaveBeenCalledTimes(1);
+    // Security scanning (post-pull gate)
+    expect(scanAndGateSpy).toHaveBeenCalledTimes(1);
     // Pre/post update hooks
     expect(preHookSpy).toHaveBeenCalledTimes(1);
     expect(postHookSpy).toHaveBeenCalledTimes(1);
@@ -4371,13 +4375,13 @@ describe('Dockercompose Trigger', () => {
     vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
       makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
     );
-    const { maybeScanSpy, preHookSpy, postHookSpy, rollbackMonitorSpy } =
+    const { scanAndGateSpy, preHookSpy, postHookSpy, rollbackMonitorSpy } =
       spyOnProcessComposeHelpers(trigger);
 
     await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
 
     // Security scanning runs even in dryrun (matches Docker behavior)
-    expect(maybeScanSpy).toHaveBeenCalledTimes(1);
+    expect(scanAndGateSpy).toHaveBeenCalledTimes(1);
     // Pre-update hook still runs (can abort before dryrun pull)
     expect(preHookSpy).toHaveBeenCalledTimes(1);
     // Post-update hook skipped (performContainerUpdate returns false in dryrun)
@@ -5534,7 +5538,8 @@ describe('Dockercompose Trigger', () => {
       .spyOn(trigger, 'updateContainerWithCompose')
       .mockResolvedValue();
     vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
-    vi.spyOn(trigger, 'maybeScanAndGateUpdate').mockResolvedValue();
+    vi.spyOn(trigger, 'verifySignaturePreUpdate').mockResolvedValue();
+    vi.spyOn(trigger, 'scanAndGatePostPull').mockResolvedValue();
     vi.spyOn(trigger, 'runPreUpdateHook').mockResolvedValue();
     vi.spyOn(trigger, 'runPostUpdateHook').mockResolvedValue();
     vi.spyOn(trigger, 'cleanupOldImages').mockResolvedValue();

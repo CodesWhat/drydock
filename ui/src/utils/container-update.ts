@@ -131,6 +131,37 @@ export function shouldRenderStandaloneQueuedUpdateAsUpdating(args: {
   return headId === args.targetId;
 }
 
+export type UpdateInProgressPhaseLabelKey =
+  | 'verifyingSignature'
+  | 'pulling'
+  | 'scanning'
+  | 'generatingSbom'
+  | 'updating'
+  | 'healthChecking'
+  | 'rollingBack';
+
+export function getUpdateInProgressPhaseLabelKey(
+  phase: string | undefined,
+): UpdateInProgressPhaseLabelKey {
+  switch (phase) {
+    case 'signature-verifying':
+      return 'verifyingSignature';
+    case 'pulling':
+      return 'pulling';
+    case 'scanning':
+      return 'scanning';
+    case 'sbom-generating':
+      return 'generatingSbom';
+    case 'health-gate':
+      return 'healthChecking';
+    case 'rollback-started':
+    case 'rollback-deferred':
+      return 'rollingBack';
+    default:
+      return 'updating';
+  }
+}
+
 export function isStaleContainerUpdateError(error: unknown): boolean {
   return isNoUpdateAvailableError(error);
 }

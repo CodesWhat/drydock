@@ -1267,7 +1267,8 @@ test('trigger should block update when security scan is blocked', async () => {
   );
 
   expect(mockScanImageForVulnerabilities).toHaveBeenCalled();
-  expect(executeContainerUpdateSpy).not.toHaveBeenCalled();
+  // Scan now runs inside executeContainerUpdate (post-pull hook), so the executor IS entered
+  expect(executeContainerUpdateSpy).toHaveBeenCalled();
 });
 
 test('trigger should block update when security scan errors', async () => {
@@ -3814,7 +3815,7 @@ describe('extracted lifecycle delegation', () => {
     try {
       const result = await docker.executeContainerUpdate(context, container, logContainer);
 
-      expect(execute).toHaveBeenCalledWith(context, container, logContainer);
+      expect(execute).toHaveBeenCalledWith(context, container, logContainer, undefined, undefined);
       expect(result).toBe('delegated-container-update');
     } finally {
       docker.containerUpdateExecutor = originalContainerUpdateExecutor;
@@ -3838,7 +3839,13 @@ describe('extracted lifecycle delegation', () => {
         runtimeContext,
       );
 
-      expect(execute).toHaveBeenCalledWith(context, container, logContainer, runtimeContext);
+      expect(execute).toHaveBeenCalledWith(
+        context,
+        container,
+        logContainer,
+        runtimeContext,
+        undefined,
+      );
       expect(result).toBe('delegated-with-runtime');
     } finally {
       docker.containerUpdateExecutor = originalContainerUpdateExecutor;
@@ -4668,7 +4675,13 @@ describe('performContainerUpdate compose file sync', () => {
 
     await docker.performContainerUpdate(context, container, logContainer, runtimeContext);
 
-    expect(executeUpdateSpy).toHaveBeenCalledWith(context, container, logContainer, runtimeContext);
+    expect(executeUpdateSpy).toHaveBeenCalledWith(
+      context,
+      container,
+      logContainer,
+      runtimeContext,
+      undefined,
+    );
     expect(mockSyncComposeFileTag).toHaveBeenCalledWith({
       labels: context.currentContainerSpec.Config.Labels,
       newImage: 'myapp:v3',
@@ -4699,7 +4712,13 @@ describe('performContainerUpdate compose file sync', () => {
     );
 
     expect(result).toBe(true);
-    expect(executeUpdateSpy).toHaveBeenCalledWith(context, container, logContainer, runtimeContext);
+    expect(executeUpdateSpy).toHaveBeenCalledWith(
+      context,
+      container,
+      logContainer,
+      runtimeContext,
+      undefined,
+    );
     expect(mockSyncComposeFileTag).not.toHaveBeenCalled();
 
     executeUpdateSpy.mockRestore();
@@ -4753,7 +4772,13 @@ describe('performContainerUpdate compose file sync', () => {
     );
 
     expect(result).toBe(true);
-    expect(executeUpdateSpy).toHaveBeenCalledWith(context, container, logContainer, runtimeContext);
+    expect(executeUpdateSpy).toHaveBeenCalledWith(
+      context,
+      container,
+      logContainer,
+      runtimeContext,
+      undefined,
+    );
     expect(mockSyncComposeFileTag).not.toHaveBeenCalled();
 
     executeUpdateSpy.mockRestore();
@@ -4812,7 +4837,13 @@ describe('performContainerUpdate compose file sync', () => {
     );
 
     expect(result).toBe(false);
-    expect(executeUpdateSpy).toHaveBeenCalledWith(context, container, logContainer, runtimeContext);
+    expect(executeUpdateSpy).toHaveBeenCalledWith(
+      context,
+      container,
+      logContainer,
+      runtimeContext,
+      undefined,
+    );
     expect(mockSyncComposeFileTag).not.toHaveBeenCalled();
 
     executeUpdateSpy.mockRestore();

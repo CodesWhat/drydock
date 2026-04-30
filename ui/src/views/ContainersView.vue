@@ -68,6 +68,9 @@ const {
 } = useOperationDisplayHold();
 const toast = useToast();
 const completionToastTimers = new Set<ReturnType<typeof setTimeout>>();
+// Tracks operationIds for which onTerminalEvent already emitted a failure/cancellation toast,
+// so handleSseUpdateFailed does not fire a duplicate for the same tracked op.
+const terminalToastFiredForOp = new Set<string>();
 
 function scheduleCompletionToast(callback: () => void) {
   const timer = setTimeout(() => {
@@ -1337,12 +1340,35 @@ function applyOperationPatch(event: Event) {
     },
     // Terminal operation SSEs can race ahead of the container-list refresh that
     // renames the row post-recreate, so still release the hold even when the row
-    // has already fallen out of containers.value. Completion toasts are emitted
-    // only from dd:update-applied / dd:update-failed.
-    onTerminalEvent: ({ container }) => {
+    // has already fallen out of containers.value.
+    onTerminalEvent: ({ container, status, name, operationId }) => {
       if (container) {
         (container as Container).updateOperation = undefined;
       }
+      if (status === 'failed') {
+        if (operationId) {
+          terminalToastFiredForOp.add(operationId);
+        }
+        scheduleCompletionToast(() =>
+          toast.error(t('containersView.toast.updateFailed', { name })),
+        );
+      } else if (status === 'rolled-back') {
+        const isCancelled =
+          parsed.rollbackReason === 'cancelled' || parsed.lastError === 'Cancelled by operator';
+        if (operationId) {
+          terminalToastFiredForOp.add(operationId);
+        }
+        if (isCancelled) {
+          scheduleCompletionToast(() =>
+            toast.success(t('containersView.toast.cancelled', { name })),
+          );
+        } else {
+          scheduleCompletionToast(() =>
+            toast.warning(t('containersView.toast.rolledBack', { name })),
+          );
+        }
+      }
+      // status === 'succeeded': no toast here; handleSseUpdateApplied owns non-batch success.
     },
   });
 }
@@ -1381,6 +1407,12 @@ function handleSseUpdateFailed(event: Event) {
     return;
   }
   if (!operationId) {
+    return;
+  }
+  // If onTerminalEvent already fired a toast for this op (via dd:sse-update-operation-changed),
+  // skip to avoid duplicates.
+  if (terminalToastFiredForOp.has(operationId)) {
+    terminalToastFiredForOp.delete(operationId);
     return;
   }
   scheduleCompletionToast(() =>

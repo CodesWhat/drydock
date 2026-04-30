@@ -1239,6 +1239,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     container,
     _logContainer,
     composeCtx?: ComposeUpdateLifecycleContext,
+    postPullHook?: (operationId: string) => Promise<void>,
   ) {
     const requiredComposeCtx = this.requireComposeUpdateContext(container, composeCtx);
     const runtimeContext = this.buildComposeRuntimeContext(context, requiredComposeCtx);
@@ -1252,6 +1253,14 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       container,
       composeUpdateOptions,
     );
+
+    // Invoke the post-pull security gate (scan + SBOM) after compose pulls the
+    // new image. Compose has no tracked operation row so we pass an empty id;
+    // setOperationPhase will silently no-op when no matching row exists.
+    if (postPullHook) {
+      await postPullHook('');
+    }
+
     await this.runServicePostStartHooks(
       container,
       requiredComposeCtx.service,

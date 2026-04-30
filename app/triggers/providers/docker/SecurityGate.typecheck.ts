@@ -7,6 +7,7 @@ const baseDependencies: NonNullable<ConstructorParameters<typeof SecurityGate>[0
     signature: { verify: false },
     sbom: { enabled: false, formats: ['spdx-json'] },
     gate: { mode: 'on' },
+    prune: { onBlock: true },
   }),
   verifyImageSignature: async () => ({
     verifier: 'cosign',
@@ -50,6 +51,17 @@ const baseDependencies: NonNullable<ConstructorParameters<typeof SecurityGate>[0
 };
 
 new SecurityGate(baseDependencies);
+
+// Optional scan-cache deps are accepted without error
+new SecurityGate({
+  ...baseDependencies,
+  scanImageWithDedup: async () => ({
+    scanResult: await baseDependencies.scanImageForVulnerabilities({} as never),
+    fromCache: false,
+  }),
+  getTrivyDbUpdatedAt: async () => undefined,
+  getScanIntervalMs: () => 86400000,
+});
 
 // @ts-expect-error core dependencies are required
 new SecurityGate({});

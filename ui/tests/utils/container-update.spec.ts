@@ -1,5 +1,6 @@
 import {
   formatContainersAlreadyUpToDateMessage,
+  getUpdateInProgressPhaseLabelKey,
   shouldRenderStandaloneQueuedUpdateAsUpdating,
 } from '@/utils/container-update';
 
@@ -318,5 +319,67 @@ describe('container-update utils', () => {
 
   it('uses the plural already-up-to-date label for multiple containers', () => {
     expect(formatContainersAlreadyUpToDateMessage(2)).toBe('2 containers already up to date');
+  });
+});
+
+describe('getUpdateInProgressPhaseLabelKey', () => {
+  it('maps signature-verifying to verifyingSignature', () => {
+    expect(getUpdateInProgressPhaseLabelKey('signature-verifying')).toBe('verifyingSignature');
+  });
+
+  it('maps pulling to pulling', () => {
+    expect(getUpdateInProgressPhaseLabelKey('pulling')).toBe('pulling');
+  });
+
+  it('maps scanning to scanning', () => {
+    expect(getUpdateInProgressPhaseLabelKey('scanning')).toBe('scanning');
+  });
+
+  it('maps sbom-generating to generatingSbom', () => {
+    expect(getUpdateInProgressPhaseLabelKey('sbom-generating')).toBe('generatingSbom');
+  });
+
+  it('maps health-gate to healthChecking', () => {
+    expect(getUpdateInProgressPhaseLabelKey('health-gate')).toBe('healthChecking');
+  });
+
+  it('maps rollback-started to rollingBack', () => {
+    expect(getUpdateInProgressPhaseLabelKey('rollback-started')).toBe('rollingBack');
+  });
+
+  it('maps rollback-deferred to rollingBack', () => {
+    expect(getUpdateInProgressPhaseLabelKey('rollback-deferred')).toBe('rollingBack');
+  });
+
+  it('maps prepare to updating (fallback)', () => {
+    expect(getUpdateInProgressPhaseLabelKey('prepare')).toBe('updating');
+  });
+
+  it('maps renamed to updating (fallback)', () => {
+    expect(getUpdateInProgressPhaseLabelKey('renamed')).toBe('updating');
+  });
+
+  it('maps new-created to updating (fallback)', () => {
+    expect(getUpdateInProgressPhaseLabelKey('new-created')).toBe('updating');
+  });
+
+  it('maps old-stopped to updating (fallback)', () => {
+    expect(getUpdateInProgressPhaseLabelKey('old-stopped')).toBe('updating');
+  });
+
+  it('maps new-started to updating (fallback)', () => {
+    expect(getUpdateInProgressPhaseLabelKey('new-started')).toBe('updating');
+  });
+
+  it('maps health-gate-passed to updating (fallback)', () => {
+    expect(getUpdateInProgressPhaseLabelKey('health-gate-passed')).toBe('updating');
+  });
+
+  it('maps undefined to updating (fallback)', () => {
+    expect(getUpdateInProgressPhaseLabelKey(undefined)).toBe('updating');
+  });
+
+  it('maps an unknown phase string to updating (fallback)', () => {
+    expect(getUpdateInProgressPhaseLabelKey('some-future-phase')).toBe('updating');
   });
 });

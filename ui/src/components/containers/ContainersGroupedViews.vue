@@ -8,6 +8,7 @@ import type { ContainersViewRenderGroup } from './containersViewTemplateContext'
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 import { useUpdateBatches } from '../../composables/useUpdateBatches';
 import { getContainerViewKey } from '../../utils/container-view-key';
+import { getUpdateInProgressPhaseLabelKey } from '../../utils/container-update';
 import { imageAge } from '../../utils/audit-helpers';
 import {
   getPrimaryHardBlocker,
@@ -196,6 +197,24 @@ function blockedUpdateTooltip(container: {
 function canCancelUpdate(c: { updateOperation?: { status?: string; id?: string } }): boolean {
   const status = c.updateOperation?.status;
   return (status === 'queued' || status === 'in-progress') && Boolean(c.updateOperation?.id);
+}
+
+const PHASE_LABEL_KEY_TO_I18N: Record<
+  ReturnType<typeof getUpdateInProgressPhaseLabelKey>,
+  string
+> = {
+  verifyingSignature: 'containerComponents.groupedViews.statusVerifyingSignature',
+  pulling: 'containerComponents.groupedViews.statusPulling',
+  scanning: 'containerComponents.groupedViews.statusScanningPhase',
+  generatingSbom: 'containerComponents.groupedViews.statusGeneratingSbom',
+  updating: 'containerComponents.groupedViews.statusUpdating',
+  healthChecking: 'containerComponents.groupedViews.statusHealthChecking',
+  rollingBack: 'containerComponents.groupedViews.statusRollingBack',
+};
+
+function getInProgressBadgeLabel(c: { updateOperation?: { phase?: string } }): string {
+  const labelKey = getUpdateInProgressPhaseLabelKey(c.updateOperation?.phase);
+  return t(PHASE_LABEL_KEY_TO_I18N[labelKey]);
 }
 
 function updateBtnState(c: {
@@ -515,7 +534,7 @@ onScopeDispose(() => {
                 :size="14"
                 :class="isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? '' : 'dd-spin'"
               />
-              <span>{{ isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? t('containerComponents.groupedViews.statusQueued') : isContainerScanning(c) && !isContainerUpdating(c) ? t('containerComponents.groupedViews.statusScanning') : t('containerComponents.groupedViews.statusUpdating') }}</span>
+              <span>{{ isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? t('containerComponents.groupedViews.statusQueued') : isContainerScanning(c) && !isContainerUpdating(c) ? t('containerComponents.groupedViews.statusScanning') : getInProgressBadgeLabel(c) }}</span>
             </div>
           </div>
           <ContainerIcon :icon="c.icon" :size="32" />
@@ -1037,7 +1056,7 @@ onScopeDispose(() => {
                 :size="18"
                 :class="isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? '' : 'dd-spin'"
               />
-              <span>{{ isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? t('containerComponents.groupedViews.statusQueued') : isContainerScanning(c) && !isContainerUpdating(c) ? t('containerComponents.groupedViews.statusScanning') : t('containerComponents.groupedViews.statusUpdating') }}</span>
+              <span>{{ isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? t('containerComponents.groupedViews.statusQueued') : isContainerScanning(c) && !isContainerUpdating(c) ? t('containerComponents.groupedViews.statusScanning') : getInProgressBadgeLabel(c) }}</span>
             </div>
           </div>
         </template>
@@ -1067,7 +1086,7 @@ onScopeDispose(() => {
               class="text-2xs mt-0.5 inline-flex items-center gap-1"
               style="color: var(--dd-warning);">
               <AppIcon name="spinner" :size="10" class="dd-spin shrink-0" />
-              {{ t('containerComponents.groupedViews.statusUpdating') }}
+              {{ getInProgressBadgeLabel(c) }}
             </div>
             <div
               v-else-if="isContainerQueued(c)"

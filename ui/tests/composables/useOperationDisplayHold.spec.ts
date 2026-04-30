@@ -1110,6 +1110,31 @@ describe('useOperationDisplayHold', () => {
         phase: undefined,
       });
     });
+
+    it('forwards string lastError and rollbackReason when present', async () => {
+      const mod = await loadModule();
+      const parsed = mod.parseUpdateOperationSsePayload({
+        operationId: 'op-1',
+        containerName: 'web',
+        status: 'rolled-back',
+        lastError: 'Cancelled by operator',
+        rollbackReason: 'cancelled',
+      });
+      expect(parsed?.lastError).toBe('Cancelled by operator');
+      expect(parsed?.rollbackReason).toBe('cancelled');
+    });
+
+    it('drops non-string lastError and rollbackReason', async () => {
+      const mod = await loadModule();
+      const parsed = mod.parseUpdateOperationSsePayload({
+        containerName: 'web',
+        status: 'failed',
+        lastError: 42,
+        rollbackReason: null,
+      });
+      expect(parsed?.lastError).toBeUndefined();
+      expect(parsed?.rollbackReason).toBeUndefined();
+    });
   });
 
   describe('applyUpdateOperationSseToHold', () => {

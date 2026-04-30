@@ -186,4 +186,58 @@ describe('update operation lifecycle events', () => {
     expect(mockEmitContainerUpdateApplied).not.toHaveBeenCalled();
     expect(mockEmitContainerUpdateFailed).not.toHaveBeenCalled();
   });
+
+  test('emitUpdateOperationChanged includes lastError and rollbackReason in the SSE payload', async () => {
+    const inserted = updateOperation.insertOperation({
+      id: 'op-sse-payload',
+      containerId: 'c-sse',
+      containerName: 'worker',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+
+    mockEmitUpdateOperationChanged.mockClear();
+
+    updateOperation.markOperationTerminal(inserted.id, {
+      status: 'rolled-back',
+      phase: 'rolled-back',
+      lastError: 'Cancelled by operator',
+      rollbackReason: 'cancelled',
+    });
+    await flushAsyncLifecycleEvents();
+
+    const calls = mockEmitUpdateOperationChanged.mock.calls;
+    const terminalCall = calls.find(([payload]) => payload?.status === 'rolled-back');
+    expect(terminalCall).toBeDefined();
+    expect(terminalCall![0]).toMatchObject({
+      operationId: 'op-sse-payload',
+      containerName: 'worker',
+      status: 'rolled-back',
+      lastError: 'Cancelled by operator',
+      rollbackReason: 'cancelled',
+    });
+  });
+
+  test('emitUpdateOperationChanged omits lastError and rollbackReason when they are empty or absent', async () => {
+    const inserted = updateOperation.insertOperation({
+      id: 'op-sse-no-extras',
+      containerName: 'api',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+
+    mockEmitUpdateOperationChanged.mockClear();
+
+    updateOperation.markOperationTerminal(inserted.id, {
+      status: 'failed',
+      phase: 'failed',
+    });
+    await flushAsyncLifecycleEvents();
+
+    const calls = mockEmitUpdateOperationChanged.mock.calls;
+    const terminalCall = calls.find(([payload]) => payload?.status === 'failed');
+    expect(terminalCall).toBeDefined();
+    expect(terminalCall![0].lastError).toBeUndefined();
+    expect(terminalCall![0].rollbackReason).toBeUndefined();
+  });
 });

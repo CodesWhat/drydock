@@ -536,6 +536,38 @@ test('scanImageForVulnerabilities should pass json format through unchanged in t
   );
 });
 
+test('buildTrivyArgs should include --image-src docker in scan args', async () => {
+  const execFileMock = vi.fn((command, args, options, callback) => {
+    callback(null, JSON.stringify({ Results: [] }), '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  await scanImageForVulnerabilities({ image: 'registry.example.com/app:1.2.3' });
+
+  const callArgs = execFileMock.mock.calls[0][1] as string[];
+  expect(callArgs).toContain('--image-src');
+  expect(callArgs[callArgs.indexOf('--image-src') + 1]).toBe('docker');
+});
+
+test('buildTrivyArgs should include --image-src docker in SBOM args', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    sbom: { enabled: true, formats: ['spdx-json'] },
+  });
+  const execFileMock = vi.fn((command, args, options, callback) => {
+    callback(null, JSON.stringify({ bomFormat: 'spdx', metadata: {} }), '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  await generateImageSbom({ image: 'registry.example.com/app:1.2.3' });
+
+  const callArgs = execFileMock.mock.calls[0][1] as string[];
+  expect(callArgs).toContain('--image-src');
+  expect(callArgs[callArgs.indexOf('--image-src') + 1]).toBe('docker');
+});
+
 test('trivy queue should serialize concurrent scan invocations', async () => {
   const order: string[] = [];
 

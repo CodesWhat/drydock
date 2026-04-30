@@ -374,6 +374,8 @@ export interface ParsedUpdateOperationSse {
   containerName?: string;
   status: ContainerUpdateOperationStatus;
   phase?: unknown;
+  lastError?: string;
+  rollbackReason?: string;
 }
 
 /**
@@ -396,6 +398,8 @@ export function parseUpdateOperationSsePayload(raw: unknown): ParsedUpdateOperat
     containerName: typeof p.containerName === 'string' ? p.containerName : undefined,
     status: p.status,
     phase: p.phase,
+    lastError: typeof p.lastError === 'string' ? p.lastError : undefined,
+    rollbackReason: typeof p.rollbackReason === 'string' ? p.rollbackReason : undefined,
   };
 }
 

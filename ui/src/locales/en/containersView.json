@@ -7,6 +7,7 @@
     "toast": {
       "updated": "Updated: {name}",
       "updateFailed": "Update failed: {name}",
+      "cancelled": "Cancelled: {name}",
       "rolledBack": "Rolled back: {name}",
       "updateAlreadyInProgress": "Update already in progress for some containers in this group",
       "batchUpdated": "Updated {count} containers in {group}",

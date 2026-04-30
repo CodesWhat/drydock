@@ -3019,7 +3019,7 @@ describe('ContainersView', () => {
       }
     });
 
-    it('does not fire toast.error when a tracked operation transitions to failed', async () => {
+    it('fires toast.error when a tracked operation transitions to failed', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       vi.useFakeTimers();
       try {
@@ -3046,7 +3046,7 @@ describe('ContainersView', () => {
 
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         operationListener?.(
           new CustomEvent('dd:sse-update-operation-changed', {
@@ -3063,7 +3063,9 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore);
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({ tone: 'error', title: 'Update failed: nginx' });
 
         wrapper.unmount();
       } finally {
@@ -3072,7 +3074,7 @@ describe('ContainersView', () => {
       }
     });
 
-    it('does not fire toast.error when a tracked operation rolls back', async () => {
+    it('fires toast.warning when a tracked operation rolls back without cancellation reason', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       vi.useFakeTimers();
       try {
@@ -3099,7 +3101,7 @@ describe('ContainersView', () => {
 
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         operationListener?.(
           new CustomEvent('dd:sse-update-operation-changed', {
@@ -3116,7 +3118,178 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore);
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({ tone: 'warning', title: 'Rolled back: nginx' });
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires toast.error when a tracked operation in a batch transitions to failed', async () => {
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      vi.useFakeTimers();
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-batch-fail',
+              containerId: 'c1',
+              containerName: 'nginx',
+              batchId: 'batch-1',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
+
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-batch-fail',
+              containerId: 'c1',
+              containerName: 'nginx',
+              batchId: 'batch-1',
+              status: 'failed',
+              phase: 'failed',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({ tone: 'error', title: 'Update failed: nginx' });
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires toast.success (Cancelled) when a tracked operation rolls back with rollbackReason=cancelled', async () => {
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      vi.useFakeTimers();
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-cancel',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
+
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-cancel',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'rolled-back',
+              phase: 'rolled-back',
+              rollbackReason: 'cancelled',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({ tone: 'success', title: 'Cancelled: nginx' });
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('suppresses per-container toast when a tracked operation in a batch transitions to succeeded', async () => {
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      vi.useFakeTimers();
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-batch-ok',
+              containerId: 'c1',
+              containerName: 'nginx',
+              batchId: 'batch-2',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
+
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-batch-ok',
+              containerId: 'c1',
+              containerName: 'nginx',
+              batchId: 'batch-2',
+              status: 'succeeded',
+              phase: 'succeeded',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(0);
 
         wrapper.unmount();
       } finally {
@@ -3185,7 +3358,7 @@ describe('ContainersView', () => {
       }
     });
 
-    it('does not fire toast.error when rolled-back arrives after a 60-second operation window', async () => {
+    it('fires toast.warning when rolled-back arrives after a 60-second operation window', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       vi.useFakeTimers();
       try {
@@ -3219,7 +3392,7 @@ describe('ContainersView', () => {
 
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         operationListener?.(
           new CustomEvent('dd:sse-update-operation-changed', {
@@ -3236,7 +3409,9 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore);
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({ tone: 'warning', title: 'Rolled back: nginx' });
 
         wrapper.unmount();
       } finally {
@@ -3323,7 +3498,7 @@ describe('ContainersView', () => {
 
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         updateAppliedListener?.(
           new CustomEvent('dd:sse-update-applied', {
@@ -3340,8 +3515,9 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore + 1);
-        expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
 
         wrapper.unmount();
       } finally {
@@ -3365,7 +3541,7 @@ describe('ContainersView', () => {
 
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         updateFailedListener?.(
           new CustomEvent('dd:sse-update-failed', {
@@ -3384,8 +3560,9 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore + 1);
-        expect(toasts.value.at(-1)).toMatchObject({ tone: 'error', title: 'Update failed: nginx' });
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({ tone: 'error', title: 'Update failed: nginx' });
 
         wrapper.unmount();
       } finally {
@@ -3411,6 +3588,7 @@ describe('ContainersView', () => {
         )?.[1] as EventListener | undefined;
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
         const countBefore = toasts.value.length;
 
         // Register a hold, then receive the terminal phase event first. This path
@@ -3459,8 +3637,9 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore + 1);
-        expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
 
         wrapper.unmount();
       } finally {

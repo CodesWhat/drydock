@@ -110,6 +110,8 @@ export interface UpdateOperationChangedEventPayload {
   batchId?: string;
   status?: string;
   phase?: string;
+  lastError?: string;
+  rollbackReason?: string;
 }
 
 export interface ContainerUpdateAppliedEventPayload {

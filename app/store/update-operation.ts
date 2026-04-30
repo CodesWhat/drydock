@@ -306,6 +306,14 @@ function emitOperationChangedEvent(operation: UpdateOperation): void {
         : undefined,
     status: operation.status,
     phase: operation.phase,
+    lastError:
+      typeof operation.lastError === 'string' && operation.lastError.trim() !== ''
+        ? operation.lastError
+        : undefined,
+    rollbackReason:
+      typeof operation.rollbackReason === 'string' && operation.rollbackReason.trim() !== ''
+        ? operation.rollbackReason
+        : undefined,
   });
 }
 

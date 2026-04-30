@@ -509,12 +509,14 @@ class ContainerUpdateExecutor {
     container: ContainerForUpdate,
     logContainer: ContainerUpdateLogger,
     runtimeContext?: unknown,
+    postPullHook?: (operationId: string) => Promise<void>,
   ) {
     const preparedExecution = await this.prepareContainerUpdateExecution(
       context,
       container,
       logContainer,
       runtimeContext,
+      postPullHook,
     );
     if (!preparedExecution) {
       return false;
@@ -551,6 +553,7 @@ class ContainerUpdateExecutor {
     container: ContainerForUpdate,
     logContainer: ContainerUpdateLogger,
     runtimeContext?: unknown,
+    postPullHook?: (operationId: string) => Promise<void>,
   ): Promise<PreparedContainerUpdateExecution | undefined> {
     const { dockerApi, auth, newImage, currentContainer, currentContainerSpec } = context;
     const configuration = this.getConfiguration();
@@ -615,6 +618,19 @@ class ContainerUpdateExecutor {
         lastError: getErrorMessage(pullError),
       });
       throw pullError;
+    }
+
+    if (postPullHook) {
+      try {
+        await postPullHook(operation.id);
+      } catch (hookError: unknown) {
+        updateOperationStore.markOperationTerminal(operation.id, {
+          status: 'failed',
+          phase: 'failed',
+          lastError: getErrorMessage(hookError),
+        });
+        throw hookError;
+      }
     }
 
     if (configuration.dryrun) {

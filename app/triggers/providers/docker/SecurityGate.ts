@@ -10,6 +10,8 @@ import { getErrorMessage } from '../../../util/error.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
 import TriggerPipelineError from './TriggerPipelineError.js';
 
+const DEFAULT_SCAN_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
+
 type SecurityContainer = Container;
 type SecurityState = SecurityContainer['security'];
 type PersistedSecurityState = NonNullable<SecurityState>;
@@ -38,9 +40,17 @@ type SecurityGateLogger = {
   warn: (message: string) => void;
 };
 
+type DockerApiLike = {
+  getImage: (name: string) => {
+    inspect: () => Promise<{ RepoDigests?: string[] }>;
+    remove: () => Promise<void>;
+  };
+};
+
 type SecurityGateUpdateContext = {
   newImage: string;
   auth: SecurityScannerRequest['auth'];
+  dockerApi?: DockerApiLike;
 };
 
 type SecurityScannerRequest = {
@@ -61,6 +71,15 @@ type SecurityAlertPayload = {
   blockingCount: number;
   container: SecurityContainer;
 };
+
+type AuthLike = SecurityScannerRequest['auth'];
+
+type ScanImageWithDedupFn = (
+  options: { image: string; auth?: AuthLike; digest: string; trivyDbUpdatedAt?: string },
+  scanIntervalMs: number,
+) => Promise<{ scanResult: VulnerabilityScanResult; fromCache: boolean }>;
+
+type PruneImageFn = (image: string, dockerApi: DockerApiLike | undefined) => Promise<void>;
 
 type SecurityGateDependencies = {
   getSecurityConfiguration: () => SecurityConfiguration;
@@ -86,10 +105,26 @@ type SecurityGateDependencies = {
     status: 'success' | 'error',
     details: string,
   ) => void;
+  // Optional scan-cache short-circuit dependencies
+  scanImageWithDedup?: ScanImageWithDedupFn;
+  getTrivyDbUpdatedAt?: () => Promise<string | undefined>;
+  getScanIntervalMs?: () => number;
+  pruneImage?: PruneImageFn;
 };
 
-type SecurityGateConstructorOptions = Omit<SecurityGateDependencies, 'recordSecurityAudit'> & {
+type SecurityGateConstructorOptions = Omit<
+  SecurityGateDependencies,
+  | 'recordSecurityAudit'
+  | 'scanImageWithDedup'
+  | 'getTrivyDbUpdatedAt'
+  | 'getScanIntervalMs'
+  | 'pruneImage'
+> & {
   recordSecurityAudit?: SecurityGateDependencies['recordSecurityAudit'];
+  scanImageWithDedup?: SecurityGateDependencies['scanImageWithDedup'];
+  getTrivyDbUpdatedAt?: SecurityGateDependencies['getTrivyDbUpdatedAt'];
+  getScanIntervalMs?: SecurityGateDependencies['getScanIntervalMs'];
+  pruneImage?: SecurityGateDependencies['pruneImage'];
 };
 
 const REQUIRED_SECURITY_GATE_DEPENDENCY_KEYS = [
@@ -122,6 +157,13 @@ class SecurityGate {
     'emitSecurityAlert' | 'fullName' | 'recordSecurityAudit'
   >;
 
+  scanCache: {
+    scanImageWithDedup?: ScanImageWithDedupFn;
+    getTrivyDbUpdatedAt?: () => Promise<string | undefined>;
+    getScanIntervalMs?: () => number;
+    pruneImage?: PruneImageFn;
+  };
+
   constructor(options: SecurityGateConstructorOptions) {
     const dependencies = resolveFunctionDependencies<SecurityGateDependencies>(options, {
       requiredKeys: REQUIRED_SECURITY_GATE_DEPENDENCY_KEYS,
@@ -147,6 +189,12 @@ class SecurityGate {
       emitSecurityAlert: dependencies.emitSecurityAlert,
       fullName: dependencies.fullName,
       recordSecurityAudit: dependencies.recordSecurityAudit,
+    };
+    this.scanCache = {
+      scanImageWithDedup: options.scanImageWithDedup,
+      getTrivyDbUpdatedAt: options.getTrivyDbUpdatedAt,
+      getScanIntervalMs: options.getScanIntervalMs,
+      pruneImage: options.pruneImage,
     };
   }
 
@@ -275,12 +323,48 @@ class SecurityGate {
     );
   }
 
+  async resolveImageDigest(
+    image: string,
+    dockerApi: DockerApiLike | undefined,
+  ): Promise<string | undefined> {
+    if (!dockerApi) {
+      return undefined;
+    }
+    try {
+      const inspected = await dockerApi.getImage(image).inspect();
+      const repoDigests = inspected.RepoDigests as string[] | undefined;
+      return repoDigests?.[0]?.split('@')[1];
+    } catch {
+      return undefined;
+    }
+  }
+
   async scanImageForUpdate(
     context: SecurityGateUpdateContext,
     container: SecurityContainer,
     logContainer: SecurityGateLogger,
   ): Promise<VulnerabilityScanResult> {
     logContainer.info(`Running security scan for candidate image ${context.newImage}`);
+
+    const { scanImageWithDedup, getTrivyDbUpdatedAt, getScanIntervalMs } = this.scanCache;
+
+    if (scanImageWithDedup) {
+      const digest = await this.resolveImageDigest(context.newImage, context.dockerApi);
+      if (digest) {
+        const trivyDbUpdatedAt = getTrivyDbUpdatedAt ? await getTrivyDbUpdatedAt() : undefined;
+        const scanIntervalMs = getScanIntervalMs ? getScanIntervalMs() : DEFAULT_SCAN_INTERVAL_MS;
+        const { scanResult, fromCache } = await scanImageWithDedup(
+          { image: context.newImage, auth: context.auth, digest, trivyDbUpdatedAt },
+          scanIntervalMs,
+        );
+        if (fromCache) {
+          logContainer.info('Using cached scan result');
+        }
+        await this.persistSecurityState(container, { scan: scanResult }, logContainer, 'update');
+        return scanResult;
+      }
+    }
+
     const scanResult = await this.scanners.scanImageForVulnerabilities({
       image: context.newImage,
       auth: context.auth,
@@ -392,7 +476,7 @@ class SecurityGate {
     );
   }
 
-  async maybeScanAndGateUpdate(
+  async verifySignaturePreUpdate(
     context: SecurityGateUpdateContext,
     container: SecurityContainer,
     logContainer: SecurityGateLogger,
@@ -401,46 +485,78 @@ class SecurityGate {
     if (!this.shouldRunSecurityGate(securityConfiguration)) {
       return;
     }
-
-    const gateMode = this.getEffectiveGateMode(container, securityConfiguration);
-
+    if (!securityConfiguration.signature.verify) {
+      return;
+    }
     try {
-      // Signature verification is governed by its own flag and is not part of
-      // the vulnerability-scan gate; it always runs synchronously when enabled.
       await this.maybeVerifyImageSignatureForUpdate(
         context,
         container,
         logContainer,
         securityConfiguration,
       );
-
-      if (gateMode === 'off') {
-        // Operator has explicitly opted this container out of the
-        // vulnerability gate. Skip scan and SBOM; the lifecycle proceeds
-        // without security clearance.
-        logContainer.info(
-          'Security gate disabled for this container (dd.security.gate=off or DD_SECURITY_GATE_MODE=off); skipping scan',
-        );
-        return;
-      }
-
-      // gateMode === 'on': scan first, then evaluate the gate before the
-      // pull/recreate runs. Scan results are digest-cached, so a subsequent
-      // update on an unchanged image is a fast cache hit.
-      const scanResult = await this.scanImageForUpdate(context, container, logContainer);
-      await this.maybeGenerateSbomForUpdate(
-        context,
-        container,
-        logContainer,
-        securityConfiguration,
-      );
-      await this.evaluateScanOutcome(container, scanResult);
     } catch (error: unknown) {
       if (TriggerPipelineError.isTriggerPipelineError(error)) {
         this.recordSecurityFailure(container, error as { code: string; message: string });
       }
       throw error;
     }
+  }
+
+  async scanAndGatePostPull(
+    context: SecurityGateUpdateContext,
+    container: SecurityContainer,
+    logContainer: SecurityGateLogger,
+    options: { setPhase?: (phase: 'scanning' | 'sbom-generating') => void } = {},
+  ): Promise<void> {
+    const securityConfiguration = this.securityConfig.getSecurityConfiguration();
+    if (!this.shouldRunSecurityGate(securityConfiguration)) {
+      return;
+    }
+
+    const gateMode = this.getEffectiveGateMode(container, securityConfiguration);
+    if (gateMode === 'off') {
+      logContainer.info(
+        'Security gate disabled for this container (dd.security.gate=off or DD_SECURITY_GATE_MODE=off); skipping scan',
+      );
+      return;
+    }
+
+    try {
+      options.setPhase?.('scanning');
+      const scanResult = await this.scanImageForUpdate(context, container, logContainer);
+      if (securityConfiguration.sbom.enabled) {
+        options.setPhase?.('sbom-generating');
+        await this.maybeGenerateSbomForUpdate(
+          context,
+          container,
+          logContainer,
+          securityConfiguration,
+        );
+      }
+      await this.evaluateScanOutcome(container, scanResult);
+    } catch (error: unknown) {
+      if (TriggerPipelineError.isTriggerPipelineError(error)) {
+        this.recordSecurityFailure(container, error as { code: string; message: string });
+        if (securityConfiguration.prune?.onBlock) {
+          try {
+            await this.scanCache.pruneImage?.(context.newImage, context.dockerApi);
+          } catch {
+            logContainer.warn(`Failed to prune blocked image ${context.newImage}`);
+          }
+        }
+      }
+      throw error;
+    }
+  }
+
+  async maybeScanAndGateUpdate(
+    context: SecurityGateUpdateContext,
+    container: SecurityContainer,
+    logContainer: SecurityGateLogger,
+  ): Promise<void> {
+    await this.verifySignaturePreUpdate(context, container, logContainer);
+    await this.scanAndGatePostPull(context, container, logContainer);
   }
 }
 

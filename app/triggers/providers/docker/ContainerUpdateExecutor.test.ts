@@ -1295,4 +1295,48 @@ describe('ContainerUpdateExecutor', () => {
       }),
     );
   });
+
+  test('execute calls postPullHook after pull and before rename', async () => {
+    const callOrder: string[] = [];
+    const context = createContext();
+    context.currentContainer.rename = vi.fn().mockImplementation(async () => {
+      callOrder.push('rename');
+    });
+    const executor = createExecutor({
+      pullImage: vi.fn().mockImplementation(async () => {
+        callOrder.push('pull');
+      }),
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+    });
+    const postPullHook = vi.fn().mockImplementation(async () => {
+      callOrder.push('postPullHook');
+    });
+
+    await executor.execute(context, createContainer(), createLog(), undefined, postPullHook);
+
+    expect(callOrder.indexOf('pull')).toBeLessThan(callOrder.indexOf('postPullHook'));
+    expect(callOrder.indexOf('postPullHook')).toBeLessThan(callOrder.indexOf('rename'));
+  });
+
+  test('execute terminates operation as failed when postPullHook throws', async () => {
+    const context = createContext();
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+    });
+    const hookError = new Error('scan blocked: CVE-2025-0001');
+    const postPullHook = vi.fn().mockRejectedValue(hookError);
+
+    await expect(
+      executor.execute(context, createContainer(), createLog(), undefined, postPullHook),
+    ).rejects.toThrow('scan blocked: CVE-2025-0001');
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'failed',
+        lastError: 'scan blocked: CVE-2025-0001',
+      }),
+    );
+  });
 });

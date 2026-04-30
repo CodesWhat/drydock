@@ -96,6 +96,7 @@ const mockMarkOperationTerminal = vi.hoisted(() => vi.fn());
 const mockGetInProgressOperationByContainerName = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerName = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerId = vi.hoisted(() => vi.fn());
+const mockIsOperationCancelRequested = vi.hoisted(() => vi.fn(() => false));
 vi.mock('../../../store/update-operation.js', () => ({
   insertOperation: (...args: any[]) => mockInsertOperation(...args),
   updateOperation: (...args: any[]) => mockUpdateOperation(...args),
@@ -106,6 +107,13 @@ vi.mock('../../../store/update-operation.js', () => ({
   getActiveOperationByContainerName: (...args: any[]) =>
     mockGetActiveOperationByContainerName(...args),
   getActiveOperationByContainerId: (...args: any[]) => mockGetActiveOperationByContainerId(...args),
+  isOperationCancelRequested: (...args: any[]) => mockIsOperationCancelRequested(...args),
+  OperationCancelledError: class OperationCancelledError extends Error {
+    constructor(operationId: string) {
+      super(`Operation ${operationId} was cancelled`);
+      this.name = 'OperationCancelledError';
+    }
+  },
 }));
 
 const mockSyncComposeFileTag = vi.hoisted(() => vi.fn().mockResolvedValue(false));
@@ -422,6 +430,7 @@ export function registerCommonDockerBeforeEach() {
     }));
     mockUpdateOperation.mockImplementation((id, patch = {}) => ({ id, ...patch }));
     mockGetInProgressOperationByContainerName.mockReturnValue(undefined);
+    mockIsOperationCancelRequested.mockReturnValue(false);
   });
 }
 
@@ -445,6 +454,7 @@ export function getDockerTestMocks() {
     mockGetInProgressOperationByContainerName,
     mockGetActiveOperationByContainerName,
     mockGetActiveOperationByContainerId,
+    mockIsOperationCancelRequested,
     mockSyncComposeFileTag,
   };
 }
