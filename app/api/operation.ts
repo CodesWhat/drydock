@@ -1,6 +1,6 @@
 import express from 'express';
 import nocache from 'nocache';
-import { cancelQueuedOperation, getOperationById } from '../store/update-operation.js';
+import { getOperationById, requestOperationCancellation } from '../store/update-operation.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizeApiError } from './helpers.js';
 
@@ -14,12 +14,20 @@ function cancelOperation(req, res) {
       sendErrorResponse(res, 404, 'Operation not found');
       return;
     }
-    if (existing.status !== 'queued') {
-      res.status(409).json({ error: 'Operation is not queued', status: existing.status });
+    if (existing.status !== 'queued' && existing.status !== 'in-progress') {
+      res.status(409).json({ error: 'Operation is not active', status: existing.status });
       return;
     }
-    const cancelled = cancelQueuedOperation(id);
-    res.status(200).json({ data: cancelled });
+    const result = requestOperationCancellation(id);
+    if (!result) {
+      sendErrorResponse(res, 404, 'Operation not found');
+      return;
+    }
+    if (result.outcome === 'cancelled') {
+      res.status(200).json({ data: result.operation });
+      return;
+    }
+    res.status(202).json({ data: result.operation });
   } catch (e: unknown) {
     sendErrorResponse(res, 500, sanitizeApiError(e));
   }

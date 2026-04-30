@@ -1,6 +1,6 @@
 import { createMockResponse } from '../test/helpers.js';
 
-const { mockRouter, mockGetOperationById, mockCancelQueuedOperation } = vi.hoisted(() => ({
+const { mockRouter, mockGetOperationById, mockRequestOperationCancellation } = vi.hoisted(() => ({
   mockRouter: {
     use: vi.fn(),
     get: vi.fn(),
@@ -8,7 +8,7 @@ const { mockRouter, mockGetOperationById, mockCancelQueuedOperation } = vi.hoist
     delete: vi.fn(),
   },
   mockGetOperationById: vi.fn(),
-  mockCancelQueuedOperation: vi.fn(),
+  mockRequestOperationCancellation: vi.fn(),
 }));
 
 vi.mock('express', () => ({
@@ -19,7 +19,7 @@ vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
 
 vi.mock('../store/update-operation', () => ({
   getOperationById: mockGetOperationById,
-  cancelQueuedOperation: mockCancelQueuedOperation,
+  requestOperationCancellation: mockRequestOperationCancellation,
 }));
 
 vi.mock('../log/index.js', () => ({
@@ -58,8 +58,8 @@ describe('Operation Router', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Operation not found' });
     });
 
-    test('returns 409 when operation is not queued', () => {
-      mockGetOperationById.mockReturnValue({ id: 'op-1', status: 'in-progress' });
+    test('returns 409 when operation is already terminal', () => {
+      mockGetOperationById.mockReturnValue({ id: 'op-1', status: 'succeeded' });
       const handler = getHandler();
       const res = createMockResponse();
 
@@ -67,12 +67,12 @@ describe('Operation Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(409);
       expect(res.json).toHaveBeenCalledWith({
-        error: 'Operation is not queued',
-        status: 'in-progress',
+        error: 'Operation is not active',
+        status: 'succeeded',
       });
     });
 
-    test('returns 200 with cancelled operation on success', () => {
+    test('returns 200 with cancelled operation when queued', () => {
       const queued = { id: 'op-2', status: 'queued', containerName: 'web' };
       const cancelled = {
         id: 'op-2',
@@ -83,15 +83,54 @@ describe('Operation Router', () => {
         containerName: 'web',
       };
       mockGetOperationById.mockReturnValue(queued);
-      mockCancelQueuedOperation.mockReturnValue(cancelled);
+      mockRequestOperationCancellation.mockReturnValue({
+        outcome: 'cancelled',
+        operation: cancelled,
+      });
       const handler = getHandler();
       const res = createMockResponse();
 
       handler({ params: { id: 'op-2' } }, res);
 
-      expect(mockCancelQueuedOperation).toHaveBeenCalledWith('op-2');
+      expect(mockRequestOperationCancellation).toHaveBeenCalledWith('op-2');
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ data: cancelled });
+    });
+
+    test('returns 202 with cancel-requested operation when in-progress', () => {
+      const inProgress = { id: 'op-3', status: 'in-progress', containerName: 'web' };
+      const flagged = {
+        id: 'op-3',
+        status: 'in-progress',
+        phase: 'pulling',
+        cancelRequested: true,
+        containerName: 'web',
+      };
+      mockGetOperationById.mockReturnValue(inProgress);
+      mockRequestOperationCancellation.mockReturnValue({
+        outcome: 'cancel-requested',
+        operation: flagged,
+      });
+      const handler = getHandler();
+      const res = createMockResponse();
+
+      handler({ params: { id: 'op-3' } }, res);
+
+      expect(mockRequestOperationCancellation).toHaveBeenCalledWith('op-3');
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(res.json).toHaveBeenCalledWith({ data: flagged });
+    });
+
+    test('returns 404 when requestOperationCancellation returns undefined after pre-check', () => {
+      mockGetOperationById.mockReturnValue({ id: 'op-4', status: 'queued' });
+      mockRequestOperationCancellation.mockReturnValue(undefined);
+      const handler = getHandler();
+      const res = createMockResponse();
+
+      handler({ params: { id: 'op-4' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Operation not found' });
     });
 
     test('returns 500 when store throws', () => {
@@ -101,7 +140,7 @@ describe('Operation Router', () => {
       const handler = getHandler();
       const res = createMockResponse();
 
-      handler({ params: { id: 'op-3' } }, res);
+      handler({ params: { id: 'op-5' } }, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ error: 'Internal server error' });

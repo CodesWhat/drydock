@@ -48,6 +48,12 @@ interface UpdateOperationBase {
   lastError?: string;
   recoveredAt?: string;
   completedAt?: string;
+  /**
+   * Operator-requested mid-flight cancellation. Set by the cancel API; the
+   * lifecycle checks this at safe checkpoints and aborts before any further
+   * destructive action when true.
+   */
+  cancelRequested?: boolean;
   [key: string]: unknown;
 }
 
@@ -123,6 +129,7 @@ type MutableUpdateOperationFields = Pick<
   | 'rollbackReason'
   | 'lastError'
   | 'recoveredAt'
+  | 'cancelRequested'
 >;
 
 interface InsertUpdateOperationInput
@@ -949,4 +956,69 @@ export function cancelQueuedOperation(id: string): UpdateOperation | undefined {
     phase: 'failed',
     lastError: 'Cancelled by operator',
   });
+}
+
+/**
+ * Thrown by the lifecycle when it observes an operator-requested cancellation
+ * at a safe checkpoint. The standard rollback path treats this like any other
+ * runtime failure but tags the rollback reason as `cancelled`.
+ */
+export class OperationCancelledError extends Error {
+  readonly operationId: string;
+
+  constructor(operationId: string) {
+    super('Cancelled by operator');
+    this.name = 'OperationCancelledError';
+    this.operationId = operationId;
+  }
+}
+
+export function isOperationCancelledError(error: unknown): error is OperationCancelledError {
+  return error instanceof OperationCancelledError;
+}
+
+/**
+ * Outcome of a mid-flight cancellation request.
+ * - `'cancelled'`: queued operation was cancelled immediately.
+ * - `'cancel-requested'`: in-progress operation was flagged; the lifecycle will
+ *   abort at the next safe checkpoint and roll back if it has crossed the
+ *   point of no return.
+ * - `undefined`: the operation does not exist or is already terminal.
+ */
+export function requestOperationCancellation(
+  id: string,
+): { outcome: 'cancelled' | 'cancel-requested'; operation: UpdateOperation } | undefined {
+  if (!updateOperationCollection) {
+    return undefined;
+  }
+  const existing = getOperationById(id);
+  if (!existing) {
+    return undefined;
+  }
+  if (existing.status === 'queued') {
+    const cancelled = markOperationTerminal(id, {
+      status: 'failed',
+      phase: 'failed',
+      lastError: 'Cancelled by operator',
+    });
+    return cancelled ? { outcome: 'cancelled', operation: cancelled } : undefined;
+  }
+  if (existing.status === 'in-progress') {
+    const flagged = persistOperationPatch(id, { cancelRequested: true });
+    return flagged ? { outcome: 'cancel-requested', operation: flagged } : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Re-read the operation row and return whether a mid-flight cancellation has
+ * been requested. Lifecycle code calls this at safe checkpoints to decide
+ * whether to abort.
+ */
+export function isOperationCancelRequested(id: string | undefined): boolean {
+  if (!id) {
+    return false;
+  }
+  const operation = getOperationById(id);
+  return Boolean(operation?.cancelRequested);
 }

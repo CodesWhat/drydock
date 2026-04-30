@@ -1,4 +1,5 @@
 import * as updateOperationStore from '../../../store/update-operation.js';
+import { OperationCancelledError } from '../../../store/update-operation.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
 import { getRequestedOperationId } from './update-runtime-context.js';
 
@@ -625,6 +626,18 @@ class ContainerUpdateExecutor {
       return undefined;
     }
 
+    if (updateOperationStore.isOperationCancelRequested(operation.id)) {
+      logContainer.info(
+        `Cancellation requested for ${oldName} before rename; aborting cleanly without rollback`,
+      );
+      updateOperationStore.markOperationTerminal(operation.id, {
+        status: 'failed',
+        phase: 'failed',
+        lastError: 'Cancelled by operator',
+      });
+      return undefined;
+    }
+
     const cloneRuntimeConfigOptions = await this.getCloneRuntimeConfigOptions(
       dockerApi,
       currentContainerSpec,
@@ -653,11 +666,18 @@ class ContainerUpdateExecutor {
     };
   }
 
+  private throwIfCancelled(operationId: string) {
+    if (updateOperationStore.isOperationCancelRequested(operationId)) {
+      throw new OperationCancelledError(operationId);
+    }
+  }
+
   private async createAndStartReplacementContainer(
     preparedExecution: PreparedContainerUpdateExecution,
     logContainer: ContainerUpdateLogger,
     attemptState: ContainerUpdateAttemptState,
   ): Promise<DockerContainerHandle> {
+    this.throwIfCancelled(preparedExecution.operationId);
     attemptState.failureReason = 'create_new_failed';
     const containerToCreateInspect = this.cloneContainer(
       preparedExecution.currentContainerSpec,
@@ -718,6 +738,7 @@ class ContainerUpdateExecutor {
     logContainer: ContainerUpdateLogger,
     attemptState: ContainerUpdateAttemptState,
   ) {
+    this.throwIfCancelled(preparedExecution.operationId);
     attemptState.failureReason = 'stop_old_failed';
     await this.stopContainer(
       preparedExecution.currentContainer,
@@ -801,6 +822,9 @@ class ContainerUpdateExecutor {
     container: ContainerForUpdate,
     logContainer: ContainerUpdateLogger,
   ): Promise<never> {
+    if (error instanceof OperationCancelledError) {
+      attemptState.failureReason = 'cancelled';
+    }
     logContainer.warn(
       `Container update failed for ${preparedExecution.oldName}, attempting rollback (${getErrorMessage(error)})`,
     );

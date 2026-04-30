@@ -1232,13 +1232,17 @@ export function useContainerActions(input: UseContainerActionsInput) {
     }
     const toast = useToast();
     try {
-      await apiCancelUpdateOperation(operationId);
-      toast.success(`Cancelled: ${name}`);
+      const outcome = await apiCancelUpdateOperation(operationId);
+      if (outcome === 'cancel-requested') {
+        toast.success(`Cancellation requested: ${name}`);
+      } else {
+        toast.success(`Cancelled: ${name}`);
+      }
       await input.loadContainers();
     } catch (e: unknown) {
       const statusCode = (e as { statusCode?: number }).statusCode;
       if (statusCode === 409) {
-        toast.warning(`Update already in progress for ${name}, cannot cancel`);
+        toast.warning(`Update already finished for ${name}, cannot cancel`);
       } else if (statusCode === 404) {
         toast.error(`Operation not found: ${name}`);
       } else {

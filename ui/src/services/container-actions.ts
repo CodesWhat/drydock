@@ -81,7 +81,9 @@ async function updateContainers(containerIds: string[]): Promise<BulkContainerUp
   return response.json();
 }
 
-async function cancelUpdateOperation(operationId: string): Promise<void> {
+type CancelUpdateOperationOutcome = 'cancelled' | 'cancel-requested';
+
+async function cancelUpdateOperation(operationId: string): Promise<CancelUpdateOperationOutcome> {
   const response = await fetch(`/api/operations/${encodeURIComponent(operationId)}/cancel`, {
     method: 'POST',
     credentials: 'include',
@@ -92,6 +94,7 @@ async function cancelUpdateOperation(operationId: string): Promise<void> {
     (error as Error & { statusCode?: number }).statusCode = response.status;
     throw error;
   }
+  return response.status === 202 ? 'cancel-requested' : 'cancelled';
 }
 
 export {

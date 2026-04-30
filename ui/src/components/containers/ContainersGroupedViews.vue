@@ -194,7 +194,8 @@ function blockedUpdateTooltip(container: {
 }
 
 function canCancelUpdate(c: { updateOperation?: { status?: string; id?: string } }): boolean {
-  return c.updateOperation?.status === 'queued' && Boolean(c.updateOperation?.id);
+  const status = c.updateOperation?.status;
+  return (status === 'queued' || status === 'in-progress') && Boolean(c.updateOperation?.id);
 }
 
 function updateBtnState(c: {
@@ -716,7 +717,7 @@ onScopeDispose(() => {
                       :tooltip="tt('Start')" @click.stop="startContainer(c)" />
               <AppIconButton v-if="canCancelUpdate(c)" icon="x" size="sm" variant="danger"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow] hover:dd-bg-hover hover:scale-110 active:scale-95"
-                      :tooltip="tt('Cancel queued update')" @click.stop="cancelUpdate(c)" />
+                      :tooltip="tt('Cancel update')" @click.stop="cancelUpdate(c)" />
               <AppIconButton icon="more" size="sm" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="[

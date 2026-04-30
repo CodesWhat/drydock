@@ -2038,4 +2038,143 @@ describe('Update Operation Store', () => {
       expect(fresh.cancelQueuedOperation('any-id')).toBeUndefined();
     });
   });
+
+  describe('OperationCancelledError', () => {
+    test('has the correct name, message, and operationId fields', () => {
+      const err = new updateOperation.OperationCancelledError('op-abc');
+      expect(err.name).toBe('OperationCancelledError');
+      expect(err.message).toBe('Cancelled by operator');
+      expect(err.operationId).toBe('op-abc');
+      expect(err).toBeInstanceOf(Error);
+    });
+
+    test('isOperationCancelledError returns true for OperationCancelledError instances', () => {
+      const err = new updateOperation.OperationCancelledError('op-xyz');
+      expect(updateOperation.isOperationCancelledError(err)).toBe(true);
+    });
+
+    test('isOperationCancelledError returns false for plain Error instances', () => {
+      expect(updateOperation.isOperationCancelledError(new Error('plain error'))).toBe(false);
+    });
+
+    test('isOperationCancelledError returns false for non-error values', () => {
+      expect(updateOperation.isOperationCancelledError(null)).toBe(false);
+      expect(updateOperation.isOperationCancelledError(undefined)).toBe(false);
+      expect(updateOperation.isOperationCancelledError('string error')).toBe(false);
+      expect(updateOperation.isOperationCancelledError(42)).toBe(false);
+    });
+  });
+
+  describe('requestOperationCancellation', () => {
+    test('returns undefined when operation does not exist', () => {
+      expect(updateOperation.requestOperationCancellation('does-not-exist')).toBeUndefined();
+    });
+
+    test('cancels a queued operation immediately', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+      });
+
+      const result = updateOperation.requestOperationCancellation(op.id);
+
+      expect(result).toBeDefined();
+      expect(result!.outcome).toBe('cancelled');
+      expect(result!.operation.id).toBe(op.id);
+      expect(result!.operation.status).toBe('failed');
+      expect(result!.operation.lastError).toBe('Cancelled by operator');
+    });
+
+    test('flags an in-progress operation with cancelRequested', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'api',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+
+      const result = updateOperation.requestOperationCancellation(op.id);
+
+      expect(result).toBeDefined();
+      expect(result!.outcome).toBe('cancel-requested');
+      expect(result!.operation.id).toBe(op.id);
+      expect(result!.operation.status).toBe('in-progress');
+      expect(result!.operation.cancelRequested).toBe(true);
+    });
+
+    test('returns undefined for a succeeded operation', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'succeeded',
+        phase: 'succeeded',
+        completedAt: new Date().toISOString(),
+      });
+
+      expect(updateOperation.requestOperationCancellation(op.id)).toBeUndefined();
+    });
+
+    test('returns undefined for a failed operation', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'failed',
+        phase: 'failed',
+        completedAt: new Date().toISOString(),
+      });
+
+      expect(updateOperation.requestOperationCancellation(op.id)).toBeUndefined();
+    });
+
+    test('returns undefined for a rolled-back operation', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'rolled-back',
+        phase: 'rolled-back',
+        completedAt: new Date().toISOString(),
+      });
+
+      expect(updateOperation.requestOperationCancellation(op.id)).toBeUndefined();
+    });
+
+    test('returns undefined when collection is not initialized', async () => {
+      vi.resetModules();
+      const fresh = await import('./update-operation.js');
+      expect(fresh.requestOperationCancellation('any-id')).toBeUndefined();
+    });
+  });
+
+  describe('isOperationCancelRequested', () => {
+    test('returns false for undefined id', () => {
+      expect(updateOperation.isOperationCancelRequested(undefined)).toBe(false);
+    });
+
+    test('returns false for empty string id', () => {
+      expect(updateOperation.isOperationCancelRequested('')).toBe(false);
+    });
+
+    test('returns false for a non-existent operation id', () => {
+      expect(updateOperation.isOperationCancelRequested('ghost-id')).toBe(false);
+    });
+
+    test('returns false for an operation without cancelRequested set', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'worker',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+
+      expect(updateOperation.isOperationCancelRequested(op.id)).toBe(false);
+    });
+
+    test('returns true for an operation with cancelRequested set to true', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'worker',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+
+      updateOperation.requestOperationCancellation(op.id);
+
+      expect(updateOperation.isOperationCancelRequested(op.id)).toBe(true);
+    });
+  });
 });
