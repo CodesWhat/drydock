@@ -306,24 +306,29 @@ class SecurityGate {
     return `critical=${summary.critical}, high=${summary.high}, medium=${summary.medium}, low=${summary.low}, unknown=${summary.unknown}`;
   }
 
-  async maybeEmitHighSeverityAlert(
+  maybeEmitHighSeverityAlert(
     container: SecurityContainer,
     scanResult: VulnerabilityScanResult,
     details: string,
-  ): Promise<void> {
+  ): void {
     const summary = scanResult.summary;
     if (summary.critical === 0 && summary.high === 0) {
       return;
     }
 
-    await this.telemetry.emitSecurityAlert({
-      containerName: this.telemetry.fullName(container),
-      details,
-      status: scanResult.status,
-      summary,
-      blockingCount: scanResult.blockingCount,
-      container,
-    });
+    // Fire-and-forget: notification dispatch is owned by the notification
+    // outbox layer (with retry/DLQ) — blocking the update lifecycle on
+    // sequential notifier delivery is the original v1.5 stall bug.
+    void this.telemetry
+      .emitSecurityAlert({
+        containerName: this.telemetry.fullName(container),
+        details,
+        status: scanResult.status,
+        summary,
+        blockingCount: scanResult.blockingCount,
+        container,
+      })
+      .catch(() => undefined);
   }
 
   throwIfScanFailed(scanResult: VulnerabilityScanResult): void {
@@ -354,7 +359,7 @@ class SecurityGate {
   ): Promise<void> {
     this.throwIfScanFailed(scanResult);
     const details = this.formatScanSummary(scanResult.summary);
-    await this.maybeEmitHighSeverityAlert(container, scanResult, details);
+    this.maybeEmitHighSeverityAlert(container, scanResult, details);
     this.throwIfScanBlocked(scanResult, details);
     this.telemetry.recordSecurityAudit(
       'security-scan-passed',
