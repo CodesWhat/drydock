@@ -3729,7 +3729,8 @@ describe('useContainerActions', () => {
   });
 
   describe('cancelUpdate', () => {
-    it('calls cancel endpoint and shows success toast on 200', async () => {
+    it('calls cancel endpoint and shows cancelled toast for queued ops', async () => {
+      mocks.cancelUpdateOperation.mockResolvedValueOnce('cancelled');
       const container = makeContainer({
         id: 'container-1',
         name: 'web',
@@ -3748,6 +3749,21 @@ describe('useContainerActions', () => {
       expect(loadContainers).toHaveBeenCalled();
     });
 
+    it('shows cancellation-requested toast for in-progress ops', async () => {
+      mocks.cancelUpdateOperation.mockResolvedValueOnce('cancel-requested');
+      const container = makeContainer({
+        id: 'container-1',
+        name: 'web',
+        updateOperation: { id: 'op-123', status: 'in-progress', phase: 'pulling', updatedAt: '' },
+      });
+      const { composable } = await mountActionsHarness({ containers: [container] });
+
+      await composable.cancelUpdate(container);
+      await flushPromises();
+
+      expect(mocks.toastSuccess).toHaveBeenCalledWith('Cancellation requested: web');
+    });
+
     it('does nothing when updateOperation is absent', async () => {
       const container = makeContainer({ id: 'container-1', name: 'web' });
       const { composable } = await mountActionsHarness({
@@ -3762,7 +3778,7 @@ describe('useContainerActions', () => {
     });
 
     it('shows warning toast on 409 conflict', async () => {
-      const err = Object.assign(new Error('already in progress'), { statusCode: 409 });
+      const err = Object.assign(new Error('already finished'), { statusCode: 409 });
       mocks.cancelUpdateOperation.mockRejectedValueOnce(err);
 
       const container = makeContainer({
@@ -3776,7 +3792,7 @@ describe('useContainerActions', () => {
       await flushPromises();
 
       expect(mocks.toastWarning).toHaveBeenCalledWith(
-        'Update already in progress for web, cannot cancel',
+        'Update already finished for web, cannot cancel',
       );
       expect(mocks.toastError).not.toHaveBeenCalled();
     });

@@ -149,6 +149,11 @@ const navGroups = computed<NavGroup[]>(() => [
         icon: 'notifications',
         route: ROUTES.NOTIFICATIONS,
       },
+      {
+        label: 'Notification outbox',
+        icon: 'notifications',
+        route: ROUTES.NOTIFICATION_OUTBOX,
+      },
       { label: t('appShell.layout.nav.triggers'), icon: 'triggers', route: ROUTES.TRIGGERS },
       { label: t('appShell.layout.nav.auth'), icon: 'auth', route: ROUTES.AUTH },
       { label: t('appShell.layout.nav.agents'), icon: 'agents', route: ROUTES.AGENTS },

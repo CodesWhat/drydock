@@ -264,13 +264,14 @@ describe('Container Actions Service', () => {
   });
 
   describe('cancelUpdateOperation', () => {
-    it('posts to cancel endpoint and resolves on 200', async () => {
+    it('posts to cancel endpoint and resolves with cancelled outcome on 200', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
+        status: 200,
         json: async () => ({ data: { id: 'op-123', status: 'cancelled' } }),
       } as any);
 
-      await expect(cancelUpdateOperation('op-123')).resolves.toBeUndefined();
+      await expect(cancelUpdateOperation('op-123')).resolves.toBe('cancelled');
 
       expect(fetch).toHaveBeenCalledWith('/api/operations/op-123/cancel', {
         method: 'POST',
@@ -278,9 +279,20 @@ describe('Container Actions Service', () => {
       });
     });
 
+    it('resolves with cancel-requested outcome on 202', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 202,
+        json: async () => ({ data: { id: 'op-456', cancelRequested: true } }),
+      } as any);
+
+      await expect(cancelUpdateOperation('op-456')).resolves.toBe('cancel-requested');
+    });
+
     it('URL-encodes the operation id', async () => {
       vi.mocked(fetch).mockResolvedValueOnce({
         ok: true,
+        status: 200,
         json: async () => ({}),
       } as any);
 
