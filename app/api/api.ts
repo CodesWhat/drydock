@@ -20,6 +20,7 @@ import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-
 import * as logRouter from './log.js';
 import * as notificationRouter from './notification.js';
 import * as notificationOutboxRouter from './notification-outbox.js';
+import * as operationRouter from './operation.js';
 import * as previewRouter from './preview.js';
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
@@ -137,6 +138,9 @@ export function init(): express.Router {
 
   // Mount notification outbox (DLQ) router
   router.use('/notifications/outbox', notificationOutboxRouter.init());
+
+  // Mount operations router (cancel queued operations)
+  router.use('/operations', operationRouter.init());
 
   // Mount watcher router
   router.use('/watchers', watcherRouter.init());

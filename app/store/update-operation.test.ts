@@ -1998,4 +1998,44 @@ describe('Update Operation Store', () => {
     const avgMs = totalMs / runs;
     expect(avgMs).toBeLessThan(1500);
   });
+
+  describe('cancelQueuedOperation', () => {
+    test('transitions a queued operation to failed with cancellation error', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+      });
+
+      const result = updateOperation.cancelQueuedOperation(op.id);
+
+      expect(result).toBeDefined();
+      expect(result!.id).toBe(op.id);
+      expect(result!.status).toBe('failed');
+      expect(result!.phase).toBe('failed');
+      expect(result!.lastError).toBe('Cancelled by operator');
+      expect(result!.completedAt).toBeDefined();
+    });
+
+    test('returns undefined for an in-progress operation', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+
+      expect(updateOperation.cancelQueuedOperation(op.id)).toBeUndefined();
+      expect(updateOperation.getOperationById(op.id)!.status).toBe('in-progress');
+    });
+
+    test('returns undefined for a missing id', () => {
+      expect(updateOperation.cancelQueuedOperation('does-not-exist')).toBeUndefined();
+    });
+
+    test('returns undefined when collection is not initialized', async () => {
+      vi.resetModules();
+      const fresh = await import('./update-operation.js');
+      expect(fresh.cancelQueuedOperation('any-id')).toBeUndefined();
+    });
+  });
 });

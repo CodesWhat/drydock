@@ -935,3 +935,18 @@ export function getOperationsByContainerName(containerName: string): UpdateOpera
     .map((item) => item.data)
     .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
 }
+
+export function cancelQueuedOperation(id: string): UpdateOperation | undefined {
+  if (!updateOperationCollection) {
+    return undefined;
+  }
+  const existing = getOperationById(id);
+  if (!existing || existing.status !== 'queued') {
+    return undefined;
+  }
+  return markOperationTerminal(id, {
+    status: 'failed',
+    phase: 'failed',
+    lastError: 'Cancelled by operator',
+  });
+}
