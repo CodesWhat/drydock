@@ -318,12 +318,23 @@ export async function runAcceptedContainerUpdates(
   }
 }
 
+/**
+ * Dispatch already-accepted update requests in the background. Per-operation
+ * failures are terminalised inside the lifecycle handler (see Docker.ts), so
+ * the rejection from runAcceptedContainerUpdates carries no information that
+ * isn't already persisted on the operation row — swallow it to avoid
+ * unhandled rejections.
+ */
+export function dispatchAccepted(accepted: AcceptedContainerUpdateRequest[]): void {
+  void runAcceptedContainerUpdates(accepted).catch(() => undefined);
+}
+
 export async function requestContainerUpdate(
   container: Container,
   options: RequestContainerUpdateOptions = {},
 ): Promise<AcceptedContainerUpdateRequest> {
   const accepted = await enqueueContainerUpdate(container, options);
-  void runAcceptedContainerUpdates([accepted]).catch(() => undefined);
+  dispatchAccepted([accepted]);
   return accepted;
 }
 
@@ -332,6 +343,6 @@ export async function requestContainerUpdates(
   options: RequestContainerUpdateOptions = {},
 ): Promise<ContainerUpdateRequestBatchResult> {
   const result = await enqueueContainerUpdates(containers, options);
-  void runAcceptedContainerUpdates(result.accepted).catch(() => undefined);
+  dispatchAccepted(result.accepted);
   return result;
 }

@@ -34,6 +34,7 @@ vi.mock('../log/index.js', () => ({
 
 import {
   buildAcceptedUpdateRuntimeContext,
+  dispatchAccepted,
   enqueueContainerUpdate,
   enqueueContainerUpdates,
   requestContainerUpdate,
@@ -285,6 +286,52 @@ describe('request-update', () => {
   test('runAcceptedContainerUpdates handles empty accepted lists', async () => {
     await expect(runAcceptedContainerUpdates([])).resolves.toBeUndefined();
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+  });
+
+  test('dispatchAccepted runs triggers in the background and returns synchronously', async () => {
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockResolvedValue(undefined),
+    };
+    const entry = {
+      container: createContainer(),
+      operationId: 'op-bg-1',
+      trigger,
+    };
+
+    const result = dispatchAccepted([entry]);
+    expect(result).toBeUndefined();
+
+    await flushAsyncWork();
+    expect(trigger.trigger).toHaveBeenCalledWith(entry.container, {
+      operationId: 'op-bg-1',
+    });
+  });
+
+  test('dispatchAccepted swallows trigger rejection so it never escapes as an unhandled rejection', async () => {
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockRejectedValue(new Error('explosion')),
+    };
+    const entry = {
+      container: createContainer(),
+      operationId: 'op-bg-2',
+      trigger,
+    };
+    mockGetOperationById.mockImplementation((id: string) => ({
+      id,
+      status: 'queued',
+      phase: 'queued',
+    }));
+
+    expect(() => dispatchAccepted([entry])).not.toThrow();
+
+    await flushAsyncWork();
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-bg-2', {
+      status: 'failed',
+      phase: 'failed',
+      lastError: 'explosion',
+    });
   });
 
   test('runAcceptedContainerUpdates leaves successful terminalization to the trigger lifecycle', async () => {

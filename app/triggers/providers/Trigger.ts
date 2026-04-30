@@ -17,9 +17,9 @@ import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
 import * as notificationHistoryStore from '../../store/notification-history.js';
 import {
+  dispatchAccepted,
   enqueueContainerUpdate,
   enqueueContainerUpdates,
-  runAcceptedContainerUpdates,
   UpdateRequestError,
 } from '../../updates/request-update.js';
 import { renderBatch, renderSimple } from './trigger-expression-parser.js';
@@ -1585,7 +1585,7 @@ class Trigger<
           trigger: (container: Container, runtimeContext?: unknown) => Promise<unknown>;
         },
       });
-      await runAcceptedContainerUpdates([accepted]);
+      dispatchAccepted([accepted]);
       return;
     }
 
@@ -2424,7 +2424,7 @@ class Trigger<
       return;
     }
 
-    await runAcceptedContainerUpdates(accepted);
+    dispatchAccepted(accepted);
   }
 
   getMetadata(): Record<string, unknown> {
