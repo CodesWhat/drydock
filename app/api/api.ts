@@ -19,6 +19,7 @@ import * as internalSelfUpdateRouter from './internal-self-update.js';
 import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
 import * as logRouter from './log.js';
 import * as notificationRouter from './notification.js';
+import * as notificationOutboxRouter from './notification-outbox.js';
 import * as previewRouter from './preview.js';
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
@@ -133,6 +134,9 @@ export function init(): express.Router {
 
   // Mount notification rules router
   router.use('/notifications', notificationRouter.init());
+
+  // Mount notification outbox (DLQ) router
+  router.use('/notifications/outbox', notificationOutboxRouter.init());
 
   // Mount watcher router
   router.use('/watchers', watcherRouter.init());
