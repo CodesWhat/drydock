@@ -47,6 +47,7 @@ const {
   tableActionStyle,
   openActionsMenu,
   toggleActionsMenu,
+  cancelUpdate,
   confirmUpdate,
   confirmStop,
   startContainer,
@@ -190,6 +191,10 @@ function blockedUpdateTooltip(container: {
     return `Blocked: ${tag} (${critical} ${noun})`;
   }
   return `Blocked: ${tag}`;
+}
+
+function canCancelUpdate(c: { updateOperation?: { status?: string; id?: string } }): boolean {
+  return c.updateOperation?.status === 'queued' && Boolean(c.updateOperation?.id);
 }
 
 function updateBtnState(c: {
@@ -709,6 +714,9 @@ onScopeDispose(() => {
                       :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
                       :disabled="isRowLocked(c)"
                       :tooltip="tt('Start')" @click.stop="startContainer(c)" />
+              <AppIconButton v-if="canCancelUpdate(c)" icon="x" size="sm" variant="danger"
+                      class="transition-[color,background-color,border-color,opacity,transform,box-shadow] hover:dd-bg-hover hover:scale-110 active:scale-95"
+                      :tooltip="tt('Cancel queued update')" @click.stop="cancelUpdate(c)" />
               <AppIconButton icon="more" size="sm" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="[
@@ -730,6 +738,12 @@ onScopeDispose(() => {
                 icon-only
               />
               <ProjectLink v-if="c.sourceRepo" :source-repo="c.sourceRepo" icon-only />
+              <AppButton v-if="canCancelUpdate(c)" size="none" variant="plain" weight="none"
+                      class="inline-flex items-center justify-center whitespace-nowrap px-3 py-1.5 text-2xs-plus font-bold tracking-wide transition-colors hover:brightness-110"
+                      :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)', borderRadius: 'var(--dd-radius)' }"
+                      @click.stop="cancelUpdate(c)">
+                <AppIcon name="x" :size="12" class="mr-1" /> Cancel
+              </AppButton>
             <div v-if="c.newTag" class="inline-flex items-center gap-1">
               <!-- Blocked: muted split button (any hard eligibility blocker) -->
               <div v-if="updateBtnState(c) === 'hard'" class="inline-flex dd-rounded overflow-hidden" style="min-width: 110px;"

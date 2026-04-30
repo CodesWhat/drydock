@@ -136,11 +136,11 @@ export function isStaleContainerUpdateError(error: unknown): boolean {
 }
 
 export function getContainerUpdateStartedMessage(name: string): string {
-  return `Update started: ${name}`;
+  return `Update queued: ${name}`;
 }
 
 export function getForceContainerUpdateStartedMessage(name: string): string {
-  return `Force update started: ${name}`;
+  return `Force update queued: ${name}`;
 }
 
 export function getContainerAlreadyUpToDateMessage(name: string): string {
@@ -148,7 +148,7 @@ export function getContainerAlreadyUpToDateMessage(name: string): string {
 }
 
 export function formatContainerUpdateStartedCountMessage(count: number): string {
-  return `Started update${count === 1 ? '' : 's'} for ${count} container${count === 1 ? '' : 's'}`;
+  return `Queued update${count === 1 ? '' : 's'} for ${count} container${count === 1 ? '' : 's'}`;
 }
 
 export function formatContainersAlreadyUpToDateMessage(count: number): string {

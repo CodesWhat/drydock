@@ -1978,7 +1978,7 @@ describe('DashboardView', () => {
 
       expect(
         toasts.value.some(
-          (toast) => toast.tone === 'success' && toast.title === 'Update started: nginx',
+          (toast) => toast.tone === 'success' && toast.title === 'Update queued: nginx',
         ),
       ).toBe(true);
     });
@@ -2316,7 +2316,7 @@ describe('DashboardView', () => {
 
       expect(
         toasts.value.some(
-          (toast) => toast.tone === 'success' && toast.title === 'Started updates for 2 containers',
+          (toast) => toast.tone === 'success' && toast.title === 'Queued updates for 2 containers',
         ),
       ).toBe(true);
     });

@@ -11,6 +11,7 @@ import {
   scanContainer as apiScanContainer,
 } from '../../services/container';
 import {
+  cancelUpdateOperation as apiCancelUpdateOperation,
   restartContainer as apiRestartContainer,
   startContainer as apiStartContainer,
   stopContainer as apiStopContainer,
@@ -1223,6 +1224,29 @@ export function useContainerActions(input: UseContainerActionsInput) {
       markScanCompleted: scanLifecycle.markScanCompleted,
     });
 
+  async function cancelUpdate(target: Pick<Container, 'id' | 'name' | 'updateOperation'>) {
+    const { name } = target;
+    const operationId = target.updateOperation?.id;
+    if (!operationId) {
+      return;
+    }
+    const toast = useToast();
+    try {
+      await apiCancelUpdateOperation(operationId);
+      toast.success(`Cancelled: ${name}`);
+      await input.loadContainers();
+    } catch (e: unknown) {
+      const statusCode = (e as { statusCode?: number }).statusCode;
+      if (statusCode === 409) {
+        toast.warning(`Update already in progress for ${name}, cannot cancel`);
+      } else if (statusCode === 404) {
+        toast.error(`Operation not found: ${name}`);
+      } else {
+        toast.error(errorMessage(e, `Failed to cancel update for ${name}`));
+      }
+    }
+  }
+
   async function deleteContainer(target: ContainerActionTarget) {
     const { containerId, name } = resolveContainerActionTarget(target, input.containerIdMap.value);
     const actionKey = containerId ?? resolveContainerActionTargetKey(target);
@@ -1265,6 +1289,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     actionInProgress,
     actionPending,
     backupsLoading: backups.backupsLoading,
+    cancelUpdate,
     containerActionsDisabledReason,
     containerActionsEnabled,
     confirmClearPolicy,
