@@ -119,6 +119,15 @@ export interface Container {
   updateKind: 'major' | 'minor' | 'patch' | 'digest' | null;
   updateDetectedAt?: string;
   updateOperation?: ContainerUpdateOperation;
+  /**
+   * UI-only transient: short summary of the most recent failed update attempt
+   * (e.g. "Registry rate limit hit"). Set by ContainersView on terminal SSE,
+   * cleared on next successful update or when the watcher cron rewrites the
+   * row. Not persisted backend-side.
+   */
+  lastUpdateFailureReason?: string;
+  /** UI-only transient: epoch ms when lastUpdateFailureReason was set. */
+  lastUpdateFailureAt?: number;
   updateMaturity: 'fresh' | 'settled' | null;
   updateMaturityTooltip?: string;
   updatePolicyState?: 'snoozed' | 'skipped' | 'maturity-blocked';

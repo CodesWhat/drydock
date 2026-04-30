@@ -159,6 +159,7 @@
       "statusGeneratingSbom": "Generating SBOM…",
       "statusHealthChecking": "Health-checking…",
       "statusRollingBack": "Rolling back…",
+      "lastUpdateFailed": "Last update failed: {reason}",
       "stopAction": "Stop",
       "startAction": "Start",
       "restartAction": "Restart",

@@ -174,6 +174,22 @@ function isRowLocked(container: { id?: unknown; name?: unknown }) {
   return isContainerRowLocked(container);
 }
 
+const RECENT_FAILURE_DISPLAY_MS = 10 * 60 * 1000;
+
+function isContainerRecentlyFailed(c: {
+  lastUpdateFailureAt?: number;
+  lastUpdateFailureReason?: string;
+}): boolean {
+  if (!c.lastUpdateFailureAt || !c.lastUpdateFailureReason) {
+    return false;
+  }
+  return Date.now() - c.lastUpdateFailureAt < RECENT_FAILURE_DISPLAY_MS;
+}
+
+function recentFailureReasonText(c: { lastUpdateFailureReason?: string }): string {
+  return c.lastUpdateFailureReason ?? '';
+}
+
 function blockedUpdateTooltip(container: {
   newTag?: string | null;
   updateBouncer?: string;
@@ -1093,6 +1109,14 @@ onScopeDispose(() => {
               class="text-2xs mt-0.5 inline-flex items-center gap-1 dd-text-muted">
               <AppIcon name="clock" :size="10" class="shrink-0" />
               {{ t('containerComponents.groupedViews.statusQueued') }}
+            </div>
+            <div
+              v-else-if="isContainerRecentlyFailed(c)"
+              class="text-2xs mt-0.5 inline-flex items-center gap-1 max-w-full"
+              style="color: var(--dd-danger);"
+              v-tooltip.top="recentFailureReasonText(c)">
+              <AppIcon name="warning" :size="10" class="shrink-0" />
+              <span class="truncate">{{ t('containerComponents.groupedViews.lastUpdateFailed', { reason: recentFailureReasonText(c) }) }}</span>
             </div>
             <div
               v-else-if="!c.newTag && c.noUpdateReason"

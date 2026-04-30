@@ -37,6 +37,7 @@ import {
   updateKindColor,
 } from '../utils/display';
 import { errorMessage } from '../utils/error';
+import { summariseUpdateError } from '../utils/update-error-summary';
 import { useContainerActions } from './containers/useContainerActions';
 import { useContainerLogs } from './containers/useContainerLogs';
 import { useContainerSecurity } from './containers/useContainerSecurity';
@@ -1342,15 +1343,31 @@ function applyOperationPatch(event: Event) {
     // renames the row post-recreate, so still release the hold even when the row
     // has already fallen out of containers.value.
     onTerminalEvent: ({ container, status, name, operationId }) => {
+      const reason = summariseUpdateError(parsed.lastError);
       if (container) {
         (container as Container).updateOperation = undefined;
+        if (
+          status === 'failed' ||
+          (status === 'rolled-back' && parsed.rollbackReason !== 'cancelled')
+        ) {
+          (container as Container).lastUpdateFailureReason =
+            reason ?? parsed.lastError ?? 'Update failed';
+          (container as Container).lastUpdateFailureAt = Date.now();
+        } else if (status === 'succeeded') {
+          (container as Container).lastUpdateFailureReason = undefined;
+          (container as Container).lastUpdateFailureAt = undefined;
+        }
       }
       if (status === 'failed') {
         if (operationId) {
           terminalToastFiredForOp.add(operationId);
         }
         scheduleCompletionToast(() =>
-          toast.error(t('containersView.toast.updateFailed', { name })),
+          toast.error(
+            reason
+              ? t('containersView.toast.updateFailedWithReason', { name, reason })
+              : t('containersView.toast.updateFailed', { name }),
+          ),
         );
       } else if (status === 'rolled-back') {
         const isCancelled =
@@ -1364,7 +1381,11 @@ function applyOperationPatch(event: Event) {
           );
         } else {
           scheduleCompletionToast(() =>
-            toast.warning(t('containersView.toast.rolledBack', { name })),
+            toast.warning(
+              reason
+                ? t('containersView.toast.rolledBackWithReason', { name, reason })
+                : t('containersView.toast.rolledBack', { name }),
+            ),
           );
         }
       }

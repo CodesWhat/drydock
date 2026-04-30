@@ -8,6 +8,12 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./qa-compose.yml:/drydock/qa-compose.yml:ro
+    # Optional gitignored credentials file (Docker Hub / GHCR tokens). See
+    # test/.env.qa-creds.example. Compose silently no-ops when the file is
+    # absent so CI / fresh checkouts still work without it.
+    env_file:
+      - path: .env.qa-creds
+        required: false
     environment:
       - DD_RUN_AS_ROOT=true
       - DD_ALLOW_INSECURE_ROOT=true
@@ -50,9 +56,14 @@ services:
       # --- Docker Compose action (manual only) ---
       - DD_ACTION_DOCKERCOMPOSE_QA_FILE=/drydock/qa-compose.yml
       - DD_ACTION_DOCKERCOMPOSE_QA_AUTO=false
+      # --- Docker Hub (anonymous unless test/.env.qa-creds is populated) ---
+      - DD_REGISTRY_HUB_PUBLIC_USERNAME=${DD_REGISTRY_HUB_PUBLIC_USERNAME:-}
+      - DD_REGISTRY_HUB_PUBLIC_TOKEN=${DD_REGISTRY_HUB_PUBLIC_TOKEN:-}
       # --- GHCR registry (authenticated) ---
-      - DD_REGISTRY_GHCR_PRIVATE_USERNAME=myghuser
-      - DD_REGISTRY_GHCR_PRIVATE_TOKEN=ghp_fakeGitHubTokenForTesting123
+      # Real creds come from test/.env.qa-creds; falls back to a placeholder so
+      # the watcher's auth-error code path still has a token to reject.
+      - DD_REGISTRY_GHCR_PRIVATE_USERNAME=${DD_REGISTRY_GHCR_PRIVATE_USERNAME:-myghuser}
+      - DD_REGISTRY_GHCR_PRIVATE_TOKEN=${DD_REGISTRY_GHCR_PRIVATE_TOKEN:-ghp_fakeGitHubTokenForTesting123}
       # --- Gitea registry (self-hosted with custom CA) ---
       - DD_REGISTRY_GITEA_PRIVATE_URL=https://gitea.internal.example
       - DD_REGISTRY_GITEA_PRIVATE_LOGIN=gitea-bot
