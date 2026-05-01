@@ -39,6 +39,23 @@ export interface FrozenBatch {
 
 const ACTIVE_STATUSES = new Set(['queued', 'in-progress']);
 
+/**
+ * Monotonic rank for operation statuses. Higher rank = further along the lifecycle.
+ * Unknown statuses (not in this map) are treated as rank 0 — they may be advanced
+ * from but never regressed to.
+ */
+const STATUS_RANK: Record<string, number> = {
+  queued: 1,
+  'in-progress': 2,
+  succeeded: 3,
+  failed: 3,
+  'rolled-back': 3,
+};
+
+function statusRank(status: string): number {
+  return STATUS_RANK[status] ?? 0;
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -153,12 +170,39 @@ export const useOperationStore = defineStore('operations', () => {
   let unsubscribeEventStream: Array<() => void> = [];
 
   function upsertOperation(operation: UiUpdateOperation): void {
+    const existing = byId.value[operation.operationId];
+    if (!existing) {
+      // First insert — no guard needed.
+      byId.value = { ...byId.value, [operation.operationId]: operation };
+      return;
+    }
+
+    const existingRank = statusRank(existing.status);
+    const incomingRank = statusRank(operation.status);
+
+    if (incomingRank < existingRank) {
+      // Stale event: drop status and phase but allow other metadata to merge through.
+      const { status: _s, phase: _p, ...rest } = operation;
+      byId.value = {
+        ...byId.value,
+        [operation.operationId]: { ...existing, ...rest },
+      };
+      return;
+    }
+
+    if (existingRank === 3 && incomingRank === 3 && operation.status !== existing.status) {
+      // Two different terminal statuses — preserve the first; only allow non-status metadata.
+      const { status: _s, phase: _p, ...rest } = operation;
+      byId.value = {
+        ...byId.value,
+        [operation.operationId]: { ...existing, ...rest },
+      };
+      return;
+    }
+
     byId.value = {
       ...byId.value,
-      [operation.operationId]: {
-        ...byId.value[operation.operationId],
-        ...operation,
-      },
+      [operation.operationId]: { ...existing, ...operation },
     };
   }
 

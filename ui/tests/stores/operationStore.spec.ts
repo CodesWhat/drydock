@@ -143,6 +143,183 @@ describe('useOperationStore', () => {
     expect(operations.getBatchProgress('missing-stack')).toBeUndefined();
   });
 
+  describe('upsertOperation status-rank guard', () => {
+    it('allows forward transition queued → in-progress → succeeded', () => {
+      const operations = useOperationStore();
+
+      operations.applyOperationChanged({
+        operationId: 'op-forward',
+        containerId: 'c1',
+        containerName: 'web',
+        status: 'queued',
+      });
+      expect(operations.byId['op-forward']?.status).toBe('queued');
+
+      operations.applyOperationChanged({
+        operationId: 'op-forward',
+        containerId: 'c1',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+      expect(operations.byId['op-forward']?.status).toBe('in-progress');
+      expect(operations.byId['op-forward']?.phase).toBe('pulling');
+
+      operations.applyUpdateApplied({
+        operationId: 'op-forward',
+        containerId: 'c1',
+        containerName: 'web',
+        batchId: null,
+        timestamp: '2026-05-01T12:00:00.000Z',
+      });
+      expect(operations.byId['op-forward']?.status).toBe('succeeded');
+    });
+
+    it('drops status but merges metadata when stale queued event arrives after in-progress', () => {
+      const operations = useOperationStore();
+
+      operations.applyOperationChanged({
+        operationId: 'op-stale',
+        containerId: 'c1',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+
+      // Stale queued event — would regress status
+      operations.applyOperationChanged({
+        operationId: 'op-stale',
+        containerId: 'c1',
+        containerName: 'web-renamed',
+        status: 'queued',
+      });
+
+      // Status must NOT regress; but containerName update should apply
+      expect(operations.byId['op-stale']?.status).toBe('in-progress');
+      expect(operations.byId['op-stale']?.containerName).toBe('web-renamed');
+    });
+
+    it('drops status when stale in-progress event arrives after succeeded', () => {
+      const operations = useOperationStore();
+
+      operations.applyUpdateApplied({
+        operationId: 'op-terminal',
+        containerId: 'c1',
+        containerName: 'web',
+        batchId: null,
+        timestamp: '2026-05-01T12:00:00.000Z',
+      });
+      expect(operations.byId['op-terminal']?.status).toBe('succeeded');
+
+      // Stale in-progress event arrives after succeeded
+      operations.applyOperationChanged({
+        operationId: 'op-terminal',
+        containerId: 'c1',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'creating',
+      });
+
+      // Terminal status is sticky; phase must not regress either
+      expect(operations.byId['op-terminal']?.status).toBe('succeeded');
+      expect(operations.byId['op-terminal']?.phase).toBe('succeeded');
+    });
+
+    it('merges non-status metadata even when status is gated', () => {
+      const operations = useOperationStore();
+
+      operations.applyUpdateFailed({
+        operationId: 'op-meta',
+        containerId: 'c1',
+        containerName: 'web',
+        error: 'pull failed',
+        phase: 'failed',
+        batchId: null,
+        timestamp: '2026-05-01T12:00:00.000Z',
+      });
+      expect(operations.byId['op-meta']?.status).toBe('failed');
+
+      // Stale in-progress with a newContainerId that we DO want to merge
+      operations.applyOperationChanged({
+        operationId: 'op-meta',
+        containerId: 'c1',
+        newContainerId: 'c1-new',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'creating',
+      });
+
+      // Status stays terminal; newContainerId merges through
+      expect(operations.byId['op-meta']?.status).toBe('failed');
+      expect(operations.byId['op-meta']?.phase).toBe('failed');
+      expect(operations.byId['op-meta']?.newContainerId).toBe('c1-new');
+    });
+
+    it('first insert (no existing operation) applies without guard', () => {
+      const operations = useOperationStore();
+
+      operations.applyOperationChanged({
+        operationId: 'op-first',
+        containerId: 'c1',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+
+      expect(operations.byId['op-first']?.status).toBe('in-progress');
+      expect(operations.byId['op-first']?.phase).toBe('pulling');
+    });
+
+    it('preserves first terminal status when a different terminal arrives (succeeded → failed is rejected)', () => {
+      const operations = useOperationStore();
+
+      operations.applyUpdateApplied({
+        operationId: 'op-two-terminals',
+        containerId: 'c1',
+        containerName: 'web',
+        batchId: null,
+        timestamp: '2026-05-01T12:00:00.000Z',
+      });
+      expect(operations.byId['op-two-terminals']?.status).toBe('succeeded');
+
+      // A spurious failed event (should not happen, but guard it)
+      operations.applyUpdateFailed({
+        operationId: 'op-two-terminals',
+        containerId: 'c1',
+        containerName: 'web',
+        error: 'unexpected',
+        phase: 'failed',
+        batchId: null,
+        timestamp: '2026-05-01T12:00:01.000Z',
+      });
+
+      expect(operations.byId['op-two-terminals']?.status).toBe('succeeded');
+    });
+
+    it('treats unknown status as rank 0 and allows advance from it', () => {
+      const operations = useOperationStore();
+
+      // Unknown status inserted first (e.g. from a future backend version)
+      operations.applyOperationChanged({
+        operationId: 'op-unknown',
+        containerId: 'c1',
+        containerName: 'web',
+        status: 'custom-status',
+      });
+      expect(operations.byId['op-unknown']?.status).toBe('custom-status');
+
+      // Should advance to in-progress without being blocked
+      operations.applyOperationChanged({
+        operationId: 'op-unknown',
+        containerId: 'c1',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+      expect(operations.byId['op-unknown']?.status).toBe('in-progress');
+    });
+  });
+
   it('supports display batch replacement and new-container operation lookup', () => {
     const operations = useOperationStore();
 

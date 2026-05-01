@@ -1350,7 +1350,20 @@ function applyContainerPatch(event: Event, kind: ContainerPatchKind) {
   } else {
     // In-place merge preserves the row object identity; downstream row wrappers
     // and :key bindings therefore keep pointing at the same object reference.
+    //
+    // updateOperation is owned by the SSE operation-stream pipeline
+    // (applyOperationPatch → applyUpdateOperationSseToHold). Container-metadata
+    // SSE events (dd:container-updated / dd:container-added) carry only container
+    // metadata — they do not carry the live updateOperation. If we blindly
+    // Object.assign the mapped result, mapped.updateOperation (undefined) clobbers
+    // the row's live updateOperation, causing reconcileHoldsAgainstContainers to
+    // read undefined status → rawIsActive:false → scheduleHeldOperationRelease.
+    // Preserve the existing operation when the patch does not carry a replacement.
+    const existingOp = containers.value[idx]!.updateOperation;
     Object.assign(containers.value[idx]!, mapped);
+    if (existingOp !== undefined && mapped.updateOperation === undefined) {
+      containers.value[idx]!.updateOperation = existingOp;
+    }
   }
   updateLookupMapsForContainer(raw);
   reconcileHoldsAgainstContainers(containers.value);

@@ -1,6 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
 import { computed, ref } from 'vue';
-import type { Container } from '@/types/container';
+import type { Container, ContainerUpdateOperation } from '@/types/container';
 import ContainersView from '@/views/ContainersView.vue';
 import { mountWithPlugins } from '../helpers/mount';
 
@@ -610,6 +610,220 @@ describe('ContainersView — applyContainerPatch', () => {
       expect(mockGetAllContainers).toHaveBeenCalledTimes(1);
       // Length unchanged on fallback — the broken update did not mutate rows
       expect(vm.containers).toHaveLength(1);
+    });
+  });
+
+  describe('updateOperation preservation across container-metadata SSE patches', () => {
+    function makeOperation(
+      overrides: Partial<ContainerUpdateOperation> = {},
+    ): ContainerUpdateOperation {
+      return {
+        id: 'op-1',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-05-01T12:00:00.000Z',
+        ...overrides,
+      };
+    }
+
+    it('preserves an active updateOperation when the SSE patch does not carry one', async () => {
+      const activeOp = makeOperation();
+      const existing = makeContainer({
+        id: 'c1',
+        name: 'vaultwarden',
+        currentTag: '1.30.0',
+        updateOperation: activeOp,
+      });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      // SSE container-updated arrives for the new container — no updateOperation in payload
+      const raw = { id: 'c1', name: 'vaultwarden' };
+      const mappedWithoutOp = makeContainer({
+        id: 'c1',
+        name: 'vaultwarden',
+        currentTag: '1.31.0',
+        updateOperation: undefined, // mapper returns undefined — SSE had no updateOperation
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedWithoutOp);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: raw }));
+      await flushPromises();
+
+      // The row must reflect the new container metadata…
+      expect(vm.containers[0].currentTag).toBe('1.31.0');
+      // …but the active updateOperation must be preserved, not wiped
+      expect(vm.containers[0].updateOperation).toEqual(activeOp);
+    });
+
+    it('does not preserve updateOperation when the row had none before the patch', async () => {
+      const existing = makeContainer({
+        id: 'c1',
+        name: 'nginx',
+        currentTag: '1.0.0',
+        updateOperation: undefined,
+      });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      const raw = { id: 'c1', name: 'nginx' };
+      const mappedWithoutOp = makeContainer({
+        id: 'c1',
+        name: 'nginx',
+        currentTag: '1.1.0',
+        updateOperation: undefined,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedWithoutOp);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: raw }));
+      await flushPromises();
+
+      expect(vm.containers[0].currentTag).toBe('1.1.0');
+      expect(vm.containers[0].updateOperation).toBeUndefined();
+    });
+
+    it('allows a defined mapped.updateOperation to overwrite an existing one', async () => {
+      const oldOp = makeOperation({ id: 'op-old', phase: 'pulling' });
+      const newOp = makeOperation({ id: 'op-new', phase: 'health-checking' });
+      const existing = makeContainer({
+        id: 'c1',
+        name: 'nginx',
+        updateOperation: oldOp,
+      });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      // This simulates a REST refresh that includes an updateOperation
+      const raw = { id: 'c1', name: 'nginx' };
+      const mappedWithNewOp = makeContainer({
+        id: 'c1',
+        name: 'nginx',
+        updateOperation: newOp,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedWithNewOp);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: raw }));
+      await flushPromises();
+
+      // New operation from the patch must replace the old one
+      expect(vm.containers[0].updateOperation).toEqual(newOp);
+    });
+
+    it('preserves updateOperation across added event for existing row with active op', async () => {
+      const activeOp = makeOperation();
+      const existing = makeContainer({
+        id: 'c1',
+        name: 'redis',
+        updateOperation: activeOp,
+      });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      // dd:container-added for an already-known id triggers in-place merge
+      const raw = { id: 'c1', name: 'redis' };
+      const mappedWithoutOp = makeContainer({
+        id: 'c1',
+        name: 'redis',
+        currentTag: '7.2.0',
+        updateOperation: undefined,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedWithoutOp);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: raw }));
+      await flushPromises();
+
+      // Still one row (in-place merge, not push)
+      expect(vm.containers).toHaveLength(1);
+      // updateOperation preserved
+      expect(vm.containers[0].updateOperation).toEqual(activeOp);
+    });
+
+    it('does NOT preserve updateOperation for a brand-new row inserted by added event', async () => {
+      const existing = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      // New container id — will be pushed, not merged
+      const raw = { id: 'c2', name: 'redis' };
+      const mappedNew = makeContainer({
+        id: 'c2',
+        name: 'redis',
+        updateOperation: undefined,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedNew);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: raw }));
+      await flushPromises();
+
+      expect(vm.containers).toHaveLength(2);
+      expect(vm.containers[1].updateOperation).toBeUndefined();
+    });
+
+    it('reconcileHoldsAgainstContainers does NOT schedule a release when updateOperation is preserved', async () => {
+      // This test verifies the end-to-end symptom: after a container-metadata SSE patch,
+      // reconciliation sees the preserved operation as active and does not trigger release.
+      const activeOp = makeOperation({ id: 'op-health', status: 'in-progress', phase: 'pulling' });
+      const existing = makeContainer({
+        id: 'c1',
+        name: 'vaultwarden',
+        updateOperation: activeOp,
+      });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      // Seed the hold map via the operation composable so reconcile has something to check
+      const { useOperationDisplayHold } = await import('@/composables/useOperationDisplayHold');
+      const {
+        holdOperationDisplay,
+        heldOperations,
+        clearAllOperationDisplayHolds,
+        scheduleHeldOperationRelease,
+      } = useOperationDisplayHold();
+
+      holdOperationDisplay({
+        operationId: activeOp.id,
+        operation: activeOp,
+        containerId: 'c1',
+        containerName: 'vaultwarden',
+        now: Date.now(),
+      });
+
+      expect(heldOperations.value.has(activeOp.id)).toBe(true);
+
+      // SSE container-updated arrives without updateOperation (e.g. new container metadata)
+      const raw = { id: 'c1', name: 'vaultwarden' };
+      const mappedWithoutOp = makeContainer({
+        id: 'c1',
+        name: 'vaultwarden',
+        currentTag: '1.31.0',
+        updateOperation: undefined,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedWithoutOp);
+
+      // Use fake timers so we can detect if setTimeout was called for a release
+      vi.useFakeTimers();
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: raw }));
+      await flushPromises();
+
+      // The hold must still be present (not transitioned to short release window)
+      // Because the operation was preserved, reconcile saw rawIsActive = true and skipped
+      const hold = heldOperations.value.get(activeOp.id);
+      expect(hold).toBeDefined();
+      // displayUntil must still be the long active window (10 minutes from now),
+      // not the short 1500ms release window
+      const shortReleaseWindow = Date.now() + 1500 + 1000; // some headroom
+      expect(hold!.displayUntil).toBeGreaterThan(shortReleaseWindow);
+
+      // No release timer must have been scheduled for this operation
+      const timerCallsForRelease = setTimeoutSpy.mock.calls.filter(
+        ([_fn, delay]) => typeof delay === 'number' && delay <= 1500,
+      );
+      expect(timerCallsForRelease).toHaveLength(0);
+
+      vi.useRealTimers();
+      clearAllOperationDisplayHolds();
     });
   });
 });
