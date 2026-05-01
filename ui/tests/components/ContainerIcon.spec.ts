@@ -116,14 +116,14 @@ describe('ContainerIcon', () => {
     expect(root.attributes('style')).toContain('height: 32px');
   });
 
-  it('does not set lazy loading on proxy images so they paint on first layout', () => {
+  it('sets lazy loading on proxy images', () => {
     const wrapper = factory({ icon: 'sh-test' });
-    expect(wrapper.find('img').attributes('loading')).toBeUndefined();
+    expect(wrapper.find('img').attributes('loading')).toBe('lazy');
   });
 
-  it('does not set lazy loading on URL images so they paint on first layout', () => {
+  it('sets lazy loading on URL images', () => {
     const wrapper = factory({ icon: 'https://example.com/img.png' });
-    expect(wrapper.find('img').attributes('loading')).toBeUndefined();
+    expect(wrapper.find('img').attributes('loading')).toBe('lazy');
   });
 
   it('applies size to proxy image container', () => {
