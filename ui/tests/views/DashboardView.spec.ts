@@ -2878,7 +2878,6 @@ describe('DashboardView', () => {
               operationId: 'op-dash-failfail-1',
               containerId: 'c1',
               containerName: 'nginx',
-              error: 'pull failed',
               phase: 'pulling',
               batchId: null,
               timestamp: '2026-04-28T12:00:00.000Z',
@@ -3025,6 +3024,204 @@ describe('DashboardView', () => {
               containerName: 'nginx',
               batchId: 'batch-xyz',
               timestamp: '2026-04-28T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        // Track D handles the batch summary; per-container toast suppressed
+        expect(toasts.value.length).toBe(countBefore);
+
+        wrapper.unmount();
+        addEventListenerSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires toast.warning on dd:sse-update-failed when rollbackReason is present and not cancelled', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-dash-rb-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              rollbackReason: '',
+              phase: 'rolled-back',
+              batchId: null,
+              timestamp: '2026-05-01T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.at(-1)).toMatchObject({
+          tone: 'warning',
+          title: 'Rolled back: nginx',
+        });
+
+        wrapper.unmount();
+        addEventListenerSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires toast.warning with reason on dd:sse-update-failed when rollbackReason has a specific value', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-dash-rb-reason-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              rollbackReason: 'health-check-failed',
+              phase: 'rolled-back',
+              batchId: null,
+              timestamp: '2026-05-01T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.at(-1)).toMatchObject({
+          tone: 'warning',
+          title: 'Rolled back: nginx — health check failed',
+        });
+
+        wrapper.unmount();
+        addEventListenerSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires toast.error with reason on dd:sse-update-failed when error is short and meaningful', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-dash-fail-reason-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              error: 'docker pull failed',
+              phase: 'pulling',
+              batchId: null,
+              timestamp: '2026-05-01T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.at(-1)).toMatchObject({
+          tone: 'error',
+          title: 'Update failed: nginx — docker pull failed',
+        });
+
+        wrapper.unmount();
+        addEventListenerSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires toast.success (Cancelled) on dd:sse-update-failed when rollbackReason is cancelled', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-dash-cancel-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              error: 'Cancelled by operator',
+              rollbackReason: 'cancelled',
+              phase: 'rolled-back',
+              batchId: null,
+              timestamp: '2026-05-01T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.at(-1)).toMatchObject({
+          tone: 'success',
+          title: 'Cancelled: nginx',
+        });
+
+        wrapper.unmount();
+        addEventListenerSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('suppresses per-container toast when dd:sse-update-failed has a non-null batchId', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-dash-batch-fail-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              error: 'Update failed',
+              phase: 'failed',
+              batchId: 'batch-xyz',
+              timestamp: '2026-05-01T12:00:00.000Z',
             },
           }),
         );

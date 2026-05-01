@@ -3055,6 +3055,9 @@ describe('ContainersView', () => {
         const operationListener = addEventListenerSpy.mock.calls.findLast(
           ([eventName]) => eventName === 'dd:sse-update-operation-changed',
         )?.[1] as EventListener | undefined;
+        const updateFailedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-failed',
+        )?.[1] as EventListener | undefined;
 
         operationListener?.(
           new CustomEvent('dd:sse-update-operation-changed', {
@@ -3072,6 +3075,7 @@ describe('ContainersView', () => {
         const { toasts } = useToast();
         const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
+        // Terminal operation SSE releases the hold but fires no toast.
         operationListener?.(
           new CustomEvent('dd:sse-update-operation-changed', {
             detail: {
@@ -3080,6 +3084,26 @@ describe('ContainersView', () => {
               containerName: 'nginx',
               status: 'failed',
               phase: 'failed',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        // No toast from the operation stream — dd:update-failed owns it.
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
+
+        // The canonical failure event fires the error toast.
+        updateFailedListener?.(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-fail',
+              containerId: 'c1',
+              containerName: 'nginx',
+              phase: 'failed',
+              batchId: null,
+              timestamp: '2026-05-01T12:00:00.000Z',
             },
           }),
         );
@@ -3110,6 +3134,9 @@ describe('ContainersView', () => {
         const operationListener = addEventListenerSpy.mock.calls.findLast(
           ([eventName]) => eventName === 'dd:sse-update-operation-changed',
         )?.[1] as EventListener | undefined;
+        const updateFailedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-failed',
+        )?.[1] as EventListener | undefined;
 
         operationListener?.(
           new CustomEvent('dd:sse-update-operation-changed', {
@@ -3127,6 +3154,7 @@ describe('ContainersView', () => {
         const { toasts } = useToast();
         const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
+        // Terminal operation SSE releases the hold but fires no toast.
         operationListener?.(
           new CustomEvent('dd:sse-update-operation-changed', {
             detail: {
@@ -3135,6 +3163,30 @@ describe('ContainersView', () => {
               containerName: 'nginx',
               status: 'rolled-back',
               phase: 'rolled-back',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        // No toast from the operation stream — dd:update-failed owns it.
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
+
+        // The canonical failure event fires the rollback warning toast.
+        // rollbackReason present (non-cancelled) triggers the warning variant.
+        // An empty rollbackReason string signals rollback without a specific reason
+        // (formatRollbackReason('') returns '' which is falsy → plain 'Rolled back' title).
+        updateFailedListener?.(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-rb',
+              containerId: 'c1',
+              containerName: 'nginx',
+              rollbackReason: '',
+              phase: 'rolled-back',
+              batchId: null,
+              timestamp: '2026-05-01T12:00:00.000Z',
             },
           }),
         );
@@ -3153,7 +3205,7 @@ describe('ContainersView', () => {
       }
     });
 
-    it('fires toast.error when a tracked operation in a batch transitions to failed', async () => {
+    it('suppresses per-container toast when a tracked operation in a batch transitions to failed', async () => {
       const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
       vi.useFakeTimers();
       try {
@@ -3164,6 +3216,9 @@ describe('ContainersView', () => {
         );
         const operationListener = addEventListenerSpy.mock.calls.findLast(
           ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+        const updateFailedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-failed',
         )?.[1] as EventListener | undefined;
 
         operationListener?.(
@@ -3196,12 +3251,27 @@ describe('ContainersView', () => {
           }),
         );
 
+        // The canonical dd:sse-update-failed carries batchId — per-container toast suppressed.
+        updateFailedListener?.(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-batch-fail',
+              containerId: 'c1',
+              containerName: 'nginx',
+              error: 'Update failed',
+              phase: 'failed',
+              batchId: 'batch-1',
+              timestamp: '2026-05-01T12:00:00.000Z',
+            },
+          }),
+        );
+
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
+        // Track D handles the batch summary toast; per-container toast suppressed.
         const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
-        expect(newToasts).toHaveLength(1);
-        expect(newToasts[0]).toMatchObject({ tone: 'error', title: 'Update failed: nginx' });
+        expect(newToasts).toHaveLength(0);
 
         wrapper.unmount();
       } finally {
@@ -3222,6 +3292,9 @@ describe('ContainersView', () => {
         const operationListener = addEventListenerSpy.mock.calls.findLast(
           ([eventName]) => eventName === 'dd:sse-update-operation-changed',
         )?.[1] as EventListener | undefined;
+        const updateFailedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-failed',
+        )?.[1] as EventListener | undefined;
 
         operationListener?.(
           new CustomEvent('dd:sse-update-operation-changed', {
@@ -3239,6 +3312,7 @@ describe('ContainersView', () => {
         const { toasts } = useToast();
         const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
+        // Terminal operation SSE releases the hold but fires no toast.
         operationListener?.(
           new CustomEvent('dd:sse-update-operation-changed', {
             detail: {
@@ -3255,9 +3329,79 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
+        // No toast from the operation stream — dd:update-failed owns it.
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
+
+        // The canonical failure event fires the cancelled success toast.
+        updateFailedListener?.(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-cancel',
+              containerId: 'c1',
+              containerName: 'nginx',
+              error: 'Cancelled by operator',
+              rollbackReason: 'cancelled',
+              phase: 'rolled-back',
+              batchId: null,
+              timestamp: '2026-05-01T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
         const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
         expect(newToasts).toHaveLength(1);
         expect(newToasts[0]).toMatchObject({ tone: 'success', title: 'Cancelled: nginx' });
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires toast.warning with reason when rolled-back has a specific rollbackReason', async () => {
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      vi.useFakeTimers();
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const updateFailedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-failed',
+        )?.[1] as EventListener | undefined;
+
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
+
+        updateFailedListener?.(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-rb-reason',
+              containerId: 'c1',
+              containerName: 'nginx',
+              rollbackReason: 'health-check-failed',
+              phase: 'rolled-back',
+              batchId: null,
+              timestamp: '2026-05-01T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({
+          tone: 'warning',
+          title: 'Rolled back: nginx — health check failed',
+        });
 
         wrapper.unmount();
       } finally {
@@ -3395,6 +3539,9 @@ describe('ContainersView', () => {
         const operationListener = addEventListenerSpy.mock.calls.findLast(
           ([eventName]) => eventName === 'dd:sse-update-operation-changed',
         )?.[1] as EventListener | undefined;
+        const updateFailedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-failed',
+        )?.[1] as EventListener | undefined;
 
         operationListener?.(
           new CustomEvent('dd:sse-update-operation-changed', {
@@ -3418,6 +3565,7 @@ describe('ContainersView', () => {
         const { toasts } = useToast();
         const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
+        // Terminal operation SSE releases the hold but fires no toast.
         operationListener?.(
           new CustomEvent('dd:sse-update-operation-changed', {
             detail: {
@@ -3426,6 +3574,27 @@ describe('ContainersView', () => {
               containerName: 'nginx',
               status: 'rolled-back',
               phase: 'rolled-back',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        // No toast from the operation stream — dd:update-failed owns it.
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
+
+        // The canonical failure event fires the rollback warning toast.
+        updateFailedListener?.(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-slow-rb',
+              containerId: 'c1',
+              containerName: 'nginx',
+              rollbackReason: '',
+              phase: 'rolled-back',
+              batchId: null,
+              timestamp: '2026-05-01T12:00:00.000Z',
             },
           }),
         );
@@ -3811,6 +3980,78 @@ describe('ContainersView', () => {
       } finally {
         addEventListenerSpy.mockRestore();
         removeEventListenerSpy.mockRestore();
+      }
+    });
+
+    it('does not fire a duplicate toast when both dd:sse-update-operation-changed and dd:sse-update-failed arrive for the same failure', async () => {
+      const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+      vi.useFakeTimers();
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+        const updateFailedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-failed',
+        )?.[1] as EventListener | undefined;
+
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-nodedup',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
+
+        // Both events arrive (the normal production path).
+        operationListener?.(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-nodedup',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'failed',
+              phase: 'failed',
+            },
+          }),
+        );
+        updateFailedListener?.(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-nodedup',
+              containerId: 'c1',
+              containerName: 'nginx',
+              phase: 'failed',
+              batchId: null,
+              timestamp: '2026-05-01T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        // One path — exactly one toast, no duplicate.
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({ tone: 'error', title: 'Update failed: nginx' });
+
+        wrapper.unmount();
+      } finally {
+        addEventListenerSpy.mockRestore();
+        vi.useRealTimers();
       }
     });
   });

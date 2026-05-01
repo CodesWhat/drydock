@@ -28,6 +28,7 @@ import {
   runContainerUpdateRequest,
 } from '../utils/container-update';
 import { errorMessage } from '../utils/error';
+import { resolveUpdateFailureReason } from '../utils/update-error-summary';
 import type { ContainerStatsSummarySnapshot } from '../services/stats';
 import DashboardHostStatusWidget from './dashboard/components/DashboardHostStatusWidget.vue';
 import DashboardRecentUpdatesWidget from './dashboard/components/DashboardRecentUpdatesWidget.vue';
@@ -552,9 +553,34 @@ function handleDashboardSseUpdateFailed(event: Event) {
   if (!operationId) {
     return;
   }
-  scheduleCompletionToast(() =>
-    toast.error(t('dashboardView.toast.updateFailed', { name: containerName })),
-  );
+  const error = typeof detail.error === 'string' ? detail.error : undefined;
+  const rollbackReason =
+    typeof detail.rollbackReason === 'string' ? detail.rollbackReason : undefined;
+  const reason = resolveUpdateFailureReason({ lastError: error, rollbackReason });
+  const isCancelled = rollbackReason === 'cancelled' || error === 'Cancelled by operator';
+  if (rollbackReason !== undefined) {
+    if (isCancelled) {
+      scheduleCompletionToast(() =>
+        toast.success(t('dashboardView.toast.cancelled', { name: containerName })),
+      );
+    } else {
+      scheduleCompletionToast(() =>
+        toast.warning(
+          reason
+            ? t('dashboardView.toast.rolledBackWithReason', { name: containerName, reason })
+            : t('dashboardView.toast.rolledBack', { name: containerName }),
+        ),
+      );
+    }
+  } else {
+    scheduleCompletionToast(() =>
+      toast.error(
+        reason
+          ? t('dashboardView.toast.updateFailedWithReason', { name: containerName, reason })
+          : t('dashboardView.toast.updateFailed', { name: containerName }),
+      ),
+    );
+  }
 }
 
 onMounted(() => {

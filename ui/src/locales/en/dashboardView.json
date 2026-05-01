@@ -29,7 +29,10 @@
     "toast": {
       "updated": "Updated: {name}",
       "updateFailed": "Update failed: {name}",
+      "updateFailedWithReason": "Update failed: {name} — {reason}",
+      "cancelled": "Cancelled: {name}",
       "rolledBack": "Rolled back: {name}",
+      "rolledBackWithReason": "Rolled back: {name} — {reason}",
       "updateError": "Failed to update {name}",
       "updateAllError": "Failed to update all containers"
     },
