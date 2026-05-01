@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, onScopeDispose, onUnmounted, provide, ref, watch } from 'vue';
+import {
+  computed,
+  onMounted,
+  onScopeDispose,
+  onUnmounted,
+  provide,
+  ref,
+  watch,
+  type WatchStopHandle,
+} from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import ContainerFullPageDetail from '../components/containers/ContainerFullPageDetail.vue';
@@ -54,6 +63,10 @@ const BOUNCER_SORT_ORDER: Readonly<Record<string, number>> = Object.freeze({
   unsafe: 1,
   safe: 2,
 });
+// How long to wait for a deferred operation-attach watcher before giving up.
+// 30 s is generous enough to outlast any SSE relay delay while still bounding
+// the worst-case watcher lifetime.
+const DEFERRED_OPERATION_ATTACH_TIMEOUT_MS = 30_000;
 
 const { t } = useI18n();
 
@@ -75,6 +88,14 @@ const completionToastTimers = new Set<ReturnType<typeof setTimeout>>();
 // so handleSseUpdateFailed does not fire a duplicate for the same tracked op.
 const terminalToastFiredForOp = new Set<string>();
 
+// Deferred operation re-attach: when dd:container-added arrives before
+// dd:update-operation-changed (agent-relay path has no ordering guarantee),
+// the synchronous resolveStoreOperation lookup misses. Each entry here is a
+// pending watcher waiting for the operation to appear in the store.
+// Keyed by container ID so at most one watcher exists per container.
+const pendingOperationWatchers = new Map<string, WatchStopHandle>();
+const pendingOperationWatcherTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 function scheduleCompletionToast(callback: () => void) {
   const timer = setTimeout(() => {
     completionToastTimers.delete(timer);
@@ -88,6 +109,14 @@ onScopeDispose(() => {
     clearTimeout(timer);
   }
   completionToastTimers.clear();
+  for (const stop of pendingOperationWatchers.values()) {
+    stop();
+  }
+  pendingOperationWatchers.clear();
+  for (const timer of pendingOperationWatcherTimers.values()) {
+    clearTimeout(timer);
+  }
+  pendingOperationWatcherTimers.clear();
 });
 
 function buildContainerLookupMaps(apiContainers: Record<string, unknown>[]) {
@@ -1324,6 +1353,76 @@ function resolveStoreOperation(containerId: string): ContainerUpdateOperation | 
   };
 }
 
+/**
+ * Deferred operation re-attach for SSE ordering races.
+ *
+ * In the direct-controller path, dd:update-operation-changed fires synchronously
+ * before dd:container-added (the container event is debounced through the watcher),
+ * so resolveStoreOperation() finds the operation immediately. In the agent-relay
+ * path ordering is NOT guaranteed: dd:container-added can win the race and push a
+ * row before the operation lands in the store.
+ *
+ * When the synchronous lookup misses, this function sets up a one-shot watcher on
+ * operationStore.getOperationByContainerId(containerId). When the operation arrives,
+ * the watcher attaches it to the row. The watcher self-cancels on success, when the
+ * container is removed, or after DEFERRED_OPERATION_ATTACH_TIMEOUT_MS to bound
+ * watcher lifetime. At most one watcher exists per container ID.
+ */
+function attachOperationWhenAvailable(containerId: string, name: string | undefined) {
+  // Cancel any existing watcher for this container to avoid stacking.
+  const existingStop = pendingOperationWatchers.get(containerId);
+  if (existingStop) {
+    existingStop();
+    pendingOperationWatchers.delete(containerId);
+    const existingTimer = pendingOperationWatcherTimers.get(containerId);
+    if (existingTimer !== undefined) {
+      clearTimeout(existingTimer);
+      pendingOperationWatcherTimers.delete(containerId);
+    }
+  }
+
+  const stop = watch(
+    () => operationStore.getOperationByContainerId(containerId),
+    (op) => {
+      if (!op) {
+        return;
+      }
+      const idx = findContainerIndexByIdOrName(containerId, name);
+      if (idx === -1) {
+        // Container was removed before the operation arrived.
+        cleanup();
+        return;
+      }
+      if (containers.value[idx]!.updateOperation === undefined) {
+        containers.value[idx]!.updateOperation = resolveStoreOperation(containerId);
+      }
+      cleanup();
+    },
+    { immediate: false },
+  );
+
+  function cleanup() {
+    stop();
+    pendingOperationWatchers.delete(containerId);
+    const timer = pendingOperationWatcherTimers.get(containerId);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      pendingOperationWatcherTimers.delete(containerId);
+    }
+  }
+
+  pendingOperationWatchers.set(containerId, stop);
+
+  const timeoutTimer = setTimeout(() => {
+    pendingOperationWatcherTimers.delete(containerId);
+    // stop() also removes from pendingOperationWatchers via cleanup() if still present,
+    // but we call stop directly here since the timer callback owns the cleanup.
+    stop();
+    pendingOperationWatchers.delete(containerId);
+  }, DEFERRED_OPERATION_ATTACH_TIMEOUT_MS);
+  pendingOperationWatcherTimers.set(containerId, timeoutTimer);
+}
+
 // Apply a single-container SSE payload in place instead of falling back to a
 // full GET /api/v1/containers + remap + array reassign. The backend emits the
 // full validated container object on dd:container-added/-updated, so we can
@@ -1350,6 +1449,20 @@ function applyContainerPatch(event: Event, kind: ContainerPatchKind) {
     if (idx !== -1) {
       containers.value.splice(idx, 1);
     }
+    // If a deferred operation-attach watcher is pending for this container, cancel
+    // it immediately — no point attaching an operation to a container that is gone.
+    if (id) {
+      const stop = pendingOperationWatchers.get(id);
+      if (stop) {
+        stop();
+        pendingOperationWatchers.delete(id);
+        const timer = pendingOperationWatcherTimers.get(id);
+        if (timer !== undefined) {
+          clearTimeout(timer);
+          pendingOperationWatcherTimers.delete(id);
+        }
+      }
+    }
     removeLookupMapsForContainer(id ?? '', name);
     reconcileHoldsAgainstContainers(containers.value);
     return;
@@ -1374,6 +1487,13 @@ function applyContainerPatch(event: Event, kind: ContainerPatchKind) {
         mapped.updateOperation = resolveStoreOperation(mapped.id);
       }
       containers.value.push(mapped);
+      // Deferred fallback: if the synchronous lookup still found nothing, set up a
+      // one-shot watcher so the operation is attached as soon as it arrives in the
+      // store. This covers the agent-relay path where dd:container-added can arrive
+      // before dd:update-operation-changed with no ordering guarantee.
+      if (mapped.updateOperation === undefined) {
+        attachOperationWhenAvailable(mapped.id, mapped.name);
+      }
     }
   } else {
     // In-place merge preserves the row object identity; downstream row wrappers

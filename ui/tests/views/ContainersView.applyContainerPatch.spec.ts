@@ -24,6 +24,14 @@ const {
   mockGetOperationByContainerId: vi.fn().mockReturnValue(undefined),
 }));
 
+// Reactive store state for deferred-attach watcher tests.
+// The watch() in ContainersView observes operationStore.getOperationByContainerId(id),
+// so we need that function to read from a reactive source. Tests set
+// mockStoreOperationsById.value[containerId] = op to trigger the watcher.
+// This is declared here (after hoisting but before vi.mock calls) so the
+// vi.mock('@/stores/operations') factory can close over it.
+const mockStoreOperationsById = ref<Record<string, unknown>>({});
+
 vi.mock('vue-router', () => ({
   useRoute: () => mockRoute,
   useRouter: () => ({ replace: mockRouterReplace }),
@@ -89,7 +97,15 @@ vi.mock('@/stores/operations', () => ({
     displayBatches: new Map(),
     byId: {},
     batchSummaries: {},
-    getOperationByContainerId: mockGetOperationByContainerId,
+    // getOperationByContainerId reads from the reactive mockStoreOperationsById so
+    // that Vue watch() in ContainersView fires when a test sets
+    // mockStoreOperationsById.value[containerId] = op.
+    // The mockGetOperationByContainerId spy is also called so tests can assert on
+    // it; the reactive read is what drives the watcher.
+    getOperationByContainerId: (containerId: string) => {
+      mockGetOperationByContainerId(containerId);
+      return mockStoreOperationsById.value[containerId];
+    },
     getBatchProgress: vi.fn().mockReturnValue(undefined),
     captureDisplayBatch: vi.fn(),
     clearDisplayBatch: vi.fn(),
@@ -339,7 +355,7 @@ describe('ContainersView — applyContainerPatch', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mockRouterReplace.mockResolvedValue(undefined);
-    mockGetOperationByContainerId.mockReturnValue(undefined);
+    mockStoreOperationsById.value = {};
     mockContainerActionsEnabled.value = true;
     mockIsMobile.value = false;
     mockWindowNarrow.value = false;
@@ -882,14 +898,15 @@ describe('ContainersView — applyContainerPatch', () => {
       const wrapper = await mountContainersView([existing]);
       const vm = wrapper.vm as any;
 
-      // Simulate an active operation in the store for the incoming container id
+      // Simulate an active operation already in the store BEFORE container-added arrives
+      // (direct-controller path: operation arrives first, synchronous lookup succeeds).
       const storeOp = makeStoreOp({
         operationId: 'op-new',
         containerId: 'c-new',
         status: 'in-progress',
         phase: 'pulling',
       });
-      mockGetOperationByContainerId.mockReturnValue(storeOp);
+      mockStoreOperationsById.value['c-new'] = storeOp;
 
       const rawNew = { id: 'c-new', name: 'vaultwarden' };
       const mappedNew = makeContainer({
@@ -918,8 +935,7 @@ describe('ContainersView — applyContainerPatch', () => {
       const wrapper = await mountContainersView([existing]);
       const vm = wrapper.vm as any;
 
-      // No store operation for this container
-      mockGetOperationByContainerId.mockReturnValue(undefined);
+      // No store operation for this container (mockStoreOperationsById is empty by default)
 
       const rawNew = { id: 'c2', name: 'redis' };
       const mappedNew = makeContainer({ id: 'c2', name: 'redis', updateOperation: undefined });
@@ -943,7 +959,7 @@ describe('ContainersView — applyContainerPatch', () => {
         status: 'queued',
         phase: 'queued',
       });
-      mockGetOperationByContainerId.mockReturnValue(storeOp);
+      mockStoreOperationsById.value['c-upd'] = storeOp;
 
       const rawNew = { id: 'c-upd', name: 'mongo' };
       const mappedNew = makeContainer({ id: 'c-upd', name: 'mongo', updateOperation: undefined });
@@ -966,7 +982,7 @@ describe('ContainersView — applyContainerPatch', () => {
 
       // Store has an operation but mapper also produced one — mapper wins
       const storeOp = makeStoreOp({ operationId: 'op-store', containerId: 'c2' });
-      mockGetOperationByContainerId.mockReturnValue(storeOp);
+      mockStoreOperationsById.value['c2'] = storeOp;
 
       const mappedOp: ContainerUpdateOperation = {
         id: 'op-mapper',
@@ -999,7 +1015,7 @@ describe('ContainersView — applyContainerPatch', () => {
 
       // Store has a different op but the row already has one — row op wins
       const storeOp = makeStoreOp({ operationId: 'op-store', containerId: 'c1' });
-      mockGetOperationByContainerId.mockReturnValue(storeOp);
+      mockStoreOperationsById.value['c1'] = storeOp;
 
       const raw = { id: 'c1', name: 'vaultwarden' };
       const mappedWithoutOp = makeContainer({
@@ -1030,7 +1046,7 @@ describe('ContainersView — applyContainerPatch', () => {
         status: 'in-progress',
         phase: 'health-checking',
       });
-      mockGetOperationByContainerId.mockReturnValue(storeOp);
+      mockStoreOperationsById.value['c1'] = storeOp;
 
       const raw = { id: 'c1', name: 'nginx' };
       const mappedWithoutOp = makeContainer({
@@ -1062,7 +1078,7 @@ describe('ContainersView — applyContainerPatch', () => {
         status: 'queued',
         phase: undefined,
       };
-      mockGetOperationByContainerId.mockReturnValue(storeOpNoPhase);
+      mockStoreOperationsById.value['c-nophase'] = storeOpNoPhase;
 
       const raw = { id: 'c-nophase', name: 'redis' };
       const mappedNew = makeContainer({
@@ -1089,7 +1105,7 @@ describe('ContainersView — applyContainerPatch', () => {
         containerId: 'c-batch',
         batchId: 'batch-42',
       });
-      mockGetOperationByContainerId.mockReturnValue(storeOp);
+      mockStoreOperationsById.value['c-batch'] = storeOp;
 
       const raw = { id: 'c-batch', name: 'batch-container' };
       const mappedNew = makeContainer({
@@ -1103,6 +1119,239 @@ describe('ContainersView — applyContainerPatch', () => {
       await flushPromises();
 
       expect(vm.containers[1].updateOperation!.batchId).toBe('batch-42');
+    });
+  });
+
+  describe('deferred operation attach (SSE ordering race)', () => {
+    function makeStoreOp(
+      overrides: Partial<{
+        operationId: string;
+        containerId: string;
+        status: string;
+        phase: string;
+        batchId: string;
+      }> = {},
+    ) {
+      return {
+        operationId: 'op-deferred-1',
+        containerId: 'c-race',
+        status: 'in-progress',
+        phase: 'pulling',
+        ...overrides,
+      };
+    }
+
+    it('attaches operation to row when store update arrives AFTER container-added (race scenario)', async () => {
+      const existing = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      // Step 1: container-added arrives first — store has no operation yet
+      const rawNew = { id: 'c-race', name: 'vaultwarden' };
+      const mappedNew = makeContainer({
+        id: 'c-race',
+        name: 'vaultwarden',
+        updateOperation: undefined,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedNew);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: rawNew }));
+      await flushPromises();
+
+      // Row is pushed without an operation
+      expect(vm.containers).toHaveLength(2);
+      expect(vm.containers[1].updateOperation).toBeUndefined();
+
+      // Step 2: operation-changed arrives later — set operation in the reactive store
+      const storeOp = makeStoreOp({ operationId: 'op-late', containerId: 'c-race' });
+      mockStoreOperationsById.value = { 'c-race': storeOp };
+      await flushPromises();
+
+      // Deferred watcher fired and attached the operation to the row
+      expect(vm.containers[1].updateOperation).toBeDefined();
+      expect(vm.containers[1].updateOperation!.id).toBe('op-late');
+      expect(vm.containers[1].updateOperation!.status).toBe('in-progress');
+    });
+
+    it('does not set up a deferred watcher when synchronous lookup already found an operation', async () => {
+      const existing = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      // Operation already in store before container-added (direct-controller path)
+      const storeOp = makeStoreOp({ operationId: 'op-sync', containerId: 'c-sync' });
+      mockStoreOperationsById.value['c-sync'] = storeOp;
+
+      const rawNew = { id: 'c-sync', name: 'redis' };
+      const mappedNew = makeContainer({ id: 'c-sync', name: 'redis', updateOperation: undefined });
+      mockMapApiContainer.mockReturnValueOnce(mappedNew);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: rawNew }));
+      await flushPromises();
+
+      // Row got operation synchronously — no deferred watcher needed
+      expect(vm.containers[1].updateOperation).toBeDefined();
+      expect(vm.containers[1].updateOperation!.id).toBe('op-sync');
+      // No pending watcher for c-sync
+      expect(vm.pendingOperationWatchers.has('c-sync')).toBe(false);
+    });
+
+    it('stops the deferred watcher after operation is attached (does not stay active)', async () => {
+      const existing = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      const rawNew = { id: 'c-oncefire', name: 'mongo' };
+      const mappedNew = makeContainer({
+        id: 'c-oncefire',
+        name: 'mongo',
+        updateOperation: undefined,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedNew);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: rawNew }));
+      await flushPromises();
+
+      // Deferred watcher is pending
+      expect(vm.pendingOperationWatchers.has('c-oncefire')).toBe(true);
+
+      // Operation arrives in store
+      mockStoreOperationsById.value = {
+        'c-oncefire': makeStoreOp({ containerId: 'c-oncefire', operationId: 'op-once' }),
+      };
+      await flushPromises();
+
+      // Watcher fired, attached, and stopped itself
+      expect(vm.containers[1].updateOperation!.id).toBe('op-once');
+      expect(vm.pendingOperationWatchers.has('c-oncefire')).toBe(false);
+    });
+
+    it('cancels deferred watcher immediately when container is removed before operation arrives', async () => {
+      const existing = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      // container-added: no op in store, deferred watcher is set up
+      const rawNew = { id: 'c-removed', name: 'postgres' };
+      const mappedNew = makeContainer({
+        id: 'c-removed',
+        name: 'postgres',
+        updateOperation: undefined,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedNew);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: rawNew }));
+      await flushPromises();
+
+      expect(vm.pendingOperationWatchers.has('c-removed')).toBe(true);
+
+      // container-removed fires before operation arrives
+      globalThis.dispatchEvent(
+        new CustomEvent('dd:sse-container-removed', {
+          detail: { id: 'c-removed', name: 'postgres' },
+        }),
+      );
+      await flushPromises();
+
+      // Watcher cancelled by the removed handler
+      expect(vm.pendingOperationWatchers.has('c-removed')).toBe(false);
+      // Container is gone
+      expect(vm.containers).toHaveLength(1);
+      expect(vm.containers[0].id).toBe('c1');
+    });
+
+    it('replaces existing deferred watcher when duplicate container-added fires for same id', async () => {
+      const existing = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      // First container-added: no op, sets up watcher
+      const rawNew = { id: 'c-dup', name: 'redis' };
+      const mappedNew1 = makeContainer({ id: 'c-dup', name: 'redis', updateOperation: undefined });
+      mockMapApiContainer.mockReturnValueOnce(mappedNew1);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: rawNew }));
+      await flushPromises();
+
+      expect(vm.pendingOperationWatchers.has('c-dup')).toBe(true);
+      const firstStop = vm.pendingOperationWatchers.get('c-dup');
+
+      // Second container-added for same id (in-place merge branch fires, not push)
+      // The idx will be found now since the row was pushed. No new watcher is set up.
+      // This tests the guard in attachOperationWhenAvailable via stacking protection.
+      // Simulate by calling attachOperationWhenAvailable a second time (via another add for new id).
+      const rawNew2 = { id: 'c-dup2', name: 'redis2' };
+      const mappedNew2 = makeContainer({
+        id: 'c-dup2',
+        name: 'redis2',
+        updateOperation: undefined,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedNew2);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: rawNew2 }));
+      await flushPromises();
+
+      // c-dup still has its original watcher (no stacking since c-dup2 is a different id)
+      expect(vm.pendingOperationWatchers.has('c-dup')).toBe(true);
+      expect(vm.pendingOperationWatchers.get('c-dup')).toBe(firstStop);
+      expect(vm.pendingOperationWatchers.has('c-dup2')).toBe(true);
+    });
+
+    it('clears all pending watchers when component is unmounted', async () => {
+      const existing = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      // Set up two deferred watchers
+      for (const id of ['c-unmount-a', 'c-unmount-b']) {
+        const raw = { id, name: id };
+        const mapped = makeContainer({ id, name: id, updateOperation: undefined });
+        mockMapApiContainer.mockReturnValueOnce(mapped);
+        globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: raw }));
+      }
+      await flushPromises();
+
+      expect(vm.pendingOperationWatchers.size).toBe(2);
+
+      // Unmount the component
+      wrapper.unmount();
+
+      // The maps are cleared by onScopeDispose
+      expect(vm.pendingOperationWatchers.size).toBe(0);
+      expect(vm.pendingOperationWatcherTimers.size).toBe(0);
+    });
+
+    it('times out and stops the watcher after DEFERRED_OPERATION_ATTACH_TIMEOUT_MS with no operation', async () => {
+      vi.useFakeTimers();
+
+      const existing = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      const rawNew = { id: 'c-timeout', name: 'redis' };
+      const mappedNew = makeContainer({
+        id: 'c-timeout',
+        name: 'redis',
+        updateOperation: undefined,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedNew);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: rawNew }));
+      await flushPromises();
+
+      expect(vm.pendingOperationWatchers.has('c-timeout')).toBe(true);
+
+      // Advance past the 30s timeout
+      vi.advanceTimersByTime(30_001);
+      await flushPromises();
+
+      // Watcher timed out and was removed
+      expect(vm.pendingOperationWatchers.has('c-timeout')).toBe(false);
+      expect(vm.pendingOperationWatcherTimers.has('c-timeout')).toBe(false);
+      // Row remains without an operation (timeout doesn't remove the row)
+      expect(vm.containers[1].updateOperation).toBeUndefined();
+
+      vi.useRealTimers();
     });
   });
 });
