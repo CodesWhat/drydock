@@ -23,7 +23,7 @@ import { usePreference } from '../preferences/usePreference';
 import { useViewMode } from '../preferences/useViewMode';
 import type { ContainerGroup } from '../services/container';
 import { getAllContainers, getContainerGroups, refreshAllContainers } from '../services/container';
-import type { Container } from '../types/container';
+import type { Container, ContainerUpdateOperation } from '../types/container';
 import { getContainerActionIdentityKey } from '../utils/container-action-key';
 import { hasHardBlocker } from '../utils/update-eligibility';
 import { mapApiContainer, mapApiContainers } from '../utils/container-mapper';
@@ -38,6 +38,7 @@ import {
 } from '../utils/display';
 import { errorMessage } from '../utils/error';
 import { resolveUpdateFailureReason } from '../utils/update-error-summary';
+import { useOperationStore } from '../stores/operations';
 import { useContainerActions } from './containers/useContainerActions';
 import { useContainerLogs } from './containers/useContainerLogs';
 import { useContainerSecurity } from './containers/useContainerSecurity';
@@ -67,6 +68,7 @@ const {
   projectContainerDisplayState,
   reconcileHoldsAgainstContainers,
 } = useOperationDisplayHold();
+const operationStore = useOperationStore();
 const toast = useToast();
 const completionToastTimers = new Set<ReturnType<typeof setTimeout>>();
 // Tracks operationIds for which onTerminalEvent already emitted a failure/cancellation toast,
@@ -1303,6 +1305,25 @@ function removeLookupMapsForContainer(id: string, name: string | undefined) {
   containerMetaMap.value = nextMeta;
 }
 
+/**
+ * Look up an active operation in the Pinia operations store by container id
+ * and coerce it to the ContainerUpdateOperation shape used on row objects.
+ * Returns undefined when no active operation exists for the given id.
+ */
+function resolveStoreOperation(containerId: string): ContainerUpdateOperation | undefined {
+  const storeOp = operationStore.getOperationByContainerId(containerId);
+  if (!storeOp) {
+    return undefined;
+  }
+  return {
+    id: storeOp.operationId,
+    status: storeOp.status as ContainerUpdateOperation['status'],
+    phase: (storeOp.phase ?? 'queued') as ContainerUpdateOperation['phase'],
+    batchId: storeOp.batchId,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 // Apply a single-container SSE payload in place instead of falling back to a
 // full GET /api/v1/containers + remap + array reassign. The backend emits the
 // full validated container object on dd:container-added/-updated, so we can
@@ -1345,6 +1366,13 @@ function applyContainerPatch(event: Event, kind: ContainerPatchKind) {
   const idx = findContainerIndexByIdOrName(id, name);
   if (idx === -1) {
     if (kind === 'added' || kind === 'updated') {
+      // Container metadata SSE doesn't carry updateOperation. If there's an active
+      // operation in the store keyed to this container's id or newContainerId,
+      // attach it before push so reconcileHoldsAgainstContainers doesn't
+      // false-positive-release the hold.
+      if (mapped.updateOperation === undefined) {
+        mapped.updateOperation = resolveStoreOperation(mapped.id);
+      }
       containers.value.push(mapped);
     }
   } else {
@@ -1359,10 +1387,12 @@ function applyContainerPatch(event: Event, kind: ContainerPatchKind) {
     // the row's live updateOperation, causing reconcileHoldsAgainstContainers to
     // read undefined status → rawIsActive:false → scheduleHeldOperationRelease.
     // Preserve the existing operation when the patch does not carry a replacement.
+    // When neither the row nor the patch carry an operation, fall back to the store.
     const existingOp = containers.value[idx]!.updateOperation;
     Object.assign(containers.value[idx]!, mapped);
-    if (existingOp !== undefined && mapped.updateOperation === undefined) {
-      containers.value[idx]!.updateOperation = existingOp;
+    if (mapped.updateOperation === undefined) {
+      containers.value[idx]!.updateOperation =
+        existingOp ?? resolveStoreOperation(containers.value[idx]!.id);
     }
   }
   updateLookupMapsForContainer(raw);

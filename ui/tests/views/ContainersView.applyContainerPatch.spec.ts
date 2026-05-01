@@ -5,18 +5,24 @@ import ContainersView from '@/views/ContainersView.vue';
 import { mountWithPlugins } from '../helpers/mount';
 
 // --- Hoisted values for mocks that need them in factory functions ---
-const { mockRoute, mockRouterReplace, mockContainerActionsEnabled, mockLoadServerFeatures } =
-  vi.hoisted(() => ({
-    mockRoute: {
-      name: 'containers',
-      path: '/containers',
-      params: {} as Record<string, unknown>,
-      query: {} as Record<string, unknown>,
-    },
-    mockRouterReplace: vi.fn().mockResolvedValue(undefined),
-    mockContainerActionsEnabled: { value: true },
-    mockLoadServerFeatures: vi.fn().mockResolvedValue(undefined),
-  }));
+const {
+  mockRoute,
+  mockRouterReplace,
+  mockContainerActionsEnabled,
+  mockLoadServerFeatures,
+  mockGetOperationByContainerId,
+} = vi.hoisted(() => ({
+  mockRoute: {
+    name: 'containers',
+    path: '/containers',
+    params: {} as Record<string, unknown>,
+    query: {} as Record<string, unknown>,
+  },
+  mockRouterReplace: vi.fn().mockResolvedValue(undefined),
+  mockContainerActionsEnabled: { value: true },
+  mockLoadServerFeatures: vi.fn().mockResolvedValue(undefined),
+  mockGetOperationByContainerId: vi.fn().mockReturnValue(undefined),
+}));
 
 vi.mock('vue-router', () => ({
   useRoute: () => mockRoute,
@@ -75,6 +81,29 @@ vi.mock('@/services/backup', () => ({
 
 vi.mock('@/services/preview', () => ({
   previewContainer: vi.fn().mockResolvedValue({}),
+}));
+
+vi.mock('@/stores/operations', () => ({
+  useOperationStore: () => ({
+    // Pinia auto-unwraps refs; consumers see the plain Map/object directly
+    displayBatches: new Map(),
+    byId: {},
+    batchSummaries: {},
+    getOperationByContainerId: mockGetOperationByContainerId,
+    getBatchProgress: vi.fn().mockReturnValue(undefined),
+    captureDisplayBatch: vi.fn(),
+    clearDisplayBatch: vi.fn(),
+    getDisplayBatch: vi.fn().mockReturnValue(undefined),
+    incrementDisplayBatchFailed: vi.fn(),
+    incrementDisplayBatchSucceeded: vi.fn(),
+    replaceDisplayBatches: vi.fn(),
+    applyOperationChanged: vi.fn(),
+    applyUpdateApplied: vi.fn(),
+    applyUpdateFailed: vi.fn(),
+    applyBatchCompleted: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+  }),
 }));
 
 // Both mapApiContainer (singular) and mapApiContainers are mocked here
@@ -310,6 +339,7 @@ describe('ContainersView — applyContainerPatch', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mockRouterReplace.mockResolvedValue(undefined);
+    mockGetOperationByContainerId.mockReturnValue(undefined);
     mockContainerActionsEnabled.value = true;
     mockIsMobile.value = false;
     mockWindowNarrow.value = false;
@@ -824,6 +854,255 @@ describe('ContainersView — applyContainerPatch', () => {
 
       vi.useRealTimers();
       clearAllOperationDisplayHolds();
+    });
+  });
+
+  describe('store-operation lookup for new rows (idx === -1 branch)', () => {
+    function makeStoreOp(
+      overrides: Partial<{
+        operationId: string;
+        containerId: string;
+        newContainerId: string;
+        status: string;
+        phase: string;
+        batchId: string;
+      }> = {},
+    ) {
+      return {
+        operationId: 'op-store-1',
+        containerId: 'c-new',
+        status: 'in-progress',
+        phase: 'pulling',
+        ...overrides,
+      };
+    }
+
+    it('attaches an active store operation to a brand-new row on dd:container-added', async () => {
+      const existing = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      // Simulate an active operation in the store for the incoming container id
+      const storeOp = makeStoreOp({
+        operationId: 'op-new',
+        containerId: 'c-new',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+      mockGetOperationByContainerId.mockReturnValue(storeOp);
+
+      const rawNew = { id: 'c-new', name: 'vaultwarden' };
+      const mappedNew = makeContainer({
+        id: 'c-new',
+        name: 'vaultwarden',
+        updateOperation: undefined,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedNew);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: rawNew }));
+      await flushPromises();
+
+      expect(vm.containers).toHaveLength(2);
+      const newRow = vm.containers[1] as Container;
+      // Row must arrive with the store operation attached
+      expect(newRow.updateOperation).toBeDefined();
+      expect(newRow.updateOperation!.id).toBe('op-new');
+      expect(newRow.updateOperation!.status).toBe('in-progress');
+      expect(newRow.updateOperation!.phase).toBe('pulling');
+      // getOperationByContainerId must have been called with the new container's id
+      expect(mockGetOperationByContainerId).toHaveBeenCalledWith('c-new');
+    });
+
+    it('leaves updateOperation undefined when no active store operation exists for new row', async () => {
+      const existing = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      // No store operation for this container
+      mockGetOperationByContainerId.mockReturnValue(undefined);
+
+      const rawNew = { id: 'c2', name: 'redis' };
+      const mappedNew = makeContainer({ id: 'c2', name: 'redis', updateOperation: undefined });
+      mockMapApiContainer.mockReturnValueOnce(mappedNew);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: rawNew }));
+      await flushPromises();
+
+      expect(vm.containers).toHaveLength(2);
+      expect(vm.containers[1].updateOperation).toBeUndefined();
+    });
+
+    it('attaches an active store operation to a new row on dd:container-updated (unknown id)', async () => {
+      const existing = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      const storeOp = makeStoreOp({
+        operationId: 'op-upd',
+        containerId: 'c-upd',
+        status: 'queued',
+        phase: 'queued',
+      });
+      mockGetOperationByContainerId.mockReturnValue(storeOp);
+
+      const rawNew = { id: 'c-upd', name: 'mongo' };
+      const mappedNew = makeContainer({ id: 'c-upd', name: 'mongo', updateOperation: undefined });
+      mockMapApiContainer.mockReturnValueOnce(mappedNew);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: rawNew }));
+      await flushPromises();
+
+      expect(vm.containers).toHaveLength(2);
+      const newRow = vm.containers[1] as Container;
+      expect(newRow.updateOperation).toBeDefined();
+      expect(newRow.updateOperation!.id).toBe('op-upd');
+      expect(newRow.updateOperation!.status).toBe('queued');
+    });
+
+    it('does not overwrite a mapped.updateOperation that is already set on a new row', async () => {
+      const existing = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      // Store has an operation but mapper also produced one — mapper wins
+      const storeOp = makeStoreOp({ operationId: 'op-store', containerId: 'c2' });
+      mockGetOperationByContainerId.mockReturnValue(storeOp);
+
+      const mappedOp: ContainerUpdateOperation = {
+        id: 'op-mapper',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-05-01T00:00:00.000Z',
+      };
+      const rawNew = { id: 'c2', name: 'redis' };
+      const mappedNew = makeContainer({ id: 'c2', name: 'redis', updateOperation: mappedOp });
+      mockMapApiContainer.mockReturnValueOnce(mappedNew);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: rawNew }));
+      await flushPromises();
+
+      expect(vm.containers[1].updateOperation!.id).toBe('op-mapper');
+      // Store was not consulted because mapped.updateOperation was already defined
+      expect(mockGetOperationByContainerId).not.toHaveBeenCalled();
+    });
+
+    it('preserves existing row operation in merge branch before falling back to store', async () => {
+      const activeOp: ContainerUpdateOperation = {
+        id: 'op-existing',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-05-01T00:00:00.000Z',
+      };
+      const existing = makeContainer({ id: 'c1', name: 'vaultwarden', updateOperation: activeOp });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      // Store has a different op but the row already has one — row op wins
+      const storeOp = makeStoreOp({ operationId: 'op-store', containerId: 'c1' });
+      mockGetOperationByContainerId.mockReturnValue(storeOp);
+
+      const raw = { id: 'c1', name: 'vaultwarden' };
+      const mappedWithoutOp = makeContainer({
+        id: 'c1',
+        name: 'vaultwarden',
+        currentTag: '1.31.0',
+        updateOperation: undefined,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedWithoutOp);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: raw }));
+      await flushPromises();
+
+      expect(vm.containers).toHaveLength(1);
+      // Existing row op takes priority; store not consulted for the fallback
+      expect(vm.containers[0].updateOperation!.id).toBe('op-existing');
+      expect(mockGetOperationByContainerId).not.toHaveBeenCalled();
+    });
+
+    it('attaches store operation via merge branch when row has no op and patch has no op', async () => {
+      const existing = makeContainer({ id: 'c1', name: 'nginx', updateOperation: undefined });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      const storeOp = makeStoreOp({
+        operationId: 'op-merge-store',
+        containerId: 'c1',
+        status: 'in-progress',
+        phase: 'health-checking',
+      });
+      mockGetOperationByContainerId.mockReturnValue(storeOp);
+
+      const raw = { id: 'c1', name: 'nginx' };
+      const mappedWithoutOp = makeContainer({
+        id: 'c1',
+        name: 'nginx',
+        currentTag: '1.2.0',
+        updateOperation: undefined,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedWithoutOp);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: raw }));
+      await flushPromises();
+
+      expect(vm.containers).toHaveLength(1);
+      expect(vm.containers[0].updateOperation).toBeDefined();
+      expect(vm.containers[0].updateOperation!.id).toBe('op-merge-store');
+      expect(vm.containers[0].updateOperation!.phase).toBe('health-checking');
+      expect(mockGetOperationByContainerId).toHaveBeenCalledWith('c1');
+    });
+
+    it('coerces store operation phase to "queued" when phase is undefined', async () => {
+      const existing = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      const storeOpNoPhase = {
+        operationId: 'op-nophase',
+        containerId: 'c-nophase',
+        status: 'queued',
+        phase: undefined,
+      };
+      mockGetOperationByContainerId.mockReturnValue(storeOpNoPhase);
+
+      const raw = { id: 'c-nophase', name: 'redis' };
+      const mappedNew = makeContainer({
+        id: 'c-nophase',
+        name: 'redis',
+        updateOperation: undefined,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedNew);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: raw }));
+      await flushPromises();
+
+      const newRow = vm.containers[1] as Container;
+      expect(newRow.updateOperation!.phase).toBe('queued');
+    });
+
+    it('includes batchId from store operation when present', async () => {
+      const existing = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      const storeOp = makeStoreOp({
+        operationId: 'op-batch',
+        containerId: 'c-batch',
+        batchId: 'batch-42',
+      });
+      mockGetOperationByContainerId.mockReturnValue(storeOp);
+
+      const raw = { id: 'c-batch', name: 'batch-container' };
+      const mappedNew = makeContainer({
+        id: 'c-batch',
+        name: 'batch-container',
+        updateOperation: undefined,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedNew);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: raw }));
+      await flushPromises();
+
+      expect(vm.containers[1].updateOperation!.batchId).toBe('batch-42');
     });
   });
 });
