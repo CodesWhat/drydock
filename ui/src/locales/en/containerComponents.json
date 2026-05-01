@@ -158,6 +158,7 @@
       "statusScanningPhase": "Scanning…",
       "statusGeneratingSbom": "Generating SBOM…",
       "statusHealthChecking": "Health-checking…",
+      "statusFinalizing": "Finalizing…",
       "statusRollingBack": "Rolling back…",
       "lastUpdateFailed": "Last update failed: {reason}",
       "stopAction": "Stop",

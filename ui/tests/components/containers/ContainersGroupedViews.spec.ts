@@ -2327,6 +2327,26 @@ describe('ContainersGroupedViews', () => {
       expect(rowByName(wrapper, 'alpha').text()).toContain('Generating SBOM…');
     });
 
+    it('shows "Health-checking…" badge for phase health-gate', () => {
+      const wrapper = mountWithPhase('health-gate');
+      expect(rowByName(wrapper, 'alpha').text()).toContain('Health-checking…');
+    });
+
+    it('shows "Finalizing…" badge for phase health-gate-passed', () => {
+      const wrapper = mountWithPhase('health-gate-passed');
+      expect(rowByName(wrapper, 'alpha').text()).toContain('Finalizing…');
+    });
+
+    it('shows "Rolling back…" badge for phase rollback-started', () => {
+      const wrapper = mountWithPhase('rollback-started');
+      expect(rowByName(wrapper, 'alpha').text()).toContain('Rolling back…');
+    });
+
+    it('shows "Rolling back…" badge for phase rollback-deferred', () => {
+      const wrapper = mountWithPhase('rollback-deferred');
+      expect(rowByName(wrapper, 'alpha').text()).toContain('Rolling back…');
+    });
+
     it('shows "Updating" badge for an unknown phase', () => {
       const wrapper = mountWithPhase('some-unknown-phase');
       expect(rowByName(wrapper, 'alpha').text()).toContain('Updating');

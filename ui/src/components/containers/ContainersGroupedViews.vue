@@ -8,7 +8,10 @@ import type { ContainersViewRenderGroup } from './containersViewTemplateContext'
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 import { useUpdateBatches } from '../../composables/useUpdateBatches';
 import { getContainerViewKey } from '../../utils/container-view-key';
-import { getUpdateInProgressPhaseLabelKey } from '../../utils/container-update';
+import {
+  getUpdateInProgressPhaseLabelKey,
+  UPDATE_IN_PROGRESS_PHASE_I18N,
+} from '../../utils/container-update';
 import { imageAge } from '../../utils/audit-helpers';
 import { displayGroupName } from '../../utils/display';
 import {
@@ -217,22 +220,9 @@ function canCancelUpdate(c: { updateOperation?: { status?: string; id?: string }
   return (status === 'queued' || status === 'in-progress') && Boolean(c.updateOperation?.id);
 }
 
-const PHASE_LABEL_KEY_TO_I18N: Record<
-  ReturnType<typeof getUpdateInProgressPhaseLabelKey>,
-  string
-> = {
-  verifyingSignature: 'containerComponents.groupedViews.statusVerifyingSignature',
-  pulling: 'containerComponents.groupedViews.statusPulling',
-  scanning: 'containerComponents.groupedViews.statusScanningPhase',
-  generatingSbom: 'containerComponents.groupedViews.statusGeneratingSbom',
-  updating: 'containerComponents.groupedViews.statusUpdating',
-  healthChecking: 'containerComponents.groupedViews.statusHealthChecking',
-  rollingBack: 'containerComponents.groupedViews.statusRollingBack',
-};
-
 function getInProgressBadgeLabel(c: { updateOperation?: { phase?: string } }): string {
   const labelKey = getUpdateInProgressPhaseLabelKey(c.updateOperation?.phase);
-  return t(PHASE_LABEL_KEY_TO_I18N[labelKey]);
+  return t(UPDATE_IN_PROGRESS_PHASE_I18N[labelKey]);
 }
 
 function updateBtnState(c: {
@@ -292,12 +282,17 @@ function getGroupDoneCount(group: ContainersViewRenderGroup) {
   return batch.succeededCount + batch.failedCount;
 }
 
-function getContainerStatusLabel(container: { id?: unknown; name?: unknown; status?: string }) {
+function getContainerStatusLabel(container: {
+  id?: unknown;
+  name?: unknown;
+  status?: string;
+  updateOperation?: { phase?: string };
+}) {
   if (isContainerScanning(container)) {
     return t('containerComponents.groupedViews.statusScanning');
   }
   if (isContainerUpdating(container)) {
-    return t('containerComponents.groupedViews.statusUpdating');
+    return getInProgressBadgeLabel(container);
   }
   if (isContainerQueued(container)) {
     return t('containerComponents.groupedViews.statusQueued');

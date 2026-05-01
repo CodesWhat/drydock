@@ -2,6 +2,7 @@ import {
   formatContainersAlreadyUpToDateMessage,
   getUpdateInProgressPhaseLabelKey,
   shouldRenderStandaloneQueuedUpdateAsUpdating,
+  UPDATE_IN_PROGRESS_PHASE_I18N,
 } from '@/utils/container-update';
 
 describe('container-update utils', () => {
@@ -371,8 +372,8 @@ describe('getUpdateInProgressPhaseLabelKey', () => {
     expect(getUpdateInProgressPhaseLabelKey('new-started')).toBe('updating');
   });
 
-  it('maps health-gate-passed to updating (fallback)', () => {
-    expect(getUpdateInProgressPhaseLabelKey('health-gate-passed')).toBe('updating');
+  it('maps health-gate-passed to finalizing', () => {
+    expect(getUpdateInProgressPhaseLabelKey('health-gate-passed')).toBe('finalizing');
   });
 
   it('maps undefined to updating (fallback)', () => {
@@ -381,5 +382,55 @@ describe('getUpdateInProgressPhaseLabelKey', () => {
 
   it('maps an unknown phase string to updating (fallback)', () => {
     expect(getUpdateInProgressPhaseLabelKey('some-future-phase')).toBe('updating');
+  });
+});
+
+describe('UPDATE_IN_PROGRESS_PHASE_I18N', () => {
+  it('maps pulling to the pulling i18n key', () => {
+    expect(UPDATE_IN_PROGRESS_PHASE_I18N.pulling).toBe(
+      'containerComponents.groupedViews.statusPulling',
+    );
+  });
+
+  it('maps verifyingSignature to the statusVerifyingSignature i18n key', () => {
+    expect(UPDATE_IN_PROGRESS_PHASE_I18N.verifyingSignature).toBe(
+      'containerComponents.groupedViews.statusVerifyingSignature',
+    );
+  });
+
+  it('maps scanning to the statusScanningPhase i18n key', () => {
+    expect(UPDATE_IN_PROGRESS_PHASE_I18N.scanning).toBe(
+      'containerComponents.groupedViews.statusScanningPhase',
+    );
+  });
+
+  it('maps generatingSbom to the statusGeneratingSbom i18n key', () => {
+    expect(UPDATE_IN_PROGRESS_PHASE_I18N.generatingSbom).toBe(
+      'containerComponents.groupedViews.statusGeneratingSbom',
+    );
+  });
+
+  it('maps updating (fallback) to the statusUpdating i18n key', () => {
+    expect(UPDATE_IN_PROGRESS_PHASE_I18N.updating).toBe(
+      'containerComponents.groupedViews.statusUpdating',
+    );
+  });
+
+  it('maps healthChecking to the statusHealthChecking i18n key', () => {
+    expect(UPDATE_IN_PROGRESS_PHASE_I18N.healthChecking).toBe(
+      'containerComponents.groupedViews.statusHealthChecking',
+    );
+  });
+
+  it('maps finalizing to the statusFinalizing i18n key', () => {
+    expect(UPDATE_IN_PROGRESS_PHASE_I18N.finalizing).toBe(
+      'containerComponents.groupedViews.statusFinalizing',
+    );
+  });
+
+  it('maps rollingBack to the statusRollingBack i18n key', () => {
+    expect(UPDATE_IN_PROGRESS_PHASE_I18N.rollingBack).toBe(
+      'containerComponents.groupedViews.statusRollingBack',
+    );
   });
 });

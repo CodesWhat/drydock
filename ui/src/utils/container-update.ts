@@ -138,6 +138,7 @@ export type UpdateInProgressPhaseLabelKey =
   | 'generatingSbom'
   | 'updating'
   | 'healthChecking'
+  | 'finalizing'
   | 'rollingBack';
 
 export function getUpdateInProgressPhaseLabelKey(
@@ -154,6 +155,8 @@ export function getUpdateInProgressPhaseLabelKey(
       return 'generatingSbom';
     case 'health-gate':
       return 'healthChecking';
+    case 'health-gate-passed':
+      return 'finalizing';
     case 'rollback-started':
     case 'rollback-deferred':
       return 'rollingBack';
@@ -161,6 +164,18 @@ export function getUpdateInProgressPhaseLabelKey(
       return 'updating';
   }
 }
+
+/** Maps every UpdateInProgressPhaseLabelKey to its i18n message path. */
+export const UPDATE_IN_PROGRESS_PHASE_I18N: Record<UpdateInProgressPhaseLabelKey, string> = {
+  verifyingSignature: 'containerComponents.groupedViews.statusVerifyingSignature',
+  pulling: 'containerComponents.groupedViews.statusPulling',
+  scanning: 'containerComponents.groupedViews.statusScanningPhase',
+  generatingSbom: 'containerComponents.groupedViews.statusGeneratingSbom',
+  updating: 'containerComponents.groupedViews.statusUpdating',
+  healthChecking: 'containerComponents.groupedViews.statusHealthChecking',
+  finalizing: 'containerComponents.groupedViews.statusFinalizing',
+  rollingBack: 'containerComponents.groupedViews.statusRollingBack',
+};
 
 export function isStaleContainerUpdateError(error: unknown): boolean {
   return isNoUpdateAvailableError(error);

@@ -5,6 +5,10 @@ import AppIconButton from '@/components/AppIconButton.vue';
 import AppTabBar from '@/components/AppTabBar.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { hasTrackedContainerAction } from '../../utils/container-action-key';
+import {
+  getUpdateInProgressPhaseLabelKey,
+  UPDATE_IN_PROGRESS_PHASE_I18N,
+} from '../../utils/container-update';
 import ContainerFullPageTabContent from './ContainerFullPageTabContent.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
@@ -47,9 +51,15 @@ function isActionBlocked(container: { id?: unknown; name?: unknown }) {
   return isActionInProgress(container) || isActionQueued(container);
 }
 
-function getStatusLabel(container: { id?: unknown; name?: unknown; status?: string }) {
+function getStatusLabel(container: {
+  id?: unknown;
+  name?: unknown;
+  status?: string;
+  updateOperation?: { phase?: string };
+}) {
   if (isActionInProgress(container)) {
-    return t('containerComponents.fullPageDetail.statusUpdating');
+    const labelKey = getUpdateInProgressPhaseLabelKey(container.updateOperation?.phase);
+    return t(UPDATE_IN_PROGRESS_PHASE_I18N[labelKey]);
   }
   if (isActionQueued(container)) {
     return t('containerComponents.fullPageDetail.statusQueued');
