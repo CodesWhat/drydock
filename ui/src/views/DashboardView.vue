@@ -28,7 +28,7 @@ import {
   runContainerUpdateRequest,
 } from '../utils/container-update';
 import { errorMessage } from '../utils/error';
-import { summarizeContainerResourceUsage } from '../utils/stats-summary';
+import type { ContainerStatsSummarySnapshot } from '../services/stats';
 import DashboardHostStatusWidget from './dashboard/components/DashboardHostStatusWidget.vue';
 import DashboardRecentUpdatesWidget from './dashboard/components/DashboardRecentUpdatesWidget.vue';
 import DashboardResourceUsageWidget from './dashboard/components/DashboardResourceUsageWidget.vue';
@@ -175,10 +175,21 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown);
 });
 
+const EMPTY_SUMMARY: ContainerStatsSummarySnapshot = {
+  timestamp: '',
+  watchedCount: 0,
+  totalCpuPercent: 0,
+  totalMemoryUsageBytes: 0,
+  totalMemoryLimitBytes: 0,
+  totalMemoryPercent: 0,
+  topCpu: [],
+  topMemory: [],
+};
+
 const {
   agents,
   containerSummary,
-  containerStats,
+  summary,
   containers,
   error,
   fetchDashboardData,
@@ -190,8 +201,6 @@ const {
   serverInfo,
   watchers,
 } = useDashboardData();
-
-const resourceUsage = computed(() => summarizeContainerResourceUsage(containerStats.value));
 
 const {
   DONUT_CIRCUMFERENCE,
@@ -881,7 +890,7 @@ function confirmDashboardUpdateAll() {
             <DashboardResourceUsageWidget
               v-else-if="item.i === 'resource-usage'"
               class="h-full"
-              :resource-usage="resourceUsage"
+              :summary="summary ?? EMPTY_SUMMARY"
               :edit-mode="editMode"
               @view-all="navigateTo(ROUTES.CONTAINERS)" />
 

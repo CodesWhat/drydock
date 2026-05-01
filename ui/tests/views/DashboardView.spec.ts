@@ -40,7 +40,13 @@ vi.mock('@/services/container', () => ({
 }));
 
 vi.mock('@/services/stats', () => ({
-  getAllContainerStats: vi.fn(),
+  getStatsSummary: vi.fn(),
+  connectStatsSummaryStream: vi.fn(() => ({
+    pause: vi.fn(),
+    resume: vi.fn(),
+    disconnect: vi.fn(),
+    isPaused: vi.fn().mockReturnValue(false),
+  })),
 }));
 
 vi.mock('@/services/agent', () => ({
@@ -91,11 +97,12 @@ import {
 } from '@/services/container';
 import { getAllRegistries } from '@/services/registry';
 import { getServer } from '@/services/server';
-import { getAllContainerStats } from '@/services/stats';
+import { connectStatsSummaryStream, getStatsSummary } from '@/services/stats';
 import { getAllWatchers } from '@/services/watcher';
 
 const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
-const mockGetAllContainerStats = getAllContainerStats as ReturnType<typeof vi.fn>;
+const mockGetStatsSummary = getStatsSummary as ReturnType<typeof vi.fn>;
+const mockConnectStatsSummaryStream = connectStatsSummaryStream as ReturnType<typeof vi.fn>;
 const mockGetContainerRecentStatus = getContainerRecentStatus as ReturnType<typeof vi.fn>;
 const mockGetContainerSummary = getContainerSummary as ReturnType<typeof vi.fn>;
 const mockGetAgents = getAgents as ReturnType<typeof vi.fn>;
@@ -135,7 +142,7 @@ interface DashboardDataOverrides {
   auditEntries?: any[];
   recentStatuses?: Record<string, string>;
   recentStatusesByIdentity?: Record<string, string>;
-  containerStats?: any[];
+  statsSummary?: Partial<import('@/services/stats').ContainerStatsSummarySnapshot>;
 }
 
 function mapAuditEntriesToRecentStatuses(auditEntries: any[]): Record<string, string> {
@@ -166,7 +173,23 @@ async function mountDashboard(
   overrides: DashboardDataOverrides = {},
 ) {
   mockGetAllContainers.mockResolvedValue(containers);
-  mockGetAllContainerStats.mockResolvedValue(overrides.containerStats ?? []);
+  mockGetStatsSummary.mockResolvedValue({
+    timestamp: '2026-04-30T00:00:00.000Z',
+    watchedCount: 0,
+    totalCpuPercent: 0,
+    totalMemoryUsageBytes: 0,
+    totalMemoryLimitBytes: 0,
+    totalMemoryPercent: 0,
+    topCpu: [],
+    topMemory: [],
+    ...(overrides.statsSummary ?? {}),
+  });
+  mockConnectStatsSummaryStream.mockReturnValue({
+    pause: vi.fn(),
+    resume: vi.fn(),
+    disconnect: vi.fn(),
+    isPaused: vi.fn().mockReturnValue(false),
+  });
   mockGetContainerSummary.mockResolvedValue({
     containers: {
       total: containers.length,
@@ -209,6 +232,23 @@ describe('DashboardView', () => {
     vi.clearAllMocks();
     mockRouterPush.mockClear();
     mockBuildDashboardContainerMetrics.mockClear();
+    // Default stats mocks (overridden per-test via mountDashboard overrides.statsSummary)
+    mockGetStatsSummary.mockResolvedValue({
+      timestamp: '2026-04-30T00:00:00.000Z',
+      watchedCount: 0,
+      totalCpuPercent: 0,
+      totalMemoryUsageBytes: 0,
+      totalMemoryLimitBytes: 0,
+      totalMemoryPercent: 0,
+      topCpu: [],
+      topMemory: [],
+    });
+    mockConnectStatsSummaryStream.mockReturnValue({
+      pause: vi.fn(),
+      resume: vi.fn(),
+      disconnect: vi.fn(),
+      isPaused: vi.fn().mockReturnValue(false),
+    });
     mockUpdateContainer.mockResolvedValue({});
     mockUpdateContainers.mockImplementation(async (containerIds: string[]) => ({
       message: 'Container update requests processed',
@@ -591,7 +631,6 @@ describe('DashboardView', () => {
         const watchersCallsBefore = mockGetAllWatchers.mock.calls.length;
         const registriesCallsBefore = mockGetAllRegistries.mock.calls.length;
         const recentStatusCallsBefore = mockGetContainerRecentStatus.mock.calls.length;
-        const statsCallsBefore = mockGetAllContainerStats.mock.calls.length;
 
         globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
         globalThis.dispatchEvent(new CustomEvent('dd:sse-scan-completed'));
@@ -613,7 +652,6 @@ describe('DashboardView', () => {
         // Live endpoints always refetch on dd:sse-connected (full-live mode)
         expect(mockGetAllContainers).toHaveBeenCalledTimes(containersCallsBefore + 1);
         expect(mockGetContainerRecentStatus).toHaveBeenCalledTimes(recentStatusCallsBefore + 1);
-        expect(mockGetAllContainerStats).toHaveBeenCalledTimes(statsCallsBefore + 1);
         // Static endpoints are TTL-guarded and skipped (fetched during mount within 30 s)
         expect(mockGetServer).toHaveBeenCalledTimes(serverCallsBefore);
         expect(mockGetAgents).toHaveBeenCalledTimes(agentsCallsBefore);
@@ -1300,52 +1338,56 @@ describe('DashboardView', () => {
   });
 
   describe('resource usage widget', () => {
-    it('renders top cpu and memory containers from live stats summary', async () => {
+    it('renders top cpu and memory containers from stats summary SSE stream', async () => {
       const wrapper = await mountDashboard(
         [makeContainer()],
         [],
         {},
         {
-          containerStats: [
-            {
-              id: 'c1',
-              name: 'web',
-              status: 'running',
-              watcher: 'local',
-              agent: undefined,
-              stats: {
-                containerId: 'c1',
-                cpuPercent: 30,
-                memoryUsageBytes: 300,
-                memoryLimitBytes: 600,
-                memoryPercent: 50,
-                networkRxBytes: 1,
-                networkTxBytes: 2,
-                blockReadBytes: 3,
-                blockWriteBytes: 4,
-                timestamp: '2026-03-14T10:00:00.000Z',
-              },
-            },
-            {
-              id: 'c2',
-              name: 'db',
-              status: 'running',
-              watcher: 'local',
-              agent: undefined,
-              stats: {
-                containerId: 'c2',
+          statsSummary: {
+            timestamp: '2026-03-14T10:00:00.000Z',
+            watchedCount: 2,
+            totalCpuPercent: 55.0,
+            totalMemoryUsageBytes: 800,
+            totalMemoryLimitBytes: 1_600,
+            totalMemoryPercent: 50.0,
+            topCpu: [
+              {
+                id: 'c2',
+                name: 'db',
                 cpuPercent: 80,
                 memoryUsageBytes: 500,
                 memoryLimitBytes: 1_000,
                 memoryPercent: 50,
-                networkRxBytes: 1,
-                networkTxBytes: 2,
-                blockReadBytes: 3,
-                blockWriteBytes: 4,
-                timestamp: '2026-03-14T10:00:00.000Z',
               },
-            },
-          ],
+              {
+                id: 'c1',
+                name: 'web',
+                cpuPercent: 30,
+                memoryUsageBytes: 300,
+                memoryLimitBytes: 600,
+                memoryPercent: 50,
+              },
+            ],
+            topMemory: [
+              {
+                id: 'c2',
+                name: 'db',
+                cpuPercent: 80,
+                memoryUsageBytes: 500,
+                memoryLimitBytes: 1_000,
+                memoryPercent: 50,
+              },
+              {
+                id: 'c1',
+                name: 'web',
+                cpuPercent: 30,
+                memoryUsageBytes: 300,
+                memoryLimitBytes: 600,
+                memoryPercent: 50,
+              },
+            ],
+          },
         },
       );
 
@@ -1357,6 +1399,23 @@ describe('DashboardView', () => {
       expect(resourceWidget.text()).toContain('web');
       expect(resourceWidget.text()).toContain('55.0%');
       expect(resourceWidget.text()).toContain('800 B / 1.6 KB');
+    });
+
+    it('renders widget with EMPTY_SUMMARY when summary is null on first render', async () => {
+      // getStatsSummary rejects — summary remains null — widget gets EMPTY_SUMMARY
+      mockGetStatsSummary.mockRejectedValue(new Error('not ready'));
+      const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+
+      const wrapper = await mountDashboard([makeContainer()]);
+
+      const resourceWidget = wrapper.find('[data-widget-id="resource-usage"]');
+      expect(resourceWidget.exists()).toBe(true);
+      // With empty summary: 0% cpu, no memory limit, no containers in top lists
+      expect(resourceWidget.text()).toContain('0.0%');
+      expect(resourceWidget.text()).toContain('No live CPU data');
+      expect(resourceWidget.text()).toContain('No live memory data');
+
+      debugSpy.mockRestore();
     });
   });
 
