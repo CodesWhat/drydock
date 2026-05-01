@@ -1999,7 +1999,7 @@ describe('ContainersGroupedViews', () => {
     expect(toasts.value[0]?.title).toBe('Failed to update 2 containers in tdarr_node');
   });
 
-  it('falls back to batchId as group name when containerId is not in renderGroups', async () => {
+  it('drops the group qualifier when no containerId resolves to a known group', async () => {
     const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
     const wrapper = mountWithGroup('known-group', 'known-group', [c1]);
 
@@ -2030,8 +2030,7 @@ describe('ContainersGroupedViews', () => {
     const { toasts } = useToast();
     expect(toasts.value).toHaveLength(1);
     expect(toasts.value[0]?.tone).toBe('success');
-    // Falls back to batchId
-    expect(toasts.value[0]?.title).toBe('Updated 1 containers in batch-xyz');
+    expect(toasts.value[0]?.title).toBe('Updated 1 containers');
   });
 
   it('ignores terminal events for unknown containers (no batch active)', async () => {
