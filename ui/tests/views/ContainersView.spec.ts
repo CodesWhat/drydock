@@ -83,6 +83,28 @@ vi.mock('@/utils/container-mapper', () => ({
   mapApiContainers: vi.fn((x: any) => x),
 }));
 
+vi.mock('@/stores/operations', () => ({
+  useOperationStore: () => ({
+    displayBatches: new Map(),
+    byId: {},
+    batchSummaries: {},
+    getOperationByContainerId: vi.fn().mockReturnValue(undefined),
+    getBatchProgress: vi.fn().mockReturnValue(undefined),
+    captureDisplayBatch: vi.fn(),
+    clearDisplayBatch: vi.fn(),
+    getDisplayBatch: vi.fn().mockReturnValue(undefined),
+    incrementDisplayBatchFailed: vi.fn(),
+    incrementDisplayBatchSucceeded: vi.fn(),
+    replaceDisplayBatches: vi.fn(),
+    applyOperationChanged: vi.fn(),
+    applyUpdateApplied: vi.fn(),
+    applyUpdateFailed: vi.fn(),
+    applyBatchCompleted: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+  }),
+}));
+
 vi.mock('@/utils/display', () => ({
   bouncerColor: vi.fn(() => ({ bg: 'bg', text: 'text' })),
   maturityColor: vi.fn(() => ({ bg: 'bg', text: 'text' })),
