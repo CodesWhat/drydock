@@ -419,3 +419,208 @@ describe('withContainerUpdateLocks (global semaphore — via dynamic module impo
     }
   });
 });
+
+describe('withContainerUpdateLocks (bypassGlobalCap option)', () => {
+  test('bypassGlobalCap=true skips the global semaphore — completes immediately while another holder occupies the cap', async () => {
+    const prev = process.env.DD_UPDATE_MAX_CONCURRENT;
+    process.env.DD_UPDATE_MAX_CONCURRENT = '1';
+    vi.resetModules();
+    try {
+      const mod = await import('./update-locks.js?bypass1');
+      const { withContainerUpdateLocks: withLocks, getUpdateLockSnapshot: getSnap } = mod as {
+        withContainerUpdateLocks: typeof withContainerUpdateLocks;
+        getUpdateLockSnapshot: typeof getUpdateLockSnapshot;
+      };
+
+      const order: string[] = [];
+      let releaseRegular: () => void = () => {};
+      const regularGate = new Promise<void>((resolve) => {
+        releaseRegular = resolve;
+      });
+
+      // A regular update holds the cap=1 semaphore.
+      const regular = withLocks(['container:local:bypass-regular'], async () => {
+        order.push('regular-start');
+        await regularGate;
+        order.push('regular-end');
+      });
+      await tick();
+      expect(getSnap().semaphore!.available).toBe(0);
+
+      // A self-update with bypassGlobalCap=true should NOT block on the semaphore.
+      const self = withLocks(
+        ['container:local:bypass-self'],
+        async () => {
+          order.push('self-update');
+        },
+        { bypassGlobalCap: true },
+      );
+      await tick();
+
+      // Self-update completed without waiting for regular to finish.
+      await self;
+      expect(order).toContain('self-update');
+      expect(order[0]).toBe('regular-start');
+      expect(order[1]).toBe('self-update');
+
+      // Semaphore still held by regular — self-update did not consume it.
+      expect(getSnap().semaphore!.available).toBe(0);
+
+      releaseRegular();
+      await regular;
+      expect(order).toEqual(['regular-start', 'self-update', 'regular-end']);
+    } finally {
+      if (prev === undefined) {
+        delete process.env.DD_UPDATE_MAX_CONCURRENT;
+      } else {
+        process.env.DD_UPDATE_MAX_CONCURRENT = prev;
+      }
+      vi.resetModules();
+    }
+  });
+
+  test('bypassGlobalCap=true still acquires the per-container keyed lock — two concurrent self-updates serialize', async () => {
+    const prev = process.env.DD_UPDATE_MAX_CONCURRENT;
+    process.env.DD_UPDATE_MAX_CONCURRENT = '1';
+    vi.resetModules();
+    try {
+      const mod = await import('./update-locks.js?bypass2');
+      const { withContainerUpdateLocks: withLocks } = mod as {
+        withContainerUpdateLocks: typeof withContainerUpdateLocks;
+      };
+
+      const order: string[] = [];
+      let releaseFirst: () => void = () => {};
+      const firstGate = new Promise<void>((resolve) => {
+        releaseFirst = resolve;
+      });
+
+      const key = ['container:local:bypass-same'];
+
+      const first = withLocks(
+        key,
+        async () => {
+          order.push('first-start');
+          await firstGate;
+          order.push('first-end');
+        },
+        { bypassGlobalCap: true },
+      );
+      await tick();
+
+      const second = withLocks(
+        key,
+        async () => {
+          order.push('second');
+        },
+        { bypassGlobalCap: true },
+      );
+      await tick();
+
+      // Second must wait for first to release the keyed lock.
+      expect(order).toEqual(['first-start']);
+
+      releaseFirst();
+      await Promise.all([first, second]);
+      expect(order).toEqual(['first-start', 'first-end', 'second']);
+    } finally {
+      if (prev === undefined) {
+        delete process.env.DD_UPDATE_MAX_CONCURRENT;
+      } else {
+        process.env.DD_UPDATE_MAX_CONCURRENT = prev;
+      }
+      vi.resetModules();
+    }
+  });
+
+  test('bypassGlobalCap not set (default) — regular updates still respect the cap', async () => {
+    const prev = process.env.DD_UPDATE_MAX_CONCURRENT;
+    process.env.DD_UPDATE_MAX_CONCURRENT = '1';
+    vi.resetModules();
+    try {
+      const mod = await import('./update-locks.js?bypass3');
+      const { withContainerUpdateLocks: withLocks } = mod as {
+        withContainerUpdateLocks: typeof withContainerUpdateLocks;
+      };
+
+      const order: string[] = [];
+      let releaseGate: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        releaseGate = resolve;
+      });
+
+      const a = withLocks(['container:local:bypass-cap-a'], async () => {
+        order.push('a-start');
+        await gate;
+        order.push('a-end');
+      });
+      await tick();
+
+      // No bypassGlobalCap — must wait.
+      const b = withLocks(['container:local:bypass-cap-b'], async () => {
+        order.push('b');
+      });
+      await tick();
+
+      expect(order).toEqual(['a-start']);
+
+      releaseGate();
+      await Promise.all([a, b]);
+      expect(order).toEqual(['a-start', 'a-end', 'b']);
+    } finally {
+      if (prev === undefined) {
+        delete process.env.DD_UPDATE_MAX_CONCURRENT;
+      } else {
+        process.env.DD_UPDATE_MAX_CONCURRENT = prev;
+      }
+      vi.resetModules();
+    }
+  });
+
+  test('bypassGlobalCap=false behaves identically to the default (respects cap)', async () => {
+    const prev = process.env.DD_UPDATE_MAX_CONCURRENT;
+    process.env.DD_UPDATE_MAX_CONCURRENT = '1';
+    vi.resetModules();
+    try {
+      const mod = await import('./update-locks.js?bypass4');
+      const { withContainerUpdateLocks: withLocks } = mod as {
+        withContainerUpdateLocks: typeof withContainerUpdateLocks;
+      };
+
+      const order: string[] = [];
+      let releaseGate: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        releaseGate = resolve;
+      });
+
+      const a = withLocks(['container:local:bypass-false-a'], async () => {
+        order.push('a-start');
+        await gate;
+        order.push('a-end');
+      });
+      await tick();
+
+      const b = withLocks(
+        ['container:local:bypass-false-b'],
+        async () => {
+          order.push('b');
+        },
+        { bypassGlobalCap: false },
+      );
+      await tick();
+
+      expect(order).toEqual(['a-start']);
+
+      releaseGate();
+      await Promise.all([a, b]);
+      expect(order).toEqual(['a-start', 'a-end', 'b']);
+    } finally {
+      if (prev === undefined) {
+        delete process.env.DD_UPDATE_MAX_CONCURRENT;
+      } else {
+        process.env.DD_UPDATE_MAX_CONCURRENT = prev;
+      }
+      vi.resetModules();
+    }
+  });
+});

@@ -88,7 +88,7 @@ Operations waiting on the global cap remain in `queued` status, which the UI alr
 
 **Scope:** per controller instance. Distributed agent hosts have independent counters by design — there is no cross-host coordination.
 
-<Callout type="info">Self-update operations (`drydock` updating itself) go through the same `withContainerUpdateLocks` path as regular container updates and are counted against the global cap. This is rarely relevant in practice since self-updates are infrequent.</Callout>
+<Callout type="info">Self-update operations (`drydock` updating itself) bypass the global cap — they take per-container locks but never wait on the global semaphore. This prevents a full update queue from starving an admin-triggered self-update.</Callout>
 
 ```yaml
 services:

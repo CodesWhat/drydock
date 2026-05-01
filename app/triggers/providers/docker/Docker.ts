@@ -1413,62 +1413,67 @@ class Docker<
    * subclasses can override.
    */
   async runContainerUpdateLifecycle(container, runtimeContext?: unknown) {
-    return withContainerUpdateLocks(this.getUpdateLockKeys(container), async () => {
-      const requestedOperationId = getRequestedOperationId(container, runtimeContext);
-      try {
-        const result: unknown = await this.updateLifecycleExecutor.run(container, runtimeContext);
-        if (result !== false && requestedOperationId) {
-          const operation = updateOperationStore.getOperationById(requestedOperationId);
-          if (
-            operation &&
-            operation.kind !== 'self-update' &&
-            (operation.status === 'queued' || operation.status === 'in-progress')
-          ) {
-            updateOperationStore.markOperationTerminal(operation.id, {
-              status: 'succeeded',
-              phase: 'succeeded',
-            });
+    const bypassGlobalCap = this.isSelfUpdate(container) || this.isInfrastructureUpdate(container);
+    return withContainerUpdateLocks(
+      this.getUpdateLockKeys(container),
+      async () => {
+        const requestedOperationId = getRequestedOperationId(container, runtimeContext);
+        try {
+          const result: unknown = await this.updateLifecycleExecutor.run(container, runtimeContext);
+          if (result !== false && requestedOperationId) {
+            const operation = updateOperationStore.getOperationById(requestedOperationId);
+            if (
+              operation &&
+              operation.kind !== 'self-update' &&
+              (operation.status === 'queued' || operation.status === 'in-progress')
+            ) {
+              updateOperationStore.markOperationTerminal(operation.id, {
+                status: 'succeeded',
+                phase: 'succeeded',
+              });
+            }
           }
-        }
-        return result;
-      } catch (error: unknown) {
-        const operation = requestedOperationId
-          ? updateOperationStore.getOperationById(requestedOperationId)
-          : undefined;
+          return result;
+        } catch (error: unknown) {
+          const operation = requestedOperationId
+            ? updateOperationStore.getOperationById(requestedOperationId)
+            : undefined;
 
-        if (!operation) {
+          if (!operation) {
+            throw error;
+          }
+
+          if (operation.kind === 'self-update') {
+            // Self-update terminalization is owned by the helper finalize callback.
+            // If the outgoing process dies before that callback runs, startup
+            // reconciliation will fail the orphaned active row on the next boot.
+            throw error;
+          }
+
+          if (operation.phase === 'rollback-deferred') {
+            // rollback-deferred is terminalized by the deferred reconciliation callback in the
+            // normal case; if the process dies before that callback runs, startup reconciliation
+            // will fail the orphaned active row on the next boot.
+            throw error;
+          }
+
+          if (operation.status !== 'queued' && operation.status !== 'in-progress') {
+            // Already terminalized by an inner handler or prior recovery path. The outer wrapper
+            // must not rewrite completedAt/error fields by terminalizing the row a second time.
+            throw error;
+          }
+
+          updateOperationStore.markOperationTerminal(operation.id, {
+            status: 'failed',
+            phase: 'failed',
+            lastError: getErrorMessage(error),
+          });
+
           throw error;
         }
-
-        if (operation.kind === 'self-update') {
-          // Self-update terminalization is owned by the helper finalize callback.
-          // If the outgoing process dies before that callback runs, startup
-          // reconciliation will fail the orphaned active row on the next boot.
-          throw error;
-        }
-
-        if (operation.phase === 'rollback-deferred') {
-          // rollback-deferred is terminalized by the deferred reconciliation callback in the
-          // normal case; if the process dies before that callback runs, startup reconciliation
-          // will fail the orphaned active row on the next boot.
-          throw error;
-        }
-
-        if (operation.status !== 'queued' && operation.status !== 'in-progress') {
-          // Already terminalized by an inner handler or prior recovery path. The outer wrapper
-          // must not rewrite completedAt/error fields by terminalizing the row a second time.
-          throw error;
-        }
-
-        updateOperationStore.markOperationTerminal(operation.id, {
-          status: 'failed',
-          phase: 'failed',
-          lastError: getErrorMessage(error),
-        });
-
-        throw error;
-      }
-    });
+      },
+      { bypassGlobalCap },
+    );
   }
 
   /**

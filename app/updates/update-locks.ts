@@ -39,8 +39,9 @@ const globalSemaphore: Semaphore | null =
 export async function withContainerUpdateLocks<T>(
   keys: readonly string[],
   fn: () => Promise<T>,
+  options?: { bypassGlobalCap?: boolean },
 ): Promise<T> {
-  if (globalSemaphore === null) {
+  if (globalSemaphore === null || options?.bypassGlobalCap === true) {
     return updateLockManager.withLocks(keys, fn);
   }
 
