@@ -65,7 +65,7 @@ jobs:
             package: app
             incremental_file: reports/stryker-incremental-app-core-api-routes.json
             mutate: >-
-              api/agent.ts,api/api.ts,api/app.ts,api/audit*.ts,api/backup.ts,api/component.ts,api/debug.ts,api/docker-trigger.ts,api/error-response.ts,api/group.ts,api/header-value.ts,api/health.ts,api/helpers.ts,api/icons.ts,api/icons/**/*.ts,api/index.ts,api/internal-self-update.ts,api/log.ts,api/notification.ts,api/pagination-links.ts,api/preview.ts,api/prometheus.ts,api/rate-limit-key.ts,api/registry.ts,api/server.ts,api/settings.ts,api/store.ts,api/trigger.ts,api/update-operations.ts,api/ui.ts,api/watcher.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+              api/agent.ts,api/api.ts,api/app.ts,api/audit*.ts,api/backup.ts,api/component.ts,api/debug.ts,api/docker-trigger.ts,api/error-response.ts,api/group.ts,api/header-value.ts,api/health.ts,api/helpers.ts,api/icons.ts,api/icons/**/*.ts,api/index.ts,api/internal-self-update.ts,api/log.ts,api/notification-outbox.ts,api/notification.ts,api/operation.ts,api/pagination-links.ts,api/preview.ts,api/prometheus.ts,api/rate-limit-key.ts,api/registry.ts,api/server.ts,api/settings.ts,api/stats.ts,api/store.ts,api/trigger.ts,api/update-operations.ts,api/ui.ts,api/watcher.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
           - name: app-core-domain-support
             package: app
             incremental_file: reports/stryker-incremental-app-core-domain-support.json
