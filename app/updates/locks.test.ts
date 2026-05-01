@@ -1,4 +1,4 @@
-import { LockManager } from './locks.js';
+import { LockManager, Semaphore } from './locks.js';
 
 const tick = async (n = 4): Promise<void> => {
   for (let i = 0; i < n; i++) {
@@ -266,5 +266,175 @@ describe('LockManager.withLocks', () => {
     await expect(lm.withLocks(['k1'], () => Promise.reject(err))).rejects.toBe(err);
     expect(lm.held()).toEqual([]);
     expect(lm.pending()).toEqual([]);
+  });
+});
+
+describe('Semaphore', () => {
+  test('constructor rejects negative permits', () => {
+    expect(() => new Semaphore(-1)).toThrow(RangeError);
+    expect(() => new Semaphore(-1)).toThrow('non-negative integer');
+  });
+
+  test('constructor rejects non-integer permits', () => {
+    expect(() => new Semaphore(1.5)).toThrow(RangeError);
+  });
+
+  test('constructor accepts 0 permits', () => {
+    expect(() => new Semaphore(0)).not.toThrow();
+    const s = new Semaphore(0);
+    expect(s.available()).toBe(0);
+    expect(s.pending()).toBe(0);
+  });
+
+  test('acquire returns a release function immediately when permits > 0', async () => {
+    const s = new Semaphore(2);
+    const release = await s.acquire();
+    expect(typeof release).toBe('function');
+    expect(s.available()).toBe(1);
+    expect(s.pending()).toBe(0);
+    release();
+    expect(s.available()).toBe(2);
+  });
+
+  test('available() and pending() are accurate under load', async () => {
+    const s = new Semaphore(2);
+
+    // Acquire both permits directly (synchronous path since permits > 0).
+    const rel1 = await s.acquire();
+    const rel2 = await s.acquire();
+
+    expect(s.available()).toBe(0);
+    expect(s.pending()).toBe(0);
+
+    // Queue two more waiters.
+    const waiter1 = s.acquire();
+    const waiter2 = s.acquire();
+    await tick();
+
+    expect(s.available()).toBe(0);
+    expect(s.pending()).toBe(2);
+
+    // Release one slot — waiter1 gets it.
+    rel1();
+    await tick();
+    expect(s.available()).toBe(0);
+    expect(s.pending()).toBe(1);
+
+    // Release another — waiter2 gets it.
+    rel2();
+    await tick();
+    expect(s.available()).toBe(0);
+    expect(s.pending()).toBe(0);
+
+    // Let waiters release their slots.
+    const rel3 = await waiter1;
+    const rel4 = await waiter2;
+    rel3();
+    rel4();
+    expect(s.available()).toBe(2);
+    expect(s.pending()).toBe(0);
+  });
+
+  test('blocks when permits exhausted; resolves in FIFO order as releases happen', async () => {
+    const s = new Semaphore(1);
+    const order: string[] = [];
+    let releaseA: (() => void) | undefined;
+
+    const gateA = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
+
+    const a = s.acquire().then(async (rel) => {
+      order.push('a-start');
+      await gateA;
+      order.push('a-end');
+      rel();
+    });
+
+    await tick();
+
+    const b = s.acquire().then((rel) => {
+      order.push('b');
+      rel();
+    });
+
+    await tick();
+    expect(s.available()).toBe(0);
+    expect(s.pending()).toBe(1);
+
+    releaseA!();
+    await Promise.all([a, b]);
+
+    expect(order).toEqual(['a-start', 'a-end', 'b']);
+    expect(s.available()).toBe(1);
+    expect(s.pending()).toBe(0);
+  });
+
+  test('permits=2 allows two concurrent holders; third waits', async () => {
+    const s = new Semaphore(2);
+    let aStarted = false;
+    let bStarted = false;
+    let cStarted = false;
+
+    const gates: Array<() => void> = [];
+
+    const makeTask = (label: string, setStarted: (v: boolean) => void) =>
+      s.acquire().then(async (rel) => {
+        setStarted(true);
+        await new Promise<void>((resolve) => gates.push(resolve));
+        rel();
+      });
+
+    const a = makeTask('a', (v) => {
+      aStarted = v;
+    });
+    const b = makeTask('b', (v) => {
+      bStarted = v;
+    });
+    const c = makeTask('c', (v) => {
+      cStarted = v;
+    });
+    await tick();
+
+    expect(aStarted).toBe(true);
+    expect(bStarted).toBe(true);
+    expect(cStarted).toBe(false); // waiting for a slot
+    expect(s.available()).toBe(0);
+    expect(s.pending()).toBe(1);
+
+    // Release one slot — C should unblock.
+    gates.shift()!();
+    await tick();
+    expect(cStarted).toBe(true);
+
+    // Clean up.
+    gates.shift()!();
+    gates.shift()!();
+    await Promise.all([a, b, c]);
+    expect(s.available()).toBe(2);
+  });
+
+  test('release() is idempotent — calling it multiple times does not over-release', async () => {
+    const s = new Semaphore(1);
+    const release = await s.acquire();
+    expect(s.available()).toBe(0);
+
+    release();
+    expect(s.available()).toBe(1);
+
+    // Calling release a second time must not increment available beyond initial.
+    release();
+    expect(s.available()).toBe(1);
+  });
+
+  test('acquire with permits=0 never resolves (verified via timeout)', async () => {
+    const s = new Semaphore(0);
+    let resolved = false;
+    s.acquire().then(() => {
+      resolved = true;
+    });
+    await tick(8);
+    expect(resolved).toBe(false);
+    expect(s.pending()).toBe(1);
   });
 });

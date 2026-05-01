@@ -62,6 +62,43 @@ The update action triggers the Docker or Docker Compose trigger for the selected
 
 See [Lifecycle Hooks](/docs/configuration/hooks) and [Backup & Rollback](/docs/configuration/rollback) for related configuration.
 
+## Global concurrency cap
+
+By default, drydock runs updates concurrently across containers. Two existing layers of serialization apply:
+
+- **Per-container lock** — prevents the same container from being updated twice in parallel.
+- **Per-compose-project lock** — serializes services within the same compose stack so `docker compose up` orchestration is safe.
+
+If you need a broader limit — for example, to stay inside Docker Hub pull-rate budgets or to keep host restart load predictable — set `DD_UPDATE_MAX_CONCURRENT`:
+
+| Env var | Required | Description | Default |
+| --- | :---: | --- | --- |
+| `DD_UPDATE_MAX_CONCURRENT` | ⚪ | Max simultaneous update lifecycles across the entire controller instance | `0` (unlimited) |
+
+**Semantics:**
+
+- `0` or absent → unlimited (default; no change from current behavior on upgrade).
+- `1` → strictly serial; only one update lifecycle runs at a time.
+- `N` (positive integer) → at most N update lifecycles run concurrently.
+- Negative or non-integer values → drydock fails fast at startup with a descriptive error.
+
+The global cap layers on top of the per-container and per-compose-project locks — it does not replace them. A compose stack already serializes its own members via the per-project lock; the global cap is an additional gate that limits how many stacks (or bare containers) can update at the same time.
+
+Operations waiting on the global cap remain in `queued` status, which the UI already renders correctly as the Queued → Updating → Updated progression.
+
+**Scope:** per controller instance. Distributed agent hosts have independent counters by design — there is no cross-host coordination.
+
+<Callout type="info">Self-update operations (`drydock` updating itself) go through the same `withContainerUpdateLocks` path as regular container updates and are counted against the global cap. This is rarely relevant in practice since self-updates are infrequent.</Callout>
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      # Allow at most 3 container updates to run simultaneously.
+      - DD_UPDATE_MAX_CONCURRENT=3
+```
+
 ## Why isn't my container auto-updating?
 
 Drydock evaluates each container against a stack of policy and trigger gates and reports the result as a pill on the row (and as `updateEligibility` on the API payload). When auto-update doesn't fire on a container with an available update, the pill identifies the active blocker — `Below threshold`, `Trigger filtered`, `No trigger`, `Agent mismatch`, `Snoozed`, etc. See [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the full reason reference and how to clear each gate.
