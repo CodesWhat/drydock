@@ -927,8 +927,8 @@ test('cloneContainer should drop stale Entrypoint and Cmd inherited from source 
   expect(logContainer.info).toHaveBeenCalledWith(expect.stringContaining('Dropping stale Cmd'));
 });
 
-test('cloneContainer should preserve Cmd/Entrypoint pins when runtime origin is unknown', () => {
-  const logContainer = createMockLog('debug');
+test('cloneContainer should drop Cmd/Entrypoint when runtime origin is unknown but values match source image', () => {
+  const logContainer = createMockLog('debug', 'info');
   const clone = docker.cloneContainer(
     {
       Name: '/hub_nginx_pinned',
@@ -958,17 +958,18 @@ test('cloneContainer should preserve Cmd/Entrypoint pins when runtime origin is 
     },
   );
 
-  expect(clone.Entrypoint).toEqual(['/docker-entrypoint.sh']);
-  expect(clone.Cmd).toEqual(['nginx', '-g', 'daemon off;']);
-  expect(clone.Labels['dd.runtime.entrypoint.origin']).toBe('explicit');
-  expect(clone.Labels['dd.runtime.cmd.origin']).toBe('explicit');
+  // UNKNOWN + matches source + source known → treat as inherited and drop
+  expect(clone.Entrypoint).toBeUndefined();
+  expect(clone.Cmd).toBeUndefined();
+  expect(clone.Labels['dd.runtime.entrypoint.origin']).toBe('inherited');
+  expect(clone.Labels['dd.runtime.cmd.origin']).toBe('inherited');
   expect(logContainer.debug).toHaveBeenCalledWith(
-    expect.stringContaining('runtime origin is unknown'),
+    expect.stringContaining('Treating Entrypoint as inherited'),
   );
 });
 
-test('cloneContainer should preserve explicit Cmd pin while dropping inherited Entrypoint', () => {
-  const logContainer = createMockLog('info');
+test('cloneContainer should drop both Entrypoint (inherited) and Cmd (unknown+matching-source) when source is known', () => {
+  const logContainer = createMockLog('info', 'debug');
   const clone = docker.cloneContainer(
     {
       Name: '/hub_nginx_cmd_pin',
@@ -999,16 +1000,17 @@ test('cloneContainer should preserve explicit Cmd pin while dropping inherited E
   );
 
   expect(clone.Entrypoint).toBeUndefined();
-  expect(clone.Cmd).toEqual(['nginx', '-g', 'daemon off;']);
+  expect(clone.Cmd).toBeUndefined();
   expect(clone.Labels['dd.runtime.entrypoint.origin']).toBe('inherited');
-  expect(clone.Labels['dd.runtime.cmd.origin']).toBe('explicit');
+  expect(clone.Labels['dd.runtime.cmd.origin']).toBe('inherited');
   expect(logContainer.info).toHaveBeenCalledWith(
     expect.stringContaining('Dropping stale Entrypoint'),
   );
+  expect(logContainer.info).toHaveBeenCalledWith(expect.stringContaining('Dropping stale Cmd'));
 });
 
-test('cloneContainer should preserve explicit Entrypoint pin while dropping inherited Cmd', () => {
-  const logContainer = createMockLog('info');
+test('cloneContainer should drop both Entrypoint (unknown+matching-source) and Cmd (inherited) when source is known', () => {
+  const logContainer = createMockLog('info', 'debug');
   const clone = docker.cloneContainer(
     {
       Name: '/hub_nginx_entrypoint_pin',
@@ -1038,10 +1040,13 @@ test('cloneContainer should preserve explicit Entrypoint pin while dropping inhe
     },
   );
 
-  expect(clone.Entrypoint).toEqual(['/docker-entrypoint.sh']);
+  expect(clone.Entrypoint).toBeUndefined();
   expect(clone.Cmd).toBeUndefined();
-  expect(clone.Labels['dd.runtime.entrypoint.origin']).toBe('explicit');
+  expect(clone.Labels['dd.runtime.entrypoint.origin']).toBe('inherited');
   expect(clone.Labels['dd.runtime.cmd.origin']).toBe('inherited');
+  expect(logContainer.info).toHaveBeenCalledWith(
+    expect.stringContaining('Dropping stale Entrypoint'),
+  );
   expect(logContainer.info).toHaveBeenCalledWith(expect.stringContaining('Dropping stale Cmd'));
 });
 
@@ -2647,7 +2652,10 @@ describe('executeContainerUpdate', () => {
     expect(result).toBe(true);
   });
 
-  test('should preserve explicit runtime pins matching source defaults during update', async () => {
+  test('should drop stale runtime defaults matching source image when origin is unknown (cold-start case)', async () => {
+    // Reproduces the vaultwarden scenario: container never updated by drydock (no origin labels),
+    // values match source image exactly (image defaults, not user overrides), source image inspected
+    // successfully. New fix: UNKNOWN + inherited-from-source + source-known → drop stale value.
     const currentContainer = {
       rename: vi.fn().mockResolvedValue(undefined),
       stop: vi.fn().mockResolvedValue(undefined),
@@ -2716,10 +2724,11 @@ describe('executeContainerUpdate', () => {
 
     expect(result).toBe(true);
     const createPayload = createContainerSpy.mock.calls[0][1];
-    expect(createPayload.Entrypoint).toEqual(['/docker-entrypoint.sh']);
-    expect(createPayload.Cmd).toEqual(['nginx', '-g', 'daemon off;']);
-    expect(createPayload.Labels['dd.runtime.entrypoint.origin']).toBe('explicit');
-    expect(createPayload.Labels['dd.runtime.cmd.origin']).toBe('explicit');
+    // Stale values match source image defaults and source image was inspected → dropped
+    expect(createPayload.Entrypoint).toBeUndefined();
+    expect(createPayload.Cmd).toBeUndefined();
+    expect(createPayload.Labels['dd.runtime.entrypoint.origin']).toBe('inherited');
+    expect(createPayload.Labels['dd.runtime.cmd.origin']).toBe('inherited');
   });
 
   test('should drop stale inherited runtime defaults when origin labels mark inherited', async () => {

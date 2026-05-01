@@ -289,8 +289,15 @@ class ContainerRuntimeConfigManager {
       clonedValue,
       sourceImageConfig?.[runtimeField],
     );
+    const sourceImageKnown = sourceImageConfig !== undefined;
     if (
-      !this.isInheritedRuntimeField(runtimeField, runtimeOrigin, inheritedFromSource, logContainer)
+      !this.isInheritedRuntimeField(
+        runtimeField,
+        runtimeOrigin,
+        inheritedFromSource,
+        sourceImageKnown,
+        logContainer,
+      )
     ) {
       return false;
     }
@@ -302,6 +309,7 @@ class ContainerRuntimeConfigManager {
     runtimeField: RuntimeProcessField,
     runtimeOrigin: RuntimeFieldOrigin,
     inheritedFromSource: boolean,
+    sourceImageKnown: boolean,
     logContainer: RuntimeConfigLogger | undefined,
   ) {
     if (runtimeOrigin === RUNTIME_ORIGIN_INHERITED) {
@@ -309,8 +317,14 @@ class ContainerRuntimeConfigManager {
     }
 
     if (runtimeOrigin === RUNTIME_ORIGIN_UNKNOWN && inheritedFromSource) {
+      if (sourceImageKnown) {
+        logContainer?.debug?.(
+          `Treating ${runtimeField} as inherited (origin unknown but matches source image default and source image is known)`,
+        );
+        return true;
+      }
       logContainer?.debug?.(
-        `Preserving ${runtimeField} because runtime origin is unknown; avoiding stale-default cleanup to prevent dropping explicit pins`,
+        `Preserving ${runtimeField}: origin unknown and source image unavailable`,
       );
     }
 

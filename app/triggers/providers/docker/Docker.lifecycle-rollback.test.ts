@@ -727,7 +727,10 @@ describe('executeContainerUpdate', () => {
     );
   });
 
-  test('should preserve explicit runtime pins matching source defaults during update', async () => {
+  test('should drop stale runtime defaults matching source image when origin is unknown (cold-start case)', async () => {
+    // Reproduces the vaultwarden scenario: container never updated by drydock (no origin labels),
+    // values match source image exactly (image defaults, not user overrides), source image inspected
+    // successfully. New fix: UNKNOWN + inherited-from-source + source-known → drop stale value.
     const currentContainer = {
       rename: vi.fn().mockResolvedValue(undefined),
       stop: vi.fn().mockResolvedValue(undefined),
@@ -796,10 +799,11 @@ describe('executeContainerUpdate', () => {
 
     expect(result).toBe(true);
     const createPayload = createContainerSpy.mock.calls[0][1];
-    expect(createPayload.Entrypoint).toEqual(['/docker-entrypoint.sh']);
-    expect(createPayload.Cmd).toEqual(['nginx', '-g', 'daemon off;']);
-    expect(createPayload.Labels['dd.runtime.entrypoint.origin']).toBe('explicit');
-    expect(createPayload.Labels['dd.runtime.cmd.origin']).toBe('explicit');
+    // Stale values match source image defaults and source image was inspected → dropped
+    expect(createPayload.Entrypoint).toBeUndefined();
+    expect(createPayload.Cmd).toBeUndefined();
+    expect(createPayload.Labels['dd.runtime.entrypoint.origin']).toBe('inherited');
+    expect(createPayload.Labels['dd.runtime.cmd.origin']).toBe('inherited');
   });
 
   test('should drop stale inherited runtime defaults when origin labels mark inherited', async () => {
