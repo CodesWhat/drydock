@@ -156,15 +156,14 @@ onMounted(() => {
     </div>
 
     <div class="mb-3 flex flex-wrap items-center gap-2">
-      <button v-for="tab in STATUS_TABS" :key="tab.key" type="button"
-              class="px-3 py-1.5 text-2xs-plus font-medium dd-rounded transition-colors"
-              :class="status === tab.key ? 'dd-bg-elevated dd-text' : 'dd-text-muted hover:dd-text'"
-              @click="selectStatus(tab.key)">
+      <AppButton v-for="tab in STATUS_TABS" :key="tab.key" type="button" size="md" weight="medium"
+                 :variant="status === tab.key ? 'elevated' : 'text-muted'"
+                 @click="selectStatus(tab.key)">
         {{ tab.label }}
         <AppBadge :tone="statusBadge(tab.key).tone" size="xs" class="ml-2">
           {{ statusToCount(tab.key) }}
         </AppBadge>
-      </button>
+      </AppButton>
     </div>
 
     <div v-if="error"
