@@ -1,4 +1,4 @@
-import { summariseUpdateError } from '@/utils/update-error-summary';
+import { resolveUpdateFailureReason, summariseUpdateError } from '@/utils/update-error-summary';
 
 describe('summariseUpdateError', () => {
   it('returns undefined for empty / non-string input', () => {
@@ -68,5 +68,51 @@ describe('summariseUpdateError', () => {
   it('returns undefined for unrecognised errors', () => {
     expect(summariseUpdateError('something weird happened')).toBeUndefined();
     expect(summariseUpdateError('disk full')).toBeUndefined();
+  });
+});
+
+describe('resolveUpdateFailureReason', () => {
+  it('prefers the friendly summarised label when the raw error matches a pattern', () => {
+    expect(
+      resolveUpdateFailureReason({
+        lastError: '(HTTP code 401) unauthorized',
+        rollbackReason: 'health_gate_failed',
+      }),
+    ).toBe('Registry authentication failed');
+  });
+
+  it('falls back to humanised rollbackReason when the summariser does not match', () => {
+    expect(
+      resolveUpdateFailureReason({
+        lastError: 'container exited with code 137',
+        rollbackReason: 'health_gate_failed',
+      }),
+    ).toBe('health gate failed');
+    expect(
+      resolveUpdateFailureReason({
+        lastError: undefined,
+        rollbackReason: 'start_new_failed',
+      }),
+    ).toBe('start new failed');
+  });
+
+  it('falls back to the raw lastError when nothing else is available and the message is short', () => {
+    expect(resolveUpdateFailureReason({ lastError: 'disk full' })).toBe('disk full');
+  });
+
+  it('does not surface excessively long raw lastError strings', () => {
+    const longError = 'x'.repeat(121);
+    expect(resolveUpdateFailureReason({ lastError: longError })).toBeUndefined();
+  });
+
+  it('returns undefined when no signal is provided', () => {
+    expect(resolveUpdateFailureReason({})).toBeUndefined();
+    expect(resolveUpdateFailureReason({ lastError: '', rollbackReason: '   ' })).toBeUndefined();
+  });
+
+  it('treats whitespace-only rollbackReason as missing', () => {
+    expect(resolveUpdateFailureReason({ lastError: 'disk full', rollbackReason: '   ' })).toBe(
+      'disk full',
+    );
   });
 });

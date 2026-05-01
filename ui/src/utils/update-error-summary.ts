@@ -1,3 +1,41 @@
+import { formatRollbackReason } from '../views/containers/useContainerBackups';
+
+const MAX_RAW_ERROR_LENGTH = 120;
+
+/**
+ * Resolve a user-facing reason string from the SSE/operation-row signals,
+ * preferring (in order):
+ *   1. A summariser-matched friendly label from the raw error.
+ *   2. The canonical machine `rollbackReason` humanised (e.g.
+ *      `health_gate_failed` → "health gate failed").
+ *   3. The raw error itself if it's short and plausible.
+ *   4. undefined — caller falls back to the generic toast/banner copy.
+ *
+ * Use this everywhere a rolled-back / failed event needs to surface "why" to
+ * the operator. Single source of truth for the resolution order so the toast,
+ * the row banner, and the detail pane never disagree.
+ */
+export function resolveUpdateFailureReason(args: {
+  lastError?: string;
+  rollbackReason?: string;
+}): string | undefined {
+  const summarised = summariseUpdateError(args.lastError);
+  if (summarised) {
+    return summarised;
+  }
+  if (typeof args.rollbackReason === 'string' && args.rollbackReason.trim() !== '') {
+    return formatRollbackReason(args.rollbackReason);
+  }
+  if (
+    typeof args.lastError === 'string' &&
+    args.lastError.trim() !== '' &&
+    args.lastError.length <= MAX_RAW_ERROR_LENGTH
+  ) {
+    return args.lastError;
+  }
+  return undefined;
+}
+
 /**
  * Map a raw update-failure error string from the backend to a short,
  * user-facing reason label. Returns `undefined` when the error doesn't match

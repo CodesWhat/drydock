@@ -37,7 +37,7 @@ import {
   updateKindColor,
 } from '../utils/display';
 import { errorMessage } from '../utils/error';
-import { summariseUpdateError } from '../utils/update-error-summary';
+import { resolveUpdateFailureReason } from '../utils/update-error-summary';
 import { useContainerActions } from './containers/useContainerActions';
 import { useContainerLogs } from './containers/useContainerLogs';
 import { useContainerSecurity } from './containers/useContainerSecurity';
@@ -1388,15 +1388,17 @@ function applyOperationPatch(event: Event) {
     // renames the row post-recreate, so still release the hold even when the row
     // has already fallen out of containers.value.
     onTerminalEvent: ({ container, status, name, operationId }) => {
-      const reason = summariseUpdateError(parsed.lastError);
+      const reason = resolveUpdateFailureReason({
+        lastError: parsed.lastError,
+        rollbackReason: parsed.rollbackReason,
+      });
       if (container) {
         (container as Container).updateOperation = undefined;
         if (
           status === 'failed' ||
           (status === 'rolled-back' && parsed.rollbackReason !== 'cancelled')
         ) {
-          (container as Container).lastUpdateFailureReason =
-            reason ?? parsed.lastError ?? 'Update failed';
+          (container as Container).lastUpdateFailureReason = reason ?? 'Update failed';
           (container as Container).lastUpdateFailureAt = Date.now();
         } else if (status === 'succeeded') {
           (container as Container).lastUpdateFailureReason = undefined;
@@ -1490,7 +1492,9 @@ function handleSseUpdateFailed(event: Event) {
   // payload carries `error`; in batched cases or when dd:update-operation-changed
   // is delayed, this is the only signal the UI gets.
   const error = typeof detail.error === 'string' ? detail.error : undefined;
-  const reason = summariseUpdateError(error);
+  const rollbackReason =
+    typeof detail.rollbackReason === 'string' ? detail.rollbackReason : undefined;
+  const reason = resolveUpdateFailureReason({ lastError: error, rollbackReason });
   scheduleCompletionToast(() =>
     toast.error(
       reason

@@ -3562,7 +3562,13 @@ describe('ContainersView', () => {
 
         const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
         expect(newToasts).toHaveLength(1);
-        expect(newToasts[0]).toMatchObject({ tone: 'error', title: 'Update failed: nginx' });
+        // Short, plausible raw errors are surfaced as the reason via
+        // resolveUpdateFailureReason so the operator sees *why* the update
+        // failed even when no summariser pattern matches.
+        expect(newToasts[0]).toMatchObject({
+          tone: 'error',
+          title: 'Update failed: nginx — docker pull failed',
+        });
 
         wrapper.unmount();
       } finally {
