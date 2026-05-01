@@ -334,8 +334,8 @@ describe('container-update utils', () => {
 });
 
 describe('getUpdateInProgressPhaseLabelKey', () => {
-  it('maps signature-verifying to verifyingSignature', () => {
-    expect(getUpdateInProgressPhaseLabelKey('signature-verifying')).toBe('verifyingSignature');
+  it('maps signature-verifying to the updating fallback (phase no longer exists)', () => {
+    expect(getUpdateInProgressPhaseLabelKey('signature-verifying')).toBe('updating');
   });
 
   it('maps pulling to pulling', () => {
@@ -399,12 +399,6 @@ describe('UPDATE_IN_PROGRESS_PHASE_I18N', () => {
   it('maps pulling to the pulling i18n key', () => {
     expect(UPDATE_IN_PROGRESS_PHASE_I18N.pulling).toBe(
       'containerComponents.groupedViews.statusPulling',
-    );
-  });
-
-  it('maps verifyingSignature to the statusVerifyingSignature i18n key', () => {
-    expect(UPDATE_IN_PROGRESS_PHASE_I18N.verifyingSignature).toBe(
-      'containerComponents.groupedViews.statusVerifyingSignature',
     );
   });
 

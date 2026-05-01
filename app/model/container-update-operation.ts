@@ -29,7 +29,6 @@ export type TerminalContainerUpdateOperationStatus =
 export const CONTAINER_UPDATE_OPERATION_PHASES = [
   'queued',
   'pulling',
-  'signature-verifying',
   'scanning',
   'sbom-generating',
   'pull-failed',
@@ -63,7 +62,6 @@ export type QueuedContainerUpdateOperationPhase =
 
 export const IN_PROGRESS_CONTAINER_UPDATE_OPERATION_PHASES = [
   'pulling',
-  'signature-verifying',
   'scanning',
   'sbom-generating',
   'prepare',

@@ -132,7 +132,6 @@ export function shouldRenderStandaloneQueuedUpdateAsUpdating(args: {
 }
 
 export type UpdateInProgressPhaseLabelKey =
-  | 'verifyingSignature'
   | 'pulling'
   | 'scanning'
   | 'generatingSbom'
@@ -145,8 +144,6 @@ export function getUpdateInProgressPhaseLabelKey(
   phase: string | undefined,
 ): UpdateInProgressPhaseLabelKey {
   switch (phase) {
-    case 'signature-verifying':
-      return 'verifyingSignature';
     case 'pulling':
       return 'pulling';
     case 'scanning':
@@ -167,7 +164,6 @@ export function getUpdateInProgressPhaseLabelKey(
 
 /** Maps every UpdateInProgressPhaseLabelKey to its i18n message path. */
 export const UPDATE_IN_PROGRESS_PHASE_I18N: Record<UpdateInProgressPhaseLabelKey, string> = {
-  verifyingSignature: 'containerComponents.groupedViews.statusVerifyingSignature',
   pulling: 'containerComponents.groupedViews.statusPulling',
   scanning: 'containerComponents.groupedViews.statusScanningPhase',
   generatingSbom: 'containerComponents.groupedViews.statusGeneratingSbom',

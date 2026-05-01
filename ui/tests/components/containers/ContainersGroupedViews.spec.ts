@@ -2317,9 +2317,9 @@ describe('ContainersGroupedViews', () => {
       expect(rowByName(wrapper, 'alpha').text()).toContain('Pulling…');
     });
 
-    it('shows "Verifying signature…" badge for phase signature-verifying', () => {
+    it('shows "Updating" badge for unknown/removed phase signature-verifying (falls through to default)', () => {
       const wrapper = mountWithPhase('signature-verifying');
-      expect(rowByName(wrapper, 'alpha').text()).toContain('Verifying signature…');
+      expect(rowByName(wrapper, 'alpha').text()).toContain('Updating');
     });
 
     it('shows "Generating SBOM…" badge for phase sbom-generating', () => {
