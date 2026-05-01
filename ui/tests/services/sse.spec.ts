@@ -361,7 +361,62 @@ describe('SseService', () => {
       batchId: 'batch-1',
       status: 'in-progress',
       phase: 'pulling',
+      lastError: undefined,
+      rollbackReason: undefined,
     });
+  });
+
+  it('parses lastError and rollbackReason from terminal rolled-back payload', () => {
+    sseService.connect(mockEventBus);
+
+    const event = new MessageEvent('dd:update-operation-changed', {
+      data: JSON.stringify({
+        operationId: 'op-rb-1',
+        containerName: 'drydock-playwright-app-vaultwarden',
+        containerId: 'c-vw',
+        status: 'rolled-back',
+        phase: 'rolled-back',
+        lastError:
+          '(HTTP code 400) unexpected - failed to create task for container: failed to create shim task: OCI runtime create failed',
+        rollbackReason: 'start_new_failed',
+      }),
+    });
+    eventListeners['dd:update-operation-changed'](event);
+
+    expect(mockEventBus.emit).toHaveBeenCalledWith(
+      'update-operation-changed',
+      expect.objectContaining({
+        operationId: 'op-rb-1',
+        status: 'rolled-back',
+        phase: 'rolled-back',
+        lastError: expect.stringContaining('OCI runtime create failed'),
+        rollbackReason: 'start_new_failed',
+      }),
+    );
+  });
+
+  it('coerces non-string lastError and rollbackReason to undefined', () => {
+    sseService.connect(mockEventBus);
+
+    const event = new MessageEvent('dd:update-operation-changed', {
+      data: JSON.stringify({
+        operationId: 'op-coerce',
+        status: 'rolled-back',
+        lastError: 42,
+        rollbackReason: { not: 'a string' },
+      }),
+    });
+    eventListeners['dd:update-operation-changed'](event);
+
+    expect(mockEventBus.emit).toHaveBeenCalledWith(
+      'update-operation-changed',
+      expect.objectContaining({
+        operationId: 'op-coerce',
+        status: 'rolled-back',
+        lastError: undefined,
+        rollbackReason: undefined,
+      }),
+    );
   });
 
   it('returns undefined for non-object operation payload', () => {
@@ -409,6 +464,8 @@ describe('SseService', () => {
       batchId: undefined,
       status: 'queued',
       phase: undefined,
+      lastError: undefined,
+      rollbackReason: undefined,
     });
   });
 

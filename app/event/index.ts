@@ -100,6 +100,7 @@ export interface ContainerUpdateFailedEventPayload {
   containerId?: string;
   batchId?: string | null;
   phase?: string;
+  rollbackReason?: string;
 }
 
 export interface UpdateOperationChangedEventPayload {

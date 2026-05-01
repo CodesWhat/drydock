@@ -28,6 +28,8 @@ export type OperationChangedPayload = {
   batchId?: string;
   status: string;
   phase?: string;
+  lastError?: string;
+  rollbackReason?: string;
 };
 
 export type ScanLifecyclePayload = {
@@ -324,6 +326,8 @@ export const useEventStreamStore = defineStore('eventStream', () => {
         batchId: typeof p.batchId === 'string' ? p.batchId : undefined,
         status: p.status,
         phase: typeof p.phase === 'string' ? p.phase : undefined,
+        lastError: typeof p.lastError === 'string' ? p.lastError : undefined,
+        rollbackReason: typeof p.rollbackReason === 'string' ? p.rollbackReason : undefined,
       };
     } catch {
       return undefined;

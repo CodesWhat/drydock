@@ -448,6 +448,9 @@ function buildUpdateFailedSsePayload(
     phase: payload.phase ?? '',
     batchId: payload.batchId ?? null,
     timestamp: new Date().toISOString(),
+    ...(typeof payload.rollbackReason === 'string' && payload.rollbackReason !== ''
+      ? { rollbackReason: payload.rollbackReason }
+      : {}),
   };
 }
 

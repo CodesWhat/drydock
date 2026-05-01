@@ -348,6 +348,9 @@ function emitTerminalLifecycleEvent(operation: UpdateOperation, batchId?: string
         ...buildTerminalLifecycleEventBase(operation, batchId),
         error: getTerminalOperationError(operation),
         phase: operation.phase,
+        ...(typeof operation.rollbackReason === 'string' && operation.rollbackReason.trim() !== ''
+          ? { rollbackReason: operation.rollbackReason }
+          : {}),
       });
   }
 }
