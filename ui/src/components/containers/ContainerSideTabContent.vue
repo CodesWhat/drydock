@@ -10,6 +10,7 @@ import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
 import ProjectLink from './ProjectLink.vue';
+import NoUpdateReasonBadge from './NoUpdateReasonBadge.vue';
 import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import { revealContainerEnv } from '../../services/container';
 import { errorMessage } from '../../utils/error';
@@ -220,14 +221,12 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                   <CopyableTag :tag="selectedContainer.newTag" class="font-bold" style="color: var(--dd-success);">{{ selectedContainer.newTag }}</CopyableTag>
                 </template>
               </div>
-              <div
+              <NoUpdateReasonBadge
                 v-if="!selectedContainer.newTag && selectedContainer.noUpdateReason"
-                class="mt-2 flex items-start gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus"
-                :style="{ backgroundColor: 'var(--dd-warning-muted)' }"
-              >
-                <AppIcon name="warning" :size="11" class="shrink-0 mt-0.5" style="color: var(--dd-warning);" />
-                <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-warning);">{{ selectedContainer.noUpdateReason }}</span>
-              </div>
+                :reason="selectedContainer.noUpdateReason"
+                variant="inline"
+                class="mt-2"
+              />
               <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag || (selectedContainer.tagPrecision === 'floating' && !selectedContainer.imageDigestWatch)" class="mt-2 flex items-center gap-1.5 flex-wrap">
                 <AppBadge v-if="selectedContainer.updateKind" size="xs" :custom="updateKindColor(selectedContainer.updateKind)">
                   {{ selectedContainer.updateKind }}

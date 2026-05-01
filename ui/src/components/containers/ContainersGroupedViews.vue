@@ -23,6 +23,7 @@ import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
 import ProjectLink from './ProjectLink.vue';
 import ContainersGroupHeader from './ContainersGroupHeader.vue';
+import NoUpdateReasonBadge from './NoUpdateReasonBadge.vue';
 
 const {
   filteredContainers,
@@ -589,7 +590,10 @@ onScopeDispose(() => {
             <CopyableTag :tag="c.newTag" class="text-2xs-plus font-semibold truncate max-w-[140px]" style="color: var(--dd-primary);" @click.stop>{{ c.newTag }}</CopyableTag>
           </div>
           <div v-else class="text-center">
-            <span class="text-2xs-plus dd-text-secondary truncate block max-w-[140px] mx-auto" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
+            <div class="inline-flex items-center justify-center gap-1">
+              <span class="text-2xs-plus dd-text-secondary truncate max-w-[140px]" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
+              <NoUpdateReasonBadge v-if="c.noUpdateReason" :reason="c.noUpdateReason" />
+            </div>
             <div v-if="getContainerListPolicyState(c).snoozed || getContainerListPolicyState(c).skipped || getContainerListPolicyState(c).maturityBlocked"
                  class="mt-1 inline-flex items-center justify-center gap-1">
               <span v-if="getContainerListPolicyState(c).snoozed"
@@ -613,15 +617,6 @@ onScopeDispose(() => {
                     v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
                 <AppIcon name="clock" :size="14" />
               </span>
-            </div>
-            <div
-              v-if="c.noUpdateReason"
-              class="mt-1 inline-flex items-center gap-1 text-2xs max-w-[220px] justify-center"
-              style="color: var(--dd-warning);"
-              v-tooltip.top="c.noUpdateReason"
-            >
-              <AppIcon name="warning" :size="10" class="shrink-0" />
-              <span class="truncate">{{ c.noUpdateReason }}</span>
             </div>
           </div>
         </template>
@@ -970,15 +965,7 @@ onScopeDispose(() => {
                 <span class="ml-1 shrink-0"><UpdateMaturityBadge :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" /></span>
               </template>
               <template v-else>
-                <span
-                  v-if="c.noUpdateReason"
-                  class="inline-flex items-center gap-1 ml-1 px-1.5 py-0.5 dd-rounded-sm text-2xs max-w-[220px]"
-                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }"
-                  v-tooltip.top="c.noUpdateReason"
-                >
-                  <AppIcon name="warning" :size="14" class="shrink-0" />
-                  <span class="truncate">{{ c.noUpdateReason }}</span>
-                </span>
+                <NoUpdateReasonBadge v-if="c.noUpdateReason" :reason="c.noUpdateReason" class="ml-1" />
                 <template v-else-if="getContainerListPolicyState(c).snoozed || getContainerListPolicyState(c).skipped || getContainerListPolicyState(c).maturityBlocked">
                   <span v-if="getContainerListPolicyState(c).snoozed"
                         class="inline-flex items-center justify-center ml-1"
@@ -1134,13 +1121,8 @@ onScopeDispose(() => {
               <AppIcon name="warning" :size="10" class="shrink-0" />
               <span class="truncate">{{ t('containerComponents.groupedViews.lastUpdateFailed', { reason: recentFailureReasonText(c) }) }}</span>
             </div>
-            <div
-              v-else-if="!c.newTag && c.noUpdateReason"
-              class="text-2xs mt-0.5 truncate"
-              style="color: var(--dd-warning);"
-              v-tooltip.top="c.noUpdateReason"
-            >
-              {{ c.noUpdateReason }}
+            <div v-else-if="!c.newTag && c.noUpdateReason" class="mt-0.5">
+              <NoUpdateReasonBadge :reason="c.noUpdateReason" />
             </div>
             <div
               v-if="c.suggestedTag || c.releaseNotes || c.currentReleaseNotes || c.releaseLink || c.sourceRepo"

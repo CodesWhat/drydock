@@ -933,12 +933,14 @@ describe('ContainersView', () => {
       );
     });
 
-    it('shows no-update reason in table version cell', async () => {
+    it('shows no-update reason icon badge in table version cell', async () => {
       const c = makeContainer({ newTag: null }) as Container & { noUpdateReason?: string };
       c.noUpdateReason = 'All tags excluded by policy';
       const wrapper = await mountContainersView([c]);
 
-      expect(wrapper.find('.data-table').text()).toContain('All tags excluded by policy');
+      const badge = wrapper.find('[data-test="no-update-reason-badge"]');
+      expect(badge.exists()).toBe(true);
+      expect(badge.attributes('aria-label')).toBe('All tags excluded by policy');
     });
 
     it('derives active list policy state from updatePolicy metadata', async () => {

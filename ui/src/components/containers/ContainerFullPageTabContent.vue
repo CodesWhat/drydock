@@ -11,6 +11,7 @@ import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
 import ProjectLink from './ProjectLink.vue';
+import NoUpdateReasonBadge from './NoUpdateReasonBadge.vue';
 import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import { revealContainerEnv } from '../../services/container';
 import { errorMessage } from '../../utils/error';
@@ -261,14 +262,11 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                 <AppIcon name="up-to-date" :size="11" style="color: var(--dd-success);" />
                 <span class="font-medium" style="color: var(--dd-success);">{{ t('containerComponents.fullPageOverview.upToDate') }}</span>
               </div>
-              <div
+              <NoUpdateReasonBadge
                 v-if="!selectedContainer.newTag && selectedContainer.noUpdateReason"
-                class="flex items-start gap-2 px-3 py-2 dd-rounded text-xs"
-                :style="{ backgroundColor: 'var(--dd-warning-muted)' }"
-              >
-                <AppIcon name="warning" :size="12" class="shrink-0 mt-0.5" style="color: var(--dd-warning);" />
-                <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-warning);">{{ selectedContainer.noUpdateReason }}</span>
-              </div>
+                :reason="selectedContainer.noUpdateReason"
+                variant="inline"
+              />
               <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag || (selectedContainer.tagPrecision === 'floating' && !selectedContainer.imageDigestWatch)" class="flex items-center gap-1.5 flex-wrap">
                 <UpdateMaturityBadge :maturity="selectedContainer.updateMaturity" :tooltip="selectedContainer.updateMaturityTooltip" />
                 <SuggestedTagBadge :tag="selectedContainer.suggestedTag" :current-tag="selectedContainer.currentTag" />
