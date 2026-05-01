@@ -272,7 +272,6 @@ export function init() {
   router.use(nocache());
   router.get('/', crudHandlers.getContainers);
   router.post('/watch', crudHandlers.watchContainers);
-  router.get('/stats', statsHandlers.getAllContainerStats);
   router.get('/summary', crudHandlers.getContainerSummary);
   router.get('/recent-status', getContainerRecentStatus);
   router.get('/security/vulnerabilities', crudHandlers.getContainerSecurityVulnerabilities);

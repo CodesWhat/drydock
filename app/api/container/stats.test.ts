@@ -40,7 +40,6 @@ function createHarness() {
     ['c2', { id: 'c2', name: 'db', watcher: 'local' }],
   ]);
   const getContainer = vi.fn((id: string) => containersById.get(id));
-  const getContainers = vi.fn(() => [...containersById.values()]);
   const watch = vi.fn(() => vi.fn());
   const touch = vi.fn();
   let subscriptionHandler: ((snapshot: unknown) => void) | undefined;
@@ -64,7 +63,6 @@ function createHarness() {
   const handlers = createStatsHandlers({
     storeContainer: {
       getContainer,
-      getContainers,
     },
     statsCollector: {
       watch,
@@ -78,7 +76,6 @@ function createHarness() {
   return {
     handlers,
     getContainer,
-    getContainers,
     watch,
     touch,
     subscribe,
@@ -141,81 +138,6 @@ describe('api/container/stats', () => {
       data: null,
       history: [],
     });
-  });
-
-  test('returns summary stats for all containers', () => {
-    const harness = createHarness();
-    const req = createRequest();
-    const res = createResponse();
-
-    harness.handlers.getAllContainerStats(req as any, res as any);
-
-    expect(harness.touch).toHaveBeenCalledWith('c1');
-    expect(harness.touch).toHaveBeenCalledWith('c2');
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({
-      data: [
-        {
-          id: 'c1',
-          name: 'web',
-          status: 'running',
-          watcher: 'local',
-          agent: undefined,
-          stats: { containerId: 'c1', cpuPercent: 10 },
-        },
-        {
-          id: 'c2',
-          name: 'db',
-          status: undefined,
-          watcher: 'local',
-          agent: undefined,
-          stats: null,
-        },
-      ],
-    });
-  });
-
-  test('does NOT call statsCollector.touch when ?touch=false', () => {
-    const harness = createHarness();
-    const req = createRequest({ query: { touch: 'false' } });
-    const res = createResponse();
-
-    harness.handlers.getAllContainerStats(req as any, res as any);
-
-    expect(harness.touch).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith({
-      data: [
-        {
-          id: 'c1',
-          name: 'web',
-          status: 'running',
-          watcher: 'local',
-          agent: undefined,
-          stats: { containerId: 'c1', cpuPercent: 10 },
-        },
-        {
-          id: 'c2',
-          name: 'db',
-          status: undefined,
-          watcher: 'local',
-          agent: undefined,
-          stats: null,
-        },
-      ],
-    });
-  });
-
-  test('calls statsCollector.touch per container when touch query is absent', () => {
-    const harness = createHarness();
-    const req = createRequest({ query: {} });
-    const res = createResponse();
-
-    harness.handlers.getAllContainerStats(req as any, res as any);
-
-    expect(harness.touch).toHaveBeenCalledTimes(2);
-    expect(harness.touch).toHaveBeenCalledWith('c1');
-    expect(harness.touch).toHaveBeenCalledWith('c2');
   });
 
   test('streams container stats over SSE with heartbeat and cleans up on disconnect', async () => {

@@ -1,5 +1,4 @@
 import { createManagedEventSource } from '@/stores/eventStream';
-import { extractCollectionData } from '../utils/api';
 
 export interface ContainerStatsSnapshot {
   containerId: string;
@@ -17,15 +16,6 @@ export interface ContainerStatsSnapshot {
 interface ContainerStatsResponse {
   data: ContainerStatsSnapshot | null;
   history: ContainerStatsSnapshot[];
-}
-
-export interface ContainerStatsSummaryItem {
-  id: string;
-  name: string;
-  status?: string;
-  watcher?: string;
-  agent?: string;
-  stats: ContainerStatsSnapshot | null;
 }
 
 interface ContainerStatsStreamEventHandlers {
@@ -134,31 +124,6 @@ function parseHistory(rawHistory: unknown): ContainerStatsSnapshot[] {
   return snapshots;
 }
 
-function parseSummaryItem(rawItem: unknown): ContainerStatsSummaryItem | null {
-  if (!rawItem || typeof rawItem !== 'object') {
-    return null;
-  }
-
-  const item = rawItem as Record<string, unknown>;
-  if (typeof item.id !== 'string' || typeof item.name !== 'string') {
-    return null;
-  }
-
-  const status = typeof item.status === 'string' ? item.status : undefined;
-  const watcher = typeof item.watcher === 'string' ? item.watcher : undefined;
-  const agent = typeof item.agent === 'string' ? item.agent : undefined;
-  const stats = item.stats === null ? null : parseSnapshot(item.stats);
-
-  return {
-    id: item.id,
-    name: item.name,
-    status,
-    watcher,
-    agent,
-    stats,
-  };
-}
-
 async function parseJson(response: Response): Promise<unknown> {
   return response.json();
 }
@@ -180,37 +145,6 @@ export async function getContainerStats(containerId: string): Promise<ContainerS
     data,
     history: parseHistory(envelope.history),
   };
-}
-
-export interface GetAllContainerStatsOptions {
-  // When false, the server returns cached snapshots without starting a Docker
-  // stats stream per container. Dashboard summary reads use this to avoid
-  // spawning per-container streams on every refresh. See #301.
-  touch?: boolean;
-}
-
-export async function getAllContainerStats(
-  options: GetAllContainerStatsOptions = {},
-): Promise<ContainerStatsSummaryItem[]> {
-  const url =
-    options.touch === false ? '/api/v1/containers/stats?touch=false' : '/api/v1/containers/stats';
-  const response = await fetch(url, {
-    credentials: 'include',
-  });
-  if (!response.ok) {
-    throw new Error(`Failed to get container stats: ${response.statusText}`);
-  }
-
-  const payload = await parseJson(response);
-  const summaryItems: ContainerStatsSummaryItem[] = [];
-  for (const rawItem of extractCollectionData(payload)) {
-    const item = parseSummaryItem(rawItem);
-    if (item) {
-      summaryItems.push(item);
-    }
-  }
-
-  return summaryItems;
 }
 
 function parseSnapshotEvent(rawData: unknown): ContainerStatsSnapshot | null {

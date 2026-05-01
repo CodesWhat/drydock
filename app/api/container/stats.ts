@@ -13,7 +13,6 @@ type ContainerStatsListener = (snapshot: NonNullable<ContainerStatsSnapshot>) =>
 
 interface StatsStoreContainerApi {
   getContainer: (id: string) => Container | undefined;
-  getContainers: (query?: Record<string, unknown>) => Container[];
 }
 
 interface StreamableResponse extends Response {
@@ -70,35 +69,6 @@ function createGetContainerStatsHandler({
       data: statsCollector.getLatest(container.id) ?? null,
       history: statsCollector.getHistory(container.id),
     });
-  };
-}
-
-function createGetAllContainerStatsHandler({
-  storeContainer,
-  statsCollector,
-}: StatsHandlerDependencies) {
-  return function getAllContainerStats(req: Request, res: Response): void {
-    const containers = storeContainer.getContainers();
-    // Dashboard callers pass ?touch=false so a summary read does not start a
-    // Docker stats stream per container. Streams stay owned by the Containers
-    // view / detail panel where live stats actually render. See #301.
-    const touch = req.query?.touch !== 'false';
-
-    const data = containers.map((container) => {
-      if (touch) {
-        statsCollector.touch(container.id);
-      }
-      return {
-        id: container.id,
-        name: container.name,
-        status: container.status,
-        watcher: container.watcher,
-        agent: container.agent,
-        stats: statsCollector.getLatest(container.id) ?? null,
-      };
-    });
-
-    res.status(200).json({ data });
   };
 }
 
@@ -245,7 +215,6 @@ export function createSummaryStatsHandlers(dependencies: SummaryStatsHandlerDepe
 export function createStatsHandlers(dependencies: StatsHandlerDependencies) {
   return {
     getContainerStats: createGetContainerStatsHandler(dependencies),
-    getAllContainerStats: createGetAllContainerStatsHandler(dependencies),
     streamContainerStats: createStreamContainerStatsHandler(dependencies),
   };
 }
