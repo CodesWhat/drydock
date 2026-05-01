@@ -53,7 +53,6 @@ const resolved = computed(() => {
          :src="resolved.src"
          class="max-w-full max-h-full object-contain"
          :class="{ 'dark:invert': resolved.mono }"
-         loading="lazy"
          @error="failed = true" />
     <AppIcon v-else name="containers" :size="size" class="dd-text-muted" />
   </div>
