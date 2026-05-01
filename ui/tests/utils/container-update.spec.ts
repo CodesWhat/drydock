@@ -1,5 +1,7 @@
 import {
   formatContainersAlreadyUpToDateMessage,
+  getContainerUpdateStartedMessage,
+  getForceContainerUpdateStartedMessage,
   getUpdateInProgressPhaseLabelKey,
   shouldRenderStandaloneQueuedUpdateAsUpdating,
   UPDATE_IN_PROGRESS_PHASE_I18N,
@@ -320,6 +322,14 @@ describe('container-update utils', () => {
 
   it('uses the plural already-up-to-date label for multiple containers', () => {
     expect(formatContainersAlreadyUpToDateMessage(2)).toBe('2 containers already up to date');
+  });
+
+  it('getContainerUpdateStartedMessage returns "Update started: <name>"', () => {
+    expect(getContainerUpdateStartedMessage('foo')).toBe('Update started: foo');
+  });
+
+  it('getForceContainerUpdateStartedMessage returns "Force update started: <name>"', () => {
+    expect(getForceContainerUpdateStartedMessage('foo')).toBe('Force update started: foo');
   });
 });
 

@@ -380,7 +380,7 @@ describe('useContainerActions', () => {
 
     expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
     expect(mocks.scanContainer).toHaveBeenCalledWith('container-1');
-    expect(mocks.toastSuccess).toHaveBeenCalledWith('Update queued: web');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Update started: web');
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Scan triggered: web');
 
     mocks.updateContainer.mockClear();
@@ -423,7 +423,7 @@ describe('useContainerActions', () => {
     expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Started: web');
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Scan triggered: web');
-    expect(mocks.toastSuccess).toHaveBeenCalledWith('Force update queued: web');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Force update started: web');
   });
 
   it('refreshes container state instead of surfacing an error when update reports no update available', async () => {
@@ -446,7 +446,7 @@ describe('useContainerActions', () => {
     expect(error.value).toBeNull();
     expect(mocks.toastError).not.toHaveBeenCalled();
     expect(mocks.toastInfo).toHaveBeenCalledWith('Already up to date: web');
-    expect(mocks.toastSuccess).not.toHaveBeenCalledWith('Update queued: web');
+    expect(mocks.toastSuccess).not.toHaveBeenCalledWith('Update started: web');
   });
 
   it('surfaces non-stale update errors that only contain the no-update text as a substring', async () => {
@@ -471,7 +471,7 @@ describe('useContainerActions', () => {
       'Update failed: web',
       'Proxy error: No update available for this container',
     );
-    expect(mocks.toastSuccess).not.toHaveBeenCalledWith('Update queued: web');
+    expect(mocks.toastSuccess).not.toHaveBeenCalledWith('Update started: web');
   });
 
   it.each([
@@ -495,7 +495,7 @@ describe('useContainerActions', () => {
     expect(loadContainers).toHaveBeenCalledTimes(1);
     expect(error.value).toBe('Action failed for web');
     expect(mocks.toastError).toHaveBeenCalledWith('Update failed: web', 'Action failed for web');
-    expect(mocks.toastSuccess).not.toHaveBeenCalledWith('Update queued: web');
+    expect(mocks.toastSuccess).not.toHaveBeenCalledWith('Update started: web');
   });
 
   it('validates snooze-until input before policy updates', async () => {
@@ -1579,7 +1579,7 @@ describe('useContainerActions', () => {
     expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Stopped: web');
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Restarted: web');
-    expect(mocks.toastSuccess).toHaveBeenCalledWith('Force update queued: web');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Force update started: web');
   });
 
   it('wires confirm handlers for object targets and falls back to names when ids are omitted', async () => {
@@ -1644,7 +1644,7 @@ describe('useContainerActions', () => {
 
     await confirmCall.accept?.();
     expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
-    expect(mocks.toastSuccess).toHaveBeenCalledWith('Update queued: web');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Update started: web');
   });
 
   it('shows tag change details in update confirmation for tag updates', async () => {

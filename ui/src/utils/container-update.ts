@@ -182,11 +182,11 @@ export function isStaleContainerUpdateError(error: unknown): boolean {
 }
 
 export function getContainerUpdateStartedMessage(name: string): string {
-  return `Update queued: ${name}`;
+  return `Update started: ${name}`;
 }
 
 export function getForceContainerUpdateStartedMessage(name: string): string {
-  return `Force update queued: ${name}`;
+  return `Force update started: ${name}`;
 }
 
 export function getContainerAlreadyUpToDateMessage(name: string): string {

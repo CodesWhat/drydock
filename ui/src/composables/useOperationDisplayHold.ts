@@ -204,6 +204,7 @@ function scheduleHeldOperationRelease(args: {
   newContainerId?: string;
   containerName?: string;
   now?: number;
+  onComplete?: () => void;
 }) {
   const operationIds = findMatchingOperationIds(args);
   let scheduled = false;
@@ -218,11 +219,13 @@ function scheduleHeldOperationRelease(args: {
     clearReleaseTimer(operationId);
 
     scheduled = true;
+    const { onComplete } = args;
     releaseTimers.set(
       operationId,
       setTimeout(() => {
         releaseTimers.delete(operationId);
         removeHeldOperation(operationId);
+        onComplete?.();
       }, OPERATION_DISPLAY_HOLD_MS),
     );
   }
@@ -458,12 +461,26 @@ export interface ApplyUpdateOperationSseArgs {
   }) => void;
   /**
    * Invoked on every terminal-status event (succeeded / failed / rolled-back)
-   * regardless of whether a hold was tracked. The helper has already called
-   * scheduleHeldOperationRelease, so the caller's job is to apply any
-   * view-specific row cleanup (e.g. clearing containers.value[idx].updateOperation).
-   * Completion toasts are intentionally owned by dd:update-applied / dd:update-failed.
+   * regardless of whether a hold was tracked. Fires IMMEDIATELY when the
+   * terminal SSE arrives so callers can apply view-specific row cleanup
+   * (e.g. clearing containers.value[idx].updateOperation). This fires before
+   * the hold's settle timer expires — the hold still masks the row.
    */
   onTerminalEvent?: (args: {
+    container?: HoldSourceContainer;
+    status: TerminalContainerUpdateOperationStatus;
+    name: string;
+    operationId?: string;
+  }) => void;
+  /**
+   * Invoked AFTER the hold's settle timer fires (OPERATION_DISPLAY_HOLD_MS after
+   * the terminal SSE), once the row has been released from the hold map. Use for
+   * actions that should appear only after the row visually transitions out of
+   * "Health-checking" / "Finalizing" — e.g. completion toasts.
+   * Not called when no hold was tracked for the operation (no row release to wait
+   * for), so callers should degrade gracefully.
+   */
+  onHoldReleased?: (args: {
     container?: HoldSourceContainer;
     status: TerminalContainerUpdateOperationStatus;
     name: string;
@@ -538,18 +555,32 @@ export function applyUpdateOperationSseToHold(args: ApplyUpdateOperationSseArgs)
     terminalStatus === 'failed' ||
     terminalStatus === 'rolled-back'
   ) {
-    scheduleHeldOperationRelease(operationTarget);
     const toastName =
       (typeof container?.name === 'string' && container.name.length > 0
         ? container.name
         : undefined) ??
       parsed.containerName ??
       'container';
-    onTerminalEvent?.({
+    const terminalEventArgs = {
       container,
       status: terminalStatus,
       name: toastName,
       operationId: parsed.operationId,
+    };
+    // Fire onTerminalEvent immediately so callers can apply view-specific state
+    // mutations (e.g. clearing container.updateOperation) before the hold releases.
+    onTerminalEvent?.(terminalEventArgs);
+    // Schedule the hold release. The onComplete callback fires after the row's
+    // settle timer expires so callers that need to act after the row visually
+    // clears (e.g. toasts) can do so via onHoldReleased.
+    const onHoldReleasedFn = args.onHoldReleased
+      ? () => {
+          args.onHoldReleased!(terminalEventArgs);
+        }
+      : undefined;
+    scheduleHeldOperationRelease({
+      ...operationTarget,
+      onComplete: onHoldReleasedFn,
     });
     return;
   }

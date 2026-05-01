@@ -2037,7 +2037,7 @@ describe('DashboardView', () => {
 
       expect(
         toasts.value.some(
-          (toast) => toast.tone === 'success' && toast.title === 'Update queued: nginx',
+          (toast) => toast.tone === 'success' && toast.title === 'Update started: nginx',
         ),
       ).toBe(true);
     });

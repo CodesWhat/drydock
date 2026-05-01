@@ -1430,7 +1430,7 @@ function applyOperationPatch(event: Event) {
     // Terminal operation SSEs can race ahead of the container-list refresh that
     // renames the row post-recreate, so still release the hold even when the row
     // has already fallen out of containers.value.
-    onTerminalEvent: ({ container, status, name, operationId }) => {
+    onTerminalEvent: ({ container, status, operationId }) => {
       const reason = resolveUpdateFailureReason({
         lastError: parsed.lastError,
         rollbackReason: parsed.rollbackReason,
@@ -1448,42 +1448,45 @@ function applyOperationPatch(event: Event) {
           (container as Container).lastUpdateFailureAt = undefined;
         }
       }
-      if (status === 'failed') {
-        if (operationId) {
-          terminalToastFiredForOp.add(operationId);
-        }
-        scheduleCompletionToast(() =>
-          toast.error(
-            reason
-              ? t('containersView.toast.updateFailedWithReason', { name, reason })
-              : t('containersView.toast.updateFailed', { name }),
-          ),
-        );
-      } else if (status === 'rolled-back') {
-        const isCancelled =
-          parsed.rollbackReason === 'cancelled' || parsed.lastError === 'Cancelled by operator';
-        if (operationId) {
-          terminalToastFiredForOp.add(operationId);
-        }
-        if (isCancelled) {
-          scheduleCompletionToast(() =>
-            toast.success(t('containersView.toast.cancelled', { name })),
-          );
-        } else {
-          scheduleCompletionToast(() =>
-            toast.warning(
-              reason
-                ? t('containersView.toast.rolledBackWithReason', { name, reason })
-                : t('containersView.toast.rolledBack', { name }),
-            ),
-          );
-        }
+      // Pre-register this operationId so handleSseUpdateFailed (which fires from a
+      // separate dd:update-failed SSE, potentially before the hold settles) knows
+      // the toast will be handled by onHoldReleased and skips its duplicate.
+      if (operationId && (status === 'failed' || status === 'rolled-back')) {
+        terminalToastFiredForOp.add(operationId);
       }
-      // status === 'succeeded': no toast here; handleSseUpdateApplied owns non-batch success.
       // Resync the full list so the row reflects post-update state — new image
       // tag on success, restored update-available banner with lastUpdateFailureReason
       // on failure. Granular SSE patches don't always cover renames/new container IDs.
       schedulePostTerminalReload();
+    },
+    // Fires AFTER the hold's settle timer releases the row (OPERATION_DISPLAY_HOLD_MS
+    // after the terminal SSE), so the toast appears once the row has visually
+    // transitioned out of "Health-checking" / "Finalizing".
+    onHoldReleased: ({ status, name }) => {
+      const reason = resolveUpdateFailureReason({
+        lastError: parsed.lastError,
+        rollbackReason: parsed.rollbackReason,
+      });
+      if (status === 'failed') {
+        toast.error(
+          reason
+            ? t('containersView.toast.updateFailedWithReason', { name, reason })
+            : t('containersView.toast.updateFailed', { name }),
+        );
+      } else if (status === 'rolled-back') {
+        const isCancelled =
+          parsed.rollbackReason === 'cancelled' || parsed.lastError === 'Cancelled by operator';
+        if (isCancelled) {
+          toast.success(t('containersView.toast.cancelled', { name }));
+        } else {
+          toast.warning(
+            reason
+              ? t('containersView.toast.rolledBackWithReason', { name, reason })
+              : t('containersView.toast.rolledBack', { name }),
+          );
+        }
+      }
+      // status === 'succeeded': no toast here; handleSseUpdateApplied owns non-batch success.
     },
   });
 }
@@ -1524,8 +1527,8 @@ function handleSseUpdateFailed(event: Event) {
   if (!operationId) {
     return;
   }
-  // If onTerminalEvent already fired a toast for this op (via dd:sse-update-operation-changed),
-  // skip to avoid duplicates.
+  // If onTerminalEvent pre-registered this operationId (indicating onHoldReleased
+  // will fire the toast after the row settles), skip to avoid duplicates.
   if (terminalToastFiredForOp.has(operationId)) {
     terminalToastFiredForOp.delete(operationId);
     return;
