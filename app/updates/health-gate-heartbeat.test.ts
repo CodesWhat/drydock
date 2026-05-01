@@ -6,16 +6,16 @@ import {
 } from './health-gate-heartbeat.js';
 
 describe('parseHealthGateHeartbeatMs', () => {
-  test('returns null for undefined (opt-out / use default)', () => {
-    expect(parseHealthGateHeartbeatMs(undefined)).toBeNull();
+  test('returns undefined for undefined (absent — use default)', () => {
+    expect(parseHealthGateHeartbeatMs(undefined)).toBeUndefined();
   });
 
-  test('returns null for empty string', () => {
-    expect(parseHealthGateHeartbeatMs('')).toBeNull();
-    expect(parseHealthGateHeartbeatMs('   ')).toBeNull();
+  test('returns undefined for empty string (absent — use default)', () => {
+    expect(parseHealthGateHeartbeatMs('')).toBeUndefined();
+    expect(parseHealthGateHeartbeatMs('   ')).toBeUndefined();
   });
 
-  test('returns null for "0" (explicit opt-out)', () => {
+  test('returns null for "0" (explicit disable)', () => {
     expect(parseHealthGateHeartbeatMs('0')).toBeNull();
     expect(parseHealthGateHeartbeatMs('  0  ')).toBeNull();
   });
@@ -73,6 +73,25 @@ describe('HEALTH_GATE_HEARTBEAT_MS module-level constant', () => {
     try {
       const mod = await import('./health-gate-heartbeat.js?env5000');
       expect(mod.HEALTH_GATE_HEARTBEAT_MS).toBe(5000);
+    } finally {
+      if (prev === undefined) {
+        delete process.env.DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS;
+      } else {
+        process.env.DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS = prev;
+      }
+      vi.resetModules();
+    }
+  });
+
+  test('is null when DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS is "0" (explicit disable)', async () => {
+    // vi.resetModules() + dynamic import forces module-level code to re-run
+    // with env=0, which should yield HEALTH_GATE_HEARTBEAT_MS === null.
+    const prev = process.env.DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS;
+    process.env.DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS = '0';
+    vi.resetModules();
+    try {
+      const mod = await import('./health-gate-heartbeat.js?env0');
+      expect(mod.HEALTH_GATE_HEARTBEAT_MS).toBeNull();
     } finally {
       if (prev === undefined) {
         delete process.env.DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS;

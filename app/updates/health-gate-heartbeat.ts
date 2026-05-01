@@ -18,13 +18,17 @@ const MIN_HEALTH_GATE_HEARTBEAT_MS = 1_000;
 /**
  * Parse DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS from the environment.
  *
- * Returns `null` when the variable is absent, empty, or `"0"` (opt-out).
+ * Returns `undefined` when the variable is absent or empty (use the default).
+ * Returns `null` when the variable is `"0"` (explicit opt-out / disable).
  * Returns the parsed positive integer (≥ 1000) when a valid interval is set.
  * Throws a descriptive Error for invalid values so the process fails fast at
  * startup rather than silently ignoring operator intent.
  */
-export function parseHealthGateHeartbeatMs(raw: string | undefined): number | null {
-  if (raw === undefined || raw.trim() === '' || raw.trim() === '0') {
+export function parseHealthGateHeartbeatMs(raw: string | undefined): number | null | undefined {
+  if (raw === undefined || raw.trim() === '') {
+    return undefined;
+  }
+  if (raw.trim() === '0') {
     return null;
   }
   const trimmed = raw.trim();
@@ -39,7 +43,7 @@ export function parseHealthGateHeartbeatMs(raw: string | undefined): number | nu
       `DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS must be a non-negative integer (got "${raw}")`,
     );
   }
-  // parsed === 0 is already handled by the trim check above, so parsed >= 1 here.
+  // parsed === 0 is already handled by the "0" check above, so parsed >= 1 here.
   if (parsed < MIN_HEALTH_GATE_HEARTBEAT_MS) {
     throw new Error(
       `DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS must be at least ${MIN_HEALTH_GATE_HEARTBEAT_MS} (got "${raw}")`,
@@ -51,7 +55,7 @@ export function parseHealthGateHeartbeatMs(raw: string | undefined): number | nu
 const _rawHeartbeatMs = parseHealthGateHeartbeatMs(process.env.DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS);
 
 export const HEALTH_GATE_HEARTBEAT_MS: number | null =
-  _rawHeartbeatMs !== null ? _rawHeartbeatMs : DEFAULT_HEALTH_GATE_HEARTBEAT_MS;
+  _rawHeartbeatMs === undefined ? DEFAULT_HEALTH_GATE_HEARTBEAT_MS : _rawHeartbeatMs;
 
 export type HeartbeatEmitFn = (operationId: string) => void;
 
