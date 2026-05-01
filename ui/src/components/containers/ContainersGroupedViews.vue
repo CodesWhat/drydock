@@ -10,6 +10,7 @@ import { useUpdateBatches } from '../../composables/useUpdateBatches';
 import { getContainerViewKey } from '../../utils/container-view-key';
 import { getUpdateInProgressPhaseLabelKey } from '../../utils/container-update';
 import { imageAge } from '../../utils/audit-helpers';
+import { displayGroupName } from '../../utils/display';
 import {
   getPrimaryHardBlocker,
   getPrimarySoftBlocker,
@@ -458,9 +459,10 @@ function onBatchUpdateCompleted(event: Event) {
     }
     if (groupKeys.size === 1) {
       const onlyKey = groupKeys.values().next().value as string;
-      groupName =
-        renderGroups.value.find((g: { key: string; name?: string }) => g.key === onlyKey)?.name ??
-        onlyKey;
+      const resolvedName =
+        renderGroups.value.find((g: { key: string; name?: string | null }) => g.key === onlyKey)
+          ?.name ?? onlyKey;
+      groupName = displayGroupName(resolvedName);
     }
   }
 

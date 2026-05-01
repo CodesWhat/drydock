@@ -1999,6 +1999,130 @@ describe('ContainersGroupedViews', () => {
     expect(toasts.value[0]?.title).toBe('Failed to update 2 containers in tdarr_node');
   });
 
+  // When the resolved group key is __ungrouped__ (name is null), the toast
+  // must use the no-group locale variant — never emit "in __ungrouped__".
+  function mountWithUngrouped(containers: Container[]) {
+    const { context, refs } = makeContext();
+    refs.groupByStack.value = true;
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__ungrouped__',
+        name: null as unknown as string,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: containers.length,
+        updatableCount: containers.length,
+      },
+    ];
+    mocked.context = context;
+    return mountSubject();
+  }
+
+  it('uses no-group locale variant (success) when group key is __ungrouped__', async () => {
+    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
+    const c2 = makeContainer({ id: 'c-2', name: 'beta' });
+    const wrapper = mountWithUngrouped([c1, c2]);
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-batch-update-completed', {
+        detail: {
+          batchId: 'batch-ug-ok',
+          total: 2,
+          succeeded: 2,
+          failed: 0,
+          durationMs: 1000,
+          items: [
+            {
+              operationId: 'op-1',
+              containerId: 'c-1',
+              containerName: 'alpha',
+              status: 'succeeded',
+            },
+            { operationId: 'op-2', containerId: 'c-2', containerName: 'beta', status: 'succeeded' },
+          ],
+          timestamp: '2026-04-30T00:00:00.000Z',
+        },
+      }),
+    );
+    await nextTick();
+    wrapper.unmount();
+
+    const { toasts } = useToast();
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0]?.tone).toBe('success');
+    expect(toasts.value[0]?.title).toBe('Updated 2 containers');
+    expect(toasts.value[0]?.title).not.toContain('__ungrouped__');
+  });
+
+  it('uses no-group locale variant (partial) when group key is __ungrouped__', async () => {
+    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
+    const c2 = makeContainer({ id: 'c-2', name: 'beta' });
+    const wrapper = mountWithUngrouped([c1, c2]);
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-batch-update-completed', {
+        detail: {
+          batchId: 'batch-ug-partial',
+          total: 2,
+          succeeded: 1,
+          failed: 1,
+          durationMs: 1000,
+          items: [
+            {
+              operationId: 'op-1',
+              containerId: 'c-1',
+              containerName: 'alpha',
+              status: 'succeeded',
+            },
+            { operationId: 'op-2', containerId: 'c-2', containerName: 'beta', status: 'failed' },
+          ],
+          timestamp: '2026-04-30T00:00:00.000Z',
+        },
+      }),
+    );
+    await nextTick();
+    wrapper.unmount();
+
+    const { toasts } = useToast();
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0]?.tone).toBe('warning');
+    expect(toasts.value[0]?.title).toBe('Updated 1 of 2 containers; 1 failed');
+    expect(toasts.value[0]?.title).not.toContain('__ungrouped__');
+  });
+
+  it('uses no-group locale variant (failure) when group key is __ungrouped__', async () => {
+    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
+    const c2 = makeContainer({ id: 'c-2', name: 'beta' });
+    const wrapper = mountWithUngrouped([c1, c2]);
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-batch-update-completed', {
+        detail: {
+          batchId: 'batch-ug-fail',
+          total: 2,
+          succeeded: 0,
+          failed: 2,
+          durationMs: 1000,
+          items: [
+            { operationId: 'op-1', containerId: 'c-1', containerName: 'alpha', status: 'failed' },
+            { operationId: 'op-2', containerId: 'c-2', containerName: 'beta', status: 'failed' },
+          ],
+          timestamp: '2026-04-30T00:00:00.000Z',
+        },
+      }),
+    );
+    await nextTick();
+    wrapper.unmount();
+
+    const { toasts } = useToast();
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0]?.tone).toBe('error');
+    expect(toasts.value[0]?.title).toBe('Failed to update 2 containers');
+    expect(toasts.value[0]?.title).not.toContain('__ungrouped__');
+  });
+
   it('drops the group qualifier when no containerId resolves to a known group', async () => {
     const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
     const wrapper = mountWithGroup('known-group', 'known-group', [c1]);
