@@ -445,6 +445,36 @@ describe('request-update', () => {
       });
     });
 
+    test('rejects with 409 when last update rolled back and candidate digest matches', async () => {
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn(),
+        agent: undefined,
+        configuration: { threshold: 'all' },
+        getId: () => 'docker.update',
+        isTriggerIncluded: () => true,
+        isTriggerExcluded: () => false,
+      };
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger } });
+
+      await expect(
+        enqueueContainerUpdate(
+          createContainerWithRawUpdate({
+            result: { tag: '1.1.0', digest: 'sha256:deadbeef' },
+            updateRollback: {
+              recordedAt: '2026-04-01T00:00:00.000Z',
+              targetDigest: 'sha256:deadbeef',
+              reason: 'start_new_failed',
+              lastError: 'container exited with code 1',
+            },
+          }),
+        ),
+      ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+        statusCode: 409,
+        message: expect.stringContaining('Last update attempt rolled back'),
+      });
+    });
+
     test('rejects with 404 when no docker trigger is configured at all', async () => {
       mockGetState.mockReturnValue({ trigger: {} });
 

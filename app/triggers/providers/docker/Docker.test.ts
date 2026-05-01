@@ -4472,6 +4472,71 @@ describe('additional direct wrapper coverage', () => {
   });
 });
 
+describe('persistRollbackState callback', () => {
+  test('success outcome clears updateRollback from container', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    const containerWithRollback = {
+      id: 'abc123',
+      name: 'my-container',
+      result: { digest: 'sha256:aabbcc' },
+      updateRollback: {
+        recordedAt: '2026-01-01T00:00:00.000Z',
+        targetDigest: 'sha256:aabbcc',
+        reason: 'health-check-failed',
+        lastError: 'container unhealthy',
+      },
+    };
+    (storeContainer.getContainer as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      containerWithRollback,
+    );
+    (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+    docker.containerUpdateExecutor.persistRollbackState?.('abc123', 'succeeded');
+
+    expect(storeContainer.updateContainer).toHaveBeenCalledTimes(1);
+    const saved = (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(saved).not.toHaveProperty('updateRollback');
+    expect(saved.id).toBe('abc123');
+  });
+
+  test('rolled-back outcome writes updateRollback to container', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    const containerNoRollback = {
+      id: 'def456',
+      name: 'other-container',
+      result: { digest: 'sha256:ddeeff' },
+    };
+    (storeContainer.getContainer as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      containerNoRollback,
+    );
+    (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+    docker.containerUpdateExecutor.persistRollbackState?.('def456', 'rolled-back', {
+      reason: 'pull-failed',
+      lastError: 'network timeout',
+    });
+
+    expect(storeContainer.updateContainer).toHaveBeenCalledTimes(1);
+    const saved = (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(saved.updateRollback).toMatchObject({
+      targetDigest: 'sha256:ddeeff',
+      reason: 'pull-failed',
+      lastError: 'network timeout',
+    });
+    expect(saved.updateRollback.recordedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  test('no-op when container is not found in store', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    (storeContainer.getContainer as ReturnType<typeof vi.fn>).mockReturnValueOnce(undefined);
+    (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+    docker.containerUpdateExecutor.persistRollbackState?.('missing-id', 'succeeded');
+
+    expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+  });
+});
+
 describe('trigger self-update routing', () => {
   test('should route to executeSelfUpdate for drydock image', async () => {
     stubTriggerFlow({ running: true });

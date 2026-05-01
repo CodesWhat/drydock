@@ -143,6 +143,7 @@ const HARD_BLOCKER_STATUS: Record<UpdateBlockerReason, number> = {
   'no-update-trigger-configured': 404,
   'rollback-container': 409,
   'security-scan-blocked': 409,
+  'last-update-rolled-back': 409,
   'active-operation': 409,
   snoozed: 409,
   'skip-tag': 409,

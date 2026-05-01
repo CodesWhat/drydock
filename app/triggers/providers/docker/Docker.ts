@@ -320,6 +320,29 @@ class Docker<
       ...pickOrchestratorCallbacks(this, CONTAINER_UPDATE_ORCHESTRATOR_METHODS),
       getCloneRuntimeConfigOptions,
       buildRuntimeConfigCompatibilityError,
+      persistRollbackState: (containerId, outcome, rollbackInfo) => {
+        const containerCurrent = storeContainer.getContainer(containerId);
+        if (!containerCurrent) {
+          return;
+        }
+        if (outcome === 'rolled-back') {
+          storeContainer.updateContainer({
+            ...containerCurrent,
+            updateRollback: {
+              recordedAt: new Date().toISOString(),
+              // Use the candidate digest from the registry result — that's the digest
+              // the operator was trying to update to when the rollback occurred.
+              targetDigest: containerCurrent.result?.digest ?? '',
+              reason: rollbackInfo?.reason ?? '',
+              lastError: rollbackInfo?.lastError ?? '',
+            },
+          });
+        } else {
+          // Success — clear any prior rollback state
+          const { updateRollback: _updateRollback, ...containerWithoutRollback } = containerCurrent;
+          storeContainer.updateContainer(containerWithoutRollback as typeof containerCurrent);
+        }
+      },
       scheduleDeferredReconciliation: (containerName, _operationId, delayMs) => {
         setTimeout(async () => {
           try {

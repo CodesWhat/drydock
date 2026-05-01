@@ -181,6 +181,21 @@ type ContainerUpdateExecutorDependencies = {
     operationId: string,
     delayMs: number,
   ) => void;
+  /**
+   * Persist rollback state onto the container record when an update rolls back, or clear
+   * it on success. Optional — omitting it skips state persistence (e.g. in tests that
+   * don't need it).
+   *
+   * Called with:
+   *   - 'rolled-back': operation terminated as rolled-back; caller provides digest +
+   *     reason/lastError from the operation.
+   *   - 'succeeded': operation succeeded; caller clears any prior rollback state.
+   */
+  persistRollbackState?: (
+    containerId: string,
+    outcome: 'rolled-back' | 'succeeded',
+    rollbackInfo?: { reason: string; lastError: string },
+  ) => void;
 };
 
 type ContainerUpdateExecutorConstructorOptions = Omit<
@@ -281,6 +296,8 @@ class ContainerUpdateExecutor {
   waitForContainerHealthy: ContainerUpdateExecutorDependencies['waitForContainerHealthy'];
 
   scheduleDeferredReconciliation?: ContainerUpdateExecutorDependencies['scheduleDeferredReconciliation'];
+
+  persistRollbackState?: ContainerUpdateExecutorDependencies['persistRollbackState'];
 
   constructor(options: ContainerUpdateExecutorConstructorOptions) {
     const dependencies = resolveFunctionDependencies<ContainerUpdateExecutorDependencies>(options, {
@@ -445,6 +462,10 @@ class ContainerUpdateExecutor {
         phase: 'recovered-rollback',
         recoveredAt: new Date().toISOString(),
       });
+      this.persistRollbackState?.(container.id, 'rolled-back', {
+        reason: pending.rollbackReason ?? '',
+        lastError: pending.lastError ?? '',
+      });
     } else {
       updateOperationStore.markOperationTerminal(pending.id, {
         status: 'failed',
@@ -536,6 +557,7 @@ class ContainerUpdateExecutor {
       );
       await this.cleanupRenamedContainer(preparedExecution, logContainer, attemptState);
       this.markOperationSucceeded(preparedExecution.operationId);
+      this.persistRollbackState?.(container.id, 'succeeded');
       return true;
     } catch (e: unknown) {
       return this.rollbackFailedContainerUpdate(
@@ -883,6 +905,10 @@ class ContainerUpdateExecutor {
         phase: 'rolled-back',
         oldContainerStopped: attemptState.oldContainerStopped,
         rollbackReason: attemptState.failureReason,
+        lastError: getErrorMessage(error),
+      });
+      this.persistRollbackState?.(container.id, 'rolled-back', {
+        reason: attemptState.failureReason,
         lastError: getErrorMessage(error),
       });
     } else {

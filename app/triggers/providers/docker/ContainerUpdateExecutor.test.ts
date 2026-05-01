@@ -1339,4 +1339,140 @@ describe('ContainerUpdateExecutor', () => {
       }),
     );
   });
+
+  describe('persistRollbackState integration', () => {
+    test('calls persistRollbackState with succeeded when update completes successfully', async () => {
+      const persistRollbackState = vi.fn();
+      const context = createContext();
+      const executor = createExecutor({
+        createContainer: vi.fn().mockResolvedValue(context.newContainer),
+        persistRollbackState,
+      });
+
+      await executor.execute(context, createContainer(), createLog());
+
+      expect(persistRollbackState).toHaveBeenCalledWith('container-id', 'succeeded');
+    });
+
+    test('calls persistRollbackState with rolled-back when rollback succeeds', async () => {
+      const persistRollbackState = vi.fn();
+      const context = createContext();
+      context.currentContainer.rename = vi
+        .fn()
+        .mockResolvedValueOnce(undefined) // first rename (to temp) succeeds
+        .mockResolvedValueOnce(undefined); // rollback rename succeeds
+      const executor = createExecutor({
+        createContainer: vi.fn().mockRejectedValue(new Error('start failed')),
+        persistRollbackState,
+      });
+
+      await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+        'start failed',
+      );
+
+      expect(persistRollbackState).toHaveBeenCalledWith(
+        'container-id',
+        'rolled-back',
+        expect.objectContaining({
+          reason: expect.any(String),
+          lastError: 'start failed',
+        }),
+      );
+    });
+
+    test('does NOT call persistRollbackState with rolled-back when rollback fails (status: failed)', async () => {
+      const persistRollbackState = vi.fn();
+      const context = createContext();
+      context.currentContainer.rename = vi
+        .fn()
+        .mockResolvedValueOnce(undefined) // first rename (to temp) succeeds
+        .mockRejectedValueOnce(new Error('rename back failed')); // rollback rename fails
+      const executor = createExecutor({
+        createContainer: vi.fn().mockRejectedValue(new Error('start failed')),
+        persistRollbackState,
+      });
+
+      await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow();
+
+      // persistRollbackState should NOT have been called with 'rolled-back' — the rollback itself failed
+      expect(persistRollbackState).not.toHaveBeenCalledWith(
+        expect.anything(),
+        'rolled-back',
+        expect.anything(),
+      );
+    });
+
+    test('persistRollbackState is optional — execute works without it', async () => {
+      const context = createContext();
+      // No persistRollbackState provided
+      const executor = createExecutor({
+        createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      });
+
+      await expect(executor.execute(context, createContainer(), createLog())).resolves.toBe(true);
+    });
+
+    test('reconcileWithTempContainerOnly calls persistRollbackState with rolled-back on successful recovery', async () => {
+      const persistRollbackState = vi.fn();
+      const container = createContainer();
+      const pendingOperation = {
+        id: 'pending-op-1',
+        status: 'in-progress',
+        phase: 'renamed',
+        containerName: 'web',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        oldName: 'web',
+        tempName: 'web-old-12345',
+        oldContainerWasRunning: false,
+        oldContainerStopped: false,
+        rollbackReason: 'start_new_failed',
+        lastError: 'container exited with code 1',
+      };
+
+      mockGetInProgressOperationByContainerName.mockReturnValue(pendingOperation);
+      mockMarkOperationTerminal.mockReturnValue({ ...pendingOperation, status: 'rolled-back' });
+
+      // temp container found (rename succeeds) — no active container at original name
+      const tempContainer = {
+        inspect: vi.fn().mockResolvedValue({ State: { Running: false } }),
+        rename: vi.fn().mockResolvedValue(undefined),
+        stop: vi.fn().mockResolvedValue(undefined),
+        remove: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const dockerApi = {
+        getContainer: vi.fn().mockImplementation((name: string) => {
+          if (name === 'web-old-12345') {
+            return tempContainer;
+          }
+          // original name 'web' — not found (throws)
+          return {
+            inspect: vi.fn().mockRejectedValue(new Error('not found')),
+            rename: vi.fn(),
+            start: vi.fn(),
+            stop: vi.fn(),
+            remove: vi.fn(),
+          };
+        }),
+      };
+
+      // isContainerNotFoundError returns true for the 'not found' error (original name lookup)
+      const executor = createExecutor({
+        persistRollbackState,
+        isContainerNotFoundError: vi.fn(() => true),
+      });
+
+      await executor.reconcileInProgressContainerUpdateOperation(dockerApi, container, createLog());
+
+      expect(persistRollbackState).toHaveBeenCalledWith(
+        'container-id',
+        'rolled-back',
+        expect.objectContaining({
+          reason: 'start_new_failed',
+          lastError: 'container exited with code 1',
+        }),
+      );
+    });
+  });
 });
