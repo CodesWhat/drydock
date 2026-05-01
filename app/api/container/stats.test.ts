@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import logger from '../../log/index.js';
-import { createStatsHandlers } from './stats.js';
+import { createStatsHandlers, createSummaryStatsHandlers } from './stats.js';
 
 function createResponse() {
   const listeners: Record<string, (...args: unknown[]) => void> = {};
@@ -327,5 +327,217 @@ describe('api/container/stats', () => {
     expect(harness.watch).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(404);
     expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
+  });
+});
+
+describe('api/container/stats — summary handlers', () => {
+  const emptySummary = {
+    timestamp: '2026-01-01T00:00:00.000Z',
+    watchedCount: 0,
+    totalCpuPercent: 0,
+    totalMemoryUsageBytes: 0,
+    totalMemoryLimitBytes: 0,
+    totalMemoryPercent: 0,
+    topCpu: [],
+    topMemory: [],
+  };
+
+  function createSummaryHarness() {
+    let subscriptionListener: ((summary: unknown) => void) | undefined;
+    const unsubscribe = vi.fn();
+    const subscribe = vi.fn((listener: (summary: unknown) => void) => {
+      subscriptionListener = listener;
+      return unsubscribe;
+    });
+    const getCurrent = vi.fn(() => emptySummary);
+
+    const aggregator = { getCurrent, subscribe, start: vi.fn(), stop: vi.fn() };
+    const handlers = createSummaryStatsHandlers({ aggregator });
+
+    return {
+      handlers,
+      aggregator,
+      getCurrent,
+      subscribe,
+      unsubscribe,
+      emitSummary(summary: unknown) {
+        subscriptionListener?.(summary);
+      },
+    };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  test('GET summary returns current aggregator state with status 200', () => {
+    const harness = createSummaryHarness();
+    const req = createRequest();
+    const res = createResponse();
+
+    harness.handlers.getStatsSummary(req as any, res as any);
+
+    expect(harness.getCurrent).toHaveBeenCalledOnce();
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ data: emptySummary });
+  });
+
+  test('SSE stream sets correct headers', () => {
+    const harness = createSummaryHarness();
+    const req = createRequest();
+    const res = createResponse();
+
+    harness.handlers.streamStatsSummary(req as any, res as any);
+
+    expect(res.writeHead).toHaveBeenCalledWith(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+  });
+
+  test('SSE stream writes initial snapshot on connect', () => {
+    const harness = createSummaryHarness();
+    const req = createRequest();
+    const res = createResponse();
+
+    harness.handlers.streamStatsSummary(req as any, res as any);
+
+    expect(res.write).toHaveBeenCalledWith(
+      `event: dd:stats-summary\ndata: ${JSON.stringify(emptySummary)}\n\n`,
+    );
+    expect(res.flush).toHaveBeenCalled();
+  });
+
+  test('SSE stream writes subsequent snapshots when subscriber fires', () => {
+    const harness = createSummaryHarness();
+    const req = createRequest();
+    const res = createResponse();
+    const updatedSummary = { ...emptySummary, watchedCount: 2, totalCpuPercent: 42 };
+
+    harness.handlers.streamStatsSummary(req as any, res as any);
+
+    harness.emitSummary(updatedSummary);
+
+    expect(res.write).toHaveBeenCalledWith(
+      `event: dd:stats-summary\ndata: ${JSON.stringify(updatedSummary)}\n\n`,
+    );
+  });
+
+  test('SSE stream writes heartbeat at interval', async () => {
+    const harness = createSummaryHarness();
+    const req = createRequest();
+    const res = createResponse();
+
+    harness.handlers.streamStatsSummary(req as any, res as any);
+
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    expect(res.write).toHaveBeenCalledWith('event: dd:heartbeat\ndata: {}\n\n');
+  });
+
+  test('cleanup on req.close unsubscribes and clears heartbeat', async () => {
+    const harness = createSummaryHarness();
+    const req = createRequest();
+    const res = createResponse();
+
+    harness.handlers.streamStatsSummary(req as any, res as any);
+
+    req.emit('close');
+
+    // Verify unsubscribed
+    expect(harness.unsubscribe).toHaveBeenCalledOnce();
+
+    // Verify heartbeat was cleared (advancing time should not write another heartbeat)
+    const writeCallCountAfterClose = (res.write as ReturnType<typeof vi.fn>).mock.calls.length;
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect((res.write as ReturnType<typeof vi.fn>).mock.calls.length).toBe(
+      writeCallCountAfterClose,
+    );
+  });
+
+  test('cleanup is idempotent — second call does not double-unsubscribe', () => {
+    const harness = createSummaryHarness();
+    const req = createRequest();
+    const res = createResponse();
+
+    harness.handlers.streamStatsSummary(req as any, res as any);
+
+    req.emit('close');
+    req.emit('close');
+    req.emit('aborted');
+
+    expect(harness.unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  test('cleanup fires on res.close', () => {
+    const harness = createSummaryHarness();
+    const req = createRequest();
+    const res = createResponse();
+
+    harness.handlers.streamStatsSummary(req as any, res as any);
+
+    res.emit('close');
+
+    expect(harness.unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  test('cleanup fires on res.error', () => {
+    const harness = createSummaryHarness();
+    const req = createRequest();
+    const res = createResponse();
+
+    harness.handlers.streamStatsSummary(req as any, res as any);
+
+    res.emit('error');
+
+    expect(harness.unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  test('cleanup continues when unsubscribe throws', () => {
+    const harness = createSummaryHarness();
+    const req = createRequest();
+    const res = createResponse();
+    harness.unsubscribe.mockImplementation(() => {
+      throw new Error('unsubscribe boom');
+    });
+
+    harness.handlers.streamStatsSummary(req as any, res as any);
+    req.emit('close');
+
+    // Should not throw and unsubscribe was still attempted
+    expect(harness.unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  test('cleanup logs debug messages when cleanup steps throw', () => {
+    const harness = createSummaryHarness();
+    const req = createRequest();
+    const res = createResponse();
+    const debug = vi.fn();
+    const childSpy = vi.spyOn(logger, 'child').mockReturnValue({ debug } as any);
+    const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval').mockImplementation(() => {
+      throw new Error('clear interval boom');
+    });
+    harness.unsubscribe.mockImplementation(() => {
+      throw new Error('unsubscribe boom');
+    });
+
+    try {
+      harness.handlers.streamStatsSummary(req as any, res as any);
+      req.emit('close');
+    } finally {
+      clearIntervalSpy.mockRestore();
+      childSpy.mockRestore();
+    }
+
+    expect(debug).toHaveBeenCalledTimes(2);
+    expect(debug).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to clear stats summary stream heartbeat interval'),
+    );
+    expect(debug).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to unsubscribe stats summary stream listener'),
+    );
   });
 });

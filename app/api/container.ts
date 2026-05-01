@@ -16,6 +16,7 @@ import {
   updateDigestScanCache,
   verifyImageSignature,
 } from '../security/scan.js';
+import { createContainerStatsAggregator } from '../stats/aggregator.js';
 import { createContainerStatsCollector } from '../stats/collector.js';
 import * as auditStore from '../store/audit.js';
 import * as storeContainer from '../store/container.js';
@@ -35,7 +36,7 @@ import {
   resolveContainerImageFullName,
   resolveContainerRegistryAuth,
 } from './container/shared.js';
-import { createStatsHandlers } from './container/stats.js';
+import { createStatsHandlers, createSummaryStatsHandlers } from './container/stats.js';
 import { createTriggerHandlers } from './container/triggers.js';
 import { createUpdatePolicyHandlers } from './container/update-policy.js';
 import { requireDestructiveActionConfirmation } from './destructive-confirmation.js';
@@ -194,6 +195,12 @@ const containerStatsCollector = createContainerStatsCollector({
   getWatchers: () => registry.getState().watcher || {},
 });
 
+const containerStatsAggregator = createContainerStatsAggregator({
+  getContainers: () => storeContainer.getContainers(),
+  getWatchers: () => registry.getState().watcher || {},
+});
+containerStatsAggregator.start();
+
 const updatePolicyHandlers = createUpdatePolicyHandlers({
   storeContainer,
   uniqStrings,
@@ -253,6 +260,10 @@ const statsHandlers = createStatsHandlers({
   statsCollector: containerStatsCollector,
 });
 
+const summaryStatsHandlers = createSummaryStatsHandlers({
+  aggregator: containerStatsAggregator,
+});
+
 export const deleteContainer = crudHandlers.deleteContainer;
 export const getContainerTriggers = triggerHandlers.getContainerTriggers;
 
@@ -273,6 +284,8 @@ export function init() {
   router.get('/', crudHandlers.getContainers);
   router.post('/watch', crudHandlers.watchContainers);
   router.get('/stats', statsHandlers.getAllContainerStats);
+  router.get('/stats/summary', summaryStatsHandlers.getStatsSummary);
+  router.get('/stats/summary/stream', summaryStatsHandlers.streamStatsSummary);
   router.get('/summary', crudHandlers.getContainerSummary);
   router.get('/recent-status', getContainerRecentStatus);
   router.get('/security/vulnerabilities', crudHandlers.getContainerSecurityVulnerabilities);

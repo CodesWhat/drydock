@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import logger from '../../log/index.js';
 import type { Container } from '../../model/container.js';
+import type { ContainerStatsAggregator } from '../../stats/aggregator.js';
 import type { ContainerStatsCollector } from '../../stats/collector.js';
 import { STATS_STREAM_HEARTBEAT_INTERVAL_MS } from '../../stats/config.js';
 import { getErrorMessage } from '../../util/error.js';
@@ -25,6 +26,10 @@ interface StatsHandlerDependencies {
     ContainerStatsCollector,
     'watch' | 'touch' | 'subscribe' | 'getLatest' | 'getHistory'
   >;
+}
+
+interface SummaryStatsHandlerDependencies {
+  aggregator: ContainerStatsAggregator;
 }
 
 function ensureContainerExists(
@@ -165,6 +170,75 @@ function createStreamContainerStatsHandler({
     req.on('aborted', cleanup);
     streamResponse.on('close', cleanup);
     streamResponse.on('error', cleanup);
+  };
+}
+
+function createGetStatsSummaryHandler({ aggregator }: SummaryStatsHandlerDependencies) {
+  return function getStatsSummary(_req: Request, res: Response): void {
+    res.status(200).json({ data: aggregator.getCurrent() });
+  };
+}
+
+function createStreamStatsSummaryHandler({ aggregator }: SummaryStatsHandlerDependencies) {
+  return function streamStatsSummary(req: Request, res: Response): void {
+    const log = logger.child({ component: 'container-stats' });
+    const streamResponse = res as StreamableResponse;
+
+    streamResponse.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    streamResponse.flushHeaders?.();
+
+    streamResponse.write(
+      `event: dd:stats-summary\ndata: ${JSON.stringify(aggregator.getCurrent())}\n\n`,
+    );
+    streamResponse.flush?.();
+
+    const unsubscribe = aggregator.subscribe((summary) => {
+      streamResponse.write(`event: dd:stats-summary\ndata: ${JSON.stringify(summary)}\n\n`);
+      streamResponse.flush?.();
+    });
+
+    const heartbeatInterval = globalThis.setInterval(() => {
+      streamResponse.write('event: dd:heartbeat\ndata: {}\n\n');
+    }, STATS_STREAM_HEARTBEAT_INTERVAL_MS);
+
+    let disconnected = false;
+    const cleanup = () => {
+      if (disconnected) {
+        return;
+      }
+      disconnected = true;
+      try {
+        globalThis.clearInterval(heartbeatInterval);
+      } catch (error: unknown) {
+        log.debug(
+          `Failed to clear stats summary stream heartbeat interval (${getErrorMessage(error)})`,
+        );
+      }
+      try {
+        unsubscribe();
+      } catch (error: unknown) {
+        log.debug(
+          `Failed to unsubscribe stats summary stream listener (${getErrorMessage(error)})`,
+        );
+      }
+    };
+
+    req.on('close', cleanup);
+    req.on('aborted', cleanup);
+    streamResponse.on('close', cleanup);
+    streamResponse.on('error', cleanup);
+  };
+}
+
+export function createSummaryStatsHandlers(dependencies: SummaryStatsHandlerDependencies) {
+  return {
+    getStatsSummary: createGetStatsSummaryHandler(dependencies),
+    streamStatsSummary: createStreamStatsSummaryHandler(dependencies),
   };
 }
 
