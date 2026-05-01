@@ -210,6 +210,7 @@ describe('UpdateEligibilityBadges', () => {
   describe('reason labels', () => {
     const labelCases: Array<[UpdateBlocker['reason'], string]> = [
       ['security-scan-blocked', 'Security blocked'],
+      ['last-update-rolled-back', 'Rolled back'],
       ['snoozed', 'Snoozed'],
       ['skip-tag', 'Tag skipped'],
       ['skip-digest', 'Digest skipped'],
@@ -244,6 +245,7 @@ describe('UpdateEligibilityBadges', () => {
   describe('reason icons', () => {
     const iconCases: Array<[UpdateBlocker['reason'], string]> = [
       ['security-scan-blocked', 'mdi:shield-alert'],
+      ['last-update-rolled-back', 'mdi:alert-circle'],
       ['snoozed', 'mdi:alarm-snooze'],
       ['skip-tag', 'mdi:tag-off'],
       ['skip-digest', 'mdi:tag-off'],
@@ -288,6 +290,19 @@ describe('UpdateEligibilityBadges', () => {
         global: globalConfig,
       });
       const item = wrapper.find('[data-reason="security-scan-blocked"]');
+      expect(item.attributes('style') ?? '').toContain('var(--dd-danger-muted)');
+    });
+
+    it('applies danger color for last-update-rolled-back', () => {
+      const wrapper = mount(UpdateEligibilityBadges, {
+        props: {
+          eligibility: makeEligibility({
+            blockers: [makeBlocker({ reason: 'last-update-rolled-back' })],
+          }),
+        },
+        global: globalConfig,
+      });
+      const item = wrapper.find('[data-reason="last-update-rolled-back"]');
       expect(item.attributes('style') ?? '').toContain('var(--dd-danger-muted)');
     });
   });

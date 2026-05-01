@@ -38,6 +38,7 @@ describe('BLOCKER_SEVERITY', () => {
     expect(BLOCKER_SEVERITY['rollback-container']).toBe('hard');
     expect(BLOCKER_SEVERITY['active-operation']).toBe('hard');
     expect(BLOCKER_SEVERITY['security-scan-blocked']).toBe('hard');
+    expect(BLOCKER_SEVERITY['last-update-rolled-back']).toBe('hard');
     expect(BLOCKER_SEVERITY['agent-mismatch']).toBe('hard');
     expect(BLOCKER_SEVERITY['no-update-trigger-configured']).toBe('hard');
   });

@@ -296,6 +296,7 @@
     },
     "eligibilityBadges": {
       "securityBlocked": "Security blocked",
+      "rolledBack": "Rolled back",
       "snoozed": "Snoozed",
       "tagSkipped": "Tag skipped",
       "digestSkipped": "Digest skipped",
