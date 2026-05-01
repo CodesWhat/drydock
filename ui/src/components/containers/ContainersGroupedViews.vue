@@ -444,34 +444,48 @@ function onBatchUpdateCompleted(event: Event) {
   const succeeded = typeof payload.succeeded === 'number' ? payload.succeeded : 0;
   const failed = typeof payload.failed === 'number' ? payload.failed : 0;
 
-  // Find the group name by looking up the first item's containerId in renderGroups.
+  // Resolve a single group name only when every item in the batch belongs to
+  // the same group; otherwise drop the "in <group>" qualifier rather than
+  // mislabeling a flat "Update All" toast or showing the raw batchId UUID.
   let groupName: string | undefined;
   if (Array.isArray(payload.items)) {
     const items = payload.items as Array<{ containerId?: string }>;
-    const firstItem = items[0];
-    if (firstItem?.containerId) {
-      const groupKey = resolveGroupKeyForContainer(firstItem.containerId);
-      if (groupKey) {
-        groupName =
-          renderGroups.value.find((g: { key: string; name?: string }) => g.key === groupKey)
-            ?.name ?? groupKey;
-      }
+    const groupKeys = new Set<string>();
+    for (const item of items) {
+      if (typeof item.containerId !== 'string') continue;
+      const groupKey = resolveGroupKeyForContainer(item.containerId);
+      if (groupKey) groupKeys.add(groupKey);
+    }
+    if (groupKeys.size === 1) {
+      const onlyKey = groupKeys.values().next().value as string;
+      groupName =
+        renderGroups.value.find((g: { key: string; name?: string }) => g.key === onlyKey)?.name ??
+        onlyKey;
     }
   }
-  groupName ??= batchId ?? t('containersView.toast.unknownGroup');
 
   if (failed === 0) {
-    toast.success(t('containersView.toast.batchUpdated', { count: succeeded, group: groupName }));
+    toast.success(
+      groupName
+        ? t('containersView.toast.batchUpdated', { count: succeeded, group: groupName })
+        : t('containersView.toast.batchUpdatedNoGroup', { count: succeeded }),
+    );
   } else if (succeeded === 0) {
-    toast.error(t('containersView.toast.batchFailed', { count: failed, group: groupName }));
+    toast.error(
+      groupName
+        ? t('containersView.toast.batchFailed', { count: failed, group: groupName })
+        : t('containersView.toast.batchFailedNoGroup', { count: failed }),
+    );
   } else {
     toast.warning(
-      t('containersView.toast.batchPartial', {
-        succeeded,
-        total,
-        group: groupName,
-        failed,
-      }),
+      groupName
+        ? t('containersView.toast.batchPartial', {
+            succeeded,
+            total,
+            group: groupName,
+            failed,
+          })
+        : t('containersView.toast.batchPartialNoGroup', { succeeded, total, failed }),
     );
   }
 }

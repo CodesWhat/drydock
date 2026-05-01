@@ -182,10 +182,35 @@ function containerListFingerprint(list: Container[]): string {
   return parts.join('\n');
 }
 
+// UI-only fields that mapApiContainer does not produce. Preserve them across
+// loadContainers() reassignments so an immediate post-update reload does not
+// wipe the freshly-set failure reason banner.
+function preserveTransientUiFields(prev: Container[], next: Container[]): Container[] {
+  if (prev.length === 0) return next;
+  const byId = new Map<string, Container>();
+  const byName = new Map<string, Container>();
+  for (const c of prev) {
+    if (c.id) byId.set(c.id, c);
+    if (c.name) byName.set(c.name, c);
+  }
+  for (const c of next) {
+    const match = (c.id && byId.get(c.id)) || (c.name && byName.get(c.name));
+    if (!match) continue;
+    if (match.lastUpdateFailureReason !== undefined) {
+      c.lastUpdateFailureReason = match.lastUpdateFailureReason;
+    }
+    if (match.lastUpdateFailureAt !== undefined) {
+      c.lastUpdateFailureAt = match.lastUpdateFailureAt;
+    }
+  }
+  return next;
+}
+
 async function loadContainers() {
   try {
     const apiContainers = await getAllContainers();
-    const mapped = mapApiContainers(apiContainers);
+    const mappedRaw = mapApiContainers(apiContainers);
+    const mapped = preserveTransientUiFields(containers.value, mappedRaw);
     // Skip reactive assignment (and downstream chain re-eval) when incoming
     // data is bit-for-bit identical to the current list. Gate the lookup map
     // reassignment on the same guard so unchanged reloads don't churn
@@ -214,6 +239,26 @@ async function loadContainers() {
 
 onMounted(() => {
   void loadContainers();
+});
+
+// Safety net only: if the SSE container-removed/added/updated stream hasn't
+// reconciled the row within ~3s of a terminal event, run a single reload so
+// the user is never stuck looking at stale data. The primary path is the
+// SSE patches (applyContainerPatch); this is a belt-and-suspenders fallback,
+// not the main mechanism.
+let pendingReloadTimer: ReturnType<typeof setTimeout> | undefined;
+function schedulePostTerminalReload() {
+  if (pendingReloadTimer) clearTimeout(pendingReloadTimer);
+  pendingReloadTimer = setTimeout(() => {
+    pendingReloadTimer = undefined;
+    void loadContainers();
+  }, 3000);
+}
+onScopeDispose(() => {
+  if (pendingReloadTimer) {
+    clearTimeout(pendingReloadTimer);
+    pendingReloadTimer = undefined;
+  }
 });
 
 const rechecking = ref(false);
@@ -1390,6 +1435,10 @@ function applyOperationPatch(event: Event) {
         }
       }
       // status === 'succeeded': no toast here; handleSseUpdateApplied owns non-batch success.
+      // Resync the full list so the row reflects post-update state — new image
+      // tag on success, restored update-available banner with lastUpdateFailureReason
+      // on failure. Granular SSE patches don't always cover renames/new container IDs.
+      schedulePostTerminalReload();
     },
   });
 }
@@ -1436,8 +1485,18 @@ function handleSseUpdateFailed(event: Event) {
     terminalToastFiredForOp.delete(operationId);
     return;
   }
+  // Classify the failure reason from the SSE payload so this fallback path
+  // produces the same with-reason toast as onTerminalEvent. The dd:update-failed
+  // payload carries `error`; in batched cases or when dd:update-operation-changed
+  // is delayed, this is the only signal the UI gets.
+  const error = typeof detail.error === 'string' ? detail.error : undefined;
+  const reason = summariseUpdateError(error);
   scheduleCompletionToast(() =>
-    toast.error(t('containersView.toast.updateFailed', { name: containerName })),
+    toast.error(
+      reason
+        ? t('containersView.toast.updateFailedWithReason', { name: containerName, reason })
+        : t('containersView.toast.updateFailed', { name: containerName }),
+    ),
   );
 }
 
