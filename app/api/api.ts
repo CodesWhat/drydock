@@ -30,6 +30,7 @@ import * as registryRouter from './registry.js';
 import * as serverRouter from './server.js';
 import * as settingsRouter from './settings.js';
 import * as sseRouter from './sse.js';
+import * as statsRouter from './stats.js';
 import * as storeRouter from './store.js';
 import * as triggerRouter from './trigger.js';
 import * as updateOperationsRouter from './update-operations.js';
@@ -126,6 +127,9 @@ export function init(): express.Router {
 
   // Mount container actions router (start/stop/restart)
   router.use('/containers', containerActionsRouter.init());
+
+  // Mount fleet-aggregate stats router (dashboard summary, sibling of /containers)
+  router.use('/stats', statsRouter.init());
 
   // Mount update-operations router (single-operation lookup by id)
   router.use('/update-operations', updateOperationsRouter.init());
