@@ -1,5 +1,6 @@
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { OperationCancelledError } from '../../../store/update-operation.js';
+import { startHealthGateHeartbeat } from '../../../updates/health-gate-heartbeat.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
 import { getRequestedOperationId } from './update-runtime-context.js';
 
@@ -800,12 +801,22 @@ class ContainerUpdateExecutor {
 
     attemptState.failureReason = 'health_gate_failed';
     updateOperationStore.updateOperation(preparedExecution.operationId, { phase: 'health-gate' });
-    await this.waitForContainerHealthy(
-      newContainer,
-      preparedExecution.oldName,
-      logContainer,
-      preparedExecution.healthGateTimeoutMs,
+    const cancelHeartbeat = startHealthGateHeartbeat(
+      preparedExecution.operationId,
+      (operationId) => {
+        updateOperationStore.updateOperation(operationId, { phase: 'health-gate' });
+      },
     );
+    try {
+      await this.waitForContainerHealthy(
+        newContainer,
+        preparedExecution.oldName,
+        logContainer,
+        preparedExecution.healthGateTimeoutMs,
+      );
+    } finally {
+      cancelHeartbeat();
+    }
     updateOperationStore.updateOperation(preparedExecution.operationId, {
       phase: 'health-gate-passed',
     });

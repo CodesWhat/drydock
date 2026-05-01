@@ -11,6 +11,8 @@ const {
   mockGetActiveOperationByContainerId,
   mockIsOperationCancelRequested,
   MockOperationCancelledError,
+  mockStartHealthGateHeartbeat,
+  mockCancelHeartbeat,
 } = vi.hoisted(() => {
   class MockOperationCancelledError extends Error {
     readonly operationId: string;
@@ -21,6 +23,8 @@ const {
       this.operationId = operationId;
     }
   }
+  const mockCancelHeartbeat = vi.fn();
+  const mockStartHealthGateHeartbeat = vi.fn(() => mockCancelHeartbeat);
   return {
     mockGetInProgressOperationByContainerName: vi.fn(),
     mockGetOperationById: vi.fn(),
@@ -32,6 +36,8 @@ const {
     mockGetActiveOperationByContainerId: vi.fn(),
     mockIsOperationCancelRequested: vi.fn(() => false),
     MockOperationCancelledError,
+    mockStartHealthGateHeartbeat,
+    mockCancelHeartbeat,
   };
 });
 
@@ -46,6 +52,11 @@ vi.mock('../../../store/update-operation.js', () => ({
   getActiveOperationByContainerId: mockGetActiveOperationByContainerId,
   isOperationCancelRequested: mockIsOperationCancelRequested,
   OperationCancelledError: MockOperationCancelledError,
+}));
+
+vi.mock('../../../updates/health-gate-heartbeat.js', () => ({
+  startHealthGateHeartbeat: mockStartHealthGateHeartbeat,
+  HEALTH_GATE_HEARTBEAT_MS: 10_000,
 }));
 
 import ContainerUpdateExecutor from './ContainerUpdateExecutor.js';
@@ -144,6 +155,7 @@ describe('ContainerUpdateExecutor', () => {
     mockGetInProgressOperationByContainerName.mockReturnValue(undefined);
     mockGetOperationById.mockReturnValue(undefined);
     mockIsOperationCancelRequested.mockReturnValue(false);
+    mockStartHealthGateHeartbeat.mockReturnValue(mockCancelHeartbeat);
   });
 
   test('constructor provides default configuration fallback', () => {
@@ -1410,6 +1422,111 @@ describe('ContainerUpdateExecutor', () => {
       });
 
       await expect(executor.execute(context, createContainer(), createLog())).resolves.toBe(true);
+    });
+
+    test('health-gate heartbeat starts when health-gating and is cancelled after success', async () => {
+      const context = createContext({
+        currentContainerSpec: createCurrentContainerSpec({
+          State: { Running: true },
+          HostConfig: { AutoRemove: false },
+        }),
+      });
+      const executor = createExecutor({
+        createContainer: vi.fn().mockResolvedValue(context.newContainer),
+        getRollbackConfig: vi.fn(() => ({ autoRollback: false })),
+        hasHealthcheckConfigured: vi.fn(() => true),
+      });
+      const log = createLog();
+
+      await expect(executor.execute(context, createContainer(), log)).resolves.toBe(true);
+
+      expect(mockStartHealthGateHeartbeat).toHaveBeenCalledWith('op-1', expect.any(Function));
+      expect(mockCancelHeartbeat).toHaveBeenCalled();
+      // health-gate-passed must still fire after the heartbeat is cancelled
+      expect(mockUpdateOperation).toHaveBeenCalledWith(
+        'op-1',
+        expect.objectContaining({ phase: 'health-gate-passed' }),
+      );
+    });
+
+    test('health-gate heartbeat is cancelled when health-gate fails (rollback path)', async () => {
+      const context = createContext({
+        currentContainerSpec: createCurrentContainerSpec({
+          State: { Running: true },
+          HostConfig: { AutoRemove: false },
+        }),
+      });
+      const executor = createExecutor({
+        createContainer: vi.fn().mockResolvedValue(context.newContainer),
+        getRollbackConfig: vi.fn(() => ({ autoRollback: false })),
+        hasHealthcheckConfigured: vi.fn(() => true),
+        waitForContainerHealthy: vi
+          .fn()
+          .mockRejectedValue(new Error('Health gate failed: unhealthy')),
+      });
+      const log = createLog();
+
+      await expect(executor.execute(context, createContainer(), log)).rejects.toThrow(
+        'Health gate failed: unhealthy',
+      );
+
+      expect(mockStartHealthGateHeartbeat).toHaveBeenCalledWith('op-1', expect.any(Function));
+      // Cancel must be called even when the wait rejects
+      expect(mockCancelHeartbeat).toHaveBeenCalled();
+      // health-gate-passed must NOT fire
+      expect(mockUpdateOperation).not.toHaveBeenCalledWith(
+        'op-1',
+        expect.objectContaining({ phase: 'health-gate-passed' }),
+      );
+    });
+
+    test('heartbeat emitter calls updateOperation with phase: health-gate', async () => {
+      const context = createContext({
+        currentContainerSpec: createCurrentContainerSpec({
+          State: { Running: true },
+          HostConfig: { AutoRemove: false },
+        }),
+      });
+
+      // Capture the emitter function passed to startHealthGateHeartbeat
+      let capturedEmitter: ((operationId: string) => void) | undefined;
+      mockStartHealthGateHeartbeat.mockImplementation(
+        (operationId: string, emitter: (operationId: string) => void) => {
+          capturedEmitter = emitter;
+          return mockCancelHeartbeat;
+        },
+      );
+
+      const executor = createExecutor({
+        createContainer: vi.fn().mockResolvedValue(context.newContainer),
+        getRollbackConfig: vi.fn(() => ({ autoRollback: false })),
+        hasHealthcheckConfigured: vi.fn(() => true),
+      });
+
+      await expect(executor.execute(context, createContainer(), createLog())).resolves.toBe(true);
+
+      expect(capturedEmitter).toBeDefined();
+      // Simulate a heartbeat tick
+      capturedEmitter!('op-1');
+      expect(mockUpdateOperation).toHaveBeenCalledWith('op-1', { phase: 'health-gate' });
+    });
+
+    test('heartbeat does not start when health-gate is skipped (no healthcheck)', async () => {
+      const context = createContext({
+        currentContainerSpec: createCurrentContainerSpec({
+          State: { Running: true },
+          HostConfig: { AutoRemove: false },
+        }),
+      });
+      const executor = createExecutor({
+        createContainer: vi.fn().mockResolvedValue(context.newContainer),
+        getRollbackConfig: vi.fn(() => ({ autoRollback: false })),
+        hasHealthcheckConfigured: vi.fn(() => false),
+      });
+
+      await expect(executor.execute(context, createContainer(), createLog())).resolves.toBe(true);
+
+      expect(mockStartHealthGateHeartbeat).not.toHaveBeenCalled();
     });
 
     test('reconcileWithTempContainerOnly calls persistRollbackState with rolled-back on successful recovery', async () => {

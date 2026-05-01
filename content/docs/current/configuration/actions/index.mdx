@@ -99,6 +99,32 @@ services:
       - DD_UPDATE_MAX_CONCURRENT=3
 ```
 
+## Health-gate SSE heartbeat
+
+When drydock waits for a new container to pass its health gate (images with long healthcheck intervals, like vaultwarden's 60 s check), the UI receives no SSE events between the `health-gate` phase (start of wait) and `health-gate-passed` (end of wait). The health-gate heartbeat fixes this by re-emitting the same `health-gate` phase event at a configurable interval, keeping the UI informed in near-real-time without relying on REST reconciliation.
+
+| Env var | Required | Description | Default |
+| --- | :---: | --- | --- |
+| `DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS` | ⚪ | Interval (ms) between health-gate SSE heartbeats during container health polling | `10000` (10 s) |
+
+**Semantics:**
+
+- Absent or empty → use the 10 s default.
+- `0` → disable heartbeats entirely (the UI will only receive the start `health-gate` event and the eventual `health-gate-passed` or rollback event).
+- Positive integer ≥ 1000 → emit a heartbeat every N milliseconds.
+- Values below 1000 or non-integer values → drydock fails fast at startup with a descriptive error.
+
+Heartbeats re-emit `phase: 'health-gate'` (the same phase already displayed by the UI) — they do not introduce a new phase and cannot regress phase rank. The heartbeat stops immediately when the health gate resolves (success, timeout, or unhealthy), so it cannot race the terminal `health-gate-passed` event.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      # Emit a health-gate heartbeat every 5 seconds.
+      - DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS=5000
+```
+
 ## Why isn't my container auto-updating?
 
 Drydock evaluates each container against a stack of policy and trigger gates and reports the result as a pill on the row (and as `updateEligibility` on the API payload). When auto-update doesn't fire on a container with an available update, the pill identifies the active blocker — `Below threshold`, `Trigger filtered`, `No trigger`, `Agent mismatch`, `Snoozed`, etc. See [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the full reason reference and how to clear each gate.
