@@ -12,6 +12,18 @@ export interface RecoveryResult {
   abandoned: number;
 }
 
+type RecoveryTriggerRegistry = Parameters<typeof findDockerTriggerForContainer>[0];
+
+function getRecoveryTriggerRegistry(): RecoveryTriggerRegistry {
+  return registry.getState().trigger;
+}
+
+export function findRecoveryUpdateTrigger(
+  container: Container,
+): AcceptedContainerUpdateRequest['trigger'] | undefined {
+  return findDockerTriggerForContainer(getRecoveryTriggerRegistry(), container);
+}
+
 /**
  * After registry initialisation, scan the operation store for queued
  * operations left over from a previous process run and dispatch them.
@@ -51,11 +63,7 @@ export function recoverQueuedOperationsOnStartup(): RecoveryResult {
       continue;
     }
 
-    const triggers = registry.getState().trigger as Record<string, unknown> | undefined;
-    const trigger = findDockerTriggerForContainer(
-      triggers as Parameters<typeof findDockerTriggerForContainer>[0],
-      container,
-    );
+    const trigger = findRecoveryUpdateTrigger(container);
     if (!trigger) {
       updateOperationStore.markOperationTerminal(operation.id, {
         status: 'failed',
@@ -69,7 +77,7 @@ export function recoverQueuedOperationsOnStartup(): RecoveryResult {
     accepted.push({
       container,
       operationId: operation.id,
-      trigger: trigger as unknown as AcceptedContainerUpdateRequest['trigger'],
+      trigger,
     });
   }
 
