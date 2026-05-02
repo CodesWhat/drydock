@@ -117,7 +117,7 @@ describe('stats/aggregator', () => {
     const { aggregator } = createHarness();
     const current = aggregator.getCurrent();
     expect(current.watchedCount).toBe(0);
-    expect(current.totalCpuPercent).toBe(0);
+    expect(current.avgCpuPercent).toBe(0);
     expect(current.totalMemoryUsageBytes).toBe(0);
     expect(current.totalMemoryLimitBytes).toBe(0);
     expect(current.totalMemoryPercent).toBe(0);
@@ -207,7 +207,7 @@ describe('stats/aggregator', () => {
     fetchSnapshot.mockResolvedValueOnce(makePayload(1100, 11000));
     await tick();
 
-    expect(aggregator.getCurrent().totalCpuPercent).toBe(0);
+    expect(aggregator.getCurrent().avgCpuPercent).toBe(0);
     expect(aggregator.getCurrent().topCpu[0].cpuPercent).toBe(0);
     aggregator.stop();
   });
@@ -236,7 +236,7 @@ describe('stats/aggregator', () => {
 
     const current = aggregator.getCurrent();
     expect(current.watchedCount).toBe(1);
-    expect(current.totalCpuPercent).toBe(0); // no previous → cpu=0
+    expect(current.avgCpuPercent).toBe(0); // no previous → cpu=0
     expect(current.totalMemoryUsageBytes).toBe(256);
     expect(current.totalMemoryLimitBytes).toBe(1024);
     expect(current.totalMemoryPercent).toBeCloseTo(25, 1);
@@ -262,7 +262,7 @@ describe('stats/aggregator', () => {
     await tick();
 
     const current = aggregator.getCurrent();
-    expect(current.totalCpuPercent).toBeCloseTo(20, 1);
+    expect(current.avgCpuPercent).toBeCloseTo(20, 1);
     expect(current.topCpu[0].cpuPercent).toBeCloseTo(20, 1);
 
     aggregator.stop();
@@ -416,7 +416,7 @@ describe('stats/aggregator', () => {
 
     const current = aggregator.getCurrent();
     expect(current.watchedCount).toBe(0);
-    expect(current.totalCpuPercent).toBe(0);
+    expect(current.avgCpuPercent).toBe(0);
     expect(current.totalMemoryUsageBytes).toBe(0);
     expect(current.totalMemoryLimitBytes).toBe(0);
     expect(current.totalMemoryPercent).toBe(0);
@@ -826,7 +826,7 @@ describe('stats/aggregator', () => {
     tickCallback?.();
     await drainMicrotasks();
 
-    expect(aggregator.getCurrent().totalCpuPercent).toBe(0);
+    expect(aggregator.getCurrent().avgCpuPercent).toBe(0);
     expect(aggregator.getCurrent().topCpu[0].cpuPercent).toBe(0);
     aggregator.stop();
   });

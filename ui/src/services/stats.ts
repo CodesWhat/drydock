@@ -220,7 +220,7 @@ export interface ContainerStatsSummaryRowSnapshot {
 export interface ContainerStatsSummarySnapshot {
   timestamp: string;
   watchedCount: number;
-  totalCpuPercent: number;
+  avgCpuPercent: number;
   totalMemoryUsageBytes: number;
   totalMemoryLimitBytes: number;
   totalMemoryPercent: number;
@@ -307,7 +307,7 @@ function parseSummarySnapshot(raw: unknown): ContainerStatsSummarySnapshot | nul
 
   const numericFields = {
     watchedCount: toFiniteNumber(obj.watchedCount),
-    totalCpuPercent: toFiniteNumber(obj.totalCpuPercent),
+    avgCpuPercent: toFiniteNumber(obj.avgCpuPercent),
     totalMemoryUsageBytes: toFiniteNumber(obj.totalMemoryUsageBytes),
     totalMemoryLimitBytes: toFiniteNumber(obj.totalMemoryLimitBytes),
     totalMemoryPercent: toFiniteNumber(obj.totalMemoryPercent),
@@ -319,7 +319,7 @@ function parseSummarySnapshot(raw: unknown): ContainerStatsSummarySnapshot | nul
 
   const {
     watchedCount,
-    totalCpuPercent,
+    avgCpuPercent,
     totalMemoryUsageBytes,
     totalMemoryLimitBytes,
     totalMemoryPercent,
@@ -328,7 +328,7 @@ function parseSummarySnapshot(raw: unknown): ContainerStatsSummarySnapshot | nul
   return {
     timestamp,
     watchedCount,
-    totalCpuPercent,
+    avgCpuPercent,
     totalMemoryUsageBytes,
     totalMemoryLimitBytes,
     totalMemoryPercent,

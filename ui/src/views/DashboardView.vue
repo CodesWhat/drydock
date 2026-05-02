@@ -179,7 +179,7 @@ onUnmounted(() => {
 const EMPTY_SUMMARY: ContainerStatsSummarySnapshot = {
   timestamp: '',
   watchedCount: 0,
-  totalCpuPercent: 0,
+  avgCpuPercent: 0,
   totalMemoryUsageBytes: 0,
   totalMemoryLimitBytes: 0,
   totalMemoryPercent: 0,

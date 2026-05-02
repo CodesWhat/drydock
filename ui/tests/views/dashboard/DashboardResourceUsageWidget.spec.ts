@@ -55,7 +55,7 @@ function makeSummary(
   return {
     timestamp: '2026-04-30T00:00:00.000Z',
     watchedCount: 3,
-    totalCpuPercent: 42.5,
+    avgCpuPercent: 42.5,
     totalMemoryUsageBytes: 512 * 1024 * 1024,
     totalMemoryLimitBytes: 2 * 1024 * 1024 * 1024,
     totalMemoryPercent: 25.0,
@@ -135,7 +135,7 @@ describe('DashboardResourceUsageWidget', () => {
   it('renders summary CPU and memory totals from the ContainerStatsSummarySnapshot prop', () => {
     const wrapper = mountWidget();
     const html = wrapper.html();
-    expect(html).toContain('42.5%'); // totalCpuPercent
+    expect(html).toContain('42.5%'); // avgCpuPercent
     expect(html).toContain('25.0%'); // totalMemoryPercent
   });
 

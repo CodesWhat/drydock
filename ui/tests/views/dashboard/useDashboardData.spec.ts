@@ -131,7 +131,7 @@ describe('useDashboardData', () => {
     mocks.getStatsSummary.mockResolvedValue({
       timestamp: '2026-04-30T00:00:00.000Z',
       watchedCount: 0,
-      totalCpuPercent: 0,
+      avgCpuPercent: 0,
       totalMemoryUsageBytes: 0,
       totalMemoryLimitBytes: 0,
       totalMemoryPercent: 0,
@@ -1040,13 +1040,13 @@ describe('useDashboardData', () => {
     const { state } = await mountDashboardData();
 
     expect(state.summary.value).toEqual(
-      expect.objectContaining({ watchedCount: 0, totalCpuPercent: 0 }),
+      expect.objectContaining({ watchedCount: 0, avgCpuPercent: 0 }),
     );
 
     const newSummary = {
       timestamp: '2026-04-30T01:00:00.000Z',
       watchedCount: 5,
-      totalCpuPercent: 35.5,
+      avgCpuPercent: 35.5,
       totalMemoryUsageBytes: 1_000_000_000,
       totalMemoryLimitBytes: 4_000_000_000,
       totalMemoryPercent: 25.0,
@@ -1066,7 +1066,7 @@ describe('useDashboardData', () => {
     const initialSummary = {
       timestamp: '2026-04-30T00:00:00.000Z',
       watchedCount: 2,
-      totalCpuPercent: 15.0,
+      avgCpuPercent: 15.0,
       totalMemoryUsageBytes: 500_000_000,
       totalMemoryLimitBytes: 2_000_000_000,
       totalMemoryPercent: 25.0,
@@ -1101,7 +1101,7 @@ describe('useDashboardData', () => {
     const streamSummary = {
       timestamp: '2026-04-30T02:00:00.000Z',
       watchedCount: 1,
-      totalCpuPercent: 5.0,
+      avgCpuPercent: 5.0,
       totalMemoryUsageBytes: 100_000_000,
       totalMemoryLimitBytes: 1_000_000_000,
       totalMemoryPercent: 10.0,

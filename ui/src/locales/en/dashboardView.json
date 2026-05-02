@@ -65,7 +65,7 @@
     "resourceUsage": {
       "title": "Resource Usage",
       "totalUsage": "Total Usage ({watched} watched)",
-      "cpu": "CPU",
+      "cpu": "Avg CPU",
       "memory": "Memory",
       "topCpu": "Top CPU",
       "topMemory": "Top Memory",

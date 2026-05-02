@@ -176,7 +176,7 @@ async function mountDashboard(
   mockGetStatsSummary.mockResolvedValue({
     timestamp: '2026-04-30T00:00:00.000Z',
     watchedCount: 0,
-    totalCpuPercent: 0,
+    avgCpuPercent: 0,
     totalMemoryUsageBytes: 0,
     totalMemoryLimitBytes: 0,
     totalMemoryPercent: 0,
@@ -236,7 +236,7 @@ describe('DashboardView', () => {
     mockGetStatsSummary.mockResolvedValue({
       timestamp: '2026-04-30T00:00:00.000Z',
       watchedCount: 0,
-      totalCpuPercent: 0,
+      avgCpuPercent: 0,
       totalMemoryUsageBytes: 0,
       totalMemoryLimitBytes: 0,
       totalMemoryPercent: 0,
@@ -1347,7 +1347,7 @@ describe('DashboardView', () => {
           statsSummary: {
             timestamp: '2026-03-14T10:00:00.000Z',
             watchedCount: 2,
-            totalCpuPercent: 55.0,
+            avgCpuPercent: 55.0,
             totalMemoryUsageBytes: 800,
             totalMemoryLimitBytes: 1_600,
             totalMemoryPercent: 50.0,

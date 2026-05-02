@@ -256,7 +256,7 @@ describe('api/container/stats — summary handlers', () => {
   const emptySummary = {
     timestamp: '2026-01-01T00:00:00.000Z',
     watchedCount: 0,
-    totalCpuPercent: 0,
+    avgCpuPercent: 0,
     totalMemoryUsageBytes: 0,
     totalMemoryLimitBytes: 0,
     totalMemoryPercent: 0,
@@ -337,7 +337,7 @@ describe('api/container/stats — summary handlers', () => {
     const harness = createSummaryHarness();
     const req = createRequest();
     const res = createResponse();
-    const updatedSummary = { ...emptySummary, watchedCount: 2, totalCpuPercent: 42 };
+    const updatedSummary = { ...emptySummary, watchedCount: 2, avgCpuPercent: 42 };
 
     harness.handlers.streamStatsSummary(req as any, res as any);
 

@@ -314,7 +314,7 @@ describe('stats service', () => {
     const validSummary = {
       timestamp: '2026-04-30T10:00:00.000Z',
       watchedCount: 3,
-      totalCpuPercent: 25,
+      avgCpuPercent: 25,
       totalMemoryUsageBytes: 512000,
       totalMemoryLimitBytes: 1024000,
       totalMemoryPercent: 50,
@@ -353,7 +353,7 @@ describe('stats service', () => {
       });
       expect(result.timestamp).toBe('2026-04-30T10:00:00.000Z');
       expect(result.watchedCount).toBe(3);
-      expect(result.totalCpuPercent).toBe(25);
+      expect(result.avgCpuPercent).toBe(25);
       expect(result.totalMemoryUsageBytes).toBe(512000);
       expect(result.totalMemoryLimitBytes).toBe(1024000);
       expect(result.totalMemoryPercent).toBe(50);
@@ -411,7 +411,7 @@ describe('stats service', () => {
           data: {
             timestamp: '2026-04-30T10:00:00.000Z',
             watchedCount: 'bad',
-            totalCpuPercent: 25,
+            avgCpuPercent: 25,
             totalMemoryUsageBytes: 512000,
             totalMemoryLimitBytes: 1024000,
             totalMemoryPercent: 50,
@@ -491,7 +491,7 @@ describe('stats service', () => {
     const validSummaryPayload = JSON.stringify({
       timestamp: '2026-04-30T10:00:00.000Z',
       watchedCount: 2,
-      totalCpuPercent: 20,
+      avgCpuPercent: 20,
       totalMemoryUsageBytes: 256000,
       totalMemoryLimitBytes: 512000,
       totalMemoryPercent: 50,
@@ -558,7 +558,7 @@ describe('stats service', () => {
         expect.objectContaining({
           timestamp: '2026-04-30T10:00:00.000Z',
           watchedCount: 2,
-          totalCpuPercent: 20,
+          avgCpuPercent: 20,
         }),
       );
 

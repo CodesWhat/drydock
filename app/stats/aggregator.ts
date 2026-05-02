@@ -20,7 +20,7 @@ export interface ContainerStatsSummaryRow {
 export interface ContainerStatsSummary {
   timestamp: string;
   watchedCount: number;
-  totalCpuPercent: number;
+  avgCpuPercent: number;
   totalMemoryUsageBytes: number;
   totalMemoryLimitBytes: number;
   totalMemoryPercent: number;
@@ -73,7 +73,7 @@ function emptyContainerStatsSummary(timestamp: string): ContainerStatsSummary {
   return {
     timestamp,
     watchedCount: 0,
-    totalCpuPercent: 0,
+    avgCpuPercent: 0,
     totalMemoryUsageBytes: 0,
     totalMemoryLimitBytes: 0,
     totalMemoryPercent: 0,
@@ -170,7 +170,7 @@ async function runTick(runtime: AggregatorRuntime): Promise<void> {
   }
 
   const watchedCount = rows.length;
-  const totalCpuPercent =
+  const avgCpuPercent =
     watchedCount > 0
       ? cap(rows.reduce((sum, r) => sum + r.cpuPercent, 0) / watchedCount, 0, 100)
       : 0;
@@ -201,7 +201,7 @@ async function runTick(runtime: AggregatorRuntime): Promise<void> {
   const summary: ContainerStatsSummary = {
     timestamp: new Date(runtime.now()).toISOString(),
     watchedCount,
-    totalCpuPercent,
+    avgCpuPercent,
     totalMemoryUsageBytes,
     totalMemoryLimitBytes,
     totalMemoryPercent,

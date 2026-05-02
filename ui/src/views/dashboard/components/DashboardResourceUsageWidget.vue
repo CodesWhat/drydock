@@ -102,14 +102,14 @@ watchEffect(() => {
           <div>
             <div class="flex items-center justify-between text-2xs dd-text-secondary mb-1">
               <span>{{ t('dashboardView.resourceUsage.cpu') }}</span>
-              <span>{{ summary.totalCpuPercent.toFixed(1) }}%</span>
+              <span>{{ summary.avgCpuPercent.toFixed(1) }}%</span>
             </div>
             <div class="h-2 dd-rounded overflow-hidden" :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
               <div
                 class="h-full dd-rounded transition-[width,color,background-color]"
                 :style="{
-                  width: `${summary.totalCpuPercent}%`,
-                  backgroundColor: getUsageThresholdColor(summary.totalCpuPercent),
+                  width: `${summary.avgCpuPercent}%`,
+                  backgroundColor: getUsageThresholdColor(summary.avgCpuPercent),
                 }" />
             </div>
           </div>
