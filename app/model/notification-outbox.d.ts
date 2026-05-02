@@ -10,6 +10,11 @@ export interface NotificationOutboxEntry {
   maxAttempts: number;
   nextAttemptAt: string;
   status: NotificationOutboxEntryStatus;
+  /**
+   * Last delivery failure. This may include downstream provider/webhook
+   * response bodies because it is only exposed through admin-gated outbox
+   * views/APIs.
+   */
   lastError?: string;
   createdAt: string;
   deliveredAt?: string;

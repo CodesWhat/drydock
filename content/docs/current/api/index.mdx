@@ -78,6 +78,7 @@ If the header is missing or does not match the expected token, the API responds 
 | `/api/v1/events/ui` | `GET` | [Server-Sent Events](#server-sent-events-sse) for real-time UI updates |
 | `/api/v1/audit` | `GET` | [Audit trail](#audit-trail) (paginated, filterable by action/container/date) |
 | `/api/v1/notifications` | `GET`, `PATCH /:id` | [Notification rules](#notification-rules) (per-event enable/disable and trigger assignments) |
+| `/api/v1/notifications/outbox` | `GET`, `POST /:id/retry`, `DELETE /:id` | [Notification outbox](#notification-outbox) (admin retry/discard for failed deliveries) |
 | `/api/v1/settings` | `GET`, `PATCH` | [UI settings](#settings) (internetless mode; `PUT` compatibility alias is deprecated) |
 | `/api/v1/log/stream` | `WS` | [System log stream](/docs/api/log#stream-application-logs-websocket) with level/component filters |
 | `/api/v1/server` | `GET` | Server configuration and compatibility info (see [App API](/docs/api/app)) |
@@ -175,6 +176,14 @@ curl -X PATCH http://drydock:3000/api/v1/notifications/update-available \
 ```
 
 Returns 200 with the updated rule, 400 if the body is invalid or a trigger ID is not recognized, or 404 if the rule ID does not exist.
+
+## Notification outbox
+
+The notification outbox stores failed notification delivery attempts so admins can inspect, retry, or discard them. The outbox API and UI are session-authenticated admin surfaces.
+
+### Error body retention
+
+`lastError` is diagnostic text from the latest failed delivery attempt. It may include downstream notification provider or webhook response bodies when those providers return useful failure text. Treat it as admin-visible troubleshooting data, not as sanitized end-user copy.
 
 ## Audit trail
 
