@@ -178,8 +178,23 @@ describe('Notification Outbox Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({
-        error: 'Invalid status: bad-status. Must be one of: pending, delivered, dead-letter',
+        error: 'Invalid status query parameter. Must be one of: pending, delivered, dead-letter',
       });
+    });
+
+    test('does not reflect long invalid status values in the 400 response body', () => {
+      outboxRouter.init();
+      const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+      const res = createMockResponse();
+      const invalidStatus = `bad-${'x'.repeat(256)}`;
+
+      handler({ query: { status: invalidStatus } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Invalid status query parameter. Must be one of: pending, delivered, dead-letter',
+      });
+      expect(JSON.stringify(res.body)).not.toContain(invalidStatus);
     });
 
     test('returns 500 when store throws', () => {

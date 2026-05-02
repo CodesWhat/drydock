@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import type { NotificationOutboxEntryStatus } from '../model/notification-outbox.js';
 import {
@@ -17,22 +17,25 @@ const VALID_STATUSES = new Set<NotificationOutboxEntryStatus>([
   'delivered',
   'dead-letter',
 ]);
+const INVALID_STATUS_QUERY_ERROR =
+  'Invalid status query parameter. Must be one of: pending, delivered, dead-letter';
 
-function getOutboxEntries(req, res) {
+function isNotificationOutboxEntryStatus(status: unknown): status is NotificationOutboxEntryStatus {
+  return typeof status === 'string' && VALID_STATUSES.has(status as NotificationOutboxEntryStatus);
+}
+
+function getOutboxEntries(req: Request, res: Response) {
   try {
     const { status } = req.query;
+    let resolvedStatus: NotificationOutboxEntryStatus = 'dead-letter';
 
-    if (status !== undefined && !VALID_STATUSES.has(status as NotificationOutboxEntryStatus)) {
-      sendErrorResponse(
-        res,
-        400,
-        `Invalid status: ${status}. Must be one of: pending, delivered, dead-letter`,
-      );
-      return;
+    if (status !== undefined) {
+      if (!isNotificationOutboxEntryStatus(status)) {
+        sendErrorResponse(res, 400, INVALID_STATUS_QUERY_ERROR);
+        return;
+      }
+      resolvedStatus = status;
     }
-
-    const resolvedStatus: NotificationOutboxEntryStatus =
-      (status as NotificationOutboxEntryStatus | undefined) ?? 'dead-letter';
 
     const pending = findOutboxEntriesByStatus('pending');
     const delivered = findOutboxEntriesByStatus('delivered');
@@ -59,7 +62,7 @@ function getOutboxEntries(req, res) {
   }
 }
 
-function retryOutboxEntry(req, res) {
+function retryOutboxEntry(req: Request<{ id: string }>, res: Response) {
   try {
     const { id } = req.params;
     const requeued = requeueDeadLetterEntry(id);
@@ -73,7 +76,7 @@ function retryOutboxEntry(req, res) {
   }
 }
 
-function deleteOutboxEntry(req, res) {
+function deleteOutboxEntry(req: Request<{ id: string }>, res: Response) {
   try {
     const { id } = req.params;
     const existing = getOutboxEntry(id);
