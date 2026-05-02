@@ -174,6 +174,44 @@ describe('stats/aggregator', () => {
     expect(clearIntervalFn).toHaveBeenCalledTimes(1);
   });
 
+  test('stop() releases subscribed listeners before a later restart', async () => {
+    const { aggregator, fetchSnapshot, tick } = createHarness({
+      containers: [{ id: 'c1', name: 'web', watcher: 'local' }],
+    });
+    fetchSnapshot.mockResolvedValue(makePayload(100, 1000));
+    const listener = vi.fn();
+
+    aggregator.start();
+    aggregator.subscribe(listener);
+    aggregator.stop();
+    aggregator.start();
+
+    await tick();
+
+    expect(listener).not.toHaveBeenCalled();
+    aggregator.stop();
+  });
+
+  test('stop() clears previous payload baselines before a later restart', async () => {
+    const { aggregator, fetchSnapshot, tick } = createHarness({
+      containers: [{ id: 'c1', name: 'web', watcher: 'local' }],
+    });
+
+    fetchSnapshot.mockResolvedValueOnce(makePayload(1000, 10000));
+    aggregator.start();
+    await tick();
+
+    aggregator.stop();
+    aggregator.start();
+
+    fetchSnapshot.mockResolvedValueOnce(makePayload(1100, 11000));
+    await tick();
+
+    expect(aggregator.getCurrent().totalCpuPercent).toBe(0);
+    expect(aggregator.getCurrent().topCpu[0].cpuPercent).toBe(0);
+    aggregator.stop();
+  });
+
   test('stop() prevents further ticks from updating the summary', async () => {
     const { aggregator, fetchSnapshot, tick } = createHarness({
       containers: [{ id: 'c1', name: 'web', watcher: 'local' }],
@@ -740,6 +778,57 @@ describe('stats/aggregator', () => {
 
     // Summary should remain empty since stopped = true
     expect(aggregator.getCurrent().watchedCount).toBe(0);
+  });
+
+  test('stop during in-flight tick does not retain payload baselines after restart', async () => {
+    const containers: FakeContainer[] = [{ id: 'c1', name: 'web', watcher: 'local' }];
+
+    let resolveFetch!: (v: ReturnType<typeof makePayload>) => void;
+    const fetchSnapshot = vi.fn(
+      () =>
+        new Promise<ReturnType<typeof makePayload>>((resolve) => {
+          resolveFetch = resolve;
+        }),
+    );
+
+    let tickCallback: (() => void) | undefined;
+    const setIntervalFn = vi.fn((cb: () => void) => {
+      tickCallback = cb;
+      return 1 as unknown as ReturnType<typeof globalThis.setInterval>;
+    });
+    const clearIntervalFn = vi.fn(() => {
+      tickCallback = undefined;
+    });
+
+    const aggregator = createContainerStatsAggregator({
+      getContainers: () => containers as Container[],
+      getWatchers: () => ({
+        'docker.local': {
+          dockerApi: { getContainer: () => ({ stats: async () => null }) },
+        },
+      }),
+      intervalSeconds: 10,
+      now: () => Date.parse('2026-03-14T12:00:00.000Z'),
+      setIntervalFn: setIntervalFn as unknown as typeof globalThis.setInterval,
+      clearIntervalFn: clearIntervalFn as unknown as typeof globalThis.clearInterval,
+      fetchSnapshot,
+    });
+
+    aggregator.start();
+    tickCallback?.();
+    aggregator.stop();
+
+    resolveFetch(makePayload(1000, 10000));
+    await drainMicrotasks();
+
+    fetchSnapshot.mockResolvedValueOnce(makePayload(1100, 11000));
+    aggregator.start();
+    tickCallback?.();
+    await drainMicrotasks();
+
+    expect(aggregator.getCurrent().totalCpuPercent).toBe(0);
+    expect(aggregator.getCurrent().topCpu[0].cpuPercent).toBe(0);
+    aggregator.stop();
   });
 
   test('uses globalThis.setInterval and clearInterval when not injected', () => {

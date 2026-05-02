@@ -135,6 +135,9 @@ async function runTick(runtime: AggregatorRuntime): Promise<void> {
       if (payload === null) {
         return null;
       }
+      if (runtime.stopped) {
+        return null;
+      }
       const previous = runtime.previousPayloads.get(container.id);
       const snapshot = calculateContainerStatsSnapshot(
         container.id,
@@ -257,12 +260,13 @@ export function createContainerStatsAggregator(
     },
 
     stop() {
-      if (runtime.timer === undefined) {
-        return;
+      if (runtime.timer !== undefined) {
+        runtime.clearIntervalFn(runtime.timer);
+        runtime.timer = undefined;
       }
-      runtime.clearIntervalFn(runtime.timer);
-      runtime.timer = undefined;
       runtime.stopped = true;
+      runtime.listeners.clear();
+      runtime.previousPayloads.clear();
     },
 
     getCurrent() {
