@@ -87,6 +87,24 @@ type PreparedContainerUpdateExecution = {
   operationId: string;
 };
 
+type ContainerUpdateOperation = ReturnType<typeof updateOperationStore.insertOperation>;
+
+type ContainerUpdateOperationStartFields = {
+  containerId: string;
+  containerName: string;
+  triggerName: string;
+  oldContainerId: string;
+  oldName: string;
+  tempName: string;
+  oldContainerWasRunning: boolean;
+  oldContainerStopped: false;
+  fromVersion: string;
+  toVersion: string;
+  targetImage: string;
+  status: 'in-progress';
+  phase: 'pulling';
+};
+
 type ContainerUpdateAttemptState = {
   newContainer: DockerContainerHandle | undefined;
   oldContainerStopped: boolean;
@@ -553,6 +571,37 @@ class ContainerUpdateExecutor {
     }
   }
 
+  private resolveOrCreateOperation(
+    requestedOperationId: string | undefined,
+    operationFields: ContainerUpdateOperationStartFields,
+  ): ContainerUpdateOperation {
+    if (!requestedOperationId) {
+      return updateOperationStore.insertOperation(operationFields);
+    }
+
+    const existingOperation = updateOperationStore.getOperationById(requestedOperationId);
+    if (!existingOperation) {
+      return updateOperationStore.insertOperation({
+        id: requestedOperationId,
+        ...operationFields,
+      });
+    }
+
+    if (existingOperation.status === 'queued' || existingOperation.status === 'in-progress') {
+      return updateOperationStore.updateOperation(requestedOperationId, {
+        ...operationFields,
+        lastError: undefined,
+        rollbackReason: undefined,
+        newContainerId: undefined,
+        completedAt: undefined,
+      })!;
+    }
+
+    return updateOperationStore.reopenTerminalOperation(requestedOperationId, {
+      ...operationFields,
+    })!;
+  }
+
   private async prepareContainerUpdateExecution(
     context: ContainerUpdateContext,
     container: ContainerForUpdate,
@@ -575,7 +624,7 @@ class ContainerUpdateExecutor {
       ? getHealthGateTimeoutMs(rollbackConfig)
       : undefined;
 
-    const operationFields = {
+    const operationFields: ContainerUpdateOperationStartFields = {
       containerId: container.id,
       containerName: container.name,
       triggerName: this.getTriggerId(),
@@ -594,25 +643,7 @@ class ContainerUpdateExecutor {
     // If an operation was pre-created by the API handler, always reuse that row
     // so the original operationId stays stable even if queued TTL expiry
     // already transitioned it to a terminal state before execution begins.
-    const existingOperation = requestedOperationId
-      ? updateOperationStore.getOperationById(requestedOperationId)
-      : undefined;
-    const operation = existingOperation
-      ? existingOperation.status === 'queued' || existingOperation.status === 'in-progress'
-        ? updateOperationStore.updateOperation(requestedOperationId!, {
-            ...operationFields,
-            lastError: undefined,
-            rollbackReason: undefined,
-            newContainerId: undefined,
-            completedAt: undefined,
-          })!
-        : updateOperationStore.reopenTerminalOperation(requestedOperationId!, {
-            ...operationFields,
-          })!
-      : updateOperationStore.insertOperation({
-          ...(requestedOperationId ? { id: requestedOperationId } : {}),
-          ...operationFields,
-        });
+    const operation = this.resolveOrCreateOperation(requestedOperationId, operationFields);
 
     try {
       await this.pullImage(dockerApi, auth, newImage, logContainer);
