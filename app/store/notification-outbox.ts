@@ -12,9 +12,14 @@ interface OutboxCollectionDocument {
   data: NotificationOutboxEntry;
 }
 
+type OutboxCollectionQuery = {
+  'data.status'?: NotificationOutboxEntryStatus | { $ne: NotificationOutboxEntryStatus };
+  'data.nextAttemptAt'?: string | { $lte: string };
+};
+
 interface OutboxCollection {
   insert(document: OutboxCollectionDocument): void;
-  find(query?: Record<string, string>): OutboxCollectionDocument[];
+  find(query?: OutboxCollectionQuery): OutboxCollectionDocument[];
   findOne(query: { 'data.id': string }): OutboxCollectionDocument | null;
   remove(document: OutboxCollectionDocument): void;
 }
@@ -80,9 +85,8 @@ export function findReadyForDelivery(
     return [];
   }
   return outboxCollection
-    .find({ 'data.status': 'pending' })
+    .find({ 'data.status': 'pending', 'data.nextAttemptAt': { $lte: nowIso } })
     .map((doc) => doc.data)
-    .filter((entry) => entry.nextAttemptAt <= nowIso)
     .sort((a, b) => a.nextAttemptAt.localeCompare(b.nextAttemptAt));
 }
 
@@ -189,12 +193,9 @@ export function purgeTerminalOutboxEntriesOlderThan(cutoffIso: string): number {
   if (!outboxCollection) {
     return 0;
   }
-  const all = outboxCollection.find();
-  const toRemove = all.filter((doc) => {
+  const terminalEntries = outboxCollection.find({ 'data.status': { $ne: 'pending' } });
+  const toRemove = terminalEntries.filter((doc) => {
     const entry = doc.data;
-    if (entry.status === 'pending') {
-      return false;
-    }
     const timestamp = entry.deliveredAt ?? entry.failedAt;
     return Boolean(timestamp) && timestamp! < cutoffIso;
   });

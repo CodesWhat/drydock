@@ -22,8 +22,24 @@ function createDb() {
       .split('.')
       .reduce((acc: unknown, key) => (acc as Record<string, unknown>)?.[key], obj);
   }
+  function matchesQueryValue(actual: unknown, expected: unknown): boolean {
+    if (expected && typeof expected === 'object' && !Array.isArray(expected) && '$ne' in expected) {
+      return actual !== (expected as { $ne: unknown }).$ne;
+    }
+    if (
+      expected &&
+      typeof expected === 'object' &&
+      !Array.isArray(expected) &&
+      '$lte' in expected
+    ) {
+      return typeof actual === 'string' && actual <= (expected as { $lte: string }).$lte;
+    }
+    return actual === expected;
+  }
   function matchesQuery(doc: unknown, query: Record<string, unknown> = {}): boolean {
-    return Object.entries(query).every(([key, value]) => getByPath(doc, key) === value);
+    return Object.entries(query).every(([key, value]) =>
+      matchesQueryValue(getByPath(doc, key), value),
+    );
   }
   const collections: Record<string, ReturnType<typeof makeCollection>> = {};
   function makeCollection() {
@@ -191,6 +207,27 @@ describe('getOutboxEntry', () => {
 describe('findReadyForDelivery', () => {
   beforeEach(() => {
     createCollections(createDb() as never);
+  });
+
+  test('queries only pending entries due at or before nowIso', () => {
+    _resetOutboxStoreForTests();
+    const find = vi.fn(() => []);
+    createCollections({
+      getCollection: () => null,
+      addCollection: () => ({
+        insert: vi.fn(),
+        find,
+        findOne: vi.fn(),
+        remove: vi.fn(),
+      }),
+    } as never);
+
+    findReadyForDelivery('2026-05-02T12:00:00.000Z');
+
+    expect(find).toHaveBeenCalledWith({
+      'data.status': 'pending',
+      'data.nextAttemptAt': { $lte: '2026-05-02T12:00:00.000Z' },
+    });
   });
 
   test('returns pending entries whose nextAttemptAt <= nowIso', () => {
@@ -395,6 +432,24 @@ describe('removeOutboxEntry', () => {
 describe('purgeTerminalOutboxEntriesOlderThan', () => {
   beforeEach(() => {
     createCollections(createDb() as never);
+  });
+
+  test('queries only terminal outbox entries before applying the cutoff filter', () => {
+    _resetOutboxStoreForTests();
+    const find = vi.fn(() => []);
+    createCollections({
+      getCollection: () => null,
+      addCollection: () => ({
+        insert: vi.fn(),
+        find,
+        findOne: vi.fn(),
+        remove: vi.fn(),
+      }),
+    } as never);
+
+    purgeTerminalOutboxEntriesOlderThan('2099-01-01T00:00:00.000Z');
+
+    expect(find).toHaveBeenCalledWith({ 'data.status': { $ne: 'pending' } });
   });
 
   test('removes delivered entries older than cutoff', () => {
