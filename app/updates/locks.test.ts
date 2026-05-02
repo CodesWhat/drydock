@@ -196,6 +196,17 @@ describe('LockManager.withLocks', () => {
     expect(lm.held()).toEqual([]);
   });
 
+  test('ignores stale waiter decrements after the key is already clear', () => {
+    const lm = new LockManager();
+    const decrementWaiters = (
+      lm as unknown as { decrementWaiters: (key: string) => void }
+    ).decrementWaiters.bind(lm);
+
+    decrementWaiters('k1');
+
+    expect(lm.pending()).toEqual([]);
+  });
+
   test('held() snapshot is sorted', async () => {
     const lm = new LockManager();
     let snapshot: string[] = [];

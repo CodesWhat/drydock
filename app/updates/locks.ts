@@ -136,7 +136,7 @@ export class LockManager {
   }
 
   private decrementWaiters(key: string): void {
-    const next = (this.waitersByKey.get(key) as number) - 1;
+    const next = (this.waitersByKey.get(key) ?? 0) - 1;
     if (next <= 0) {
       this.waitersByKey.delete(key);
     } else {
