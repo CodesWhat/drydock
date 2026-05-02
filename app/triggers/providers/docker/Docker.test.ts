@@ -1498,7 +1498,7 @@ test('persistSecurityState should warn when container store update fails', async
 
   await docker.persistSecurityState(
     createTriggerContainer(),
-    { scan: createSecurityScanResult() },
+    { slot: 'current', scan: createSecurityScanResult() },
     logContainer,
   );
 
@@ -1519,7 +1519,7 @@ test('persistSecurityState should merge with existing security state from store'
 
   await docker.persistSecurityState(
     createTriggerContainer(),
-    { signature: createSignatureVerificationResult() },
+    { slot: 'current', signature: createSignatureVerificationResult() },
     logContainer,
   );
 

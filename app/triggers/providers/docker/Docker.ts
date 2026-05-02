@@ -38,7 +38,7 @@ import { startHealthMonitor } from './HealthMonitor.js';
 import HookExecutor from './HookExecutor.js';
 import RegistryResolver from './RegistryResolver.js';
 import RollbackMonitor from './RollbackMonitor.js';
-import SecurityGate from './SecurityGate.js';
+import SecurityGate, { type SecurityStatePatch } from './SecurityGate.js';
 import SelfUpdateOrchestrator from './SelfUpdateOrchestrator.js';
 import {
   markSelfUpdateOperationFailed as markSelfUpdateOperationFailedFromStore,
@@ -1240,7 +1240,7 @@ class Docker<
     markSelfUpdateOperationFailedFromStore(operationId, lastError);
   }
 
-  async persistSecurityState(container, securityPatch, logContainer) {
+  async persistSecurityState(container, securityPatch: SecurityStatePatch, logContainer) {
     await this.getSecurityGate().persistSecurityState(container, securityPatch, logContainer);
   }
 

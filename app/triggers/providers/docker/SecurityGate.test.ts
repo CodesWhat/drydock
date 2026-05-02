@@ -241,6 +241,7 @@ describe('SecurityGate', () => {
     await gate.persistSecurityState(
       createContainer(),
       {
+        slot: 'current',
         scan: {
           status: 'passed',
         },
@@ -280,6 +281,7 @@ describe('SecurityGate', () => {
       gate.persistSecurityState(
         createContainer(),
         {
+          slot: 'current',
           scan: {
             status: 'error',
           },
@@ -304,6 +306,7 @@ describe('SecurityGate', () => {
       gate.persistSecurityState(
         createContainer(),
         {
+          slot: 'current',
           scan: {
             status: 'error',
           },
@@ -341,6 +344,7 @@ describe('SecurityGate', () => {
         name: 'web',
       },
       {
+        slot: 'current',
         signature: {
           status: 'verified',
         },
@@ -810,9 +814,8 @@ describe('SecurityGate', () => {
 
     await gate.persistSecurityState(
       createContainer(),
-      { scan: { status: 'passed' } },
+      { slot: 'update', scan: { status: 'passed' } },
       log,
-      'update',
     );
 
     expect(updateContainer).toHaveBeenCalledWith(
@@ -828,22 +831,47 @@ describe('SecurityGate', () => {
     expect(securityArg).not.toHaveProperty('scan');
   });
 
-  test('persistSecurityState should preserve unmapped keys when slot is update', async () => {
+  test('persistSecurityState should use an explicit patch slot discriminator', async () => {
     const { gate, updateContainer } = createGateHarness();
 
     await gate.persistSecurityState(
       createContainer(),
       {
+        slot: 'update',
         scan: { status: 'passed' },
-        customState: { source: 'manual' },
       },
       createLog(),
-      'update',
     );
 
     const securityArg = updateContainer.mock.calls[0][0].security;
-    expect(securityArg.updateScan).toEqual({ status: 'passed' });
-    expect(securityArg.customState).toEqual({ source: 'manual' });
+    expect(securityArg).toEqual(
+      expect.objectContaining({
+        persisted: true,
+        updateScan: { status: 'passed' },
+      }),
+    );
+    expect(securityArg).not.toHaveProperty('scan');
+    expect(securityArg).not.toHaveProperty('slot');
+  });
+
+  test('persistSecurityState should map signature and sbom when slot is update', async () => {
+    const { gate, updateContainer } = createGateHarness();
+
+    await gate.persistSecurityState(
+      createContainer(),
+      {
+        slot: 'update',
+        signature: { status: 'verified' },
+        sbom: { status: 'generated' },
+      },
+      createLog(),
+    );
+
+    const securityArg = updateContainer.mock.calls[0][0].security;
+    expect(securityArg.updateSignature).toEqual({ status: 'verified' });
+    expect(securityArg.updateSbom).toEqual({ status: 'generated' });
+    expect(securityArg).not.toHaveProperty('signature');
+    expect(securityArg).not.toHaveProperty('sbom');
   });
 
   test('persistSecurityState with update slot preserves existing scan field', async () => {
@@ -872,9 +900,8 @@ describe('SecurityGate', () => {
 
     await gate.persistSecurityState(
       createContainer(),
-      { scan: { status: 'blocked' } },
+      { slot: 'update', scan: { status: 'blocked' } },
       createLog(),
-      'update',
     );
 
     const securityArg = updateContainer.mock.calls[0][0].security;

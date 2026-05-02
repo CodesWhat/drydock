@@ -33,7 +33,13 @@ function isSecurityFailureCode(code: string): code is SecurityFailureCode {
   return SECURITY_FAILURE_AUDIT_CODES.includes(code as SecurityFailureCode);
 }
 
-type SecurityStatePatch = Partial<PersistedSecurityState> & Record<string, unknown>;
+type SecurityStatePatchFields = Partial<
+  Pick<PersistedSecurityState, 'scan' | 'signature' | 'sbom'>
+>;
+
+export type SecurityStatePatch =
+  | ({ slot: 'current' } & SecurityStatePatchFields)
+  | ({ slot: 'update' } & SecurityStatePatchFields);
 
 type SecurityGateLogger = {
   info: (message: string) => void;
@@ -139,6 +145,35 @@ const REQUIRED_SECURITY_GATE_DEPENDENCY_KEYS = [
   'fullName',
 ] as const;
 
+function mapSecurityStatePatch(securityPatch: SecurityStatePatch): Partial<PersistedSecurityState> {
+  const mappedPatch: Partial<PersistedSecurityState> = {};
+  const isUpdateSlot = securityPatch.slot === 'update';
+
+  if ('scan' in securityPatch) {
+    if (isUpdateSlot) {
+      mappedPatch.updateScan = securityPatch.scan;
+    } else {
+      mappedPatch.scan = securityPatch.scan;
+    }
+  }
+  if ('signature' in securityPatch) {
+    if (isUpdateSlot) {
+      mappedPatch.updateSignature = securityPatch.signature;
+    } else {
+      mappedPatch.signature = securityPatch.signature;
+    }
+  }
+  if ('sbom' in securityPatch) {
+    if (isUpdateSlot) {
+      mappedPatch.updateSbom = securityPatch.sbom;
+    } else {
+      mappedPatch.sbom = securityPatch.sbom;
+    }
+  }
+
+  return mappedPatch;
+}
+
 class SecurityGate {
   securityConfig: Pick<SecurityGateDependencies, 'getSecurityConfiguration'>;
 
@@ -220,20 +255,9 @@ class SecurityGate {
     container: SecurityContainer,
     securityPatch: SecurityStatePatch,
     logContainer: SecurityGateLogger,
-    slot: 'current' | 'update' = 'current',
   ): Promise<void> {
     try {
-      const mappedPatch: SecurityStatePatch =
-        slot === 'update'
-          ? Object.fromEntries(
-              Object.entries(securityPatch).map(([key, value]) => {
-                if (key === 'scan') return ['updateScan', value];
-                if (key === 'signature') return ['updateSignature', value];
-                if (key === 'sbom') return ['updateSbom', value];
-                return [key, value];
-              }),
-            )
-          : securityPatch;
+      const mappedPatch = mapSecurityStatePatch(securityPatch);
       const containerCurrent = this.stateStore.getContainer(container.id);
       const containerWithSecurity = {
         ...(containerCurrent || container),
@@ -297,9 +321,8 @@ class SecurityGate {
     });
     await this.persistSecurityState(
       container,
-      { signature: signatureResult },
+      { slot: 'update', signature: signatureResult },
       logContainer,
-      'update',
     );
 
     if (signatureResult.status === 'verified') {
@@ -360,7 +383,11 @@ class SecurityGate {
         if (fromCache) {
           logContainer.info('Using cached scan result');
         }
-        await this.persistSecurityState(container, { scan: scanResult }, logContainer, 'update');
+        await this.persistSecurityState(
+          container,
+          { slot: 'update', scan: scanResult },
+          logContainer,
+        );
         return scanResult;
       }
     }
@@ -369,7 +396,7 @@ class SecurityGate {
       image: context.newImage,
       auth: context.auth,
     });
-    await this.persistSecurityState(container, { scan: scanResult }, logContainer, 'update');
+    await this.persistSecurityState(container, { slot: 'update', scan: scanResult }, logContainer);
     return scanResult;
   }
 
@@ -389,7 +416,7 @@ class SecurityGate {
       auth: context.auth,
       formats: securityConfiguration.sbom.formats,
     });
-    await this.persistSecurityState(container, { sbom: sbomResult }, logContainer, 'update');
+    await this.persistSecurityState(container, { slot: 'update', sbom: sbomResult }, logContainer);
 
     if (sbomResult.status === 'error') {
       this.telemetry.recordSecurityAudit(
