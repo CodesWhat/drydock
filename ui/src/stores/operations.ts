@@ -72,6 +72,21 @@ function isActiveOperation(operation: UiUpdateOperation | undefined): boolean {
   return Boolean(operation && ACTIVE_STATUSES.has(operation.status));
 }
 
+function getOperationContainerIds(operation: UiUpdateOperation | undefined): string[] {
+  if (!operation) {
+    return [];
+  }
+
+  const ids = new Set<string>();
+  if (operation.containerId) {
+    ids.add(operation.containerId);
+  }
+  if (operation.newContainerId) {
+    ids.add(operation.newContainerId);
+  }
+  return [...ids];
+}
+
 function normalizeOperationChangedPayload(payload: unknown): OperationChangedPayload | undefined {
   if (!isObject(payload)) {
     return undefined;
@@ -153,7 +168,7 @@ function normalizeBatchCompletedPayload(payload: unknown): BatchUpdateCompletedP
     timestamp: getString(payload.timestamp) || new Date().toISOString(),
     items: payload.items
       .filter(isObject)
-      .map((item) => ({
+      .map((item): BatchUpdateCompletedPayload['items'][number] => ({
         operationId: getString(item.operationId) || '',
         containerId: getString(item.containerId) || '',
         containerName: getString(item.containerName) || '',
@@ -165,45 +180,86 @@ function normalizeBatchCompletedPayload(payload: unknown): BatchUpdateCompletedP
 
 export const useOperationStore = defineStore('operations', () => {
   const byId = ref<Record<string, UiUpdateOperation>>({});
+  const byContainerId = ref(new Map<string, string>());
   const batchSummaries = ref<Record<string, UiBatchProgress>>({});
   const displayBatches = ref(new Map<string, FrozenBatch>());
   let unsubscribeEventStream: Array<() => void> = [];
+
+  function replaceContainerIndex(
+    previous: UiUpdateOperation | undefined,
+    next: UiUpdateOperation | undefined,
+  ): void {
+    const nextIndex = new Map(byContainerId.value);
+
+    for (const containerId of getOperationContainerIds(previous)) {
+      if (nextIndex.get(containerId) === previous?.operationId) {
+        nextIndex.delete(containerId);
+      }
+    }
+
+    if (isActiveOperation(next)) {
+      for (const containerId of getOperationContainerIds(next)) {
+        nextIndex.set(containerId, next.operationId);
+      }
+    }
+
+    byContainerId.value = nextIndex;
+  }
 
   function upsertOperation(operation: UiUpdateOperation): void {
     const existing = byId.value[operation.operationId];
     if (!existing) {
       // First insert — no guard needed.
       byId.value = { ...byId.value, [operation.operationId]: operation };
+      replaceContainerIndex(undefined, operation);
       return;
     }
 
     const existingRank = statusRank(existing.status);
     const incomingRank = statusRank(operation.status);
+    let nextOperation: UiUpdateOperation;
 
     if (incomingRank < existingRank) {
       // Stale event: drop status and phase but allow other metadata to merge through.
       const { status: _s, phase: _p, ...rest } = operation;
+      nextOperation = { ...existing, ...rest };
       byId.value = {
         ...byId.value,
-        [operation.operationId]: { ...existing, ...rest },
+        [operation.operationId]: nextOperation,
       };
+      replaceContainerIndex(existing, nextOperation);
       return;
     }
 
     if (existingRank === 3 && incomingRank === 3 && operation.status !== existing.status) {
       // Two different terminal statuses — preserve the first; only allow non-status metadata.
       const { status: _s, phase: _p, ...rest } = operation;
+      nextOperation = { ...existing, ...rest };
       byId.value = {
         ...byId.value,
-        [operation.operationId]: { ...existing, ...rest },
+        [operation.operationId]: nextOperation,
       };
+      replaceContainerIndex(existing, nextOperation);
       return;
     }
 
+    nextOperation = { ...existing, ...operation };
     byId.value = {
       ...byId.value,
-      [operation.operationId]: { ...existing, ...operation },
+      [operation.operationId]: nextOperation,
     };
+    replaceContainerIndex(existing, nextOperation);
+  }
+
+  function removeOperation(operationId: string): void {
+    const existing = byId.value[operationId];
+    if (!existing) {
+      return;
+    }
+
+    const { [operationId]: _removed, ...nextById } = byId.value;
+    byId.value = nextById;
+    replaceContainerIndex(existing, undefined);
   }
 
   function applyOperationChanged(payload: OperationChangedPayload): void {
@@ -272,11 +328,8 @@ export const useOperationStore = defineStore('operations', () => {
   }
 
   function getOperationByContainerId(containerId: string): UiUpdateOperation | undefined {
-    return Object.values(byId.value).find(
-      (operation) =>
-        isActiveOperation(operation) &&
-        (operation.containerId === containerId || operation.newContainerId === containerId),
-    );
+    const operationId = byContainerId.value.get(containerId);
+    return operationId ? byId.value[operationId] : undefined;
   }
 
   function getBatchProgress(batchId: string): UiBatchProgress | undefined {
@@ -405,6 +458,7 @@ export const useOperationStore = defineStore('operations', () => {
     applyUpdateApplied,
     applyUpdateFailed,
     applyBatchCompleted,
+    removeOperation,
     captureDisplayBatch,
     clearDisplayBatch,
     getDisplayBatch,

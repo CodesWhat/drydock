@@ -1,5 +1,5 @@
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useEventStreamStore } from '@/stores/eventStream';
 import { useOperationStore } from '@/stores/operations';
 
@@ -73,6 +73,46 @@ describe('useOperationStore', () => {
       failed: 0,
       active: 0,
     });
+  });
+
+  it('looks up active operations by container id without scanning all operations', () => {
+    const operations = useOperationStore();
+    operations.applyOperationChanged({
+      operationId: 'op-indexed',
+      containerId: 'c-indexed',
+      containerName: 'web',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+
+    const valuesSpy = vi.spyOn(Object, 'values');
+    try {
+      const result = operations.getOperationByContainerId('c-indexed');
+      expect(valuesSpy).not.toHaveBeenCalled();
+      expect(result?.operationId).toBe('op-indexed');
+    } finally {
+      valuesSpy.mockRestore();
+    }
+  });
+
+  it('removes operations from the id and container indexes', () => {
+    const operations = useOperationStore();
+    operations.applyOperationChanged({
+      operationId: 'op-remove',
+      containerId: 'c-old',
+      newContainerId: 'c-new',
+      containerName: 'web',
+      status: 'in-progress',
+    });
+
+    expect(operations.getOperationByContainerId('c-old')?.operationId).toBe('op-remove');
+    expect(operations.getOperationByContainerId('c-new')?.operationId).toBe('op-remove');
+
+    operations.removeOperation('op-remove');
+
+    expect(operations.byId['op-remove']).toBeUndefined();
+    expect(operations.getOperationByContainerId('c-old')).toBeUndefined();
+    expect(operations.getOperationByContainerId('c-new')).toBeUndefined();
   });
 
   it('batch completion summaries replace derived batch progress', () => {
