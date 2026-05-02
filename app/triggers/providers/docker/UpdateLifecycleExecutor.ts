@@ -16,15 +16,51 @@ type UpdateLifecycleRootLogger = {
 };
 
 type UpdateLifecycleContainer = {
-  id?: unknown;
+  id?: string;
   name: string;
-  [key: string]: unknown;
+  watcher?: string;
+  labels?: Record<string, string>;
+  image?: {
+    registry?: {
+      name?: string;
+    };
+    tag?: {
+      value?: string;
+    };
+    digest?: {
+      repo?: string;
+    };
+  };
+  result?: {
+    digest?: unknown;
+  };
+  updateKind?: {
+    kind?: string;
+    localValue?: string | null;
+    remoteValue?: string | null;
+  };
 };
 
 type UpdateLifecycleContext = {
   dockerApi: unknown;
   registry: unknown;
-  [key: string]: unknown;
+  auth?: unknown;
+  newImage?: string;
+  operationId?: string;
+  currentContainer?: unknown;
+  currentContainerSpec?: {
+    Id?: string;
+    Name?: string;
+    State?: {
+      Running?: boolean;
+    };
+    Config?: {
+      Labels?: Record<string, string>;
+    };
+    HostConfig?: {
+      Binds?: string[];
+    };
+  };
 };
 
 type UpdateLifecycleExecutorCallbacks = {
