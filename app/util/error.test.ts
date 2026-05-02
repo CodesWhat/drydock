@@ -17,6 +17,10 @@ describe('getErrorMessage', () => {
     expect(getErrorMessage('network timeout')).toBe('network timeout');
   });
 
+  test('stringifies non-object thrown values', () => {
+    expect(getErrorMessage(Symbol('create failed'))).toBe('Symbol(create failed)');
+  });
+
   test('falls back to unknown error by default for empty or missing messages', () => {
     expect(getErrorMessage(undefined)).toBe('unknown error');
     expect(getErrorMessage({ message: '' })).toBe('unknown error');
