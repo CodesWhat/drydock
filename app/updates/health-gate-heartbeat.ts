@@ -12,6 +12,8 @@
  * is not on the critical path.
  */
 
+import { parseEnvNonNegativeInteger } from '../util/parse.js';
+
 const DEFAULT_HEALTH_GATE_HEARTBEAT_MS = 10_000;
 const MIN_HEALTH_GATE_HEARTBEAT_MS = 1_000;
 
@@ -25,25 +27,13 @@ const MIN_HEALTH_GATE_HEARTBEAT_MS = 1_000;
  * startup rather than silently ignoring operator intent.
  */
 export function parseHealthGateHeartbeatMs(raw: string | undefined): number | null | undefined {
-  if (raw === undefined || raw.trim() === '') {
+  const parsed = parseEnvNonNegativeInteger(raw, 'DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS');
+  if (parsed === undefined) {
     return undefined;
   }
-  if (raw.trim() === '0') {
+  if (parsed === 0) {
     return null;
   }
-  const trimmed = raw.trim();
-  if (!/^\d+$/.test(trimmed)) {
-    throw new Error(
-      `DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS must be a non-negative integer (got "${raw}")`,
-    );
-  }
-  const parsed = Number.parseInt(trimmed, 10);
-  if (!Number.isSafeInteger(parsed) || parsed < 0) {
-    throw new Error(
-      `DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS must be a non-negative integer (got "${raw}")`,
-    );
-  }
-  // parsed === 0 is already handled by the "0" check above, so parsed >= 1 here.
   if (parsed < MIN_HEALTH_GATE_HEARTBEAT_MS) {
     throw new Error(
       `DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS must be at least ${MIN_HEALTH_GATE_HEARTBEAT_MS} (got "${raw}")`,

@@ -1,3 +1,4 @@
+import { parseEnvNonNegativeInteger } from '../util/parse.js';
 import { LockManager, Semaphore } from './locks.js';
 
 export interface ContainerLockReference {
@@ -15,18 +16,10 @@ export interface ContainerLockReference {
  * operator intent.
  */
 export function parseMaxConcurrent(raw: string | undefined): number | null {
-  if (raw === undefined || raw.trim() === '' || raw.trim() === '0') {
+  const parsed = parseEnvNonNegativeInteger(raw, 'DD_UPDATE_MAX_CONCURRENT');
+  if (parsed === undefined || parsed === 0) {
     return null;
   }
-  const trimmed = raw.trim();
-  if (!/^\d+$/.test(trimmed)) {
-    throw new Error(`DD_UPDATE_MAX_CONCURRENT must be a non-negative integer (got "${raw}")`);
-  }
-  const parsed = Number.parseInt(trimmed, 10);
-  if (!Number.isSafeInteger(parsed) || parsed < 0) {
-    throw new Error(`DD_UPDATE_MAX_CONCURRENT must be a non-negative integer (got "${raw}")`);
-  }
-  // parsed === 0 covered by the trim check above, so parsed >= 1 here.
   return parsed;
 }
 
