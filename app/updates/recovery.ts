@@ -57,7 +57,7 @@ export function recoverQueuedOperationsOnStartup(): RecoveryResult {
       updateOperationStore.markOperationTerminal(operation.id, {
         status: 'failed',
         phase: 'failed',
-        lastError: `Recovery abandoned: container ${operation.containerId ?? operation.containerName} not found in store after restart.`,
+        lastError: `Recovery abandoned: container ${operation.containerId || operation.containerName} not found in store after restart.`,
       });
       abandoned++;
       continue;

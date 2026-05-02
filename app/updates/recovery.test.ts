@@ -138,6 +138,31 @@ describe('recoverQueuedOperationsOnStartup', () => {
     );
   });
 
+  test('marks an operation with an empty-string containerId failed without resolving a container', () => {
+    mockListActiveOperations.mockReturnValue([
+      {
+        id: 'op-empty-id',
+        status: 'queued',
+        containerId: '',
+        containerName: 'web',
+      },
+    ]);
+
+    const result = recoverQueuedOperationsOnStartup();
+
+    expect(result).toEqual({ resumed: 0, abandoned: 1 });
+    expect(mockGetContainer).not.toHaveBeenCalled();
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-empty-id',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'failed',
+        lastError: expect.stringContaining('web'),
+      }),
+    );
+    expect(mockDispatchAccepted).not.toHaveBeenCalled();
+  });
+
   test('marks an operation failed when no compatible trigger is found', () => {
     const container = { id: 'c-1', name: 'web', watcher: 'local' };
     mockListActiveOperations.mockReturnValue([
@@ -183,6 +208,35 @@ describe('recoverQueuedOperationsOnStartup', () => {
     expect(result).toEqual({ resumed: 1, abandoned: 0 });
     expect(mockDispatchAccepted).toHaveBeenCalledWith([
       { container, operationId: 'op-go', trigger },
+    ]);
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+  });
+
+  test('dispatches a mid-health-gate crash operation after startup reconciliation reset it to queued', () => {
+    const container = { id: 'c-health', name: 'web', watcher: 'local' };
+    const trigger = { type: 'docker', trigger: vi.fn() };
+    mockListActiveOperations.mockReturnValue([
+      {
+        id: 'op-health-gate-crash',
+        status: 'queued',
+        phase: 'queued',
+        containerId: 'c-health',
+        containerName: 'web',
+        oldContainerId: 'old-c-health',
+        oldName: 'web',
+        tempName: 'web-drydock-update',
+        newContainerId: 'new-c-health',
+        recoveredAt: '2026-02-23T02:00:00.000Z',
+      },
+    ]);
+    mockGetContainer.mockReturnValue(container);
+    mockFindDockerTriggerForContainer.mockReturnValue(trigger);
+
+    const result = recoverQueuedOperationsOnStartup();
+
+    expect(result).toEqual({ resumed: 1, abandoned: 0 });
+    expect(mockDispatchAccepted).toHaveBeenCalledWith([
+      { container, operationId: 'op-health-gate-crash', trigger },
     ]);
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
   });
