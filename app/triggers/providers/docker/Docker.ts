@@ -28,6 +28,7 @@ import * as storeContainer from '../../../store/container.js';
 import { cacheSecurityState } from '../../../store/container.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { buildContainerLockKey, withContainerUpdateLocks } from '../../../updates/update-locks.js';
+import { getErrorMessage } from '../../../util/error.js';
 import { runHook } from '../../hooks/HookRunner.js';
 import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 import ContainerRuntimeConfigManager from './ContainerRuntimeConfigManager.js';
@@ -113,13 +114,6 @@ function shouldKeepImage(imageNormalized, container) {
 
 function getContainerFullNameForLifecycle(container: ContainerFullNameReference): string {
   return `${container.watcher}_${container.name}`;
-}
-
-function getErrorMessage(error: unknown): string {
-  if (!error || typeof error !== 'object' || !('message' in error)) {
-    return String(error);
-  }
-  return String((error as { message?: unknown }).message);
 }
 
 function getErrorNumberField(error: unknown, field: 'statusCode' | 'status'): number | undefined {

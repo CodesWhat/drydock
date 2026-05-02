@@ -1,6 +1,7 @@
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { OperationCancelledError } from '../../../store/update-operation.js';
 import { startHealthGateHeartbeat } from '../../../updates/health-gate-heartbeat.js';
+import { getErrorMessage } from '../../../util/error.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
 import { getRequestedOperationId } from './update-runtime-context.js';
 
@@ -225,25 +226,6 @@ const REQUIRED_CONTAINER_UPDATE_EXECUTOR_DEPENDENCY_KEYS = [
   'hasHealthcheckConfigured',
   'waitForContainerHealthy',
 ] as const;
-
-type ErrorWithMessage = {
-  message?: unknown;
-};
-
-function hasMessage(error: unknown): error is ErrorWithMessage {
-  return (
-    (typeof error === 'object' || typeof error === 'function') &&
-    error !== null &&
-    'message' in error
-  );
-}
-
-function getErrorMessage(error: unknown): string {
-  if (hasMessage(error)) {
-    return String(error.message ?? error);
-  }
-  return String(error);
-}
 
 const DEFERRED_RECONCILIATION_DELAY_MS = 10_000;
 

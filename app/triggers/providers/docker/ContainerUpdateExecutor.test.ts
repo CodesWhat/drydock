@@ -941,7 +941,7 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
-  test('execute stringifies object errors when message field is undefined', async () => {
+  test('execute uses the shared fallback for object errors when message field is undefined', async () => {
     const context = createContext();
     const createContainerError = { message: undefined, detail: 'create failed' };
     const executor = createExecutor({
@@ -956,7 +956,7 @@ describe('ContainerUpdateExecutor', () => {
     expect(mockUpdateOperation).toHaveBeenCalledWith(
       'op-1',
       expect.objectContaining({
-        lastError: '[object Object]',
+        lastError: 'unknown error',
       }),
     );
   });
