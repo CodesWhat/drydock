@@ -49,8 +49,9 @@ interface ResolvedOptions {
  * entry to dead-letter via the store.
  */
 export class OutboxWorker {
+  private static readonly inflight = new Set<string>();
+
   private timer: ReturnType<typeof setInterval> | undefined;
-  private readonly inflight = new Set<string>();
   private drainsSincePurge = 0;
   private readonly options: ResolvedOptions;
 
@@ -92,20 +93,24 @@ export class OutboxWorker {
   async drain(): Promise<void> {
     const nowIso = this.options.nowFn().toISOString();
     const ready = findReadyForDelivery(nowIso);
+    const dispatches: Promise<void>[] = [];
     for (const entry of ready) {
-      if (this.inflight.has(entry.id)) {
+      if (OutboxWorker.inflight.has(entry.id)) {
         continue;
       }
-      this.inflight.add(entry.id);
-      void this.dispatch(entry).finally(() => {
-        this.inflight.delete(entry.id);
-      });
+      OutboxWorker.inflight.add(entry.id);
+      dispatches.push(
+        this.dispatch(entry).finally(() => {
+          OutboxWorker.inflight.delete(entry.id);
+        }),
+      );
     }
     this.drainsSincePurge += 1;
     if (this.drainsSincePurge >= this.options.purgeEveryDrains) {
       this.drainsSincePurge = 0;
       this.purgeTerminal();
     }
+    await Promise.all(dispatches);
   }
 
   private async dispatch(entry: NotificationOutboxEntry): Promise<void> {

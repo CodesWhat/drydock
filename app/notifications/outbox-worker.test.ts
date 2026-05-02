@@ -41,13 +41,6 @@ import {
   stopOutboxWorker,
 } from './outbox-worker.js';
 
-/** Flush pending microtasks (fire-and-forget promise chains need a few turns). */
-async function flushAsync() {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
-}
-
 function makeEntry(overrides: Partial<NotificationOutboxEntry> = {}): NotificationOutboxEntry {
   return {
     id: 'entry-1',
@@ -109,16 +102,14 @@ describe('OutboxWorker', () => {
   describe('start()', () => {
     test('sets isRunning() to true and drains immediately', async () => {
       const deliver = vi.fn().mockResolvedValue(undefined);
-      const entry = makeEntry();
-      mockFindReadyForDelivery.mockReturnValue([entry]);
+      mockFindReadyForDelivery.mockReturnValue([]);
 
       const w = new OutboxWorker({ deliver, intervalMs: 10_000 });
       w.start();
 
       expect(w.isRunning()).toBe(true);
-      // Drain was called (deliver scheduled via void — flush microtasks)
-      await flushAsync();
       expect(mockFindReadyForDelivery).toHaveBeenCalledTimes(1);
+      expect(deliver).not.toHaveBeenCalled();
     });
 
     test('interval fires drain repeatedly', async () => {
@@ -127,10 +118,8 @@ describe('OutboxWorker', () => {
 
       const w = new OutboxWorker({ deliver, intervalMs: 1_000 });
       w.start();
-      await flushAsync();
 
       vi.advanceTimersByTime(3_000);
-      await flushAsync();
 
       // 1 immediate + 3 interval ticks
       expect(mockFindReadyForDelivery.mock.calls.length).toBeGreaterThanOrEqual(4);
@@ -145,10 +134,8 @@ describe('OutboxWorker', () => {
       const w = new OutboxWorker({ deliver, intervalMs: 1_000 });
       w.start();
       w.start(); // second call should be a no-op
-      await flushAsync();
 
       vi.advanceTimersByTime(1_000);
-      await flushAsync();
 
       // Only 1 immediate drain + 1 interval tick = 2 total
       expect(mockFindReadyForDelivery).toHaveBeenCalledTimes(2);
@@ -164,14 +151,12 @@ describe('OutboxWorker', () => {
 
       const w = new OutboxWorker({ deliver, intervalMs: 1_000 });
       w.start();
-      await flushAsync();
 
       w.stop();
       expect(w.isRunning()).toBe(false);
 
       const callsBefore = mockFindReadyForDelivery.mock.calls.length;
       vi.advanceTimersByTime(5_000);
-      await flushAsync();
       expect(mockFindReadyForDelivery.mock.calls.length).toBe(callsBefore);
     });
 
@@ -210,20 +195,48 @@ describe('OutboxWorker', () => {
 
     // First drain — entry goes inflight
     const drain1 = w.drain();
-    await flushAsync();
 
     // Second drain — same entry is still inflight; deliver should NOT be called again
     await w.drain();
-    await flushAsync();
 
     expect(deliver).toHaveBeenCalledTimes(1);
 
     // Resolve the inflight dispatch and verify success path settles
     resolveDeliver();
     await drain1;
-    await flushAsync();
 
     expect(mockMarkOutboxEntryDelivered).toHaveBeenCalledWith('slow-entry');
+  });
+
+  test('stop/restart does not duplicate dispatch for an in-flight delivery', async () => {
+    let resolveDeliver!: () => void;
+    const inflightPromise = new Promise<void>((resolve) => {
+      resolveDeliver = resolve;
+    });
+    const deliver = vi.fn().mockReturnValueOnce(inflightPromise).mockResolvedValue(undefined);
+
+    const entry = makeEntry({ id: 'restart-entry' });
+    mockFindReadyForDelivery.mockReturnValueOnce([]).mockReturnValue([entry]);
+
+    const firstWorker = startOutboxWorker({ deliver, intervalMs: 1_000 });
+    expect(firstWorker.isRunning()).toBe(true);
+    expect(deliver).not.toHaveBeenCalled();
+
+    const firstDrain = firstWorker.drain();
+    expect(deliver).toHaveBeenCalledTimes(1);
+
+    stopOutboxWorker();
+    expect(firstWorker.isRunning()).toBe(false);
+
+    const secondWorker = startOutboxWorker({ deliver, intervalMs: 1_000 });
+    expect(secondWorker).not.toBe(firstWorker);
+    expect(secondWorker.isRunning()).toBe(true);
+    expect(deliver).toHaveBeenCalledTimes(1);
+
+    resolveDeliver();
+    await firstDrain;
+
+    expect(mockMarkOutboxEntryDelivered).toHaveBeenCalledWith('restart-entry');
   });
 
   // ── 8. successful delivery calls markOutboxEntryDelivered ────────────────
@@ -234,7 +247,6 @@ describe('OutboxWorker', () => {
 
     const w = new OutboxWorker({ deliver });
     await w.drain();
-    await flushAsync();
 
     expect(mockMarkOutboxEntryDelivered).toHaveBeenCalledWith('entry-1');
     expect(mockMarkOutboxEntryAttempted).not.toHaveBeenCalled();
@@ -262,7 +274,6 @@ describe('OutboxWorker', () => {
       });
 
       await w.drain();
-      await flushAsync();
 
       // attempt 1 → base * 2^0 = 1000ms after fixedNow
       const expectedNextAttemptAt = new Date(
@@ -296,7 +307,6 @@ describe('OutboxWorker', () => {
       });
 
       await w.drain();
-      await flushAsync();
 
       const expectedNextAttemptAt = new Date(
         fixedNow.getTime() + baseBackoffMs * 2 ** 2,
@@ -330,7 +340,6 @@ describe('OutboxWorker', () => {
       });
 
       await w.drain();
-      await flushAsync();
 
       const expectedNextAttemptAt = new Date(fixedNow.getTime() + maxBackoffMs).toISOString();
 
@@ -361,7 +370,6 @@ describe('OutboxWorker', () => {
     });
 
     await w.drain();
-    await flushAsync();
 
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('dead-letter'));
     expect(debugSpy).not.toHaveBeenCalledWith(expect.stringContaining('attempt'));
@@ -386,7 +394,6 @@ describe('OutboxWorker', () => {
     });
 
     await w.drain();
-    await flushAsync();
 
     expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('attempt'));
     expect(warnSpy).not.toHaveBeenCalled();
@@ -403,7 +410,6 @@ describe('OutboxWorker', () => {
     const w = new OutboxWorker({ deliver, randomFn: () => 0, jitterMs: 0 });
 
     await w.drain();
-    await flushAsync();
 
     expect(mockMarkOutboxEntryAttempted).toHaveBeenCalledWith(
       'entry-1',
