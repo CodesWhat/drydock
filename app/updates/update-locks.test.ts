@@ -6,10 +6,37 @@ import {
   withContainerUpdateLocks,
 } from './update-locks.js';
 
-const tick = async (n = 4): Promise<void> => {
-  for (let i = 0; i < n; i++) {
-    await Promise.resolve();
+interface Deferred<T = void> {
+  promise: Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+  reject: (reason?: unknown) => void;
+}
+
+const deferred = <T = void>(): Deferred<T> => {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+};
+
+const waitForCondition = async (
+  predicate: () => boolean,
+  description: string,
+  timeoutMs = 1_000,
+): Promise<void> => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
   }
+  throw new Error(`Timed out waiting for ${description}`);
 };
 
 describe('buildContainerLockKey', () => {
@@ -103,19 +130,24 @@ describe('withContainerUpdateLocks (no global semaphore — default unlimited)',
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
+    const aStarted = deferred();
 
     const keys = ['container:local:shared'];
     const a = withContainerUpdateLocks(keys, async () => {
       order.push('a-start');
+      aStarted.resolve();
       await gate;
       order.push('a-end');
     });
-    await tick();
+    await aStarted.promise;
 
     const b = withContainerUpdateLocks(keys, async () => {
       order.push('b');
     });
-    await tick();
+    await waitForCondition(
+      () => getUpdateLockSnapshot().pending.some((entry) => entry.key === keys[0]),
+      'second caller to wait on the shared container key',
+    );
 
     release();
     await Promise.all([a, b]);
@@ -134,16 +166,20 @@ describe('withContainerUpdateLocks (no global semaphore — default unlimited)',
     const bGate = new Promise<void>((resolve) => {
       releaseB = resolve;
     });
+    const aStartedDeferred = deferred();
+    const bStartedDeferred = deferred();
 
     const a = withContainerUpdateLocks(['container:local:disjoint-a'], async () => {
       aStarted = true;
+      aStartedDeferred.resolve();
       await aGate;
     });
     const b = withContainerUpdateLocks(['container:local:disjoint-b'], async () => {
       bStarted = true;
+      bStartedDeferred.resolve();
       await bGate;
     });
-    await tick();
+    await Promise.all([aStartedDeferred.promise, bStartedDeferred.promise]);
 
     expect(aStarted).toBe(true);
     expect(bStarted).toBe(true);
@@ -158,11 +194,13 @@ describe('withContainerUpdateLocks (no global semaphore — default unlimited)',
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
+    const holderStarted = deferred();
 
     const a = withContainerUpdateLocks(['container:local:snapshot'], async () => {
+      holderStarted.resolve();
       await gate;
     });
-    await tick();
+    await holderStarted.promise;
 
     expect(getUpdateLockSnapshot().held).toContain('container:local:snapshot');
 
@@ -176,6 +214,46 @@ describe('withContainerUpdateLocks (no global semaphore — default unlimited)',
   test('snapshot does not include semaphore field when cap is not configured', () => {
     const snap = getUpdateLockSnapshot();
     expect(snap.semaphore).toBeUndefined();
+  });
+
+  test('compose update holding compose and container keys blocks a solo update on the same container key', async () => {
+    const order: string[] = [];
+    const releaseCompose = deferred();
+    const composeStarted = deferred();
+    const composeProjectKey = buildComposeProjectLockKey(
+      { name: 'web', watcher: 'local' },
+      'stack',
+    );
+    const containerKey = buildContainerLockKey({ name: 'web', watcher: 'local' });
+
+    const compose = withContainerUpdateLocks([composeProjectKey, containerKey], async () => {
+      order.push('compose-start');
+      composeStarted.resolve();
+      await releaseCompose.promise;
+      order.push('compose-end');
+    });
+    await composeStarted.promise;
+
+    const solo = withContainerUpdateLocks([containerKey], async () => {
+      order.push('solo-container');
+    });
+
+    await waitForCondition(() => {
+      const snap = getUpdateLockSnapshot();
+      return (
+        snap.held.includes(composeProjectKey) &&
+        snap.held.includes(containerKey) &&
+        snap.pending.some((entry) => entry.key === containerKey && entry.waiters === 1)
+      );
+    }, 'solo container update to wait while compose update holds both keys');
+
+    expect(order).toEqual(['compose-start']);
+
+    releaseCompose.resolve();
+    await Promise.all([compose, solo]);
+
+    expect(order).toEqual(['compose-start', 'compose-end', 'solo-container']);
+    expect(getUpdateLockSnapshot()).toMatchObject({ held: [], pending: [] });
   });
 });
 
@@ -206,12 +284,15 @@ describe('withContainerUpdateLocks (global semaphore — via dynamic module impo
         await gate;
         order.push('a-end');
       });
-      await tick();
+      await waitForCondition(() => order.includes('a-start'), 'first capped caller to start');
 
       const b = withLocks(['container:local:cap1-b'], async () => {
         order.push('b');
       });
-      await tick();
+      await waitForCondition(
+        () => getSnap().semaphore?.pending === 1,
+        'second disjoint-key caller to wait on the global semaphore',
+      );
 
       // B is on a disjoint key but must wait because global cap=1.
       const snap = getSnap();
@@ -246,24 +327,44 @@ describe('withContainerUpdateLocks (global semaphore — via dynamic module impo
       let aStarted = false;
       let bStarted = false;
       let cStarted = false;
+      const aStartedDeferred = deferred();
+      const bStartedDeferred = deferred();
+      const cStartedDeferred = deferred();
       const gates: Array<() => void> = [];
 
-      const makeTask = (label: string, setStarted: (v: boolean) => void) =>
+      const makeTask = (label: string, setStarted: (v: boolean) => void, started: Deferred) =>
         withLocks([`container:local:cap2-${label}`], async () => {
           setStarted(true);
+          started.resolve();
           await new Promise<void>((resolve) => gates.push(resolve));
         });
 
-      const a = makeTask('a', (v) => {
-        aStarted = v;
-      });
-      const b = makeTask('b', (v) => {
-        bStarted = v;
-      });
-      const c = makeTask('c', (v) => {
-        cStarted = v;
-      });
-      await tick();
+      const a = makeTask(
+        'a',
+        (v) => {
+          aStarted = v;
+        },
+        aStartedDeferred,
+      );
+      const b = makeTask(
+        'b',
+        (v) => {
+          bStarted = v;
+        },
+        bStartedDeferred,
+      );
+      const c = makeTask(
+        'c',
+        (v) => {
+          cStarted = v;
+        },
+        cStartedDeferred,
+      );
+      await Promise.all([aStartedDeferred.promise, bStartedDeferred.promise]);
+      await waitForCondition(
+        () => getSnap().semaphore?.pending === 1,
+        'third capped caller to wait on the global semaphore',
+      );
 
       expect(aStarted).toBe(true);
       expect(bStarted).toBe(true);
@@ -276,7 +377,7 @@ describe('withContainerUpdateLocks (global semaphore — via dynamic module impo
 
       // Release one slot — C unblocks.
       gates.shift()!();
-      await tick(16);
+      await cStartedDeferred.promise;
       expect(cStarted).toBe(true);
 
       // Clean up.
@@ -303,8 +404,9 @@ describe('withContainerUpdateLocks (global semaphore — via dynamic module impo
     vi.resetModules();
     try {
       const mod = await import('./update-locks.js?cap5');
-      const { withContainerUpdateLocks: withLocks } = mod as {
+      const { withContainerUpdateLocks: withLocks, getUpdateLockSnapshot: getSnap } = mod as {
         withContainerUpdateLocks: typeof withContainerUpdateLocks;
+        getUpdateLockSnapshot: typeof getUpdateLockSnapshot;
       };
 
       const order: string[] = [];
@@ -319,11 +421,14 @@ describe('withContainerUpdateLocks (global semaphore — via dynamic module impo
         await gate;
         order.push('a-end');
       });
-      await tick();
+      await waitForCondition(() => order.includes('a-start'), 'first same-key caller to start');
       const b = withLocks(['container:local:samekey'], async () => {
         order.push('b');
       });
-      await tick();
+      await waitForCondition(
+        () => getSnap().pending.some((entry) => entry.key === 'container:local:samekey'),
+        'second same-key caller to wait on the keyed lock',
+      );
 
       releaseGate();
       await Promise.all([a, b]);
@@ -356,12 +461,14 @@ describe('withContainerUpdateLocks (global semaphore — via dynamic module impo
 
       // Capture snapshot from inside fn (keyed lock held, semaphore held).
       let snapshotInside: ReturnType<typeof getSnap> | undefined;
+      const holderStarted = deferred();
 
       const a = withLocks(['container:local:ordertest'], async () => {
+        holderStarted.resolve();
         await gate;
         snapshotInside = getSnap();
       });
-      await tick();
+      await holderStarted.promise;
       expect(getSnap().semaphore!.available).toBe(0);
 
       releaseGate();
@@ -444,7 +551,7 @@ describe('withContainerUpdateLocks (bypassGlobalCap option)', () => {
         await regularGate;
         order.push('regular-end');
       });
-      await tick();
+      await waitForCondition(() => order.includes('regular-start'), 'regular update to start');
       expect(getSnap().semaphore!.available).toBe(0);
 
       // A self-update with bypassGlobalCap=true should NOT block on the semaphore.
@@ -455,8 +562,6 @@ describe('withContainerUpdateLocks (bypassGlobalCap option)', () => {
         },
         { bypassGlobalCap: true },
       );
-      await tick();
-
       // Self-update completed without waiting for regular to finish.
       await self;
       expect(order).toContain('self-update');
@@ -485,8 +590,9 @@ describe('withContainerUpdateLocks (bypassGlobalCap option)', () => {
     vi.resetModules();
     try {
       const mod = await import('./update-locks.js?bypass2');
-      const { withContainerUpdateLocks: withLocks } = mod as {
+      const { withContainerUpdateLocks: withLocks, getUpdateLockSnapshot: getSnap } = mod as {
         withContainerUpdateLocks: typeof withContainerUpdateLocks;
+        getUpdateLockSnapshot: typeof getUpdateLockSnapshot;
       };
 
       const order: string[] = [];
@@ -506,7 +612,7 @@ describe('withContainerUpdateLocks (bypassGlobalCap option)', () => {
         },
         { bypassGlobalCap: true },
       );
-      await tick();
+      await waitForCondition(() => order.includes('first-start'), 'first bypass update to start');
 
       const second = withLocks(
         key,
@@ -515,7 +621,10 @@ describe('withContainerUpdateLocks (bypassGlobalCap option)', () => {
         },
         { bypassGlobalCap: true },
       );
-      await tick();
+      await waitForCondition(
+        () => getSnap().pending.some((entry) => entry.key === key[0]),
+        'second bypass update to wait on the keyed lock',
+      );
 
       // Second must wait for first to release the keyed lock.
       expect(order).toEqual(['first-start']);
@@ -539,8 +648,9 @@ describe('withContainerUpdateLocks (bypassGlobalCap option)', () => {
     vi.resetModules();
     try {
       const mod = await import('./update-locks.js?bypass3');
-      const { withContainerUpdateLocks: withLocks } = mod as {
+      const { withContainerUpdateLocks: withLocks, getUpdateLockSnapshot: getSnap } = mod as {
         withContainerUpdateLocks: typeof withContainerUpdateLocks;
+        getUpdateLockSnapshot: typeof getUpdateLockSnapshot;
       };
 
       const order: string[] = [];
@@ -554,13 +664,16 @@ describe('withContainerUpdateLocks (bypassGlobalCap option)', () => {
         await gate;
         order.push('a-end');
       });
-      await tick();
+      await waitForCondition(() => order.includes('a-start'), 'first capped update to start');
 
       // No bypassGlobalCap — must wait.
       const b = withLocks(['container:local:bypass-cap-b'], async () => {
         order.push('b');
       });
-      await tick();
+      await waitForCondition(
+        () => getSnap().semaphore?.pending === 1,
+        'second capped update to wait on the global semaphore',
+      );
 
       expect(order).toEqual(['a-start']);
 
@@ -583,8 +696,9 @@ describe('withContainerUpdateLocks (bypassGlobalCap option)', () => {
     vi.resetModules();
     try {
       const mod = await import('./update-locks.js?bypass4');
-      const { withContainerUpdateLocks: withLocks } = mod as {
+      const { withContainerUpdateLocks: withLocks, getUpdateLockSnapshot: getSnap } = mod as {
         withContainerUpdateLocks: typeof withContainerUpdateLocks;
+        getUpdateLockSnapshot: typeof getUpdateLockSnapshot;
       };
 
       const order: string[] = [];
@@ -598,7 +712,10 @@ describe('withContainerUpdateLocks (bypassGlobalCap option)', () => {
         await gate;
         order.push('a-end');
       });
-      await tick();
+      await waitForCondition(
+        () => order.includes('a-start'),
+        'first explicit non-bypass update to start',
+      );
 
       const b = withLocks(
         ['container:local:bypass-false-b'],
@@ -607,7 +724,10 @@ describe('withContainerUpdateLocks (bypassGlobalCap option)', () => {
         },
         { bypassGlobalCap: false },
       );
-      await tick();
+      await waitForCondition(
+        () => getSnap().semaphore?.pending === 1,
+        'second explicit non-bypass update to wait on the global semaphore',
+      );
 
       expect(order).toEqual(['a-start']);
 

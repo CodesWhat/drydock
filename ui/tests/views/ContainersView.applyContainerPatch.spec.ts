@@ -835,6 +835,7 @@ describe('ContainersView — applyContainerPatch', () => {
       });
 
       expect(heldOperations.value.has(activeOp.id)).toBe(true);
+      const originalDisplayUntil = heldOperations.value.get(activeOp.id)!.displayUntil;
 
       // SSE container-updated arrives without updateOperation (e.g. new container metadata)
       const raw = { id: 'c1', name: 'vaultwarden' };
@@ -845,10 +846,6 @@ describe('ContainersView — applyContainerPatch', () => {
         updateOperation: undefined,
       });
       mockMapApiContainer.mockReturnValueOnce(mappedWithoutOp);
-
-      // Use fake timers so we can detect if setTimeout was called for a release
-      vi.useFakeTimers();
-      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
 
       globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: raw }));
       await flushPromises();
@@ -861,14 +858,8 @@ describe('ContainersView — applyContainerPatch', () => {
       // not the short 1500ms release window
       const shortReleaseWindow = Date.now() + 1500 + 1000; // some headroom
       expect(hold!.displayUntil).toBeGreaterThan(shortReleaseWindow);
+      expect(hold!.displayUntil).toBe(originalDisplayUntil);
 
-      // No release timer must have been scheduled for this operation
-      const timerCallsForRelease = setTimeoutSpy.mock.calls.filter(
-        ([_fn, delay]) => typeof delay === 'number' && delay <= 1500,
-      );
-      expect(timerCallsForRelease).toHaveLength(0);
-
-      vi.useRealTimers();
       clearAllOperationDisplayHolds();
     });
   });

@@ -530,7 +530,7 @@ describe('stats/aggregator', () => {
     aggregator.stop();
   });
 
-  test('totalMemoryPercent is 0 when totalMemoryLimitBytes is 0', async () => {
+  test('memory percentages are 0 when Docker reports memory_stats.limit as 0', async () => {
     const { aggregator, fetchSnapshot, tick } = createHarness({
       containers: [{ id: 'c1', name: 'web', watcher: 'local' }],
     });
@@ -542,6 +542,13 @@ describe('stats/aggregator', () => {
     const current = aggregator.getCurrent();
     expect(current.totalMemoryLimitBytes).toBe(0);
     expect(current.totalMemoryPercent).toBe(0);
+    expect(current.topMemory[0]).toMatchObject({
+      id: 'c1',
+      name: 'web',
+      memoryUsageBytes: 256,
+      memoryLimitBytes: 0,
+      memoryPercent: 0,
+    });
 
     aggregator.stop();
   });

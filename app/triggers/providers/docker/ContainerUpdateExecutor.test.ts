@@ -1308,6 +1308,85 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
+  test('execute rolls back when cancellation arrives after create checkpoint but before transition checkpoint', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    let cancelRequested = false;
+    mockIsOperationCancelRequested.mockImplementation(() => cancelRequested);
+
+    const executor = createExecutor({
+      createContainer: vi.fn().mockImplementation(async () => {
+        cancelRequested = true;
+        return context.newContainer;
+      }),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+      'Cancelled by operator',
+    );
+
+    expect(mockIsOperationCancelRequested).toHaveBeenCalledTimes(3);
+    expect(executor.createContainer).toHaveBeenCalled();
+    expect(executor.stopContainer).not.toHaveBeenCalled();
+    expect(executor.startContainer).not.toHaveBeenCalled();
+    expect(context.newContainer.stop).toHaveBeenCalledTimes(1);
+    expect(context.newContainer.remove).toHaveBeenCalledTimes(1);
+    expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'web' });
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'rolled-back',
+        rollbackReason: 'cancelled',
+      }),
+    );
+  });
+
+  test('execute treats repeated cancellation signals during rollback idempotently', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    // False before rename and at the create checkpoint; repeated true values model
+    // duplicate cancel requests arriving before/at the transition checkpoint.
+    mockIsOperationCancelRequested
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(false)
+      .mockReturnValue(true);
+
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+      'Cancelled by operator',
+    );
+
+    const terminalCalls = mockMarkOperationTerminal.mock.calls.filter(
+      ([operationId]) => operationId === 'op-1',
+    );
+    expect(terminalCalls).toHaveLength(1);
+    expect(terminalCalls[0][1]).toEqual(
+      expect.objectContaining({
+        status: 'rolled-back',
+        phase: 'rolled-back',
+        rollbackReason: 'cancelled',
+      }),
+    );
+    expect(context.newContainer.stop).toHaveBeenCalledTimes(1);
+    expect(context.newContainer.remove).toHaveBeenCalledTimes(1);
+    expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'web' });
+    expect(executor.stopContainer).not.toHaveBeenCalled();
+    expect(executor.startContainer).not.toHaveBeenCalled();
+  });
+
   test('execute calls postPullHook after pull and before rename', async () => {
     const callOrder: string[] = [];
     const context = createContext();

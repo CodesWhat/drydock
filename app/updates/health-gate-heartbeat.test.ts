@@ -212,4 +212,17 @@ describe('startHealthGateHeartbeat', () => {
     // No heartbeats should have fired
     expect(emitHeartbeat).not.toHaveBeenCalled();
   });
+
+  test('terminal event wins at the heartbeat boundary before queued ticks run', () => {
+    vi.setSystemTime(0);
+    const emitHeartbeat = vi.fn();
+    const cancel = startHealthGateHeartbeat('op-8', emitHeartbeat, 10_000);
+
+    // Terminal event arrives exactly at t=10000 before timer callbacks are flushed.
+    vi.setSystemTime(10_000);
+    cancel();
+
+    vi.runOnlyPendingTimers();
+    expect(emitHeartbeat).not.toHaveBeenCalled();
+  });
 });
