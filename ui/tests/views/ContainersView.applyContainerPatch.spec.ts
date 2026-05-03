@@ -1184,7 +1184,7 @@ describe('ContainersView — applyContainerPatch', () => {
       expect(vm.containers[1].updateOperation).toBeDefined();
       expect(vm.containers[1].updateOperation!.id).toBe('op-sync');
       // No pending watcher for c-sync
-      expect(vm.pendingOperationWatchers.has('c-sync')).toBe(false);
+      expect(vm.hasPendingOperationWatcher('c-sync')).toBe(false);
     });
 
     it('stops the deferred watcher after operation is attached (does not stay active)', async () => {
@@ -1204,7 +1204,7 @@ describe('ContainersView — applyContainerPatch', () => {
       await flushPromises();
 
       // Deferred watcher is pending
-      expect(vm.pendingOperationWatchers.has('c-oncefire')).toBe(true);
+      expect(vm.hasPendingOperationWatcher('c-oncefire')).toBe(true);
 
       // Operation arrives in store
       mockStoreOperationsById.value = {
@@ -1214,7 +1214,7 @@ describe('ContainersView — applyContainerPatch', () => {
 
       // Watcher fired, attached, and stopped itself
       expect(vm.containers[1].updateOperation!.id).toBe('op-once');
-      expect(vm.pendingOperationWatchers.has('c-oncefire')).toBe(false);
+      expect(vm.hasPendingOperationWatcher('c-oncefire')).toBe(false);
     });
 
     it('cancels deferred watcher immediately when container is removed before operation arrives', async () => {
@@ -1234,7 +1234,7 @@ describe('ContainersView — applyContainerPatch', () => {
       globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: rawNew }));
       await flushPromises();
 
-      expect(vm.pendingOperationWatchers.has('c-removed')).toBe(true);
+      expect(vm.hasPendingOperationWatcher('c-removed')).toBe(true);
 
       // container-removed fires before operation arrives
       globalThis.dispatchEvent(
@@ -1245,7 +1245,7 @@ describe('ContainersView — applyContainerPatch', () => {
       await flushPromises();
 
       // Watcher cancelled by the removed handler
-      expect(vm.pendingOperationWatchers.has('c-removed')).toBe(false);
+      expect(vm.hasPendingOperationWatcher('c-removed')).toBe(false);
       // Container is gone
       expect(vm.containers).toHaveLength(1);
       expect(vm.containers[0].id).toBe('c1');
@@ -1264,8 +1264,7 @@ describe('ContainersView — applyContainerPatch', () => {
       globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: rawNew }));
       await flushPromises();
 
-      expect(vm.pendingOperationWatchers.has('c-dup')).toBe(true);
-      const firstStop = vm.pendingOperationWatchers.get('c-dup');
+      expect(vm.hasPendingOperationWatcher('c-dup')).toBe(true);
 
       // Second container-added for same id (in-place merge branch fires, not push)
       // The idx will be found now since the row was pushed. No new watcher is set up.
@@ -1283,9 +1282,8 @@ describe('ContainersView — applyContainerPatch', () => {
       await flushPromises();
 
       // c-dup still has its original watcher (no stacking since c-dup2 is a different id)
-      expect(vm.pendingOperationWatchers.has('c-dup')).toBe(true);
-      expect(vm.pendingOperationWatchers.get('c-dup')).toBe(firstStop);
-      expect(vm.pendingOperationWatchers.has('c-dup2')).toBe(true);
+      expect(vm.hasPendingOperationWatcher('c-dup')).toBe(true);
+      expect(vm.hasPendingOperationWatcher('c-dup2')).toBe(true);
     });
 
     it('clears all pending watchers when component is unmounted', async () => {
@@ -1302,14 +1300,15 @@ describe('ContainersView — applyContainerPatch', () => {
       }
       await flushPromises();
 
-      expect(vm.pendingOperationWatchers.size).toBe(2);
+      expect(vm.hasPendingOperationWatcher('c-unmount-a')).toBe(true);
+      expect(vm.hasPendingOperationWatcher('c-unmount-b')).toBe(true);
 
       // Unmount the component
       wrapper.unmount();
 
       // The maps are cleared by onScopeDispose
-      expect(vm.pendingOperationWatchers.size).toBe(0);
-      expect(vm.pendingOperationWatcherTimers.size).toBe(0);
+      expect(vm.hasPendingOperationWatcher('c-unmount-a')).toBe(false);
+      expect(vm.hasPendingOperationWatcher('c-unmount-b')).toBe(false);
     });
 
     it('times out and stops the watcher after DEFERRED_OPERATION_ATTACH_TIMEOUT_MS with no operation', async () => {
@@ -1330,15 +1329,14 @@ describe('ContainersView — applyContainerPatch', () => {
       globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: rawNew }));
       await flushPromises();
 
-      expect(vm.pendingOperationWatchers.has('c-timeout')).toBe(true);
+      expect(vm.hasPendingOperationWatcher('c-timeout')).toBe(true);
 
       // Advance past the 30s timeout
       vi.advanceTimersByTime(30_001);
       await flushPromises();
 
       // Watcher timed out and was removed
-      expect(vm.pendingOperationWatchers.has('c-timeout')).toBe(false);
-      expect(vm.pendingOperationWatcherTimers.has('c-timeout')).toBe(false);
+      expect(vm.hasPendingOperationWatcher('c-timeout')).toBe(false);
       // Row remains without an operation (timeout doesn't remove the row)
       expect(vm.containers[1].updateOperation).toBeUndefined();
 

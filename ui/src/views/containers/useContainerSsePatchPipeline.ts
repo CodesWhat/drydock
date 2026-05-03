@@ -48,6 +48,10 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
   const pendingOperationWatchers = new Map<string, WatchStopHandle>();
   const pendingOperationWatcherTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+  function hasPendingOperationWatcher(containerId: string) {
+    return pendingOperationWatchers.has(containerId);
+  }
+
   function scheduleCompletionToast(callback: () => void) {
     const timer = setTimeout(() => {
       completionToastTimers.delete(timer);
@@ -526,7 +530,6 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
   return {
     applyContainerPatch,
     applyOperationPatch,
-    pendingOperationWatchers,
-    pendingOperationWatcherTimers,
+    hasPendingOperationWatcher,
   };
 }

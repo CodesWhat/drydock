@@ -1199,7 +1199,7 @@ function handleGlobalScroll() {
   }
 }
 
-const { pendingOperationWatchers, pendingOperationWatcherTimers } = useContainerSsePatchPipeline({
+const { hasPendingOperationWatcher } = useContainerSsePatchPipeline({
   containers,
   containerIdMap,
   containerMetaMap,
