@@ -12,6 +12,7 @@ import {
 } from '../model/update-eligibility.js';
 import * as registry from '../registry/index.js';
 import * as updateOperationStore from '../store/update-operation.js';
+import { getErrorMessage } from '../util/error.js';
 import { hasUpdateConcurrencyCap } from './update-locks.js';
 
 interface UpdateQueueBatchMetadata {
@@ -92,10 +93,6 @@ function toRejectedContainerUpdateRequest(
     message: error.message,
     statusCode: error.statusCode,
   };
-}
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function isResolvedUpdateTrigger(trigger: UpdateTriggerLike): trigger is ResolvedUpdateTrigger {

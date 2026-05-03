@@ -21,6 +21,12 @@ describe('getErrorMessage', () => {
     expect(getErrorMessage(Symbol('create failed'))).toBe('Symbol(create failed)');
   });
 
+  test('stringifies boolean, number, and bigint primitive inputs', () => {
+    expect(getErrorMessage(false)).toBe('false');
+    expect(getErrorMessage(503)).toBe('503');
+    expect(getErrorMessage(9007199254740993n)).toBe('9007199254740993');
+  });
+
   test('uses the fallback when primitive stringification produces an empty message', () => {
     const stringSpy = vi.spyOn(globalThis, 'String').mockReturnValueOnce('');
 

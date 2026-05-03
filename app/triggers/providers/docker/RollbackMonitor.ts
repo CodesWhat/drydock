@@ -1,3 +1,4 @@
+import { parseEnvNonNegativeInteger } from '../../../util/parse.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
 
 type RollbackMonitorLogger = {
@@ -68,6 +69,28 @@ const REQUIRED_ROLLBACK_MONITOR_DEPENDENCY_KEYS = [
   'inspectContainer',
   'startHealthMonitor',
 ] as const;
+const DEFAULT_ROLLBACK_WINDOW = 300000;
+const DEFAULT_ROLLBACK_INTERVAL = 10000;
+
+function parsePositiveDurationLabel(
+  rawValue: string | undefined,
+  labelName: string,
+  defaultValue: number,
+  warningMessage: string,
+  logger: { warn?: (message: string) => void } | undefined,
+): number {
+  try {
+    const parsedValue = parseEnvNonNegativeInteger(rawValue ?? String(defaultValue), labelName);
+    if (parsedValue !== undefined && parsedValue > 0) {
+      return parsedValue;
+    }
+  } catch {
+    // Fall through to the existing default-and-warn behavior.
+  }
+
+  logger?.warn?.(warningMessage);
+  return defaultValue;
+}
 
 class RollbackMonitor {
   getPreferredLabelValue: RollbackMonitorDependencies['getPreferredLabelValue'];
@@ -95,50 +118,31 @@ class RollbackMonitor {
   }
 
   getConfig(container: RollbackContainer): RollbackConfig {
-    const DEFAULT_ROLLBACK_WINDOW = 300000;
-    const DEFAULT_ROLLBACK_INTERVAL = 10000;
     const logger = this.getLogger()?.child?.({});
-
-    const parsedWindow = Number.parseInt(
+    const rollbackWindow = parsePositiveDurationLabel(
       this.getPreferredLabelValue(
         container.labels,
         'dd.rollback.window',
         'wud.rollback.window',
         logger,
-      ) ?? String(DEFAULT_ROLLBACK_WINDOW),
-      10,
+      ),
+      'dd.rollback.window',
+      DEFAULT_ROLLBACK_WINDOW,
+      `Invalid rollback window label value — using default ${DEFAULT_ROLLBACK_WINDOW}ms`,
+      logger,
     );
-    const parsedInterval = Number.parseInt(
+    const rollbackInterval = parsePositiveDurationLabel(
       this.getPreferredLabelValue(
         container.labels,
         'dd.rollback.interval',
         'wud.rollback.interval',
         logger,
-      ) ?? String(DEFAULT_ROLLBACK_INTERVAL),
-      10,
+      ),
+      'dd.rollback.interval',
+      DEFAULT_ROLLBACK_INTERVAL,
+      `Invalid rollback interval label value — using default ${DEFAULT_ROLLBACK_INTERVAL}ms`,
+      logger,
     );
-
-    const rollbackWindow =
-      Number.isFinite(parsedWindow) && parsedWindow > 0 ? parsedWindow : DEFAULT_ROLLBACK_WINDOW;
-    const rollbackInterval =
-      Number.isFinite(parsedInterval) && parsedInterval > 0
-        ? parsedInterval
-        : DEFAULT_ROLLBACK_INTERVAL;
-
-    if (rollbackWindow !== parsedWindow) {
-      this.getLogger()
-        ?.child?.({})
-        ?.warn?.(
-          `Invalid rollback window label value — using default ${DEFAULT_ROLLBACK_WINDOW}ms`,
-        );
-    }
-    if (rollbackInterval !== parsedInterval) {
-      this.getLogger()
-        ?.child?.({})
-        ?.warn?.(
-          `Invalid rollback interval label value — using default ${DEFAULT_ROLLBACK_INTERVAL}ms`,
-        );
-    }
 
     return {
       autoRollback:

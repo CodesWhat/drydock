@@ -77,7 +77,7 @@ describe('RollbackMonitor', () => {
       createContainer({
         labels: {
           'dd.rollback.auto': 'false',
-          'dd.rollback.window': '-1',
+          'dd.rollback.window': '0',
           'dd.rollback.interval': 'NaN',
         },
       }),
@@ -88,6 +88,32 @@ describe('RollbackMonitor', () => {
       rollbackWindow: 300000,
       rollbackInterval: 10000,
     });
+
+    const warnCalls = logger.child.mock.results
+      .map((result) => result.value?.warn)
+      .filter(Boolean)
+      .flatMap((warnSpy) => warnSpy.mock.calls.map((call) => call[0]));
+    expect(warnCalls).toContain('Invalid rollback window label value — using default 300000ms');
+    expect(warnCalls).toContain('Invalid rollback interval label value — using default 10000ms');
+  });
+
+  test('getConfig rejects partially numeric rollback labels', () => {
+    const logger = createLogger();
+    const monitor = createMonitor({
+      getLogger: () => logger,
+    });
+
+    const config = monitor.getConfig(
+      createContainer({
+        labels: {
+          'dd.rollback.window': '120000ms',
+          'dd.rollback.interval': '5.5',
+        },
+      }),
+    );
+
+    expect(config.rollbackWindow).toBe(300000);
+    expect(config.rollbackInterval).toBe(10000);
 
     const warnCalls = logger.child.mock.results
       .map((result) => result.value?.warn)

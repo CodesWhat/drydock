@@ -13,6 +13,7 @@
  * does not detect an early exit on its own.
  */
 
+import { getErrorMessage } from '../util/error.js';
 import { parseEnvNonNegativeInteger } from '../util/parse.js';
 
 const DEFAULT_POST_START_LIVENESS_GRACE_MS = 2_000;
@@ -126,9 +127,4 @@ export async function verifyContainerStillRunning(args: {
 
 function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return String(error);
 }

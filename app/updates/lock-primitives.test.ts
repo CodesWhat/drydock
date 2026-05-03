@@ -1,4 +1,4 @@
-import { LockManager, Semaphore } from './locks.js';
+import { LockManager, Semaphore } from './lock-primitives.js';
 
 const tick = async (n = 4): Promise<void> => {
   for (let i = 0; i < n; i++) {

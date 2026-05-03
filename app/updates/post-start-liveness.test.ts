@@ -225,6 +225,22 @@ describe('verifyContainerStillRunning', () => {
     );
   });
 
+  test('uses shared error-message handling for object inspect rejection payloads', async () => {
+    const inspect = vi.fn().mockRejectedValue({ message: 'inspect unavailable' });
+    await expect(
+      verifyContainerStillRunning({
+        container: { inspect },
+        containerName: 'web',
+        graceMs: 2000,
+        logger,
+        sleep,
+      }),
+    ).resolves.toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Unable to verify post-start liveness for container web (inspect unavailable)',
+    );
+  });
+
   test('uses default sleep when not provided', async () => {
     vi.useFakeTimers();
     const inspect = vi.fn().mockResolvedValue({ State: { Running: true } });

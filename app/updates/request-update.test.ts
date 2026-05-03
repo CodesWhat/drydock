@@ -131,6 +131,27 @@ describe('request-update', () => {
     });
   });
 
+  test('requestContainerUpdate uses shared error-message handling for object trigger rejections', async () => {
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockRejectedValue({ message: 'registry timeout' }),
+    };
+    mockGetOperationById.mockImplementation((id: string) => ({
+      id,
+      status: 'queued',
+      phase: 'queued',
+    }));
+
+    const accepted = await requestContainerUpdate(createContainer(), { trigger });
+    await flushAsyncWork();
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(accepted.operationId, {
+      status: 'failed',
+      phase: 'failed',
+      lastError: 'registry timeout',
+    });
+  });
+
   test('requestContainerUpdate rejects when no update is available', async () => {
     await expect(
       requestContainerUpdate(createContainer({ updateAvailable: false }), {

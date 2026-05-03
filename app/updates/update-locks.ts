@@ -1,5 +1,5 @@
 import { parseEnvNonNegativeInteger } from '../util/parse.js';
-import { LockManager, Semaphore } from './locks.js';
+import { LockManager, Semaphore } from './lock-primitives.js';
 
 export interface ContainerLockReference {
   name: string;

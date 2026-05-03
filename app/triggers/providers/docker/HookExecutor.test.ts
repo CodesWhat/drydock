@@ -100,6 +100,40 @@ describe('HookExecutor', () => {
     expect(withLabels.hookEnv.DD_UPDATE_TO).toBe('');
   });
 
+  test('buildHookConfig applies the default timeout for invalid timeout labels', () => {
+    const executor = createExecutor();
+
+    expect(
+      executor.buildHookConfig(
+        createContainer({
+          labels: {
+            'dd.hook.timeout': '120000ms',
+          },
+        }),
+      ).hookTimeout,
+    ).toBe(60000);
+
+    expect(
+      executor.buildHookConfig(
+        createContainer({
+          labels: {
+            'wud.hook.timeout': '-1',
+          },
+        }),
+      ).hookTimeout,
+    ).toBe(60000);
+
+    expect(
+      executor.buildHookConfig(
+        createContainer({
+          labels: {
+            'dd.hook.timeout': '0',
+          },
+        }),
+      ).hookTimeout,
+    ).toBe(60000);
+  });
+
   test('isHookFailure and getHookFailureDetails should handle exit code and timeout failures', () => {
     const executor = createExecutor();
 
