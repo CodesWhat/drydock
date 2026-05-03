@@ -4,8 +4,12 @@ import type { Container } from '../model/container.js';
 import * as registry from '../registry/index.js';
 import * as containerStore from '../store/container.js';
 import * as updateOperationStore from '../store/update-operation.js';
+import { parseEnvNonNegativeInteger } from '../util/parse.js';
 import type { AcceptedContainerUpdateRequest } from './request-update.js';
 import { dispatchAccepted } from './request-update.js';
+
+const DEFAULT_RECOVERY_BOOT_CONCURRENCY = 4;
+const RECOVERY_BOOT_CONCURRENCY_ENV = 'DD_UPDATE_RECOVERY_BOOT_CONCURRENCY';
 
 export interface RecoveryResult {
   resumed: number;
@@ -16,6 +20,17 @@ type RecoveryTriggerRegistry = Parameters<typeof findDockerTriggerForContainer>[
 
 function getRecoveryTriggerRegistry(): RecoveryTriggerRegistry {
   return registry.getState().trigger;
+}
+
+export function parseRecoveryBootConcurrency(raw: string | undefined): number {
+  const parsed = parseEnvNonNegativeInteger(raw, RECOVERY_BOOT_CONCURRENCY_ENV);
+  if (parsed === undefined) {
+    return DEFAULT_RECOVERY_BOOT_CONCURRENCY;
+  }
+  if (parsed === 0) {
+    throw new Error(`${RECOVERY_BOOT_CONCURRENCY_ENV} must be at least 1 (got "${raw}")`);
+  }
+  return parsed;
 }
 
 export function findRecoveryUpdateTrigger(
@@ -82,10 +97,13 @@ export function recoverQueuedOperationsOnStartup(): RecoveryResult {
   }
 
   if (accepted.length > 0) {
+    const bootConcurrency = parseRecoveryBootConcurrency(
+      process.env.DD_UPDATE_RECOVERY_BOOT_CONCURRENCY,
+    );
     recoveryLog.info(
       `Recovering ${accepted.length} queued update operation${accepted.length === 1 ? '' : 's'} after restart`,
     );
-    dispatchAccepted(accepted);
+    dispatchAccepted(accepted, { concurrency: bootConcurrency });
   }
   if (abandoned > 0) {
     recoveryLog.warn(

@@ -53,6 +53,7 @@ import { recoverQueuedOperationsOnStartup } from './recovery.js';
 describe('recoverQueuedOperationsOnStartup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.DD_UPDATE_RECOVERY_BOOT_CONCURRENCY;
     mockGetState.mockReturnValue({ trigger: { 'docker.local': {} } });
   });
 
@@ -206,10 +207,63 @@ describe('recoverQueuedOperationsOnStartup', () => {
     const result = recoverQueuedOperationsOnStartup();
 
     expect(result).toEqual({ resumed: 1, abandoned: 0 });
-    expect(mockDispatchAccepted).toHaveBeenCalledWith([
-      { container, operationId: 'op-go', trigger },
-    ]);
+    expect(mockDispatchAccepted).toHaveBeenCalledWith(
+      [{ container, operationId: 'op-go', trigger }],
+      { concurrency: 4 },
+    );
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+  });
+
+  test('dispatches recovered operations with the default boot concurrency cap', () => {
+    const trigger = { type: 'docker', trigger: vi.fn() };
+    const operations = Array.from({ length: 5 }, (_, index) => ({
+      id: `op-${index + 1}`,
+      status: 'queued',
+      containerId: `c-${index + 1}`,
+      containerName: `app-${index + 1}`,
+    }));
+    mockListActiveOperations.mockReturnValue(operations);
+    mockGetContainer.mockImplementation((id: string) => ({
+      id,
+      name: `app-${id.slice(2)}`,
+      watcher: 'local',
+    }));
+    mockFindDockerTriggerForContainer.mockReturnValue(trigger);
+
+    const result = recoverQueuedOperationsOnStartup();
+
+    expect(result).toEqual({ resumed: 5, abandoned: 0 });
+    expect(mockDispatchAccepted).toHaveBeenCalledWith(expect.any(Array), { concurrency: 4 });
+  });
+
+  test('uses DD_UPDATE_RECOVERY_BOOT_CONCURRENCY for startup redispatch', () => {
+    const previous = process.env.DD_UPDATE_RECOVERY_BOOT_CONCURRENCY;
+    process.env.DD_UPDATE_RECOVERY_BOOT_CONCURRENCY = '2';
+    const container = { id: 'c-1', name: 'web', watcher: 'local' };
+    const trigger = { type: 'docker', trigger: vi.fn() };
+    mockListActiveOperations.mockReturnValue([
+      {
+        id: 'op-env-cap',
+        status: 'queued',
+        containerId: 'c-1',
+        containerName: 'web',
+      },
+    ]);
+    mockGetContainer.mockReturnValue(container);
+    mockFindDockerTriggerForContainer.mockReturnValue(trigger);
+
+    try {
+      const result = recoverQueuedOperationsOnStartup();
+
+      expect(result).toEqual({ resumed: 1, abandoned: 0 });
+      expect(mockDispatchAccepted).toHaveBeenCalledWith(expect.any(Array), { concurrency: 2 });
+    } finally {
+      if (previous === undefined) {
+        delete process.env.DD_UPDATE_RECOVERY_BOOT_CONCURRENCY;
+      } else {
+        process.env.DD_UPDATE_RECOVERY_BOOT_CONCURRENCY = previous;
+      }
+    }
   });
 
   test('dispatches a mid-health-gate crash operation after startup reconciliation reset it to queued', () => {
@@ -235,9 +289,10 @@ describe('recoverQueuedOperationsOnStartup', () => {
     const result = recoverQueuedOperationsOnStartup();
 
     expect(result).toEqual({ resumed: 1, abandoned: 0 });
-    expect(mockDispatchAccepted).toHaveBeenCalledWith([
-      { container, operationId: 'op-health-gate-crash', trigger },
-    ]);
+    expect(mockDispatchAccepted).toHaveBeenCalledWith(
+      [{ container, operationId: 'op-health-gate-crash', trigger }],
+      { concurrency: 4 },
+    );
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
   });
 
@@ -260,10 +315,13 @@ describe('recoverQueuedOperationsOnStartup', () => {
 
     const result = recoverQueuedOperationsOnStartup();
     expect(result).toEqual({ resumed: 2, abandoned: 2 });
-    expect(mockDispatchAccepted).toHaveBeenCalledWith([
-      { container: containerA, operationId: 'op-a', trigger },
-      { container: containerB, operationId: 'op-b', trigger },
-    ]);
+    expect(mockDispatchAccepted).toHaveBeenCalledWith(
+      [
+        { container: containerA, operationId: 'op-a', trigger },
+        { container: containerB, operationId: 'op-b', trigger },
+      ],
+      { concurrency: 4 },
+    );
   });
 
   test('handles a mix of resumable and abandoned operations in one sweep', () => {
@@ -289,9 +347,10 @@ describe('recoverQueuedOperationsOnStartup', () => {
     const result = recoverQueuedOperationsOnStartup();
 
     expect(result).toEqual({ resumed: 1, abandoned: 1 });
-    expect(mockDispatchAccepted).toHaveBeenCalledWith([
-      { container, operationId: 'op-good', trigger },
-    ]);
+    expect(mockDispatchAccepted).toHaveBeenCalledWith(
+      [{ container, operationId: 'op-good', trigger }],
+      { concurrency: 4 },
+    );
     expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
       'op-bad',
       expect.objectContaining({ status: 'failed' }),

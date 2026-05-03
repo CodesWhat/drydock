@@ -57,6 +57,22 @@ async function flushAsyncWork() {
   await Promise.resolve();
 }
 
+interface Deferred<T = void> {
+  promise: Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+  reject: (reason?: unknown) => void;
+}
+
+function deferred<T = void>(): Deferred<T> {
+  let resolve!: Deferred<T>['resolve'];
+  let reject!: Deferred<T>['reject'];
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('request-update', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -286,6 +302,39 @@ describe('request-update', () => {
   test('runAcceptedContainerUpdates handles empty accepted lists', async () => {
     await expect(runAcceptedContainerUpdates([])).resolves.toBeUndefined();
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+  });
+
+  test('runAcceptedContainerUpdates limits trigger concurrency when a cap is provided', async () => {
+    const gates = Array.from({ length: 5 }, () => deferred());
+    const started: string[] = [];
+    const accepted = gates.map((gate, index) => {
+      const operationId = `op-${index + 1}`;
+      return {
+        operationId,
+        container: createContainer({ id: `c${index + 1}`, name: `app-${index + 1}` }),
+        trigger: {
+          type: 'docker',
+          trigger: vi.fn(async () => {
+            started.push(operationId);
+            await gate.promise;
+          }),
+        },
+      };
+    });
+
+    const run = runAcceptedContainerUpdates(accepted, { concurrency: 2 });
+
+    await flushAsyncWork();
+    expect(started).toEqual(['op-1', 'op-2']);
+
+    gates[0].resolve();
+    await flushAsyncWork();
+    expect(started).toEqual(['op-1', 'op-2', 'op-3']);
+
+    for (const gate of gates) {
+      gate.resolve();
+    }
+    await expect(run).resolves.toBeUndefined();
   });
 
   test('dispatchAccepted runs triggers in the background and returns synchronously', async () => {

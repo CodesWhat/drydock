@@ -43,6 +43,10 @@ export interface AcceptedContainerUpdateRequest {
   trigger: UpdateTriggerLike;
 }
 
+export interface AcceptedUpdateDispatchOptions {
+  concurrency?: number;
+}
+
 export interface RejectedContainerUpdateRequest {
   container: Container;
   message: string;
@@ -298,21 +302,39 @@ export async function enqueueContainerUpdates(
 
 export async function runAcceptedContainerUpdates(
   accepted: AcceptedContainerUpdateRequest[],
+  options: AcceptedUpdateDispatchOptions = {},
 ): Promise<void> {
   if (accepted.length === 0) {
     return;
   }
 
-  let firstError: unknown;
+  const concurrency = options.concurrency ?? 1;
+  if (!Number.isSafeInteger(concurrency) || concurrency <= 0) {
+    throw new Error(`Accepted update dispatch concurrency must be a positive integer`);
+  }
 
-  for (const entry of accepted) {
-    try {
-      await entry.trigger.trigger(entry.container, { operationId: entry.operationId });
-    } catch (error: unknown) {
-      markAcceptedQueuedOperationFailed(entry.operationId, error);
-      firstError ??= error;
+  let firstError: unknown;
+  let nextIndex = 0;
+
+  async function runNextAcceptedUpdate(): Promise<void> {
+    while (nextIndex < accepted.length) {
+      const entry = accepted[nextIndex];
+      nextIndex++;
+      try {
+        await entry.trigger.trigger(entry.container, { operationId: entry.operationId });
+      } catch (error: unknown) {
+        markAcceptedQueuedOperationFailed(entry.operationId, error);
+        firstError ??= error;
+      }
     }
   }
+
+  const workerCount = Math.min(concurrency, accepted.length);
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      await runNextAcceptedUpdate();
+    }),
+  );
 
   if (firstError) {
     throw firstError;
@@ -326,8 +348,11 @@ export async function runAcceptedContainerUpdates(
  * isn't already persisted on the operation row — swallow it to avoid
  * unhandled rejections.
  */
-export function dispatchAccepted(accepted: AcceptedContainerUpdateRequest[]): void {
-  void runAcceptedContainerUpdates(accepted).catch(() => undefined);
+export function dispatchAccepted(
+  accepted: AcceptedContainerUpdateRequest[],
+  options: AcceptedUpdateDispatchOptions = {},
+): void {
+  void runAcceptedContainerUpdates(accepted, options).catch(() => undefined);
 }
 
 export async function requestContainerUpdate(
