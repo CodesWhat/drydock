@@ -1146,6 +1146,18 @@ describe('useDashboardData', () => {
     debugSpy.mockRestore();
   });
 
+  it('logs the default summary fetch message for non-object rejections', async () => {
+    mocks.getStatsSummary.mockRejectedValue('summary unavailable');
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+
+    const { state } = await mountDashboardData();
+
+    expect(state.summary.value).toBeNull();
+    expect(debugSpy).toHaveBeenCalledWith('Failed to fetch stats summary');
+
+    debugSpy.mockRestore();
+  });
+
   it('pauses stats summary stream on visibilitychange:hidden and resumes on visible', async () => {
     vi.useFakeTimers();
     let capturedController: {

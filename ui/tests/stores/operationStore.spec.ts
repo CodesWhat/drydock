@@ -174,6 +174,7 @@ describe('useOperationStore', () => {
     const operations = useOperationStore();
 
     operations.applyOperationChanged({ operationId: '', status: 'queued' });
+    operations.removeOperation('missing-operation');
     operations.clearDisplayBatch('missing-stack');
     operations.incrementDisplayBatchSucceeded('missing-stack');
     operations.incrementDisplayBatchFailed('missing-stack');
@@ -181,6 +182,28 @@ describe('useOperationStore', () => {
     expect(Object.keys(operations.byId)).toEqual([]);
     expect(operations.getDisplayBatch('missing-stack')).toBeUndefined();
     expect(operations.getBatchProgress('missing-stack')).toBeUndefined();
+  });
+
+  it('stores operations that do not yet have container ids without indexing them', () => {
+    const operations = useOperationStore();
+
+    operations.applyOperationChanged({
+      operationId: 'op-without-container',
+      containerName: 'web',
+      status: 'queued',
+    });
+
+    expect(operations.byId['op-without-container']).toEqual(
+      expect.objectContaining({
+        containerName: 'web',
+        status: 'queued',
+      }),
+    );
+    expect(operations.getOperationByContainerId('missing-container')).toBeUndefined();
+
+    operations.removeOperation('op-without-container');
+
+    expect(operations.byId['op-without-container']).toBeUndefined();
   });
 
   describe('upsertOperation status-rank guard', () => {
@@ -405,6 +428,12 @@ describe('useOperationStore', () => {
       containerName: 'web',
       status: 'queued',
     });
+    eventStream.publish('update-operation-changed', {
+      operationId: 'op-stream-invalid-status',
+      containerId: 'c-stream-invalid-status',
+      containerName: 'invalid-status',
+      status: 'not-a-status',
+    });
     eventStream.publish('update-operation-changed', 'invalid');
     eventStream.publish('update-operation-changed', { operationId: '', status: 'queued' });
     eventStream.publish('update-applied', {
@@ -471,6 +500,7 @@ describe('useOperationStore', () => {
     expect(operations.byId['op-stream-1']).toEqual(
       expect.objectContaining({ status: 'succeeded' }),
     );
+    expect(operations.byId['op-stream-invalid-status']).toBeUndefined();
     expect(operations.byId['op-stream-2']).toEqual(
       expect.objectContaining({ status: 'failed', phase: 'failed' }),
     );
