@@ -104,11 +104,6 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
     );
   }
 
-  // Patch the id+meta maps once per SSE event instead of spread-copying the
-  // full map per field. On a 400-container deployment the old code did 4 full
-  // O(N) spreads per event (id-key, meta-key, alias-key, alias-meta-key); this
-  // does 2. Identity still changes per call so downstream caches keyed on
-  // `containerMetaMap.value !== cached` invalidate correctly. See #301.
   function updateLookupMapsForContainer(raw: Record<string, unknown>) {
     const containerId = typeof raw.id === 'string' ? raw.id : '';
     if (!containerId) {
@@ -237,9 +232,6 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
 
     const timeoutTimer = setTimeout(() => {
       pendingOperationWatcherTimers.delete(containerId);
-      // stop() also removes from pendingOperationWatchers via cleanup() if still
-      // present, but we call stop directly here since the timer callback owns the
-      // cleanup.
       stop();
       pendingOperationWatchers.delete(containerId);
     }, DEFERRED_OPERATION_ATTACH_TIMEOUT_MS);
@@ -321,19 +313,6 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
         }
       }
     } else {
-      // In-place merge preserves the row object identity; downstream row wrappers
-      // and :key bindings therefore keep pointing at the same object reference.
-      //
-      // updateOperation is owned by the SSE operation-stream pipeline
-      // (applyOperationPatch -> applyUpdateOperationSseToHold). Container-metadata
-      // SSE events (dd:container-updated / dd:container-added) carry only
-      // container metadata; they do not carry the live updateOperation. If we
-      // blindly Object.assign the mapped result, mapped.updateOperation
-      // (undefined) clobbers the row's live updateOperation, causing
-      // reconcileHoldsAgainstContainers to read undefined status -> rawIsActive:false
-      // -> scheduleHeldOperationRelease. Preserve the existing operation when the
-      // patch does not carry a replacement. When neither the row nor the patch
-      // carry an operation, fall back to the store.
       const existingOp = input.containers.value[idx]!.updateOperation;
       Object.assign(input.containers.value[idx]!, mapped);
       if (mapped.updateOperation === undefined) {
@@ -412,7 +391,6 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
     const containerName =
       typeof detail.containerName === 'string' ? detail.containerName : 'container';
     const batchId = detail.batchId ?? null;
-    // Batch completions are handled by Track D; suppress per-container toast.
     if (batchId !== null) {
       return;
     }
