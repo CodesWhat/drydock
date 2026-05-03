@@ -529,8 +529,16 @@ export function createCollections(db: UpdateOperationStoreDb): void {
 
 /**
  * Insert a persisted container-update operation.
+ *
+ * `options.skipChangeEvent` suppresses the `dd:update-operation-changed` SSE
+ * for this insert. Used when a transient `queued` state would only flash in
+ * the UI before the executor immediately picks the operation up — see
+ * `createAcceptedContainerUpdateRequest` and the no-cap concurrency path.
  */
-export function insertOperation(operation: InsertUpdateOperationInput): UpdateOperation {
+export function insertOperation(
+  operation: InsertUpdateOperationInput,
+  options: { skipChangeEvent?: boolean } = {},
+): UpdateOperation {
   const now = new Date().toISOString();
   const operationToSave: UpdateOperation = {
     ...operation,
@@ -544,7 +552,9 @@ export function insertOperation(operation: InsertUpdateOperationInput): UpdateOp
   if (updateOperationCollection) {
     updateOperationCollection.insert({ data: operationToSave });
     maybePruneOperationsForRetention(updateOperationCollection);
-    emitOperationChangedEvent(operationToSave);
+    if (!options.skipChangeEvent) {
+      emitOperationChangedEvent(operationToSave);
+    }
   }
 
   // Register batch membership for batch-completion tracking.

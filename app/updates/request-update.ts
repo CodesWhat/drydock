@@ -12,6 +12,7 @@ import {
 } from '../model/update-eligibility.js';
 import * as registry from '../registry/index.js';
 import * as updateOperationStore from '../store/update-operation.js';
+import { hasUpdateConcurrencyCap } from './update-locks.js';
 
 interface UpdateQueueBatchMetadata {
   batchId: string;
@@ -221,14 +222,24 @@ function createAcceptedContainerUpdateRequest(
 ): AcceptedContainerUpdateRequest {
   const operationId = crypto.randomUUID();
 
-  updateOperationStore.insertOperation({
-    id: operationId,
-    containerId: prepared.container.id,
-    containerName: prepared.container.name,
-    status: 'queued',
-    phase: 'queued',
-    ...batchMetadata,
-  });
+  // Suppress the `queued` SSE when no global concurrency cap is configured:
+  // every accepted update runs as soon as it is dispatched, so the UI would
+  // otherwise see a useless "Queued" flash for the microsecond between insert
+  // and the executor's `in-progress` transition. With a cap in place, real
+  // waiting can occur — keep the SSE so users see the queue.
+  const skipChangeEvent = !hasUpdateConcurrencyCap();
+
+  updateOperationStore.insertOperation(
+    {
+      id: operationId,
+      containerId: prepared.container.id,
+      containerName: prepared.container.name,
+      status: 'queued',
+      phase: 'queued',
+      ...batchMetadata,
+    },
+    { skipChangeEvent },
+  );
 
   return {
     container: prepared.container,

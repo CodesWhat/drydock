@@ -29,6 +29,15 @@ const _maxConcurrent = parseMaxConcurrent(process.env.DD_UPDATE_MAX_CONCURRENT);
 const globalSemaphore: Semaphore | null =
   _maxConcurrent !== null ? new Semaphore(_maxConcurrent) : null;
 
+/**
+ * Whether a global concurrency cap is configured. When false, every accepted
+ * update runs as soon as it is dispatched — no queue exists, so callers can
+ * skip emitting the transient `queued` state to the UI.
+ */
+export function hasUpdateConcurrencyCap(): boolean {
+  return globalSemaphore !== null;
+}
+
 export async function withContainerUpdateLocks<T>(
   keys: readonly string[],
   fn: () => Promise<T>,

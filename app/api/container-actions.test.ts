@@ -526,11 +526,13 @@ describe('Container Actions Router', () => {
           status: 'queued',
           phase: 'queued',
         }),
+        expect.objectContaining({ skipChangeEvent: true }),
       );
       expect(updateOperationStore.insertOperation).not.toHaveBeenCalledWith(
         expect.objectContaining({
           batchId: expect.any(String),
         }),
+        expect.anything(),
       );
     });
 

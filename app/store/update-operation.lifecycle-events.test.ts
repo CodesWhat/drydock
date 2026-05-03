@@ -218,6 +218,39 @@ describe('update operation lifecycle events', () => {
     });
   });
 
+  test('insertOperation emits update-operation-changed by default', async () => {
+    mockEmitUpdateOperationChanged.mockClear();
+
+    updateOperation.insertOperation({
+      id: 'op-emit-default',
+      containerName: 'web',
+      status: 'queued',
+      phase: 'queued',
+    });
+    await flushAsyncLifecycleEvents();
+
+    expect(mockEmitUpdateOperationChanged).toHaveBeenCalledWith(
+      expect.objectContaining({ operationId: 'op-emit-default', status: 'queued' }),
+    );
+  });
+
+  test('insertOperation suppresses update-operation-changed when skipChangeEvent is true', async () => {
+    mockEmitUpdateOperationChanged.mockClear();
+
+    updateOperation.insertOperation(
+      {
+        id: 'op-emit-skip',
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+      },
+      { skipChangeEvent: true },
+    );
+    await flushAsyncLifecycleEvents();
+
+    expect(mockEmitUpdateOperationChanged).not.toHaveBeenCalled();
+  });
+
   test('emitUpdateOperationChanged omits lastError and rollbackReason when they are empty or absent', async () => {
     const inserted = updateOperation.insertOperation({
       id: 'op-sse-no-extras',

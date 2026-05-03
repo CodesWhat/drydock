@@ -102,6 +102,7 @@ describe('request-update', () => {
         status: 'queued',
         phase: 'queued',
       }),
+      expect.objectContaining({ skipChangeEvent: true }),
     );
     expect(trigger.trigger).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'c1', name: 'nginx' }),
@@ -165,6 +166,7 @@ describe('request-update', () => {
         queuePosition: 1,
         queueTotal: 2,
       }),
+      expect.objectContaining({ skipChangeEvent: true }),
     );
     expect(mockInsertOperation).toHaveBeenNthCalledWith(
       2,
@@ -177,6 +179,7 @@ describe('request-update', () => {
         queuePosition: 2,
         queueTotal: 2,
       }),
+      expect.objectContaining({ skipChangeEvent: true }),
     );
   });
 

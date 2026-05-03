@@ -2,6 +2,7 @@ import {
   buildComposeProjectLockKey,
   buildContainerLockKey,
   getUpdateLockSnapshot,
+  hasUpdateConcurrencyCap,
   parseMaxConcurrent,
   withContainerUpdateLocks,
 } from './update-locks.js';
@@ -112,6 +113,48 @@ describe('parseMaxConcurrent', () => {
     expect(() => parseMaxConcurrent(huge)).toThrow(
       'DD_UPDATE_MAX_CONCURRENT must be a non-negative integer',
     );
+  });
+});
+
+describe('hasUpdateConcurrencyCap', () => {
+  test('returns false when DD_UPDATE_MAX_CONCURRENT is unset (default unlimited)', () => {
+    // Module under test was loaded with no env var set, so the module-level
+    // semaphore is null and `hasUpdateConcurrencyCap()` should be false.
+    expect(hasUpdateConcurrencyCap()).toBe(false);
+  });
+
+  test('returns true after dynamic import with DD_UPDATE_MAX_CONCURRENT set', async () => {
+    const prev = process.env.DD_UPDATE_MAX_CONCURRENT;
+    process.env.DD_UPDATE_MAX_CONCURRENT = '2';
+    vi.resetModules();
+    try {
+      const mod = await import('./update-locks.js?cap2');
+      expect(mod.hasUpdateConcurrencyCap()).toBe(true);
+    } finally {
+      if (prev === undefined) {
+        delete process.env.DD_UPDATE_MAX_CONCURRENT;
+      } else {
+        process.env.DD_UPDATE_MAX_CONCURRENT = prev;
+      }
+      vi.resetModules();
+    }
+  });
+
+  test('returns false after dynamic import with DD_UPDATE_MAX_CONCURRENT="0"', async () => {
+    const prev = process.env.DD_UPDATE_MAX_CONCURRENT;
+    process.env.DD_UPDATE_MAX_CONCURRENT = '0';
+    vi.resetModules();
+    try {
+      const mod = await import('./update-locks.js?cap0');
+      expect(mod.hasUpdateConcurrencyCap()).toBe(false);
+    } finally {
+      if (prev === undefined) {
+        delete process.env.DD_UPDATE_MAX_CONCURRENT;
+      } else {
+        process.env.DD_UPDATE_MAX_CONCURRENT = prev;
+      }
+      vi.resetModules();
+    }
   });
 });
 
