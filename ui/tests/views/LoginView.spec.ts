@@ -121,6 +121,20 @@ describe('LoginView', () => {
       expect(wrapper.find('input[type="password"]').exists()).toBe(true);
     });
 
+    it('has password-manager autofill attributes on username and password inputs', async () => {
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+      expect(
+        wrapper
+          .find('input#username[name="username"][type="text"][autocomplete="username"]')
+          .exists(),
+      ).toBe(true);
+      expect(
+        wrapper
+          .find('input#password[name="password"][type="password"][autocomplete="current-password"]')
+          .exists(),
+      ).toBe(true);
+    });
+
     it('hides basic auth form when no basic strategy exists', async () => {
       const wrapper = await mountLogin([{ type: 'oidc', name: 'github' }]);
       expect(wrapper.find('form').exists()).toBe(false);

@@ -313,6 +313,8 @@ onUnmounted(() => {
             </label>
             <input
               v-model="username"
+              id="username"
+              name="username"
               type="text"
               autocomplete="username"
               required
@@ -328,6 +330,8 @@ onUnmounted(() => {
             </label>
             <input
               v-model="password"
+              id="password"
+              name="password"
               type="password"
               autocomplete="current-password"
               required
