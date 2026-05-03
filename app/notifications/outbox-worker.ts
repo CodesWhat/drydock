@@ -49,8 +49,7 @@ interface ResolvedOptions {
  * entry to dead-letter via the store.
  */
 export class OutboxWorker {
-  private static readonly inflight = new Set<string>();
-
+  private readonly inflight = new Set<string>();
   private timer: ReturnType<typeof setInterval> | undefined;
   private drainsSincePurge = 0;
   private readonly options: ResolvedOptions;
@@ -84,6 +83,7 @@ export class OutboxWorker {
       clearInterval(this.timer);
       this.timer = undefined;
     }
+    this.inflight.clear();
   }
 
   isRunning(): boolean {
@@ -95,13 +95,13 @@ export class OutboxWorker {
     const ready = findReadyForDelivery(nowIso);
     const dispatches: Promise<void>[] = [];
     for (const entry of ready) {
-      if (OutboxWorker.inflight.has(entry.id)) {
+      if (this.inflight.has(entry.id)) {
         continue;
       }
-      OutboxWorker.inflight.add(entry.id);
+      this.inflight.add(entry.id);
       dispatches.push(
         this.dispatch(entry).finally(() => {
-          OutboxWorker.inflight.delete(entry.id);
+          this.inflight.delete(entry.id);
         }),
       );
     }

@@ -208,7 +208,7 @@ describe('OutboxWorker', () => {
     expect(mockMarkOutboxEntryDelivered).toHaveBeenCalledWith('slow-entry');
   });
 
-  test('stop/restart does not duplicate dispatch for an in-flight delivery', async () => {
+  test('stop() releases inflight ids so a restarted worker can retry a still-pending entry', async () => {
     let resolveDeliver!: () => void;
     const inflightPromise = new Promise<void>((resolve) => {
       resolveDeliver = resolve;
@@ -231,7 +231,7 @@ describe('OutboxWorker', () => {
     const secondWorker = startOutboxWorker({ deliver, intervalMs: 1_000 });
     expect(secondWorker).not.toBe(firstWorker);
     expect(secondWorker.isRunning()).toBe(true);
-    expect(deliver).toHaveBeenCalledTimes(1);
+    expect(deliver).toHaveBeenCalledTimes(2);
 
     resolveDeliver();
     await firstDrain;
