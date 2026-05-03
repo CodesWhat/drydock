@@ -31,6 +31,7 @@ import {
   createActiveSseClientRegistryTestAdapter,
   type FlushableResponse,
 } from './sse-active-client-registry.js';
+import { SSE_STALE_SWEEP_INTERVAL_MS } from './sse-constants.js';
 import { enrichContainerLifecyclePayloadWithEligibility } from './sse-container-enrichment.js';
 import { bootId, SseEventBuffer } from './sse-event-buffer.js';
 import { createSelfUpdateAckProtocol } from './sse-self-update-ack-protocol.js';
@@ -45,7 +46,6 @@ const connectionsPerIp = new Map<string, number>();
 const connectionsPerSession = new Map<string, number>();
 const DEFAULT_SELF_UPDATE_ACK_TIMEOUT_MS = 3000;
 const SSE_HEARTBEAT_INTERVAL_MS = 15000;
-const SSE_STALE_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 const SSE_STALE_ENTRY_TTL_MS = 30 * 60 * 1000;
 const ALLOWED_CONTAINER_EVENT_NAMES = new Set<string>([
   'dd:agent-connected',

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import logger from '../../log/index.js';
 import { createStatsHandlers, createSummaryStatsHandlers } from './stats.js';
 
@@ -92,6 +92,11 @@ describe('api/container/stats', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
   });
 
   test('returns latest snapshot and history for a container', () => {
@@ -293,6 +298,11 @@ describe('api/container/stats — summary handlers', () => {
     vi.useFakeTimers();
   });
 
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
   test('GET summary returns current aggregator state with status 200', () => {
     const harness = createSummaryHarness();
     const req = createRequest();
@@ -358,6 +368,25 @@ describe('api/container/stats — summary handlers', () => {
     await vi.advanceTimersByTimeAsync(15_000);
 
     expect(res.write).toHaveBeenCalledWith('event: dd:heartbeat\ndata: {}\n\n');
+  });
+
+  test('SSE stream sweeps destroyed responses and unsubscribes stale listeners', async () => {
+    const harness = createSummaryHarness();
+    const req = createRequest();
+    const res = createResponse() as ReturnType<typeof createResponse> & { destroyed?: boolean };
+
+    harness.handlers.streamStatsSummary(req as any, res as any);
+
+    res.destroyed = true;
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+
+    expect(harness.unsubscribe).toHaveBeenCalledOnce();
+
+    const writeCallCountAfterSweep = (res.write as ReturnType<typeof vi.fn>).mock.calls.length;
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect((res.write as ReturnType<typeof vi.fn>).mock.calls.length).toBe(
+      writeCallCountAfterSweep,
+    );
   });
 
   test('cleanup on req.close unsubscribes and clears heartbeat', async () => {

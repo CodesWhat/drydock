@@ -6,6 +6,7 @@ import type { ContainerStatsCollector } from '../../stats/collector.js';
 import { STATS_STREAM_HEARTBEAT_INTERVAL_MS } from '../../stats/config.js';
 import { getErrorMessage } from '../../util/error.js';
 import { sendErrorResponse } from '../error-response.js';
+import { SSE_STALE_SWEEP_INTERVAL_MS } from '../sse-constants.js';
 import { getPathParamValue } from './request-helpers.js';
 
 type ContainerStatsSnapshot = ReturnType<ContainerStatsCollector['getLatest']>;
@@ -31,6 +32,16 @@ interface SummaryStatsHandlerDependencies {
   aggregator: ContainerStatsAggregator;
 }
 
+interface SummaryStatsStreamClient {
+  response: StreamableResponse;
+  cleanup: () => void;
+}
+
+interface SummaryStatsStreamRuntime {
+  clients: Set<SummaryStatsStreamClient>;
+  staleSweepInterval?: ReturnType<typeof globalThis.setInterval>;
+}
+
 function ensureContainerExists(
   storeContainer: StatsStoreContainerApi,
   id: string,
@@ -51,6 +62,48 @@ function writeStatsEvent(res: StreamableResponse, snapshot: unknown): void {
 
 function writeHeartbeatEvent(res: StreamableResponse): void {
   res.write('event: dd:heartbeat\ndata: {}\n\n');
+}
+
+function isStreamResponseClosed(response: StreamableResponse): boolean {
+  const state = response as Response & {
+    destroyed?: boolean;
+    writableEnded?: boolean;
+    writableFinished?: boolean;
+  };
+  return (
+    state.writableEnded === true || state.writableFinished === true || state.destroyed === true
+  );
+}
+
+function stopSummaryStatsStaleSweepIfIdle(runtime: SummaryStatsStreamRuntime): void {
+  if (!runtime.staleSweepInterval || runtime.clients.size > 0) {
+    return;
+  }
+  const staleSweepInterval = runtime.staleSweepInterval;
+  runtime.staleSweepInterval = undefined;
+  try {
+    globalThis.clearInterval(staleSweepInterval);
+  } catch {
+    // The sweep is best-effort cleanup for stale HTTP responses; cleanup must continue.
+  }
+}
+
+function sweepStaleSummaryStatsStreams(runtime: SummaryStatsStreamRuntime): void {
+  for (const client of runtime.clients) {
+    if (isStreamResponseClosed(client.response)) {
+      client.cleanup();
+    }
+  }
+  stopSummaryStatsStaleSweepIfIdle(runtime);
+}
+
+function startSummaryStatsStaleSweepIfNeeded(runtime: SummaryStatsStreamRuntime): void {
+  if (runtime.staleSweepInterval || runtime.clients.size === 0) {
+    return;
+  }
+  runtime.staleSweepInterval = globalThis.setInterval(() => {
+    sweepStaleSummaryStatsStreams(runtime);
+  }, SSE_STALE_SWEEP_INTERVAL_MS);
 }
 
 function createGetContainerStatsHandler({
@@ -149,7 +202,10 @@ function createGetStatsSummaryHandler({ aggregator }: SummaryStatsHandlerDepende
   };
 }
 
-function createStreamStatsSummaryHandler({ aggregator }: SummaryStatsHandlerDependencies) {
+function createStreamStatsSummaryHandler(
+  { aggregator }: SummaryStatsHandlerDependencies,
+  runtime: SummaryStatsStreamRuntime,
+) {
   return function streamStatsSummary(req: Request, res: Response): void {
     const log = logger.child({ component: 'container-stats' });
     const streamResponse = res as StreamableResponse;
@@ -177,11 +233,14 @@ function createStreamStatsSummaryHandler({ aggregator }: SummaryStatsHandlerDepe
     }, STATS_STREAM_HEARTBEAT_INTERVAL_MS);
 
     let disconnected = false;
+    let streamClient: SummaryStatsStreamClient;
     const cleanup = () => {
       if (disconnected) {
         return;
       }
       disconnected = true;
+      runtime.clients.delete(streamClient);
+      stopSummaryStatsStaleSweepIfIdle(runtime);
       try {
         globalThis.clearInterval(heartbeatInterval);
       } catch (error: unknown) {
@@ -198,6 +257,10 @@ function createStreamStatsSummaryHandler({ aggregator }: SummaryStatsHandlerDepe
       }
     };
 
+    streamClient = { response: streamResponse, cleanup };
+    runtime.clients.add(streamClient);
+    startSummaryStatsStaleSweepIfNeeded(runtime);
+
     req.on('close', cleanup);
     req.on('aborted', cleanup);
     streamResponse.on('close', cleanup);
@@ -206,9 +269,13 @@ function createStreamStatsSummaryHandler({ aggregator }: SummaryStatsHandlerDepe
 }
 
 export function createSummaryStatsHandlers(dependencies: SummaryStatsHandlerDependencies) {
+  const streamRuntime: SummaryStatsStreamRuntime = {
+    clients: new Set(),
+  };
+
   return {
     getStatsSummary: createGetStatsSummaryHandler(dependencies),
-    streamStatsSummary: createStreamStatsSummaryHandler(dependencies),
+    streamStatsSummary: createStreamStatsSummaryHandler(dependencies, streamRuntime),
   };
 }
 
