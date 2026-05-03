@@ -47,9 +47,45 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
   // Keyed by container ID so at most one watcher exists per container.
   const pendingOperationWatchers = new Map<string, WatchStopHandle>();
   const pendingOperationWatcherTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const containerIndexById = new Map<string, number>();
 
   function hasPendingOperationWatcher(containerId: string) {
     return pendingOperationWatchers.has(containerId);
+  }
+
+  function rebuildContainerIndexById() {
+    containerIndexById.clear();
+    for (let index = 0; index < input.containers.value.length; index += 1) {
+      const { id } = input.containers.value[index]!;
+      if (id) {
+        containerIndexById.set(id, index);
+      }
+    }
+  }
+
+  function setContainerIndex(container: Container, index: number) {
+    if (container.id) {
+      containerIndexById.set(container.id, index);
+    }
+  }
+
+  function removeContainerIndexAt(removedIndex: number) {
+    for (const [id, index] of containerIndexById) {
+      if (index === removedIndex) {
+        containerIndexById.delete(id);
+      } else if (index > removedIndex) {
+        containerIndexById.set(id, index - 1);
+      }
+    }
+  }
+
+  function resolveContainerLookupId(id: unknown, name: unknown): string | undefined {
+    const idKey = typeof id === 'string' && id.length > 0 ? id : undefined;
+    const nameKey = typeof name === 'string' && name.length > 0 ? name : undefined;
+    if (idKey) {
+      return input.containerIdMap.value[idKey] ?? idKey;
+    }
+    return nameKey ? input.containerIdMap.value[nameKey] : undefined;
   }
 
   function scheduleCompletionToast(callback: () => void) {
@@ -97,12 +133,11 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
   }
 
   function findContainerIndexByIdOrName(id: unknown, name: unknown): number {
-    return input.containers.value.findIndex(
-      (c) =>
-        (typeof id === 'string' && id.length > 0 && c.id === id) ||
-        (typeof name === 'string' && name.length > 0 && c.name === name),
-    );
+    const containerId = resolveContainerLookupId(id, name);
+    return containerId ? (containerIndexById.get(containerId) ?? -1) : -1;
   }
+
+  watch(input.containers, rebuildContainerIndexById, { immediate: true });
 
   function updateLookupMapsForContainer(raw: Record<string, unknown>) {
     const containerId = typeof raw.id === 'string' ? raw.id : '';
@@ -263,6 +298,7 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
       const idx = findContainerIndexByIdOrName(id, name);
       if (idx !== -1) {
         input.containers.value.splice(idx, 1);
+        removeContainerIndexAt(idx);
       }
       // If a deferred operation-attach watcher is pending for this container,
       // cancel it immediately: no point attaching an operation to a container
@@ -303,6 +339,7 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
           mapped.updateOperation = resolveStoreOperation(mapped.id);
         }
         input.containers.value.push(mapped);
+        setContainerIndex(mapped, input.containers.value.length - 1);
         // Deferred fallback: if the synchronous lookup still found nothing, set
         // up a one-shot watcher so the operation is attached as soon as it
         // arrives in the store. This covers the agent-relay path where
@@ -313,11 +350,16 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
         }
       }
     } else {
-      const existingOp = input.containers.value[idx]!.updateOperation;
-      Object.assign(input.containers.value[idx]!, mapped);
+      const existing = input.containers.value[idx]!;
+      const previousId = existing.id;
+      const existingOp = existing.updateOperation;
+      Object.assign(existing, mapped);
+      if (previousId !== existing.id) {
+        containerIndexById.delete(previousId);
+      }
+      setContainerIndex(existing, idx);
       if (mapped.updateOperation === undefined) {
-        input.containers.value[idx]!.updateOperation =
-          existingOp ?? resolveStoreOperation(input.containers.value[idx]!.id);
+        existing.updateOperation = existingOp ?? resolveStoreOperation(existing.id);
       }
     }
     updateLookupMapsForContainer(raw);

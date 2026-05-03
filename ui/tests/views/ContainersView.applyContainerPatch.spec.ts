@@ -474,6 +474,32 @@ describe('ContainersView — applyContainerPatch', () => {
       expect(vm.containers[0].currentTag).toBe('1.2.0');
     });
 
+    it('uses the lookup map for name-only patches instead of scanning the container array', async () => {
+      const existing = makeContainer({ id: 'c1', name: 'nginx', currentTag: '1.0.0' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      const originalRef = vm.containers[0];
+      const findIndexSpy = vi.fn(() => {
+        throw new Error('container array scan should not be used');
+      });
+      Object.defineProperty(vm.containers, 'findIndex', {
+        configurable: true,
+        value: findIndexSpy,
+      });
+
+      const raw = { name: 'nginx' };
+      const updated = makeContainer({ id: 'c1', name: 'nginx', currentTag: '1.3.0' });
+      mockMapApiContainer.mockReturnValueOnce(updated);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: raw }));
+      await flushPromises();
+
+      expect(findIndexSpy).not.toHaveBeenCalled();
+      expect(vm.containers[0]).toBe(originalRef);
+      expect(vm.containers[0].currentTag).toBe('1.3.0');
+    });
+
     it('pushes a new row for updated event when id is unknown (new container)', async () => {
       const existing = makeContainer({ id: 'c1', name: 'nginx' });
       const wrapper = await mountContainersView([existing]);
