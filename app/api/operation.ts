@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
 import { getOperationById, requestOperationCancellation } from '../store/update-operation.js';
 import { sendErrorResponse } from './error-response.js';
@@ -6,7 +6,7 @@ import { sanitizeApiError } from './helpers.js';
 
 const router = express.Router();
 
-function cancelOperation(req, res) {
+function cancelOperation(req: Request<{ id: string }>, res: Response) {
   try {
     const { id } = req.params;
     const existing = getOperationById(id);
