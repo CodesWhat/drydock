@@ -126,7 +126,7 @@ function createLog() {
 }
 
 function createExecutor(overrides = {}) {
-  return new ContainerUpdateExecutor({
+  const executor = new ContainerUpdateExecutor({
     getConfiguration: () => ({ dryrun: false }),
     getTriggerId: vi.fn(() => 'docker.update'),
     getRollbackConfig: vi.fn(() => ({ autoRollback: false })),
@@ -145,6 +145,8 @@ function createExecutor(overrides = {}) {
     waitForContainerHealthy: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   });
+  executor.postStartLivenessGraceMs = 0;
+  return executor;
 }
 
 describe('ContainerUpdateExecutor', () => {
@@ -736,6 +738,97 @@ describe('ContainerUpdateExecutor', () => {
       'web',
       log,
       300_000,
+    );
+  });
+
+  test('execute rolls back when post-start liveness check sees new container exited', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    context.newContainer.inspect = vi
+      .fn()
+      .mockResolvedValueOnce({ Id: 'new-container-id' })
+      .mockResolvedValue({
+        Id: 'new-container-id',
+        State: { Running: false, ExitCode: 127, Status: 'exited' },
+      });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      getRollbackConfig: vi.fn(() => ({ autoRollback: false })),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+    executor.postStartLivenessGraceMs = 10;
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+      /exited within 10ms of start/,
+    );
+
+    expect(executor.startContainer).toHaveBeenCalledWith(
+      context.newContainer,
+      'web',
+      expect.anything(),
+    );
+    expect(executor.waitForContainerHealthy).not.toHaveBeenCalled();
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        rollbackReason: 'start_new_failed',
+        lastError: expect.stringContaining('exited within 10ms of start'),
+      }),
+    );
+  });
+
+  test('execute proceeds when post-start liveness check sees new container still running', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    context.newContainer.inspect = vi
+      .fn()
+      .mockResolvedValueOnce({ Id: 'new-container-id' })
+      .mockResolvedValue({
+        Id: 'new-container-id',
+        State: { Running: true, ExitCode: 0 },
+      });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+    executor.postStartLivenessGraceMs = 10;
+
+    await expect(executor.execute(context, createContainer(), createLog())).resolves.toBe(true);
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({ status: 'succeeded', phase: 'succeeded' }),
+    );
+  });
+
+  test('execute skips post-start liveness check when grace is 0', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const inspectSpy = vi.fn().mockResolvedValue({ Id: 'new-container-id' });
+    context.newContainer.inspect = inspectSpy;
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(executor.execute(context, createContainer(), createLog())).resolves.toBe(true);
+
+    expect(inspectSpy).toHaveBeenCalledTimes(1);
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({ status: 'succeeded', phase: 'succeeded' }),
     );
   });
 

@@ -1,6 +1,10 @@
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { OperationCancelledError } from '../../../store/update-operation.js';
 import { startHealthGateHeartbeat } from '../../../updates/health-gate-heartbeat.js';
+import {
+  POST_START_LIVENESS_GRACE_MS,
+  verifyContainerStillRunning,
+} from '../../../updates/post-start-liveness.js';
 import { getErrorMessage } from '../../../util/error.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
 import { getRequestedOperationId } from './update-runtime-context.js';
@@ -299,6 +303,8 @@ class ContainerUpdateExecutor {
   scheduleDeferredReconciliation?: ContainerUpdateExecutorDependencies['scheduleDeferredReconciliation'];
 
   persistRollbackState?: ContainerUpdateExecutorDependencies['persistRollbackState'];
+
+  postStartLivenessGraceMs: number = POST_START_LIVENESS_GRACE_MS;
 
   constructor(options: ContainerUpdateExecutorConstructorOptions) {
     const dependencies = resolveFunctionDependencies<ContainerUpdateExecutorDependencies>(options, {
@@ -807,6 +813,13 @@ class ContainerUpdateExecutor {
     attemptState.failureReason = 'start_new_failed';
     await this.startContainer(newContainer, preparedExecution.oldName, logContainer);
     updateOperationStore.updateOperation(preparedExecution.operationId, { phase: 'new-started' });
+
+    await verifyContainerStillRunning({
+      container: newContainer,
+      containerName: preparedExecution.oldName,
+      graceMs: this.postStartLivenessGraceMs,
+      logger: logContainer,
+    });
 
     if (!preparedExecution.shouldHealthGate) {
       return;
