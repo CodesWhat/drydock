@@ -1,6 +1,10 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import {
+  type ContainerUpdateOperationStatus,
+  isContainerUpdateOperationStatus,
+} from '../types/update-operation';
+import {
   type BatchUpdateCompletedPayload,
   type OperationChangedPayload,
   type UpdateAppliedPayload,
@@ -8,7 +12,7 @@ import {
   useEventStreamStore,
 } from './eventStream';
 
-type OperationStatus = 'queued' | 'in-progress' | 'succeeded' | 'failed' | 'rolled-back' | string;
+type OperationStatus = ContainerUpdateOperationStatus;
 
 export interface UiUpdateOperation {
   operationId: string;
@@ -37,14 +41,12 @@ export interface FrozenBatch {
   failedCount: number;
 }
 
-const ACTIVE_STATUSES = new Set(['queued', 'in-progress']);
+const ACTIVE_STATUSES = new Set<OperationStatus>(['queued', 'in-progress']);
 
 /**
  * Monotonic rank for operation statuses. Higher rank = further along the lifecycle.
- * Unknown statuses (not in this map) are treated as rank 0 — they may be advanced
- * from but never regressed to.
  */
-const STATUS_RANK: Record<string, number> = {
+const STATUS_RANK: Record<OperationStatus, number> = {
   queued: 1,
   'in-progress': 2,
   succeeded: 3,
@@ -52,8 +54,8 @@ const STATUS_RANK: Record<string, number> = {
   'rolled-back': 3,
 };
 
-function statusRank(status: string): number {
-  return STATUS_RANK[status] ?? 0;
+function statusRank(status: OperationStatus): number {
+  return STATUS_RANK[status];
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -90,6 +92,9 @@ function normalizeOperationChangedPayload(payload: unknown): OperationChangedPay
   const operationId = getString(payload.operationId);
   const status = getString(payload.status);
   if (!operationId || !status) {
+    return undefined;
+  }
+  if (!isContainerUpdateOperationStatus(status)) {
     return undefined;
   }
   return {
@@ -260,6 +265,9 @@ export const useOperationStore = defineStore('operations', () => {
 
   function applyOperationChanged(payload: OperationChangedPayload): void {
     if (!payload.operationId) {
+      return;
+    }
+    if (!isContainerUpdateOperationStatus(payload.status)) {
       return;
     }
     upsertOperation({

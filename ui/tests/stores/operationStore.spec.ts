@@ -336,19 +336,17 @@ describe('useOperationStore', () => {
       expect(operations.byId['op-two-terminals']?.status).toBe('succeeded');
     });
 
-    it('treats unknown status as rank 0 and allows advance from it', () => {
+    it('ignores operation changes with unknown statuses', () => {
       const operations = useOperationStore();
 
-      // Unknown status inserted first (e.g. from a future backend version)
       operations.applyOperationChanged({
         operationId: 'op-unknown',
         containerId: 'c1',
         containerName: 'web',
         status: 'custom-status',
       });
-      expect(operations.byId['op-unknown']?.status).toBe('custom-status');
+      expect(operations.byId['op-unknown']).toBeUndefined();
 
-      // Should advance to in-progress without being blocked
       operations.applyOperationChanged({
         operationId: 'op-unknown',
         containerId: 'c1',
