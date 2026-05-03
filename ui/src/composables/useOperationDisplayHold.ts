@@ -51,6 +51,7 @@ interface OperationDisplayHoldRecord {
 // computed for ALL N containers.
 const heldOperations = shallowRef(new Map<string, OperationDisplayHoldRecord>());
 const releaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const releaseCallbacks = new Map<string, Set<() => void>>();
 
 function setHeldOperation(operationId: string, hold: OperationDisplayHoldRecord) {
   heldOperations.value.set(operationId, hold);
@@ -133,6 +134,7 @@ function dropConflictingHolds(target: OperationDisplayHoldTarget & { operationId
       continue;
     }
     clearReleaseTimer(operationId);
+    releaseCallbacks.delete(operationId);
     removeHeldOperation(operationId);
   }
 }
@@ -178,6 +180,7 @@ function holdOperationDisplay(args: {
 }) {
   dropConflictingHolds(args);
   clearReleaseTimer(args.operationId);
+  releaseCallbacks.delete(args.operationId);
 
   const existing = heldOperations.value.get(args.operationId);
   const displayUntil = (args.now ?? Date.now()) + OPERATION_ACTIVE_HOLD_MS;
@@ -210,6 +213,12 @@ function scheduleHeldOperationRelease(args: {
   let scheduled = false;
 
   for (const operationId of operationIds) {
+    if (args.onComplete) {
+      const callbacks = releaseCallbacks.get(operationId) ?? new Set<() => void>();
+      callbacks.add(args.onComplete);
+      releaseCallbacks.set(operationId, callbacks);
+    }
+
     const now = args.now ?? Date.now();
     const nextHold = {
       ...updateHoldTargets(heldOperations.value.get(operationId)!, args),
@@ -219,13 +228,18 @@ function scheduleHeldOperationRelease(args: {
     clearReleaseTimer(operationId);
 
     scheduled = true;
-    const { onComplete } = args;
     releaseTimers.set(
       operationId,
       setTimeout(() => {
         releaseTimers.delete(operationId);
         removeHeldOperation(operationId);
-        onComplete?.();
+        const callbacks = releaseCallbacks.get(operationId);
+        releaseCallbacks.delete(operationId);
+        if (callbacks) {
+          for (const callback of callbacks) {
+            callback();
+          }
+        }
       }, OPERATION_DISPLAY_HOLD_MS),
     );
   }
@@ -241,6 +255,7 @@ function clearHeldOperation(args: {
 }) {
   for (const operationId of findMatchingOperationIds(args)) {
     clearReleaseTimer(operationId);
+    releaseCallbacks.delete(operationId);
     removeHeldOperation(operationId);
   }
 }
@@ -308,6 +323,7 @@ function clearAllOperationDisplayHolds() {
     clearTimeout(timer);
   }
   releaseTimers.clear();
+  releaseCallbacks.clear();
   if (heldOperations.value.size > 0) {
     heldOperations.value.clear();
     triggerRef(heldOperations);
@@ -406,6 +422,33 @@ export function parseUpdateOperationSsePayload(raw: unknown): ParsedUpdateOperat
   };
 }
 
+function getPayloadString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+export function parseUpdateLifecycleSsePayload(
+  raw: unknown,
+  lifecycleStatus: 'succeeded' | 'failed',
+): ParsedUpdateOperationSse | undefined {
+  if (!raw || typeof raw !== 'object') {
+    return undefined;
+  }
+  const p = raw as Record<string, unknown>;
+  const rollbackReason = getPayloadString(p.rollbackReason);
+  const status =
+    lifecycleStatus === 'succeeded' ? 'succeeded' : rollbackReason ? 'rolled-back' : 'failed';
+  return {
+    operationId: getPayloadString(p.operationId),
+    containerId: getPayloadString(p.containerId),
+    newContainerId: getPayloadString(p.newContainerId),
+    containerName: getPayloadString(p.containerName),
+    status,
+    phase: getPayloadString(p.phase) ?? status,
+    lastError: getPayloadString(p.error),
+    rollbackReason,
+  };
+}
+
 function resolveActiveOperationPhase(args: {
   status: ActiveContainerUpdateOperationStatus;
   phase: unknown;
@@ -488,6 +531,11 @@ export interface ApplyUpdateOperationSseArgs {
   }) => void;
 }
 
+export interface ApplyUpdateOperationSseResult {
+  terminal: boolean;
+  releaseScheduled: boolean;
+}
+
 /**
  * Shared dispatcher that both ContainersView and DashboardView route their
  * `dd:sse-update-operation-changed` events through. Keeps the hold map, sort
@@ -495,7 +543,9 @@ export interface ApplyUpdateOperationSseArgs {
  * lockstep (previously DashboardView had only a terminal handler with no hold
  * creation or REST reconciliation, which was the root of #291).
  */
-export function applyUpdateOperationSseToHold(args: ApplyUpdateOperationSseArgs) {
+export function applyUpdateOperationSseToHold(
+  args: ApplyUpdateOperationSseArgs,
+): ApplyUpdateOperationSseResult {
   const { parsed, resolveContainer, onActiveOperationComputed, onTerminalEvent } = args;
   const target: OperationDisplayHoldTarget = {
     containerId: parsed.containerId,
@@ -506,7 +556,7 @@ export function applyUpdateOperationSseToHold(args: ApplyUpdateOperationSseArgs)
 
   if (isActiveContainerUpdateOperationStatus(parsed.status)) {
     if (!container) {
-      return;
+      return { terminal: false, releaseScheduled: false };
     }
     const nextOperation: ContainerUpdateOperation = {
       ...(container.updateOperation ?? {}),
@@ -542,7 +592,7 @@ export function applyUpdateOperationSseToHold(args: ApplyUpdateOperationSseArgs)
         },
       });
     }
-    return;
+    return { terminal: false, releaseScheduled: false };
   }
 
   const operationTarget = {
@@ -578,14 +628,15 @@ export function applyUpdateOperationSseToHold(args: ApplyUpdateOperationSseArgs)
           args.onHoldReleased!(terminalEventArgs);
         }
       : undefined;
-    scheduleHeldOperationRelease({
+    const releaseScheduled = scheduleHeldOperationRelease({
       ...operationTarget,
       onComplete: onHoldReleasedFn,
     });
-    return;
+    return { terminal: true, releaseScheduled };
   }
 
   clearHeldOperation(operationTarget);
+  return { terminal: false, releaseScheduled: false };
 }
 
 export function useOperationDisplayHold() {

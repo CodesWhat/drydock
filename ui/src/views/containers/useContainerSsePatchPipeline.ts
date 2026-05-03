@@ -2,6 +2,8 @@ import { onMounted, onScopeDispose, onUnmounted, type Ref, type WatchStopHandle,
 import {
   applyUpdateOperationSseToHold,
   OPERATION_DISPLAY_HOLD_MS,
+  type ParsedUpdateOperationSse,
+  parseUpdateLifecycleSsePayload,
   parseUpdateOperationSsePayload,
 } from '../../composables/useOperationDisplayHold';
 import { type UiUpdateOperation, useOperationStore } from '../../stores/operations';
@@ -39,6 +41,7 @@ const DEFERRED_OPERATION_ATTACH_TIMEOUT_MS = 30_000;
 export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipelineInput) {
   const operationStore = useOperationStore();
   const completionToastTimers = new Set<ReturnType<typeof setTimeout>>();
+  const completionToastOperationIds = new Set<string>();
 
   // Deferred operation re-attach: when dd:container-added arrives before
   // dd:update-operation-changed (agent-relay path has no ordering guarantee),
@@ -101,6 +104,7 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
       clearTimeout(timer);
     }
     completionToastTimers.clear();
+    completionToastOperationIds.clear();
     for (const stop of pendingOperationWatchers.values()) {
       stop();
     }
@@ -380,12 +384,11 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
     return idx === -1 ? undefined : input.containers.value[idx];
   }
 
-  function applyOperationPatch(event: Event) {
-    const parsed = parseUpdateOperationSsePayload((event as CustomEvent)?.detail);
-    if (!parsed) {
-      return;
-    }
-    applyUpdateOperationSseToHold({
+  function applyParsedOperationPatch(
+    parsed: ParsedUpdateOperationSse,
+    options: { onHoldReleased?: () => void } = {},
+  ) {
+    return applyUpdateOperationSseToHold({
       parsed,
       resolveContainer: findContainerForOperationTarget,
       // ContainersView drives row reactivity by mutating updateOperation in
@@ -421,7 +424,47 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
         // cover renames/new container IDs.
         input.schedulePostTerminalReload();
       },
+      onHoldReleased: options.onHoldReleased,
     });
+  }
+
+  function applyOperationPatch(event: Event) {
+    const parsed = parseUpdateOperationSsePayload((event as CustomEvent)?.detail);
+    if (!parsed) {
+      return;
+    }
+    applyParsedOperationPatch(parsed);
+  }
+
+  function scheduleCompletionAfterTerminalRelease(args: {
+    parsed: ParsedUpdateOperationSse;
+    batchId: unknown;
+    toastCallback: () => void;
+  }) {
+    const operationId =
+      typeof args.parsed.operationId === 'string' && args.parsed.operationId.length > 0
+        ? args.parsed.operationId
+        : undefined;
+    const shouldToast = args.batchId === null && operationId !== undefined;
+    const shouldScheduleToast = shouldToast && !completionToastOperationIds.has(operationId);
+    if (shouldScheduleToast) {
+      completionToastOperationIds.add(operationId);
+    }
+    let toastFired = false;
+    const onHoldReleased = shouldScheduleToast
+      ? () => {
+          if (toastFired) {
+            return;
+          }
+          toastFired = true;
+          args.toastCallback();
+        }
+      : undefined;
+    const result = applyParsedOperationPatch(args.parsed, { onHoldReleased });
+    if (!onHoldReleased || result.releaseScheduled) {
+      return;
+    }
+    scheduleCompletionToast(args.toastCallback);
   }
 
   function handleSseUpdateApplied(event: Event) {
@@ -429,19 +472,19 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
     if (!detail) {
       return;
     }
-    const operationId = typeof detail.operationId === 'string' ? detail.operationId : undefined;
+    const parsed = parseUpdateLifecycleSsePayload(detail, 'succeeded');
+    if (!parsed) {
+      return;
+    }
     const containerName =
       typeof detail.containerName === 'string' ? detail.containerName : 'container';
     const batchId = detail.batchId ?? null;
-    if (batchId !== null) {
-      return;
-    }
-    if (!operationId) {
-      return;
-    }
-    scheduleCompletionToast(() =>
-      input.toast.success(input.t('containersView.toast.updated', { name: containerName })),
-    );
+    scheduleCompletionAfterTerminalRelease({
+      parsed,
+      batchId,
+      toastCallback: () =>
+        input.toast.success(input.t('containersView.toast.updated', { name: containerName })),
+    });
   }
 
   function handleSseUpdateFailed(event: Event) {
@@ -449,16 +492,13 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
     if (!detail) {
       return;
     }
-    const operationId = typeof detail.operationId === 'string' ? detail.operationId : undefined;
+    const parsed = parseUpdateLifecycleSsePayload(detail, 'failed');
+    if (!parsed) {
+      return;
+    }
     const containerName =
       typeof detail.containerName === 'string' ? detail.containerName : 'container';
     const batchId = detail.batchId ?? null;
-    if (batchId !== null) {
-      return;
-    }
-    if (!operationId) {
-      return;
-    }
     // Classify the failure reason from the SSE payload. The dd:update-failed
     // payload carries `error` and `rollbackReason`; the presence of
     // rollbackReason signals a rolled-back (vs failed) terminal state and drives
@@ -468,13 +508,13 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
       typeof detail.rollbackReason === 'string' ? detail.rollbackReason : undefined;
     const reason = resolveUpdateFailureReason({ lastError: error, rollbackReason });
     const isCancelled = rollbackReason === 'cancelled' || error === 'Cancelled by operator';
+    let toastCallback: () => void;
     if (rollbackReason !== undefined) {
       if (isCancelled) {
-        scheduleCompletionToast(() =>
-          input.toast.success(input.t('containersView.toast.cancelled', { name: containerName })),
-        );
+        toastCallback = () =>
+          input.toast.success(input.t('containersView.toast.cancelled', { name: containerName }));
       } else {
-        scheduleCompletionToast(() =>
+        toastCallback = () =>
           input.toast.warning(
             reason
               ? input.t('containersView.toast.rolledBackWithReason', {
@@ -482,11 +522,10 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
                   reason,
                 })
               : input.t('containersView.toast.rolledBack', { name: containerName }),
-          ),
-        );
+          );
       }
     } else {
-      scheduleCompletionToast(() =>
+      toastCallback = () =>
         input.toast.error(
           reason
             ? input.t('containersView.toast.updateFailedWithReason', {
@@ -494,9 +533,9 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
                 reason,
               })
             : input.t('containersView.toast.updateFailed', { name: containerName }),
-        ),
-      );
+        );
     }
+    scheduleCompletionAfterTerminalRelease({ parsed, batchId, toastCallback });
   }
 
   const sseScanCompletedListener = handleSseScanCompleted as EventListener;

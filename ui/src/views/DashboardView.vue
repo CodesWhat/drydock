@@ -4,7 +4,9 @@ import { useI18n } from 'vue-i18n';
 import {
   applyUpdateOperationSseToHold,
   OPERATION_DISPLAY_HOLD_MS,
+  parseUpdateLifecycleSsePayload,
   parseUpdateOperationSsePayload,
+  type ParsedUpdateOperationSse,
   useOperationDisplayHold,
 } from '../composables/useOperationDisplayHold';
 import type { Container } from '../types/container';
@@ -55,8 +57,12 @@ const { t } = useI18n();
 const router = useRouter();
 const confirm = useConfirmDialog();
 const toast = useToast();
-const { heldOperations, projectContainerDisplayState, reconcileHoldsAgainstContainers } =
-  useOperationDisplayHold();
+const {
+  clearAllOperationDisplayHolds,
+  heldOperations,
+  projectContainerDisplayState,
+  reconcileHoldsAgainstContainers,
+} = useOperationDisplayHold();
 const { isMobile, windowNarrow } = useBreakpoints();
 const dashboardScrollEl = ref<HTMLElement | null>(null);
 // Responsive grid margins: slightly wider vertical gaps on touch screens for scroll room
@@ -77,6 +83,7 @@ const dashboardPendingUpdatePollTimer = ref<ReturnType<typeof setTimeout> | null
 const dashboardPendingUpdatePollInFlight = ref(false);
 const dashboardPendingUpdatePollDelayMs = ref(2_000);
 const completionToastTimers = new Set<ReturnType<typeof setTimeout>>();
+const completionToastOperationIds = new Set<string>();
 const DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS = 2_000;
 const DASHBOARD_PENDING_UPDATE_POLL_MAX_INTERVAL_MS = 16_000;
 const DASHBOARD_PENDING_UPDATE_TIMEOUT_MS = 30_000;
@@ -94,6 +101,7 @@ onScopeDispose(() => {
     clearTimeout(timer);
   }
   completionToastTimers.clear();
+  completionToastOperationIds.clear();
 });
 
 function navigateTo(route: RouteLocationRaw) {
@@ -490,12 +498,11 @@ function findDashboardContainerForOperationTarget(target: {
   return undefined;
 }
 
-function applyDashboardOperationSse(event: Event) {
-  const parsed = parseUpdateOperationSsePayload((event as CustomEvent)?.detail);
-  if (!parsed) {
-    return;
-  }
-  applyUpdateOperationSseToHold({
+function applyDashboardParsedOperationSse(
+  parsed: ParsedUpdateOperationSse,
+  options: { onHoldReleased?: () => void } = {},
+) {
+  return applyUpdateOperationSseToHold({
     parsed,
     resolveContainer: findDashboardContainerForOperationTarget,
     // DashboardView doesn't mutate container rows — the widget projects held
@@ -508,7 +515,16 @@ function applyDashboardOperationSse(event: Event) {
         containerName: parsed.containerName,
       });
     },
+    onHoldReleased: options.onHoldReleased,
   });
+}
+
+function applyDashboardOperationSse(event: Event) {
+  const parsed = parseUpdateOperationSsePayload((event as CustomEvent)?.detail);
+  if (!parsed) {
+    return;
+  }
+  applyDashboardParsedOperationSse(parsed);
 }
 
 watch(containers, (next) => {
@@ -517,25 +533,54 @@ watch(containers, (next) => {
   reconcileHoldsAgainstContainers(next, Date.now());
 });
 
+function scheduleDashboardCompletionAfterTerminalRelease(args: {
+  parsed: ParsedUpdateOperationSse;
+  batchId: unknown;
+  toastCallback: () => void;
+}) {
+  const operationId =
+    typeof args.parsed.operationId === 'string' && args.parsed.operationId.length > 0
+      ? args.parsed.operationId
+      : undefined;
+  const shouldToast = args.batchId === null && operationId !== undefined;
+  const shouldScheduleToast = shouldToast && !completionToastOperationIds.has(operationId);
+  if (shouldScheduleToast) {
+    completionToastOperationIds.add(operationId);
+  }
+  let toastFired = false;
+  const onHoldReleased = shouldScheduleToast
+    ? () => {
+        if (toastFired) {
+          return;
+        }
+        toastFired = true;
+        args.toastCallback();
+      }
+    : undefined;
+  const result = applyDashboardParsedOperationSse(args.parsed, { onHoldReleased });
+  if (!onHoldReleased || result.releaseScheduled) {
+    return;
+  }
+  scheduleCompletionToast(args.toastCallback);
+}
+
 function handleDashboardSseUpdateApplied(event: Event) {
   const detail = (event as CustomEvent)?.detail as Record<string, unknown> | undefined;
   if (!detail) {
     return;
   }
-  const operationId = typeof detail.operationId === 'string' ? detail.operationId : undefined;
+  const parsed = parseUpdateLifecycleSsePayload(detail, 'succeeded');
+  if (!parsed) {
+    return;
+  }
   const containerName =
     typeof detail.containerName === 'string' ? detail.containerName : 'container';
   const batchId = detail.batchId ?? null;
-  // Batch completions are handled by Track D — suppress per-container toast.
-  if (batchId !== null) {
-    return;
-  }
-  if (!operationId) {
-    return;
-  }
-  scheduleCompletionToast(() =>
-    toast.success(t('dashboardView.toast.updated', { name: containerName })),
-  );
+  scheduleDashboardCompletionAfterTerminalRelease({
+    parsed,
+    batchId,
+    toastCallback: () => toast.success(t('dashboardView.toast.updated', { name: containerName })),
+  });
 }
 
 function handleDashboardSseUpdateFailed(event: Event) {
@@ -543,44 +588,40 @@ function handleDashboardSseUpdateFailed(event: Event) {
   if (!detail) {
     return;
   }
-  const operationId = typeof detail.operationId === 'string' ? detail.operationId : undefined;
+  const parsed = parseUpdateLifecycleSsePayload(detail, 'failed');
+  if (!parsed) {
+    return;
+  }
   const containerName =
     typeof detail.containerName === 'string' ? detail.containerName : 'container';
   const batchId = detail.batchId ?? null;
-  if (batchId !== null) {
-    return;
-  }
-  if (!operationId) {
-    return;
-  }
   const error = typeof detail.error === 'string' ? detail.error : undefined;
   const rollbackReason =
     typeof detail.rollbackReason === 'string' ? detail.rollbackReason : undefined;
   const reason = resolveUpdateFailureReason({ lastError: error, rollbackReason });
   const isCancelled = rollbackReason === 'cancelled' || error === 'Cancelled by operator';
+  let toastCallback: () => void;
   if (rollbackReason !== undefined) {
     if (isCancelled) {
-      scheduleCompletionToast(() =>
-        toast.success(t('dashboardView.toast.cancelled', { name: containerName })),
-      );
+      toastCallback = () =>
+        toast.success(t('dashboardView.toast.cancelled', { name: containerName }));
     } else {
-      scheduleCompletionToast(() =>
+      toastCallback = () =>
         toast.warning(
           reason
             ? t('dashboardView.toast.rolledBackWithReason', { name: containerName, reason })
             : t('dashboardView.toast.rolledBack', { name: containerName }),
-        ),
-      );
+        );
     }
   } else {
-    scheduleCompletionToast(() =>
+    toastCallback = () =>
       toast.error(
         reason
           ? t('dashboardView.toast.updateFailedWithReason', { name: containerName, reason })
           : t('dashboardView.toast.updateFailed', { name: containerName }),
-      ),
-    );
+      );
   }
+  scheduleDashboardCompletionAfterTerminalRelease({ parsed, batchId, toastCallback });
 }
 
 onMounted(() => {
@@ -593,6 +634,7 @@ onUnmounted(() => {
   globalThis.removeEventListener('dd:sse-update-operation-changed', applyDashboardOperationSse);
   globalThis.removeEventListener('dd:sse-update-applied', handleDashboardSseUpdateApplied);
   globalThis.removeEventListener('dd:sse-update-failed', handleDashboardSseUpdateFailed);
+  clearAllOperationDisplayHolds();
   stopDashboardPendingUpdatePolling();
 });
 

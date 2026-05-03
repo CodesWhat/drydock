@@ -1,7 +1,8 @@
 import { flushPromises } from '@vue/test-utils';
-import { computed, ref } from 'vue';
+import { computed, defineComponent, ref } from 'vue';
 import type { Container, ContainerUpdateOperation } from '@/types/container';
 import ContainersView from '@/views/ContainersView.vue';
+import { useContainerSsePatchPipeline } from '@/views/containers/useContainerSsePatchPipeline';
 import { mountWithPlugins } from '../helpers/mount';
 
 // --- Hoisted values for mocks that need them in factory functions ---
@@ -437,6 +438,15 @@ describe('ContainersView — applyContainerPatch', () => {
   });
 
   describe('updated', () => {
+    it('skips idless rows when rebuilding the container index', async () => {
+      const existing = makeContainer({ id: '', name: 'idless', currentTag: '1.0.0' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      expect(vm.containers).toHaveLength(1);
+      expect(vm.containers[0].id).toBe('');
+    });
+
     it('merges fields in place when row exists by id — preserves reference', async () => {
       const existing = makeContainer({ id: 'c1', name: 'nginx', currentTag: '1.0.0' });
       const wrapper = await mountContainersView([existing]);
@@ -498,6 +508,30 @@ describe('ContainersView — applyContainerPatch', () => {
       expect(findIndexSpy).not.toHaveBeenCalled();
       expect(vm.containers[0]).toBe(originalRef);
       expect(vm.containers[0].currentTag).toBe('1.3.0');
+    });
+
+    it('resolves id-only patches through the lookup map before mutating a row', async () => {
+      const existing = makeContainer({ id: 'canonical-c1', name: 'nginx', currentTag: '1.0.0' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      const originalRef = vm.containers[0];
+      vm.containerIdMap['runtime-c1'] = 'canonical-c1';
+
+      const raw = { id: 'runtime-c1' };
+      const updated = makeContainer({
+        id: 'canonical-c1',
+        name: 'nginx',
+        currentTag: '1.4.0',
+      });
+      mockMapApiContainer.mockReturnValueOnce(updated);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: raw }));
+      await flushPromises();
+
+      expect(vm.containers).toHaveLength(1);
+      expect(vm.containers[0]).toBe(originalRef);
+      expect(vm.containers[0].currentTag).toBe('1.4.0');
     });
 
     it('pushes a new row for updated event when id is unknown (new container)', async () => {
@@ -1139,6 +1173,304 @@ describe('ContainersView — applyContainerPatch', () => {
     });
   });
 
+  describe('fail-safe completion toast guards', () => {
+    it('does not schedule a toast when update-applied detail has no operationId', async () => {
+      vi.useFakeTimers();
+
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-applied', {
+            detail: {
+              containerId: 'c1',
+              containerName: 'nginx',
+              batchId: null,
+              timestamp: '2026-05-01T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value).toHaveLength(countBefore);
+
+        wrapper.unmount();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('defaults the update-applied toast name when containerName is missing', async () => {
+      vi.useFakeTimers();
+
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-applied', {
+            detail: {
+              operationId: 'op-default-name-success',
+              containerId: 'c1',
+              batchId: null,
+              timestamp: '2026-05-01T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({ tone: 'success', title: 'Updated: container' });
+
+        wrapper.unmount();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not schedule a toast when update-failed detail has no operationId', async () => {
+      vi.useFakeTimers();
+
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              containerId: 'c1',
+              containerName: 'nginx',
+              error: 'docker pull failed',
+              batchId: null,
+              timestamp: '2026-05-01T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value).toHaveLength(countBefore);
+
+        wrapper.unmount();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('defaults the update-failed toast name when containerName is missing', async () => {
+      vi.useFakeTimers();
+
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-default-name-failed',
+              containerId: 'c1',
+              error: 'docker pull failed',
+              batchId: null,
+              timestamp: '2026-05-01T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({
+          tone: 'error',
+          title: 'Update failed: container — docker pull failed',
+        });
+
+        wrapper.unmount();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not schedule a toast when update-failed detail is missing', async () => {
+      vi.useFakeTimers();
+
+      try {
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountContainersView(
+          [c],
+          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+        );
+
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(new CustomEvent('dd:sse-update-failed'));
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value).toHaveLength(countBefore);
+
+        wrapper.unmount();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe('operation patch guards', () => {
+    it('ignores malformed update-operation-changed payloads', async () => {
+      const c = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const vm = wrapper.vm as any;
+      mockGetAllContainers.mockClear();
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-update-operation-changed'));
+      await flushPromises();
+
+      expect(vm.containers[0].updateOperation).toBeUndefined();
+      expect(mockGetAllContainers).not.toHaveBeenCalled();
+      wrapper.unmount();
+    });
+
+    it('handles terminal operation events when no container row matches', async () => {
+      const c = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const vm = wrapper.vm as any;
+
+      globalThis.dispatchEvent(
+        new CustomEvent('dd:sse-update-operation-changed', {
+          detail: {
+            operationId: 'op-missing-row',
+            containerId: 'missing-container',
+            status: 'failed',
+            phase: 'failed',
+            lastError: 'container disappeared',
+          },
+        }),
+      );
+      await flushPromises();
+
+      expect(vm.containers[0].updateOperation).toBeUndefined();
+      wrapper.unmount();
+    });
+
+    it('resolves operation targets by newContainerId when containerId is absent', async () => {
+      const c = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const vm = wrapper.vm as any;
+
+      globalThis.dispatchEvent(
+        new CustomEvent('dd:sse-update-operation-changed', {
+          detail: {
+            operationId: 'op-new-id-target',
+            newContainerId: 'c1',
+            status: 'in-progress',
+            phase: 'pulling',
+          },
+        }),
+      );
+      await flushPromises();
+
+      expect(vm.containers[0].updateOperation).toMatchObject({
+        id: 'op-new-id-target',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+      wrapper.unmount();
+    });
+
+    it('ignores an unrecognized container patch kind after mapping', async () => {
+      const reconcileHoldsAgainstContainers = vi.fn();
+      const Harness = defineComponent({
+        setup(_, { expose }) {
+          const containers = ref<Container[]>([]);
+          const pipeline = useContainerSsePatchPipeline({
+            containers,
+            containerIdMap: ref<Record<string, string>>({}),
+            containerMetaMap: ref<Record<string, unknown>>({}),
+            selectedContainerId: ref(undefined),
+            loadContainers: vi.fn().mockResolvedValue(undefined),
+            loadDetailSecurityData: vi.fn().mockResolvedValue(undefined),
+            reconcileHoldsAgainstContainers,
+            schedulePostTerminalReload: vi.fn(),
+            toast: {
+              error: vi.fn(),
+              success: vi.fn(),
+              warning: vi.fn(),
+            },
+            t: (key: string) => key,
+          });
+          expose({ containers, ...pipeline });
+          return () => null;
+        },
+      });
+      const wrapper = mountWithPlugins(Harness);
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+      const vm = wrapper.vm as any;
+
+      mockMapApiContainer.mockReturnValueOnce(makeContainer({ id: 'c-noop', name: 'noop' }));
+
+      vm.applyContainerPatch(
+        new CustomEvent('dd:sse-container-noop', {
+          detail: { id: 'c-noop', name: 'noop' },
+        }),
+        'noop',
+      );
+      await flushPromises();
+
+      expect(vm.containers).toHaveLength(0);
+      expect(reconcileHoldsAgainstContainers).toHaveBeenCalledWith([]);
+    });
+  });
+
   describe('deferred operation attach (SSE ordering race)', () => {
     function makeStoreOp(
       overrides: Partial<{
@@ -1275,6 +1607,129 @@ describe('ContainersView — applyContainerPatch', () => {
       // Container is gone
       expect(vm.containers).toHaveLength(1);
       expect(vm.containers[0].id).toBe('c1');
+    });
+
+    it('cancels a deferred watcher even when its timeout entry is absent', async () => {
+      const existing = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      const rawNew = { id: 'c-no-timer', name: 'postgres' };
+      const mappedNew = makeContainer({
+        id: 'c-no-timer',
+        name: 'postgres',
+        updateOperation: undefined,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedNew);
+
+      const setTimeoutSpy = vi
+        .spyOn(globalThis, 'setTimeout')
+        .mockImplementationOnce(() => undefined as any);
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: rawNew }));
+      setTimeoutSpy.mockRestore();
+      await flushPromises();
+
+      expect(vm.hasPendingOperationWatcher('c-no-timer')).toBe(true);
+
+      globalThis.dispatchEvent(
+        new CustomEvent('dd:sse-container-removed', {
+          detail: { id: 'c-no-timer', name: 'postgres' },
+        }),
+      );
+      await flushPromises();
+
+      expect(vm.hasPendingOperationWatcher('c-no-timer')).toBe(false);
+    });
+
+    it('cleans up a pending watcher when the watched id is replaced before the operation arrives', async () => {
+      const existing = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      const rawNew = { id: 'c-old', name: 'redis' };
+      const mappedNew = makeContainer({
+        id: 'c-old',
+        name: 'redis',
+        updateOperation: undefined,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedNew);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: rawNew }));
+      await flushPromises();
+
+      expect(vm.hasPendingOperationWatcher('c-old')).toBe(true);
+
+      const mappedRenamed = makeContainer({
+        id: 'c-new',
+        name: 'redis',
+        currentTag: '2.0.0',
+        updateOperation: undefined,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedRenamed);
+
+      globalThis.dispatchEvent(
+        new CustomEvent('dd:sse-container-updated', { detail: { id: 'c-old', name: 'redis' } }),
+      );
+      await flushPromises();
+
+      expect(vm.containers[1].id).toBe('c-new');
+
+      mockStoreOperationsById.value = {
+        'c-old': makeStoreOp({ containerId: 'c-old', operationId: 'op-old' }),
+      };
+      await flushPromises();
+
+      expect(vm.hasPendingOperationWatcher('c-old')).toBe(false);
+      expect(vm.containers[1].updateOperation).toBeUndefined();
+    });
+
+    it('replaces a pending watcher for the same mapped id and ignores empty watcher updates', async () => {
+      const wrapper = await mountContainersView([]);
+      const vm = wrapper.vm as any;
+
+      const rawAlias = { id: 'runtime-alias', name: 'redis' };
+      const mappedCanonical = makeContainer({
+        id: 'canonical-race',
+        name: 'redis',
+        updateOperation: undefined,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedCanonical);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: rawAlias }));
+      await flushPromises();
+
+      expect(vm.hasPendingOperationWatcher('canonical-race')).toBe(true);
+
+      mockStoreOperationsById.value = { 'canonical-race': null };
+      await flushPromises();
+
+      expect(vm.hasPendingOperationWatcher('canonical-race')).toBe(true);
+      expect(vm.containers[0].updateOperation).toBeUndefined();
+
+      const mappedCanonicalAgain = makeContainer({
+        id: 'canonical-race',
+        name: 'redis',
+        currentTag: '2.0.0',
+        updateOperation: undefined,
+      });
+      mockMapApiContainer.mockReturnValueOnce(mappedCanonicalAgain);
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: rawAlias }));
+      await flushPromises();
+
+      expect(vm.hasPendingOperationWatcher('canonical-race')).toBe(true);
+      expect(vm.containers).toHaveLength(2);
+
+      mockStoreOperationsById.value = {
+        'canonical-race': makeStoreOp({
+          containerId: 'canonical-race',
+          operationId: 'op-replaced-watcher',
+        }),
+      };
+      await flushPromises();
+
+      expect(vm.hasPendingOperationWatcher('canonical-race')).toBe(false);
+      expect(vm.containers[1].updateOperation!.id).toBe('op-replaced-watcher');
     });
 
     it('replaces existing deferred watcher when duplicate container-added fires for same id', async () => {
