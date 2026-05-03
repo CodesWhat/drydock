@@ -464,6 +464,7 @@ export function useDashboardData() {
       onSummary: (s) => {
         summary.value = s;
       },
+      onError: () => undefined,
     });
 
     await fetchDashboardData();

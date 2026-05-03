@@ -1062,6 +1062,37 @@ describe('useDashboardData', () => {
     expect(state.summary.value).toEqual(newSummary);
   });
 
+  it('keeps existing summary unchanged when the stats summary stream errors', async () => {
+    const existingSummary = {
+      timestamp: '2026-04-30T00:00:00.000Z',
+      watchedCount: 2,
+      avgCpuPercent: 15.0,
+      totalMemoryUsageBytes: 500_000_000,
+      totalMemoryLimitBytes: 2_000_000_000,
+      totalMemoryPercent: 25.0,
+      topCpu: [],
+      topMemory: [],
+    };
+    mocks.getStatsSummary.mockResolvedValue(existingSummary);
+
+    let capturedHandlers: Record<string, unknown> | undefined;
+    mocks.connectStatsSummaryStream.mockImplementation((handlers: unknown) => {
+      capturedHandlers = handlers as Record<string, unknown>;
+      return { pause: vi.fn(), resume: vi.fn(), disconnect: vi.fn(), isPaused: vi.fn() };
+    });
+
+    const { state } = await mountDashboardData();
+
+    expect(state.summary.value).toEqual(existingSummary);
+
+    const onError = capturedHandlers?.onError as (() => void) | undefined;
+    expect(onError).toBeTypeOf('function');
+    onError!();
+
+    await nextTick();
+    expect(state.summary.value).toEqual(existingSummary);
+  });
+
   it('populates summary from initial getStatsSummary fetch', async () => {
     const initialSummary = {
       timestamp: '2026-04-30T00:00:00.000Z',
