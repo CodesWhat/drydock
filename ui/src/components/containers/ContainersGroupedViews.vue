@@ -721,52 +721,63 @@ onScopeDispose(() => {
                 @click.stop />
             </div>
           </template>
-          <!-- Icon-style actions (compact) -->
+          <!-- Icon-style actions (compact). Each slot is a fixed-width cell so
+               icons line up vertically across rows even when optional links are absent. -->
           <template v-else-if="tableActionStyle === 'icons'">
             <div class="flex items-center justify-end gap-0.5">
-              <ReleaseNotesLink
-                v-if="c.releaseNotes?.url || c.currentReleaseNotes?.url || c.releaseLink"
-                :release-notes="c.releaseNotes"
-                :current-release-notes="c.currentReleaseNotes"
-                :release-link="c.releaseLink"
-                icon-only
-              />
-              <ProjectLink v-if="c.sourceRepo" :source-repo="c.sourceRepo" icon-only />
-              <AppIconButton v-if="updateBtnState(c) === 'hard'" icon="lock" size="sm" variant="muted"
-                      class="cursor-not-allowed opacity-50"
-                      :disabled="true"
-                      :tooltip="tt(updateBtnTooltip(c))" @click.stop />
-              <AppIconButton v-else-if="updateBtnState(c) === 'soft'" icon="cloud-download" size="sm" variant="warning"
-                      class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
-                      :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-bg-hover hover:scale-110 active:scale-95'"
-                      :disabled="isRowLocked(c)"
-                      :tooltip="tt(updateBtnTooltip(c))" @click.stop="confirmUpdate(c)" />
-              <AppIconButton v-else-if="updateBtnState(c) === 'ready'" icon="cloud-download" size="sm" variant="muted"
-                      class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
-                      :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
-                      :disabled="isRowLocked(c)"
-                      :tooltip="tt(updateBtnTooltip(c))" @click.stop="confirmUpdate(c)" />
-              <AppIconButton v-else-if="c.status === 'running'" icon="stop" size="sm" variant="muted"
-                      class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
-                      :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95'"
-                      :disabled="isRowLocked(c)"
-                      :tooltip="tt('Stop')" @click.stop="confirmStop(c)" />
-              <AppIconButton v-else icon="play" size="sm" variant="muted"
-                      class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
-                      :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
-                      :disabled="isRowLocked(c)"
-                      :tooltip="tt('Start')" @click.stop="startContainer(c)" />
-              <AppIconButton v-if="canCancelUpdate(c)" icon="x" size="sm" variant="danger"
-                      class="transition-[color,background-color,border-color,opacity,transform,box-shadow] hover:dd-bg-hover hover:scale-110 active:scale-95"
-                      :tooltip="tt('Cancel update')" @click.stop="cancelUpdate(c)" />
-              <AppIconButton icon="more" size="sm" variant="muted"
-                      class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
-                      :class="[
-                        isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95',
-                        openActionsMenu === c.id && !isRowLocked(c) ? 'dd-bg-elevated dd-text' : '',
-                      ]"
-                      :disabled="isRowLocked(c)"
-                      :tooltip="tt('More')" @click.stop="toggleActionsMenu(c.id, $event)" />
+              <div class="inline-flex items-center justify-center w-11 h-11 shrink-0">
+                <ReleaseNotesLink
+                  v-if="c.releaseNotes?.url || c.currentReleaseNotes?.url || c.releaseLink"
+                  :release-notes="c.releaseNotes"
+                  :current-release-notes="c.currentReleaseNotes"
+                  :release-link="c.releaseLink"
+                  icon-only
+                />
+              </div>
+              <div class="inline-flex items-center justify-center w-11 h-11 shrink-0">
+                <ProjectLink v-if="c.sourceRepo" :source-repo="c.sourceRepo" icon-only />
+              </div>
+              <div class="inline-flex items-center justify-center w-11 h-11 shrink-0">
+                <AppIconButton v-if="updateBtnState(c) === 'hard'" icon="lock" size="sm" variant="muted"
+                        class="cursor-not-allowed opacity-50"
+                        :disabled="true"
+                        :tooltip="tt(updateBtnTooltip(c))" @click.stop />
+                <AppIconButton v-else-if="updateBtnState(c) === 'soft'" icon="cloud-download" size="sm" variant="warning"
+                        class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+                        :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                        :disabled="isRowLocked(c)"
+                        :tooltip="tt(updateBtnTooltip(c))" @click.stop="confirmUpdate(c)" />
+                <AppIconButton v-else-if="updateBtnState(c) === 'ready'" icon="cloud-download" size="sm" variant="muted"
+                        class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+                        :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                        :disabled="isRowLocked(c)"
+                        :tooltip="tt(updateBtnTooltip(c))" @click.stop="confirmUpdate(c)" />
+                <AppIconButton v-else-if="c.status === 'running'" icon="stop" size="sm" variant="muted"
+                        class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+                        :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                        :disabled="isRowLocked(c)"
+                        :tooltip="tt('Stop')" @click.stop="confirmStop(c)" />
+                <AppIconButton v-else icon="play" size="sm" variant="muted"
+                        class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+                        :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                        :disabled="isRowLocked(c)"
+                        :tooltip="tt('Start')" @click.stop="startContainer(c)" />
+              </div>
+              <div class="inline-flex items-center justify-center w-11 h-11 shrink-0">
+                <AppIconButton v-if="canCancelUpdate(c)" icon="x" size="sm" variant="danger"
+                        class="transition-[color,background-color,border-color,opacity,transform,box-shadow] hover:dd-bg-hover hover:scale-110 active:scale-95"
+                        :tooltip="tt('Cancel update')" @click.stop="cancelUpdate(c)" />
+              </div>
+              <div class="inline-flex items-center justify-center w-11 h-11 shrink-0">
+                <AppIconButton icon="more" size="sm" variant="muted"
+                        class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+                        :class="[
+                          isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95',
+                          openActionsMenu === c.id && !isRowLocked(c) ? 'dd-bg-elevated dd-text' : '',
+                        ]"
+                        :disabled="isRowLocked(c)"
+                        :tooltip="tt('More')" @click.stop="toggleActionsMenu(c.id, $event)" />
+              </div>
             </div>
           </template>
           <!-- Button-style actions (full) -->
