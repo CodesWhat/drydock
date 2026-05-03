@@ -2,6 +2,7 @@ import { createMockResponse } from '../test/helpers.js';
 
 const {
   mockRouter,
+  mockFindAllOutboxEntries,
   mockFindOutboxEntriesByStatus,
   mockGetOutboxEntry,
   mockRequeueDeadLetterEntry,
@@ -13,6 +14,31 @@ const {
     post: vi.fn(),
     delete: vi.fn(),
   },
+  mockFindAllOutboxEntries: vi.fn(() => [
+    {
+      id: 'entry-1',
+      eventName: 'update-available',
+      payload: {},
+      triggerId: 'slack.ops',
+      attempts: 5,
+      maxAttempts: 5,
+      nextAttemptAt: '2026-01-01T00:00:00.000Z',
+      status: 'dead-letter',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      failedAt: '2026-01-01T01:00:00.000Z',
+    },
+    {
+      id: 'entry-2',
+      eventName: 'update-available',
+      payload: {},
+      triggerId: 'slack.ops',
+      attempts: 0,
+      maxAttempts: 5,
+      nextAttemptAt: '2026-01-01T00:00:00.000Z',
+      status: 'pending',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+  ]),
   mockFindOutboxEntriesByStatus: vi.fn((status: string) => {
     if (status === 'dead-letter') {
       return [
@@ -90,6 +116,7 @@ vi.mock('express', () => ({
 vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
 
 vi.mock('../store/notification-outbox', () => ({
+  findAllOutboxEntries: mockFindAllOutboxEntries,
   findOutboxEntriesByStatus: mockFindOutboxEntriesByStatus,
   getOutboxEntry: mockGetOutboxEntry,
   requeueDeadLetterEntry: mockRequeueDeadLetterEntry,
@@ -124,7 +151,8 @@ describe('Notification Outbox Router', () => {
 
       handler({ query: {} }, res);
 
-      expect(mockFindOutboxEntriesByStatus).toHaveBeenCalledWith('dead-letter');
+      expect(mockFindAllOutboxEntries).toHaveBeenCalledTimes(1);
+      expect(mockFindOutboxEntriesByStatus).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
       const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
       expect(body.data).toHaveLength(1);
@@ -170,48 +198,44 @@ describe('Notification Outbox Router', () => {
     });
 
     test('scrubs lastError and strips full container payloads before responding', () => {
-      mockFindOutboxEntriesByStatus.mockImplementation((status: string) =>
-        status === 'dead-letter'
-          ? [
-              {
-                id: 'entry-sensitive',
-                eventName: 'update-failed',
-                payload: {
-                  container: {
-                    id: 'container-1',
-                    name: 'web',
-                    displayName: 'Web',
-                    watcher: 'local',
-                    status: 'running',
-                    image: {
-                      name: 'library/nginx',
-                      tag: { value: '1.25', semver: true },
-                      registry: { name: 'hub', url: 'https://registry-1.docker.io/v2' },
-                    },
-                    details: {
-                      env: [
-                        { key: 'API_TOKEN', value: 'container-secret-token' },
-                        { key: 'Authorization', value: 'Bearer container-secret-header' },
-                      ],
-                    },
-                    labels: {
-                      'com.example.secret': 'label-secret',
-                    },
-                  },
-                  containerName: 'web',
-                },
-                triggerId: 'webhook.ops',
-                attempts: 5,
-                maxAttempts: 5,
-                nextAttemptAt: '2026-01-01T00:00:00.000Z',
-                status: 'dead-letter',
-                lastError: 'HTTP 401 Authorization: Bearer provider-secret-token',
-                createdAt: '2026-01-01T00:00:00.000Z',
-                failedAt: '2026-01-01T01:00:00.000Z',
+      mockFindAllOutboxEntries.mockReturnValueOnce([
+        {
+          id: 'entry-sensitive',
+          eventName: 'update-failed',
+          payload: {
+            container: {
+              id: 'container-1',
+              name: 'web',
+              displayName: 'Web',
+              watcher: 'local',
+              status: 'running',
+              image: {
+                name: 'library/nginx',
+                tag: { value: '1.25', semver: true },
+                registry: { name: 'hub', url: 'https://registry-1.docker.io/v2' },
               },
-            ]
-          : [],
-      );
+              details: {
+                env: [
+                  { key: 'API_TOKEN', value: 'container-secret-token' },
+                  { key: 'Authorization', value: 'Bearer container-secret-header' },
+                ],
+              },
+              labels: {
+                'com.example.secret': 'label-secret',
+              },
+            },
+            containerName: 'web',
+          },
+          triggerId: 'webhook.ops',
+          attempts: 5,
+          maxAttempts: 5,
+          nextAttemptAt: '2026-01-01T00:00:00.000Z',
+          status: 'dead-letter',
+          lastError: 'HTTP 401 Authorization: Bearer provider-secret-token',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          failedAt: '2026-01-01T01:00:00.000Z',
+        },
+      ]);
       outboxRouter.init();
       const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
       const res = createMockResponse();
@@ -273,7 +297,7 @@ describe('Notification Outbox Router', () => {
     });
 
     test('returns 500 when store throws', () => {
-      mockFindOutboxEntriesByStatus.mockImplementationOnce(() => {
+      mockFindAllOutboxEntries.mockImplementationOnce(() => {
         throw new Error('store failure');
       });
       outboxRouter.init();

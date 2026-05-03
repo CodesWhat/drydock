@@ -2,6 +2,7 @@ import {
   _resetOutboxStoreForTests,
   createCollections,
   enqueueOutboxEntry,
+  findAllOutboxEntries,
   findOutboxEntriesByStatus,
   findReadyForDelivery,
   getOutboxEntry,
@@ -133,6 +134,10 @@ describe('uninitialised guards (before createCollections)', () => {
 
   test('findOutboxEntriesByStatus returns []', () => {
     expect(findOutboxEntriesByStatus('pending')).toEqual([]);
+  });
+
+  test('findAllOutboxEntries returns []', () => {
+    expect(findAllOutboxEntries()).toEqual([]);
   });
 
   test('markOutboxEntryAttempted returns undefined', () => {
@@ -315,6 +320,30 @@ describe('findOutboxEntriesByStatus', () => {
     const entries = findOutboxEntriesByStatus('pending');
     const ids = entries.map((e) => e.id);
     expect(ids.indexOf(e1.id)).toBeLessThanOrEqual(ids.indexOf(e2.id));
+  });
+});
+
+// ─── findAllOutboxEntries ────────────────────────────────────────────────────
+
+describe('findAllOutboxEntries', () => {
+  beforeEach(() => {
+    createCollections(createDb() as never);
+  });
+
+  test('returns entries across statuses sorted ascending by createdAt', () => {
+    const pending = enqueueOutboxEntry(BASE_INPUT);
+    const delivered = enqueueOutboxEntry(BASE_INPUT);
+    markOutboxEntryDelivered(delivered.id);
+    const deadLetter = enqueueOutboxEntry({ ...BASE_INPUT, maxAttempts: 1 });
+    markOutboxEntryAttempted(deadLetter.id, {
+      error: 'e',
+      nextAttemptAt: '2099-01-01T00:00:00.000Z',
+    });
+
+    const entries = findAllOutboxEntries();
+
+    expect(entries.map((entry) => entry.id)).toEqual([pending.id, delivered.id, deadLetter.id]);
+    expect(entries.map((entry) => entry.status)).toEqual(['pending', 'delivered', 'dead-letter']);
   });
 });
 

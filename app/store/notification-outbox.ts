@@ -112,6 +112,16 @@ export function findOutboxEntriesByStatus(
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
+export function findAllOutboxEntries(): NotificationOutboxEntry[] {
+  if (!outboxCollection) {
+    return [];
+  }
+  return outboxCollection
+    .find()
+    .map((doc) => doc.data)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+}
+
 export interface MarkAttemptedInput {
   error: string;
   nextAttemptAt: string;

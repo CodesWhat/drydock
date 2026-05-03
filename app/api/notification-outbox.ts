@@ -5,7 +5,7 @@ import type {
   NotificationOutboxEntryStatus,
 } from '../model/notification-outbox.js';
 import {
-  findOutboxEntriesByStatus,
+  findAllOutboxEntries,
   getOutboxEntry,
   removeOutboxEntry,
   requeueDeadLetterEntry,
@@ -129,6 +129,30 @@ function sanitizeOutboxEntryForResponse(entry: NotificationOutboxEntry): Sanitiz
   };
 }
 
+function partitionOutboxEntriesByStatus(entries: NotificationOutboxEntry[]): {
+  pending: NotificationOutboxEntry[];
+  delivered: NotificationOutboxEntry[];
+  deadLetter: NotificationOutboxEntry[];
+} {
+  const partitioned = {
+    pending: [] as NotificationOutboxEntry[],
+    delivered: [] as NotificationOutboxEntry[],
+    deadLetter: [] as NotificationOutboxEntry[],
+  };
+
+  for (const entry of entries) {
+    if (entry.status === 'pending') {
+      partitioned.pending.push(entry);
+    } else if (entry.status === 'delivered') {
+      partitioned.delivered.push(entry);
+    } else if (entry.status === 'dead-letter') {
+      partitioned.deadLetter.push(entry);
+    }
+  }
+
+  return partitioned;
+}
+
 function getOutboxEntries(req: Request, res: Response) {
   try {
     const { status } = req.query;
@@ -142,9 +166,9 @@ function getOutboxEntries(req: Request, res: Response) {
       resolvedStatus = status;
     }
 
-    const pending = findOutboxEntriesByStatus('pending');
-    const delivered = findOutboxEntriesByStatus('delivered');
-    const deadLetter = findOutboxEntriesByStatus('dead-letter');
+    const { pending, delivered, deadLetter } = partitionOutboxEntriesByStatus(
+      findAllOutboxEntries(),
+    );
 
     const data =
       resolvedStatus === 'pending'
