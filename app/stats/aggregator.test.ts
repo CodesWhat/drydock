@@ -94,6 +94,10 @@ function createHarness(options: HarnessOptions = {}) {
     await drainMicrotasks();
   }
 
+  function fireTick() {
+    tickCallback?.();
+  }
+
   return {
     aggregator,
     containerList,
@@ -101,6 +105,7 @@ function createHarness(options: HarnessOptions = {}) {
     setIntervalFn,
     clearIntervalFn,
     tick,
+    fireTick,
     advanceNowByMs: (delta: number) => {
       nowMs += delta;
     },
@@ -264,6 +269,40 @@ describe('stats/aggregator', () => {
     const current = aggregator.getCurrent();
     expect(current.avgCpuPercent).toBeCloseTo(20, 1);
     expect(current.topCpu[0].cpuPercent).toBeCloseTo(20, 1);
+
+    aggregator.stop();
+  });
+
+  test('overlapping ticks are skipped while a stats tick is already in flight', async () => {
+    const { aggregator, fetchSnapshot, fireTick, tick } = createHarness({
+      containers: [{ id: 'c1', name: 'web', watcher: 'local' }],
+    });
+
+    let resolveFirstFetch: (payload: ReturnType<typeof makePayload>) => void = () => {};
+    fetchSnapshot.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirstFetch = resolve;
+        }),
+    );
+
+    aggregator.start();
+    fireTick();
+
+    expect(fetchSnapshot).toHaveBeenCalledTimes(1);
+
+    fetchSnapshot.mockResolvedValueOnce(makePayload(1100, 11000));
+    fireTick();
+    await drainMicrotasks();
+
+    expect(fetchSnapshot).toHaveBeenCalledTimes(1);
+
+    resolveFirstFetch(makePayload(1000, 10000));
+    await drainMicrotasks();
+
+    await tick();
+
+    expect(fetchSnapshot).toHaveBeenCalledTimes(2);
 
     aggregator.stop();
   });

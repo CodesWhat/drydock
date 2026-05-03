@@ -114,116 +114,126 @@ interface AggregatorRuntime {
   listeners: Set<SummaryListener>;
   timer?: ReturnType<typeof globalThis.setInterval>;
   stopped: boolean;
+  ticking: boolean;
 }
 
 async function runTick(runtime: AggregatorRuntime): Promise<void> {
-  const containers = runtime.getContainers();
-  const watchers = runtime.getWatchers();
-
-  const targets: Array<{ container: Container; watcher: DockerStatsWatcherApi }> = [];
-  for (const container of containers) {
-    const watcherId = `docker.${container.watcher}`;
-    const watcher = watchers[watcherId];
-    if (isDockerStatsWatcherApi(watcher)) {
-      targets.push({ container, watcher });
-    }
-  }
-
-  const results = await Promise.allSettled(
-    targets.map(async ({ container, watcher }) => {
-      const payload = await runtime.fetchSnapshot(watcher, container.name);
-      if (payload === null) {
-        return null;
-      }
-      if (runtime.stopped) {
-        return null;
-      }
-      const previous = runtime.previousPayloads.get(container.id);
-      const snapshot = calculateContainerStatsSnapshot(
-        container.id,
-        payload,
-        previous,
-        runtime.now(),
-      );
-      runtime.previousPayloads.set(container.id, payload);
-      return { container, snapshot };
-    }),
-  );
-
-  if (runtime.stopped) {
+  if (runtime.ticking) {
     return;
   }
 
-  const rows: ContainerStatsSummaryRow[] = [];
-  for (const result of results) {
-    if (result.status === 'fulfilled' && result.value !== null) {
-      const { container, snapshot } = result.value;
-      rows.push({
-        id: container.id,
-        name: container.name,
-        cpuPercent: snapshot.cpuPercent,
-        memoryUsageBytes: snapshot.memoryUsageBytes,
-        memoryLimitBytes: snapshot.memoryLimitBytes,
-        memoryPercent: snapshot.memoryPercent,
-      });
+  runtime.ticking = true;
+  try {
+    const containers = runtime.getContainers();
+    const watchers = runtime.getWatchers();
+
+    const targets: Array<{ container: Container; watcher: DockerStatsWatcherApi }> = [];
+    for (const container of containers) {
+      const watcherId = `docker.${container.watcher}`;
+      const watcher = watchers[watcherId];
+      if (isDockerStatsWatcherApi(watcher)) {
+        targets.push({ container, watcher });
+      }
     }
-  }
 
-  const watchedCount = rows.length;
-  const avgCpuPercent =
-    watchedCount > 0
-      ? cap(rows.reduce((sum, r) => sum + r.cpuPercent, 0) / watchedCount, 0, 100)
-      : 0;
-  const totalMemoryUsageBytes = rows.reduce((sum, r) => sum + r.memoryUsageBytes, 0);
-  const totalMemoryLimitBytes = rows.reduce((sum, r) => sum + r.memoryLimitBytes, 0);
-  const totalMemoryPercent =
-    totalMemoryLimitBytes > 0
-      ? cap((totalMemoryUsageBytes / totalMemoryLimitBytes) * 100, 0, 100)
-      : 0;
+    const results = await Promise.allSettled(
+      targets.map(async ({ container, watcher }) => {
+        const payload = await runtime.fetchSnapshot(watcher, container.name);
+        if (payload === null) {
+          return null;
+        }
+        if (runtime.stopped) {
+          return null;
+        }
+        const previous = runtime.previousPayloads.get(container.id);
+        const snapshot = calculateContainerStatsSnapshot(
+          container.id,
+          payload,
+          previous,
+          runtime.now(),
+        );
+        runtime.previousPayloads.set(container.id, payload);
+        return { container, snapshot };
+      }),
+    );
 
-  function sortDesc(
-    a: ContainerStatsSummaryRow,
-    b: ContainerStatsSummaryRow,
-    key: 'cpuPercent' | 'memoryPercent',
-  ): number {
-    const diff = b[key] - a[key];
-    if (diff !== 0) {
-      return diff;
+    if (runtime.stopped) {
+      return;
     }
-    return a.name.localeCompare(b.name);
-  }
 
-  const topCpu = [...rows].sort((a, b) => sortDesc(a, b, 'cpuPercent')).slice(0, runtime.topN);
-  const topMemory = [...rows]
-    .sort((a, b) => sortDesc(a, b, 'memoryPercent'))
-    .slice(0, runtime.topN);
-
-  const summary: ContainerStatsSummary = {
-    timestamp: new Date(runtime.now()).toISOString(),
-    watchedCount,
-    avgCpuPercent,
-    totalMemoryUsageBytes,
-    totalMemoryLimitBytes,
-    totalMemoryPercent,
-    topCpu,
-    topMemory,
-  };
-
-  runtime.current = summary;
-
-  for (const listener of runtime.listeners) {
-    try {
-      listener(summary);
-    } catch (err: unknown) {
-      log.warn({ err }, 'Stats aggregator listener threw');
+    const rows: ContainerStatsSummaryRow[] = [];
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value !== null) {
+        const { container, snapshot } = result.value;
+        rows.push({
+          id: container.id,
+          name: container.name,
+          cpuPercent: snapshot.cpuPercent,
+          memoryUsageBytes: snapshot.memoryUsageBytes,
+          memoryLimitBytes: snapshot.memoryLimitBytes,
+          memoryPercent: snapshot.memoryPercent,
+        });
+      }
     }
-  }
 
-  const currentIds = new Set(containers.map((c) => c.id));
-  for (const id of runtime.previousPayloads.keys()) {
-    if (!currentIds.has(id)) {
-      runtime.previousPayloads.delete(id);
+    const watchedCount = rows.length;
+    const avgCpuPercent =
+      watchedCount > 0
+        ? cap(rows.reduce((sum, r) => sum + r.cpuPercent, 0) / watchedCount, 0, 100)
+        : 0;
+    const totalMemoryUsageBytes = rows.reduce((sum, r) => sum + r.memoryUsageBytes, 0);
+    const totalMemoryLimitBytes = rows.reduce((sum, r) => sum + r.memoryLimitBytes, 0);
+    const totalMemoryPercent =
+      totalMemoryLimitBytes > 0
+        ? cap((totalMemoryUsageBytes / totalMemoryLimitBytes) * 100, 0, 100)
+        : 0;
+
+    function sortDesc(
+      a: ContainerStatsSummaryRow,
+      b: ContainerStatsSummaryRow,
+      key: 'cpuPercent' | 'memoryPercent',
+    ): number {
+      const diff = b[key] - a[key];
+      if (diff !== 0) {
+        return diff;
+      }
+      return a.name.localeCompare(b.name);
     }
+
+    const topCpu = [...rows].sort((a, b) => sortDesc(a, b, 'cpuPercent')).slice(0, runtime.topN);
+    const topMemory = [...rows]
+      .sort((a, b) => sortDesc(a, b, 'memoryPercent'))
+      .slice(0, runtime.topN);
+
+    const summary: ContainerStatsSummary = {
+      timestamp: new Date(runtime.now()).toISOString(),
+      watchedCount,
+      avgCpuPercent,
+      totalMemoryUsageBytes,
+      totalMemoryLimitBytes,
+      totalMemoryPercent,
+      topCpu,
+      topMemory,
+    };
+
+    runtime.current = summary;
+
+    for (const listener of runtime.listeners) {
+      try {
+        listener(summary);
+      } catch (err: unknown) {
+        log.warn({ err }, 'Stats aggregator listener threw');
+      }
+    }
+
+    const currentIds = new Set(containers.map((c) => c.id));
+    for (const id of runtime.previousPayloads.keys()) {
+      if (!currentIds.has(id)) {
+        runtime.previousPayloads.delete(id);
+      }
+    }
+  } finally {
+    runtime.ticking = false;
   }
 }
 
@@ -244,6 +254,7 @@ export function createContainerStatsAggregator(
     current: emptyContainerStatsSummary(new Date(now()).toISOString()),
     listeners: new Set(),
     stopped: false,
+    ticking: false,
   };
 
   return {
