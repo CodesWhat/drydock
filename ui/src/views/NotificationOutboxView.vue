@@ -50,12 +50,12 @@ const error = ref('');
 const actingId = ref<string | null>(null);
 
 const tableColumns = computed(() => [
-  { key: 'eventName', label: 'Event', sortable: false, width: '20%' },
-  { key: 'triggerId', label: 'Trigger', sortable: false, width: '20%' },
+  { key: 'eventName', label: 'Event', sortable: false, width: '18%' },
+  { key: 'triggerId', label: 'Trigger', sortable: false, width: '18%' },
   { key: 'attempts', label: 'Attempts', sortable: false, width: '8%' },
-  { key: 'lastError', label: 'Last error', sortable: false, width: '32%' },
+  { key: 'lastError', label: 'Last error', sortable: false, width: '26%' },
   { key: 'createdAt', label: 'Created', sortable: false, width: '12%' },
-  { key: 'actions', label: '', sortable: false, width: '8%' },
+  { key: 'actions', label: '', sortable: false, width: '18%', align: 'text-right', px: 'px-3' },
 ]);
 
 function statusToCount(s: NotificationOutboxEntryStatus): number {

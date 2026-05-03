@@ -17,6 +17,7 @@ export interface OutboxWorkerOptions {
   baseBackoffMs?: number;
   maxBackoffMs?: number;
   jitterMs?: number;
+  maxDrainConcurrency?: number;
   randomFn?: () => number;
   nowFn?: () => Date;
 }
@@ -27,6 +28,7 @@ const DEFAULT_PURGE_EVERY_DRAINS = 12;
 const DEFAULT_BASE_BACKOFF_MS = 30_000;
 const DEFAULT_MAX_BACKOFF_MS = 5 * 60_000;
 const DEFAULT_JITTER_MS = 5_000;
+const DEFAULT_MAX_DRAIN_CONCURRENCY = 10;
 
 const workerLog = log.child({ component: 'notifications.outbox-worker' });
 
@@ -38,15 +40,57 @@ interface ResolvedOptions {
   baseBackoffMs: number;
   maxBackoffMs: number;
   jitterMs: number;
+  maxDrainConcurrency: number;
   randomFn: () => number;
   nowFn: () => Date;
 }
 
+class DrainSemaphore {
+  private active = 0;
+  private readonly waiting: Array<() => void> = [];
+
+  constructor(private readonly limit: number) {}
+
+  run<T>(task: () => Promise<T>): Promise<T> {
+    if (this.active < this.limit) {
+      return this.runNow(task);
+    }
+
+    return new Promise((resolve) => {
+      this.waiting.push(() => resolve(this.runNow(task)));
+    });
+  }
+
+  private runNow<T>(task: () => Promise<T>): Promise<T> {
+    this.active += 1;
+    return Promise.resolve()
+      .then(task)
+      .finally(() => {
+        this.release();
+      });
+  }
+
+  private release(): void {
+    this.active -= 1;
+    const next = this.waiting.shift();
+    if (next) {
+      next();
+    }
+  }
+}
+
+function resolveMaxDrainConcurrency(value: number | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_MAX_DRAIN_CONCURRENCY;
+  }
+  return Math.max(1, Math.floor(value));
+}
+
 /**
  * Drains the notification outbox on a fixed interval. Each ready entry is
- * passed to `deliver`; success marks it delivered, failure schedules a retry
- * with exponential backoff + jitter and (after maxAttempts) transitions the
- * entry to dead-letter via the store.
+ * passed to `deliver` under `maxDrainConcurrency`; success marks it delivered,
+ * failure schedules a retry with exponential backoff + jitter and (after
+ * maxAttempts) transitions the entry to dead-letter via the store.
  */
 export class OutboxWorker {
   private readonly inflight = new Set<string>();
@@ -63,6 +107,7 @@ export class OutboxWorker {
       baseBackoffMs: opts.baseBackoffMs ?? DEFAULT_BASE_BACKOFF_MS,
       maxBackoffMs: opts.maxBackoffMs ?? DEFAULT_MAX_BACKOFF_MS,
       jitterMs: opts.jitterMs ?? DEFAULT_JITTER_MS,
+      maxDrainConcurrency: resolveMaxDrainConcurrency(opts.maxDrainConcurrency),
       randomFn: opts.randomFn ?? Math.random,
       nowFn: opts.nowFn ?? (() => new Date()),
     };
@@ -94,6 +139,7 @@ export class OutboxWorker {
     const nowIso = this.options.nowFn().toISOString();
     const ready = findReadyForDelivery(nowIso);
     const dispatches: Promise<void>[] = [];
+    const semaphore = new DrainSemaphore(this.options.maxDrainConcurrency);
     for (const entry of ready) {
       if (entry.status !== 'pending') {
         continue;
@@ -103,9 +149,11 @@ export class OutboxWorker {
       }
       this.inflight.add(entry.id);
       dispatches.push(
-        this.dispatch(entry).finally(() => {
-          this.inflight.delete(entry.id);
-        }),
+        semaphore
+          .run(() => this.dispatch(entry))
+          .finally(() => {
+            this.inflight.delete(entry.id);
+          }),
       );
     }
     this.drainsSincePurge += 1;

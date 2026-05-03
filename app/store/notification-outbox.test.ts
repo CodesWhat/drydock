@@ -105,11 +105,38 @@ describe('createCollections', () => {
       addCollection,
     } as never);
 
-    expect(addCollection).toHaveBeenCalledWith('notificationOutbox', {
-      indices: expect.arrayContaining(['data.deliveredAt', 'data.failedAt']),
-    });
+    expect(addCollection).toHaveBeenCalledWith(
+      'notificationOutbox',
+      expect.objectContaining({
+        indices: expect.arrayContaining(['data.deliveredAt', 'data.failedAt']),
+      }),
+    );
     expect(collection.ensureIndex).toHaveBeenCalledWith('data.deliveredAt');
     expect(collection.ensureIndex).toHaveBeenCalledWith('data.failedAt');
+  });
+
+  test('initialises binary indexes for ready-delivery scheduler lookups', () => {
+    const collection = {
+      insert: vi.fn(),
+      find: vi.fn(),
+      findOne: vi.fn(),
+      remove: vi.fn(),
+      ensureIndex: vi.fn(),
+    };
+    const addCollection = vi.fn(() => collection);
+
+    createCollections({
+      getCollection: () => null,
+      addCollection,
+    } as never);
+
+    expect(addCollection).toHaveBeenCalledWith(
+      'notificationOutbox',
+      expect.objectContaining({
+        indices: expect.arrayContaining(['data.status', 'data.nextAttemptAt']),
+        binaryIndices: expect.arrayContaining(['data.status', 'data.nextAttemptAt']),
+      }),
+    );
   });
 });
 
@@ -255,9 +282,10 @@ describe('findReadyForDelivery', () => {
     findReadyForDelivery('2026-05-02T12:00:00.000Z');
 
     expect(find).toHaveBeenCalledWith({
-      'data.status': 'pending',
       'data.nextAttemptAt': { $lte: '2026-05-02T12:00:00.000Z' },
+      'data.status': 'pending',
     });
+    expect(Object.keys(find.mock.calls[0][0])).toEqual(['data.nextAttemptAt', 'data.status']);
   });
 
   test('returns pending entries whose nextAttemptAt <= nowIso', () => {

@@ -56,6 +56,12 @@ function makeEntry(overrides: Partial<NotificationOutboxEntry> = {}): Notificati
   };
 }
 
+async function flushOutboxMicrotasks(cycles = 3): Promise<void> {
+  for (let index = 0; index < cycles; index += 1) {
+    await Promise.resolve();
+  }
+}
+
 describe('OutboxWorker', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -208,6 +214,80 @@ describe('OutboxWorker', () => {
     expect(mockMarkOutboxEntryDelivered).toHaveBeenCalledWith('slow-entry');
   });
 
+  test('drain() limits concurrent deliveries with maxDrainConcurrency', async () => {
+    const releaseDeliveries: Array<() => void> = [];
+    let activeDeliveries = 0;
+    let maxActiveDeliveries = 0;
+    const deliver = vi.fn(() => {
+      activeDeliveries += 1;
+      maxActiveDeliveries = Math.max(maxActiveDeliveries, activeDeliveries);
+      return new Promise<void>((resolve) => {
+        releaseDeliveries.push(() => {
+          activeDeliveries -= 1;
+          resolve();
+        });
+      });
+    });
+    const entries = Array.from({ length: 5 }, (_, index) =>
+      makeEntry({ id: `entry-${index + 1}` }),
+    );
+    mockFindReadyForDelivery.mockReturnValue(entries);
+
+    const w = new OutboxWorker({ deliver, maxDrainConcurrency: 2 });
+    const drain = w.drain();
+    await flushOutboxMicrotasks();
+
+    expect(deliver).toHaveBeenCalledTimes(2);
+    expect(maxActiveDeliveries).toBe(2);
+
+    releaseDeliveries.shift()?.();
+    await flushOutboxMicrotasks();
+    expect(deliver).toHaveBeenCalledTimes(3);
+    expect(maxActiveDeliveries).toBe(2);
+
+    while (releaseDeliveries.length > 0) {
+      releaseDeliveries.shift()?.();
+      await flushOutboxMicrotasks();
+    }
+    await drain;
+
+    expect(deliver).toHaveBeenCalledTimes(5);
+    expect(maxActiveDeliveries).toBe(2);
+    expect(mockMarkOutboxEntryDelivered).toHaveBeenCalledTimes(5);
+  });
+
+  test('drain() defaults maxDrainConcurrency to 10', async () => {
+    const releaseDeliveries: Array<() => void> = [];
+    const deliver = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseDeliveries.push(resolve);
+        }),
+    );
+    const entries = Array.from({ length: 11 }, (_, index) =>
+      makeEntry({ id: `default-entry-${index + 1}` }),
+    );
+    mockFindReadyForDelivery.mockReturnValue(entries);
+
+    const w = new OutboxWorker({ deliver });
+    const drain = w.drain();
+    await flushOutboxMicrotasks();
+
+    expect(deliver).toHaveBeenCalledTimes(10);
+
+    releaseDeliveries.shift()?.();
+    await flushOutboxMicrotasks();
+    expect(deliver).toHaveBeenCalledTimes(11);
+
+    while (releaseDeliveries.length > 0) {
+      releaseDeliveries.shift()?.();
+      await flushOutboxMicrotasks();
+    }
+    await drain;
+
+    expect(mockMarkOutboxEntryDelivered).toHaveBeenCalledTimes(11);
+  });
+
   test('stop() releases inflight ids so a restarted worker can retry a still-pending entry', async () => {
     let resolveDeliver!: () => void;
     const inflightPromise = new Promise<void>((resolve) => {
@@ -223,12 +303,14 @@ describe('OutboxWorker', () => {
     expect(deliver).not.toHaveBeenCalled();
 
     const firstDrain = firstWorker.drain();
+    await flushOutboxMicrotasks();
     expect(deliver).toHaveBeenCalledTimes(1);
 
     stopOutboxWorker();
     expect(firstWorker.isRunning()).toBe(false);
 
     const secondWorker = startOutboxWorker({ deliver, intervalMs: 1_000 });
+    await flushOutboxMicrotasks();
     expect(secondWorker).not.toBe(firstWorker);
     expect(secondWorker.isRunning()).toBe(true);
     expect(deliver).toHaveBeenCalledTimes(2);

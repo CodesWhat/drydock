@@ -7,6 +7,7 @@ import { scrubAuthorizationHeaderValues } from '../util/auth-redaction.js';
 import { initCollection } from './util.js';
 
 const DEFAULT_MAX_ATTEMPTS = 5;
+const READY_DELIVERY_BINARY_INDICES = ['data.status', 'data.nextAttemptAt'];
 
 interface OutboxCollectionDocument {
   $loki?: number;
@@ -29,7 +30,10 @@ interface OutboxCollection {
 
 interface OutboxStoreDb {
   getCollection(name: string): OutboxCollection | null;
-  addCollection(name: string, options?: { indices?: string[] }): OutboxCollection;
+  addCollection(
+    name: string,
+    options?: { indices?: string[]; binaryIndices?: string[] },
+  ): OutboxCollection;
 }
 
 let outboxCollection: OutboxCollection | undefined;
@@ -39,14 +43,8 @@ export function createCollections(db: OutboxStoreDb): void {
     db as unknown as Parameters<typeof initCollection>[0],
     'notificationOutbox',
     {
-      indices: [
-        'data.id',
-        'data.status',
-        'data.triggerId',
-        'data.nextAttemptAt',
-        'data.deliveredAt',
-        'data.failedAt',
-      ],
+      indices: ['data.id', 'data.triggerId', 'data.deliveredAt', 'data.failedAt'],
+      binaryIndices: READY_DELIVERY_BINARY_INDICES,
     },
   ) as unknown as OutboxCollection;
 }
@@ -95,7 +93,7 @@ export function findReadyForDelivery(
     return [];
   }
   return outboxCollection
-    .find({ 'data.status': 'pending', 'data.nextAttemptAt': { $lte: nowIso } })
+    .find({ 'data.nextAttemptAt': { $lte: nowIso }, 'data.status': 'pending' })
     .map((doc) => doc.data)
     .sort((a, b) => a.nextAttemptAt.localeCompare(b.nextAttemptAt));
 }
