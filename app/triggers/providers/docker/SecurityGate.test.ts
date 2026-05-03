@@ -1062,6 +1062,32 @@ describe('SecurityGate', () => {
 
       expect(log.info).toHaveBeenCalledWith(expect.stringContaining('Security gate disabled'));
     });
+
+    test('records audit row when scans are skipped by global gate off mode', async () => {
+      const harness = createGateHarness({
+        securityConfiguration: { gate: { mode: 'off' } },
+      });
+      const container = createContainer();
+
+      await harness.gate.maybeScanAndGateUpdate(createContext(), container, createLog());
+
+      expect(harness.recordSecurityAudit).toHaveBeenCalledWith(
+        'security-scan-skipped',
+        container,
+        'info',
+        'Security scan skipped because DD_SECURITY_GATE_MODE=off is configured globally',
+      );
+    });
+
+    test('describes an effective gate-off skip when no direct off source is present', () => {
+      const harness = createGateHarness({
+        securityConfiguration: { gate: { mode: 'on' } },
+      });
+
+      expect(
+        harness.gate.getGateDisabledAuditDetails(createContainer(), { gate: { mode: 'on' } }),
+      ).toBe('Security scan skipped because the effective security gate mode is off');
+    });
   });
 
   // -------------------------------------------------------------------------

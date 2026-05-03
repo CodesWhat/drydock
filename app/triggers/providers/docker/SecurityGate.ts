@@ -311,6 +311,21 @@ class SecurityGate {
     return securityConfiguration.gate?.mode ?? 'on';
   }
 
+  getGateDisabledAuditDetails(
+    container: SecurityContainer,
+    securityConfiguration: SecurityConfiguration,
+  ): string {
+    if (this.getContainerGateModeOverride(container) === 'off') {
+      return 'Security scan skipped because dd.security.gate=off is set on the container';
+    }
+
+    if (securityConfiguration.gate?.mode === 'off') {
+      return 'Security scan skipped because DD_SECURITY_GATE_MODE=off is configured globally';
+    }
+
+    return 'Security scan skipped because the effective security gate mode is off';
+  }
+
   async maybeVerifyImageSignatureForUpdate(
     context: SecurityGateUpdateContext,
     container: SecurityContainer,
@@ -553,14 +568,12 @@ class SecurityGate {
       logContainer.info(
         'Security gate disabled for this container (dd.security.gate=off or DD_SECURITY_GATE_MODE=off); skipping scan',
       );
-      if (this.getContainerGateModeOverride(container) === 'off') {
-        this.telemetry.recordSecurityAudit(
-          'security-scan-skipped',
-          container,
-          'info',
-          'Security scan skipped because dd.security.gate=off is set on the container',
-        );
-      }
+      this.telemetry.recordSecurityAudit(
+        'security-scan-skipped',
+        container,
+        'info',
+        this.getGateDisabledAuditDetails(container, securityConfiguration),
+      );
       return;
     }
 
