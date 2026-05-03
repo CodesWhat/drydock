@@ -1340,6 +1340,18 @@ describe('ContainersView — applyContainerPatch', () => {
       // Row remains without an operation (timeout doesn't remove the row)
       expect(vm.containers[1].updateOperation).toBeUndefined();
 
+      mockGetOperationByContainerId.mockClear();
+
+      // A late store update after timeout must not be observed by a leaked watcher.
+      mockStoreOperationsById.value = {
+        'c-timeout': makeStoreOp({ containerId: 'c-timeout', operationId: 'op-too-late' }),
+      };
+      await flushPromises();
+
+      expect(mockGetOperationByContainerId).not.toHaveBeenCalled();
+      expect(vm.containers[1].updateOperation).toBeUndefined();
+      expect(vm.hasPendingOperationWatcher('c-timeout')).toBe(false);
+
       vi.useRealTimers();
     });
   });
