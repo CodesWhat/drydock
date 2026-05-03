@@ -183,7 +183,9 @@ The notification outbox stores failed notification delivery attempts so admins c
 
 ### Error body retention
 
-`lastError` is diagnostic text from the latest failed delivery attempt. It may include downstream notification provider or webhook response bodies when those providers return useful failure text. Treat it as admin-visible troubleshooting data, not as sanitized end-user copy.
+`lastError` is diagnostic text from the latest failed delivery attempt. It may include downstream notification provider or webhook response bodies when those providers return useful failure text, with Authorization header values redacted before storage. Treat it as admin-visible troubleshooting data, not as sanitized end-user copy.
+
+Outbox API responses expose only a safe payload projection. Full persisted delivery payloads, including full container objects, are not returned by `GET /api/v1/notifications/outbox`.
 
 ## Audit trail
 

@@ -312,6 +312,19 @@ describe('markOutboxEntryAttempted', () => {
     expect(next?.status).toBe('pending');
   });
 
+  test('scrubs authorization header values before persisting lastError', () => {
+    const entry = enqueueOutboxEntry(BASE_INPUT);
+    const next = markOutboxEntryAttempted(entry.id, {
+      error:
+        'webhook failed with headers: Authorization: Bearer secret-token-123, x-request-id=abc',
+      nextAttemptAt: '2099-01-01T00:00:00.000Z',
+    });
+
+    expect(next?.lastError).toContain('Authorization: Bearer [REDACTED]');
+    expect(next?.lastError).not.toContain('secret-token-123');
+    expect(getOutboxEntry(entry.id)?.lastError).toBe(next?.lastError);
+  });
+
   test('transitions to dead-letter when attempts >= maxAttempts', () => {
     const entry = enqueueOutboxEntry({ ...BASE_INPUT, maxAttempts: 2 });
     markOutboxEntryAttempted(entry.id, { error: 'e1', nextAttemptAt: '2099-01-01T00:00:00.000Z' });

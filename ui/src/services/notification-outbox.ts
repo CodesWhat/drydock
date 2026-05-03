@@ -5,6 +5,7 @@ export interface NotificationOutboxEntry {
   eventName: string;
   triggerId: string;
   containerId?: string;
+  /** API-safe projection of the delivery payload; full container payloads are not exposed. */
   payload: unknown;
   attempts: number;
   maxAttempts: number;
@@ -12,7 +13,8 @@ export interface NotificationOutboxEntry {
   status: NotificationOutboxEntryStatus;
   /**
    * Last delivery failure. Admin-only: provider/webhook response bodies may be
-   * present when downstream delivery returns diagnostic text.
+   * present when downstream delivery returns diagnostic text. Authorization
+   * header values are redacted by the backend.
    */
   lastError?: string;
   createdAt: string;

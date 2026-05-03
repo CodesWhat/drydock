@@ -3,6 +3,7 @@ import type {
   NotificationOutboxEntry,
   NotificationOutboxEntryStatus,
 } from '../model/notification-outbox.js';
+import { scrubAuthorizationHeaderValues } from '../util/auth-redaction.js';
 import { initCollection } from './util.js';
 
 const DEFAULT_MAX_ATTEMPTS = 5;
@@ -121,7 +122,7 @@ export function markOutboxEntryAttempted(
   const next: NotificationOutboxEntry = {
     ...doc.data,
     attempts: doc.data.attempts + 1,
-    lastError: input.error,
+    lastError: scrubAuthorizationHeaderValues(input.error),
     nextAttemptAt: input.nextAttemptAt,
   };
   if (next.attempts >= next.maxAttempts) {

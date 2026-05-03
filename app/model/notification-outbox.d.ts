@@ -13,7 +13,7 @@ export interface NotificationOutboxEntry {
   /**
    * Last delivery failure. This may include downstream provider/webhook
    * response bodies because it is only exposed through admin-gated outbox
-   * views/APIs.
+   * views/APIs. Authorization header values are redacted before persistence.
    */
   lastError?: string;
   createdAt: string;
