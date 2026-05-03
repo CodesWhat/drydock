@@ -375,6 +375,33 @@ describe('OutboxWorker', () => {
     expect(debugSpy).not.toHaveBeenCalledWith(expect.stringContaining('attempt'));
   });
 
+  test('drain() skips a dead-letter entry returned on the next drain after terminal failure', async () => {
+    const deliver = vi.fn().mockRejectedValue(new Error('fatal'));
+    const entry = makeEntry({ id: 'dead-letter-entry', attempts: 4 });
+    const deadLetterEntry = {
+      ...entry,
+      attempts: 5,
+      status: 'dead-letter' as const,
+      failedAt: '2026-04-01T00:00:01.000Z',
+    };
+
+    mockFindReadyForDelivery.mockReturnValueOnce([entry]).mockReturnValueOnce([deadLetterEntry]);
+    mockMarkOutboxEntryAttempted.mockReturnValue(deadLetterEntry);
+
+    const w = new OutboxWorker({
+      deliver,
+      randomFn: () => 0,
+      jitterMs: 0,
+    });
+
+    await w.drain();
+    await w.drain();
+
+    expect(mockFindReadyForDelivery).toHaveBeenCalledTimes(2);
+    expect(deliver).toHaveBeenCalledTimes(1);
+    expect(mockMarkOutboxEntryAttempted).toHaveBeenCalledTimes(1);
+  });
+
   // ── 12. non-dead-letter failure logs debug ────────────────────────────────
   test('logs debug when entry is still pending after failed attempt', async () => {
     const deliver = vi.fn().mockRejectedValue(new Error('transient'));

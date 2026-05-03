@@ -95,6 +95,9 @@ export class OutboxWorker {
     const ready = findReadyForDelivery(nowIso);
     const dispatches: Promise<void>[] = [];
     for (const entry of ready) {
+      if (entry.status !== 'pending') {
+        continue;
+      }
       if (this.inflight.has(entry.id)) {
         continue;
       }
