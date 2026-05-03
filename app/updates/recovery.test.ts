@@ -48,7 +48,7 @@ vi.mock('../log/index.js', () => ({
   },
 }));
 
-import { recoverQueuedOperationsOnStartup } from './recovery.js';
+import { parseRecoveryBootConcurrency, recoverQueuedOperationsOnStartup } from './recovery.js';
 
 describe('recoverQueuedOperationsOnStartup', () => {
   beforeEach(() => {
@@ -264,6 +264,12 @@ describe('recoverQueuedOperationsOnStartup', () => {
         process.env.DD_UPDATE_RECOVERY_BOOT_CONCURRENCY = previous;
       }
     }
+  });
+
+  test('rejects zero DD_UPDATE_RECOVERY_BOOT_CONCURRENCY values', () => {
+    expect(() => parseRecoveryBootConcurrency('0')).toThrow(
+      'DD_UPDATE_RECOVERY_BOOT_CONCURRENCY must be at least 1 (got "0")',
+    );
   });
 
   test('dispatches a mid-health-gate crash operation after startup reconciliation reset it to queued', () => {

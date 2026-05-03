@@ -373,6 +373,35 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
+  test('reconcile persists empty rollback details when restored pending operation has no errors', async () => {
+    const pending = {
+      id: 'op-1',
+      oldName: 'web',
+      tempName: 'web-old-1',
+      oldContainerWasRunning: false,
+      oldContainerStopped: false,
+      fromVersion: '1.0.0',
+      toVersion: '1.0.1',
+    };
+    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+
+    const tempContainer = {
+      rename: vi.fn().mockResolvedValue(undefined),
+    };
+    const persistRollbackState = vi.fn();
+    const executor = createExecutor({ persistRollbackState });
+    vi.spyOn(executor, 'inspectContainerByIdentifier')
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ container: tempContainer, inspection: {} });
+
+    await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
+
+    expect(persistRollbackState).toHaveBeenCalledWith('container-id', 'rolled-back', {
+      reason: '',
+      lastError: '',
+    });
+  });
+
   test('reconcile restores old name without restart when old container was not stopped', async () => {
     const pending = {
       id: 'op-1',

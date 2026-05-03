@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import * as errorUtils from './error.js';
 
 const { getErrorMessage } = errorUtils;
@@ -19,6 +19,16 @@ describe('getErrorMessage', () => {
 
   test('stringifies non-object thrown values', () => {
     expect(getErrorMessage(Symbol('create failed'))).toBe('Symbol(create failed)');
+  });
+
+  test('uses the fallback when primitive stringification produces an empty message', () => {
+    const stringSpy = vi.spyOn(globalThis, 'String').mockReturnValueOnce('');
+
+    try {
+      expect(getErrorMessage(12, 'fallback error')).toBe('fallback error');
+    } finally {
+      stringSpy.mockRestore();
+    }
   });
 
   test('falls back to unknown error by default for empty or missing messages', () => {

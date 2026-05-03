@@ -635,6 +635,23 @@ describe('SSE lifecycle event handlers', () => {
       });
     });
 
+    test('update-failed handler includes rollback reason when present', () => {
+      sseRouter.init();
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+
+      const onUpdateFailed = mockRegisterContainerUpdateFailed.mock.calls.at(-1)[0];
+      onUpdateFailed({
+        containerName: 'nginx',
+        operationId: 'op-fail-rollback',
+        error: 'health gate failed',
+        rollbackReason: 'container became unhealthy',
+      });
+
+      const payload = parseSseEventPayload(res, 'dd:update-failed');
+      expect(payload.rollbackReason).toBe('container became unhealthy');
+    });
+
     test('update-failed handler includes empty string phase when phase is missing', () => {
       sseRouter.init();
       const handler = getHandler();

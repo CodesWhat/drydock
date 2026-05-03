@@ -304,6 +304,21 @@ describe('request-update', () => {
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
   });
 
+  test('runAcceptedContainerUpdates rejects invalid concurrency limits', async () => {
+    await expect(
+      runAcceptedContainerUpdates(
+        [
+          {
+            container: createContainer({ id: 'c1' }),
+            operationId: 'op-1',
+            trigger: { type: 'docker', trigger: vi.fn() },
+          },
+        ],
+        { concurrency: 0 },
+      ),
+    ).rejects.toThrow('Accepted update dispatch concurrency must be a positive integer');
+  });
+
   test('runAcceptedContainerUpdates limits trigger concurrency when a cap is provided', async () => {
     const gates = Array.from({ length: 5 }, () => deferred());
     const started: string[] = [];

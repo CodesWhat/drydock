@@ -9,6 +9,7 @@ import {
 } from './Docker.test.helpers.js';
 
 const { mockGetState } = getDockerTestMocks();
+const { mockGetTrivyDatabaseStatus, mockGetSchedulerScanIntervalMs } = getDockerTestMocks();
 
 registerCommonDockerBeforeEach();
 
@@ -245,6 +246,52 @@ test('createContainer should connect additional networks after create', async ()
     Container: 'container-name',
     EndpointConfig: { Aliases: ['container-name'] },
   });
+});
+
+test('getSecurityGate should provide trivy database and scan interval callbacks', async () => {
+  mockGetTrivyDatabaseStatus.mockResolvedValueOnce({
+    updatedAt: '2026-04-01T00:00:00.000Z',
+  });
+  mockGetSchedulerScanIntervalMs.mockReturnValueOnce(123_456);
+  (docker as any).securityGate = undefined;
+
+  const gate = docker.getSecurityGate();
+
+  await expect(gate.scanCache.getTrivyDbUpdatedAt?.()).resolves.toBe('2026-04-01T00:00:00.000Z');
+  expect(gate.scanCache.getScanIntervalMs?.()).toBe(123_456);
+});
+
+test('getSecurityGate should tolerate missing trivy database status and prune image failures', async () => {
+  mockGetTrivyDatabaseStatus.mockResolvedValueOnce(undefined);
+  const remove = vi.fn().mockRejectedValue(new Error('remove failed'));
+  const dockerApi = {
+    getImage: vi.fn(() => ({ remove })),
+  };
+  (docker as any).securityGate = undefined;
+
+  const gate = docker.getSecurityGate();
+
+  await expect(gate.scanCache.getTrivyDbUpdatedAt?.()).resolves.toBeUndefined();
+  await expect(gate.scanCache.pruneImage?.('ghcr.io/acme/web:2.0.0', dockerApi)).resolves.toBe(
+    undefined,
+  );
+  expect(dockerApi.getImage).toHaveBeenCalledWith('ghcr.io/acme/web:2.0.0');
+  expect(remove).toHaveBeenCalled();
+});
+
+test('maybeScanAndGateUpdate should delegate to the security gate', async () => {
+  (docker as any).securityGate = undefined;
+  const gate = docker.getSecurityGate();
+  const maybeScanAndGateUpdate = vi
+    .spyOn(gate, 'maybeScanAndGateUpdate')
+    .mockResolvedValue(undefined);
+  const context = { newImage: 'ghcr.io/acme/web:2.0.0' };
+  const container = { id: 'container-id', watcher: 'docker.local', name: 'web' };
+  const logContainer = createMockLog('info', 'warn');
+
+  await docker.maybeScanAndGateUpdate(context, container, logContainer);
+
+  expect(maybeScanAndGateUpdate).toHaveBeenCalledWith(context, container, logContainer);
 });
 
 // --- pullImage ---

@@ -175,6 +175,44 @@ describe('Notification Outbox Router', () => {
     });
 
     test('returns delivered entries when status=delivered', () => {
+      mockFindAllOutboxEntries.mockReturnValueOnce([
+        {
+          id: 'entry-delivered',
+          eventName: 'update-available',
+          payload: {
+            containerId: 'c1',
+            agentName: 'agent-a',
+            reason: 'Authorization: Bearer payload-token',
+            status: true,
+            blockingCount: 2,
+            container: {
+              id: 'c1',
+              name: 'web',
+              image: 'not-an-image-record',
+              ignored: { nested: 'secret' },
+            },
+          },
+          triggerId: 'slack.ops',
+          attempts: 1,
+          maxAttempts: 5,
+          nextAttemptAt: '2026-01-01T00:00:00.000Z',
+          status: 'delivered',
+          lastError: { message: 'not a string' },
+          createdAt: '2026-01-01T00:00:00.000Z',
+          deliveredAt: '2026-01-01T00:01:00.000Z',
+        },
+        {
+          id: 'entry-ignored-status',
+          eventName: 'update-available',
+          payload: null,
+          triggerId: 'slack.ops',
+          attempts: 0,
+          maxAttempts: 5,
+          nextAttemptAt: '2026-01-01T00:00:00.000Z',
+          status: 'unknown',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ] as any);
       outboxRouter.init();
       const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
       const res = createMockResponse();
@@ -182,8 +220,26 @@ describe('Notification Outbox Router', () => {
       handler({ query: { status: 'delivered' } }, res);
 
       const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
-      expect(body.data).toHaveLength(0);
-      expect(body.total).toBe(0);
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0]).toMatchObject({
+        id: 'entry-delivered',
+        payload: {
+          containerId: 'c1',
+          agentName: 'agent-a',
+          reason: 'Authorization: Bearer [REDACTED]',
+          status: true,
+          blockingCount: 2,
+          container: {
+            id: 'c1',
+            name: 'web',
+          },
+        },
+        lastError: { message: 'not a string' },
+      });
+      expect(JSON.stringify(body)).not.toContain('payload-token');
+      expect(JSON.stringify(body)).not.toContain('secret');
+      expect(body.total).toBe(1);
+      expect(body.counts).toEqual({ pending: 0, delivered: 1, deadLetter: 0 });
     });
 
     test('returns dead-letter entries when status=dead-letter', () => {
@@ -195,6 +251,90 @@ describe('Notification Outbox Router', () => {
 
       const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
       expect(body.data[0].status).toBe('dead-letter');
+    });
+
+    test('returns an empty payload object for malformed outbox payloads', () => {
+      mockFindAllOutboxEntries.mockReturnValueOnce([
+        {
+          id: 'entry-malformed-payload',
+          eventName: 'update-available',
+          payload: null,
+          triggerId: 'slack.ops',
+          attempts: 5,
+          maxAttempts: 5,
+          nextAttemptAt: '2026-01-01T00:00:00.000Z',
+          status: 'dead-letter',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          failedAt: '2026-01-01T01:00:00.000Z',
+        },
+      ] as any);
+      outboxRouter.init();
+      const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+      const res = createMockResponse();
+
+      handler({ query: { status: 'dead-letter' } }, res);
+
+      const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(body.data[0]).toMatchObject({
+        id: 'entry-malformed-payload',
+        payload: {},
+      });
+    });
+
+    test('omits container payloads when no safe summary fields remain', () => {
+      mockFindAllOutboxEntries.mockReturnValueOnce([
+        {
+          id: 'entry-empty-container-summary',
+          eventName: 'update-available',
+          payload: {
+            container: {
+              image: {
+                name: 42,
+                tag: { value: false },
+                registry: { token: 'registry-secret' },
+              },
+              details: { token: 'container-secret' },
+            },
+          },
+          triggerId: 'slack.ops',
+          attempts: 5,
+          maxAttempts: 5,
+          nextAttemptAt: '2026-01-01T00:00:00.000Z',
+          status: 'dead-letter',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          failedAt: '2026-01-01T01:00:00.000Z',
+        },
+        {
+          id: 'entry-empty-container-summary-missing-tag',
+          eventName: 'update-available',
+          payload: {
+            container: {
+              image: {
+                registry: { token: 'missing-tag-secret' },
+              },
+            },
+          },
+          triggerId: 'slack.ops',
+          attempts: 5,
+          maxAttempts: 5,
+          nextAttemptAt: '2026-01-01T00:00:00.000Z',
+          status: 'dead-letter',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          failedAt: '2026-01-01T01:00:00.000Z',
+        },
+      ] as any);
+      outboxRouter.init();
+      const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+      const res = createMockResponse();
+
+      handler({ query: { status: 'dead-letter' } }, res);
+
+      const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(body.data).toHaveLength(2);
+      expect(body.data.map((entry: { payload: unknown }) => entry.payload)).toEqual([{}, {}]);
+      expect(JSON.stringify(body)).not.toContain('registry-secret');
+      expect(JSON.stringify(body)).not.toContain('container-secret');
+      expect(JSON.stringify(body)).not.toContain('missing-tag-secret');
     });
 
     test('scrubs lastError and strips full container payloads before responding', () => {
@@ -274,6 +414,19 @@ describe('Notification Outbox Router', () => {
       const res = createMockResponse();
 
       handler({ query: { status: 'bad-status' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Invalid status query parameter. Must be one of: pending, delivered, dead-letter',
+      });
+    });
+
+    test('returns 400 for repeated status query params', () => {
+      outboxRouter.init();
+      const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+      const res = createMockResponse();
+
+      handler({ query: { status: ['pending', 'dead-letter'] } }, res);
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({

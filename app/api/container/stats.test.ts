@@ -188,6 +188,20 @@ describe('api/container/stats', () => {
     expect(releaseWatch).toHaveBeenCalledTimes(1);
   });
 
+  test('streams container stats without an initial event when no snapshot exists yet', () => {
+    const harness = createHarness();
+    const req = createRequest({
+      params: { id: 'c2' },
+    });
+    const res = createResponse();
+
+    harness.handlers.streamContainerStats(req as any, res as any);
+
+    expect(harness.watch).toHaveBeenCalledWith('c2');
+    expect(harness.subscribe).toHaveBeenCalledWith('c2', expect.any(Function));
+    expect(res.write).not.toHaveBeenCalledWith(expect.stringContaining('dd:container-stats'));
+  });
+
   test('cleanup continues when unsubscribe throws', () => {
     const harness = createHarness();
     const req = createRequest({ params: { id: 'c1' } });
@@ -386,6 +400,31 @@ describe('api/container/stats — summary handlers', () => {
     await vi.advanceTimersByTimeAsync(15_000);
     expect((res.write as ReturnType<typeof vi.fn>).mock.calls.length).toBe(
       writeCallCountAfterSweep,
+    );
+  });
+
+  test('SSE stale sweep handles writable-ended responses while active clients remain', async () => {
+    const harness = createSummaryHarness();
+    const firstReq = createRequest();
+    const secondReq = createRequest();
+    const firstRes = createResponse() as ReturnType<typeof createResponse> & {
+      writableEnded?: boolean;
+    };
+    const secondRes = createResponse();
+
+    harness.handlers.streamStatsSummary(firstReq as any, firstRes as any);
+    harness.handlers.streamStatsSummary(secondReq as any, secondRes as any);
+
+    firstRes.writableEnded = true;
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+
+    expect(harness.unsubscribe).toHaveBeenCalledOnce();
+
+    const secondWriteCountAfterSweep = (secondRes.write as ReturnType<typeof vi.fn>).mock.calls
+      .length;
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect((secondRes.write as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(
+      secondWriteCountAfterSweep,
     );
   });
 

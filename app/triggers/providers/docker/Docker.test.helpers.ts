@@ -28,6 +28,8 @@ docker.configuration = configurationValid;
 docker.log = log;
 
 const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
+const mockGetTrivyDatabaseStatus = vi.hoisted(() => vi.fn());
+const mockGetSchedulerScanIntervalMs = vi.hoisted(() => vi.fn());
 vi.mock('../../../configuration/index.js', async () => {
   const actual = await vi.importActual<typeof import('../../../configuration/index.js')>(
     '../../../configuration/index.js',
@@ -37,6 +39,14 @@ vi.mock('../../../configuration/index.js', async () => {
     getSecurityConfiguration: (...args: any[]) => mockGetSecurityConfiguration(...args),
   };
 });
+
+vi.mock('../../../security/runtime.js', () => ({
+  getTrivyDatabaseStatus: (...args: any[]) => mockGetTrivyDatabaseStatus(...args),
+}));
+
+vi.mock('../../../security/scheduler.js', () => ({
+  getSchedulerScanIntervalMs: (...args: any[]) => mockGetSchedulerScanIntervalMs(...args),
+}));
 
 const mockScanImageForVulnerabilities = vi.hoisted(() => vi.fn());
 const mockVerifyImageSignature = vi.hoisted(() => vi.fn());
@@ -410,6 +420,8 @@ export function registerCommonDockerBeforeEach() {
         formats: ['spdx-json'],
       },
     });
+    mockGetTrivyDatabaseStatus.mockResolvedValue(undefined);
+    mockGetSchedulerScanIntervalMs.mockReturnValue(86_400_000);
     mockScanImageForVulnerabilities.mockResolvedValue({
       ...createSecurityScanResult(),
     });
@@ -438,6 +450,8 @@ export function getDockerTestMocks() {
   return {
     mockGetState,
     mockGetSecurityConfiguration,
+    mockGetTrivyDatabaseStatus,
+    mockGetSchedulerScanIntervalMs,
     mockScanImageForVulnerabilities,
     mockVerifyImageSignature,
     mockGenerateImageSbom,

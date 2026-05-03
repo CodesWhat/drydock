@@ -183,6 +183,31 @@ describe('update-operation batch completion', () => {
     expect(mockEmitBatchUpdateCompleted).not.toHaveBeenCalled();
   });
 
+  test('does not emit batch-update-completed for persisted batch rows missing from the in-memory registry', () => {
+    const documents: any[] = [
+      {
+        data: {
+          id: 'preexisting-op-1',
+          containerName: 'nginx',
+          containerId: 'c-1',
+          status: 'queued',
+          phase: 'queued',
+          batchId: 'batch-before-boot',
+          createdAt: '2026-02-23T00:00:00.000Z',
+          updatedAt: '2026-02-23T00:00:00.000Z',
+        },
+      },
+    ];
+    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
+
+    const terminal = updateOperation.markOperationTerminal('preexisting-op-1', {
+      status: 'succeeded',
+    });
+
+    expect(terminal).toEqual(expect.objectContaining({ status: 'succeeded' }));
+    expect(mockEmitBatchUpdateCompleted).not.toHaveBeenCalled();
+  });
+
   test('emits batch-update-completed when the last operation in a 2-op batch succeeds', async () => {
     const documents: any[] = [];
     updateOperation.createCollections(createDocumentBackedDb(documents) as any);

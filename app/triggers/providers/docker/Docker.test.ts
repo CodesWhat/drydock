@@ -4526,6 +4526,28 @@ describe('persistRollbackState callback', () => {
     expect(saved.updateRollback.recordedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
+  test('rolled-back outcome writes empty rollback defaults when digest and details are absent', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    const containerNoRollbackDetails = {
+      id: 'ghi789',
+      name: 'container-without-details',
+    };
+    (storeContainer.getContainer as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      containerNoRollbackDetails,
+    );
+    (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+    docker.containerUpdateExecutor.persistRollbackState?.('ghi789', 'rolled-back');
+
+    expect(storeContainer.updateContainer).toHaveBeenCalledTimes(1);
+    const saved = (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(saved.updateRollback).toMatchObject({
+      targetDigest: '',
+      reason: '',
+      lastError: '',
+    });
+  });
+
   test('no-op when container is not found in store', async () => {
     const storeContainer = await import('../../../store/container.js');
     (storeContainer.getContainer as ReturnType<typeof vi.fn>).mockReturnValueOnce(undefined);

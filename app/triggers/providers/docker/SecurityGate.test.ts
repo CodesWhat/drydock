@@ -369,6 +369,33 @@ describe('SecurityGate', () => {
     });
   });
 
+  test('persistSecurityState should map sbom to current security state by default', async () => {
+    const { gate, updateContainer } = createGateHarness();
+
+    await gate.persistSecurityState(
+      createContainer(),
+      {
+        slot: 'current',
+        sbom: {
+          status: 'generated',
+          formats: ['spdx-json'],
+        },
+      },
+      createLog(),
+    );
+
+    expect(updateContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        security: expect.objectContaining({
+          sbom: {
+            status: 'generated',
+            formats: ['spdx-json'],
+          },
+        }),
+      }),
+    );
+  });
+
   test('maybeScanAndGateUpdate should no-op when security is disabled or scanner is not trivy', async () => {
     const disabledHarness = createGateHarness({
       securityConfiguration: {
@@ -1516,6 +1543,96 @@ describe('SecurityGate', () => {
       expect(log.warn).toHaveBeenCalledWith(
         expect.stringContaining('Failed to prune blocked image'),
       );
+    });
+  });
+
+  describe('direct security step skips', () => {
+    test('maybeVerifyImageSignatureForUpdate should return when signature verification is disabled', async () => {
+      const { gate, verifyImageSignature } = createGateHarness();
+
+      await gate.maybeVerifyImageSignatureForUpdate(
+        createContext(),
+        createContainer(),
+        createLog(),
+        {
+          enabled: true,
+          scanner: 'trivy',
+          signature: { verify: false },
+          sbom: { enabled: false, formats: ['spdx-json'] },
+        },
+      );
+
+      expect(verifyImageSignature).not.toHaveBeenCalled();
+    });
+
+    test('maybeGenerateSbomForUpdate should return when SBOM generation is disabled', async () => {
+      const { gate, generateImageSbom } = createGateHarness();
+
+      await gate.maybeGenerateSbomForUpdate(createContext(), createContainer(), createLog(), {
+        enabled: true,
+        scanner: 'trivy',
+        signature: { verify: false },
+        sbom: { enabled: false, formats: ['spdx-json'] },
+      });
+
+      expect(generateImageSbom).not.toHaveBeenCalled();
+    });
+
+    test('scanImageForUpdate should use dedupe cache without trivy database timestamp provider', async () => {
+      const scanResult = {
+        status: 'passed',
+        summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+        blockingCount: 0,
+        blockSeverities: [],
+      };
+      const scanImageWithDedup = vi.fn().mockResolvedValue({
+        scanResult,
+        fromCache: false,
+      });
+      const { gate } = createGateHarness({
+        scanImageWithDedup,
+        getTrivyDbUpdatedAt: undefined,
+        getScanIntervalMs: vi.fn(() => 123_456),
+      });
+      const dockerApi = {
+        getImage: vi.fn(() => ({
+          inspect: vi.fn().mockResolvedValue({
+            RepoDigests: ['ghcr.io/acme/web@sha256:abc123'],
+          }),
+        })),
+      };
+
+      await expect(
+        gate.scanImageForUpdate(createContext({ dockerApi }), createContainer(), createLog()),
+      ).resolves.toBe(scanResult);
+
+      expect(scanImageWithDedup).toHaveBeenCalledWith(
+        expect.objectContaining({
+          digest: 'sha256:abc123',
+          trivyDbUpdatedAt: undefined,
+        }),
+        123_456,
+      );
+    });
+
+    test('verifySignaturePreUpdate should rethrow non-pipeline signature errors without audit mapping', async () => {
+      const { gate, recordSecurityAudit } = createGateHarness({
+        securityConfiguration: {
+          enabled: true,
+          scanner: 'trivy',
+          signature: { verify: true },
+          sbom: { enabled: false, formats: ['spdx-json'] },
+        },
+      });
+      vi.spyOn(gate, 'maybeVerifyImageSignatureForUpdate').mockRejectedValueOnce(
+        new Error('cosign crashed'),
+      );
+
+      await expect(
+        gate.verifySignaturePreUpdate(createContext(), createContainer(), createLog()),
+      ).rejects.toThrow('cosign crashed');
+
+      expect(recordSecurityAudit).not.toHaveBeenCalled();
     });
   });
 

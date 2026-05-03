@@ -2070,6 +2070,34 @@ describe('Update Operation Store', () => {
       expect(updateOperation.requestOperationCancellation('does-not-exist')).toBeUndefined();
     });
 
+    test('returns undefined when a queued operation disappears during cancellation', () => {
+      let findOneCalls = 0;
+      const doc = {
+        data: {
+          id: 'queued-race',
+          containerName: 'web',
+          status: 'queued',
+          phase: 'queued',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      };
+      updateOperation.createCollections({
+        getCollection: () => null,
+        addCollection: () => ({
+          insert: vi.fn(),
+          find: () => [],
+          findOne: () => {
+            findOneCalls++;
+            return findOneCalls < 3 ? doc : null;
+          },
+          remove: vi.fn(),
+        }),
+      } as any);
+
+      expect(updateOperation.requestOperationCancellation('queued-race')).toBeUndefined();
+    });
+
     test('cancels a queued operation immediately', () => {
       const op = updateOperation.insertOperation({
         containerName: 'web',
@@ -2100,6 +2128,34 @@ describe('Update Operation Store', () => {
       expect(result!.operation.id).toBe(op.id);
       expect(result!.operation.status).toBe('in-progress');
       expect(result!.operation.cancelRequested).toBe(true);
+    });
+
+    test('returns undefined when an in-progress operation disappears during cancellation', () => {
+      let findOneCalls = 0;
+      const doc = {
+        data: {
+          id: 'in-progress-race',
+          containerName: 'api',
+          status: 'in-progress',
+          phase: 'pulling',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      };
+      updateOperation.createCollections({
+        getCollection: () => null,
+        addCollection: () => ({
+          insert: vi.fn(),
+          find: () => [],
+          findOne: () => {
+            findOneCalls++;
+            return findOneCalls < 2 ? doc : null;
+          },
+          remove: vi.fn(),
+        }),
+      } as any);
+
+      expect(updateOperation.requestOperationCancellation('in-progress-race')).toBeUndefined();
     });
 
     test('returns undefined for a succeeded operation', () => {
