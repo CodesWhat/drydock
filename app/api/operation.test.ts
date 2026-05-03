@@ -72,6 +72,21 @@ describe('Operation Router', () => {
       });
     });
 
+    test.each(['rolled-back', 'failed'])('returns 409 when operation is already %s', (status) => {
+      mockGetOperationById.mockReturnValue({ id: 'op-terminal', status });
+      const handler = getHandler();
+      const res = createMockResponse();
+
+      handler({ params: { id: 'op-terminal' } }, res);
+
+      expect(mockRequestOperationCancellation).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Operation is not active',
+        status,
+      });
+    });
+
     test('returns 200 with cancelled operation when queued', () => {
       const queued = { id: 'op-2', status: 'queued', containerName: 'web' };
       const cancelled = {
