@@ -46,7 +46,7 @@ export function resolveUpdateFailureReason(args: {
  * `lastError`) for tooltips and detail panes.
  */
 export function summariseUpdateError(error: string | undefined): string | undefined {
-  if (!error || typeof error !== 'string') {
+  if (!error) {
     return undefined;
   }
   const lower = error.toLowerCase();

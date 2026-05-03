@@ -1,11 +1,9 @@
 import { resolveUpdateFailureReason, summariseUpdateError } from '@/utils/update-error-summary';
 
 describe('summariseUpdateError', () => {
-  it('returns undefined for empty / non-string input', () => {
+  it('returns undefined for empty input', () => {
     expect(summariseUpdateError(undefined)).toBeUndefined();
     expect(summariseUpdateError('')).toBeUndefined();
-    expect(summariseUpdateError(null as unknown as string)).toBeUndefined();
-    expect(summariseUpdateError(42 as unknown as string)).toBeUndefined();
   });
 
   it('classifies Docker Hub rate limit (HTTP 500 + "rate limit")', () => {
