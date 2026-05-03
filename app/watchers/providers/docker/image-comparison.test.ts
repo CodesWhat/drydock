@@ -49,6 +49,10 @@ function createManifestLookup(version = 1) {
   });
 }
 
+function identityNormalizeImage<T>(image: T): T {
+  return image;
+}
+
 describe('image-comparison', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -62,6 +66,7 @@ describe('image-comparison', () => {
         hub: {
           getTags: vi.fn().mockResolvedValue(['latest']),
           getImageManifestDigest,
+          normalizeImage: identityNormalizeImage,
         },
       },
     });
@@ -80,6 +85,7 @@ describe('image-comparison', () => {
         hub: {
           getTags: vi.fn().mockResolvedValue(['latest', 'stable']),
           getImageManifestDigest,
+          normalizeImage: identityNormalizeImage,
         },
       },
     });
@@ -97,6 +103,7 @@ describe('image-comparison', () => {
         hub: {
           getTags: vi.fn().mockResolvedValue(['latest', 'stable']),
           getImageManifestDigest,
+          normalizeImage: identityNormalizeImage,
         },
       },
     });
@@ -124,6 +131,7 @@ describe('image-comparison', () => {
         hub: {
           getTags: vi.fn().mockResolvedValue(['alpha', 'beta']),
           getImageManifestDigest,
+          normalizeImage: identityNormalizeImage,
         },
       },
     });
@@ -141,6 +149,7 @@ describe('image-comparison', () => {
         hub: {
           getTags: vi.fn().mockResolvedValue(['16-alpine', '16.1-alpine', '17-alpine']),
           getImageManifestDigest,
+          normalizeImage: identityNormalizeImage,
         },
       },
     });

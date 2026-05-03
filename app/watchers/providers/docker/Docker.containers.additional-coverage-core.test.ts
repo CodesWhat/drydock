@@ -69,8 +69,12 @@ describe('Docker Watcher', () => {
 
   /** Set registry state on the helper-scoped mock (used by production code). */
   function setRegistryState(state: Record<string, unknown>) {
-    const value = { registry: state };
-    hRegistry.getState.mockReturnValue(value);
+    const augmented: Record<string, unknown> = {};
+    for (const [id, mock] of Object.entries(state)) {
+      const m = (mock ?? {}) as Record<string, unknown>;
+      augmented[id] = m.normalizeImage ? m : { ...m, normalizeImage: (img: unknown) => img };
+    }
+    hRegistry.getState.mockReturnValue({ registry: augmented });
   }
 
   describe('Additional Coverage - safeRegExp', () => {

@@ -302,7 +302,9 @@ async function refreshStoredContainerImageFields(
             registry: {
               ...(containerInStore.image.registry || { name: 'unknown', url: '' }),
               url:
-                resolvedImageState.parsedImage.domain ?? containerInStore.image.registry?.url ?? '',
+                resolvedImageState.parsedImage.domain ??
+                containerInStore.image.registry?.url ??
+                'docker.io',
               lookupImage: resolvedImageState.resolvedConfig.lookupImage,
             },
             name: resolvedImageState.parsedImage.path,
@@ -711,7 +713,11 @@ export async function addImageDetailsToContainerOrchestration(
       id: image.Id,
       registry: {
         name: 'unknown', // Will be overwritten by normalizeContainer
-        url: parsedImage.domain,
+        // Un-prefixed images (e.g. `nginx:1.0`) parse with no domain. The
+        // canonical Docker Hub host stands in so the deploy identity is
+        // always a non-empty registry URL — matched providers strip
+        // `docker.io/` back out at display time.
+        url: parsedImage.domain ?? 'docker.io',
         lookupImage: resolvedConfig.lookupImage,
       },
       name: parsedImage.path,

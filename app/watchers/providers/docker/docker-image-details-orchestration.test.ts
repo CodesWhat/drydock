@@ -362,7 +362,7 @@ describe('docker image details orchestration module', () => {
       name: 'acme/service',
       registry: {
         name: 'unknown',
-        url: '',
+        url: 'docker.io',
       },
       tag: {
         value: 'latest',
