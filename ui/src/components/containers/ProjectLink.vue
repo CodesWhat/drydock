@@ -2,13 +2,18 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppIconButton from '../AppIconButton.vue';
+import type { IconButtonSize } from '../appIconButtonSizes';
 
 const { t } = useI18n();
 
-const props = defineProps<{
-  sourceRepo?: string;
-  iconOnly?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    sourceRepo?: string;
+    iconOnly?: boolean;
+    iconSize?: IconButtonSize;
+  }>(),
+  { iconSize: 'sm' },
+);
 
 const trimmed = computed(() => props.sourceRepo?.trim() ?? '');
 
@@ -26,7 +31,7 @@ const iconName = computed(() => {
   <AppIconButton
     v-if="trimmed && iconOnly"
     :icon="iconName"
-    size="sm"
+    :size="iconSize"
     variant="muted"
     :href="projectUrl"
     target="_blank"
