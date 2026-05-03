@@ -86,6 +86,18 @@ function cap(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function sortDesc(
+  a: ContainerStatsSummaryRow,
+  b: ContainerStatsSummaryRow,
+  key: 'cpuPercent' | 'memoryPercent',
+): number {
+  const diff = b[key] - a[key];
+  if (diff !== 0) {
+    return diff;
+  }
+  return a.name.localeCompare(b.name);
+}
+
 async function defaultFetchSnapshot(
   watcher: DockerStatsWatcherApi,
   containerName: string,
@@ -187,18 +199,6 @@ async function runTick(runtime: AggregatorRuntime): Promise<void> {
       totalMemoryLimitBytes > 0
         ? cap((totalMemoryUsageBytes / totalMemoryLimitBytes) * 100, 0, 100)
         : 0;
-
-    function sortDesc(
-      a: ContainerStatsSummaryRow,
-      b: ContainerStatsSummaryRow,
-      key: 'cpuPercent' | 'memoryPercent',
-    ): number {
-      const diff = b[key] - a[key];
-      if (diff !== 0) {
-        return diff;
-      }
-      return a.name.localeCompare(b.name);
-    }
 
     const topCpu = [...rows].sort((a, b) => sortDesc(a, b, 'cpuPercent')).slice(0, runtime.topN);
     const topMemory = [...rows]
