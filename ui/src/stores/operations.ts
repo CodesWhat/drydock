@@ -64,10 +64,6 @@ function getString(value: unknown): string | undefined {
   return typeof value === 'string' && value !== '' ? value : undefined;
 }
 
-function getNullableBatchId(value: unknown): string | undefined {
-  return typeof value === 'string' && value !== '' ? value : undefined;
-}
-
 function isActiveOperation(operation: UiUpdateOperation | undefined): boolean {
   return Boolean(operation && ACTIVE_STATUSES.has(operation.status));
 }
@@ -122,7 +118,7 @@ function normalizeUpdateAppliedPayload(payload: unknown): UpdateAppliedPayload |
     operationId,
     containerId,
     containerName,
-    batchId: getNullableBatchId(payload.batchId) ?? null,
+    batchId: getString(payload.batchId) ?? null,
     timestamp,
   };
 }
@@ -146,7 +142,7 @@ function normalizeUpdateFailedPayload(payload: unknown): UpdateFailedPayload | u
     containerName,
     error,
     phase,
-    batchId: getNullableBatchId(payload.batchId) ?? null,
+    batchId: getString(payload.batchId) ?? null,
     timestamp,
   };
 }
