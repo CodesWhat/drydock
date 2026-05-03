@@ -5,6 +5,7 @@
     "filterPlaceholder": "按目标或事件筛选...",
     "containerFilterPlaceholder": "容器名称...",
     "allEvents": "所有事件",
+    "eventsSelected": "已选择 {count} 个事件",
     "clear": "清除",
     "fromDateLabel": "开始日期",
     "toDateLabel": "结束日期",

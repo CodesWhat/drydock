@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import AppBadge from '../components/AppBadge.vue';
@@ -64,6 +64,24 @@ function parseActionQuery(value: unknown): string {
   return raw && actionTypes.includes(raw) ? raw : '';
 }
 
+function parseActionsQuery(actionsValue: unknown, actionValue: unknown): string[] {
+  const rawList = firstQueryValue(actionsValue);
+  if (rawList) {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const part of rawList.split(',')) {
+      const trimmed = part.trim();
+      if (trimmed && actionTypes.includes(trimmed) && !seen.has(trimmed)) {
+        seen.add(trimmed);
+        out.push(trimmed);
+      }
+    }
+    return out;
+  }
+  const single = parseActionQuery(actionValue);
+  return single ? [single] : [];
+}
+
 function parseContainerQuery(value: unknown): string {
   const raw = firstQueryValue(value);
   return raw?.trim() ?? '';
@@ -104,24 +122,44 @@ const totalPages = computed(() => Math.max(1, Math.ceil(total.value / limit.valu
 
 // Filters
 const searchQuery = ref(firstQueryValue(route.query.q) ?? '');
-const actionFilter = ref(parseActionQuery(route.query.action));
+const actionFilter = ref<string[]>(parseActionsQuery(route.query.actions, route.query.action));
 const containerFilter = ref(parseContainerQuery(route.query.container));
 const fromDateFilter = ref(parseDateQuery(route.query.from));
 const toDateFilter = ref(parseDateQuery(route.query.to));
 const showFilters = ref(false);
+const showEventPicker = ref(false);
 const activeFilterCount = computed(() => {
   let count = 0;
   if (searchQuery.value) count++;
-  if (actionFilter.value) count++;
+  if (actionFilter.value.length > 0) count++;
   if (containerFilter.value) count++;
   if (fromDateFilter.value) count++;
   if (toDateFilter.value) count++;
   return count;
 });
 
+const eventFilterLabel = computed(() => {
+  if (actionFilter.value.length === 0) return t('auditView.allEvents');
+  if (actionFilter.value.length === 1) return actionLabel(actionFilter.value[0]);
+  return t('auditView.eventsSelected', { count: actionFilter.value.length });
+});
+
+function toggleAction(action: string) {
+  const current = actionFilter.value;
+  actionFilter.value = current.includes(action)
+    ? current.filter((a) => a !== action)
+    : [...current, action];
+  page.value = 1;
+}
+
+function clearActionFilter() {
+  actionFilter.value = [];
+  page.value = 1;
+}
+
 function clearFilters() {
   searchQuery.value = '';
-  actionFilter.value = '';
+  actionFilter.value = [];
   containerFilter.value = '';
   fromDateFilter.value = '';
   toDateFilter.value = '';
@@ -170,7 +208,8 @@ async function fetchAudit() {
   error.value = '';
   try {
     const params: Record<string, unknown> = { page: page.value, limit: limit.value };
-    if (actionFilter.value) params.action = actionFilter.value;
+    if (actionFilter.value.length === 1) params.action = actionFilter.value[0];
+    else if (actionFilter.value.length > 1) params.actions = [...actionFilter.value];
     if (containerFilter.value) params.container = containerFilter.value;
     if (fromDateFilter.value) params.from = fromDateFilter.value;
     if (toDateFilter.value) params.to = toDateFilter.value;
@@ -184,20 +223,23 @@ async function fetchAudit() {
   }
 }
 
-watch([page, actionFilter, containerFilter, fromDateFilter, toDateFilter], () => fetchAudit());
+watch([page, actionFilter, containerFilter, fromDateFilter, toDateFilter], () => fetchAudit(), {
+  deep: true,
+});
 watch(
   () => [
     route.query.page,
     route.query.action,
+    route.query.actions,
     route.query.q,
     route.query.view,
     route.query.container,
     route.query.from,
     route.query.to,
   ],
-  ([nextPage, nextAction, nextSearch, nextView, nextContainer, nextFrom, nextTo]) => {
+  ([nextPage, nextAction, nextActions, nextSearch, nextView, nextContainer, nextFrom, nextTo]) => {
     page.value = parsePageQuery(nextPage);
-    actionFilter.value = parseActionQuery(nextAction);
+    actionFilter.value = parseActionsQuery(nextActions, nextAction);
     searchQuery.value = firstQueryValue(nextSearch) ?? '';
     auditViewMode.value = resolveAuditViewModeFromQuery(auditViewMode.value, nextView);
     containerFilter.value = parseContainerQuery(nextContainer);
@@ -214,6 +256,16 @@ function nextPage() {
 }
 
 onMounted(fetchAudit);
+
+function handleDocumentClick() {
+  if (showEventPicker.value) showEventPicker.value = false;
+}
+onMounted(() => {
+  document.addEventListener('click', handleDocumentClick);
+});
+onUnmounted(() => {
+  document.removeEventListener('click', handleDocumentClick);
+});
 </script>
 
 <template>
@@ -244,11 +296,54 @@ onMounted(fetchAudit);
                type="text"
                :placeholder="t('auditView.containerFilterPlaceholder')"
                class="min-w-[140px] max-w-[220px] px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text dd-placeholder" />
-        <select v-model="actionFilter"
-                class="px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium outline-none dd-bg dd-text">
-          <option value="">{{ t('auditView.allEvents') }}</option>
-          <option v-for="a in actionTypes" :key="a" :value="a">{{ actionLabel(a) }}</option>
-        </select>
+        <div class="relative">
+          <AppButton size="none" variant="plain" weight="none"
+                  type="button"
+                  :aria-haspopup="'listbox'"
+                  :aria-expanded="showEventPicker"
+                  class="px-2.5 py-1.5 dd-rounded text-2xs-plus font-medium dd-bg dd-text flex items-center gap-1.5"
+                  @click.stop="showEventPicker = !showEventPicker">
+            <span>{{ eventFilterLabel }}</span>
+            <AppIcon name="chevron-down" :size="11" class="dd-text-muted" />
+          </AppButton>
+          <div v-if="showEventPicker"
+               class="absolute mt-1 min-w-[200px] max-h-[320px] overflow-y-auto py-1.5 dd-rounded shadow-lg"
+               :style="{
+                 zIndex: 'var(--z-popover)',
+                 backgroundColor: 'var(--dd-bg-card)',
+                 border: '1px solid var(--dd-border-strong)',
+                 boxShadow: 'var(--dd-shadow-tooltip)',
+               }"
+               role="listbox"
+               aria-multiselectable="true"
+               @click.stop>
+            <AppButton size="none" variant="plain" weight="none"
+                    type="button"
+                    role="option"
+                    :aria-selected="actionFilter.length === 0"
+                    class="w-full text-left px-3 py-1.5 text-2xs-plus font-medium transition-colors flex items-center gap-2 hover:dd-bg-elevated dd-text"
+                    @click="clearActionFilter">
+              <AppIcon
+                :name="actionFilter.length === 0 ? 'check' : 'square'"
+                :size="13"
+                :style="actionFilter.length === 0 ? { color: 'var(--dd-primary)' } : {}" />
+              {{ t('auditView.allEvents') }}
+            </AppButton>
+            <AppButton size="none" variant="plain" weight="none"
+                    type="button"
+                    role="option"
+                    v-for="a in actionTypes" :key="a"
+                    :aria-selected="actionFilter.includes(a)"
+                    class="w-full text-left px-3 py-1.5 text-2xs-plus font-medium transition-colors flex items-center gap-2 hover:dd-bg-elevated dd-text"
+                    @click="toggleAction(a)">
+              <AppIcon
+                :name="actionFilter.includes(a) ? 'check' : 'square'"
+                :size="13"
+                :style="actionFilter.includes(a) ? { color: 'var(--dd-primary)' } : {}" />
+              {{ actionLabel(a) }}
+            </AppButton>
+          </div>
+        </div>
         <input v-model="fromDateFilter"
                name="from-date"
                type="date"
