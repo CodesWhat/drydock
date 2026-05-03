@@ -14,8 +14,10 @@ interface OutboxCollectionDocument {
 }
 
 type OutboxCollectionQuery = {
-  'data.status'?: NotificationOutboxEntryStatus | { $ne: NotificationOutboxEntryStatus };
+  'data.status'?: NotificationOutboxEntryStatus;
   'data.nextAttemptAt'?: string | { $lte: string };
+  'data.deliveredAt'?: string | { $lt: string };
+  'data.failedAt'?: string | { $lt: string };
 };
 
 interface OutboxCollection {
@@ -37,7 +39,14 @@ export function createCollections(db: OutboxStoreDb): void {
     db as unknown as Parameters<typeof initCollection>[0],
     'notificationOutbox',
     {
-      indices: ['data.id', 'data.status', 'data.triggerId', 'data.nextAttemptAt'],
+      indices: [
+        'data.id',
+        'data.status',
+        'data.triggerId',
+        'data.nextAttemptAt',
+        'data.deliveredAt',
+        'data.failedAt',
+      ],
     },
   ) as unknown as OutboxCollection;
 }
@@ -194,12 +203,16 @@ export function purgeTerminalOutboxEntriesOlderThan(cutoffIso: string): number {
   if (!outboxCollection) {
     return 0;
   }
-  const terminalEntries = outboxCollection.find({ 'data.status': { $ne: 'pending' } });
-  const toRemove = terminalEntries.filter((doc) => {
-    const entry = doc.data;
-    const timestamp = entry.deliveredAt ?? entry.failedAt;
-    return Boolean(timestamp) && timestamp! < cutoffIso;
-  });
+  const toRemove = [
+    ...outboxCollection.find({
+      'data.status': 'delivered',
+      'data.deliveredAt': { $lt: cutoffIso },
+    }),
+    ...outboxCollection.find({
+      'data.status': 'dead-letter',
+      'data.failedAt': { $lt: cutoffIso },
+    }),
+  ];
   for (const doc of toRemove) {
     outboxCollection.remove(doc);
   }

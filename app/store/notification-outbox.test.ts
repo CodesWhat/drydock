@@ -34,6 +34,9 @@ function createDb() {
     ) {
       return typeof actual === 'string' && actual <= (expected as { $lte: string }).$lte;
     }
+    if (expected && typeof expected === 'object' && !Array.isArray(expected) && '$lt' in expected) {
+      return typeof actual === 'string' && actual < (expected as { $lt: string }).$lt;
+    }
     return actual === expected;
   }
   function matchesQuery(doc: unknown, query: Record<string, unknown> = {}): boolean {
@@ -84,6 +87,28 @@ describe('createCollections', () => {
     createCollections(db as never);
     const entry = enqueueOutboxEntry(BASE_INPUT);
     expect(getOutboxEntry(entry.id)).toEqual(entry);
+  });
+
+  test('initialises indexes for terminal outbox purge lookups', () => {
+    const collection = {
+      insert: vi.fn(),
+      find: vi.fn(),
+      findOne: vi.fn(),
+      remove: vi.fn(),
+      ensureIndex: vi.fn(),
+    };
+    const addCollection = vi.fn(() => collection);
+
+    createCollections({
+      getCollection: () => null,
+      addCollection,
+    } as never);
+
+    expect(addCollection).toHaveBeenCalledWith('notificationOutbox', {
+      indices: expect.arrayContaining(['data.deliveredAt', 'data.failedAt']),
+    });
+    expect(collection.ensureIndex).toHaveBeenCalledWith('data.deliveredAt');
+    expect(collection.ensureIndex).toHaveBeenCalledWith('data.failedAt');
   });
 });
 
@@ -447,7 +472,7 @@ describe('purgeTerminalOutboxEntriesOlderThan', () => {
     createCollections(createDb() as never);
   });
 
-  test('queries only terminal outbox entries before applying the cutoff filter', () => {
+  test('queries delivered and dead-letter entries by indexed status and terminal timestamp', () => {
     _resetOutboxStoreForTests();
     const find = vi.fn(() => []);
     createCollections({
@@ -460,9 +485,18 @@ describe('purgeTerminalOutboxEntriesOlderThan', () => {
       }),
     } as never);
 
-    purgeTerminalOutboxEntriesOlderThan('2099-01-01T00:00:00.000Z');
+    const cutoffIso = '2099-01-01T00:00:00.000Z';
+    purgeTerminalOutboxEntriesOlderThan(cutoffIso);
 
-    expect(find).toHaveBeenCalledWith({ 'data.status': { $ne: 'pending' } });
+    expect(find).toHaveBeenCalledTimes(2);
+    expect(find).toHaveBeenNthCalledWith(1, {
+      'data.status': 'delivered',
+      'data.deliveredAt': { $lt: cutoffIso },
+    });
+    expect(find).toHaveBeenNthCalledWith(2, {
+      'data.status': 'dead-letter',
+      'data.failedAt': { $lt: cutoffIso },
+    });
   });
 
   test('removes delivered entries older than cutoff', () => {
