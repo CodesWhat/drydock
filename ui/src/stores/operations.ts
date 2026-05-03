@@ -1,7 +1,9 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import {
+  type ContainerUpdateOperationPhase,
   type ContainerUpdateOperationStatus,
+  isContainerUpdateOperationPhase,
   isContainerUpdateOperationStatus,
 } from '../types/update-operation';
 import {
@@ -13,6 +15,7 @@ import {
 } from './eventStream';
 
 type OperationStatus = ContainerUpdateOperationStatus;
+type OperationPhase = ContainerUpdateOperationPhase;
 
 export interface UiUpdateOperation {
   operationId: string;
@@ -21,7 +24,7 @@ export interface UiUpdateOperation {
   newContainerId?: string;
   batchId?: string;
   status: OperationStatus;
-  phase?: string;
+  phase?: OperationPhase;
   error?: string;
   completedAt?: string;
 }
@@ -66,6 +69,10 @@ function getString(value: unknown): string | undefined {
   return typeof value === 'string' && value !== '' ? value : undefined;
 }
 
+function getOperationPhase(value: unknown): OperationPhase | undefined {
+  return isContainerUpdateOperationPhase(value) ? value : undefined;
+}
+
 function isActiveOperation(operation: UiUpdateOperation | undefined): boolean {
   return Boolean(operation && ACTIVE_STATUSES.has(operation.status));
 }
@@ -104,7 +111,7 @@ function normalizeOperationChangedPayload(payload: unknown): OperationChangedPay
     newContainerId: getString(payload.newContainerId),
     batchId: getString(payload.batchId),
     status,
-    phase: getString(payload.phase),
+    phase: getOperationPhase(payload.phase),
   };
 }
 
@@ -136,7 +143,7 @@ function normalizeUpdateFailedPayload(payload: unknown): UpdateFailedPayload | u
   const containerName = getString(payload.containerName);
   const containerId = getString(payload.containerId);
   const error = getString(payload.error);
-  const phase = getString(payload.phase) || 'failed';
+  const phase = getOperationPhase(payload.phase) ?? 'failed';
   const timestamp = getString(payload.timestamp) || new Date().toISOString();
   if (!operationId || !containerName || !containerId || !error) {
     return undefined;
@@ -277,7 +284,7 @@ export const useOperationStore = defineStore('operations', () => {
       newContainerId: payload.newContainerId,
       batchId: payload.batchId,
       status: payload.status,
-      phase: payload.phase,
+      phase: getOperationPhase(payload.phase),
     });
   }
 
@@ -300,7 +307,7 @@ export const useOperationStore = defineStore('operations', () => {
       containerName: payload.containerName,
       batchId: payload.batchId || undefined,
       status: 'failed',
-      phase: payload.phase,
+      phase: getOperationPhase(payload.phase) ?? 'failed',
       error: payload.error,
       completedAt: payload.timestamp,
     });

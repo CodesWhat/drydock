@@ -790,7 +790,7 @@ describe('ContainersView — applyContainerPatch', () => {
 
     it('allows a defined mapped.updateOperation to overwrite an existing one', async () => {
       const oldOp = makeOperation({ id: 'op-old', phase: 'pulling' });
-      const newOp = makeOperation({ id: 'op-new', phase: 'health-checking' });
+      const newOp = makeOperation({ id: 'op-new', phase: 'health-gate' });
       const existing = makeContainer({
         id: 'c1',
         name: 'nginx',
@@ -1095,7 +1095,7 @@ describe('ContainersView — applyContainerPatch', () => {
         operationId: 'op-merge-store',
         containerId: 'c1',
         status: 'in-progress',
-        phase: 'health-checking',
+        phase: 'health-gate',
       });
       mockStoreOperationsById.value['c1'] = storeOp;
 
@@ -1114,7 +1114,7 @@ describe('ContainersView — applyContainerPatch', () => {
       expect(vm.containers).toHaveLength(1);
       expect(vm.containers[0].updateOperation).toBeDefined();
       expect(vm.containers[0].updateOperation!.id).toBe('op-merge-store');
-      expect(vm.containers[0].updateOperation!.phase).toBe('health-checking');
+      expect(vm.containers[0].updateOperation!.phase).toBe('health-gate');
       expect(mockGetOperationByContainerId).toHaveBeenCalledWith('c1');
     });
 
@@ -1144,6 +1144,64 @@ describe('ContainersView — applyContainerPatch', () => {
 
       const newRow = vm.containers[1] as Container;
       expect(newRow.updateOperation!.phase).toBe('queued');
+    });
+
+    it('coerces invalid store operation status to queued', async () => {
+      const existing = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      mockStoreOperationsById.value['c-invalid-status'] = {
+        operationId: 'op-invalid-status',
+        containerId: 'c-invalid-status',
+        status: 'not-a-status',
+        phase: 'health-gate',
+      };
+
+      const raw = { id: 'c-invalid-status', name: 'invalid-status-container' };
+      mockMapApiContainer.mockReturnValueOnce(
+        makeContainer({
+          id: 'c-invalid-status',
+          name: 'invalid-status-container',
+          updateOperation: undefined,
+        }),
+      );
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: raw }));
+      await flushPromises();
+
+      const newRow = vm.containers[1] as Container;
+      expect(newRow.updateOperation!.status).toBe('queued');
+      expect(newRow.updateOperation!.phase).toBe('queued');
+    });
+
+    it('coerces invalid in-progress store operation phase to pulling', async () => {
+      const existing = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+
+      mockStoreOperationsById.value['c-invalid-phase'] = {
+        operationId: 'op-invalid-phase',
+        containerId: 'c-invalid-phase',
+        status: 'in-progress',
+        phase: 'not-a-phase',
+      };
+
+      const raw = { id: 'c-invalid-phase', name: 'invalid-phase-container' };
+      mockMapApiContainer.mockReturnValueOnce(
+        makeContainer({
+          id: 'c-invalid-phase',
+          name: 'invalid-phase-container',
+          updateOperation: undefined,
+        }),
+      );
+
+      globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: raw }));
+      await flushPromises();
+
+      const newRow = vm.containers[1] as Container;
+      expect(newRow.updateOperation!.status).toBe('in-progress');
+      expect(newRow.updateOperation!.phase).toBe('pulling');
     });
 
     it('includes batchId from store operation when present', async () => {

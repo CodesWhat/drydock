@@ -343,6 +343,39 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
     wrapper.unmount();
   });
 
+  it('updates index entries after removing before an idless row', async () => {
+    const containers = ref([
+      makeContainer({ id: 'c1', name: 'one' }),
+      makeContainer({ id: '', name: 'idless' }),
+      makeContainer({ id: 'c3', name: 'three' }),
+    ]);
+    const { wrapper } = mountPipeline({ containers });
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-container-removed', {
+        detail: { id: 'c1', name: 'one' },
+      }),
+    );
+    await flushPromises();
+
+    expect(containers.value.map((container) => container.id)).toEqual(['', 'c3']);
+
+    mockMapApiContainer.mockReturnValueOnce(
+      makeContainer({ id: 'c3', name: 'three', currentTag: '3.1.0' }),
+    );
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-container-updated', {
+        detail: { id: 'c3', name: 'three' },
+      }),
+    );
+    await flushPromises();
+
+    expect(containers.value).toHaveLength(2);
+    expect(containers.value[1]!.currentTag).toBe('3.1.0');
+
+    wrapper.unmount();
+  });
+
   it('ignores removal events that only name an unmapped container', async () => {
     const containers = ref([makeContainer({ id: 'c1', name: 'one' })]);
     const { wrapper } = mountPipeline({ containers });

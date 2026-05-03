@@ -318,6 +318,22 @@ describe('useOperationStore', () => {
       expect(operations.byId['op-meta']?.newContainerId).toBe('c1-new');
     });
 
+    it('defaults update-failed payloads with unknown phases to failed', () => {
+      const operations = useOperationStore();
+
+      operations.applyUpdateFailed({
+        operationId: 'op-invalid-failed-phase',
+        containerId: 'c1',
+        containerName: 'web',
+        error: 'pull failed',
+        phase: 'not-a-phase',
+        batchId: null,
+        timestamp: '2026-05-01T12:00:00.000Z',
+      });
+
+      expect(operations.byId['op-invalid-failed-phase']?.phase).toBe('failed');
+    });
+
     it('first insert (no existing operation) applies without guard', () => {
       const operations = useOperationStore();
 

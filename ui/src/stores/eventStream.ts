@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 
 export type SseBusEvent =
   | 'sse:connected'
@@ -110,6 +110,51 @@ type EventStreamSubscriber = (payload: unknown, event: EventStreamEvent) => void
 
 const MAX_RECENT_EVENTS = 500;
 
+export interface FixedRingBuffer<T> {
+  readonly size: number;
+  push: (entry: T) => void;
+  toArray: () => T[];
+  clear: () => void;
+}
+
+export function createFixedRingBuffer<T>(capacity: number): FixedRingBuffer<T> {
+  if (!Number.isSafeInteger(capacity) || capacity <= 0) {
+    throw new RangeError('Ring buffer capacity must be a positive safe integer');
+  }
+
+  const entries = new Array<T | undefined>(capacity);
+  let start = 0;
+  let size = 0;
+
+  return {
+    get size() {
+      return size;
+    },
+    push(entry: T) {
+      if (size < capacity) {
+        entries[(start + size) % capacity] = entry;
+        size += 1;
+        return;
+      }
+
+      entries[start] = entry;
+      start = (start + 1) % capacity;
+    },
+    toArray() {
+      const snapshot: T[] = [];
+      for (let offset = 0; offset < size; offset += 1) {
+        snapshot.push(entries[(start + offset) % capacity] as T);
+      }
+      return snapshot;
+    },
+    clear() {
+      entries.fill(undefined);
+      start = 0;
+      size = 0;
+    },
+  };
+}
+
 export function createManagedEventSource(streamUrl: string): EventSource {
   return new EventSource(streamUrl);
 }
@@ -117,7 +162,12 @@ export function createManagedEventSource(streamUrl: string): EventSource {
 export const useEventStreamStore = defineStore('eventStream', () => {
   const status = ref<EventStreamConnectionStatus>('closed');
   const lastEventId = ref<string | undefined>();
-  const recentEvents = ref<EventStreamEvent[]>([]);
+  const recentEventRing = createFixedRingBuffer<EventStreamEvent>(MAX_RECENT_EVENTS);
+  const recentEventsVersion = ref(0);
+  const recentEvents = computed(() => {
+    void recentEventsVersion.value;
+    return recentEventRing.toArray();
+  });
 
   let eventSource: EventSource | undefined;
   let eventBus: SseEventBus | undefined;
@@ -143,7 +193,8 @@ export const useEventStreamStore = defineStore('eventStream', () => {
       payload,
       receivedAt: Date.now(),
     };
-    recentEvents.value = [...recentEvents.value.slice(-(MAX_RECENT_EVENTS - 1)), entry];
+    recentEventRing.push(entry);
+    recentEventsVersion.value += 1;
     if (payload === undefined && !emitUndefinedPayload) {
       eventBus?.emit(event);
     } else {

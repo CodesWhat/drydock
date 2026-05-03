@@ -6,8 +6,12 @@ import {
   parseUpdateLifecycleSsePayload,
   parseUpdateOperationSsePayload,
 } from '../../composables/useOperationDisplayHold';
-import { type UiUpdateOperation, useOperationStore } from '../../stores/operations';
+import { useOperationStore } from '../../stores/operations';
 import type { Container, ContainerUpdateOperation } from '../../types/container';
+import {
+  isActiveContainerUpdateOperationPhaseForStatus,
+  isActiveContainerUpdateOperationStatus,
+} from '../../types/update-operation';
 import { mapApiContainer } from '../../utils/container-mapper';
 import { resolveUpdateFailureReason } from '../../utils/update-error-summary';
 
@@ -51,6 +55,7 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
   const pendingOperationWatchers = new Map<string, WatchStopHandle>();
   const pendingOperationWatcherTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const containerIndexById = new Map<string, number>();
+  const containerIdByIndex = new Map<number, string>();
 
   function hasPendingOperationWatcher(containerId: string) {
     return pendingOperationWatchers.has(containerId);
@@ -58,27 +63,43 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
 
   function rebuildContainerIndexById() {
     containerIndexById.clear();
+    containerIdByIndex.clear();
     for (let index = 0; index < input.containers.value.length; index += 1) {
-      const { id } = input.containers.value[index]!;
-      if (id) {
-        containerIndexById.set(id, index);
-      }
+      setContainerIndex(input.containers.value[index]!, index);
     }
   }
 
   function setContainerIndex(container: Container, index: number) {
-    if (container.id) {
-      containerIndexById.set(container.id, index);
+    const previousIdAtIndex = containerIdByIndex.get(index);
+    if (previousIdAtIndex && previousIdAtIndex !== container.id) {
+      containerIndexById.delete(previousIdAtIndex);
     }
+    if (!container.id) {
+      containerIdByIndex.delete(index);
+      return;
+    }
+    const previousIndexForId = containerIndexById.get(container.id);
+    if (previousIndexForId !== undefined && previousIndexForId !== index) {
+      containerIdByIndex.delete(previousIndexForId);
+    }
+    containerIndexById.set(container.id, index);
+    containerIdByIndex.set(index, container.id);
   }
 
   function removeContainerIndexAt(removedIndex: number) {
-    for (const [id, index] of containerIndexById) {
-      if (index === removedIndex) {
-        containerIndexById.delete(id);
-      } else if (index > removedIndex) {
-        containerIndexById.set(id, index - 1);
+    const removedId = containerIdByIndex.get(removedIndex)!;
+    containerIndexById.delete(removedId);
+    containerIdByIndex.delete(removedIndex);
+
+    for (let index = removedIndex; index < input.containers.value.length; index += 1) {
+      const shiftedId = containerIdByIndex.get(index + 1);
+      if (shiftedId) {
+        containerIdByIndex.set(index, shiftedId);
+        containerIndexById.set(shiftedId, index);
+      } else {
+        containerIdByIndex.delete(index);
       }
+      containerIdByIndex.delete(index + 1);
     }
   }
 
@@ -192,16 +213,22 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
    * Returns undefined when no active operation exists for the given id.
    */
   function resolveStoreOperation(containerId: string): ContainerUpdateOperation | undefined {
-    const storeOp = operationStore.getOperationByContainerId(containerId) as
-      | UiUpdateOperation
-      | undefined;
+    const storeOp = operationStore.getOperationByContainerId(containerId);
     if (!storeOp) {
       return undefined;
     }
+    const status = isActiveContainerUpdateOperationStatus(storeOp.status)
+      ? storeOp.status
+      : 'queued';
+    const phase = isActiveContainerUpdateOperationPhaseForStatus(status, storeOp.phase)
+      ? storeOp.phase
+      : status === 'queued'
+        ? 'queued'
+        : 'pulling';
     return {
       id: storeOp.operationId,
-      status: storeOp.status as ContainerUpdateOperation['status'],
-      phase: (storeOp.phase ?? 'queued') as ContainerUpdateOperation['phase'],
+      status,
+      phase,
       batchId: storeOp.batchId,
       updatedAt: new Date().toISOString(),
     };
