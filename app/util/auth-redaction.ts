@@ -1,7 +1,9 @@
 export const REDACTED_AUTH_HEADER_VALUE = '[REDACTED]';
 
 const AUTHORIZATION_HEADER_VALUE_PATTERN =
-  /\b(authorization["']?\s*[:=]\s*)(["']?)([^\r\n"',;}\]]+)/gi;
+  /\b(authorization["']?\s*[:=]\s*)(["']?)([^\r\n"',;}\]]*?)(?=(?:\s+(?:x-registry-auth|[a-z0-9_-]*token|api[-_]?key)["']?\s*[:=])|[\r\n"',;}\]]|$)/gi;
+const SENSITIVE_CREDENTIAL_VALUE_PATTERN =
+  /\b((?:x-registry-auth|[a-z0-9_-]*token|api[-_]?key)["']?\s*[:=]\s*)(["']?)((?:(?:basic|bearer)\s+)?[^\s\r\n"',;&}\]]+)/gi;
 const AUTHORIZATION_SCHEME_PATTERN = /^(basic|bearer)\b/i;
 
 function redactAuthorizationValue(value: string): string {
@@ -16,9 +18,14 @@ function redactAuthorizationValue(value: string): string {
 }
 
 export function scrubAuthorizationHeaderValues(message: string): string {
-  return message.replace(
-    AUTHORIZATION_HEADER_VALUE_PATTERN,
-    (_match, prefix: string, quote: string, value: string) =>
-      `${prefix}${quote}${redactAuthorizationValue(value)}`,
-  );
+  return message
+    .replace(
+      AUTHORIZATION_HEADER_VALUE_PATTERN,
+      (_match, prefix: string, quote: string, value: string) =>
+        `${prefix}${quote}${redactAuthorizationValue(value)}`,
+    )
+    .replace(
+      SENSITIVE_CREDENTIAL_VALUE_PATTERN,
+      (_match, prefix: string, quote: string) => `${prefix}${quote}${REDACTED_AUTH_HEADER_VALUE}`,
+    );
 }

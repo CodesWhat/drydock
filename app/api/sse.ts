@@ -23,6 +23,7 @@ import {
   registerUpdateOperationChanged,
 } from '../event/index.js';
 import log from '../log/index.js';
+import { scrubAuthorizationHeaderValues } from '../util/auth-redaction.js';
 import { hashToken } from '../util/crypto.js';
 import { sendErrorResponse } from './error-response.js';
 import {
@@ -444,7 +445,7 @@ function buildUpdateFailedSsePayload(
     operationId: payload.operationId ?? '',
     containerId: payload.containerId ?? '',
     containerName: payload.containerName,
-    error: payload.error,
+    error: scrubAuthorizationHeaderValues(payload.error),
     phase: payload.phase ?? '',
     batchId: payload.batchId ?? null,
     timestamp: new Date().toISOString(),

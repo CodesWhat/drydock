@@ -48,4 +48,38 @@ describe('scrubAuthorizationHeaderValues', () => {
       matchSpy.mockRestore();
     }
   });
+
+  test('redacts registry auth header values in diagnostic strings', () => {
+    const result = scrubAuthorizationHeaderValues(
+      'registry failed: X-Registry-Auth=super-secret; status=401',
+    );
+
+    expect(result).toBe('registry failed: X-Registry-Auth=[REDACTED]; status=401');
+    expect(result).not.toContain('super-secret');
+  });
+
+  test('redacts token and api key credential fields', () => {
+    const result = scrubAuthorizationHeaderValues(
+      'registry-token=registry-secret api-key=api-secret apikey=compact-secret token=plain-secret',
+    );
+
+    expect(result).toBe(
+      'registry-token=[REDACTED] api-key=[REDACTED] apikey=[REDACTED] token=[REDACTED]',
+    );
+    expect(result).not.toContain('registry-secret');
+    expect(result).not.toContain('api-secret');
+    expect(result).not.toContain('compact-secret');
+    expect(result).not.toContain('plain-secret');
+  });
+
+  test('redacts oauth token fields', () => {
+    const result = scrubAuthorizationHeaderValues(
+      'access_token=access-secret refresh_token=refresh-secret id_token=id-secret',
+    );
+
+    expect(result).toBe('access_token=[REDACTED] refresh_token=[REDACTED] id_token=[REDACTED]');
+    expect(result).not.toContain('access-secret');
+    expect(result).not.toContain('refresh-secret');
+    expect(result).not.toContain('id-secret');
+  });
 });

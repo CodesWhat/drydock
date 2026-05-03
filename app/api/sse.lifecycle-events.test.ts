@@ -635,6 +635,25 @@ describe('SSE lifecycle event handlers', () => {
       });
     });
 
+    test('update-failed handler redacts registry credentials before broadcasting', () => {
+      sseRouter.init();
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+
+      const onUpdateFailed = mockRegisterContainerUpdateFailed.mock.calls.at(-1)[0];
+      onUpdateFailed({
+        containerName: 'nginx',
+        operationId: 'op-fail-redact',
+        error: 'registry denied: Authorization: Bearer registry-token X-Registry-Auth=super-secret',
+      });
+
+      const payload = parseSseEventPayload(res, 'dd:update-failed');
+      expect(payload.error).toContain('Authorization: Bearer [REDACTED]');
+      expect(payload.error).toContain('X-Registry-Auth=[REDACTED]');
+      expect(payload.error).not.toContain('registry-token');
+      expect(payload.error).not.toContain('super-secret');
+    });
+
     test('update-failed handler includes rollback reason when present', () => {
       sseRouter.init();
       const handler = getHandler();
