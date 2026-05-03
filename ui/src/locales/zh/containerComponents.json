@@ -153,6 +153,13 @@
       "statusQueued": "排队中",
       "statusScanning": "扫描中",
       "statusUpdating": "更新中",
+      "statusPulling": "拉取中…",
+      "statusScanningPhase": "扫描中…",
+      "statusGeneratingSbom": "生成 SBOM 中…",
+      "statusHealthChecking": "健康检查中…",
+      "statusFinalizing": "完成中…",
+      "statusRollingBack": "回滚中…",
+      "lastUpdateFailed": "上次更新失败：{reason}",
       "stopAction": "停止",
       "startAction": "启动",
       "restartAction": "重启",
@@ -197,6 +204,117 @@
       "deleteTooltip": "删除",
       "statusUpdating": "更新中",
       "statusQueued": "排队中"
+    },
+    "sideTabContent": {
+      "hideValueTooltip": "隐藏值",
+      "revealValueTooltip": "显示值",
+      "previewEmptyState": "运行预览以查看将执行哪些更新操作。",
+      "architecture": "架构",
+      "os": "操作系统",
+      "digest": "摘要",
+      "created": "创建时间",
+      "unknown": "未知",
+      "imageMetadata": "镜像元数据"
+    },
+    "listContent": {
+      "loadingContainers": "正在加载容器...",
+      "searchPlaceholder": "搜索名称或镜像...",
+      "allStatuses": "所有状态",
+      "running": "运行中",
+      "stopped": "已停止",
+      "allBouncer": "所有 Bouncer",
+      "safe": "安全",
+      "unsafe": "不安全",
+      "blocked": "已阻止",
+      "allRegistries": "所有仓库",
+      "dockerHub": "Docker Hub",
+      "ghcr": "GHCR",
+      "custom": "自定义",
+      "allHosts": "所有主机",
+      "allContainers": "所有容器",
+      "hasUpdate": "有可用更新",
+      "major": "主版本",
+      "minor": "次版本",
+      "patch": "补丁",
+      "digest": "摘要",
+      "hidePinned": "隐藏已固定",
+      "hidePinnedTooltip": "隐藏已固定到特定版本的容器",
+      "clearAll": "全部清除",
+      "toggleColumnsTooltip": "切换列",
+      "groupByStackTooltip": "按堆栈分组",
+      "expandAll": "全部展开",
+      "collapseAll": "全部折叠",
+      "recheckTooltip": "重新检查更新",
+      "columnsHeader": "列",
+      "filterSearch": "搜索：{value}",
+      "filterStatus": "状态：{value}",
+      "filterBouncer": "Bouncer：{value}",
+      "filterRegistry": "仓库：{value}",
+      "filterHost": "主机：{value}",
+      "filterKind": "类型：{value}",
+      "filterHiddenPinned": "已隐藏：已固定",
+      "filtersLabel": "筛选器",
+      "filteredContainers": "已筛选 {count} 个容器 | 已筛选 {count} 个容器"
+    },
+    "stats": {
+      "paused": "已暂停",
+      "live": "实时",
+      "heartbeatActive": "心跳活动中",
+      "resume": "恢复",
+      "pause": "暂停",
+      "loadingStats": "正在加载容器统计信息...",
+      "noDataYet": "统计流尚未产生数据。",
+      "cpu": "CPU",
+      "memory": "内存",
+      "networkRxTx": "网络 RX/TX",
+      "blockIo": "块 I/O"
+    },
+    "updateDialog": {
+      "title": "更新容器",
+      "confirmTagChange": "更新 {name}？这将把镜像标签从 :{currentTag} 更改为 :{newTag}{kind}。",
+      "confirmDigestChange": "更新 {name}？:{currentTag} 有更新的构建版本可用（摘要变更）。",
+      "confirmLatest": "立即更新 {name}？这将应用最新发现的镜像。",
+      "updating": "更新中...",
+      "update": "更新"
+    },
+    "floatingTag": {
+      "badgeText": "浮动标签",
+      "tooltip": "此标签可能会被仓库就地更新。启用 dd.watch.digest=true 或使用完整 semver 标签以完整检测更新。"
+    },
+    "projectLink": {
+      "viewProject": "查看项目"
+    },
+    "releaseNotesLink": {
+      "releaseNotes": "发布说明",
+      "viewFullNotes": "查看完整说明",
+      "currentSuffix": "（当前）",
+      "availableSuffix": "（可用）"
+    },
+    "suggestedTag": {
+      "badgeText": "建议",
+      "tooltip": "可用的最佳稳定 semver 标签 — 建议固定使用"
+    },
+    "eligibilityBadges": {
+      "securityBlocked": "安全阻止",
+      "rolledBack": "已回滚",
+      "snoozed": "已推迟",
+      "tagSkipped": "标签已跳过",
+      "digestSkipped": "摘要已跳过",
+      "maturing": "成熟中",
+      "belowThreshold": "低于阈值",
+      "rollback": "回滚",
+      "inProgress": "进行中",
+      "triggerExcluded": "触发器排除",
+      "triggerFiltered": "触发器筛选",
+      "agentMismatch": "代理不匹配",
+      "noTrigger": "无触发器",
+      "liftsLabel": "解除条件："
+    },
+    "maturityBadge": {
+      "new": "新",
+      "mature": "成熟",
+      "newTooltip": "新更新",
+      "matureTooltip": "成熟更新"
     }
   }
 }

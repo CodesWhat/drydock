@@ -29,7 +29,10 @@
     "toast": {
       "updated": "已更新：{name}",
       "updateFailed": "更新失败：{name}",
+      "updateFailedWithReason": "更新失败：{name} — {reason}",
+      "cancelled": "已取消：{name}",
       "rolledBack": "已回滚：{name}",
+      "rolledBackWithReason": "已回滚：{name} — {reason}",
       "updateError": "无法更新 {name}",
       "updateAllError": "无法更新所有容器"
     },
