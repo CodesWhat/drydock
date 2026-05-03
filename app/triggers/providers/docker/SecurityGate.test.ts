@@ -1051,6 +1051,12 @@ describe('SecurityGate', () => {
       await harness.gate.maybeScanAndGateUpdate(createContext(), container, createLog());
 
       expect(harness.scanImageForVulnerabilities).not.toHaveBeenCalled();
+      expect(harness.recordSecurityAudit).toHaveBeenCalledWith(
+        'security-scan-skipped',
+        container,
+        'info',
+        'Security scan skipped because dd.security.gate=off is set on the container',
+      );
     });
 
     test("config gate.mode='off' overridden by label dd.security.gate=on — scan runs and gates", async () => {

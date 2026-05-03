@@ -108,7 +108,7 @@ type SecurityGateDependencies = {
   recordSecurityAudit: (
     action: string,
     container: SecurityContainer,
-    status: 'success' | 'error',
+    status: 'success' | 'error' | 'info',
     details: string,
   ) => void;
   // Optional scan-cache short-circuit dependencies
@@ -281,6 +281,16 @@ class SecurityGate {
     return securityConfiguration.enabled && securityConfiguration.scanner === 'trivy';
   }
 
+  getContainerGateModeOverride(container: SecurityContainer): 'on' | 'off' | undefined {
+    const labelRaw = container.labels?.['dd.security.gate'];
+    if (typeof labelRaw !== 'string') {
+      return undefined;
+    }
+
+    const normalised = labelRaw.trim().toLowerCase();
+    return normalised === 'on' || normalised === 'off' ? normalised : undefined;
+  }
+
   /**
    * Resolve the effective vulnerability-scan gate mode for this container.
    * Container label `dd.security.gate=on|off` overrides the global
@@ -294,12 +304,9 @@ class SecurityGate {
     container: SecurityContainer,
     securityConfiguration: SecurityConfiguration,
   ): 'on' | 'off' {
-    const labelRaw = container.labels?.['dd.security.gate'];
-    if (typeof labelRaw === 'string') {
-      const normalised = labelRaw.trim().toLowerCase();
-      if (normalised === 'on' || normalised === 'off') {
-        return normalised;
-      }
+    const labelMode = this.getContainerGateModeOverride(container);
+    if (labelMode) {
+      return labelMode;
     }
     return securityConfiguration.gate?.mode ?? 'on';
   }
@@ -546,6 +553,14 @@ class SecurityGate {
       logContainer.info(
         'Security gate disabled for this container (dd.security.gate=off or DD_SECURITY_GATE_MODE=off); skipping scan',
       );
+      if (this.getContainerGateModeOverride(container) === 'off') {
+        this.telemetry.recordSecurityAudit(
+          'security-scan-skipped',
+          container,
+          'info',
+          'Security scan skipped because dd.security.gate=off is set on the container',
+        );
+      }
       return;
     }
 
