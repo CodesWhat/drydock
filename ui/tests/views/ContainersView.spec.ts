@@ -1986,6 +1986,54 @@ describe('ContainersView', () => {
       expect(mockGetContainerGroups).toHaveBeenCalled();
       expect(vm.groupMembershipMap).toEqual({ nginx: 'my-stack' });
     });
+
+    it('preserves stack grouping when containers are recreated with new IDs mid-update', async () => {
+      // Regression: when a Docker action recreates a container it receives a new
+      // container ID. Previously loadGroups() keyed the membership map only by ID,
+      // so the post-recreate lookup (map[container.id] ?? map[container.name]) always
+      // missed and the whole stack collapsed into __ungrouped__.
+      const initialContainers = [
+        makeContainer({ id: 'old-A', name: 'nginx-hooked' }),
+        makeContainer({ id: 'old-B', name: 'redis-cache' }),
+      ];
+      mockGetContainerGroups.mockResolvedValue([
+        {
+          name: 'web-stack',
+          containers: [
+            { id: 'old-A', name: 'nginx-hooked', displayName: 'nginx-hooked' },
+            { id: 'old-B', name: 'redis-cache', displayName: 'redis-cache' },
+          ],
+          containerCount: 2,
+          updatesAvailable: 0,
+        },
+      ]);
+      const wrapper = await mountContainersView(initialContainers);
+      const vm = wrapper.vm as any;
+
+      vm.groupByStack = true;
+      await flushPromises();
+
+      // Both containers should be grouped under web-stack initially
+      let groups = vm.groupedContainers;
+      expect(groups).toHaveLength(1);
+      expect(groups[0].key).toBe('web-stack');
+      expect(groups[0].containers).toHaveLength(2);
+
+      // Simulate post-recreate: same names, brand-new IDs, groups API not re-called
+      const recreatedContainers = [
+        makeContainer({ id: 'new-A', name: 'nginx-hooked' }),
+        makeContainer({ id: 'new-B', name: 'redis-cache' }),
+      ];
+      mockGetAllContainers.mockResolvedValue(recreatedContainers);
+      vm.containers = recreatedContainers;
+      await flushPromises();
+
+      // Containers must still appear under web-stack via the name fallback
+      groups = vm.groupedContainers;
+      expect(groups).toHaveLength(1);
+      expect(groups[0].key).toBe('web-stack');
+      expect(groups[0].containers).toHaveLength(2);
+    });
   });
 
   describe('container logs viewer integration', () => {

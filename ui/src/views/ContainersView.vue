@@ -990,15 +990,19 @@ async function loadGroups() {
         continue;
       }
       for (const container of group.containers) {
-        const groupKey =
-          (typeof container.id === 'string' && container.id) ||
-          (typeof container.displayName === 'string' && container.displayName) ||
-          (typeof container.name === 'string' && container.name) ||
-          undefined;
-        if (!groupKey) {
-          continue;
+        // Index under id, name, AND displayName so a container recreated by an
+        // update (which gets a new container ID) still resolves to the same
+        // stack via its stable name. Without this, mid-update the whole stack
+        // collapses into the ungrouped bucket.
+        if (typeof container.id === 'string' && container.id) {
+          map[container.id] = group.name;
         }
-        map[groupKey] = group.name;
+        if (typeof container.name === 'string' && container.name) {
+          map[container.name] = group.name;
+        }
+        if (typeof container.displayName === 'string' && container.displayName) {
+          map[container.displayName] = group.name;
+        }
       }
     }
     groupMembershipMap.value = map;
