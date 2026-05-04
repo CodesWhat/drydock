@@ -195,17 +195,22 @@ describe('image-comparison', () => {
       };
     }
 
-    test('normalizeContainer applies provider URL normalization to image.registry.url', () => {
-      // Regression guard for 594a07e8: removing normalizeImage call left
-      // registry.url in raw user-config form ("docker.io") instead of the
-      // API base form ("https://registry-1.docker.io/v2").
+    test('normalizeContainer applies provider name canonicalization and URL normalization for a plain Docker Hub container', () => {
+      // Regression guard for 594a07e8 + follow-up fix: removing normalizeImage
+      // left registry.url in raw form ("docker.io") instead of the API base form.
+      // The follow-up fix restores image.name canonicalization too — Hub's
+      // normalizeImage adds a "library/" prefix to un-prefixed names, and without
+      // it the Prometheus image_name label emits "nginx" instead of "library/nginx".
       mockGetState.mockReturnValue({
         registry: {
           hub: {
             getId: () => 'hub',
             match: () => true,
-            normalizeImage: (image: { registry: { url: string } }) => ({
+            // Faithful stub of Hub.normalizeImage semantics: adds "library/" to
+            // un-prefixed names and rewrites the URL to the API base form.
+            normalizeImage: (image: { name: string; registry: { url: string } }) => ({
               ...image,
+              name: image.name.includes('/') ? image.name : `library/${image.name}`,
               registry: {
                 ...image.registry,
                 url: 'https://registry-1.docker.io/v2',
@@ -215,9 +220,16 @@ describe('image-comparison', () => {
         },
       });
 
-      const container = createBaseContainer({ url: 'docker.io' });
+      const container = {
+        ...createBaseContainer({ url: 'docker.io' }),
+        image: {
+          ...createBaseContainer({ url: 'docker.io' }).image,
+          name: 'nginx',
+        },
+      };
       const result = normalizeContainer(container as never);
 
+      expect(result.image.name).toBe('library/nginx');
       expect(result.image.registry.url).toBe('https://registry-1.docker.io/v2');
     });
 

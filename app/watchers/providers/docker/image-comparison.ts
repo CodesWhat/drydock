@@ -154,20 +154,25 @@ export function normalizeContainer(container: Container) {
     // files, recreated, and shown in the UI. We must not overwrite it with
     // the lookup-substituted view or any provider name mutation.
     containerWithNormalizedImage.image.registry.name = registryProvider.getId();
-    // `image.registry.url` must be the API base URL form when the deploy
-    // image itself belongs to this provider (e.g. docker.io → https://registry-1.docker.io/v2).
-    // Registry HTTP callers, getImageFullName, the Prometheus image_registry_url
-    // label, and the Docker trigger's self-update helper all rely on this form.
+    // `image.name` and `image.registry.url` must reflect the provider's
+    // canonical forms when the deploy image itself belongs to this provider.
+    // For Docker Hub: un-prefixed names like `nginx` become `library/nginx`,
+    // and the URL is rewritten from `docker.io` to `https://registry-1.docker.io/v2`.
+    // Registry HTTP callers, getImageFullName, the Prometheus image_name and
+    // image_registry_url labels, and the Docker trigger's self-update helper
+    // all rely on these canonical forms.
     //
     // Exception: when a dd.registry.lookup.image label diverts queries to a
     // different registry than the deploy registry (e.g. harbor.example.com mirror
-    // looking up tags from Docker Hub), the deploy URL is harbor.example.com and
-    // must not be rewritten to the Hub API URL. We detect this by checking whether
-    // the provider also matches the deploy image directly — if it does not, the
-    // lookup label is doing the diversion and the deploy URL is preserved as-is.
+    // looking up tags from Docker Hub), neither the name nor the URL should be
+    // rewritten — the deploy identity must be preserved as-is. This is the fix
+    // for #336. We detect this by checking whether the provider also matches the
+    // deploy image directly; if it does not, the lookup label is doing the
+    // diversion and both fields are left untouched.
     if (registryProvider.match(containerWithNormalizedImage.image)) {
-      const urlNormalized = registryProvider.normalizeImage(containerWithNormalizedImage.image);
-      containerWithNormalizedImage.image.registry.url = urlNormalized.registry.url;
+      const normalized = registryProvider.normalizeImage(containerWithNormalizedImage.image);
+      containerWithNormalizedImage.image.name = normalized.name;
+      containerWithNormalizedImage.image.registry.url = normalized.registry.url;
     }
   } else {
     log.warn(`${fullName(container)} - No Registry Provider found`);
