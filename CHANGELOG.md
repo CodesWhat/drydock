@@ -1502,7 +1502,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.14...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.15...HEAD
+[1.5.0-rc.15]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.14...v1.5.0-rc.15
 [1.5.0-rc.14]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.13...v1.5.0-rc.14
 [1.5.0-rc.13]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.12...v1.5.0-rc.13
 [1.5.0-rc.12]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.11...v1.5.0-rc.12

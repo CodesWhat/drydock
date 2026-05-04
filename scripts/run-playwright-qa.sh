@@ -78,8 +78,12 @@ remove_stale_playwright_containers
 
 if ! is_port_available "$DD_PLAYWRIGHT_PORT"; then
 	echo "❌ DD_PLAYWRIGHT_PORT=$DD_PLAYWRIGHT_PORT is already in use."
+	if command -v lsof >/dev/null 2>&1; then
+		echo "   Holders (lsof -nP -iTCP:${DD_PLAYWRIGHT_PORT}):"
+		lsof -nP -iTCP:"$DD_PLAYWRIGHT_PORT" 2>/dev/null | sed 's/^/     /' || true
+	fi
 	if [[ -z $USER_PROVIDED_PLAYWRIGHT_PORT ]]; then
-		echo "   Default QA runs use localhost:3333. Free this port or set DD_PLAYWRIGHT_PORT."
+		echo "   Default QA runs use localhost:3333. Kill the listener above or set DD_PLAYWRIGHT_PORT to a free port."
 	fi
 	exit 1
 fi
