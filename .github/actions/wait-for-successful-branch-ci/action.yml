@@ -94,7 +94,9 @@ runs:
           fi
 
           echo "Attempt ${attempt}/${MAX_ATTEMPTS}: waiting for successful ${workflow_name} branch push run on ${TARGET_SHA}..."
-          sleep "${SLEEP_SECONDS}"
+          if [ "${attempt}" -lt "${MAX_ATTEMPTS}" ]; then
+            sleep "${SLEEP_SECONDS}"
+          fi
         done
 
         echo "::error::Timed out waiting for successful ${workflow_name} branch push run on ${TARGET_SHA}."
