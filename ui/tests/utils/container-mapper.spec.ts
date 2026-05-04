@@ -1769,6 +1769,7 @@ describe('container-mapper', () => {
       'rollback-container',
       'active-operation',
       'security-scan-blocked',
+      'last-update-rolled-back',
       'snoozed',
       'skip-tag',
       'skip-digest',

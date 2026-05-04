@@ -1,243 +1,255 @@
-// Mock all dependencies
-vi.mock('./configuration', () => ({
-  getVersion: vi.fn(() => '1.0.0'),
-  getDnsMode: vi.fn(() => 'ipv4first'),
-}));
-vi.mock('./configuration/migrate-cli', () => ({
-  runConfigMigrateCommandIfRequested: vi.fn(() => null),
-}));
+import { afterEach, describe, expect, test, vi } from 'vitest';
+import type { NotificationOutboxEntry } from './model/notification-outbox.js';
 
-vi.mock('./log', () => ({
-  default: { info: vi.fn(), warn: vi.fn(), child: vi.fn().mockReturnThis() },
-}));
+const originalArgv = process.argv;
+const originalExitCode = process.exitCode;
+const originalGetuid = process.getuid;
 
-vi.mock('./store', () => ({
-  init: vi.fn().mockResolvedValue(),
-}));
+interface EntryPointOptions {
+  argv?: string[];
+  env?: Record<string, string | undefined>;
+  getuid?: number | 'unavailable';
+  migrateExitCode?: number | null;
+  triggerState?: Record<string, unknown>;
+}
 
-vi.mock('./registry', () => ({
-  init: vi.fn().mockResolvedValue(),
-}));
+async function loadEntryPoint({
+  argv = ['node', 'index.js'],
+  env = {},
+  getuid = 501,
+  migrateExitCode = null,
+  triggerState = {},
+}: EntryPointOptions = {}) {
+  vi.resetModules();
+  vi.clearAllMocks();
+  vi.unstubAllEnvs();
 
-vi.mock('./api', () => ({
-  init: vi.fn().mockResolvedValue(),
-}));
+  process.argv = argv;
+  process.exitCode = undefined;
+  for (const [key, value] of Object.entries(env)) {
+    vi.stubEnv(key, value);
+  }
+  if (getuid === 'unavailable') {
+    Object.defineProperty(process, 'getuid', {
+      configurable: true,
+      value: undefined,
+    });
+  } else {
+    vi.spyOn(process, 'getuid').mockReturnValue(getuid);
+  }
 
-vi.mock('./agent/api', () => ({
-  init: vi.fn().mockResolvedValue(),
-}));
+  const setDefaultResultOrder = vi.fn();
+  const getDnsMode = vi.fn(() => 'ipv4first');
+  const runConfigMigrateCommandIfRequested = vi.fn(() => migrateExitCode);
+  const logInfo = vi.fn();
+  const logWarn = vi.fn();
+  const storeInit = vi.fn(async () => undefined);
+  const prometheusInit = vi.fn();
+  const registryState = { trigger: triggerState };
+  const registryInit = vi.fn(async () => undefined);
+  const registryGetState = vi.fn(() => registryState);
+  const agentServerInit = vi.fn(async () => undefined);
+  const agentManagerInit = vi.fn(async () => undefined);
+  const apiInit = vi.fn(async () => undefined);
+  const securitySchedulerInit = vi.fn();
+  const startOutboxWorker = vi.fn();
+  const recoverQueuedOperationsOnStartup = vi.fn();
+  let deliverOutboxEntry: ((entry: NotificationOutboxEntry) => Promise<void>) | undefined;
 
-vi.mock('./agent', () => ({
-  init: vi.fn().mockResolvedValue(),
-}));
+  vi.doMock('node:dns', () => ({
+    default: { setDefaultResultOrder },
+  }));
+  vi.doMock('./configuration/index.js', () => ({ getDnsMode }));
+  vi.doMock('./configuration/migrate-cli.js', () => ({ runConfigMigrateCommandIfRequested }));
+  vi.doMock('./log/index.js', () => ({
+    default: {
+      info: logInfo,
+      warn: logWarn,
+    },
+  }));
+  vi.doMock('./store/index.js', () => ({ init: storeInit }));
+  vi.doMock('./prometheus/index.js', () => ({ init: prometheusInit }));
+  vi.doMock('./registry/index.js', () => ({
+    init: registryInit,
+    getState: registryGetState,
+  }));
+  vi.doMock('./agent/api/index.js', () => ({ init: agentServerInit }));
+  vi.doMock('./agent/index.js', () => ({ init: agentManagerInit }));
+  vi.doMock('./api/index.js', () => ({ init: apiInit }));
+  vi.doMock('./security/scheduler.js', () => ({ init: securitySchedulerInit }));
+  vi.doMock('./notifications/outbox-worker.js', () => ({
+    startOutboxWorker: vi.fn((options: { deliver: typeof deliverOutboxEntry }) => {
+      deliverOutboxEntry = options.deliver;
+      startOutboxWorker(options);
+    }),
+  }));
+  vi.doMock('./updates/recovery.js', () => ({ recoverQueuedOperationsOnStartup }));
 
-vi.mock('./prometheus', () => ({
-  init: vi.fn(),
-}));
+  const imported = import('./index.js');
 
-vi.mock('./security/scheduler', () => ({
-  init: vi.fn(),
-  shutdown: vi.fn(),
-}));
+  return {
+    imported,
+    setDefaultResultOrder,
+    getDnsMode,
+    runConfigMigrateCommandIfRequested,
+    logInfo,
+    logWarn,
+    storeInit,
+    prometheusInit,
+    registryInit,
+    registryGetState,
+    agentServerInit,
+    agentManagerInit,
+    apiInit,
+    securitySchedulerInit,
+    startOutboxWorker,
+    recoverQueuedOperationsOnStartup,
+    get deliverOutboxEntry() {
+      return deliverOutboxEntry;
+    },
+  };
+}
 
-describe('Main Application', () => {
-  const originalArgv = process.argv;
-  const originalGetuid = (process as NodeJS.Process & { getuid?: () => number }).getuid;
-  const originalRunAsRoot = process.env.DD_RUN_AS_ROOT;
-  const originalAllowInsecureRoot = process.env.DD_ALLOW_INSECURE_ROOT;
-  const originalExitCode = process.exitCode;
-
-  beforeEach(async () => {
-    vi.clearAllMocks();
-    // Clear the module cache to ensure fresh imports
-    vi.resetModules();
-    process.argv = [...originalArgv].filter((arg) => arg !== '--agent');
-    const migrateCli = await import('./configuration/migrate-cli.js');
-    migrateCli.runConfigMigrateCommandIfRequested.mockReturnValue(null);
-  });
-
-  afterAll(() => {
+describe('entrypoint', () => {
+  afterEach(() => {
     process.argv = originalArgv;
-    if (originalGetuid) {
-      (process as NodeJS.Process & { getuid?: () => number }).getuid = originalGetuid;
-    } else {
-      delete (process as NodeJS.Process & { getuid?: () => number }).getuid;
-    }
-    if (originalRunAsRoot === undefined) {
-      delete process.env.DD_RUN_AS_ROOT;
-    } else {
-      process.env.DD_RUN_AS_ROOT = originalRunAsRoot;
-    }
-    if (originalAllowInsecureRoot === undefined) {
-      delete process.env.DD_ALLOW_INSECURE_ROOT;
-    } else {
-      process.env.DD_ALLOW_INSECURE_ROOT = originalAllowInsecureRoot;
-    }
     process.exitCode = originalExitCode;
+    Object.defineProperty(process, 'getuid', {
+      configurable: true,
+      value: originalGetuid,
+    });
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
   });
 
-  test('should initialize controller mode by default', async () => {
-    const { default: log } = await import('./log/index.js');
-    const store = await import('./store/index.js');
-    const registry = await import('./registry/index.js');
-    const api = await import('./api/index.js');
-    const agentManager = await import('./agent/index.js');
-    const agentServer = await import('./agent/api/index.js');
-    const prometheus = await import('./prometheus/index.js');
-    const migrateCli = await import('./configuration/migrate-cli.js');
+  test('exits with the migration command status when config migration is requested', async () => {
+    const harness = await loadEntryPoint({ migrateExitCode: 7 });
 
-    // Import and run the main module
-    await import('./index.js');
+    await harness.imported;
 
-    // Wait for async operations to complete
-    await new Promise((resolve) => setImmediate(resolve));
+    expect(harness.setDefaultResultOrder).toHaveBeenCalledWith('ipv4first');
+    expect(harness.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith([]);
+    expect(process.exitCode).toBe(7);
+    expect(harness.storeInit).not.toHaveBeenCalled();
+  });
 
-    // Verify initialization order and calls
-    expect(migrateCli.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith(
-      process.argv.slice(2),
+  test('does not set process exitCode for successful config migration commands', async () => {
+    const harness = await loadEntryPoint({
+      argv: ['node', 'index.js', 'config', 'migrate'],
+      migrateExitCode: 0,
+    });
+
+    await harness.imported;
+
+    expect(harness.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith(['config', 'migrate']);
+    expect(process.exitCode).toBeUndefined();
+    expect(harness.storeInit).not.toHaveBeenCalled();
+  });
+
+  test('starts the controller runtime and dispatches outbox entries through registered triggers', async () => {
+    const dispatchOutboxEntry = vi.fn(async () => undefined);
+    const harness = await loadEntryPoint({
+      triggerState: {
+        'webhook.ops': { dispatchOutboxEntry },
+        inert: {},
+      },
+    });
+
+    await harness.imported;
+
+    expect(harness.logInfo).toHaveBeenCalledWith('drydock is starting');
+    expect(harness.storeInit).toHaveBeenCalledWith({ memory: false });
+    expect(harness.prometheusInit).toHaveBeenCalledOnce();
+    expect(harness.registryInit).toHaveBeenCalledWith({ agent: false });
+    expect(harness.agentManagerInit).toHaveBeenCalledOnce();
+    expect(harness.apiInit).toHaveBeenCalledOnce();
+    expect(harness.securitySchedulerInit).toHaveBeenCalledOnce();
+    expect(harness.startOutboxWorker).toHaveBeenCalledOnce();
+    expect(harness.recoverQueuedOperationsOnStartup).toHaveBeenCalledOnce();
+
+    const entry = {
+      id: 'entry-1',
+      triggerId: 'webhook.ops',
+    } as NotificationOutboxEntry;
+    await expect(harness.deliverOutboxEntry?.(entry)).resolves.toBeUndefined();
+    expect(dispatchOutboxEntry).toHaveBeenCalledWith(entry);
+
+    await expect(harness.deliverOutboxEntry?.({ ...entry, triggerId: 'missing' })).rejects.toThrow(
+      'Trigger missing not registered for outbox delivery',
     );
-    expect(log.info).toHaveBeenCalledWith('drydock is starting');
-    expect(store.init).toHaveBeenCalledWith({ memory: false });
-    expect(prometheus.init).toHaveBeenCalled();
-    expect(registry.init).toHaveBeenCalledWith({ agent: false });
-    expect(agentManager.init).toHaveBeenCalled();
-    expect(api.init).toHaveBeenCalled();
-    expect(agentServer.init).not.toHaveBeenCalled();
-    const securityScheduler = await import('./security/scheduler.js');
-    expect(securityScheduler.init).toHaveBeenCalled();
-  });
-
-  test('should initialize agent mode with --agent flag', async () => {
-    process.argv = [...originalArgv, '--agent'];
-
-    const { default: log } = await import('./log/index.js');
-    const store = await import('./store/index.js');
-    const registry = await import('./registry/index.js');
-    const api = await import('./api/index.js');
-    const agentManager = await import('./agent/index.js');
-    const agentServer = await import('./agent/api/index.js');
-    const prometheus = await import('./prometheus/index.js');
-    const migrateCli = await import('./configuration/migrate-cli.js');
-
-    await import('./index.js');
-    await new Promise((resolve) => setImmediate(resolve));
-
-    expect(log.info).toHaveBeenCalledWith('drydock is starting');
-    expect(migrateCli.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith(
-      process.argv.slice(2),
-    );
-    expect(store.init).toHaveBeenCalledWith({ memory: true });
-    expect(registry.init).toHaveBeenCalledWith({ agent: true });
-    expect(prometheus.init).not.toHaveBeenCalled();
-    expect(agentServer.init).toHaveBeenCalled();
-    expect(agentManager.init).not.toHaveBeenCalled();
-    expect(api.init).not.toHaveBeenCalled();
-    const securityScheduler = await import('./security/scheduler.js');
-    expect(securityScheduler.init).not.toHaveBeenCalled();
-  });
-
-  test('should run config migrate command and skip application bootstrap', async () => {
-    process.argv = [...originalArgv.slice(0, 2), 'config', 'migrate'];
-
-    const { default: log } = await import('./log/index.js');
-    const store = await import('./store/index.js');
-    const registry = await import('./registry/index.js');
-    const api = await import('./api/index.js');
-    const agentManager = await import('./agent/index.js');
-    const agentServer = await import('./agent/api/index.js');
-    const prometheus = await import('./prometheus/index.js');
-    const { getVersion } = await import('./configuration/index.js');
-    const migrateCli = await import('./configuration/migrate-cli.js');
-
-    migrateCli.runConfigMigrateCommandIfRequested.mockReturnValue(0);
-
-    await import('./index.js');
-    await new Promise((resolve) => setImmediate(resolve));
-
-    expect(migrateCli.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith([
-      'config',
-      'migrate',
-    ]);
-    expect(log.info).not.toHaveBeenCalled();
-    expect(getVersion).not.toHaveBeenCalled();
-    expect(store.init).not.toHaveBeenCalled();
-    expect(registry.init).not.toHaveBeenCalled();
-    expect(prometheus.init).not.toHaveBeenCalled();
-    expect(agentManager.init).not.toHaveBeenCalled();
-    expect(agentServer.init).not.toHaveBeenCalled();
-    expect(api.init).not.toHaveBeenCalled();
-  });
-
-  test('should set process.exitCode when config migrate command returns a non-zero code', async () => {
-    const store = await import('./store/index.js');
-    const migrateCli = await import('./configuration/migrate-cli.js');
-    process.exitCode = undefined;
-    migrateCli.runConfigMigrateCommandIfRequested.mockReturnValue(2);
-
-    await import('./index.js');
-    await new Promise((resolve) => setImmediate(resolve));
-
-    expect(process.exitCode).toBe(2);
-    expect(store.init).not.toHaveBeenCalled();
-  });
-
-  test('should throw when insecure root mode is not fully acknowledged', async () => {
-    const migrateCli = await import('./configuration/migrate-cli.js');
-    migrateCli.runConfigMigrateCommandIfRequested.mockReturnValue(null);
-    process.env.DD_RUN_AS_ROOT = 'true';
-    process.env.DD_ALLOW_INSECURE_ROOT = 'false';
-    (process as NodeJS.Process & { getuid?: () => number }).getuid = () => 0;
-
-    await expect(import('./index.js')).rejects.toThrow(
-      'DD_RUN_AS_ROOT=true requires DD_ALLOW_INSECURE_ROOT=true (break-glass). Prefer socket-proxy mode for least privilege.',
+    await expect(harness.deliverOutboxEntry?.({ ...entry, triggerId: 'inert' })).rejects.toThrow(
+      'Trigger inert not registered for outbox delivery',
     );
   });
 
-  test('should proceed without warning when root and DD_RUN_AS_ROOT is unset', async () => {
-    const { default: log } = await import('./log/index.js');
-    const store = await import('./store/index.js');
-    const migrateCli = await import('./configuration/migrate-cli.js');
-    migrateCli.runConfigMigrateCommandIfRequested.mockReturnValue(null);
-    delete process.env.DD_RUN_AS_ROOT;
-    delete process.env.DD_ALLOW_INSECURE_ROOT;
-    (process as NodeJS.Process & { getuid?: () => number }).getuid = () => 0;
+  test('starts the agent runtime without controller services', async () => {
+    const harness = await loadEntryPoint({ argv: ['node', 'index.js', '--agent'] });
 
-    await import('./index.js');
-    await new Promise((resolve) => setImmediate(resolve));
+    await harness.imported;
 
-    expect(store.init).toHaveBeenCalled();
-    expect(log.warn).not.toHaveBeenCalled();
+    expect(harness.storeInit).toHaveBeenCalledWith({ memory: true });
+    expect(harness.prometheusInit).not.toHaveBeenCalled();
+    expect(harness.registryInit).toHaveBeenCalledWith({ agent: true });
+    expect(harness.agentServerInit).toHaveBeenCalledOnce();
+    expect(harness.agentManagerInit).not.toHaveBeenCalled();
+    expect(harness.apiInit).not.toHaveBeenCalled();
+    expect(harness.startOutboxWorker).not.toHaveBeenCalled();
+    expect(harness.recoverQueuedOperationsOnStartup).not.toHaveBeenCalled();
   });
 
-  test('should skip root-mode enforcement when process.getuid is unavailable', async () => {
-    const { default: log } = await import('./log/index.js');
-    const store = await import('./store/index.js');
-    const migrateCli = await import('./configuration/migrate-cli.js');
-    migrateCli.runConfigMigrateCommandIfRequested.mockReturnValue(null);
-    process.env.DD_RUN_AS_ROOT = 'true';
-    process.env.DD_ALLOW_INSECURE_ROOT = 'false';
-    delete (process as NodeJS.Process & { getuid?: () => number }).getuid;
+  test('blocks insecure root mode unless explicitly acknowledged', async () => {
+    const harness = await loadEntryPoint({
+      getuid: 0,
+      env: {
+        DD_RUN_AS_ROOT: 'true',
+        DD_ALLOW_INSECURE_ROOT: 'false',
+      },
+    });
 
-    await import('./index.js');
-    await new Promise((resolve) => setImmediate(resolve));
-
-    expect(store.init).toHaveBeenCalled();
-    expect(log.warn).not.toHaveBeenCalled();
+    await expect(harness.imported).rejects.toThrow(
+      'DD_RUN_AS_ROOT=true requires DD_ALLOW_INSECURE_ROOT=true',
+    );
+    expect(harness.storeInit).not.toHaveBeenCalled();
   });
 
-  test('should warn when insecure root mode is acknowledged', async () => {
-    const { default: log } = await import('./log/index.js');
-    const migrateCli = await import('./configuration/migrate-cli.js');
-    migrateCli.runConfigMigrateCommandIfRequested.mockReturnValue(null);
-    process.env.DD_RUN_AS_ROOT = 'true';
-    process.env.DD_ALLOW_INSECURE_ROOT = 'true';
-    (process as NodeJS.Process & { getuid?: () => number }).getuid = () => 0;
+  test('does not enforce root mode when getuid is unavailable', async () => {
+    const harness = await loadEntryPoint({
+      getuid: 'unavailable',
+      env: {
+        DD_RUN_AS_ROOT: 'true',
+        DD_ALLOW_INSECURE_ROOT: 'false',
+      },
+    });
 
-    await import('./index.js');
-    await new Promise((resolve) => setImmediate(resolve));
+    await harness.imported;
 
-    expect(log.warn).toHaveBeenCalledWith(
+    expect(harness.logWarn).not.toHaveBeenCalled();
+    expect(harness.storeInit).toHaveBeenCalledWith({ memory: false });
+  });
+
+  test('does not warn when running as root without DD_RUN_AS_ROOT', async () => {
+    const harness = await loadEntryPoint({ getuid: 0 });
+
+    await harness.imported;
+
+    expect(harness.logWarn).not.toHaveBeenCalled();
+    expect(harness.storeInit).toHaveBeenCalledWith({ memory: false });
+  });
+
+  test('allows acknowledged root mode and warns operators', async () => {
+    const harness = await loadEntryPoint({
+      getuid: 0,
+      env: {
+        DD_RUN_AS_ROOT: 'true',
+        DD_ALLOW_INSECURE_ROOT: 'true',
+      },
+    });
+
+    await harness.imported;
+
+    expect(harness.logWarn).toHaveBeenCalledWith(
       'Running in insecure root mode (DD_RUN_AS_ROOT=true + DD_ALLOW_INSECURE_ROOT=true); use socket-proxy mode when possible.',
     );
+    expect(harness.storeInit).toHaveBeenCalledWith({ memory: false });
   });
 });

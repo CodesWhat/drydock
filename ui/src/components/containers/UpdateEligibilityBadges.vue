@@ -37,6 +37,8 @@ function reasonIcon(reason: UpdateBlockerReason): string {
   switch (reason) {
     case 'security-scan-blocked':
       return 'mdi:shield-alert';
+    case 'last-update-rolled-back':
+      return 'mdi:alert-circle';
     case 'snoozed':
       return 'mdi:alarm-snooze';
     case 'skip-tag':
@@ -64,6 +66,8 @@ function reasonLabel(reason: UpdateBlockerReason): string {
   switch (reason) {
     case 'security-scan-blocked':
       return t('containerComponents.eligibilityBadges.securityBlocked');
+    case 'last-update-rolled-back':
+      return t('containerComponents.eligibilityBadges.rolledBack');
     case 'snoozed':
       return t('containerComponents.eligibilityBadges.snoozed');
     case 'skip-tag':
@@ -96,6 +100,7 @@ type BlockerStyle = { bg: string; text: string };
 function reasonColor(reason: UpdateBlockerReason): BlockerStyle {
   switch (reason) {
     case 'security-scan-blocked':
+    case 'last-update-rolled-back':
       return { bg: 'var(--dd-danger-muted)', text: 'var(--dd-danger)' };
     case 'snoozed':
     case 'skip-tag':

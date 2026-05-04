@@ -5,6 +5,12 @@ import AppIconButton from '@/components/AppIconButton.vue';
 import AppTabBar from '@/components/AppTabBar.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { hasTrackedContainerAction } from '../../utils/container-action-key';
+import {
+  getUpdateInProgressPhaseLabelKey,
+  UPDATE_IN_PROGRESS_PHASE_I18N,
+} from '../../utils/container-update';
+import type { UpdateEligibility } from '../../types/container';
+import { getPrimaryHardBlocker } from '../../utils/update-eligibility';
 import ContainerFullPageTabContent from './ContainerFullPageTabContent.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
@@ -47,9 +53,23 @@ function isActionBlocked(container: { id?: unknown; name?: unknown }) {
   return isActionInProgress(container) || isActionQueued(container);
 }
 
-function getStatusLabel(container: { id?: unknown; name?: unknown; status?: string }) {
+function getUpdateHardBlocker(container: { updateEligibility?: UpdateEligibility }) {
+  return getPrimaryHardBlocker(container.updateEligibility);
+}
+
+function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility }) {
+  return getUpdateHardBlocker(container) !== undefined;
+}
+
+function getStatusLabel(container: {
+  id?: unknown;
+  name?: unknown;
+  status?: string;
+  updateOperation?: { phase?: string };
+}) {
   if (isActionInProgress(container)) {
-    return t('containerComponents.fullPageDetail.statusUpdating');
+    const labelKey = getUpdateInProgressPhaseLabelKey(container.updateOperation?.phase);
+    return t(UPDATE_IN_PROGRESS_PHASE_I18N[labelKey]);
   }
   if (isActionQueued(container)) {
     return t('containerComponents.fullPageDetail.statusQueued');
@@ -182,11 +202,20 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'security'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
             {{ t('containerComponents.fullPageDetail.scanButton') }}
           </AppButton>
-          <AppButton size="none" variant="plain" weight="none"
-            v-if="selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-bold transition-colors"
-            :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
-            :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+	          <AppButton size="none" variant="plain" weight="none"
+	            v-if="selectedContainer.newTag && isUpdateHardBlocked(selectedContainer)"
+	            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-bold transition-colors opacity-50 cursor-not-allowed"
+	            :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+	            :disabled="true"
+	            :aria-label="getUpdateHardBlocker(selectedContainer)?.message ?? t('containerComponents.fullPageDetail.ariaUpdateBlocked')">
+	            <AppIcon name="lock" :size="12" />
+	            {{ t('containerComponents.fullPageDetail.blockedButton') }}
+	          </AppButton>
+	          <AppButton size="none" variant="plain" weight="none"
+	            v-else-if="selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
+	            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-bold transition-colors"
+	            :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
+	            :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
             :disabled="isActionBlocked(selectedContainer)"
             :aria-label="t('containerComponents.fullPageDetail.ariaUpdateBlocked')"
             @click="confirmForceUpdate(selectedContainer)">

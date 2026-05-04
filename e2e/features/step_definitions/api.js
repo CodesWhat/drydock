@@ -381,6 +381,12 @@ Then(
   },
 );
 
+Then(/^response body path (.+) should be of type (string|number|boolean)$/, function (path, type) {
+  const resolvedPath = resolveTemplate(path, this.scenarioScope);
+  const actual = resolveJsonPath(this.responseJson, resolvedPath);
+  assert.strictEqual(typeof actual, type, `Expected ${path} to be ${type}, got ${typeof actual}`);
+});
+
 Then(/^response body path (.+) should be a sha256 digest or undefined$/, function (path) {
   const resolvedPath = resolveTemplate(path, this.scenarioScope);
   const actual = resolveJsonPath(this.responseJson, resolvedPath);

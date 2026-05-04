@@ -16,8 +16,12 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: '30 6 * * 1'  # Weekly CodeQL (Monday 06:30 UTC)
-    - cron: '0 6 * * 0'   # Weekly Fuzz (Sunday 06:00 UTC)
+    # Both schedules now run the full security sweep: CodeQL, Fuzz, DAST
+    # (ZAP baseline + Nuclei), plus the lint/test/build chain DAST depends on.
+    # Twice-weekly cadence catches drift in external CodeQL queries, Nuclei
+    # templates, and ZAP signatures between merges to main.
+    - cron: '30 6 * * 1'  # Monday 06:30 UTC
+    - cron: '0 6 * * 0'   # Sunday 06:00 UTC
   merge_group:
     branches: [main]
   workflow_call:
@@ -346,7 +350,6 @@ jobs:
 
   lint:
     name: "🧹 Quality: Lint"
-    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -403,7 +406,6 @@ jobs:
 
   test:
     name: "🧪 Quality: Test & Coverage"
-    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: ci-codecov
@@ -456,7 +458,6 @@ jobs:
 
   build:
     name: "🏗️ Build"
-    if: github.event_name != 'schedule'
     needs: [lint, test]
     runs-on: ubuntu-latest
     timeout-minutes: 35  # Includes UI build + single-arch QA image + multi-arch smoke build
@@ -532,7 +533,12 @@ jobs:
     name: "🕷️ DAST: ZAP Baseline"
     runs-on: ubuntu-latest
     timeout-minutes: 25  # Includes QA stack startup and scanner container runtime
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+    # Run on every merge to main (gates the next release-cut), on legacy
+    # release branches (back-compat), and on the existing weekly schedules
+    # so external-template/signature drift is caught between merges.
+    if: |
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')))
+      || github.event_name == 'schedule'
     needs: [build]
     permissions:
       contents: read
@@ -647,7 +653,11 @@ jobs:
     name: "🔎 DAST: Nuclei"
     runs-on: ubuntu-latest
     timeout-minutes: 25  # Includes QA stack startup and full medium+ template pass
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
+    # Same gate as dast-zap-baseline — push to main, legacy release branches,
+    # and the weekly schedules.
+    if: |
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')))
+      || github.event_name == 'schedule'
     needs: [build]
     permissions:
       contents: read

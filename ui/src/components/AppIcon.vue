@@ -20,6 +20,7 @@ const scaled = computed(() => Math.round(props.size * iconScale.value));
     :icon="resolved"
     :width="scaled"
     :height="scaled"
+    noobserver
     :style="{ width: `${scaled}px`, height: `${scaled}px`, display: 'inline-block', flex: 'none' }"
   />
 </template>

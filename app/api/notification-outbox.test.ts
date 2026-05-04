@@ -1,0 +1,551 @@
+import { createMockResponse } from '../test/helpers.js';
+
+const {
+  mockRouter,
+  mockFindAllOutboxEntries,
+  mockFindOutboxEntriesByStatus,
+  mockGetOutboxEntry,
+  mockRequeueDeadLetterEntry,
+  mockRemoveOutboxEntry,
+} = vi.hoisted(() => ({
+  mockRouter: {
+    use: vi.fn(),
+    get: vi.fn(),
+    post: vi.fn(),
+    delete: vi.fn(),
+  },
+  mockFindAllOutboxEntries: vi.fn(() => [
+    {
+      id: 'entry-1',
+      eventName: 'update-available',
+      payload: {},
+      triggerId: 'slack.ops',
+      attempts: 5,
+      maxAttempts: 5,
+      nextAttemptAt: '2026-01-01T00:00:00.000Z',
+      status: 'dead-letter',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      failedAt: '2026-01-01T01:00:00.000Z',
+    },
+    {
+      id: 'entry-2',
+      eventName: 'update-available',
+      payload: {},
+      triggerId: 'slack.ops',
+      attempts: 0,
+      maxAttempts: 5,
+      nextAttemptAt: '2026-01-01T00:00:00.000Z',
+      status: 'pending',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+  ]),
+  mockFindOutboxEntriesByStatus: vi.fn((status: string) => {
+    if (status === 'dead-letter') {
+      return [
+        {
+          id: 'entry-1',
+          eventName: 'update-available',
+          payload: {},
+          triggerId: 'slack.ops',
+          attempts: 5,
+          maxAttempts: 5,
+          nextAttemptAt: '2026-01-01T00:00:00.000Z',
+          status: 'dead-letter',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          failedAt: '2026-01-01T01:00:00.000Z',
+        },
+      ];
+    }
+    if (status === 'pending') {
+      return [
+        {
+          id: 'entry-2',
+          eventName: 'update-available',
+          payload: {},
+          triggerId: 'slack.ops',
+          attempts: 0,
+          maxAttempts: 5,
+          nextAttemptAt: '2026-01-01T00:00:00.000Z',
+          status: 'pending',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ];
+    }
+    return [];
+  }),
+  mockGetOutboxEntry: vi.fn((id: string) => {
+    if (id === 'entry-1') {
+      return {
+        id: 'entry-1',
+        eventName: 'update-available',
+        payload: {},
+        triggerId: 'slack.ops',
+        attempts: 5,
+        maxAttempts: 5,
+        nextAttemptAt: '2026-01-01T00:00:00.000Z',
+        status: 'dead-letter',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        failedAt: '2026-01-01T01:00:00.000Z',
+      };
+    }
+    return undefined;
+  }),
+  mockRequeueDeadLetterEntry: vi.fn((id: string) => {
+    if (id === 'entry-1') {
+      return {
+        id: 'entry-1',
+        eventName: 'update-available',
+        payload: {},
+        triggerId: 'slack.ops',
+        attempts: 0,
+        maxAttempts: 5,
+        nextAttemptAt: '2026-01-01T00:00:00.000Z',
+        status: 'pending',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      };
+    }
+    return undefined;
+  }),
+  mockRemoveOutboxEntry: vi.fn((id: string) => id === 'entry-1'),
+}));
+
+vi.mock('express', () => ({
+  default: { Router: vi.fn(() => mockRouter) },
+}));
+
+vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
+
+vi.mock('../store/notification-outbox', () => ({
+  findAllOutboxEntries: mockFindAllOutboxEntries,
+  findOutboxEntriesByStatus: mockFindOutboxEntriesByStatus,
+  getOutboxEntry: mockGetOutboxEntry,
+  requeueDeadLetterEntry: mockRequeueDeadLetterEntry,
+  removeOutboxEntry: mockRemoveOutboxEntry,
+}));
+
+vi.mock('../log/index.js', () => ({
+  default: { child: () => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() }) },
+}));
+
+import * as outboxRouter from './notification-outbox.js';
+
+describe('Notification Outbox Router', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('should initialize router with nocache and routes', () => {
+    const router = outboxRouter.init();
+
+    expect(router.use).toHaveBeenCalledWith('nocache-middleware');
+    expect(router.get).toHaveBeenCalledWith('/', expect.any(Function));
+    expect(router.post).toHaveBeenCalledWith('/:id/retry', expect.any(Function));
+    expect(router.delete).toHaveBeenCalledWith('/:id', expect.any(Function));
+  });
+
+  describe('GET /', () => {
+    test('returns dead-letter entries by default (no status param)', () => {
+      outboxRouter.init();
+      const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+      const res = createMockResponse();
+
+      handler({ query: {} }, res);
+
+      expect(mockFindAllOutboxEntries).toHaveBeenCalledTimes(1);
+      expect(mockFindOutboxEntriesByStatus).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+      const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0].status).toBe('dead-letter');
+      expect(body.total).toBe(1);
+      expect(body.counts).toEqual({ pending: 1, delivered: 0, deadLetter: 1 });
+    });
+
+    test('returns pending entries when status=pending', () => {
+      outboxRouter.init();
+      const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+      const res = createMockResponse();
+
+      handler({ query: { status: 'pending' } }, res);
+
+      const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0].status).toBe('pending');
+      expect(body.total).toBe(1);
+    });
+
+    test('returns delivered entries when status=delivered', () => {
+      mockFindAllOutboxEntries.mockReturnValueOnce([
+        {
+          id: 'entry-delivered',
+          eventName: 'update-available',
+          payload: {
+            containerId: 'c1',
+            agentName: 'agent-a',
+            reason: 'Authorization: Bearer payload-token',
+            status: true,
+            blockingCount: 2,
+            container: {
+              id: 'c1',
+              name: 'web',
+              image: 'not-an-image-record',
+              ignored: { nested: 'secret' },
+            },
+          },
+          triggerId: 'slack.ops',
+          attempts: 1,
+          maxAttempts: 5,
+          nextAttemptAt: '2026-01-01T00:00:00.000Z',
+          status: 'delivered',
+          lastError: { message: 'not a string' },
+          createdAt: '2026-01-01T00:00:00.000Z',
+          deliveredAt: '2026-01-01T00:01:00.000Z',
+        },
+        {
+          id: 'entry-ignored-status',
+          eventName: 'update-available',
+          payload: null,
+          triggerId: 'slack.ops',
+          attempts: 0,
+          maxAttempts: 5,
+          nextAttemptAt: '2026-01-01T00:00:00.000Z',
+          status: 'unknown',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ] as any);
+      outboxRouter.init();
+      const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+      const res = createMockResponse();
+
+      handler({ query: { status: 'delivered' } }, res);
+
+      const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0]).toMatchObject({
+        id: 'entry-delivered',
+        payload: {
+          containerId: 'c1',
+          agentName: 'agent-a',
+          reason: 'Authorization: Bearer [REDACTED]',
+          status: true,
+          blockingCount: 2,
+          container: {
+            id: 'c1',
+            name: 'web',
+          },
+        },
+        lastError: { message: 'not a string' },
+      });
+      expect(JSON.stringify(body)).not.toContain('payload-token');
+      expect(JSON.stringify(body)).not.toContain('secret');
+      expect(body.total).toBe(1);
+      expect(body.counts).toEqual({ pending: 0, delivered: 1, deadLetter: 0 });
+    });
+
+    test('returns dead-letter entries when status=dead-letter', () => {
+      outboxRouter.init();
+      const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+      const res = createMockResponse();
+
+      handler({ query: { status: 'dead-letter' } }, res);
+
+      const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(body.data[0].status).toBe('dead-letter');
+    });
+
+    test('returns an empty payload object for malformed outbox payloads', () => {
+      mockFindAllOutboxEntries.mockReturnValueOnce([
+        {
+          id: 'entry-malformed-payload',
+          eventName: 'update-available',
+          payload: null,
+          triggerId: 'slack.ops',
+          attempts: 5,
+          maxAttempts: 5,
+          nextAttemptAt: '2026-01-01T00:00:00.000Z',
+          status: 'dead-letter',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          failedAt: '2026-01-01T01:00:00.000Z',
+        },
+      ] as any);
+      outboxRouter.init();
+      const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+      const res = createMockResponse();
+
+      handler({ query: { status: 'dead-letter' } }, res);
+
+      const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(body.data[0]).toMatchObject({
+        id: 'entry-malformed-payload',
+        payload: {},
+      });
+    });
+
+    test('omits container payloads when no safe summary fields remain', () => {
+      mockFindAllOutboxEntries.mockReturnValueOnce([
+        {
+          id: 'entry-empty-container-summary',
+          eventName: 'update-available',
+          payload: {
+            container: {
+              image: {
+                name: 42,
+                tag: { value: false },
+                registry: { token: 'registry-secret' },
+              },
+              details: { token: 'container-secret' },
+            },
+          },
+          triggerId: 'slack.ops',
+          attempts: 5,
+          maxAttempts: 5,
+          nextAttemptAt: '2026-01-01T00:00:00.000Z',
+          status: 'dead-letter',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          failedAt: '2026-01-01T01:00:00.000Z',
+        },
+        {
+          id: 'entry-empty-container-summary-missing-tag',
+          eventName: 'update-available',
+          payload: {
+            container: {
+              image: {
+                registry: { token: 'missing-tag-secret' },
+              },
+            },
+          },
+          triggerId: 'slack.ops',
+          attempts: 5,
+          maxAttempts: 5,
+          nextAttemptAt: '2026-01-01T00:00:00.000Z',
+          status: 'dead-letter',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          failedAt: '2026-01-01T01:00:00.000Z',
+        },
+      ] as any);
+      outboxRouter.init();
+      const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+      const res = createMockResponse();
+
+      handler({ query: { status: 'dead-letter' } }, res);
+
+      const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(body.data).toHaveLength(2);
+      expect(body.data.map((entry: { payload: unknown }) => entry.payload)).toEqual([{}, {}]);
+      expect(JSON.stringify(body)).not.toContain('registry-secret');
+      expect(JSON.stringify(body)).not.toContain('container-secret');
+      expect(JSON.stringify(body)).not.toContain('missing-tag-secret');
+    });
+
+    test('scrubs lastError and strips full container payloads before responding', () => {
+      mockFindAllOutboxEntries.mockReturnValueOnce([
+        {
+          id: 'entry-sensitive',
+          eventName: 'update-failed',
+          payload: {
+            container: {
+              id: 'container-1',
+              name: 'web',
+              displayName: 'Web',
+              watcher: 'local',
+              status: 'running',
+              image: {
+                name: 'library/nginx',
+                tag: { value: '1.25', semver: true },
+                registry: { name: 'hub', url: 'https://registry-1.docker.io/v2' },
+              },
+              details: {
+                env: [
+                  { key: 'API_TOKEN', value: 'container-secret-token' },
+                  { key: 'Authorization', value: 'Bearer container-secret-header' },
+                ],
+              },
+              labels: {
+                'com.example.secret': 'label-secret',
+              },
+            },
+            containerName: 'web',
+          },
+          triggerId: 'webhook.ops',
+          attempts: 5,
+          maxAttempts: 5,
+          nextAttemptAt: '2026-01-01T00:00:00.000Z',
+          status: 'dead-letter',
+          lastError: 'HTTP 401 Authorization: Bearer provider-secret-token',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          failedAt: '2026-01-01T01:00:00.000Z',
+        },
+      ]);
+      outboxRouter.init();
+      const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+      const res = createMockResponse();
+
+      handler({ query: { status: 'dead-letter' } }, res);
+
+      const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      const responseJson = JSON.stringify(body);
+      expect(body.data[0]).toMatchObject({
+        id: 'entry-sensitive',
+        payload: {
+          containerName: 'web',
+          container: {
+            id: 'container-1',
+            name: 'web',
+            displayName: 'Web',
+            watcher: 'local',
+            status: 'running',
+            image: {
+              name: 'library/nginx',
+              tag: '1.25',
+            },
+          },
+        },
+        lastError: 'HTTP 401 Authorization: Bearer [REDACTED]',
+      });
+      expect(responseJson).not.toContain('container-secret-token');
+      expect(responseJson).not.toContain('container-secret-header');
+      expect(responseJson).not.toContain('label-secret');
+      expect(responseJson).not.toContain('provider-secret-token');
+    });
+
+    test('returns 400 for invalid status param', () => {
+      outboxRouter.init();
+      const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+      const res = createMockResponse();
+
+      handler({ query: { status: 'bad-status' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Invalid status query parameter. Must be one of: pending, delivered, dead-letter',
+      });
+    });
+
+    test('returns 400 for repeated status query params', () => {
+      outboxRouter.init();
+      const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+      const res = createMockResponse();
+
+      handler({ query: { status: ['pending', 'dead-letter'] } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Invalid status query parameter. Must be one of: pending, delivered, dead-letter',
+      });
+    });
+
+    test('does not reflect long invalid status values in the 400 response body', () => {
+      outboxRouter.init();
+      const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+      const res = createMockResponse();
+      const invalidStatus = `bad-${'x'.repeat(256)}`;
+
+      handler({ query: { status: invalidStatus } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Invalid status query parameter. Must be one of: pending, delivered, dead-letter',
+      });
+      expect(JSON.stringify(res.body)).not.toContain(invalidStatus);
+    });
+
+    test('returns 500 when store throws', () => {
+      mockFindAllOutboxEntries.mockImplementationOnce(() => {
+        throw new Error('store failure');
+      });
+      outboxRouter.init();
+      const handler = mockRouter.get.mock.calls.find((c) => c[0] === '/')[1];
+      const res = createMockResponse();
+
+      handler({ query: {} }, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Internal server error' });
+    });
+  });
+
+  describe('POST /:id/retry', () => {
+    test('requeues a dead-letter entry and returns 200 with the updated entry', () => {
+      outboxRouter.init();
+      const handler = mockRouter.post.mock.calls.find((c) => c[0] === '/:id/retry')[1];
+      const res = createMockResponse();
+
+      handler({ params: { id: 'entry-1' } }, res);
+
+      expect(mockRequeueDeadLetterEntry).toHaveBeenCalledWith('entry-1');
+      expect(res.status).toHaveBeenCalledWith(200);
+      const body = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(body.id).toBe('entry-1');
+      expect(body.status).toBe('pending');
+    });
+
+    test('returns 404 when entry not found or not dead-letter', () => {
+      outboxRouter.init();
+      const handler = mockRouter.post.mock.calls.find((c) => c[0] === '/:id/retry')[1];
+      const res = createMockResponse();
+
+      handler({ params: { id: 'missing' } }, res);
+
+      expect(mockRequeueDeadLetterEntry).toHaveBeenCalledWith('missing');
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Outbox entry not found or not in dead-letter status',
+      });
+    });
+
+    test('returns 500 when store throws', () => {
+      mockRequeueDeadLetterEntry.mockImplementationOnce(() => {
+        throw new Error('retry failure');
+      });
+      outboxRouter.init();
+      const handler = mockRouter.post.mock.calls.find((c) => c[0] === '/:id/retry')[1];
+      const res = createMockResponse();
+
+      handler({ params: { id: 'entry-1' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Internal server error' });
+    });
+  });
+
+  describe('DELETE /:id', () => {
+    test('removes an entry and returns 204', () => {
+      outboxRouter.init();
+      const handler = mockRouter.delete.mock.calls.find((c) => c[0] === '/:id')[1];
+      const res = createMockResponse();
+
+      handler({ params: { id: 'entry-1' } }, res);
+
+      expect(mockGetOutboxEntry).toHaveBeenCalledWith('entry-1');
+      expect(mockRemoveOutboxEntry).toHaveBeenCalledWith('entry-1');
+      expect(res.status).toHaveBeenCalledWith(204);
+    });
+
+    test('returns 404 when entry does not exist', () => {
+      outboxRouter.init();
+      const handler = mockRouter.delete.mock.calls.find((c) => c[0] === '/:id')[1];
+      const res = createMockResponse();
+
+      handler({ params: { id: 'missing' } }, res);
+
+      expect(mockGetOutboxEntry).toHaveBeenCalledWith('missing');
+      expect(mockRemoveOutboxEntry).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Outbox entry not found' });
+    });
+
+    test('returns 500 when store throws', () => {
+      mockGetOutboxEntry.mockImplementationOnce(() => {
+        throw new Error('lookup failure');
+      });
+      outboxRouter.init();
+      const handler = mockRouter.delete.mock.calls.find((c) => c[0] === '/:id')[1];
+      const res = createMockResponse();
+
+      handler({ params: { id: 'entry-1' } }, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Internal server error' });
+    });
+  });
+});

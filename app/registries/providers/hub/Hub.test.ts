@@ -85,6 +85,27 @@ describe('Docker Hub Registry', () => {
     expect(fullName).toBe('user/nginx:1.0.0');
   });
 
+  test('should preserve private mirror domain for images that look up tags from docker hub', async () => {
+    // Regression for issue #336: when `dd.registry.lookup.image` diverts
+    // tag/manifest queries to Docker Hub but the container is deployed from
+    // a private mirror, the rebuilt image must retain the mirror's domain.
+    const image = {
+      name: 'nextcloud',
+      registry: { url: 'myPrivateRegistry' },
+    };
+    const fullName = hub.getImageFullName(image, '33.0.2-apache');
+    expect(fullName).toBe('myPrivateRegistry/nextcloud:33.0.2-apache');
+  });
+
+  test('should drop docker.io prefix for un-prefixed hub images', async () => {
+    const image = {
+      name: 'library/nginx',
+      registry: { url: 'docker.io' },
+    };
+    const fullName = hub.getImageFullName(image, '1.27.0');
+    expect(fullName).toBe('nginx:1.27.0');
+  });
+
   test('should initialize with token as password', async () => {
     const hubWithToken = new Hub();
     await hubWithToken.register('registry', 'hub', 'test', {

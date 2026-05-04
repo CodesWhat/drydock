@@ -818,9 +818,9 @@ describe('Docker Watcher', () => {
       const result = await docker.addImageDetailsToContainer(container);
 
       expect(result.image.registry.name).toBe('hub');
-      expect(result.image.registry.url).toBe('https://registry-1.docker.io/v2');
+      expect(result.image.registry.url).toBe('harbor.example.com');
       expect(result.image.registry.lookupImage).toBe('library/traefik');
-      expect(result.image.name).toBe('library/traefik');
+      expect(result.image.name).toBe('dockerhub-proxy/traefik');
     });
 
     test('should support legacy lookup url label without crashing', async () => {
@@ -872,7 +872,7 @@ describe('Docker Watcher', () => {
       expect(hMockParse).toHaveBeenCalledWith('prom/prometheus:v3.8.0');
     });
 
-    test('should fail implicit docker hub image normalization when hub registry provider is missing', async () => {
+    test('should mark implicit docker hub image registry name as unknown when hub registry provider is missing', async () => {
       const container = await setupContainerDetailTest(docker, {
         container: {
           Image: 'nginx:1.25.5',
@@ -880,17 +880,13 @@ describe('Docker Watcher', () => {
         },
         parsedImage: { domain: undefined, path: 'library/nginx', tag: '1.25.5' },
         registryState: {},
-        validateImpl: (containerCandidate) => {
-          if (!containerCandidate.image.registry.url) {
-            throw new Error('"image.registry.url" is required');
-          }
-          return containerCandidate;
-        },
       });
 
-      await expect(docker.addImageDetailsToContainer(container)).rejects.toThrow(
-        '"image.registry.url" is required',
-      );
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result.image.registry.name).toBe('unknown');
+      expect(result.image.registry.url).toBe('docker.io');
+      expect(result.image.name).toBe('library/nginx');
     });
 
     test('should keep implicit docker hub image tracking when hub registry provider is available', async () => {
@@ -901,18 +897,11 @@ describe('Docker Watcher', () => {
         },
         parsedImage: { domain: undefined, path: 'library/nginx', tag: '1.25.5' },
         registryState: createHarborHubRegistryState(),
-        validateImpl: (containerCandidate) => {
-          if (!containerCandidate.image.registry.url) {
-            throw new Error('"image.registry.url" is required');
-          }
-          return containerCandidate;
-        },
       });
 
       const result = await docker.addImageDetailsToContainer(container);
 
       expect(result.image.registry.name).toBe('hub');
-      expect(result.image.registry.url).toBe('https://registry-1.docker.io/v2');
     });
 
     test('should handle container with SHA256 image', async () => {

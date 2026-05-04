@@ -718,6 +718,7 @@ export function insertContainer(container) {
  */
 export function updateContainer(container) {
   const hasUpdatePolicy = Object.hasOwn(container, 'updatePolicy');
+  const hasUpdateRollback = Object.hasOwn(container, 'updateRollback');
   const hasSecurity = Object.hasOwn(container, 'security');
   const hasDetails = Object.hasOwn(container, 'details');
   const containerCurrentDoc =
@@ -732,6 +733,7 @@ export function updateContainer(container) {
   const containerMerged = {
     ...container,
     updatePolicy: hasUpdatePolicy ? container.updatePolicy : containerCurrent?.updatePolicy,
+    updateRollback: hasUpdateRollback ? container.updateRollback : containerCurrent?.updateRollback,
     security: hasSecurity ? container.security : containerCurrent?.security,
     details: shouldRestoreCurrentDetails
       ? containerCurrent.details
@@ -768,7 +770,13 @@ export function updateContainer(container) {
   invalidateContainersCacheForMutation(containerCurrent, containerToReturn);
   const wasRollback = isRollbackContainerName(containerCurrent?.name);
   const isRollback = isRollbackContainerName(containerToReturn.name);
-  if (
+  if (isRollback && containerCurrent && !wasRollback) {
+    // Container just transitioned into a rollback — it disappears from the
+    // user-visible list, so let subscribers prune the row instead of leaving
+    // it as a phantom entry next to the freshly-recreated container. Carry
+    // the pre-rename payload so subscribers can match the row by its old name.
+    emitContainerRemoved(redactContainerRuntimeEnv({ ...containerCurrent }));
+  } else if (
     !isRollback &&
     (!containerCurrent ||
       wasRollback ||

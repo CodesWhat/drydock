@@ -81,4 +81,27 @@ async function updateContainers(containerIds: string[]): Promise<BulkContainerUp
   return response.json();
 }
 
-export { restartContainer, startContainer, stopContainer, updateContainer, updateContainers };
+type CancelUpdateOperationOutcome = 'cancelled' | 'cancel-requested';
+
+async function cancelUpdateOperation(operationId: string): Promise<CancelUpdateOperationOutcome> {
+  const response = await fetch(`/api/operations/${encodeURIComponent(operationId)}/cancel`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    const error = new Error(body?.error || `Failed to cancel operation: ${response.statusText}`);
+    (error as Error & { statusCode?: number }).statusCode = response.status;
+    throw error;
+  }
+  return response.status === 202 ? 'cancel-requested' : 'cancelled';
+}
+
+export {
+  cancelUpdateOperation,
+  restartContainer,
+  startContainer,
+  stopContainer,
+  updateContainer,
+  updateContainers,
+};

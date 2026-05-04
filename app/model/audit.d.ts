@@ -8,6 +8,7 @@ export interface AuditEntry {
     | 'notification-delivery-failed'
     | 'container-update'
     | 'security-alert'
+    | 'security-scan-skipped'
     | 'agent-disconnect'
     | 'container-added'
     | 'container-removed'

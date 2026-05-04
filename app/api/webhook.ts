@@ -276,23 +276,7 @@ async function updateContainer(req: Request, res: Response) {
   }
 
   try {
-    const accepted = await requestContainerUpdate(container, {
-      onSuccess: () => {
-        recordAuditEvent({
-          action: 'webhook-update',
-          container,
-          status: 'success',
-        });
-      },
-      onFailure: (_accepted, error) => {
-        recordAuditEvent({
-          action: 'webhook-update',
-          container,
-          status: 'error',
-          details: getErrorMessage(error),
-        });
-      },
-    });
+    const accepted = await requestContainerUpdate(container);
     getWebhookCounter()?.inc({ action: 'update-container' });
 
     res.status(202).json({

@@ -149,6 +149,11 @@ const navGroups = computed<NavGroup[]>(() => [
         icon: 'notifications',
         route: ROUTES.NOTIFICATIONS,
       },
+      {
+        label: 'Notification outbox',
+        icon: 'notifications',
+        route: ROUTES.NOTIFICATION_OUTBOX,
+      },
       { label: t('appShell.layout.nav.triggers'), icon: 'triggers', route: ROUTES.TRIGGERS },
       { label: t('appShell.layout.nav.auth'), icon: 'auth', route: ROUTES.AUTH },
       { label: t('appShell.layout.nav.agents'), icon: 'agents', route: ROUTES.AGENTS },
@@ -1335,6 +1340,18 @@ function handleSseEvent(event: string, payload?: unknown) {
         ? String((payload as Record<string, unknown>).reason || 'boot-mismatch')
         : 'boot-mismatch';
     emitUiSseEvent('dd:sse-resync-required', { reason });
+    return;
+  }
+  if (event === 'update-applied') {
+    emitUiSseEvent('dd:sse-update-applied', payload);
+    return;
+  }
+  if (event === 'update-failed') {
+    emitUiSseEvent('dd:sse-update-failed', payload);
+    return;
+  }
+  if (event === 'batch-update-completed') {
+    emitUiSseEvent('dd:sse-batch-update-completed', payload);
     return;
   }
   if (event === 'connection-lost') {

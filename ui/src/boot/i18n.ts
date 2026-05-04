@@ -1,6 +1,6 @@
 import { createI18n } from 'vue-i18n';
 
-export const SUPPORTED_LOCALES = ['en'] as const;
+export const SUPPORTED_LOCALES = ['en', 'zh'] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
 export const DEFAULT_LOCALE: SupportedLocale = 'en';
@@ -16,7 +16,9 @@ const localeModules = import.meta.glob<Record<string, unknown>>('../locales/**/*
 export function buildMessages(
   modules: Record<string, Record<string, unknown>> = localeModules,
 ): Record<SupportedLocale, Record<string, unknown>> {
-  const messages: Record<string, Record<string, unknown>> = { en: {} };
+  const messages: Record<string, Record<string, unknown>> = Object.fromEntries(
+    SUPPORTED_LOCALES.map((l) => [l, {}]),
+  );
   for (const [path, mod] of Object.entries(modules)) {
     const match = path.match(/\/locales\/([^/]+)\//);
     if (!match) continue;

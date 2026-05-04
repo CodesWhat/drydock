@@ -985,6 +985,38 @@ describe('useDashboardComputed recent updates', () => {
     expect(rows.find((row) => row.id === 'remote-api')).toMatchObject({ status: 'failed' });
   });
 
+  it('marks hard eligibility blockers as blocked in recent updates', () => {
+    const state = createState({
+      containers: [
+        makeBaseContainer({
+          id: 'rollback-blocked',
+          name: 'rabbitmq',
+          newTag: '3.13.7-alpine',
+          updateDetectedAt: '2026-05-04T17:00:00.000Z',
+          updateEligibility: {
+            eligible: false,
+            evaluatedAt: '2026-05-04T17:00:00.000Z',
+            blockers: [
+              {
+                reason: 'last-update-rolled-back',
+                severity: 'hard',
+                message: 'Last update attempt rolled back.',
+                actionable: true,
+              },
+            ],
+          },
+        }),
+      ],
+    });
+
+    expect(state.recentUpdates.value).toEqual([
+      expect.objectContaining({
+        id: 'rollback-blocked',
+        blocked: true,
+      }),
+    ]);
+  });
+
   it('uses the container-name recent status when a container name is unique', () => {
     const state = createState({
       containers: [

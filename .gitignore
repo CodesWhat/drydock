@@ -75,6 +75,10 @@ typings/
 .env
 .env.test
 
+# Local-only QA stack credentials (Docker Hub / GHCR tokens). The .example
+# is committed; the real file is gitignored.
+test/.env.qa-creds
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 

@@ -294,13 +294,6 @@ function mountSubject() {
   });
 }
 
-/** Find all buttons in wrapper that contain a child with the given data-icon value. */
-function iconButtons(wrapper: any, icon: string) {
-  return wrapper
-    .findAll('button')
-    .filter((button: any) => button.find(`[data-icon="${icon}"]`).exists());
-}
-
 /** Find the first table row whose text contains `name`. */
 function rowByName(wrapper: any, name: string) {
   const row = wrapper

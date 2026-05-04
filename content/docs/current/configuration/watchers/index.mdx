@@ -56,7 +56,7 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 
 - **Socket vs remote API** — When using socket configuration, mount the Docker socket on your drydock container. When using host/port configuration, enable the [Docker remote API](https://docs.docker.com/reference/cli/dockerd/). If the remote API is secured with TLS, mount and configure the [TLS certificates](https://docs.docker.com/engine/security/protect-access/#use-tls-https-to-protect-the-docker-daemon-socket).
 - **Remote auth is fail-closed** — Remote watcher auth (`AUTH_*`) requires HTTPS (`PROTOCOL=https`) or TLS certificate-based connections by default. Set `AUTH_INSECURE=true` only if you intentionally need legacy fail-open behavior.
-- **Digest watching and Hub quotas** — Watching image digests causes extensive usage of the _Docker Registry Pull API_, which is restricted by [**Quotas on the Docker Hub**](https://docs.docker.com/docker-hub/usage/). By default, drydock enables it only for **non semver** image tags. You can tune this behavior per container using the `dd.watch.digest` label. If you face [quota related errors](https://docs.docker.com/docker-hub/usage/#how-do-i-know-my-pull-requests-are-being-limited), consider slowing down the watcher rate by adjusting the `DD_WATCHER_{watcher_name}_CRON` variable.
+- **Digest watching and Hub quotas** — Watching image digests causes usage of the _Docker Registry Pull API_, which is restricted by [**Quotas on the Docker Hub**](https://docs.docker.com/docker-hub/usage/). By default, drydock enables digest watching for mutable floating tags (`latest`, `stable`, `v3`, `16-alpine`, `10.6`) so those tags update in place without being changed to a different tag. Specific semver tags (`1.4.5`) do not watch digests by default. You can force or disable this behavior per container using the `dd.watch.digest` label or per image with `IMGSET_*_WATCH_DIGEST`. If you face [quota related errors](https://docs.docker.com/docker-hub/usage/#how-do-i-know-my-pull-requests-are-being-limited), consider slowing down the watcher rate by adjusting the `DD_WATCHER_{watcher_name}_CRON` variable.
 </Callout>
 
 ## Variable examples
@@ -714,14 +714,14 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.tag.exclude` | ⚪ | Regex to exclude specific tags | Valid JavaScript Regex | |
 | `dd.tag.include` | ⚪ | Regex to include specific tags only | Valid JavaScript Regex | |
 | `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` (see below) | |
-| `dd.tag.family` | ⚪ | Tag family policy for semver updates | `strict` (default) or `loose` | `strict` |
+| `dd.tag.family` | ⚪ | Tag family policy for semver updates. In `strict` mode, floating aliases such as `16-alpine` stay on the current tag and update by digest; use `loose` to allow cross-tag semver moves such as `16-alpine` → `17-alpine`. | `strict` (default) or `loose` | `strict` |
 | `dd.action.exclude` | ⚪ | Exclude specific action triggers from automatic execution for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.action.include` | ⚪ | Only allow specific action triggers to automatically execute for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.notification.exclude` | ⚪ | Exclude specific notification triggers from this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.notification.include` | ⚪ | Only allow specific notification triggers for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.trigger.exclude` | ⚪ | **Deprecated** — use `dd.action.exclude` or `dd.notification.exclude` instead | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.trigger.include` | ⚪ | **Deprecated** — use `dd.action.include` or `dd.notification.include` instead | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
-| `dd.watch.digest` | ⚪ | Watch this container digest | Valid Boolean | `false` |
+| `dd.watch.digest` | ⚪ | Watch this container digest. Missing values are auto-enabled for floating tags and disabled for specific semver tags. | Valid Boolean | Automatic |
 | `dd.watch` | ⚪ | Explicitly include or exclude this container from monitoring (overrides `WATCHBYDEFAULT`) | Valid Boolean | Inherits from `WATCHBYDEFAULT` (`true` by default) |
 | `dd.compose.file` | ⚪ | Path to the docker-compose.yml file for compose-native updates (also configurable via trigger `COMPOSEFILELABEL`) | file path | |
 | `dd.source.repo` | ⚪ | Source repository override for release-notes lookup (e.g. `owner/repo`) | Valid `owner/repo` string | |
@@ -958,8 +958,7 @@ searx/searx:1.0.0-269-7b368146
 
 ### Enable digest watching
 
-Additionally to semver tag tracking, you can also track if the digest associated to the local tag has been updated.  
-It can be convenient to monitor image tags known to be overridden (`latest`, `10`, `10.6`...)
+In addition to semver tag tracking, drydock can track whether the digest associated with the local tag has been updated. This is enabled automatically for floating tags known to move in place (`latest`, `stable`, `10`, `10.6`, `16-alpine`). Add `dd.watch.digest=true` when you want to force digest tracking for a specific container, or `dd.watch.digest=false` when you want to opt a high-churn Docker Hub image out.
 
 <Tabs items={["Docker Compose (Digest Watch)", "Docker (Digest Watch)"]}>
 <Tab value="Docker Compose (Digest Watch)">

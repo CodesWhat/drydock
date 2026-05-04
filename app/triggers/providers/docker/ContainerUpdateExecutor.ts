@@ -1,4 +1,11 @@
 import * as updateOperationStore from '../../../store/update-operation.js';
+import { OperationCancelledError } from '../../../store/update-operation.js';
+import { startHealthGateHeartbeat } from '../../../updates/health-gate-heartbeat.js';
+import {
+  POST_START_LIVENESS_GRACE_MS,
+  verifyContainerStillRunning,
+} from '../../../updates/post-start-liveness.js';
+import { getErrorMessage } from '../../../util/error.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
 import { getRequestedOperationId } from './update-runtime-context.js';
 
@@ -82,6 +89,24 @@ type PreparedContainerUpdateExecution = {
   shouldHealthGate: boolean;
   healthGateTimeoutMs?: number;
   operationId: string;
+};
+
+type ContainerUpdateOperation = ReturnType<typeof updateOperationStore.insertOperation>;
+
+type ContainerUpdateOperationStartFields = {
+  containerId: string;
+  containerName: string;
+  triggerName: string;
+  oldContainerId: string;
+  oldName: string;
+  tempName: string;
+  oldContainerWasRunning: boolean;
+  oldContainerStopped: false;
+  fromVersion: string;
+  toVersion: string;
+  targetImage: string;
+  status: 'in-progress';
+  phase: 'pulling';
 };
 
 type ContainerUpdateAttemptState = {
@@ -180,6 +205,21 @@ type ContainerUpdateExecutorDependencies = {
     operationId: string,
     delayMs: number,
   ) => void;
+  /**
+   * Persist rollback state onto the container record when an update rolls back, or clear
+   * it on success. Optional — omitting it skips state persistence (e.g. in tests that
+   * don't need it).
+   *
+   * Called with:
+   *   - 'rolled-back': operation terminated as rolled-back; caller provides digest +
+   *     reason/lastError from the operation.
+   *   - 'succeeded': operation succeeded; caller clears any prior rollback state.
+   */
+  persistRollbackState?: (
+    containerId: string,
+    outcome: 'rolled-back' | 'succeeded',
+    rollbackInfo?: { reason: string; lastError: string },
+  ) => void;
 };
 
 type ContainerUpdateExecutorConstructorOptions = Omit<
@@ -208,25 +248,6 @@ const REQUIRED_CONTAINER_UPDATE_EXECUTOR_DEPENDENCY_KEYS = [
   'hasHealthcheckConfigured',
   'waitForContainerHealthy',
 ] as const;
-
-type ErrorWithMessage = {
-  message?: unknown;
-};
-
-function hasMessage(error: unknown): error is ErrorWithMessage {
-  return (
-    (typeof error === 'object' || typeof error === 'function') &&
-    error !== null &&
-    'message' in error
-  );
-}
-
-function getErrorMessage(error: unknown): string {
-  if (hasMessage(error)) {
-    return String(error.message ?? error);
-  }
-  return String(error);
-}
 
 const DEFERRED_RECONCILIATION_DELAY_MS = 10_000;
 
@@ -280,6 +301,10 @@ class ContainerUpdateExecutor {
   waitForContainerHealthy: ContainerUpdateExecutorDependencies['waitForContainerHealthy'];
 
   scheduleDeferredReconciliation?: ContainerUpdateExecutorDependencies['scheduleDeferredReconciliation'];
+
+  persistRollbackState?: ContainerUpdateExecutorDependencies['persistRollbackState'];
+
+  postStartLivenessGraceMs: number = POST_START_LIVENESS_GRACE_MS;
 
   constructor(options: ContainerUpdateExecutorConstructorOptions) {
     const dependencies = resolveFunctionDependencies<ContainerUpdateExecutorDependencies>(options, {
@@ -444,6 +469,10 @@ class ContainerUpdateExecutor {
         phase: 'recovered-rollback',
         recoveredAt: new Date().toISOString(),
       });
+      this.persistRollbackState?.(container.id, 'rolled-back', {
+        reason: pending.rollbackReason ?? '',
+        lastError: pending.lastError ?? '',
+      });
     } else {
       updateOperationStore.markOperationTerminal(pending.id, {
         status: 'failed',
@@ -508,12 +537,14 @@ class ContainerUpdateExecutor {
     container: ContainerForUpdate,
     logContainer: ContainerUpdateLogger,
     runtimeContext?: unknown,
+    postPullHook?: (operationId: string) => Promise<void>,
   ) {
     const preparedExecution = await this.prepareContainerUpdateExecution(
       context,
       container,
       logContainer,
       runtimeContext,
+      postPullHook,
     );
     if (!preparedExecution) {
       return false;
@@ -533,6 +564,7 @@ class ContainerUpdateExecutor {
       );
       await this.cleanupRenamedContainer(preparedExecution, logContainer, attemptState);
       this.markOperationSucceeded(preparedExecution.operationId);
+      this.persistRollbackState?.(container.id, 'succeeded');
       return true;
     } catch (e: unknown) {
       return this.rollbackFailedContainerUpdate(
@@ -545,11 +577,43 @@ class ContainerUpdateExecutor {
     }
   }
 
+  private resolveOrCreateOperation(
+    requestedOperationId: string | undefined,
+    operationFields: ContainerUpdateOperationStartFields,
+  ): ContainerUpdateOperation {
+    if (!requestedOperationId) {
+      return updateOperationStore.insertOperation(operationFields);
+    }
+
+    const existingOperation = updateOperationStore.getOperationById(requestedOperationId);
+    if (!existingOperation) {
+      return updateOperationStore.insertOperation({
+        id: requestedOperationId,
+        ...operationFields,
+      });
+    }
+
+    if (existingOperation.status === 'queued' || existingOperation.status === 'in-progress') {
+      return updateOperationStore.updateOperation(requestedOperationId, {
+        ...operationFields,
+        lastError: undefined,
+        rollbackReason: undefined,
+        newContainerId: undefined,
+        completedAt: undefined,
+      })!;
+    }
+
+    return updateOperationStore.reopenTerminalOperation(requestedOperationId, {
+      ...operationFields,
+    })!;
+  }
+
   private async prepareContainerUpdateExecution(
     context: ContainerUpdateContext,
     container: ContainerForUpdate,
     logContainer: ContainerUpdateLogger,
     runtimeContext?: unknown,
+    postPullHook?: (operationId: string) => Promise<void>,
   ): Promise<PreparedContainerUpdateExecution | undefined> {
     const { dockerApi, auth, newImage, currentContainer, currentContainerSpec } = context;
     const configuration = this.getConfiguration();
@@ -566,7 +630,7 @@ class ContainerUpdateExecutor {
       ? getHealthGateTimeoutMs(rollbackConfig)
       : undefined;
 
-    const operationFields = {
+    const operationFields: ContainerUpdateOperationStartFields = {
       containerId: container.id,
       containerName: container.name,
       triggerName: this.getTriggerId(),
@@ -585,25 +649,7 @@ class ContainerUpdateExecutor {
     // If an operation was pre-created by the API handler, always reuse that row
     // so the original operationId stays stable even if queued TTL expiry
     // already transitioned it to a terminal state before execution begins.
-    const existingOperation = requestedOperationId
-      ? updateOperationStore.getOperationById(requestedOperationId)
-      : undefined;
-    const operation = existingOperation
-      ? existingOperation.status === 'queued' || existingOperation.status === 'in-progress'
-        ? updateOperationStore.updateOperation(requestedOperationId!, {
-            ...operationFields,
-            lastError: undefined,
-            rollbackReason: undefined,
-            newContainerId: undefined,
-            completedAt: undefined,
-          })!
-        : updateOperationStore.reopenTerminalOperation(requestedOperationId!, {
-            ...operationFields,
-          })!
-      : updateOperationStore.insertOperation({
-          ...(requestedOperationId ? { id: requestedOperationId } : {}),
-          ...operationFields,
-        });
+    const operation = this.resolveOrCreateOperation(requestedOperationId, operationFields);
 
     try {
       await this.pullImage(dockerApi, auth, newImage, logContainer);
@@ -616,11 +662,36 @@ class ContainerUpdateExecutor {
       throw pullError;
     }
 
+    if (postPullHook) {
+      try {
+        await postPullHook(operation.id);
+      } catch (hookError: unknown) {
+        updateOperationStore.markOperationTerminal(operation.id, {
+          status: 'failed',
+          phase: 'failed',
+          lastError: getErrorMessage(hookError),
+        });
+        throw hookError;
+      }
+    }
+
     if (configuration.dryrun) {
       logContainer.info('Do not replace the existing container because dry-run mode is enabled');
       updateOperationStore.markOperationTerminal(operation.id, {
         status: 'succeeded',
         phase: 'dryrun',
+      });
+      return undefined;
+    }
+
+    if (updateOperationStore.isOperationCancelRequested(operation.id)) {
+      logContainer.info(
+        `Cancellation requested for ${oldName} before rename; aborting cleanly without rollback`,
+      );
+      updateOperationStore.markOperationTerminal(operation.id, {
+        status: 'failed',
+        phase: 'failed',
+        lastError: 'Cancelled by operator',
       });
       return undefined;
     }
@@ -653,11 +724,18 @@ class ContainerUpdateExecutor {
     };
   }
 
+  private throwIfCancelled(operationId: string) {
+    if (updateOperationStore.isOperationCancelRequested(operationId)) {
+      throw new OperationCancelledError(operationId);
+    }
+  }
+
   private async createAndStartReplacementContainer(
     preparedExecution: PreparedContainerUpdateExecution,
     logContainer: ContainerUpdateLogger,
     attemptState: ContainerUpdateAttemptState,
   ): Promise<DockerContainerHandle> {
+    this.throwIfCancelled(preparedExecution.operationId);
     attemptState.failureReason = 'create_new_failed';
     const containerToCreateInspect = this.cloneContainer(
       preparedExecution.currentContainerSpec,
@@ -718,6 +796,7 @@ class ContainerUpdateExecutor {
     logContainer: ContainerUpdateLogger,
     attemptState: ContainerUpdateAttemptState,
   ) {
+    this.throwIfCancelled(preparedExecution.operationId);
     attemptState.failureReason = 'stop_old_failed';
     await this.stopContainer(
       preparedExecution.currentContainer,
@@ -735,18 +814,35 @@ class ContainerUpdateExecutor {
     await this.startContainer(newContainer, preparedExecution.oldName, logContainer);
     updateOperationStore.updateOperation(preparedExecution.operationId, { phase: 'new-started' });
 
+    await verifyContainerStillRunning({
+      container: newContainer,
+      containerName: preparedExecution.oldName,
+      graceMs: this.postStartLivenessGraceMs,
+      logger: logContainer,
+    });
+
     if (!preparedExecution.shouldHealthGate) {
       return;
     }
 
     attemptState.failureReason = 'health_gate_failed';
     updateOperationStore.updateOperation(preparedExecution.operationId, { phase: 'health-gate' });
-    await this.waitForContainerHealthy(
-      newContainer,
-      preparedExecution.oldName,
-      logContainer,
-      preparedExecution.healthGateTimeoutMs,
+    const cancelHeartbeat = startHealthGateHeartbeat(
+      preparedExecution.operationId,
+      (operationId) => {
+        updateOperationStore.updateOperation(operationId, { phase: 'health-gate' });
+      },
     );
+    try {
+      await this.waitForContainerHealthy(
+        newContainer,
+        preparedExecution.oldName,
+        logContainer,
+        preparedExecution.healthGateTimeoutMs,
+      );
+    } finally {
+      cancelHeartbeat();
+    }
     updateOperationStore.updateOperation(preparedExecution.operationId, {
       phase: 'health-gate-passed',
     });
@@ -801,6 +897,9 @@ class ContainerUpdateExecutor {
     container: ContainerForUpdate,
     logContainer: ContainerUpdateLogger,
   ): Promise<never> {
+    if (error instanceof OperationCancelledError) {
+      attemptState.failureReason = 'cancelled';
+    }
     logContainer.warn(
       `Container update failed for ${preparedExecution.oldName}, attempting rollback (${getErrorMessage(error)})`,
     );
@@ -843,6 +942,10 @@ class ContainerUpdateExecutor {
         phase: 'rolled-back',
         oldContainerStopped: attemptState.oldContainerStopped,
         rollbackReason: attemptState.failureReason,
+        lastError: getErrorMessage(error),
+      });
+      this.persistRollbackState?.(container.id, 'rolled-back', {
+        reason: attemptState.failureReason,
         lastError: getErrorMessage(error),
       });
     } else {

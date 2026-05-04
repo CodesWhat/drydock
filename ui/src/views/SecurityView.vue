@@ -18,10 +18,11 @@ import { usePreference } from '../preferences/usePreference';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllContainers } from '../services/container';
 import { getSecurityRuntime } from '../services/server';
-import type { Container } from '../types/container';
+import type { Container, UpdateEligibility } from '../types/container';
 import { mapApiContainers } from '../utils/container-mapper';
 import { errorMessage } from '../utils/error';
 import { ROUTES } from '../router/routes';
+import { getPrimaryHardBlocker } from '../utils/update-eligibility';
 import type { SecurityRuntimeStatus } from './security/securityViewTypes';
 import {
   fixableColor,
@@ -44,6 +45,7 @@ const updateDialogNewTag = ref<string | undefined>(undefined);
 const updateDialogUpdateKind = ref<'major' | 'minor' | 'patch' | 'digest' | null | undefined>(
   undefined,
 );
+const updateDialogUpdateEligibility = ref<UpdateEligibility | undefined>(undefined);
 
 const chooserSummary = ref<ImageSummary | null>(null);
 const chooserAnchorStyle = ref<Record<string, string>>({});
@@ -55,6 +57,9 @@ interface ContainerChoice {
   currentTag?: string;
   newTag?: string;
   updateKind?: 'major' | 'minor' | 'patch' | 'digest' | null;
+  updateEligibility?: UpdateEligibility;
+  blocked: boolean;
+  blockerMessage?: string;
 }
 
 const { isMobile, windowNarrow: isCompact } = useBreakpoints();
@@ -218,10 +223,38 @@ function navigateToContainerUpdate(summary: ImageSummary) {
   });
 }
 
+function getContainerById(id: string): Container | undefined {
+  return containers.value.find((c) => c.id === id);
+}
+
+function getContainerHardBlocker(id: string) {
+  return getPrimaryHardBlocker(getContainerById(id)?.updateEligibility);
+}
+
+function isSummaryUpdateBlocked(summary: ImageSummary | null | undefined): boolean {
+  const ids = summary?.containersWithUpdate ?? [];
+  return ids.length > 0 && ids.every((id) => getContainerHardBlocker(id) !== undefined);
+}
+
+function getSummaryUpdateTooltip(summary: ImageSummary | null | undefined): string {
+  const ids = summary?.containersWithUpdate ?? [];
+  if (isSummaryUpdateBlocked(summary)) {
+    if (ids.length === 1) {
+      return (
+        getContainerHardBlocker(ids[0])?.message ??
+        t('containerComponents.groupedViews.blockedTooltip')
+      );
+    }
+    return t('containerComponents.groupHeader.allBlockedTooltip');
+  }
+  return ids.length > 1 ? `Update one of ${ids.length} containers` : 'Update this container';
+}
+
 function resolveContainerChoices(summary: ImageSummary): ContainerChoice[] {
   const ids = summary.containersWithUpdate ?? [];
   return ids.map((id) => {
     const found = containers.value.find((c) => c.id === id);
+    const blocker = getPrimaryHardBlocker(found?.updateEligibility);
     return {
       id,
       name: found?.name ?? id,
@@ -229,6 +262,9 @@ function resolveContainerChoices(summary: ImageSummary): ContainerChoice[] {
       currentTag: found?.currentTag,
       newTag: found?.newTag ?? undefined,
       updateKind: found?.updateKind,
+      updateEligibility: found?.updateEligibility,
+      blocked: blocker !== undefined,
+      blockerMessage: blocker?.message,
     };
   });
 }
@@ -238,14 +274,21 @@ function openUpdateAction(summary: ImageSummary) {
   if (ids.length === 0) {
     return;
   }
+  const choices = resolveContainerChoices(summary);
+  if (choices.every((choice) => choice.blocked)) {
+    return;
+  }
   if (ids.length === 1) {
-    const choices = resolveContainerChoices(summary);
     const choice = choices[0];
+    if (choice.blocked) {
+      return;
+    }
     updateDialogContainerId.value = choice.id;
     updateDialogContainerName.value = choice.name;
     updateDialogCurrentTag.value = choice.currentTag;
     updateDialogNewTag.value = choice.newTag;
     updateDialogUpdateKind.value = choice.updateKind;
+    updateDialogUpdateEligibility.value = choice.updateEligibility;
     chooserSummary.value = null;
   } else {
     chooserSummary.value = summary;
@@ -253,11 +296,15 @@ function openUpdateAction(summary: ImageSummary) {
 }
 
 function openUpdateFromChooser(choice: ContainerChoice) {
+  if (choice.blocked) {
+    return;
+  }
   updateDialogContainerId.value = choice.id;
   updateDialogContainerName.value = choice.name;
   updateDialogCurrentTag.value = choice.currentTag;
   updateDialogNewTag.value = choice.newTag;
   updateDialogUpdateKind.value = choice.updateKind;
+  updateDialogUpdateEligibility.value = choice.updateEligibility;
   chooserSummary.value = null;
 }
 
@@ -478,11 +525,15 @@ onUnmounted(() => {
                 variant="plain"
                 weight="none"
                 class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-3xs font-semibold uppercase tracking-wide shrink-0 transition-colors"
-                :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }"
+                :class="isSummaryUpdateBlocked(row) ? 'opacity-60 cursor-not-allowed' : ''"
+                :style="isSummaryUpdateBlocked(row)
+                  ? { backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }
+                  : { backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }"
                 data-test="security-update-btn"
-                v-tooltip.top="(row.containersWithUpdate?.length ?? 0) > 1 ? `Update one of ${row.containersWithUpdate?.length} containers` : 'Update this container'"
+                :disabled="isSummaryUpdateBlocked(row)"
+                v-tooltip.top="getSummaryUpdateTooltip(row)"
                 @click.stop="openUpdateAction(row)">
-                <AppIcon name="cloud-download" :size="9" />
+                <AppIcon :name="isSummaryUpdateBlocked(row) ? 'lock' : 'cloud-download'" :size="9" />
                 {{ t('securityView.update') }}
               </AppButton>
               <AppButton
@@ -615,10 +666,14 @@ onUnmounted(() => {
                 variant="plain"
                 weight="none"
                 class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-3xs font-semibold uppercase tracking-wide transition-colors"
-                :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }"
+                :class="isSummaryUpdateBlocked(summary) ? 'opacity-60 cursor-not-allowed' : ''"
+                :style="isSummaryUpdateBlocked(summary)
+                  ? { backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }
+                  : { backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }"
                 data-test="security-update-btn"
+                :disabled="isSummaryUpdateBlocked(summary)"
                 @click.stop="openUpdateAction(summary)">
-                <AppIcon name="cloud-download" :size="9" />
+                <AppIcon :name="isSummaryUpdateBlocked(summary) ? 'lock' : 'cloud-download'" :size="9" />
                 {{ t('securityView.update') }}
               </AppButton>
               <AppButton
@@ -750,9 +805,10 @@ onUnmounted(() => {
               size="xs"
               variant="secondary"
               class="inline-flex items-center gap-1.5"
+              :disabled="isSummaryUpdateBlocked(selectedImage)"
               data-test="security-detail-update-btn"
               @click="openUpdateAction(selectedImage)">
-              <AppIcon name="cloud-download" :size="10" />
+              <AppIcon :name="isSummaryUpdateBlocked(selectedImage) ? 'lock' : 'cloud-download'" :size="10" />
               {{ t('securityView.update') }}
             </AppButton>
             <AppButton
@@ -899,7 +955,8 @@ onUnmounted(() => {
     :container-name="updateDialogContainerName"
     :current-tag="updateDialogCurrentTag"
     :new-tag="updateDialogNewTag"
-    :update-kind="updateDialogUpdateKind" />
+    :update-kind="updateDialogUpdateKind"
+    :update-eligibility="updateDialogUpdateEligibility" />
 
   <!-- Multi-container chooser -->
   <Teleport v-if="chooserSummary" to="body">
@@ -925,13 +982,19 @@ onUnmounted(() => {
             variant="plain"
             weight="none"
             class="w-full text-left px-4 py-2.5 flex items-start gap-2 hover:dd-bg-hover transition-colors"
+            :class="choice.blocked ? 'opacity-60 cursor-not-allowed' : ''"
+            :disabled="choice.blocked"
             data-test="security-chooser-item"
+            v-tooltip.top="choice.blockerMessage"
             @click="openUpdateFromChooser(choice)">
             <div class="min-w-0 flex-1">
               <div class="text-2xs-plus font-semibold dd-text truncate">{{ choice.name }}</div>
               <div v-if="choice.host" class="text-3xs dd-text-muted mt-0.5">{{ choice.host }}</div>
             </div>
-            <AppBadge v-if="choice.newTag" tone="info" size="xs" class="shrink-0 mt-0.5">
+            <AppBadge v-if="choice.blocked" tone="danger" size="xs" class="shrink-0 mt-0.5">
+              {{ t('containerComponents.fullPageDetail.blockedButton') }}
+            </AppBadge>
+            <AppBadge v-else-if="choice.newTag" tone="info" size="xs" class="shrink-0 mt-0.5">
               {{ choice.newTag }}
             </AppBadge>
           </AppButton>

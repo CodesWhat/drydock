@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { ResourceUsageSummary } from '../../../utils/stats-summary';
+import type { ContainerStatsSummarySnapshot } from '../../../services/stats';
 import {
   getUsageThresholdColor,
   getUsageThresholdMutedColor,
@@ -9,7 +9,7 @@ import {
 
 interface Props {
   editMode: boolean;
-  resourceUsage: ResourceUsageSummary;
+  summary: ContainerStatsSummarySnapshot;
 }
 
 defineProps<Props>();
@@ -96,20 +96,20 @@ watchEffect(() => {
 
       <div>
         <div v-if="showHeader" class="dd-text-label mb-2 dd-text-muted">
-          {{ t('dashboardView.resourceUsage.totalUsage', { watched: resourceUsage.watchedContainers }) }}
+          {{ t('dashboardView.resourceUsage.totalUsage', { watched: summary.watchedCount }) }}
         </div>
         <div class="space-y-2">
           <div>
             <div class="flex items-center justify-between text-2xs dd-text-secondary mb-1">
               <span>{{ t('dashboardView.resourceUsage.cpu') }}</span>
-              <span>{{ resourceUsage.totalCpuPercent.toFixed(1) }}%</span>
+              <span>{{ summary.avgCpuPercent.toFixed(1) }}%</span>
             </div>
             <div class="h-2 dd-rounded overflow-hidden" :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
               <div
                 class="h-full dd-rounded transition-[width,color,background-color]"
                 :style="{
-                  width: `${resourceUsage.totalCpuPercent}%`,
-                  backgroundColor: getUsageThresholdColor(resourceUsage.totalCpuPercent),
+                  width: `${summary.avgCpuPercent}%`,
+                  backgroundColor: getUsageThresholdColor(summary.avgCpuPercent),
                 }" />
             </div>
           </div>
@@ -118,15 +118,15 @@ watchEffect(() => {
             <div class="flex items-center justify-between text-2xs dd-text-secondary mb-1">
               <span>{{ t('dashboardView.resourceUsage.memory') }}</span>
               <span>
-                {{ formatBytes(resourceUsage.totalMemoryUsageBytes) }} / {{ formatBytes(resourceUsage.totalMemoryLimitBytes) }} ({{ resourceUsage.totalMemoryPercent.toFixed(1) }}%)
+                {{ formatBytes(summary.totalMemoryUsageBytes) }} / {{ formatBytes(summary.totalMemoryLimitBytes) }} ({{ summary.totalMemoryPercent.toFixed(1) }}%)
               </span>
             </div>
             <div class="h-2 dd-rounded overflow-hidden" :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
               <div
                 class="h-full dd-rounded transition-[width,color,background-color]"
                 :style="{
-                  width: `${resourceUsage.totalMemoryPercent}%`,
-                  backgroundColor: getUsageThresholdColor(resourceUsage.totalMemoryPercent),
+                  width: `${summary.totalMemoryPercent}%`,
+                  backgroundColor: getUsageThresholdColor(summary.totalMemoryPercent),
                 }" />
             </div>
           </div>
@@ -140,7 +140,7 @@ watchEffect(() => {
           </div>
           <div class="space-y-1.5">
             <div
-              v-for="row in resourceUsage.topCpu.slice(0, topListLimit)"
+              v-for="row in summary.topCpu.slice(0, topListLimit)"
               :key="`cpu-${row.id}`"
               class="px-2.5 py-2 dd-rounded"
               :style="{ backgroundColor: getUsageThresholdMutedColor(row.cpuPercent) }">
@@ -152,7 +152,7 @@ watchEffect(() => {
               </div>
             </div>
             <div
-              v-if="resourceUsage.topCpu.length === 0"
+              v-if="summary.topCpu.length === 0"
               class="px-2.5 py-2 dd-rounded text-2xs-plus text-center dd-text-muted"
               :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
               {{ t('dashboardView.resourceUsage.noCpuData') }}
@@ -166,7 +166,7 @@ watchEffect(() => {
           </div>
           <div class="space-y-1.5">
             <div
-              v-for="row in resourceUsage.topMemory.slice(0, topListLimit)"
+              v-for="row in summary.topMemory.slice(0, topListLimit)"
               :key="`memory-${row.id}`"
               class="px-2.5 py-2 dd-rounded"
               :style="{ backgroundColor: getUsageThresholdMutedColor(row.memoryPercent) }">
@@ -178,7 +178,7 @@ watchEffect(() => {
               </div>
             </div>
             <div
-              v-if="resourceUsage.topMemory.length === 0"
+              v-if="summary.topMemory.length === 0"
               class="px-2.5 py-2 dd-rounded text-2xs-plus text-center dd-text-muted"
               :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
               {{ t('dashboardView.resourceUsage.noMemoryData') }}

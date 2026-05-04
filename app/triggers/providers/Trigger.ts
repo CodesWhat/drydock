@@ -10,16 +10,18 @@ import {
 
 const RECREATED_ALIAS_RE = /^[a-f0-9]{12}_(.+)$/i;
 
+import type { NotificationOutboxEntry } from '../../model/notification-outbox.js';
 import { getTriggerCounter } from '../../prometheus/trigger.js';
 import Component, { type ComponentConfiguration } from '../../registry/Component.js';
 import * as auditStore from '../../store/audit.js';
 import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
 import * as notificationHistoryStore from '../../store/notification-history.js';
+import { enqueueOutboxEntry } from '../../store/notification-outbox.js';
 import {
+  dispatchAccepted,
   enqueueContainerUpdate,
   enqueueContainerUpdates,
-  runAcceptedContainerUpdates,
   UpdateRequestError,
 } from '../../updates/request-update.js';
 import { renderBatch, renderSimple } from './trigger-expression-parser.js';
@@ -1015,27 +1017,60 @@ class Trigger<
       return;
     }
 
-    try {
-      const notificationEvent = getNotificationEvent(container);
-      // Agent connectivity notifications synthesize one-off container payloads and should always
-      // dispatch immediately, even when the trigger itself is configured for batch updates.
-      const shouldUseBatchMode =
-        Trigger.isBatchCapableMode(this.configuration.mode) &&
-        this.shouldDispatchNotificationEventInBatch(notificationEvent);
-      if (shouldUseBatchMode) {
-        this.queueEventBatchDispatch(ruleId, container);
-      } else {
-        await this.trigger(container);
-      }
-    } catch (e: unknown) {
-      const errorMessage = Trigger.getErrorMessage(e);
-      if (this.shouldSuppressAutoTriggerError(ruleId, container, errorMessage)) {
-        this.log.debug(`Suppressed repeated error handling ${ruleId} event (${errorMessage})`);
-      } else {
-        this.log.warn(`Error handling ${ruleId} event (${errorMessage})`);
-      }
-      this.log.debug(e);
+    const notificationEvent = getNotificationEvent(container);
+    // Agent connectivity notifications synthesize one-off container payloads and should always
+    // dispatch immediately, even when the trigger itself is configured for batch updates.
+    const shouldUseBatchMode =
+      Trigger.isBatchCapableMode(this.configuration.mode) &&
+      this.shouldDispatchNotificationEventInBatch(notificationEvent);
+    if (shouldUseBatchMode) {
+      this.queueEventBatchDispatch(ruleId, container);
+      return;
     }
+    this.dispatchToTriggerOptimistically(ruleId, container);
+  }
+
+  /**
+   * Optimistic dispatch with durable fallback. Calls this.trigger(container)
+   * fire-and-forget. On failure, persists a delivery intent to the
+   * notification outbox so the outbox worker can retry with backoff and
+   * eventually move the entry to dead-letter on persistent failure.
+   *
+   * The lifecycle (and watcher cron) is never blocked on the provider call.
+   */
+  private dispatchToTriggerOptimistically(ruleId: NotificationRuleId, container: Container): void {
+    const triggerId = this.getId();
+    void Promise.resolve()
+      .then(() => this.trigger(container))
+      .catch((err: unknown) => {
+        const errorMessage = Trigger.getErrorMessage(err);
+        if (this.shouldSuppressAutoTriggerError(ruleId, container, errorMessage)) {
+          this.log.debug(`Suppressed repeated error handling ${ruleId} event (${errorMessage})`);
+        } else {
+          this.log.warn(`Error handling ${ruleId} event (${errorMessage})`);
+        }
+        this.log.debug(err);
+        enqueueOutboxEntry({
+          eventName: ruleId,
+          payload: { container },
+          triggerId,
+          containerId: container.id,
+        });
+      });
+  }
+
+  /**
+   * Default outbox delivery hook. The outbox worker calls this to retry a
+   * persisted notification intent. Subclasses may override to handle custom
+   * payload shapes or batched events.
+   */
+  async dispatchOutboxEntry(entry: NotificationOutboxEntry): Promise<void> {
+    const payload = entry.payload as { container?: Container };
+    const container = payload?.container;
+    if (!container) {
+      throw new Error(`Outbox entry ${entry.id} missing container payload`);
+    }
+    await this.trigger(container);
   }
 
   async handleContainerUpdateAppliedEvent(payload: ContainerUpdateAppliedEventPayload) {
@@ -1585,7 +1620,7 @@ class Trigger<
           trigger: (container: Container, runtimeContext?: unknown) => Promise<unknown>;
         },
       });
-      await runAcceptedContainerUpdates([accepted]);
+      dispatchAccepted([accepted]);
       return;
     }
 
@@ -2424,7 +2459,7 @@ class Trigger<
       return;
     }
 
-    await runAcceptedContainerUpdates(accepted);
+    dispatchAccepted(accepted);
   }
 
   getMetadata(): Record<string, unknown> {

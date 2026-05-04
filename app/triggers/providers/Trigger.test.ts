@@ -111,6 +111,9 @@ vi.mock('../../store/notification-history.js', () => {
     resetForTesting: vi.fn(() => notificationHistoryByKey.clear()),
   };
 });
+vi.mock('../../store/notification-outbox.js', () => ({
+  enqueueOutboxEntry: vi.fn(),
+}));
 vi.mock('../../updates/request-update.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../updates/request-update.js')>();
   return {
@@ -3389,9 +3392,81 @@ test('handleSecurityAlertEvent should catch trigger execution errors', async () 
     details: 'high=1',
     container,
   });
+  // Optimistic dispatch is fire-and-forget; the .catch fires on a later
+  // microtask, so flush the queue before asserting on its side effects.
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
 
   expect(warnSpy).toHaveBeenCalledWith('Error handling security-alert event (dispatch failed)');
   expect(debugSpy).toHaveBeenCalledWith(expect.any(Error));
+});
+
+test('handleSecurityAlertEvent should enqueue an outbox entry when trigger fails', async () => {
+  const { enqueueOutboxEntry } = await import('../../store/notification-outbox.js');
+  (enqueueOutboxEntry as unknown as { mockClear: () => void }).mockClear();
+
+  const container = {
+    id: 'c-outbox-1',
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  };
+  vi.spyOn(trigger, 'trigger').mockRejectedValue(new Error('provider exploded'));
+
+  await trigger.handleSecurityAlertEvent({
+    containerName: 'local_container1',
+    details: 'high=1',
+    container,
+  });
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  expect(enqueueOutboxEntry).toHaveBeenCalledWith(
+    expect.objectContaining({
+      eventName: 'security-alert',
+      triggerId: trigger.getId(),
+      containerId: 'c-outbox-1',
+      payload: expect.objectContaining({ container: expect.any(Object) }),
+    }),
+  );
+});
+
+test('dispatchOutboxEntry delegates to trigger() with the payload container', async () => {
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+  const container = { id: 'c-1', name: 'web', watcher: 'local' };
+
+  await trigger.dispatchOutboxEntry({
+    id: 'entry-1',
+    eventName: 'update-applied',
+    payload: { container },
+    triggerId: trigger.getId(),
+    attempts: 0,
+    maxAttempts: 5,
+    nextAttemptAt: new Date().toISOString(),
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+  });
+
+  expect(triggerSpy).toHaveBeenCalledWith(container);
+});
+
+test('dispatchOutboxEntry throws when payload is missing the container', async () => {
+  await expect(
+    trigger.dispatchOutboxEntry({
+      id: 'entry-bad',
+      eventName: 'update-applied',
+      payload: {},
+      triggerId: trigger.getId(),
+      attempts: 0,
+      maxAttempts: 5,
+      nextAttemptAt: new Date().toISOString(),
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    }),
+  ).rejects.toThrow(/missing container payload/);
 });
 
 test('handleSecurityAlertEvent should not trigger when neither payload container nor store container is found', async () => {

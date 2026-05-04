@@ -1,11 +1,21 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { getContainerUpdateStartedMessage } from '../../utils/container-update';
+import { useToast } from '../../composables/useToast';
+import {
+  getContainerAlreadyUpToDateMessage,
+  getContainerUpdateStartedMessage,
+  isStaleContainerUpdateError,
+  runContainerUpdateRequest,
+} from '../../utils/container-update';
 import { updateContainer as apiUpdateContainer } from '../../services/container-actions';
 import { errorMessage } from '../../utils/error';
+import { resolveUpdateFailureReason } from '../../utils/update-error-summary';
+import type { UpdateEligibility } from '../../types/container';
+import { getPrimaryHardBlocker } from '../../utils/update-eligibility';
 
 const { t } = useI18n();
+const toast = useToast();
 
 const props = defineProps<{
   containerId: string | null;
@@ -13,6 +23,7 @@ const props = defineProps<{
   currentTag?: string;
   newTag?: string;
   updateKind?: 'major' | 'minor' | 'patch' | 'digest' | null;
+  updateEligibility?: UpdateEligibility;
 }>();
 
 const emit = defineEmits<{
@@ -22,8 +33,86 @@ const emit = defineEmits<{
 
 const inProgress = ref(false);
 const actionError = ref<string | null>(null);
+const terminalToastStops = new Set<() => void>();
 
 const isOpen = computed(() => props.containerId !== null);
+const hardBlocker = computed(() => getPrimaryHardBlocker(props.updateEligibility));
+const updateBlocked = computed(() => hardBlocker.value !== undefined);
+
+function getDetailString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function getTerminalEventDetail(event: Event): Record<string, unknown> | undefined {
+  const detail = (event as CustomEvent)?.detail;
+  return detail && typeof detail === 'object' ? (detail as Record<string, unknown>) : undefined;
+}
+
+function watchTerminalToast(operationId: string, fallbackName: string) {
+  let done = false;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const cleanup = () => {
+    if (done) {
+      return;
+    }
+    done = true;
+    globalThis.removeEventListener('dd:sse-update-applied', onApplied);
+    globalThis.removeEventListener('dd:sse-update-failed', onFailed);
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+    terminalToastStops.delete(cleanup);
+  };
+  const onApplied = (event: Event) => {
+    const detail = getTerminalEventDetail(event);
+    if (getDetailString(detail?.operationId) !== operationId) {
+      return;
+    }
+    const name = getDetailString(detail?.containerName) ?? fallbackName;
+    toast.success(t('containersView.toast.updated', { name }));
+    cleanup();
+  };
+  const onFailed = (event: Event) => {
+    const detail = getTerminalEventDetail(event);
+    if (getDetailString(detail?.operationId) !== operationId) {
+      return;
+    }
+    const name = getDetailString(detail?.containerName) ?? fallbackName;
+    const error = getDetailString(detail?.error);
+    const rollbackReason = getDetailString(detail?.rollbackReason);
+    const reason = resolveUpdateFailureReason({ lastError: error, rollbackReason });
+    const isCancelled = rollbackReason === 'cancelled' || error === 'Cancelled by operator';
+    if (rollbackReason !== undefined) {
+      if (isCancelled) {
+        toast.success(t('containersView.toast.cancelled', { name }));
+      } else {
+        toast.warning(
+          reason
+            ? t('containersView.toast.rolledBackWithReason', { name, reason })
+            : t('containersView.toast.rolledBack', { name }),
+        );
+      }
+    } else {
+      toast.error(
+        reason
+          ? t('containersView.toast.updateFailedWithReason', { name, reason })
+          : t('containersView.toast.updateFailed', { name }),
+      );
+    }
+    cleanup();
+  };
+
+  globalThis.addEventListener('dd:sse-update-applied', onApplied);
+  globalThis.addEventListener('dd:sse-update-failed', onFailed);
+  terminalToastStops.add(cleanup);
+  timeout = setTimeout(cleanup, 10 * 60 * 1000);
+}
+
+onBeforeUnmount(() => {
+  for (const cleanup of [...terminalToastStops]) {
+    cleanup();
+  }
+});
 
 const confirmMessage = computed(() => {
   const name = props.containerName ?? props.containerId ?? 'this container';
@@ -63,17 +152,37 @@ async function confirm() {
   if (!id || inProgress.value) {
     return;
   }
+  if (hardBlocker.value) {
+    actionError.value = hardBlocker.value.message;
+    toast.warning(hardBlocker.value.message);
+    return;
+  }
   inProgress.value = true;
   actionError.value = null;
+  const name = props.containerName ?? id;
+  let operationId: string | undefined;
   try {
-    await apiUpdateContainer(id);
-    const name = props.containerName ?? id;
+    const result = await runContainerUpdateRequest({
+      request: async () => {
+        const response = (await apiUpdateContainer(id)) as { operationId?: unknown };
+        operationId = getDetailString(response?.operationId);
+      },
+      isStaleError: isStaleContainerUpdateError,
+    });
+    if (result === 'stale') {
+      toast.info(getContainerAlreadyUpToDateMessage(name));
+      emit('update:containerId', null);
+      return;
+    }
+    toast.success(getContainerUpdateStartedMessage(name));
+    if (operationId) {
+      watchTerminalToast(operationId, name);
+    }
     emit('updated', id);
     emit('update:containerId', null);
-    // Show a simple console diagnostic for callers that don't handle the event
-    getContainerUpdateStartedMessage(name);
   } catch (caught: unknown) {
     actionError.value = errorMessage(caught, 'Update failed');
+    toast.error(`Update failed: ${name}`, actionError.value);
   } finally {
     inProgress.value = false;
   }
@@ -120,6 +229,12 @@ function handleKeydown(e: KeyboardEvent) {
             {{ confirmMessage }}
           </div>
           <div
+            v-if="hardBlocker"
+            class="px-5 pb-2 text-2xs"
+            :style="{ color: 'var(--dd-danger)' }">
+            {{ hardBlocker.message }}
+          </div>
+          <div
             v-if="actionError"
             class="px-5 pb-2 text-2xs"
             :style="{ color: 'var(--dd-danger)' }">
@@ -150,7 +265,7 @@ function handleKeydown(e: KeyboardEvent) {
                 border: '1px solid var(--dd-warning)',
                 color: 'var(--dd-warning)',
               }"
-              :disabled="inProgress"
+              :disabled="inProgress || updateBlocked"
               @click="confirm">
               <AppIcon v-if="inProgress" name="restart" :size="11" class="animate-spin" />
               {{ inProgress ? t('containerComponents.updateDialog.updating') : t('containerComponents.updateDialog.update') }}

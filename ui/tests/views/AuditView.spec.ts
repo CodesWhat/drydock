@@ -167,7 +167,7 @@ describe('AuditView', () => {
       expect(wrapper.find('.data-card-grid').exists()).toBe(true);
       expect(wrapper.find('.data-card-grid').attributes('data-item-count')).toBe('1');
       expect((wrapper.find('input').element as HTMLInputElement).value).toBe('redis');
-      expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('update-failed');
+      expect(wrapper.get('[aria-haspopup="listbox"]').text()).toContain('Update Failed');
     });
 
     it('falls back to safe defaults for invalid query values', async () => {
@@ -185,7 +185,7 @@ describe('AuditView', () => {
         limit: 50,
       });
       expect(wrapper.find('.data-table').exists()).toBe(true);
-      expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('');
+      expect(wrapper.get('[aria-haspopup="listbox"]').text()).toContain('All events');
     });
 
     it('accepts security-alert as a valid action filter from route query', async () => {
@@ -204,7 +204,7 @@ describe('AuditView', () => {
         limit: 50,
         action: 'security-alert',
       });
-      expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('security-alert');
+      expect(wrapper.get('[aria-haspopup="listbox"]').text()).toContain('Security Alert');
     });
 
     it('accepts container-update as a valid action filter from route query', async () => {
@@ -223,7 +223,7 @@ describe('AuditView', () => {
         limit: 50,
         action: 'container-update',
       });
-      expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('container-update');
+      expect(wrapper.get('[aria-haspopup="listbox"]').text()).toContain('Container Update');
     });
 
     it('accepts notification-delivery-failed as a valid action filter from route query', async () => {
@@ -242,8 +242,8 @@ describe('AuditView', () => {
         limit: 50,
         action: 'notification-delivery-failed',
       });
-      expect((wrapper.find('select').element as HTMLSelectElement).value).toBe(
-        'notification-delivery-failed',
+      expect(wrapper.get('[aria-haspopup="listbox"]').text()).toContain(
+        'Notification Delivery Failed',
       );
     });
 
@@ -369,7 +369,15 @@ describe('AuditView', () => {
       });
       const wrapper = await mountAuditView();
 
-      await wrapper.find('select').setValue('update-failed');
+      // Open the picker
+      await wrapper.get('[aria-haspopup="listbox"]').trigger('click');
+      await flushPromises();
+
+      // Click the "Update Failed" option
+      const options = wrapper.findAll('[role="option"]');
+      const updateFailedOption = options.find((o) => o.text().includes('Update Failed'));
+      expect(updateFailedOption).toBeDefined();
+      await updateFailedOption!.trigger('click');
       await flushPromises();
 
       expect(mockGetAuditLog).toHaveBeenCalledTimes(2);
@@ -442,11 +450,167 @@ describe('AuditView', () => {
       expect((wrapper.find('input[name="container-name"]').element as HTMLInputElement).value).toBe(
         '',
       );
-      expect((wrapper.find('select').element as HTMLSelectElement).value).toBe('');
+      expect(wrapper.get('[aria-haspopup="listbox"]').text()).toContain('All events');
       expect(mockGetAuditLog).toHaveBeenLastCalledWith({
         page: 1,
         limit: 50,
       });
+    });
+  });
+
+  describe('multiselect event filter', () => {
+    beforeEach(() => {
+      mockGetAuditLog.mockResolvedValue({ entries: [makeEntry()], total: 1 });
+    });
+
+    async function openPicker(wrapper: any) {
+      await wrapper.get('[aria-haspopup="listbox"]').trigger('click');
+      await flushPromises();
+    }
+
+    async function clickOption(wrapper: any, labelText: string) {
+      const option = wrapper
+        .findAll('[role="option"]')
+        .find((o: any) => o.text().includes(labelText));
+      expect(option).toBeDefined();
+      await option!.trigger('click');
+      await flushPromises();
+    }
+
+    it('selecting two actions sends plural actions param and no singular action param', async () => {
+      const wrapper = await mountAuditView();
+
+      // Open picker and select both options in one open session (picker stays open after each toggle)
+      await openPicker(wrapper);
+      await clickOption(wrapper, 'Update Applied');
+      // Picker is still open — select second without reopening
+      await clickOption(wrapper, 'Update Failed');
+
+      const lastCall = mockGetAuditLog.mock.calls[mockGetAuditLog.mock.calls.length - 1][0];
+      expect(lastCall.actions).toEqual(['update-applied', 'update-failed']);
+      expect(lastCall.action).toBeUndefined();
+    });
+
+    it('toggle removes a selected action; if one remains API reverts to singular action param', async () => {
+      const wrapper = await mountAuditView();
+
+      // Select two in one open session
+      await openPicker(wrapper);
+      await clickOption(wrapper, 'Update Applied');
+      await clickOption(wrapper, 'Update Failed');
+
+      // Deselect first one (picker still open)
+      await clickOption(wrapper, 'Update Applied');
+
+      const lastCall = mockGetAuditLog.mock.calls[mockGetAuditLog.mock.calls.length - 1][0];
+      expect(lastCall.action).toBe('update-failed');
+      expect(lastCall.actions).toBeUndefined();
+    });
+
+    it('clicking "All events" clears selections and sends no action/actions params', async () => {
+      const wrapper = await mountAuditView();
+
+      // Select two in one open session, then clear
+      await openPicker(wrapper);
+      await clickOption(wrapper, 'Update Applied');
+      await clickOption(wrapper, 'Update Failed');
+      await clickOption(wrapper, 'All events');
+
+      const lastCall = mockGetAuditLog.mock.calls[mockGetAuditLog.mock.calls.length - 1][0];
+      expect(lastCall.action).toBeUndefined();
+      expect(lastCall.actions).toBeUndefined();
+      expect(wrapper.get('[aria-haspopup="listbox"]').text()).toContain('All events');
+    });
+
+    it('route query ?actions=update-applied,update-failed initializes two-selection state', async () => {
+      mockRoute.query = { actions: 'update-applied,update-failed' };
+      const wrapper = await mountAuditView();
+
+      expect(wrapper.get('[aria-haspopup="listbox"]').text()).toContain('2 events selected');
+      expect(mockGetAuditLog).toHaveBeenCalledWith({
+        page: 1,
+        limit: 50,
+        actions: ['update-applied', 'update-failed'],
+      });
+
+      // Open picker and verify both show check icon
+      await openPicker(wrapper);
+      const options = wrapper.findAll('[role="option"]');
+      const appliedOption = options.find((o: any) => o.text().includes('Update Applied'));
+      const failedOption = options.find((o: any) => o.text().includes('Update Failed'));
+      expect(appliedOption?.find('.app-icon-stub').attributes('data-icon')).toBe('check');
+      expect(failedOption?.find('.app-icon-stub').attributes('data-icon')).toBe('check');
+    });
+
+    it('route query ?actions= filters out invalid actions', async () => {
+      mockRoute.query = { actions: 'update-applied,bogus,update-failed' };
+      const wrapper = await mountAuditView();
+
+      expect(wrapper.get('[aria-haspopup="listbox"]').text()).toContain('2 events selected');
+      expect(mockGetAuditLog).toHaveBeenCalledWith({
+        page: 1,
+        limit: 50,
+        actions: ['update-applied', 'update-failed'],
+      });
+    });
+
+    it('route query ?actions= deduplicates repeated values', async () => {
+      mockRoute.query = { actions: 'update-applied,update-applied' };
+      const wrapper = await mountAuditView();
+
+      expect(wrapper.get('[aria-haspopup="listbox"]').text()).toContain('Update Applied');
+      expect(mockGetAuditLog).toHaveBeenCalledWith({
+        page: 1,
+        limit: 50,
+        action: 'update-applied',
+      });
+    });
+
+    it('legacy ?action= query produces single-element selection and uses singular API param', async () => {
+      mockRoute.query = { action: 'update-failed' };
+      const wrapper = await mountAuditView();
+
+      expect(wrapper.get('[aria-haspopup="listbox"]').text()).toContain('Update Failed');
+      expect(mockGetAuditLog).toHaveBeenCalledWith({
+        page: 1,
+        limit: 50,
+        action: 'update-failed',
+      });
+    });
+
+    it('?actions= wins when both ?actions= and ?action= are present', async () => {
+      mockRoute.query = { actions: 'update-applied,update-failed', action: 'rollback' };
+      const wrapper = await mountAuditView();
+
+      expect(wrapper.get('[aria-haspopup="listbox"]').text()).toContain('2 events selected');
+      expect(mockGetAuditLog).toHaveBeenCalledWith({
+        page: 1,
+        limit: 50,
+        actions: ['update-applied', 'update-failed'],
+      });
+    });
+
+    it('toggling a filter resets page to 1', async () => {
+      mockRoute.query = { page: '3' };
+      const wrapper = await mountAuditView();
+
+      await openPicker(wrapper);
+      await clickOption(wrapper, 'Update Applied');
+
+      const lastCall = mockGetAuditLog.mock.calls[mockGetAuditLog.mock.calls.length - 1][0];
+      expect(lastCall.page).toBe(1);
+    });
+
+    it('outside click closes the dropdown', async () => {
+      const wrapper = await mountAuditView();
+
+      await openPicker(wrapper);
+      expect(wrapper.find('[role="listbox"]').exists()).toBe(true);
+
+      document.body.dispatchEvent(new Event('click', { bubbles: true }));
+      await flushPromises();
+
+      expect(wrapper.find('[role="listbox"]').exists()).toBe(false);
     });
   });
 

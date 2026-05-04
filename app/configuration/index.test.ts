@@ -554,6 +554,12 @@ describe('getSecurityConfiguration', () => {
         enabled: false,
         formats: ['spdx-json'],
       },
+      gate: {
+        mode: 'on',
+      },
+      prune: {
+        onBlock: true,
+      },
       scan: {
         cron: '',
         jitter: 60000,
@@ -605,6 +611,12 @@ describe('getSecurityConfiguration', () => {
       sbom: {
         enabled: true,
         formats: ['cyclonedx-json', 'spdx-json'],
+      },
+      gate: {
+        mode: 'on',
+      },
+      prune: {
+        onBlock: true,
       },
       scan: {
         cron: '',
@@ -808,6 +820,29 @@ describe('getSecurityConfiguration', () => {
 
     delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
     delete configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY;
+  });
+
+  test('prune.onBlock should default to true', () => {
+    const result = configuration.getSecurityConfiguration();
+    expect(result.prune.onBlock).toBe(true);
+  });
+
+  test('DD_SECURITY_PRUNE_ONBLOCK=false should disable prune on block', () => {
+    configuration.ddEnvVars.DD_SECURITY_PRUNE_ONBLOCK = 'false';
+
+    const result = configuration.getSecurityConfiguration();
+    expect(result.prune.onBlock).toBe(false);
+
+    delete configuration.ddEnvVars.DD_SECURITY_PRUNE_ONBLOCK;
+  });
+
+  test('DD_SECURITY_PRUNE_ONBLOCK=true should enable prune on block', () => {
+    configuration.ddEnvVars.DD_SECURITY_PRUNE_ONBLOCK = 'true';
+
+    const result = configuration.getSecurityConfiguration();
+    expect(result.prune.onBlock).toBe(true);
+
+    delete configuration.ddEnvVars.DD_SECURITY_PRUNE_ONBLOCK;
   });
 });
 

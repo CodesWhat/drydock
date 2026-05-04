@@ -18,6 +18,7 @@ const SIDEBAR_NAV_TARGETS: Array<{ label: string; urlPattern: RegExp }> = [
   { label: 'Watchers', urlPattern: /\/watchers(?:\?|$)/ },
   { label: 'General', urlPattern: /\/config(?:\?|$)/ },
   { label: 'Notifications', urlPattern: /\/notifications(?:\?|$)/ },
+  { label: 'Notification outbox', urlPattern: /\/notifications\/outbox(?:\?|$)/ },
   { label: 'Triggers', urlPattern: /\/triggers(?:\?|$)/ },
   { label: 'Auth', urlPattern: /\/auth(?:\?|$)/ },
   { label: 'Agents', urlPattern: /\/agents(?:\?|$)/ },

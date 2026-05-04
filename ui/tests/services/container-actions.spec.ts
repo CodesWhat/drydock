@@ -1,4 +1,5 @@
 import {
+  cancelUpdateOperation,
   restartContainer,
   startContainer,
   stopContainer,
@@ -258,6 +259,93 @@ describe('Container Actions Service', () => {
 
       await expect(updateContainers(['abc123'])).rejects.toThrow(
         'Failed to update containers: Internal Server Error',
+      );
+    });
+  });
+
+  describe('cancelUpdateOperation', () => {
+    it('posts to cancel endpoint and resolves with cancelled outcome on 200', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: { id: 'op-123', status: 'cancelled' } }),
+      } as any);
+
+      await expect(cancelUpdateOperation('op-123')).resolves.toBe('cancelled');
+
+      expect(fetch).toHaveBeenCalledWith('/api/operations/op-123/cancel', {
+        method: 'POST',
+        credentials: 'include',
+      });
+    });
+
+    it('resolves with cancel-requested outcome on 202', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 202,
+        json: async () => ({ data: { id: 'op-456', cancelRequested: true } }),
+      } as any);
+
+      await expect(cancelUpdateOperation('op-456')).resolves.toBe('cancel-requested');
+    });
+
+    it('URL-encodes the operation id', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({}),
+      } as any);
+
+      await cancelUpdateOperation('op/with/slashes');
+
+      expect(fetch).toHaveBeenCalledWith('/api/operations/op%2Fwith%2Fslashes/cancel', {
+        method: 'POST',
+        credentials: 'include',
+      });
+    });
+
+    it('throws with server error message on failure', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        statusText: 'Conflict',
+        json: async () => ({ error: 'Operation already in progress' }),
+      } as any);
+
+      await expect(cancelUpdateOperation('op-123')).rejects.toThrow(
+        'Operation already in progress',
+      );
+    });
+
+    it('attaches statusCode to thrown error', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        json: async () => ({ error: 'Operation not found' }),
+      } as any);
+
+      let caught: unknown;
+      try {
+        await cancelUpdateOperation('op-missing');
+      } catch (e) {
+        caught = e;
+      }
+      expect((caught as { statusCode?: number }).statusCode).toBe(404);
+    });
+
+    it('throws with statusText when response body parsing fails', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        json: async () => {
+          throw new Error('parse error');
+        },
+      } as any);
+
+      await expect(cancelUpdateOperation('op-123')).rejects.toThrow(
+        'Failed to cancel operation: Internal Server Error',
       );
     });
   });

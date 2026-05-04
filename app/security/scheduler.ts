@@ -37,7 +37,7 @@ function getSchedulerSecurityConfiguration(): ReturnType<typeof getSecurityConfi
   return cachedSecurityConfiguration;
 }
 
-function getSchedulerScanIntervalMs(): number {
+export function getSchedulerScanIntervalMs(): number {
   if (cachedScanIntervalMs === undefined) {
     const securityConfig = getSchedulerSecurityConfiguration();
     cachedScanIntervalMs = getCronIntervalMs(securityConfig.scan.cron);

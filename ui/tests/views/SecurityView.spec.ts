@@ -1193,6 +1193,139 @@ describe('SecurityView', () => {
       expect(mockRouterPush).not.toHaveBeenCalled();
     });
 
+    it('does not open the update dialog when every security update candidate is hard-blocked', async () => {
+      mockContainers([
+        makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          security: {
+            scan: {
+              vulnerabilities: [{ id: 'CVE-1', severity: 'HIGH', packageName: 'openssl' }],
+            },
+          },
+        }),
+      ]);
+      mockGetAllContainers.mockResolvedValue([
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          image: { name: 'nginx', tag: { value: '1.25' } },
+          currentTag: '1.25',
+          newTag: '1.26',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'patch',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          updateEligibility: {
+            eligible: false,
+            evaluatedAt: '2026-04-01T00:00:00.000Z',
+            blockers: [
+              {
+                reason: 'agent-mismatch',
+                severity: 'hard',
+                message: 'Container belongs to another agent.',
+                actionable: false,
+              },
+            ],
+          },
+        },
+      ]);
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      const vm = w.vm as any;
+      const summary = vm.filteredSummaries[0];
+      expect(vm.isSummaryUpdateBlocked(summary)).toBe(true);
+
+      vm.openUpdateAction(summary);
+      await nextTick();
+
+      expect(vm.updateDialogContainerId).toBeNull();
+    });
+
+    it('marks hard-blocked security chooser entries and only opens unblocked entries', async () => {
+      mockContainers([
+        makeContainer({
+          id: 'c1',
+          name: 'app-1',
+          displayName: 'app',
+          security: { scan: { vulnerabilities: [{ id: 'CVE-1', severity: 'HIGH' }] } },
+        }),
+        makeContainer({
+          id: 'c2',
+          name: 'app-2',
+          displayName: 'app',
+          security: { scan: { vulnerabilities: [{ id: 'CVE-2', severity: 'HIGH' }] } },
+        }),
+      ]);
+      mockGetAllContainers.mockResolvedValue([
+        {
+          id: 'c1',
+          name: 'app-1',
+          displayName: 'app',
+          image: { name: 'app', tag: { value: '1.0' } },
+          currentTag: '1.0',
+          newTag: '2.0',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'major',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          updateEligibility: {
+            eligible: false,
+            evaluatedAt: '2026-04-01T00:00:00.000Z',
+            blockers: [
+              {
+                reason: 'last-update-rolled-back',
+                severity: 'hard',
+                message: 'Last update attempt rolled back.',
+                actionable: true,
+              },
+            ],
+          },
+        },
+        {
+          id: 'c2',
+          name: 'app-2',
+          displayName: 'app',
+          image: { name: 'app', tag: { value: '1.0' } },
+          currentTag: '1.0',
+          newTag: '2.0',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'major',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+        },
+      ]);
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      const vm = w.vm as any;
+      const summary = vm.filteredSummaries[0];
+      const choices = vm.resolveContainerChoices(summary);
+      expect(choices[0].blocked).toBe(true);
+      expect(choices[1].blocked).toBe(false);
+
+      vm.openUpdateAction(summary);
+      await nextTick();
+      vm.openUpdateFromChooser(choices[0]);
+      expect(vm.updateDialogContainerId).toBeNull();
+
+      vm.openUpdateFromChooser(choices[1]);
+      expect(vm.updateDialogContainerId).toBe('c2');
+    });
+
     it('propagates releaseNotes and releaseLink from updating container onto the image summary', async () => {
       mockContainers([
         makeContainer({

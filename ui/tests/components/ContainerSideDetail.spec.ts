@@ -209,6 +209,90 @@ describe('ContainerSideDetail', () => {
     expect(wrapper.text()).toContain('Updating');
   });
 
+  it('shows "Pulling…" when the container is mid-update at the pulling phase', () => {
+    isContainerUpdateInProgress.mockReturnValue(true);
+    (selectedContainer as any).value = {
+      ...selectedContainer.value,
+      updateOperation: { phase: 'pulling' },
+    };
+
+    const wrapper = mount(ContainerSideDetail, {
+      global: {
+        components: { DetailPanel },
+        stubs: {
+          AppIcon: { template: '<span class="app-icon-stub" />' },
+          ContainerSideTabContent: { template: '<div class="side-tab-content-stub" />' },
+        },
+        directives: { tooltip: {} },
+      },
+    });
+
+    expect(wrapper.text()).toContain('Pulling…');
+  });
+
+  it('shows "Health-checking…" when the container is at the health-gate phase', () => {
+    isContainerUpdateInProgress.mockReturnValue(true);
+    (selectedContainer as any).value = {
+      ...selectedContainer.value,
+      updateOperation: { phase: 'health-gate' },
+    };
+
+    const wrapper = mount(ContainerSideDetail, {
+      global: {
+        components: { DetailPanel },
+        stubs: {
+          AppIcon: { template: '<span class="app-icon-stub" />' },
+          ContainerSideTabContent: { template: '<div class="side-tab-content-stub" />' },
+        },
+        directives: { tooltip: {} },
+      },
+    });
+
+    expect(wrapper.text()).toContain('Health-checking…');
+  });
+
+  it('shows "Finalizing…" when the container is at the health-gate-passed phase', () => {
+    isContainerUpdateInProgress.mockReturnValue(true);
+    (selectedContainer as any).value = {
+      ...selectedContainer.value,
+      updateOperation: { phase: 'health-gate-passed' },
+    };
+
+    const wrapper = mount(ContainerSideDetail, {
+      global: {
+        components: { DetailPanel },
+        stubs: {
+          AppIcon: { template: '<span class="app-icon-stub" />' },
+          ContainerSideTabContent: { template: '<div class="side-tab-content-stub" />' },
+        },
+        directives: { tooltip: {} },
+      },
+    });
+
+    expect(wrapper.text()).toContain('Finalizing…');
+  });
+
+  it('shows "Rolling back…" when the container is at the rollback-started phase', () => {
+    isContainerUpdateInProgress.mockReturnValue(true);
+    (selectedContainer as any).value = {
+      ...selectedContainer.value,
+      updateOperation: { phase: 'rollback-started' },
+    };
+
+    const wrapper = mount(ContainerSideDetail, {
+      global: {
+        components: { DetailPanel },
+        stubs: {
+          AppIcon: { template: '<span class="app-icon-stub" />' },
+          ContainerSideTabContent: { template: '<div class="side-tab-content-stub" />' },
+        },
+        directives: { tooltip: {} },
+      },
+    });
+
+    expect(wrapper.text()).toContain('Rolling back…');
+  });
+
   it('shows Queued when the selected container is still queued for update', () => {
     isContainerUpdateQueued.mockReturnValue(true);
 

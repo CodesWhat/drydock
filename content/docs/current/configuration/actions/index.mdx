@@ -62,6 +62,69 @@ The update action triggers the Docker or Docker Compose trigger for the selected
 
 See [Lifecycle Hooks](/docs/configuration/hooks) and [Backup & Rollback](/docs/configuration/rollback) for related configuration.
 
+## Global concurrency cap
+
+By default, drydock runs updates concurrently across containers. Two existing layers of serialization apply:
+
+- **Per-container lock** — prevents the same container from being updated twice in parallel.
+- **Per-compose-project lock** — serializes services within the same compose stack so `docker compose up` orchestration is safe.
+
+If you need a broader limit — for example, to stay inside Docker Hub pull-rate budgets or to keep host restart load predictable — set `DD_UPDATE_MAX_CONCURRENT`:
+
+| Env var | Required | Description | Default |
+| --- | :---: | --- | --- |
+| `DD_UPDATE_MAX_CONCURRENT` | ⚪ | Max simultaneous update lifecycles across the entire controller instance | `0` (unlimited) |
+
+**Semantics:**
+
+- `0` or absent → unlimited (default; no change from current behavior on upgrade).
+- `1` → strictly serial; only one update lifecycle runs at a time.
+- `N` (positive integer) → at most N update lifecycles run concurrently.
+- Negative or non-integer values → drydock fails fast at startup with a descriptive error.
+
+The global cap layers on top of the per-container and per-compose-project locks — it does not replace them. A compose stack already serializes its own members via the per-project lock; the global cap is an additional gate that limits how many stacks (or bare containers) can update at the same time.
+
+Operations waiting on the global cap remain in `queued` status, which the UI already renders correctly as the Queued → Updating → Updated progression.
+
+**Scope:** per controller instance. Distributed agent hosts have independent counters by design — there is no cross-host coordination.
+
+<Callout type="info">Self-update operations (`drydock` updating itself) bypass the global cap — they take per-container locks but never wait on the global semaphore. This prevents a full update queue from starving an admin-triggered self-update.</Callout>
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      # Allow at most 3 container updates to run simultaneously.
+      - DD_UPDATE_MAX_CONCURRENT=3
+```
+
+## Health-gate SSE heartbeat
+
+When drydock waits for a new container to pass its health gate (images with long healthcheck intervals, like vaultwarden's 60 s check), the UI receives no SSE events between the `health-gate` phase (start of wait) and `health-gate-passed` (end of wait). The health-gate heartbeat fixes this by re-emitting the same `health-gate` phase event at a configurable interval, keeping the UI informed in near-real-time without relying on REST reconciliation.
+
+| Env var | Required | Description | Default |
+| --- | :---: | --- | --- |
+| `DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS` | ⚪ | Interval (ms) between health-gate SSE heartbeats during container health polling | `10000` (10 s) |
+
+**Semantics:**
+
+- Absent or empty → use the 10 s default.
+- `0` → disable heartbeats entirely (the UI will only receive the start `health-gate` event and the eventual `health-gate-passed` or rollback event).
+- Positive integer ≥ 1000 → emit a heartbeat every N milliseconds.
+- Values below 1000 or non-integer values → drydock fails fast at startup with a descriptive error.
+
+Heartbeats re-emit `phase: 'health-gate'` (the same phase already displayed by the UI) — they do not introduce a new phase and cannot regress phase rank. The heartbeat stops immediately when the health gate resolves (success, timeout, or unhealthy), so it cannot race the terminal `health-gate-passed` event.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      # Emit a health-gate heartbeat every 5 seconds.
+      - DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS=5000
+```
+
 ## Why isn't my container auto-updating?
 
 Drydock evaluates each container against a stack of policy and trigger gates and reports the result as a pill on the row (and as `updateEligibility` on the API payload). When auto-update doesn't fire on a container with an available update, the pill identifies the active blocker — `Below threshold`, `Trigger filtered`, `No trigger`, `Agent mismatch`, `Snoozed`, etc. See [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the full reason reference and how to clear each gate.

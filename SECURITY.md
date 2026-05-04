@@ -13,7 +13,7 @@ If you discover a security vulnerability in drydock, please report it responsibl
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 
-Instead, please email **<80784472+s-b-e-n-s-o-n@users.noreply.github.com>** or use [GitHub's private vulnerability reporting](https://github.com/CodesWhat/drydock/security/advisories/new).
+Instead, please email **<security@getdrydock.com>** or use [GitHub's private vulnerability reporting](https://github.com/CodesWhat/drydock/security/advisories/new).
 
 You can expect:
 

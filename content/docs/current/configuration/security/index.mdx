@@ -34,6 +34,7 @@ DD_SECURITY_SCANNER=trivy
 | `DD_SECURITY_SCAN_CONCURRENCY` | ⚪ | Max digest scans processed in parallel during scheduled scans | integer (`>=1`) | `4` |
 | `DD_SECURITY_SCAN_BATCH_TIMEOUT` | ⚪ | Total scheduled scan batch timeout in milliseconds (`0` disables timeout) | integer (`>=0`) | `1800000` |
 | `DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES` | ⚪ | Max in-memory digest scan cache entries (LRU eviction -- least recently used entries are removed when the limit is reached) | integer (`>0`) | `500` |
+| `DD_SECURITY_PRUNE_ONBLOCK` | ⚪ | Prune a pulled candidate image when Update Bouncer blocks it | `true` / `false` | `true` |
 
 ## Trivy modes
 
@@ -87,6 +88,10 @@ services:
       - DD_SECURITY_SCANNER=trivy
       - DD_SECURITY_BLOCK_SEVERITY=NONE
 ```
+
+## Blocked candidate cleanup
+
+When Update Bouncer blocks an update after pulling the candidate image, drydock prunes that candidate image by default (`DD_SECURITY_PRUNE_ONBLOCK=true`). This cleanup is best-effort: if Docker refuses the prune, the update still fails with the original security-block reason and the prune failure is logged as a warning for operators to review.
 
 ## Signature Verification (cosign)
 

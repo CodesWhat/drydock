@@ -264,7 +264,6 @@ describe('Container Router', () => {
       const router = containerRouter.init();
       expect(router.use).toHaveBeenCalledWith('nocache-middleware');
       expect(router.get).toHaveBeenCalledWith('/', expect.any(Function));
-      expect(router.get).toHaveBeenCalledWith('/stats', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/summary', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/recent-status', expect.any(Function));
       expect(router.post).toHaveBeenCalledWith('/watch', expect.any(Function));

@@ -1,4 +1,5 @@
 import {
+  displayGroupName,
   maturityColor,
   parseServer,
   registryColorBg,
@@ -181,6 +182,48 @@ describe('display utilities', () => {
         bg: 'var(--dd-alt-muted)',
         text: 'var(--dd-alt)',
       });
+    });
+  });
+
+  describe('displayGroupName', () => {
+    it('returns undefined for __ungrouped__ sentinel', () => {
+      expect(displayGroupName('__ungrouped__')).toBeUndefined();
+    });
+
+    it('returns undefined for __flat__ sentinel', () => {
+      expect(displayGroupName('__flat__')).toBeUndefined();
+    });
+
+    it('returns undefined for null', () => {
+      expect(displayGroupName(null)).toBeUndefined();
+    });
+
+    it('returns undefined for undefined', () => {
+      expect(displayGroupName(undefined)).toBeUndefined();
+    });
+
+    it('returns undefined for empty string', () => {
+      expect(displayGroupName('')).toBeUndefined();
+    });
+
+    it('returns undefined for whitespace-only string', () => {
+      expect(displayGroupName('   ')).toBeUndefined();
+    });
+
+    it('returns undefined for __ungrouped__ with surrounding whitespace', () => {
+      expect(displayGroupName('  __ungrouped__  ')).toBeUndefined();
+    });
+
+    it('returns the trimmed name for a real group name', () => {
+      expect(displayGroupName('tdarr_node')).toBe('tdarr_node');
+    });
+
+    it('trims leading/trailing whitespace from real group names', () => {
+      expect(displayGroupName('  my-stack  ')).toBe('my-stack');
+    });
+
+    it('passes through valid group names unchanged', () => {
+      expect(displayGroupName('arr-stack')).toBe('arr-stack');
     });
   });
 });

@@ -1,0 +1,138 @@
+{
+  "configView": {
+    "tabs": {
+      "general": "通用",
+      "appearance": "外观",
+      "profile": "个人资料"
+    },
+    "general": {
+      "application": {
+        "title": "应用程序",
+        "loadingServerInfo": "正在加载服务器信息"
+      },
+      "store": {
+        "title": "存储"
+      },
+      "webhookApi": {
+        "title": "Webhook API",
+        "enabled": "已启用",
+        "disabled": "已禁用",
+        "description": "使用这些端点通过 HTTP 触发监视周期和更新。所有请求都需要在 Authorization 头中携带 Bearer 令牌。",
+        "disabledMessage": "Webhook API 已禁用。请设置",
+        "disabledHint": "Webhook API 已禁用。请设置 {envEnabled} 并配置至少一个令牌（{envToken} 或 {envTokens}）以启用它。",
+        "table": {
+          "endpoint": "端点",
+          "description": "描述"
+        },
+        "example": "示例",
+        "endpoints": {
+          "watchAll": "在所有监视器上触发完整监视周期",
+          "watchOne": "按名称监视特定容器",
+          "updateOne": "触发特定容器的更新"
+        }
+      },
+      "network": {
+        "title": "网络",
+        "internetlessMode": {
+          "label": "离线模式",
+          "description": "阻止所有出站请求（容器图标、外部获取）"
+        }
+      },
+      "iconCache": {
+        "title": "容器图标缓存",
+        "cachedIcons": {
+          "label": "已缓存图标",
+          "description": "常用图标已打包；其他图标在首次获取时缓存到磁盘"
+        },
+        "cleared": "已清除 {count} 个",
+        "clearButton": "清除缓存"
+      },
+      "diagnostics": {
+        "title": "诊断",
+        "debugDump": {
+          "label": "诊断调试转储",
+          "description": "下载用于故障排除的运行时状态精简 JSON 快照",
+          "preparing": "准备中...",
+          "download": "下载调试转储"
+        }
+      },
+      "fields": {
+        "version": "版本",
+        "serverPort": "服务器端口",
+        "containerActions": "容器操作",
+        "webhook": "Webhook",
+        "deleteEnabled": "允许删除",
+        "trustProxy": "信任代理",
+        "metricsAuth": "指标认证",
+        "storePath": "存储路径",
+        "storeFile": "存储文件",
+        "enabled": "已启用",
+        "disabled": "已禁用",
+        "yes": "是",
+        "no": "否"
+      },
+      "errors": {
+        "loadServerInfo": "无法加载服务器信息",
+        "loadProfileData": "无法加载个人资料数据",
+        "updateNetworkSettings": "无法更新网络设置",
+        "clearIconCache": "无法清除图标缓存",
+        "downloadDebugDump": "无法下载调试转储",
+        "errorLabel": "错误"
+      }
+    },
+    "appearance": {
+      "colorTheme": {
+        "title": "颜色主题"
+      },
+      "fontFamily": {
+        "title": "字体",
+        "defaultBadge": "默认",
+        "preview": "The quick brown fox jumps over the lazy dog"
+      },
+      "fontSize": {
+        "title": "字体大小"
+      },
+      "iconLibrary": {
+        "title": "图标库"
+      },
+      "iconSize": {
+        "title": "图标大小"
+      },
+      "borderRadius": {
+        "title": "圆角"
+      }
+    },
+    "profile": {
+      "loading": "正在加载个人资料",
+      "fields": {
+        "username": "用户名",
+        "email": "邮箱",
+        "role": "角色",
+        "provider": "提供者",
+        "lastLogin": "上次登录",
+        "activeSessions": "活跃会话"
+      }
+    },
+    "logs": {
+      "loading": "正在加载日志...",
+      "emptyMessage": "当前筛选条件下没有日志条目。",
+      "toolbar": {
+        "live": "实时",
+        "allLevels": "所有级别",
+        "debug": "调试",
+        "info": "信息",
+        "warn": "警告",
+        "error": "错误",
+        "allComponents": "所有组件",
+        "resetFilters": "重置筛选"
+      },
+      "tail": {
+        "50": "末尾 50 条",
+        "100": "末尾 100 条",
+        "500": "末尾 500 条",
+        "1000": "末尾 1000 条"
+      },
+      "logLevelBadge": "服务器日志级别：{level}。仅捕获此级别及更高级别的消息。"
+    }
+  }
+}

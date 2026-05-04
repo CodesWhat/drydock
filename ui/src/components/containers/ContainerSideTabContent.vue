@@ -10,9 +10,12 @@ import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
 import ProjectLink from './ProjectLink.vue';
+import NoUpdateReasonBadge from './NoUpdateReasonBadge.vue';
 import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import { revealContainerEnv } from '../../services/container';
 import { errorMessage } from '../../utils/error';
+import type { UpdateEligibility } from '../../types/container';
+import { getPrimaryHardBlocker } from '../../utils/update-eligibility';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
 const revealedEnvCache = reactive(new Map<string, Map<string, string>>());
@@ -153,6 +156,10 @@ const { t } = useI18n();
 function isActionInProgress(container: { id?: unknown; name?: unknown }) {
   return hasTrackedContainerAction(actionInProgress.value, container);
 }
+
+function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility }) {
+  return getPrimaryHardBlocker(container.updateEligibility) !== undefined;
+}
 </script>
 
 <template>
@@ -220,14 +227,12 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                   <CopyableTag :tag="selectedContainer.newTag" class="font-bold" style="color: var(--dd-success);">{{ selectedContainer.newTag }}</CopyableTag>
                 </template>
               </div>
-              <div
+              <NoUpdateReasonBadge
                 v-if="!selectedContainer.newTag && selectedContainer.noUpdateReason"
-                class="mt-2 flex items-start gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus"
-                :style="{ backgroundColor: 'var(--dd-warning-muted)' }"
-              >
-                <AppIcon name="warning" :size="11" class="shrink-0 mt-0.5" style="color: var(--dd-warning);" />
-                <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-warning);">{{ selectedContainer.noUpdateReason }}</span>
-              </div>
+                :reason="selectedContainer.noUpdateReason"
+                variant="inline"
+                class="mt-2"
+              />
               <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag || (selectedContainer.tagPrecision === 'floating' && !selectedContainer.imageDigestWatch)" class="mt-2 flex items-center gap-1.5 flex-wrap">
                 <AppBadge v-if="selectedContainer.updateKind" size="xs" :custom="updateKindColor(selectedContainer.updateKind)">
                   {{ selectedContainer.updateKind }}
@@ -607,10 +612,14 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                           @click="runContainerPreview">
                     {{ previewLoading ? t('containerComponents.fullPageActions.previewing') : t('containerComponents.fullPageActions.previewUpdate') }}
                   </AppButton>
-                  <AppButton v-if="selectedContainer.bouncer === 'blocked'" size="sm" variant="plain" :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
-                          :disabled="isActionInProgress(selectedContainer)"
-                          @click="confirmForceUpdate(selectedContainer)">
-                    <AppIcon name="lock" :size="10" class="mr-1 inline" />{{ t('containerComponents.fullPageActions.forceUpdate') }}
+	                  <AppButton v-if="isUpdateHardBlocked(selectedContainer)" size="sm" variant="plain" :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+	                          :disabled="true">
+	                    <AppIcon name="lock" :size="10" class="mr-1 inline" />{{ t('containerComponents.fullPageDetail.blockedButton') }}
+	                  </AppButton>
+	                  <AppButton v-else-if="selectedContainer.bouncer === 'blocked'" size="sm" variant="plain" :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+	                          :disabled="isActionInProgress(selectedContainer)"
+	                          @click="confirmForceUpdate(selectedContainer)">
+	                    <AppIcon name="lock" :size="10" class="mr-1 inline" />{{ t('containerComponents.fullPageActions.forceUpdate') }}
                   </AppButton>
                   <AppButton v-else
                           size="sm" variant="outlined"

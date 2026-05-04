@@ -142,6 +142,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['1.0.0', '1.1.0', '2.0.0']),
       };
       hRegistry.getState.mockReturnValue({
@@ -164,6 +165,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['1.0.0']),
         getImagePublishedAt: vi.fn().mockResolvedValue('2026-03-10T10:00:00.000Z'),
       };
@@ -190,6 +192,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue([]),
         getImagePublishedAt: vi.fn().mockResolvedValue('2026-03-01T10:00:00.000Z'),
       };
@@ -214,6 +217,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['1.0.0']),
         getImagePublishedAt: vi.fn().mockResolvedValue(new Date('2026-03-10T10:00:00.000Z')),
       };
@@ -236,6 +240,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['1.0.0']),
         getImagePublishedAt: vi.fn().mockRejectedValue(new Error('metadata unavailable')),
       };
@@ -261,6 +266,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['1.0.0']),
         getImagePublishedAt: vi.fn().mockRejectedValue(new Error('metadata unavailable')),
       };
@@ -302,6 +308,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['1.0.0']),
         getImageManifestDigest: vi
           .fn()
@@ -337,6 +344,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['1.0.0']),
         getImageManifestDigest: vi.fn().mockResolvedValue({
           digest: 'sha256:def456',
@@ -364,6 +372,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['1.0.0', '2.0.0']),
         getImageManifestDigest: vi
           .fn()
@@ -404,6 +413,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['v1.0.0', 'v1.1.0', 'v2.0.0-beta', 'latest']),
       };
       hRegistry.getState.mockReturnValue({
@@ -427,6 +437,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue([
           '1.2.1', // 3 parts, should be filtered out
           '1.3', // 2 parts, should be kept
@@ -460,6 +471,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['20.04.1', '5.1.5', '5.1.4']),
       };
       hRegistry.getState.mockReturnValue({
@@ -490,6 +502,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['1.2.4', '1.2.4-ls133', '1.2.3-ls132']),
       };
       hRegistry.getState.mockReturnValue({
@@ -520,6 +533,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['1.2.4', '1.2.3-ls132']),
       };
       hRegistry.getState.mockReturnValue({
@@ -560,6 +574,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['1.2.4', '1.2.3-ls132']),
       };
       hRegistry.getState.mockReturnValue({
@@ -590,6 +605,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['1.2.4', '1.2.4-ls133', '1.2.3-ls132']),
       };
       hRegistry.getState.mockReturnValue({
@@ -621,6 +637,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['1.2.4', '1.2.4-ls133', '1.2.3-ls132']),
       };
       hRegistry.getState.mockReturnValue({
@@ -654,6 +671,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['latest', 'v1.0.0', 'v1.1.0', 'v2.0.0', '1.2.0']),
       };
       hRegistry.getState.mockReturnValue({
@@ -690,6 +708,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['1.8.0', '1.9.0', '2.1.0']),
       };
       hRegistry.getState.mockReturnValue({
@@ -739,6 +758,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['latest', 'rolling', '1.0.0', '2.0.0', '3.0.0']),
       };
       hRegistry.getState.mockReturnValue({
@@ -783,6 +803,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['latest', '1.0.0', '2.0.0']),
       };
       hRegistry.getState.mockReturnValue({
@@ -812,6 +833,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['latest', '1.27.2', '1.27.3', '1.28.0-rc.1']),
       };
       hRegistry.getState.mockReturnValue({
@@ -843,6 +865,7 @@ describe('Docker Watcher', () => {
         },
       };
       const mockRegistry = {
+        normalizeImage: (img) => img,
         getTags: vi.fn().mockResolvedValue(['latest', 'nightly', '1.28.0-beta']),
       };
       hRegistry.getState.mockReturnValue({

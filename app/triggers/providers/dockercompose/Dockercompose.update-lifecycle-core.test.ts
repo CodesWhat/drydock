@@ -151,13 +151,13 @@ describe('Dockercompose Trigger', () => {
     vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
       makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
     );
-    const { maybeScanSpy, preHookSpy, postHookSpy, composeUpdateSpy, rollbackMonitorSpy } =
+    const { scanAndGateSpy, preHookSpy, postHookSpy, composeUpdateSpy, rollbackMonitorSpy } =
       spyOnProcessComposeHelpers(trigger);
 
     await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
 
-    // Security scanning
-    expect(maybeScanSpy).toHaveBeenCalledTimes(1);
+    // Security scanning (post-pull gate)
+    expect(scanAndGateSpy).toHaveBeenCalledTimes(1);
     // Pre/post update hooks
     expect(preHookSpy).toHaveBeenCalledTimes(1);
     expect(postHookSpy).toHaveBeenCalledTimes(1);
@@ -195,13 +195,13 @@ describe('Dockercompose Trigger', () => {
     vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
       makeCompose({ nginx: { image: 'nginx:1.0.0' } }),
     );
-    const { maybeScanSpy, preHookSpy, postHookSpy, rollbackMonitorSpy } =
+    const { scanAndGateSpy, preHookSpy, postHookSpy, rollbackMonitorSpy } =
       spyOnProcessComposeHelpers(trigger);
 
     await trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]);
 
     // Security scanning runs even in dryrun (matches Docker behavior)
-    expect(maybeScanSpy).toHaveBeenCalledTimes(1);
+    expect(scanAndGateSpy).toHaveBeenCalledTimes(1);
     // Pre-update hook still runs (can abort before dryrun pull)
     expect(preHookSpy).toHaveBeenCalledTimes(1);
     // Post-update hook skipped (performContainerUpdate returns false in dryrun)

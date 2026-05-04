@@ -100,6 +100,7 @@ class Hub extends Custom<HubRegistryConfiguration> {
   getImageFullName(image: ContainerImage, tagOrDigest: string) {
     let fullName = super.getImageFullName(image, tagOrDigest);
     fullName = fullName.replaceAll('registry-1.docker.io/', '');
+    fullName = fullName.replaceAll('docker.io/', '');
     fullName = fullName.replaceAll('library/', '');
     return fullName;
   }

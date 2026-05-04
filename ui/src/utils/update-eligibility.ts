@@ -16,6 +16,7 @@ export const BLOCKER_SEVERITY: Record<UpdateBlockerReason, UpdateBlockerSeverity
   'rollback-container': 'hard',
   'active-operation': 'hard',
   'security-scan-blocked': 'hard',
+  'last-update-rolled-back': 'hard',
   'agent-mismatch': 'hard',
   'no-update-trigger-configured': 'hard',
   snoozed: 'soft',

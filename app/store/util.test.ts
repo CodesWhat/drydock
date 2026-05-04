@@ -47,6 +47,53 @@ describe('store util initCollection', () => {
     expect(collection.ensureIndex).toHaveBeenCalledWith('data.status');
   });
 
+  test('normalizes binaryIndices into Loki indices and ensures them', () => {
+    const collection = {
+      ensureIndex: vi.fn(),
+    };
+    const db = {
+      getCollection: vi.fn(() => null),
+      addCollection: vi.fn(() => collection),
+    };
+
+    const result = initCollection(db as any, 'notificationOutbox', {
+      indices: ['data.id'],
+      binaryIndices: ['data.status', 'data.nextAttemptAt'],
+    });
+
+    expect(result).toBe(collection);
+    expect(db.addCollection).toHaveBeenCalledWith('notificationOutbox', {
+      indices: ['data.id', 'data.status', 'data.nextAttemptAt'],
+      binaryIndices: ['data.status', 'data.nextAttemptAt'],
+    });
+    expect(collection.ensureIndex).toHaveBeenCalledWith('data.id');
+    expect(collection.ensureIndex).toHaveBeenCalledWith('data.status');
+    expect(collection.ensureIndex).toHaveBeenCalledWith('data.nextAttemptAt');
+  });
+
+  test('normalizes string index options into Loki indices and ensures them', () => {
+    const collection = {
+      ensureIndex: vi.fn(),
+    };
+    const db = {
+      getCollection: vi.fn(() => null),
+      addCollection: vi.fn(() => collection),
+    };
+
+    const result = initCollection(db as any, 'notificationOutbox', {
+      indices: 'data.id',
+      binaryIndices: 'data.status',
+    });
+
+    expect(result).toBe(collection);
+    expect(db.addCollection).toHaveBeenCalledWith('notificationOutbox', {
+      indices: ['data.id', 'data.status'],
+      binaryIndices: 'data.status',
+    });
+    expect(collection.ensureIndex).toHaveBeenCalledWith('data.id');
+    expect(collection.ensureIndex).toHaveBeenCalledWith('data.status');
+  });
+
   test('creates collection without options and skips index wiring when unavailable', () => {
     const collectionWithoutEnsureIndex = {};
     const db = {

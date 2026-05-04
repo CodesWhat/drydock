@@ -4,7 +4,7 @@ import { getServerConfiguration } from '../configuration/index.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import type { AuditEntry } from '../model/audit.js';
-import { type Container, clearDetectedUpdateState } from '../model/container.js';
+import type { Container } from '../model/container.js';
 import { getContainerActionsCounter } from '../prometheus/container-actions.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
@@ -88,29 +88,6 @@ function serializeRejectedUpdateRequest(
     statusCode: rejected.statusCode,
     message: rejected.message,
   };
-}
-
-function clearManualUpdateDetectionState(id: string) {
-  const containerAfterTrigger = storeContainer.getContainer(id);
-  if (
-    containerAfterTrigger &&
-    (containerAfterTrigger.result || containerAfterTrigger.updateAvailable)
-  ) {
-    const clearedAtMs = Date.now();
-    storeContainer.markPendingFreshStateAfterManualUpdate(containerAfterTrigger, clearedAtMs);
-    storeContainer.updateContainer(clearDetectedUpdateState(containerAfterTrigger));
-  }
-}
-
-function recordAcceptedUpdateFailure(id: string, container: Container, error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  log.warn(`Error updating container ${sanitizeLogParam(id)} (${sanitizeLogParam(message)})`);
-  recordAuditEvent({
-    action: 'container-update',
-    container,
-    status: 'error',
-    details: message,
-  });
 }
 
 /**
@@ -229,15 +206,7 @@ async function updateContainer(req: Request, res: Response) {
   }
 
   try {
-    const accepted = await requestContainerUpdate(container, {
-      onSuccess: () => {
-        clearManualUpdateDetectionState(id);
-        recordAuditEvent({ action: 'container-update', container, status: 'success' });
-      },
-      onFailure: (_accepted, error) => {
-        recordAcceptedUpdateFailure(id, container, error);
-      },
-    });
+    const accepted = await requestContainerUpdate(container);
     getContainerActionsCounter()?.inc({ action: 'container-update' });
     res
       .status(202)
@@ -288,19 +257,7 @@ async function updateContainers(req: Request, res: Response) {
   }
 
   try {
-    const result = await requestContainerUpdates(containers, {
-      onSuccess: (accepted) => {
-        clearManualUpdateDetectionState(accepted.container.id);
-        recordAuditEvent({
-          action: 'container-update',
-          container: accepted.container,
-          status: 'success',
-        });
-      },
-      onFailure: (accepted, error) => {
-        recordAcceptedUpdateFailure(accepted.container.id, accepted.container, error);
-      },
-    });
+    const result = await requestContainerUpdates(containers);
 
     result.accepted.forEach(() => {
       getContainerActionsCounter()?.inc({ action: 'container-update' });

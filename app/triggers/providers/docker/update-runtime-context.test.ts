@@ -57,4 +57,11 @@ describe('update-runtime-context', () => {
       getRequestedOperationId({ id: 'missing' }, { operationIds: { 'container-a': 'x' } }),
     ).toBe(undefined);
   });
+
+  test('returns undefined when runtime context contains a cycle', () => {
+    const cyclic: { runtimeContext?: unknown } = {};
+    cyclic.runtimeContext = cyclic;
+
+    expect(getRequestedOperationId({ id: 'container-a' }, cyclic)).toBeUndefined();
+  });
 });

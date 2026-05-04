@@ -219,7 +219,8 @@ test('trigger should block update when security scan is blocked', async () => {
   );
 
   expect(mockScanImageForVulnerabilities).toHaveBeenCalled();
-  expect(executeContainerUpdateSpy).not.toHaveBeenCalled();
+  // Scan now runs inside executeContainerUpdate (post-pull hook), so the executor IS entered
+  expect(executeContainerUpdateSpy).toHaveBeenCalled();
 });
 
 test('trigger should block update when security scan errors', async () => {
@@ -444,7 +445,7 @@ test('persistSecurityState should warn when container store update fails', async
 
   await docker.persistSecurityState(
     createTriggerContainer(),
-    { scan: createSecurityScanResult() },
+    { slot: 'current', scan: createSecurityScanResult() },
     logContainer,
   );
 
@@ -465,7 +466,7 @@ test('persistSecurityState should merge with existing security state from store'
 
   await docker.persistSecurityState(
     createTriggerContainer(),
-    { signature: createSignatureVerificationResult() },
+    { slot: 'current', signature: createSignatureVerificationResult() },
     logContainer,
   );
 

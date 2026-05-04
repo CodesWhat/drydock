@@ -6,8 +6,10 @@ import type { ContainerImage } from '../../../model/container.js';
 import type Registry from '../../../registries/Registry.js';
 import { getState } from '../../../registry/index.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../../runtime/paths.js';
+import { buildComposeProjectLockKey } from '../../../updates/update-locks.js';
 import { sleep } from '../../../util/sleep.js';
 import Docker, { type DockerTriggerConfiguration } from '../docker/Docker.js';
+import { getRequestedOperationId } from '../docker/update-runtime-context.js';
 import ComposeFileLockManager from './ComposeFileLockManager.js';
 import ComposeFileParser, {
   COMPOSE_CACHE_MAX_ENTRIES,
@@ -1214,11 +1216,31 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     );
   }
 
+  /**
+   * Compose updates mutate project-level state (compose file rewrites,
+   * `docker compose up` orchestration), so two services in the same project
+   * cannot recreate concurrently. Add a per-project lock on top of the
+   * per-container lock from the Docker base class.
+   */
+  override getUpdateLockKeys(container: {
+    name: string;
+    watcher: string;
+    labels?: Record<string, string>;
+  }): string[] {
+    const keys = super.getUpdateLockKeys(container);
+    const composeProject = container.labels?.[COMPOSE_PROJECT_LABEL];
+    if (composeProject) {
+      keys.push(buildComposeProjectLockKey(container, composeProject));
+    }
+    return keys;
+  }
+
   async performContainerUpdate(
     context,
     container,
     _logContainer,
     composeCtx?: ComposeUpdateLifecycleContext,
+    postPullHook?: (operationId: string) => Promise<void>,
   ) {
     const requiredComposeCtx = this.requireComposeUpdateContext(container, composeCtx);
     const runtimeContext = this.buildComposeRuntimeContext(context, requiredComposeCtx);
@@ -1232,6 +1254,14 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       container,
       composeUpdateOptions,
     );
+
+    // Invoke the post-pull security gate (scan + SBOM) after compose pulls the
+    // new image. API-requested compose updates carry a queued operation id in
+    // runtime context; direct trigger runs do not, so setOperationPhase no-ops.
+    if (postPullHook) {
+      await postPullHook(getRequestedOperationId(container, runtimeContext) ?? '');
+    }
+
     await this.runServicePostStartHooks(
       container,
       requiredComposeCtx.service,

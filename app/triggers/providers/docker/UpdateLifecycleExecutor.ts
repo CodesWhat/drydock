@@ -3,6 +3,7 @@ import {
   assertRequiredFunctionDependencies,
   resolveFunctionDependencies,
 } from './dependency-constructor.js';
+import { getRequestedOperationId } from './update-runtime-context.js';
 
 type UpdateLifecycleOperationLogger = {
   info?: (message: string) => void;
@@ -15,14 +16,51 @@ type UpdateLifecycleRootLogger = {
 };
 
 type UpdateLifecycleContainer = {
+  id?: string;
   name: string;
-  [key: string]: unknown;
+  watcher?: string;
+  labels?: Record<string, string>;
+  image?: {
+    registry?: {
+      name?: string;
+    };
+    tag?: {
+      value?: string;
+    };
+    digest?: {
+      repo?: string;
+    };
+  };
+  result?: {
+    digest?: unknown;
+  };
+  updateKind?: {
+    kind?: string;
+    localValue?: string | null;
+    remoteValue?: string | null;
+  };
 };
 
 type UpdateLifecycleContext = {
   dockerApi: unknown;
   registry: unknown;
-  [key: string]: unknown;
+  auth?: unknown;
+  newImage?: string;
+  operationId?: string;
+  currentContainer?: unknown;
+  currentContainerSpec?: {
+    Id?: string;
+    Name?: string;
+    State?: {
+      Running?: boolean;
+    };
+    Config?: {
+      Labels?: Record<string, string>;
+    };
+    HostConfig?: {
+      Binds?: string[];
+    };
+  };
 };
 
 type UpdateLifecycleExecutorCallbacks = {
@@ -37,6 +75,17 @@ type UpdateLifecycleExecutorCallbacks = {
     context: UpdateLifecycleContext,
     container: UpdateLifecycleContainer,
     logger: UpdateLifecycleOperationLogger,
+  ) => Promise<void>;
+  verifySignaturePreUpdate: (
+    context: UpdateLifecycleContext,
+    container: UpdateLifecycleContainer,
+    logger: UpdateLifecycleOperationLogger,
+  ) => Promise<void>;
+  scanAndGatePostPull: (
+    context: UpdateLifecycleContext,
+    container: UpdateLifecycleContainer,
+    logger: UpdateLifecycleOperationLogger,
+    options?: { setPhase?: (phase: 'scanning' | 'sbom-generating') => void },
   ) => Promise<void>;
   buildHookConfig: (container: UpdateLifecycleContainer) => Record<string, unknown>;
   recordHookConfigurationAudit: (
@@ -80,6 +129,7 @@ type UpdateLifecycleExecutorCallbacks = {
     container: UpdateLifecycleContainer,
     logger: UpdateLifecycleOperationLogger,
     runtimeContext?: unknown,
+    postPullHook?: (operationId: string) => Promise<void>,
   ) => Promise<boolean>;
   runPostUpdateHook: (
     container: UpdateLifecycleContainer,
@@ -114,7 +164,7 @@ type UpdateLifecycleContextServices = Pick<
 
 type UpdateLifecycleSecurityServices = Pick<
   UpdateLifecycleExecutorCallbacks,
-  'maybeScanAndGateUpdate'
+  'maybeScanAndGateUpdate' | 'verifySignaturePreUpdate' | 'scanAndGatePostPull'
 >;
 
 type UpdateLifecycleHookServices = Pick<
@@ -135,7 +185,9 @@ type UpdateLifecycleSelfUpdateServices = Pick<
 type UpdateLifecycleRuntimeUpdateServices = Pick<
   UpdateLifecycleExecutorCallbacks,
   'runPreRuntimeUpdateLifecycle' | 'performContainerUpdate'
->;
+> & {
+  setOperationPhase?: (operationId: string, phase: 'scanning' | 'sbom-generating') => void;
+};
 
 type UpdateLifecyclePostUpdateServices = Pick<
   UpdateLifecycleExecutorCallbacks,
@@ -170,7 +222,7 @@ type UpdateLifecycleExecutorConstructorOptions = {
 
 const REQUIRED_UPDATE_LIFECYCLE_EXECUTOR_DEPENDENCY_KEYS = {
   context: ['getContainerFullName', 'createTriggerContext'],
-  security: ['maybeScanAndGateUpdate'],
+  security: ['maybeScanAndGateUpdate', 'verifySignaturePreUpdate', 'scanAndGatePostPull'],
   hooks: [
     'buildHookConfig',
     'recordHookConfigurationAudit',
@@ -255,6 +307,8 @@ class UpdateLifecycleExecutor {
     const rootLogger = this.logger.getLogger();
     const containerLogger =
       rootLogger?.child?.({ container: this.context.getContainerFullName(container) }) ?? {};
+    let emitFailureFallback = false;
+    const requestedOperationId = getRequestedOperationId(container, runtimeContext);
 
     try {
       const context = await this.context.createTriggerContext(
@@ -266,7 +320,7 @@ class UpdateLifecycleExecutor {
         return;
       }
 
-      await this.security.maybeScanAndGateUpdate(context, container, containerLogger);
+      await this.security.verifySignaturePreUpdate(context, container, containerLogger);
 
       const hookConfig = this.hooks.buildHookConfig(container);
       this.hooks.recordHookConfigurationAudit(container, hookConfig);
@@ -276,6 +330,7 @@ class UpdateLifecycleExecutor {
         this.selfUpdate.isSelfUpdate(container) ||
         this.selfUpdate.isInfrastructureUpdate(container)
       ) {
+        emitFailureFallback = true;
         const selfUpdateOperationId = await this.selfUpdate.prepareSelfUpdateOperation(
           context,
           container,
@@ -315,6 +370,14 @@ class UpdateLifecycleExecutor {
         }
       }
 
+      const postPullHook = async (operationId: string) => {
+        await this.security.scanAndGatePostPull(context, container, containerLogger, {
+          setPhase: (phase) => {
+            this.runtimeUpdate.setOperationPhase?.(operationId, phase);
+          },
+        });
+      };
+
       await this.runtimeUpdate.runPreRuntimeUpdateLifecycle(
         context,
         container,
@@ -326,6 +389,7 @@ class UpdateLifecycleExecutor {
         container,
         containerLogger,
         runtimeContext,
+        postPullHook,
       );
       if (!updated) {
         return;
@@ -346,17 +410,21 @@ class UpdateLifecycleExecutor {
         containerLogger,
       );
 
-      await this.telemetry.emitContainerUpdateApplied({
-        containerName: this.context.getContainerFullName(container),
-        container,
-      });
+      if (!requestedOperationId) {
+        await this.telemetry.emitContainerUpdateApplied({
+          containerName: this.context.getContainerFullName(container),
+          container,
+        });
+      }
       this.postUpdate.pruneOldBackups(container.name, this.postUpdate.getBackupCount());
     } catch (e: unknown) {
       const errorMessage = String((e as Error)?.message ?? e);
-      await this.telemetry.emitContainerUpdateFailed({
-        containerName: this.context.getContainerFullName(container),
-        error: errorMessage,
-      });
+      if (emitFailureFallback || !requestedOperationId) {
+        await this.telemetry.emitContainerUpdateFailed({
+          containerName: this.context.getContainerFullName(container),
+          error: errorMessage,
+        });
+      }
       try {
         this.postUpdate.pruneOldBackups(container.name, this.postUpdate.getBackupCount());
       } catch (pruneError: unknown) {

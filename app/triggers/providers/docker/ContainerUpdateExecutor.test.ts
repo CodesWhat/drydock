@@ -9,16 +9,37 @@ const {
   mockMarkOperationTerminal,
   mockGetActiveOperationByContainerName,
   mockGetActiveOperationByContainerId,
-} = vi.hoisted(() => ({
-  mockGetInProgressOperationByContainerName: vi.fn(),
-  mockGetOperationById: vi.fn(),
-  mockInsertOperation: vi.fn(),
-  mockReopenTerminalOperation: vi.fn(),
-  mockUpdateOperation: vi.fn(),
-  mockMarkOperationTerminal: vi.fn(),
-  mockGetActiveOperationByContainerName: vi.fn(),
-  mockGetActiveOperationByContainerId: vi.fn(),
-}));
+  mockIsOperationCancelRequested,
+  MockOperationCancelledError,
+  mockStartHealthGateHeartbeat,
+  mockCancelHeartbeat,
+} = vi.hoisted(() => {
+  class MockOperationCancelledError extends Error {
+    readonly operationId: string;
+
+    constructor(operationId: string) {
+      super('Cancelled by operator');
+      this.name = 'OperationCancelledError';
+      this.operationId = operationId;
+    }
+  }
+  const mockCancelHeartbeat = vi.fn();
+  const mockStartHealthGateHeartbeat = vi.fn(() => mockCancelHeartbeat);
+  return {
+    mockGetInProgressOperationByContainerName: vi.fn(),
+    mockGetOperationById: vi.fn(),
+    mockInsertOperation: vi.fn(),
+    mockReopenTerminalOperation: vi.fn(),
+    mockUpdateOperation: vi.fn(),
+    mockMarkOperationTerminal: vi.fn(),
+    mockGetActiveOperationByContainerName: vi.fn(),
+    mockGetActiveOperationByContainerId: vi.fn(),
+    mockIsOperationCancelRequested: vi.fn(() => false),
+    MockOperationCancelledError,
+    mockStartHealthGateHeartbeat,
+    mockCancelHeartbeat,
+  };
+});
 
 vi.mock('../../../store/update-operation.js', () => ({
   getInProgressOperationByContainerName: mockGetInProgressOperationByContainerName,
@@ -29,6 +50,13 @@ vi.mock('../../../store/update-operation.js', () => ({
   markOperationTerminal: mockMarkOperationTerminal,
   getActiveOperationByContainerName: mockGetActiveOperationByContainerName,
   getActiveOperationByContainerId: mockGetActiveOperationByContainerId,
+  isOperationCancelRequested: mockIsOperationCancelRequested,
+  OperationCancelledError: MockOperationCancelledError,
+}));
+
+vi.mock('../../../updates/health-gate-heartbeat.js', () => ({
+  startHealthGateHeartbeat: mockStartHealthGateHeartbeat,
+  HEALTH_GATE_HEARTBEAT_MS: 10_000,
 }));
 
 import ContainerUpdateExecutor from './ContainerUpdateExecutor.js';
@@ -98,7 +126,7 @@ function createLog() {
 }
 
 function createExecutor(overrides = {}) {
-  return new ContainerUpdateExecutor({
+  const executor = new ContainerUpdateExecutor({
     getConfiguration: () => ({ dryrun: false }),
     getTriggerId: vi.fn(() => 'docker.update'),
     getRollbackConfig: vi.fn(() => ({ autoRollback: false })),
@@ -117,6 +145,8 @@ function createExecutor(overrides = {}) {
     waitForContainerHealthy: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   });
+  executor.postStartLivenessGraceMs = 0;
+  return executor;
 }
 
 describe('ContainerUpdateExecutor', () => {
@@ -126,6 +156,8 @@ describe('ContainerUpdateExecutor', () => {
     mockReopenTerminalOperation.mockReturnValue({ id: 'op-1' });
     mockGetInProgressOperationByContainerName.mockReturnValue(undefined);
     mockGetOperationById.mockReturnValue(undefined);
+    mockIsOperationCancelRequested.mockReturnValue(false);
+    mockStartHealthGateHeartbeat.mockReturnValue(mockCancelHeartbeat);
   });
 
   test('constructor provides default configuration fallback', () => {
@@ -341,6 +373,35 @@ describe('ContainerUpdateExecutor', () => {
         phase: 'recovered-rollback',
       }),
     );
+  });
+
+  test('reconcile persists empty rollback details when restored pending operation has no errors', async () => {
+    const pending = {
+      id: 'op-1',
+      oldName: 'web',
+      tempName: 'web-old-1',
+      oldContainerWasRunning: false,
+      oldContainerStopped: false,
+      fromVersion: '1.0.0',
+      toVersion: '1.0.1',
+    };
+    mockGetInProgressOperationByContainerName.mockReturnValue(pending);
+
+    const tempContainer = {
+      rename: vi.fn().mockResolvedValue(undefined),
+    };
+    const persistRollbackState = vi.fn();
+    const executor = createExecutor({ persistRollbackState });
+    vi.spyOn(executor, 'inspectContainerByIdentifier')
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({ container: tempContainer, inspection: {} });
+
+    await executor.reconcileInProgressContainerUpdateOperation({}, createContainer(), createLog());
+
+    expect(persistRollbackState).toHaveBeenCalledWith('container-id', 'rolled-back', {
+      reason: '',
+      lastError: '',
+    });
   });
 
   test('reconcile restores old name without restart when old container was not stopped', async () => {
@@ -680,6 +741,97 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
+  test('execute rolls back when post-start liveness check sees new container exited', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    context.newContainer.inspect = vi
+      .fn()
+      .mockResolvedValueOnce({ Id: 'new-container-id' })
+      .mockResolvedValue({
+        Id: 'new-container-id',
+        State: { Running: false, ExitCode: 127, Status: 'exited' },
+      });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      getRollbackConfig: vi.fn(() => ({ autoRollback: false })),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+    executor.postStartLivenessGraceMs = 10;
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+      /exited within 10ms of start/,
+    );
+
+    expect(executor.startContainer).toHaveBeenCalledWith(
+      context.newContainer,
+      'web',
+      expect.anything(),
+    );
+    expect(executor.waitForContainerHealthy).not.toHaveBeenCalled();
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        rollbackReason: 'start_new_failed',
+        lastError: expect.stringContaining('exited within 10ms of start'),
+      }),
+    );
+  });
+
+  test('execute proceeds when post-start liveness check sees new container still running', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    context.newContainer.inspect = vi
+      .fn()
+      .mockResolvedValueOnce({ Id: 'new-container-id' })
+      .mockResolvedValue({
+        Id: 'new-container-id',
+        State: { Running: true, ExitCode: 0 },
+      });
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+    executor.postStartLivenessGraceMs = 10;
+
+    await expect(executor.execute(context, createContainer(), createLog())).resolves.toBe(true);
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({ status: 'succeeded', phase: 'succeeded' }),
+    );
+  });
+
+  test('execute skips post-start liveness check when grace is 0', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    const inspectSpy = vi.fn().mockResolvedValue({ Id: 'new-container-id' });
+    context.newContainer.inspect = inspectSpy;
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(executor.execute(context, createContainer(), createLog())).resolves.toBe(true);
+
+    expect(inspectSpy).toHaveBeenCalledTimes(1);
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({ status: 'succeeded', phase: 'succeeded' }),
+    );
+  });
+
   test('execute ignores non-string requested operation ids in runtime context', async () => {
     const context = createContext({
       currentContainerSpec: createCurrentContainerSpec({
@@ -911,7 +1063,7 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
-  test('execute stringifies object errors when message field is undefined', async () => {
+  test('execute uses the shared fallback for object errors when message field is undefined', async () => {
     const context = createContext();
     const createContainerError = { message: undefined, detail: 'create failed' };
     const executor = createExecutor({
@@ -926,7 +1078,7 @@ describe('ContainerUpdateExecutor', () => {
     expect(mockUpdateOperation).toHaveBeenCalledWith(
       'op-1',
       expect.objectContaining({
-        lastError: '[object Object]',
+        lastError: 'unknown error',
       }),
     );
   });
@@ -1172,5 +1324,473 @@ describe('ContainerUpdateExecutor', () => {
         phase: 'rollback-failed',
       }),
     );
+  });
+
+  test('execute aborts cleanly when cancellation is detected after pull but before rename', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: false },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    mockIsOperationCancelRequested.mockReturnValue(true);
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+    const log = createLog();
+
+    await expect(executor.execute(context, createContainer(), log)).resolves.toBe(false);
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'failed',
+        lastError: 'Cancelled by operator',
+      }),
+    );
+    expect(context.currentContainer.rename).not.toHaveBeenCalled();
+    expect(executor.createContainer).not.toHaveBeenCalled();
+    expect(executor.stopContainer).not.toHaveBeenCalled();
+  });
+
+  test('execute rolls back with rollbackReason cancelled when cancel detected after rename (before createContainer)', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    // First call (before rename checkpoint) returns false, second call (inside createAndStartReplacementContainer) returns true
+    mockIsOperationCancelRequested
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true)
+      .mockReturnValue(false);
+
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+      'Cancelled by operator',
+    );
+
+    // Rename forward happened (preparing for update)
+    expect(context.currentContainer.rename).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ name: expect.stringMatching(/^web-old-/) }),
+    );
+    // Rename back happened (rollback)
+    expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'web' });
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'rolled-back',
+        rollbackReason: 'cancelled',
+      }),
+    );
+  });
+
+  test('execute rolls back with rollbackReason cancelled when cancel detected before runReplacementContainerTransition', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    // First call (pre-rename): false; second call (createAndStartReplacementContainer entry): false; third call (runReplacementContainerTransition entry): true
+    mockIsOperationCancelRequested
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true)
+      .mockReturnValue(false);
+
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+      'Cancelled by operator',
+    );
+
+    expect(executor.createContainer).toHaveBeenCalled();
+    // Rename back happened (rollback)
+    expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'web' });
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'rolled-back',
+        rollbackReason: 'cancelled',
+      }),
+    );
+  });
+
+  test('execute rolls back when cancellation arrives after create checkpoint but before transition checkpoint', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    let cancelRequested = false;
+    mockIsOperationCancelRequested.mockImplementation(() => cancelRequested);
+
+    const executor = createExecutor({
+      createContainer: vi.fn().mockImplementation(async () => {
+        cancelRequested = true;
+        return context.newContainer;
+      }),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+      'Cancelled by operator',
+    );
+
+    expect(mockIsOperationCancelRequested).toHaveBeenCalledTimes(3);
+    expect(executor.createContainer).toHaveBeenCalled();
+    expect(executor.stopContainer).not.toHaveBeenCalled();
+    expect(executor.startContainer).not.toHaveBeenCalled();
+    expect(context.newContainer.stop).toHaveBeenCalledTimes(1);
+    expect(context.newContainer.remove).toHaveBeenCalledTimes(1);
+    expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'web' });
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'rolled-back',
+        rollbackReason: 'cancelled',
+      }),
+    );
+  });
+
+  test('execute treats repeated cancellation signals during rollback idempotently', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        State: { Running: true },
+        HostConfig: { AutoRemove: false },
+      }),
+    });
+    // False before rename and at the create checkpoint; repeated true values model
+    // duplicate cancel requests arriving before/at the transition checkpoint.
+    mockIsOperationCancelRequested
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(false)
+      .mockReturnValue(true);
+
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      hasHealthcheckConfigured: vi.fn(() => false),
+    });
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+      'Cancelled by operator',
+    );
+
+    const terminalCalls = mockMarkOperationTerminal.mock.calls.filter(
+      ([operationId]) => operationId === 'op-1',
+    );
+    expect(terminalCalls).toHaveLength(1);
+    expect(terminalCalls[0][1]).toEqual(
+      expect.objectContaining({
+        status: 'rolled-back',
+        phase: 'rolled-back',
+        rollbackReason: 'cancelled',
+      }),
+    );
+    expect(context.newContainer.stop).toHaveBeenCalledTimes(1);
+    expect(context.newContainer.remove).toHaveBeenCalledTimes(1);
+    expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'web' });
+    expect(executor.stopContainer).not.toHaveBeenCalled();
+    expect(executor.startContainer).not.toHaveBeenCalled();
+  });
+
+  test('execute calls postPullHook after pull and before rename', async () => {
+    const callOrder: string[] = [];
+    const context = createContext();
+    context.currentContainer.rename = vi.fn().mockImplementation(async () => {
+      callOrder.push('rename');
+    });
+    const executor = createExecutor({
+      pullImage: vi.fn().mockImplementation(async () => {
+        callOrder.push('pull');
+      }),
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+    });
+    const postPullHook = vi.fn().mockImplementation(async () => {
+      callOrder.push('postPullHook');
+    });
+
+    await executor.execute(context, createContainer(), createLog(), undefined, postPullHook);
+
+    expect(callOrder.indexOf('pull')).toBeLessThan(callOrder.indexOf('postPullHook'));
+    expect(callOrder.indexOf('postPullHook')).toBeLessThan(callOrder.indexOf('rename'));
+  });
+
+  test('execute terminates operation as failed when postPullHook throws', async () => {
+    const context = createContext();
+    const executor = createExecutor({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+    });
+    const hookError = new Error('scan blocked: CVE-2025-0001');
+    const postPullHook = vi.fn().mockRejectedValue(hookError);
+
+    await expect(
+      executor.execute(context, createContainer(), createLog(), undefined, postPullHook),
+    ).rejects.toThrow('scan blocked: CVE-2025-0001');
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'failed',
+        lastError: 'scan blocked: CVE-2025-0001',
+      }),
+    );
+  });
+
+  describe('persistRollbackState integration', () => {
+    test('calls persistRollbackState with succeeded when update completes successfully', async () => {
+      const persistRollbackState = vi.fn();
+      const context = createContext();
+      const executor = createExecutor({
+        createContainer: vi.fn().mockResolvedValue(context.newContainer),
+        persistRollbackState,
+      });
+
+      await executor.execute(context, createContainer(), createLog());
+
+      expect(persistRollbackState).toHaveBeenCalledWith('container-id', 'succeeded');
+    });
+
+    test('calls persistRollbackState with rolled-back when rollback succeeds', async () => {
+      const persistRollbackState = vi.fn();
+      const context = createContext();
+      context.currentContainer.rename = vi
+        .fn()
+        .mockResolvedValueOnce(undefined) // first rename (to temp) succeeds
+        .mockResolvedValueOnce(undefined); // rollback rename succeeds
+      const executor = createExecutor({
+        createContainer: vi.fn().mockRejectedValue(new Error('start failed')),
+        persistRollbackState,
+      });
+
+      await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+        'start failed',
+      );
+
+      expect(persistRollbackState).toHaveBeenCalledWith(
+        'container-id',
+        'rolled-back',
+        expect.objectContaining({
+          reason: expect.any(String),
+          lastError: 'start failed',
+        }),
+      );
+    });
+
+    test('does NOT call persistRollbackState with rolled-back when rollback fails (status: failed)', async () => {
+      const persistRollbackState = vi.fn();
+      const context = createContext();
+      context.currentContainer.rename = vi
+        .fn()
+        .mockResolvedValueOnce(undefined) // first rename (to temp) succeeds
+        .mockRejectedValueOnce(new Error('rename back failed')); // rollback rename fails
+      const executor = createExecutor({
+        createContainer: vi.fn().mockRejectedValue(new Error('start failed')),
+        persistRollbackState,
+      });
+
+      await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow();
+
+      // persistRollbackState should NOT have been called with 'rolled-back' — the rollback itself failed
+      expect(persistRollbackState).not.toHaveBeenCalledWith(
+        expect.anything(),
+        'rolled-back',
+        expect.anything(),
+      );
+    });
+
+    test('persistRollbackState is optional — execute works without it', async () => {
+      const context = createContext();
+      // No persistRollbackState provided
+      const executor = createExecutor({
+        createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      });
+
+      await expect(executor.execute(context, createContainer(), createLog())).resolves.toBe(true);
+    });
+
+    test('health-gate heartbeat starts when health-gating and is cancelled after success', async () => {
+      const context = createContext({
+        currentContainerSpec: createCurrentContainerSpec({
+          State: { Running: true },
+          HostConfig: { AutoRemove: false },
+        }),
+      });
+      const executor = createExecutor({
+        createContainer: vi.fn().mockResolvedValue(context.newContainer),
+        getRollbackConfig: vi.fn(() => ({ autoRollback: false })),
+        hasHealthcheckConfigured: vi.fn(() => true),
+      });
+      const log = createLog();
+
+      await expect(executor.execute(context, createContainer(), log)).resolves.toBe(true);
+
+      expect(mockStartHealthGateHeartbeat).toHaveBeenCalledWith('op-1', expect.any(Function));
+      expect(mockCancelHeartbeat).toHaveBeenCalled();
+      // health-gate-passed must still fire after the heartbeat is cancelled
+      expect(mockUpdateOperation).toHaveBeenCalledWith(
+        'op-1',
+        expect.objectContaining({ phase: 'health-gate-passed' }),
+      );
+    });
+
+    test('health-gate heartbeat is cancelled when health-gate fails (rollback path)', async () => {
+      const context = createContext({
+        currentContainerSpec: createCurrentContainerSpec({
+          State: { Running: true },
+          HostConfig: { AutoRemove: false },
+        }),
+      });
+      const executor = createExecutor({
+        createContainer: vi.fn().mockResolvedValue(context.newContainer),
+        getRollbackConfig: vi.fn(() => ({ autoRollback: false })),
+        hasHealthcheckConfigured: vi.fn(() => true),
+        waitForContainerHealthy: vi
+          .fn()
+          .mockRejectedValue(new Error('Health gate failed: unhealthy')),
+      });
+      const log = createLog();
+
+      await expect(executor.execute(context, createContainer(), log)).rejects.toThrow(
+        'Health gate failed: unhealthy',
+      );
+
+      expect(mockStartHealthGateHeartbeat).toHaveBeenCalledWith('op-1', expect.any(Function));
+      // Cancel must be called even when the wait rejects
+      expect(mockCancelHeartbeat).toHaveBeenCalled();
+      // health-gate-passed must NOT fire
+      expect(mockUpdateOperation).not.toHaveBeenCalledWith(
+        'op-1',
+        expect.objectContaining({ phase: 'health-gate-passed' }),
+      );
+    });
+
+    test('heartbeat emitter calls updateOperation with phase: health-gate', async () => {
+      const context = createContext({
+        currentContainerSpec: createCurrentContainerSpec({
+          State: { Running: true },
+          HostConfig: { AutoRemove: false },
+        }),
+      });
+
+      // Capture the emitter function passed to startHealthGateHeartbeat
+      let capturedEmitter: ((operationId: string) => void) | undefined;
+      mockStartHealthGateHeartbeat.mockImplementation(
+        (operationId: string, emitter: (operationId: string) => void) => {
+          capturedEmitter = emitter;
+          return mockCancelHeartbeat;
+        },
+      );
+
+      const executor = createExecutor({
+        createContainer: vi.fn().mockResolvedValue(context.newContainer),
+        getRollbackConfig: vi.fn(() => ({ autoRollback: false })),
+        hasHealthcheckConfigured: vi.fn(() => true),
+      });
+
+      await expect(executor.execute(context, createContainer(), createLog())).resolves.toBe(true);
+
+      expect(capturedEmitter).toBeDefined();
+      // Simulate a heartbeat tick
+      capturedEmitter!('op-1');
+      expect(mockUpdateOperation).toHaveBeenCalledWith('op-1', { phase: 'health-gate' });
+    });
+
+    test('heartbeat does not start when health-gate is skipped (no healthcheck)', async () => {
+      const context = createContext({
+        currentContainerSpec: createCurrentContainerSpec({
+          State: { Running: true },
+          HostConfig: { AutoRemove: false },
+        }),
+      });
+      const executor = createExecutor({
+        createContainer: vi.fn().mockResolvedValue(context.newContainer),
+        getRollbackConfig: vi.fn(() => ({ autoRollback: false })),
+        hasHealthcheckConfigured: vi.fn(() => false),
+      });
+
+      await expect(executor.execute(context, createContainer(), createLog())).resolves.toBe(true);
+
+      expect(mockStartHealthGateHeartbeat).not.toHaveBeenCalled();
+    });
+
+    test('reconcileWithTempContainerOnly calls persistRollbackState with rolled-back on successful recovery', async () => {
+      const persistRollbackState = vi.fn();
+      const container = createContainer();
+      const pendingOperation = {
+        id: 'pending-op-1',
+        status: 'in-progress',
+        phase: 'renamed',
+        containerName: 'web',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        oldName: 'web',
+        tempName: 'web-old-12345',
+        oldContainerWasRunning: false,
+        oldContainerStopped: false,
+        rollbackReason: 'start_new_failed',
+        lastError: 'container exited with code 1',
+      };
+
+      mockGetInProgressOperationByContainerName.mockReturnValue(pendingOperation);
+      mockMarkOperationTerminal.mockReturnValue({ ...pendingOperation, status: 'rolled-back' });
+
+      // temp container found (rename succeeds) — no active container at original name
+      const tempContainer = {
+        inspect: vi.fn().mockResolvedValue({ State: { Running: false } }),
+        rename: vi.fn().mockResolvedValue(undefined),
+        stop: vi.fn().mockResolvedValue(undefined),
+        remove: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const dockerApi = {
+        getContainer: vi.fn().mockImplementation((name: string) => {
+          if (name === 'web-old-12345') {
+            return tempContainer;
+          }
+          // original name 'web' — not found (throws)
+          return {
+            inspect: vi.fn().mockRejectedValue(new Error('not found')),
+            rename: vi.fn(),
+            start: vi.fn(),
+            stop: vi.fn(),
+            remove: vi.fn(),
+          };
+        }),
+      };
+
+      // isContainerNotFoundError returns true for the 'not found' error (original name lookup)
+      const executor = createExecutor({
+        persistRollbackState,
+        isContainerNotFoundError: vi.fn(() => true),
+      });
+
+      await executor.reconcileInProgressContainerUpdateOperation(dockerApi, container, createLog());
+
+      expect(persistRollbackState).toHaveBeenCalledWith(
+        'container-id',
+        'rolled-back',
+        expect.objectContaining({
+          reason: 'start_new_failed',
+          lastError: 'container exited with code 1',
+        }),
+      );
+    });
   });
 });

@@ -3,14 +3,43 @@ import { nextTick } from 'vue';
 
 const mockUpdateContainer = vi.fn();
 const mockGetContainerUpdateStartedMessage = vi.fn().mockReturnValue('Update started');
+const mockGetContainerAlreadyUpToDateMessage = vi.fn().mockReturnValue('Already up to date');
+const mockToast = {
+  error: vi.fn(),
+  info: vi.fn(),
+  success: vi.fn(),
+  warning: vi.fn(),
+};
 
 vi.mock('@/services/container-actions', () => ({
   updateContainer: (...args: any[]) => mockUpdateContainer(...args),
 }));
 
 vi.mock('@/utils/container-update', () => ({
+  getContainerAlreadyUpToDateMessage: (...args: any[]) =>
+    mockGetContainerAlreadyUpToDateMessage(...args),
   getContainerUpdateStartedMessage: (...args: any[]) =>
     mockGetContainerUpdateStartedMessage(...args),
+  isStaleContainerUpdateError: (error: unknown) =>
+    error instanceof Error && error.message === 'No update available for this container',
+  runContainerUpdateRequest: async (args: {
+    request: () => Promise<unknown>;
+    isStaleError?: (error: unknown) => boolean;
+  }) => {
+    try {
+      await args.request();
+      return 'accepted';
+    } catch (error: unknown) {
+      if (args.isStaleError?.(error) === true) {
+        return 'stale';
+      }
+      throw error;
+    }
+  },
+}));
+
+vi.mock('@/composables/useToast', () => ({
+  useToast: () => mockToast,
 }));
 
 import ContainerUpdateDialog from '@/components/containers/ContainerUpdateDialog.vue';
@@ -136,6 +165,83 @@ describe('ContainerUpdateDialog', () => {
       w.unmount();
     });
 
+    it('shows a started toast after the update request is accepted', async () => {
+      mockUpdateContainer.mockResolvedValue({ operationId: 'op-accepted' });
+      const w = factory({ containerId: 'abc123', containerName: 'my-nginx' });
+      await nextTick();
+      const updateBtn = [...document.body.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === 'Update',
+      );
+      updateBtn!.click();
+      await flushPromises();
+      expect(mockGetContainerUpdateStartedMessage).toHaveBeenCalledWith('my-nginx');
+      expect(mockToast.success).toHaveBeenCalledWith('Update started');
+      w.unmount();
+    });
+
+    it('shows a success toast when the accepted operation succeeds', async () => {
+      mockUpdateContainer.mockResolvedValue({ operationId: 'op-success' });
+      const w = factory({ containerId: 'abc123', containerName: 'my-nginx' });
+      await nextTick();
+      const updateBtn = [...document.body.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === 'Update',
+      );
+      updateBtn!.click();
+      await flushPromises();
+      mockToast.success.mockClear();
+
+      globalThis.dispatchEvent(
+        new CustomEvent('dd:sse-update-applied', {
+          detail: { operationId: 'op-success', containerName: 'my-nginx' },
+        }),
+      );
+      await flushPromises();
+
+      expect(mockToast.success).toHaveBeenCalledWith('Updated: my-nginx');
+      w.unmount();
+    });
+
+    it('shows a failure toast when the accepted operation fails', async () => {
+      mockUpdateContainer.mockResolvedValue({ operationId: 'op-failed' });
+      const w = factory({ containerId: 'abc123', containerName: 'my-nginx' });
+      await nextTick();
+      const updateBtn = [...document.body.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === 'Update',
+      );
+      updateBtn!.click();
+      await flushPromises();
+
+      globalThis.dispatchEvent(
+        new CustomEvent('dd:sse-update-failed', {
+          detail: {
+            operationId: 'op-failed',
+            containerName: 'my-nginx',
+            error: 'Network error',
+          },
+        }),
+      );
+      await flushPromises();
+
+      expect(mockToast.error).toHaveBeenCalledWith('Update failed: my-nginx — Network error');
+      w.unmount();
+    });
+
+    it('shows an up-to-date toast and closes when the update is stale', async () => {
+      mockUpdateContainer.mockRejectedValue(new Error('No update available for this container'));
+      const w = factory({ containerId: 'abc123', containerName: 'my-nginx' });
+      await nextTick();
+      const updateBtn = [...document.body.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === 'Update',
+      );
+      updateBtn!.click();
+      await flushPromises();
+      expect(mockGetContainerAlreadyUpToDateMessage).toHaveBeenCalledWith('my-nginx');
+      expect(mockToast.info).toHaveBeenCalledWith('Already up to date');
+      expect(w.emitted('updated')).toBeUndefined();
+      expect(w.emitted('update:containerId')).toEqual([[null]]);
+      w.unmount();
+    });
+
     it('shows error and keeps dialog open when update fails', async () => {
       mockUpdateContainer.mockRejectedValue(new Error('Network error'));
       const w = factory({ containerId: 'abc123' });
@@ -169,6 +275,41 @@ describe('ContainerUpdateDialog', () => {
       resolveUpdate();
       await flushPromises();
       expect(mockUpdateContainer).toHaveBeenCalledTimes(1);
+      w.unmount();
+    });
+
+    it('does not submit when update eligibility has a hard blocker', async () => {
+      mockUpdateContainer.mockResolvedValue(undefined);
+      const w = factory({
+        containerId: 'abc123',
+        containerName: 'my-nginx',
+        updateEligibility: {
+          eligible: false,
+          evaluatedAt: '2026-04-01T00:00:00.000Z',
+          blockers: [
+            {
+              reason: 'last-update-rolled-back',
+              severity: 'hard',
+              message: 'Last update attempt rolled back.',
+              actionable: true,
+            },
+          ],
+        },
+      });
+      await nextTick();
+
+      const updateBtn = [...document.body.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === 'Update',
+      );
+      expect(updateBtn?.hasAttribute('disabled')).toBe(true);
+
+      updateBtn!.click();
+      const overlay = document.body.querySelector('.fixed') as HTMLElement | null;
+      overlay!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: false }));
+      await flushPromises();
+
+      expect(mockUpdateContainer).not.toHaveBeenCalled();
+      expect(mockToast.warning).toHaveBeenCalledWith('Last update attempt rolled back.');
       w.unmount();
     });
 

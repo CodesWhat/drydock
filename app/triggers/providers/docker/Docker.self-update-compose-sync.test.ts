@@ -318,7 +318,7 @@ describe('extracted lifecycle delegation', () => {
     try {
       const result = await docker.executeContainerUpdate(context, container, logContainer);
 
-      expect(execute).toHaveBeenCalledWith(context, container, logContainer);
+      expect(execute).toHaveBeenCalledWith(context, container, logContainer, undefined, undefined);
       expect(result).toBe('delegated-container-update');
     } finally {
       docker.containerUpdateExecutor = originalContainerUpdateExecutor;

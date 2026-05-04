@@ -15,6 +15,7 @@ import * as backup from './backup.js';
 import * as container from './container.js';
 import * as notification from './notification.js';
 import * as notificationHistory from './notification-history.js';
+import * as notificationOutbox from './notification-outbox.js';
 import * as settings from './settings.js';
 import * as updateOperation from './update-operation.js';
 
@@ -44,6 +45,7 @@ function createCollections() {
   container.createCollections(db);
   notification.createCollections(db);
   notificationHistory.createCollections(db);
+  notificationOutbox.createCollections(db);
   settings.createCollections(db);
   updateOperation.createCollections(db);
   app.completeStartupInitialization();

@@ -1,4 +1,5 @@
 import { computed, onUnmounted, type Ref, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useConfirmDialog } from '../../composables/useConfirmDialog';
 import { useOperationDisplayHold } from '../../composables/useOperationDisplayHold';
 import { useScanLifecycle } from '../../composables/useScanLifecycle';
@@ -10,6 +11,7 @@ import {
   scanContainer as apiScanContainer,
 } from '../../services/container';
 import {
+  cancelUpdateOperation as apiCancelUpdateOperation,
   restartContainer as apiRestartContainer,
   startContainer as apiStartContainer,
   stopContainer as apiStopContainer,
@@ -34,7 +36,11 @@ import {
   shouldRenderStandaloneQueuedUpdateAsUpdating,
 } from '../../utils/container-update';
 import { errorMessage } from '../../utils/error';
-import { getSoftBlockers } from '../../utils/update-eligibility';
+import {
+  getPrimaryHardBlocker,
+  getSoftBlockers,
+  hasHardBlocker,
+} from '../../utils/update-eligibility';
 import { useContainerBackups } from './useContainerBackups';
 import { useContainerPolicy } from './useContainerPolicy';
 import { useContainerPreview } from './useContainerPreview';
@@ -274,13 +280,18 @@ async function updateAllInGroupState(args: {
   loadContainers: () => Promise<void>;
   captureBatch: (groupKey: string, frozenTotal: number) => void;
   clearBatch: (groupKey: string) => void;
+  alreadyInProgressMessage: string;
 }) {
   if (!args.containerActionsEnabled) {
     args.inputError.value = args.containerActionsDisabledReason;
     return;
   }
   const updatableContainers = args.group.containers.filter((container) => {
-    return container.newTag && container.bouncer !== 'blocked';
+    return (
+      container.newTag &&
+      container.bouncer !== 'blocked' &&
+      !hasHardBlocker(container.updateEligibility)
+    );
   });
   const displayContainers = args.containers.value.map(args.projectContainerDisplayState);
   if (
@@ -296,6 +307,7 @@ async function updateAllInGroupState(args: {
       );
     })
   ) {
+    useToast().warning(args.alreadyInProgressMessage);
     return;
   }
   const frozenUpdateTargets = updatableContainers.map((container) => ({
@@ -328,11 +340,6 @@ async function updateAllInGroupState(args: {
     await args.loadContainers();
     for (const container of updatableContainers) {
       if (!acceptedTargetIdSet.has(container.id)) {
-        continue;
-      }
-      const liveContainer = args.containers.value.find((entry) => entry.id === container.id);
-      const operation = liveContainer?.updateOperation;
-      if (operation?.status === 'queued' || operation?.status === 'in-progress') {
         continue;
       }
       markPendingActionState({
@@ -658,6 +665,11 @@ function createConfirmHandlers(args: {
       typeof target === 'object' && target
         ? target.updateEligibility
         : container?.updateEligibility;
+    const hardBlocker = getPrimaryHardBlocker(eligibility);
+    if (hardBlocker) {
+      useToast().warning(hardBlocker.message);
+      return;
+    }
 
     let message = `Update ${name} now? This will apply the latest discovered image.`;
     if (container && container.currentTag && container.newTag) {
@@ -871,6 +883,7 @@ function createContainerActionHandlers(args: {
 
 export function useContainerActions(input: UseContainerActionsInput) {
   const confirm = useConfirmDialog();
+  const { t } = useI18n();
   const { getDisplayUpdateOperation, projectContainerDisplayState } = useOperationDisplayHold();
   const { containerActionsEnabled, containerActionsDisabledReason } = useServerFeatures();
   const scanLifecycle = useScanLifecycle();
@@ -1199,6 +1212,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       loadContainers: input.loadContainers,
       captureBatch,
       clearBatch,
+      alreadyInProgressMessage: t('containersView.toast.updateAlreadyInProgress'),
     });
   }
 
@@ -1217,6 +1231,33 @@ export function useContainerActions(input: UseContainerActionsInput) {
       markScanStarted: scanLifecycle.markScanStarted,
       markScanCompleted: scanLifecycle.markScanCompleted,
     });
+
+  async function cancelUpdate(target: Pick<Container, 'id' | 'name' | 'updateOperation'>) {
+    const { name } = target;
+    const operationId = target.updateOperation?.id;
+    if (!operationId) {
+      return;
+    }
+    const toast = useToast();
+    try {
+      const outcome = await apiCancelUpdateOperation(operationId);
+      if (outcome === 'cancel-requested') {
+        toast.success(`Cancellation requested: ${name}`);
+      } else {
+        toast.success(`Cancelled: ${name}`);
+      }
+      await input.loadContainers();
+    } catch (e: unknown) {
+      const statusCode = (e as { statusCode?: number }).statusCode;
+      if (statusCode === 409) {
+        toast.warning(`Update already finished for ${name}, cannot cancel`);
+      } else if (statusCode === 404) {
+        toast.error(`Operation not found: ${name}`);
+      } else {
+        toast.error(errorMessage(e, `Failed to cancel update for ${name}`));
+      }
+    }
+  }
 
   async function deleteContainer(target: ContainerActionTarget) {
     const { containerId, name } = resolveContainerActionTarget(target, input.containerIdMap.value);
@@ -1260,6 +1301,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     actionInProgress,
     actionPending,
     backupsLoading: backups.backupsLoading,
+    cancelUpdate,
     containerActionsDisabledReason,
     containerActionsEnabled,
     confirmClearPolicy,

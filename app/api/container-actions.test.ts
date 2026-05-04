@@ -434,7 +434,7 @@ describe('Container Actions Router', () => {
   });
 
   describe('updateContainer', () => {
-    test('should accept update immediately and clear detected update state after trigger succeeds', async () => {
+    test('should accept update immediately and leave lifecycle side effects to event sinks', async () => {
       const container = {
         id: 'c1',
         name: 'nginx',
@@ -473,14 +473,11 @@ describe('Container Actions Router', () => {
         expect.objectContaining({ operationId: accepted.operationId }),
       );
       await flushAcceptedUpdateWork();
-      expect(mockUpdateContainer).toHaveBeenCalledWith(
+      expect(mockUpdateContainer).not.toHaveBeenCalledWith(
         expect.objectContaining({ result: undefined, updateAvailable: false }),
       );
-      expect(mockMarkPendingFreshStateAfterManualUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'c1', name: 'nginx' }),
-        expect.any(Number),
-      );
-      expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect(mockMarkPendingFreshStateAfterManualUpdate).not.toHaveBeenCalled();
+      expect(mockInsertAudit).not.toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'container-update',
           containerName: 'nginx',
@@ -529,11 +526,13 @@ describe('Container Actions Router', () => {
           status: 'queued',
           phase: 'queued',
         }),
+        expect.objectContaining({ skipChangeEvent: true }),
       );
       expect(updateOperationStore.insertOperation).not.toHaveBeenCalledWith(
         expect.objectContaining({
           batchId: expect.any(String),
         }),
+        expect.anything(),
       );
     });
 
@@ -572,13 +571,10 @@ describe('Container Actions Router', () => {
         expect.objectContaining({ operationId: accepted.operationId }),
       );
       await flushAcceptedUpdateWork();
-      expect(mockUpdateContainer).toHaveBeenCalledWith(
+      expect(mockUpdateContainer).not.toHaveBeenCalledWith(
         expect.objectContaining({ result: undefined, updateAvailable: false }),
       );
-      expect(mockMarkPendingFreshStateAfterManualUpdate).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'c1', name: 'nginx' }),
-        expect.any(Number),
-      );
+      expect(mockMarkPendingFreshStateAfterManualUpdate).not.toHaveBeenCalled();
     });
 
     test('should not clear updateAvailable when the post-trigger container is already up to date', async () => {
@@ -949,7 +945,7 @@ describe('Container Actions Router', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Unable to accept container update' });
     });
 
-    test('should accept update and record an error when trigger fails asynchronously', async () => {
+    test('should accept update and let the lifecycle event sink record asynchronous trigger errors', async () => {
       const container = {
         id: 'c1',
         name: 'nginx',
@@ -972,7 +968,7 @@ describe('Container Actions Router', () => {
         operationId: expect.any(String),
       });
       await flushAcceptedUpdateWork();
-      expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect(mockInsertAudit).not.toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'container-update',
           status: 'error',
@@ -1057,7 +1053,7 @@ describe('Container Actions Router', () => {
       );
     });
 
-    test('should insert audit entry on success', async () => {
+    test('should not insert route-level audit entry on success', async () => {
       const container = {
         id: 'c1',
         name: 'nginx',
@@ -1076,7 +1072,7 @@ describe('Container Actions Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(202);
       await flushAcceptedUpdateWork();
-      expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect(mockInsertAudit).not.toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'container-update',
           containerName: 'nginx',
@@ -1085,7 +1081,7 @@ describe('Container Actions Router', () => {
       );
     });
 
-    test('should insert audit entry on error', async () => {
+    test('should not insert route-level audit entry on error', async () => {
       const container = {
         id: 'c1',
         name: 'nginx',
@@ -1104,7 +1100,7 @@ describe('Container Actions Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(202);
       await flushAcceptedUpdateWork();
-      expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect(mockInsertAudit).not.toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'container-update',
           status: 'error',
@@ -1137,7 +1133,7 @@ describe('Container Actions Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(202);
       await flushAcceptedUpdateWork();
-      expect(mockAuditInc).toHaveBeenCalledWith({ action: 'container-update' });
+      expect(mockAuditInc).not.toHaveBeenCalledWith({ action: 'container-update' });
       expect(mockActionsInc).toHaveBeenCalledWith({ action: 'container-update' });
     });
 
@@ -1160,7 +1156,7 @@ describe('Container Actions Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(202);
       await flushAcceptedUpdateWork();
-      expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect(mockInsertAudit).not.toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'container-update',
           status: 'error',
@@ -1283,7 +1279,7 @@ describe('Container Actions Router', () => {
       );
     });
 
-    test('should record errors for bulk accepted updates that fail asynchronously', async () => {
+    test('should let lifecycle event sinks record bulk accepted updates that fail asynchronously', async () => {
       const nginx = {
         id: 'c1',
         name: 'nginx',
@@ -1308,7 +1304,7 @@ describe('Container Actions Router', () => {
       await flushAcceptedUpdateWork();
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect(mockInsertAudit).not.toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'container-update',
           status: 'error',
