@@ -436,6 +436,59 @@ describe('useOperationStore', () => {
     );
   });
 
+  it('rejects invalid queuePosition and queueTotal values from event stream payloads', () => {
+    const operations = useOperationStore();
+    const eventStream = useEventStreamStore();
+    operations.start();
+
+    eventStream.publish('update-operation-changed', {
+      operationId: 'op-nan',
+      containerId: 'c-nan',
+      containerName: 'web',
+      queuePosition: Number.NaN,
+      queueTotal: Number.POSITIVE_INFINITY,
+      status: 'queued',
+    });
+
+    eventStream.publish('update-operation-changed', {
+      operationId: 'op-zero',
+      containerId: 'c-zero',
+      containerName: 'web',
+      queuePosition: 0,
+      queueTotal: -5,
+      status: 'queued',
+    });
+
+    eventStream.publish('update-operation-changed', {
+      operationId: 'op-str',
+      containerId: 'c-str',
+      containerName: 'web',
+      queuePosition: '2',
+      queueTotal: '4',
+      status: 'queued',
+    });
+
+    eventStream.publish('update-operation-changed', {
+      operationId: 'op-valid-queue',
+      containerId: 'c-valid-queue',
+      containerName: 'web',
+      queuePosition: 1,
+      queueTotal: 3,
+      status: 'queued',
+    });
+
+    expect(operations.byId['op-valid-queue']?.queuePosition).toBe(1);
+    expect(operations.byId['op-valid-queue']?.queueTotal).toBe(3);
+    expect(operations.byId['op-nan']?.queuePosition).toBeUndefined();
+    expect(operations.byId['op-nan']?.queueTotal).toBeUndefined();
+    expect(operations.byId['op-zero']?.queuePosition).toBeUndefined();
+    expect(operations.byId['op-zero']?.queueTotal).toBeUndefined();
+    expect(operations.byId['op-str']?.queuePosition).toBeUndefined();
+    expect(operations.byId['op-str']?.queueTotal).toBeUndefined();
+
+    operations.stop();
+  });
+
   it('subscribes to event stream updates once and stops cleanly', () => {
     const operations = useOperationStore();
     const eventStream = useEventStreamStore();
