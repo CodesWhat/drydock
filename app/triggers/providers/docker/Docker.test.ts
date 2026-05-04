@@ -3901,6 +3901,34 @@ describe('extracted lifecycle delegation', () => {
     }
   });
 
+  test('runContainerUpdateLifecycle should terminalize a requested operation nested in compose runtime context', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const run = vi.fn().mockResolvedValue(true);
+    docker.updateLifecycleExecutor = { run };
+    const container = createTriggerContainer();
+
+    mockGetOperationById.mockReturnValue({
+      id: 'queued-compose-op-success-1',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+
+    try {
+      await docker.runContainerUpdateLifecycle(container, {
+        composeFile: '/opt/drydock/test/stack.yml',
+        service: 'web',
+        runtimeContext: { operationId: 'queued-compose-op-success-1' },
+      });
+
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith('queued-compose-op-success-1', {
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+    } finally {
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
   test('runContainerUpdateLifecycle should not terminalize when the requested operation is gone on success', async () => {
     const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
     const run = vi.fn().mockResolvedValue(true);

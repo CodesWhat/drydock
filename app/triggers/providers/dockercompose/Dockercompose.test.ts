@@ -5325,6 +5325,39 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('performContainerUpdate should pass the requested operation id to the post-pull hook', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({
+      id: 'container-1',
+      name: 'nginx',
+    });
+    vi.spyOn(trigger, 'updateContainerWithCompose').mockResolvedValue();
+    vi.spyOn(trigger, 'runServicePostStartHooks').mockResolvedValue();
+    const postPullHook = vi.fn().mockResolvedValue(undefined);
+
+    await trigger.performContainerUpdate(
+      {
+        dockerApi: mockDockerApi,
+        auth: { from: 'context' },
+        newImage: 'nginx:9.9.9',
+        registry: getState().registry.hub,
+      } as any,
+      container as any,
+      mockLog,
+      {
+        composeFile: '/opt/drydock/test/stack.override.yml',
+        composeFiles: ['/opt/drydock/test/stack.yml', '/opt/drydock/test/stack.override.yml'],
+        service: 'nginx',
+        serviceDefinition: {},
+        composeFileOnceApplied: false,
+        runtimeContext: { operationId: 'op-compose-1' },
+      } as any,
+      postPullHook,
+    );
+
+    expect(postPullHook).toHaveBeenCalledWith('op-compose-1');
+  });
+
   test('performContainerUpdate should pass skipPull in multi-file compose context', async () => {
     trigger.configuration.dryrun = false;
     const container = makeContainer({

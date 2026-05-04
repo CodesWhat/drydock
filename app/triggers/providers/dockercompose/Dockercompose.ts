@@ -9,6 +9,7 @@ import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../..
 import { buildComposeProjectLockKey } from '../../../updates/update-locks.js';
 import { sleep } from '../../../util/sleep.js';
 import Docker, { type DockerTriggerConfiguration } from '../docker/Docker.js';
+import { getRequestedOperationId } from '../docker/update-runtime-context.js';
 import ComposeFileLockManager from './ComposeFileLockManager.js';
 import ComposeFileParser, {
   COMPOSE_CACHE_MAX_ENTRIES,
@@ -1255,10 +1256,10 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     );
 
     // Invoke the post-pull security gate (scan + SBOM) after compose pulls the
-    // new image. Compose has no tracked operation row so we pass an empty id;
-    // setOperationPhase will silently no-op when no matching row exists.
+    // new image. API-requested compose updates carry a queued operation id in
+    // runtime context; direct trigger runs do not, so setOperationPhase no-ops.
     if (postPullHook) {
-      await postPullHook('');
+      await postPullHook(getRequestedOperationId(container, runtimeContext) ?? '');
     }
 
     await this.runServicePostStartHooks(
