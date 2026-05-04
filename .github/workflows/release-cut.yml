@@ -8,6 +8,11 @@ run-name: "🏷️ Release: Cut — manual by ${{ github.actor }}"
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to cut, e.g. v1.5.0-rc.17 or v1.5.0. Tag base must match package.json version and the tag must not already exist."
+        required: true
+        type: string
 
 permissions: {}
 
@@ -75,80 +80,34 @@ jobs:
           max-attempts: '12'
           sleep-seconds: '300'
 
-      - name: Find latest release tag
-        id: base
-        run: |
-          set -euo pipefail
-          # Resolve latest stable tag (skip pre-release tags like v1.5.0-rc.2
-          # since release-next-version.mjs only accepts X.Y.Z).
-          latest_tag="$(git tag --list 'v*' --sort=-v:refname \
-            | awk '/^v[0-9]+\.[0-9]+\.[0-9]+$/ { print; exit }')"
-          if [ -z "${latest_tag}" ]; then
-            latest_tag="v0.0.0"
-          fi
-
-          echo "latest_tag=${latest_tag}" >> "$GITHUB_OUTPUT"
-          echo "current_version=${latest_tag#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Compute next version
+      - name: Resolve release tag from input
         id: next
         env:
-          BUMP: auto
-          CURRENT_VERSION: ${{ steps.base.outputs.current_version }}
-          LATEST_TAG: ${{ steps.base.outputs.latest_tag }}
-          TARGET_SHA: ${{ steps.target.outputs.sha }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
 
-          if [ "${BUMP}" = "auto" ] && [ "${LATEST_TAG}" = "v0.0.0" ]; then
-            release_level="patch"
-            next_version="0.0.1"
-          else
-            set +e
-            output="$(node scripts/release-next-version.mjs \
-              --current "${CURRENT_VERSION}" \
-              --bump "${BUMP}" \
-              --from "${LATEST_TAG}" \
-              --to "${TARGET_SHA}" 2>&1)"
-            rc=$?
-            set -e
-
-            if [ "${rc}" -ne 0 ]; then
-              if echo "${output}" | grep -qi "no releasable commits"; then
-                echo "::error::No releasable commits since ${LATEST_TAG}; refusing to cut a release tag."
-              else
-                echo "::error::release-next-version.mjs failed: ${output}"
-              fi
-              exit 1
-            fi
-
-            release_level=""
-            next_version=""
-            while IFS= read -r kv; do
-              key="${kv%%=*}"
-              value="${kv#*=}"
-              case "${key}" in
-                release_level) release_level="${value}" ;;
-                next_version) next_version="${value}" ;;
-              esac
-            done <<< "${output}"
-
-            if [ -z "${release_level}" ] || [ -z "${next_version}" ]; then
-              echo "::error::release-next-version.mjs succeeded but returned incomplete output. Output: ${output}"
-              exit 1
-            fi
+          if ! [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid release_tag '${RELEASE_TAG}'. Expected vX.Y.Z or vX.Y.Z-prerelease (e.g. v1.5.0 or v1.5.0-rc.17)."
+            exit 1
           fi
 
-          release_tag="v${next_version}"
-          if git rev-parse -q --verify "refs/tags/${release_tag}" >/dev/null; then
-            echo "::error::Tag already exists: ${release_tag}"
+          if git rev-parse -q --verify "refs/tags/${RELEASE_TAG}" >/dev/null; then
+            echo "::error::Tag already exists: ${RELEASE_TAG}. Pick the next unused tag and re-dispatch."
             exit 1
+          fi
+
+          next_version="${RELEASE_TAG#v}"
+          if [[ "${RELEASE_TAG}" == *-* ]]; then
+            release_level="prerelease"
+          else
+            release_level="release"
           fi
 
           {
             echo "release_level=${release_level}"
             echo "next_version=${next_version}"
-            echo "release_tag=${release_tag}"
+            echo "release_tag=${RELEASE_TAG}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Parse release tag
