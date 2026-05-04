@@ -2112,6 +2112,86 @@ describe('ContainersView', () => {
       expect(groups[0].key).toBe('web-stack');
       expect(groups[0].containers).toHaveLength(2);
     });
+
+    it('keeps active bulk update rows in their stack when group reloads transiently omit stack members', async () => {
+      const initialContainers = [
+        makeContainer({ id: 'old-A', name: 'nginx-hooked' }),
+        makeContainer({ id: 'old-B', name: 'redis-cache' }),
+      ];
+      mockGetContainerGroups.mockResolvedValueOnce([
+        {
+          name: 'web-stack',
+          containers: [
+            { id: 'old-A', name: 'nginx-hooked', displayName: 'nginx-hooked' },
+            { id: 'old-B', name: 'redis-cache', displayName: 'redis-cache' },
+          ],
+          containerCount: 2,
+          updatesAvailable: 0,
+        },
+      ]);
+      const wrapper = await mountContainersView(initialContainers);
+      const vm = wrapper.vm as any;
+
+      vm.groupByStack = true;
+      await flushPromises();
+      expect(vm.groupMembershipMap).toMatchObject({
+        'old-A': 'web-stack',
+        'old-B': 'web-stack',
+        'nginx-hooked': 'web-stack',
+        'redis-cache': 'web-stack',
+      });
+
+      const updatingContainers = [
+        makeContainer({
+          id: 'old-A',
+          name: 'nginx-hooked',
+          updateOperation: {
+            id: 'op-a',
+            status: 'in-progress',
+            phase: 'pulling',
+            updatedAt: '2026-05-04T12:00:00.000Z',
+          },
+        }),
+        makeContainer({
+          id: 'old-B',
+          name: 'redis-cache',
+          updateOperation: {
+            id: 'op-b',
+            status: 'queued',
+            phase: 'queued',
+            updatedAt: '2026-05-04T12:00:00.000Z',
+          },
+        }),
+      ];
+      mockGetAllContainers.mockResolvedValue(updatingContainers);
+      const { mapApiContainers } = await import('@/utils/container-mapper');
+      (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue(updatingContainers);
+      mockGetContainerGroups.mockResolvedValueOnce([
+        {
+          name: 'web-stack',
+          containers: [{ id: 'old-A', name: 'nginx-hooked', displayName: 'nginx-hooked' }],
+          containerCount: 1,
+          updatesAvailable: 0,
+        },
+      ]);
+
+      await vm.loadContainers();
+      await flushPromises();
+
+      expect(vm.groupMembershipMap).toMatchObject({
+        'old-A': 'web-stack',
+        'old-B': 'web-stack',
+        'nginx-hooked': 'web-stack',
+        'redis-cache': 'web-stack',
+      });
+      const groups = vm.groupedContainers;
+      expect(groups).toHaveLength(1);
+      expect(groups[0].key).toBe('web-stack');
+      expect(groups[0].containers.map((container: Container) => container.name)).toEqual([
+        'nginx-hooked',
+        'redis-cache',
+      ]);
+    });
   });
 
   describe('container logs viewer integration', () => {

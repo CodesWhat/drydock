@@ -1034,9 +1034,53 @@ async function loadGroups() {
         }
       }
     }
+    preserveTransientUpdateGroupMembership(map);
     groupMembershipMap.value = map;
   } catch {
-    groupMembershipMap.value = {};
+    const map: Record<string, string> = {};
+    preserveTransientUpdateGroupMembership(map);
+    groupMembershipMap.value = map;
+  }
+}
+
+function getGroupMembershipKey(container: Pick<Container, 'id' | 'name'>): string | undefined {
+  return groupMembershipMap.value[container.id] ?? groupMembershipMap.value[container.name];
+}
+
+function isTransientUpdateGroupMember(container: Container): boolean {
+  return (
+    container.updateOperation?.status === 'queued' ||
+    container.updateOperation?.status === 'in-progress'
+  );
+}
+
+function preserveTransientUpdateGroupMembership(map: Record<string, string>) {
+  for (const container of containers.value) {
+    if (!isTransientUpdateGroupMember(container)) {
+      continue;
+    }
+    const previousGroup = getGroupMembershipKey(container);
+    if (!previousGroup) {
+      continue;
+    }
+    if (container.id && !map[container.id]) {
+      map[container.id] = previousGroup;
+    }
+    if (container.name && !map[container.name]) {
+      map[container.name] = previousGroup;
+    }
+  }
+  for (const container of actionPending.value.values()) {
+    const previousGroup = getGroupMembershipKey(container);
+    if (!previousGroup) {
+      continue;
+    }
+    if (container.id && !map[container.id]) {
+      map[container.id] = previousGroup;
+    }
+    if (container.name && !map[container.name]) {
+      map[container.name] = previousGroup;
+    }
   }
 }
 
