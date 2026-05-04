@@ -1244,7 +1244,7 @@ describe('ContainersView — applyContainerPatch', () => {
 
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         globalThis.dispatchEvent(
           new CustomEvent('dd:sse-update-applied', {
@@ -1260,7 +1260,7 @@ describe('ContainersView — applyContainerPatch', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value).toHaveLength(countBefore);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
 
         wrapper.unmount();
       } finally {
@@ -1318,7 +1318,7 @@ describe('ContainersView — applyContainerPatch', () => {
 
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         globalThis.dispatchEvent(
           new CustomEvent('dd:sse-update-failed', {
@@ -1335,7 +1335,7 @@ describe('ContainersView — applyContainerPatch', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value).toHaveLength(countBefore);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
 
         wrapper.unmount();
       } finally {
@@ -1397,14 +1397,14 @@ describe('ContainersView — applyContainerPatch', () => {
 
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         globalThis.dispatchEvent(new CustomEvent('dd:sse-update-failed'));
 
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value).toHaveLength(countBefore);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
 
         wrapper.unmount();
       } finally {

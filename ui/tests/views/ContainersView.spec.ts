@@ -3136,7 +3136,7 @@ describe('ContainersView', () => {
 
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         // Terminal operation SSE releases the hold; dd:update-applied owns the toast.
         operationListener?.(
@@ -3154,7 +3154,7 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
 
         wrapper.unmount();
       } finally {
@@ -3191,7 +3191,7 @@ describe('ContainersView', () => {
 
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         operationListener?.(
           new CustomEvent('dd:sse-update-operation-changed', {
@@ -3208,7 +3208,7 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
 
         wrapper.unmount();
       } finally {
@@ -3232,7 +3232,7 @@ describe('ContainersView', () => {
 
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         // Fire succeeded directly with no prior in-progress (replay scenario)
         operationListener?.(
@@ -3247,7 +3247,7 @@ describe('ContainersView', () => {
           }),
         );
 
-        expect(toasts.value.length).toBe(countBefore);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
 
         wrapper.unmount();
       } finally {
@@ -3299,7 +3299,7 @@ describe('ContainersView', () => {
 
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         // Both succeed
         operationListener?.(
@@ -3328,7 +3328,7 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
 
         wrapper.unmount();
       } finally {
@@ -3794,7 +3794,7 @@ describe('ContainersView', () => {
 
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         operationListener?.(
           new CustomEvent('dd:sse-update-operation-changed', {
@@ -3811,7 +3811,7 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
 
         wrapper.unmount();
       } finally {
@@ -4082,7 +4082,6 @@ describe('ContainersView', () => {
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
         const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
-        const countBefore = toasts.value.length;
 
         // Register a hold, then receive the terminal phase event first. This path
         // now only releases the hold; the toast is owned by dd:sse-update-applied.
@@ -4112,7 +4111,7 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
 
         // The canonical completion event is still responsible for user feedback.
         updateAppliedListener?.(
@@ -4156,7 +4155,7 @@ describe('ContainersView', () => {
 
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         updateAppliedListener?.(
           new CustomEvent('dd:sse-update-applied', {
@@ -4174,7 +4173,8 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore);
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(0);
       } finally {
         addEventListenerSpy.mockRestore();
         vi.useRealTimers();
@@ -4196,7 +4196,7 @@ describe('ContainersView', () => {
 
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         updateAppliedListener?.(
           new CustomEvent('dd:sse-update-applied', {
@@ -4214,7 +4214,7 @@ describe('ContainersView', () => {
         await flushPromises();
 
         // Track D will handle the batch summary toast; per-container toast suppressed
-        expect(toasts.value.length).toBe(countBefore);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
 
         wrapper.unmount();
       } finally {
@@ -4238,14 +4238,14 @@ describe('ContainersView', () => {
 
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         updateAppliedListener?.(new CustomEvent('dd:sse-update-applied'));
 
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
 
         wrapper.unmount();
       } finally {

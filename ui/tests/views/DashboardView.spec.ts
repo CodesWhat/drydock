@@ -2663,7 +2663,7 @@ describe('DashboardView', () => {
         await nextTick();
 
         const { toasts } = useToast();
-        const beforeCount = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         globalThis.dispatchEvent(
           new CustomEvent('dd:sse-update-operation-changed', {
@@ -2680,7 +2680,7 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(beforeCount);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
         void wrapper;
       } finally {
         vi.useRealTimers();
@@ -2711,7 +2711,7 @@ describe('DashboardView', () => {
         await nextTick();
 
         const { toasts } = useToast();
-        const beforeCount = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         globalThis.dispatchEvent(
           new CustomEvent('dd:sse-update-operation-changed', {
@@ -2728,7 +2728,7 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(beforeCount);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
         void wrapper;
       } finally {
         vi.useRealTimers();
@@ -2759,7 +2759,7 @@ describe('DashboardView', () => {
         await nextTick();
 
         const { toasts } = useToast();
-        const beforeCount = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         globalThis.dispatchEvent(
           new CustomEvent('dd:sse-update-operation-changed', {
@@ -2776,7 +2776,7 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(beforeCount);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
         void wrapper;
       } finally {
         vi.useRealTimers();
@@ -2788,7 +2788,7 @@ describe('DashboardView', () => {
       // No update action triggered — dashboardPendingUpdateRows is empty
 
       const { toasts } = useToast();
-      const beforeCount = toasts.value.length;
+      const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
       globalThis.dispatchEvent(
         new CustomEvent('dd:sse-update-operation-changed', {
@@ -2802,7 +2802,7 @@ describe('DashboardView', () => {
       );
       await nextTick();
 
-      expect(toasts.value.length).toBe(beforeCount);
+      expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
       void wrapper;
     });
 
@@ -2832,7 +2832,7 @@ describe('DashboardView', () => {
         expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain('Updating');
 
         const { toasts } = useToast();
-        const beforeCount = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         // Fire terminal SSE for a completely different container — toast should NOT fire,
         // but the ghost pruning for our container should still remain (unrelated id won't match)
@@ -2849,7 +2849,7 @@ describe('DashboardView', () => {
         await nextTick();
 
         // No toast for untracked operation
-        expect(toasts.value.length).toBe(beforeCount);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
         // Ghost for our container should still be visible (unrelated event shouldn't prune it)
         expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain('Updating');
       } finally {
@@ -2870,7 +2870,7 @@ describe('DashboardView', () => {
         )?.[1] as EventListener | undefined;
 
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         globalThis.dispatchEvent(
           new CustomEvent('dd:sse-update-applied', {
@@ -2887,8 +2887,9 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore + 1);
-        expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
 
         wrapper.unmount();
         addEventListenerSpy.mockRestore();
@@ -2908,7 +2909,7 @@ describe('DashboardView', () => {
         )?.[1] as EventListener | undefined;
 
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         globalThis.dispatchEvent(
           new CustomEvent('dd:sse-update-failed', {
@@ -2926,8 +2927,9 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore + 1);
-        expect(toasts.value.at(-1)).toMatchObject({
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({
           tone: 'error',
           title: 'Update failed: nginx',
         });
@@ -2952,7 +2954,7 @@ describe('DashboardView', () => {
           ([eventName]) => eventName === 'dd:sse-update-applied',
         )?.[1] as EventListener | undefined;
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         // Register a hold, then receive the terminal phase event first. This path
         // now only releases the hold; the toast is owned by dd:sse-update-applied.
@@ -2982,7 +2984,7 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
 
         // The canonical completion event is still responsible for user feedback.
         globalThis.dispatchEvent(
@@ -3000,8 +3002,9 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore + 1);
-        expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
 
         wrapper.unmount();
         addEventListenerSpy.mockRestore();
@@ -3018,7 +3021,7 @@ describe('DashboardView', () => {
         const wrapper = await mountDashboard([c], []);
 
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         globalThis.dispatchEvent(
           new CustomEvent('dd:sse-update-applied', {
@@ -3036,7 +3039,7 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
 
         addEventListenerSpy.mockRestore();
       } finally {
@@ -3052,7 +3055,7 @@ describe('DashboardView', () => {
         const wrapper = await mountDashboard([c], []);
 
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         globalThis.dispatchEvent(
           new CustomEvent('dd:sse-update-applied', {
@@ -3070,7 +3073,7 @@ describe('DashboardView', () => {
         await flushPromises();
 
         // Track D handles the batch summary; per-container toast suppressed
-        expect(toasts.value.length).toBe(countBefore);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
 
         wrapper.unmount();
         addEventListenerSpy.mockRestore();
@@ -3087,7 +3090,7 @@ describe('DashboardView', () => {
         const wrapper = await mountDashboard([c], []);
 
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         globalThis.dispatchEvent(
           new CustomEvent('dd:sse-update-failed', {
@@ -3106,8 +3109,9 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore + 1);
-        expect(toasts.value.at(-1)).toMatchObject({
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({
           tone: 'warning',
           title: 'Rolled back: nginx',
         });
@@ -3127,7 +3131,7 @@ describe('DashboardView', () => {
         const wrapper = await mountDashboard([c], []);
 
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         globalThis.dispatchEvent(
           new CustomEvent('dd:sse-update-failed', {
@@ -3146,8 +3150,9 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore + 1);
-        expect(toasts.value.at(-1)).toMatchObject({
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({
           tone: 'warning',
           title: 'Rolled back: nginx — health check failed',
         });
@@ -3167,7 +3172,7 @@ describe('DashboardView', () => {
         const wrapper = await mountDashboard([c], []);
 
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         globalThis.dispatchEvent(
           new CustomEvent('dd:sse-update-failed', {
@@ -3186,8 +3191,9 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore + 1);
-        expect(toasts.value.at(-1)).toMatchObject({
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({
           tone: 'error',
           title: 'Update failed: nginx — docker pull failed',
         });
@@ -3207,7 +3213,7 @@ describe('DashboardView', () => {
         const wrapper = await mountDashboard([c], []);
 
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         globalThis.dispatchEvent(
           new CustomEvent('dd:sse-update-failed', {
@@ -3227,8 +3233,9 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore + 1);
-        expect(toasts.value.at(-1)).toMatchObject({
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({
           tone: 'success',
           title: 'Cancelled: nginx',
         });
@@ -3248,7 +3255,7 @@ describe('DashboardView', () => {
         const wrapper = await mountDashboard([c], []);
 
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         globalThis.dispatchEvent(
           new CustomEvent('dd:sse-update-failed', {
@@ -3268,7 +3275,7 @@ describe('DashboardView', () => {
         await flushPromises();
 
         // Track D handles the batch summary; per-container toast suppressed
-        expect(toasts.value.length).toBe(countBefore);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
 
         wrapper.unmount();
         addEventListenerSpy.mockRestore();
