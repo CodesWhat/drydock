@@ -687,6 +687,67 @@ describe('useContainerActions', () => {
     expect(mocks.updateContainer).not.toHaveBeenCalled();
   });
 
+  it('excludes hard-blocked rows from grouped update-all submissions', async () => {
+    const ready = makeContainer({
+      id: 'container-1',
+      name: 'web',
+      newTag: '1.1.0',
+      bouncer: 'safe',
+    });
+    const rollbackBlocked = makeContainer({
+      id: 'container-2',
+      name: 'rabbitmq',
+      newTag: '3.13.7-alpine',
+      bouncer: 'safe',
+      updateEligibility: {
+        eligible: false,
+        evaluatedAt: '2026-05-04T17:00:00.000Z',
+        blockers: [
+          {
+            reason: 'last-update-rolled-back',
+            severity: 'hard',
+            message: 'Last update attempt rolled back.',
+            actionable: true,
+          },
+        ],
+      },
+    });
+    const softBlocked = makeContainer({
+      id: 'container-3',
+      name: 'worker',
+      newTag: '2.0.0',
+      bouncer: 'safe',
+      updateEligibility: {
+        eligible: false,
+        evaluatedAt: '2026-05-04T17:00:00.000Z',
+        blockers: [
+          {
+            reason: 'snoozed',
+            severity: 'soft',
+            message: 'Snoozed until May 5, 2026.',
+            actionable: true,
+          },
+        ],
+      },
+    });
+
+    const { composable } = await mountActionsHarness({
+      containers: [ready, rollbackBlocked, softBlocked],
+      containerIdMap: {
+        web: 'container-1',
+        rabbitmq: 'container-2',
+        worker: 'container-3',
+      },
+    });
+
+    await composable.updateAllInGroup({
+      key: 'group-1',
+      containers: [ready, rollbackBlocked, softBlocked],
+    });
+
+    expect(mocks.updateContainers).toHaveBeenCalledWith(['container-1', 'container-3']);
+  });
+
   it('freezes grouped update ids and skips containers renamed during the batch', async () => {
     const web = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0', bouncer: 'safe' });
     const api = makeContainer({ id: 'container-2', name: 'api', newTag: '2.0.0', bouncer: 'safe' });
@@ -1645,6 +1706,36 @@ describe('useContainerActions', () => {
     await confirmCall.accept?.();
     expect(mocks.updateContainer).toHaveBeenCalledWith('container-1');
     expect(mocks.toastSuccess).toHaveBeenCalledWith('Update started: web');
+  });
+
+  it('does not open update confirmation for hard-blocked updates', async () => {
+    const container = makeContainer({
+      id: 'container-1',
+      name: 'web',
+      newTag: '1.1.0',
+      updateEligibility: {
+        eligible: false,
+        evaluatedAt: '2026-05-04T17:00:00.000Z',
+        blockers: [
+          {
+            reason: 'last-update-rolled-back',
+            severity: 'hard',
+            message: 'Last update attempt rolled back.',
+            actionable: true,
+          },
+        ],
+      },
+    });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+    });
+
+    composable.confirmUpdate('web');
+
+    expect(mocks.confirmRequire).not.toHaveBeenCalled();
+    expect(mocks.toastWarning).toHaveBeenCalledWith('Last update attempt rolled back.');
   });
 
   it('shows tag change details in update confirmation for tag updates', async () => {

@@ -36,7 +36,11 @@ import {
   shouldRenderStandaloneQueuedUpdateAsUpdating,
 } from '../../utils/container-update';
 import { errorMessage } from '../../utils/error';
-import { getSoftBlockers } from '../../utils/update-eligibility';
+import {
+  getPrimaryHardBlocker,
+  getSoftBlockers,
+  hasHardBlocker,
+} from '../../utils/update-eligibility';
 import { useContainerBackups } from './useContainerBackups';
 import { useContainerPolicy } from './useContainerPolicy';
 import { useContainerPreview } from './useContainerPreview';
@@ -283,7 +287,11 @@ async function updateAllInGroupState(args: {
     return;
   }
   const updatableContainers = args.group.containers.filter((container) => {
-    return container.newTag && container.bouncer !== 'blocked';
+    return (
+      container.newTag &&
+      container.bouncer !== 'blocked' &&
+      !hasHardBlocker(container.updateEligibility)
+    );
   });
   const displayContainers = args.containers.value.map(args.projectContainerDisplayState);
   if (
@@ -657,6 +665,11 @@ function createConfirmHandlers(args: {
       typeof target === 'object' && target
         ? target.updateEligibility
         : container?.updateEligibility;
+    const hardBlocker = getPrimaryHardBlocker(eligibility);
+    if (hardBlocker) {
+      useToast().warning(hardBlocker.message);
+      return;
+    }
 
     let message = `Update ${name} now? This will apply the latest discovered image.`;
     if (container && container.currentTag && container.newTag) {

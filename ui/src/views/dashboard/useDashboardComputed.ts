@@ -7,6 +7,7 @@ import {
   type ImageSecurityAggregate,
 } from '../../utils/dashboard-container-metrics';
 import { filterContainersByHidePinned } from '../../utils/hide-pinned';
+import { hasHardBlocker } from '../../utils/update-eligibility';
 import type {
   DashboardAgent,
   DashboardContainerSummary,
@@ -698,7 +699,11 @@ function buildRecentUpdateRows(
     }
 
     candidates.push(
-      toPendingRecentUpdateCandidate(container, candidateContext, container.bouncer === 'blocked'),
+      toPendingRecentUpdateCandidate(
+        container,
+        candidateContext,
+        container.bouncer === 'blocked' || hasHardBlocker(container.updateEligibility),
+      ),
     );
   }
 
