@@ -343,6 +343,35 @@ describe('request-update', () => {
     ).rejects.toThrow('Accepted update dispatch concurrency must be a positive integer');
   });
 
+  test('runAcceptedContainerUpdates dispatches all accepted updates by default so update locks own concurrency', async () => {
+    const gates = Array.from({ length: 3 }, () => deferred());
+    const started: string[] = [];
+    const accepted = gates.map((gate, index) => {
+      const operationId = `op-default-${index + 1}`;
+      return {
+        operationId,
+        container: createContainer({ id: `c-default-${index + 1}`, name: `app-${index + 1}` }),
+        trigger: {
+          type: 'docker',
+          trigger: vi.fn(async () => {
+            started.push(operationId);
+            await gate.promise;
+          }),
+        },
+      };
+    });
+
+    const run = runAcceptedContainerUpdates(accepted);
+
+    await flushAsyncWork();
+    expect(started).toEqual(['op-default-1', 'op-default-2', 'op-default-3']);
+
+    for (const gate of gates) {
+      gate.resolve();
+    }
+    await expect(run).resolves.toBeUndefined();
+  });
+
   test('runAcceptedContainerUpdates limits trigger concurrency when a cap is provided', async () => {
     const gates = Array.from({ length: 5 }, () => deferred());
     const started: string[] = [];

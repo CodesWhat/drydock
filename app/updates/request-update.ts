@@ -316,7 +316,7 @@ export async function runAcceptedContainerUpdates(
     return;
   }
 
-  const concurrency = options.concurrency ?? 1;
+  const concurrency = options.concurrency ?? accepted.length;
   if (!Number.isSafeInteger(concurrency) || concurrency <= 0) {
     throw new Error(`Accepted update dispatch concurrency must be a positive integer`);
   }
