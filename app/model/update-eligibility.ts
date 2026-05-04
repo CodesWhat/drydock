@@ -197,13 +197,15 @@ export function computeUpdateEligibility(
   }
 
   // 1b. last-update-rolled-back — fires when the last update attempt for this
-  // container was rolled back and the candidate digest is unchanged. This prevents
+  // container was rolled back and the candidate image target is unchanged. This prevents
   // the user from immediately re-triggering the same broken update.
   //
-  // The block is digest-scoped: a different candidate digest (e.g. a newer release)
-  // is never blocked. The operator can also opt out via dd.update.rollback-gate=off.
+  // The block is scoped to the strongest candidate identity available: digest
+  // when present, otherwise tag. A different candidate target (e.g. a newer
+  // release) is never blocked. The operator can also opt out via
+  // dd.update.rollback-gate=off.
   if (container.updateRollback) {
-    const candidateDigest = container.result?.digest;
+    const candidateTarget = container.result?.digest ?? container.result?.tag;
     const rollbackGateLabelRaw = container.labels?.['dd.update.rollback-gate'];
     const rollbackGateOff =
       typeof rollbackGateLabelRaw === 'string' &&
@@ -211,14 +213,14 @@ export function computeUpdateEligibility(
 
     if (
       !rollbackGateOff &&
-      candidateDigest !== undefined &&
-      candidateDigest === container.updateRollback.targetDigest
+      candidateTarget !== undefined &&
+      candidateTarget === container.updateRollback.targetDigest
     ) {
       blockers.push(
         makeBlocker({
           reason: 'last-update-rolled-back',
           message:
-            'Last update attempt rolled back. The same target digest is blocked until a newer image is available.',
+            'Last update attempt rolled back. The same target image is blocked until a newer image is available.',
           actionable: true,
           actionHint:
             'Wait for a newer image to be released, or set dd.update.rollback-gate=off to override.',

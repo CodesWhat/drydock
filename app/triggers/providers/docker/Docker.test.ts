@@ -4495,7 +4495,7 @@ describe('persistRollbackState callback', () => {
 
     expect(storeContainer.updateContainer).toHaveBeenCalledTimes(1);
     const saved = (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(saved).not.toHaveProperty('updateRollback');
+    expect(saved.updateRollback).toBeUndefined();
     expect(saved.id).toBe('abc123');
   });
 
@@ -4524,6 +4524,32 @@ describe('persistRollbackState callback', () => {
       lastError: 'network timeout',
     });
     expect(saved.updateRollback.recordedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  test('rolled-back outcome stores candidate tag when digest is unavailable', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    const containerNoRollback = {
+      id: 'tag123',
+      name: 'tag-only-container',
+      result: { tag: '3.13.7-alpine' },
+    };
+    (storeContainer.getContainer as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      containerNoRollback,
+    );
+    (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+    docker.containerUpdateExecutor.persistRollbackState?.('tag123', 'rolled-back', {
+      reason: 'start_new_failed',
+      lastError: 'container exited',
+    });
+
+    expect(storeContainer.updateContainer).toHaveBeenCalledTimes(1);
+    const saved = (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(saved.updateRollback).toMatchObject({
+      targetDigest: '3.13.7-alpine',
+      reason: 'start_new_failed',
+      lastError: 'container exited',
+    });
   });
 
   test('rolled-back outcome writes empty rollback defaults when digest and details are absent', async () => {

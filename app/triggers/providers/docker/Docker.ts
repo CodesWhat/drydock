@@ -324,17 +324,21 @@ class Docker<
             ...containerCurrent,
             updateRollback: {
               recordedAt: new Date().toISOString(),
-              // Use the candidate digest from the registry result — that's the digest
-              // the operator was trying to update to when the rollback occurred.
-              targetDigest: containerCurrent.result?.digest ?? '',
+              // Use the strongest candidate identity from the registry result.
+              // Digest is preferred, but some registries only provide tag data.
+              // The rollback gate compares against this same field on the next
+              // update attempt so tag-only updates can still be blocked.
+              targetDigest: containerCurrent.result?.digest ?? containerCurrent.result?.tag ?? '',
               reason: rollbackInfo?.reason ?? '',
               lastError: rollbackInfo?.lastError ?? '',
             },
           });
         } else {
           // Success — clear any prior rollback state
-          const { updateRollback: _updateRollback, ...containerWithoutRollback } = containerCurrent;
-          storeContainer.updateContainer(containerWithoutRollback as typeof containerCurrent);
+          storeContainer.updateContainer({
+            ...containerCurrent,
+            updateRollback: undefined,
+          } as typeof containerCurrent);
         }
       },
       scheduleDeferredReconciliation: (containerName, _operationId, delayMs) => {

@@ -338,6 +338,20 @@ describe('computeUpdateEligibility', () => {
       expect(result.blockers.find((b) => b.reason === 'last-update-rolled-back')).toBeUndefined();
     });
 
+    test('emits blocker when digest is unavailable and candidate tag matches recorded rollback target', () => {
+      const container = makeContainerWithTagUpdate({
+        result: { tag: '1.1.0' },
+        updateRollback: {
+          ...ROLLBACK_STATE,
+          targetDigest: '1.1.0',
+        },
+      });
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      const blocker = result.blockers.find((b) => b.reason === 'last-update-rolled-back');
+      expect(blocker).toBeDefined();
+      expect(blocker?.details?.targetDigest).toBe('1.1.0');
+    });
+
     test('does NOT emit blocker when dd.update.rollback-gate=off', () => {
       const trigger = makeTrigger();
       const container = makeContainerWithTagUpdate({

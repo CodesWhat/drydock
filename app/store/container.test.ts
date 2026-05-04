@@ -213,6 +213,73 @@ test('updateContainer should clear updatePolicy when explicitly set to undefined
   expect(updated.updatePolicy).toBeUndefined();
 });
 
+test('updateContainer should preserve updateRollback when omitted from payload', async () => {
+  const existingContainer = {
+    data: createContainerFixture({
+      updateRollback: {
+        recordedAt: '2026-04-01T00:00:00.000Z',
+        targetDigest: '3.13.7-alpine',
+        reason: 'start_new_failed',
+        lastError: 'container exited',
+      },
+    }),
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: () => {},
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const containerToSave = createContainerFixture();
+
+  container.createCollections(db);
+  const updated = container.updateContainer(containerToSave);
+  expect(updated.updateRollback).toEqual({
+    recordedAt: '2026-04-01T00:00:00.000Z',
+    targetDigest: '3.13.7-alpine',
+    reason: 'start_new_failed',
+    lastError: 'container exited',
+  });
+});
+
+test('updateContainer should clear updateRollback when explicitly set to undefined', async () => {
+  const existingContainer = {
+    data: createContainerFixture({
+      updateRollback: {
+        recordedAt: '2026-04-01T00:00:00.000Z',
+        targetDigest: '3.13.7-alpine',
+        reason: 'start_new_failed',
+        lastError: 'container exited',
+      },
+    }),
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: () => {},
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const containerToSave = createContainerFixture({ updateRollback: undefined });
+
+  container.createCollections(db);
+  const updated = container.updateContainer(containerToSave);
+  expect(updated.updateRollback).toBeUndefined();
+});
+
 test('updateContainer should preserve security scan when omitted from payload', async () => {
   const existingContainer = {
     data: createContainerFixture({

@@ -117,7 +117,7 @@ export interface ContainerSecurityState {
 export interface ContainerUpdateRollbackState {
   /** ISO 8601 timestamp when the rollback was recorded. */
   recordedAt: string;
-  /** Registry digest of the candidate image that was attempted. */
+  /** Registry digest of the candidate image that was attempted, or tag when digest is unavailable. */
   targetDigest: string;
   /** Human-readable reason for the rollback (from operation.rollbackReason). */
   reason: string;
