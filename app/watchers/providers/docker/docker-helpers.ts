@@ -454,7 +454,7 @@ function hasMeaningfulDigestComparisonTag(currentTag?: string) {
 }
 
 function shouldWatchDigestForUnlabeledImage(context: DigestWatchContext) {
-  const { parsedImage, isSemver, tagPrecision, currentTag, summaryImageReference } = context;
+  const { isSemver, tagPrecision, currentTag, summaryImageReference } = context;
 
   // Specific semver releases (1.4.5) — immutable, no digest watching needed
   if (isSemver && tagPrecision === 'specific') {

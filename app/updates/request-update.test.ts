@@ -416,8 +416,7 @@ describe('request-update', () => {
       trigger,
     };
 
-    const result = dispatchAccepted([entry]);
-    expect(result).toBeUndefined();
+    dispatchAccepted([entry]);
 
     await flushAsyncWork();
     expect(trigger.trigger).toHaveBeenCalledWith(entry.container, {

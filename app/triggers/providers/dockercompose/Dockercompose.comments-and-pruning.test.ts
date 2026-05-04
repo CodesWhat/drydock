@@ -97,11 +97,10 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 
 describe('Dockercompose Trigger', () => {
   let trigger;
-  let mockLog;
   let mockDockerApi;
 
   beforeEach(() => {
-    ({ trigger, mockLog, mockDockerApi } = setupDockercomposeTestContext({
+    ({ trigger, mockDockerApi } = setupDockercomposeTestContext({
       DockercomposeCtor: Dockercompose,
       watchMock: watch,
       getStateMock: getState,

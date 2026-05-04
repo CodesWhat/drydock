@@ -94,7 +94,7 @@ afterEach(async () => {
     await registry.testable_deregisterTriggers();
     await registry.testable_deregisterWatchers();
     await registry.testable_deregisterAuthentications();
-  } catch (e) {
+  } catch {
     // ignore error
   }
 });

@@ -9,8 +9,6 @@ import {
 
 describe('Docker Watcher', () => {
   let docker;
-  let mockDockerApi;
-  let mockSchedule;
   let mockContainer;
   let mockImage;
   // Helper-scoped mock references (populated in beforeEach)
@@ -20,8 +18,6 @@ describe('Docker Watcher', () => {
 
   setupDockerWatcherContainerSuite((state) => {
     docker = state.docker;
-    mockDockerApi = state.mockDockerApi;
-    mockSchedule = state.mockSchedule;
     mockContainer = state.mockContainer;
     mockImage = state.mockImage;
   });

@@ -2865,9 +2865,6 @@ describe('DashboardView', () => {
         const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
         const c = makeContainer({ id: 'c1', name: 'nginx' });
         const wrapper = await mountDashboard([c], []);
-        const updateAppliedListener = addEventListenerSpy.mock.calls.findLast(
-          ([eventName]) => eventName === 'dd:sse-update-applied',
-        )?.[1] as EventListener | undefined;
 
         const { toasts } = useToast();
         const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
@@ -2904,9 +2901,6 @@ describe('DashboardView', () => {
         const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
         const c = makeContainer({ id: 'c1', name: 'nginx' });
         const wrapper = await mountDashboard([c], []);
-        const updateFailedListener = addEventListenerSpy.mock.calls.findLast(
-          ([eventName]) => eventName === 'dd:sse-update-failed',
-        )?.[1] as EventListener | undefined;
 
         const { toasts } = useToast();
         const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
@@ -2947,12 +2941,6 @@ describe('DashboardView', () => {
         const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
         const c = makeContainer({ id: 'c1', name: 'nginx' });
         const wrapper = await mountDashboard([c], []);
-        const operationListener = addEventListenerSpy.mock.calls.findLast(
-          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
-        )?.[1] as EventListener | undefined;
-        const updateAppliedListener = addEventListenerSpy.mock.calls.findLast(
-          ([eventName]) => eventName === 'dd:sse-update-applied',
-        )?.[1] as EventListener | undefined;
         const { toasts } = useToast();
         const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 

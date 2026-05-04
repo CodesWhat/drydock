@@ -63,23 +63,6 @@ interface LogStreamContainerApi {
   getContainer: (id: string) => Container | undefined;
 }
 
-interface LocalDockerContainerApi {
-  logs: (options: {
-    follow: boolean;
-    stdout: boolean;
-    stderr: boolean;
-    tail: number;
-    since: number;
-    timestamps: boolean;
-  }) => Promise<Buffer | string | Uint8Array | Readable>;
-}
-
-interface LocalDockerWatcherApi {
-  dockerApi?: {
-    getContainer: (containerName: string) => LocalDockerContainerApi;
-  };
-}
-
 interface ContainerLogStreamGatewayDependencies {
   getContainer: LogStreamContainerApi['getContainer'];
   getWatchers: () => Record<string, unknown>;

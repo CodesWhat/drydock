@@ -4,18 +4,12 @@ import { testable_getLabel } from './Docker.js';
 describe('Docker Watcher', () => {
   let docker;
   let mockDockerApi;
-  let mockSchedule;
-  let mockContainer;
-  let mockImage;
   let hRegistry: any;
   let hMockTag: any;
 
   setupDockerWatcherContainerSuite((state) => {
     docker = state.docker;
     mockDockerApi = state.mockDockerApi;
-    mockSchedule = state.mockSchedule;
-    mockContainer = state.mockContainer;
-    mockImage = state.mockImage;
   });
 
   beforeEach(async () => {
