@@ -1227,9 +1227,7 @@ describe('Docker Watcher', () => {
       mockDockerApi.listContainers.mockResolvedValue([]);
 
       // First call sequence: device flow
-      let postCallCount = 0;
       mockAxios.post.mockImplementation((url) => {
-        postCallCount++;
         if (url === 'https://idp.example.com/oauth/device/code') {
           return Promise.resolve({
             data: createDeviceCodeResponse({

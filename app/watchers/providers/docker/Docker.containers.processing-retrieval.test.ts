@@ -10,18 +10,12 @@ import {
 describe('Docker Watcher', () => {
   let docker;
   let mockDockerApi;
-  let mockSchedule;
-  let mockContainer;
-  let mockImage;
   let hEvent: any;
   let hStoreContainer: any;
 
   setupDockerWatcherContainerSuite((state) => {
     docker = state.docker;
     mockDockerApi = state.mockDockerApi;
-    mockSchedule = state.mockSchedule;
-    mockContainer = state.mockContainer;
-    mockImage = state.mockImage;
   });
 
   beforeEach(async () => {

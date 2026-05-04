@@ -874,17 +874,12 @@ describe('ContainersView — applyContainerPatch', () => {
         name: 'vaultwarden',
         updateOperation: activeOp,
       });
-      const wrapper = await mountContainersView([existing]);
-      const vm = wrapper.vm as any;
+      await mountContainersView([existing]);
 
       // Seed the hold map via the operation composable so reconcile has something to check
       const { useOperationDisplayHold } = await import('@/composables/useOperationDisplayHold');
-      const {
-        holdOperationDisplay,
-        heldOperations,
-        clearAllOperationDisplayHolds,
-        scheduleHeldOperationRelease,
-      } = useOperationDisplayHold();
+      const { holdOperationDisplay, heldOperations, clearAllOperationDisplayHolds } =
+        useOperationDisplayHold();
 
       holdOperationDisplay({
         operationId: activeOp.id,

@@ -183,7 +183,7 @@ async function getAgentLogEntries(
     const since = req.query.since ? Number.parseInt(req.query.since, 10) : undefined;
     const entries = await agent.getLogEntries({ level, component, tail, since });
     res.json(normalizeAgentLogEntries(entries));
-  } catch (error: unknown) {
+  } catch {
     sendErrorResponse(res, 502, AGENT_LOG_FETCH_ERROR_MESSAGE);
   }
 }

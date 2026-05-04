@@ -18,22 +18,6 @@ export interface SeveritySummaryCounts {
   low: number;
 }
 
-interface SecurityDelta {
-  fixed: number;
-  new: number;
-  fixedCritical: number;
-  fixedHigh: number;
-  newCritical: number;
-  newHigh: number;
-}
-
-interface ImageSummary extends SeveritySummaryCounts {
-  image: string;
-  total: number;
-  fixable: number;
-  delta?: SecurityDelta;
-}
-
 export type SbomFormat = 'spdx-json' | 'cyclonedx-json';
 
 export interface SecurityRuntimeToolStatus {
@@ -57,10 +41,6 @@ export interface SecurityRuntimeStatus {
     formats: string[];
   };
   requirements: string[];
-}
-
-interface UpdateScanSummary extends SeveritySummaryCounts {
-  unknown: number;
 }
 
 export interface SecurityEmptyState {

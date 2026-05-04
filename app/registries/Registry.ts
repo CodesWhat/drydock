@@ -7,10 +7,6 @@ import Component, { type ComponentConfiguration } from '../registry/Component.js
 import { getErrorMessage } from '../util/error.js';
 import { getRegistryRequestTimeoutMs } from './configuration.js';
 
-interface RegistryImage extends ContainerImage {
-  // Add registry-specific properties if needed
-}
-
 interface RegistryManifest {
   digest?: string;
   version?: number;
