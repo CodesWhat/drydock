@@ -304,6 +304,14 @@ function emitOperationChangedEvent(operation: UpdateOperation): void {
       typeof (operation as { batchId?: unknown }).batchId === 'string'
         ? (operation as { batchId: string }).batchId
         : undefined,
+    queuePosition:
+      typeof (operation as { queuePosition?: unknown }).queuePosition === 'number'
+        ? (operation as { queuePosition: number }).queuePosition
+        : undefined,
+    queueTotal:
+      typeof (operation as { queueTotal?: unknown }).queueTotal === 'number'
+        ? (operation as { queueTotal: number }).queueTotal
+        : undefined,
     status: operation.status,
     phase: operation.phase,
     lastError:

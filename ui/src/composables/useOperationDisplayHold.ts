@@ -391,6 +391,9 @@ export interface ParsedUpdateOperationSse {
   containerId?: string;
   newContainerId?: string;
   containerName?: string;
+  batchId?: string;
+  queuePosition?: number;
+  queueTotal?: number;
   status: ContainerUpdateOperationStatus;
   phase?: unknown;
   lastError?: string;
@@ -415,6 +418,9 @@ export function parseUpdateOperationSsePayload(raw: unknown): ParsedUpdateOperat
     containerId: typeof p.containerId === 'string' ? p.containerId : undefined,
     newContainerId: typeof p.newContainerId === 'string' ? p.newContainerId : undefined,
     containerName: typeof p.containerName === 'string' ? p.containerName : undefined,
+    batchId: typeof p.batchId === 'string' ? p.batchId : undefined,
+    queuePosition: getPayloadPositiveInteger(p.queuePosition),
+    queueTotal: getPayloadPositiveInteger(p.queueTotal),
     status: p.status,
     phase: p.phase,
     lastError: typeof p.lastError === 'string' ? p.lastError : undefined,
@@ -424,6 +430,10 @@ export function parseUpdateOperationSsePayload(raw: unknown): ParsedUpdateOperat
 
 function getPayloadString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function getPayloadPositiveInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
 
 export function parseUpdateLifecycleSsePayload(
@@ -442,6 +452,7 @@ export function parseUpdateLifecycleSsePayload(
     containerId: getPayloadString(p.containerId),
     newContainerId: getPayloadString(p.newContainerId),
     containerName: getPayloadString(p.containerName),
+    batchId: getPayloadString(p.batchId),
     status,
     phase: getPayloadString(p.phase) ?? status,
     lastError: getPayloadString(p.error),
@@ -561,6 +572,9 @@ export function applyUpdateOperationSseToHold(
     const nextOperation: ContainerUpdateOperation = {
       ...(container.updateOperation ?? {}),
       id: parsed.operationId ?? container.updateOperation?.id ?? '',
+      ...(parsed.batchId !== undefined ? { batchId: parsed.batchId } : {}),
+      ...(parsed.queuePosition !== undefined ? { queuePosition: parsed.queuePosition } : {}),
+      ...(parsed.queueTotal !== undefined ? { queueTotal: parsed.queueTotal } : {}),
       status: parsed.status,
       phase: resolveActiveOperationPhase({
         status: parsed.status,

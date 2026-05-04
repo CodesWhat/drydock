@@ -17,6 +17,8 @@ describe('useOperationStore', () => {
       containerId: 'c1',
       containerName: 'web',
       batchId: 'batch-1',
+      queuePosition: 2,
+      queueTotal: 4,
       status: 'in-progress',
       phase: 'pulling',
     });
@@ -27,6 +29,8 @@ describe('useOperationStore', () => {
         containerId: 'c1',
         containerName: 'web',
         batchId: 'batch-1',
+        queuePosition: 2,
+        queueTotal: 4,
         status: 'in-progress',
         phase: 'pulling',
       }),

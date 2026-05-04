@@ -26,6 +26,8 @@ export type OperationChangedPayload = {
   containerId?: string;
   newContainerId?: string;
   batchId?: string;
+  queuePosition?: number;
+  queueTotal?: number;
   status: string;
   phase?: string;
   lastError?: string;
@@ -109,6 +111,10 @@ export interface SseEventBus {
 type EventStreamSubscriber = (payload: unknown, event: EventStreamEvent) => void;
 
 const MAX_RECENT_EVENTS = 500;
+
+function getPositiveInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
 
 export interface FixedRingBuffer<T> {
   readonly size: number;
@@ -375,6 +381,8 @@ export const useEventStreamStore = defineStore('eventStream', () => {
         containerId: typeof p.containerId === 'string' ? p.containerId : undefined,
         newContainerId: typeof p.newContainerId === 'string' ? p.newContainerId : undefined,
         batchId: typeof p.batchId === 'string' ? p.batchId : undefined,
+        queuePosition: getPositiveInteger(p.queuePosition),
+        queueTotal: getPositiveInteger(p.queueTotal),
         status: p.status,
         phase: typeof p.phase === 'string' ? p.phase : undefined,
         lastError: typeof p.lastError === 'string' ? p.lastError : undefined,

@@ -23,6 +23,8 @@ export interface UiUpdateOperation {
   containerId?: string;
   newContainerId?: string;
   batchId?: string;
+  queuePosition?: number;
+  queueTotal?: number;
   status: OperationStatus;
   phase?: OperationPhase;
   error?: string;
@@ -69,6 +71,10 @@ function getString(value: unknown): string | undefined {
   return typeof value === 'string' && value !== '' ? value : undefined;
 }
 
+function getPositiveInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
 function getOperationPhase(value: unknown): OperationPhase | undefined {
   return isContainerUpdateOperationPhase(value) ? value : undefined;
 }
@@ -110,6 +116,8 @@ function normalizeOperationChangedPayload(payload: unknown): OperationChangedPay
     containerId: getString(payload.containerId),
     newContainerId: getString(payload.newContainerId),
     batchId: getString(payload.batchId),
+    queuePosition: getPositiveInteger(payload.queuePosition),
+    queueTotal: getPositiveInteger(payload.queueTotal),
     status,
     phase: getOperationPhase(payload.phase),
   };
@@ -283,6 +291,8 @@ export const useOperationStore = defineStore('operations', () => {
       containerId: payload.containerId,
       newContainerId: payload.newContainerId,
       batchId: payload.batchId,
+      queuePosition: payload.queuePosition,
+      queueTotal: payload.queueTotal,
       status: payload.status,
       phase: getOperationPhase(payload.phase),
     });

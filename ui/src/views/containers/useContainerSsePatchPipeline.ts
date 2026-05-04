@@ -230,6 +230,8 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
       status,
       phase,
       batchId: storeOp.batchId,
+      queuePosition: storeOp.queuePosition,
+      queueTotal: storeOp.queueTotal,
       updatedAt: new Date().toISOString(),
     };
   }

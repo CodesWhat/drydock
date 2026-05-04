@@ -234,6 +234,31 @@ describe('update operation lifecycle events', () => {
     );
   });
 
+  test('insertOperation emits queue sequence metadata on update-operation-changed', async () => {
+    mockEmitUpdateOperationChanged.mockClear();
+
+    updateOperation.insertOperation({
+      id: 'op-emit-queue',
+      containerName: 'web',
+      status: 'queued',
+      phase: 'queued',
+      batchId: 'batch-queue',
+      queuePosition: 2,
+      queueTotal: 3,
+    });
+    await flushAsyncLifecycleEvents();
+
+    expect(mockEmitUpdateOperationChanged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationId: 'op-emit-queue',
+        batchId: 'batch-queue',
+        queuePosition: 2,
+        queueTotal: 3,
+        status: 'queued',
+      }),
+    );
+  });
+
   test('insertOperation suppresses update-operation-changed when skipChangeEvent is true', async () => {
     mockEmitUpdateOperationChanged.mockClear();
 

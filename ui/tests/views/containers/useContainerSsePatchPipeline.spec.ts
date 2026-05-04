@@ -583,6 +583,9 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
       operationId: 'op-delayed',
       containerId: 'pending-delayed-op',
       containerName: 'pending-delayed',
+      batchId: 'batch-delayed',
+      queuePosition: 2,
+      queueTotal: 5,
       status: 'in-progress',
       phase: 'pulling',
     });
@@ -590,6 +593,9 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
 
     expect(containers.value[0]!.updateOperation).toMatchObject({
       id: 'op-delayed',
+      batchId: 'batch-delayed',
+      queuePosition: 2,
+      queueTotal: 5,
       status: 'in-progress',
       phase: 'pulling',
     });

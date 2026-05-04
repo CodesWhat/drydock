@@ -109,6 +109,8 @@ export interface UpdateOperationChangedEventPayload {
   containerId?: string;
   newContainerId?: string;
   batchId?: string;
+  queuePosition?: number;
+  queueTotal?: number;
   status?: string;
   phase?: string;
   lastError?: string;
