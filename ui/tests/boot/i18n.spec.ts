@@ -45,4 +45,12 @@ describe('buildMessages', () => {
       expect(result).toHaveProperty(locale);
     }
   });
+
+  it('handles locale codes with hyphens (e.g. zh-CN)', () => {
+    const modules = {
+      '../locales/zh-CN/common.json': { hello: '你好' },
+    };
+    const result = buildMessages(modules);
+    expect((result as Record<string, unknown>)['zh-CN']).toEqual({ hello: '你好' });
+  });
 });
