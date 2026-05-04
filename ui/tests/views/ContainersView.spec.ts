@@ -2192,6 +2192,94 @@ describe('ContainersView', () => {
         'redis-cache',
       ]);
     });
+
+    it('keeps accepted bulk update rows visible when live containers disappear during recreate', async () => {
+      const nginx = makeContainer({
+        id: 'c1',
+        name: 'nginx-hooked',
+        newTag: '1.26.0',
+        updateKind: 'minor',
+      });
+      const redis = makeContainer({
+        id: 'c2',
+        name: 'redis-cache',
+        newTag: '7.2.1',
+        updateKind: 'patch',
+      });
+      const postgres = makeContainer({ id: 'c3', name: 'postgres-db' });
+      const wrapper = await mountContainersView([nginx, redis, postgres]);
+      const vm = wrapper.vm as any;
+
+      vm.groupByStack = true;
+      vm.containerSortKey = 'kind';
+      vm.containerSortAsc = false;
+      vm.groupMembershipMap = {
+        c1: 'web-stack',
+        c2: 'web-stack',
+        'nginx-hooked': 'web-stack',
+        'redis-cache': 'web-stack',
+        c3: 'db-stack',
+        'postgres-db': 'db-stack',
+      };
+      await flushPromises();
+      const initialWebOrder = vm.groupedContainers
+        .find((group: { key: string }) => group.key === 'web-stack')
+        ?.containers.map((container: Container) => container.name);
+
+      const activeContainers = [
+        makeContainer({
+          id: 'c1',
+          name: 'nginx-hooked',
+          updateOperation: {
+            id: 'op-c1',
+            status: 'in-progress',
+            phase: 'pulling',
+            updatedAt: '2026-05-04T12:00:00.000Z',
+          },
+        }),
+        makeContainer({
+          id: 'c2',
+          name: 'redis-cache',
+          updateOperation: {
+            id: 'op-c2',
+            status: 'queued',
+            phase: 'queued',
+            updatedAt: '2026-05-04T12:00:00.000Z',
+          },
+        }),
+        postgres,
+      ];
+      mockGetAllContainers.mockResolvedValue(activeContainers);
+      const { mapApiContainers } = await import('@/utils/container-mapper');
+      (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue(activeContainers);
+      mockGetContainerGroups.mockResolvedValueOnce([
+        {
+          name: 'web-stack',
+          containers: [
+            { id: 'c1', name: 'nginx-hooked', displayName: 'nginx-hooked' },
+            { id: 'c2', name: 'redis-cache', displayName: 'redis-cache' },
+          ],
+          containerCount: 2,
+          updatesAvailable: 0,
+        },
+      ]);
+
+      await vm.updateAllInGroup(
+        vm.groupedContainers.find((group: { key: string }) => group.key === 'web-stack'),
+      );
+      await flushPromises();
+      expect(vm.actionPending.has('c1')).toBe(true);
+      expect(vm.actionPending.has('c2')).toBe(true);
+
+      vm.containers = [postgres];
+      mockFilteredContainers.value = [postgres];
+      await flushPromises();
+
+      const webGroup = vm.renderGroups.find((group: { key: string }) => group.key === 'web-stack');
+      expect(webGroup?.containers.map((container: Container) => container.name)).toEqual(
+        initialWebOrder,
+      );
+    });
   });
 
   describe('container logs viewer integration', () => {

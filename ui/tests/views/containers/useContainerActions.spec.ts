@@ -1183,7 +1183,7 @@ describe('useContainerActions', () => {
     expect(composable.isContainerUpdateInProgress('web')).toBe(false);
   });
 
-  it('relies on live backend operation state for grouped updates instead of local pending tracking', async () => {
+  it('keeps grouped updates in local pending tracking even when backend operation state is visible', async () => {
     vi.useFakeTimers();
     const web = makeContainer({
       id: 'container-1',
@@ -1221,7 +1221,7 @@ describe('useContainerActions', () => {
       containers: [web],
     });
 
-    expect(composable.actionPending.value.has('container-1')).toBe(false);
+    expect(composable.actionPending.value.has('container-1')).toBe(true);
     expect(composable.isContainerUpdateInProgress('web')).toBe(true);
   });
 

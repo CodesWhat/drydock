@@ -334,11 +334,6 @@ async function updateAllInGroupState(args: {
       if (!acceptedTargetIdSet.has(container.id)) {
         continue;
       }
-      const liveContainer = args.containers.value.find((entry) => entry.id === container.id);
-      const operation = liveContainer?.updateOperation;
-      if (operation?.status === 'queued' || operation?.status === 'in-progress') {
-        continue;
-      }
       markPendingActionState({
         actionPending: args.actionPending,
         actionPendingLifecycleModes: args.actionPendingLifecycleModes,
