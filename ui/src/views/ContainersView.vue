@@ -135,17 +135,31 @@ function containerRowFingerprint(c: Container): string {
   return [
     c.id,
     c.name,
+    c.image,
     c.currentTag,
     c.newTag ?? '',
     c.status,
+    c.server ?? '',
+    c.registry ?? '',
     c.updateKind ?? '',
     c.updateDetectedAt ?? '',
+    c.imageCreated ?? '',
     c.bouncer,
     c.updateBouncer ?? '',
     c.updatePolicyState ?? '',
     c.noUpdateReason ?? '',
     c.registryError ?? '',
-    op ? `${op.id}:${op.status}:${op.phase}:${op.updatedAt}` : '',
+    op
+      ? [
+          op.id,
+          op.status,
+          op.phase,
+          op.updatedAt,
+          op.batchId ?? '',
+          op.queuePosition ?? '',
+          op.queueTotal ?? '',
+        ].join(':')
+      : '',
   ].join('|');
 }
 
@@ -176,6 +190,21 @@ function preserveTransientUiFields(prev: Container[], next: Container[]): Contai
     }
     if (match.lastUpdateFailureAt !== undefined) {
       c.lastUpdateFailureAt = match.lastUpdateFailureAt;
+    }
+    const previousOperation = match.updateOperation;
+    if (c.updateOperation && previousOperation && c.updateOperation.id === previousOperation.id) {
+      c.updateOperation = {
+        ...previousOperation,
+        ...c.updateOperation,
+        batchId: c.updateOperation.batchId ?? previousOperation.batchId,
+        queuePosition: c.updateOperation.queuePosition ?? previousOperation.queuePosition,
+        queueTotal: c.updateOperation.queueTotal ?? previousOperation.queueTotal,
+      };
+    } else if (
+      c.updateOperation === undefined &&
+      (previousOperation?.status === 'queued' || previousOperation?.status === 'in-progress')
+    ) {
+      c.updateOperation = previousOperation;
     }
   }
   return next;

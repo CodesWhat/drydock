@@ -604,6 +604,84 @@ describe('ContainersView', () => {
         });
       });
 
+      it('reassigns containers.value when operation queue metadata changes', async () => {
+        const container = makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          updateOperation: {
+            id: 'op-1',
+            status: 'queued',
+            phase: 'queued',
+            updatedAt: '2026-04-20T12:00:00.000Z',
+          },
+        });
+        const wrapper = await mountContainersView([container]);
+        const vm = wrapper.vm as any;
+
+        const firstRef = vm.containers;
+        const updatedContainer = makeContainer({
+          ...container,
+          updateOperation: {
+            ...container.updateOperation!,
+            batchId: 'batch-1',
+            queuePosition: 2,
+            queueTotal: 4,
+          },
+        });
+        mockGetAllContainers.mockResolvedValue([
+          { ...updatedContainer, displayName: updatedContainer.name },
+        ]);
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue([updatedContainer]);
+
+        await vm.loadContainers();
+        await flushPromises();
+
+        expect(vm.containers).not.toBe(firstRef);
+        expect(vm.containers[0].updateOperation).toMatchObject({
+          batchId: 'batch-1',
+          queuePosition: 2,
+          queueTotal: 4,
+        });
+      });
+
+      it('preserves an active update operation when a reload omits operation metadata', async () => {
+        const activeOperation = {
+          id: 'op-1',
+          status: 'in-progress' as const,
+          phase: 'pulling' as const,
+          updatedAt: '2026-04-20T12:00:00.000Z',
+          batchId: 'batch-1',
+          queuePosition: 2,
+          queueTotal: 4,
+        };
+        const container = makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          currentTag: '1.0.0',
+          updateOperation: activeOperation,
+        });
+        const wrapper = await mountContainersView([container]);
+        const vm = wrapper.vm as any;
+
+        const updatedContainer = makeContainer({
+          ...container,
+          currentTag: '1.0.1',
+          updateOperation: undefined,
+        });
+        mockGetAllContainers.mockResolvedValue([
+          { ...updatedContainer, displayName: updatedContainer.name },
+        ]);
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue([updatedContainer]);
+
+        await vm.loadContainers();
+        await flushPromises();
+
+        expect(vm.containers[0].currentTag).toBe('1.0.1');
+        expect(vm.containers[0].updateOperation).toEqual(activeOperation);
+      });
+
       it('reassigns containers.value when container count changes', async () => {
         const container = makeContainer({ id: 'c1', name: 'nginx' });
         const wrapper = await mountContainersView([container]);
