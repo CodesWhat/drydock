@@ -449,9 +449,12 @@ function hasDigestBackedSummaryReference(currentTag?: string, summaryImageRefere
   return true;
 }
 
+function hasMeaningfulDigestComparisonTag(currentTag?: string) {
+  return typeof currentTag === 'string' && currentTag !== '' && currentTag !== 'unknown';
+}
+
 function shouldWatchDigestForUnlabeledImage(context: DigestWatchContext) {
   const { parsedImage, isSemver, tagPrecision, currentTag, summaryImageReference } = context;
-  const domain = parsedImage.domain;
 
   // Specific semver releases (1.4.5) — immutable, no digest watching needed
   if (isSemver && tagPrecision === 'specific') {
@@ -473,8 +476,8 @@ function shouldWatchDigestForUnlabeledImage(context: DigestWatchContext) {
   }
 
   // Floating tags (v3, 1, 1.4, latest, stable)
-  // Docker Hub stays opt-in because of its documented pull/abuse throttling.
-  return !isDockerHubDomain(domain);
+  // compare by digest so mutable tag aliases stay on their configured tag.
+  return hasMeaningfulDigestComparisonTag(currentTag);
 }
 
 /**

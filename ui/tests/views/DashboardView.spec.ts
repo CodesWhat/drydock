@@ -40,7 +40,13 @@ vi.mock('@/services/container', () => ({
 }));
 
 vi.mock('@/services/stats', () => ({
-  getAllContainerStats: vi.fn(),
+  getStatsSummary: vi.fn(),
+  connectStatsSummaryStream: vi.fn(() => ({
+    pause: vi.fn(),
+    resume: vi.fn(),
+    disconnect: vi.fn(),
+    isPaused: vi.fn().mockReturnValue(false),
+  })),
 }));
 
 vi.mock('@/services/agent', () => ({
@@ -91,11 +97,12 @@ import {
 } from '@/services/container';
 import { getAllRegistries } from '@/services/registry';
 import { getServer } from '@/services/server';
-import { getAllContainerStats } from '@/services/stats';
+import { connectStatsSummaryStream, getStatsSummary } from '@/services/stats';
 import { getAllWatchers } from '@/services/watcher';
 
 const mockGetAllContainers = getAllContainers as ReturnType<typeof vi.fn>;
-const mockGetAllContainerStats = getAllContainerStats as ReturnType<typeof vi.fn>;
+const mockGetStatsSummary = getStatsSummary as ReturnType<typeof vi.fn>;
+const mockConnectStatsSummaryStream = connectStatsSummaryStream as ReturnType<typeof vi.fn>;
 const mockGetContainerRecentStatus = getContainerRecentStatus as ReturnType<typeof vi.fn>;
 const mockGetContainerSummary = getContainerSummary as ReturnType<typeof vi.fn>;
 const mockGetAgents = getAgents as ReturnType<typeof vi.fn>;
@@ -135,7 +142,7 @@ interface DashboardDataOverrides {
   auditEntries?: any[];
   recentStatuses?: Record<string, string>;
   recentStatusesByIdentity?: Record<string, string>;
-  containerStats?: any[];
+  statsSummary?: Partial<import('@/services/stats').ContainerStatsSummarySnapshot>;
 }
 
 function mapAuditEntriesToRecentStatuses(auditEntries: any[]): Record<string, string> {
@@ -166,7 +173,23 @@ async function mountDashboard(
   overrides: DashboardDataOverrides = {},
 ) {
   mockGetAllContainers.mockResolvedValue(containers);
-  mockGetAllContainerStats.mockResolvedValue(overrides.containerStats ?? []);
+  mockGetStatsSummary.mockResolvedValue({
+    timestamp: '2026-04-30T00:00:00.000Z',
+    watchedCount: 0,
+    avgCpuPercent: 0,
+    totalMemoryUsageBytes: 0,
+    totalMemoryLimitBytes: 0,
+    totalMemoryPercent: 0,
+    topCpu: [],
+    topMemory: [],
+    ...(overrides.statsSummary ?? {}),
+  });
+  mockConnectStatsSummaryStream.mockReturnValue({
+    pause: vi.fn(),
+    resume: vi.fn(),
+    disconnect: vi.fn(),
+    isPaused: vi.fn().mockReturnValue(false),
+  });
   mockGetContainerSummary.mockResolvedValue({
     containers: {
       total: containers.length,
@@ -209,6 +232,23 @@ describe('DashboardView', () => {
     vi.clearAllMocks();
     mockRouterPush.mockClear();
     mockBuildDashboardContainerMetrics.mockClear();
+    // Default stats mocks (overridden per-test via mountDashboard overrides.statsSummary)
+    mockGetStatsSummary.mockResolvedValue({
+      timestamp: '2026-04-30T00:00:00.000Z',
+      watchedCount: 0,
+      avgCpuPercent: 0,
+      totalMemoryUsageBytes: 0,
+      totalMemoryLimitBytes: 0,
+      totalMemoryPercent: 0,
+      topCpu: [],
+      topMemory: [],
+    });
+    mockConnectStatsSummaryStream.mockReturnValue({
+      pause: vi.fn(),
+      resume: vi.fn(),
+      disconnect: vi.fn(),
+      isPaused: vi.fn().mockReturnValue(false),
+    });
     mockUpdateContainer.mockResolvedValue({});
     mockUpdateContainers.mockImplementation(async (containerIds: string[]) => ({
       message: 'Container update requests processed',
@@ -591,7 +631,6 @@ describe('DashboardView', () => {
         const watchersCallsBefore = mockGetAllWatchers.mock.calls.length;
         const registriesCallsBefore = mockGetAllRegistries.mock.calls.length;
         const recentStatusCallsBefore = mockGetContainerRecentStatus.mock.calls.length;
-        const statsCallsBefore = mockGetAllContainerStats.mock.calls.length;
 
         globalThis.dispatchEvent(new CustomEvent('dd:sse-container-changed'));
         globalThis.dispatchEvent(new CustomEvent('dd:sse-scan-completed'));
@@ -613,7 +652,6 @@ describe('DashboardView', () => {
         // Live endpoints always refetch on dd:sse-connected (full-live mode)
         expect(mockGetAllContainers).toHaveBeenCalledTimes(containersCallsBefore + 1);
         expect(mockGetContainerRecentStatus).toHaveBeenCalledTimes(recentStatusCallsBefore + 1);
-        expect(mockGetAllContainerStats).toHaveBeenCalledTimes(statsCallsBefore + 1);
         // Static endpoints are TTL-guarded and skipped (fetched during mount within 30 s)
         expect(mockGetServer).toHaveBeenCalledTimes(serverCallsBefore);
         expect(mockGetAgents).toHaveBeenCalledTimes(agentsCallsBefore);
@@ -1300,52 +1338,56 @@ describe('DashboardView', () => {
   });
 
   describe('resource usage widget', () => {
-    it('renders top cpu and memory containers from live stats summary', async () => {
+    it('renders top cpu and memory containers from stats summary SSE stream', async () => {
       const wrapper = await mountDashboard(
         [makeContainer()],
         [],
         {},
         {
-          containerStats: [
-            {
-              id: 'c1',
-              name: 'web',
-              status: 'running',
-              watcher: 'local',
-              agent: undefined,
-              stats: {
-                containerId: 'c1',
-                cpuPercent: 30,
-                memoryUsageBytes: 300,
-                memoryLimitBytes: 600,
-                memoryPercent: 50,
-                networkRxBytes: 1,
-                networkTxBytes: 2,
-                blockReadBytes: 3,
-                blockWriteBytes: 4,
-                timestamp: '2026-03-14T10:00:00.000Z',
-              },
-            },
-            {
-              id: 'c2',
-              name: 'db',
-              status: 'running',
-              watcher: 'local',
-              agent: undefined,
-              stats: {
-                containerId: 'c2',
+          statsSummary: {
+            timestamp: '2026-03-14T10:00:00.000Z',
+            watchedCount: 2,
+            avgCpuPercent: 55.0,
+            totalMemoryUsageBytes: 800,
+            totalMemoryLimitBytes: 1_600,
+            totalMemoryPercent: 50.0,
+            topCpu: [
+              {
+                id: 'c2',
+                name: 'db',
                 cpuPercent: 80,
                 memoryUsageBytes: 500,
                 memoryLimitBytes: 1_000,
                 memoryPercent: 50,
-                networkRxBytes: 1,
-                networkTxBytes: 2,
-                blockReadBytes: 3,
-                blockWriteBytes: 4,
-                timestamp: '2026-03-14T10:00:00.000Z',
               },
-            },
-          ],
+              {
+                id: 'c1',
+                name: 'web',
+                cpuPercent: 30,
+                memoryUsageBytes: 300,
+                memoryLimitBytes: 600,
+                memoryPercent: 50,
+              },
+            ],
+            topMemory: [
+              {
+                id: 'c2',
+                name: 'db',
+                cpuPercent: 80,
+                memoryUsageBytes: 500,
+                memoryLimitBytes: 1_000,
+                memoryPercent: 50,
+              },
+              {
+                id: 'c1',
+                name: 'web',
+                cpuPercent: 30,
+                memoryUsageBytes: 300,
+                memoryLimitBytes: 600,
+                memoryPercent: 50,
+              },
+            ],
+          },
         },
       );
 
@@ -1357,6 +1399,23 @@ describe('DashboardView', () => {
       expect(resourceWidget.text()).toContain('web');
       expect(resourceWidget.text()).toContain('55.0%');
       expect(resourceWidget.text()).toContain('800 B / 1.6 KB');
+    });
+
+    it('renders widget with EMPTY_SUMMARY when summary is null on first render', async () => {
+      // getStatsSummary rejects — summary remains null — widget gets EMPTY_SUMMARY
+      mockGetStatsSummary.mockRejectedValue(new Error('not ready'));
+      const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+
+      const wrapper = await mountDashboard([makeContainer()]);
+
+      const resourceWidget = wrapper.find('[data-widget-id="resource-usage"]');
+      expect(resourceWidget.exists()).toBe(true);
+      // With empty summary: 0% cpu, no memory limit, no containers in top lists
+      expect(resourceWidget.text()).toContain('0.0%');
+      expect(resourceWidget.text()).toContain('No live CPU data');
+      expect(resourceWidget.text()).toContain('No live memory data');
+
+      debugSpy.mockRestore();
     });
   });
 
@@ -2316,7 +2375,7 @@ describe('DashboardView', () => {
 
       expect(
         toasts.value.some(
-          (toast) => toast.tone === 'success' && toast.title === 'Started updates for 2 containers',
+          (toast) => toast.tone === 'success' && toast.title === 'Queued updates for 2 containers',
         ),
       ).toBe(true);
     });
@@ -2540,7 +2599,7 @@ describe('DashboardView', () => {
       }
     });
 
-    it('fires success toast when terminal SSE succeeded and operation was tracked', async () => {
+    it('does not fire success toast when terminal SSE succeeded and operation was tracked', async () => {
       vi.useFakeTimers();
       try {
         const wrapper = await mountDashboard(
@@ -2583,18 +2642,14 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        const successToast = toasts.value.find(
-          (t) => t.tone === 'success' && t.title === 'Updated: nginx',
-        );
-        expect(successToast).toBeDefined();
-        expect(toasts.value.length).toBeGreaterThan(beforeCount);
+        expect(toasts.value.length).toBe(beforeCount);
         void wrapper;
       } finally {
         vi.useRealTimers();
       }
     });
 
-    it('fires error toast when terminal SSE failed and operation was tracked', async () => {
+    it('does not fire error toast when terminal SSE failed and operation was tracked', async () => {
       vi.useFakeTimers();
       try {
         const wrapper = await mountDashboard(
@@ -2635,18 +2690,14 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        const errorToast = toasts.value.find(
-          (t) => t.tone === 'error' && t.title === 'Update failed: nginx',
-        );
-        expect(errorToast).toBeDefined();
-        expect(toasts.value.length).toBeGreaterThan(beforeCount);
+        expect(toasts.value.length).toBe(beforeCount);
         void wrapper;
       } finally {
         vi.useRealTimers();
       }
     });
 
-    it('fires error toast when terminal SSE rolled-back and operation was tracked', async () => {
+    it('does not fire error toast when terminal SSE rolled-back and operation was tracked', async () => {
       vi.useFakeTimers();
       try {
         const wrapper = await mountDashboard(
@@ -2687,11 +2738,7 @@ describe('DashboardView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        const errorToast = toasts.value.find(
-          (t) => t.tone === 'error' && t.title === 'Rolled back: nginx',
-        );
-        expect(errorToast).toBeDefined();
-        expect(toasts.value.length).toBeGreaterThan(beforeCount);
+        expect(toasts.value.length).toBe(beforeCount);
         void wrapper;
       } finally {
         vi.useRealTimers();
@@ -2767,6 +2814,426 @@ describe('DashboardView', () => {
         expect(toasts.value.length).toBe(beforeCount);
         // Ghost for our container should still be visible (unrelated event shouldn't prune it)
         expect(wrapper.find('[data-widget-id="recent-updates"]').text()).toContain('Updating');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe('fail-safe completion toast via dd:sse-update-applied / dd:sse-update-failed', () => {
+    it('fires toast.success on dd:sse-update-applied when no hold was tracked', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+        const updateAppliedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-applied',
+        )?.[1] as EventListener | undefined;
+
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-applied', {
+            detail: {
+              operationId: 'op-dash-failsafe-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              batchId: null,
+              timestamp: '2026-04-28T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
+
+        wrapper.unmount();
+        addEventListenerSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires toast.error on dd:sse-update-failed when no hold was tracked', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+        const updateFailedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-failed',
+        )?.[1] as EventListener | undefined;
+
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-dash-failfail-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              phase: 'pulling',
+              batchId: null,
+              timestamp: '2026-04-28T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.at(-1)).toMatchObject({
+          tone: 'error',
+          title: 'Update failed: nginx',
+        });
+
+        wrapper.unmount();
+        addEventListenerSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires completion toast from dd:sse-update-applied even when operation terminal event arrived first', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+        const operationListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-operation-changed',
+        )?.[1] as EventListener | undefined;
+        const updateAppliedListener = addEventListenerSpy.mock.calls.findLast(
+          ([eventName]) => eventName === 'dd:sse-update-applied',
+        )?.[1] as EventListener | undefined;
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        // Register a hold, then receive the terminal phase event first. This path
+        // now only releases the hold; the toast is owned by dd:sse-update-applied.
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-dash-dedup-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'in-progress',
+              phase: 'pulling',
+            },
+          }),
+        );
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-operation-changed', {
+            detail: {
+              operationId: 'op-dash-dedup-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              status: 'succeeded',
+              phase: 'succeeded',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countBefore);
+
+        // The canonical completion event is still responsible for user feedback.
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-applied', {
+            detail: {
+              operationId: 'op-dash-dedup-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              batchId: null,
+              timestamp: '2026-04-28T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.at(-1)).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
+
+        wrapper.unmount();
+        addEventListenerSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('clears pending fail-safe completion toast timers on unmount', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-applied', {
+            detail: {
+              operationId: 'op-dash-unmount-cleanup-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              batchId: null,
+              timestamp: '2026-04-28T12:00:00.000Z',
+            },
+          }),
+        );
+
+        wrapper.unmount();
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countBefore);
+
+        addEventListenerSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('suppresses per-container toast when dd:sse-update-applied has a non-null batchId', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-applied', {
+            detail: {
+              operationId: 'op-dash-batch-member-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              batchId: 'batch-xyz',
+              timestamp: '2026-04-28T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        // Track D handles the batch summary; per-container toast suppressed
+        expect(toasts.value.length).toBe(countBefore);
+
+        wrapper.unmount();
+        addEventListenerSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires toast.warning on dd:sse-update-failed when rollbackReason is present and not cancelled', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-dash-rb-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              rollbackReason: '',
+              phase: 'rolled-back',
+              batchId: null,
+              timestamp: '2026-05-01T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.at(-1)).toMatchObject({
+          tone: 'warning',
+          title: 'Rolled back: nginx',
+        });
+
+        wrapper.unmount();
+        addEventListenerSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires toast.warning with reason on dd:sse-update-failed when rollbackReason has a specific value', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-dash-rb-reason-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              rollbackReason: 'health-check-failed',
+              phase: 'rolled-back',
+              batchId: null,
+              timestamp: '2026-05-01T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.at(-1)).toMatchObject({
+          tone: 'warning',
+          title: 'Rolled back: nginx — health check failed',
+        });
+
+        wrapper.unmount();
+        addEventListenerSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires toast.error with reason on dd:sse-update-failed when error is short and meaningful', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-dash-fail-reason-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              error: 'docker pull failed',
+              phase: 'pulling',
+              batchId: null,
+              timestamp: '2026-05-01T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.at(-1)).toMatchObject({
+          tone: 'error',
+          title: 'Update failed: nginx — docker pull failed',
+        });
+
+        wrapper.unmount();
+        addEventListenerSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires toast.success (Cancelled) on dd:sse-update-failed when rollbackReason is cancelled', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-dash-cancel-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              error: 'Cancelled by operator',
+              rollbackReason: 'cancelled',
+              phase: 'rolled-back',
+              batchId: null,
+              timestamp: '2026-05-01T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        expect(toasts.value.length).toBe(countBefore + 1);
+        expect(toasts.value.at(-1)).toMatchObject({
+          tone: 'success',
+          title: 'Cancelled: nginx',
+        });
+
+        wrapper.unmount();
+        addEventListenerSpy.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('suppresses per-container toast when dd:sse-update-failed has a non-null batchId', async () => {
+      vi.useFakeTimers();
+      try {
+        const addEventListenerSpy = vi.spyOn(globalThis, 'addEventListener');
+        const c = makeContainer({ id: 'c1', name: 'nginx' });
+        const wrapper = await mountDashboard([c], []);
+
+        const { toasts } = useToast();
+        const countBefore = toasts.value.length;
+
+        globalThis.dispatchEvent(
+          new CustomEvent('dd:sse-update-failed', {
+            detail: {
+              operationId: 'op-dash-batch-fail-1',
+              containerId: 'c1',
+              containerName: 'nginx',
+              error: 'Update failed',
+              phase: 'failed',
+              batchId: 'batch-xyz',
+              timestamp: '2026-05-01T12:00:00.000Z',
+            },
+          }),
+        );
+
+        vi.advanceTimersByTime(1500);
+        await flushPromises();
+
+        // Track D handles the batch summary; per-container toast suppressed
+        expect(toasts.value.length).toBe(countBefore);
+
+        wrapper.unmount();
+        addEventListenerSpy.mockRestore();
       } finally {
         vi.useRealTimers();
       }

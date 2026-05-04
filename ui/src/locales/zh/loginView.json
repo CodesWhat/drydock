@@ -1,0 +1,34 @@
+{
+  "loginView": {
+    "heading": "登录 Drydock",
+    "username": {
+      "label": "用户名",
+      "placeholder": "请输入用户名"
+    },
+    "password": {
+      "label": "密码",
+      "placeholder": "请输入密码"
+    },
+    "submit": {
+      "signIn": "登录",
+      "signingIn": "登录中..."
+    },
+    "separator": "或使用以下方式继续",
+    "rememberMe": "记住我",
+    "noMethods": "未配置任何身份验证方法。",
+    "errors": {
+      "loadFailed": "无法加载身份验证方法",
+      "invalidCredentials": "用户名或密码无效",
+      "oidcFailed": "无法连接到 {name}",
+      "providerBasic": "基本认证 '{name}'：{error}",
+      "providerOidc": "OIDC 提供者 '{name}'：{error}",
+      "providerNamed": "{type} '{name}'：{error}",
+      "providerGeneric": "{provider}：{error}"
+    },
+    "connectionLost": {
+      "title": "连接丢失",
+      "body": "服务器无法访问。正在等待其重新上线...",
+      "reconnecting": "重新连接中"
+    }
+  }
+}

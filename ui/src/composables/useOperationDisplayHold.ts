@@ -51,25 +51,7 @@ interface OperationDisplayHoldRecord {
 // computed for ALL N containers.
 const heldOperations = shallowRef(new Map<string, OperationDisplayHoldRecord>());
 const releaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-/**
- * Tracks operation IDs whose terminal outcome has already been surfaced to the
- * user (either via the primary SSE path or the reconciliation fallback). Shared
- * between both paths to prevent duplicate toasts.
- */
-const toastFiredOperations = new Set<string>();
-
-function markToastFired(operationId: string) {
-  toastFiredOperations.add(operationId);
-}
-
-function wasToastFired(operationId: string): boolean {
-  return toastFiredOperations.has(operationId);
-}
-
-function resetToastFiredOperations() {
-  toastFiredOperations.clear();
-}
+const releaseCallbacks = new Map<string, Set<() => void>>();
 
 function setHeldOperation(operationId: string, hold: OperationDisplayHoldRecord) {
   heldOperations.value.set(operationId, hold);
@@ -152,6 +134,7 @@ function dropConflictingHolds(target: OperationDisplayHoldTarget & { operationId
       continue;
     }
     clearReleaseTimer(operationId);
+    releaseCallbacks.delete(operationId);
     removeHeldOperation(operationId);
   }
 }
@@ -197,6 +180,7 @@ function holdOperationDisplay(args: {
 }) {
   dropConflictingHolds(args);
   clearReleaseTimer(args.operationId);
+  releaseCallbacks.delete(args.operationId);
 
   const existing = heldOperations.value.get(args.operationId);
   const displayUntil = (args.now ?? Date.now()) + OPERATION_ACTIVE_HOLD_MS;
@@ -223,11 +207,18 @@ function scheduleHeldOperationRelease(args: {
   newContainerId?: string;
   containerName?: string;
   now?: number;
+  onComplete?: () => void;
 }) {
   const operationIds = findMatchingOperationIds(args);
   let scheduled = false;
 
   for (const operationId of operationIds) {
+    if (args.onComplete) {
+      const callbacks = releaseCallbacks.get(operationId) ?? new Set<() => void>();
+      callbacks.add(args.onComplete);
+      releaseCallbacks.set(operationId, callbacks);
+    }
+
     const now = args.now ?? Date.now();
     const nextHold = {
       ...updateHoldTargets(heldOperations.value.get(operationId)!, args),
@@ -242,6 +233,13 @@ function scheduleHeldOperationRelease(args: {
       setTimeout(() => {
         releaseTimers.delete(operationId);
         removeHeldOperation(operationId);
+        const callbacks = releaseCallbacks.get(operationId);
+        releaseCallbacks.delete(operationId);
+        if (callbacks) {
+          for (const callback of callbacks) {
+            callback();
+          }
+        }
       }, OPERATION_DISPLAY_HOLD_MS),
     );
   }
@@ -257,6 +255,7 @@ function clearHeldOperation(args: {
 }) {
   for (const operationId of findMatchingOperationIds(args)) {
     clearReleaseTimer(operationId);
+    releaseCallbacks.delete(operationId);
     removeHeldOperation(operationId);
   }
 }
@@ -324,6 +323,7 @@ function clearAllOperationDisplayHolds() {
     clearTimeout(timer);
   }
   releaseTimers.clear();
+  releaseCallbacks.clear();
   if (heldOperations.value.size > 0) {
     heldOperations.value.clear();
     triggerRef(heldOperations);
@@ -345,9 +345,9 @@ export interface TerminalResolvedArgs {
  * active operation in the raw API response into the short settle window — so the
  * row releases within ~1.5s of the next refresh instead of 10 minutes.
  *
- * When `onTerminalResolved` is provided, it is invoked (at most once per operationId
- * per hold lifetime) before scheduling the release so the caller can fetch the
- * terminal operation state and fire the appropriate toast.
+ * When `onTerminalResolved` is provided, it is invoked before scheduling the
+ * release so callers can perform local cleanup. Toasts intentionally remain on
+ * the replayable dd:update-applied / dd:update-failed path.
  */
 function reconcileHoldsAgainstContainers(
   containers: readonly Pick<Container, 'id' | 'name' | 'updateOperation'>[],
@@ -393,6 +393,8 @@ export interface ParsedUpdateOperationSse {
   containerName?: string;
   status: ContainerUpdateOperationStatus;
   phase?: unknown;
+  lastError?: string;
+  rollbackReason?: string;
 }
 
 /**
@@ -415,6 +417,35 @@ export function parseUpdateOperationSsePayload(raw: unknown): ParsedUpdateOperat
     containerName: typeof p.containerName === 'string' ? p.containerName : undefined,
     status: p.status,
     phase: p.phase,
+    lastError: typeof p.lastError === 'string' ? p.lastError : undefined,
+    rollbackReason: typeof p.rollbackReason === 'string' ? p.rollbackReason : undefined,
+  };
+}
+
+function getPayloadString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+export function parseUpdateLifecycleSsePayload(
+  raw: unknown,
+  lifecycleStatus: 'succeeded' | 'failed',
+): ParsedUpdateOperationSse | undefined {
+  if (!raw || typeof raw !== 'object') {
+    return undefined;
+  }
+  const p = raw as Record<string, unknown>;
+  const rollbackReason = getPayloadString(p.rollbackReason);
+  const status =
+    lifecycleStatus === 'succeeded' ? 'succeeded' : rollbackReason ? 'rolled-back' : 'failed';
+  return {
+    operationId: getPayloadString(p.operationId),
+    containerId: getPayloadString(p.containerId),
+    newContainerId: getPayloadString(p.newContainerId),
+    containerName: getPayloadString(p.containerName),
+    status,
+    phase: getPayloadString(p.phase) ?? status,
+    lastError: getPayloadString(p.error),
+    rollbackReason,
   };
 }
 
@@ -473,31 +504,48 @@ export interface ApplyUpdateOperationSseArgs {
   }) => void;
   /**
    * Invoked on every terminal-status event (succeeded / failed / rolled-back)
-   * regardless of whether a hold was tracked. The helper has already called
-   * scheduleHeldOperationRelease — plus markToastFired when wasTracked — so the
-   * caller's job is to (a) apply any view-specific row cleanup (e.g. clearing
-   * containers.value[idx].updateOperation) and (b) surface the terminal toast
-   * when wasTracked (usually with a setTimeout(OPERATION_DISPLAY_HOLD_MS) so
-   * the row settles before the toast fires). The wasTracked flag lets views
-   * avoid firing toasts for replays of events they never held for.
+   * regardless of whether a hold was tracked. Fires IMMEDIATELY when the
+   * terminal SSE arrives so callers can apply view-specific row cleanup
+   * (e.g. clearing containers.value[idx].updateOperation). This fires before
+   * the hold's settle timer expires — the hold still masks the row.
    */
   onTerminalEvent?: (args: {
     container?: HoldSourceContainer;
     status: TerminalContainerUpdateOperationStatus;
     name: string;
     operationId?: string;
-    wasTracked: boolean;
   }) => void;
+  /**
+   * Invoked AFTER the hold's settle timer fires (OPERATION_DISPLAY_HOLD_MS after
+   * the terminal SSE), once the row has been released from the hold map. Use for
+   * actions that should appear only after the row visually transitions out of
+   * "Health-checking" / "Finalizing" — e.g. completion toasts.
+   * Not called when no hold was tracked for the operation (no row release to wait
+   * for), so callers should degrade gracefully.
+   */
+  onHoldReleased?: (args: {
+    container?: HoldSourceContainer;
+    status: TerminalContainerUpdateOperationStatus;
+    name: string;
+    operationId?: string;
+  }) => void;
+}
+
+export interface ApplyUpdateOperationSseResult {
+  terminal: boolean;
+  releaseScheduled: boolean;
 }
 
 /**
  * Shared dispatcher that both ContainersView and DashboardView route their
  * `dd:sse-update-operation-changed` events through. Keeps the hold map, sort
- * snapshot, and terminal-toast-fired dedup in one place so both views stay in
+ * snapshot, and terminal release behavior in one place so both views stay in
  * lockstep (previously DashboardView had only a terminal handler with no hold
  * creation or REST reconciliation, which was the root of #291).
  */
-export function applyUpdateOperationSseToHold(args: ApplyUpdateOperationSseArgs) {
+export function applyUpdateOperationSseToHold(
+  args: ApplyUpdateOperationSseArgs,
+): ApplyUpdateOperationSseResult {
   const { parsed, resolveContainer, onActiveOperationComputed, onTerminalEvent } = args;
   const target: OperationDisplayHoldTarget = {
     containerId: parsed.containerId,
@@ -508,7 +556,7 @@ export function applyUpdateOperationSseToHold(args: ApplyUpdateOperationSseArgs)
 
   if (isActiveContainerUpdateOperationStatus(parsed.status)) {
     if (!container) {
-      return;
+      return { terminal: false, releaseScheduled: false };
     }
     const nextOperation: ContainerUpdateOperation = {
       ...(container.updateOperation ?? {}),
@@ -544,7 +592,7 @@ export function applyUpdateOperationSseToHold(args: ApplyUpdateOperationSseArgs)
         },
       });
     }
-    return;
+    return { terminal: false, releaseScheduled: false };
   }
 
   const operationTarget = {
@@ -557,28 +605,38 @@ export function applyUpdateOperationSseToHold(args: ApplyUpdateOperationSseArgs)
     terminalStatus === 'failed' ||
     terminalStatus === 'rolled-back'
   ) {
-    const wasTracked = findMatchingOperationIds(operationTarget).length > 0;
-    scheduleHeldOperationRelease(operationTarget);
-    if (wasTracked && parsed.operationId) {
-      markToastFired(parsed.operationId);
-    }
     const toastName =
       (typeof container?.name === 'string' && container.name.length > 0
         ? container.name
         : undefined) ??
       parsed.containerName ??
       'container';
-    onTerminalEvent?.({
+    const terminalEventArgs = {
       container,
       status: terminalStatus,
       name: toastName,
       operationId: parsed.operationId,
-      wasTracked,
+    };
+    // Fire onTerminalEvent immediately so callers can apply view-specific state
+    // mutations (e.g. clearing container.updateOperation) before the hold releases.
+    onTerminalEvent?.(terminalEventArgs);
+    // Schedule the hold release. The onComplete callback fires after the row's
+    // settle timer expires so callers that need to act after the row visually
+    // clears (e.g. toasts) can do so via onHoldReleased.
+    const onHoldReleasedFn = args.onHoldReleased
+      ? () => {
+          args.onHoldReleased!(terminalEventArgs);
+        }
+      : undefined;
+    const releaseScheduled = scheduleHeldOperationRelease({
+      ...operationTarget,
+      onComplete: onHoldReleasedFn,
     });
-    return;
+    return { terminal: true, releaseScheduled };
   }
 
   clearHeldOperation(operationTarget);
+  return { terminal: false, releaseScheduled: false };
 }
 
 export function useOperationDisplayHold() {
@@ -590,10 +648,7 @@ export function useOperationDisplayHold() {
     findMatchingOperationIds,
     getDisplayUpdateOperation,
     holdOperationDisplay,
-    markToastFired,
     parseUpdateOperationSsePayload,
-    wasToastFired,
-    resetToastFiredOperations,
     projectContainerDisplayState,
     reconcileHoldsAgainstContainers,
     scheduleHeldOperationRelease,

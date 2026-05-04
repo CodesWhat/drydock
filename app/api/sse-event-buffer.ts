@@ -33,15 +33,18 @@ function parseEventId(lastEventId: string): { bootIdPart: string; counter: numbe
 
 export class SseEventBuffer {
   private readonly windowMs: number;
+  private readonly maxEntries: number;
   private readonly ring: BufferedEvent[] = [];
 
-  constructor(windowMs = 5 * 60 * 1000) {
+  constructor(windowMs = 5 * 60 * 1000, maxEntries = 500) {
     this.windowMs = windowMs;
+    this.maxEntries = maxEntries;
   }
 
   push(id: string, event: string, data: unknown, timestamp: number): void {
     this.evict(timestamp);
     this.ring.push({ id, event, data, timestamp });
+    this.evictOverflow();
   }
 
   replaySince(lastEventId: string, now: number): ReplaySinceResult {
@@ -82,6 +85,17 @@ export class SseEventBuffer {
     }
     if (i > 0) {
       this.ring.splice(0, i);
+    }
+  }
+
+  private evictOverflow(): void {
+    if (this.maxEntries <= 0) {
+      this.ring.length = 0;
+      return;
+    }
+    const overflow = this.ring.length - this.maxEntries;
+    if (overflow > 0) {
+      this.ring.splice(0, overflow);
     }
   }
 }

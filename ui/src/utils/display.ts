@@ -1,5 +1,28 @@
 /** Pure display helper functions for container/server/registry badge styling. */
 
+/**
+ * Internal group-bucket sentinels that must never appear in user-facing text.
+ * Any raw group key that matches one of these (or is null/undefined/blank) is
+ * treated as "no group" by returning `undefined`, so callers fall through to
+ * their no-group locale branch.
+ */
+const GROUP_SENTINELS = new Set(['__ungrouped__', '__flat__']);
+
+/**
+ * Normalise a raw group key or name for display.
+ *
+ * Returns `undefined` when the value is a sentinel (`__ungrouped__`,
+ * `__flat__`), null, undefined, or blank/whitespace-only so callers can
+ * use a simple truthiness check and fall through to no-group text.
+ */
+export function displayGroupName(raw: string | null | undefined): string | undefined {
+  if (raw == null) return undefined;
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return undefined;
+  if (GROUP_SENTINELS.has(trimmed)) return undefined;
+  return trimmed;
+}
+
 export function parseServer(server: string): { name: string; env: string | null } {
   const m = server.match(/^(.+?)\s*\((.+)\)$/);
   return m ? { name: m[1], env: m[2] } : { name: server, env: null };

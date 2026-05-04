@@ -131,6 +131,48 @@ export function shouldRenderStandaloneQueuedUpdateAsUpdating(args: {
   return headId === args.targetId;
 }
 
+export type UpdateInProgressPhaseLabelKey =
+  | 'pulling'
+  | 'scanning'
+  | 'generatingSbom'
+  | 'updating'
+  | 'healthChecking'
+  | 'finalizing'
+  | 'rollingBack';
+
+export function getUpdateInProgressPhaseLabelKey(
+  phase: string | undefined,
+): UpdateInProgressPhaseLabelKey {
+  switch (phase) {
+    case 'pulling':
+      return 'pulling';
+    case 'scanning':
+      return 'scanning';
+    case 'sbom-generating':
+      return 'generatingSbom';
+    case 'health-gate':
+      return 'healthChecking';
+    case 'health-gate-passed':
+      return 'finalizing';
+    case 'rollback-started':
+    case 'rollback-deferred':
+      return 'rollingBack';
+    default:
+      return 'updating';
+  }
+}
+
+/** Maps every UpdateInProgressPhaseLabelKey to its i18n message path. */
+export const UPDATE_IN_PROGRESS_PHASE_I18N: Record<UpdateInProgressPhaseLabelKey, string> = {
+  pulling: 'containerComponents.groupedViews.statusPulling',
+  scanning: 'containerComponents.groupedViews.statusScanningPhase',
+  generatingSbom: 'containerComponents.groupedViews.statusGeneratingSbom',
+  updating: 'containerComponents.groupedViews.statusUpdating',
+  healthChecking: 'containerComponents.groupedViews.statusHealthChecking',
+  finalizing: 'containerComponents.groupedViews.statusFinalizing',
+  rollingBack: 'containerComponents.groupedViews.statusRollingBack',
+};
+
 export function isStaleContainerUpdateError(error: unknown): boolean {
   return isNoUpdateAvailableError(error);
 }
@@ -148,7 +190,7 @@ export function getContainerAlreadyUpToDateMessage(name: string): string {
 }
 
 export function formatContainerUpdateStartedCountMessage(count: number): string {
-  return `Started update${count === 1 ? '' : 's'} for ${count} container${count === 1 ? '' : 's'}`;
+  return `Queued update${count === 1 ? '' : 's'} for ${count} container${count === 1 ? '' : 's'}`;
 }
 
 export function formatContainersAlreadyUpToDateMessage(count: number): string {

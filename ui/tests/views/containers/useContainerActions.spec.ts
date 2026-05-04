@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
   toastInfo: vi.fn(),
+  toastWarning: vi.fn(),
   confirmRequire: vi.fn(),
   getBackups: vi.fn(),
   rollback: vi.fn(),
@@ -36,6 +37,7 @@ const mocks = vi.hoisted(() => ({
   stopContainer: vi.fn(),
   updateContainer: vi.fn(),
   updateContainers: vi.fn(),
+  cancelUpdateOperation: vi.fn(),
   previewContainer: vi.fn(),
   containerActionsEnabled: { value: true },
   loadServerFeatures: vi.fn().mockResolvedValue(undefined),
@@ -62,6 +64,7 @@ vi.mock('@/services/container', () => ({
 }));
 
 vi.mock('@/services/container-actions', () => ({
+  cancelUpdateOperation: mocks.cancelUpdateOperation,
   restartContainer: mocks.restartContainer,
   startContainer: mocks.startContainer,
   stopContainer: mocks.stopContainer,
@@ -78,7 +81,7 @@ vi.mock('@/composables/useToast', () => ({
     success: mocks.toastSuccess,
     error: mocks.toastError,
     info: mocks.toastInfo,
-    warning: vi.fn(),
+    warning: mocks.toastWarning,
     toasts: { value: [] },
     addToast: vi.fn(),
     dismissToast: vi.fn(),
@@ -237,6 +240,7 @@ describe('useContainerActions', () => {
       })),
       rejected: [],
     }));
+    mocks.cancelUpdateOperation.mockResolvedValue(undefined);
     mocks.previewContainer.mockResolvedValue({});
   });
 
@@ -648,8 +652,10 @@ describe('useContainerActions', () => {
     expect(useUpdateBatches().getBatch('group-1')).toEqual({
       frozenTotal: 2,
       startedAt: expect.any(Number),
+      succeededCount: 0,
+      failedCount: 0,
     });
-    expect(mocks.toastSuccess).toHaveBeenCalledWith('Started updates for 2 containers in group-1');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Queued updates for 2 containers in group-1');
   });
 
   it('sends grouped update-all through the bulk update endpoint', async () => {
@@ -804,7 +810,7 @@ describe('useContainerActions', () => {
     expect(loadContainers).toHaveBeenCalledTimes(1);
     expect(error.value).toBeNull();
     expect(mocks.toastError).not.toHaveBeenCalled();
-    expect(mocks.toastSuccess).toHaveBeenCalledWith('Started update for 1 container in group-1');
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Queued update for 1 container in group-1');
   });
 
   it('surfaces non-stale grouped update rejections as toast errors', async () => {
@@ -878,7 +884,7 @@ describe('useContainerActions', () => {
     });
 
     expect(loadContainers).toHaveBeenCalledTimes(1);
-    expect(mocks.toastSuccess).not.toHaveBeenCalledWith(expect.stringContaining('Started update'));
+    expect(mocks.toastSuccess).not.toHaveBeenCalledWith(expect.stringContaining('Queued update'));
     expect(useUpdateBatches().getBatch('group-1')).toBeUndefined();
   });
 
@@ -2361,7 +2367,7 @@ describe('useContainerActions', () => {
     expect(mocks.getContainerUpdateOperations).not.toHaveBeenCalled();
   });
 
-  it('skips grouped updates when already in progress or when no container is eligible', async () => {
+  it('warns and skips grouped updates when already in progress; silently skips when no container is eligible', async () => {
     const updatable = makeContainer({
       id: 'container-1',
       name: 'web',
@@ -2385,11 +2391,18 @@ describe('useContainerActions', () => {
       containerIdMap: { web: 'container-1', api: 'container-2', worker: 'container-3' },
     });
 
+    // Group-1: updatable container has a queued operation — guard fires, warning toast shown
     await composable.updateAllInGroup({ key: 'group-1', containers: [updatable] });
     expect(mocks.updateContainers).not.toHaveBeenCalled();
+    expect(mocks.toastWarning).toHaveBeenCalledWith(
+      'Update already in progress for some containers in this group',
+    );
 
+    // Group-2: no updatable containers (all blocked/unchanged) — no API call, no extra warning
+    mocks.toastWarning.mockClear();
     await composable.updateAllInGroup({ key: 'group-2', containers: [blocked, unchanged] });
     expect(mocks.updateContainers).not.toHaveBeenCalled();
+    expect(mocks.toastWarning).not.toHaveBeenCalled();
   });
 
   it('handles delete guard and delete failure paths', async () => {
@@ -2722,6 +2735,8 @@ describe('useContainerActions', () => {
     expect(useUpdateBatches().getBatch('proxy-stack')).toEqual({
       frozenTotal: 3,
       startedAt: expect.any(Number),
+      succeededCount: 0,
+      failedCount: 0,
     });
   });
 
@@ -3711,5 +3726,109 @@ describe('useContainerActions', () => {
     // in-progress (that behaviour is covered by other dedicated pending-state tests).
     // Verify only that actionInProgress no longer carries the update entry.
     expect(composable.actionInProgress.value.has('container-1')).toBe(false);
+  });
+
+  describe('cancelUpdate', () => {
+    it('calls cancel endpoint and shows cancelled toast for queued ops', async () => {
+      mocks.cancelUpdateOperation.mockResolvedValueOnce('cancelled');
+      const container = makeContainer({
+        id: 'container-1',
+        name: 'web',
+        updateOperation: { id: 'op-123', status: 'queued', phase: 'none', updatedAt: '' },
+      });
+      const { composable, loadContainers } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { web: 'container-1' },
+      });
+
+      await composable.cancelUpdate(container);
+      await flushPromises();
+
+      expect(mocks.cancelUpdateOperation).toHaveBeenCalledWith('op-123');
+      expect(mocks.toastSuccess).toHaveBeenCalledWith('Cancelled: web');
+      expect(loadContainers).toHaveBeenCalled();
+    });
+
+    it('shows cancellation-requested toast for in-progress ops', async () => {
+      mocks.cancelUpdateOperation.mockResolvedValueOnce('cancel-requested');
+      const container = makeContainer({
+        id: 'container-1',
+        name: 'web',
+        updateOperation: { id: 'op-123', status: 'in-progress', phase: 'pulling', updatedAt: '' },
+      });
+      const { composable } = await mountActionsHarness({ containers: [container] });
+
+      await composable.cancelUpdate(container);
+      await flushPromises();
+
+      expect(mocks.toastSuccess).toHaveBeenCalledWith('Cancellation requested: web');
+    });
+
+    it('does nothing when updateOperation is absent', async () => {
+      const container = makeContainer({ id: 'container-1', name: 'web' });
+      const { composable } = await mountActionsHarness({
+        containers: [container],
+        containerIdMap: { web: 'container-1' },
+      });
+
+      await composable.cancelUpdate(container);
+      await flushPromises();
+
+      expect(mocks.cancelUpdateOperation).not.toHaveBeenCalled();
+    });
+
+    it('shows warning toast on 409 conflict', async () => {
+      const err = Object.assign(new Error('already finished'), { statusCode: 409 });
+      mocks.cancelUpdateOperation.mockRejectedValueOnce(err);
+
+      const container = makeContainer({
+        id: 'container-1',
+        name: 'web',
+        updateOperation: { id: 'op-123', status: 'queued', phase: 'none', updatedAt: '' },
+      });
+      const { composable } = await mountActionsHarness({ containers: [container] });
+
+      await composable.cancelUpdate(container);
+      await flushPromises();
+
+      expect(mocks.toastWarning).toHaveBeenCalledWith(
+        'Update already finished for web, cannot cancel',
+      );
+      expect(mocks.toastError).not.toHaveBeenCalled();
+    });
+
+    it('shows error toast on 404', async () => {
+      const err = Object.assign(new Error('not found'), { statusCode: 404 });
+      mocks.cancelUpdateOperation.mockRejectedValueOnce(err);
+
+      const container = makeContainer({
+        id: 'container-1',
+        name: 'web',
+        updateOperation: { id: 'op-missing', status: 'queued', phase: 'none', updatedAt: '' },
+      });
+      const { composable } = await mountActionsHarness({ containers: [container] });
+
+      await composable.cancelUpdate(container);
+      await flushPromises();
+
+      expect(mocks.toastError).toHaveBeenCalledWith('Operation not found: web');
+    });
+
+    it('shows generic error toast on unexpected failures', async () => {
+      const err = new Error('network failure');
+      mocks.cancelUpdateOperation.mockRejectedValueOnce(err);
+
+      const container = makeContainer({
+        id: 'container-1',
+        name: 'web',
+        updateOperation: { id: 'op-123', status: 'queued', phase: 'none', updatedAt: '' },
+      });
+      const { composable } = await mountActionsHarness({ containers: [container] });
+
+      await composable.cancelUpdate(container);
+      await flushPromises();
+
+      expect(mocks.toastError).toHaveBeenCalledWith('network failure');
+    });
   });
 });

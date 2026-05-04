@@ -1,3 +1,4 @@
+import { parseEnvNonNegativeInteger } from '../../../util/parse.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
 import TriggerPipelineError from './TriggerPipelineError.js';
 
@@ -65,6 +66,16 @@ type HookExecutorConstructorOptions = Omit<
 };
 
 const REQUIRED_HOOK_EXECUTOR_DEPENDENCY_KEYS = ['runHook', 'getPreferredLabelValue'] as const;
+const DEFAULT_HOOK_TIMEOUT_MS = 60000;
+
+function parseHookTimeout(rawValue: string | undefined): number {
+  try {
+    const parsedValue = parseEnvNonNegativeInteger(rawValue, 'dd.hook.timeout');
+    return parsedValue !== undefined && parsedValue > 0 ? parsedValue : DEFAULT_HOOK_TIMEOUT_MS;
+  } catch {
+    return DEFAULT_HOOK_TIMEOUT_MS;
+  }
+}
 
 class HookExecutor {
   runHook: HookExecutorDependencies['runHook'];
@@ -106,14 +117,13 @@ class HookExecutor {
             logger,
           ) ?? 'true'
         ).toLowerCase() === 'true',
-      hookTimeout: Number.parseInt(
+      hookTimeout: parseHookTimeout(
         this.getPreferredLabelValue(
           container.labels,
           'dd.hook.timeout',
           'wud.hook.timeout',
           logger,
-        ) ?? '60000',
-        10,
+        ),
       ),
       hookEnv: {
         DD_CONTAINER_NAME: container.name,

@@ -114,6 +114,17 @@ export interface ContainerSecurityState {
   updateSbom?: ContainerSecuritySbom;
 }
 
+export interface ContainerUpdateRollbackState {
+  /** ISO 8601 timestamp when the rollback was recorded. */
+  recordedAt: string;
+  /** Registry digest of the candidate image that was attempted. */
+  targetDigest: string;
+  /** Human-readable reason for the rollback (from operation.rollbackReason). */
+  reason: string;
+  /** Last error message from the failed update attempt (from operation.lastError). */
+  lastError: string;
+}
+
 export interface ContainerRuntimeEnv {
   key: string;
   value: string;
@@ -158,6 +169,7 @@ export interface Container {
   tagPinned?: boolean;
   updatePolicy?: ContainerUpdatePolicy;
   security?: ContainerSecurityState;
+  updateRollback?: ContainerUpdateRollbackState;
   image: ContainerImage;
   result?: ContainerResult;
   error?: {
@@ -275,6 +287,12 @@ const schema = joi.object({
     updateScan: containerSecurityScanSchema,
     updateSignature: containerSecuritySignatureSchema,
     updateSbom: containerSecuritySbomSchema,
+  }),
+  updateRollback: joi.object({
+    recordedAt: joi.string().isoDate().required(),
+    targetDigest: joi.string().required(),
+    reason: joi.string().allow('').required(),
+    lastError: joi.string().allow('').required(),
   }),
   image: joi
     .object({

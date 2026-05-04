@@ -7,7 +7,18 @@
     "toast": {
       "updated": "Updated: {name}",
       "updateFailed": "Update failed: {name}",
-      "rolledBack": "Rolled back: {name}"
+      "updateFailedWithReason": "Update failed: {name} — {reason}",
+      "cancelled": "Cancelled: {name}",
+      "rolledBack": "Rolled back: {name}",
+      "rolledBackWithReason": "Rolled back: {name} — {reason}",
+      "updateAlreadyInProgress": "Update already in progress for some containers in this group",
+      "batchUpdated": "Updated {count} containers in {group}",
+      "batchUpdatedNoGroup": "Updated {count} containers",
+      "batchPartial": "Updated {succeeded} of {total} containers in {group}; {failed} failed",
+      "batchPartialNoGroup": "Updated {succeeded} of {total} containers; {failed} failed",
+      "batchFailed": "Failed to update {count} containers in {group}",
+      "batchFailedNoGroup": "Failed to update {count} containers",
+      "unknownGroup": "unknown group"
     },
     "registryError": {
       "generic": "Registry error",

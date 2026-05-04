@@ -164,7 +164,8 @@ export function spyOnProcessComposeHelpers(
   const hooksSpy = vi.spyOn(triggerInstance, 'runServicePostStartHooks').mockResolvedValue();
   const backupSpy = vi.spyOn(triggerInstance, 'backup').mockResolvedValue();
   // Lifecycle methods inherited from Docker trigger
-  const maybeScanSpy = vi.spyOn(triggerInstance, 'maybeScanAndGateUpdate').mockResolvedValue();
+  const verifySigSpy = vi.spyOn(triggerInstance, 'verifySignaturePreUpdate').mockResolvedValue();
+  const scanAndGateSpy = vi.spyOn(triggerInstance, 'scanAndGatePostPull').mockResolvedValue();
   const preHookSpy = vi.spyOn(triggerInstance, 'runPreUpdateHook').mockResolvedValue();
   const postHookSpy = vi.spyOn(triggerInstance, 'runPostUpdateHook').mockResolvedValue();
   const pruneImagesSpy = vi.spyOn(triggerInstance, 'pruneImages').mockResolvedValue();
@@ -178,7 +179,8 @@ export function spyOnProcessComposeHelpers(
     composeUpdateSpy,
     hooksSpy,
     backupSpy,
-    maybeScanSpy,
+    verifySigSpy,
+    scanAndGateSpy,
     preHookSpy,
     postHookSpy,
     pruneImagesSpy,

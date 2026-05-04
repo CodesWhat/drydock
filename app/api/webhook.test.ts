@@ -1259,7 +1259,7 @@ describe('Webhook Router', () => {
         operationId: expect.any(String),
         result: { container: 'my-nginx' },
       });
-      expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect(mockInsertAudit).not.toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'webhook-update',
           status: 'error',
@@ -1268,7 +1268,7 @@ describe('Webhook Router', () => {
       );
     });
 
-    test('should stringify non-Error update failures for audit details', async () => {
+    test('should leave non-Error update failure audit details to lifecycle sinks', async () => {
       const container = {
         id: 'c1',
         name: 'my-nginx',
@@ -1293,12 +1293,12 @@ describe('Webhook Router', () => {
       await flushAcceptedUpdateWork();
 
       expect(res.status).toHaveBeenCalledWith(202);
-      expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect(mockInsertAudit).not.toHaveBeenCalledWith(
         expect.objectContaining({ details: 'trigger failed as string' }),
       );
     });
 
-    test('should insert audit entry for successful update', async () => {
+    test('should not insert route-level audit entry for successful update', async () => {
       const container = {
         id: 'c1',
         name: 'my-nginx',
@@ -1319,7 +1319,7 @@ describe('Webhook Router', () => {
       await handler(req, res);
       await flushAcceptedUpdateWork();
 
-      expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect(mockInsertAudit).not.toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'webhook-update',
           containerName: 'my-nginx',
@@ -1328,7 +1328,7 @@ describe('Webhook Router', () => {
       );
     });
 
-    test('should insert audit entry on update error', async () => {
+    test('should not insert route-level audit entry on update error', async () => {
       const container = {
         id: 'c1',
         name: 'my-nginx',
@@ -1352,7 +1352,7 @@ describe('Webhook Router', () => {
       await handler(req, res);
       await flushAcceptedUpdateWork();
 
-      expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect(mockInsertAudit).not.toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'webhook-update',
           status: 'error',
@@ -1381,7 +1381,7 @@ describe('Webhook Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(mockAuditInc).toHaveBeenCalledWith({ action: 'webhook-update' });
+      expect(mockAuditInc).not.toHaveBeenCalledWith({ action: 'webhook-update' });
       expect(mockWebhookInc).toHaveBeenCalledWith({ action: 'update-container' });
     });
 

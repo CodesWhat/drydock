@@ -8,6 +8,12 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./qa-compose.yml:/drydock/qa-compose.yml:ro
+    # Optional gitignored credentials file (Docker Hub / GHCR tokens). See
+    # test/.env.qa-creds.example. Compose silently no-ops when the file is
+    # absent so CI / fresh checkouts still work without it.
+    env_file:
+      - path: .env.qa-creds
+        required: false
     environment:
       - DD_RUN_AS_ROOT=true
       - DD_ALLOW_INSECURE_ROOT=true
@@ -50,21 +56,31 @@ services:
       # --- Docker Compose action (manual only) ---
       - DD_ACTION_DOCKERCOMPOSE_QA_FILE=/drydock/qa-compose.yml
       - DD_ACTION_DOCKERCOMPOSE_QA_AUTO=false
-      # --- GHCR registry (authenticated) ---
-      - DD_REGISTRY_GHCR_PRIVATE_USERNAME=myghuser
-      - DD_REGISTRY_GHCR_PRIVATE_TOKEN=ghp_fakeGitHubTokenForTesting123
+      # Docker Hub + GHCR creds come from test/.env.qa-creds (gitignored,
+      # optional). When that file is absent: Hub pulls hit the anonymous IP
+      # rate limit, GHCR private uses no creds. See test/.env.qa-creds.example
+      # for the variable list. Compose `environment:` always overrides
+      # `env_file`, so don't add DD_REGISTRY_HUB_* / DD_REGISTRY_GHCR_PRIVATE_*
+      # entries here — let env_file win.
       # --- Gitea registry (self-hosted with custom CA) ---
       - DD_REGISTRY_GITEA_PRIVATE_URL=https://gitea.internal.example
       - DD_REGISTRY_GITEA_PRIVATE_LOGIN=gitea-bot
       - DD_REGISTRY_GITEA_PRIVATE_PASSWORD=replace-me
       - DD_REGISTRY_GITEA_PRIVATE_CAFILE=/certs/internal-ca.pem
       # --- Update Bouncer (security scanning) ---
-      - DD_SECURITY_SCANNER=trivy
-      - DD_SECURITY_TRIVY_SERVER=http://trivy-server:4954
-      - DD_SECURITY_BLOCK_SEVERITY=CRITICAL
-      - DD_SECURITY_SBOM_ENABLED=true
-      - DD_SECURITY_SBOM_FORMATS=spdx-json,cyclonedx-json
-      - DD_SECURITY_VERIFY_SIGNATURES=false
+      # Disabled by default for QA: trivy scans pull candidate images from
+      # Docker Hub anonymously, which the rate limiter routinely throttles
+      # (TOOMANYREQUESTS). When that happens the scan errors with
+      # security-scan-failed and the update lifecycle correctly fails the
+      # operation — but it blocks the update path we want to QA.
+      # Uncomment the trivy block below to exercise the security gate.
+      - DD_SECURITY_SCANNER=
+      # - DD_SECURITY_SCANNER=trivy
+      # - DD_SECURITY_TRIVY_SERVER=http://trivy-server:4954
+      # - DD_SECURITY_BLOCK_SEVERITY=CRITICAL
+      # - DD_SECURITY_SBOM_ENABLED=true
+      # - DD_SECURITY_SBOM_FORMATS=spdx-json,cyclonedx-json
+      # - DD_SECURITY_VERIFY_SIGNATURES=false
       # --- Maintenance window (QA) ---
       # Uncomment to test; adjust cron to match/not-match current time
       # - DD_WATCHER_LOCAL_MAINTENANCE_WINDOW=0 2-6 * * *
@@ -157,17 +173,17 @@ services:
     entrypoint: ["sh", "-c"]
     command:
       - |
-        docker pull nginx:1.24.0
-        docker run -d --name remote-nginx --label dd.watch=true --label "dd.display.name=Remote Nginx" --label dd.group=remote nginx:1.24.0
-        docker pull redis:7.0.0
-        docker run -d --name remote-redis --label dd.watch=true --label "dd.display.name=Remote Redis" --label dd.group=remote redis:7.0.0
+        docker pull mirror.gcr.io/library/nginx:1.24.0
+        docker run -d --name remote-nginx --label dd.watch=true --label "dd.display.name=Remote Nginx" --label dd.group=remote mirror.gcr.io/library/nginx:1.24.0
+        docker pull mirror.gcr.io/library/redis:7.0.0
+        docker run -d --name remote-redis --label dd.watch=true --label "dd.display.name=Remote Redis" --label dd.group=remote mirror.gcr.io/library/redis:7.0.0
 
   # ── Containers with updates available ──────────────────
 
   # Nginx with lifecycle hooks (tests hooks UI + group view)
   # Icon uses colon separator with nested prefix (tests Fix 03 + Fix 06)
   nginx-hooked:
-    image: nginx:1.25.5-alpine
+    image: mirror.gcr.io/library/nginx:1.25.5-alpine
     pull_policy: missing
     container_name: drydock-playwright-nginx-hooked
     labels:
@@ -182,7 +198,7 @@ services:
   # Redis in same group (tests group view)
   # Icon uses colon separator (tests Fix 06)
   redis-cache:
-    image: redis:7.2.0-alpine
+    image: mirror.gcr.io/library/redis:7.2.0-alpine
     pull_policy: missing
     container_name: drydock-playwright-redis-cache
     labels:
@@ -194,7 +210,7 @@ services:
   # Traefik with auto-rollback (tests rollback UI)
   # Icon uses dash separator (standard format — baseline comparison)
   traefik-proxy:
-    image: traefik:v3.0.0
+    image: mirror.gcr.io/library/traefik:v3.0.0
     pull_policy: missing
     container_name: drydock-playwright-traefik-proxy
     labels:
@@ -218,7 +234,7 @@ services:
 
   # PostgreSQL ungrouped (tests ungrouped container)
   postgres-db:
-    image: postgres:16.0-alpine
+    image: mirror.gcr.io/library/postgres:16.0-alpine
     pull_policy: missing
     container_name: drydock-playwright-postgres-db
     environment:
@@ -232,7 +248,7 @@ services:
   # Node 16 Alpine — EOL, newer versions have known CRITICAL CVEs
   # After watcher finds update, trigger scan to get "blocked" bouncer status
   node-vulnerable:
-    image: node:16.0.0-alpine
+    image: mirror.gcr.io/library/node:16.0.0-alpine
     container_name: drydock-playwright-node-vulnerable
     command: ["node", "-e", "setInterval(() => {}, 60000)"]
     labels:
@@ -244,7 +260,7 @@ services:
   # Python 3.9 slim — older version with known HIGH vulns (not CRITICAL)
   # Should show "unsafe" bouncer after scan (not blocked since only CRITICALs block)
   python-unsafe:
-    image: python:3.9.0-slim
+    image: mirror.gcr.io/library/python:3.9.0-slim
     container_name: drydock-playwright-python-unsafe
     command: ["python", "-c", "import time; time.sleep(999999)"]
     labels:
@@ -257,7 +273,7 @@ services:
 
   # Alpine at latest — shows "up to date" state
   alpine-latest:
-    image: alpine:latest
+    image: mirror.gcr.io/library/alpine:latest
     pull_policy: always
     container_name: drydock-playwright-alpine-latest
     command: ["sleep", "infinity"]
@@ -270,7 +286,7 @@ services:
   # Redis 7.4 has an update available but the bootstrap script
   # calls the skip-update API so it shows the "pinned" badge.
   redis-pinned:
-    image: redis:7.4.0
+    image: mirror.gcr.io/library/redis:7.4.0
     pull_policy: missing
     container_name: drydock-playwright-redis-pinned
     command: ["redis-server", "--save", ""]
@@ -283,7 +299,7 @@ services:
 
   # Busybox printing a line every 5s — populates dashboard container log
   log-spammer:
-    image: busybox:1.36
+    image: mirror.gcr.io/library/busybox:1.36
     pull_policy: missing
     container_name: drydock-playwright-log-spammer
     command: ["sh", "-c", "i=0; while true; do i=$((i+1)); echo \"[$$i] drydock-playwright-qa heartbeat $(date -u +%H:%M:%S)\"; sleep 5; done"]
@@ -298,7 +314,7 @@ services:
   #   docker compose -f test/qa-compose.yml up -d --force-recreate slow-shutdown
   # to reproduce the Docker transient alias race condition.
   slow-shutdown:
-    image: busybox:1.36
+    image: mirror.gcr.io/library/busybox:1.36
     pull_policy: missing
     container_name: drydock-playwright-slow-shutdown
     command: ["sh", "-c", "trap 'echo SIGTERM received; sleep 15; exit 0' TERM; echo 'slow-shutdown running'; while true; do sleep 1; done"]
@@ -312,7 +328,7 @@ services:
 
   # Memcached — starts then exits (shows "stopped" in container list)
   memcached-stopped:
-    image: memcached:1.6.0
+    image: mirror.gcr.io/library/memcached:1.6.0
     pull_policy: missing
     container_name: drydock-playwright-memcached-stopped
     command: ["sh", "-c", "exit 0"]
@@ -322,7 +338,7 @@ services:
 
   # ── Edge stack (multi-container batch QA) ──────────────
   edge-caddy:
-    image: caddy:2.6.4-alpine
+    image: mirror.gcr.io/library/caddy:2.6.4-alpine
     pull_policy: missing
     container_name: drydock-playwright-edge-caddy
     command: ["caddy", "respond", "--listen", ":80", "QA"]
@@ -333,7 +349,7 @@ services:
       - dd.tag.include=^2\.\d+\.\d+-alpine$$
 
   edge-nginx:
-    image: nginx:1.21.0-alpine
+    image: mirror.gcr.io/library/nginx:1.21.0-alpine
     pull_policy: missing
     container_name: drydock-playwright-edge-nginx
     labels:
@@ -343,7 +359,7 @@ services:
       - dd.tag.include=^1\.\d+\.\d+-alpine$$
 
   edge-httpd:
-    image: httpd:2.4.50-alpine
+    image: mirror.gcr.io/library/httpd:2.4.50-alpine
     pull_policy: missing
     container_name: drydock-playwright-edge-httpd
     labels:
@@ -354,7 +370,7 @@ services:
 
   # ── Messaging stack (multi-container batch QA) ─────────
   msg-nats:
-    image: nats:2.9.0-alpine
+    image: mirror.gcr.io/library/nats:2.9.0-alpine
     pull_policy: missing
     container_name: drydock-playwright-msg-nats
     command: ["-js"]
@@ -365,7 +381,7 @@ services:
       - dd.tag.include=^2\.\d+\.\d+-alpine$$
 
   msg-redis:
-    image: redis:6.0.0-alpine
+    image: mirror.gcr.io/library/redis:6.0.0-alpine
     pull_policy: missing
     container_name: drydock-playwright-msg-redis
     labels:
@@ -376,7 +392,7 @@ services:
 
   # ── Runtime stack (multi-container batch QA) ───────────
   runtime-node:
-    image: node:18.0.0-alpine
+    image: mirror.gcr.io/library/node:18.0.0-alpine
     pull_policy: missing
     container_name: drydock-playwright-runtime-node
     command: ["node", "-e", "setInterval(() => {}, 60000)"]
@@ -387,7 +403,7 @@ services:
       - dd.tag.include=^18\.\d+\.\d+-alpine$$
 
   runtime-python:
-    image: python:3.10.0-alpine
+    image: mirror.gcr.io/library/python:3.10.0-alpine
     pull_policy: missing
     container_name: drydock-playwright-runtime-python
     command: ["python", "-c", "import time; time.sleep(999999)"]
@@ -399,7 +415,7 @@ services:
 
   # ── Standalone updateable containers ───────────────────
   busybox-old:
-    image: busybox:1.34.0
+    image: mirror.gcr.io/library/busybox:1.34.0
     pull_policy: missing
     container_name: drydock-playwright-busybox-old
     command: ["sh", "-c", "while true; do sleep 60; done"]
@@ -409,7 +425,7 @@ services:
       - dd.tag.include=^1\.\d+\.\d+$$
 
   alpine-old:
-    image: alpine:3.14.0
+    image: mirror.gcr.io/library/alpine:3.14.0
     pull_policy: missing
     container_name: drydock-playwright-alpine-old
     command: ["sh", "-c", "while true; do sleep 60; done"]
@@ -417,6 +433,88 @@ services:
       - dd.watch=true
       - dd.display.name=Alpine (Old)
       - dd.tag.include=^3\.\d+\.\d+$$
+
+  # ── Observability stack (Quay.io — separate registry from Docker Hub) ──
+  obs-node-exporter:
+    image: quay.io/prometheus/node-exporter:v1.5.0
+    pull_policy: missing
+    container_name: drydock-playwright-obs-node-exporter
+    command: ["--web.listen-address=:9100"]
+    labels:
+      - dd.watch=true
+      - dd.display.name=Node Exporter
+      - dd.group=observability
+      - dd.tag.include=^v1\.\d+\.\d+$$
+
+  obs-blackbox-exporter:
+    image: quay.io/prometheus/blackbox-exporter:v0.20.0
+    pull_policy: missing
+    container_name: drydock-playwright-obs-blackbox-exporter
+    command: ["--web.listen-address=:9115"]
+    labels:
+      - dd.watch=true
+      - dd.display.name=Blackbox Exporter
+      - dd.group=observability
+      - dd.tag.include=^v0\.\d+\.\d+$$
+
+  obs-alertmanager:
+    image: quay.io/prometheus/alertmanager:v0.24.0
+    pull_policy: missing
+    container_name: drydock-playwright-obs-alertmanager
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml", "--storage.path=/tmp"]
+    labels:
+      - dd.watch=true
+      - dd.display.name=Alertmanager
+      - dd.group=observability
+      - dd.tag.include=^v0\.\d+\.\d+$$
+
+  # ── App servers (mixed registries, varied update sizes) ──
+  app-vaultwarden:
+    image: mirror.gcr.io/vaultwarden/server:1.27.0
+    pull_policy: missing
+    container_name: drydock-playwright-app-vaultwarden
+    environment:
+      - DISABLE_ICON_DOWNLOAD=true
+      - I_REALLY_WANT_VOLATILE_STORAGE=true
+    labels:
+      - dd.watch=true
+      - dd.display.name=Vaultwarden
+      - dd.group=apps
+      - dd.tag.include=^1\.\d+\.\d+$$
+
+  app-gitea:
+    image: mirror.gcr.io/gitea/gitea:1.16.0
+    pull_policy: missing
+    container_name: drydock-playwright-app-gitea
+    environment:
+      - INSTALL_LOCK=true
+      - SECRET_KEY=qa-only-not-secret
+    labels:
+      - dd.watch=true
+      - dd.display.name=Gitea
+      - dd.group=apps
+      - dd.tag.include=^1\.\d+\.\d+$$
+
+  # ── Cache stack (small, fast pulls, mixed tag families) ──
+  cache-memcached:
+    image: mirror.gcr.io/library/memcached:1.6.10-alpine
+    pull_policy: missing
+    container_name: drydock-playwright-cache-memcached
+    labels:
+      - dd.watch=true
+      - dd.display.name=Memcached (Cache)
+      - dd.group=cache
+      - dd.tag.include=^1\.6\.\d+-alpine$$
+
+  cache-rabbitmq:
+    image: mirror.gcr.io/library/rabbitmq:3.10.0-alpine
+    pull_policy: missing
+    container_name: drydock-playwright-cache-rabbitmq
+    labels:
+      - dd.watch=true
+      - dd.display.name=RabbitMQ
+      - dd.group=cache
+      - dd.tag.include=^3\.\d+\.\d+-alpine$$
 
 volumes:
   portainer_data:

@@ -1,0 +1,55 @@
+{
+  "sharedComponents": {
+    "confirmDialog": {
+      "cancel": "取消",
+      "confirm": "确认"
+    },
+    "copyableTag": {
+      "copied": "已复制！",
+      "clickToCopy": "点击复制"
+    },
+    "dataCardGrid": {
+      "selectItem": "选择 {name}"
+    },
+    "dataFilterBar": {
+      "filters": "筛选",
+      "toggleFilters": "切换筛选",
+      "viewMode": "视图模式",
+      "viewModeLabel": "{label} 视图"
+    },
+    "dataListAccordion": {
+      "toggleDetails": "切换 {name} 详情",
+      "selectItem": "选择 {name}"
+    },
+    "dataTable": {
+      "actions": "操作",
+      "resizeColumn": "调整列宽"
+    },
+    "detailPanel": {
+      "openFullPage": "打开全页视图",
+      "closePanel": "关闭详情面板",
+      "ariaLabel": "详情面板"
+    },
+    "emptyState": {
+      "clearFilters": "清除所有筛选"
+    },
+    "logViewer": {
+      "emptyMessage": "未找到日志条目。",
+      "loadingMessage": "正在加载日志..."
+    },
+    "scanProgressBanner": {
+      "scanning": "正在扫描 {done}/{total} 个容器..."
+    },
+    "scanProgressText": {
+      "scanning": "正在扫描 {done}/{total}..."
+    },
+    "securityEmptyState": {
+      "noDataTitle": "暂无漏洞数据",
+      "noDataBody": "运行扫描以检查您的容器的已知漏洞",
+      "filteredTitle": "没有镜像匹配您的筛选条件",
+      "clearFilters": "清除所有筛选",
+      "setupGuide": "设置指南",
+      "scanNow": "立即扫描"
+    }
+  }
+}

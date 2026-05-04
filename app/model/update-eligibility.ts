@@ -10,6 +10,7 @@ export type UpdateBlockerReason =
   | 'rollback-container'
   | 'active-operation'
   | 'security-scan-blocked'
+  | 'last-update-rolled-back'
   | 'snoozed'
   | 'skip-tag'
   | 'skip-digest'
@@ -36,6 +37,7 @@ export const BLOCKER_SEVERITY: Record<UpdateBlockerReason, UpdateBlockerSeverity
   'rollback-container': 'hard',
   'active-operation': 'hard',
   'security-scan-blocked': 'hard',
+  'last-update-rolled-back': 'hard',
   'agent-mismatch': 'hard',
   'no-update-trigger-configured': 'hard',
   snoozed: 'soft',
@@ -192,6 +194,43 @@ export function computeUpdateEligibility(
         actionHint: 'Use force-update to override, or lower the scan severity threshold.',
       }),
     );
+  }
+
+  // 1b. last-update-rolled-back — fires when the last update attempt for this
+  // container was rolled back and the candidate digest is unchanged. This prevents
+  // the user from immediately re-triggering the same broken update.
+  //
+  // The block is digest-scoped: a different candidate digest (e.g. a newer release)
+  // is never blocked. The operator can also opt out via dd.update.rollback-gate=off.
+  if (container.updateRollback) {
+    const candidateDigest = container.result?.digest;
+    const rollbackGateLabelRaw = container.labels?.['dd.update.rollback-gate'];
+    const rollbackGateOff =
+      typeof rollbackGateLabelRaw === 'string' &&
+      rollbackGateLabelRaw.trim().toLowerCase() === 'off';
+
+    if (
+      !rollbackGateOff &&
+      candidateDigest !== undefined &&
+      candidateDigest === container.updateRollback.targetDigest
+    ) {
+      blockers.push(
+        makeBlocker({
+          reason: 'last-update-rolled-back',
+          message:
+            'Last update attempt rolled back. The same target digest is blocked until a newer image is available.',
+          actionable: true,
+          actionHint:
+            'Wait for a newer image to be released, or set dd.update.rollback-gate=off to override.',
+          details: {
+            targetDigest: container.updateRollback.targetDigest,
+            rollbackReason: container.updateRollback.reason,
+            lastError: container.updateRollback.lastError,
+            recordedAt: container.updateRollback.recordedAt,
+          },
+        }),
+      );
+    }
   }
 
   // 2. snoozed

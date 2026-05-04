@@ -1,3 +1,4 @@
+import { createPinia, setActivePinia } from 'pinia';
 import sseService from '@/services/sse';
 
 describe('SseService', () => {
@@ -13,6 +14,7 @@ describe('SseService', () => {
   };
 
   beforeEach(() => {
+    setActivePinia(createPinia());
     vi.useFakeTimers();
     eventListeners = {};
     mockEventSource = {
@@ -47,7 +49,7 @@ describe('SseService', () => {
     expect(MockEventSourceCtor).toHaveBeenCalledWith('/api/v1/events/ui');
   });
 
-  it('registers event listeners for dd:connected, dd:self-update, container lifecycle events, update-operation changes, agent status events, dd:scan-started, dd:scan-completed, and dd:resync-required', () => {
+  it('registers event listeners for dd:connected, dd:self-update, container lifecycle events, update-operation changes, agent status events, dd:scan-started, dd:scan-completed, dd:resync-required, and the new lifecycle events', () => {
     sseService.connect(mockEventBus);
     expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
       'dd:connected',
@@ -91,6 +93,18 @@ describe('SseService', () => {
     );
     expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
       'dd:resync-required',
+      expect.any(Function),
+    );
+    expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+      'dd:update-applied',
+      expect.any(Function),
+    );
+    expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+      'dd:update-failed',
+      expect.any(Function),
+    );
+    expect(mockEventSource.addEventListener).toHaveBeenCalledWith(
+      'dd:batch-update-completed',
       expect.any(Function),
     );
   });
@@ -332,6 +346,7 @@ describe('SseService', () => {
         containerName: 'nginx',
         containerId: 'c1',
         newContainerId: 'c1-new',
+        batchId: 'batch-1',
         status: 'in-progress',
         phase: 'pulling',
       }),
@@ -343,9 +358,65 @@ describe('SseService', () => {
       containerName: 'nginx',
       containerId: 'c1',
       newContainerId: 'c1-new',
+      batchId: 'batch-1',
       status: 'in-progress',
       phase: 'pulling',
+      lastError: undefined,
+      rollbackReason: undefined,
     });
+  });
+
+  it('parses lastError and rollbackReason from terminal rolled-back payload', () => {
+    sseService.connect(mockEventBus);
+
+    const event = new MessageEvent('dd:update-operation-changed', {
+      data: JSON.stringify({
+        operationId: 'op-rb-1',
+        containerName: 'drydock-playwright-app-vaultwarden',
+        containerId: 'c-vw',
+        status: 'rolled-back',
+        phase: 'rolled-back',
+        lastError:
+          '(HTTP code 400) unexpected - failed to create task for container: failed to create shim task: OCI runtime create failed',
+        rollbackReason: 'start_new_failed',
+      }),
+    });
+    eventListeners['dd:update-operation-changed'](event);
+
+    expect(mockEventBus.emit).toHaveBeenCalledWith(
+      'update-operation-changed',
+      expect.objectContaining({
+        operationId: 'op-rb-1',
+        status: 'rolled-back',
+        phase: 'rolled-back',
+        lastError: expect.stringContaining('OCI runtime create failed'),
+        rollbackReason: 'start_new_failed',
+      }),
+    );
+  });
+
+  it('coerces non-string lastError and rollbackReason to undefined', () => {
+    sseService.connect(mockEventBus);
+
+    const event = new MessageEvent('dd:update-operation-changed', {
+      data: JSON.stringify({
+        operationId: 'op-coerce',
+        status: 'rolled-back',
+        lastError: 42,
+        rollbackReason: { not: 'a string' },
+      }),
+    });
+    eventListeners['dd:update-operation-changed'](event);
+
+    expect(mockEventBus.emit).toHaveBeenCalledWith(
+      'update-operation-changed',
+      expect.objectContaining({
+        operationId: 'op-coerce',
+        status: 'rolled-back',
+        lastError: undefined,
+        rollbackReason: undefined,
+      }),
+    );
   });
 
   it('returns undefined for non-object operation payload', () => {
@@ -379,6 +450,7 @@ describe('SseService', () => {
         containerName: null,
         containerId: true,
         newContainerId: {},
+        batchId: null,
         status: 'queued',
         phase: 42,
       }),
@@ -389,8 +461,11 @@ describe('SseService', () => {
       containerName: undefined,
       containerId: undefined,
       newContainerId: undefined,
+      batchId: undefined,
       status: 'queued',
       phase: undefined,
+      lastError: undefined,
+      rollbackReason: undefined,
     });
   });
 
@@ -467,6 +542,17 @@ describe('SseService', () => {
 
     vi.advanceTimersByTime(5000);
     expect(MockEventSourceCtor).toHaveBeenCalledWith('/api/v1/events/ui');
+  });
+
+  it('cancels pending manual reconnect when native EventSource reconnects successfully', () => {
+    sseService.connect(mockEventBus);
+    MockEventSourceCtor.mockClear();
+
+    mockEventSource.onerror();
+    eventListeners['dd:connected']({ data: JSON.stringify(connectedPayload) });
+
+    vi.advanceTimersByTime(5000);
+    expect(MockEventSourceCtor).not.toHaveBeenCalled();
   });
 
   it('clears pending reconnect timer before scheduling a new one', () => {
@@ -556,5 +642,89 @@ describe('SseService', () => {
     expect(mockEventBus.emit).not.toHaveBeenCalledWith('connection-lost');
     vi.advanceTimersByTime(5000);
     expect(MockEventSourceCtor).toHaveBeenCalled();
+  });
+
+  it('emits update-applied with parsed payload on dd:update-applied event', () => {
+    sseService.connect(mockEventBus);
+    const payload = {
+      operationId: 'op-1',
+      containerId: 'c1',
+      containerName: 'nginx',
+      imageName: 'nginx:1.25',
+      previousDigest: 'sha256:abc',
+      newDigest: 'sha256:def',
+      batchId: null,
+      timestamp: '2026-04-28T12:00:00.000Z',
+    };
+    const event = new MessageEvent('dd:update-applied', { data: JSON.stringify(payload) });
+    eventListeners['dd:update-applied'](event);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('update-applied', payload);
+  });
+
+  it('emits update-applied with undefined payload when dd:update-applied data is missing', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:update-applied'](new MessageEvent('dd:update-applied'));
+    expect(mockEventBus.emit).toHaveBeenCalledWith('update-applied', undefined);
+  });
+
+  it('emits update-applied with undefined payload when dd:update-applied data is malformed JSON', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:update-applied'](new MessageEvent('dd:update-applied', { data: '{bad' }));
+    expect(mockEventBus.emit).toHaveBeenCalledWith('update-applied', undefined);
+  });
+
+  it('emits update-applied with undefined payload when dd:update-applied data is a JSON array', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:update-applied'](
+      new MessageEvent('dd:update-applied', { data: '["not","object"]' }),
+    );
+    expect(mockEventBus.emit).toHaveBeenCalledWith('update-applied', undefined);
+  });
+
+  it('emits update-failed with parsed payload on dd:update-failed event', () => {
+    sseService.connect(mockEventBus);
+    const payload = {
+      operationId: 'op-2',
+      containerId: 'c2',
+      containerName: 'redis',
+      error: 'pull failed',
+      phase: 'pulling',
+      batchId: 'batch-1',
+      timestamp: '2026-04-28T12:00:00.000Z',
+    };
+    const event = new MessageEvent('dd:update-failed', { data: JSON.stringify(payload) });
+    eventListeners['dd:update-failed'](event);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('update-failed', payload);
+  });
+
+  it('emits update-failed with undefined payload when dd:update-failed data is missing', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:update-failed'](new MessageEvent('dd:update-failed'));
+    expect(mockEventBus.emit).toHaveBeenCalledWith('update-failed', undefined);
+  });
+
+  it('emits batch-update-completed with parsed payload on dd:batch-update-completed event', () => {
+    sseService.connect(mockEventBus);
+    const payload = {
+      batchId: 'batch-1',
+      total: 2,
+      succeeded: 2,
+      failed: 0,
+      durationMs: 4500,
+      items: [
+        { operationId: 'op-1', containerId: 'c1', containerName: 'nginx', status: 'succeeded' },
+        { operationId: 'op-2', containerId: 'c2', containerName: 'redis', status: 'succeeded' },
+      ],
+      timestamp: '2026-04-28T12:00:00.000Z',
+    };
+    const event = new MessageEvent('dd:batch-update-completed', { data: JSON.stringify(payload) });
+    eventListeners['dd:batch-update-completed'](event);
+    expect(mockEventBus.emit).toHaveBeenCalledWith('batch-update-completed', payload);
+  });
+
+  it('emits batch-update-completed with undefined payload when dd:batch-update-completed data is missing', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:batch-update-completed'](new MessageEvent('dd:batch-update-completed'));
+    expect(mockEventBus.emit).toHaveBeenCalledWith('batch-update-completed', undefined);
   });
 });

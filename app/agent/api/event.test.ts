@@ -29,6 +29,8 @@ vi.mock('../../event/index.js', () => ({
   registerWatcherSnapshot: vi.fn(),
   registerContainerUpdateApplied: vi.fn(),
   registerContainerUpdateFailed: vi.fn(),
+  registerUpdateOperationChanged: vi.fn(),
+  registerBatchUpdateCompleted: vi.fn(),
   registerSecurityAlert: vi.fn(),
   registerSecurityScanCycleComplete: vi.fn(),
 }));
@@ -213,6 +215,8 @@ describe('agent API event', () => {
       expect(event.registerWatcherSnapshot).toHaveBeenCalledWith(expect.any(Function));
       expect(event.registerContainerUpdateApplied).toHaveBeenCalledWith(expect.any(Function));
       expect(event.registerContainerUpdateFailed).toHaveBeenCalledWith(expect.any(Function));
+      expect(event.registerUpdateOperationChanged).toHaveBeenCalledWith(expect.any(Function));
+      expect(event.registerBatchUpdateCompleted).toHaveBeenCalledWith(expect.any(Function));
       expect(event.registerSecurityAlert).toHaveBeenCalledWith(expect.any(Function));
     });
 
@@ -420,6 +424,63 @@ describe('agent API event', () => {
       expect(payload).toContain('dd:update-failed');
       expect(payload).toContain('"containerName":"local_nginx"');
       expect(payload).toContain('"error":"compose pull failed"');
+    });
+
+    test('update-operation-changed handler should send SSE to connected clients', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const operationHandler = event.registerUpdateOperationChanged.mock.calls[0][0];
+      operationHandler({
+        operationId: 'agent-op-1',
+        containerName: 'local_nginx',
+        containerId: 'c1',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:update-operation-changed');
+      expect(payload).toContain('"operationId":"agent-op-1"');
+      expect(payload).toContain('"phase":"pulling"');
+    });
+
+    test('batch-update-completed handler should send SSE to connected clients', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const batchHandler = event.registerBatchUpdateCompleted.mock.calls[0][0];
+      batchHandler({
+        batchId: 'batch-agent-1',
+        total: 2,
+        succeeded: 2,
+        failed: 0,
+        durationMs: 1200,
+        items: [
+          {
+            operationId: 'op-1',
+            containerId: 'c1',
+            containerName: 'local_nginx',
+            status: 'succeeded',
+          },
+          {
+            operationId: 'op-2',
+            containerId: 'c2',
+            containerName: 'local_redis',
+            status: 'succeeded',
+          },
+        ],
+        timestamp: '2026-04-29T12:00:00.000Z',
+      });
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:batch-update-completed');
+      expect(payload).toContain('"batchId":"batch-agent-1"');
+      expect(payload).toContain('"total":2');
     });
 
     test('security-alert handler should omit container payload so controller resolves its own store state', () => {

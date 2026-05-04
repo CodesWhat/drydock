@@ -2,19 +2,28 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
 import express from 'express';
 import type {
+  BatchUpdateCompletedEventPayload,
   ContainerLifecycleEventPayload,
+  ContainerUpdateAppliedEvent,
+  ContainerUpdateAppliedEventPayload,
+  ContainerUpdateFailedEventPayload,
   SelfUpdateStartingEventPayload,
 } from '../event/index.js';
 import {
+  getContainerUpdateAppliedEventContainerName,
   registerAgentConnected,
   registerAgentDisconnected,
+  registerBatchUpdateCompleted,
   registerContainerAdded,
   registerContainerRemoved,
+  registerContainerUpdateApplied,
   registerContainerUpdated,
+  registerContainerUpdateFailed,
   registerSelfUpdateStarting,
   registerUpdateOperationChanged,
 } from '../event/index.js';
 import log from '../log/index.js';
+import { scrubAuthorizationHeaderValues } from '../util/auth-redaction.js';
 import { hashToken } from '../util/crypto.js';
 import { sendErrorResponse } from './error-response.js';
 import {
@@ -23,6 +32,7 @@ import {
   createActiveSseClientRegistryTestAdapter,
   type FlushableResponse,
 } from './sse-active-client-registry.js';
+import { SSE_STALE_SWEEP_INTERVAL_MS } from './sse-constants.js';
 import { enrichContainerLifecyclePayloadWithEligibility } from './sse-container-enrichment.js';
 import { bootId, SseEventBuffer } from './sse-event-buffer.js';
 import { createSelfUpdateAckProtocol } from './sse-self-update-ack-protocol.js';
@@ -37,7 +47,6 @@ const connectionsPerIp = new Map<string, number>();
 const connectionsPerSession = new Map<string, number>();
 const DEFAULT_SELF_UPDATE_ACK_TIMEOUT_MS = 3000;
 const SSE_HEARTBEAT_INTERVAL_MS = 15000;
-const SSE_STALE_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 const SSE_STALE_ENTRY_TTL_MS = 30 * 60 * 1000;
 const ALLOWED_CONTAINER_EVENT_NAMES = new Set<string>([
   'dd:agent-connected',
@@ -47,6 +56,9 @@ const ALLOWED_CONTAINER_EVENT_NAMES = new Set<string>([
   'dd:container-updated',
   'dd:resync-required',
   'dd:update-operation-changed',
+  'dd:update-applied',
+  'dd:update-failed',
+  'dd:batch-update-completed',
 ]);
 
 // Events that carry no id: line because they are ephemeral (not cross-client
@@ -389,6 +401,60 @@ function unregisterProcessShutdownHandlersForTests(): void {
   processShutdownHandlersRegistered = false;
 }
 
+function buildUpdateAppliedSsePayload(
+  payload: ContainerUpdateAppliedEvent,
+): Record<string, unknown> {
+  const containerName = getContainerUpdateAppliedEventContainerName(payload) ?? '';
+  if (typeof payload === 'string') {
+    return { containerName, timestamp: new Date().toISOString() };
+  }
+  const container =
+    payload && typeof payload === 'object' && 'container' in payload
+      ? (payload.container as Record<string, unknown> | undefined)
+      : undefined;
+  const topLevelContainerId =
+    typeof payload.containerId === 'string' && payload.containerId !== ''
+      ? payload.containerId
+      : '';
+  const containerId =
+    typeof container?.id === 'string' && container.id !== '' ? container.id : topLevelContainerId;
+  const imageName =
+    container?.image && typeof (container.image as Record<string, unknown>)?.name === 'string'
+      ? ((container.image as Record<string, unknown>).name as string)
+      : undefined;
+  const imageDigest =
+    container?.image && typeof (container.image as Record<string, unknown>)?.digest === 'string'
+      ? ((container.image as Record<string, unknown>).digest as string)
+      : null;
+  return {
+    operationId: (payload as ContainerUpdateAppliedEventPayload).operationId ?? '',
+    containerId,
+    containerName,
+    imageName,
+    previousDigest: null,
+    newDigest: imageDigest,
+    batchId: (payload as ContainerUpdateAppliedEventPayload).batchId ?? null,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+function buildUpdateFailedSsePayload(
+  payload: ContainerUpdateFailedEventPayload,
+): Record<string, unknown> {
+  return {
+    operationId: payload.operationId ?? '',
+    containerId: payload.containerId ?? '',
+    containerName: payload.containerName,
+    error: scrubAuthorizationHeaderValues(payload.error),
+    phase: payload.phase ?? '',
+    batchId: payload.batchId ?? null,
+    timestamp: new Date().toISOString(),
+    ...(typeof payload.rollbackReason === 'string' && payload.rollbackReason !== ''
+      ? { rollbackReason: payload.rollbackReason }
+      : {}),
+  };
+}
+
 export function broadcastScanStarted(containerId: string): void {
   broadcastWithId('dd:scan-started', { containerId });
 }
@@ -458,6 +524,33 @@ export function init(): express.Router {
     registerAgentDisconnected((payload: unknown) => {
       broadcastContainerEvent('dd:agent-disconnected', payload);
     }),
+  );
+
+  // High order (1000) ensures these SSE broadcasts run AFTER trigger notification dispatch,
+  // which uses the default order (100). This preserves the existing notification ordering.
+  trackEventListenerDeregistration(
+    registerContainerUpdateApplied(
+      (payload: ContainerUpdateAppliedEvent) => {
+        broadcastContainerEvent('dd:update-applied', buildUpdateAppliedSsePayload(payload));
+      },
+      { order: 1000 },
+    ),
+  );
+  trackEventListenerDeregistration(
+    registerContainerUpdateFailed(
+      (payload: ContainerUpdateFailedEventPayload) => {
+        broadcastContainerEvent('dd:update-failed', buildUpdateFailedSsePayload(payload));
+      },
+      { order: 1000 },
+    ),
+  );
+  trackEventListenerDeregistration(
+    registerBatchUpdateCompleted(
+      (payload: BatchUpdateCompletedEventPayload) => {
+        broadcastContainerEvent('dd:batch-update-completed', payload);
+      },
+      { order: 1000 },
+    ),
   );
 
   router.get('/', eventsHandler);

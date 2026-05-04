@@ -28,6 +28,8 @@ docker.configuration = configurationValid;
 docker.log = log;
 
 const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
+const mockGetTrivyDatabaseStatus = vi.hoisted(() => vi.fn());
+const mockGetSchedulerScanIntervalMs = vi.hoisted(() => vi.fn());
 vi.mock('../../../configuration/index.js', async () => {
   const actual = await vi.importActual<typeof import('../../../configuration/index.js')>(
     '../../../configuration/index.js',
@@ -37,6 +39,14 @@ vi.mock('../../../configuration/index.js', async () => {
     getSecurityConfiguration: (...args: any[]) => mockGetSecurityConfiguration(...args),
   };
 });
+
+vi.mock('../../../security/runtime.js', () => ({
+  getTrivyDatabaseStatus: (...args: any[]) => mockGetTrivyDatabaseStatus(...args),
+}));
+
+vi.mock('../../../security/scheduler.js', () => ({
+  getSchedulerScanIntervalMs: (...args: any[]) => mockGetSchedulerScanIntervalMs(...args),
+}));
 
 const mockScanImageForVulnerabilities = vi.hoisted(() => vi.fn());
 const mockVerifyImageSignature = vi.hoisted(() => vi.fn());
@@ -96,6 +106,7 @@ const mockMarkOperationTerminal = vi.hoisted(() => vi.fn());
 const mockGetInProgressOperationByContainerName = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerName = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerId = vi.hoisted(() => vi.fn());
+const mockIsOperationCancelRequested = vi.hoisted(() => vi.fn(() => false));
 vi.mock('../../../store/update-operation.js', () => ({
   insertOperation: (...args: any[]) => mockInsertOperation(...args),
   updateOperation: (...args: any[]) => mockUpdateOperation(...args),
@@ -106,6 +117,13 @@ vi.mock('../../../store/update-operation.js', () => ({
   getActiveOperationByContainerName: (...args: any[]) =>
     mockGetActiveOperationByContainerName(...args),
   getActiveOperationByContainerId: (...args: any[]) => mockGetActiveOperationByContainerId(...args),
+  isOperationCancelRequested: (...args: any[]) => mockIsOperationCancelRequested(...args),
+  OperationCancelledError: class OperationCancelledError extends Error {
+    constructor(operationId: string) {
+      super(`Operation ${operationId} was cancelled`);
+      this.name = 'OperationCancelledError';
+    }
+  },
 }));
 
 const mockSyncComposeFileTag = vi.hoisted(() => vi.fn().mockResolvedValue(false));
@@ -402,6 +420,8 @@ export function registerCommonDockerBeforeEach() {
         formats: ['spdx-json'],
       },
     });
+    mockGetTrivyDatabaseStatus.mockResolvedValue(undefined);
+    mockGetSchedulerScanIntervalMs.mockReturnValue(86_400_000);
     mockScanImageForVulnerabilities.mockResolvedValue({
       ...createSecurityScanResult(),
     });
@@ -422,6 +442,7 @@ export function registerCommonDockerBeforeEach() {
     }));
     mockUpdateOperation.mockImplementation((id, patch = {}) => ({ id, ...patch }));
     mockGetInProgressOperationByContainerName.mockReturnValue(undefined);
+    mockIsOperationCancelRequested.mockReturnValue(false);
   });
 }
 
@@ -429,6 +450,8 @@ export function getDockerTestMocks() {
   return {
     mockGetState,
     mockGetSecurityConfiguration,
+    mockGetTrivyDatabaseStatus,
+    mockGetSchedulerScanIntervalMs,
     mockScanImageForVulnerabilities,
     mockVerifyImageSignature,
     mockGenerateImageSbom,
@@ -445,6 +468,7 @@ export function getDockerTestMocks() {
     mockGetInProgressOperationByContainerName,
     mockGetActiveOperationByContainerName,
     mockGetActiveOperationByContainerId,
+    mockIsOperationCancelRequested,
     mockSyncComposeFileTag,
   };
 }

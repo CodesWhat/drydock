@@ -31,4 +31,13 @@ describe('vitest coverage configuration', () => {
       'vitest.coverage-provider.ts',
     ]);
   });
+
+  test('keeps SSE constants in coverage through API module imports', () => {
+    const include = config.test?.coverage?.include ?? [];
+    const exclude = config.test?.coverage?.exclude ?? [];
+
+    expect(include).toContain('**/*.{js,ts}');
+    expect(exclude).not.toContain('**/api/sse-constants.ts');
+    expect(exclude).not.toContain('app/api/sse-constants.ts');
+  });
 });

@@ -1,3 +1,4 @@
+import type { ContainerSecurityState } from '../../../model/container.js';
 import SecurityGate from './SecurityGate.js';
 
 const baseDependencies: NonNullable<ConstructorParameters<typeof SecurityGate>[0]> = {
@@ -6,6 +7,8 @@ const baseDependencies: NonNullable<ConstructorParameters<typeof SecurityGate>[0
     scanner: 'trivy',
     signature: { verify: false },
     sbom: { enabled: false, formats: ['spdx-json'] },
+    gate: { mode: 'on' },
+    prune: { onBlock: true },
   }),
   verifyImageSignature: async () => ({
     verifier: 'cosign',
@@ -49,6 +52,17 @@ const baseDependencies: NonNullable<ConstructorParameters<typeof SecurityGate>[0
 };
 
 new SecurityGate(baseDependencies);
+
+// Optional scan-cache deps are accepted without error
+new SecurityGate({
+  ...baseDependencies,
+  scanImageWithDedup: async () => ({
+    scanResult: await baseDependencies.scanImageForVulnerabilities({} as never),
+    fromCache: false,
+  }),
+  getTrivyDbUpdatedAt: async () => undefined,
+  getScanIntervalMs: () => 86400000,
+});
 
 // @ts-expect-error core dependencies are required
 new SecurityGate({});
@@ -96,6 +110,28 @@ const maybeScanAndGateUpdateContainerIsTyped: ExpectNotAny<
 const maybeScanAndGateUpdateLogIsTyped: ExpectNotAny<
   Parameters<SecurityGate['maybeScanAndGateUpdate']>[2]
 > = true;
+
+const typecheckGate = new SecurityGate(baseDependencies);
+const typecheckContainer = {} as Parameters<SecurityGate['persistSecurityState']>[0];
+const typecheckLog = {} as Parameters<SecurityGate['persistSecurityState']>[2];
+const typecheckScan = {} as NonNullable<ContainerSecurityState['scan']>;
+
+void typecheckGate.persistSecurityState(
+  typecheckContainer,
+  { slot: 'current', scan: typecheckScan },
+  typecheckLog,
+);
+void typecheckGate.persistSecurityState(
+  typecheckContainer,
+  { slot: 'update', scan: typecheckScan },
+  typecheckLog,
+);
+void typecheckGate.persistSecurityState(
+  typecheckContainer,
+  // @ts-expect-error security patches should not accept arbitrary keys
+  { slot: 'update', customState: { source: 'manual' } },
+  typecheckLog,
+);
 
 void createSecurityFailureCodeIsTyped;
 void createSecurityFailureMessageIsTyped;

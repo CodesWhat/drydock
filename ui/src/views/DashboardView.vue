@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onScopeDispose, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
   applyUpdateOperationSseToHold,
   OPERATION_DISPLAY_HOLD_MS,
+  parseUpdateLifecycleSsePayload,
   parseUpdateOperationSsePayload,
-  type TerminalResolvedArgs,
+  type ParsedUpdateOperationSse,
   useOperationDisplayHold,
 } from '../composables/useOperationDisplayHold';
-import { getUpdateOperationById } from '../services/container';
 import type { Container } from '../types/container';
 import { type RouteLocationRaw, useRouter } from 'vue-router';
 import type { OperationChangedPayload } from '../services/sse';
@@ -30,7 +30,8 @@ import {
   runContainerUpdateRequest,
 } from '../utils/container-update';
 import { errorMessage } from '../utils/error';
-import { summarizeContainerResourceUsage } from '../utils/stats-summary';
+import { resolveUpdateFailureReason } from '../utils/update-error-summary';
+import type { ContainerStatsSummarySnapshot } from '../services/stats';
 import DashboardHostStatusWidget from './dashboard/components/DashboardHostStatusWidget.vue';
 import DashboardRecentUpdatesWidget from './dashboard/components/DashboardRecentUpdatesWidget.vue';
 import DashboardResourceUsageWidget from './dashboard/components/DashboardResourceUsageWidget.vue';
@@ -57,9 +58,8 @@ const router = useRouter();
 const confirm = useConfirmDialog();
 const toast = useToast();
 const {
+  clearAllOperationDisplayHolds,
   heldOperations,
-  markToastFired,
-  wasToastFired,
   projectContainerDisplayState,
   reconcileHoldsAgainstContainers,
 } = useOperationDisplayHold();
@@ -82,9 +82,27 @@ const dashboardUpdateSequence = ref<Map<string, DashboardUpdateSequenceEntry>>(n
 const dashboardPendingUpdatePollTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 const dashboardPendingUpdatePollInFlight = ref(false);
 const dashboardPendingUpdatePollDelayMs = ref(2_000);
+const completionToastTimers = new Set<ReturnType<typeof setTimeout>>();
+const completionToastOperationIds = new Set<string>();
 const DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS = 2_000;
 const DASHBOARD_PENDING_UPDATE_POLL_MAX_INTERVAL_MS = 16_000;
 const DASHBOARD_PENDING_UPDATE_TIMEOUT_MS = 30_000;
+
+function scheduleCompletionToast(callback: () => void) {
+  const timer = setTimeout(() => {
+    completionToastTimers.delete(timer);
+    callback();
+  }, OPERATION_DISPLAY_HOLD_MS);
+  completionToastTimers.add(timer);
+}
+
+onScopeDispose(() => {
+  for (const timer of completionToastTimers) {
+    clearTimeout(timer);
+  }
+  completionToastTimers.clear();
+  completionToastOperationIds.clear();
+});
 
 function navigateTo(route: RouteLocationRaw) {
   router.push(route);
@@ -166,10 +184,21 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown);
 });
 
+const EMPTY_SUMMARY: ContainerStatsSummarySnapshot = {
+  timestamp: '',
+  watchedCount: 0,
+  avgCpuPercent: 0,
+  totalMemoryUsageBytes: 0,
+  totalMemoryLimitBytes: 0,
+  totalMemoryPercent: 0,
+  topCpu: [],
+  topMemory: [],
+};
+
 const {
   agents,
   containerSummary,
-  containerStats,
+  summary,
   containers,
   error,
   fetchDashboardData,
@@ -181,8 +210,6 @@ const {
   serverInfo,
   watchers,
 } = useDashboardData();
-
-const resourceUsage = computed(() => summarizeContainerResourceUsage(containerStats.value));
 
 const {
   DONUT_CIRCUMFERENCE,
@@ -471,39 +498,25 @@ function findDashboardContainerForOperationTarget(target: {
   return undefined;
 }
 
-/**
- * REST-backed fallback for when the terminal SSE is dropped on the dashboard
- * path (Synology DSM 7-style reverse-proxy hiccups that don't trigger native
- * EventSource reconnect, #291 rc.11). Fetches the terminal operation and fires
- * the matching toast; guarded against double-firing via wasToastFired because
- * the primary SSE handler also calls markToastFired.
- */
-async function handleDashboardTerminalResolvedFromReconciliation(args: TerminalResolvedArgs) {
-  const { operationId, containerName } = args;
-  if (wasToastFired(operationId)) {
-    return;
-  }
-  let operation: Awaited<ReturnType<typeof getUpdateOperationById>>;
-  try {
-    operation = await getUpdateOperationById(operationId);
-  } catch {
-    return;
-  }
-  if (!operation) {
-    return;
-  }
-  if (wasToastFired(operationId)) {
-    return;
-  }
-  markToastFired(operationId);
-  const name = containerName ?? 'container';
-  if (operation.status === 'succeeded') {
-    toast.success(t('dashboardView.toast.updated', { name }));
-  } else if (operation.status === 'failed') {
-    toast.error(t('dashboardView.toast.updateFailed', { name }));
-  } else if (operation.status === 'rolled-back') {
-    toast.error(t('dashboardView.toast.rolledBack', { name }));
-  }
+function applyDashboardParsedOperationSse(
+  parsed: ParsedUpdateOperationSse,
+  options: { onHoldReleased?: () => void } = {},
+) {
+  return applyUpdateOperationSseToHold({
+    parsed,
+    resolveContainer: findDashboardContainerForOperationTarget,
+    // DashboardView doesn't mutate container rows — the widget projects held
+    // containers through projectContainerDisplayState, so reactivity flows from
+    // the hold map into the derived computed.
+    onTerminalEvent: () => {
+      pruneGhostsForOperation({
+        containerId: parsed.containerId,
+        newContainerId: parsed.newContainerId,
+        containerName: parsed.containerName,
+      });
+    },
+    onHoldReleased: options.onHoldReleased,
+  });
 }
 
 function applyDashboardOperationSse(event: Event) {
@@ -511,60 +524,117 @@ function applyDashboardOperationSse(event: Event) {
   if (!parsed) {
     return;
   }
-  applyUpdateOperationSseToHold({
-    parsed,
-    resolveContainer: findDashboardContainerForOperationTarget,
-    // DashboardView doesn't mutate container rows — the widget projects held
-    // containers through projectContainerDisplayState, so reactivity flows from
-    // the hold map into the derived computed.
-    onTerminalEvent: ({ status, name, wasTracked }) => {
-      pruneGhostsForOperation({
-        containerId: parsed.containerId,
-        newContainerId: parsed.newContainerId,
-        containerName: parsed.containerName,
-      });
-      if (!wasTracked) {
-        return;
-      }
-      // Defer terminal toasts until the hold window ends so the row settles
-      // before the toast announces the outcome (rc.12 9d48922a).
-      if (status === 'succeeded') {
-        setTimeout(
-          () => toast.success(t('dashboardView.toast.updated', { name })),
-          OPERATION_DISPLAY_HOLD_MS,
-        );
-      } else if (status === 'failed') {
-        setTimeout(
-          () => toast.error(t('dashboardView.toast.updateFailed', { name })),
-          OPERATION_DISPLAY_HOLD_MS,
-        );
-      } else {
-        setTimeout(
-          () => toast.error(t('dashboardView.toast.rolledBack', { name })),
-          OPERATION_DISPLAY_HOLD_MS,
-        );
-      }
-    },
-  });
+  applyDashboardParsedOperationSse(parsed);
 }
 
 watch(containers, (next) => {
   // After every container-list refresh, reconcile holds against the raw container
-  // state so a dropped terminal SSE still releases the hold + fires the right
-  // toast via REST (#291 symptom 2 on the dashboard path).
-  reconcileHoldsAgainstContainers(
-    next,
-    Date.now(),
-    handleDashboardTerminalResolvedFromReconciliation,
-  );
+  // state so a replayed or reconciled terminal state releases the display hold.
+  reconcileHoldsAgainstContainers(next, Date.now());
 });
+
+function scheduleDashboardCompletionAfterTerminalRelease(args: {
+  parsed: ParsedUpdateOperationSse;
+  batchId: unknown;
+  toastCallback: () => void;
+}) {
+  const operationId =
+    typeof args.parsed.operationId === 'string' && args.parsed.operationId.length > 0
+      ? args.parsed.operationId
+      : undefined;
+  const shouldToast = args.batchId === null && operationId !== undefined;
+  const shouldScheduleToast = shouldToast && !completionToastOperationIds.has(operationId);
+  if (shouldScheduleToast) {
+    completionToastOperationIds.add(operationId);
+  }
+  let toastFired = false;
+  const onHoldReleased = shouldScheduleToast
+    ? () => {
+        if (toastFired) {
+          return;
+        }
+        toastFired = true;
+        args.toastCallback();
+      }
+    : undefined;
+  const result = applyDashboardParsedOperationSse(args.parsed, { onHoldReleased });
+  if (!onHoldReleased || result.releaseScheduled) {
+    return;
+  }
+  scheduleCompletionToast(args.toastCallback);
+}
+
+function handleDashboardSseUpdateApplied(event: Event) {
+  const detail = (event as CustomEvent)?.detail as Record<string, unknown> | undefined;
+  if (!detail) {
+    return;
+  }
+  const parsed = parseUpdateLifecycleSsePayload(detail, 'succeeded');
+  if (!parsed) {
+    return;
+  }
+  const containerName =
+    typeof detail.containerName === 'string' ? detail.containerName : 'container';
+  const batchId = detail.batchId ?? null;
+  scheduleDashboardCompletionAfterTerminalRelease({
+    parsed,
+    batchId,
+    toastCallback: () => toast.success(t('dashboardView.toast.updated', { name: containerName })),
+  });
+}
+
+function handleDashboardSseUpdateFailed(event: Event) {
+  const detail = (event as CustomEvent)?.detail as Record<string, unknown> | undefined;
+  if (!detail) {
+    return;
+  }
+  const parsed = parseUpdateLifecycleSsePayload(detail, 'failed');
+  if (!parsed) {
+    return;
+  }
+  const containerName =
+    typeof detail.containerName === 'string' ? detail.containerName : 'container';
+  const batchId = detail.batchId ?? null;
+  const error = typeof detail.error === 'string' ? detail.error : undefined;
+  const rollbackReason =
+    typeof detail.rollbackReason === 'string' ? detail.rollbackReason : undefined;
+  const reason = resolveUpdateFailureReason({ lastError: error, rollbackReason });
+  const isCancelled = rollbackReason === 'cancelled' || error === 'Cancelled by operator';
+  let toastCallback: () => void;
+  if (rollbackReason !== undefined) {
+    if (isCancelled) {
+      toastCallback = () =>
+        toast.success(t('dashboardView.toast.cancelled', { name: containerName }));
+    } else {
+      toastCallback = () =>
+        toast.warning(
+          reason
+            ? t('dashboardView.toast.rolledBackWithReason', { name: containerName, reason })
+            : t('dashboardView.toast.rolledBack', { name: containerName }),
+        );
+    }
+  } else {
+    toastCallback = () =>
+      toast.error(
+        reason
+          ? t('dashboardView.toast.updateFailedWithReason', { name: containerName, reason })
+          : t('dashboardView.toast.updateFailed', { name: containerName }),
+      );
+  }
+  scheduleDashboardCompletionAfterTerminalRelease({ parsed, batchId, toastCallback });
+}
 
 onMounted(() => {
   globalThis.addEventListener('dd:sse-update-operation-changed', applyDashboardOperationSse);
+  globalThis.addEventListener('dd:sse-update-applied', handleDashboardSseUpdateApplied);
+  globalThis.addEventListener('dd:sse-update-failed', handleDashboardSseUpdateFailed);
 });
 
 onUnmounted(() => {
   globalThis.removeEventListener('dd:sse-update-operation-changed', applyDashboardOperationSse);
+  globalThis.removeEventListener('dd:sse-update-applied', handleDashboardSseUpdateApplied);
+  globalThis.removeEventListener('dd:sse-update-failed', handleDashboardSseUpdateFailed);
+  clearAllOperationDisplayHolds();
   stopDashboardPendingUpdatePolling();
 });
 
@@ -888,7 +958,7 @@ function confirmDashboardUpdateAll() {
             <DashboardResourceUsageWidget
               v-else-if="item.i === 'resource-usage'"
               class="h-full"
-              :resource-usage="resourceUsage"
+              :summary="summary ?? EMPTY_SUMMARY"
               :edit-mode="editMode"
               @view-all="navigateTo(ROUTES.CONTAINERS)" />
 

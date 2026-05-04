@@ -688,6 +688,16 @@ export function getSecurityConfiguration() {
         formats: joi.string().allow('').default(DEFAULT_SECURITY_SBOM_FORMATS),
       })
       .default({}),
+    gate: joi
+      .object({
+        mode: joi.string().insensitive().valid('on', 'off').default('on'),
+      })
+      .default({}),
+    prune: joi
+      .object({
+        onblock: joi.boolean().default(true),
+      })
+      .default({}),
     scan: joi
       .object({
         cron: joi.string().allow('').default(''),
@@ -740,6 +750,12 @@ export function getSecurityConfiguration() {
       enabled: Boolean(configuration.sbom?.enabled),
       formats: sbomFormats,
     },
+    gate: {
+      mode: (configuration.gate?.mode || 'on').toLowerCase() as 'on' | 'off',
+    },
+    prune: {
+      onBlock: configuration.prune?.onblock !== false,
+    },
     scan: {
       cron: configuration.scan?.cron || '',
       jitter: configuration.scan?.jitter ?? 60000,
@@ -752,7 +768,7 @@ export function getSecurityConfiguration() {
 
 export type SecurityConfiguration = Pick<
   ReturnType<typeof getSecurityConfiguration>,
-  'enabled' | 'scanner' | 'sbom'
+  'enabled' | 'scanner' | 'sbom' | 'gate' | 'prune'
 > & {
   signature: Pick<ReturnType<typeof getSecurityConfiguration>['signature'], 'verify'>;
 };

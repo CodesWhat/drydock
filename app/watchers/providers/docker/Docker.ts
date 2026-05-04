@@ -314,6 +314,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   public isCronWatchInProgress: boolean = false;
   public recentDockerEvents: DockerRecentEvent[] = [];
   public recentAliasFilterDecisions: AliasFilterDecision[] = [];
+  public unregisterContainerUpdateApplied?: () => void;
   #cachedTimeMatcher: { cron: string; matcher: CronTaskWithNextMatch['timeMatcher'] } | undefined;
 
   ensureLogger() {
@@ -596,6 +597,13 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       maxRandomDelay: this.configuration.jitter,
     });
 
+    this.unregisterContainerUpdateApplied = event.registerContainerUpdateApplied(
+      async (containerName) => {
+        await this.maybeFastResyncAfterUpdate(containerName).catch(() => undefined);
+      },
+      { id: this.getId(), order: 0 },
+    );
+
     // watch at startup if enabled (after all components have been registered)
     if (this.configuration.watchatstart) {
       this.watchCronTimeout = setTimeout(this.watchFromCron.bind(this), START_WATCHER_DELAY_MS);
@@ -863,7 +871,24 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     }
     this.cleanupDockerEventsStream(true);
     delete this.watchCronDebounced;
+    this.unregisterContainerUpdateApplied?.();
+    this.unregisterContainerUpdateApplied = undefined;
     this.clearMaintenanceWindowQueue();
+  }
+
+  private async maybeFastResyncAfterUpdate(
+    payload: import('../../../event/index.js').ContainerUpdateAppliedEvent,
+  ): Promise<void> {
+    const containerName = event.getContainerUpdateAppliedEventContainerName(payload);
+    if (!containerName) {
+      return;
+    }
+    const containers = storeContainer.getContainers({ watcher: this.name });
+    const matched = containers.find((c) => `${c.watcher}_${c.name}` === containerName);
+    if (!matched) {
+      return;
+    }
+    await this.watchContainer(matched, { emitBatchEvent: false });
   }
 
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: used through docker-event watcher adapter

@@ -223,6 +223,66 @@ describe('ContainerRuntimeConfigManager', () => {
     expect(manager.buildCloneRuntimeConfigOptions(logContainer)).toEqual({ logContainer });
   });
 
+  describe('isInheritedRuntimeField', () => {
+    test('INHERITED origin should delegate to inheritedFromSource', () => {
+      const manager = createManager();
+      const log = createLog();
+
+      expect(manager.isInheritedRuntimeField('Entrypoint', 'inherited', true, true, log)).toBe(
+        true,
+      );
+      expect(manager.isInheritedRuntimeField('Entrypoint', 'inherited', false, true, log)).toBe(
+        false,
+      );
+    });
+
+    test('EXPLICIT origin should always return false', () => {
+      const manager = createManager();
+      const log = createLog();
+
+      expect(manager.isInheritedRuntimeField('Entrypoint', 'explicit', true, true, log)).toBe(
+        false,
+      );
+      expect(manager.isInheritedRuntimeField('Entrypoint', 'explicit', false, false, log)).toBe(
+        false,
+      );
+    });
+
+    test('UNKNOWN origin + inheritedFromSource + sourceImageKnown → treat as inherited (drop stale value)', () => {
+      const manager = createManager();
+      const log = createLog();
+
+      expect(manager.isInheritedRuntimeField('Entrypoint', 'unknown', true, true, log)).toBe(true);
+      expect(log.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Treating Entrypoint as inherited'),
+      );
+    });
+
+    test('UNKNOWN origin + inheritedFromSource + sourceImageUnknown → conservative keep', () => {
+      const manager = createManager();
+      const log = createLog();
+
+      expect(manager.isInheritedRuntimeField('Entrypoint', 'unknown', true, false, log)).toBe(
+        false,
+      );
+      expect(log.debug).toHaveBeenCalledWith(
+        expect.stringContaining('origin unknown and source image unavailable'),
+      );
+    });
+
+    test('UNKNOWN origin + not inherited from source → keep regardless of sourceImageKnown', () => {
+      const manager = createManager();
+      const log = createLog();
+
+      expect(manager.isInheritedRuntimeField('Entrypoint', 'unknown', false, true, log)).toBe(
+        false,
+      );
+      expect(manager.isInheritedRuntimeField('Entrypoint', 'unknown', false, false, log)).toBe(
+        false,
+      );
+    });
+  });
+
   test('sanitizeClonedRuntimeConfig should drop stale inherited runtime values and keep safe values', () => {
     const manager = createManager();
     const log = createLog();
@@ -252,7 +312,8 @@ describe('ContainerRuntimeConfigManager', () => {
     });
     expect(log.info).toHaveBeenCalledWith(expect.stringContaining('Dropping stale Entrypoint'));
 
-    const preserveUnknownOrigin = manager.sanitizeClonedRuntimeConfig(
+    // UNKNOWN origin + source image known + value matches source → drop stale value
+    const dropUnknownOriginWhenSourceKnown = manager.sanitizeClonedRuntimeConfig(
       {
         Cmd: ['from-source'],
       },
@@ -268,8 +329,26 @@ describe('ContainerRuntimeConfigManager', () => {
       log,
     );
 
-    expect(preserveUnknownOrigin).toEqual({ Cmd: ['from-source'] });
-    expect(log.debug).toHaveBeenCalledWith(expect.stringContaining('runtime origin is unknown'));
+    expect(dropUnknownOriginWhenSourceKnown).toEqual({});
+    expect(log.debug).toHaveBeenCalledWith(expect.stringContaining('Treating Cmd as inherited'));
+
+    // UNKNOWN origin + source image unavailable → conservative keep (sourceImageConfig=undefined
+    // means inheritedFromSource=false, so the value is treated as a potential explicit override)
+    const preserveUnknownOriginNoSourceImage = manager.sanitizeClonedRuntimeConfig(
+      {
+        Cmd: ['from-source'],
+      },
+      undefined,
+      {
+        Cmd: ['new-default'],
+      },
+      {
+        Cmd: 'unknown',
+      },
+      log,
+    );
+
+    expect(preserveUnknownOriginNoSourceImage).toEqual({ Cmd: ['from-source'] });
 
     const preserveExplicitOverride = manager.sanitizeClonedRuntimeConfig(
       {
@@ -494,5 +573,39 @@ describe('ContainerRuntimeConfigManager', () => {
 
     expect(wrappedAttempted.message).toContain('source image: unknown');
     expect(wrappedAttempted.message).toContain('Rollback attempted but did not fully complete.');
+  });
+
+  test('vaultwarden scenario: UNKNOWN origin + stale entrypoint matches old image + new image has no entrypoint → drop stale value', () => {
+    // Reproduces vaultwarden 1.27.0 → 1.35.8:
+    //   - Old image: Entrypoint=['/usr/bin/entry.sh'], new image: Entrypoint=null
+    //   - Container was never updated by drydock (no origin label set → UNKNOWN)
+    //   - Container's Entrypoint matches old image exactly (came from image default, not user override)
+    //   - Expected: stale Entrypoint is dropped so new image default (null) applies
+    const manager = createManager();
+    const log = createLog();
+
+    const result = manager.sanitizeClonedRuntimeConfig(
+      {
+        Entrypoint: ['/usr/bin/entry.sh'],
+        Cmd: ['/start.sh'],
+      },
+      {
+        Entrypoint: ['/usr/bin/entry.sh'],
+        Cmd: ['/start.sh'],
+      },
+      {
+        Entrypoint: undefined,
+        Cmd: ['/start.sh'],
+      },
+      {
+        Entrypoint: 'unknown',
+        Cmd: 'unknown',
+      },
+      log,
+    );
+
+    expect(result).not.toHaveProperty('Entrypoint');
+    expect(result).toHaveProperty('Cmd', ['/start.sh']);
+    expect(log.info).toHaveBeenCalledWith(expect.stringContaining('Dropping stale Entrypoint'));
   });
 });

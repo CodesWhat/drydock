@@ -81,4 +81,14 @@ describe('useToast', () => {
     expect(b.toasts.value).toHaveLength(1);
     expect(b.toasts.value[0].title).toBe('From A');
   });
+
+  test('supports replacing the toast list through the compatibility ref', () => {
+    const { toasts } = useToast();
+
+    toasts.value = [{ id: 42, title: 'Imported', body: 'Body', tone: 'warning' }];
+
+    expect(toasts.value).toEqual([
+      expect.objectContaining({ title: 'Imported', body: 'Body', tone: 'warning' }),
+    ]);
+  });
 });

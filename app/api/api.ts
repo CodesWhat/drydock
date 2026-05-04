@@ -19,6 +19,8 @@ import * as internalSelfUpdateRouter from './internal-self-update.js';
 import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
 import * as logRouter from './log.js';
 import * as notificationRouter from './notification.js';
+import * as notificationOutboxRouter from './notification-outbox.js';
+import * as operationRouter from './operation.js';
 import * as previewRouter from './preview.js';
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
@@ -28,6 +30,7 @@ import * as registryRouter from './registry.js';
 import * as serverRouter from './server.js';
 import * as settingsRouter from './settings.js';
 import * as sseRouter from './sse.js';
+import * as statsRouter from './stats.js';
 import * as storeRouter from './store.js';
 import * as triggerRouter from './trigger.js';
 import * as updateOperationsRouter from './update-operations.js';
@@ -125,6 +128,9 @@ export function init(): express.Router {
   // Mount container actions router (start/stop/restart)
   router.use('/containers', containerActionsRouter.init());
 
+  // Mount fleet-aggregate stats router (dashboard summary, sibling of /containers)
+  router.use('/stats', statsRouter.init());
+
   // Mount update-operations router (single-operation lookup by id)
   router.use('/update-operations', updateOperationsRouter.init());
 
@@ -133,6 +139,12 @@ export function init(): express.Router {
 
   // Mount notification rules router
   router.use('/notifications', notificationRouter.init());
+
+  // Mount notification outbox (DLQ) router
+  router.use('/notifications/outbox', notificationOutboxRouter.init());
+
+  // Mount operations router (cancel queued operations)
+  router.use('/operations', operationRouter.init());
 
   // Mount watcher router
   router.use('/watchers', watcherRouter.init());

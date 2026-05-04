@@ -3,18 +3,40 @@ import { defineComponent, h, nextTick } from 'vue';
 import type { Container } from '@/types/container';
 import { useDashboardData } from '@/views/dashboard/useDashboardData';
 
-const mocks = vi.hoisted(() => ({
-  getAgents: vi.fn(),
-  getAllContainers: vi.fn(),
-  getAllContainerStats: vi.fn(),
-  getContainerRecentStatus: vi.fn(),
-  getContainerSummary: vi.fn(),
-  getAllRegistries: vi.fn(),
-  getAllWatchers: vi.fn(),
-  getServer: vi.fn(),
-  mapApiContainers: vi.fn(),
-  mapApiContainer: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+  // Shared controller instance so tests can access it after mount
+  let summaryController: {
+    pause: ReturnType<typeof vi.fn>;
+    resume: ReturnType<typeof vi.fn>;
+    disconnect: ReturnType<typeof vi.fn>;
+    isPaused: ReturnType<typeof vi.fn>;
+  } | null = null;
+
+  const connectStatsSummaryStream = vi.fn((_handlers?: unknown) => {
+    summaryController = {
+      pause: vi.fn(),
+      resume: vi.fn(),
+      disconnect: vi.fn(),
+      isPaused: vi.fn().mockReturnValue(false),
+    };
+    return summaryController;
+  });
+
+  return {
+    getAgents: vi.fn(),
+    getAllContainers: vi.fn(),
+    getContainerRecentStatus: vi.fn(),
+    getContainerSummary: vi.fn(),
+    getAllRegistries: vi.fn(),
+    getAllWatchers: vi.fn(),
+    getServer: vi.fn(),
+    getStatsSummary: vi.fn(),
+    connectStatsSummaryStream,
+    getSummaryController: () => summaryController,
+    mapApiContainers: vi.fn(),
+    mapApiContainer: vi.fn(),
+  };
+});
 
 vi.mock('@/services/agent', () => ({
   getAgents: mocks.getAgents,
@@ -27,7 +49,8 @@ vi.mock('@/services/container', () => ({
 }));
 
 vi.mock('@/services/stats', () => ({
-  getAllContainerStats: mocks.getAllContainerStats,
+  getStatsSummary: mocks.getStatsSummary,
+  connectStatsSummaryStream: mocks.connectStatsSummaryStream,
 }));
 
 vi.mock('@/services/registry', () => ({
@@ -105,7 +128,23 @@ describe('useDashboardData', () => {
     vi.resetAllMocks();
 
     mocks.getAllContainers.mockResolvedValue([{ id: 'api-c1' }]);
-    mocks.getAllContainerStats.mockResolvedValue([]);
+    mocks.getStatsSummary.mockResolvedValue({
+      timestamp: '2026-04-30T00:00:00.000Z',
+      watchedCount: 0,
+      avgCpuPercent: 0,
+      totalMemoryUsageBytes: 0,
+      totalMemoryLimitBytes: 0,
+      totalMemoryPercent: 0,
+      topCpu: [],
+      topMemory: [],
+    });
+    // Re-initialize the connectStatsSummaryStream mock each time (reset wipes it)
+    mocks.connectStatsSummaryStream.mockImplementation((_handlers?: unknown) => ({
+      pause: vi.fn(),
+      resume: vi.fn(),
+      disconnect: vi.fn(),
+      isPaused: vi.fn().mockReturnValue(false),
+    }));
     mocks.getServer.mockResolvedValue({ configuration: { webhook: { enabled: true } } });
     mocks.getAgents.mockResolvedValue([{ name: 'agent-1', connected: true }]);
     mocks.getAllWatchers.mockResolvedValue([]);
@@ -173,7 +212,6 @@ describe('useDashboardData', () => {
     expect(state.loading.value).toBe(false);
     expect(state.error.value).toBeNull();
     expect(state.containers.value).toEqual([makeContainer()]);
-    expect(state.containerStats.value).toEqual([]);
     expect(state.serverInfo.value).toEqual({ configuration: { webhook: { enabled: true } } });
     expect(state.agents.value).toEqual([{ name: 'agent-1', connected: true }]);
     expect(state.watchers.value).toHaveLength(4);
@@ -911,7 +949,7 @@ describe('useDashboardData', () => {
   it('skips watchers/registries/agents/server on reconnect-driven refresh when within TTL', async () => {
     vi.useFakeTimers();
 
-    // Mount — initial fetch calls all 7 endpoints
+    // Mount — initial fetch calls all live+static endpoints
     await mountDashboardData();
 
     // Confirm each static endpoint was called exactly once during initial load
@@ -920,7 +958,6 @@ describe('useDashboardData', () => {
     expect(mocks.getAllWatchers).toHaveBeenCalledTimes(1);
     expect(mocks.getAllRegistries).toHaveBeenCalledTimes(1);
     expect(mocks.getAllContainers).toHaveBeenCalledTimes(1);
-    expect(mocks.getAllContainerStats).toHaveBeenCalledTimes(1);
     expect(mocks.getContainerRecentStatus).toHaveBeenCalledTimes(1);
 
     // Dispatch reconnect — debouncer waits 1000ms then calls fetchDashboardData({ background: true, skipStaticIfFresh: true })
@@ -931,7 +968,6 @@ describe('useDashboardData', () => {
 
     // Live endpoints always fetch — now called 2× total
     expect(mocks.getAllContainers).toHaveBeenCalledTimes(2);
-    expect(mocks.getAllContainerStats).toHaveBeenCalledTimes(2);
     expect(mocks.getContainerRecentStatus).toHaveBeenCalledTimes(2);
 
     // Static endpoints skipped — still only 1× (TTL fresh)
@@ -955,9 +991,8 @@ describe('useDashboardData', () => {
     vi.advanceTimersByTime(1_000);
     await flushPromises();
 
-    // All 7 endpoints called 2× total
+    // All live + static endpoints called 2× total
     expect(mocks.getAllContainers).toHaveBeenCalledTimes(2);
-    expect(mocks.getAllContainerStats).toHaveBeenCalledTimes(2);
     expect(mocks.getContainerRecentStatus).toHaveBeenCalledTimes(2);
     expect(mocks.getServer).toHaveBeenCalledTimes(2);
     expect(mocks.getAgents).toHaveBeenCalledTimes(2);
@@ -972,13 +1007,187 @@ describe('useDashboardData', () => {
     // Call fetchDashboardData directly with no options → foreground, skipStaticIfFresh is false
     await state.fetchDashboardData();
 
-    // All 7 endpoints called 2× total — TTL guard is never consulted for foreground calls
+    // All live + static endpoints called 2× total — TTL guard is never consulted for foreground calls
     expect(mocks.getAllContainers).toHaveBeenCalledTimes(2);
-    expect(mocks.getAllContainerStats).toHaveBeenCalledTimes(2);
     expect(mocks.getContainerRecentStatus).toHaveBeenCalledTimes(2);
     expect(mocks.getServer).toHaveBeenCalledTimes(2);
     expect(mocks.getAgents).toHaveBeenCalledTimes(2);
     expect(mocks.getAllWatchers).toHaveBeenCalledTimes(2);
     expect(mocks.getAllRegistries).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens stats summary stream on mount and disconnects on unmount', async () => {
+    const { wrapper } = await mountDashboardData();
+
+    expect(mocks.getStatsSummary).toHaveBeenCalledTimes(1);
+    expect(mocks.connectStatsSummaryStream).toHaveBeenCalledTimes(1);
+
+    // The controller disconnect is called on unmount
+    const controller = mocks.connectStatsSummaryStream.mock.results[0]?.value;
+    expect(controller).toBeDefined();
+
+    wrapper.unmount();
+    expect(controller.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('updates summary ref when the stream onSummary handler fires', async () => {
+    let capturedHandlers: Record<string, unknown> | undefined;
+    mocks.connectStatsSummaryStream.mockImplementation((handlers: unknown) => {
+      capturedHandlers = handlers as Record<string, unknown>;
+      return { pause: vi.fn(), resume: vi.fn(), disconnect: vi.fn(), isPaused: vi.fn() };
+    });
+
+    const { state } = await mountDashboardData();
+
+    expect(state.summary.value).toEqual(
+      expect.objectContaining({ watchedCount: 0, avgCpuPercent: 0 }),
+    );
+
+    const newSummary = {
+      timestamp: '2026-04-30T01:00:00.000Z',
+      watchedCount: 5,
+      avgCpuPercent: 35.5,
+      totalMemoryUsageBytes: 1_000_000_000,
+      totalMemoryLimitBytes: 4_000_000_000,
+      totalMemoryPercent: 25.0,
+      topCpu: [],
+      topMemory: [],
+    };
+
+    const onSummary = capturedHandlers?.onSummary as ((s: unknown) => void) | undefined;
+    expect(onSummary).toBeTypeOf('function');
+    onSummary!(newSummary);
+
+    await nextTick();
+    expect(state.summary.value).toEqual(newSummary);
+  });
+
+  it('keeps existing summary unchanged when the stats summary stream errors', async () => {
+    const existingSummary = {
+      timestamp: '2026-04-30T00:00:00.000Z',
+      watchedCount: 2,
+      avgCpuPercent: 15.0,
+      totalMemoryUsageBytes: 500_000_000,
+      totalMemoryLimitBytes: 2_000_000_000,
+      totalMemoryPercent: 25.0,
+      topCpu: [],
+      topMemory: [],
+    };
+    mocks.getStatsSummary.mockResolvedValue(existingSummary);
+
+    let capturedHandlers: Record<string, unknown> | undefined;
+    mocks.connectStatsSummaryStream.mockImplementation((handlers: unknown) => {
+      capturedHandlers = handlers as Record<string, unknown>;
+      return { pause: vi.fn(), resume: vi.fn(), disconnect: vi.fn(), isPaused: vi.fn() };
+    });
+
+    const { state } = await mountDashboardData();
+
+    expect(state.summary.value).toEqual(existingSummary);
+
+    const onError = capturedHandlers?.onError as (() => void) | undefined;
+    expect(onError).toBeTypeOf('function');
+    onError!();
+
+    await nextTick();
+    expect(state.summary.value).toEqual(existingSummary);
+  });
+
+  it('populates summary from initial getStatsSummary fetch', async () => {
+    const initialSummary = {
+      timestamp: '2026-04-30T00:00:00.000Z',
+      watchedCount: 2,
+      avgCpuPercent: 15.0,
+      totalMemoryUsageBytes: 500_000_000,
+      totalMemoryLimitBytes: 2_000_000_000,
+      totalMemoryPercent: 25.0,
+      topCpu: [],
+      topMemory: [],
+    };
+    mocks.getStatsSummary.mockResolvedValue(initialSummary);
+
+    const { state } = await mountDashboardData();
+
+    expect(state.summary.value).toEqual(initialSummary);
+  });
+
+  it('tolerates getStatsSummary errors and keeps summary null until stream fires', async () => {
+    mocks.getStatsSummary.mockRejectedValue(new Error('summary fetch failed'));
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+
+    let capturedOnSummary: ((s: unknown) => void) | undefined;
+    mocks.connectStatsSummaryStream.mockImplementation((handlers: unknown) => {
+      const h = handlers as Record<string, unknown>;
+      capturedOnSummary = h?.onSummary as ((s: unknown) => void) | undefined;
+      return { pause: vi.fn(), resume: vi.fn(), disconnect: vi.fn(), isPaused: vi.fn() };
+    });
+
+    const { state } = await mountDashboardData();
+
+    // Initial fetch failed — summary is still null
+    expect(state.summary.value).toBeNull();
+    expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('summary fetch failed'));
+
+    // Stream fires later and updates summary
+    const streamSummary = {
+      timestamp: '2026-04-30T02:00:00.000Z',
+      watchedCount: 1,
+      avgCpuPercent: 5.0,
+      totalMemoryUsageBytes: 100_000_000,
+      totalMemoryLimitBytes: 1_000_000_000,
+      totalMemoryPercent: 10.0,
+      topCpu: [],
+      topMemory: [],
+    };
+    capturedOnSummary?.(streamSummary);
+    await nextTick();
+    expect(state.summary.value).toEqual(streamSummary);
+
+    debugSpy.mockRestore();
+  });
+
+  it('logs the default summary fetch message for non-object rejections', async () => {
+    mocks.getStatsSummary.mockRejectedValue('summary unavailable');
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+
+    const { state } = await mountDashboardData();
+
+    expect(state.summary.value).toBeNull();
+    expect(debugSpy).toHaveBeenCalledWith('Failed to fetch stats summary');
+
+    debugSpy.mockRestore();
+  });
+
+  it('pauses stats summary stream on visibilitychange:hidden and resumes on visible', async () => {
+    vi.useFakeTimers();
+    let capturedController: {
+      pause: ReturnType<typeof vi.fn>;
+      resume: ReturnType<typeof vi.fn>;
+      disconnect: ReturnType<typeof vi.fn>;
+    } | null = null;
+
+    mocks.connectStatsSummaryStream.mockImplementation(() => {
+      capturedController = { pause: vi.fn(), resume: vi.fn(), disconnect: vi.fn() };
+      return { ...capturedController, isPaused: vi.fn().mockReturnValue(false) };
+    });
+
+    mocks.getAllWatchers.mockResolvedValue([
+      { configuration: { maintenanceWindow: 'Sun 02:00-03:00 UTC' } },
+    ]);
+
+    await mountDashboardData();
+    expect(capturedController).not.toBeNull();
+
+    setVisibilityState('hidden');
+    expect(capturedController!.pause).toHaveBeenCalledTimes(1);
+
+    setVisibilityState('visible');
+    expect(capturedController!.resume).toHaveBeenCalledTimes(1);
+  });
+
+  it('exports summary ref (not containerStats) from useDashboardData', async () => {
+    const { state } = await mountDashboardData();
+    expect('summary' in state).toBe(true);
+    expect('containerStats' in state).toBe(false);
   });
 });

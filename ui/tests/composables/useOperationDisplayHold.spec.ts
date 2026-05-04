@@ -1052,39 +1052,6 @@ describe('useOperationDisplayHold', () => {
     });
   });
 
-  describe('toast dedup helpers (markToastFired / wasToastFired / resetToastFiredOperations)', () => {
-    it('wasToastFired returns false before marking', async () => {
-      const hold = await loadComposable();
-      hold.resetToastFiredOperations();
-      expect(hold.wasToastFired('op-dedup-1')).toBe(false);
-    });
-
-    it('wasToastFired returns true after markToastFired', async () => {
-      const hold = await loadComposable();
-      hold.resetToastFiredOperations();
-      hold.markToastFired('op-dedup-2');
-      expect(hold.wasToastFired('op-dedup-2')).toBe(true);
-    });
-
-    it('wasToastFired is independent per operation id', async () => {
-      const hold = await loadComposable();
-      hold.resetToastFiredOperations();
-      hold.markToastFired('op-a');
-      expect(hold.wasToastFired('op-a')).toBe(true);
-      expect(hold.wasToastFired('op-b')).toBe(false);
-    });
-
-    it('resetToastFiredOperations clears all previously marked ids', async () => {
-      const hold = await loadComposable();
-      hold.resetToastFiredOperations();
-      hold.markToastFired('op-c');
-      hold.markToastFired('op-d');
-      hold.resetToastFiredOperations();
-      expect(hold.wasToastFired('op-c')).toBe(false);
-      expect(hold.wasToastFired('op-d')).toBe(false);
-    });
-  });
-
   async function loadModule() {
     vi.resetModules();
     return await import('@/composables/useOperationDisplayHold');
@@ -1142,6 +1109,31 @@ describe('useOperationDisplayHold', () => {
         status: 'queued',
         phase: undefined,
       });
+    });
+
+    it('forwards string lastError and rollbackReason when present', async () => {
+      const mod = await loadModule();
+      const parsed = mod.parseUpdateOperationSsePayload({
+        operationId: 'op-1',
+        containerName: 'web',
+        status: 'rolled-back',
+        lastError: 'Cancelled by operator',
+        rollbackReason: 'cancelled',
+      });
+      expect(parsed?.lastError).toBe('Cancelled by operator');
+      expect(parsed?.rollbackReason).toBe('cancelled');
+    });
+
+    it('drops non-string lastError and rollbackReason', async () => {
+      const mod = await loadModule();
+      const parsed = mod.parseUpdateOperationSsePayload({
+        containerName: 'web',
+        status: 'failed',
+        lastError: 42,
+        rollbackReason: null,
+      });
+      expect(parsed?.lastError).toBeUndefined();
+      expect(parsed?.rollbackReason).toBeUndefined();
     });
   });
 
@@ -1312,7 +1304,7 @@ describe('useOperationDisplayHold', () => {
       expect(onActiveOperationComputed).not.toHaveBeenCalled();
     });
 
-    it('fires onTerminalEvent for a tracked hold and marks the toast fired', async () => {
+    it('fires onTerminalEvent immediately for a tracked hold (state mutations must be synchronous)', async () => {
       const mod = await loadModule();
       const composable = mod.useOperationDisplayHold();
       const container = makeContainer({ id: 'c-t', name: 'tracked' });
@@ -1334,20 +1326,118 @@ describe('useOperationDisplayHold', () => {
         resolveContainer: () => container,
         onTerminalEvent,
       });
+      // onTerminalEvent fires immediately (state mutations need synchronous access to container)
+      expect(onTerminalEvent).toHaveBeenCalledOnce();
       expect(onTerminalEvent).toHaveBeenCalledWith({
         container,
         status: 'succeeded',
         name: 'tracked',
         operationId: 'op-terminal',
-        wasTracked: true,
       });
-      expect(composable.wasToastFired('op-terminal')).toBe(true);
+      // Hold is still in the settle window (row not yet cleared)
+      expect(composable.findMatchingOperationIds({ operationId: 'op-terminal' })).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(1500);
+      // Hold clears after the settle window
+      expect(composable.findMatchingOperationIds({ operationId: 'op-terminal' })).toHaveLength(0);
     });
 
-    it('fires onTerminalEvent with wasTracked=false when no hold was active', async () => {
+    it('fires onHoldReleased AFTER the settle timer for a tracked hold (toasts must be deferred)', async () => {
       const mod = await loadModule();
       const composable = mod.useOperationDisplayHold();
-      composable.resetToastFiredOperations();
+      const container = makeContainer({ id: 'c-hr', name: 'hold-released' });
+      composable.holdOperationDisplay({
+        operationId: 'op-hr',
+        operation: makeOperation({ id: 'op-hr' }),
+        containerId: 'c-hr',
+        containerName: 'hold-released',
+      });
+      const onHoldReleased = vi.fn();
+      mod.applyUpdateOperationSseToHold({
+        parsed: {
+          operationId: 'op-hr',
+          containerId: 'c-hr',
+          containerName: 'hold-released',
+          status: 'succeeded',
+        },
+        resolveContainer: () => container,
+        onHoldReleased,
+      });
+      // Not yet — row is in its settle window
+      expect(onHoldReleased).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1499);
+      expect(onHoldReleased).not.toHaveBeenCalled();
+
+      // Timer fires: hold removed, THEN onHoldReleased fires
+      await vi.advanceTimersByTimeAsync(1);
+      expect(onHoldReleased).toHaveBeenCalledOnce();
+      expect(onHoldReleased).toHaveBeenCalledWith({
+        container,
+        status: 'succeeded',
+        name: 'hold-released',
+        operationId: 'op-hr',
+      });
+      expect(composable.findMatchingOperationIds({ operationId: 'op-hr' })).toHaveLength(0);
+    });
+
+    it('does NOT fire onHoldReleased if the hold release timer is cancelled before it fires', async () => {
+      const mod = await loadModule();
+      const composable = mod.useOperationDisplayHold();
+      const container = makeContainer({ id: 'c-cancel', name: 'cancellable' });
+      composable.holdOperationDisplay({
+        operationId: 'op-cancel',
+        operation: makeOperation({ id: 'op-cancel' }),
+        containerId: 'c-cancel',
+        containerName: 'cancellable',
+      });
+      const onHoldReleased = vi.fn();
+      mod.applyUpdateOperationSseToHold({
+        parsed: {
+          operationId: 'op-cancel',
+          containerId: 'c-cancel',
+          containerName: 'cancellable',
+          status: 'succeeded',
+        },
+        resolveContainer: () => container,
+        onHoldReleased,
+      });
+      // Hold is scheduled for release; onHoldReleased not yet fired
+      expect(onHoldReleased).not.toHaveBeenCalled();
+
+      // Cancel the hold (e.g. a follow-up event re-asserts the operation)
+      composable.clearHeldOperation({ operationId: 'op-cancel' });
+
+      // Advance past the settle window — timer was cancelled so onComplete never runs
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(onHoldReleased).not.toHaveBeenCalled();
+    });
+
+    it('does NOT fire onHoldReleased when no hold was active (no row release to wait for)', async () => {
+      const mod = await loadModule();
+      const composable = mod.useOperationDisplayHold();
+      const onHoldReleased = vi.fn();
+      mod.applyUpdateOperationSseToHold({
+        parsed: {
+          operationId: 'op-untracked-hr',
+          containerId: 'c-u',
+          containerName: 'untracked',
+          status: 'failed',
+        },
+        resolveContainer: () => undefined,
+        onHoldReleased,
+      });
+      // No hold was active — onHoldReleased should NOT fire since there is no row to release
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(onHoldReleased).not.toHaveBeenCalled();
+      expect(composable.findMatchingOperationIds({ operationId: 'op-untracked-hr' })).toHaveLength(
+        0,
+      );
+    });
+
+    it('fires onTerminalEvent when no hold was active', async () => {
+      const mod = await loadModule();
+      const composable = mod.useOperationDisplayHold();
       const onTerminalEvent = vi.fn();
       mod.applyUpdateOperationSseToHold({
         parsed: {
@@ -1359,14 +1449,14 @@ describe('useOperationDisplayHold', () => {
         resolveContainer: () => undefined,
         onTerminalEvent,
       });
+      // onTerminalEvent fires immediately whether or not a hold was tracked
       expect(onTerminalEvent).toHaveBeenCalledWith({
         container: undefined,
         status: 'failed',
         name: 'untracked',
         operationId: 'op-untracked',
-        wasTracked: false,
       });
-      expect(composable.wasToastFired('op-untracked')).toBe(false);
+      expect(composable.findMatchingOperationIds({ operationId: 'op-untracked' })).toHaveLength(0);
     });
 
     it('uses the resolved container name over the payload name when both exist', async () => {
@@ -1390,6 +1480,7 @@ describe('useOperationDisplayHold', () => {
         resolveContainer: () => container,
         onTerminalEvent,
       });
+      // onTerminalEvent fires immediately — name should be from container, not payload
       expect(onTerminalEvent.mock.calls[0]?.[0]?.name).toBe('canonical');
     });
 

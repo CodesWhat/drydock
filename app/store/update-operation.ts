@@ -1,6 +1,11 @@
 import crypto from 'node:crypto';
 import { getDefaultCacheMaxEntries } from '../configuration/runtime-defaults.js';
-import { emitUpdateOperationChanged } from '../event/index.js';
+import {
+  emitBatchUpdateCompleted,
+  emitContainerUpdateApplied,
+  emitContainerUpdateFailed,
+  emitUpdateOperationChanged,
+} from '../event/index.js';
 import type {
   ActiveContainerUpdateOperationPhase,
   ActiveContainerUpdateOperationStatus,
@@ -43,6 +48,12 @@ interface UpdateOperationBase {
   lastError?: string;
   recoveredAt?: string;
   completedAt?: string;
+  /**
+   * Operator-requested mid-flight cancellation. Set by the cancel API; the
+   * lifecycle checks this at safe checkpoints and aborts before any further
+   * destructive action when true.
+   */
+  cancelRequested?: boolean;
   [key: string]: unknown;
 }
 
@@ -118,6 +129,7 @@ type MutableUpdateOperationFields = Pick<
   | 'rollbackReason'
   | 'lastError'
   | 'recoveredAt'
+  | 'cancelRequested'
 >;
 
 interface InsertUpdateOperationInput
@@ -191,7 +203,8 @@ type UpdateOperationQuery =
   | { 'data.containerId': string }
   | { 'data.containerId': string; 'data.status': ContainerUpdateOperationStatus }
   | { 'data.newContainerId': string }
-  | { 'data.newContainerId': string; 'data.status': ContainerUpdateOperationStatus };
+  | { 'data.newContainerId': string; 'data.status': ContainerUpdateOperationStatus }
+  | { 'data.batchId': string };
 
 interface UpdateOperationCollection {
   insert(document: UpdateOperationCollectionDocument): void;
@@ -213,6 +226,10 @@ interface UpdateOperationStoreDb {
 }
 
 let updateOperationCollection: UpdateOperationCollection | undefined;
+// In-memory registry: batchId → Set of operationIds. Populated on insert, cleared when the
+// batch completes. This allows us to reconstruct full batch membership even after individual
+// operations have had their batchId cleared on terminal transition.
+const batchMemberRegistry = new Map<string, Set<string>>();
 const UPDATE_OPERATION_COLLECTION_INDICES = [
   'data.id',
   'data.containerName',
@@ -283,9 +300,59 @@ function emitOperationChangedEvent(operation: UpdateOperation): void {
     containerName: operation.containerName,
     containerId: operation.containerId,
     newContainerId: operation.newContainerId,
+    batchId:
+      typeof (operation as { batchId?: unknown }).batchId === 'string'
+        ? (operation as { batchId: string }).batchId
+        : undefined,
     status: operation.status,
     phase: operation.phase,
+    lastError:
+      typeof operation.lastError === 'string' && operation.lastError.trim() !== ''
+        ? operation.lastError
+        : undefined,
+    rollbackReason:
+      typeof operation.rollbackReason === 'string' && operation.rollbackReason.trim() !== ''
+        ? operation.rollbackReason
+        : undefined,
   });
+}
+
+function buildTerminalLifecycleEventBase(operation: UpdateOperation, batchId?: string) {
+  return {
+    operationId: operation.id,
+    ...(operation.containerId ? { containerId: operation.containerId } : {}),
+    containerName: operation.containerName,
+    ...(batchId ? { batchId } : {}),
+  };
+}
+
+function getTerminalOperationError(operation: UpdateOperation): string {
+  if (typeof operation.lastError === 'string' && operation.lastError.trim() !== '') {
+    return operation.lastError;
+  }
+  return operation.status === 'rolled-back' ? 'Update rolled back' : 'Update failed';
+}
+
+function emitTerminalLifecycleEvent(operation: UpdateOperation, batchId?: string): void {
+  if (operation.kind === 'self-update') {
+    return;
+  }
+
+  switch (operation.status) {
+    case 'succeeded':
+      void emitContainerUpdateApplied(buildTerminalLifecycleEventBase(operation, batchId));
+      return;
+    case 'failed':
+    case 'rolled-back':
+      void emitContainerUpdateFailed({
+        ...buildTerminalLifecycleEventBase(operation, batchId),
+        error: getTerminalOperationError(operation),
+        phase: operation.phase,
+        ...(typeof operation.rollbackReason === 'string' && operation.rollbackReason.trim() !== ''
+          ? { rollbackReason: operation.rollbackReason }
+          : {}),
+      });
+  }
 }
 
 function expireActiveOperationWithMessage(
@@ -384,6 +451,36 @@ function findOperationDocumentsByStatus(
   return Array.isArray(documents) ? documents : [];
 }
 
+function isResumableActiveOperationOnStartup(operation: ActiveUpdateOperation): boolean {
+  if (operation.kind === 'self-update') {
+    return false;
+  }
+  if (operation.status === 'queued') {
+    return true;
+  }
+  return operation.status === 'in-progress' && operation.phase === 'pulling';
+}
+
+function resetActiveOperationDocumentToQueuedOnStartup(
+  collection: UpdateOperationCollection,
+  document: UpdateOperationCollectionDocument,
+  operation: InProgressUpdateOperation,
+): void {
+  const now = new Date().toISOString();
+  const reset: QueuedUpdateOperation = {
+    ...operation,
+    status: 'queued',
+    phase: 'queued',
+    updatedAt: now,
+    recoveredAt: now,
+    lastError: undefined,
+    completedAt: undefined,
+  } as QueuedUpdateOperation;
+  collection.remove(document);
+  collection.insert({ data: reset });
+  emitOperationChangedEvent(reset);
+}
+
 function reconcileStaleActiveOperationsOnStartup(collection: UpdateOperationCollection): number {
   const documents = ACTIVE_STATUSES.flatMap((status) =>
     findOperationDocumentsByStatus(collection, status),
@@ -392,15 +489,23 @@ function reconcileStaleActiveOperationsOnStartup(collection: UpdateOperationColl
     return 0;
   }
 
-  const activeOperations = documents
-    .map((document) => document.data)
-    .filter((operation): operation is ActiveUpdateOperation => isActiveUpdateOperation(operation));
-
-  for (const operation of activeOperations) {
-    reconcileOrphanedActiveOperationOnStartup(operation);
+  // findOperationDocumentsByStatus filters by status, so every document here is
+  // an ActiveUpdateOperation (queued or in-progress).
+  for (const document of documents) {
+    const operation = document.data as ActiveUpdateOperation;
+    if (!isResumableActiveOperationOnStartup(operation)) {
+      reconcileOrphanedActiveOperationOnStartup(operation);
+      continue;
+    }
+    if (operation.status === 'in-progress') {
+      // Resumable in-progress (pulling) → reset to queued so the recovery
+      // dispatcher picks it up uniformly with already-queued operations.
+      resetActiveOperationDocumentToQueuedOnStartup(collection, document, operation);
+    }
+    // Already-queued resumable operations stay as-is.
   }
 
-  return activeOperations.length;
+  return documents.length;
 }
 
 /**
@@ -412,6 +517,7 @@ export function createCollections(db: UpdateOperationStoreDb): void {
     indices: UPDATE_OPERATION_COLLECTION_INDICES,
   }) as UpdateOperationCollection;
   updateOperationMutationsSincePrune = 0;
+  batchMemberRegistry.clear();
   // Startup repair emits update-operation change events before API/SSE route
   // initialization has registered subscribers. That is acceptable because the
   // UI reloads state over HTTP on connect instead of depending on replay of
@@ -423,8 +529,16 @@ export function createCollections(db: UpdateOperationStoreDb): void {
 
 /**
  * Insert a persisted container-update operation.
+ *
+ * `options.skipChangeEvent` suppresses the `dd:update-operation-changed` SSE
+ * for this insert. Used when a transient `queued` state would only flash in
+ * the UI before the executor immediately picks the operation up — see
+ * `createAcceptedContainerUpdateRequest` and the no-cap concurrency path.
  */
-export function insertOperation(operation: InsertUpdateOperationInput): UpdateOperation {
+export function insertOperation(
+  operation: InsertUpdateOperationInput,
+  options: { skipChangeEvent?: boolean } = {},
+): UpdateOperation {
   const now = new Date().toISOString();
   const operationToSave: UpdateOperation = {
     ...operation,
@@ -438,7 +552,22 @@ export function insertOperation(operation: InsertUpdateOperationInput): UpdateOp
   if (updateOperationCollection) {
     updateOperationCollection.insert({ data: operationToSave });
     maybePruneOperationsForRetention(updateOperationCollection);
-    emitOperationChangedEvent(operationToSave);
+    if (!options.skipChangeEvent) {
+      emitOperationChangedEvent(operationToSave);
+    }
+  }
+
+  // Register batch membership for batch-completion tracking.
+  const insertedBatchId =
+    typeof (operationToSave as { batchId?: unknown }).batchId === 'string' &&
+    (operationToSave as { batchId?: unknown }).batchId !== ''
+      ? (operationToSave as { batchId: string }).batchId
+      : undefined;
+  if (insertedBatchId) {
+    if (!batchMemberRegistry.has(insertedBatchId)) {
+      batchMemberRegistry.set(insertedBatchId, new Set<string>());
+    }
+    batchMemberRegistry.get(insertedBatchId)!.add(operationToSave.id);
   }
 
   return operationToSave;
@@ -597,12 +726,19 @@ export function markOperationTerminal(
     return existing;
   }
 
+  // Capture batchId BEFORE writing terminal state — terminal ops have batchId cleared.
+  const preBatchId =
+    typeof (existing as { batchId?: unknown }).batchId === 'string' &&
+    (existing as { batchId?: unknown }).batchId !== ''
+      ? (existing as { batchId: string }).batchId
+      : undefined;
+
   const completedAt =
     typeof patch.completedAt === 'string' && patch.completedAt.trim() !== ''
       ? patch.completedAt
       : new Date().toISOString();
 
-  return persistOperationPatch(id, {
+  const updated = persistOperationPatch(id, {
     ...patch,
     phase: resolveTerminalContainerUpdateOperationPhase(patch.status, patch.phase),
     completedAt,
@@ -610,6 +746,83 @@ export function markOperationTerminal(
     queuePosition: undefined,
     queueTotal: undefined,
   });
+
+  if (updated) {
+    emitTerminalLifecycleEvent(updated, preBatchId);
+  }
+
+  // After writing terminal state, check if this was the last active operation in the batch.
+  if (preBatchId) {
+    // Check remaining active ops in batch (active ops still have batchId set).
+    // c8 ignore next: updateOperationCollection is always set when preBatchId is truthy
+    /* c8 ignore next */
+    const remainingActive = updateOperationCollection
+      ? updateOperationCollection
+          .find({ 'data.batchId': preBatchId })
+          .filter((doc) => isActiveOperationStatus(doc.data.status))
+      : [];
+
+    if (remainingActive.length === 0) {
+      // All operations in this batch have reached a terminal state.
+      // Use the in-memory registry to reconstruct full batch membership.
+      const memberIds = batchMemberRegistry.get(preBatchId);
+      if (memberIds && memberIds.size > 0) {
+        batchMemberRegistry.delete(preBatchId);
+
+        // durationMs: sum of per-operation (completedAt - createdAt) for each batch item.
+        let totalDurationMs = 0;
+        const items: Array<{
+          operationId: string;
+          containerId: string;
+          containerName: string;
+          status: 'succeeded' | 'failed';
+        }> = [];
+
+        for (const memberId of memberIds) {
+          // c8 ignore next: updated is always defined here; the ?? fallback is a null-safety guard
+          /* c8 ignore next */
+          const op =
+            memberId === id ? (updated ?? getOperationById(memberId)) : getOperationById(memberId);
+          if (!op) {
+            continue;
+          }
+          const createdAtMs = Date.parse(op.createdAt);
+          const completedAtMs = Date.parse(
+            typeof op.completedAt === 'string' ? op.completedAt : completedAt,
+          );
+          const opDuration =
+            !Number.isNaN(createdAtMs) && !Number.isNaN(completedAtMs)
+              ? Math.max(0, completedAtMs - createdAtMs)
+              : 0;
+          totalDurationMs += opDuration;
+
+          const opStatus: 'succeeded' | 'failed' =
+            op.status === 'succeeded' ? 'succeeded' : 'failed';
+          items.push({
+            operationId: op.id,
+            containerId: typeof op.containerId === 'string' ? op.containerId : '',
+            containerName: op.containerName,
+            status: opStatus,
+          });
+        }
+
+        const succeededCount = items.filter((i) => i.status === 'succeeded').length;
+        const failedCount = items.filter((i) => i.status === 'failed').length;
+
+        void emitBatchUpdateCompleted({
+          batchId: preBatchId,
+          total: items.length,
+          succeeded: succeededCount,
+          failed: failedCount,
+          durationMs: totalDurationMs,
+          items,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+  }
+
+  return updated;
 }
 
 /**
@@ -749,4 +962,84 @@ export function getOperationsByContainerName(containerName: string): UpdateOpera
     .find({ 'data.containerName': containerName })
     .map((item) => item.data)
     .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
+}
+
+export function cancelQueuedOperation(id: string): UpdateOperation | undefined {
+  if (!updateOperationCollection) {
+    return undefined;
+  }
+  const existing = getOperationById(id);
+  if (!existing || existing.status !== 'queued') {
+    return undefined;
+  }
+  return markOperationTerminal(id, {
+    status: 'failed',
+    phase: 'failed',
+    lastError: 'Cancelled by operator',
+  });
+}
+
+/**
+ * Thrown by the lifecycle when it observes an operator-requested cancellation
+ * at a safe checkpoint. The standard rollback path treats this like any other
+ * runtime failure but tags the rollback reason as `cancelled`.
+ */
+export class OperationCancelledError extends Error {
+  readonly operationId: string;
+
+  constructor(operationId: string) {
+    super('Cancelled by operator');
+    this.name = 'OperationCancelledError';
+    this.operationId = operationId;
+  }
+}
+
+export function isOperationCancelledError(error: unknown): error is OperationCancelledError {
+  return error instanceof OperationCancelledError;
+}
+
+/**
+ * Outcome of a mid-flight cancellation request.
+ * - `'cancelled'`: queued operation was cancelled immediately.
+ * - `'cancel-requested'`: in-progress operation was flagged; the lifecycle will
+ *   abort at the next safe checkpoint and roll back if it has crossed the
+ *   point of no return.
+ * - `undefined`: the operation does not exist or is already terminal.
+ */
+export function requestOperationCancellation(
+  id: string,
+): { outcome: 'cancelled' | 'cancel-requested'; operation: UpdateOperation } | undefined {
+  if (!updateOperationCollection) {
+    return undefined;
+  }
+  const existing = getOperationById(id);
+  if (!existing) {
+    return undefined;
+  }
+  if (existing.status === 'queued') {
+    const cancelled = markOperationTerminal(id, {
+      status: 'failed',
+      phase: 'failed',
+      lastError: 'Cancelled by operator',
+    });
+    return cancelled ? { outcome: 'cancelled', operation: cancelled } : undefined;
+  }
+  if (existing.status === 'in-progress') {
+    const flagged = persistOperationPatch(id, { cancelRequested: true });
+    return flagged ? { outcome: 'cancel-requested', operation: flagged } : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Re-read the operation row and return whether a mid-flight cancellation has
+ * been requested. Lifecycle code calls this at safe checkpoints to decide
+ * whether to abort.
+ */
+export function isOperationCancelRequested(id: string | undefined): boolean {
+  if (!id) {
+    return false;
+  }
+  const operation = getOperationById(id);
+  return Boolean(operation?.cancelRequested);
 }

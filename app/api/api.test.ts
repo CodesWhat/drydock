@@ -22,6 +22,12 @@ const {
     use: createTrackedMethod('use'),
     get: createTrackedMethod('get'),
     post: createTrackedMethod('post'),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+    head: vi.fn(),
+    options: vi.fn(),
+    all: vi.fn(),
   });
 
   return {

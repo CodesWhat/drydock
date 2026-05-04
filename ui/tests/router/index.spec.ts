@@ -52,7 +52,7 @@ describe('router auth guard', () => {
       .map((route) => route.component as () => Promise<unknown>);
     const loaders = [...topLevelLoaders, ...childLoaders];
 
-    expect(loaders).toHaveLength(15);
+    expect(loaders).toHaveLength(16);
     await Promise.all(loaders.map((loader) => loader()));
   });
 

@@ -5,6 +5,7 @@
     "filterPlaceholder": "Filter by target or event...",
     "containerFilterPlaceholder": "Container name...",
     "allEvents": "All events",
+    "eventsSelected": "{count} events selected",
     "clear": "Clear",
     "fromDateLabel": "From date",
     "toDateLabel": "To date",

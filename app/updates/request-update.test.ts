@@ -34,6 +34,7 @@ vi.mock('../log/index.js', () => ({
 
 import {
   buildAcceptedUpdateRuntimeContext,
+  dispatchAccepted,
   enqueueContainerUpdate,
   enqueueContainerUpdates,
   requestContainerUpdate,
@@ -54,6 +55,22 @@ function createContainer(overrides: Record<string, unknown> = {}) {
 async function flushAsyncWork() {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+interface Deferred<T = void> {
+  promise: Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+  reject: (reason?: unknown) => void;
+}
+
+function deferred<T = void>(): Deferred<T> {
+  let resolve!: Deferred<T>['resolve'];
+  let reject!: Deferred<T>['reject'];
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }
 
 describe('request-update', () => {
@@ -85,6 +102,7 @@ describe('request-update', () => {
         status: 'queued',
         phase: 'queued',
       }),
+      expect.objectContaining({ skipChangeEvent: true }),
     );
     expect(trigger.trigger).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'c1', name: 'nginx' }),
@@ -110,6 +128,27 @@ describe('request-update', () => {
       status: 'failed',
       phase: 'failed',
       lastError: 'pull failed',
+    });
+  });
+
+  test('requestContainerUpdate uses shared error-message handling for object trigger rejections', async () => {
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockRejectedValue({ message: 'registry timeout' }),
+    };
+    mockGetOperationById.mockImplementation((id: string) => ({
+      id,
+      status: 'queued',
+      phase: 'queued',
+    }));
+
+    const accepted = await requestContainerUpdate(createContainer(), { trigger });
+    await flushAsyncWork();
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(accepted.operationId, {
+      status: 'failed',
+      phase: 'failed',
+      lastError: 'registry timeout',
     });
   });
 
@@ -148,6 +187,7 @@ describe('request-update', () => {
         queuePosition: 1,
         queueTotal: 2,
       }),
+      expect.objectContaining({ skipChangeEvent: true }),
     );
     expect(mockInsertOperation).toHaveBeenNthCalledWith(
       2,
@@ -160,6 +200,7 @@ describe('request-update', () => {
         queuePosition: 2,
         queueTotal: 2,
       }),
+      expect.objectContaining({ skipChangeEvent: true }),
     );
   });
 
@@ -287,7 +328,101 @@ describe('request-update', () => {
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
   });
 
-  test('runAcceptedContainerUpdates invokes onSuccess for successful updates', async () => {
+  test('runAcceptedContainerUpdates rejects invalid concurrency limits', async () => {
+    await expect(
+      runAcceptedContainerUpdates(
+        [
+          {
+            container: createContainer({ id: 'c1' }),
+            operationId: 'op-1',
+            trigger: { type: 'docker', trigger: vi.fn() },
+          },
+        ],
+        { concurrency: 0 },
+      ),
+    ).rejects.toThrow('Accepted update dispatch concurrency must be a positive integer');
+  });
+
+  test('runAcceptedContainerUpdates limits trigger concurrency when a cap is provided', async () => {
+    const gates = Array.from({ length: 5 }, () => deferred());
+    const started: string[] = [];
+    const accepted = gates.map((gate, index) => {
+      const operationId = `op-${index + 1}`;
+      return {
+        operationId,
+        container: createContainer({ id: `c${index + 1}`, name: `app-${index + 1}` }),
+        trigger: {
+          type: 'docker',
+          trigger: vi.fn(async () => {
+            started.push(operationId);
+            await gate.promise;
+          }),
+        },
+      };
+    });
+
+    const run = runAcceptedContainerUpdates(accepted, { concurrency: 2 });
+
+    await flushAsyncWork();
+    expect(started).toEqual(['op-1', 'op-2']);
+
+    gates[0].resolve();
+    await flushAsyncWork();
+    expect(started).toEqual(['op-1', 'op-2', 'op-3']);
+
+    for (const gate of gates) {
+      gate.resolve();
+    }
+    await expect(run).resolves.toBeUndefined();
+  });
+
+  test('dispatchAccepted runs triggers in the background and returns synchronously', async () => {
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockResolvedValue(undefined),
+    };
+    const entry = {
+      container: createContainer(),
+      operationId: 'op-bg-1',
+      trigger,
+    };
+
+    const result = dispatchAccepted([entry]);
+    expect(result).toBeUndefined();
+
+    await flushAsyncWork();
+    expect(trigger.trigger).toHaveBeenCalledWith(entry.container, {
+      operationId: 'op-bg-1',
+    });
+  });
+
+  test('dispatchAccepted swallows trigger rejection so it never escapes as an unhandled rejection', async () => {
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockRejectedValue(new Error('explosion')),
+    };
+    const entry = {
+      container: createContainer(),
+      operationId: 'op-bg-2',
+      trigger,
+    };
+    mockGetOperationById.mockImplementation((id: string) => ({
+      id,
+      status: 'queued',
+      phase: 'queued',
+    }));
+
+    expect(() => dispatchAccepted([entry])).not.toThrow();
+
+    await flushAsyncWork();
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-bg-2', {
+      status: 'failed',
+      phase: 'failed',
+      lastError: 'explosion',
+    });
+  });
+
+  test('runAcceptedContainerUpdates leaves successful terminalization to the trigger lifecycle', async () => {
     const trigger = {
       type: 'docker',
       trigger: vi.fn().mockResolvedValue(undefined),
@@ -299,14 +434,12 @@ describe('request-update', () => {
         trigger,
       },
     ];
-    const onSuccess = vi.fn();
 
-    await runAcceptedContainerUpdates(accepted, { onSuccess });
+    await runAcceptedContainerUpdates(accepted);
 
     expect(trigger.trigger).toHaveBeenCalledWith(accepted[0].container, {
       operationId: 'op-1',
     });
-    expect(onSuccess).toHaveBeenCalledWith(accepted[0]);
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
   });
 
@@ -397,6 +530,36 @@ describe('request-update', () => {
       ).rejects.toMatchObject<Partial<UpdateRequestError>>({
         statusCode: 409,
         message: expect.stringContaining('Security scan is blocking this update'),
+      });
+    });
+
+    test('rejects with 409 when last update rolled back and candidate digest matches', async () => {
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn(),
+        agent: undefined,
+        configuration: { threshold: 'all' },
+        getId: () => 'docker.update',
+        isTriggerIncluded: () => true,
+        isTriggerExcluded: () => false,
+      };
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger } });
+
+      await expect(
+        enqueueContainerUpdate(
+          createContainerWithRawUpdate({
+            result: { tag: '1.1.0', digest: 'sha256:deadbeef' },
+            updateRollback: {
+              recordedAt: '2026-04-01T00:00:00.000Z',
+              targetDigest: 'sha256:deadbeef',
+              reason: 'start_new_failed',
+              lastError: 'container exited with code 1',
+            },
+          }),
+        ),
+      ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+        statusCode: 409,
+        message: expect.stringContaining('Last update attempt rolled back'),
       });
     });
 

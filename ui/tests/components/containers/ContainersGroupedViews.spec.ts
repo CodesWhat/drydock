@@ -1,5 +1,6 @@
 import { defineComponent, nextTick, onMounted, ref } from 'vue';
 import ContainersGroupedViews from '@/components/containers/ContainersGroupedViews.vue';
+import { useToast } from '@/composables/useToast';
 import { useUpdateBatches } from '@/composables/useUpdateBatches';
 import type { Container } from '@/types/container';
 import { mountWithPlugins } from '../../helpers/mount';
@@ -350,8 +351,10 @@ function rowByName(wrapper: any, name: string) {
   return row!;
 }
 
+let activeWrapper: ReturnType<typeof mountWithPlugins> | null = null;
+
 function mountSubject() {
-  return mountWithPlugins(ContainersGroupedViews, {
+  const wrapper = mountWithPlugins(ContainersGroupedViews, {
     global: {
       stubs: {
         DataTable: DataTableStub,
@@ -366,12 +369,26 @@ function mountSubject() {
       },
     },
   });
+  activeWrapper = wrapper as any;
+  return wrapper;
 }
 
 describe('ContainersGroupedViews', () => {
+  afterEach(() => {
+    if (activeWrapper) {
+      try {
+        activeWrapper.unmount();
+      } catch {
+        // Wrapper may have been explicitly unmounted in the test already.
+      }
+      activeWrapper = null;
+    }
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     useUpdateBatches().batches.value = new Map();
+    useToast().toasts.value = [];
   });
 
   it('covers grouped table interactions in icon action mode', async () => {
@@ -1430,7 +1447,7 @@ describe('ContainersGroupedViews', () => {
     expect(row.text()).not.toContain('2 of 3');
   });
 
-  it('shows frozen batch progress in the grouped header', () => {
+  it('shows frozen batch progress in the grouped header — counter starts at 0', () => {
     const updating = makeContainer({
       id: 'c-updating',
       name: 'alpha',
@@ -1481,7 +1498,104 @@ describe('ContainersGroupedViews', () => {
 
     const wrapper = mountSubject();
 
-    expect(wrapper.text()).toContain('Updating stack · 1 of 3 done');
+    // Counter starts at 0 — ticks only as terminal SSE events arrive.
+    expect(wrapper.text()).toContain('Updating stack · 0 of 3 done');
+  });
+
+  it('ticks the batch counter as terminal SSE events arrive', async () => {
+    const c1 = makeContainer({
+      id: 'c-1',
+      name: 'alpha',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      updateOperation: {
+        id: 'op-1',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-28T00:00:00.000Z',
+      },
+    });
+    const c2 = makeContainer({
+      id: 'c-2',
+      name: 'beta',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      updateOperation: {
+        id: 'op-2',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-28T00:00:00.000Z',
+      },
+    });
+
+    const { context, refs } = makeContext();
+    refs.groupByStack.value = true;
+    refs.filteredContainers.value = [c1, c2];
+    refs.displayContainers.value = [c1, c2];
+    refs.renderGroups.value = [
+      {
+        key: 'stack-a',
+        name: 'stack-a',
+        containers: [c1, c2],
+        containerCount: 2,
+        updatesAvailable: 2,
+        updatableCount: 2,
+      },
+    ];
+    useUpdateBatches().captureBatch('stack-a', 2);
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    expect(wrapper.text()).toContain('Updating stack · 0 of 2 done');
+
+    // First terminal event
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-applied', { detail: { containerId: 'c-1' } }),
+    );
+    await nextTick();
+    expect(wrapper.text()).toContain('Updating stack · 1 of 2 done');
+
+    // Second terminal event
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-applied', { detail: { containerId: 'c-2' } }),
+    );
+    await nextTick();
+    expect(wrapper.text()).toContain('Updating stack · 2 of 2 done');
+    wrapper.unmount();
+  });
+
+  it('increments failed count on dd:sse-update-failed', async () => {
+    const c1 = makeContainer({ id: 'c-1', name: 'alpha', newTag: '2.0.0', updateKind: 'major' });
+    const c2 = makeContainer({ id: 'c-2', name: 'beta', newTag: '2.0.0', updateKind: 'major' });
+
+    const { context, refs } = makeContext();
+    refs.groupByStack.value = true;
+    refs.filteredContainers.value = [c1, c2];
+    refs.displayContainers.value = [c1, c2];
+    refs.renderGroups.value = [
+      {
+        key: 'stack-a',
+        name: 'stack-a',
+        containers: [c1, c2],
+        containerCount: 2,
+        updatesAvailable: 2,
+        updatableCount: 2,
+      },
+    ];
+    useUpdateBatches().captureBatch('stack-a', 2);
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-failed', { detail: { containerId: 'c-1' } }),
+    );
+    await nextTick();
+    wrapper.unmount();
+
+    const batch = useUpdateBatches().getBatch('stack-a');
+    expect(batch?.failedCount).toBe(1);
+    expect(batch?.succeededCount).toBe(0);
   });
 
   it('covers card and list pending/disabled/update-kind branches', async () => {
@@ -1627,7 +1741,7 @@ describe('ContainersGroupedViews', () => {
     expect(updatingWrapper.classes()).toContain('opacity-30');
     const updatingOverlay = cards[0]!.find('.absolute.inset-0');
     expect(updatingOverlay.exists()).toBe(true);
-    expect(updatingOverlay.text()).toBe('Updating');
+    expect(updatingOverlay.text()).toBe('Pulling…');
 
     const queuedWrapper = cards[1]!.find('.transition-opacity');
     expect(queuedWrapper.classes()).toContain('opacity-30');
@@ -1758,5 +1872,484 @@ describe('ContainersGroupedViews', () => {
 
     const rows = wrapper.findAll('.table-row-stub');
     expect(rows).toHaveLength(1);
+  });
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Batch completion toast
+  // ──────────────────────────────────────────────────────────────────────────
+
+  function mountWithGroup(groupKey: string, groupName: string, containers: Container[]) {
+    const { context, refs } = makeContext();
+    refs.groupByStack.value = true;
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: groupKey,
+        name: groupName,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: containers.length,
+        updatableCount: containers.length,
+      },
+    ];
+    mocked.context = context;
+    return mountSubject();
+  }
+
+  it('fires a success toast when all containers in a batch succeed', async () => {
+    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
+    const c2 = makeContainer({ id: 'c-2', name: 'beta' });
+    const wrapper = mountWithGroup('tdarr_node', 'tdarr_node', [c1, c2]);
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-batch-update-completed', {
+        detail: {
+          batchId: 'batch-abc',
+          total: 2,
+          succeeded: 2,
+          failed: 0,
+          durationMs: 1500,
+          items: [
+            {
+              operationId: 'op-1',
+              containerId: 'c-1',
+              containerName: 'alpha',
+              status: 'succeeded',
+            },
+            { operationId: 'op-2', containerId: 'c-2', containerName: 'beta', status: 'succeeded' },
+          ],
+          timestamp: '2026-04-28T00:00:00.000Z',
+        },
+      }),
+    );
+    await nextTick();
+    wrapper.unmount();
+
+    const { toasts } = useToast();
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0]?.tone).toBe('success');
+    expect(toasts.value[0]?.title).toBe('Updated 2 containers in tdarr_node');
+  });
+
+  it('fires a warning toast when some containers fail', async () => {
+    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
+    const c2 = makeContainer({ id: 'c-2', name: 'beta' });
+    const c3 = makeContainer({ id: 'c-3', name: 'gamma' });
+    const wrapper = mountWithGroup('tdarr_node', 'tdarr_node', [c1, c2, c3]);
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-batch-update-completed', {
+        detail: {
+          batchId: 'batch-abc',
+          total: 3,
+          succeeded: 2,
+          failed: 1,
+          durationMs: 1500,
+          items: [
+            {
+              operationId: 'op-1',
+              containerId: 'c-1',
+              containerName: 'alpha',
+              status: 'succeeded',
+            },
+            { operationId: 'op-2', containerId: 'c-2', containerName: 'beta', status: 'succeeded' },
+            { operationId: 'op-3', containerId: 'c-3', containerName: 'gamma', status: 'failed' },
+          ],
+          timestamp: '2026-04-28T00:00:00.000Z',
+        },
+      }),
+    );
+    await nextTick();
+    wrapper.unmount();
+
+    const { toasts } = useToast();
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0]?.tone).toBe('warning');
+    expect(toasts.value[0]?.title).toBe('Updated 2 of 3 containers in tdarr_node; 1 failed');
+  });
+
+  it('fires an error toast when all containers fail', async () => {
+    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
+    const c2 = makeContainer({ id: 'c-2', name: 'beta' });
+    const wrapper = mountWithGroup('tdarr_node', 'tdarr_node', [c1, c2]);
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-batch-update-completed', {
+        detail: {
+          batchId: 'batch-abc',
+          total: 2,
+          succeeded: 0,
+          failed: 2,
+          durationMs: 1500,
+          items: [
+            { operationId: 'op-1', containerId: 'c-1', containerName: 'alpha', status: 'failed' },
+            { operationId: 'op-2', containerId: 'c-2', containerName: 'beta', status: 'failed' },
+          ],
+          timestamp: '2026-04-28T00:00:00.000Z',
+        },
+      }),
+    );
+    await nextTick();
+    wrapper.unmount();
+
+    const { toasts } = useToast();
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0]?.tone).toBe('error');
+    expect(toasts.value[0]?.title).toBe('Failed to update 2 containers in tdarr_node');
+  });
+
+  // When the resolved group key is __ungrouped__ (name is null), the toast
+  // must use the no-group locale variant — never emit "in __ungrouped__".
+  function mountWithUngrouped(containers: Container[]) {
+    const { context, refs } = makeContext();
+    refs.groupByStack.value = true;
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__ungrouped__',
+        name: null as unknown as string,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: containers.length,
+        updatableCount: containers.length,
+      },
+    ];
+    mocked.context = context;
+    return mountSubject();
+  }
+
+  it('uses no-group locale variant (success) when group key is __ungrouped__', async () => {
+    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
+    const c2 = makeContainer({ id: 'c-2', name: 'beta' });
+    const wrapper = mountWithUngrouped([c1, c2]);
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-batch-update-completed', {
+        detail: {
+          batchId: 'batch-ug-ok',
+          total: 2,
+          succeeded: 2,
+          failed: 0,
+          durationMs: 1000,
+          items: [
+            {
+              operationId: 'op-1',
+              containerId: 'c-1',
+              containerName: 'alpha',
+              status: 'succeeded',
+            },
+            { operationId: 'op-2', containerId: 'c-2', containerName: 'beta', status: 'succeeded' },
+          ],
+          timestamp: '2026-04-30T00:00:00.000Z',
+        },
+      }),
+    );
+    await nextTick();
+    wrapper.unmount();
+
+    const { toasts } = useToast();
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0]?.tone).toBe('success');
+    expect(toasts.value[0]?.title).toBe('Updated 2 containers');
+    expect(toasts.value[0]?.title).not.toContain('__ungrouped__');
+  });
+
+  it('uses no-group locale variant (partial) when group key is __ungrouped__', async () => {
+    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
+    const c2 = makeContainer({ id: 'c-2', name: 'beta' });
+    const wrapper = mountWithUngrouped([c1, c2]);
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-batch-update-completed', {
+        detail: {
+          batchId: 'batch-ug-partial',
+          total: 2,
+          succeeded: 1,
+          failed: 1,
+          durationMs: 1000,
+          items: [
+            {
+              operationId: 'op-1',
+              containerId: 'c-1',
+              containerName: 'alpha',
+              status: 'succeeded',
+            },
+            { operationId: 'op-2', containerId: 'c-2', containerName: 'beta', status: 'failed' },
+          ],
+          timestamp: '2026-04-30T00:00:00.000Z',
+        },
+      }),
+    );
+    await nextTick();
+    wrapper.unmount();
+
+    const { toasts } = useToast();
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0]?.tone).toBe('warning');
+    expect(toasts.value[0]?.title).toBe('Updated 1 of 2 containers; 1 failed');
+    expect(toasts.value[0]?.title).not.toContain('__ungrouped__');
+  });
+
+  it('uses no-group locale variant (failure) when group key is __ungrouped__', async () => {
+    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
+    const c2 = makeContainer({ id: 'c-2', name: 'beta' });
+    const wrapper = mountWithUngrouped([c1, c2]);
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-batch-update-completed', {
+        detail: {
+          batchId: 'batch-ug-fail',
+          total: 2,
+          succeeded: 0,
+          failed: 2,
+          durationMs: 1000,
+          items: [
+            { operationId: 'op-1', containerId: 'c-1', containerName: 'alpha', status: 'failed' },
+            { operationId: 'op-2', containerId: 'c-2', containerName: 'beta', status: 'failed' },
+          ],
+          timestamp: '2026-04-30T00:00:00.000Z',
+        },
+      }),
+    );
+    await nextTick();
+    wrapper.unmount();
+
+    const { toasts } = useToast();
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0]?.tone).toBe('error');
+    expect(toasts.value[0]?.title).toBe('Failed to update 2 containers');
+    expect(toasts.value[0]?.title).not.toContain('__ungrouped__');
+  });
+
+  it('drops the group qualifier when no containerId resolves to a known group', async () => {
+    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
+    const wrapper = mountWithGroup('known-group', 'known-group', [c1]);
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-batch-update-completed', {
+        detail: {
+          batchId: 'batch-xyz',
+          total: 1,
+          succeeded: 1,
+          failed: 0,
+          durationMs: 500,
+          items: [
+            // containerId not in renderGroups
+            {
+              operationId: 'op-1',
+              containerId: 'unknown-container',
+              containerName: 'unknown',
+              status: 'succeeded',
+            },
+          ],
+          timestamp: '2026-04-28T00:00:00.000Z',
+        },
+      }),
+    );
+    await nextTick();
+    wrapper.unmount();
+
+    const { toasts } = useToast();
+    expect(toasts.value).toHaveLength(1);
+    expect(toasts.value[0]?.tone).toBe('success');
+    expect(toasts.value[0]?.title).toBe('Updated 1 containers');
+  });
+
+  it('ignores terminal events for unknown containers (no batch active)', async () => {
+    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
+    const wrapper = mountWithGroup('stack-a', 'stack-a', [c1]);
+    // No batch captured
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-applied', { detail: { containerId: 'c-1' } }),
+    );
+    await nextTick();
+    wrapper.unmount();
+
+    // No batch captured, so no counter change
+    expect(useUpdateBatches().getBatch('stack-a')).toBeUndefined();
+  });
+
+  it('ignores terminal events for containers not in any group', async () => {
+    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
+    const wrapper = mountWithGroup('stack-a', 'stack-a', [c1]);
+    useUpdateBatches().captureBatch('stack-a', 1);
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-applied', { detail: { containerId: 'not-in-group' } }),
+    );
+    await nextTick();
+    wrapper.unmount();
+
+    expect(useUpdateBatches().getBatch('stack-a')?.succeededCount).toBe(0);
+  });
+
+  it('ignores dd:sse-batch-update-completed with missing or malformed payload', async () => {
+    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
+    const wrapper = mountWithGroup('stack-a', 'stack-a', [c1]);
+
+    // No detail
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-batch-update-completed'));
+    // detail is null
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-batch-update-completed', { detail: null }));
+    await nextTick();
+    wrapper.unmount();
+
+    expect(useToast().toasts.value).toHaveLength(0);
+  });
+
+  it('ignores dd:sse-update-applied with missing containerId', async () => {
+    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
+    const wrapper = mountWithGroup('stack-a', 'stack-a', [c1]);
+    useUpdateBatches().captureBatch('stack-a', 1);
+
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-update-applied', { detail: {} }));
+    await nextTick();
+    wrapper.unmount();
+
+    expect(useUpdateBatches().getBatch('stack-a')?.succeededCount).toBe(0);
+  });
+
+  it('ignores dd:sse-update-failed with missing containerId', async () => {
+    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
+    const wrapper = mountWithGroup('stack-a', 'stack-a', [c1]);
+    useUpdateBatches().captureBatch('stack-a', 1);
+
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-update-failed', { detail: {} }));
+    await nextTick();
+    wrapper.unmount();
+
+    expect(useUpdateBatches().getBatch('stack-a')?.failedCount).toBe(0);
+  });
+
+  it('holds batch at Y of Y for ~1500ms before clearing', async () => {
+    vi.useFakeTimers();
+
+    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
+    const c2 = makeContainer({ id: 'c-2', name: 'beta' });
+
+    const { context, refs } = makeContext();
+    refs.groupByStack.value = true;
+    refs.filteredContainers.value = [c1, c2];
+    refs.displayContainers.value = [c1, c2];
+    refs.renderGroups.value = [
+      {
+        key: 'stack-a',
+        name: 'stack-a',
+        containers: [c1, c2],
+        containerCount: 2,
+        updatesAvailable: 2,
+        updatableCount: 2,
+      },
+    ];
+    useUpdateBatches().captureBatch('stack-a', 2);
+    mocked.context = context;
+
+    mountSubject();
+
+    // Both containers complete
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-applied', { detail: { containerId: 'c-1' } }),
+    );
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-applied', { detail: { containerId: 'c-2' } }),
+    );
+    await nextTick();
+
+    // Batch still present — within the hold window
+    expect(useUpdateBatches().getBatch('stack-a')).toBeDefined();
+
+    // Advance just before the hold expires
+    vi.advanceTimersByTime(1400);
+    expect(useUpdateBatches().getBatch('stack-a')).toBeDefined();
+
+    // Advance past the hold
+    vi.advanceTimersByTime(200);
+    expect(useUpdateBatches().getBatch('stack-a')).toBeUndefined();
+
+    vi.useRealTimers();
+  });
+
+  describe('phase-aware in-progress badge labels', () => {
+    function mountWithPhase(phase: string | undefined) {
+      const container = makeContainer({
+        id: 'c-phase-1',
+        name: 'alpha',
+        newTag: '2.0.0',
+        updateKind: 'major',
+        bouncer: 'safe',
+        status: 'running',
+        updateOperation: {
+          id: 'op-1',
+          status: 'in-progress',
+          phase: phase as any,
+          updatedAt: '2026-04-01T12:00:00.000Z',
+        },
+      });
+
+      const { context, refs } = makeContext();
+      refs.filteredContainers.value = [container];
+      refs.displayContainers.value = [container];
+      refs.renderGroups.value = [
+        {
+          key: '__flat__',
+          name: null,
+          containers: [container],
+          containerCount: 1,
+          updatesAvailable: 1,
+          updatableCount: 1,
+        },
+      ];
+      refs.containerViewMode.value = 'table';
+      mocked.context = context;
+      return mountSubject();
+    }
+
+    it('shows "Scanning…" badge for phase scanning', () => {
+      const wrapper = mountWithPhase('scanning');
+      expect(rowByName(wrapper, 'alpha').text()).toContain('Scanning…');
+    });
+
+    it('shows "Pulling…" badge for phase pulling', () => {
+      const wrapper = mountWithPhase('pulling');
+      expect(rowByName(wrapper, 'alpha').text()).toContain('Pulling…');
+    });
+
+    it('shows "Updating" badge for unknown/removed phase signature-verifying (falls through to default)', () => {
+      const wrapper = mountWithPhase('signature-verifying');
+      expect(rowByName(wrapper, 'alpha').text()).toContain('Updating');
+    });
+
+    it('shows "Generating SBOM…" badge for phase sbom-generating', () => {
+      const wrapper = mountWithPhase('sbom-generating');
+      expect(rowByName(wrapper, 'alpha').text()).toContain('Generating SBOM…');
+    });
+
+    it('shows "Health-checking…" badge for phase health-gate', () => {
+      const wrapper = mountWithPhase('health-gate');
+      expect(rowByName(wrapper, 'alpha').text()).toContain('Health-checking…');
+    });
+
+    it('shows "Finalizing…" badge for phase health-gate-passed', () => {
+      const wrapper = mountWithPhase('health-gate-passed');
+      expect(rowByName(wrapper, 'alpha').text()).toContain('Finalizing…');
+    });
+
+    it('shows "Rolling back…" badge for phase rollback-started', () => {
+      const wrapper = mountWithPhase('rollback-started');
+      expect(rowByName(wrapper, 'alpha').text()).toContain('Rolling back…');
+    });
+
+    it('shows "Rolling back…" badge for phase rollback-deferred', () => {
+      const wrapper = mountWithPhase('rollback-deferred');
+      expect(rowByName(wrapper, 'alpha').text()).toContain('Rolling back…');
+    });
+
+    it('shows "Updating" badge for an unknown phase', () => {
+      const wrapper = mountWithPhase('some-unknown-phase');
+      expect(rowByName(wrapper, 'alpha').text()).toContain('Updating');
+    });
   });
 });

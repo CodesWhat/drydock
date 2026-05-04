@@ -106,6 +106,19 @@ const mockMarkOperationTerminal = vi.hoisted(() => vi.fn());
 const mockGetInProgressOperationByContainerName = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerName = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerId = vi.hoisted(() => vi.fn());
+const mockIsOperationCancelRequested = vi.hoisted(() => vi.fn(() => false));
+const MockOperationCancelledError = vi.hoisted(
+  () =>
+    class MockOperationCancelledError extends Error {
+      readonly operationId: string;
+
+      constructor(operationId: string) {
+        super('Cancelled by operator');
+        this.name = 'OperationCancelledError';
+        this.operationId = operationId;
+      }
+    },
+);
 vi.mock('../../../store/update-operation.js', () => ({
   insertOperation: (...args: any[]) => mockInsertOperation(...args),
   updateOperation: (...args: any[]) => mockUpdateOperation(...args),
@@ -116,6 +129,8 @@ vi.mock('../../../store/update-operation.js', () => ({
   getActiveOperationByContainerName: (...args: any[]) =>
     mockGetActiveOperationByContainerName(...args),
   getActiveOperationByContainerId: (...args: any[]) => mockGetActiveOperationByContainerId(...args),
+  isOperationCancelRequested: (...args: any[]) => mockIsOperationCancelRequested(...args),
+  OperationCancelledError: MockOperationCancelledError,
 }));
 
 const mockSyncComposeFileTag = vi.hoisted(() => vi.fn().mockResolvedValue(false));
@@ -912,8 +927,8 @@ test('cloneContainer should drop stale Entrypoint and Cmd inherited from source 
   expect(logContainer.info).toHaveBeenCalledWith(expect.stringContaining('Dropping stale Cmd'));
 });
 
-test('cloneContainer should preserve Cmd/Entrypoint pins when runtime origin is unknown', () => {
-  const logContainer = createMockLog('debug');
+test('cloneContainer should drop Cmd/Entrypoint when runtime origin is unknown but values match source image', () => {
+  const logContainer = createMockLog('debug', 'info');
   const clone = docker.cloneContainer(
     {
       Name: '/hub_nginx_pinned',
@@ -943,17 +958,18 @@ test('cloneContainer should preserve Cmd/Entrypoint pins when runtime origin is 
     },
   );
 
-  expect(clone.Entrypoint).toEqual(['/docker-entrypoint.sh']);
-  expect(clone.Cmd).toEqual(['nginx', '-g', 'daemon off;']);
-  expect(clone.Labels['dd.runtime.entrypoint.origin']).toBe('explicit');
-  expect(clone.Labels['dd.runtime.cmd.origin']).toBe('explicit');
+  // UNKNOWN + matches source + source known → treat as inherited and drop
+  expect(clone.Entrypoint).toBeUndefined();
+  expect(clone.Cmd).toBeUndefined();
+  expect(clone.Labels['dd.runtime.entrypoint.origin']).toBe('inherited');
+  expect(clone.Labels['dd.runtime.cmd.origin']).toBe('inherited');
   expect(logContainer.debug).toHaveBeenCalledWith(
-    expect.stringContaining('runtime origin is unknown'),
+    expect.stringContaining('Treating Entrypoint as inherited'),
   );
 });
 
-test('cloneContainer should preserve explicit Cmd pin while dropping inherited Entrypoint', () => {
-  const logContainer = createMockLog('info');
+test('cloneContainer should drop both Entrypoint (inherited) and Cmd (unknown+matching-source) when source is known', () => {
+  const logContainer = createMockLog('info', 'debug');
   const clone = docker.cloneContainer(
     {
       Name: '/hub_nginx_cmd_pin',
@@ -984,16 +1000,17 @@ test('cloneContainer should preserve explicit Cmd pin while dropping inherited E
   );
 
   expect(clone.Entrypoint).toBeUndefined();
-  expect(clone.Cmd).toEqual(['nginx', '-g', 'daemon off;']);
+  expect(clone.Cmd).toBeUndefined();
   expect(clone.Labels['dd.runtime.entrypoint.origin']).toBe('inherited');
-  expect(clone.Labels['dd.runtime.cmd.origin']).toBe('explicit');
+  expect(clone.Labels['dd.runtime.cmd.origin']).toBe('inherited');
   expect(logContainer.info).toHaveBeenCalledWith(
     expect.stringContaining('Dropping stale Entrypoint'),
   );
+  expect(logContainer.info).toHaveBeenCalledWith(expect.stringContaining('Dropping stale Cmd'));
 });
 
-test('cloneContainer should preserve explicit Entrypoint pin while dropping inherited Cmd', () => {
-  const logContainer = createMockLog('info');
+test('cloneContainer should drop both Entrypoint (unknown+matching-source) and Cmd (inherited) when source is known', () => {
+  const logContainer = createMockLog('info', 'debug');
   const clone = docker.cloneContainer(
     {
       Name: '/hub_nginx_entrypoint_pin',
@@ -1023,10 +1040,13 @@ test('cloneContainer should preserve explicit Entrypoint pin while dropping inhe
     },
   );
 
-  expect(clone.Entrypoint).toEqual(['/docker-entrypoint.sh']);
+  expect(clone.Entrypoint).toBeUndefined();
   expect(clone.Cmd).toBeUndefined();
-  expect(clone.Labels['dd.runtime.entrypoint.origin']).toBe('explicit');
+  expect(clone.Labels['dd.runtime.entrypoint.origin']).toBe('inherited');
   expect(clone.Labels['dd.runtime.cmd.origin']).toBe('inherited');
+  expect(logContainer.info).toHaveBeenCalledWith(
+    expect.stringContaining('Dropping stale Entrypoint'),
+  );
   expect(logContainer.info).toHaveBeenCalledWith(expect.stringContaining('Dropping stale Cmd'));
 });
 
@@ -1252,7 +1272,8 @@ test('trigger should block update when security scan is blocked', async () => {
   );
 
   expect(mockScanImageForVulnerabilities).toHaveBeenCalled();
-  expect(executeContainerUpdateSpy).not.toHaveBeenCalled();
+  // Scan now runs inside executeContainerUpdate (post-pull hook), so the executor IS entered
+  expect(executeContainerUpdateSpy).toHaveBeenCalled();
 });
 
 test('trigger should block update when security scan errors', async () => {
@@ -1477,7 +1498,7 @@ test('persistSecurityState should warn when container store update fails', async
 
   await docker.persistSecurityState(
     createTriggerContainer(),
-    { scan: createSecurityScanResult() },
+    { slot: 'current', scan: createSecurityScanResult() },
     logContainer,
   );
 
@@ -1498,7 +1519,7 @@ test('persistSecurityState should merge with existing security state from store'
 
   await docker.persistSecurityState(
     createTriggerContainer(),
-    { signature: createSignatureVerificationResult() },
+    { slot: 'current', signature: createSignatureVerificationResult() },
     logContainer,
   );
 
@@ -2631,7 +2652,10 @@ describe('executeContainerUpdate', () => {
     expect(result).toBe(true);
   });
 
-  test('should preserve explicit runtime pins matching source defaults during update', async () => {
+  test('should drop stale runtime defaults matching source image when origin is unknown (cold-start case)', async () => {
+    // Reproduces the vaultwarden scenario: container never updated by drydock (no origin labels),
+    // values match source image exactly (image defaults, not user overrides), source image inspected
+    // successfully. New fix: UNKNOWN + inherited-from-source + source-known → drop stale value.
     const currentContainer = {
       rename: vi.fn().mockResolvedValue(undefined),
       stop: vi.fn().mockResolvedValue(undefined),
@@ -2700,10 +2724,11 @@ describe('executeContainerUpdate', () => {
 
     expect(result).toBe(true);
     const createPayload = createContainerSpy.mock.calls[0][1];
-    expect(createPayload.Entrypoint).toEqual(['/docker-entrypoint.sh']);
-    expect(createPayload.Cmd).toEqual(['nginx', '-g', 'daemon off;']);
-    expect(createPayload.Labels['dd.runtime.entrypoint.origin']).toBe('explicit');
-    expect(createPayload.Labels['dd.runtime.cmd.origin']).toBe('explicit');
+    // Stale values match source image defaults and source image was inspected → dropped
+    expect(createPayload.Entrypoint).toBeUndefined();
+    expect(createPayload.Cmd).toBeUndefined();
+    expect(createPayload.Labels['dd.runtime.entrypoint.origin']).toBe('inherited');
+    expect(createPayload.Labels['dd.runtime.cmd.origin']).toBe('inherited');
   });
 
   test('should drop stale inherited runtime defaults when origin labels mark inherited', async () => {
@@ -3799,7 +3824,7 @@ describe('extracted lifecycle delegation', () => {
     try {
       const result = await docker.executeContainerUpdate(context, container, logContainer);
 
-      expect(execute).toHaveBeenCalledWith(context, container, logContainer);
+      expect(execute).toHaveBeenCalledWith(context, container, logContainer, undefined, undefined);
       expect(result).toBe('delegated-container-update');
     } finally {
       docker.containerUpdateExecutor = originalContainerUpdateExecutor;
@@ -3823,7 +3848,13 @@ describe('extracted lifecycle delegation', () => {
         runtimeContext,
       );
 
-      expect(execute).toHaveBeenCalledWith(context, container, logContainer, runtimeContext);
+      expect(execute).toHaveBeenCalledWith(
+        context,
+        container,
+        logContainer,
+        runtimeContext,
+        undefined,
+      );
       expect(result).toBe('delegated-with-runtime');
     } finally {
       docker.containerUpdateExecutor = originalContainerUpdateExecutor;
@@ -3841,6 +3872,47 @@ describe('extracted lifecycle delegation', () => {
       await docker.runContainerUpdateLifecycle(container, runtimeContext);
 
       expect(run).toHaveBeenCalledWith(container, runtimeContext);
+    } finally {
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('runContainerUpdateLifecycle should terminalize an active requested operation on success', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const run = vi.fn().mockResolvedValue(true);
+    docker.updateLifecycleExecutor = { run };
+    const container = createTriggerContainer();
+
+    mockGetOperationById.mockReturnValue({
+      id: 'queued-op-success-1',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+
+    try {
+      await docker.runContainerUpdateLifecycle(container, { operationId: 'queued-op-success-1' });
+
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith('queued-op-success-1', {
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+    } finally {
+      docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+    }
+  });
+
+  test('runContainerUpdateLifecycle should not terminalize when the requested operation is gone on success', async () => {
+    const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+    const run = vi.fn().mockResolvedValue(true);
+    docker.updateLifecycleExecutor = { run };
+    const container = createTriggerContainer();
+
+    mockGetOperationById.mockReturnValue(undefined);
+
+    try {
+      await docker.runContainerUpdateLifecycle(container, { operationId: 'missing-op-success-1' });
+
+      expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
     } finally {
       docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
     }
@@ -4400,6 +4472,93 @@ describe('additional direct wrapper coverage', () => {
   });
 });
 
+describe('persistRollbackState callback', () => {
+  test('success outcome clears updateRollback from container', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    const containerWithRollback = {
+      id: 'abc123',
+      name: 'my-container',
+      result: { digest: 'sha256:aabbcc' },
+      updateRollback: {
+        recordedAt: '2026-01-01T00:00:00.000Z',
+        targetDigest: 'sha256:aabbcc',
+        reason: 'health-check-failed',
+        lastError: 'container unhealthy',
+      },
+    };
+    (storeContainer.getContainer as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      containerWithRollback,
+    );
+    (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+    docker.containerUpdateExecutor.persistRollbackState?.('abc123', 'succeeded');
+
+    expect(storeContainer.updateContainer).toHaveBeenCalledTimes(1);
+    const saved = (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(saved).not.toHaveProperty('updateRollback');
+    expect(saved.id).toBe('abc123');
+  });
+
+  test('rolled-back outcome writes updateRollback to container', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    const containerNoRollback = {
+      id: 'def456',
+      name: 'other-container',
+      result: { digest: 'sha256:ddeeff' },
+    };
+    (storeContainer.getContainer as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      containerNoRollback,
+    );
+    (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+    docker.containerUpdateExecutor.persistRollbackState?.('def456', 'rolled-back', {
+      reason: 'pull-failed',
+      lastError: 'network timeout',
+    });
+
+    expect(storeContainer.updateContainer).toHaveBeenCalledTimes(1);
+    const saved = (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(saved.updateRollback).toMatchObject({
+      targetDigest: 'sha256:ddeeff',
+      reason: 'pull-failed',
+      lastError: 'network timeout',
+    });
+    expect(saved.updateRollback.recordedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  test('rolled-back outcome writes empty rollback defaults when digest and details are absent', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    const containerNoRollbackDetails = {
+      id: 'ghi789',
+      name: 'container-without-details',
+    };
+    (storeContainer.getContainer as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+      containerNoRollbackDetails,
+    );
+    (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+    docker.containerUpdateExecutor.persistRollbackState?.('ghi789', 'rolled-back');
+
+    expect(storeContainer.updateContainer).toHaveBeenCalledTimes(1);
+    const saved = (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(saved.updateRollback).toMatchObject({
+      targetDigest: '',
+      reason: '',
+      lastError: '',
+    });
+  });
+
+  test('no-op when container is not found in store', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    (storeContainer.getContainer as ReturnType<typeof vi.fn>).mockReturnValueOnce(undefined);
+    (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+    docker.containerUpdateExecutor.persistRollbackState?.('missing-id', 'succeeded');
+
+    expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+  });
+});
+
 describe('trigger self-update routing', () => {
   test('should route to executeSelfUpdate for drydock image', async () => {
     stubTriggerFlow({ running: true });
@@ -4612,7 +4771,13 @@ describe('performContainerUpdate compose file sync', () => {
 
     await docker.performContainerUpdate(context, container, logContainer, runtimeContext);
 
-    expect(executeUpdateSpy).toHaveBeenCalledWith(context, container, logContainer, runtimeContext);
+    expect(executeUpdateSpy).toHaveBeenCalledWith(
+      context,
+      container,
+      logContainer,
+      runtimeContext,
+      undefined,
+    );
     expect(mockSyncComposeFileTag).toHaveBeenCalledWith({
       labels: context.currentContainerSpec.Config.Labels,
       newImage: 'myapp:v3',
@@ -4643,7 +4808,13 @@ describe('performContainerUpdate compose file sync', () => {
     );
 
     expect(result).toBe(true);
-    expect(executeUpdateSpy).toHaveBeenCalledWith(context, container, logContainer, runtimeContext);
+    expect(executeUpdateSpy).toHaveBeenCalledWith(
+      context,
+      container,
+      logContainer,
+      runtimeContext,
+      undefined,
+    );
     expect(mockSyncComposeFileTag).not.toHaveBeenCalled();
 
     executeUpdateSpy.mockRestore();
@@ -4697,7 +4868,13 @@ describe('performContainerUpdate compose file sync', () => {
     );
 
     expect(result).toBe(true);
-    expect(executeUpdateSpy).toHaveBeenCalledWith(context, container, logContainer, runtimeContext);
+    expect(executeUpdateSpy).toHaveBeenCalledWith(
+      context,
+      container,
+      logContainer,
+      runtimeContext,
+      undefined,
+    );
     expect(mockSyncComposeFileTag).not.toHaveBeenCalled();
 
     executeUpdateSpy.mockRestore();
@@ -4756,7 +4933,13 @@ describe('performContainerUpdate compose file sync', () => {
     );
 
     expect(result).toBe(false);
-    expect(executeUpdateSpy).toHaveBeenCalledWith(context, container, logContainer, runtimeContext);
+    expect(executeUpdateSpy).toHaveBeenCalledWith(
+      context,
+      container,
+      logContainer,
+      runtimeContext,
+      undefined,
+    );
     expect(mockSyncComposeFileTag).not.toHaveBeenCalled();
 
     executeUpdateSpy.mockRestore();

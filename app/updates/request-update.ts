@@ -12,6 +12,8 @@ import {
 } from '../model/update-eligibility.js';
 import * as registry from '../registry/index.js';
 import * as updateOperationStore from '../store/update-operation.js';
+import { getErrorMessage } from '../util/error.js';
+import { hasUpdateConcurrencyCap } from './update-locks.js';
 
 interface UpdateQueueBatchMetadata {
   batchId: string;
@@ -43,6 +45,10 @@ export interface AcceptedContainerUpdateRequest {
   trigger: UpdateTriggerLike;
 }
 
+export interface AcceptedUpdateDispatchOptions {
+  concurrency?: number;
+}
+
 export interface RejectedContainerUpdateRequest {
   container: Container;
   message: string;
@@ -64,14 +70,7 @@ interface EnqueueContainerUpdateOptions {
   triggerTypes?: UpdateTriggerType[];
 }
 
-interface RunAcceptedContainerUpdatesOptions {
-  onSuccess?: (accepted: AcceptedContainerUpdateRequest) => Promise<void> | void;
-  onFailure?: (accepted: AcceptedContainerUpdateRequest, error: unknown) => Promise<void> | void;
-}
-
-export interface RequestContainerUpdateOptions
-  extends EnqueueContainerUpdateOptions,
-    RunAcceptedContainerUpdatesOptions {}
+export interface RequestContainerUpdateOptions extends EnqueueContainerUpdateOptions {}
 
 const DEFAULT_UPDATE_TRIGGER_TYPES: UpdateTriggerType[] = ['docker', 'dockercompose'];
 
@@ -94,10 +93,6 @@ function toRejectedContainerUpdateRequest(
     message: error.message,
     statusCode: error.statusCode,
   };
-}
-
-function getErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function isResolvedUpdateTrigger(trigger: UpdateTriggerLike): trigger is ResolvedUpdateTrigger {
@@ -150,6 +145,7 @@ const HARD_BLOCKER_STATUS: Record<UpdateBlockerReason, number> = {
   'no-update-trigger-configured': 404,
   'rollback-container': 409,
   'security-scan-blocked': 409,
+  'last-update-rolled-back': 409,
   'active-operation': 409,
   snoozed: 409,
   'skip-tag': 409,
@@ -223,14 +219,24 @@ function createAcceptedContainerUpdateRequest(
 ): AcceptedContainerUpdateRequest {
   const operationId = crypto.randomUUID();
 
-  updateOperationStore.insertOperation({
-    id: operationId,
-    containerId: prepared.container.id,
-    containerName: prepared.container.name,
-    status: 'queued',
-    phase: 'queued',
-    ...batchMetadata,
-  });
+  // Suppress the `queued` SSE when no global concurrency cap is configured:
+  // every accepted update runs as soon as it is dispatched, so the UI would
+  // otherwise see a useless "Queued" flash for the microsecond between insert
+  // and the executor's `in-progress` transition. With a cap in place, real
+  // waiting can occur — keep the SSE so users see the queue.
+  const skipChangeEvent = !hasUpdateConcurrencyCap();
+
+  updateOperationStore.insertOperation(
+    {
+      id: operationId,
+      containerId: prepared.container.id,
+      containerName: prepared.container.name,
+      status: 'queued',
+      phase: 'queued',
+      ...batchMetadata,
+    },
+    { skipChangeEvent },
+  );
 
   return {
     container: prepared.container,
@@ -304,32 +310,57 @@ export async function enqueueContainerUpdates(
 
 export async function runAcceptedContainerUpdates(
   accepted: AcceptedContainerUpdateRequest[],
-  options: RunAcceptedContainerUpdatesOptions = {},
+  options: AcceptedUpdateDispatchOptions = {},
 ): Promise<void> {
   if (accepted.length === 0) {
     return;
   }
 
-  let firstError: unknown;
+  const concurrency = options.concurrency ?? 1;
+  if (!Number.isSafeInteger(concurrency) || concurrency <= 0) {
+    throw new Error(`Accepted update dispatch concurrency must be a positive integer`);
+  }
 
-  for (const entry of accepted) {
-    try {
-      await entry.trigger.trigger(entry.container, { operationId: entry.operationId });
-      if (options.onSuccess) {
-        await options.onSuccess(entry);
+  let firstError: unknown;
+  let nextIndex = 0;
+
+  async function runNextAcceptedUpdate(): Promise<void> {
+    while (nextIndex < accepted.length) {
+      const entry = accepted[nextIndex];
+      nextIndex++;
+      try {
+        await entry.trigger.trigger(entry.container, { operationId: entry.operationId });
+      } catch (error: unknown) {
+        markAcceptedQueuedOperationFailed(entry.operationId, error);
+        firstError ??= error;
       }
-    } catch (error: unknown) {
-      markAcceptedQueuedOperationFailed(entry.operationId, error);
-      if (options.onFailure) {
-        await options.onFailure(entry, error);
-      }
-      firstError ??= error;
     }
   }
+
+  const workerCount = Math.min(concurrency, accepted.length);
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      await runNextAcceptedUpdate();
+    }),
+  );
 
   if (firstError) {
     throw firstError;
   }
+}
+
+/**
+ * Dispatch already-accepted update requests in the background. Per-operation
+ * failures are terminalised inside the lifecycle handler (see Docker.ts), so
+ * the rejection from runAcceptedContainerUpdates carries no information that
+ * isn't already persisted on the operation row — swallow it to avoid
+ * unhandled rejections.
+ */
+export function dispatchAccepted(
+  accepted: AcceptedContainerUpdateRequest[],
+  options: AcceptedUpdateDispatchOptions = {},
+): void {
+  void runAcceptedContainerUpdates(accepted, options).catch(() => undefined);
 }
 
 export async function requestContainerUpdate(
@@ -337,7 +368,7 @@ export async function requestContainerUpdate(
   options: RequestContainerUpdateOptions = {},
 ): Promise<AcceptedContainerUpdateRequest> {
   const accepted = await enqueueContainerUpdate(container, options);
-  void runAcceptedContainerUpdates([accepted], options).catch(() => undefined);
+  dispatchAccepted([accepted]);
   return accepted;
 }
 
@@ -346,6 +377,6 @@ export async function requestContainerUpdates(
   options: RequestContainerUpdateOptions = {},
 ): Promise<ContainerUpdateRequestBatchResult> {
   const result = await enqueueContainerUpdates(containers, options);
-  void runAcceptedContainerUpdates(result.accepted, options).catch(() => undefined);
+  dispatchAccepted(result.accepted);
   return result;
 }

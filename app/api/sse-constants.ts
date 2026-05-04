@@ -1,0 +1,1 @@
+export const SSE_STALE_SWEEP_INTERVAL_MS = 5 * 60 * 1000;

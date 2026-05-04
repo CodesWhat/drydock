@@ -1,13 +1,19 @@
 <script setup lang="ts">
-import { computed, watchEffect } from 'vue';
+import { computed, onScopeDispose, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useToast } from '../../composables/useToast';
 import AppBadge from '../AppBadge.vue';
 import AppIconButton from '../AppIconButton.vue';
 import type { ContainersViewRenderGroup } from './containersViewTemplateContext';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 import { useUpdateBatches } from '../../composables/useUpdateBatches';
 import { getContainerViewKey } from '../../utils/container-view-key';
+import {
+  getUpdateInProgressPhaseLabelKey,
+  UPDATE_IN_PROGRESS_PHASE_I18N,
+} from '../../utils/container-update';
 import { imageAge } from '../../utils/audit-helpers';
+import { displayGroupName } from '../../utils/display';
 import {
   getPrimaryHardBlocker,
   getPrimarySoftBlocker,
@@ -20,6 +26,7 @@ import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
 import ProjectLink from './ProjectLink.vue';
 import ContainersGroupHeader from './ContainersGroupHeader.vue';
+import NoUpdateReasonBadge from './NoUpdateReasonBadge.vue';
 
 const {
   filteredContainers,
@@ -46,6 +53,7 @@ const {
   tableActionStyle,
   openActionsMenu,
   toggleActionsMenu,
+  cancelUpdate,
   confirmUpdate,
   confirmStop,
   startContainer,
@@ -72,7 +80,8 @@ const {
   clearFilters,
 } = useContainersViewTemplateContext();
 const { t } = useI18n();
-const { batches, clearBatch, getBatch } = useUpdateBatches();
+const { batches, clearBatch, getBatch, incrementSucceeded, incrementFailed } = useUpdateBatches();
+const toast = useToast();
 
 const openActionsContainer = computed(
   () => displayContainers.value.find((container) => container.id === openActionsMenu.value) ?? null,
@@ -170,6 +179,22 @@ function isRowLocked(container: { id?: unknown; name?: unknown }) {
   return isContainerRowLocked(container);
 }
 
+const RECENT_FAILURE_DISPLAY_MS = 10 * 60 * 1000;
+
+function isContainerRecentlyFailed(c: {
+  lastUpdateFailureAt?: number;
+  lastUpdateFailureReason?: string;
+}): boolean {
+  if (!c.lastUpdateFailureAt || !c.lastUpdateFailureReason) {
+    return false;
+  }
+  return Date.now() - c.lastUpdateFailureAt < RECENT_FAILURE_DISPLAY_MS;
+}
+
+function recentFailureReasonText(c: { lastUpdateFailureReason?: string }): string {
+  return c.lastUpdateFailureReason ?? '';
+}
+
 function blockedUpdateTooltip(container: {
   newTag?: string | null;
   updateBouncer?: string;
@@ -188,6 +213,16 @@ function blockedUpdateTooltip(container: {
     return `Blocked: ${tag} (${critical} ${noun})`;
   }
   return `Blocked: ${tag}`;
+}
+
+function canCancelUpdate(c: { updateOperation?: { status?: string; id?: string } }): boolean {
+  const status = c.updateOperation?.status;
+  return (status === 'queued' || status === 'in-progress') && Boolean(c.updateOperation?.id);
+}
+
+function getInProgressBadgeLabel(c: { updateOperation?: { phase?: string } }): string {
+  const labelKey = getUpdateInProgressPhaseLabelKey(c.updateOperation?.phase);
+  return t(UPDATE_IN_PROGRESS_PHASE_I18N[labelKey]);
 }
 
 function updateBtnState(c: {
@@ -244,15 +279,20 @@ function getGroupDoneCount(group: ContainersViewRenderGroup) {
     return undefined;
   }
 
-  return Math.max(batch.frozenTotal - getGroupActiveUpdateCount(group), 0);
+  return batch.succeededCount + batch.failedCount;
 }
 
-function getContainerStatusLabel(container: { id?: unknown; name?: unknown; status?: string }) {
+function getContainerStatusLabel(container: {
+  id?: unknown;
+  name?: unknown;
+  status?: string;
+  updateOperation?: { phase?: string };
+}) {
   if (isContainerScanning(container)) {
     return t('containerComponents.groupedViews.statusScanning');
   }
   if (isContainerUpdating(container)) {
-    return t('containerComponents.groupedViews.statusUpdating');
+    return getInProgressBadgeLabel(container);
   }
   if (isContainerQueued(container)) {
     return t('containerComponents.groupedViews.statusQueued');
@@ -335,16 +375,132 @@ function selectTableRow(row: Record<string, unknown>) {
   selectContainer(typedRow.__source);
 }
 
+// Timers for the display-hold window: keyed by groupKey, hold for ~1500ms
+// at "Y of Y done" before clearing so the user can see the final count.
+const batchClearTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 watchEffect(() => {
   batches.value;
   renderGroups.value.forEach((group) => {
-    if (!getBatch(group.key)) {
+    const batch = getBatch(group.key);
+    if (!batch) {
       return;
     }
-    if (getGroupActiveUpdateCount(group) === 0) {
-      clearBatch(group.key);
+    const done = batch.succeededCount + batch.failedCount;
+    if (done >= batch.frozenTotal) {
+      // All terminal events received — start/reset the display-hold timer.
+      if (!batchClearTimers.has(group.key)) {
+        const timer = setTimeout(() => {
+          batchClearTimers.delete(group.key);
+          clearBatch(group.key);
+        }, 1500);
+        batchClearTimers.set(group.key, timer);
+      }
     }
   });
+});
+
+// Resolve a groupKey for a given containerId by searching the current renderGroups.
+function resolveGroupKeyForContainer(containerId: string): string | undefined {
+  for (const group of renderGroups.value) {
+    if (group.containers.some((c: { id?: string }) => c.id === containerId)) {
+      return group.key;
+    }
+  }
+  return undefined;
+}
+
+// Subscribe to per-container terminal events to tick the live counter.
+function onUpdateApplied(event: Event) {
+  const payload = (event as CustomEvent).detail as Record<string, unknown> | undefined;
+  if (!payload) return;
+  const containerId = typeof payload.containerId === 'string' ? payload.containerId : undefined;
+  if (!containerId) return;
+  const groupKey = resolveGroupKeyForContainer(containerId);
+  if (!groupKey || !getBatch(groupKey)) return;
+  incrementSucceeded(groupKey);
+}
+
+function onUpdateFailed(event: Event) {
+  const payload = (event as CustomEvent).detail as Record<string, unknown> | undefined;
+  if (!payload) return;
+  const containerId = typeof payload.containerId === 'string' ? payload.containerId : undefined;
+  if (!containerId) return;
+  const groupKey = resolveGroupKeyForContainer(containerId);
+  if (!groupKey || !getBatch(groupKey)) return;
+  incrementFailed(groupKey);
+}
+
+// Subscribe to the batch-completion SSE event to fire the summary toast.
+function onBatchUpdateCompleted(event: Event) {
+  const payload = (event as CustomEvent).detail as Record<string, unknown> | undefined;
+  if (!payload) return;
+
+  const batchId = typeof payload.batchId === 'string' ? payload.batchId : undefined;
+  const total = typeof payload.total === 'number' ? payload.total : 0;
+  const succeeded = typeof payload.succeeded === 'number' ? payload.succeeded : 0;
+  const failed = typeof payload.failed === 'number' ? payload.failed : 0;
+
+  // Resolve a single group name only when every item in the batch belongs to
+  // the same group; otherwise drop the "in <group>" qualifier rather than
+  // mislabeling a flat "Update All" toast or showing the raw batchId UUID.
+  let groupName: string | undefined;
+  if (Array.isArray(payload.items)) {
+    const items = payload.items as Array<{ containerId?: string }>;
+    const groupKeys = new Set<string>();
+    for (const item of items) {
+      if (typeof item.containerId !== 'string') continue;
+      const groupKey = resolveGroupKeyForContainer(item.containerId);
+      if (groupKey) groupKeys.add(groupKey);
+    }
+    if (groupKeys.size === 1) {
+      const onlyKey = groupKeys.values().next().value as string;
+      const resolvedName =
+        renderGroups.value.find((g: { key: string; name?: string | null }) => g.key === onlyKey)
+          ?.name ?? onlyKey;
+      groupName = displayGroupName(resolvedName);
+    }
+  }
+
+  if (failed === 0) {
+    toast.success(
+      groupName
+        ? t('containersView.toast.batchUpdated', { count: succeeded, group: groupName })
+        : t('containersView.toast.batchUpdatedNoGroup', { count: succeeded }),
+    );
+  } else if (succeeded === 0) {
+    toast.error(
+      groupName
+        ? t('containersView.toast.batchFailed', { count: failed, group: groupName })
+        : t('containersView.toast.batchFailedNoGroup', { count: failed }),
+    );
+  } else {
+    toast.warning(
+      groupName
+        ? t('containersView.toast.batchPartial', {
+            succeeded,
+            total,
+            group: groupName,
+            failed,
+          })
+        : t('containersView.toast.batchPartialNoGroup', { succeeded, total, failed }),
+    );
+  }
+}
+
+globalThis.addEventListener('dd:sse-update-applied', onUpdateApplied);
+globalThis.addEventListener('dd:sse-update-failed', onUpdateFailed);
+globalThis.addEventListener('dd:sse-batch-update-completed', onBatchUpdateCompleted);
+
+// Clean up timers and event listeners when the component is torn down.
+onScopeDispose(() => {
+  for (const timer of batchClearTimers.values()) {
+    clearTimeout(timer);
+  }
+  batchClearTimers.clear();
+  globalThis.removeEventListener('dd:sse-update-applied', onUpdateApplied);
+  globalThis.removeEventListener('dd:sse-update-failed', onUpdateFailed);
+  globalThis.removeEventListener('dd:sse-batch-update-completed', onBatchUpdateCompleted);
 });
 </script>
 
@@ -406,7 +562,7 @@ watchEffect(() => {
                 :size="14"
                 :class="isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? '' : 'dd-spin'"
               />
-              <span>{{ isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? t('containerComponents.groupedViews.statusQueued') : isContainerScanning(c) && !isContainerUpdating(c) ? t('containerComponents.groupedViews.statusScanning') : t('containerComponents.groupedViews.statusUpdating') }}</span>
+              <span>{{ isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? t('containerComponents.groupedViews.statusQueued') : isContainerScanning(c) && !isContainerUpdating(c) ? t('containerComponents.groupedViews.statusScanning') : getInProgressBadgeLabel(c) }}</span>
             </div>
           </div>
           <ContainerIcon :icon="c.icon" :size="32" />
@@ -429,7 +585,10 @@ watchEffect(() => {
             <CopyableTag :tag="c.newTag" class="text-2xs-plus font-semibold truncate max-w-[140px]" style="color: var(--dd-primary);" @click.stop>{{ c.newTag }}</CopyableTag>
           </div>
           <div v-else class="text-center">
-            <span class="text-2xs-plus dd-text-secondary truncate block max-w-[140px] mx-auto" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
+            <div class="inline-flex items-center justify-center gap-1">
+              <span class="text-2xs-plus dd-text-secondary truncate max-w-[140px]" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
+              <NoUpdateReasonBadge v-if="c.noUpdateReason" :reason="c.noUpdateReason" />
+            </div>
             <div v-if="getContainerListPolicyState(c).snoozed || getContainerListPolicyState(c).skipped || getContainerListPolicyState(c).maturityBlocked"
                  class="mt-1 inline-flex items-center justify-center gap-1">
               <span v-if="getContainerListPolicyState(c).snoozed"
@@ -453,15 +612,6 @@ watchEffect(() => {
                     v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
                 <AppIcon name="clock" :size="14" />
               </span>
-            </div>
-            <div
-              v-if="c.noUpdateReason"
-              class="mt-1 inline-flex items-center gap-1 text-2xs max-w-[220px] justify-center"
-              style="color: var(--dd-warning);"
-              v-tooltip.top="c.noUpdateReason"
-            >
-              <AppIcon name="warning" :size="10" class="shrink-0" />
-              <span class="truncate">{{ c.noUpdateReason }}</span>
             </div>
           </div>
         </template>
@@ -571,7 +721,10 @@ watchEffect(() => {
                 @click.stop />
             </div>
           </template>
-          <!-- Icon-style actions (compact) -->
+          <!-- Icon-style actions (compact). Each AppIconButton is `toolbar`
+               size (w-8=32px) so all icons share the same fixed width and
+               justify-end pins them to consistent X positions across rows,
+               while still fitting the 180px actions column. -->
           <template v-else-if="tableActionStyle === 'icons'">
             <div class="flex items-center justify-end gap-0.5">
               <ReleaseNotesLink
@@ -580,33 +733,42 @@ watchEffect(() => {
                 :current-release-notes="c.currentReleaseNotes"
                 :release-link="c.releaseLink"
                 icon-only
+                icon-size="toolbar"
               />
-              <ProjectLink v-if="c.sourceRepo" :source-repo="c.sourceRepo" icon-only />
-              <AppIconButton v-if="updateBtnState(c) === 'hard'" icon="lock" size="sm" variant="muted"
+              <ProjectLink
+                v-if="c.sourceRepo"
+                :source-repo="c.sourceRepo"
+                icon-only
+                icon-size="toolbar"
+              />
+              <AppIconButton v-if="updateBtnState(c) === 'hard'" icon="lock" size="toolbar" variant="muted"
                       class="cursor-not-allowed opacity-50"
                       :disabled="true"
                       :tooltip="tt(updateBtnTooltip(c))" @click.stop />
-              <AppIconButton v-else-if="updateBtnState(c) === 'soft'" icon="cloud-download" size="sm" variant="warning"
+              <AppIconButton v-else-if="updateBtnState(c) === 'soft'" icon="cloud-download" size="toolbar" variant="warning"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-bg-hover hover:scale-110 active:scale-95'"
                       :disabled="isRowLocked(c)"
                       :tooltip="tt(updateBtnTooltip(c))" @click.stop="confirmUpdate(c)" />
-              <AppIconButton v-else-if="updateBtnState(c) === 'ready'" icon="cloud-download" size="sm" variant="muted"
+              <AppIconButton v-else-if="updateBtnState(c) === 'ready'" icon="cloud-download" size="toolbar" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
                       :disabled="isRowLocked(c)"
                       :tooltip="tt(updateBtnTooltip(c))" @click.stop="confirmUpdate(c)" />
-              <AppIconButton v-else-if="c.status === 'running'" icon="stop" size="sm" variant="muted"
+              <AppIconButton v-else-if="c.status === 'running'" icon="stop" size="toolbar" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95'"
                       :disabled="isRowLocked(c)"
                       :tooltip="tt('Stop')" @click.stop="confirmStop(c)" />
-              <AppIconButton v-else icon="play" size="sm" variant="muted"
+              <AppIconButton v-else icon="play" size="toolbar" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
                       :disabled="isRowLocked(c)"
                       :tooltip="tt('Start')" @click.stop="startContainer(c)" />
-              <AppIconButton icon="more" size="sm" variant="muted"
+              <AppIconButton v-if="canCancelUpdate(c)" icon="x" size="toolbar" variant="danger"
+                      class="transition-[color,background-color,border-color,opacity,transform,box-shadow] hover:dd-bg-hover hover:scale-110 active:scale-95"
+                      :tooltip="tt('Cancel update')" @click.stop="cancelUpdate(c)" />
+              <AppIconButton icon="more" size="toolbar" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="[
                         isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95',
@@ -627,6 +789,12 @@ watchEffect(() => {
                 icon-only
               />
               <ProjectLink v-if="c.sourceRepo" :source-repo="c.sourceRepo" icon-only />
+              <AppButton v-if="canCancelUpdate(c)" size="none" variant="plain" weight="none"
+                      class="inline-flex items-center justify-center whitespace-nowrap px-3 py-1.5 text-2xs-plus font-bold tracking-wide transition-colors hover:brightness-110"
+                      :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)', borderRadius: 'var(--dd-radius)' }"
+                      @click.stop="cancelUpdate(c)">
+                <AppIcon name="x" :size="12" class="mr-1" /> Cancel
+              </AppButton>
             <div v-if="c.newTag" class="inline-flex items-center gap-1">
               <!-- Blocked: muted split button (any hard eligibility blocker) -->
               <div v-if="updateBtnState(c) === 'hard'" class="inline-flex dd-rounded overflow-hidden" style="min-width: 110px;"
@@ -801,15 +969,7 @@ watchEffect(() => {
                 <span class="ml-1 shrink-0"><UpdateMaturityBadge :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" /></span>
               </template>
               <template v-else>
-                <span
-                  v-if="c.noUpdateReason"
-                  class="inline-flex items-center gap-1 ml-1 px-1.5 py-0.5 dd-rounded-sm text-2xs max-w-[220px]"
-                  :style="{ backgroundColor: 'var(--dd-warning-muted)', color: 'var(--dd-warning)' }"
-                  v-tooltip.top="c.noUpdateReason"
-                >
-                  <AppIcon name="warning" :size="14" class="shrink-0" />
-                  <span class="truncate">{{ c.noUpdateReason }}</span>
-                </span>
+                <NoUpdateReasonBadge v-if="c.noUpdateReason" :reason="c.noUpdateReason" class="ml-1" />
                 <template v-else-if="getContainerListPolicyState(c).snoozed || getContainerListPolicyState(c).skipped || getContainerListPolicyState(c).maturityBlocked">
                   <span v-if="getContainerListPolicyState(c).snoozed"
                         class="inline-flex items-center justify-center ml-1"
@@ -919,7 +1079,7 @@ watchEffect(() => {
                 :size="18"
                 :class="isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? '' : 'dd-spin'"
               />
-              <span>{{ isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? t('containerComponents.groupedViews.statusQueued') : isContainerScanning(c) && !isContainerUpdating(c) ? t('containerComponents.groupedViews.statusScanning') : t('containerComponents.groupedViews.statusUpdating') }}</span>
+              <span>{{ isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? t('containerComponents.groupedViews.statusQueued') : isContainerScanning(c) && !isContainerUpdating(c) ? t('containerComponents.groupedViews.statusScanning') : getInProgressBadgeLabel(c) }}</span>
             </div>
           </div>
         </template>
@@ -949,7 +1109,7 @@ watchEffect(() => {
               class="text-2xs mt-0.5 inline-flex items-center gap-1"
               style="color: var(--dd-warning);">
               <AppIcon name="spinner" :size="10" class="dd-spin shrink-0" />
-              {{ t('containerComponents.groupedViews.statusUpdating') }}
+              {{ getInProgressBadgeLabel(c) }}
             </div>
             <div
               v-else-if="isContainerQueued(c)"
@@ -958,12 +1118,15 @@ watchEffect(() => {
               {{ t('containerComponents.groupedViews.statusQueued') }}
             </div>
             <div
-              v-else-if="!c.newTag && c.noUpdateReason"
-              class="text-2xs mt-0.5 truncate"
-              style="color: var(--dd-warning);"
-              v-tooltip.top="c.noUpdateReason"
-            >
-              {{ c.noUpdateReason }}
+              v-else-if="isContainerRecentlyFailed(c)"
+              class="text-2xs mt-0.5 inline-flex items-center gap-1 max-w-full"
+              style="color: var(--dd-danger);"
+              v-tooltip.top="recentFailureReasonText(c)">
+              <AppIcon name="warning" :size="10" class="shrink-0" />
+              <span class="truncate">{{ t('containerComponents.groupedViews.lastUpdateFailed', { reason: recentFailureReasonText(c) }) }}</span>
+            </div>
+            <div v-else-if="!c.newTag && c.noUpdateReason" class="mt-0.5">
+              <NoUpdateReasonBadge :reason="c.noUpdateReason" />
             </div>
             <div
               v-if="c.suggestedTag || c.releaseNotes || c.currentReleaseNotes || c.releaseLink || c.sourceRepo"

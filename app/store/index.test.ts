@@ -68,6 +68,7 @@ const {
     vi.doMock('./container', createCollectionsMock);
     vi.doMock('./notification', createCollectionsMock);
     vi.doMock('./notification-history', createCollectionsMock);
+    vi.doMock('./notification-outbox', createCollectionsMock);
     vi.doMock('./settings', createCollectionsMock);
     vi.doMock('./update-operation', createCollectionsMock);
     vi.doMock('../log', createLogMock);
@@ -95,6 +96,7 @@ vi.mock('./backup', createCollectionsMock);
 vi.mock('./container', createCollectionsMock);
 vi.mock('./notification', createCollectionsMock);
 vi.mock('./notification-history', createCollectionsMock);
+vi.mock('./notification-outbox', createCollectionsMock);
 vi.mock('./settings', createCollectionsMock);
 vi.mock('./update-operation', createCollectionsMock);
 vi.mock('../log', createLogMock);

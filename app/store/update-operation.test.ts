@@ -108,7 +108,7 @@ describe('Update Operation Store', () => {
     );
   });
 
-  test('createCollections should reconcile every active operation during startup repair', async () => {
+  test('createCollections should fail non-resumable active operations and leave resumable ones queued for recovery', async () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-02-23T01:00:00.000Z'));
@@ -178,16 +178,16 @@ describe('Update Operation Store', () => {
 
       fresh.createCollections(createDocumentBackedDb(documents) as any);
 
+      // Queued operations are resumable and stay queued for the recovery
+      // dispatcher to pick up post-registry-init.
       expect(fresh.getOperationById('queued-fresh-op-1')).toEqual(
         expect.objectContaining({
           id: 'queued-fresh-op-1',
-          status: 'failed',
-          phase: 'failed',
-          completedAt: '2026-02-23T01:00:00.000Z',
-          lastError: expect.stringContaining('process restart'),
-          batchId: undefined,
-          queuePosition: undefined,
-          queueTotal: undefined,
+          status: 'queued',
+          phase: 'queued',
+          batchId: 'batch-1',
+          queuePosition: 2,
+          queueTotal: 4,
         }),
       );
 
@@ -231,10 +231,101 @@ describe('Update Operation Store', () => {
         }),
       );
 
-      expect(fresh.getActiveOperationByContainerName('queued-web')).toBeUndefined();
+      expect(fresh.getActiveOperationByContainerName('queued-web')).toEqual(
+        expect.objectContaining({ id: 'queued-fresh-op-1', status: 'queued' }),
+      );
       expect(fresh.getActiveOperationByContainerName('started-web')).toBeUndefined();
       expect(fresh.getActiveOperationByContainerName('health-web')).toBeUndefined();
       expect(fresh.getActiveOperationByContainerName('deferred-web')).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('createCollections should reset in-progress pulling-phase operations to queued for recovery', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-02-23T02:00:00.000Z'));
+      vi.resetModules();
+      const fresh = await import('./update-operation.js');
+      const documents = [
+        {
+          data: {
+            id: 'pulling-op-1',
+            containerId: 'container-pulling',
+            containerName: 'pulling-web',
+            status: 'in-progress',
+            phase: 'pulling',
+            triggerName: 'docker.local',
+            createdAt: '2026-02-23T01:50:00.000Z',
+            updatedAt: '2026-02-23T01:55:00.000Z',
+            lastError: 'partial pull',
+          },
+        },
+      ];
+
+      fresh.createCollections(createDocumentBackedDb(documents) as any);
+
+      expect(fresh.getOperationById('pulling-op-1')).toEqual(
+        expect.objectContaining({
+          id: 'pulling-op-1',
+          status: 'queued',
+          phase: 'queued',
+          recoveredAt: '2026-02-23T02:00:00.000Z',
+          updatedAt: '2026-02-23T02:00:00.000Z',
+          triggerName: 'docker.local',
+          lastError: undefined,
+          completedAt: undefined,
+        }),
+      );
+
+      expect(fresh.getActiveOperationByContainerName('pulling-web')).toEqual(
+        expect.objectContaining({ id: 'pulling-op-1', status: 'queued', phase: 'queued' }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('createCollections should still fail self-update operations even if queued or pulling', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-02-23T03:00:00.000Z'));
+      vi.resetModules();
+      const fresh = await import('./update-operation.js');
+      const documents = [
+        {
+          data: {
+            id: 'self-update-queued',
+            kind: 'self-update',
+            containerName: 'drydock',
+            status: 'queued',
+            phase: 'queued',
+            createdAt: '2026-02-23T02:55:00.000Z',
+            updatedAt: '2026-02-23T02:59:00.000Z',
+          },
+        },
+        {
+          data: {
+            id: 'self-update-pulling',
+            kind: 'self-update',
+            containerName: 'drydock',
+            status: 'in-progress',
+            phase: 'pulling',
+            createdAt: '2026-02-23T02:50:00.000Z',
+            updatedAt: '2026-02-23T02:55:00.000Z',
+          },
+        },
+      ];
+
+      fresh.createCollections(createDocumentBackedDb(documents) as any);
+
+      expect(fresh.getOperationById('self-update-queued')).toEqual(
+        expect.objectContaining({ status: 'failed', phase: 'failed' }),
+      );
+      expect(fresh.getOperationById('self-update-pulling')).toEqual(
+        expect.objectContaining({ status: 'failed', phase: 'failed' }),
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -1906,5 +1997,240 @@ describe('Update Operation Store', () => {
 
     const avgMs = totalMs / runs;
     expect(avgMs).toBeLessThan(1500);
+  });
+
+  describe('cancelQueuedOperation', () => {
+    test('transitions a queued operation to failed with cancellation error', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+      });
+
+      const result = updateOperation.cancelQueuedOperation(op.id);
+
+      expect(result).toBeDefined();
+      expect(result!.id).toBe(op.id);
+      expect(result!.status).toBe('failed');
+      expect(result!.phase).toBe('failed');
+      expect(result!.lastError).toBe('Cancelled by operator');
+      expect(result!.completedAt).toBeDefined();
+    });
+
+    test('returns undefined for an in-progress operation', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+
+      expect(updateOperation.cancelQueuedOperation(op.id)).toBeUndefined();
+      expect(updateOperation.getOperationById(op.id)!.status).toBe('in-progress');
+    });
+
+    test('returns undefined for a missing id', () => {
+      expect(updateOperation.cancelQueuedOperation('does-not-exist')).toBeUndefined();
+    });
+
+    test('returns undefined when collection is not initialized', async () => {
+      vi.resetModules();
+      const fresh = await import('./update-operation.js');
+      expect(fresh.cancelQueuedOperation('any-id')).toBeUndefined();
+    });
+  });
+
+  describe('OperationCancelledError', () => {
+    test('has the correct name, message, and operationId fields', () => {
+      const err = new updateOperation.OperationCancelledError('op-abc');
+      expect(err.name).toBe('OperationCancelledError');
+      expect(err.message).toBe('Cancelled by operator');
+      expect(err.operationId).toBe('op-abc');
+      expect(err).toBeInstanceOf(Error);
+    });
+
+    test('isOperationCancelledError returns true for OperationCancelledError instances', () => {
+      const err = new updateOperation.OperationCancelledError('op-xyz');
+      expect(updateOperation.isOperationCancelledError(err)).toBe(true);
+    });
+
+    test('isOperationCancelledError returns false for plain Error instances', () => {
+      expect(updateOperation.isOperationCancelledError(new Error('plain error'))).toBe(false);
+    });
+
+    test('isOperationCancelledError returns false for non-error values', () => {
+      expect(updateOperation.isOperationCancelledError(null)).toBe(false);
+      expect(updateOperation.isOperationCancelledError(undefined)).toBe(false);
+      expect(updateOperation.isOperationCancelledError('string error')).toBe(false);
+      expect(updateOperation.isOperationCancelledError(42)).toBe(false);
+    });
+  });
+
+  describe('requestOperationCancellation', () => {
+    test('returns undefined when operation does not exist', () => {
+      expect(updateOperation.requestOperationCancellation('does-not-exist')).toBeUndefined();
+    });
+
+    test('returns undefined when a queued operation disappears during cancellation', () => {
+      let findOneCalls = 0;
+      const doc = {
+        data: {
+          id: 'queued-race',
+          containerName: 'web',
+          status: 'queued',
+          phase: 'queued',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      };
+      updateOperation.createCollections({
+        getCollection: () => null,
+        addCollection: () => ({
+          insert: vi.fn(),
+          find: () => [],
+          findOne: () => {
+            findOneCalls++;
+            return findOneCalls < 3 ? doc : null;
+          },
+          remove: vi.fn(),
+        }),
+      } as any);
+
+      expect(updateOperation.requestOperationCancellation('queued-race')).toBeUndefined();
+    });
+
+    test('cancels a queued operation immediately', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+      });
+
+      const result = updateOperation.requestOperationCancellation(op.id);
+
+      expect(result).toBeDefined();
+      expect(result!.outcome).toBe('cancelled');
+      expect(result!.operation.id).toBe(op.id);
+      expect(result!.operation.status).toBe('failed');
+      expect(result!.operation.lastError).toBe('Cancelled by operator');
+    });
+
+    test('flags an in-progress operation with cancelRequested', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'api',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+
+      const result = updateOperation.requestOperationCancellation(op.id);
+
+      expect(result).toBeDefined();
+      expect(result!.outcome).toBe('cancel-requested');
+      expect(result!.operation.id).toBe(op.id);
+      expect(result!.operation.status).toBe('in-progress');
+      expect(result!.operation.cancelRequested).toBe(true);
+    });
+
+    test('returns undefined when an in-progress operation disappears during cancellation', () => {
+      let findOneCalls = 0;
+      const doc = {
+        data: {
+          id: 'in-progress-race',
+          containerName: 'api',
+          status: 'in-progress',
+          phase: 'pulling',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      };
+      updateOperation.createCollections({
+        getCollection: () => null,
+        addCollection: () => ({
+          insert: vi.fn(),
+          find: () => [],
+          findOne: () => {
+            findOneCalls++;
+            return findOneCalls < 2 ? doc : null;
+          },
+          remove: vi.fn(),
+        }),
+      } as any);
+
+      expect(updateOperation.requestOperationCancellation('in-progress-race')).toBeUndefined();
+    });
+
+    test('returns undefined for a succeeded operation', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'succeeded',
+        phase: 'succeeded',
+        completedAt: new Date().toISOString(),
+      });
+
+      expect(updateOperation.requestOperationCancellation(op.id)).toBeUndefined();
+    });
+
+    test('returns undefined for a failed operation', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'failed',
+        phase: 'failed',
+        completedAt: new Date().toISOString(),
+      });
+
+      expect(updateOperation.requestOperationCancellation(op.id)).toBeUndefined();
+    });
+
+    test('returns undefined for a rolled-back operation', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'rolled-back',
+        phase: 'rolled-back',
+        completedAt: new Date().toISOString(),
+      });
+
+      expect(updateOperation.requestOperationCancellation(op.id)).toBeUndefined();
+    });
+
+    test('returns undefined when collection is not initialized', async () => {
+      vi.resetModules();
+      const fresh = await import('./update-operation.js');
+      expect(fresh.requestOperationCancellation('any-id')).toBeUndefined();
+    });
+  });
+
+  describe('isOperationCancelRequested', () => {
+    test('returns false for undefined id', () => {
+      expect(updateOperation.isOperationCancelRequested(undefined)).toBe(false);
+    });
+
+    test('returns false for empty string id', () => {
+      expect(updateOperation.isOperationCancelRequested('')).toBe(false);
+    });
+
+    test('returns false for a non-existent operation id', () => {
+      expect(updateOperation.isOperationCancelRequested('ghost-id')).toBe(false);
+    });
+
+    test('returns false for an operation without cancelRequested set', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'worker',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+
+      expect(updateOperation.isOperationCancelRequested(op.id)).toBe(false);
+    });
+
+    test('returns true for an operation with cancelRequested set to true', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'worker',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+
+      updateOperation.requestOperationCancellation(op.id);
+
+      expect(updateOperation.isOperationCancelRequested(op.id)).toBe(true);
+    });
   });
 });

@@ -1,0 +1,90 @@
+{
+  "agentsView": {
+    "list": {
+      "loading": "正在加载代理...",
+      "filterPlaceholder": "按名称筛选...",
+      "clearFilter": "清除",
+      "emptyFiltered": "没有代理匹配您的筛选条件",
+      "toggleColumns": "切换列",
+      "columnPickerHeading": "列",
+      "loadError": "无法加载代理",
+      "status": {
+        "connected": "已连接",
+        "disconnected": "已断开"
+      },
+      "columns": {
+        "name": "代理",
+        "status": "状态",
+        "containers": "容器",
+        "docker": "Docker",
+        "os": "操作系统",
+        "version": "版本",
+        "lastSeen": "最后活跃"
+      },
+      "card": {
+        "running": "运行中",
+        "stopped": "已停止"
+      }
+    },
+    "detail": {
+      "tabs": {
+        "overview": "概览",
+        "logs": "日志",
+        "config": "配置"
+      },
+      "overview": {
+        "resources": "资源",
+        "system": "系统",
+        "containers": "容器",
+        "containerTotal": "总计",
+        "containerRunning": "运行中",
+        "containerStopped": "已停止",
+        "viewContainers": "查看容器",
+        "automation": "自动化",
+        "watchers": "监视器",
+        "triggers": "触发器",
+        "none": "无"
+      },
+      "logs": {
+        "allLevels": "所有级别",
+        "levelDebug": "调试",
+        "levelInfo": "信息",
+        "levelWarn": "警告",
+        "levelError": "错误",
+        "tail50": "最近 50 条",
+        "tail100": "最近 100 条",
+        "tail500": "最近 500 条",
+        "tail1000": "最近 1000 条",
+        "componentPlaceholder": "按组件筛选...",
+        "apply": "应用",
+        "reset": "重置",
+        "refresh": "刷新",
+        "emptyMessage": "当前筛选条件下没有日志条目。",
+        "lastFetched": "最后获取时间：{time}",
+        "entries": "{count} 条记录",
+        "statusLive": "在线",
+        "statusOffline": "离线"
+      },
+      "fields": {
+        "cpus": "CPUs",
+        "memory": "内存",
+        "images": "镜像",
+        "uptime": "运行时间",
+        "docker": "Docker",
+        "os": "操作系统",
+        "architecture": "架构",
+        "agent": "代理",
+        "host": "主机",
+        "agentVersion": "代理版本",
+        "logLevel": "日志级别",
+        "pollInterval": "轮询间隔",
+        "dockerSocket": "Docker Socket",
+        "lastSeen": "最后活跃",
+        "never": "从未"
+      },
+      "listView": {
+        "details": "详情"
+      }
+    }
+  }
+}

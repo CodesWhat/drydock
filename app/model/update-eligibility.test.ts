@@ -285,6 +285,110 @@ describe('computeUpdateEligibility', () => {
     });
   });
 
+  describe('last-update-rolled-back', () => {
+    const ROLLBACK_DIGEST = 'sha256:deadbeef';
+    const OTHER_DIGEST = 'sha256:cafebabe';
+    const ROLLBACK_STATE = {
+      recordedAt: '2026-04-01T00:00:00.000Z',
+      targetDigest: ROLLBACK_DIGEST,
+      reason: 'start_new_failed',
+      lastError: 'container exited with code 1',
+    };
+
+    test('emits blocker when candidate digest matches recorded rollback targetDigest', () => {
+      const container = makeContainerWithTagUpdate({
+        result: { tag: '1.1.0', digest: ROLLBACK_DIGEST },
+        updateRollback: ROLLBACK_STATE,
+      });
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      const blocker = result.blockers.find((b) => b.reason === 'last-update-rolled-back');
+      expect(blocker).toBeDefined();
+      expect(blocker?.severity).toBe('hard');
+      expect(blocker?.actionable).toBe(true);
+      expect(blocker?.actionHint).toBeTruthy();
+      expect(blocker?.details?.targetDigest).toBe(ROLLBACK_DIGEST);
+      expect(blocker?.details?.rollbackReason).toBe('start_new_failed');
+      expect(blocker?.details?.lastError).toBe('container exited with code 1');
+    });
+
+    test('does NOT emit blocker when candidate digest differs from recorded rollback targetDigest', () => {
+      const trigger = makeTrigger();
+      const container = makeContainerWithTagUpdate({
+        result: { tag: '1.2.0', digest: OTHER_DIGEST },
+        updateRollback: ROLLBACK_STATE,
+      });
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({ triggers: { 'docker.update': trigger as never }, now: FIXED_NOW }),
+      );
+      expect(result.blockers.find((b) => b.reason === 'last-update-rolled-back')).toBeUndefined();
+    });
+
+    test('does NOT emit blocker when candidate digest is undefined', () => {
+      const trigger = makeTrigger();
+      // result.tag update present but no digest
+      const container = makeContainerWithTagUpdate({
+        result: { tag: '1.1.0' },
+        updateRollback: ROLLBACK_STATE,
+      });
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({ triggers: { 'docker.update': trigger as never }, now: FIXED_NOW }),
+      );
+      expect(result.blockers.find((b) => b.reason === 'last-update-rolled-back')).toBeUndefined();
+    });
+
+    test('does NOT emit blocker when dd.update.rollback-gate=off', () => {
+      const trigger = makeTrigger();
+      const container = makeContainerWithTagUpdate({
+        result: { tag: '1.1.0', digest: ROLLBACK_DIGEST },
+        updateRollback: ROLLBACK_STATE,
+        labels: { 'dd.update.rollback-gate': 'off' },
+      });
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({ triggers: { 'docker.update': trigger as never }, now: FIXED_NOW }),
+      );
+      expect(result.blockers.find((b) => b.reason === 'last-update-rolled-back')).toBeUndefined();
+    });
+
+    test('emits blocker when dd.update.rollback-gate=on (explicit)', () => {
+      const container = makeContainerWithTagUpdate({
+        result: { tag: '1.1.0', digest: ROLLBACK_DIGEST },
+        updateRollback: ROLLBACK_STATE,
+        labels: { 'dd.update.rollback-gate': 'on' },
+      });
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      expect(result.blockers.find((b) => b.reason === 'last-update-rolled-back')).toBeDefined();
+    });
+
+    test('ignores unrecognised rollback-gate label value (treats as gate on)', () => {
+      const container = makeContainerWithTagUpdate({
+        result: { tag: '1.1.0', digest: ROLLBACK_DIGEST },
+        updateRollback: ROLLBACK_STATE,
+        labels: { 'dd.update.rollback-gate': 'yes' },
+      });
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      expect(result.blockers.find((b) => b.reason === 'last-update-rolled-back')).toBeDefined();
+    });
+
+    test('does NOT emit blocker when updateRollback is absent', () => {
+      const trigger = makeTrigger();
+      const container = makeContainerWithTagUpdate({
+        result: { tag: '1.1.0', digest: ROLLBACK_DIGEST },
+      });
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({ triggers: { 'docker.update': trigger as never }, now: FIXED_NOW }),
+      );
+      expect(result.blockers.find((b) => b.reason === 'last-update-rolled-back')).toBeUndefined();
+    });
+
+    test('BLOCKER_SEVERITY for last-update-rolled-back is hard', () => {
+      expect(BLOCKER_SEVERITY['last-update-rolled-back']).toBe('hard');
+    });
+  });
+
   describe('snoozed', () => {
     test('formatSnoozeDate falls back to raw ISO string when toLocaleDateString throws', () => {
       const originalToLocaleDateString = Date.prototype.toLocaleDateString;
@@ -1021,6 +1125,7 @@ describe('computeUpdateEligibility', () => {
         'rollback-container',
         'active-operation',
         'security-scan-blocked',
+        'last-update-rolled-back',
         'snoozed',
         'skip-tag',
         'skip-digest',
@@ -1041,6 +1146,7 @@ describe('computeUpdateEligibility', () => {
       expect(BLOCKER_SEVERITY['rollback-container']).toBe('hard');
       expect(BLOCKER_SEVERITY['active-operation']).toBe('hard');
       expect(BLOCKER_SEVERITY['security-scan-blocked']).toBe('hard');
+      expect(BLOCKER_SEVERITY['last-update-rolled-back']).toBe('hard');
       expect(BLOCKER_SEVERITY['agent-mismatch']).toBe('hard');
       expect(BLOCKER_SEVERITY['no-update-trigger-configured']).toBe('hard');
     });

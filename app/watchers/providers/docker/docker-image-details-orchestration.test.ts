@@ -362,7 +362,7 @@ describe('docker image details orchestration module', () => {
       name: 'acme/service',
       registry: {
         name: 'unknown',
-        url: '',
+        url: 'docker.io',
       },
       tag: {
         value: 'latest',
@@ -853,7 +853,7 @@ describe('docker image details orchestration module', () => {
     expect(helpers.resolveLabelsFromContainer).not.toHaveBeenCalled();
   });
 
-  test('assembles a normalized container payload and warns when updates cannot be detected', async () => {
+  test('assembles a normalized container payload and warns when digest watching is explicitly disabled', async () => {
     vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
 
     const { watcher, inspectContainer } = createWatcher();
@@ -889,7 +889,7 @@ describe('docker image details orchestration module', () => {
       displayIcon: 'mdi:cube',
       triggerInclude: '^release$',
       triggerExclude: '^ignore$',
-      watchDigest: undefined,
+      watchDigest: 'false',
       inspectTagPath: 'Config/Labels/org.opencontainers.image.version',
       lookupImage: 'mirror/library/service',
     };

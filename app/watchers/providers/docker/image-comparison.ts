@@ -2,6 +2,7 @@ import { RE2JS } from 're2js';
 import log from '../../../log/index.js';
 import {
   type Container,
+  type ContainerImage,
   type ContainerResult,
   fullName,
   validate as validateContainer,
@@ -14,6 +15,7 @@ import { getImageForRegistryLookup } from './docker-helpers.js';
 import { getTagCandidates } from './tag-candidates.js';
 
 export interface ContainerTagLookupProvider {
+  normalizeImage: (image: ContainerImage) => ContainerImage;
   getTags: (image: Container['image']) => Promise<string[]>;
   getImageManifestDigest: (
     image: Container['image'],
@@ -24,6 +26,26 @@ export interface ContainerTagLookupProvider {
     version?: number;
   }>;
   getImagePublishedAt?: (image: Container['image'], tag?: string) => Promise<string | undefined>;
+}
+
+/**
+ * Build the image view used for registry HTTP queries.
+ *
+ * The container record stores the *deploy identity* — the image name and
+ * registry URL the user actually has running. When a `dd.registry.lookup.image`
+ * label diverts tag/manifest lookups to a different image (e.g. a private
+ * mirror running `myreg/nextcloud` looking up tags from `library/nextcloud` on
+ * Docker Hub), the substitution must only apply at the registry-query
+ * boundary. This helper performs that substitution and applies the matched
+ * provider's URL/path normalization (e.g. `https://.../v2`, `library/` prefix)
+ * so the call site receives an image ready for HTTP requests without mutating
+ * the container's deploy identity.
+ */
+export function getImageForRegistryQuery(
+  image: ContainerImage,
+  registryProvider: Pick<ContainerTagLookupProvider, 'normalizeImage'>,
+): ContainerImage {
+  return registryProvider.normalizeImage(getImageForRegistryLookup(image));
 }
 
 export interface ContainerWatchLogger {
@@ -128,8 +150,30 @@ export function normalizeContainer(container: Container) {
     provider.match(imageForMatching),
   );
   if (registryProvider) {
-    containerWithNormalizedImage.image = registryProvider.normalizeImage(imageForMatching);
+    // `image.name` is the deploy identity — what gets written to compose
+    // files, recreated, and shown in the UI. We must not overwrite it with
+    // the lookup-substituted view or any provider name mutation.
     containerWithNormalizedImage.image.registry.name = registryProvider.getId();
+    // `image.name` and `image.registry.url` must reflect the provider's
+    // canonical forms when the deploy image itself belongs to this provider.
+    // For Docker Hub: un-prefixed names like `nginx` become `library/nginx`,
+    // and the URL is rewritten from `docker.io` to `https://registry-1.docker.io/v2`.
+    // Registry HTTP callers, getImageFullName, the Prometheus image_name and
+    // image_registry_url labels, and the Docker trigger's self-update helper
+    // all rely on these canonical forms.
+    //
+    // Exception: when a dd.registry.lookup.image label diverts queries to a
+    // different registry than the deploy registry (e.g. harbor.example.com mirror
+    // looking up tags from Docker Hub), neither the name nor the URL should be
+    // rewritten — the deploy identity must be preserved as-is. This is the fix
+    // for #336. We detect this by checking whether the provider also matches the
+    // deploy image directly; if it does not, the lookup label is doing the
+    // diversion and both fields are left untouched.
+    if (registryProvider.match(containerWithNormalizedImage.image)) {
+      const normalized = registryProvider.normalizeImage(containerWithNormalizedImage.image);
+      containerWithNormalizedImage.image.name = normalized.name;
+      containerWithNormalizedImage.image.registry.url = normalized.registry.url;
+    }
   } else {
     log.warn(`${fullName(container)} - No Registry Provider found`);
     containerWithNormalizedImage.image.registry.name = 'unknown';
@@ -161,14 +205,15 @@ async function handleDigestWatch(
     [imageToGetDigestFrom.tag.value] = tagsCandidates;
   }
 
-  const remoteDigest = await registryProvider.getImageManifestDigest(imageToGetDigestFrom);
+  const queryImage = getImageForRegistryQuery(imageToGetDigestFrom, registryProvider);
+  const remoteDigest = await registryProvider.getImageManifestDigest(queryImage);
 
   result.digest = remoteDigest.digest;
   result.created = remoteDigest.created;
 
   if (remoteDigest.version === 2) {
     const digestV2 = await registryProvider.getImageManifestDigest(
-      imageToGetDigestFrom,
+      queryImage,
       container.image.digest.repo,
     );
     container.image.digest.value = digestV2.digest;
@@ -201,7 +246,9 @@ export async function findNewVersion(
     result.noUpdateReason = 'Running by digest — no tag to compare';
 
     if (container.image.digest.watch && container.image.digest.repo) {
-      const tags = await registryProvider.getTags(container.image);
+      const tags = await registryProvider.getTags(
+        getImageForRegistryQuery(container.image, registryProvider),
+      );
       const comparisonTag = resolveDigestComparisonTag(container, tags, logContainer);
 
       if (comparisonTag) {
@@ -223,7 +270,9 @@ export async function findNewVersion(
   }
 
   // Get all available tags
-  const tags = await registryProvider.getTags(container.image);
+  const tags = await registryProvider.getTags(
+    getImageForRegistryQuery(container.image, registryProvider),
+  );
 
   // Get candidate tags (based on tag name)
   const { tags: tagsCandidates, noUpdateReason } = getTagCandidates(container, tags, logContainer);
@@ -249,7 +298,10 @@ export async function findNewVersion(
   const publishedTag = result.tag || container.image.tag.value;
   try {
     if (typeof registryProvider.getImagePublishedAt === 'function') {
-      const publishedAt = await registryProvider.getImagePublishedAt(container.image, publishedTag);
+      const publishedAt = await registryProvider.getImagePublishedAt(
+        getImageForRegistryQuery(container.image, registryProvider),
+        publishedTag,
+      );
       if (typeof publishedAt === 'string') {
         result.publishedAt = publishedAt;
       }

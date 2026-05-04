@@ -284,6 +284,12 @@ export function initEvents() {
   event.registerContainerUpdateFailed((payload: event.ContainerUpdateFailedEventPayload) =>
     sendSseEvent('dd:update-failed', payload),
   );
+  event.registerUpdateOperationChanged((payload: event.UpdateOperationChangedEventPayload) =>
+    sendSseEvent('dd:update-operation-changed', payload),
+  );
+  event.registerBatchUpdateCompleted((payload: event.BatchUpdateCompletedEventPayload) =>
+    sendSseEvent('dd:batch-update-completed', payload),
+  );
   event.registerSecurityAlert((payload: event.SecurityAlertEventPayload) =>
     sendSseEvent('dd:security-alert', sanitizeSecurityAlertPayloadForAgentSse(payload)),
   );

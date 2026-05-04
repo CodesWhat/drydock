@@ -1,5 +1,7 @@
 import {
+  CONTAINER_UPDATE_OPERATION_PHASES,
   getDefaultTerminalContainerUpdateOperationPhase,
+  IN_PROGRESS_CONTAINER_UPDATE_OPERATION_PHASES,
   isActiveContainerUpdateOperationPhase,
   isActiveContainerUpdateOperationPhaseForStatus,
   isActiveContainerUpdateOperationStatus,
@@ -12,6 +14,20 @@ import {
 } from './container-update-operation.js';
 
 describe('container update operation guards', () => {
+  test('signature-verifying is not in CONTAINER_UPDATE_OPERATION_PHASES', () => {
+    expect(
+      (CONTAINER_UPDATE_OPERATION_PHASES as readonly string[]).includes('signature-verifying'),
+    ).toBe(false);
+  });
+
+  test('signature-verifying is not in IN_PROGRESS_CONTAINER_UPDATE_OPERATION_PHASES', () => {
+    expect(
+      (IN_PROGRESS_CONTAINER_UPDATE_OPERATION_PHASES as readonly string[]).includes(
+        'signature-verifying',
+      ),
+    ).toBe(false);
+  });
+
   test('accepts known statuses and rejects non-status values', () => {
     expect(isContainerUpdateOperationStatus('in-progress')).toBe(true);
     expect(isContainerUpdateOperationStatus('failed')).toBe(true);

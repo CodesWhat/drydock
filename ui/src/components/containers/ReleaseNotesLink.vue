@@ -3,15 +3,20 @@ import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ContainerReleaseNotes } from '../../types/container';
 import AppIconButton from '../AppIconButton.vue';
+import type { IconButtonSize } from '../appIconButtonSizes';
 
 const { t } = useI18n();
 
-const props = defineProps<{
-  releaseNotes?: ContainerReleaseNotes | null;
-  currentReleaseNotes?: ContainerReleaseNotes | null;
-  releaseLink?: string;
-  iconOnly?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    releaseNotes?: ContainerReleaseNotes | null;
+    currentReleaseNotes?: ContainerReleaseNotes | null;
+    releaseLink?: string;
+    iconOnly?: boolean;
+    iconSize?: IconButtonSize;
+  }>(),
+  { iconSize: 'sm' },
+);
 
 const currentExpanded = ref(false);
 const updateExpanded = ref(false);
@@ -49,7 +54,7 @@ function truncateBody(body: string, maxLength: number = 200): string {
   <AppIconButton
     v-if="iconOnly && iconHref"
     icon="file-text"
-    size="sm"
+    :size="iconSize"
     variant="muted"
     :href="iconHref"
     target="_blank"

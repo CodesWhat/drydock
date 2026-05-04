@@ -1,10 +1,12 @@
 import type { Request, Response } from 'express';
 import logger from '../../log/index.js';
 import type { Container } from '../../model/container.js';
+import type { ContainerStatsAggregator } from '../../stats/aggregator.js';
 import type { ContainerStatsCollector } from '../../stats/collector.js';
 import { STATS_STREAM_HEARTBEAT_INTERVAL_MS } from '../../stats/config.js';
 import { getErrorMessage } from '../../util/error.js';
 import { sendErrorResponse } from '../error-response.js';
+import { SSE_STALE_SWEEP_INTERVAL_MS } from '../sse-constants.js';
 import { getPathParamValue } from './request-helpers.js';
 
 type ContainerStatsSnapshot = ReturnType<ContainerStatsCollector['getLatest']>;
@@ -12,7 +14,6 @@ type ContainerStatsListener = (snapshot: NonNullable<ContainerStatsSnapshot>) =>
 
 interface StatsStoreContainerApi {
   getContainer: (id: string) => Container | undefined;
-  getContainers: (query?: Record<string, unknown>) => Container[];
 }
 
 interface StreamableResponse extends Response {
@@ -25,6 +26,20 @@ interface StatsHandlerDependencies {
     ContainerStatsCollector,
     'watch' | 'touch' | 'subscribe' | 'getLatest' | 'getHistory'
   >;
+}
+
+interface SummaryStatsHandlerDependencies {
+  aggregator: ContainerStatsAggregator;
+}
+
+interface SummaryStatsStreamClient {
+  response: StreamableResponse;
+  cleanup: () => void;
+}
+
+interface SummaryStatsStreamRuntime {
+  clients: Set<SummaryStatsStreamClient>;
+  staleSweepInterval?: ReturnType<typeof globalThis.setInterval>;
 }
 
 function ensureContainerExists(
@@ -49,6 +64,48 @@ function writeHeartbeatEvent(res: StreamableResponse): void {
   res.write('event: dd:heartbeat\ndata: {}\n\n');
 }
 
+function isStreamResponseClosed(response: StreamableResponse): boolean {
+  const state = response as Response & {
+    destroyed?: boolean;
+    writableEnded?: boolean;
+    writableFinished?: boolean;
+  };
+  return (
+    state.writableEnded === true || state.writableFinished === true || state.destroyed === true
+  );
+}
+
+function stopSummaryStatsStaleSweepIfIdle(runtime: SummaryStatsStreamRuntime): void {
+  if (!runtime.staleSweepInterval || runtime.clients.size > 0) {
+    return;
+  }
+  const staleSweepInterval = runtime.staleSweepInterval;
+  runtime.staleSweepInterval = undefined;
+  try {
+    globalThis.clearInterval(staleSweepInterval);
+  } catch {
+    // The sweep is best-effort cleanup for stale HTTP responses; cleanup must continue.
+  }
+}
+
+function sweepStaleSummaryStatsStreams(runtime: SummaryStatsStreamRuntime): void {
+  for (const client of runtime.clients) {
+    if (isStreamResponseClosed(client.response)) {
+      client.cleanup();
+    }
+  }
+  stopSummaryStatsStaleSweepIfIdle(runtime);
+}
+
+function startSummaryStatsStaleSweepIfNeeded(runtime: SummaryStatsStreamRuntime): void {
+  if (runtime.staleSweepInterval || runtime.clients.size === 0) {
+    return;
+  }
+  runtime.staleSweepInterval = globalThis.setInterval(() => {
+    sweepStaleSummaryStatsStreams(runtime);
+  }, SSE_STALE_SWEEP_INTERVAL_MS);
+}
+
 function createGetContainerStatsHandler({
   storeContainer,
   statsCollector,
@@ -65,35 +122,6 @@ function createGetContainerStatsHandler({
       data: statsCollector.getLatest(container.id) ?? null,
       history: statsCollector.getHistory(container.id),
     });
-  };
-}
-
-function createGetAllContainerStatsHandler({
-  storeContainer,
-  statsCollector,
-}: StatsHandlerDependencies) {
-  return function getAllContainerStats(req: Request, res: Response): void {
-    const containers = storeContainer.getContainers();
-    // Dashboard callers pass ?touch=false so a summary read does not start a
-    // Docker stats stream per container. Streams stay owned by the Containers
-    // view / detail panel where live stats actually render. See #301.
-    const touch = req.query?.touch !== 'false';
-
-    const data = containers.map((container) => {
-      if (touch) {
-        statsCollector.touch(container.id);
-      }
-      return {
-        id: container.id,
-        name: container.name,
-        status: container.status,
-        watcher: container.watcher,
-        agent: container.agent,
-        stats: statsCollector.getLatest(container.id) ?? null,
-      };
-    });
-
-    res.status(200).json({ data });
   };
 }
 
@@ -168,10 +196,92 @@ function createStreamContainerStatsHandler({
   };
 }
 
+function createGetStatsSummaryHandler({ aggregator }: SummaryStatsHandlerDependencies) {
+  return function getStatsSummary(_req: Request, res: Response): void {
+    res.status(200).json({ data: aggregator.getCurrent() });
+  };
+}
+
+function createStreamStatsSummaryHandler(
+  { aggregator }: SummaryStatsHandlerDependencies,
+  runtime: SummaryStatsStreamRuntime,
+) {
+  return function streamStatsSummary(req: Request, res: Response): void {
+    const log = logger.child({ component: 'container-stats' });
+    const streamResponse = res as StreamableResponse;
+
+    streamResponse.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+    streamResponse.flushHeaders?.();
+
+    streamResponse.write(
+      `event: dd:stats-summary\ndata: ${JSON.stringify(aggregator.getCurrent())}\n\n`,
+    );
+    streamResponse.flush?.();
+
+    const unsubscribe = aggregator.subscribe((summary) => {
+      streamResponse.write(`event: dd:stats-summary\ndata: ${JSON.stringify(summary)}\n\n`);
+      streamResponse.flush?.();
+    });
+
+    const heartbeatInterval = globalThis.setInterval(() => {
+      streamResponse.write('event: dd:heartbeat\ndata: {}\n\n');
+    }, STATS_STREAM_HEARTBEAT_INTERVAL_MS);
+
+    let disconnected = false;
+    let streamClient: SummaryStatsStreamClient;
+    const cleanup = () => {
+      if (disconnected) {
+        return;
+      }
+      disconnected = true;
+      runtime.clients.delete(streamClient);
+      stopSummaryStatsStaleSweepIfIdle(runtime);
+      try {
+        globalThis.clearInterval(heartbeatInterval);
+      } catch (error: unknown) {
+        log.debug(
+          `Failed to clear stats summary stream heartbeat interval (${getErrorMessage(error)})`,
+        );
+      }
+      try {
+        unsubscribe();
+      } catch (error: unknown) {
+        log.debug(
+          `Failed to unsubscribe stats summary stream listener (${getErrorMessage(error)})`,
+        );
+      }
+    };
+
+    streamClient = { response: streamResponse, cleanup };
+    runtime.clients.add(streamClient);
+    startSummaryStatsStaleSweepIfNeeded(runtime);
+
+    req.on('close', cleanup);
+    req.on('aborted', cleanup);
+    streamResponse.on('close', cleanup);
+    streamResponse.on('error', cleanup);
+  };
+}
+
+export function createSummaryStatsHandlers(dependencies: SummaryStatsHandlerDependencies) {
+  const streamRuntime: SummaryStatsStreamRuntime = {
+    clients: new Set(),
+  };
+
+  return {
+    getStatsSummary: createGetStatsSummaryHandler(dependencies),
+    streamStatsSummary: createStreamStatsSummaryHandler(dependencies, streamRuntime),
+  };
+}
+
 export function createStatsHandlers(dependencies: StatsHandlerDependencies) {
   return {
     getContainerStats: createGetContainerStatsHandler(dependencies),
-    getAllContainerStats: createGetAllContainerStatsHandler(dependencies),
     streamContainerStats: createStreamContainerStatsHandler(dependencies),
   };
 }
