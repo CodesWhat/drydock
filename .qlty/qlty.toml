@@ -94,6 +94,10 @@ mode = "comment"
 
 [[plugin]]
 name = "shellcheck"
+# Pinned to the version GitHub Actions ubuntu-latest pre-installs.
+# qlty otherwise resolves to the latest (0.11.0) and rejects the runner's
+# 0.9.0 binary with "Invalid tool version", failing the lint job.
+version = "0.9.0"
 
 [[plugin]]
 name = "shfmt"
