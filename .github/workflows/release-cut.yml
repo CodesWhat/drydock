@@ -59,13 +59,21 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - name: Resolve target SHA
+      - name: Resolve target SHA and lowercase repository
         id: target
         run: |
           set -euo pipefail
           sha="$(git rev-parse HEAD)"
-          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          # Docker registries reject uppercase repository names. ${GITHUB_REPOSITORY}
+          # preserves the org casing (e.g. "CodesWhat/drydock") so we expose a
+          # pre-lowered value for every step that builds an image reference.
+          repo_lower="$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          {
+            echo "sha=${sha}"
+            echo "repo_lower=${repo_lower}"
+          } >> "$GITHUB_OUTPUT"
           echo "Target SHA: ${sha}"
+          echo "Repository (lowercase): ${repo_lower}"
 
       - name: Wait for successful branch CI on target SHA
         uses: ./.github/actions/wait-for-successful-branch-ci
@@ -174,10 +182,11 @@ jobs:
         env:
           VERSION: ${{ steps.next.outputs.next_version }}
           IS_PRERELEASE: ${{ steps.tag.outputs.is_prerelease }}
+          GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
         run: |
           set -euo pipefail
 
-          registries=("ghcr.io/${GITHUB_REPOSITORY}" "docker.io/codeswhat/drydock" "quay.io/codeswhat/drydock")
+          registries=("ghcr.io/${GHCR_REPO}" "docker.io/codeswhat/drydock" "quay.io/codeswhat/drydock")
           suffixes=("${VERSION}")
 
           if [ "${IS_PRERELEASE}" = "false" ]; then
@@ -234,7 +243,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf  # v6.0.0
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/${{ steps.target.outputs.repo_lower }}
           # The tags input is required. We pass the full tag list to
           # build-push-action via steps.image_tags; this single raw tag
           # exists only to drive the OCI label values
@@ -263,6 +272,7 @@ jobs:
         env:
           BUILD_DIGEST: ${{ steps.build.outputs.digest }}
           TAGS: ${{ steps.image_tags.outputs.tags }}
+          GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
         run: |
           set -euo pipefail
 
@@ -272,7 +282,7 @@ jobs:
           fi
 
           source_candidates=(
-            "ghcr.io/${GITHUB_REPOSITORY}@${BUILD_DIGEST}"
+            "ghcr.io/${GHCR_REPO}@${BUILD_DIGEST}"
             "docker.io/codeswhat/drydock@${BUILD_DIGEST}"
             "quay.io/codeswhat/drydock@${BUILD_DIGEST}"
           )
@@ -381,7 +391,7 @@ jobs:
         if: steps.digest.outputs.value
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32  # v4.1.0
         with:
-          subject-name: ghcr.io/${{ github.repository }}
+          subject-name: ghcr.io/${{ steps.target.outputs.repo_lower }}
           subject-digest: ${{ steps.digest.outputs.value }}
           push-to-registry: true
 
