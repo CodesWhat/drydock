@@ -56,6 +56,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Binary indices and drain concurrency cap for notification outbox ([commit `9393253e`](https://github.com/CodesWhat/drydock/commit/9393253e)).** `findReadyForDelivery` — the hot path that runs on every outbox drain cycle — queried `data.status` and `data.nextAttemptAt` with standard LokiJS indices, causing full-collection scans as the outbox grew. Switching those two fields to binary indices gives O(log n) B-tree lookups. `OutboxWorker` gains a `maxDrainConcurrency` option (default 10) backed by a `DrainSemaphore` so a burst of ready entries cannot flood the trigger pipeline with unbounded parallel deliveries. `store/util` normalises a `binaryIndices` option on `initCollection` so collections receive correct field registration at creation time.
 
+### Tests / CI
+
+- **Reconciliation terminal-hold toast assertions use `maxIdBefore` pattern.** Two tests in `ContainersView.spec.ts` were flaking on CI because `vi.advanceTimersByTime(1500)` expired pre-existing toasts, lowering `toasts.value.length` even though no new toasts were added. Replaced `countBefore = toasts.value.length` / `toBe(countBefore)` with the `maxIdBefore` / `filter(t.id > maxIdBefore)` pattern already used elsewhere in the file.
+
 ## [1.5.0-rc.16] — 2026-04-28
 
 ### Added

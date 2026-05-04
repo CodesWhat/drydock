@@ -4402,7 +4402,7 @@ describe('ContainersView', () => {
 
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         // Reload with the container having no active op (terminal SSE was missed)
         const { mapApiContainers } = await import('@/utils/container-mapper');
@@ -4421,7 +4421,7 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
 
         wrapper.unmount();
       } finally {
@@ -4458,7 +4458,7 @@ describe('ContainersView', () => {
 
         const { useToast } = await import('@/composables/useToast');
         const { toasts } = useToast();
-        const countBefore = toasts.value.length;
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
 
         // Primary operation SSE: terminal succeeded — releases the hold only.
         operationListener?.(
@@ -4476,7 +4476,7 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
 
         // Now trigger reconciliation as if the next list reload saw no active op.
         // It should remain toast-free because the canonical completion event owns
@@ -4508,7 +4508,7 @@ describe('ContainersView', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.length).toBe(countBefore);
+        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
 
         wrapper.unmount();
       } finally {
