@@ -150,12 +150,25 @@ export function normalizeContainer(container: Container) {
     provider.match(imageForMatching),
   );
   if (registryProvider) {
-    // The container's `image.name` and `image.registry.url` are the deploy
-    // identity — what gets written to compose files, recreated, and shown in
-    // the UI. The lookup-substituted view (`imageForMatching`) and provider
-    // URL normalization are applied at registry-query time via
-    // getImageForRegistryQuery so they don't bleed into the deploy path.
+    // `image.name` is the deploy identity — what gets written to compose
+    // files, recreated, and shown in the UI. We must not overwrite it with
+    // the lookup-substituted view or any provider name mutation.
     containerWithNormalizedImage.image.registry.name = registryProvider.getId();
+    // `image.registry.url` must be the API base URL form when the deploy
+    // image itself belongs to this provider (e.g. docker.io → https://registry-1.docker.io/v2).
+    // Registry HTTP callers, getImageFullName, the Prometheus image_registry_url
+    // label, and the Docker trigger's self-update helper all rely on this form.
+    //
+    // Exception: when a dd.registry.lookup.image label diverts queries to a
+    // different registry than the deploy registry (e.g. harbor.example.com mirror
+    // looking up tags from Docker Hub), the deploy URL is harbor.example.com and
+    // must not be rewritten to the Hub API URL. We detect this by checking whether
+    // the provider also matches the deploy image directly — if it does not, the
+    // lookup label is doing the diversion and the deploy URL is preserved as-is.
+    if (registryProvider.match(containerWithNormalizedImage.image)) {
+      const urlNormalized = registryProvider.normalizeImage(containerWithNormalizedImage.image);
+      containerWithNormalizedImage.image.registry.url = urlNormalized.registry.url;
+    }
   } else {
     log.warn(`${fullName(container)} - No Registry Provider found`);
     containerWithNormalizedImage.image.registry.name = 'unknown';
