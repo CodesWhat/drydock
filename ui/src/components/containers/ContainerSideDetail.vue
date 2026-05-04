@@ -9,6 +9,8 @@ import {
   getUpdateInProgressPhaseLabelKey,
   UPDATE_IN_PROGRESS_PHASE_I18N,
 } from '../../utils/container-update';
+import type { UpdateEligibility } from '../../types/container';
+import { getPrimaryHardBlocker } from '../../utils/update-eligibility';
 import ContainerSideTabContent from './ContainerSideTabContent.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
@@ -48,6 +50,20 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
 
 function isActionBlocked(container: { id?: unknown; name?: unknown }) {
   return isActionInProgress(container) || isActionQueued(container);
+}
+
+function getUpdateHardBlocker(container: { updateEligibility?: UpdateEligibility }) {
+  return getPrimaryHardBlocker(container.updateEligibility);
+}
+
+function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility }) {
+  return getUpdateHardBlocker(container) !== undefined;
+}
+
+function getUpdateBlockedTooltip(container: { updateEligibility?: UpdateEligibility }) {
+  return (
+    getUpdateHardBlocker(container)?.message ?? t('containerComponents.sideDetail.updateTooltip')
+  );
 }
 
 function getStatusLabel(container: {
@@ -121,12 +137,19 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             :disabled="isActionBlocked(selectedContainer)"
             :tooltip="t('containerComponents.sideDetail.scanTooltip')"
             @click="scanContainer(selectedContainer)" />
-          <AppIconButton
-            v-if="selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
-            icon="lock"
-            size="xs"
-            variant="danger"
-            :disabled="isActionBlocked(selectedContainer)"
+	          <AppIconButton
+	            v-if="selectedContainer.newTag && isUpdateHardBlocked(selectedContainer)"
+	            icon="lock"
+	            size="xs"
+	            variant="danger"
+	            :disabled="true"
+	            :tooltip="getUpdateBlockedTooltip(selectedContainer)" />
+	          <AppIconButton
+	            v-else-if="selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
+	            icon="lock"
+	            size="xs"
+	            variant="danger"
+	            :disabled="isActionBlocked(selectedContainer)"
             :tooltip="t('containerComponents.sideDetail.blockedForceUpdateTooltip')"
             @click="confirmForceUpdate(selectedContainer)" />
           <AppIconButton

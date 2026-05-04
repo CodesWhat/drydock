@@ -2017,6 +2017,44 @@ describe('DashboardView', () => {
       expect(updateError.text()).toContain('update exploded');
     });
 
+    it('does not submit a single dashboard update for a hard-blocked row', async () => {
+      const hardBlockedContainer = makeContainer({
+        id: 'c-blocked',
+        name: 'blocked-nginx',
+        newTag: '2.0.0',
+        updateKind: 'major',
+        updateEligibility: {
+          eligible: false,
+          evaluatedAt: '2026-04-01T00:00:00.000Z',
+          blockers: [
+            {
+              reason: 'last-update-rolled-back',
+              severity: 'hard',
+              message: 'Last update attempt rolled back.',
+              actionable: true,
+            },
+          ],
+        },
+      });
+      const wrapper = await mountDashboard(
+        [hardBlockedContainer],
+        [],
+        {},
+        {
+          recentStatuses: { 'blocked-nginx': 'pending' },
+        },
+      );
+      const row = (wrapper.vm as any).recentUpdates[0];
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      (wrapper.vm as any).confirmDashboardUpdate(row);
+      await confirm.accept();
+      await flushPromises();
+
+      expect(mockUpdateContainer).not.toHaveBeenCalled();
+    });
+
     it('shows the shared update-started toast when a single dashboard update starts successfully', async () => {
       mockUpdateContainer.mockResolvedValueOnce({});
       const wrapper = await mountDashboard(

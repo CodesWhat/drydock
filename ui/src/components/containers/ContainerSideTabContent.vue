@@ -14,6 +14,8 @@ import NoUpdateReasonBadge from './NoUpdateReasonBadge.vue';
 import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import { revealContainerEnv } from '../../services/container';
 import { errorMessage } from '../../utils/error';
+import type { UpdateEligibility } from '../../types/container';
+import { getPrimaryHardBlocker } from '../../utils/update-eligibility';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
 const revealedEnvCache = reactive(new Map<string, Map<string, string>>());
@@ -153,6 +155,10 @@ const { t } = useI18n();
 
 function isActionInProgress(container: { id?: unknown; name?: unknown }) {
   return hasTrackedContainerAction(actionInProgress.value, container);
+}
+
+function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility }) {
+  return getPrimaryHardBlocker(container.updateEligibility) !== undefined;
 }
 </script>
 
@@ -606,10 +612,14 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
                           @click="runContainerPreview">
                     {{ previewLoading ? t('containerComponents.fullPageActions.previewing') : t('containerComponents.fullPageActions.previewUpdate') }}
                   </AppButton>
-                  <AppButton v-if="selectedContainer.bouncer === 'blocked'" size="sm" variant="plain" :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
-                          :disabled="isActionInProgress(selectedContainer)"
-                          @click="confirmForceUpdate(selectedContainer)">
-                    <AppIcon name="lock" :size="10" class="mr-1 inline" />{{ t('containerComponents.fullPageActions.forceUpdate') }}
+	                  <AppButton v-if="isUpdateHardBlocked(selectedContainer)" size="sm" variant="plain" :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+	                          :disabled="true">
+	                    <AppIcon name="lock" :size="10" class="mr-1 inline" />{{ t('containerComponents.fullPageDetail.blockedButton') }}
+	                  </AppButton>
+	                  <AppButton v-else-if="selectedContainer.bouncer === 'blocked'" size="sm" variant="plain" :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+	                          :disabled="isActionInProgress(selectedContainer)"
+	                          @click="confirmForceUpdate(selectedContainer)">
+	                    <AppIcon name="lock" :size="10" class="mr-1 inline" />{{ t('containerComponents.fullPageActions.forceUpdate') }}
                   </AppButton>
                   <AppButton v-else
                           size="sm" variant="outlined"

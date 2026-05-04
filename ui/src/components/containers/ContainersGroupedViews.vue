@@ -179,6 +179,17 @@ function isRowLocked(container: { id?: unknown; name?: unknown }) {
   return isContainerRowLocked(container);
 }
 
+function isUpdateHardBlocked(container: Pick<Container, 'updateEligibility'>) {
+  return getPrimaryHardBlocker(container.updateEligibility) !== undefined;
+}
+
+function getUpdateHardBlockerMessage(container: Pick<Container, 'updateEligibility'>) {
+  return (
+    getPrimaryHardBlocker(container.updateEligibility)?.message ??
+    t('containerComponents.groupedViews.blockedTooltip')
+  );
+}
+
 const RECENT_FAILURE_DISPLAY_MS = 10 * 60 * 1000;
 
 function isContainerRecentlyFailed(c: {
@@ -1255,12 +1266,21 @@ onScopeDispose(() => {
           </template>
           <template v-if="openActionsContainer.newTag">
             <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
-            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-if="openActionsContainer.bouncer === 'blocked'"
+            <AppButton
+                    v-if="isUpdateHardBlocked(openActionsContainer)"
+                    size="md" variant="plain" weight="medium"
+                    class="w-full text-left flex items-center gap-2 dd-text opacity-60 cursor-not-allowed"
+                    :disabled="true"
+                    v-tooltip.top="tt(getUpdateHardBlockerMessage(openActionsContainer))">
+              <AppIcon name="lock" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-danger)' }" />
+              {{ t('containerComponents.fullPageDetail.blockedButton') }}
+            </AppButton>
+            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" v-else-if="openActionsContainer.bouncer === 'blocked'"
                     @click="confirmForceUpdate(openActionsContainer); closeActionsMenu()">
               <AppIcon name="bolt" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-warning)' }" />
               {{ t('containerComponents.groupedViews.forceUpdateAction') }}
             </AppButton>
-            <AppButton v-if="openActionsContainer.bouncer !== 'blocked'" size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text"
+            <AppButton v-else size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text"
                     @click="confirmUpdate(openActionsContainer); closeActionsMenu()">
               <AppIcon name="cloud-download" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-success)' }" />
               {{ t('containerComponents.groupedViews.updateAction') }}

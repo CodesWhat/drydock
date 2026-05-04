@@ -729,6 +729,62 @@ describe('ContainersGroupedViews', () => {
     expect(spies.confirmDelete).toHaveBeenCalled();
   });
 
+  it('does not expose an enabled update action in the dropdown for hard-blocked rows', async () => {
+    const hardBlocked = makeContainer({
+      id: 'c-hard-menu',
+      name: 'hard-menu',
+      newTag: '2.0.0',
+      updateKind: 'major',
+      bouncer: 'safe',
+      updateEligibility: {
+        eligible: false,
+        evaluatedAt: '2026-04-01T00:00:00.000Z',
+        blockers: [
+          {
+            reason: 'last-update-rolled-back',
+            severity: 'hard',
+            message: 'Last update attempt rolled back.',
+            actionable: true,
+          },
+        ],
+      },
+    });
+
+    const { context, refs, spies } = makeContext();
+    context.containerViewMode.value = 'table';
+    context.tableActionStyle.value = 'icons';
+    context.filteredContainers.value = [hardBlocked];
+    context.displayContainers.value = [hardBlocked];
+    context.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [hardBlocked],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    refs.openActionsMenu.value = 'c-hard-menu';
+    await nextTick();
+
+    const updateButtons = wrapper
+      .findAll('button')
+      .filter((button) => button.text().trim() === 'Update');
+    expect(updateButtons).toHaveLength(0);
+
+    const blockedButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().trim() === 'Blocked');
+    expect(blockedButton?.attributes('disabled')).toBeDefined();
+    await blockedButton?.trigger('click');
+
+    expect(spies.confirmUpdate).not.toHaveBeenCalled();
+  });
+
   it('renders a single teleported actions menu when one container menu is open across groups', async () => {
     const alpha = makeContainer({
       id: 'c-alpha',

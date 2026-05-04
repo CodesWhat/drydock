@@ -191,7 +191,7 @@ export function computeUpdateEligibility(
         reason: 'security-scan-blocked',
         message: 'Security scan is blocking this update (critical/high vulnerabilities).',
         actionable: true,
-        actionHint: 'Use force-update to override, or lower the scan severity threshold.',
+        actionHint: 'Lower the scan severity threshold before updating.',
       }),
     );
   }

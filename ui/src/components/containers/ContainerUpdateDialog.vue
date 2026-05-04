@@ -11,6 +11,8 @@ import {
 import { updateContainer as apiUpdateContainer } from '../../services/container-actions';
 import { errorMessage } from '../../utils/error';
 import { resolveUpdateFailureReason } from '../../utils/update-error-summary';
+import type { UpdateEligibility } from '../../types/container';
+import { getPrimaryHardBlocker } from '../../utils/update-eligibility';
 
 const { t } = useI18n();
 const toast = useToast();
@@ -21,6 +23,7 @@ const props = defineProps<{
   currentTag?: string;
   newTag?: string;
   updateKind?: 'major' | 'minor' | 'patch' | 'digest' | null;
+  updateEligibility?: UpdateEligibility;
 }>();
 
 const emit = defineEmits<{
@@ -33,6 +36,8 @@ const actionError = ref<string | null>(null);
 const terminalToastStops = new Set<() => void>();
 
 const isOpen = computed(() => props.containerId !== null);
+const hardBlocker = computed(() => getPrimaryHardBlocker(props.updateEligibility));
+const updateBlocked = computed(() => hardBlocker.value !== undefined);
 
 function getDetailString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
@@ -147,6 +152,11 @@ async function confirm() {
   if (!id || inProgress.value) {
     return;
   }
+  if (hardBlocker.value) {
+    actionError.value = hardBlocker.value.message;
+    toast.warning(hardBlocker.value.message);
+    return;
+  }
   inProgress.value = true;
   actionError.value = null;
   const name = props.containerName ?? id;
@@ -219,6 +229,12 @@ function handleKeydown(e: KeyboardEvent) {
             {{ confirmMessage }}
           </div>
           <div
+            v-if="hardBlocker"
+            class="px-5 pb-2 text-2xs"
+            :style="{ color: 'var(--dd-danger)' }">
+            {{ hardBlocker.message }}
+          </div>
+          <div
             v-if="actionError"
             class="px-5 pb-2 text-2xs"
             :style="{ color: 'var(--dd-danger)' }">
@@ -249,7 +265,7 @@ function handleKeydown(e: KeyboardEvent) {
                 border: '1px solid var(--dd-warning)',
                 color: 'var(--dd-warning)',
               }"
-              :disabled="inProgress"
+              :disabled="inProgress || updateBlocked"
               @click="confirm">
               <AppIcon v-if="inProgress" name="restart" :size="11" class="animate-spin" />
               {{ inProgress ? t('containerComponents.updateDialog.updating') : t('containerComponents.updateDialog.update') }}

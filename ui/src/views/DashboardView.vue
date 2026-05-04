@@ -31,6 +31,7 @@ import {
 } from '../utils/container-update';
 import { errorMessage } from '../utils/error';
 import { resolveUpdateFailureReason } from '../utils/update-error-summary';
+import { getPrimaryHardBlocker } from '../utils/update-eligibility';
 import type { ContainerStatsSummarySnapshot } from '../services/stats';
 import DashboardHostStatusWidget from './dashboard/components/DashboardHostStatusWidget.vue';
 import DashboardRecentUpdatesWidget from './dashboard/components/DashboardRecentUpdatesWidget.vue';
@@ -673,6 +674,11 @@ function isStatWidget(id: string): boolean {
 }
 
 function confirmDashboardUpdate(row: RecentUpdateRow) {
+  const hardBlocker = getPrimaryHardBlocker(row.updateEligibility);
+  if (row.blocked || hardBlocker) {
+    toast.warning(hardBlocker?.message ?? t('dashboardView.recentUpdates.securityBlocked'));
+    return;
+  }
   confirm.require({
     header: t('dashboardView.confirm.updateContainer.header'),
     message: t('dashboardView.confirm.updateContainer.message', { name: row.name }),

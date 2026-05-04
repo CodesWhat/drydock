@@ -242,7 +242,7 @@ describe('computeUpdateEligibility', () => {
       const blocker = result.blockers.find((b) => b.reason === 'security-scan-blocked');
       expect(blocker).toBeDefined();
       expect(blocker?.actionable).toBe(true);
-      expect(blocker?.actionHint).toBeTruthy();
+      expect(blocker?.actionHint).toBe('Lower the scan severity threshold before updating.');
     });
 
     test('no blocker when updateScan status is passed', () => {

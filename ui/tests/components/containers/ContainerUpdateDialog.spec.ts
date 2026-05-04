@@ -278,6 +278,41 @@ describe('ContainerUpdateDialog', () => {
       w.unmount();
     });
 
+    it('does not submit when update eligibility has a hard blocker', async () => {
+      mockUpdateContainer.mockResolvedValue(undefined);
+      const w = factory({
+        containerId: 'abc123',
+        containerName: 'my-nginx',
+        updateEligibility: {
+          eligible: false,
+          evaluatedAt: '2026-04-01T00:00:00.000Z',
+          blockers: [
+            {
+              reason: 'last-update-rolled-back',
+              severity: 'hard',
+              message: 'Last update attempt rolled back.',
+              actionable: true,
+            },
+          ],
+        },
+      });
+      await nextTick();
+
+      const updateBtn = [...document.body.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === 'Update',
+      );
+      expect(updateBtn?.hasAttribute('disabled')).toBe(true);
+
+      updateBtn!.click();
+      const overlay = document.body.querySelector('.fixed') as HTMLElement | null;
+      overlay!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: false }));
+      await flushPromises();
+
+      expect(mockUpdateContainer).not.toHaveBeenCalled();
+      expect(mockToast.warning).toHaveBeenCalledWith('Last update attempt rolled back.');
+      w.unmount();
+    });
+
     it('clears error when containerId prop changes', async () => {
       mockUpdateContainer.mockRejectedValue(new Error('Fail'));
       const w = factory({ containerId: 'abc123' });
