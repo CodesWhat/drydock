@@ -1,0 +1,42 @@
+name: Crowdin Sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ui/src/locales/en/**'
+      - 'crowdin.yml'
+      - '.github/workflows/i18n-crowdin.yml'
+  schedule:
+    - cron: '0 7 * * 1'   # Mondays 07:00 UTC — pull translations weekly
+  workflow_dispatch:
+
+concurrency:
+  group: crowdin-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: crowdin/github-action@8868a33591d21088edfc398968173a3b98d51706  # v2.16.2
+        with:
+          upload_sources: true
+          upload_translations: false
+          download_translations: true
+          localization_branch_name: l10n_crowdin
+          create_pull_request: true
+          pull_request_title: "i18n: sync translations from Crowdin"
+          pull_request_body: "Automated sync from Crowdin. Review wording, then merge."
+          pull_request_labels: "translations,crowdin"
+          pull_request_base_branch_name: main
+          commit_message: "i18n: sync translations from Crowdin"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
