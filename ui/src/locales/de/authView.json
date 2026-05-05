@@ -1,0 +1,24 @@
+{
+  "authView": {
+    "loadingProviders": "Authentifizierungsanbieter werden geladen...",
+    "loadError": "Authentifizierungsanbieter konnten nicht geladen werden",
+    "filterPlaceholder": "Nach Name filtern...",
+    "clearFilter": "Löschen",
+    "emptyFiltered": "Keine Anbieter passen zu deinen Filtern",
+    "detailRefreshing": "Authentifizierungsdetails werden aktualisiert...",
+    "detailLoadError": "Aktuelle Authentifizierungsdetails konnten nicht geladen werden",
+    "noConfig": "Keine Konfigurationseigenschaften",
+    "columns": {
+      "provider": "Anbieter",
+      "type": "Typ",
+      "status": "Status"
+    },
+    "fields": {
+      "status": "Status"
+    },
+    "badge": {
+      "basic": "Basic",
+      "oidc": "OIDC"
+    }
+  }
+}

@@ -1,0 +1,132 @@
+{
+  "appShell": {
+    "toast": {
+      "dismiss": "Ausblenden"
+    },
+    "logViewer": {
+      "toolbar": {
+        "resume": "Fortsetzen",
+        "pause": "Pausieren",
+        "unpinAutoScroll": "Auto-Scroll lösen",
+        "pinAutoScroll": "Auto-Scroll anheften",
+        "newestFirst": "Neueste zuerst",
+        "oldestFirst": "Älteste zuerst",
+        "regexToggle": ".* Regex",
+        "showMatchesOnly": "Nur Treffer anzeigen",
+        "showingMatchesOnly": "Nur Treffer werden angezeigt",
+        "prev": "Zurück",
+        "next": "Weiter"
+      },
+      "search": {
+        "placeholder": "Logs durchsuchen",
+        "copied": "Kopiert!",
+        "copyLogs": "Logs kopieren"
+      },
+      "empty": {
+        "noMatchingEntries": "Keine passenden Einträge",
+        "defaultMessage": "Noch keine Logeinträge"
+      },
+      "footer": {
+        "lines": "Zeilen",
+        "defaultStatusLabel": "Offline"
+      }
+    },
+    "notificationBell": {
+      "buttonLabel": "Benachrichtigungen",
+      "tooltip": "Benachrichtigungen",
+      "header": "Benachrichtigungen",
+      "clear": "Löschen",
+      "loading": "Wird geladen...",
+      "empty": "Noch keine Benachrichtigungen",
+      "markAllRead": "Alle als gelesen markieren",
+      "openAuditLog": "Audit-Log öffnen",
+      "dismiss": "Benachrichtigung ausblenden"
+    },
+    "themeToggle": {
+      "mobileLabel": "Theme: {id} (tippen zum Wechseln)",
+      "switchTo": "Zu Theme {id} wechseln",
+      "variantLabel": "{label}"
+    },
+    "layout": {
+      "nav": {
+        "dashboard": "Dashboard",
+        "containers": "Container",
+        "security": "Sicherheit",
+        "audit": "Audit",
+        "systemLogs": "Systemlogs",
+        "manageGroup": "Verwalten",
+        "hosts": "Hosts",
+        "registries": "Registries",
+        "watchers": "Watcher",
+        "settingsGroup": "Einstellungen",
+        "general": "Allgemein",
+        "notifications": "Benachrichtigungen",
+        "triggers": "Trigger",
+        "auth": "Auth",
+        "agents": "Agents"
+      },
+      "sidebar": {
+        "closeMobileMenu": "Menü schließen",
+        "searchButton": "Suchen",
+        "searchAriaLabel": "Suchen",
+        "aboutTooltip": "Über Drydock",
+        "aboutAriaLabel": "Über Drydock",
+        "expandSidebar": "Seitenleiste erweitern",
+        "collapseSidebar": "Seitenleiste einklappen"
+      },
+      "topbar": {
+        "openMenu": "Menü öffnen",
+        "closeMenu": "Menü schließen",
+        "userMenu": "Benutzermenü",
+        "profile": "Profil",
+        "signOut": "Abmelden"
+      },
+      "about": {
+        "title": "Drydock",
+        "subtitle": "Docker Container Update Manager",
+        "documentation": "Dokumentation",
+        "github": "GitHub",
+        "changelog": "Changelog",
+        "close": "Schließen"
+      },
+      "search": {
+        "ariaLabel": "Suchen",
+        "placeholder": "Zu Seiten, Containern, Agents, Triggern springen...",
+        "shown": "{count} angezeigt",
+        "refreshing": "Suchindex wird aktualisiert...",
+        "noMatches": "Keine Treffer für \"{query}\".",
+        "hint": "Tippe, um Seiten, Container, Agents, Trigger, Watcher und Einstellungen zu suchen.",
+        "prefixScopeHint": "Präfix-Bereich aktiv; verwende ",
+        "typeHint": "Tippe",
+        "useTab": " zum Wechseln des Bereichs",
+        "moveHint": "bewegen",
+        "openHint": "öffnen"
+      },
+      "connection": {
+        "lostTitle": "Verbindung verloren",
+        "applyingUpdateTitle": "Update wird angewendet",
+        "lostMessage": "Der Server ist nicht erreichbar. Warten auf Wiederverbindung...",
+        "restartingMessage": "Drydock startet nach einem Self-Update neu{opId}. Verbindung wird hergestellt, sobald der Dienst wieder verfügbar ist...",
+        "reconnecting": "Verbindet neu",
+        "restartingService": "Dienst wird neu gestartet"
+      }
+    },
+    "announcementBanner": {
+      "defaultDismiss": "Ausblenden",
+      "defaultLinkLabel": "Migrationsanleitung anzeigen"
+    },
+    "banners": {
+      "legacyConfigTitleSingular": "{total} Legacy-Konfigurationsalias erkannt",
+      "legacyConfigTitlePlural": "{total} Legacy-Konfigurationsaliasse erkannt",
+      "legacyApiPathTitle": "{total} Legacy-API-Pfade erkannt",
+      "dontShowAgain": "Nicht erneut anzeigen",
+      "oidcHttpTitle": "HTTP-OIDC-Discovery erkannt",
+      "legacyHashTitle": "Legacy-Passworthash erkannt",
+      "curlHealthcheckTitle": "Benutzerdefinierter curl-Healthcheck-Override erkannt",
+      "envKeysLabel": "Env-Keys ({count}): {keys}",
+      "labelKeysLabel": "Label-Keys ({count}): {keys}",
+      "apiPathsLabel": "API-Pfade ({count}): {keys}",
+      "healthcheckCommandLabel": "Healthcheck-Befehl: {command}"
+    }
+  }
+}

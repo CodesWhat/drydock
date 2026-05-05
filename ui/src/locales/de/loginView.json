@@ -1,0 +1,34 @@
+{
+  "loginView": {
+    "heading": "Bei Drydock anmelden",
+    "username": {
+      "label": "Benutzername",
+      "placeholder": "Benutzernamen eingeben"
+    },
+    "password": {
+      "label": "Passwort",
+      "placeholder": "Passwort eingeben"
+    },
+    "submit": {
+      "signIn": "Anmelden",
+      "signingIn": "Anmeldung..."
+    },
+    "separator": "oder fortfahren mit",
+    "rememberMe": "Angemeldet bleiben",
+    "noMethods": "Keine Authentifizierungsmethoden konfiguriert.",
+    "errors": {
+      "loadFailed": "Authentifizierungsmethoden konnten nicht geladen werden",
+      "invalidCredentials": "Benutzername oder Passwort ungültig",
+      "oidcFailed": "Verbindung zu {name} fehlgeschlagen",
+      "providerBasic": "Basic-Auth '{name}': {error}",
+      "providerOidc": "OIDC-Anbieter '{name}': {error}",
+      "providerNamed": "{type} '{name}': {error}",
+      "providerGeneric": "{provider}: {error}"
+    },
+    "connectionLost": {
+      "title": "Verbindung verloren",
+      "body": "Der Server ist nicht erreichbar. Warten auf Wiederverbindung...",
+      "reconnecting": "Verbindet neu"
+    }
+  }
+}

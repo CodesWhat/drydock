@@ -1,0 +1,55 @@
+{
+  "sharedComponents": {
+    "confirmDialog": {
+      "cancel": "Abbrechen",
+      "confirm": "Bestätigen"
+    },
+    "copyableTag": {
+      "copied": "Kopiert!",
+      "clickToCopy": "Zum Kopieren klicken"
+    },
+    "dataCardGrid": {
+      "selectItem": "{name} auswählen"
+    },
+    "dataFilterBar": {
+      "filters": "Filter",
+      "toggleFilters": "Filter umschalten",
+      "viewMode": "Ansichtsmodus",
+      "viewModeLabel": "{label}-Ansicht"
+    },
+    "dataListAccordion": {
+      "toggleDetails": "Details für {name} umschalten",
+      "selectItem": "{name} auswählen"
+    },
+    "dataTable": {
+      "actions": "Aktionen",
+      "resizeColumn": "Spalte vergrößern/verkleinern"
+    },
+    "detailPanel": {
+      "openFullPage": "Vollseitenansicht öffnen",
+      "closePanel": "Detailpanel schließen",
+      "ariaLabel": "Detailpanel"
+    },
+    "emptyState": {
+      "clearFilters": "Alle Filter löschen"
+    },
+    "logViewer": {
+      "emptyMessage": "Keine Logeinträge gefunden.",
+      "loadingMessage": "Logs werden geladen..."
+    },
+    "scanProgressBanner": {
+      "scanning": "{done}/{total} Container werden gescannt..."
+    },
+    "scanProgressText": {
+      "scanning": "Scan {done}/{total}..."
+    },
+    "securityEmptyState": {
+      "noDataTitle": "Noch keine Schwachstellendaten",
+      "noDataBody": "Starte einen Scan, um deine Container auf bekannte Schwachstellen zu prüfen",
+      "filteredTitle": "Keine Images passen zu deinen Filtern",
+      "clearFilters": "Alle Filter löschen",
+      "setupGuide": "Einrichtungsanleitung",
+      "scanNow": "Jetzt scannen"
+    }
+  }
+}

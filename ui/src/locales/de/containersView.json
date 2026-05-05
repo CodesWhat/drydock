@@ -1,0 +1,28 @@
+{
+  "containersView": {
+    "error": {
+      "loadFailed": "Container konnten nicht geladen werden",
+      "recheckFailed": "Container konnten nicht erneut geprüft werden"
+    },
+    "toast": {
+      "updated": "Aktualisiert: {name}",
+      "updateFailed": "Update fehlgeschlagen: {name}",
+      "updateFailedWithReason": "Update fehlgeschlagen: {name} - {reason}",
+      "cancelled": "Abgebrochen: {name}",
+      "rolledBack": "Rollback ausgeführt: {name}",
+      "rolledBackWithReason": "Rollback ausgeführt: {name} - {reason}",
+      "updateAlreadyInProgress": "Für einige Container in dieser Gruppe läuft bereits ein Update",
+      "batchUpdated": "{count} Container in {group} aktualisiert",
+      "batchUpdatedNoGroup": "{count} Container aktualisiert",
+      "batchPartial": "{succeeded} von {total} Containern in {group} aktualisiert; {failed} fehlgeschlagen",
+      "batchPartialNoGroup": "{succeeded} von {total} Containern aktualisiert; {failed} fehlgeschlagen",
+      "batchFailed": "{count} Container in {group} konnten nicht aktualisiert werden",
+      "batchFailedNoGroup": "{count} Container konnten nicht aktualisiert werden",
+      "unknownGroup": "unbekannte Gruppe"
+    },
+    "registryError": {
+      "generic": "Registry-Fehler",
+      "detail": "Registry-Fehler: {error}"
+    }
+  }
+}

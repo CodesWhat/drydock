@@ -123,13 +123,13 @@ describe('preferences store', () => {
 
   it('should serialize and restore the selected locale', async () => {
     const { preferences, flushPreferences } = await loadStore();
-    preferences.locale.language = 'es';
+    preferences.locale.language = 'de';
     flushPreferences();
 
     vi.resetModules();
 
     const { preferences: restoredPreferences } = await loadStore();
-    expect(restoredPreferences.locale.language).toBe('es');
+    expect(restoredPreferences.locale.language).toBe('de');
   });
 
   it('should reset to defaults via resetPreferences', async () => {
