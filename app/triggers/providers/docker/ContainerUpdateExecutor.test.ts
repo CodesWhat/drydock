@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const {
   mockGetInProgressOperationByContainerName,
+  mockGetInProgressOperationByContainerId,
   mockGetOperationById,
   mockInsertOperation,
   mockReopenTerminalOperation,
@@ -27,6 +28,7 @@ const {
   const mockStartHealthGateHeartbeat = vi.fn(() => mockCancelHeartbeat);
   return {
     mockGetInProgressOperationByContainerName: vi.fn(),
+    mockGetInProgressOperationByContainerId: vi.fn(),
     mockGetOperationById: vi.fn(),
     mockInsertOperation: vi.fn(),
     mockReopenTerminalOperation: vi.fn(),
@@ -43,6 +45,7 @@ const {
 
 vi.mock('../../../store/update-operation.js', () => ({
   getInProgressOperationByContainerName: mockGetInProgressOperationByContainerName,
+  getInProgressOperationByContainerId: mockGetInProgressOperationByContainerId,
   getOperationById: mockGetOperationById,
   insertOperation: mockInsertOperation,
   reopenTerminalOperation: mockReopenTerminalOperation,
@@ -155,6 +158,7 @@ describe('ContainerUpdateExecutor', () => {
     mockInsertOperation.mockReturnValue({ id: 'op-1' });
     mockReopenTerminalOperation.mockReturnValue({ id: 'op-1' });
     mockGetInProgressOperationByContainerName.mockReturnValue(undefined);
+    mockGetInProgressOperationByContainerId.mockReturnValue(undefined);
     mockGetOperationById.mockReturnValue(undefined);
     mockIsOperationCancelRequested.mockReturnValue(false);
     mockStartHealthGateHeartbeat.mockReturnValue(mockCancelHeartbeat);
@@ -276,6 +280,31 @@ describe('ContainerUpdateExecutor', () => {
     ).resolves.toBeUndefined();
 
     expect(mockUpdateOperation).not.toHaveBeenCalled();
+  });
+
+  test('reconcile ignores same-name in-progress operations for a different container id', async () => {
+    mockGetInProgressOperationByContainerName.mockReturnValue({
+      id: 'other-host-op',
+      containerId: 'other-host-container-id',
+      oldName: 'docker-socket-proxy',
+      tempName: 'docker-socket-proxy-old-1',
+      fromVersion: '1.0.0',
+      toVersion: '1.0.1',
+    });
+    const executor = createExecutor();
+    const inspectSpy = vi.spyOn(executor, 'inspectContainerByIdentifier');
+
+    await executor.reconcileInProgressContainerUpdateOperation(
+      {},
+      createContainer({ id: 'current-host-container-id', name: 'docker-socket-proxy' }),
+      createLog(),
+    );
+
+    expect(mockGetInProgressOperationByContainerId).toHaveBeenCalledWith(
+      'current-host-container-id',
+    );
+    expect(inspectSpy).not.toHaveBeenCalled();
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
   });
 
   test('reconcile marks success when both active and temp containers exist', async () => {

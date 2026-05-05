@@ -151,6 +151,25 @@ describe('enrichContainerLifecyclePayloadWithEligibility', () => {
       ).toBe(true);
     });
 
+    test('byName operation with another container id is ignored', () => {
+      mockGetActiveOperationByContainerId.mockReturnValueOnce(undefined);
+      mockGetActiveOperationByContainerName.mockReturnValueOnce({
+        id: 'op-other-host',
+        containerId: 'other-host-container-id',
+        status: 'queued',
+        updatedAt: '2026-04-26T00:00:00Z',
+      });
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = enrichContainerLifecyclePayloadWithEligibility(updatePayload()) as any;
+
+      expect(
+        result.updateEligibility.blockers.some(
+          (b: { reason: string }) => b.reason === 'active-operation',
+        ),
+      ).toBe(false);
+    });
+
     test('both byId and byName return undefined → no active-operation blocker', () => {
       mockGetActiveOperationByContainerId.mockReturnValueOnce(undefined);
       mockGetActiveOperationByContainerName.mockReturnValueOnce(undefined);
