@@ -1,0 +1,141 @@
+{
+  "configView": {
+    "tabs": {
+      "general": "General",
+      "appearance": "Apariencia",
+      "profile": "Perfil"
+    },
+    "general": {
+      "application": {
+        "title": "Aplicación",
+        "loadingServerInfo": "Cargando información del servidor"
+      },
+      "store": {
+        "title": "Almacén"
+      },
+      "webhookApi": {
+        "title": "API Webhook",
+        "enabled": "Habilitada",
+        "disabled": "Deshabilitada",
+        "description": "Usa estos endpoints para activar ciclos de watch y actualizaciones por HTTP. Todas las solicitudes requieren un token Bearer en el encabezado Authorization.",
+        "disabledMessage": "La API Webhook está deshabilitada. Define",
+        "disabledHint": "La API Webhook está deshabilitada. Define {envEnabled} y configura al menos un token ({envToken} o {envTokens}) para habilitarla.",
+        "table": {
+          "endpoint": "Endpoint",
+          "description": "Descripción"
+        },
+        "example": "Ejemplo",
+        "endpoints": {
+          "watchAll": "Activar un ciclo de watch completo en todos los watchers",
+          "watchOne": "Hacer watch de un contenedor específico por nombre",
+          "updateOne": "Activar una actualización en un contenedor específico"
+        }
+      },
+      "network": {
+        "title": "Red",
+        "internetlessMode": {
+          "label": "Modo sin Internet",
+          "description": "Bloquea todas las solicitudes salientes (iconos de contenedores, fetches externos)"
+        }
+      },
+      "iconCache": {
+        "title": "Caché de iconos de contenedores",
+        "cachedIcons": {
+          "label": "Iconos en caché",
+          "description": "Los iconos comunes vienen incluidos; otros se guardan en disco al primer fetch"
+        },
+        "cleared": "{count} limpiados",
+        "clearButton": "Limpiar caché"
+      },
+      "diagnostics": {
+        "title": "Diagnósticos",
+        "debugDump": {
+          "label": "Volcado diagnóstico de debug",
+          "description": "Descarga una instantánea JSON redactada del estado de ejecución para solucionar problemas",
+          "preparing": "Preparando...",
+          "download": "Descargar volcado debug"
+        }
+      },
+      "fields": {
+        "version": "Versión",
+        "serverPort": "Puerto del servidor",
+        "containerActions": "Acciones de contenedor",
+        "webhook": "Webhook",
+        "deleteEnabled": "Eliminación habilitada",
+        "trustProxy": "Trust proxy",
+        "metricsAuth": "Auth de métricas",
+        "storePath": "Ruta del almacén",
+        "storeFile": "Archivo del almacén",
+        "enabled": "Habilitado",
+        "disabled": "Deshabilitado",
+        "yes": "Sí",
+        "no": "No"
+      },
+      "errors": {
+        "loadServerInfo": "No se pudo cargar la información del servidor",
+        "loadProfileData": "No se pudieron cargar los datos del perfil",
+        "updateNetworkSettings": "No se pudieron actualizar los ajustes de red",
+        "clearIconCache": "No se pudo limpiar la caché de iconos",
+        "downloadDebugDump": "No se pudo descargar el volcado debug",
+        "errorLabel": "Error"
+      }
+    },
+    "appearance": {
+      "language": {
+        "title": "Idioma"
+      },
+      "colorTheme": {
+        "title": "Tema de color"
+      },
+      "fontFamily": {
+        "title": "Familia tipográfica",
+        "defaultBadge": "predeterminado",
+        "preview": "El veloz murciélago hindú comía feliz cardillo y kiwi"
+      },
+      "fontSize": {
+        "title": "Tamaño de fuente"
+      },
+      "iconLibrary": {
+        "title": "Biblioteca de iconos"
+      },
+      "iconSize": {
+        "title": "Tamaño de iconos"
+      },
+      "borderRadius": {
+        "title": "Radio de borde"
+      }
+    },
+    "profile": {
+      "loading": "Cargando perfil",
+      "fields": {
+        "username": "Usuario",
+        "email": "Email",
+        "role": "Rol",
+        "provider": "Proveedor",
+        "lastLogin": "Último acceso",
+        "activeSessions": "Sesiones activas"
+      }
+    },
+    "logs": {
+      "loading": "Cargando registros...",
+      "emptyMessage": "No se encontraron entradas de registro para los filtros actuales.",
+      "toolbar": {
+        "live": "En vivo",
+        "allLevels": "Todos los niveles",
+        "debug": "Debug",
+        "info": "Info",
+        "warn": "Aviso",
+        "error": "Error",
+        "allComponents": "Todos los componentes",
+        "resetFilters": "Restablecer filtros"
+      },
+      "tail": {
+        "50": "Últimas 50",
+        "100": "Últimas 100",
+        "500": "Últimas 500",
+        "1000": "Últimas 1000"
+      },
+      "logLevelBadge": "Nivel de registro del servidor: {level}. Solo se capturan mensajes en este nivel o superior."
+    }
+  }
+}

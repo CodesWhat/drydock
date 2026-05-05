@@ -1,0 +1,34 @@
+{
+  "loginView": {
+    "heading": "Iniciar sesión en Drydock",
+    "username": {
+      "label": "Usuario",
+      "placeholder": "Introduce tu usuario"
+    },
+    "password": {
+      "label": "Contraseña",
+      "placeholder": "Introduce tu contraseña"
+    },
+    "submit": {
+      "signIn": "Iniciar sesión",
+      "signingIn": "Iniciando sesión..."
+    },
+    "separator": "o continuar con",
+    "rememberMe": "Recordarme",
+    "noMethods": "No hay métodos de autenticación configurados.",
+    "errors": {
+      "loadFailed": "No se pudieron cargar los métodos de autenticación",
+      "invalidCredentials": "Usuario o contraseña no válidos",
+      "oidcFailed": "No se pudo conectar con {name}",
+      "providerBasic": "Auth básica '{name}': {error}",
+      "providerOidc": "Proveedor OIDC '{name}': {error}",
+      "providerNamed": "{type} '{name}': {error}",
+      "providerGeneric": "{provider}: {error}"
+    },
+    "connectionLost": {
+      "title": "Conexión perdida",
+      "body": "No se puede alcanzar el servidor. Esperando a que vuelva a estar en línea...",
+      "reconnecting": "Reconectando"
+    }
+  }
+}
