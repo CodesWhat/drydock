@@ -16,7 +16,8 @@ function buildEligibilityContext(): UpdateEligibilityContext {
     getActiveOperation: (container: Container) => {
       const byId = getActiveOperationByContainerId(container.id);
       const byName = byId ? undefined : getActiveOperationByContainerName(container.name);
-      const matched = byId ?? byName;
+      const isLegacyOperation = byName && typeof byName === 'object' && !('containerId' in byName);
+      const matched = byId ?? (isLegacyOperation ? byName : undefined);
       if (!matched || typeof matched !== 'object') return undefined;
       const m = matched as Record<string, unknown>;
       const id = typeof m.id === 'string' ? m.id : undefined;

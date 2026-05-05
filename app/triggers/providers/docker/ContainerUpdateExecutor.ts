@@ -373,7 +373,19 @@ class ContainerUpdateExecutor {
     container: ContainerForUpdate,
     logContainer: ContainerUpdateLogger,
   ) {
-    const pending = updateOperationStore.getInProgressOperationByContainerName(container.name);
+    const pendingByContainerId = updateOperationStore.getInProgressOperationByContainerId(
+      container.id,
+    );
+    const pendingByContainerName =
+      pendingByContainerId ??
+      updateOperationStore.getInProgressOperationByContainerName(container.name);
+    const pending =
+      container.id &&
+      pendingByContainerName?.containerId &&
+      pendingByContainerName.containerId !== container.id
+        ? undefined
+        : pendingByContainerName;
+
     if (!pending) {
       return;
     }
