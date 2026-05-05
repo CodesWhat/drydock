@@ -21,6 +21,16 @@ describe('buildMessages', () => {
     expect(LOCALE_OPTIONS).toContainEqual({ id: 'de', label: 'Deutsch' });
   });
 
+  it('exposes French as a supported picker option', () => {
+    expect(SUPPORTED_LOCALES).toContain('fr');
+    expect(LOCALE_OPTIONS).toContainEqual({ id: 'fr', label: 'Français' });
+  });
+
+  it('exposes Brazilian Portuguese as a supported picker option', () => {
+    expect(SUPPORTED_LOCALES).toContain('pt-BR');
+    expect(LOCALE_OPTIONS).toContainEqual({ id: 'pt-BR', label: 'Português (Brasil)' });
+  });
+
   it('skips paths that do not match the /locales/<locale>/ pattern', () => {
     const modules = {
       // no /locales/<x>/ segment — should be silently skipped
@@ -36,12 +46,12 @@ describe('buildMessages', () => {
 
   it('skips paths whose locale segment is not in SUPPORTED_LOCALES', () => {
     const modules = {
-      '../locales/fr/common.json': { bonjour: 'Bonjour' },
+      '../locales/ja/common.json': { hello: 'こんにちは' },
       '../locales/en/common.json': { hello: 'Hello' },
     };
     const result = buildMessages(modules);
-    // fr is not supported — its keys must not appear
-    expect((result as Record<string, unknown>).fr).toBeUndefined();
+    // ja is not supported — its keys must not appear
+    expect((result as Record<string, unknown>).ja).toBeUndefined();
     expect(result.en).toEqual({ hello: 'Hello' });
   });
 
@@ -91,6 +101,22 @@ describe('buildMessages', () => {
     };
     const result = buildMessages(modules);
     expect((result as Record<string, unknown>).de).toEqual({ hello: 'Hallo' });
+  });
+
+  it('handles French locale namespaces', () => {
+    const modules = {
+      '../locales/fr/common.json': { hello: 'Bonjour' },
+    };
+    const result = buildMessages(modules);
+    expect((result as Record<string, unknown>).fr).toEqual({ hello: 'Bonjour' });
+  });
+
+  it('handles Brazilian Portuguese locale namespaces', () => {
+    const modules = {
+      '../locales/pt-BR/common.json': { hello: 'Olá' },
+    };
+    const result = buildMessages(modules);
+    expect((result as Record<string, unknown>)['pt-BR']).toEqual({ hello: 'Olá' });
   });
 });
 

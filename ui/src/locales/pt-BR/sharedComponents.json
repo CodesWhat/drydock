@@ -1,0 +1,55 @@
+{
+  "sharedComponents": {
+    "confirmDialog": {
+      "cancel": "Cancelar",
+      "confirm": "Confirmar"
+    },
+    "copyableTag": {
+      "copied": "Copiado!",
+      "clickToCopy": "Clique para copiar"
+    },
+    "dataCardGrid": {
+      "selectItem": "Selecionar {name}"
+    },
+    "dataFilterBar": {
+      "filters": "Filtros",
+      "toggleFilters": "Alternar filtros",
+      "viewMode": "Modo de visualização",
+      "viewModeLabel": "Visualização {label}"
+    },
+    "dataListAccordion": {
+      "toggleDetails": "Alternar detalhes de {name}",
+      "selectItem": "Selecionar {name}"
+    },
+    "dataTable": {
+      "actions": "Ações",
+      "resizeColumn": "Redimensionar coluna"
+    },
+    "detailPanel": {
+      "openFullPage": "Abrir visualização em página inteira",
+      "closePanel": "Fechar painel de detalhes",
+      "ariaLabel": "Painel de detalhes"
+    },
+    "emptyState": {
+      "clearFilters": "Limpar todos os filtros"
+    },
+    "logViewer": {
+      "emptyMessage": "Nenhuma entrada de log encontrada.",
+      "loadingMessage": "Carregando logs..."
+    },
+    "scanProgressBanner": {
+      "scanning": "Escaneando {done}/{total} contêineres..."
+    },
+    "scanProgressText": {
+      "scanning": "Escaneando {done}/{total}..."
+    },
+    "securityEmptyState": {
+      "noDataTitle": "Ainda não há dados de vulnerabilidade",
+      "noDataBody": "Execute um scan para verificar seus contêineres contra vulnerabilidades conhecidas",
+      "filteredTitle": "Nenhuma imagem corresponde aos filtros",
+      "clearFilters": "Limpar todos os filtros",
+      "setupGuide": "Guia de configuração",
+      "scanNow": "Escanear agora"
+    }
+  }
+}

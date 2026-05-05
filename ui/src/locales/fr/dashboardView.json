@@ -1,0 +1,94 @@
+{
+  "dashboardView": {
+    "loading": "Chargement du tableau de bord...",
+    "loadFailed": "Impossible de charger le tableau de bord",
+    "dragToReorder": "Glisser pour réordonner",
+    "viewAll": "Tout voir ->",
+    "editToggle": {
+      "showWidgetPanel": "Afficher le panneau de widgets",
+      "doneCustomizing": "Terminer la personnalisation",
+      "customize": "Personnaliser le tableau de bord"
+    },
+    "widgetPanel": {
+      "title": "Widgets",
+      "closePanel": "Fermer le panneau",
+      "resetToDefault": "Réinitialiser par défaut"
+    },
+    "confirm": {
+      "updateContainer": {
+        "header": "Mettre à jour le conteneur",
+        "message": "Mettre à jour {name} maintenant ? L'image la plus récente détectée sera appliquée.",
+        "accept": "Mettre à jour"
+      },
+      "updateAll": {
+        "header": "Mettre à jour tous les conteneurs",
+        "message": "{count} conteneurs seront mis à jour. Continuer ?",
+        "accept": "Tout mettre à jour"
+      }
+    },
+    "toast": {
+      "updated": "Mis à jour : {name}",
+      "updateFailed": "Échec de la mise à jour : {name}",
+      "updateFailedWithReason": "Échec de la mise à jour : {name} - {reason}",
+      "cancelled": "Annulé : {name}",
+      "rolledBack": "Rollback effectué : {name}",
+      "rolledBackWithReason": "Rollback effectué : {name} - {reason}",
+      "updateError": "Impossible de mettre à jour {name}",
+      "updateAllError": "Impossible de mettre à jour tous les conteneurs"
+    },
+    "recentUpdates": {
+      "title": "Mises à jour disponibles",
+      "updateAll": "Tout mettre à jour",
+      "noUpdates": "Aucune mise à jour disponible",
+      "releaseNotes": "Notes de version",
+      "securityBlocked": "Bloqué par la sécurité",
+      "updateContainer": "Mettre à jour le conteneur",
+      "compactSingle": "{count} mise à jour disponible",
+      "compactPlural": "{count} mises à jour disponibles",
+      "status": {
+        "queued": "En file",
+        "updating": "Mise à jour"
+      },
+      "columns": {
+        "container": "Conteneur",
+        "version": "Version",
+        "type": "Type",
+        "actions": "Actions"
+      }
+    },
+    "hostStatus": {
+      "title": "État des hôtes",
+      "connected": "Connecté",
+      "disconnected": "Déconnecté",
+      "containerCount": "{running}/{total} conteneurs"
+    },
+    "resourceUsage": {
+      "title": "Utilisation des ressources",
+      "totalUsage": "Utilisation totale ({watched} surveillés)",
+      "cpu": "CPU moy.",
+      "memory": "Mémoire",
+      "topCpu": "Top CPU",
+      "topMemory": "Top mémoire",
+      "noCpuData": "Aucune donnée CPU live",
+      "noMemoryData": "Aucune donnée mémoire live"
+    },
+    "securityOverview": {
+      "title": "Vue sécurité",
+      "images": "images",
+      "clean": "Saines",
+      "issues": "Problèmes",
+      "notScanned": "Non scannées",
+      "severityBreakdown": "Répartition par gravité",
+      "critical": "{count} critiques",
+      "high": "{count} élevées",
+      "medium": "{count} moyennes",
+      "low": "{count} faibles",
+      "topVulnerabilities": "Principales vulnérabilités",
+      "noVulnerabilities": "Aucune vulnérabilité signalée"
+    },
+    "updateBreakdown": {
+      "title": "Répartition des mises à jour",
+      "noUpdates": "Aucune mise à jour à catégoriser"
+    }
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "agentsView": {
+    "list": {
+      "loading": "Carregando agentes...",
+      "filterPlaceholder": "Filtrar por nome...",
+      "clearFilter": "Limpar",
+      "emptyFiltered": "Nenhum agente corresponde aos filtros",
+      "toggleColumns": "Alternar colunas",
+      "columnPickerHeading": "Colunas",
+      "loadError": "Falha ao carregar agentes",
+      "status": {
+        "connected": "Conectado",
+        "disconnected": "Desconectado"
+      },
+      "columns": {
+        "name": "Agente",
+        "status": "Status",
+        "containers": "Contêineres",
+        "docker": "Docker",
+        "os": "SO",
+        "version": "Versão",
+        "lastSeen": "Última atividade"
+      },
+      "card": {
+        "running": "em execução",
+        "stopped": "parados"
+      }
+    },
+    "detail": {
+      "tabs": {
+        "overview": "Visão geral",
+        "logs": "Logs",
+        "config": "Config"
+      },
+      "overview": {
+        "resources": "Recursos",
+        "system": "Sistema",
+        "containers": "Contêineres",
+        "containerTotal": "Total",
+        "containerRunning": "Em execução",
+        "containerStopped": "Parados",
+        "viewContainers": "Ver contêineres",
+        "automation": "Automação",
+        "watchers": "Watchers",
+        "triggers": "Triggers",
+        "none": "Nenhum"
+      },
+      "logs": {
+        "allLevels": "Todos os níveis",
+        "levelDebug": "Debug",
+        "levelInfo": "Info",
+        "levelWarn": "Aviso",
+        "levelError": "Erro",
+        "tail50": "Últimas 50",
+        "tail100": "Últimas 100",
+        "tail500": "Últimas 500",
+        "tail1000": "Últimas 1000",
+        "componentPlaceholder": "Filtrar por componente...",
+        "apply": "Aplicar",
+        "reset": "Redefinir",
+        "refresh": "Atualizar",
+        "emptyMessage": "Nenhuma entrada de log encontrada para os filtros atuais.",
+        "lastFetched": "Última busca: {time}",
+        "entries": "{count} entradas",
+        "statusLive": "Ao vivo",
+        "statusOffline": "Offline"
+      },
+      "fields": {
+        "cpus": "CPUs",
+        "memory": "Memória",
+        "images": "Imagens",
+        "uptime": "Tempo ativo",
+        "docker": "Docker",
+        "os": "SO",
+        "architecture": "Arquitetura",
+        "agent": "Agente",
+        "host": "Host",
+        "agentVersion": "Versão do agente",
+        "logLevel": "Nível de log",
+        "pollInterval": "Intervalo de polling",
+        "dockerSocket": "Socket Docker",
+        "lastSeen": "Última atividade",
+        "never": "nunca"
+      },
+      "listView": {
+        "details": "Detalhes"
+      }
+    }
+  }
+}

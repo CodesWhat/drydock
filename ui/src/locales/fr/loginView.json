@@ -1,0 +1,34 @@
+{
+  "loginView": {
+    "heading": "Connexion à Drydock",
+    "username": {
+      "label": "Nom d'utilisateur",
+      "placeholder": "Saisissez votre nom d'utilisateur"
+    },
+    "password": {
+      "label": "Mot de passe",
+      "placeholder": "Saisissez votre mot de passe"
+    },
+    "submit": {
+      "signIn": "Se connecter",
+      "signingIn": "Connexion..."
+    },
+    "separator": "ou continuer avec",
+    "rememberMe": "Se souvenir de moi",
+    "noMethods": "Aucune méthode d'authentification configurée.",
+    "errors": {
+      "loadFailed": "Impossible de charger les méthodes d'authentification",
+      "invalidCredentials": "Nom d'utilisateur ou mot de passe invalide",
+      "oidcFailed": "Impossible de se connecter à {name}",
+      "providerBasic": "Auth basique '{name}' : {error}",
+      "providerOidc": "Fournisseur OIDC '{name}' : {error}",
+      "providerNamed": "{type} '{name}' : {error}",
+      "providerGeneric": "{provider} : {error}"
+    },
+    "connectionLost": {
+      "title": "Connexion perdue",
+      "body": "Le serveur est inaccessible. En attente de son retour en ligne...",
+      "reconnecting": "Reconnexion"
+    }
+  }
+}

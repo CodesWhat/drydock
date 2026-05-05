@@ -1,0 +1,141 @@
+{
+  "configView": {
+    "tabs": {
+      "general": "Général",
+      "appearance": "Apparence",
+      "profile": "Profil"
+    },
+    "general": {
+      "application": {
+        "title": "Application",
+        "loadingServerInfo": "Chargement des informations serveur"
+      },
+      "store": {
+        "title": "Stockage"
+      },
+      "webhookApi": {
+        "title": "API Webhook",
+        "enabled": "Activée",
+        "disabled": "Désactivée",
+        "description": "Utilisez ces endpoints pour déclencher des cycles de watch et des mises à jour via HTTP. Toutes les requêtes nécessitent un token Bearer dans l'en-tête Authorization.",
+        "disabledMessage": "L'API Webhook est désactivée. Définissez",
+        "disabledHint": "L'API Webhook est désactivée. Définissez {envEnabled} et configurez au moins un token ({envToken} ou {envTokens}) pour l'activer.",
+        "table": {
+          "endpoint": "Endpoint",
+          "description": "Description"
+        },
+        "example": "Exemple",
+        "endpoints": {
+          "watchAll": "Déclencher un cycle de watch complet sur tous les watchers",
+          "watchOne": "Watcher un conteneur spécifique par nom",
+          "updateOne": "Déclencher une mise à jour sur un conteneur spécifique"
+        }
+      },
+      "network": {
+        "title": "Réseau",
+        "internetlessMode": {
+          "label": "Mode sans Internet",
+          "description": "Bloquer toutes les requêtes sortantes (icônes de conteneurs, fetches externes)"
+        }
+      },
+      "iconCache": {
+        "title": "Cache des icônes de conteneur",
+        "cachedIcons": {
+          "label": "Icônes en cache",
+          "description": "Les icônes courantes sont incluses ; les autres sont mises en cache sur disque au premier fetch"
+        },
+        "cleared": "{count} effacées",
+        "clearButton": "Vider le cache"
+      },
+      "diagnostics": {
+        "title": "Diagnostics",
+        "debugDump": {
+          "label": "Dump de diagnostic debug",
+          "description": "Télécharger un instantané JSON expurgé de l'état runtime pour le dépannage",
+          "preparing": "Préparation...",
+          "download": "Télécharger le dump debug"
+        }
+      },
+      "fields": {
+        "version": "Version",
+        "serverPort": "Port serveur",
+        "containerActions": "Actions de conteneur",
+        "webhook": "Webhook",
+        "deleteEnabled": "Suppression activée",
+        "trustProxy": "Trust Proxy",
+        "metricsAuth": "Auth métriques",
+        "storePath": "Chemin du stockage",
+        "storeFile": "Fichier de stockage",
+        "enabled": "Activé",
+        "disabled": "Désactivé",
+        "yes": "Oui",
+        "no": "Non"
+      },
+      "errors": {
+        "loadServerInfo": "Impossible de charger les informations serveur",
+        "loadProfileData": "Impossible de charger les données du profil",
+        "updateNetworkSettings": "Impossible de mettre à jour les paramètres réseau",
+        "clearIconCache": "Impossible de vider le cache d'icônes",
+        "downloadDebugDump": "Impossible de télécharger le dump debug",
+        "errorLabel": "Erreur"
+      }
+    },
+    "appearance": {
+      "language": {
+        "title": "Langue"
+      },
+      "colorTheme": {
+        "title": "Thème couleur"
+      },
+      "fontFamily": {
+        "title": "Famille de police",
+        "defaultBadge": "par défaut",
+        "preview": "Portez ce vieux whisky au juge blond qui fume"
+      },
+      "fontSize": {
+        "title": "Taille de police"
+      },
+      "iconLibrary": {
+        "title": "Bibliothèque d'icônes"
+      },
+      "iconSize": {
+        "title": "Taille des icônes"
+      },
+      "borderRadius": {
+        "title": "Rayon des bordures"
+      }
+    },
+    "profile": {
+      "loading": "Chargement du profil",
+      "fields": {
+        "username": "Nom d'utilisateur",
+        "email": "E-mail",
+        "role": "Rôle",
+        "provider": "Fournisseur",
+        "lastLogin": "Dernière connexion",
+        "activeSessions": "Sessions actives"
+      }
+    },
+    "logs": {
+      "loading": "Chargement des logs...",
+      "emptyMessage": "Aucune entrée de log trouvée pour les filtres actuels.",
+      "toolbar": {
+        "live": "Live",
+        "allLevels": "Tous les niveaux",
+        "debug": "Debug",
+        "info": "Info",
+        "warn": "Avertissement",
+        "error": "Erreur",
+        "allComponents": "Tous les composants",
+        "resetFilters": "Réinitialiser les filtres"
+      },
+      "tail": {
+        "50": "50 dernières",
+        "100": "100 dernières",
+        "500": "500 dernières",
+        "1000": "1000 dernières"
+      },
+      "logLevelBadge": "Niveau de log serveur : {level}. Seuls les messages à ce niveau ou supérieur sont capturés."
+    }
+  }
+}

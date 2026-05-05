@@ -1,0 +1,24 @@
+{
+  "authView": {
+    "loadingProviders": "Chargement des fournisseurs d'authentification...",
+    "loadError": "Impossible de charger les fournisseurs d'authentification",
+    "filterPlaceholder": "Filtrer par nom...",
+    "clearFilter": "Effacer",
+    "emptyFiltered": "Aucun fournisseur ne correspond à vos filtres",
+    "detailRefreshing": "Actualisation des détails d'authentification...",
+    "detailLoadError": "Impossible de charger les derniers détails d'authentification",
+    "noConfig": "Aucune propriété de configuration",
+    "columns": {
+      "provider": "Fournisseur",
+      "type": "Type",
+      "status": "État"
+    },
+    "fields": {
+      "status": "État"
+    },
+    "badge": {
+      "basic": "Basique",
+      "oidc": "OIDC"
+    }
+  }
+}

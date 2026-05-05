@@ -154,8 +154,18 @@ describe('preferences migration', () => {
       expect(result.locale.language).toBe('de');
     });
 
-    it('should replace an unsupported locale with the default', () => {
+    it('should preserve French as a supported locale', () => {
       const result = migrate({ schemaVersion: 1, locale: { language: 'fr' } });
+      expect(result.locale.language).toBe('fr');
+    });
+
+    it('should preserve Brazilian Portuguese as a supported locale', () => {
+      const result = migrate({ schemaVersion: 1, locale: { language: 'pt-BR' } });
+      expect(result.locale.language).toBe('pt-BR');
+    });
+
+    it('should replace an unsupported locale with the default', () => {
+      const result = migrate({ schemaVersion: 1, locale: { language: 'ja' } });
       expect(result.locale.language).toBe(DEFAULTS.locale.language);
     });
 

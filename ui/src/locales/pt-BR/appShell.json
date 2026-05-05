@@ -1,0 +1,132 @@
+{
+  "appShell": {
+    "toast": {
+      "dismiss": "Dispensar"
+    },
+    "logViewer": {
+      "toolbar": {
+        "resume": "Retomar",
+        "pause": "Pausar",
+        "unpinAutoScroll": "Desafixar rolagem automática",
+        "pinAutoScroll": "Fixar rolagem automática",
+        "newestFirst": "Mais recentes primeiro",
+        "oldestFirst": "Mais antigos primeiro",
+        "regexToggle": ".* Regex",
+        "showMatchesOnly": "Mostrar apenas correspondências",
+        "showingMatchesOnly": "Mostrando apenas correspondências",
+        "prev": "Ant.",
+        "next": "Próx."
+      },
+      "search": {
+        "placeholder": "Buscar logs",
+        "copied": "Copiado!",
+        "copyLogs": "Copiar logs"
+      },
+      "empty": {
+        "noMatchingEntries": "Nenhuma entrada correspondente",
+        "defaultMessage": "Ainda não há entradas de log"
+      },
+      "footer": {
+        "lines": "linhas",
+        "defaultStatusLabel": "Offline"
+      }
+    },
+    "notificationBell": {
+      "buttonLabel": "Notificações",
+      "tooltip": "Notificações",
+      "header": "Notificações",
+      "clear": "Limpar",
+      "loading": "Carregando...",
+      "empty": "Ainda não há notificações",
+      "markAllRead": "Marcar todas como lidas",
+      "openAuditLog": "Abrir log de auditoria",
+      "dismiss": "Dispensar notificação"
+    },
+    "themeToggle": {
+      "mobileLabel": "Tema: {id} (toque para alternar)",
+      "switchTo": "Alternar para o tema {id}",
+      "variantLabel": "{label}"
+    },
+    "layout": {
+      "nav": {
+        "dashboard": "Dashboard",
+        "containers": "Contêineres",
+        "security": "Segurança",
+        "audit": "Auditoria",
+        "systemLogs": "Logs do sistema",
+        "manageGroup": "Gerenciar",
+        "hosts": "Hosts",
+        "registries": "Registries",
+        "watchers": "Watchers",
+        "settingsGroup": "Configurações",
+        "general": "Geral",
+        "notifications": "Notificações",
+        "triggers": "Triggers",
+        "auth": "Auth",
+        "agents": "Agentes"
+      },
+      "sidebar": {
+        "closeMobileMenu": "Fechar menu",
+        "searchButton": "Buscar",
+        "searchAriaLabel": "Buscar",
+        "aboutTooltip": "Sobre o Drydock",
+        "aboutAriaLabel": "Sobre o Drydock",
+        "expandSidebar": "Expandir barra lateral",
+        "collapseSidebar": "Recolher barra lateral"
+      },
+      "topbar": {
+        "openMenu": "Abrir menu",
+        "closeMenu": "Fechar menu",
+        "userMenu": "Menu do usuário",
+        "profile": "Perfil",
+        "signOut": "Sair"
+      },
+      "about": {
+        "title": "Drydock",
+        "subtitle": "Gerenciador de atualizações de contêineres Docker",
+        "documentation": "Documentação",
+        "github": "GitHub",
+        "changelog": "Changelog",
+        "close": "Fechar"
+      },
+      "search": {
+        "ariaLabel": "Buscar",
+        "placeholder": "Ir para páginas, contêineres, agentes, triggers...",
+        "shown": "{count} exibidos",
+        "refreshing": "Atualizando índice de busca...",
+        "noMatches": "Nenhuma correspondência para \"{query}\".",
+        "hint": "Digite para buscar páginas, contêineres, agentes, triggers, watchers e configurações.",
+        "prefixScopeHint": "Escopo de prefixo ativo; use ",
+        "typeHint": "Digite",
+        "useTab": " para alterar o escopo",
+        "moveHint": "mover",
+        "openHint": "abrir"
+      },
+      "connection": {
+        "lostTitle": "Conexão perdida",
+        "applyingUpdateTitle": "Aplicando atualização",
+        "lostMessage": "O servidor está inacessível. Aguardando voltar online...",
+        "restartingMessage": "O Drydock está reiniciando após uma autoatualização{opId}. Reconectando quando o serviço voltar...",
+        "reconnecting": "Reconectando",
+        "restartingService": "Reiniciando serviço"
+      }
+    },
+    "announcementBanner": {
+      "defaultDismiss": "Dispensar",
+      "defaultLinkLabel": "Ver guia de migração"
+    },
+    "banners": {
+      "legacyConfigTitleSingular": "{total} alias de configuração legado detectado",
+      "legacyConfigTitlePlural": "{total} aliases de configuração legados detectados",
+      "legacyApiPathTitle": "{total} caminhos de API legados detectados",
+      "dontShowAgain": "Não mostrar novamente",
+      "oidcHttpTitle": "Discovery OIDC via HTTP detectado",
+      "legacyHashTitle": "Hash de senha legado detectado",
+      "curlHealthcheckTitle": "Override de healthcheck curl personalizado detectado",
+      "envKeysLabel": "Chaves env ({count}): {keys}",
+      "labelKeysLabel": "Chaves de label ({count}): {keys}",
+      "apiPathsLabel": "Caminhos API ({count}): {keys}",
+      "healthcheckCommandLabel": "Comando healthcheck: {command}"
+    }
+  }
+}
