@@ -1,3 +1,4 @@
+import { isSupportedLocale } from '../i18n/locales';
 import { RADIUS_PRESET_IDS } from './radius';
 import type { ViewMode } from './schema';
 
@@ -47,4 +48,8 @@ export function isValidScale(v: unknown): v is number {
 
 export function isValidFontSize(v: unknown): v is number {
   return typeof v === 'number' && v >= 0.8 && v <= 1.3;
+}
+
+export function isValidLocale(v: unknown): boolean {
+  return isSupportedLocale(v);
 }

@@ -1,5 +1,8 @@
 # Credentials are supplied by the Crowdin GitHub Action via repo secrets
 # (CROWDIN_PROJECT_ID, CROWDIN_PERSONAL_TOKEN), not committed here.
+project_id_env: CROWDIN_PROJECT_ID
+api_token_env: CROWDIN_PERSONAL_TOKEN
+base_path: .
 preserve_hierarchy: true
 
 commit_message: "i18n: sync %language% translations from Crowdin"

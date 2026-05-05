@@ -36,9 +36,10 @@ describe('preferences store', () => {
 
   it('should return defaults when localStorage is empty', async () => {
     const { preferences } = await loadStore();
-    expect(preferences.schemaVersion).toBe(4);
+    expect(preferences.schemaVersion).toBe(5);
     expect(preferences.theme.family).toBe('one-dark');
     expect(preferences.theme.variant).toBe('dark');
+    expect(preferences.locale.language).toBe('en');
     expect(preferences.containers.viewMode).toBe('table');
   });
 
@@ -118,6 +119,17 @@ describe('preferences store', () => {
 
     const { preferences: restoredPreferences } = await loadStore();
     expect(restoredPreferences.appearance.radius).toBe('soft');
+  });
+
+  it('should serialize and restore the selected locale', async () => {
+    const { preferences, flushPreferences } = await loadStore();
+    preferences.locale.language = 'it';
+    flushPreferences();
+
+    vi.resetModules();
+
+    const { preferences: restoredPreferences } = await loadStore();
+    expect(restoredPreferences.locale.language).toBe('it');
   });
 
   it('should reset to defaults via resetPreferences', async () => {

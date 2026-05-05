@@ -81,6 +81,9 @@
       }
     },
     "appearance": {
+      "language": {
+        "title": "Language"
+      },
       "colorTheme": {
         "title": "Color Theme"
       },

@@ -90,6 +90,7 @@ watch(() => preferences.schemaVersion, markDirty);
 
 const DEEP_WATCH_SECTIONS = [
   'theme',
+  'locale',
   'font',
   'icons',
   'appearance',

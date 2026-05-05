@@ -1,9 +1,14 @@
-import { buildMessages, SUPPORTED_LOCALES } from '@/boot/i18n';
+import { buildMessages, i18n, LOCALE_OPTIONS, SUPPORTED_LOCALES, setI18nLocale } from '@/boot/i18n';
 
 describe('buildMessages', () => {
   it('returns an object keyed by supported locales', () => {
     const result = buildMessages({});
     expect(result).toHaveProperty('en');
+  });
+
+  it('exposes Italian as a supported picker option', () => {
+    expect(SUPPORTED_LOCALES).toContain('it');
+    expect(LOCALE_OPTIONS).toContainEqual({ id: 'it', label: 'Italiano' });
   });
 
   it('skips paths that do not match the /locales/<locale>/ pattern', () => {
@@ -52,5 +57,26 @@ describe('buildMessages', () => {
     };
     const result = buildMessages(modules);
     expect((result as Record<string, unknown>)['zh-CN']).toEqual({ hello: '你好' });
+  });
+
+  it('handles Italian locale namespaces', () => {
+    const modules = {
+      '../locales/it/common.json': { hello: 'Ciao' },
+    };
+    const result = buildMessages(modules);
+    expect((result as Record<string, unknown>).it).toEqual({ hello: 'Ciao' });
+  });
+});
+
+describe('setI18nLocale', () => {
+  afterEach(() => {
+    setI18nLocale('en');
+  });
+
+  it('updates the vue-i18n global locale and document language', () => {
+    setI18nLocale('zh-CN');
+
+    expect(i18n.global.locale.value).toBe('zh-CN');
+    expect(document.documentElement.lang).toBe('zh-CN');
   });
 });

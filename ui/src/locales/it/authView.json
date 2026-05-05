@@ -1,0 +1,24 @@
+{
+  "authView": {
+    "loadingProviders": "Caricamento provider di autenticazione...",
+    "loadError": "Impossibile caricare i provider di autenticazione",
+    "filterPlaceholder": "Filtra per nome...",
+    "clearFilter": "Cancella",
+    "emptyFiltered": "Nessun provider corrisponde ai filtri",
+    "detailRefreshing": "Aggiornamento dettagli autenticazione...",
+    "detailLoadError": "Impossibile caricare gli ultimi dettagli di autenticazione",
+    "noConfig": "Nessuna proprieta di configurazione",
+    "columns": {
+      "provider": "Provider",
+      "type": "Tipo",
+      "status": "Stato"
+    },
+    "fields": {
+      "status": "Stato"
+    },
+    "badge": {
+      "basic": "Base",
+      "oidc": "OIDC"
+    }
+  }
+}
