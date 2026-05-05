@@ -1,0 +1,34 @@
+{
+  "loginView": {
+    "heading": "Entrar no Drydock",
+    "username": {
+      "label": "Usuário",
+      "placeholder": "Digite seu usuário"
+    },
+    "password": {
+      "label": "Senha",
+      "placeholder": "Digite sua senha"
+    },
+    "submit": {
+      "signIn": "Entrar",
+      "signingIn": "Entrando..."
+    },
+    "separator": "ou continuar com",
+    "rememberMe": "Lembrar de mim",
+    "noMethods": "Nenhum método de autenticação configurado.",
+    "errors": {
+      "loadFailed": "Falha ao carregar métodos de autenticação",
+      "invalidCredentials": "Usuário ou senha inválidos",
+      "oidcFailed": "Falha ao conectar a {name}",
+      "providerBasic": "Auth básica '{name}': {error}",
+      "providerOidc": "Provedor OIDC '{name}': {error}",
+      "providerNamed": "{type} '{name}': {error}",
+      "providerGeneric": "{provider}: {error}"
+    },
+    "connectionLost": {
+      "title": "Conexão perdida",
+      "body": "O servidor está inacessível. Aguardando voltar online...",
+      "reconnecting": "Reconectando"
+    }
+  }
+}

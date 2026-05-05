@@ -1,0 +1,141 @@
+{
+  "configView": {
+    "tabs": {
+      "general": "Geral",
+      "appearance": "Aparência",
+      "profile": "Perfil"
+    },
+    "general": {
+      "application": {
+        "title": "Aplicação",
+        "loadingServerInfo": "Carregando informações do servidor"
+      },
+      "store": {
+        "title": "Armazenamento"
+      },
+      "webhookApi": {
+        "title": "API Webhook",
+        "enabled": "Ativada",
+        "disabled": "Desativada",
+        "description": "Use estes endpoints para acionar ciclos de watch e atualizações via HTTP. Todas as requisições exigem um token Bearer no cabeçalho Authorization.",
+        "disabledMessage": "A API Webhook está desativada. Defina",
+        "disabledHint": "A API Webhook está desativada. Defina {envEnabled} e configure pelo menos um token ({envToken} ou {envTokens}) para ativá-la.",
+        "table": {
+          "endpoint": "Endpoint",
+          "description": "Descrição"
+        },
+        "example": "Exemplo",
+        "endpoints": {
+          "watchAll": "Acionar um ciclo de watch completo em todos os watchers",
+          "watchOne": "Executar watch de um contêiner específico por nome",
+          "updateOne": "Acionar uma atualização em um contêiner específico"
+        }
+      },
+      "network": {
+        "title": "Rede",
+        "internetlessMode": {
+          "label": "Modo sem Internet",
+          "description": "Bloqueia todas as requisições de saída (ícones de contêiner, fetches externos)"
+        }
+      },
+      "iconCache": {
+        "title": "Cache de ícones de contêiner",
+        "cachedIcons": {
+          "label": "Ícones em cache",
+          "description": "Ícones comuns são incluídos; outros ícones são salvos em disco no primeiro fetch"
+        },
+        "cleared": "{count} limpos",
+        "clearButton": "Limpar cache"
+      },
+      "diagnostics": {
+        "title": "Diagnósticos",
+        "debugDump": {
+          "label": "Dump diagnóstico de debug",
+          "description": "Baixe um snapshot JSON redigido do estado em runtime para troubleshooting",
+          "preparing": "Preparando...",
+          "download": "Baixar dump debug"
+        }
+      },
+      "fields": {
+        "version": "Versão",
+        "serverPort": "Porta do servidor",
+        "containerActions": "Ações de contêiner",
+        "webhook": "Webhook",
+        "deleteEnabled": "Exclusão ativada",
+        "trustProxy": "Trust Proxy",
+        "metricsAuth": "Auth de métricas",
+        "storePath": "Caminho do armazenamento",
+        "storeFile": "Arquivo do armazenamento",
+        "enabled": "Ativado",
+        "disabled": "Desativado",
+        "yes": "Sim",
+        "no": "Não"
+      },
+      "errors": {
+        "loadServerInfo": "Falha ao carregar informações do servidor",
+        "loadProfileData": "Falha ao carregar dados do perfil",
+        "updateNetworkSettings": "Falha ao atualizar configurações de rede",
+        "clearIconCache": "Falha ao limpar cache de ícones",
+        "downloadDebugDump": "Não foi possível baixar o dump debug",
+        "errorLabel": "Erro"
+      }
+    },
+    "appearance": {
+      "language": {
+        "title": "Idioma"
+      },
+      "colorTheme": {
+        "title": "Tema de cores"
+      },
+      "fontFamily": {
+        "title": "Família da fonte",
+        "defaultBadge": "padrão",
+        "preview": "Luís argüia à Júlia que brações, fé, chá, óxido, pôr, zângão"
+      },
+      "fontSize": {
+        "title": "Tamanho da fonte"
+      },
+      "iconLibrary": {
+        "title": "Biblioteca de ícones"
+      },
+      "iconSize": {
+        "title": "Tamanho dos ícones"
+      },
+      "borderRadius": {
+        "title": "Raio da borda"
+      }
+    },
+    "profile": {
+      "loading": "Carregando perfil",
+      "fields": {
+        "username": "Usuário",
+        "email": "Email",
+        "role": "Função",
+        "provider": "Provedor",
+        "lastLogin": "Último login",
+        "activeSessions": "Sessões ativas"
+      }
+    },
+    "logs": {
+      "loading": "Carregando logs...",
+      "emptyMessage": "Nenhuma entrada de log encontrada para os filtros atuais.",
+      "toolbar": {
+        "live": "Ao vivo",
+        "allLevels": "Todos os níveis",
+        "debug": "Debug",
+        "info": "Info",
+        "warn": "Aviso",
+        "error": "Erro",
+        "allComponents": "Todos os componentes",
+        "resetFilters": "Redefinir filtros"
+      },
+      "tail": {
+        "50": "Últimas 50",
+        "100": "Últimas 100",
+        "500": "Últimas 500",
+        "1000": "Últimas 1000"
+      },
+      "logLevelBadge": "Nível de log do servidor: {level}. Apenas mensagens nesse nível ou acima são capturadas."
+    }
+  }
+}

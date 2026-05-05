@@ -1,0 +1,55 @@
+{
+  "sharedComponents": {
+    "confirmDialog": {
+      "cancel": "Annuler",
+      "confirm": "Confirmer"
+    },
+    "copyableTag": {
+      "copied": "Copié !",
+      "clickToCopy": "Cliquer pour copier"
+    },
+    "dataCardGrid": {
+      "selectItem": "Sélectionner {name}"
+    },
+    "dataFilterBar": {
+      "filters": "Filtres",
+      "toggleFilters": "Afficher/masquer les filtres",
+      "viewMode": "Mode d'affichage",
+      "viewModeLabel": "Vue {label}"
+    },
+    "dataListAccordion": {
+      "toggleDetails": "Afficher/masquer les détails de {name}",
+      "selectItem": "Sélectionner {name}"
+    },
+    "dataTable": {
+      "actions": "Actions",
+      "resizeColumn": "Redimensionner la colonne"
+    },
+    "detailPanel": {
+      "openFullPage": "Ouvrir la vue pleine page",
+      "closePanel": "Fermer le panneau de détails",
+      "ariaLabel": "Panneau de détails"
+    },
+    "emptyState": {
+      "clearFilters": "Effacer tous les filtres"
+    },
+    "logViewer": {
+      "emptyMessage": "Aucune entrée de log trouvée.",
+      "loadingMessage": "Chargement des logs..."
+    },
+    "scanProgressBanner": {
+      "scanning": "Scan de {done}/{total} conteneurs..."
+    },
+    "scanProgressText": {
+      "scanning": "Scan {done}/{total}..."
+    },
+    "securityEmptyState": {
+      "noDataTitle": "Aucune donnée de vulnérabilité pour le moment",
+      "noDataBody": "Lancez un scan pour vérifier vos conteneurs contre les vulnérabilités connues",
+      "filteredTitle": "Aucune image ne correspond à vos filtres",
+      "clearFilters": "Effacer tous les filtres",
+      "setupGuide": "Guide de configuration",
+      "scanNow": "Scanner maintenant"
+    }
+  }
+}

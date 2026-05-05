@@ -1,0 +1,13 @@
+{
+  "common": {
+    "loading": "Carregando...",
+    "back": "Voltar",
+    "cancel": "Cancelar",
+    "save": "Salvar",
+    "delete": "Excluir",
+    "confirm": "Confirmar",
+    "close": "Fechar",
+    "retry": "Tentar novamente",
+    "unknown": "desconhecido"
+  }
+}

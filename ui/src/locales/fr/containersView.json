@@ -1,0 +1,28 @@
+{
+  "containersView": {
+    "error": {
+      "loadFailed": "Impossible de charger les conteneurs",
+      "recheckFailed": "Impossible de revérifier les conteneurs"
+    },
+    "toast": {
+      "updated": "Mis à jour : {name}",
+      "updateFailed": "Échec de la mise à jour : {name}",
+      "updateFailedWithReason": "Échec de la mise à jour : {name} - {reason}",
+      "cancelled": "Annulé : {name}",
+      "rolledBack": "Rollback effectué : {name}",
+      "rolledBackWithReason": "Rollback effectué : {name} - {reason}",
+      "updateAlreadyInProgress": "Une mise à jour est déjà en cours pour certains conteneurs de ce groupe",
+      "batchUpdated": "{count} conteneurs mis à jour dans {group}",
+      "batchUpdatedNoGroup": "{count} conteneurs mis à jour",
+      "batchPartial": "{succeeded} sur {total} conteneurs mis à jour dans {group} ; {failed} en échec",
+      "batchPartialNoGroup": "{succeeded} sur {total} conteneurs mis à jour ; {failed} en échec",
+      "batchFailed": "Impossible de mettre à jour {count} conteneurs dans {group}",
+      "batchFailedNoGroup": "Impossible de mettre à jour {count} conteneurs",
+      "unknownGroup": "groupe inconnu"
+    },
+    "registryError": {
+      "generic": "Erreur registry",
+      "detail": "Erreur registry : {error}"
+    }
+  }
+}

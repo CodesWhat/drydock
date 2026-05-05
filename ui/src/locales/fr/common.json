@@ -1,0 +1,13 @@
+{
+  "common": {
+    "loading": "Chargement...",
+    "back": "Retour",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "delete": "Supprimer",
+    "confirm": "Confirmer",
+    "close": "Fermer",
+    "retry": "Réessayer",
+    "unknown": "inconnu"
+  }
+}

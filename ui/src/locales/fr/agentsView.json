@@ -1,0 +1,90 @@
+{
+  "agentsView": {
+    "list": {
+      "loading": "Chargement des agents...",
+      "filterPlaceholder": "Filtrer par nom...",
+      "clearFilter": "Effacer",
+      "emptyFiltered": "Aucun agent ne correspond à vos filtres",
+      "toggleColumns": "Afficher/masquer les colonnes",
+      "columnPickerHeading": "Colonnes",
+      "loadError": "Impossible de charger les agents",
+      "status": {
+        "connected": "Connecté",
+        "disconnected": "Déconnecté"
+      },
+      "columns": {
+        "name": "Agent",
+        "status": "État",
+        "containers": "Conteneurs",
+        "docker": "Docker",
+        "os": "OS",
+        "version": "Version",
+        "lastSeen": "Dernière activité"
+      },
+      "card": {
+        "running": "en cours",
+        "stopped": "arrêtés"
+      }
+    },
+    "detail": {
+      "tabs": {
+        "overview": "Vue d'ensemble",
+        "logs": "Logs",
+        "config": "Config"
+      },
+      "overview": {
+        "resources": "Ressources",
+        "system": "Système",
+        "containers": "Conteneurs",
+        "containerTotal": "Total",
+        "containerRunning": "En cours",
+        "containerStopped": "Arrêtés",
+        "viewContainers": "Voir les conteneurs",
+        "automation": "Automatisation",
+        "watchers": "Watchers",
+        "triggers": "Triggers",
+        "none": "Aucun"
+      },
+      "logs": {
+        "allLevels": "Tous les niveaux",
+        "levelDebug": "Debug",
+        "levelInfo": "Info",
+        "levelWarn": "Avertissement",
+        "levelError": "Erreur",
+        "tail50": "50 dernières",
+        "tail100": "100 dernières",
+        "tail500": "500 dernières",
+        "tail1000": "1000 dernières",
+        "componentPlaceholder": "Filtrer par composant...",
+        "apply": "Appliquer",
+        "reset": "Réinitialiser",
+        "refresh": "Actualiser",
+        "emptyMessage": "Aucune entrée de log trouvée pour les filtres actuels.",
+        "lastFetched": "Dernière récupération : {time}",
+        "entries": "{count} entrées",
+        "statusLive": "Live",
+        "statusOffline": "Hors ligne"
+      },
+      "fields": {
+        "cpus": "CPU",
+        "memory": "Mémoire",
+        "images": "Images",
+        "uptime": "Temps de fonctionnement",
+        "docker": "Docker",
+        "os": "OS",
+        "architecture": "Architecture",
+        "agent": "Agent",
+        "host": "Hôte",
+        "agentVersion": "Version de l'agent",
+        "logLevel": "Niveau de log",
+        "pollInterval": "Intervalle de polling",
+        "dockerSocket": "Socket Docker",
+        "lastSeen": "Dernière activité",
+        "never": "jamais"
+      },
+      "listView": {
+        "details": "Détails"
+      }
+    }
+  }
+}
