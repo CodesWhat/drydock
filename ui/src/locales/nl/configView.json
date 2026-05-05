@@ -1,0 +1,141 @@
+{
+  "configView": {
+    "tabs": {
+      "general": "Algemeen",
+      "appearance": "Uiterlijk",
+      "profile": "Profiel"
+    },
+    "general": {
+      "application": {
+        "title": "Applicatie",
+        "loadingServerInfo": "Serverinformatie laden"
+      },
+      "store": {
+        "title": "Opslag"
+      },
+      "webhookApi": {
+        "title": "Webhook-API",
+        "enabled": "Ingeschakeld",
+        "disabled": "Uitgeschakeld",
+        "description": "Gebruik deze eindpunten om controlecycli en updates via HTTP te activeren. Voor alle aanvragen is een Bearer-token in de Authorization-header vereist.",
+        "disabledMessage": "Webhook-API is uitgeschakeld. Instellen",
+        "disabledHint": "Webhook-API is uitgeschakeld. Stel {envEnabled} in en configureer ten minste één token ({envToken} of {envTokens}) om dit in te schakelen.",
+        "table": {
+          "endpoint": "Eindpunt",
+          "description": "Beschrijving"
+        },
+        "example": "Voorbeeld",
+        "endpoints": {
+          "watchAll": "Start een volledige watch-cyclus voor alle watchers",
+          "watchOne": "Watch een specifieke container op naam",
+          "updateOne": "Activeer een update voor een specifieke container"
+        }
+      },
+      "network": {
+        "title": "Netwerk",
+        "internetlessMode": {
+          "label": "Internetloze modus",
+          "description": "Blokkeer alle uitgaande verzoeken (containerpictogrammen, externe ophaalacties)"
+        }
+      },
+      "iconCache": {
+        "title": "Cache van containerpictogram",
+        "cachedIcons": {
+          "label": "Gecachte pictogrammen",
+          "description": "Algemene pictogrammen zijn gebundeld; andere pictogrammen worden bij de eerste keer ophalen op schijf in de cache opgeslagen"
+        },
+        "cleared": "{count} gewist",
+        "clearButton": "Cache wissen"
+      },
+      "diagnostics": {
+        "title": "Diagnostiek",
+        "debugDump": {
+          "label": "Diagnostische foutopsporingsdump",
+          "description": "Download een geredigeerde JSON-momentopname van de runtimestatus voor probleemoplossing",
+          "preparing": "Voorbereiden...",
+          "download": "Download debug-dump"
+        }
+      },
+      "fields": {
+        "version": "Versie",
+        "serverPort": "Serverpoort",
+        "containerActions": "Containeracties",
+        "webhook": "Webhook",
+        "deleteEnabled": "Verwijderen ingeschakeld",
+        "trustProxy": "Vertrouwen proxy",
+        "metricsAuth": "Statistieken verificatie",
+        "storePath": "Opslagpad",
+        "storeFile": "Opslagbestand",
+        "enabled": "Ingeschakeld",
+        "disabled": "Uitgeschakeld",
+        "yes": "Ja",
+        "no": "Nee"
+      },
+      "errors": {
+        "loadServerInfo": "Kan serverinformatie niet laden",
+        "loadProfileData": "Kan profielgegevens niet laden",
+        "updateNetworkSettings": "Kan de netwerkinstellingen niet updaten",
+        "clearIconCache": "Kan de pictogramcache niet wissen",
+        "downloadDebugDump": "Kan debug-dump niet downloaden",
+        "errorLabel": "Fout"
+      }
+    },
+    "appearance": {
+      "language": {
+        "title": "Taal"
+      },
+      "colorTheme": {
+        "title": "Kleurthema"
+      },
+      "fontFamily": {
+        "title": "Lettertypefamilie",
+        "defaultBadge": "standaard",
+        "preview": "Filmquiz bracht knappe ex-yogi van de wijs"
+      },
+      "fontSize": {
+        "title": "Lettergrootte"
+      },
+      "iconLibrary": {
+        "title": "Pictogrambibliotheek"
+      },
+      "iconSize": {
+        "title": "Pictogramgrootte"
+      },
+      "borderRadius": {
+        "title": "Randradius"
+      }
+    },
+    "profile": {
+      "loading": "Profiel laden",
+      "fields": {
+        "username": "Gebruikersnaam",
+        "email": "E-mail",
+        "role": "Rol",
+        "provider": "Aanbieder",
+        "lastLogin": "Laatste login",
+        "activeSessions": "Actieve sessies"
+      }
+    },
+    "logs": {
+      "loading": "Logboeken laden...",
+      "emptyMessage": "Er zijn geen loggegevens gevonden voor de huidige filters.",
+      "toolbar": {
+        "live": "Leef",
+        "allLevels": "Alle niveaus",
+        "debug": "Foutopsporing",
+        "info": "Info",
+        "warn": "Waarschuw",
+        "error": "Fout",
+        "allComponents": "Alle componenten",
+        "resetFilters": "Filters opnieuw instellen"
+      },
+      "tail": {
+        "50": "Staart 50",
+        "100": "Staart 100",
+        "500": "Staart 500",
+        "1000": "Staart 1000"
+      },
+      "logLevelBadge": "Serverlogniveau: {level}. Alleen berichten op dit niveau of hoger worden vastgelegd."
+    }
+  }
+}

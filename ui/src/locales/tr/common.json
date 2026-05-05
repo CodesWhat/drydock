@@ -1,0 +1,13 @@
+{
+  "common": {
+    "loading": "Yükleniyor…",
+    "back": "Geri",
+    "cancel": "İptal",
+    "save": "Kaydet",
+    "delete": "Sil",
+    "confirm": "Onayla",
+    "close": "Kapat",
+    "retry": "Yeniden dene",
+    "unknown": "bilinmiyor"
+  }
+}

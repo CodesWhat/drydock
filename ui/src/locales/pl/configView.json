@@ -1,0 +1,141 @@
+{
+  "configView": {
+    "tabs": {
+      "general": "Ogólne",
+      "appearance": "Wygląd",
+      "profile": "Profil"
+    },
+    "general": {
+      "application": {
+        "title": "Aplikacja",
+        "loadingServerInfo": "Ładowanie informacji o serwerze"
+      },
+      "store": {
+        "title": "Magazyn danych"
+      },
+      "webhookApi": {
+        "title": "API webhooka",
+        "enabled": "Włączone",
+        "disabled": "Wyłączone",
+        "description": "Użyj tych punktów końcowych, aby wyzwalać cykle oglądania i aktualizacje za pośrednictwem protokołu HTTP. Wszystkie żądania wymagają tokenu okaziciela w nagłówku Authorization.",
+        "disabledMessage": "Interfejs API webhooka jest wyłączony. Zestaw",
+        "disabledHint": "Interfejs API webhooka jest wyłączony. Ustaw {envEnabled} i skonfiguruj co najmniej jeden token ({envToken} lub {envTokens}), aby go włączyć.",
+        "table": {
+          "endpoint": "Punkt końcowy",
+          "description": "Opis"
+        },
+        "example": "Przykład",
+        "endpoints": {
+          "watchAll": "Uruchom pełny cykl oglądania dla wszystkich obserwatorów",
+          "watchOne": "Oglądaj konkretny kontener według nazwy",
+          "updateOne": "Wyzwalaj aktualizację określonego kontenera"
+        }
+      },
+      "network": {
+        "title": "Sieć",
+        "internetlessMode": {
+          "label": "Tryb bez Internetu",
+          "description": "Blokuj wszystkie żądania wychodzące (ikony kontenerów, pobrania zewnętrzne)"
+        }
+      },
+      "iconCache": {
+        "title": "Pamięć podręczna ikon kontenerów",
+        "cachedIcons": {
+          "label": "Ikony w pamięci podręcznej",
+          "description": "Wspólne ikony są w zestawie; inne ikony są buforowane na dysku przy pierwszym pobraniu"
+        },
+        "cleared": "{count} wyczyszczono",
+        "clearButton": "Wyczyść pamięć podręczną"
+      },
+      "diagnostics": {
+        "title": "Diagnostyka",
+        "debugDump": {
+          "label": "Zrzut debugowania diagnostycznego",
+          "description": "Pobierz zredagowaną migawkę stanu środowiska wykonawczego w formacie JSON w celu rozwiązywania problemów",
+          "preparing": "Przygotowanie...",
+          "download": "Pobierz zrzut debugowania"
+        }
+      },
+      "fields": {
+        "version": "Wersja",
+        "serverPort": "Port serwera",
+        "containerActions": "Akcje kontenera",
+        "webhook": "Webhook",
+        "deleteEnabled": "Usuń włączone",
+        "trustProxy": "Zaufaj proxy",
+        "metricsAuth": "Autoryzacja metryk",
+        "storePath": "Ścieżka magazynu danych",
+        "storeFile": "Plik magazynu danych",
+        "enabled": "Włączone",
+        "disabled": "Wyłączone",
+        "yes": "Tak",
+        "no": "Nie"
+      },
+      "errors": {
+        "loadServerInfo": "Nie udało się załadować informacji o serwerze",
+        "loadProfileData": "Nie udało się załadować danych profilu",
+        "updateNetworkSettings": "Nie udało się zaktualizować ustawień sieciowych",
+        "clearIconCache": "Nie udało się wyczyścić pamięci podręcznej ikon",
+        "downloadDebugDump": "Nie można pobrać zrzutu debugowania",
+        "errorLabel": "Błąd"
+      }
+    },
+    "appearance": {
+      "language": {
+        "title": "Język"
+      },
+      "colorTheme": {
+        "title": "Motyw kolorów"
+      },
+      "fontFamily": {
+        "title": "Rodzina czcionek",
+        "defaultBadge": "domyślny",
+        "preview": "Pchnąć w tę łódź jeża lub ośm skrzyń fig"
+      },
+      "fontSize": {
+        "title": "Rozmiar czcionki"
+      },
+      "iconLibrary": {
+        "title": "Biblioteka ikon"
+      },
+      "iconSize": {
+        "title": "Rozmiar ikon"
+      },
+      "borderRadius": {
+        "title": "Zaokrąglenie rogów"
+      }
+    },
+    "profile": {
+      "loading": "Ładowanie profilu",
+      "fields": {
+        "username": "Nazwa użytkownika",
+        "email": "E-mail",
+        "role": "Rola",
+        "provider": "Dostawca",
+        "lastLogin": "Ostatnie logowanie",
+        "activeSessions": "Aktywne sesje"
+      }
+    },
+    "logs": {
+      "loading": "Ładowanie dzienników...",
+      "emptyMessage": "Nie znaleziono wpisów dziennika dla bieżących filtrów.",
+      "toolbar": {
+        "live": "Na żywo",
+        "allLevels": "Wszystkie poziomy",
+        "debug": "Debuguj",
+        "info": "Informacje",
+        "warn": "Ostrzegaj",
+        "error": "Błąd",
+        "allComponents": "Wszystkie komponenty",
+        "resetFilters": "Zresetuj filtry"
+      },
+      "tail": {
+        "50": "Ogon 50",
+        "100": "Ogon 100",
+        "500": "Ogon 500",
+        "1000": "Ogon 1000"
+      },
+      "logLevelBadge": "Poziom dziennika serwera: {level}. Przechwytywane są tylko wiadomości na tym poziomie lub wyższym."
+    }
+  }
+}

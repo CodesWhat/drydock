@@ -1,0 +1,24 @@
+{
+  "authView": {
+    "loadingProviders": "Kimlik doğrulama sağlayıcıları yükleniyor...",
+    "loadError": "Kimlik doğrulama sağlayıcıları yüklenemedi",
+    "filterPlaceholder": "Ada göre filtrele...",
+    "clearFilter": "Temizle",
+    "emptyFiltered": "Filtrelerinizle eşleşen sağlayıcı yok",
+    "detailRefreshing": "Kimlik doğrulama ayrıntıları yenileniyor...",
+    "detailLoadError": "En son kimlik doğrulama ayrıntıları yüklenemiyor",
+    "noConfig": "Yapılandırma özelliği yok",
+    "columns": {
+      "provider": "sağlayıcı",
+      "type": "Tür",
+      "status": "Durum"
+    },
+    "fields": {
+      "status": "Durum"
+    },
+    "badge": {
+      "basic": "Temel",
+      "oidc": "OIDC"
+    }
+  }
+}

@@ -1,0 +1,271 @@
+{
+  "auditView": {
+    "loadingAuditLog": "Auditlogboek laden...",
+    "loadError": "Kan het auditlogboek niet laden",
+    "filterPlaceholder": "Filter op doel of gebeurtenis...",
+    "containerFilterPlaceholder": "Containernaam...",
+    "allEvents": "Alle evenementen",
+    "eventsSelected": "{count} gebeurtenissen geselecteerd",
+    "clear": "Wissen",
+    "fromDateLabel": "Vanaf datum",
+    "toDateLabel": "Tot op heden",
+    "pagination": {
+      "summary": "Pagina {page} van {totalPages} ({total} vermeldingen)",
+      "previousPage": "Vorige pagina",
+      "nextPage": "Volgende pagina"
+    },
+    "emptyFiltered": "Er zijn geen auditgegevens die overeenkomen met uw filters",
+    "columns": {
+      "time": "Tijd",
+      "event": "Evenement",
+      "target": "Doel",
+      "status": "Status",
+      "details": "Details"
+    },
+    "card": {
+      "time": "Tijd",
+      "version": "Versie"
+    },
+    "detail": {
+      "timestamp": "Tijdstempel",
+      "event": "Evenement",
+      "image": "Image",
+      "fromVersion": "Van versie",
+      "toVersion": "Naar versie",
+      "trigger": "Trigger",
+      "details": "Details"
+    }
+  },
+  "notificationsView": {
+    "loadingRules": "Meldingsregels laden...",
+    "loadError": "Kan meldingsregels niet laden",
+    "filterPlaceholder": "Filter op naam, beschrijving of trigger...",
+    "clear": "Wissen",
+    "allNotificationTriggers": "Alle meldingen worden geactiveerd",
+    "noTriggers": "Geen triggers",
+    "columns": {
+      "on": "Aan",
+      "rule": "Regel",
+      "triggers": "Triggers"
+    },
+    "toggleAriaLabel": "Schakel de meldingsregel in",
+    "emptyFiltered": "Er zijn geen meldingsregels die overeenkomen met uw filters",
+    "detail": {
+      "ruleStatusLabel": "Regelstatus",
+      "ruleStatusAriaLabel": "Regelstatus",
+      "enabledText": "Ingeschakeld: er kunnen meldingen worden geactiveerd voor deze gebeurtenis.",
+      "disabledText": "Uitgeschakeld: meldingen voor deze gebeurtenis worden onderdrukt.",
+      "assignedTriggersLabel": "Toegewezen triggers",
+      "noTriggersConfigured": "Geen triggers geconfigureerd. Voeg triggers toe aan de",
+      "triggersPageLink": "Triggers-pagina",
+      "helpTextImplicitAll": "Laat dit leeg om deze gebeurtenis naar alle meldingstriggers te sturen. Als u een trigger selecteert, wordt deze regel omgezet in een toelatingslijst.",
+      "helpTextExplicit": "Alleen geselecteerde triggers ontvangen deze gebeurtenis. Laat het leeg om deze gebeurtenis voor alle triggers te onderdrukken.",
+      "saving": "Opslaan...",
+      "saveChanges": "Wijzigingen opslaan",
+      "reset": "Opnieuw instellen",
+      "enabled": "ingeschakeld",
+      "disabled": "uitgeschakeld"
+    }
+  },
+  "securityView": {
+    "loadingVulnerabilityData": "Kwetsbaarheidsgegevens laden...",
+    "scanNow": "Nu scannen",
+    "scanning": "Scannen...",
+    "scanAllAriaLabel": "Scan alle containers",
+    "scanAllContainers": "Scan alle containers op kwetsbaarheden",
+    "checkingScanner": "Beschikbaarheid van scanners controleren",
+    "runtimeUnavailable": "Runtimecontrole niet beschikbaar; Er kan nog steeds worden geprobeerd te scannen",
+    "filters": {
+      "severity": "Ernst",
+      "severityCritical": "Kritisch",
+      "severityHigh": "Hoog",
+      "severityMedium": "Middelmatig",
+      "severityLow": "Laag",
+      "fixAvailable": "Oplossing beschikbaar",
+      "fixYes": "Ja",
+      "fixNo": "Nee",
+      "clearAll": "Alles wissen"
+    },
+    "columns": {
+      "image": "Image",
+      "critical": "Kritisch",
+      "high": "Hoog",
+      "medium": "Middelmatig",
+      "low": "Laag",
+      "fixable": "Repareerbaar",
+      "total": "Totaal"
+    },
+    "card": {
+      "vulnerabilities": "kwetsbaarheden",
+      "vsUpdate": "versus bijwerken",
+      "fixable": "repareerbaar",
+      "noFixesAvailable": "Geen oplossingen beschikbaar",
+      "total": "totaal"
+    },
+    "badge": {
+      "critical": "Kritisch",
+      "high": "Hoog",
+      "medium": "Middelmatig",
+      "low": "Laag"
+    },
+    "update": "Bijwerken",
+    "viewInContainers": "Bekijken in containers",
+    "viewAllInContainers": "Bekijk alles in Containers",
+    "export": {
+      "label": "Exporteren",
+      "downloadReport": "Rapport downloaden"
+    },
+    "sbom": {
+      "label": "SBOM",
+      "loading": "SBOM-document laden...",
+      "loadingButton": "Laden...",
+      "refresh": "Vernieuwen",
+      "hide": "Verbergen",
+      "view": "Bekijken",
+      "download": "Downloaden",
+      "format": "formaat:",
+      "components": "componenten:",
+      "generated": "gegenereerd:"
+    },
+    "vuln": {
+      "noFix": "Geen oplossing",
+      "target": "Doel:"
+    },
+    "chooser": {
+      "title": "Selecteer de container om bij te werken",
+      "cancel": "Annuleren"
+    }
+  },
+  "registriesView": {
+    "loadingRegistries": "Registers laden...",
+    "loadError": "Kan registers niet laden",
+    "filterPlaceholder": "Filter op naam of type...",
+    "clear": "Wissen",
+    "emptyFiltered": "Er zijn geen registers die overeenkomen met uw filters",
+    "columns": {
+      "registry": "Register",
+      "type": "Typ",
+      "status": "Status",
+      "url": "URL"
+    },
+    "badge": {
+      "private": "Privé",
+      "public": "Openbaar"
+    },
+    "card": {
+      "auth": "Authenticatie",
+      "status": "Status"
+    },
+    "detail": {
+      "refreshing": "Registergegevens vernieuwen...",
+      "status": "Status",
+      "authentication": "Authenticatie",
+      "url": "URL"
+    }
+  },
+  "serversView": {
+    "loadingServerData": "Servergegevens laden...",
+    "loadError": "Kan servergegevens niet laden",
+    "filterPlaceholder": "Filter op naam of adres...",
+    "clear": "Wissen",
+    "emptyFiltered": "Er zijn geen hosts die overeenkomen met uw filters",
+    "justNow": "Zojuist",
+    "never": "Nooit",
+    "columns": {
+      "host": "Gastheer",
+      "address": "Adres",
+      "status": "Status",
+      "containers": "Containers",
+      "lastSeen": "Laatst gezien"
+    },
+    "card": {
+      "containers": "Containers",
+      "running": "Actief",
+      "images": "Images",
+      "lastSeen": "Laatst gezien"
+    },
+    "list": {
+      "containers": "containers"
+    },
+    "detail": {
+      "containers": "Containers",
+      "running": "rennen",
+      "stopped": "gestopt",
+      "images": "Images",
+      "lastSeen": "Laatst gezien",
+      "refresh": "Vernieuwen"
+    }
+  },
+  "triggersView": {
+    "loadingTriggers": "Triggers laden...",
+    "loadError": "Kan triggers niet laden",
+    "filterPlaceholder": "Filter op naam...",
+    "clear": "Wissen",
+    "emptyFiltered": "Er zijn geen triggers die overeenkomen met uw filters",
+    "columns": {
+      "trigger": "Trigger",
+      "type": "Typ",
+      "status": "Status"
+    },
+    "status": {
+      "active": "Actief",
+      "inactive": "Inactief"
+    },
+    "test": {
+      "testing": "Testen...",
+      "sent": "Verzonden!",
+      "failed": "Mislukt",
+      "test": "Testen",
+      "testTrigger": "Testtrigger",
+      "runTest": "Test uitvoeren",
+      "testPassed": "Test geslaagd",
+      "testFailed": "Test mislukt",
+      "defaultError": "Triggertest mislukt"
+    },
+    "detail": {
+      "status": "Status",
+      "refreshing": "Triggerdetails vernieuwen...",
+      "noConfig": "Geen configuratie-eigenschappen"
+    },
+    "list": {
+      "status": "Status"
+    }
+  },
+  "watchersView": {
+    "loadingWatchers": "Kijkers laden...",
+    "loadError": "Kan kijkers niet laden",
+    "filterPlaceholder": "Filter op naam...",
+    "clear": "Wissen",
+    "emptyFiltered": "Er zijn geen kijkers die overeenkomen met uw filters",
+    "columns": {
+      "watcher": "Waarnemer",
+      "status": "Status",
+      "containers": "Containers",
+      "schedule": "Schema",
+      "nextRun": "Volgende uitvoering",
+      "lastRun": "Laatste run"
+    },
+    "status": {
+      "watching": "Kijken",
+      "paused": "Gepauzeerd"
+    },
+    "card": {
+      "containers": "Containers",
+      "nextRun": "Volgende run",
+      "lastRun": "Laatste run",
+      "containersWatched": "{count} containers bekeken"
+    },
+    "badge": {
+      "maint": "Onderhoud"
+    },
+    "detail": {
+      "cron": "Cron",
+      "lastRun": "Laatste run",
+      "containersWatched": "Containers in de gaten gehouden",
+      "schedule": "Schema",
+      "nextRun": "Volgende uitvoering",
+      "viewContainers": "Bekijk containers",
+      "refreshing": "Verfrissende details van de kijker..."
+    }
+  }
+}

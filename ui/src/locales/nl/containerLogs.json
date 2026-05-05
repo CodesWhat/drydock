@@ -1,0 +1,9 @@
+{
+  "containerLogs": {
+    "backTooltip": "Terug naar containers",
+    "title": "Containerlogboeken",
+    "loading": "Container laden…",
+    "notFound": "Container \"{name}\" niet gevonden",
+    "loadFailed": "Kan containerinformatie niet laden"
+  }
+}

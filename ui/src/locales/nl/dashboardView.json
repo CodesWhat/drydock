@@ -1,0 +1,94 @@
+{
+  "dashboardView": {
+    "loading": "Dashboard laden...",
+    "loadFailed": "Kan dashboard niet laden",
+    "dragToReorder": "Sleep om de volgorde te wijzigen",
+    "viewAll": "Bekijk alles →",
+    "editToggle": {
+      "showWidgetPanel": "Widgetpaneel weergeven",
+      "doneCustomizing": "Klaar met aanpassen",
+      "customize": "Dashboard aanpassen"
+    },
+    "widgetPanel": {
+      "title": "Widgets",
+      "closePanel": "Sluit paneel",
+      "resetToDefault": "Terugzetten naar standaard"
+    },
+    "confirm": {
+      "updateContainer": {
+        "header": "Container bijwerken",
+        "message": "{name} nu bijwerken? Hiermee wordt de laatst gevonden image toegepast.",
+        "accept": "Bijwerken"
+      },
+      "updateAll": {
+        "header": "Update alle containers",
+        "message": "{count} containers worden bijgewerkt. Doorgaan?",
+        "accept": "Alles bijwerken"
+      }
+    },
+    "toast": {
+      "updated": "Bijgewerkt: {name}",
+      "updateFailed": "Update mislukt: {name}",
+      "updateFailedWithReason": "Update mislukt: {name} — {reason}",
+      "cancelled": "Geannuleerd: {name}",
+      "rolledBack": "Teruggedraaid: {name}",
+      "rolledBackWithReason": "Teruggedraaid: {name} — {reason}",
+      "updateError": "Kan {name} niet updaten",
+      "updateAllError": "Kan niet alle containers updaten"
+    },
+    "recentUpdates": {
+      "title": "Updates beschikbaar",
+      "updateAll": "Alles bijwerken",
+      "noUpdates": "Geen updates beschikbaar",
+      "releaseNotes": "Release-opmerkingen",
+      "securityBlocked": "Beveiliging geblokkeerd",
+      "updateContainer": "Container bijwerken",
+      "compactSingle": "{count}-update beschikbaar",
+      "compactPlural": "{count}-updates beschikbaar",
+      "status": {
+        "queued": "In de wachtrij",
+        "updating": "Updaten"
+      },
+      "columns": {
+        "container": "Houder",
+        "version": "Versie",
+        "type": "Typ",
+        "actions": "Acties"
+      }
+    },
+    "hostStatus": {
+      "title": "Hoststatus",
+      "connected": "Verbonden",
+      "disconnected": "Verbroken",
+      "containerCount": "{running}/{total}-containers"
+    },
+    "resourceUsage": {
+      "title": "Gebruik van hulpbronnen",
+      "totalUsage": "Totaal gebruik ({watched} bekeken)",
+      "cpu": "Gem. CPU",
+      "memory": "Geheugen",
+      "topCpu": "Top-CPU",
+      "topMemory": "Topgeheugen",
+      "noCpuData": "Geen live CPU-gegevens",
+      "noMemoryData": "Geen live geheugengegevens"
+    },
+    "securityOverview": {
+      "title": "Beveiligingsoverzicht",
+      "images": "images",
+      "clean": "Schoon",
+      "issues": "Problemen",
+      "notScanned": "Niet gescand",
+      "severityBreakdown": "Ernstverdeling",
+      "critical": "{count} Kritiek",
+      "high": "{count} Hoog",
+      "medium": "{count} Gemiddeld",
+      "low": "{count} Laag",
+      "topVulnerabilities": "Belangrijkste kwetsbaarheden",
+      "noVulnerabilities": "Er zijn geen kwetsbaarheden gemeld"
+    },
+    "updateBreakdown": {
+      "title": "Uitsplitsing bijwerken",
+      "noUpdates": "Geen updates om te categoriseren"
+    }
+  }
+}

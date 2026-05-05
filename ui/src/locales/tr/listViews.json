@@ -1,0 +1,271 @@
+{
+  "auditView": {
+    "loadingAuditLog": "Denetim günlüğü yükleniyor...",
+    "loadError": "Denetim günlüğü yüklenemedi",
+    "filterPlaceholder": "Hedefe veya etkinliğe göre filtreleyin...",
+    "containerFilterPlaceholder": "Konteyner adı...",
+    "allEvents": "Tüm etkinlikler",
+    "eventsSelected": "{count} etkinlikleri seçildi",
+    "clear": "Temizle",
+    "fromDateLabel": "Tarihten itibaren",
+    "toDateLabel": "bugüne kadar",
+    "pagination": {
+      "summary": "Sayfa {page} / {totalPages} ({total} giriş)",
+      "previousPage": "Önceki sayfa",
+      "nextPage": "Sonraki sayfa"
+    },
+    "emptyFiltered": "Filtrelerinizle eşleşen denetim girişi yok",
+    "columns": {
+      "time": "Zaman",
+      "event": "Etkinlik",
+      "target": "Hedef",
+      "status": "Durum",
+      "details": "Ayrıntılar"
+    },
+    "card": {
+      "time": "Zaman",
+      "version": "Sürüm"
+    },
+    "detail": {
+      "timestamp": "Zaman damgası",
+      "event": "Etkinlik",
+      "image": "İmaj",
+      "fromVersion": "Sürümden",
+      "toVersion": "Sürüme",
+      "trigger": "Tetikleyici",
+      "details": "Ayrıntılar"
+    }
+  },
+  "notificationsView": {
+    "loadingRules": "Bildirim kuralları yükleniyor...",
+    "loadError": "Bildirim kuralları yüklenemedi",
+    "filterPlaceholder": "Ada, açıklamaya veya tetikleyiciye göre filtreleyin...",
+    "clear": "Temizle",
+    "allNotificationTriggers": "Tüm bildirim tetikleyicileri",
+    "noTriggers": "Tetikleyici yok",
+    "columns": {
+      "on": "Açık",
+      "rule": "Kural",
+      "triggers": "Tetikleyiciler"
+    },
+    "toggleAriaLabel": "Bildirim kuralını değiştir",
+    "emptyFiltered": "Filtrelerinizle eşleşen bildirim kuralı yok",
+    "detail": {
+      "ruleStatusLabel": "Kural durumu",
+      "ruleStatusAriaLabel": "Kural durumu",
+      "enabledText": "Etkin: Bu etkinlik için bildirimler tetiklenebilir.",
+      "disabledText": "Devre Dışı: Bu etkinlik için bildirimler bastırılır.",
+      "assignedTriggersLabel": "Atanan Tetikleyiciler",
+      "noTriggersConfigured": "Hiçbir tetikleyici yapılandırılmadı. Tetikleyicileri ekleyin",
+      "triggersPageLink": "Tetikleyiciler sayfası",
+      "helpTextImplicitAll": "Bu etkinliği tüm bildirim tetikleyicilerine göndermek için bunu boş bırakın. Herhangi bir tetikleyicinin seçilmesi bu kuralı izin verilenler listesine dönüştürür.",
+      "helpTextExplicit": "Bu etkinliği yalnızca seçilen tetikleyiciler alacaktır. Bu etkinliği tüm tetikleyiciler için bastırmak amacıyla alanı boş bırakın.",
+      "saving": "Kaydediliyor...",
+      "saveChanges": "Değişiklikleri kaydet",
+      "reset": "Sıfırla",
+      "enabled": "etkin",
+      "disabled": "devre dışı"
+    }
+  },
+  "securityView": {
+    "loadingVulnerabilityData": "Güvenlik açığı verileri yükleniyor...",
+    "scanNow": "Şimdi tara",
+    "scanning": "Taranıyor...",
+    "scanAllAriaLabel": "Tüm kapsayıcıları tara",
+    "scanAllContainers": "Tüm kapsayıcıları güvenlik açıklarına karşı tarayın",
+    "checkingScanner": "Tarayıcı kullanılabilirliğini kontrol etme",
+    "runtimeUnavailable": "Çalışma zamanı kontrolü mevcut değil; tarama hâlâ denenebilir",
+    "filters": {
+      "severity": "Şiddet",
+      "severityCritical": "Kritik",
+      "severityHigh": "Yüksek",
+      "severityMedium": "Orta",
+      "severityLow": "Düşük",
+      "fixAvailable": "Düzeltme Mevcut",
+      "fixYes": "Evet",
+      "fixNo": "Hayır",
+      "clearAll": "Tümünü temizle"
+    },
+    "columns": {
+      "image": "İmaj",
+      "critical": "Kritik",
+      "high": "Yüksek",
+      "medium": "Orta",
+      "low": "Düşük",
+      "fixable": "Tamir edilebilir",
+      "total": "Toplam"
+    },
+    "card": {
+      "vulnerabilities": "güvenlik açıkları",
+      "vsUpdate": "vs güncelleme",
+      "fixable": "tamir edilebilir",
+      "noFixesAvailable": "Hiçbir düzeltme mevcut değil",
+      "total": "toplam"
+    },
+    "badge": {
+      "critical": "Kritik",
+      "high": "Yüksek",
+      "medium": "Orta",
+      "low": "Düşük"
+    },
+    "update": "Güncelle",
+    "viewInContainers": "Kapsayıcılarda Görüntüle",
+    "viewAllInContainers": "Tümünü Container'larda görüntüle",
+    "export": {
+      "label": "İhracat",
+      "downloadReport": "Raporu İndir"
+    },
+    "sbom": {
+      "label": "SBOM",
+      "loading": "SBOM belgesi yükleniyor...",
+      "loadingButton": "Yükleniyor...",
+      "refresh": "Yenile",
+      "hide": "Gizle",
+      "view": "Görüntüle",
+      "download": "İndir",
+      "format": "format:",
+      "components": "bileşenler:",
+      "generated": "oluşturulan:"
+    },
+    "vuln": {
+      "noFix": "Düzeltme yok",
+      "target": "Hedef:"
+    },
+    "chooser": {
+      "title": "Güncellenecek kapsayıcıyı seçin",
+      "cancel": "İptal"
+    }
+  },
+  "registriesView": {
+    "loadingRegistries": "Kayıtlar yükleniyor...",
+    "loadError": "Kayıtlar yüklenemedi",
+    "filterPlaceholder": "Ada veya türe göre filtreleyin...",
+    "clear": "Temizle",
+    "emptyFiltered": "Filtrelerinizle eşleşen kayıt yok",
+    "columns": {
+      "registry": "Kayıt defteri",
+      "type": "Tür",
+      "status": "Durum",
+      "url": "URL'si"
+    },
+    "badge": {
+      "private": "Özel",
+      "public": "halka açık"
+    },
+    "card": {
+      "auth": "Kimlik doğrulama",
+      "status": "Durum"
+    },
+    "detail": {
+      "refreshing": "Kayıt defteri ayrıntıları yenileniyor...",
+      "status": "Durum",
+      "authentication": "Kimlik doğrulama",
+      "url": "URL'si"
+    }
+  },
+  "serversView": {
+    "loadingServerData": "Sunucu verileri yükleniyor...",
+    "loadError": "Sunucu verileri yüklenemedi",
+    "filterPlaceholder": "Ada veya adrese göre filtrele...",
+    "clear": "Temizle",
+    "emptyFiltered": "Filtrelerinizle eşleşen ana makine yok",
+    "justNow": "Az önce",
+    "never": "Asla",
+    "columns": {
+      "host": "Sunucu",
+      "address": "Adres",
+      "status": "Durum",
+      "containers": "Konteynerler",
+      "lastSeen": "Son Görülme"
+    },
+    "card": {
+      "containers": "Konteynerler",
+      "running": "Çalışıyor",
+      "images": "Görseller",
+      "lastSeen": "Son görülme"
+    },
+    "list": {
+      "containers": "konteynerler"
+    },
+    "detail": {
+      "containers": "Konteynerler",
+      "running": "koşu",
+      "stopped": "durduruldu",
+      "images": "Görseller",
+      "lastSeen": "Son Görülme",
+      "refresh": "Yenile"
+    }
+  },
+  "triggersView": {
+    "loadingTriggers": "Tetikleyiciler yükleniyor...",
+    "loadError": "Tetikleyiciler yüklenemedi",
+    "filterPlaceholder": "Ada göre filtrele...",
+    "clear": "Temizle",
+    "emptyFiltered": "Filtrelerinizle eşleşen tetikleyici yok",
+    "columns": {
+      "trigger": "Tetikleyici",
+      "type": "Tür",
+      "status": "Durum"
+    },
+    "status": {
+      "active": "Aktif",
+      "inactive": "Etkin değil"
+    },
+    "test": {
+      "testing": "Test ediliyor...",
+      "sent": "Gönderildi!",
+      "failed": "Başarısız",
+      "test": "Test et",
+      "testTrigger": "Test Tetikleyicisi",
+      "runTest": "Testi çalıştır",
+      "testPassed": "Test geçti",
+      "testFailed": "Test başarısız oldu",
+      "defaultError": "Tetikleme testi başarısız oldu"
+    },
+    "detail": {
+      "status": "Durum",
+      "refreshing": "Tetikleyici ayrıntıları yenileniyor...",
+      "noConfig": "Yapılandırma özelliği yok"
+    },
+    "list": {
+      "status": "Durum"
+    }
+  },
+  "watchersView": {
+    "loadingWatchers": "İzleyiciler yükleniyor...",
+    "loadError": "İzleyiciler yüklenemedi",
+    "filterPlaceholder": "Ada göre filtrele...",
+    "clear": "Temizle",
+    "emptyFiltered": "Filtrelerinizle eşleşen izleyici yok",
+    "columns": {
+      "watcher": "gözlemci",
+      "status": "Durum",
+      "containers": "Konteynerler",
+      "schedule": "Program",
+      "nextRun": "Sonraki Çalıştırma",
+      "lastRun": "Son Çalıştırma"
+    },
+    "status": {
+      "watching": "izliyorum",
+      "paused": "Duraklatıldı"
+    },
+    "card": {
+      "containers": "Konteynerler",
+      "nextRun": "Sonraki çalıştırma",
+      "lastRun": "Son çalıştırma",
+      "containersWatched": "{count} kapsayıcıları izlendi"
+    },
+    "badge": {
+      "maint": "Bakım"
+    },
+    "detail": {
+      "cron": "Cron",
+      "lastRun": "Son Çalıştırma",
+      "containersWatched": "İzlenen Konteynerler",
+      "schedule": "Program",
+      "nextRun": "Sonraki Çalıştırma",
+      "viewContainers": "Kapsayıcıları görüntüle",
+      "refreshing": "İzleyici ayrıntıları yenileniyor..."
+    }
+  }
+}

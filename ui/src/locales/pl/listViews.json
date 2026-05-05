@@ -1,0 +1,271 @@
+{
+  "auditView": {
+    "loadingAuditLog": "Ładowanie dziennika kontrolnego...",
+    "loadError": "Nie udało się załadować dziennika kontroli",
+    "filterPlaceholder": "Filtruj według celu lub zdarzenia...",
+    "containerFilterPlaceholder": "Nazwa kontenera...",
+    "allEvents": "Wszystkie wydarzenia",
+    "eventsSelected": "Wybrano zdarzenia {count}",
+    "clear": "Wyczyść",
+    "fromDateLabel": "Od daty",
+    "toDateLabel": "Do tej pory",
+    "pagination": {
+      "summary": "Strona {page} z {totalPages} (wpisy {total})",
+      "previousPage": "Poprzednia strona",
+      "nextPage": "Następna strona"
+    },
+    "emptyFiltered": "Żadne wpisy audytu nie pasują do wybranych filtrów",
+    "columns": {
+      "time": "Czas",
+      "event": "Wydarzenie",
+      "target": "Cel",
+      "status": "Stan",
+      "details": "Szczegóły"
+    },
+    "card": {
+      "time": "Czas",
+      "version": "Wersja"
+    },
+    "detail": {
+      "timestamp": "Znacznik czasu",
+      "event": "Wydarzenie",
+      "image": "Obraz",
+      "fromVersion": "Z wersji",
+      "toVersion": "Do wersji",
+      "trigger": "Wyzwalacz",
+      "details": "Szczegóły"
+    }
+  },
+  "notificationsView": {
+    "loadingRules": "Ładowanie reguł powiadomień...",
+    "loadError": "Nie udało się załadować reguł powiadomień",
+    "filterPlaceholder": "Filtruj według nazwy, opisu lub wyzwalacza...",
+    "clear": "Wyczyść",
+    "allNotificationTriggers": "Wszystkie wyzwalacze powiadomień",
+    "noTriggers": "Żadnych wyzwalaczy",
+    "columns": {
+      "on": "Włączone",
+      "rule": "Reguła",
+      "triggers": "Wyzwalacze"
+    },
+    "toggleAriaLabel": "Przełącz regułę powiadamiania",
+    "emptyFiltered": "Żadne reguły powiadomień nie pasują do Twoich filtrów",
+    "detail": {
+      "ruleStatusLabel": "Stan reguły",
+      "ruleStatusAriaLabel": "Stan reguły",
+      "enabledText": "Włączone: powiadomienia mogą być uruchamiane w przypadku tego zdarzenia.",
+      "disabledText": "Wyłączone: powiadomienia dla tego zdarzenia są pomijane.",
+      "assignedTriggersLabel": "Przypisane wyzwalacze",
+      "noTriggersConfigured": "Nie skonfigurowano żadnych wyzwalaczy. Dodaj wyzwalacze na",
+      "triggersPageLink": "Strona wyzwalaczy",
+      "helpTextImplicitAll": "Pozostaw to pole puste, aby wysłać to zdarzenie do wszystkich wyzwalaczy powiadomień. Wybranie dowolnego wyzwalacza zamienia tę regułę w listę dozwolonych.",
+      "helpTextExplicit": "Tylko wybrane wyzwalacze otrzymają to zdarzenie. Pozostaw to pole puste, aby pominąć to zdarzenie dla wszystkich wyzwalaczy.",
+      "saving": "Zapisywanie...",
+      "saveChanges": "Zapisz zmiany",
+      "reset": "Resetuj",
+      "enabled": "włączone",
+      "disabled": "wyłączone"
+    }
+  },
+  "securityView": {
+    "loadingVulnerabilityData": "Ładowanie danych o lukach w zabezpieczeniach...",
+    "scanNow": "Skanuj teraz",
+    "scanning": "Skanowanie...",
+    "scanAllAriaLabel": "Zeskanuj wszystkie kontenery",
+    "scanAllContainers": "Przeskanuj wszystkie kontenery pod kątem luk w zabezpieczeniach",
+    "checkingScanner": "Sprawdzanie dostępności skanera",
+    "runtimeUnavailable": "Kontrola czasu wykonania niedostępna; nadal można podjąć próbę skanowania",
+    "filters": {
+      "severity": "Dotkliwość",
+      "severityCritical": "Krytyczny",
+      "severityHigh": "Wysoka",
+      "severityMedium": "Średni",
+      "severityLow": "Niski",
+      "fixAvailable": "Poprawka dostępna",
+      "fixYes": "Tak",
+      "fixNo": "Nie",
+      "clearAll": "Wyczyść wszystko"
+    },
+    "columns": {
+      "image": "Obraz",
+      "critical": "Krytyczny",
+      "high": "Wysoka",
+      "medium": "Średni",
+      "low": "Niski",
+      "fixable": "Możliwość naprawy",
+      "total": "Razem"
+    },
+    "card": {
+      "vulnerabilities": "luki w zabezpieczeniach",
+      "vsUpdate": "vs aktualizacja",
+      "fixable": "naprawialne",
+      "noFixesAvailable": "Brak dostępnych poprawek",
+      "total": "łącznie"
+    },
+    "badge": {
+      "critical": "Krytyczny",
+      "high": "Wysoka",
+      "medium": "Średni",
+      "low": "Niski"
+    },
+    "update": "Zaktualizuj",
+    "viewInContainers": "Zobacz w kontenerach",
+    "viewAllInContainers": "Zobacz wszystko w Kontenery",
+    "export": {
+      "label": "Eksportuj",
+      "downloadReport": "Pobierz raport"
+    },
+    "sbom": {
+      "label": "SBOM",
+      "loading": "Ładowanie dokumentu SBOM...",
+      "loadingButton": "Ładowanie...",
+      "refresh": "Odśwież",
+      "hide": "Ukryj",
+      "view": "Wyświetl",
+      "download": "Pobierz",
+      "format": "format:",
+      "components": "komponenty:",
+      "generated": "wygenerowano:"
+    },
+    "vuln": {
+      "noFix": "Brak poprawki",
+      "target": "Cel:"
+    },
+    "chooser": {
+      "title": "Wybierz kontener do aktualizacji",
+      "cancel": "Anuluj"
+    }
+  },
+  "registriesView": {
+    "loadingRegistries": "Ładowanie rejestrów...",
+    "loadError": "Nie udało się załadować rejestrów",
+    "filterPlaceholder": "Filtruj według nazwy lub typu...",
+    "clear": "Wyczyść",
+    "emptyFiltered": "Żadne rejestry nie pasują do wybranych filtrów",
+    "columns": {
+      "registry": "Rejestr",
+      "type": "Wpisz",
+      "status": "Stan",
+      "url": "Adres URL"
+    },
+    "badge": {
+      "private": "Prywatny",
+      "public": "Publiczne"
+    },
+    "card": {
+      "auth": "Uwierzytelnianie",
+      "status": "Stan"
+    },
+    "detail": {
+      "refreshing": "Odświeżanie szczegółów rejestru...",
+      "status": "Stan",
+      "authentication": "Uwierzytelnianie",
+      "url": "Adres URL"
+    }
+  },
+  "serversView": {
+    "loadingServerData": "Ładowanie danych serwera...",
+    "loadError": "Nie udało się załadować danych serwera",
+    "filterPlaceholder": "Filtruj według nazwy lub adresu...",
+    "clear": "Wyczyść",
+    "emptyFiltered": "Żaden host nie pasuje do Twoich filtrów",
+    "justNow": "Właśnie teraz",
+    "never": "Nigdy",
+    "columns": {
+      "host": "Gospodarz",
+      "address": "Adres",
+      "status": "Stan",
+      "containers": "Kontenery",
+      "lastSeen": "Ostatnio widziany"
+    },
+    "card": {
+      "containers": "Kontenery",
+      "running": "Działa",
+      "images": "Obrazy",
+      "lastSeen": "Ostatnio widziany"
+    },
+    "list": {
+      "containers": "pojemniki"
+    },
+    "detail": {
+      "containers": "Kontenery",
+      "running": "bieganie",
+      "stopped": "zatrzymał się",
+      "images": "Obrazy",
+      "lastSeen": "Ostatnio widziany",
+      "refresh": "Odśwież"
+    }
+  },
+  "triggersView": {
+    "loadingTriggers": "Ładowanie wyzwalaczy...",
+    "loadError": "Nie udało się załadować wyzwalaczy",
+    "filterPlaceholder": "Filtruj według nazwy...",
+    "clear": "Wyczyść",
+    "emptyFiltered": "Żadne wyzwalacze nie pasują do Twoich filtrów",
+    "columns": {
+      "trigger": "Wyzwalacz",
+      "type": "Wpisz",
+      "status": "Stan"
+    },
+    "status": {
+      "active": "Aktywny",
+      "inactive": "Nieaktywny"
+    },
+    "test": {
+      "testing": "Testowanie...",
+      "sent": "Wysłane!",
+      "failed": "Nie udało się",
+      "test": "Testuj",
+      "testTrigger": "Wyzwalacz testowy",
+      "runTest": "Uruchom test",
+      "testPassed": "Test zaliczony",
+      "testFailed": "Test nie powiódł się",
+      "defaultError": "Test wyzwalacza nie powiódł się"
+    },
+    "detail": {
+      "status": "Stan",
+      "refreshing": "Odświeżanie szczegółów wyzwalacza...",
+      "noConfig": "Brak właściwości konfiguracyjnych"
+    },
+    "list": {
+      "status": "Stan"
+    }
+  },
+  "watchersView": {
+    "loadingWatchers": "Ładowanie obserwatorów...",
+    "loadError": "Nie udało się załadować obserwatorów",
+    "filterPlaceholder": "Filtruj według nazwy...",
+    "clear": "Wyczyść",
+    "emptyFiltered": "Żaden obserwator nie pasuje do Twoich filtrów",
+    "columns": {
+      "watcher": "Obserwator",
+      "status": "Stan",
+      "containers": "Kontenery",
+      "schedule": "Harmonogram",
+      "nextRun": "Następny bieg",
+      "lastRun": "Ostatni bieg"
+    },
+    "status": {
+      "watching": "Oglądanie",
+      "paused": "Wstrzymano"
+    },
+    "card": {
+      "containers": "Kontenery",
+      "nextRun": "Następny bieg",
+      "lastRun": "Ostatni bieg",
+      "containersWatched": "Obejrzane kontenery {count}"
+    },
+    "badge": {
+      "maint": "Konserwacja"
+    },
+    "detail": {
+      "cron": "Cron",
+      "lastRun": "Ostatni bieg",
+      "containersWatched": "Kontenery oglądane",
+      "schedule": "Harmonogram",
+      "nextRun": "Następny bieg",
+      "viewContainers": "Zobacz kontenery",
+      "refreshing": "Odświeżanie szczegółów obserwatora..."
+    }
+  }
+}

@@ -1,0 +1,141 @@
+{
+  "configView": {
+    "tabs": {
+      "general": "Genel",
+      "appearance": "Görünüm",
+      "profile": "Profil"
+    },
+    "general": {
+      "application": {
+        "title": "Uygulama",
+        "loadingServerInfo": "Sunucu bilgileri yükleniyor"
+      },
+      "store": {
+        "title": "Veri deposu"
+      },
+      "webhookApi": {
+        "title": "Web kancası API'si",
+        "enabled": "Etkin",
+        "disabled": "Devre dışı",
+        "description": "HTTP aracılığıyla izleme döngülerini ve güncellemeleri tetiklemek için bu uç noktaları kullanın. Tüm istekler, Yetkilendirme başlığında bir Taşıyıcı jetonu gerektirir.",
+        "disabledMessage": "Webhook API'si devre dışı. Ayarla",
+        "disabledHint": "Webhook API'si devre dışı. {envEnabled} öğesini ayarlayın ve etkinleştirmek için en az bir belirteci ({envToken} veya {envTokens}) yapılandırın.",
+        "table": {
+          "endpoint": "Uç nokta",
+          "description": "Açıklama"
+        },
+        "example": "Örnek",
+        "endpoints": {
+          "watchAll": "Tüm izleyicilerde tam bir izleme döngüsünü tetikleyin",
+          "watchOne": "Belirli bir kapsayıcıyı ada göre izleyin",
+          "updateOne": "Belirli bir kapsayıcıda güncellemeyi tetikleyin"
+        }
+      },
+      "network": {
+        "title": "Ağ",
+        "internetlessMode": {
+          "label": "İnternetsiz Mod",
+          "description": "Tüm giden istekleri engelle (kapsayıcı simgeleri, harici getirmeler)"
+        }
+      },
+      "iconCache": {
+        "title": "Konteyner Simgesi Önbelleği",
+        "cachedIcons": {
+          "label": "Önbelleğe Alınmış Simgeler",
+          "description": "Ortak simgeler paketlenmiştir; diğer simgeler ilk getirmede diskte önbelleğe alınır"
+        },
+        "cleared": "{count} temizlendi",
+        "clearButton": "Önbelleği Temizle"
+      },
+      "diagnostics": {
+        "title": "Teşhis",
+        "debugDump": {
+          "label": "Tanılama Hata Ayıklama Dökümü",
+          "description": "Sorun giderme için çalışma zamanı durumunun düzeltilmiş JSON anlık görüntüsünü indirin",
+          "preparing": "Hazırlanıyor...",
+          "download": "Hata Ayıklama Dökümünü İndir"
+        }
+      },
+      "fields": {
+        "version": "Sürüm",
+        "serverPort": "Sunucu Bağlantı Noktası",
+        "containerActions": "Konteyner Eylemleri",
+        "webhook": "Web kancası",
+        "deleteEnabled": "Etkin Silme",
+        "trustProxy": "Güven Proxy'si",
+        "metricsAuth": "Metrik Yetkilendirmesi",
+        "storePath": "Veri deposu yolu",
+        "storeFile": "Veri deposu dosyası",
+        "enabled": "Etkin",
+        "disabled": "Devre dışı",
+        "yes": "Evet",
+        "no": "Hayır"
+      },
+      "errors": {
+        "loadServerInfo": "Sunucu bilgileri yüklenemedi",
+        "loadProfileData": "Profil verileri yüklenemedi",
+        "updateNetworkSettings": "Ağ ayarları güncellenemedi",
+        "clearIconCache": "Simge önbelleği temizlenemedi",
+        "downloadDebugDump": "Hata ayıklama dökümü indirilemiyor",
+        "errorLabel": "Hata"
+      }
+    },
+    "appearance": {
+      "language": {
+        "title": "Dil"
+      },
+      "colorTheme": {
+        "title": "Renk teması"
+      },
+      "fontFamily": {
+        "title": "Yazı tipi ailesi",
+        "defaultBadge": "varsayılan",
+        "preview": "Pijamalı hasta yağız şoföre çabucak güvendi"
+      },
+      "fontSize": {
+        "title": "Yazı tipi boyutu"
+      },
+      "iconLibrary": {
+        "title": "Simge kitaplığı"
+      },
+      "iconSize": {
+        "title": "Simge boyutu"
+      },
+      "borderRadius": {
+        "title": "Kenar yuvarlaklığı"
+      }
+    },
+    "profile": {
+      "loading": "Profil yükleniyor",
+      "fields": {
+        "username": "Kullanıcı adı",
+        "email": "E-posta",
+        "role": "Rol",
+        "provider": "sağlayıcı",
+        "lastLogin": "Son Giriş",
+        "activeSessions": "Aktif Oturumlar"
+      }
+    },
+    "logs": {
+      "loading": "Günlükler yükleniyor...",
+      "emptyMessage": "Mevcut filtreler için günlük girişi bulunamadı.",
+      "toolbar": {
+        "live": "Canlı",
+        "allLevels": "Tüm Seviyeler",
+        "debug": "Hata ayıklama",
+        "info": "Bilgi",
+        "warn": "Uyar",
+        "error": "Hata",
+        "allComponents": "Tüm Bileşenler",
+        "resetFilters": "Filtreleri sıfırla"
+      },
+      "tail": {
+        "50": "Kuyruk 50",
+        "100": "Kuyruk 100",
+        "500": "Kuyruk 500",
+        "1000": "Kuyruk 1000"
+      },
+      "logLevelBadge": "Sunucu günlük düzeyi: {level}. Yalnızca bu düzeydeki veya üzerindeki iletiler yakalanır."
+    }
+  }
+}

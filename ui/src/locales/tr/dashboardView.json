@@ -1,0 +1,94 @@
+{
+  "dashboardView": {
+    "loading": "Kontrol paneli yükleniyor...",
+    "loadFailed": "Kontrol paneli yüklenemedi",
+    "dragToReorder": "Yeniden sıralamak için sürükleyin",
+    "viewAll": "Tümünü görüntüle →",
+    "editToggle": {
+      "showWidgetPanel": "Widget panelini göster",
+      "doneCustomizing": "Özelleştirme tamamlandı",
+      "customize": "Kontrol panelini özelleştirin"
+    },
+    "widgetPanel": {
+      "title": "Widget'lar",
+      "closePanel": "Paneli kapat",
+      "resetToDefault": "Varsayılana Sıfırla"
+    },
+    "confirm": {
+      "updateContainer": {
+        "header": "Kapsayıcıyı Güncelle",
+        "message": "{name} şimdi güncellensin mi? Bu, en son bulunan imajı uygulayacaktır.",
+        "accept": "Güncelle"
+      },
+      "updateAll": {
+        "header": "Tüm Kapsayıcıları Güncelle",
+        "message": "{count} kapsayıcıları güncellenecektir. Devam etmek?",
+        "accept": "Tümünü güncelle"
+      }
+    },
+    "toast": {
+      "updated": "Güncellendi: {name}",
+      "updateFailed": "Güncelleme başarısız oldu: {name}",
+      "updateFailedWithReason": "Güncelleme başarısız oldu: {name} — {reason}",
+      "cancelled": "İptal edildi: {name}",
+      "rolledBack": "Geri alındı: {name}",
+      "rolledBackWithReason": "Geri alındı: {name} — {reason}",
+      "updateError": "{name} güncellenemedi",
+      "updateAllError": "Tüm kapsayıcılar güncellenemedi"
+    },
+    "recentUpdates": {
+      "title": "Güncellemeler Mevcut",
+      "updateAll": "Tümünü güncelle",
+      "noUpdates": "Güncelleme yok",
+      "releaseNotes": "Sürüm notları",
+      "securityBlocked": "Güvenlik engellendi",
+      "updateContainer": "Kapsayıcıyı güncelle",
+      "compactSingle": "{count} güncellemesi mevcut",
+      "compactPlural": "{count} güncellemeleri mevcut",
+      "status": {
+        "queued": "Sıraya alındı",
+        "updating": "Güncelleniyor"
+      },
+      "columns": {
+        "container": "Konteyner",
+        "version": "Sürüm",
+        "type": "Tür",
+        "actions": "Eylemler"
+      }
+    },
+    "hostStatus": {
+      "title": "Ana Bilgisayar Durumu",
+      "connected": "Bağlı",
+      "disconnected": "Bağlantı kesildi",
+      "containerCount": "{running}/{total} kapsayıcıları"
+    },
+    "resourceUsage": {
+      "title": "Kaynak Kullanımı",
+      "totalUsage": "Toplam Kullanım ({watched} izlendi)",
+      "cpu": "Ortalama CPU",
+      "memory": "Bellek",
+      "topCpu": "En iyi CPU",
+      "topMemory": "En İyi Bellek",
+      "noCpuData": "Canlı CPU verisi yok",
+      "noMemoryData": "Canlı hafıza verisi yok"
+    },
+    "securityOverview": {
+      "title": "Güvenliğe Genel Bakış",
+      "images": "görseller",
+      "clean": "Temiz",
+      "issues": "Sorunlar",
+      "notScanned": "Taranmadı",
+      "severityBreakdown": "Önem Derecesi Dağılımı",
+      "critical": "{count} Kritik",
+      "high": "{count} Yüksek",
+      "medium": "{count} Orta",
+      "low": "{count} Düşük",
+      "topVulnerabilities": "En Önemli Güvenlik Açıkları",
+      "noVulnerabilities": "Herhangi bir güvenlik açığı bildirilmedi"
+    },
+    "updateBreakdown": {
+      "title": "Dökümü Güncelle",
+      "noUpdates": "Kategorize edilecek güncelleme yok"
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "sharedComponents": {
+    "confirmDialog": {
+      "cancel": "Anuluj",
+      "confirm": "Potwierdź"
+    },
+    "copyableTag": {
+      "copied": "Skopiowano!",
+      "clickToCopy": "Kliknij, aby skopiować"
+    },
+    "dataCardGrid": {
+      "selectItem": "Wybierz {name}"
+    },
+    "dataFilterBar": {
+      "filters": "Filtry",
+      "toggleFilters": "Przełącz filtry",
+      "viewMode": "Tryb przeglądania",
+      "viewModeLabel": "Widok {label}"
+    },
+    "dataListAccordion": {
+      "toggleDetails": "Przełącz szczegóły {name}",
+      "selectItem": "Wybierz {name}"
+    },
+    "dataTable": {
+      "actions": "Działania",
+      "resizeColumn": "Zmień rozmiar kolumny"
+    },
+    "detailPanel": {
+      "openFullPage": "Otwórz widok pełnej strony",
+      "closePanel": "Zamknij panel szczegółów",
+      "ariaLabel": "Panel szczegółów"
+    },
+    "emptyState": {
+      "clearFilters": "Wyczyść wszystkie filtry"
+    },
+    "logViewer": {
+      "emptyMessage": "Nie znaleziono wpisów w dzienniku.",
+      "loadingMessage": "Ładowanie dzienników..."
+    },
+    "scanProgressBanner": {
+      "scanning": "Skanowanie kontenerów {done}/{total}..."
+    },
+    "scanProgressText": {
+      "scanning": "Skanowanie {done}/{total}..."
+    },
+    "securityEmptyState": {
+      "noDataTitle": "Nie ma jeszcze danych o podatnościach",
+      "noDataBody": "Uruchom skanowanie, aby sprawdzić kontenery pod kątem znanych luk w zabezpieczeniach",
+      "filteredTitle": "Żadne obrazy nie pasują do wybranych filtrów",
+      "clearFilters": "Wyczyść wszystkie filtry",
+      "setupGuide": "Przewodnik konfiguracji",
+      "scanNow": "Skanuj teraz"
+    }
+  }
+}

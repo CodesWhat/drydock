@@ -1,0 +1,90 @@
+{
+  "agentsView": {
+    "list": {
+      "loading": "Aracılar yükleniyor...",
+      "filterPlaceholder": "Ada göre filtrele...",
+      "clearFilter": "Temizle",
+      "emptyFiltered": "Filtrelerinizle eşleşen aracı yok",
+      "toggleColumns": "Sütunları değiştir",
+      "columnPickerHeading": "Sütunlar",
+      "loadError": "Aracılar yüklenemedi",
+      "status": {
+        "connected": "Bağlı",
+        "disconnected": "Bağlantı kesildi"
+      },
+      "columns": {
+        "name": "Temsilci",
+        "status": "Durum",
+        "containers": "Konteynerler",
+        "docker": "Liman işçisi",
+        "os": "İşletim Sistemi",
+        "version": "Sürüm",
+        "lastSeen": "Son Görülme"
+      },
+      "card": {
+        "running": "koşu",
+        "stopped": "durduruldu"
+      }
+    },
+    "detail": {
+      "tabs": {
+        "overview": "Genel Bakış",
+        "logs": "Günlükler",
+        "config": "Yapılandırma"
+      },
+      "overview": {
+        "resources": "Kaynaklar",
+        "system": "Sistem",
+        "containers": "Konteynerler",
+        "containerTotal": "Toplam",
+        "containerRunning": "Çalışıyor",
+        "containerStopped": "Durduruldu",
+        "viewContainers": "Kapsayıcıları görüntüle",
+        "automation": "Otomasyon",
+        "watchers": "İzleyiciler",
+        "triggers": "Tetikleyiciler",
+        "none": "Yok"
+      },
+      "logs": {
+        "allLevels": "Tüm Seviyeler",
+        "levelDebug": "Hata ayıklama",
+        "levelInfo": "Bilgi",
+        "levelWarn": "Uyar",
+        "levelError": "Hata",
+        "tail50": "Kuyruk 50",
+        "tail100": "Kuyruk 100",
+        "tail500": "Kuyruk 500",
+        "tail1000": "Kuyruk 1000",
+        "componentPlaceholder": "Bileşene göre filtrele...",
+        "apply": "Uygula",
+        "reset": "Sıfırla",
+        "refresh": "Yenile",
+        "emptyMessage": "Mevcut filtreler için günlük girişi bulunamadı.",
+        "lastFetched": "Son getirilen: {time}",
+        "entries": "{count} girişleri",
+        "statusLive": "Canlı",
+        "statusOffline": "Çevrimdışı"
+      },
+      "fields": {
+        "cpus": "CPU'lar",
+        "memory": "Bellek",
+        "images": "Görseller",
+        "uptime": "Çalışma süresi",
+        "docker": "Liman işçisi",
+        "os": "İşletim Sistemi",
+        "architecture": "Mimarlık",
+        "agent": "Temsilci",
+        "host": "Sunucu",
+        "agentVersion": "Temsilci Sürümü",
+        "logLevel": "Günlük Düzeyi",
+        "pollInterval": "Anket Aralığı",
+        "dockerSocket": "Docker Socket",
+        "lastSeen": "Son Görülme",
+        "never": "asla"
+      },
+      "listView": {
+        "details": "Ayrıntılar"
+      }
+    }
+  }
+}

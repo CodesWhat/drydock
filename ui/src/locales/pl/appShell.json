@@ -1,0 +1,132 @@
+{
+  "appShell": {
+    "toast": {
+      "dismiss": "Odrzuć"
+    },
+    "logViewer": {
+      "toolbar": {
+        "resume": "Wznów",
+        "pause": "Pauza",
+        "unpinAutoScroll": "Odepnij automatyczne przewijanie",
+        "pinAutoScroll": "Przypnij automatyczne przewijanie",
+        "newestFirst": "Najpierw najnowsze",
+        "oldestFirst": "Najpierw najstarszy",
+        "regexToggle": ".* Wyrażenie regularne",
+        "showMatchesOnly": "Pokaż tylko dopasowania",
+        "showingMatchesOnly": "Wyświetlanie tylko dopasowań",
+        "prev": "Poprzednia",
+        "next": "Następny"
+      },
+      "search": {
+        "placeholder": "Przeszukaj logi",
+        "copied": "Skopiowano!",
+        "copyLogs": "Skopiuj logi"
+      },
+      "empty": {
+        "noMatchingEntries": "Brak pasujących wpisów",
+        "defaultMessage": "Nie ma jeszcze żadnych wpisów w dzienniku"
+      },
+      "footer": {
+        "lines": "linie",
+        "defaultStatusLabel": "Nieaktywny"
+      }
+    },
+    "notificationBell": {
+      "buttonLabel": "Powiadomienia",
+      "tooltip": "Powiadomienia",
+      "header": "Powiadomienia",
+      "clear": "Wyczyść",
+      "loading": "Ładowanie...",
+      "empty": "Nie ma jeszcze żadnych powiadomień",
+      "markAllRead": "Oznacz wszystkie jako przeczytane",
+      "openAuditLog": "Otwórz dziennik audytu",
+      "dismiss": "Odrzuć powiadomienie"
+    },
+    "themeToggle": {
+      "mobileLabel": "Motyw: {id} (dotknij, aby przełączać)",
+      "switchTo": "Przełącz na motyw {id}",
+      "variantLabel": "{label}"
+    },
+    "layout": {
+      "nav": {
+        "dashboard": "Panel",
+        "containers": "Kontenery",
+        "security": "Bezpieczeństwo",
+        "audit": "Audyt",
+        "systemLogs": "Logi systemowe",
+        "manageGroup": "Zarządzaj",
+        "hosts": "Hosty",
+        "registries": "Rejestry",
+        "watchers": "Obserwatory",
+        "settingsGroup": "Ustawienia",
+        "general": "Ogólne",
+        "notifications": "Powiadomienia",
+        "triggers": "Wyzwalacze",
+        "auth": "Uwierzytelnianie",
+        "agents": "Agenty"
+      },
+      "sidebar": {
+        "closeMobileMenu": "Zamknij menu",
+        "searchButton": "Szukaj",
+        "searchAriaLabel": "Szukaj",
+        "aboutTooltip": "O Drydocku",
+        "aboutAriaLabel": "O Drydocku",
+        "expandSidebar": "Rozwiń pasek boczny",
+        "collapseSidebar": "Zwiń pasek boczny"
+      },
+      "topbar": {
+        "openMenu": "Otwórz menu",
+        "closeMenu": "Zamknij menu",
+        "userMenu": "Menu użytkownika",
+        "profile": "Profil",
+        "signOut": "Wyloguj się"
+      },
+      "about": {
+        "title": "Drydock",
+        "subtitle": "Menedżer aktualizacji kontenerów Docker",
+        "documentation": "Dokumentacja",
+        "github": "GitHub",
+        "changelog": "Dziennik zmian",
+        "close": "Zamknij"
+      },
+      "search": {
+        "ariaLabel": "Szukaj",
+        "placeholder": "Przejdź do stron, kontenerów, agentów, wyzwalaczy...",
+        "shown": "Pokazano {count}",
+        "refreshing": "Odświeżanie indeksu wyszukiwania...",
+        "noMatches": "Brak dopasowań dla „{query}”.",
+        "hint": "Wpisz, aby przeszukać strony, kontenery, agentów, wyzwalacze, obserwatorów i ustawienia.",
+        "prefixScopeHint": "Zakres prefiksu aktywny; używać",
+        "typeHint": "Wpisz",
+        "useTab": "zmienić zakres",
+        "moveHint": "ruszaj się",
+        "openHint": "otwarte"
+      },
+      "connection": {
+        "lostTitle": "Połączenie utracone",
+        "applyingUpdateTitle": "Stosowanie aktualizacji",
+        "lostMessage": "Serwer jest nieosiągalny. Czekam, aż znów będzie online...",
+        "restartingMessage": "Drydock uruchamia się ponownie po samodzielnej aktualizacji{opId}. Ponowne łączenie po przywróceniu usługi...",
+        "reconnecting": "Ponowne łączenie",
+        "restartingService": "Ponowne uruchomienie usługi"
+      }
+    },
+    "announcementBanner": {
+      "defaultDismiss": "Odrzuć",
+      "defaultLinkLabel": "Zobacz przewodnik po migracji"
+    },
+    "banners": {
+      "legacyConfigTitleSingular": "{total} Wykryto alias starszej konfiguracji",
+      "legacyConfigTitlePlural": "{total} Wykryto starsze aliasy konfiguracji",
+      "legacyApiPathTitle": "{total} Wykryto starsze ścieżki API",
+      "dontShowAgain": "Nie pokazuj więcej",
+      "oidcHttpTitle": "Wykryto odkrycie HTTP OIDC",
+      "legacyHashTitle": "Wykryto skrót hasła starszego typu",
+      "curlHealthcheckTitle": "Wykryto niestandardowe zastąpienie kontroli stanu zwijania",
+      "envKeysLabel": "Klucze Env ({count}): {keys}",
+      "labelKeysLabel": "Klucze etykiet ({count}): {keys}",
+      "apiPathsLabel": "Ścieżki API ({count}): {keys}",
+      "healthcheckCommandLabel": "Komenda sprawdzania stanu: {command}"
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "loginView": {
+    "heading": "Zaloguj się do Drydock",
+    "username": {
+      "label": "Nazwa użytkownika",
+      "placeholder": "Wpisz swoją nazwę użytkownika"
+    },
+    "password": {
+      "label": "Hasło",
+      "placeholder": "Wpisz swoje hasło"
+    },
+    "submit": {
+      "signIn": "Zaloguj się",
+      "signingIn": "Logowanie..."
+    },
+    "separator": "lub kontynuuj",
+    "rememberMe": "Pamiętaj mnie",
+    "noMethods": "Nie skonfigurowano żadnych metod uwierzytelniania.",
+    "errors": {
+      "loadFailed": "Nie udało się załadować metod uwierzytelniania",
+      "invalidCredentials": "Nieprawidłowa nazwa użytkownika lub hasło",
+      "oidcFailed": "Nie udało się połączyć z {name}",
+      "providerBasic": "Uwierzytelnianie podstawowe „{name}”: {error}",
+      "providerOidc": "Dostawca OIDC „{name}”: {error}",
+      "providerNamed": "{type} '{name}': {error}",
+      "providerGeneric": "{provider}: {error}"
+    },
+    "connectionLost": {
+      "title": "Połączenie utracone",
+      "body": "Serwer jest nieosiągalny. Czekam, aż znów będzie online...",
+      "reconnecting": "Ponowne łączenie"
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "loginView": {
+    "heading": "Drydock'ta oturum açın",
+    "username": {
+      "label": "Kullanıcı adı",
+      "placeholder": "Kullanıcı adınızı girin"
+    },
+    "password": {
+      "label": "Şifre",
+      "placeholder": "Şifrenizi girin"
+    },
+    "submit": {
+      "signIn": "Oturum aç",
+      "signingIn": "Oturum açılıyor..."
+    },
+    "separator": "veya devam et",
+    "rememberMe": "Beni hatırla",
+    "noMethods": "Hiçbir kimlik doğrulama yöntemi yapılandırılmadı.",
+    "errors": {
+      "loadFailed": "Kimlik doğrulama yöntemleri yüklenemedi",
+      "invalidCredentials": "Geçersiz kullanıcı adı veya şifre",
+      "oidcFailed": "{name}'ye bağlanılamadı",
+      "providerBasic": "Temel kimlik doğrulama '{name}': {error}",
+      "providerOidc": "OIDC sağlayıcısı '{name}': {error}",
+      "providerNamed": "{type} '{name}': {error}",
+      "providerGeneric": "{provider}: {error}"
+    },
+    "connectionLost": {
+      "title": "Bağlantı Kesildi",
+      "body": "Sunucuya ulaşılamıyor. Tekrar internete dönmesini bekliyorum...",
+      "reconnecting": "Yeniden bağlanılıyor"
+    }
+  }
+}

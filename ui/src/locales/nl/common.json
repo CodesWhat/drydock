@@ -1,0 +1,13 @@
+{
+  "common": {
+    "loading": "Laden…",
+    "back": "Terug",
+    "cancel": "Annuleren",
+    "save": "Opslaan",
+    "delete": "Verwijderen",
+    "confirm": "Bevestigen",
+    "close": "Sluiten",
+    "retry": "Opnieuw proberen",
+    "unknown": "onbekend"
+  }
+}

@@ -1,0 +1,132 @@
+{
+  "appShell": {
+    "toast": {
+      "dismiss": "Reddet"
+    },
+    "logViewer": {
+      "toolbar": {
+        "resume": "Devam et",
+        "pause": "Duraklat",
+        "unpinAutoScroll": "Otomatik kaydırmanın sabitlemesini kaldır",
+        "pinAutoScroll": "Otomatik kaydırmayı sabitle",
+        "newestFirst": "Önce en yeni",
+        "oldestFirst": "Önce en eski",
+        "regexToggle": ".* Normal ifade",
+        "showMatchesOnly": "Yalnızca eşleşmeleri göster",
+        "showingMatchesOnly": "Yalnızca eşleşmeler gösteriliyor",
+        "prev": "Önceki",
+        "next": "Sonraki"
+      },
+      "search": {
+        "placeholder": "Günlüklerde arama yapın",
+        "copied": "Kopyalandı!",
+        "copyLogs": "Günlükleri kopyala"
+      },
+      "empty": {
+        "noMatchingEntries": "Eşleşen giriş yok",
+        "defaultMessage": "Henüz günlük girişi yok"
+      },
+      "footer": {
+        "lines": "çizgiler",
+        "defaultStatusLabel": "Çevrimdışı"
+      }
+    },
+    "notificationBell": {
+      "buttonLabel": "Bildirimler",
+      "tooltip": "Bildirimler",
+      "header": "Bildirimler",
+      "clear": "Temizle",
+      "loading": "Yükleniyor...",
+      "empty": "Henüz bildirim yok",
+      "markAllRead": "Tümünü okundu olarak işaretle",
+      "openAuditLog": "Denetim günlüğünü aç",
+      "dismiss": "Bildirimi reddet"
+    },
+    "themeToggle": {
+      "mobileLabel": "Tema: {id} (dönüşüm yapmak için dokunun)",
+      "switchTo": "{id} temasına geç",
+      "variantLabel": "{label}"
+    },
+    "layout": {
+      "nav": {
+        "dashboard": "Pano",
+        "containers": "Konteynerler",
+        "security": "Güvenlik",
+        "audit": "Denetim",
+        "systemLogs": "Sistem günlükleri",
+        "manageGroup": "Yönet",
+        "hosts": "Ana makineler",
+        "registries": "Kayıtlar",
+        "watchers": "İzleyiciler",
+        "settingsGroup": "Ayarlar",
+        "general": "Genel",
+        "notifications": "Bildirimler",
+        "triggers": "Tetikleyiciler",
+        "auth": "Kimlik doğrulama",
+        "agents": "Aracılar"
+      },
+      "sidebar": {
+        "closeMobileMenu": "Menüyü kapat",
+        "searchButton": "Ara",
+        "searchAriaLabel": "Ara",
+        "aboutTooltip": "Drydock hakkında",
+        "aboutAriaLabel": "Drydock hakkında",
+        "expandSidebar": "Kenar çubuğunu genişlet",
+        "collapseSidebar": "Kenar çubuğunu daralt"
+      },
+      "topbar": {
+        "openMenu": "Menüyü aç",
+        "closeMenu": "Menüyü kapat",
+        "userMenu": "Kullanıcı menüsü",
+        "profile": "Profil",
+        "signOut": "Oturumu kapat"
+      },
+      "about": {
+        "title": "Drydock",
+        "subtitle": "Docker Konteyner Güncelleme Yöneticisi",
+        "documentation": "Dokümantasyon",
+        "github": "GitHub",
+        "changelog": "Değişiklik günlüğü",
+        "close": "Kapat"
+      },
+      "search": {
+        "ariaLabel": "Ara",
+        "placeholder": "Sayfalara, kapsayıcılara, aracılara, tetikleyicilere atlayın...",
+        "shown": "{count} gösteriliyor",
+        "refreshing": "Arama dizini yenileniyor...",
+        "noMatches": "\"{query}\" için eşleşme yok.",
+        "hint": "Sayfaları, kapsayıcıları, aracıları, tetikleyicileri, izleyicileri ve ayarları aramak için yazın.",
+        "prefixScopeHint": "Önek kapsamı etkin; kullanmak",
+        "typeHint": "Tür",
+        "useTab": "kapsamı değiştirmek",
+        "moveHint": "hareket etmek",
+        "openHint": "açık"
+      },
+      "connection": {
+        "lostTitle": "Bağlantı Kesildi",
+        "applyingUpdateTitle": "Güncelleme Uygulanıyor",
+        "lostMessage": "Sunucuya ulaşılamıyor. Tekrar internete dönmesini bekliyorum...",
+        "restartingMessage": "Drydock, kendi kendine güncelleme{opId} sonrasında yeniden başlatılıyor. Hizmet geri geldiğinde yeniden bağlanılıyor...",
+        "reconnecting": "Yeniden bağlanılıyor",
+        "restartingService": "Hizmet yeniden başlatılıyor"
+      }
+    },
+    "announcementBanner": {
+      "defaultDismiss": "Reddet",
+      "defaultLinkLabel": "Taşıma kılavuzunu görüntüle"
+    },
+    "banners": {
+      "legacyConfigTitleSingular": "{total} eski yapılandırma takma adı algılandı",
+      "legacyConfigTitlePlural": "{total} eski yapılandırma takma adları algılandı",
+      "legacyApiPathTitle": "{total} eski API yolları algılandı",
+      "dontShowAgain": "Bir daha gösterme",
+      "oidcHttpTitle": "HTTP OIDC keşfi algılandı",
+      "legacyHashTitle": "Eski şifre karması algılandı",
+      "curlHealthcheckTitle": "Özel kıvrılma durumu denetimini geçersiz kılma algılandı",
+      "envKeysLabel": "Zarf anahtarları ({count}): {keys}",
+      "labelKeysLabel": "Etiket anahtarları ({count}): {keys}",
+      "apiPathsLabel": "API yolları ({count}): {keys}",
+      "healthcheckCommandLabel": "Durum denetimi komutu: {command}"
+    }
+  }
+}
