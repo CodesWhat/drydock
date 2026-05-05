@@ -1,0 +1,132 @@
+{
+  "appShell": {
+    "toast": {
+      "dismiss": "Ignora"
+    },
+    "logViewer": {
+      "toolbar": {
+        "resume": "Riprendi",
+        "pause": "Pausa",
+        "unpinAutoScroll": "Sblocca scorrimento automatico",
+        "pinAutoScroll": "Blocca scorrimento automatico",
+        "newestFirst": "Piu recenti prima",
+        "oldestFirst": "Piu vecchi prima",
+        "regexToggle": ".* Regex",
+        "showMatchesOnly": "Mostra solo corrispondenze",
+        "showingMatchesOnly": "Solo corrispondenze visibili",
+        "prev": "Prec",
+        "next": "Succ"
+      },
+      "search": {
+        "placeholder": "Cerca nei log",
+        "copied": "Copiato!",
+        "copyLogs": "Copia log"
+      },
+      "empty": {
+        "noMatchingEntries": "Nessuna voce corrispondente",
+        "defaultMessage": "Ancora nessuna voce di log"
+      },
+      "footer": {
+        "lines": "righe",
+        "defaultStatusLabel": "Offline"
+      }
+    },
+    "notificationBell": {
+      "buttonLabel": "Notifiche",
+      "tooltip": "Notifiche",
+      "header": "Notifiche",
+      "clear": "Cancella",
+      "loading": "Caricamento...",
+      "empty": "Ancora nessuna notifica",
+      "markAllRead": "Segna tutte come lette",
+      "openAuditLog": "Apri log audit",
+      "dismiss": "Ignora notifica"
+    },
+    "themeToggle": {
+      "mobileLabel": "Tema: {id} (tocca per cambiare)",
+      "switchTo": "Passa al tema {id}",
+      "variantLabel": "{label}"
+    },
+    "layout": {
+      "nav": {
+        "dashboard": "Dashboard",
+        "containers": "Container",
+        "security": "Sicurezza",
+        "audit": "Audit",
+        "systemLogs": "Log di sistema",
+        "manageGroup": "Gestione",
+        "hosts": "Host",
+        "registries": "Registry",
+        "watchers": "Watcher",
+        "settingsGroup": "Impostazioni",
+        "general": "Generale",
+        "notifications": "Notifiche",
+        "triggers": "Trigger",
+        "auth": "Auth",
+        "agents": "Agent"
+      },
+      "sidebar": {
+        "closeMobileMenu": "Chiudi menu",
+        "searchButton": "Cerca",
+        "searchAriaLabel": "Cerca",
+        "aboutTooltip": "Informazioni su Drydock",
+        "aboutAriaLabel": "Informazioni su Drydock",
+        "expandSidebar": "Espandi barra laterale",
+        "collapseSidebar": "Comprimi barra laterale"
+      },
+      "topbar": {
+        "openMenu": "Apri menu",
+        "closeMenu": "Chiudi menu",
+        "userMenu": "Menu utente",
+        "profile": "Profilo",
+        "signOut": "Esci"
+      },
+      "about": {
+        "title": "Drydock",
+        "subtitle": "Gestore aggiornamenti container Docker",
+        "documentation": "Documentazione",
+        "github": "GitHub",
+        "changelog": "Changelog",
+        "close": "Chiudi"
+      },
+      "search": {
+        "ariaLabel": "Cerca",
+        "placeholder": "Vai a pagine, container, agent, trigger...",
+        "shown": "{count} mostrati",
+        "refreshing": "Aggiornamento indice di ricerca...",
+        "noMatches": "Nessuna corrispondenza per \"{query}\".",
+        "hint": "Digita per cercare pagine, container, agent, trigger, watcher e impostazioni.",
+        "prefixScopeHint": "Prefisso ambito attivo; usa ",
+        "typeHint": "Digita",
+        "useTab": " per cambiare ambito",
+        "moveHint": "sposta",
+        "openHint": "apri"
+      },
+      "connection": {
+        "lostTitle": "Connessione persa",
+        "applyingUpdateTitle": "Applicazione aggiornamento",
+        "lostMessage": "Il server non e raggiungibile. In attesa che torni online...",
+        "restartingMessage": "Drydock si sta riavviando dopo un auto-aggiornamento{opId}. Riconnessione quando il servizio torna disponibile...",
+        "reconnecting": "Riconnessione",
+        "restartingService": "Riavvio servizio"
+      }
+    },
+    "announcementBanner": {
+      "defaultDismiss": "Ignora",
+      "defaultLinkLabel": "Vedi guida alla migrazione"
+    },
+    "banners": {
+      "legacyConfigTitleSingular": "{total} alias di configurazione legacy rilevato",
+      "legacyConfigTitlePlural": "{total} alias di configurazione legacy rilevati",
+      "legacyApiPathTitle": "{total} percorsi API legacy rilevati",
+      "dontShowAgain": "Non mostrare piu",
+      "oidcHttpTitle": "Discovery OIDC HTTP rilevata",
+      "legacyHashTitle": "Hash password legacy rilevato",
+      "curlHealthcheckTitle": "Override healthcheck curl personalizzato rilevato",
+      "envKeysLabel": "Chiavi env ({count}): {keys}",
+      "labelKeysLabel": "Chiavi label ({count}): {keys}",
+      "apiPathsLabel": "Percorsi API ({count}): {keys}",
+      "healthcheckCommandLabel": "Comando healthcheck: {command}"
+    }
+  }
+}

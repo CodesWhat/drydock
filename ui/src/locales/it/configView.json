@@ -1,0 +1,141 @@
+{
+  "configView": {
+    "tabs": {
+      "general": "Generale",
+      "appearance": "Aspetto",
+      "profile": "Profilo"
+    },
+    "general": {
+      "application": {
+        "title": "Applicazione",
+        "loadingServerInfo": "Caricamento informazioni server"
+      },
+      "store": {
+        "title": "Archivio"
+      },
+      "webhookApi": {
+        "title": "API Webhook",
+        "enabled": "Abilitata",
+        "disabled": "Disabilitata",
+        "description": "Usa questi endpoint per attivare cicli di watch e aggiornamenti via HTTP. Tutte le richieste richiedono un token Bearer nell'header Authorization.",
+        "disabledMessage": "L'API Webhook e disabilitata. Imposta",
+        "disabledHint": "L'API Webhook e disabilitata. Imposta {envEnabled} e configura almeno un token ({envToken} o {envTokens}) per abilitarla.",
+        "table": {
+          "endpoint": "Endpoint",
+          "description": "Descrizione"
+        },
+        "example": "Esempio",
+        "endpoints": {
+          "watchAll": "Avvia un ciclo di watch completo su tutti i watcher",
+          "watchOne": "Esegui il watch di un container specifico per nome",
+          "updateOne": "Avvia un aggiornamento su un container specifico"
+        }
+      },
+      "network": {
+        "title": "Rete",
+        "internetlessMode": {
+          "label": "Modalita senza Internet",
+          "description": "Blocca tutte le richieste in uscita (icone container, fetch esterni)"
+        }
+      },
+      "iconCache": {
+        "title": "Cache icone container",
+        "cachedIcons": {
+          "label": "Icone in cache",
+          "description": "Le icone comuni sono incluse; le altre vengono salvate su disco al primo recupero"
+        },
+        "cleared": "{count} cancellate",
+        "clearButton": "Cancella cache"
+      },
+      "diagnostics": {
+        "title": "Diagnostica",
+        "debugDump": {
+          "label": "Dump diagnostico debug",
+          "description": "Scarica uno snapshot JSON redatto dello stato runtime per il troubleshooting",
+          "preparing": "Preparazione...",
+          "download": "Scarica dump debug"
+        }
+      },
+      "fields": {
+        "version": "Versione",
+        "serverPort": "Porta server",
+        "containerActions": "Azioni container",
+        "webhook": "Webhook",
+        "deleteEnabled": "Eliminazione abilitata",
+        "trustProxy": "Trust proxy",
+        "metricsAuth": "Auth metriche",
+        "storePath": "Percorso archivio",
+        "storeFile": "File archivio",
+        "enabled": "Abilitato",
+        "disabled": "Disabilitato",
+        "yes": "Si",
+        "no": "No"
+      },
+      "errors": {
+        "loadServerInfo": "Impossibile caricare le informazioni server",
+        "loadProfileData": "Impossibile caricare i dati profilo",
+        "updateNetworkSettings": "Impossibile aggiornare le impostazioni di rete",
+        "clearIconCache": "Impossibile cancellare la cache icone",
+        "downloadDebugDump": "Impossibile scaricare il dump debug",
+        "errorLabel": "Errore"
+      }
+    },
+    "appearance": {
+      "language": {
+        "title": "Lingua"
+      },
+      "colorTheme": {
+        "title": "Tema colori"
+      },
+      "fontFamily": {
+        "title": "Famiglia font",
+        "defaultBadge": "predefinito",
+        "preview": "Quel vituperabile xenofobo zelante assaggia il whisky"
+      },
+      "fontSize": {
+        "title": "Dimensione font"
+      },
+      "iconLibrary": {
+        "title": "Libreria icone"
+      },
+      "iconSize": {
+        "title": "Dimensione icone"
+      },
+      "borderRadius": {
+        "title": "Raggio bordi"
+      }
+    },
+    "profile": {
+      "loading": "Caricamento profilo",
+      "fields": {
+        "username": "Nome utente",
+        "email": "Email",
+        "role": "Ruolo",
+        "provider": "Provider",
+        "lastLogin": "Ultimo accesso",
+        "activeSessions": "Sessioni attive"
+      }
+    },
+    "logs": {
+      "loading": "Caricamento log...",
+      "emptyMessage": "Nessuna voce di log trovata per i filtri correnti.",
+      "toolbar": {
+        "live": "Live",
+        "allLevels": "Tutti i livelli",
+        "debug": "Debug",
+        "info": "Info",
+        "warn": "Avviso",
+        "error": "Errore",
+        "allComponents": "Tutti i componenti",
+        "resetFilters": "Reimposta filtri"
+      },
+      "tail": {
+        "50": "Ultime 50",
+        "100": "Ultime 100",
+        "500": "Ultime 500",
+        "1000": "Ultime 1000"
+      },
+      "logLevelBadge": "Livello log server: {level}. Vengono acquisiti solo i messaggi a questo livello o superiore."
+    }
+  }
+}

@@ -1,0 +1,271 @@
+{
+  "auditView": {
+    "loadingAuditLog": "Caricamento log audit...",
+    "loadError": "Impossibile caricare il log audit",
+    "filterPlaceholder": "Filtra per target o evento...",
+    "containerFilterPlaceholder": "Nome container...",
+    "allEvents": "Tutti gli eventi",
+    "eventsSelected": "{count} eventi selezionati",
+    "clear": "Cancella",
+    "fromDateLabel": "Data da",
+    "toDateLabel": "Data a",
+    "pagination": {
+      "summary": "Pagina {page} di {totalPages} ({total} voci)",
+      "previousPage": "Pagina precedente",
+      "nextPage": "Pagina successiva"
+    },
+    "emptyFiltered": "Nessuna voce audit corrisponde ai filtri",
+    "columns": {
+      "time": "Ora",
+      "event": "Evento",
+      "target": "Target",
+      "status": "Stato",
+      "details": "Dettagli"
+    },
+    "card": {
+      "time": "Ora",
+      "version": "Versione"
+    },
+    "detail": {
+      "timestamp": "Timestamp",
+      "event": "Evento",
+      "image": "Immagine",
+      "fromVersion": "Da versione",
+      "toVersion": "A versione",
+      "trigger": "Trigger",
+      "details": "Dettagli"
+    }
+  },
+  "notificationsView": {
+    "loadingRules": "Caricamento regole notifiche...",
+    "loadError": "Impossibile caricare le regole notifiche",
+    "filterPlaceholder": "Filtra per nome, descrizione o trigger...",
+    "clear": "Cancella",
+    "allNotificationTriggers": "Tutti i trigger notifiche",
+    "noTriggers": "Nessun trigger",
+    "columns": {
+      "on": "Su",
+      "rule": "Regola",
+      "triggers": "Trigger"
+    },
+    "toggleAriaLabel": "Attiva/disattiva regola notifica",
+    "emptyFiltered": "Nessuna regola notifica corrisponde ai filtri",
+    "detail": {
+      "ruleStatusLabel": "Stato regola",
+      "ruleStatusAriaLabel": "Stato regola",
+      "enabledText": "Abilitata: le notifiche possono partire per questo evento.",
+      "disabledText": "Disabilitata: le notifiche sono soppresse per questo evento.",
+      "assignedTriggersLabel": "Trigger assegnati",
+      "noTriggersConfigured": "Nessun trigger configurato. Aggiungi trigger nella",
+      "triggersPageLink": "pagina Trigger",
+      "helpTextImplicitAll": "Lascia vuoto per inviare questo evento a tutti i trigger notifica. Selezionare un trigger trasforma la regola in una allow-list.",
+      "helpTextExplicit": "Solo i trigger selezionati riceveranno questo evento. Lascia vuoto per sopprimere questo evento per tutti i trigger.",
+      "saving": "Salvataggio...",
+      "saveChanges": "Salva modifiche",
+      "reset": "Reimposta",
+      "enabled": "abilitata",
+      "disabled": "disabilitata"
+    }
+  },
+  "securityView": {
+    "loadingVulnerabilityData": "Caricamento dati vulnerabilita...",
+    "scanNow": "Scansiona ora",
+    "scanning": "Scansione...",
+    "scanAllAriaLabel": "Scansiona tutti i container",
+    "scanAllContainers": "Scansiona tutti i container per vulnerabilita",
+    "checkingScanner": "Controllo disponibilita scanner",
+    "runtimeUnavailable": "Controllo runtime non disponibile; la scansione puo comunque essere tentata",
+    "filters": {
+      "severity": "Gravita",
+      "severityCritical": "Critica",
+      "severityHigh": "Alta",
+      "severityMedium": "Media",
+      "severityLow": "Bassa",
+      "fixAvailable": "Fix disponibile",
+      "fixYes": "Si",
+      "fixNo": "No",
+      "clearAll": "Cancella tutto"
+    },
+    "columns": {
+      "image": "Immagine",
+      "critical": "Critiche",
+      "high": "Alte",
+      "medium": "Medie",
+      "low": "Basse",
+      "fixable": "Risolvibili",
+      "total": "Totale"
+    },
+    "card": {
+      "vulnerabilities": "vulnerabilita",
+      "vsUpdate": "vs aggiornamento",
+      "fixable": "risolvibili",
+      "noFixesAvailable": "Nessun fix disponibile",
+      "total": "totale"
+    },
+    "badge": {
+      "critical": "Critica",
+      "high": "Alta",
+      "medium": "Media",
+      "low": "Bassa"
+    },
+    "update": "Aggiorna",
+    "viewInContainers": "Vedi in Container",
+    "viewAllInContainers": "Vedi tutto in Container",
+    "export": {
+      "label": "Esporta",
+      "downloadReport": "Scarica report"
+    },
+    "sbom": {
+      "label": "SBOM",
+      "loading": "Caricamento documento SBOM...",
+      "loadingButton": "Caricamento...",
+      "refresh": "Aggiorna",
+      "hide": "Nascondi",
+      "view": "Vedi",
+      "download": "Scarica",
+      "format": "formato:",
+      "components": "componenti:",
+      "generated": "generato:"
+    },
+    "vuln": {
+      "noFix": "Nessun fix",
+      "target": "Target:"
+    },
+    "chooser": {
+      "title": "Seleziona container da aggiornare",
+      "cancel": "Annulla"
+    }
+  },
+  "registriesView": {
+    "loadingRegistries": "Caricamento registry...",
+    "loadError": "Impossibile caricare i registry",
+    "filterPlaceholder": "Filtra per nome o tipo...",
+    "clear": "Cancella",
+    "emptyFiltered": "Nessun registry corrisponde ai filtri",
+    "columns": {
+      "registry": "Registry",
+      "type": "Tipo",
+      "status": "Stato",
+      "url": "URL"
+    },
+    "badge": {
+      "private": "Privato",
+      "public": "Pubblico"
+    },
+    "card": {
+      "auth": "Auth",
+      "status": "Stato"
+    },
+    "detail": {
+      "refreshing": "Aggiornamento dettagli registry...",
+      "status": "Stato",
+      "authentication": "Autenticazione",
+      "url": "URL"
+    }
+  },
+  "serversView": {
+    "loadingServerData": "Caricamento dati server...",
+    "loadError": "Impossibile caricare i dati server",
+    "filterPlaceholder": "Filtra per nome o indirizzo...",
+    "clear": "Cancella",
+    "emptyFiltered": "Nessun host corrisponde ai filtri",
+    "justNow": "Ora",
+    "never": "Mai",
+    "columns": {
+      "host": "Host",
+      "address": "Indirizzo",
+      "status": "Stato",
+      "containers": "Container",
+      "lastSeen": "Ultima attivita"
+    },
+    "card": {
+      "containers": "Container",
+      "running": "In esecuzione",
+      "images": "Immagini",
+      "lastSeen": "Ultima attivita"
+    },
+    "list": {
+      "containers": "container"
+    },
+    "detail": {
+      "containers": "Container",
+      "running": "in esecuzione",
+      "stopped": "arrestati",
+      "images": "Immagini",
+      "lastSeen": "Ultima attivita",
+      "refresh": "Aggiorna"
+    }
+  },
+  "triggersView": {
+    "loadingTriggers": "Caricamento trigger...",
+    "loadError": "Impossibile caricare i trigger",
+    "filterPlaceholder": "Filtra per nome...",
+    "clear": "Cancella",
+    "emptyFiltered": "Nessun trigger corrisponde ai filtri",
+    "columns": {
+      "trigger": "Trigger",
+      "type": "Tipo",
+      "status": "Stato"
+    },
+    "status": {
+      "active": "Attivo",
+      "inactive": "Inattivo"
+    },
+    "test": {
+      "testing": "Test...",
+      "sent": "Inviato!",
+      "failed": "Non riuscito",
+      "test": "Test",
+      "testTrigger": "Test trigger",
+      "runTest": "Esegui test",
+      "testPassed": "Test superato",
+      "testFailed": "Test non riuscito",
+      "defaultError": "Test trigger non riuscito"
+    },
+    "detail": {
+      "status": "Stato",
+      "refreshing": "Aggiornamento dettagli trigger...",
+      "noConfig": "Nessuna proprieta di configurazione"
+    },
+    "list": {
+      "status": "Stato"
+    }
+  },
+  "watchersView": {
+    "loadingWatchers": "Caricamento watcher...",
+    "loadError": "Impossibile caricare i watcher",
+    "filterPlaceholder": "Filtra per nome...",
+    "clear": "Cancella",
+    "emptyFiltered": "Nessun watcher corrisponde ai filtri",
+    "columns": {
+      "watcher": "Watcher",
+      "status": "Stato",
+      "containers": "Container",
+      "schedule": "Pianificazione",
+      "nextRun": "Prossima esecuzione",
+      "lastRun": "Ultima esecuzione"
+    },
+    "status": {
+      "watching": "In watch",
+      "paused": "In pausa"
+    },
+    "card": {
+      "containers": "Container",
+      "nextRun": "Prossima esecuzione",
+      "lastRun": "Ultima esecuzione",
+      "containersWatched": "{count} container monitorati"
+    },
+    "badge": {
+      "maint": "Manut."
+    },
+    "detail": {
+      "cron": "Cron",
+      "lastRun": "Ultima esecuzione",
+      "containersWatched": "Container monitorati",
+      "schedule": "Pianificazione",
+      "nextRun": "Prossima esecuzione",
+      "viewContainers": "Vedi container",
+      "refreshing": "Aggiornamento dettagli watcher..."
+    }
+  }
+}

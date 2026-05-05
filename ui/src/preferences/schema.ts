@@ -1,3 +1,4 @@
+import { DEFAULT_LOCALE, type SupportedLocale } from '../i18n/locales';
 import type { ThemeFamily } from '../theme/palettes';
 import type { RadiusPresetId } from './radius';
 
@@ -20,6 +21,7 @@ export type PersistedResponsiveLayoutMap = Partial<
 
 export interface PreferencesSchema {
   schemaVersion: number;
+  locale: { language: SupportedLocale };
   theme: { family: ThemeFamily; variant: string };
   font: { family: string };
   icons: { library: string; scale: number };
@@ -60,7 +62,7 @@ export interface PreferencesSchema {
   };
 }
 
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 5;
 
 export const CONTAINER_TABLE_COLUMN_KEYS = [
   'icon',
@@ -77,6 +79,7 @@ export const CONTAINER_TABLE_REQUIRED_COLUMN_KEYS = ['icon', 'name'] as const;
 
 export const DEFAULTS: PreferencesSchema = {
   schemaVersion: CURRENT_SCHEMA_VERSION,
+  locale: { language: DEFAULT_LOCALE },
   theme: { family: 'one-dark', variant: 'dark' },
   font: { family: 'ibm-plex-mono' },
   icons: { library: 'ph-duotone', scale: 1 },

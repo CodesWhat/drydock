@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
+import { setI18nLocale } from '../boot/i18n';
 import { disableIconifyApi } from '../boot/icons';
 import { type FontId, fontOptions, useFont } from '../composables/useFont';
 import { useIcons } from '../composables/useIcons';
@@ -10,6 +11,7 @@ import ConfigAppearanceTab from '../components/config/ConfigAppearanceTab.vue';
 import ConfigGeneralTab from '../components/config/ConfigGeneralTab.vue';
 import ConfigProfileTab from '../components/config/ConfigProfileTab.vue';
 import { type IconLibrary, iconMap, libraryLabels } from '../icons';
+import { LOCALE_OPTIONS, type SupportedLocale } from '../i18n/locales';
 import { themeFamilies } from '../theme/palettes';
 import { getAppInfos } from '../services/app';
 import { getUser } from '../services/auth';
@@ -46,6 +48,21 @@ function setRadius(id: RadiusPresetId) {
 
 const { iconLibrary, setIconLibrary, iconScale, setIconScale } = useIcons();
 const { activeFont, setFont, fontLoading, isFontLoaded } = useFont();
+const localeOptions = LOCALE_OPTIONS;
+
+const activeLocale = usePreference(
+  () => preferences.locale.language,
+  (v) => {
+    preferences.locale.language = v;
+  },
+);
+
+setI18nLocale(activeLocale.value);
+
+function setLocale(language: SupportedLocale) {
+  activeLocale.value = language;
+  setI18nLocale(language);
+}
 
 // --- Font Size ---
 const activeFontSize = usePreference(
@@ -396,6 +413,8 @@ function handleSelectIconLibrary(library: string) {
       :theme-families="availableThemeFamilies"
       :theme-family="themeFamily"
       :is-dark="isDark"
+      :locale-options="localeOptions"
+      :active-locale="activeLocale"
       :active-font="activeFont"
       :font-loading="fontLoading"
       :font-options="fontOptions"
@@ -405,6 +424,7 @@ function handleSelectIconLibrary(library: string) {
       :icon-map="iconMap"
       :icon-scale="iconScale"
       :on-select-theme-family="handleSelectThemeFamily"
+      :on-select-locale="setLocale"
       :on-select-font="handleSelectFont"
       :on-select-icon-library="handleSelectIconLibrary"
       :on-change-icon-scale="setIconScale"

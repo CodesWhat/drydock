@@ -5,4 +5,4 @@ export { DEFAULTS } from './schema';
 export { flushPreferences, preferences, resetPreferences } from './store';
 export { usePreference } from './usePreference';
 export { useViewMode } from './useViewMode';
-export { isValidScale, isViewMode } from './validators';
+export { isValidLocale, isValidScale, isViewMode } from './validators';

@@ -134,6 +134,21 @@ describe('preferences migration', () => {
       expect(result.appearance.fontSize).toBe(1.1);
     });
 
+    it('should preserve a supported locale', () => {
+      const result = migrate({ schemaVersion: 1, locale: { language: 'zh-CN' } });
+      expect(result.locale.language).toBe('zh-CN');
+    });
+
+    it('should preserve Italian as a supported locale', () => {
+      const result = migrate({ schemaVersion: 1, locale: { language: 'it' } });
+      expect(result.locale.language).toBe('it');
+    });
+
+    it('should replace an unsupported locale with the default', () => {
+      const result = migrate({ schemaVersion: 1, locale: { language: 'fr' } });
+      expect(result.locale.language).toBe(DEFAULTS.locale.language);
+    });
+
     it('should replace invalid container viewMode with default', () => {
       const result = migrate({ schemaVersion: 1, containers: { viewMode: 'timeline' } });
       expect(result.containers.viewMode).toBe(DEFAULTS.containers.viewMode);

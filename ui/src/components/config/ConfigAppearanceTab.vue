@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
+import type { LocaleOption, SupportedLocale } from '../../i18n/locales';
 import type { RadiusPreset, RadiusPresetId } from '../../preferences/radius';
 
 const { t } = useI18n();
@@ -25,6 +26,8 @@ const props = withDefaults(
     themeFamilies: ThemeFamilyOption[];
     themeFamily?: string;
     isDark?: boolean;
+    localeOptions: LocaleOption[];
+    activeLocale?: SupportedLocale;
     activeFont?: string;
     fontLoading?: boolean;
     fontOptions: FontOption[];
@@ -37,6 +40,7 @@ const props = withDefaults(
     activeRadius?: RadiusPresetId;
     radiusPresets: RadiusPreset[];
     onSelectThemeFamily: (familyId: string, event: Event) => void;
+    onSelectLocale: (locale: SupportedLocale) => void;
     onSelectFont: (fontId: string) => void;
     onSelectIconLibrary: (library: string) => void;
     onChangeIconScale: (value: number) => void;
@@ -46,6 +50,7 @@ const props = withDefaults(
   {
     themeFamily: '',
     isDark: false,
+    activeLocale: 'en',
     activeFont: '',
     fontLoading: false,
     iconLibrary: '',
@@ -68,6 +73,48 @@ function handleFontSizeInput(event: Event) {
 
 <template>
   <div class="space-y-6">
+    <!-- Language -->
+    <div
+      class="dd-rounded overflow-hidden"
+      :style="{
+        backgroundColor: 'var(--dd-bg-card)',
+      }"
+    >
+      <div class="flex items-center gap-2 px-5 py-3" :style="{ borderBottom: '1px solid var(--dd-border)' }">
+        <AppIcon name="config" :size="14" class="text-drydock-secondary" />
+        <h2 class="dd-text-heading-section dd-text">{{ t('configView.appearance.language.title') }}</h2>
+      </div>
+      <div class="p-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <AppButton size="none" variant="plain" weight="none"
+            v-for="option in props.localeOptions"
+            :key="option.id"
+            class="flex items-center gap-3 px-4 py-3 dd-rounded text-left transition-colors border"
+            :class="props.activeLocale === option.id ? 'ring-2 ring-drydock-secondary' : ''"
+            :aria-pressed="props.activeLocale === option.id"
+            :style="{
+              backgroundColor: props.activeLocale === option.id ? 'var(--dd-primary-muted)' : 'var(--dd-bg-inset)',
+              border: props.activeLocale === option.id ? '1px solid var(--dd-primary)' : '1px solid var(--dd-border)',
+            }"
+            @click="props.onSelectLocale(option.id)"
+          >
+            <span
+              class="text-xs font-semibold"
+              :class="props.activeLocale === option.id ? 'text-drydock-secondary' : 'dd-text'"
+            >
+              {{ option.label }}
+            </span>
+            <AppIcon
+              v-if="props.activeLocale === option.id"
+              name="check"
+              :size="14"
+              class="text-drydock-secondary ml-auto shrink-0"
+            />
+          </AppButton>
+        </div>
+      </div>
+    </div>
+
     <!-- Color Theme -->
     <div
       class="dd-rounded overflow-hidden"

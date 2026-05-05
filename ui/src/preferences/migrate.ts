@@ -12,6 +12,7 @@ import {
   FONT_FAMILIES,
   ICON_LIBRARIES,
   isValidFontSize,
+  isValidLocale,
   isValidScale,
   isViewMode,
   RADIUS_PRESETS,
@@ -118,11 +119,26 @@ function normalizeDashboardLayouts(data: Record<string, unknown>): void {
 function sanitize(data: Record<string, unknown>): void {
   normalizeDashboardLayouts(data);
   sanitizeTheme(data);
+  sanitizeLocale(data);
   sanitizeFont(data);
   sanitizeIcons(data);
   sanitizeAppearance(data);
   sanitizeContainers(data);
   sanitizeViews(data);
+}
+
+function sanitizeLocale(data: Record<string, unknown>): void {
+  const locale = data.locale;
+  if (locale === undefined) {
+    return;
+  }
+  if (!isRecord(locale)) {
+    delete data.locale;
+    return;
+  }
+  if ('language' in locale && !isValidLocale(locale.language)) {
+    delete locale.language;
+  }
 }
 
 function sanitizeTheme(data: Record<string, unknown>): void {

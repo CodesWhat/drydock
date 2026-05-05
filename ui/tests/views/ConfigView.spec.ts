@@ -217,7 +217,9 @@ vi.mock('@/theme/palettes', () => ({
 }));
 
 import { mount } from '@vue/test-utils';
+import { i18n, setI18nLocale } from '@/boot/i18n';
 import ToggleSwitch from '@/components/ToggleSwitch.vue';
+import { flushPreferences, preferences, resetPreferences } from '@/preferences/store';
 import ConfigView from '@/views/ConfigView.vue';
 
 const stubs: Record<string, any> = {
@@ -246,6 +248,8 @@ describe('ConfigView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRouteQuery.value = {};
+    resetPreferences();
+    setI18nLocale('en');
     resetMockFontState();
     mockGetUser.mockResolvedValue({
       username: 'admin',
@@ -460,6 +464,40 @@ describe('ConfigView', () => {
       expect(w.text()).toContain('Color Theme');
       expect(w.text()).toContain('Font Family');
       expect(w.text()).toContain('Icon Library');
+    });
+
+    it('switches and persists the UI language from appearance settings', async () => {
+      mockGetServer.mockResolvedValue({ configuration: {} });
+      mockGetSettings.mockResolvedValue({ internetlessMode: false });
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetServer).toHaveBeenCalled());
+      await nextTick();
+
+      const appearanceTab = w
+        .findAll('button')
+        .find((button) => button.text().includes('Appearance'));
+      await appearanceTab?.trigger('click');
+      await nextTick();
+
+      expect(w.text()).toContain('Language');
+      expect(w.text()).toContain('English');
+      expect(w.text()).toContain('简体中文');
+      expect(w.text()).toContain('Italiano');
+
+      const italianButton = w
+        .findAll('button')
+        .find((button) => button.text().includes('Italiano'));
+      expect(italianButton).toBeDefined();
+      await italianButton?.trigger('click');
+      await nextTick();
+
+      expect(preferences.locale.language).toBe('it');
+      expect(i18n.global.locale.value).toBe('it');
+
+      flushPreferences();
+      const raw = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}');
+      expect(raw.locale.language).toBe('it');
     });
   });
 

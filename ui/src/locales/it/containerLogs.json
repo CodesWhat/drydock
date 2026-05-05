@@ -1,0 +1,9 @@
+{
+  "containerLogs": {
+    "backTooltip": "Torna ai container",
+    "title": "Log container",
+    "loading": "Caricamento container...",
+    "notFound": "Container \"{name}\" non trovato",
+    "loadFailed": "Impossibile caricare le informazioni del container"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "sharedComponents": {
+    "confirmDialog": {
+      "cancel": "Annulla",
+      "confirm": "Conferma"
+    },
+    "copyableTag": {
+      "copied": "Copiato!",
+      "clickToCopy": "Clicca per copiare"
+    },
+    "dataCardGrid": {
+      "selectItem": "Seleziona {name}"
+    },
+    "dataFilterBar": {
+      "filters": "Filtri",
+      "toggleFilters": "Attiva/disattiva filtri",
+      "viewMode": "Modalita visualizzazione",
+      "viewModeLabel": "Vista {label}"
+    },
+    "dataListAccordion": {
+      "toggleDetails": "Attiva/disattiva dettagli {name}",
+      "selectItem": "Seleziona {name}"
+    },
+    "dataTable": {
+      "actions": "Azioni",
+      "resizeColumn": "Ridimensiona colonna"
+    },
+    "detailPanel": {
+      "openFullPage": "Apri vista pagina completa",
+      "closePanel": "Chiudi pannello dettagli",
+      "ariaLabel": "Pannello dettagli"
+    },
+    "emptyState": {
+      "clearFilters": "Cancella tutti i filtri"
+    },
+    "logViewer": {
+      "emptyMessage": "Nessuna voce di log trovata.",
+      "loadingMessage": "Caricamento log..."
+    },
+    "scanProgressBanner": {
+      "scanning": "Scansione di {done}/{total} container..."
+    },
+    "scanProgressText": {
+      "scanning": "Scansione {done}/{total}..."
+    },
+    "securityEmptyState": {
+      "noDataTitle": "Ancora nessun dato vulnerabilita",
+      "noDataBody": "Esegui una scansione per controllare i tuoi container rispetto a vulnerabilita note",
+      "filteredTitle": "Nessuna immagine corrisponde ai filtri",
+      "clearFilters": "Cancella tutti i filtri",
+      "setupGuide": "Guida configurazione",
+      "scanNow": "Scansiona ora"
+    }
+  }
+}

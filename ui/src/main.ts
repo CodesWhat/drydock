@@ -1,7 +1,7 @@
 import { createPinia } from 'pinia';
 import { createApp } from 'vue';
 import App from './App.vue';
-import { i18n } from './boot/i18n';
+import { i18n, setI18nLocale } from './boot/i18n';
 import { disableIconifyApi, registerIcons } from './boot/icons';
 import AppButton from './components/AppButton.vue';
 import AppIcon from './components/AppIcon.vue';
@@ -41,6 +41,7 @@ if (isValidFontSize(preferences.appearance.fontSize)) {
 if (preferences.appearance.radius && preferences.appearance.radius !== 'sharp') {
   applyRadius(preferences.appearance.radius);
 }
+setI18nLocale(preferences.locale.language);
 
 // Disable Iconify CDN fetching when internetless mode is active.
 // Runs async — bundled icons are already registered above, so the UI renders
