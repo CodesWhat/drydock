@@ -1,0 +1,55 @@
+{
+  "sharedComponents": {
+    "confirmDialog": {
+      "cancel": "Cancelar",
+      "confirm": "Confirmar"
+    },
+    "copyableTag": {
+      "copied": "¡Copiado!",
+      "clickToCopy": "Clic para copiar"
+    },
+    "dataCardGrid": {
+      "selectItem": "Seleccionar {name}"
+    },
+    "dataFilterBar": {
+      "filters": "Filtros",
+      "toggleFilters": "Alternar filtros",
+      "viewMode": "Modo de vista",
+      "viewModeLabel": "Vista {label}"
+    },
+    "dataListAccordion": {
+      "toggleDetails": "Alternar detalles de {name}",
+      "selectItem": "Seleccionar {name}"
+    },
+    "dataTable": {
+      "actions": "Acciones",
+      "resizeColumn": "Redimensionar columna"
+    },
+    "detailPanel": {
+      "openFullPage": "Abrir vista de página completa",
+      "closePanel": "Cerrar panel de detalles",
+      "ariaLabel": "Panel de detalles"
+    },
+    "emptyState": {
+      "clearFilters": "Limpiar todos los filtros"
+    },
+    "logViewer": {
+      "emptyMessage": "No se encontraron entradas de registro.",
+      "loadingMessage": "Cargando registros..."
+    },
+    "scanProgressBanner": {
+      "scanning": "Escaneando {done}/{total} contenedores..."
+    },
+    "scanProgressText": {
+      "scanning": "Escaneando {done}/{total}..."
+    },
+    "securityEmptyState": {
+      "noDataTitle": "Aún no hay datos de vulnerabilidades",
+      "noDataBody": "Ejecuta un escaneo para comprobar tus contenedores frente a vulnerabilidades conocidas",
+      "filteredTitle": "Ninguna imagen coincide con tus filtros",
+      "clearFilters": "Limpiar todos los filtros",
+      "setupGuide": "Guía de configuración",
+      "scanNow": "Escanear ahora"
+    }
+  }
+}

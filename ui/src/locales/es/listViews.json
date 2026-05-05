@@ -1,0 +1,271 @@
+{
+  "auditView": {
+    "loadingAuditLog": "Cargando registro de auditoría...",
+    "loadError": "No se pudo cargar el registro de auditoría",
+    "filterPlaceholder": "Filtrar por destino o evento...",
+    "containerFilterPlaceholder": "Nombre del contenedor...",
+    "allEvents": "Todos los eventos",
+    "eventsSelected": "{count} eventos seleccionados",
+    "clear": "Limpiar",
+    "fromDateLabel": "Fecha desde",
+    "toDateLabel": "Fecha hasta",
+    "pagination": {
+      "summary": "Página {page} de {totalPages} ({total} entradas)",
+      "previousPage": "Página anterior",
+      "nextPage": "Página siguiente"
+    },
+    "emptyFiltered": "Ninguna entrada de auditoría coincide con tus filtros",
+    "columns": {
+      "time": "Hora",
+      "event": "Evento",
+      "target": "Destino",
+      "status": "Estado",
+      "details": "Detalles"
+    },
+    "card": {
+      "time": "Hora",
+      "version": "Versión"
+    },
+    "detail": {
+      "timestamp": "Timestamp",
+      "event": "Evento",
+      "image": "Imagen",
+      "fromVersion": "Desde versión",
+      "toVersion": "A versión",
+      "trigger": "Trigger",
+      "details": "Detalles"
+    }
+  },
+  "notificationsView": {
+    "loadingRules": "Cargando reglas de notificación...",
+    "loadError": "No se pudieron cargar las reglas de notificación",
+    "filterPlaceholder": "Filtrar por nombre, descripción o trigger...",
+    "clear": "Limpiar",
+    "allNotificationTriggers": "Todos los triggers de notificación",
+    "noTriggers": "Sin triggers",
+    "columns": {
+      "on": "En",
+      "rule": "Regla",
+      "triggers": "Triggers"
+    },
+    "toggleAriaLabel": "Alternar regla de notificación",
+    "emptyFiltered": "Ninguna regla de notificación coincide con tus filtros",
+    "detail": {
+      "ruleStatusLabel": "Estado de la regla",
+      "ruleStatusAriaLabel": "Estado de la regla",
+      "enabledText": "Habilitada: las notificaciones pueden dispararse para este evento.",
+      "disabledText": "Deshabilitada: las notificaciones están suprimidas para este evento.",
+      "assignedTriggersLabel": "Triggers asignados",
+      "noTriggersConfigured": "No hay triggers configurados. Agrega triggers en la",
+      "triggersPageLink": "página Triggers",
+      "helpTextImplicitAll": "Déjalo vacío para enviar este evento a todos los triggers de notificación. Seleccionar cualquier trigger convierte esta regla en una allow-list.",
+      "helpTextExplicit": "Solo los triggers seleccionados recibirán este evento. Déjalo vacío para suprimir este evento para todos los triggers.",
+      "saving": "Guardando...",
+      "saveChanges": "Guardar cambios",
+      "reset": "Restablecer",
+      "enabled": "habilitada",
+      "disabled": "deshabilitada"
+    }
+  },
+  "securityView": {
+    "loadingVulnerabilityData": "Cargando datos de vulnerabilidades...",
+    "scanNow": "Escanear ahora",
+    "scanning": "Escaneando...",
+    "scanAllAriaLabel": "Escanear todos los contenedores",
+    "scanAllContainers": "Escanear todos los contenedores en busca de vulnerabilidades",
+    "checkingScanner": "Comprobando disponibilidad del escáner",
+    "runtimeUnavailable": "Comprobación runtime no disponible; el escaneo aún puede intentarse",
+    "filters": {
+      "severity": "Severidad",
+      "severityCritical": "Crítica",
+      "severityHigh": "Alta",
+      "severityMedium": "Media",
+      "severityLow": "Baja",
+      "fixAvailable": "Fix disponible",
+      "fixYes": "Sí",
+      "fixNo": "No",
+      "clearAll": "Limpiar todo"
+    },
+    "columns": {
+      "image": "Imagen",
+      "critical": "Críticas",
+      "high": "Altas",
+      "medium": "Medias",
+      "low": "Bajas",
+      "fixable": "Corregibles",
+      "total": "Total"
+    },
+    "card": {
+      "vulnerabilities": "vulnerabilidades",
+      "vsUpdate": "vs actualización",
+      "fixable": "corregibles",
+      "noFixesAvailable": "No hay fixes disponibles",
+      "total": "total"
+    },
+    "badge": {
+      "critical": "Crítica",
+      "high": "Alta",
+      "medium": "Media",
+      "low": "Baja"
+    },
+    "update": "Actualizar",
+    "viewInContainers": "Ver en Contenedores",
+    "viewAllInContainers": "Ver todo en Contenedores",
+    "export": {
+      "label": "Exportar",
+      "downloadReport": "Descargar reporte"
+    },
+    "sbom": {
+      "label": "SBOM",
+      "loading": "Cargando documento SBOM...",
+      "loadingButton": "Cargando...",
+      "refresh": "Actualizar",
+      "hide": "Ocultar",
+      "view": "Ver",
+      "download": "Descargar",
+      "format": "formato:",
+      "components": "componentes:",
+      "generated": "generado:"
+    },
+    "vuln": {
+      "noFix": "Sin fix",
+      "target": "Destino:"
+    },
+    "chooser": {
+      "title": "Seleccionar contenedor para actualizar",
+      "cancel": "Cancelar"
+    }
+  },
+  "registriesView": {
+    "loadingRegistries": "Cargando registros...",
+    "loadError": "No se pudieron cargar los registros",
+    "filterPlaceholder": "Filtrar por nombre o tipo...",
+    "clear": "Limpiar",
+    "emptyFiltered": "Ningún registro coincide con tus filtros",
+    "columns": {
+      "registry": "Registro",
+      "type": "Tipo",
+      "status": "Estado",
+      "url": "URL"
+    },
+    "badge": {
+      "private": "Privado",
+      "public": "Público"
+    },
+    "card": {
+      "auth": "Auth",
+      "status": "Estado"
+    },
+    "detail": {
+      "refreshing": "Actualizando detalles del registro...",
+      "status": "Estado",
+      "authentication": "Autenticación",
+      "url": "URL"
+    }
+  },
+  "serversView": {
+    "loadingServerData": "Cargando datos del servidor...",
+    "loadError": "No se pudieron cargar los datos del servidor",
+    "filterPlaceholder": "Filtrar por nombre o dirección...",
+    "clear": "Limpiar",
+    "emptyFiltered": "Ningún host coincide con tus filtros",
+    "justNow": "Ahora mismo",
+    "never": "Nunca",
+    "columns": {
+      "host": "Host",
+      "address": "Dirección",
+      "status": "Estado",
+      "containers": "Contenedores",
+      "lastSeen": "Última vez visto"
+    },
+    "card": {
+      "containers": "Contenedores",
+      "running": "En ejecución",
+      "images": "Imágenes",
+      "lastSeen": "Última vez visto"
+    },
+    "list": {
+      "containers": "contenedores"
+    },
+    "detail": {
+      "containers": "Contenedores",
+      "running": "en ejecución",
+      "stopped": "detenidos",
+      "images": "Imágenes",
+      "lastSeen": "Última vez visto",
+      "refresh": "Actualizar"
+    }
+  },
+  "triggersView": {
+    "loadingTriggers": "Cargando triggers...",
+    "loadError": "No se pudieron cargar los triggers",
+    "filterPlaceholder": "Filtrar por nombre...",
+    "clear": "Limpiar",
+    "emptyFiltered": "Ningún trigger coincide con tus filtros",
+    "columns": {
+      "trigger": "Trigger",
+      "type": "Tipo",
+      "status": "Estado"
+    },
+    "status": {
+      "active": "Activo",
+      "inactive": "Inactivo"
+    },
+    "test": {
+      "testing": "Probando...",
+      "sent": "¡Enviado!",
+      "failed": "Falló",
+      "test": "Probar",
+      "testTrigger": "Probar trigger",
+      "runTest": "Ejecutar prueba",
+      "testPassed": "Prueba superada",
+      "testFailed": "Prueba fallida",
+      "defaultError": "Prueba de trigger fallida"
+    },
+    "detail": {
+      "status": "Estado",
+      "refreshing": "Actualizando detalles del trigger...",
+      "noConfig": "Sin propiedades de configuración"
+    },
+    "list": {
+      "status": "Estado"
+    }
+  },
+  "watchersView": {
+    "loadingWatchers": "Cargando watchers...",
+    "loadError": "No se pudieron cargar los watchers",
+    "filterPlaceholder": "Filtrar por nombre...",
+    "clear": "Limpiar",
+    "emptyFiltered": "Ningún watcher coincide con tus filtros",
+    "columns": {
+      "watcher": "Watcher",
+      "status": "Estado",
+      "containers": "Contenedores",
+      "schedule": "Programación",
+      "nextRun": "Próxima ejecución",
+      "lastRun": "Última ejecución"
+    },
+    "status": {
+      "watching": "Vigilando",
+      "paused": "Pausado"
+    },
+    "card": {
+      "containers": "Contenedores",
+      "nextRun": "Próxima ejecución",
+      "lastRun": "Última ejecución",
+      "containersWatched": "{count} contenedores vigilados"
+    },
+    "badge": {
+      "maint": "Mant."
+    },
+    "detail": {
+      "cron": "Cron",
+      "lastRun": "Última ejecución",
+      "containersWatched": "Contenedores vigilados",
+      "schedule": "Programación",
+      "nextRun": "Próxima ejecución",
+      "viewContainers": "Ver contenedores",
+      "refreshing": "Actualizando detalles del watcher..."
+    }
+  }
+}

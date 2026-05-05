@@ -144,6 +144,11 @@ describe('preferences migration', () => {
       expect(result.locale.language).toBe('it');
     });
 
+    it('should preserve Spanish as a supported locale', () => {
+      const result = migrate({ schemaVersion: 1, locale: { language: 'es' } });
+      expect(result.locale.language).toBe('es');
+    });
+
     it('should replace an unsupported locale with the default', () => {
       const result = migrate({ schemaVersion: 1, locale: { language: 'fr' } });
       expect(result.locale.language).toBe(DEFAULTS.locale.language);
