@@ -1,0 +1,94 @@
+{
+  "dashboardView": {
+    "loading": "Dashboard wird geladen...",
+    "loadFailed": "Dashboard konnte nicht geladen werden",
+    "dragToReorder": "Zum Sortieren ziehen",
+    "viewAll": "Alle anzeigen ->",
+    "editToggle": {
+      "showWidgetPanel": "Widget-Panel anzeigen",
+      "doneCustomizing": "Anpassung fertig",
+      "customize": "Dashboard anpassen"
+    },
+    "widgetPanel": {
+      "title": "Widgets",
+      "closePanel": "Panel schließen",
+      "resetToDefault": "Auf Standard zurücksetzen"
+    },
+    "confirm": {
+      "updateContainer": {
+        "header": "Container aktualisieren",
+        "message": "{name} jetzt aktualisieren? Das neueste erkannte Image wird angewendet.",
+        "accept": "Aktualisieren"
+      },
+      "updateAll": {
+        "header": "Alle Container aktualisieren",
+        "message": "{count} Container werden aktualisiert. Fortfahren?",
+        "accept": "Alle aktualisieren"
+      }
+    },
+    "toast": {
+      "updated": "Aktualisiert: {name}",
+      "updateFailed": "Update fehlgeschlagen: {name}",
+      "updateFailedWithReason": "Update fehlgeschlagen: {name} - {reason}",
+      "cancelled": "Abgebrochen: {name}",
+      "rolledBack": "Rollback ausgeführt: {name}",
+      "rolledBackWithReason": "Rollback ausgeführt: {name} - {reason}",
+      "updateError": "{name} konnte nicht aktualisiert werden",
+      "updateAllError": "Nicht alle Container konnten aktualisiert werden"
+    },
+    "recentUpdates": {
+      "title": "Updates verfügbar",
+      "updateAll": "Alle aktualisieren",
+      "noUpdates": "Keine Updates verfügbar",
+      "releaseNotes": "Release Notes",
+      "securityBlocked": "Durch Sicherheit blockiert",
+      "updateContainer": "Container aktualisieren",
+      "compactSingle": "{count} Update verfügbar",
+      "compactPlural": "{count} Updates verfügbar",
+      "status": {
+        "queued": "In Warteschlange",
+        "updating": "Aktualisiert"
+      },
+      "columns": {
+        "container": "Container",
+        "version": "Version",
+        "type": "Typ",
+        "actions": "Aktionen"
+      }
+    },
+    "hostStatus": {
+      "title": "Host-Status",
+      "connected": "Verbunden",
+      "disconnected": "Getrennt",
+      "containerCount": "{running}/{total} Container"
+    },
+    "resourceUsage": {
+      "title": "Ressourcennutzung",
+      "totalUsage": "Gesamtnutzung ({watched} beobachtet)",
+      "cpu": "Ø CPU",
+      "memory": "Speicher",
+      "topCpu": "Top CPU",
+      "topMemory": "Top Speicher",
+      "noCpuData": "Keine Live-CPU-Daten",
+      "noMemoryData": "Keine Live-Speicherdaten"
+    },
+    "securityOverview": {
+      "title": "Sicherheitsübersicht",
+      "images": "Images",
+      "clean": "Sauber",
+      "issues": "Probleme",
+      "notScanned": "Nicht gescannt",
+      "severityBreakdown": "Schweregrad-Aufschlüsselung",
+      "critical": "{count} Kritisch",
+      "high": "{count} Hoch",
+      "medium": "{count} Mittel",
+      "low": "{count} Niedrig",
+      "topVulnerabilities": "Top-Schwachstellen",
+      "noVulnerabilities": "Keine Schwachstellen gemeldet"
+    },
+    "updateBreakdown": {
+      "title": "Update-Aufschlüsselung",
+      "noUpdates": "Keine Updates zum Kategorisieren"
+    }
+  }
+}

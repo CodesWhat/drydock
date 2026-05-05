@@ -485,18 +485,19 @@ describe('ConfigView', () => {
       expect(w.text()).toContain('简体中文');
       expect(w.text()).toContain('Italiano');
       expect(w.text()).toContain('Español');
+      expect(w.text()).toContain('Deutsch');
 
-      const spanishButton = w.findAll('button').find((button) => button.text().includes('Español'));
-      expect(spanishButton).toBeDefined();
-      await spanishButton?.trigger('click');
+      const germanButton = w.findAll('button').find((button) => button.text().includes('Deutsch'));
+      expect(germanButton).toBeDefined();
+      await germanButton?.trigger('click');
       await nextTick();
 
-      expect(preferences.locale.language).toBe('es');
-      expect(i18n.global.locale.value).toBe('es');
+      expect(preferences.locale.language).toBe('de');
+      expect(i18n.global.locale.value).toBe('de');
 
       flushPreferences();
       const raw = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}');
-      expect(raw.locale.language).toBe('es');
+      expect(raw.locale.language).toBe('de');
     });
   });
 

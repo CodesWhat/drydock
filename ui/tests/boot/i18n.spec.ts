@@ -16,6 +16,11 @@ describe('buildMessages', () => {
     expect(LOCALE_OPTIONS).toContainEqual({ id: 'es', label: 'Español' });
   });
 
+  it('exposes German as a supported picker option', () => {
+    expect(SUPPORTED_LOCALES).toContain('de');
+    expect(LOCALE_OPTIONS).toContainEqual({ id: 'de', label: 'Deutsch' });
+  });
+
   it('skips paths that do not match the /locales/<locale>/ pattern', () => {
     const modules = {
       // no /locales/<x>/ segment — should be silently skipped
@@ -78,6 +83,14 @@ describe('buildMessages', () => {
     };
     const result = buildMessages(modules);
     expect((result as Record<string, unknown>).es).toEqual({ hello: 'Hola' });
+  });
+
+  it('handles German locale namespaces', () => {
+    const modules = {
+      '../locales/de/common.json': { hello: 'Hallo' },
+    };
+    const result = buildMessages(modules);
+    expect((result as Record<string, unknown>).de).toEqual({ hello: 'Hallo' });
   });
 });
 

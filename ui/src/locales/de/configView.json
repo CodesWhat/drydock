@@ -1,0 +1,141 @@
+{
+  "configView": {
+    "tabs": {
+      "general": "Allgemein",
+      "appearance": "Darstellung",
+      "profile": "Profil"
+    },
+    "general": {
+      "application": {
+        "title": "Anwendung",
+        "loadingServerInfo": "Serverinformationen werden geladen"
+      },
+      "store": {
+        "title": "Speicher"
+      },
+      "webhookApi": {
+        "title": "Webhook-API",
+        "enabled": "Aktiviert",
+        "disabled": "Deaktiviert",
+        "description": "Verwende diese Endpoints, um Watch-Zyklen und Updates per HTTP auszulösen. Alle Requests benötigen ein Bearer-Token im Authorization-Header.",
+        "disabledMessage": "Die Webhook-API ist deaktiviert. Setze",
+        "disabledHint": "Die Webhook-API ist deaktiviert. Setze {envEnabled} und konfiguriere mindestens ein Token ({envToken} oder {envTokens}), um sie zu aktivieren.",
+        "table": {
+          "endpoint": "Endpoint",
+          "description": "Beschreibung"
+        },
+        "example": "Beispiel",
+        "endpoints": {
+          "watchAll": "Vollen Watch-Zyklus für alle Watcher auslösen",
+          "watchOne": "Einen bestimmten Container nach Name watchen",
+          "updateOne": "Ein Update für einen bestimmten Container auslösen"
+        }
+      },
+      "network": {
+        "title": "Netzwerk",
+        "internetlessMode": {
+          "label": "Internetloser Modus",
+          "description": "Alle ausgehenden Requests blockieren (Container-Icons, externe Fetches)"
+        }
+      },
+      "iconCache": {
+        "title": "Container-Icon-Cache",
+        "cachedIcons": {
+          "label": "Gecachte Icons",
+          "description": "Häufige Icons sind gebündelt; andere Icons werden beim ersten Abruf auf Datenträger gecacht"
+        },
+        "cleared": "{count} gelöscht",
+        "clearButton": "Cache löschen"
+      },
+      "diagnostics": {
+        "title": "Diagnose",
+        "debugDump": {
+          "label": "Diagnose-Debug-Dump",
+          "description": "Lade einen redigierten JSON-Snapshot des Laufzeitstatus zur Fehlersuche herunter",
+          "preparing": "Wird vorbereitet...",
+          "download": "Debug-Dump herunterladen"
+        }
+      },
+      "fields": {
+        "version": "Version",
+        "serverPort": "Server-Port",
+        "containerActions": "Container-Aktionen",
+        "webhook": "Webhook",
+        "deleteEnabled": "Löschen aktiviert",
+        "trustProxy": "Trust Proxy",
+        "metricsAuth": "Metrik-Auth",
+        "storePath": "Speicherpfad",
+        "storeFile": "Speicherdatei",
+        "enabled": "Aktiviert",
+        "disabled": "Deaktiviert",
+        "yes": "Ja",
+        "no": "Nein"
+      },
+      "errors": {
+        "loadServerInfo": "Serverinformationen konnten nicht geladen werden",
+        "loadProfileData": "Profildaten konnten nicht geladen werden",
+        "updateNetworkSettings": "Netzwerkeinstellungen konnten nicht aktualisiert werden",
+        "clearIconCache": "Icon-Cache konnte nicht gelöscht werden",
+        "downloadDebugDump": "Debug-Dump konnte nicht heruntergeladen werden",
+        "errorLabel": "Fehler"
+      }
+    },
+    "appearance": {
+      "language": {
+        "title": "Sprache"
+      },
+      "colorTheme": {
+        "title": "Farb-Theme"
+      },
+      "fontFamily": {
+        "title": "Schriftfamilie",
+        "defaultBadge": "Standard",
+        "preview": "Franz jagt im komplett verwahrlosten Taxi quer durch Bayern"
+      },
+      "fontSize": {
+        "title": "Schriftgröße"
+      },
+      "iconLibrary": {
+        "title": "Icon-Bibliothek"
+      },
+      "iconSize": {
+        "title": "Icon-Größe"
+      },
+      "borderRadius": {
+        "title": "Eckenradius"
+      }
+    },
+    "profile": {
+      "loading": "Profil wird geladen",
+      "fields": {
+        "username": "Benutzername",
+        "email": "E-Mail",
+        "role": "Rolle",
+        "provider": "Anbieter",
+        "lastLogin": "Letzte Anmeldung",
+        "activeSessions": "Aktive Sitzungen"
+      }
+    },
+    "logs": {
+      "loading": "Logs werden geladen...",
+      "emptyMessage": "Keine Logeinträge für die aktuellen Filter gefunden.",
+      "toolbar": {
+        "live": "Live",
+        "allLevels": "Alle Level",
+        "debug": "Debug",
+        "info": "Info",
+        "warn": "Warnung",
+        "error": "Fehler",
+        "allComponents": "Alle Komponenten",
+        "resetFilters": "Filter zurücksetzen"
+      },
+      "tail": {
+        "50": "Letzte 50",
+        "100": "Letzte 100",
+        "500": "Letzte 500",
+        "1000": "Letzte 1000"
+      },
+      "logLevelBadge": "Server-Log-Level: {level}. Nur Nachrichten auf diesem Level oder höher werden erfasst."
+    }
+  }
+}
