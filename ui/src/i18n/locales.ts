@@ -1,4 +1,15 @@
-export const SUPPORTED_LOCALES = ['en', 'zh-CN', 'it', 'es', 'de', 'fr', 'pt-BR'] as const;
+export const SUPPORTED_LOCALES = [
+  'en',
+  'zh-CN',
+  'it',
+  'es',
+  'de',
+  'fr',
+  'pt-BR',
+  'nl',
+  'pl',
+  'tr',
+] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
 export const DEFAULT_LOCALE: SupportedLocale = 'en';
@@ -16,6 +27,9 @@ export const LOCALE_OPTIONS: LocaleOption[] = [
   { id: 'de', label: 'Deutsch' },
   { id: 'fr', label: 'Français' },
   { id: 'pt-BR', label: 'Português (Brasil)' },
+  { id: 'nl', label: 'Nederlands' },
+  { id: 'pl', label: 'Polski' },
+  { id: 'tr', label: 'Türkçe' },
 ];
 
 export function isSupportedLocale(value: unknown): value is SupportedLocale {

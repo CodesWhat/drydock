@@ -1,0 +1,24 @@
+{
+  "authView": {
+    "loadingProviders": "Authenticatieproviders laden...",
+    "loadError": "Kan authenticatieproviders niet laden",
+    "filterPlaceholder": "Filter op naam...",
+    "clearFilter": "Wissen",
+    "emptyFiltered": "Er zijn geen providers die overeenkomen met uw filters",
+    "detailRefreshing": "Verificatiegegevens vernieuwen...",
+    "detailLoadError": "Kan de nieuwste authenticatiegegevens niet laden",
+    "noConfig": "Geen configuratie-eigenschappen",
+    "columns": {
+      "provider": "Aanbieder",
+      "type": "Typ",
+      "status": "Status"
+    },
+    "fields": {
+      "status": "Status"
+    },
+    "badge": {
+      "basic": "Basis",
+      "oidc": "OIDC"
+    }
+  }
+}

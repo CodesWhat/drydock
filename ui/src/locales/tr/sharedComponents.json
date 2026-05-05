@@ -1,0 +1,55 @@
+{
+  "sharedComponents": {
+    "confirmDialog": {
+      "cancel": "İptal",
+      "confirm": "Onayla"
+    },
+    "copyableTag": {
+      "copied": "Kopyalandı!",
+      "clickToCopy": "Kopyalamak için tıklayın"
+    },
+    "dataCardGrid": {
+      "selectItem": "{name}'yi seçin"
+    },
+    "dataFilterBar": {
+      "filters": "Filtreler",
+      "toggleFilters": "Filtreleri değiştir",
+      "viewMode": "Görünüm modu",
+      "viewModeLabel": "{label} görünümü"
+    },
+    "dataListAccordion": {
+      "toggleDetails": "{name} ayrıntılarını değiştir",
+      "selectItem": "{name}'yi seçin"
+    },
+    "dataTable": {
+      "actions": "Eylemler",
+      "resizeColumn": "Sütunu yeniden boyutlandır"
+    },
+    "detailPanel": {
+      "openFullPage": "Tam sayfa görünümünü aç",
+      "closePanel": "Ayrıntılar panelini kapat",
+      "ariaLabel": "Ayrıntı paneli"
+    },
+    "emptyState": {
+      "clearFilters": "Tüm filtreleri temizle"
+    },
+    "logViewer": {
+      "emptyMessage": "Hiçbir günlük girişi bulunamadı.",
+      "loadingMessage": "Günlükler yükleniyor..."
+    },
+    "scanProgressBanner": {
+      "scanning": "{done}/{total} kapsayıcıları taranıyor..."
+    },
+    "scanProgressText": {
+      "scanning": "{done}/{total} taranıyor..."
+    },
+    "securityEmptyState": {
+      "noDataTitle": "Henüz güvenlik açığı verisi yok",
+      "noDataBody": "Kapsayıcılarınızı bilinen güvenlik açıklarına karşı kontrol etmek için bir tarama çalıştırın",
+      "filteredTitle": "Filtrelerinizle eşleşen resim yok",
+      "clearFilters": "Tüm filtreleri temizle",
+      "setupGuide": "Kurulum Kılavuzu",
+      "scanNow": "Şimdi tara"
+    }
+  }
+}

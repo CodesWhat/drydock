@@ -1,0 +1,24 @@
+{
+  "authView": {
+    "loadingProviders": "Ładowanie dostawców uwierzytelniania...",
+    "loadError": "Nie udało się załadować dostawców uwierzytelniania",
+    "filterPlaceholder": "Filtruj według nazwy...",
+    "clearFilter": "Wyczyść",
+    "emptyFiltered": "Żaden dostawca nie pasuje do Twoich filtrów",
+    "detailRefreshing": "Odświeżanie szczegółów uwierzytelniania...",
+    "detailLoadError": "Nie można załadować najnowszych szczegółów uwierzytelniania",
+    "noConfig": "Brak właściwości konfiguracyjnych",
+    "columns": {
+      "provider": "Dostawca",
+      "type": "Wpisz",
+      "status": "Stan"
+    },
+    "fields": {
+      "status": "Stan"
+    },
+    "badge": {
+      "basic": "Podstawowe",
+      "oidc": "OIDC"
+    }
+  }
+}

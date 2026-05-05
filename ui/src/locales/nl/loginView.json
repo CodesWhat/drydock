@@ -1,0 +1,34 @@
+{
+  "loginView": {
+    "heading": "Aanmelden bij Drydock",
+    "username": {
+      "label": "Gebruikersnaam",
+      "placeholder": "Voer uw gebruikersnaam in"
+    },
+    "password": {
+      "label": "Wachtwoord",
+      "placeholder": "Voer uw wachtwoord in"
+    },
+    "submit": {
+      "signIn": "Log in",
+      "signingIn": "Aanmelden..."
+    },
+    "separator": "of doorgaan met",
+    "rememberMe": "Onthoud mij",
+    "noMethods": "Geen authenticatiemethoden geconfigureerd.",
+    "errors": {
+      "loadFailed": "Kan verificatiemethoden niet laden",
+      "invalidCredentials": "Ongeldige gebruikersnaam of wachtwoord",
+      "oidcFailed": "Kan geen verbinding maken met {name}",
+      "providerBasic": "Basisverificatie '{name}': {error}",
+      "providerOidc": "OIDC-provider '{name}': {error}",
+      "providerNamed": "{type} '{name}': {error}",
+      "providerGeneric": "{provider}: {error}"
+    },
+    "connectionLost": {
+      "title": "Verbinding verloren",
+      "body": "De server is onbereikbaar. Wachten tot hij weer online komt...",
+      "reconnecting": "Opnieuw verbinding maken"
+    }
+  }
+}

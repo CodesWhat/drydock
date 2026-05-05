@@ -1,0 +1,9 @@
+{
+  "containerLogs": {
+    "backTooltip": "Konteynerlere geri dön",
+    "title": "Konteyner Günlükleri",
+    "loading": "Konteyner yükleniyor…",
+    "notFound": "\"{name}\" kapsayıcısı bulunamadı",
+    "loadFailed": "Kapsayıcı bilgileri yüklenemedi"
+  }
+}

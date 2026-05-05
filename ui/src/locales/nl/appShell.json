@@ -1,0 +1,132 @@
+{
+  "appShell": {
+    "toast": {
+      "dismiss": "Negeren"
+    },
+    "logViewer": {
+      "toolbar": {
+        "resume": "Hervatten",
+        "pause": "Pauze",
+        "unpinAutoScroll": "Automatisch scrollen losmaken",
+        "pinAutoScroll": "Automatisch scrollen vastzetten",
+        "newestFirst": "Nieuwste eerst",
+        "oldestFirst": "Oudste eerst",
+        "regexToggle": ".* Regex",
+        "showMatchesOnly": "Alleen overeenkomsten weergeven",
+        "showingMatchesOnly": "Alleen overeenkomsten weergeven",
+        "prev": "Vorige",
+        "next": "Volgende"
+      },
+      "search": {
+        "placeholder": "Zoek logboeken",
+        "copied": "Gekopieerd!",
+        "copyLogs": "Kopieer logboeken"
+      },
+      "empty": {
+        "noMatchingEntries": "Geen overeenkomende vermeldingen",
+        "defaultMessage": "Nog geen loggegevens"
+      },
+      "footer": {
+        "lines": "lijnen",
+        "defaultStatusLabel": "Offline"
+      }
+    },
+    "notificationBell": {
+      "buttonLabel": "Meldingen",
+      "tooltip": "Meldingen",
+      "header": "Meldingen",
+      "clear": "Wissen",
+      "loading": "Laden...",
+      "empty": "Nog geen meldingen",
+      "markAllRead": "Markeer alles als gelezen",
+      "openAuditLog": "Auditlogboek openen",
+      "dismiss": "Melding afwijzen"
+    },
+    "themeToggle": {
+      "mobileLabel": "Thema: {id} (tik om te bladeren)",
+      "switchTo": "Schakel over naar het {id}-thema",
+      "variantLabel": "{label}"
+    },
+    "layout": {
+      "nav": {
+        "dashboard": "Dashboard",
+        "containers": "Containers",
+        "security": "Beveiliging",
+        "audit": "Audit",
+        "systemLogs": "Systeemlogs",
+        "manageGroup": "Beheren",
+        "hosts": "Hosts",
+        "registries": "Registers",
+        "watchers": "Watchers",
+        "settingsGroup": "Instellingen",
+        "general": "Algemeen",
+        "notifications": "Meldingen",
+        "triggers": "Triggers",
+        "auth": "Authenticatie",
+        "agents": "Agents"
+      },
+      "sidebar": {
+        "closeMobileMenu": "Menu sluiten",
+        "searchButton": "Zoeken",
+        "searchAriaLabel": "Zoeken",
+        "aboutTooltip": "Over Drydock",
+        "aboutAriaLabel": "Over Drydock",
+        "expandSidebar": "Zijbalk uitvouwen",
+        "collapseSidebar": "Zijbalk samenvouwen"
+      },
+      "topbar": {
+        "openMenu": "Menu openen",
+        "closeMenu": "Menu sluiten",
+        "userMenu": "Gebruikersmenu",
+        "profile": "Profiel",
+        "signOut": "Meld u af"
+      },
+      "about": {
+        "title": "Drydock",
+        "subtitle": "Docker-container-updatemanager",
+        "documentation": "Documentatie",
+        "github": "GitHub",
+        "changelog": "Wijzigingslog",
+        "close": "Sluiten"
+      },
+      "search": {
+        "ariaLabel": "Zoeken",
+        "placeholder": "Ga naar pagina's, containers, agenten, triggers...",
+        "shown": "{count} weergegeven",
+        "refreshing": "Zoekindex vernieuwen...",
+        "noMatches": "Geen overeenkomsten voor \"{query}\".",
+        "hint": "Typ om te zoeken naar pagina's, containers, agenten, triggers, watchers en instellingen.",
+        "prefixScopeHint": "Voorvoegselbereik actief; gebruik",
+        "typeHint": "Typ",
+        "useTab": "om de reikwijdte te veranderen",
+        "moveHint": "bewegen",
+        "openHint": "geopend"
+      },
+      "connection": {
+        "lostTitle": "Verbinding verloren",
+        "applyingUpdateTitle": "Update toepassen",
+        "lostMessage": "De server is onbereikbaar. Wachten tot hij weer online komt...",
+        "restartingMessage": "Drydock start opnieuw op na een zelfupdate{opId}. Opnieuw verbinding maken wanneer de service terug is...",
+        "reconnecting": "Opnieuw verbinding maken",
+        "restartingService": "Dienst opnieuw opstarten"
+      }
+    },
+    "announcementBanner": {
+      "defaultDismiss": "Negeren",
+      "defaultLinkLabel": "Bekijk de migratiegids"
+    },
+    "banners": {
+      "legacyConfigTitleSingular": "{total} verouderde configuratiealias gedetecteerd",
+      "legacyConfigTitlePlural": "{total} verouderde configuratie-aliassen gedetecteerd",
+      "legacyApiPathTitle": "{total} verouderde API-paden gedetecteerd",
+      "dontShowAgain": "Niet meer laten zien",
+      "oidcHttpTitle": "HTTP OIDC-detectie gedetecteerd",
+      "legacyHashTitle": "Verouderde wachtwoord-hash gedetecteerd",
+      "curlHealthcheckTitle": "Aangepaste overschrijving van krulstatus gedetecteerd",
+      "envKeysLabel": "Env-sleutels ({count}): {keys}",
+      "labelKeysLabel": "Labelsleutels ({count}): {keys}",
+      "apiPathsLabel": "API-paden ({count}): {keys}",
+      "healthcheckCommandLabel": "Healthcheck-opdracht: {command}"
+    }
+  }
+}

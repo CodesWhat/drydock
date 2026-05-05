@@ -1,0 +1,28 @@
+{
+  "containersView": {
+    "error": {
+      "loadFailed": "Kan containers niet laden",
+      "recheckFailed": "Kan containers niet opnieuw controleren"
+    },
+    "toast": {
+      "updated": "Bijgewerkt: {name}",
+      "updateFailed": "Update mislukt: {name}",
+      "updateFailedWithReason": "Update mislukt: {name} — {reason}",
+      "cancelled": "Geannuleerd: {name}",
+      "rolledBack": "Teruggedraaid: {name}",
+      "rolledBackWithReason": "Teruggedraaid: {name} — {reason}",
+      "updateAlreadyInProgress": "Er wordt al een update uitgevoerd voor sommige containers in deze groep",
+      "batchUpdated": "{count} containers bijgewerkt in {group}",
+      "batchUpdatedNoGroup": "{count} containers bijgewerkt",
+      "batchPartial": "{succeeded} van {total} containers in {group} bijgewerkt; {failed} is mislukt",
+      "batchPartialNoGroup": "{succeeded} van {total} containers bijgewerkt; {failed} is mislukt",
+      "batchFailed": "Kan {count} containers in {group} niet updaten",
+      "batchFailedNoGroup": "Kan {count} containers niet updaten",
+      "unknownGroup": "onbekende groep"
+    },
+    "registryError": {
+      "generic": "Registerfout",
+      "detail": "Registerfout: {error}"
+    }
+  }
+}

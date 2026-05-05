@@ -31,6 +31,21 @@ describe('buildMessages', () => {
     expect(LOCALE_OPTIONS).toContainEqual({ id: 'pt-BR', label: 'Português (Brasil)' });
   });
 
+  it('exposes Dutch as a supported picker option', () => {
+    expect(SUPPORTED_LOCALES).toContain('nl');
+    expect(LOCALE_OPTIONS).toContainEqual({ id: 'nl', label: 'Nederlands' });
+  });
+
+  it('exposes Polish as a supported picker option', () => {
+    expect(SUPPORTED_LOCALES).toContain('pl');
+    expect(LOCALE_OPTIONS).toContainEqual({ id: 'pl', label: 'Polski' });
+  });
+
+  it('exposes Turkish as a supported picker option', () => {
+    expect(SUPPORTED_LOCALES).toContain('tr');
+    expect(LOCALE_OPTIONS).toContainEqual({ id: 'tr', label: 'Türkçe' });
+  });
+
   it('skips paths that do not match the /locales/<locale>/ pattern', () => {
     const modules = {
       // no /locales/<x>/ segment — should be silently skipped
@@ -117,6 +132,30 @@ describe('buildMessages', () => {
     };
     const result = buildMessages(modules);
     expect((result as Record<string, unknown>)['pt-BR']).toEqual({ hello: 'Olá' });
+  });
+
+  it('handles Dutch locale namespaces', () => {
+    const modules = {
+      '../locales/nl/common.json': { hello: 'Hallo' },
+    };
+    const result = buildMessages(modules);
+    expect((result as Record<string, unknown>).nl).toEqual({ hello: 'Hallo' });
+  });
+
+  it('handles Polish locale namespaces', () => {
+    const modules = {
+      '../locales/pl/common.json': { hello: 'Cześć' },
+    };
+    const result = buildMessages(modules);
+    expect((result as Record<string, unknown>).pl).toEqual({ hello: 'Cześć' });
+  });
+
+  it('handles Turkish locale namespaces', () => {
+    const modules = {
+      '../locales/tr/common.json': { hello: 'Merhaba' },
+    };
+    const result = buildMessages(modules);
+    expect((result as Record<string, unknown>).tr).toEqual({ hello: 'Merhaba' });
   });
 });
 

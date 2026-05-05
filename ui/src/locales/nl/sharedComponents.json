@@ -1,0 +1,55 @@
+{
+  "sharedComponents": {
+    "confirmDialog": {
+      "cancel": "Annuleren",
+      "confirm": "Bevestigen"
+    },
+    "copyableTag": {
+      "copied": "Gekopieerd!",
+      "clickToCopy": "Klik om te kopiëren"
+    },
+    "dataCardGrid": {
+      "selectItem": "Selecteer {name}"
+    },
+    "dataFilterBar": {
+      "filters": "Filters",
+      "toggleFilters": "Schakel tussen filters",
+      "viewMode": "Bekijk modus",
+      "viewModeLabel": "{label} weergave"
+    },
+    "dataListAccordion": {
+      "toggleDetails": "Schakel {name} details in of uit",
+      "selectItem": "Selecteer {name}"
+    },
+    "dataTable": {
+      "actions": "Acties",
+      "resizeColumn": "Formaat van kolom wijzigen"
+    },
+    "detailPanel": {
+      "openFullPage": "Volledige paginaweergave openen",
+      "closePanel": "Sluit het detailpaneel",
+      "ariaLabel": "Detailpaneel"
+    },
+    "emptyState": {
+      "clearFilters": "Wis alle filters"
+    },
+    "logViewer": {
+      "emptyMessage": "Geen logvermeldingen gevonden.",
+      "loadingMessage": "Logboeken laden..."
+    },
+    "scanProgressBanner": {
+      "scanning": "{done}/{total} containers scannen..."
+    },
+    "scanProgressText": {
+      "scanning": "Scannen {done}/{total}..."
+    },
+    "securityEmptyState": {
+      "noDataTitle": "Nog geen kwetsbaarheidsgegevens",
+      "noDataBody": "Voer een scan uit om uw containers te controleren op bekende kwetsbaarheden",
+      "filteredTitle": "Er zijn geen afbeeldingen die overeenkomen met uw filters",
+      "clearFilters": "Wis alle filters",
+      "setupGuide": "Installatiehandleiding",
+      "scanNow": "Nu scannen"
+    }
+  }
+}

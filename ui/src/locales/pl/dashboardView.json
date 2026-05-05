@@ -1,0 +1,94 @@
+{
+  "dashboardView": {
+    "loading": "Ładowanie panelu...",
+    "loadFailed": "Nie udało się załadować panelu",
+    "dragToReorder": "Przeciągnij, aby zmienić kolejność",
+    "viewAll": "Zobacz wszystkie →",
+    "editToggle": {
+      "showWidgetPanel": "Pokaż panel widżetów",
+      "doneCustomizing": "Zakończ dostosowywanie",
+      "customize": "Dostosuj pulpit nawigacyjny"
+    },
+    "widgetPanel": {
+      "title": "Widżety",
+      "closePanel": "Zamknij panel",
+      "resetToDefault": "Przywróć ustawienia domyślne"
+    },
+    "confirm": {
+      "updateContainer": {
+        "header": "Zaktualizuj kontener",
+        "message": "Zaktualizować {name} teraz? Spowoduje to zastosowanie najnowszego odkrytego obrazu.",
+        "accept": "Zaktualizuj"
+      },
+      "updateAll": {
+        "header": "Zaktualizuj wszystkie kontenery",
+        "message": "Kontenery {count} zostaną zaktualizowane. Kontynuować?",
+        "accept": "Zaktualizuj wszystko"
+      }
+    },
+    "toast": {
+      "updated": "Zaktualizowano: {name}",
+      "updateFailed": "Aktualizacja nie powiodła się: {name}",
+      "updateFailedWithReason": "Aktualizacja nie powiodła się: {name} — {reason}",
+      "cancelled": "Anulowano: {name}",
+      "rolledBack": "Cofnięto: {name}",
+      "rolledBackWithReason": "Cofnięto: {name} — {reason}",
+      "updateError": "Nie udało się zaktualizować {name}",
+      "updateAllError": "Nie udało się zaktualizować wszystkich kontenerów"
+    },
+    "recentUpdates": {
+      "title": "Dostępne aktualizacje",
+      "updateAll": "Zaktualizuj wszystko",
+      "noUpdates": "Brak dostępnych aktualizacji",
+      "releaseNotes": "Informacje o wydaniu",
+      "securityBlocked": "Zabezpieczenia zablokowane",
+      "updateContainer": "Zaktualizuj kontener",
+      "compactSingle": "Dostępna aktualizacja {count}",
+      "compactPlural": "Dostępne aktualizacje {count}",
+      "status": {
+        "queued": "W kolejce",
+        "updating": "Aktualizowanie"
+      },
+      "columns": {
+        "container": "Pojemnik",
+        "version": "Wersja",
+        "type": "Wpisz",
+        "actions": "Działania"
+      }
+    },
+    "hostStatus": {
+      "title": "Stan gospodarza",
+      "connected": "Połączono",
+      "disconnected": "Rozłączono",
+      "containerCount": "Kontenery {running}/{total}"
+    },
+    "resourceUsage": {
+      "title": "Wykorzystanie zasobów",
+      "totalUsage": "Całkowite wykorzystanie (obejrzane {watched})",
+      "cpu": "Średni procesor",
+      "memory": "Pamięć",
+      "topCpu": "Najlepszy procesor",
+      "topMemory": "Najlepsza pamięć",
+      "noCpuData": "Brak bieżących danych procesora",
+      "noMemoryData": "Brak danych dotyczących pamięci na żywo"
+    },
+    "securityOverview": {
+      "title": "Przegląd zabezpieczeń",
+      "images": "obrazy",
+      "clean": "Czysty",
+      "issues": "Problemy",
+      "notScanned": "Nie zeskanowano",
+      "severityBreakdown": "Podział ważności",
+      "critical": "{count} Krytyczny",
+      "high": "{count} Wysoki",
+      "medium": "{count} Średni",
+      "low": "{count} Niski",
+      "topVulnerabilities": "Najważniejsze luki",
+      "noVulnerabilities": "Nie zgłoszono żadnych luk"
+    },
+    "updateBreakdown": {
+      "title": "Aktualizuj podział",
+      "noUpdates": "Brak aktualizacji do kategoryzacji"
+    }
+  }
+}

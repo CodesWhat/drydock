@@ -1,0 +1,90 @@
+{
+  "agentsView": {
+    "list": {
+      "loading": "Ładowanie agentów...",
+      "filterPlaceholder": "Filtruj według nazwy...",
+      "clearFilter": "Wyczyść",
+      "emptyFiltered": "Żaden agent nie pasuje do Twoich filtrów",
+      "toggleColumns": "Przełącz kolumny",
+      "columnPickerHeading": "Kolumny",
+      "loadError": "Nie udało się załadować agentów",
+      "status": {
+        "connected": "Połączono",
+        "disconnected": "Rozłączono"
+      },
+      "columns": {
+        "name": "Agent",
+        "status": "Stan",
+        "containers": "Kontenery",
+        "docker": "Doker",
+        "os": "system operacyjny",
+        "version": "Wersja",
+        "lastSeen": "Ostatnio widziany"
+      },
+      "card": {
+        "running": "bieganie",
+        "stopped": "zatrzymał się"
+      }
+    },
+    "detail": {
+      "tabs": {
+        "overview": "Przegląd",
+        "logs": "Dzienniki",
+        "config": "Konfig"
+      },
+      "overview": {
+        "resources": "Zasoby",
+        "system": "Systemu",
+        "containers": "Kontenery",
+        "containerTotal": "Razem",
+        "containerRunning": "Działa",
+        "containerStopped": "Zatrzymany",
+        "viewContainers": "Zobacz kontenery",
+        "automation": "Automatyzacja",
+        "watchers": "Obserwatory",
+        "triggers": "Wyzwalacze",
+        "none": "Żadne"
+      },
+      "logs": {
+        "allLevels": "Wszystkie poziomy",
+        "levelDebug": "Debuguj",
+        "levelInfo": "Informacje",
+        "levelWarn": "Ostrzegaj",
+        "levelError": "Błąd",
+        "tail50": "Ogon 50",
+        "tail100": "Ogon 100",
+        "tail500": "Ogon 500",
+        "tail1000": "Ogon 1000",
+        "componentPlaceholder": "Filtruj według komponentu...",
+        "apply": "Zastosuj",
+        "reset": "Resetuj",
+        "refresh": "Odśwież",
+        "emptyMessage": "Nie znaleziono wpisów dziennika dla bieżących filtrów.",
+        "lastFetched": "Ostatnio pobrane: {time}",
+        "entries": "{count} wpisy",
+        "statusLive": "Na żywo",
+        "statusOffline": "Nieaktywny"
+      },
+      "fields": {
+        "cpus": "Procesory",
+        "memory": "Pamięć",
+        "images": "Obrazy",
+        "uptime": "Czas pracy",
+        "docker": "Doker",
+        "os": "system operacyjny",
+        "architecture": "Architektura",
+        "agent": "Agent",
+        "host": "Gospodarz",
+        "agentVersion": "Wersja agenta",
+        "logLevel": "Poziom dziennika",
+        "pollInterval": "Interwał ankiety",
+        "dockerSocket": "Docker Socket",
+        "lastSeen": "Ostatnio widziany",
+        "never": "nigdy"
+      },
+      "listView": {
+        "details": "Szczegóły"
+      }
+    }
+  }
+}

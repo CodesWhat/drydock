@@ -1,0 +1,90 @@
+{
+  "agentsView": {
+    "list": {
+      "loading": "Agenten laden...",
+      "filterPlaceholder": "Filter op naam...",
+      "clearFilter": "Wissen",
+      "emptyFiltered": "Er zijn geen agenten die overeenkomen met uw filters",
+      "toggleColumns": "Kolommen wisselen",
+      "columnPickerHeading": "Kolommen",
+      "loadError": "Kan agenten niet laden",
+      "status": {
+        "connected": "Verbonden",
+        "disconnected": "Verbroken"
+      },
+      "columns": {
+        "name": "Agent",
+        "status": "Status",
+        "containers": "Containers",
+        "docker": "Dokwerker",
+        "os": "Besturingssysteem",
+        "version": "Versie",
+        "lastSeen": "Laatst gezien"
+      },
+      "card": {
+        "running": "rennen",
+        "stopped": "gestopt"
+      }
+    },
+    "detail": {
+      "tabs": {
+        "overview": "Overzicht",
+        "logs": "Logboeken",
+        "config": "Configuratie"
+      },
+      "overview": {
+        "resources": "Hulpbronnen",
+        "system": "Systeem",
+        "containers": "Containers",
+        "containerTotal": "Totaal",
+        "containerRunning": "Actief",
+        "containerStopped": "Gestopt",
+        "viewContainers": "Bekijk containers",
+        "automation": "Automatisering",
+        "watchers": "Watchers",
+        "triggers": "Triggers",
+        "none": "Geen"
+      },
+      "logs": {
+        "allLevels": "Alle niveaus",
+        "levelDebug": "Foutopsporing",
+        "levelInfo": "Info",
+        "levelWarn": "Waarschuw",
+        "levelError": "Fout",
+        "tail50": "Staart 50",
+        "tail100": "Staart 100",
+        "tail500": "Staart 500",
+        "tail1000": "Staart 1000",
+        "componentPlaceholder": "Filter op onderdeel...",
+        "apply": "Toepassen",
+        "reset": "Opnieuw instellen",
+        "refresh": "Vernieuwen",
+        "emptyMessage": "Er zijn geen loggegevens gevonden voor de huidige filters.",
+        "lastFetched": "Laatst opgehaald: {time}",
+        "entries": "{count} vermeldingen",
+        "statusLive": "Leef",
+        "statusOffline": "Offline"
+      },
+      "fields": {
+        "cpus": "CPU's",
+        "memory": "Geheugen",
+        "images": "Images",
+        "uptime": "Uptime",
+        "docker": "Dokwerker",
+        "os": "Besturingssysteem",
+        "architecture": "Architectuur",
+        "agent": "Agent",
+        "host": "Gastheer",
+        "agentVersion": "Agent-versie",
+        "logLevel": "Logniveau",
+        "pollInterval": "Poll-interval",
+        "dockerSocket": "Docker Socket",
+        "lastSeen": "Laatst gezien",
+        "never": "nooit"
+      },
+      "listView": {
+        "details": "Details"
+      }
+    }
+  }
+}
