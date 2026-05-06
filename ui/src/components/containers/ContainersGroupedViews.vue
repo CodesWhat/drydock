@@ -14,6 +14,7 @@ import {
 } from '../../utils/container-update';
 import { imageAge } from '../../utils/audit-helpers';
 import { displayGroupName } from '../../utils/display';
+import { formatShortDigest } from '../../utils/digest-format';
 import {
   getPrimaryHardBlocker,
   getPrimarySoftBlocker,
@@ -590,7 +591,12 @@ onScopeDispose(() => {
         </template>
         <!-- Version comparison -->
         <template #cell-version="{ row: c }">
-            <div v-if="c.newTag" class="flex items-center justify-center gap-1.5 w-full">
+            <div v-if="c.updateKind === 'digest' && c.newDigest && c.currentDigest" class="flex items-center justify-center gap-1.5 w-full">
+            <span class="text-2xs-plus dd-text-secondary truncate shrink-0 max-w-[100px]" v-tooltip.top="c.currentDigest">{{ formatShortDigest(c.currentDigest) }}</span>
+            <AppIcon name="arrow-right" :size="8" class="dd-text-muted shrink-0" />
+            <CopyableTag :tag="c.newDigest" class="text-2xs-plus font-semibold truncate max-w-[140px]" style="color: var(--dd-primary);" @click.stop>{{ formatShortDigest(c.newDigest) }}</CopyableTag>
+          </div>
+          <div v-else-if="c.newTag" class="flex items-center justify-center gap-1.5 w-full">
             <span class="text-2xs-plus dd-text-secondary truncate shrink-0 max-w-[100px]" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
             <AppIcon name="arrow-right" :size="8" class="dd-text-muted shrink-0" />
             <CopyableTag :tag="c.newTag" class="text-2xs-plus font-semibold truncate max-w-[140px]" style="color: var(--dd-primary);" @click.stop>{{ c.newTag }}</CopyableTag>
@@ -968,10 +974,19 @@ onScopeDispose(() => {
           <div class="px-4 py-3 min-w-0">
             <div class="flex items-center gap-2 flex-wrap min-w-0">
               <span class="text-2xs-plus dd-text-muted shrink-0">{{ t('containerComponents.groupedViews.currentLabel') }}</span>
-              <CopyableTag :tag="c.currentTag" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
-                {{ c.currentTag }}
+              <CopyableTag :tag="c.updateKind === 'digest' && c.currentDigest ? c.currentDigest : c.currentTag"
+                           class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
+                {{ c.updateKind === 'digest' && c.currentDigest ? formatShortDigest(c.currentDigest) : c.currentTag }}
               </CopyableTag>
-              <template v-if="c.newTag">
+              <template v-if="c.updateKind === 'digest' && c.newDigest && c.currentDigest">
+                <span class="text-2xs-plus ml-1 dd-text-muted shrink-0">{{ t('containerComponents.groupedViews.latestLabel') }}</span>
+                <CopyableTag :tag="c.newDigest" class="text-xs font-bold truncate max-w-[140px]"
+                      :style="{ color: updateKindColor(c.updateKind).text }" @click.stop>
+                  {{ formatShortDigest(c.newDigest) }}
+                </CopyableTag>
+                <span class="ml-1 shrink-0"><UpdateMaturityBadge :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" /></span>
+              </template>
+              <template v-else-if="c.newTag">
                 <span class="text-2xs-plus ml-1 dd-text-muted shrink-0">{{ t('containerComponents.groupedViews.latestLabel') }}</span>
                 <CopyableTag :tag="c.newTag" class="text-xs font-bold truncate max-w-[140px]"
                       :style="{ color: updateKindColor(c.updateKind).text }" @click.stop>
@@ -1108,7 +1123,8 @@ onScopeDispose(() => {
           <ContainerIcon v-else :icon="c.icon" :size="28" class="shrink-0" />
           <div class="min-w-0 flex-1" :class="{ 'opacity-50': isRowLocked(c) }">
             <div class="text-sm font-semibold truncate dd-text">{{ c.name }}</div>
-            <div class="text-2xs mt-0.5 truncate dd-text-muted" v-tooltip.top="`${c.image}:${c.currentTag}`">{{ c.image }}:{{ c.currentTag }}</div>
+            <div class="text-2xs mt-0.5 truncate dd-text-muted"
+                 v-tooltip.top="c.updateKind === 'digest' && c.currentDigest ? `${c.image}@${c.currentDigest}` : `${c.image}:${c.currentTag}`">{{ c.image }}{{ c.updateKind === 'digest' && c.currentDigest ? `@${formatShortDigest(c.currentDigest)}` : `:${c.currentTag}` }}</div>
             <div
               v-if="isContainerScanning(c) && !isContainerUpdating(c)"
               class="text-2xs mt-0.5 inline-flex items-center gap-1 dd-text-muted">

@@ -17,6 +17,7 @@ import { errorMessage } from '../../utils/error';
 import type { UpdateEligibility } from '../../types/container';
 import { getPrimaryHardBlocker } from '../../utils/update-eligibility';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
+import { formatShortDigest } from '../../utils/digest-format';
 
 const revealedEnvCache = reactive(new Map<string, Map<string, string>>());
 const revealedKeys = reactive(new Set<string>());
@@ -221,14 +222,19 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
               <div class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus font-mono"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                 <span class="dd-text-secondary">{{ t('containerComponents.fullPageOverview.currentLabel') }}</span>
-                <CopyableTag :tag="selectedContainer.currentTag" class="font-bold dd-text">{{ selectedContainer.currentTag }}</CopyableTag>
-                <template v-if="selectedContainer.newTag">
+                <CopyableTag :tag="selectedContainer.updateKind === 'digest' && selectedContainer.currentDigest ? selectedContainer.currentDigest : selectedContainer.currentTag"
+                             class="font-bold dd-text">{{ selectedContainer.updateKind === 'digest' && selectedContainer.currentDigest ? formatShortDigest(selectedContainer.currentDigest) : selectedContainer.currentTag }}</CopyableTag>
+                <template v-if="selectedContainer.updateKind === 'digest' && selectedContainer.newDigest && selectedContainer.currentDigest">
+                  <AppIcon name="arrow-right" :size="8" class="dd-text-muted" />
+                  <CopyableTag :tag="selectedContainer.newDigest" class="font-bold" style="color: var(--dd-success);">{{ formatShortDigest(selectedContainer.newDigest) }}</CopyableTag>
+                </template>
+                <template v-else-if="selectedContainer.newTag">
                   <AppIcon name="arrow-right" :size="8" class="dd-text-muted" />
                   <CopyableTag :tag="selectedContainer.newTag" class="font-bold" style="color: var(--dd-success);">{{ selectedContainer.newTag }}</CopyableTag>
                 </template>
               </div>
               <NoUpdateReasonBadge
-                v-if="!selectedContainer.newTag && selectedContainer.noUpdateReason"
+                v-if="!selectedContainer.newTag && !selectedContainer.newDigest && selectedContainer.noUpdateReason"
                 :reason="selectedContainer.noUpdateReason"
                 variant="inline"
                 class="mt-2"

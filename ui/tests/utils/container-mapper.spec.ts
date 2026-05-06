@@ -1797,4 +1797,58 @@ describe('container-mapper', () => {
       });
     }
   });
+
+  describe('currentDigest / newDigest', () => {
+    const digestLocal = 'sha256:bcf6335aabbb1234567890abcdef1234567890abcdef1234567890abcdef12';
+    const digestRemote = 'sha256:deadbeefcafe1234567890abcdef1234567890abcdef1234567890abcdef12';
+
+    it('populates currentDigest and newDigest for a digest update', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: true,
+          updateKind: { kind: 'digest', localValue: digestLocal, remoteValue: digestRemote },
+        }),
+      );
+      expect(c.currentDigest).toBe(digestLocal);
+      expect(c.newDigest).toBe(digestRemote);
+    });
+
+    it('leaves currentDigest undefined and newDigest null for a tag update', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'minor', remoteValue: null },
+          result: { tag: '1.26' },
+        }),
+      );
+      expect(c.currentDigest).toBeUndefined();
+      expect(c.newDigest).toBeNull();
+    });
+
+    it('newDigest is null when updateAvailable is false even if updateKind.localValue is present', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: false,
+          updateKind: { kind: 'digest', localValue: digestLocal, remoteValue: digestRemote },
+        }),
+      );
+      expect(c.currentDigest).toBe(digestLocal);
+      expect(c.newDigest).toBeNull();
+    });
+
+    it('newDigest is null when remoteValue is absent', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: true,
+          updateKind: { kind: 'digest', localValue: digestLocal },
+        }),
+      );
+      expect(c.newDigest).toBeNull();
+    });
+
+    it('currentDigest is undefined when updateKind is null', () => {
+      const c = mapApiContainer(makeApiContainer({ updateKind: null }));
+      expect(c.currentDigest).toBeUndefined();
+    });
+  });
 });
