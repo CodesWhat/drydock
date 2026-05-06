@@ -207,6 +207,18 @@ function recentFailureReasonText(c: { lastUpdateFailureReason?: string }): strin
   return c.lastUpdateFailureReason ?? '';
 }
 
+function registryErrorPillLabel(c: {
+  registryErrorKind?: 'rate-limited' | 'auth' | 'not-found' | 'transient' | 'unknown';
+}): string {
+  if (c.registryErrorKind === 'rate-limited')
+    return t('containerComponents.groupedViews.registryErrorRateLimited');
+  if (c.registryErrorKind === 'auth')
+    return t('containerComponents.groupedViews.registryErrorAuth');
+  if (c.registryErrorKind === 'not-found')
+    return t('containerComponents.groupedViews.registryErrorNotFound');
+  return t('containerComponents.groupedViews.registryErrorCheckFailed');
+}
+
 function blockedUpdateTooltip(container: {
   newTag?: string | null;
   updateBouncer?: string;
@@ -602,34 +614,40 @@ onScopeDispose(() => {
             <CopyableTag :tag="c.newTag" class="text-2xs-plus font-semibold truncate max-w-[140px]" style="color: var(--dd-primary);" @click.stop>{{ c.newTag }}</CopyableTag>
           </div>
           <div v-else class="text-center">
-            <div class="inline-flex items-center justify-center gap-1">
-              <span class="text-2xs-plus dd-text-secondary truncate max-w-[140px]" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
-              <NoUpdateReasonBadge v-if="c.noUpdateReason" :reason="c.noUpdateReason" />
+            <div v-if="c.registryError" class="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 dd-rounded" style="background-color: var(--dd-danger-muted);" v-tooltip.top="tt(registryErrorTooltip(c))">
+              <AppIcon name="warning" :size="10" style="color: var(--dd-danger);" class="shrink-0" />
+              <span class="text-2xs-plus font-medium" style="color: var(--dd-danger);">{{ registryErrorPillLabel(c) }}</span>
             </div>
-            <div v-if="getContainerListPolicyState(c).snoozed || getContainerListPolicyState(c).skipped || getContainerListPolicyState(c).maturityBlocked"
-                 class="mt-1 inline-flex items-center justify-center gap-1">
-              <span v-if="getContainerListPolicyState(c).snoozed"
-                    class="inline-flex items-center justify-center"
-                    style="color: var(--dd-info);"
-                    :aria-label="t('containerComponents.groupedViews.ariaSnoozedUpdates')"
-                    v-tooltip.top="tt(containerPolicyTooltip(c, 'snoozed'))">
-                <AppIcon name="pause" :size="14" />
-              </span>
-              <span v-if="getContainerListPolicyState(c).skipped"
-                    class="inline-flex items-center justify-center"
-                    style="color: var(--dd-warning);"
-                    :aria-label="t('containerComponents.groupedViews.ariaSkippedUpdates')"
-                    v-tooltip.top="tt(containerPolicyTooltip(c, 'skipped'))">
-                <AppIcon name="skip-forward" :size="14" />
-              </span>
-              <span v-if="getContainerListPolicyState(c).maturityBlocked"
-                    class="inline-flex items-center justify-center"
-                    style="color: var(--dd-primary);"
-                    :aria-label="t('containerComponents.groupedViews.ariaMaturityBlocked')"
-                    v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
-                <AppIcon name="clock" :size="14" />
-              </span>
-            </div>
+            <template v-else>
+              <div class="inline-flex items-center justify-center gap-1">
+                <span class="text-2xs-plus dd-text-secondary truncate max-w-[140px]" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
+                <NoUpdateReasonBadge v-if="c.noUpdateReason" :reason="c.noUpdateReason" />
+              </div>
+              <div v-if="getContainerListPolicyState(c).snoozed || getContainerListPolicyState(c).skipped || getContainerListPolicyState(c).maturityBlocked"
+                   class="mt-1 inline-flex items-center justify-center gap-1">
+                <span v-if="getContainerListPolicyState(c).snoozed"
+                      class="inline-flex items-center justify-center"
+                      style="color: var(--dd-info);"
+                      :aria-label="t('containerComponents.groupedViews.ariaSnoozedUpdates')"
+                      v-tooltip.top="tt(containerPolicyTooltip(c, 'snoozed'))">
+                  <AppIcon name="pause" :size="14" />
+                </span>
+                <span v-if="getContainerListPolicyState(c).skipped"
+                      class="inline-flex items-center justify-center"
+                      style="color: var(--dd-warning);"
+                      :aria-label="t('containerComponents.groupedViews.ariaSkippedUpdates')"
+                      v-tooltip.top="tt(containerPolicyTooltip(c, 'skipped'))">
+                  <AppIcon name="skip-forward" :size="14" />
+                </span>
+                <span v-if="getContainerListPolicyState(c).maturityBlocked"
+                      class="inline-flex items-center justify-center"
+                      style="color: var(--dd-primary);"
+                      :aria-label="t('containerComponents.groupedViews.ariaMaturityBlocked')"
+                      v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
+                  <AppIcon name="clock" :size="14" />
+                </span>
+              </div>
+            </template>
           </div>
         </template>
         <!-- Kind badge (3 breaks: icon-only → stack → row) -->
@@ -995,31 +1013,37 @@ onScopeDispose(() => {
                 <span class="ml-1 shrink-0"><UpdateMaturityBadge :maturity="c.updateMaturity" :tooltip="c.updateMaturityTooltip" /></span>
               </template>
               <template v-else>
-                <NoUpdateReasonBadge v-if="c.noUpdateReason" :reason="c.noUpdateReason" class="ml-1" />
-                <template v-else-if="getContainerListPolicyState(c).snoozed || getContainerListPolicyState(c).skipped || getContainerListPolicyState(c).maturityBlocked">
-                  <span v-if="getContainerListPolicyState(c).snoozed"
-                        class="inline-flex items-center justify-center ml-1"
-                        style="color: var(--dd-info);"
-                        :aria-label="t('containerComponents.groupedViews.ariaSnoozedUpdates')"
-                        v-tooltip.top="tt(containerPolicyTooltip(c, 'snoozed'))">
-                    <AppIcon name="pause" :size="13" />
-                  </span>
-                  <span v-if="getContainerListPolicyState(c).skipped"
-                        class="inline-flex items-center justify-center"
-                        style="color: var(--dd-warning);"
-                        :aria-label="t('containerComponents.groupedViews.ariaSkippedUpdates')"
-                        v-tooltip.top="tt(containerPolicyTooltip(c, 'skipped'))">
-                    <AppIcon name="skip-forward" :size="13" />
-                  </span>
-                  <span v-if="getContainerListPolicyState(c).maturityBlocked"
-                        class="inline-flex items-center justify-center"
-                        style="color: var(--dd-primary);"
-                        :aria-label="t('containerComponents.groupedViews.ariaMaturityBlocked')"
-                        v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
-                    <AppIcon name="clock" :size="13" />
-                  </span>
+                <span v-if="c.registryError" class="inline-flex items-center gap-1 ml-1 px-1.5 py-0.5 dd-rounded" style="background-color: var(--dd-danger-muted);" v-tooltip.top="tt(registryErrorTooltip(c))">
+                  <AppIcon name="warning" :size="10" style="color: var(--dd-danger);" class="shrink-0" />
+                  <span class="text-2xs-plus font-medium" style="color: var(--dd-danger);">{{ registryErrorPillLabel(c) }}</span>
+                </span>
+                <template v-else>
+                  <NoUpdateReasonBadge v-if="c.noUpdateReason" :reason="c.noUpdateReason" class="ml-1" />
+                  <template v-else-if="getContainerListPolicyState(c).snoozed || getContainerListPolicyState(c).skipped || getContainerListPolicyState(c).maturityBlocked">
+                    <span v-if="getContainerListPolicyState(c).snoozed"
+                          class="inline-flex items-center justify-center ml-1"
+                          style="color: var(--dd-info);"
+                          :aria-label="t('containerComponents.groupedViews.ariaSnoozedUpdates')"
+                          v-tooltip.top="tt(containerPolicyTooltip(c, 'snoozed'))">
+                      <AppIcon name="pause" :size="13" />
+                    </span>
+                    <span v-if="getContainerListPolicyState(c).skipped"
+                          class="inline-flex items-center justify-center"
+                          style="color: var(--dd-warning);"
+                          :aria-label="t('containerComponents.groupedViews.ariaSkippedUpdates')"
+                          v-tooltip.top="tt(containerPolicyTooltip(c, 'skipped'))">
+                      <AppIcon name="skip-forward" :size="13" />
+                    </span>
+                    <span v-if="getContainerListPolicyState(c).maturityBlocked"
+                          class="inline-flex items-center justify-center"
+                          style="color: var(--dd-primary);"
+                          :aria-label="t('containerComponents.groupedViews.ariaMaturityBlocked')"
+                          v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
+                      <AppIcon name="clock" :size="13" />
+                    </span>
+                  </template>
+                  <AppIcon v-else name="check" :size="14" class="ml-1" style="color: var(--dd-success);" v-tooltip.top="tt('Up to date')" />
                 </template>
-                <AppIcon v-else name="check" :size="14" class="ml-1" style="color: var(--dd-success);" v-tooltip.top="tt('Up to date')" />
               </template>
             </div>
             <div v-if="c.suggestedTag || c.releaseNotes || c.currentReleaseNotes || c.releaseLink || c.sourceRepo" class="flex items-center gap-2 flex-wrap mt-2">
@@ -1151,6 +1175,13 @@ onScopeDispose(() => {
               v-tooltip.top="recentFailureReasonText(c)">
               <AppIcon name="warning" :size="10" class="shrink-0" />
               <span class="truncate">{{ t('containerComponents.groupedViews.lastUpdateFailed', { reason: recentFailureReasonText(c) }) }}</span>
+            </div>
+            <div v-else-if="!c.newTag && !c.newDigest && c.registryError"
+                 class="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded"
+                 style="background-color: var(--dd-danger-muted);"
+                 v-tooltip.top="tt(registryErrorTooltip(c))">
+              <AppIcon name="warning" :size="10" style="color: var(--dd-danger);" class="shrink-0" />
+              <span class="text-2xs-plus font-medium" style="color: var(--dd-danger);">{{ registryErrorPillLabel(c) }}</span>
             </div>
             <div v-else-if="!c.newTag && c.noUpdateReason" class="mt-0.5">
               <NoUpdateReasonBadge :reason="c.noUpdateReason" />

@@ -2495,5 +2495,72 @@ describe('ContainersGroupedViews', () => {
       expect(text).toContain('1.25');
       expect(text).toContain('1.26');
     });
+
+    it('renders the rate-limited error pill in the version cell when registryError is set and newTag is null', async () => {
+      const container = makeContainer({
+        id: 'c-ratelimited',
+        name: 'alpha',
+        currentTag: '1.0.0',
+        newTag: null,
+        updateKind: null,
+        status: 'running',
+        bouncer: 'safe',
+        registryError: '429 Too Many Requests',
+        registryErrorKind: 'rate-limited',
+      } as any);
+      const { context } = makeContext();
+      context.containerViewMode.value = 'table';
+      context.filteredContainers.value = [container];
+      context.displayContainers.value = [container];
+      context.renderGroups.value = [
+        {
+          key: 'g',
+          name: 'g',
+          containers: [container],
+          containerCount: 1,
+          updatesAvailable: 0,
+          updatableCount: 0,
+        },
+      ];
+      mocked.context = context;
+      const wrapper = mountSubject();
+      const row = rowByName(wrapper, 'alpha');
+      expect(row.text()).toContain('Rate limited');
+    });
+
+    it('does NOT render the registry-error pill in the version cell when newTag is set', async () => {
+      const container = makeContainer({
+        id: 'c-ratelimited-with-newtag',
+        name: 'alpha',
+        currentTag: '1.0.0',
+        newTag: '1.1.0',
+        updateKind: 'minor',
+        status: 'running',
+        bouncer: 'safe',
+        registryError: '429 Too Many Requests',
+        registryErrorKind: 'rate-limited',
+      } as any);
+      const { context } = makeContext();
+      context.containerViewMode.value = 'table';
+      context.filteredContainers.value = [container];
+      context.displayContainers.value = [container];
+      context.renderGroups.value = [
+        {
+          key: 'g',
+          name: 'g',
+          containers: [container],
+          containerCount: 1,
+          updatesAvailable: 1,
+          updatableCount: 1,
+        },
+      ];
+      mocked.context = context;
+      const wrapper = mountSubject();
+      const row = rowByName(wrapper, 'alpha');
+      const text = row.text();
+      expect(text).toContain('1.0.0');
+      expect(text).toContain('1.1.0');
+      expect(text).not.toContain('Rate limited');
+    });
   });
 });

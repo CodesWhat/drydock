@@ -1851,4 +1851,38 @@ describe('container-mapper', () => {
       expect(c.currentDigest).toBeUndefined();
     });
   });
+
+  describe('deriveRegistryErrorKind', () => {
+    it('returns undefined when no error is present', () => {
+      const c = mapApiContainer(makeApiContainer());
+      expect(c.registryErrorKind).toBeUndefined();
+    });
+
+    it('returns rate-limited for 429 / too many requests messages', () => {
+      const c = mapApiContainer(makeApiContainer({ error: { message: '429 Too Many Requests' } }));
+      expect(c.registryErrorKind).toBe('rate-limited');
+    });
+
+    it('returns auth for 401/403/unauthorized/forbidden messages', () => {
+      const c = mapApiContainer(makeApiContainer({ error: { message: '401 Unauthorized' } }));
+      expect(c.registryErrorKind).toBe('auth');
+    });
+
+    it('returns not-found for 404 / not found messages', () => {
+      const c = mapApiContainer(makeApiContainer({ error: { message: '404 Not Found' } }));
+      expect(c.registryErrorKind).toBe('not-found');
+    });
+
+    it('returns transient for network/connection error messages', () => {
+      const c = mapApiContainer(
+        makeApiContainer({ error: { message: 'ECONNRESET connection reset' } }),
+      );
+      expect(c.registryErrorKind).toBe('transient');
+    });
+
+    it('returns unknown for unclassified error messages', () => {
+      const c = mapApiContainer(makeApiContainer({ error: { message: 'Something went wrong' } }));
+      expect(c.registryErrorKind).toBe('unknown');
+    });
+  });
 });

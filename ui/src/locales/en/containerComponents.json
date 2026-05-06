@@ -182,7 +182,11 @@
       "emptyState": "No containers match your filters",
       "currentLabel": "Current",
       "latestLabel": "Latest",
-      "blockedByBouncer": "Blocked by Bouncer"
+      "blockedByBouncer": "Blocked by Bouncer",
+      "registryErrorRateLimited": "Rate limited",
+      "registryErrorAuth": "Auth failed",
+      "registryErrorNotFound": "Not found",
+      "registryErrorCheckFailed": "Check failed"
     },
     "groupHeader": {
       "ungrouped": "Ungrouped",
