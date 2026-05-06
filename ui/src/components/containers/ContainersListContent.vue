@@ -34,6 +34,7 @@ const {
   allColumns,
   toggleColumn,
   visibleColumns,
+  autoHiddenColumns,
   tt,
   groupByStack,
   rechecking,
@@ -182,11 +183,17 @@ const activeFilterChips = computed(() => {
         </AppButton>
       </template>
       <template #extra-buttons>
-        <div v-if="containerViewMode === 'table'">
+        <div v-if="containerViewMode === 'table'" class="relative inline-flex items-center">
           <AppIconButton icon="config" size="toolbar" variant="secondary"
             :class="showColumnPicker ? 'dd-text dd-bg-elevated' : ''"
             :tooltip="tt(t('containerComponents.listContent.toggleColumnsTooltip'))"
             @click.stop="toggleColumnPicker($event)" />
+          <span
+            v-if="autoHiddenColumns.length > 0"
+            class="absolute -top-1 -right-1 pointer-events-none text-3xs font-bold px-1 dd-rounded dd-text-muted dd-bg-elevated leading-tight"
+            v-tooltip="t('containerComponents.listContent.autoHiddenBadgeTooltip', { count: autoHiddenColumns.length })">
+            +{{ autoHiddenColumns.length }}
+          </span>
         </div>
       </template>
       <template #left>
@@ -270,7 +277,9 @@ const activeFilterChips = computed(() => {
           :name="visibleColumns.has(column.key) ? 'check' : 'square'"
           :size="13"
           :style="visibleColumns.has(column.key) ? { color: 'var(--dd-primary)' } : {}" />
-        {{ column.label }}
+        {{ column.label }}<em
+          v-if="visibleColumns.has(column.key) && autoHiddenColumns.some((c) => c.key === column.key)"
+          class="not-italic dd-text-muted"> {{ t('containerComponents.listContent.narrowViewportSuffix') }}</em>
       </AppButton>
     </div>
 

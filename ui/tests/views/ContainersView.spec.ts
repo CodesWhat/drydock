@@ -181,6 +181,7 @@ vi.mock('@/composables/useColumnVisibility', () => ({
       { key: 'name', label: 'Container', align: 'text-left' },
       { key: 'status', label: 'Status', align: 'text-center' },
     ]),
+    autoHiddenColumns: computed(() => []),
     showColumnPicker: mockShowColumnPicker,
     toggleColumn: vi.fn(),
   })),
