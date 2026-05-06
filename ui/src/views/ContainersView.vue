@@ -1163,8 +1163,21 @@ const renderGroups = computed<RenderGroup[]>(() => {
   return groupedContainers.value;
 });
 
-const { allColumns, visibleColumns, activeColumns, showColumnPicker, toggleColumn } =
-  useColumnVisibility();
+const availableContentWidth = computed(() => {
+  const sidebarPx = isMobile.value ? 0 : preferences.layout.sidebarCollapsed ? 56 : 240;
+  const contentPx = 48;
+  const panelPx = detailPanelOpen.value ? PANEL_WIDTH_PX[panelSize.value] : 0;
+  return Math.max(0, windowWidth.value - sidebarPx - contentPx - panelPx);
+});
+
+const {
+  allColumns,
+  visibleColumns,
+  activeColumns,
+  autoHiddenColumns,
+  showColumnPicker,
+  toggleColumn,
+} = useColumnVisibility(availableContentWidth);
 
 const tableColumns = computed(() =>
   activeColumns.value.map((column) => ({
@@ -1335,6 +1348,7 @@ provide(containersViewTemplateContextKey, {
   allColumns,
   toggleColumn,
   visibleColumns,
+  autoHiddenColumns,
   tt,
   groupByStack,
   rechecking,
