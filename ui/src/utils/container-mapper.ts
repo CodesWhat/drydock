@@ -574,6 +574,20 @@ function deriveRegistryError(apiContainer: ApiContainerInput): string | undefine
   return asNonEmptyString(apiContainer.error?.message);
 }
 
+/** Classify the registry error into a kind for color-coded UI affordances. */
+function deriveRegistryErrorKind(
+  apiContainer: ApiContainerInput,
+): 'rate-limited' | 'auth' | 'not-found' | 'transient' | 'unknown' | undefined {
+  const msg = asNonEmptyString(apiContainer.error?.message);
+  if (!msg) return undefined;
+  if (/429|too\s+many\s+requests|rate[- ]?limit/i.test(msg)) return 'rate-limited';
+  if (/401|403|unauthor|forbidden/i.test(msg)) return 'auth';
+  if (/404|not[- ]?found/i.test(msg)) return 'not-found';
+  if (/timeout|econnreset|econnrefused|enotfound|eai_again|network|socket hang up/i.test(msg))
+    return 'transient';
+  return 'unknown';
+}
+
 /** Extract labels from the API labels object into an array of "key=value" strings. */
 function deriveLabels(apiContainer: ApiContainerInput): string[] {
   const labels = apiContainer.labels;
@@ -804,6 +818,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     registryUrl: deriveRegistryUrl(apiContainer),
     updateKind: deriveUpdateKind(apiContainer),
     registryError: deriveRegistryError(apiContainer),
+    registryErrorKind: deriveRegistryErrorKind(apiContainer),
     noUpdateReason: deriveNoUpdateReason(apiContainer),
     bouncer: deriveBouncer(apiContainer),
     securityScanState: deriveSecurityScanState(apiContainer),

@@ -136,6 +136,7 @@ export interface Container {
   updatePolicyState?: 'snoozed' | 'skipped' | 'maturity-blocked';
   suppressedUpdateTag?: string;
   registryError?: string;
+  registryErrorKind?: 'rate-limited' | 'auth' | 'not-found' | 'transient' | 'unknown';
   noUpdateReason?: string;
   bouncer: 'safe' | 'unsafe' | 'blocked';
   securityScanState?: 'scanned' | 'not-scanned';

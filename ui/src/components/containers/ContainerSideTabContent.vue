@@ -239,6 +239,12 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
                 variant="inline"
                 class="mt-2"
               />
+              <div v-if="selectedContainer.registryError"
+                   class="mt-2 flex items-start gap-2 px-2.5 py-1.5 dd-rounded text-2xs"
+                   :style="{ backgroundColor: 'var(--dd-danger-muted)' }">
+                <AppIcon name="warning" :size="12" class="shrink-0 mt-0.5" style="color: var(--dd-danger);" />
+                <span class="flex-1 min-w-0 whitespace-normal break-words" style="color: var(--dd-danger);">{{ selectedContainer.registryError }}</span>
+              </div>
               <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag || (selectedContainer.tagPrecision === 'floating' && !selectedContainer.imageDigestWatch)" class="mt-2 flex items-center gap-1.5 flex-wrap">
                 <AppBadge v-if="selectedContainer.updateKind" size="xs" :custom="updateKindColor(selectedContainer.updateKind)">
                   {{ selectedContainer.updateKind }}
