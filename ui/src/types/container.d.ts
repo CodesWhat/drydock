@@ -102,6 +102,8 @@ export interface Container {
   icon: string;
   currentTag: string;
   newTag: string | null;
+  currentDigest?: string;
+  newDigest?: string | null;
   tagFamily?: string;
   imageVariant?: string;
   imageDigestWatch?: boolean;

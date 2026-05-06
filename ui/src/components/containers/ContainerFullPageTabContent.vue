@@ -18,6 +18,7 @@ import { errorMessage } from '../../utils/error';
 import type { UpdateEligibility } from '../../types/container';
 import { getPrimaryHardBlocker } from '../../utils/update-eligibility';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
+import { formatShortDigest } from '../../utils/digest-format';
 
 interface RevealEnvResponse {
   env?: Array<{ key: string; value: string }>;
@@ -253,9 +254,19 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
               <div class="flex items-center gap-3 px-3 py-2 dd-rounded text-xs font-mono"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                 <span class="dd-text-secondary">{{ t('containerComponents.fullPageOverview.currentLabel') }}</span>
-                <CopyableTag :tag="selectedContainer.currentTag" class="font-bold dd-text">{{ selectedContainer.currentTag }}</CopyableTag>
+                <CopyableTag :tag="selectedContainer.updateKind === 'digest' && selectedContainer.currentDigest ? selectedContainer.currentDigest : selectedContainer.currentTag"
+                             class="font-bold dd-text">{{ selectedContainer.updateKind === 'digest' && selectedContainer.currentDigest ? formatShortDigest(selectedContainer.currentDigest) : selectedContainer.currentTag }}</CopyableTag>
               </div>
-              <div v-if="selectedContainer.newTag" class="flex items-center gap-3 px-3 py-2 dd-rounded text-xs font-mono"
+              <div v-if="selectedContainer.updateKind === 'digest' && selectedContainer.newDigest && selectedContainer.currentDigest"
+                   class="flex items-center gap-3 px-3 py-2 dd-rounded text-xs font-mono"
+                   :style="{ backgroundColor: 'var(--dd-success-muted)' }">
+                <span style="color: var(--dd-success);">{{ t('containerComponents.fullPageOverview.latestLabel') }}</span>
+                <CopyableTag :tag="selectedContainer.newDigest" class="font-bold" style="color: var(--dd-success);">{{ formatShortDigest(selectedContainer.newDigest) }}</CopyableTag>
+                <AppBadge size="xs" :custom="updateKindColor(selectedContainer.updateKind)">
+                  {{ selectedContainer.updateKind }}
+                </AppBadge>
+              </div>
+              <div v-else-if="selectedContainer.newTag" class="flex items-center gap-3 px-3 py-2 dd-rounded text-xs font-mono"
                    :style="{ backgroundColor: 'var(--dd-success-muted)' }">
                 <span style="color: var(--dd-success);">{{ t('containerComponents.fullPageOverview.latestLabel') }}</span>
                 <CopyableTag :tag="selectedContainer.newTag!" class="font-bold" style="color: var(--dd-success);">{{ selectedContainer.newTag }}</CopyableTag>
@@ -269,7 +280,7 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
                 <span class="font-medium" style="color: var(--dd-success);">{{ t('containerComponents.fullPageOverview.upToDate') }}</span>
               </div>
               <NoUpdateReasonBadge
-                v-if="!selectedContainer.newTag && selectedContainer.noUpdateReason"
+                v-if="!selectedContainer.newTag && !selectedContainer.newDigest && selectedContainer.noUpdateReason"
                 :reason="selectedContainer.noUpdateReason"
                 variant="inline"
               />

@@ -79,6 +79,7 @@ interface ApiContainerUpdateKind {
   kind?: unknown;
   semverDiff?: unknown;
   remoteValue?: unknown;
+  localValue?: unknown;
 }
 
 interface ApiContainerUpdatePolicy {
@@ -393,6 +394,27 @@ function deriveUpdateKind(
 function deriveNewTag(apiContainer: ApiContainerInput): string | null {
   if (!apiContainer.updateAvailable) return null;
   return asNonEmptyString(apiContainer.result?.tag) ?? null;
+}
+
+/**
+ * For digest updates, derive the remote digest from updateKind.remoteValue.
+ * Returns null when no update is available or the kind is not 'digest'.
+ */
+function deriveNewDigest(apiContainer: ApiContainerInput): string | null {
+  if (!apiContainer.updateAvailable) return null;
+  const uk = apiContainer.updateKind;
+  if (!uk || uk.kind !== 'digest') return null;
+  return asNonEmptyString(uk.remoteValue) ?? null;
+}
+
+/**
+ * For digest updates, derive the local digest from updateKind.localValue.
+ * Independent of updateAvailable so detail panels can always show the local digest.
+ */
+function deriveCurrentDigest(apiContainer: ApiContainerInput): string | undefined {
+  const uk = apiContainer.updateKind;
+  if (!uk || uk.kind !== 'digest') return undefined;
+  return asNonEmptyString(uk.localValue) ?? undefined;
 }
 
 /** Derive the release/changelog URL for the update when present. */
@@ -797,6 +819,8 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     transformTags: asNonEmptyString(apiContainer.transformTags),
     triggerInclude: asNonEmptyString(apiContainer.triggerInclude),
     triggerExclude: asNonEmptyString(apiContainer.triggerExclude),
+    currentDigest: deriveCurrentDigest(apiContainer),
+    newDigest: deriveNewDigest(apiContainer),
     details: {
       ports: runtimeDetails.ports,
       volumes: runtimeDetails.volumes,

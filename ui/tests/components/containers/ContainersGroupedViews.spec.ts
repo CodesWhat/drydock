@@ -2408,4 +2408,92 @@ describe('ContainersGroupedViews', () => {
       expect(rowByName(wrapper, 'alpha').text()).toContain('Updating');
     });
   });
+
+  describe('digest update row rendering', () => {
+    const digestLocal = 'sha256:bcf6335aabbb1234567890abcdef1234567890abcdef1234567890abcdef12';
+    const digestRemote = 'sha256:deadbeefcafe1234567890abcdef1234567890abcdef1234567890abcdef12';
+
+    function mountDigestContainer(
+      digestOverrides: Partial<Container> = {},
+      contextOverrides: Record<string, unknown> = {},
+    ) {
+      const container = makeContainer({
+        id: 'c-digest',
+        name: 'alpha',
+        currentTag: digestLocal,
+        newTag: digestLocal,
+        updateKind: 'digest',
+        currentDigest: digestLocal,
+        newDigest: digestRemote,
+        status: 'running',
+        bouncer: 'safe',
+        ...digestOverrides,
+      });
+      const { context } = makeContext(contextOverrides);
+      context.containerViewMode.value = 'table';
+      context.filteredContainers.value = [container];
+      context.displayContainers.value = [container];
+      context.renderGroups.value = [
+        {
+          key: 'g',
+          name: 'g',
+          containers: [container],
+          containerCount: 1,
+          updatesAvailable: 1,
+          updatableCount: 1,
+        },
+      ];
+      mocked.context = context;
+      return mountSubject();
+    }
+
+    it('renders the short form of currentDigest → newDigest for a digest update row', async () => {
+      const wrapper = mountDigestContainer();
+      const row = rowByName(wrapper, 'alpha');
+      const text = row.text();
+      expect(text).toContain('sha256:bcf6335aabbb…');
+      expect(text).toContain('sha256:deadbeefcafe…');
+    });
+
+    it('does NOT render two identical currentTag strings for a digest update row', async () => {
+      const wrapper = mountDigestContainer();
+      const row = rowByName(wrapper, 'alpha');
+      const text = row.text();
+      // The full raw digest should not appear twice (identical-string bug)
+      const occurrences = text.split(digestLocal).length - 1;
+      expect(occurrences).toBeLessThan(2);
+    });
+
+    it('still renders currentTag → newTag for a tag update row', async () => {
+      const container = makeContainer({
+        id: 'c-tag',
+        name: 'alpha',
+        currentTag: '1.25',
+        newTag: '1.26',
+        updateKind: 'minor',
+        status: 'running',
+        bouncer: 'safe',
+      });
+      const { context } = makeContext();
+      context.containerViewMode.value = 'table';
+      context.filteredContainers.value = [container];
+      context.displayContainers.value = [container];
+      context.renderGroups.value = [
+        {
+          key: 'g',
+          name: 'g',
+          containers: [container],
+          containerCount: 1,
+          updatesAvailable: 1,
+          updatableCount: 1,
+        },
+      ];
+      mocked.context = context;
+      const wrapper = mountSubject();
+      const row = rowByName(wrapper, 'alpha');
+      const text = row.text();
+      expect(text).toContain('1.25');
+      expect(text).toContain('1.26');
+    });
+  });
 });
