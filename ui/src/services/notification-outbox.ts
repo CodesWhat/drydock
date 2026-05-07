@@ -1,3 +1,5 @@
+import { readJsonResponse } from '../utils/api';
+
 export type NotificationOutboxEntryStatus = 'pending' | 'delivered' | 'dead-letter';
 
 export interface NotificationOutboxEntry {
@@ -34,44 +36,69 @@ export interface NotificationOutboxResponse {
   counts: NotificationOutboxStatusCounts;
 }
 
+const OUTBOX_API_BASE = '/api/v1/notifications/outbox';
+
+type ErrorEnvelope = {
+  error?: unknown;
+};
+
+function messageFromErrorEnvelope(body: ErrorEnvelope, fallback: string): string {
+  return typeof body.error === 'string' && body.error.trim() ? body.error : fallback;
+}
+
+async function readErrorEnvelope(response: Response, context: string): Promise<ErrorEnvelope> {
+  try {
+    return await readJsonResponse<ErrorEnvelope>(response, context);
+  } catch {
+    return {};
+  }
+}
+
+function withStatusCode(error: Error, statusCode: number): Error & { statusCode?: number } {
+  (error as Error & { statusCode?: number }).statusCode = statusCode;
+  return error as Error & { statusCode?: number };
+}
+
 async function getOutboxEntries(
   status?: NotificationOutboxEntryStatus,
 ): Promise<NotificationOutboxResponse> {
-  const url = status
-    ? `/api/notifications/outbox?status=${encodeURIComponent(status)}`
-    : '/api/notifications/outbox';
+  const url = status ? `${OUTBOX_API_BASE}?status=${encodeURIComponent(status)}` : OUTBOX_API_BASE;
   const response = await fetch(url, { credentials: 'include' });
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body?.error || `Failed to load outbox: ${response.statusText}`);
+    const body = await readErrorEnvelope(response, 'Outbox API');
+    throw new Error(
+      messageFromErrorEnvelope(body, `Failed to load outbox: ${response.statusText}`),
+    );
   }
-  return (await response.json()) as NotificationOutboxResponse;
+  return readJsonResponse<NotificationOutboxResponse>(response, 'Outbox API');
 }
 
 async function retryOutboxEntry(id: string): Promise<NotificationOutboxEntry> {
-  const response = await fetch(`/api/notifications/outbox/${encodeURIComponent(id)}/retry`, {
+  const response = await fetch(`${OUTBOX_API_BASE}/${encodeURIComponent(id)}/retry`, {
     method: 'POST',
     credentials: 'include',
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    const error = new Error(body?.error || `Failed to retry entry: ${response.statusText}`);
-    (error as Error & { statusCode?: number }).statusCode = response.status;
-    throw error;
+    const body = await readErrorEnvelope(response, 'Outbox retry API');
+    throw withStatusCode(
+      new Error(messageFromErrorEnvelope(body, `Failed to retry entry: ${response.statusText}`)),
+      response.status,
+    );
   }
-  return (await response.json()) as NotificationOutboxEntry;
+  return readJsonResponse<NotificationOutboxEntry>(response, 'Outbox retry API');
 }
 
 async function deleteOutboxEntry(id: string): Promise<void> {
-  const response = await fetch(`/api/notifications/outbox/${encodeURIComponent(id)}`, {
+  const response = await fetch(`${OUTBOX_API_BASE}/${encodeURIComponent(id)}`, {
     method: 'DELETE',
     credentials: 'include',
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    const error = new Error(body?.error || `Failed to delete entry: ${response.statusText}`);
-    (error as Error & { statusCode?: number }).statusCode = response.status;
-    throw error;
+    const body = await readErrorEnvelope(response, 'Outbox delete API');
+    throw withStatusCode(
+      new Error(messageFromErrorEnvelope(body, `Failed to delete entry: ${response.statusText}`)),
+      response.status,
+    );
   }
 }
 

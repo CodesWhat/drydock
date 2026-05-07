@@ -171,6 +171,15 @@ export const iconMap: Record<string, Record<IconLibrary, string>> = {
     heroicons: 'heroicons:bell',
     iconoir: 'iconoir:bell',
   },
+  outbox: {
+    'fa6-solid': 'fa6-solid:arrow-up-from-bracket',
+    ph: 'ph:tray-arrow-up',
+    'ph-duotone': 'ph:tray-arrow-up-duotone',
+    lucide: 'lucide:upload',
+    tabler: 'tabler:upload',
+    heroicons: 'heroicons:arrow-up-tray',
+    iconoir: 'iconoir:mail-out',
+  },
   moon: {
     'fa6-solid': 'fa6-solid:moon',
     ph: 'ph:moon',

@@ -61,6 +61,7 @@
         "settingsGroup": "Configurações",
         "general": "Geral",
         "notifications": "Notificações",
+        "outbox": "Caixa de saída",
         "triggers": "Triggers",
         "auth": "Auth",
         "agents": "Agentes"

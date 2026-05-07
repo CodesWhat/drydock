@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import AppBadge from '@/components/AppBadge.vue';
 import AppButton from '@/components/AppButton.vue';
@@ -21,6 +22,7 @@ import { errorMessage } from '../utils/error';
 const route = useRoute();
 const router = useRouter();
 const toast = useToast();
+const { t } = useI18n();
 
 const STATUS_TABS: Array<{ key: NotificationOutboxEntryStatus; label: string }> = [
   { key: 'dead-letter', label: 'Dead-letter' },
@@ -50,12 +52,11 @@ const error = ref('');
 const actingId = ref<string | null>(null);
 
 const tableColumns = computed(() => [
-  { key: 'eventName', label: 'Event', sortable: false, width: '18%' },
-  { key: 'triggerId', label: 'Trigger', sortable: false, width: '18%' },
-  { key: 'attempts', label: 'Attempts', sortable: false, width: '8%' },
-  { key: 'lastError', label: 'Last error', sortable: false, width: '26%' },
-  { key: 'createdAt', label: 'Created', sortable: false, width: '12%' },
-  { key: 'actions', label: '', sortable: false, width: '18%', align: 'text-right', px: 'px-3' },
+  { key: 'eventName', label: 'Event', sortable: false, width: '220px', align: 'text-left' },
+  { key: 'triggerId', label: 'Trigger', sortable: false, width: '260px', align: 'text-left' },
+  { key: 'attempts', label: 'Attempts', sortable: false, width: '100px' },
+  { key: 'lastError', label: 'Last error', sortable: false, width: '360px', align: 'text-left' },
+  { key: 'createdAt', label: 'Created', sortable: false, width: '160px' },
 ]);
 
 function statusToCount(s: NotificationOutboxEntryStatus): number {
@@ -147,7 +148,7 @@ onMounted(() => {
   <DataViewLayout>
     <div class="mb-3 flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <h2 class="text-base font-semibold dd-text">Notification outbox</h2>
+        <h2 class="text-base font-semibold dd-text">{{ t('appShell.layout.nav.outbox') }}</h2>
         <span class="text-xs dd-text-muted">{{ entries.length }} of {{ statusToCount(status) }}</span>
       </div>
       <AppButton size="xs" variant="text-muted" weight="medium" :disabled="loading" @click="loadEntries">
@@ -174,33 +175,91 @@ onMounted(() => {
 
     <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">Loading outbox entries…</div>
 
-    <DataTable v-if="!loading" :columns="tableColumns" :rows="entries" row-key="id">
+    <DataTable
+      v-if="!loading"
+      :columns="tableColumns"
+      :rows="entries"
+      row-key="id"
+      :fixed-layout="true"
+      :show-actions="true"
+      actions-width="180px"
+    >
       <template #cell-eventName="{ row }">
-        <span class="font-medium dd-text">{{ row.eventName }}</span>
+        <span
+          data-testid="outbox-event-name"
+          class="block min-w-0 truncate whitespace-nowrap font-mono text-2xs-plus font-semibold dd-text"
+          :title="row.eventName"
+        >
+          {{ row.eventName }}
+        </span>
       </template>
       <template #cell-triggerId="{ row }">
-        <span class="text-2xs-plus dd-text">{{ row.triggerId }}</span>
-        <span v-if="row.containerId" class="block text-2xs dd-text-muted truncate">{{ row.containerId }}</span>
+        <span
+          data-testid="outbox-trigger-id"
+          class="block min-w-0 truncate whitespace-nowrap font-mono text-2xs-plus dd-text"
+          :title="row.triggerId"
+        >
+          {{ row.triggerId }}
+        </span>
+        <span
+          v-if="row.containerId"
+          class="block min-w-0 truncate whitespace-nowrap text-2xs dd-text-muted"
+          :title="row.containerId"
+        >
+          {{ row.containerId }}
+        </span>
       </template>
       <template #cell-attempts="{ row }">
-        <AppBadge :tone="row.attempts >= row.maxAttempts ? 'danger' : 'warning'" size="xs">
+        <AppBadge
+          :tone="row.attempts >= row.maxAttempts ? 'danger' : 'warning'"
+          size="xs"
+          class="whitespace-nowrap"
+        >
           {{ row.attempts }} / {{ row.maxAttempts }}
         </AppBadge>
       </template>
       <template #cell-lastError="{ row }">
-        <span class="text-2xs dd-text-muted truncate" :title="row.lastError">{{ row.lastError ?? '—' }}</span>
+        <span
+          data-testid="outbox-last-error"
+          class="line-clamp-2 min-w-0 break-words text-2xs dd-text-muted"
+          :title="row.lastError"
+        >
+          {{ row.lastError ?? '—' }}
+        </span>
       </template>
       <template #cell-createdAt="{ row }">
-        <span class="text-2xs dd-text-muted">{{ formatTimestamp(row.createdAt) }}</span>
+        <span
+          data-testid="outbox-created-at"
+          class="block whitespace-nowrap text-2xs dd-text-muted"
+        >
+          {{ formatTimestamp(row.createdAt) }}
+        </span>
       </template>
-      <template #cell-actions="{ row }">
-        <div class="flex items-center justify-end gap-1">
-          <AppButton v-if="row.status === 'dead-letter'" size="xs" variant="primary" weight="medium"
-                     :disabled="actingId === row.id" @click.stop="retryEntry(row)">
+      <template #actions="{ row }">
+        <div class="flex items-center justify-end gap-1 whitespace-nowrap">
+          <AppButton
+            v-if="row.status === 'dead-letter'"
+            size="sm"
+            variant="success-subtle"
+            weight="bold"
+            class="inline-flex min-w-[74px] items-center justify-center gap-1 whitespace-nowrap"
+            :disabled="actingId === row.id"
+            aria-label="Retry outbox entry"
+            @click.stop="retryEntry(row)"
+          >
+            <AppIcon name="refresh" :size="12" />
             Retry
           </AppButton>
-          <AppButton size="xs" variant="text-muted" weight="medium" :disabled="actingId === row.id"
-                     @click.stop="discardEntry(row)">
+          <AppButton
+            size="sm"
+            variant="danger-subtle"
+            weight="bold"
+            class="inline-flex min-w-[82px] items-center justify-center gap-1 whitespace-nowrap"
+            :disabled="actingId === row.id"
+            aria-label="Discard outbox entry"
+            @click.stop="discardEntry(row)"
+          >
+            <AppIcon name="trash" :size="12" />
             Discard
           </AppButton>
         </div>

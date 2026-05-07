@@ -42,7 +42,7 @@ describe('notification-outbox service', () => {
   });
 
   describe('getOutboxEntries', () => {
-    it('fetches /api/notifications/outbox without status param when called with no args', async () => {
+    it('fetches /api/v1/notifications/outbox without status param when called with no args', async () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: true,
         json: vi.fn().mockResolvedValue(makeResponse()),
@@ -50,7 +50,7 @@ describe('notification-outbox service', () => {
 
       const result = await getOutboxEntries();
 
-      expect(global.fetch).toHaveBeenCalledWith('/api/notifications/outbox', {
+      expect(global.fetch).toHaveBeenCalledWith('/api/v1/notifications/outbox', {
         credentials: 'include',
       });
       expect(result).toEqual(makeResponse());
@@ -64,7 +64,7 @@ describe('notification-outbox service', () => {
 
       await getOutboxEntries('pending');
 
-      expect(global.fetch).toHaveBeenCalledWith('/api/notifications/outbox?status=pending', {
+      expect(global.fetch).toHaveBeenCalledWith('/api/v1/notifications/outbox?status=pending', {
         credentials: 'include',
       });
     });
@@ -77,7 +77,7 @@ describe('notification-outbox service', () => {
 
       await getOutboxEntries('delivered');
 
-      expect(global.fetch).toHaveBeenCalledWith('/api/notifications/outbox?status=delivered', {
+      expect(global.fetch).toHaveBeenCalledWith('/api/v1/notifications/outbox?status=delivered', {
         credentials: 'include',
       });
     });
@@ -90,9 +90,22 @@ describe('notification-outbox service', () => {
 
       await getOutboxEntries('dead-letter');
 
-      expect(global.fetch).toHaveBeenCalledWith('/api/notifications/outbox?status=dead-letter', {
+      expect(global.fetch).toHaveBeenCalledWith('/api/v1/notifications/outbox?status=dead-letter', {
         credentials: 'include',
       });
+    });
+
+    it('normalizes HTML success responses from an unhandled API route', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        headers: new Headers({ 'content-type': 'text/html' }),
+        clone: () => ({
+          text: vi.fn().mockResolvedValue('<!DOCTYPE html><html><body>Vite shell</body></html>'),
+        }),
+        json: vi.fn().mockRejectedValue(new SyntaxError("Unexpected token '<'")),
+      });
+
+      await expect(getOutboxEntries()).rejects.toThrow('Outbox API returned HTML instead of JSON');
     });
 
     it('throws with server error message from body on !ok', async () => {
@@ -129,7 +142,7 @@ describe('notification-outbox service', () => {
   });
 
   describe('retryOutboxEntry', () => {
-    it('POSTs to /api/notifications/outbox/:id/retry and returns parsed entry', async () => {
+    it('POSTs to /api/v1/notifications/outbox/:id/retry and returns parsed entry', async () => {
       const entry = makeEntry({ id: 'entry-42', status: 'pending' });
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: true,
@@ -138,7 +151,7 @@ describe('notification-outbox service', () => {
 
       const result = await retryOutboxEntry('entry-42');
 
-      expect(global.fetch).toHaveBeenCalledWith('/api/notifications/outbox/entry-42/retry', {
+      expect(global.fetch).toHaveBeenCalledWith('/api/v1/notifications/outbox/entry-42/retry', {
         method: 'POST',
         credentials: 'include',
       });
@@ -154,7 +167,7 @@ describe('notification-outbox service', () => {
       await retryOutboxEntry('entry/with spaces');
 
       expect(global.fetch).toHaveBeenCalledWith(
-        '/api/notifications/outbox/entry%2Fwith%20spaces/retry',
+        '/api/v1/notifications/outbox/entry%2Fwith%20spaces/retry',
         expect.objectContaining({ method: 'POST' }),
       );
     });
@@ -188,7 +201,7 @@ describe('notification-outbox service', () => {
   });
 
   describe('deleteOutboxEntry', () => {
-    it('DELETEs /api/notifications/outbox/:id and resolves undefined on success', async () => {
+    it('DELETEs /api/v1/notifications/outbox/:id and resolves undefined on success', async () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: true,
         json: vi.fn().mockResolvedValue({}),
@@ -196,7 +209,7 @@ describe('notification-outbox service', () => {
 
       const result = await deleteOutboxEntry('entry-99');
 
-      expect(global.fetch).toHaveBeenCalledWith('/api/notifications/outbox/entry-99', {
+      expect(global.fetch).toHaveBeenCalledWith('/api/v1/notifications/outbox/entry-99', {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -212,7 +225,7 @@ describe('notification-outbox service', () => {
       await deleteOutboxEntry('entry/with spaces');
 
       expect(global.fetch).toHaveBeenCalledWith(
-        '/api/notifications/outbox/entry%2Fwith%20spaces',
+        '/api/v1/notifications/outbox/entry%2Fwith%20spaces',
         expect.objectContaining({ method: 'DELETE' }),
       );
     });

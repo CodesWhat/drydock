@@ -1,5 +1,5 @@
 import type { ApiContainerUpdateOperation } from '../types/api';
-import { extractCollectionData } from '../utils/api';
+import { extractCollectionData, readJsonResponse } from '../utils/api';
 import type { ApiContainerInput } from '../utils/container-mapper';
 import { ApiError, errorMessage } from '../utils/error';
 
@@ -134,7 +134,7 @@ async function getAllContainers(
   if (!response.ok) {
     throw new Error(`Failed to get containers: ${response.statusText}`);
   }
-  const payload = await response.json();
+  const payload = await readJsonResponse(response, 'Containers API');
   return extractCollectionData<ApiContainerInput>(payload);
 }
 
@@ -145,7 +145,7 @@ async function getContainerSummary(): Promise<ContainerSummary> {
   if (!response.ok) {
     throw new Error(`Failed to get container summary: ${response.statusText}`);
   }
-  return response.json();
+  return readJsonResponse<ContainerSummary>(response, 'Container summary API');
 }
 
 async function getContainerRecentStatus(): Promise<ContainerRecentStatusResponse> {
@@ -155,7 +155,7 @@ async function getContainerRecentStatus(): Promise<ContainerRecentStatusResponse
   if (!response.ok) {
     throw new Error(`Failed to get container recent status: ${response.statusText}`);
   }
-  return response.json();
+  return readJsonResponse<ContainerRecentStatusResponse>(response, 'Container recent status API');
 }
 
 async function refreshAllContainers() {
@@ -166,7 +166,7 @@ async function refreshAllContainers() {
   if (!response.ok) {
     throw new Error(`Failed to refresh all containers: ${response.statusText}`);
   }
-  return response.json();
+  return readJsonResponse(response, 'Container refresh API');
 }
 
 async function refreshContainer(containerId: string) {
@@ -180,7 +180,7 @@ async function refreshContainer(containerId: string) {
   if (!response.ok) {
     throw new Error(`Failed to refresh container ${containerId}: ${response.statusText}`);
   }
-  return response.json();
+  return readJsonResponse(response, 'Container refresh API');
 }
 
 async function deleteContainer(containerId: string) {
@@ -204,7 +204,7 @@ async function getContainerTriggers(containerId: string) {
   if (!response.ok) {
     throw new Error(`Failed to get triggers for container ${containerId}: ${response.statusText}`);
   }
-  const payload = await response.json();
+  const payload = await readJsonResponse(response, 'Container triggers API');
   return extractCollectionData<Record<string, unknown>>(payload);
 }
 
@@ -225,7 +225,7 @@ async function runTrigger({
   if (!response.ok) {
     throw new Error(`Failed to run trigger ${triggerType}/${triggerName}: ${response.statusText}`);
   }
-  return response.json();
+  return readJsonResponse(response, 'Container trigger API');
 }
 
 async function getContainerLogs(containerId: string, tail: number = 100) {
@@ -235,7 +235,7 @@ async function getContainerLogs(containerId: string, tail: number = 100) {
   if (!response.ok) {
     throw new Error(`Failed to get logs for container ${containerId}: ${response.statusText}`);
   }
-  return response.json();
+  return readJsonResponse(response, 'Container logs API');
 }
 
 async function getContainerUpdateOperations(
@@ -249,7 +249,7 @@ async function getContainerUpdateOperations(
       `Failed to get update operations for container ${containerId}: ${response.statusText}`,
     );
   }
-  const payload = await response.json();
+  const payload = await readJsonResponse(response, 'Container update operations API');
   return extractCollectionData<ApiContainerUpdateOperation>(payload);
 }
 
@@ -262,7 +262,7 @@ async function getContainerVulnerabilities(containerId: string) {
       `Failed to get vulnerabilities for container ${containerId}: ${response.statusText}`,
     );
   }
-  return response.json();
+  return readJsonResponse(response, 'Container vulnerabilities API');
 }
 
 async function getSecurityVulnerabilityOverview(): Promise<SecurityVulnerabilityOverview> {
@@ -272,7 +272,7 @@ async function getSecurityVulnerabilityOverview(): Promise<SecurityVulnerability
   if (!response.ok) {
     throw new Error(`Failed to get aggregated vulnerabilities: ${response.statusText}`);
   }
-  return response.json();
+  return readJsonResponse<SecurityVulnerabilityOverview>(response, 'Container vulnerabilities API');
 }
 
 async function getContainerSbom(containerId: string, format: string = 'spdx-json') {
@@ -285,7 +285,7 @@ async function getContainerSbom(containerId: string, format: string = 'spdx-json
   if (!response.ok) {
     throw new Error(`Failed to get SBOM for container ${containerId}: ${response.statusText}`);
   }
-  return response.json();
+  return readJsonResponse(response, 'Container SBOM API');
 }
 
 async function updateContainerPolicy(
@@ -305,7 +305,7 @@ async function updateContainerPolicy(
   if (!response.ok) {
     let details = '';
     try {
-      const body = await response.json();
+      const body = await readJsonResponse<{ error?: unknown }>(response, 'Container policy API');
       details = body?.error ? ` (${body.error})` : '';
     } catch (e: unknown) {
       console.debug(`Unable to parse policy update response payload: ${errorMessage(e)}`);
@@ -315,7 +315,7 @@ async function updateContainerPolicy(
       `Failed to update container policy ${action}: ${response.statusText}${details}`,
     );
   }
-  return response.json();
+  return readJsonResponse(response, 'Container policy API');
 }
 
 async function getContainerGroups(): Promise<ContainerGroup[]> {
@@ -323,7 +323,7 @@ async function getContainerGroups(): Promise<ContainerGroup[]> {
   if (!response.ok) {
     throw new Error(`Failed to get container groups: ${response.statusText}`);
   }
-  const payload = await response.json();
+  const payload = await readJsonResponse(response, 'Container groups API');
   return extractCollectionData<ContainerGroup>(payload);
 }
 
@@ -342,7 +342,7 @@ async function scanAllContainersApi(signal?: AbortSignal): Promise<BulkScanRespo
   if (!response.ok) {
     let details = '';
     try {
-      const body = await response.json();
+      const body = await readJsonResponse<{ error?: unknown }>(response, 'Container scan API');
       details = body?.error ? ` (${body.error})` : '';
     } catch (e: unknown) {
       console.debug(`Unable to parse scan-all response payload: ${errorMessage(e)}`);
@@ -352,7 +352,7 @@ async function scanAllContainersApi(signal?: AbortSignal): Promise<BulkScanRespo
       response.status,
     );
   }
-  return response.json();
+  return readJsonResponse<BulkScanResponse>(response, 'Container scan API');
 }
 
 async function scanContainer(containerId: string, signal?: AbortSignal) {
@@ -364,7 +364,7 @@ async function scanContainer(containerId: string, signal?: AbortSignal) {
   if (!response.ok) {
     let details = '';
     try {
-      const body = await response.json();
+      const body = await readJsonResponse<{ error?: unknown }>(response, 'Container scan API');
       details = body?.error ? ` (${body.error})` : '';
     } catch (e: unknown) {
       console.debug(`Unable to parse scan response payload: ${errorMessage(e)}`);
@@ -374,7 +374,7 @@ async function scanContainer(containerId: string, signal?: AbortSignal) {
       response.status,
     );
   }
-  return response.json();
+  return readJsonResponse(response, 'Container scan API');
 }
 
 async function getContainerReleaseNotes(containerId: string) {
@@ -389,7 +389,7 @@ async function getContainerReleaseNotes(containerId: string) {
       `Failed to get release notes for container ${containerId}: ${response.statusText}`,
     );
   }
-  return response.json();
+  return readJsonResponse(response, 'Container release notes API');
 }
 
 async function getUpdateOperationById(
@@ -404,7 +404,7 @@ async function getUpdateOperationById(
   if (!response.ok) {
     throw new Error(`Failed to get update operation ${operationId}: ${response.statusText}`);
   }
-  return response.json();
+  return readJsonResponse<ApiContainerUpdateOperation>(response, 'Container update operation API');
 }
 
 async function revealContainerEnv(containerId: string) {
@@ -415,7 +415,7 @@ async function revealContainerEnv(containerId: string) {
   if (!response.ok) {
     throw new Error(`Failed to reveal env vars: ${response.statusText}`);
   }
-  return response.json();
+  return readJsonResponse(response, 'Container env API');
 }
 
 export type { ContainerGroup };

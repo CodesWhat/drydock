@@ -61,6 +61,7 @@
         "settingsGroup": "Impostazioni",
         "general": "Generale",
         "notifications": "Notifiche",
+        "outbox": "In uscita",
         "triggers": "Trigger",
         "auth": "Auth",
         "agents": "Agent"

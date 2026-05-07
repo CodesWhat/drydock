@@ -148,6 +148,26 @@ describe('Container Service', () => {
         'Failed to get containers: Internal Server Error',
       );
     });
+
+    it('throws a clear error when the endpoint returns the HTML app shell', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce(
+        new Response('<!DOCTYPE html><html><body>Drydock</body></html>', {
+          status: 200,
+          headers: { 'Content-Type': 'text/html' },
+        }) as any,
+      );
+
+      let thrown: unknown;
+      try {
+        await getAllContainers();
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(Error);
+      expect((thrown as Error).message).toContain('API returned HTML instead of JSON');
+      expect((thrown as Error).message).not.toContain('Unexpected token');
+    });
   });
 
   describe('getContainerSummary', () => {
