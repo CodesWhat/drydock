@@ -72,9 +72,11 @@ function truncateBody(body: string, maxLength: number = 200): string {
   >
     <!-- Current running tag -->
     <div v-if="showCurrentPanel" class="inline-flex flex-col" data-test="current-release-notes-panel">
-      <AppButton size="none" variant="plain" weight="none"
-        class="inline-flex items-center gap-1 text-2xs-plus underline hover:no-underline transition-colors"
-        style="color: var(--dd-info);"
+      <AppButton
+        size="compact"
+        variant="text-info"
+        weight="none"
+        class="inline-flex items-center gap-1 underline hover:no-underline transition-colors"
         @click.stop="currentExpanded = !currentExpanded"
       >
         <AppIcon name="file-text" :size="12" />
@@ -93,8 +95,7 @@ function truncateBody(body: string, maxLength: number = 200): string {
           :href="props.currentReleaseNotes.url"
           target="_blank"
           rel="noopener noreferrer"
-          class="inline-flex items-center gap-1 text-2xs underline hover:no-underline"
-          style="color: var(--dd-info);"
+          class="inline-flex items-center gap-1 text-2xs underline hover:no-underline dd-text-info"
         >
           {{ t('containerComponents.releaseNotesLink.viewFullNotes') }}
           <AppIcon name="external-link" :size="10" />
@@ -103,9 +104,11 @@ function truncateBody(body: string, maxLength: number = 200): string {
     </div>
     <!-- New update target tag -->
     <div v-if="props.releaseNotes" class="inline-flex flex-col" data-test="update-release-notes-panel">
-      <AppButton size="none" variant="plain" weight="none"
-        class="inline-flex items-center gap-1 text-2xs-plus underline hover:no-underline transition-colors"
-        style="color: var(--dd-info);"
+      <AppButton
+        size="compact"
+        variant="text-info"
+        weight="none"
+        class="inline-flex items-center gap-1 underline hover:no-underline transition-colors"
         @click.stop="updateExpanded = !updateExpanded"
       >
         <AppIcon name="file-text" :size="12" />
@@ -129,8 +132,7 @@ function truncateBody(body: string, maxLength: number = 200): string {
           :href="props.releaseNotes.url"
           target="_blank"
           rel="noopener noreferrer"
-          class="inline-flex items-center gap-1 text-2xs underline hover:no-underline"
-          style="color: var(--dd-info);"
+          class="inline-flex items-center gap-1 text-2xs underline hover:no-underline dd-text-info"
         >
           {{ t('containerComponents.releaseNotesLink.viewFullNotes') }}
           <AppIcon name="external-link" :size="10" />
@@ -144,8 +146,7 @@ function truncateBody(body: string, maxLength: number = 200): string {
     :href="props.releaseLink"
     target="_blank"
     rel="noopener noreferrer"
-    class="inline-flex items-center gap-1 text-2xs-plus underline hover:no-underline"
-    style="color: var(--dd-info);"
+    class="inline-flex items-center gap-1 text-2xs-plus underline hover:no-underline dd-text-info"
     data-test="release-link"
   >
     <AppIcon name="file-text" :size="12" />

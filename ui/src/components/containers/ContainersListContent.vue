@@ -175,9 +175,11 @@ const activeFilterChips = computed(() => {
           />
           {{ t('containerComponents.listContent.hidePinned') }}
         </label>
-        <AppButton size="none" variant="plain" weight="none"
+        <AppButton
           v-if="activeFilterCount > 0 || filterSearch"
-          class="text-2xs font-medium px-2 py-1 dd-rounded transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+          size="xs"
+          variant="muted"
+          weight="medium"
           @click="clearFilters">
           {{ t('containerComponents.listContent.clearAll') }}
         </AppButton>
@@ -224,15 +226,13 @@ const activeFilterChips = computed(() => {
           class="inline-flex items-center gap-1.5 px-2 py-1 dd-rounded text-2xs font-medium"
           :style="{ backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }">
           <span>{{ t('containerComponents.listContent.filteredContainers', { count: filterContainerIds.size }) }}</span>
-          <AppButton
-            size="none"
+          <AppIconButton
+            icon="xmark"
+            size="toolbar"
             variant="plain"
-            weight="none"
-            class="ml-1 font-semibold hover:opacity-70 transition-opacity"
+            class="-my-1 ml-1 dd-text-info hover:opacity-70"
             aria-label="Clear container ID filter"
-            @click="clearContainerIdsFilter">
-            &times;
-          </AppButton>
+            @click="clearContainerIdsFilter" />
         </div>
         <div
           v-else-if="!showFilters && activeFilterChips.length > 0"
@@ -255,33 +255,39 @@ const activeFilterChips = computed(() => {
       </template>
     </DataFilterBar>
 
-    <div
-      v-if="showColumnPicker"
-      class="min-w-[160px] py-1.5 dd-rounded shadow-lg"
-      :style="{
-        ...columnPickerStyle,
-        zIndex: 'var(--z-popover)',
-        backgroundColor: 'var(--dd-bg-card)',
-        border: '1px solid var(--dd-border-strong)',
-        boxShadow: 'var(--dd-shadow-tooltip)',
-      }"
-      @click.stop>
-      <div class="px-3 py-1 text-3xs font-bold uppercase tracking-wider dd-text-muted">{{ t('containerComponents.listContent.columnsHeader') }}</div>
-      <AppButton size="none" variant="plain" weight="none"
-        v-for="column in allColumns.filter((columnItem) => columnItem.label)"
-        :key="column.key"
-        class="w-full text-left px-3 py-1.5 text-2xs-plus font-medium transition-colors flex items-center gap-2 hover:dd-bg-elevated"
-        :class="column.required ? 'dd-text-muted cursor-not-allowed' : 'dd-text'"
-        @click="toggleColumn(column.key)">
-        <AppIcon
-          :name="visibleColumns.has(column.key) ? 'check' : 'square'"
-          :size="13"
-          :style="visibleColumns.has(column.key) ? { color: 'var(--dd-primary)' } : {}" />
-        {{ column.label }}<em
-          v-if="visibleColumns.has(column.key) && autoHiddenColumns.some((c) => c.key === column.key)"
-          class="not-italic dd-text-muted"> {{ t('containerComponents.listContent.narrowViewportSuffix') }}</em>
-      </AppButton>
-    </div>
+    <Teleport to="body">
+      <div
+        v-if="showColumnPicker"
+        data-test="containers-column-picker"
+        class="min-w-[160px] py-1.5 dd-rounded shadow-lg"
+        :style="{
+          ...columnPickerStyle,
+          zIndex: 'var(--z-popover)',
+          backgroundColor: 'var(--dd-bg-card)',
+          border: '1px solid var(--dd-border-strong)',
+          boxShadow: 'var(--dd-shadow-tooltip)',
+        }"
+        @click.stop>
+        <div class="px-3 py-1 text-3xs font-bold uppercase tracking-wider dd-text-muted">{{ t('containerComponents.listContent.columnsHeader') }}</div>
+        <AppButton
+          v-for="column in allColumns.filter((columnItem) => columnItem.label)"
+          :key="column.key"
+          size="md"
+          variant="plain"
+          weight="medium"
+          class="w-full text-left flex items-center gap-2 hover:dd-bg-elevated"
+          :class="column.required ? 'dd-text-muted cursor-not-allowed' : 'dd-text'"
+          @click="toggleColumn(column.key)">
+          <AppIcon
+            :name="visibleColumns.has(column.key) ? 'check' : 'square'"
+            :size="13"
+            :style="visibleColumns.has(column.key) ? { color: 'var(--dd-primary)' } : {}" />
+          {{ column.label }}<em
+            v-if="visibleColumns.has(column.key) && autoHiddenColumns.some((c) => c.key === column.key)"
+            class="not-italic dd-text-muted"> {{ t('containerComponents.listContent.narrowViewportSuffix') }}</em>
+        </AppButton>
+      </div>
+    </Teleport>
 
     <ContainersGroupedViews />
   </div>

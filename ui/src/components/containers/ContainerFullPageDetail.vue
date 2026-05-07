@@ -9,7 +9,7 @@ import {
   getUpdateInProgressPhaseLabelKey,
   UPDATE_IN_PROGRESS_PHASE_I18N,
 } from '../../utils/container-update';
-import type { UpdateEligibility } from '../../types/container';
+import type { Container, UpdateEligibility } from '../../types/container';
 import { getPrimaryHardBlocker } from '../../utils/update-eligibility';
 import ContainerFullPageTabContent from './ContainerFullPageTabContent.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
@@ -61,6 +61,17 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
   return getUpdateHardBlocker(container) !== undefined;
 }
 
+const updateKindLabels: Record<NonNullable<Container['updateKind']>, string> = {
+  major: 'Major',
+  minor: 'Minor',
+  patch: 'Patch',
+  digest: 'Digest',
+};
+
+function getUpdateKindLabel(kind: Container['updateKind']) {
+  return kind ? updateKindLabels[kind] : '';
+}
+
 function getStatusLabel(container: {
   id?: unknown;
   name?: unknown;
@@ -97,8 +108,10 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
       }">
       <div class="px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div class="flex items-center gap-4 min-w-0">
-          <AppButton size="none" variant="plain" weight="none"
-            class="flex items-center gap-2 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated shrink-0"
+          <AppButton
+            size="md"
+            variant="muted"
+            class="inline-flex items-center gap-2 shrink-0"
             @click="closeFullPage">
             <AppIcon name="arrow-left" :size="11" />
             {{ t('common.back') }}
@@ -155,88 +168,94 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
                     text: updateKindColor(selectedContainer.updateKind).text,
                   }"
                   class="max-sm:hidden">
-                  {{ selectedContainer.updateKind }} update: {{ selectedContainer.newTag }}
+                  {{ getUpdateKindLabel(selectedContainer.updateKind) }}: {{ selectedContainer.newTag }}
                 </AppBadge>
               </div>
             </div>
           </div>
         </div>
         <div class="flex items-center gap-2 shrink-0">
-          <AppButton size="none" variant="plain" weight="none"
+          <AppButton
             v-if="selectedContainer.status === 'running'"
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
-            :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
-            :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+            size="md"
+            variant="danger"
+            class="inline-flex items-center gap-1.5"
             :disabled="isActionBlocked(selectedContainer)"
             :aria-label="t('containerComponents.fullPageDetail.ariaStopContainer')"
             @click="confirmStop(selectedContainer)">
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'stop'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
             {{ t('containerComponents.fullPageDetail.stopButton') }}
           </AppButton>
-          <AppButton size="none" variant="plain" weight="none"
+          <AppButton
             v-else
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
-            :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
-            :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', border: '1px solid var(--dd-success)' }"
+            size="md"
+            variant="success"
+            class="inline-flex items-center gap-1.5"
             :disabled="isActionBlocked(selectedContainer)"
             :aria-label="t('containerComponents.fullPageDetail.ariaStartContainer')"
             @click="startContainer(selectedContainer)">
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'play'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
             {{ t('containerComponents.fullPageDetail.startButton') }}
           </AppButton>
-          <AppButton size="none" variant="plain" weight="none"
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
-            :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
+          <AppButton
+            size="md"
+            variant="muted"
+            class="inline-flex items-center gap-1.5"
             :disabled="isActionBlocked(selectedContainer)"
             :aria-label="t('containerComponents.fullPageDetail.ariaRestartContainer')"
             @click="confirmRestart(selectedContainer)">
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'restart'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
             {{ t('containerComponents.fullPageDetail.restartButton') }}
           </AppButton>
-          <AppButton size="none" variant="plain" weight="none"
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
-            :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : 'dd-text-muted hover:dd-text'"
+          <AppButton
+            size="md"
+            variant="muted"
+            class="inline-flex items-center gap-1.5"
             :disabled="isActionBlocked(selectedContainer)"
             :aria-label="t('containerComponents.fullPageDetail.ariaScanContainer')"
             @click="scanContainer(selectedContainer)">
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'security'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
             {{ t('containerComponents.fullPageDetail.scanButton') }}
           </AppButton>
-	          <AppButton size="none" variant="plain" weight="none"
+	          <AppButton
 	            v-if="selectedContainer.newTag && isUpdateHardBlocked(selectedContainer)"
-	            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-bold transition-colors opacity-50 cursor-not-allowed"
-	            :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+	            size="md"
+	            variant="danger"
+	            weight="bold"
+	            class="inline-flex items-center gap-1.5"
 	            :disabled="true"
 	            :aria-label="getUpdateHardBlocker(selectedContainer)?.message ?? t('containerComponents.fullPageDetail.ariaUpdateBlocked')">
 	            <AppIcon name="lock" :size="12" />
 	            {{ t('containerComponents.fullPageDetail.blockedButton') }}
 	          </AppButton>
-	          <AppButton size="none" variant="plain" weight="none"
+	          <AppButton
 	            v-else-if="selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
-	            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-bold transition-colors"
-	            :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
-	            :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+	            size="md"
+	            variant="danger"
+	            weight="bold"
+	            class="inline-flex items-center gap-1.5"
             :disabled="isActionBlocked(selectedContainer)"
             :aria-label="t('containerComponents.fullPageDetail.ariaUpdateBlocked')"
             @click="confirmForceUpdate(selectedContainer)">
             <AppIcon name="lock" :size="12" />
             {{ t('containerComponents.fullPageDetail.blockedButton') }}
           </AppButton>
-          <AppButton size="none" variant="plain" weight="none"
+          <AppButton
             v-else-if="selectedContainer.newTag"
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-bold transition-colors"
-            :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
-            :style="{ backgroundColor: 'var(--dd-success-muted)', color: 'var(--dd-success)', border: '1px solid var(--dd-success)' }"
+            size="md"
+            variant="success"
+            weight="bold"
+            class="inline-flex items-center gap-1.5"
             :disabled="isActionBlocked(selectedContainer)"
             :aria-label="t('containerComponents.fullPageDetail.ariaUpdateContainer')"
             @click="confirmUpdate(selectedContainer)">
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'cloud-download'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
             {{ t('containerComponents.fullPageDetail.updateButton') }}
           </AppButton>
-          <AppButton size="none" variant="plain" weight="none"
-            class="flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors"
-            :class="isActionBlocked(selectedContainer) ? 'opacity-50 cursor-not-allowed' : ''"
-            :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+          <AppButton
+            size="md"
+            variant="danger"
+            class="inline-flex items-center gap-1.5"
             :disabled="isActionBlocked(selectedContainer)"
             :aria-label="t('containerComponents.fullPageDetail.ariaDeleteContainer')"
             @click="confirmDelete(selectedContainer)">

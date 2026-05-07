@@ -2,6 +2,7 @@
 import { reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppBadge from '@/components/AppBadge.vue';
+import AppIconButton from '../AppIconButton.vue';
 import ContainerLogs from './ContainerLogs.vue';
 import ContainerStats from './ContainerStats.vue';
 import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
@@ -14,10 +15,11 @@ import NoUpdateReasonBadge from './NoUpdateReasonBadge.vue';
 import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import { revealContainerEnv } from '../../services/container';
 import { errorMessage } from '../../utils/error';
-import type { UpdateEligibility } from '../../types/container';
+import type { Container, UpdateEligibility } from '../../types/container';
 import { getPrimaryHardBlocker } from '../../utils/update-eligibility';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 import { formatShortDigest } from '../../utils/digest-format';
+import { imageAge } from '../../utils/audit-helpers';
 
 const revealedEnvCache = reactive(new Map<string, Map<string, string>>());
 const revealedKeys = reactive(new Set<string>());
@@ -161,6 +163,17 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
 function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility }) {
   return getPrimaryHardBlocker(container.updateEligibility) !== undefined;
 }
+
+const updateKindLabels: Record<NonNullable<Container['updateKind']>, string> = {
+  major: 'Major',
+  minor: 'Minor',
+  patch: 'Patch',
+  digest: 'Digest',
+};
+
+function getUpdateKindLabel(kind: Container['updateKind']) {
+  return kind ? updateKindLabels[kind] : '';
+}
 </script>
 
 <template>
@@ -247,7 +260,7 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
               </div>
               <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag || (selectedContainer.tagPrecision === 'floating' && !selectedContainer.imageDigestWatch)" class="mt-2 flex items-center gap-1.5 flex-wrap">
                 <AppBadge v-if="selectedContainer.updateKind" size="xs" :custom="updateKindColor(selectedContainer.updateKind)">
-                  {{ selectedContainer.updateKind }}
+                  {{ getUpdateKindLabel(selectedContainer.updateKind) }}
                 </AppBadge>
                 <UpdateMaturityBadge :maturity="selectedContainer.updateMaturity" :tooltip="selectedContainer.updateMaturityTooltip" />
                 <SuggestedTagBadge :tag="selectedContainer.suggestedTag" :current-tag="selectedContainer.currentTag" />
@@ -255,6 +268,20 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
                   :tag-precision="selectedContainer.tagPrecision"
                   :image-digest-watch="selectedContainer.imageDigestWatch"
                 />
+              </div>
+              <div
+                v-if="selectedContainer.imageCreated || selectedImageMetadata.created"
+                data-test="container-image-age-detail"
+                class="mt-2 flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus"
+                :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
+              >
+                <span class="dd-text-secondary">Image age</span>
+                <span class="font-mono dd-text">
+                  {{ imageAge(selectedContainer.imageCreated || selectedImageMetadata.created) }}
+                </span>
+                <span class="min-w-0 truncate dd-text-muted">
+                  {{ formatTimestamp(selectedContainer.imageCreated || selectedImageMetadata.created) }}
+                </span>
               </div>
               <UpdateEligibilityBadges
                 v-if="selectedContainer.updateEligibility"
@@ -574,12 +601,14 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
                   <template v-else>
                     <span v-if="getRevealedValue(selectedContainer.id, e.key)" class="truncate dd-text">{{ getRevealedValue(selectedContainer.id, e.key) }}</span>
                     <span v-else class="truncate dd-text-muted">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>
-                    <AppButton size="none" variant="plain" weight="none" class="shrink-0 p-0.5 dd-text-muted hover:dd-text transition-colors"
-                            :tooltip="getRevealedValue(selectedContainer.id, e.key) ? t('containerComponents.sideTabContent.hideValueTooltip') : t('containerComponents.sideTabContent.revealValueTooltip')"
-                            :disabled="envRevealLoading"
-                            @click="toggleReveal(selectedContainer.id, e.key)">
-                      <AppIcon :name="getRevealedValue(selectedContainer.id, e.key) ? 'eye-slash' : 'eye'" :size="11" />
-                    </AppButton>
+                    <AppIconButton
+                      :icon="getRevealedValue(selectedContainer.id, e.key) ? 'eye-slash' : 'eye'"
+                      size="toolbar"
+                      variant="muted"
+                      class="shrink-0"
+                      :tooltip="getRevealedValue(selectedContainer.id, e.key) ? t('containerComponents.sideTabContent.hideValueTooltip') : t('containerComponents.sideTabContent.revealValueTooltip')"
+                      :disabled="envRevealLoading"
+                      @click="toggleReveal(selectedContainer.id, e.key)" />
                   </template>
                 </div>
               </div>
@@ -624,11 +653,11 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
                           @click="runContainerPreview">
                     {{ previewLoading ? t('containerComponents.fullPageActions.previewing') : t('containerComponents.fullPageActions.previewUpdate') }}
                   </AppButton>
-	                  <AppButton v-if="isUpdateHardBlocked(selectedContainer)" size="sm" variant="plain" :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+	                  <AppButton v-if="isUpdateHardBlocked(selectedContainer)" size="sm" variant="danger"
 	                          :disabled="true">
 	                    <AppIcon name="lock" :size="10" class="mr-1 inline" />{{ t('containerComponents.fullPageDetail.blockedButton') }}
 	                  </AppButton>
-	                  <AppButton v-else-if="selectedContainer.bouncer === 'blocked'" size="sm" variant="plain" :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+	                  <AppButton v-else-if="selectedContainer.bouncer === 'blocked'" size="sm" variant="danger"
 	                          :disabled="isActionInProgress(selectedContainer)"
 	                          @click="confirmForceUpdate(selectedContainer)">
 	                    <AppIcon name="lock" :size="10" class="mr-1 inline" />{{ t('containerComponents.fullPageActions.forceUpdate') }}
@@ -748,12 +777,14 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
                           class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-2xs font-mono"
                           :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                       <span class="dd-text">{{ tag }}</span>
-                      <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                              :tooltip="t('containerComponents.fullPageActions.removeSkip')"
-                              :disabled="policyInProgress !== null"
-                              @click="removeSkipTagSelected(tag)">
-                        <AppIcon name="xmark" :size="9" />
-                      </AppButton>
+                      <AppIconButton
+                        icon="xmark"
+                        size="toolbar"
+                        variant="muted"
+                        class="shrink-0"
+                        :tooltip="t('containerComponents.fullPageActions.removeSkip')"
+                        :disabled="policyInProgress !== null"
+                        @click="removeSkipTagSelected(tag)" />
                     </span>
                   </div>
                 </div>
@@ -764,12 +795,14 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
                           class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-2xs font-mono"
                           :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                       <span class="dd-text">{{ digest }}</span>
-                      <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                              :tooltip="t('containerComponents.fullPageActions.removeSkip')"
-                              :disabled="policyInProgress !== null"
-                              @click="removeSkipDigestSelected(digest)">
-                        <AppIcon name="xmark" :size="9" />
-                      </AppButton>
+                      <AppIconButton
+                        icon="xmark"
+                        size="toolbar"
+                        variant="muted"
+                        class="shrink-0"
+                        :tooltip="t('containerComponents.fullPageActions.removeSkip')"
+                        :disabled="policyInProgress !== null"
+                        @click="removeSkipDigestSelected(digest)" />
                     </span>
                   </div>
                 </div>

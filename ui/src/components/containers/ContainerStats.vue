@@ -283,13 +283,10 @@ onUnmounted(() => {
         </span>
       </div>
 
-      <AppButton size="none" variant="plain" weight="none"
+      <AppButton
+        size="xs"
+        :variant="streamPaused ? 'success' : 'warning'"
         type="button"
-        class="px-2.5 py-1 text-2xs font-semibold dd-rounded transition-colors hover:opacity-90"
-        :style="{
-          backgroundColor: streamPaused ? 'var(--dd-success-muted)' : 'var(--dd-warning-muted)',
-          color: streamPaused ? 'var(--dd-success)' : 'var(--dd-warning)',
-        }"
         data-test="stats-toggle-stream"
         @click="toggleStream">
         {{ streamPaused ? t('containerComponents.stats.resume') : t('containerComponents.stats.pause') }}

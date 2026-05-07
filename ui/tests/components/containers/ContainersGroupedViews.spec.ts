@@ -299,7 +299,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       },
     serverBadgeColor: () => ({ bg: '#ddd', text: '#111' }),
     parseServer: (server: string) =>
-      server.includes('local') ? { name: 'Local', env: 'dev' } : { name: 'Remote', env: null },
+      server.includes('local') ? { name: 'Local', env: 'dev' } : { name: server, env: null },
     registryColorBg: () => '#ddd',
     registryColorText: () => '#222',
     registryLabel: (registry: string, _registryUrl?: string, registryName?: string) =>
@@ -648,6 +648,153 @@ describe('ContainersGroupedViews', () => {
       );
     expect(cardRegistry).toBeDefined();
     expect(cardRegistry?.classes()).toContain('truncate');
+  });
+
+  it('renders normal table metadata quietly and uses concise update labels', async () => {
+    const current = makeContainer({
+      id: 'c-quiet-current',
+      name: 'alpha',
+      newTag: null,
+      updateKind: null,
+      status: 'running',
+      server: 'local-main',
+      registry: 'dockerhub',
+    });
+    const minor = makeContainer({
+      id: 'c-quiet-minor',
+      name: 'beta',
+      currentTag: '1.0.0',
+      newTag: '1.1.0',
+      updateKind: 'minor',
+      updateMaturity: 'fresh',
+      status: 'running',
+      server: 'local-main',
+      registry: 'dockerhub',
+    });
+
+    const { context, refs } = makeContext();
+    const containers = [current, minor];
+    refs.containerViewMode.value = 'table';
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    const currentRow = rowByName(wrapper, 'alpha');
+    expect(currentRow.get('[data-test="container-update-state"]').text()).toContain('Current');
+    expect(currentRow.get('[data-test="container-runtime-status"]').text()).toContain('running');
+    expect(currentRow.get('[data-test="container-server-text"]').text()).toBe('Local');
+    expect(currentRow.get('[data-test="container-registry-text"]').text()).toBe('dockerhub');
+    expect(currentRow.find('[data-test="container-runtime-status"] .badge').exists()).toBe(false);
+    expect(currentRow.find('[data-test="container-server-text"] .badge').exists()).toBe(false);
+    expect(currentRow.find('[data-test="container-registry-text"] .badge').exists()).toBe(false);
+
+    const minorUpdateState = rowByName(wrapper, 'beta').get('[data-test="container-update-state"]');
+    expect(minorUpdateState.text()).toContain('Minor');
+    expect(minorUpdateState.text()).not.toContain('Minor update');
+  });
+
+  it('renders normal card and list metadata quietly with concise update labels', async () => {
+    const current = makeContainer({
+      id: 'c-quiet-card-current',
+      name: 'alpha',
+      newTag: null,
+      updateKind: null,
+      status: 'running',
+      server: 'local-main',
+      registry: 'dockerhub',
+    });
+    const minor = makeContainer({
+      id: 'c-quiet-card-minor',
+      name: 'beta',
+      currentTag: '1.0.0',
+      newTag: '1.1.0',
+      updateKind: 'minor',
+      updateMaturity: 'fresh',
+      status: 'running',
+      server: 'local-main',
+      registry: 'dockerhub',
+    });
+
+    const { context, refs } = makeContext();
+    const containers = [current, minor];
+    refs.containerViewMode.value = 'cards';
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    const currentCard = wrapper
+      .findAll('.card-item-stub')
+      .find((candidate) => candidate.text().includes('alpha'));
+    expect(currentCard).toBeDefined();
+    expect(currentCard!.get('[data-test="container-card-update-state"]').text()).toContain(
+      'Current',
+    );
+    expect(currentCard!.get('[data-test="container-card-runtime-status"]').text()).toContain(
+      'running',
+    );
+    expect(currentCard!.get('[data-test="container-card-server-text"]').text()).toContain('Local');
+    expect(currentCard!.get('[data-test="container-card-registry-text"]').text()).toBe('dockerhub');
+    expect(currentCard!.find('[data-test="container-card-runtime-status"] .badge').exists()).toBe(
+      false,
+    );
+
+    const minorCardUpdate = wrapper
+      .findAll('.card-item-stub')
+      .find((candidate) => candidate.text().includes('beta'))!
+      .get('[data-test="container-card-update-state"]');
+    expect(minorCardUpdate.text()).toContain('Minor');
+    expect(minorCardUpdate.text()).not.toContain('Minor update');
+
+    refs.containerViewMode.value = 'list';
+    await nextTick();
+
+    const currentListItem = wrapper
+      .findAll('.list-item-stub')
+      .find((candidate) => candidate.text().includes('alpha'));
+    expect(currentListItem).toBeDefined();
+    expect(currentListItem!.get('[data-test="container-list-update-state"]').text()).toContain(
+      'Current',
+    );
+    expect(currentListItem!.get('[data-test="container-list-runtime-status"]').text()).toContain(
+      'running',
+    );
+    expect(currentListItem!.get('[data-test="container-list-server-text"]').text()).toContain(
+      'Local',
+    );
+    expect(
+      currentListItem!.find('[data-test="container-list-runtime-status"] .badge').exists(),
+    ).toBe(false);
+
+    const minorListUpdate = wrapper
+      .findAll('.list-item-stub')
+      .find((candidate) => candidate.text().includes('beta'))!
+      .get('[data-test="container-list-update-state"]');
+    expect(minorListUpdate.text()).toContain('Minor');
+    expect(minorListUpdate.text()).not.toContain('Minor update');
   });
 
   it('covers dropdown menu actions across blocked/updateable states', async () => {

@@ -213,19 +213,20 @@ describe('ContainerFullPageDetail', () => {
       }
     });
 
-    it('applies opacity-50 class when disabled', () => {
+    it('uses shared disabled button classes when disabled', () => {
       actionInProgress.value = new Map([['container-1', 'update']]);
       const wrapper = factory();
       const stopBtn = wrapper.find('button[aria-label="Stop container"]');
-      expect(stopBtn.classes()).toContain('opacity-50');
-      expect(stopBtn.classes()).toContain('cursor-not-allowed');
+      expect(stopBtn.attributes('disabled')).toBeDefined();
+      expect(stopBtn.classes()).toContain('disabled:opacity-60');
+      expect(stopBtn.classes()).toContain('disabled:cursor-not-allowed');
     });
 
-    it('does not apply opacity-50 class when not disabled', () => {
+    it('does not disable the action button when not blocked', () => {
       actionInProgress.value = new Map();
       const wrapper = factory();
       const stopBtn = wrapper.find('button[aria-label="Stop container"]');
-      expect(stopBtn.classes()).not.toContain('opacity-50');
+      expect(stopBtn.attributes('disabled')).toBeUndefined();
     });
   });
 });
