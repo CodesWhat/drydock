@@ -415,6 +415,16 @@ function isInteractiveRow(row: Record<string, unknown>): boolean {
   return !isFullWidthRow(row);
 }
 
+function rowBackgroundColor(row: Record<string, unknown>, localIndex: number): string {
+  if (isFullWidthRow(row)) {
+    return 'transparent';
+  }
+  if (props.selectedKey != null && getRowKey(row, props.rowKey) === props.selectedKey) {
+    return 'var(--dd-bg-elevated)';
+  }
+  return rowAbsoluteIndex(localIndex) % 2 === 0 ? 'var(--dd-bg-card)' : 'var(--dd-bg-inset)';
+}
+
 function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
   if (resizing.value || !isSortableColumn(col)) {
     return;
@@ -467,7 +477,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
                      style="background: var(--dd-text-muted)" />
               </div>
             </th>
-            <th v-if="showActions" class="text-right px-3 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative" :style="{ width: actionsWidth }">
+            <th v-if="showActions" class="sticky right-0 z-20 text-right px-3 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative" :style="{ width: actionsWidth, backgroundColor: 'var(--dd-bg-inset)' }">
               {{ t('sharedComponents.dataTable.actions') }}
               <div v-if="lastResizableColumnKey"
                    role="separator"
@@ -496,11 +506,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
                 rowClass?.(row) ?? '',
               ]"
               :style="{
-                backgroundColor: isFullWidthRow(row)
-                  ? 'transparent'
-                  : selectedKey != null && getRowKey(row, rowKey) === selectedKey
-                    ? 'var(--dd-bg-elevated)'
-                    : (rowAbsoluteIndex(i) % 2 === 0 ? 'var(--dd-bg-card)' : 'var(--dd-bg-inset)'),
+                backgroundColor: rowBackgroundColor(row, i),
                 borderBottom: 'none',
               }"
               :tabindex="isInteractiveRow(row) ? 0 : undefined"
@@ -526,7 +532,11 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
                   </slot>
                 </template>
               </td>
-              <td v-if="showActions" class="px-3 py-3 text-right whitespace-nowrap relative">
+              <td
+                v-if="showActions"
+                class="sticky right-0 z-10 px-3 py-3 text-right whitespace-nowrap relative"
+                :style="{ backgroundColor: rowBackgroundColor(row, i) }"
+              >
                 <slot name="actions" :row="row" />
               </td>
             </template>

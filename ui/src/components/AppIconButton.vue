@@ -6,7 +6,17 @@ import {
   iconButtonSizeClasses,
   type IconButtonSize,
 } from './appIconButtonSizes';
-type IconButtonVariant = 'muted' | 'secondary' | 'danger' | 'success' | 'warning' | 'plain';
+type IconButtonVariant =
+  | 'muted'
+  | 'secondary'
+  | 'danger'
+  | 'success'
+  | 'warning'
+  | 'muted-subtle'
+  | 'danger-subtle'
+  | 'success-subtle'
+  | 'warning-subtle'
+  | 'plain';
 
 const props = withDefaults(
   defineProps<{
@@ -41,6 +51,10 @@ const variantClasses: Record<IconButtonVariant, string> = {
   danger: 'dd-text-muted hover:dd-text-danger hover:dd-bg-elevated',
   success: 'dd-text-muted hover:dd-text-success hover:dd-bg-elevated',
   warning: 'dd-text-warning hover:dd-text-warning hover:dd-bg-elevated',
+  'muted-subtle': 'dd-bg-button dd-text-muted hover:opacity-90',
+  'danger-subtle': 'dd-bg-danger-muted dd-text-danger hover:opacity-90',
+  'success-subtle': 'dd-bg-success-muted dd-text-success hover:opacity-90',
+  'warning-subtle': 'dd-bg-warning-muted dd-text-warning hover:opacity-90',
   plain: '',
 };
 

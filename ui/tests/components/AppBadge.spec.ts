@@ -11,8 +11,7 @@ describe('AppBadge', () => {
     const span = wrapper.get('span');
 
     expect(span.classes()).toContain('badge');
-    expect(span.classes()).toContain('text-2xs');
-    expect(span.classes()).toContain('font-semibold');
+    expect(span.classes()).toContain('dd-text-badge-sm');
     expect(span.classes()).toContain('uppercase');
     expect(span.attributes('style')).toContain('background-color: var(--dd-neutral-muted)');
     expect(span.attributes('style')).toContain('color: var(--dd-neutral)');
@@ -26,8 +25,7 @@ describe('AppBadge', () => {
 
     const span = wrapper.get('span');
 
-    expect(span.classes()).toContain('text-3xs');
-    expect(span.classes()).toContain('font-bold');
+    expect(span.classes()).toContain('dd-text-badge-xs');
   });
 
   it('applies correct size classes for sm', () => {
@@ -38,8 +36,7 @@ describe('AppBadge', () => {
 
     const span = wrapper.get('span');
 
-    expect(span.classes()).toContain('text-2xs');
-    expect(span.classes()).toContain('font-semibold');
+    expect(span.classes()).toContain('dd-text-badge-sm');
   });
 
   it('applies correct size classes for md', () => {
@@ -50,8 +47,7 @@ describe('AppBadge', () => {
 
     const span = wrapper.get('span');
 
-    expect(span.classes()).toContain('text-2xs-plus');
-    expect(span.classes()).toContain('font-semibold');
+    expect(span.classes()).toContain('dd-text-badge-md');
   });
 
   it('applies uppercase class when uppercase=true', () => {

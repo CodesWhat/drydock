@@ -324,6 +324,16 @@ describe('DataTable', () => {
       expect(actionsHeader.text()).toContain('Actions');
       expect(actionsHeader.find('[role="separator"]').exists()).toBe(true);
     });
+
+    it('keeps the shared actions column sticky to the right edge', () => {
+      const w = factory({ showActions: true }, { actions: '<span class="action-btn">Act</span>' });
+      const actionsHeader = w.findAll('thead th')[3];
+      const actionsCell = w.findAll('tbody tr')[0].findAll('td')[3];
+
+      expect(actionsHeader.classes()).toEqual(expect.arrayContaining(['sticky', 'right-0']));
+      expect(actionsCell.classes()).toEqual(expect.arrayContaining(['sticky', 'right-0']));
+      expect(actionsCell.attributes('style')).toContain('var(--dd-bg-card)');
+    });
   });
 
   describe('column resize performance', () => {

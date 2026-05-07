@@ -19,9 +19,9 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const sizeClasses: Record<string, string> = {
-  xs: 'text-3xs font-bold',
-  sm: 'text-2xs font-semibold',
-  md: 'text-2xs-plus font-semibold',
+  xs: 'dd-text-badge-xs',
+  sm: 'dd-text-badge-sm',
+  md: 'dd-text-badge-md',
 };
 
 const badgeClasses = computed(() => [

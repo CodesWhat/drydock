@@ -73,28 +73,22 @@ describe('AppTabBar', () => {
     expect(wrapper.emitted('update:modelValue')).toBeFalsy();
   });
 
-  it('compact size applies correct classes (px-2 py-1.5 text-2xs)', () => {
+  it('compact size applies semantic compact typography', () => {
     const wrapper = factory({ size: 'compact' });
     const button = wrapper.findAll('button')[0];
 
     expect(button.classes()).toContain('px-2');
     expect(button.classes()).toContain('py-1.5');
-    expect(button.classes()).toContain('text-2xs');
-    expect(button.classes()).toContain('font-semibold');
-    expect(button.classes()).toContain('uppercase');
-    expect(button.classes()).toContain('tracking-wide');
+    expect(button.classes()).toContain('dd-text-tab-sm');
   });
 
-  it('default size applies correct classes (px-3 py-2 text-2xs-plus)', () => {
+  it('default size applies semantic tab typography', () => {
     const wrapper = factory();
     const button = wrapper.findAll('button')[0];
 
     expect(button.classes()).toContain('px-3');
     expect(button.classes()).toContain('py-2');
-    expect(button.classes()).toContain('text-2xs-plus');
-    expect(button.classes()).toContain('font-semibold');
-    expect(button.classes()).toContain('uppercase');
-    expect(button.classes()).toContain('tracking-wide');
+    expect(button.classes()).toContain('dd-text-tab');
   });
 
   it('active tab shows underline indicator div (h-[2px])', () => {
@@ -137,8 +131,7 @@ describe('AppTabBar', () => {
 
     expect(badge).toBeDefined();
     expect(badge!.text()).toBe('5');
-    expect(badge!.classes()).toContain('text-4xs');
-    expect(badge!.classes()).toContain('font-bold');
+    expect(badge!.classes()).toContain('dd-text-badge-xs');
   });
 
   it('tab without count does not render count badge', () => {
@@ -171,6 +164,20 @@ describe('AppTabBar', () => {
     expect(buttons[0].attributes('aria-label')).toBe('Overview');
     expect(buttons[1].attributes('aria-label')).toBe('Actions');
     expect(buttons[2].attributes('aria-label')).toBe('Logs');
+  });
+
+  it('iconOnly compact mode uses toolbar-sized hit targets and icons', () => {
+    const wrapper = factory({ iconOnly: true, size: 'compact' });
+    const overviewButton = wrapper.findAll('button')[0];
+    const iconEl = overviewButton.find('iconify-icon');
+
+    expect(overviewButton.classes()).toContain('w-8');
+    expect(overviewButton.classes()).toContain('h-8');
+    expect(overviewButton.classes()).toContain('inline-flex');
+    expect(overviewButton.classes()).toContain('items-center');
+    expect(overviewButton.classes()).toContain('justify-center');
+    expect(iconEl.attributes('width')).toBe('15');
+    expect(iconEl.attributes('height')).toBe('15');
   });
 
   it('non-iconOnly mode does not set aria-label on tabs', () => {
