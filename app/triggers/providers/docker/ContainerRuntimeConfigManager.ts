@@ -21,6 +21,7 @@ type RuntimeConfigLogger = {
 type RuntimeConfigObject = {
   Entrypoint?: unknown;
   Cmd?: unknown;
+  Env?: unknown;
   Image?: string;
   Labels?: Record<string, string>;
   [key: string]: unknown;
@@ -76,6 +77,38 @@ const RUNTIME_FIELD_ORIGIN_LABELS = {
     wud: 'wud.runtime.cmd.origin',
   },
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseEnvEntry(envEntry: unknown): { name: string; value: string } | undefined {
+  if (typeof envEntry !== 'string') {
+    return undefined;
+  }
+  const separatorIndex = envEntry.indexOf('=');
+  if (separatorIndex <= 0) {
+    return undefined;
+  }
+  return {
+    name: envEntry.slice(0, separatorIndex),
+    value: envEntry.slice(separatorIndex + 1),
+  };
+}
+
+function buildEnvValueMap(env: unknown): Map<string, string> {
+  const envValueMap = new Map<string, string>();
+  if (!Array.isArray(env)) {
+    return envValueMap;
+  }
+  for (const envEntry of env) {
+    const parsedEnv = parseEnvEntry(envEntry);
+    if (parsedEnv) {
+      envValueMap.set(parsedEnv.name, parsedEnv.value);
+    }
+  }
+  return envValueMap;
+}
 
 function isRuntimeConfigOptions(
   runtimeOptionsOrLogContainer: RuntimeConfigOptions | RuntimeConfigLogger | undefined,
@@ -358,7 +391,106 @@ class ContainerRuntimeConfigManager {
       );
     }
 
+    const sanitizedEnv = this.sanitizeImageInheritedEnv(
+      sanitizedConfig.Env,
+      sourceImageConfig,
+      targetImageConfig,
+      logContainer,
+    );
+    if (sanitizedEnv !== sanitizedConfig.Env) {
+      const nextEnv = sanitizedEnv as unknown[];
+      if (nextEnv.length > 0) {
+        sanitizedConfig.Env = nextEnv;
+      } else {
+        delete sanitizedConfig.Env;
+      }
+    }
+
+    const sanitizedLabels = this.sanitizeImageInheritedLabels(
+      sanitizedConfig.Labels,
+      sourceImageConfig,
+      targetImageConfig,
+      logContainer,
+    );
+    if (sanitizedLabels !== sanitizedConfig.Labels) {
+      const nextLabels = sanitizedLabels as Record<string, string>;
+      if (Object.keys(nextLabels).length > 0) {
+        sanitizedConfig.Labels = nextLabels;
+      } else {
+        delete sanitizedConfig.Labels;
+      }
+    }
+
     return sanitizedConfig;
+  }
+
+  sanitizeImageInheritedEnv(
+    containerEnv: unknown,
+    sourceImageConfig: RuntimeConfigObject | undefined,
+    targetImageConfig: RuntimeConfigObject | undefined,
+    logContainer: RuntimeConfigLogger | undefined,
+  ) {
+    if (!Array.isArray(containerEnv) || !sourceImageConfig || !targetImageConfig) {
+      return containerEnv;
+    }
+
+    const sourceEnvValues = buildEnvValueMap(sourceImageConfig.Env);
+    if (sourceEnvValues.size === 0) {
+      return containerEnv;
+    }
+    const targetEnvValues = buildEnvValueMap(targetImageConfig.Env);
+    const filteredEnv = containerEnv.filter((envEntry) => {
+      const parsedEnv = parseEnvEntry(envEntry);
+      if (!parsedEnv) {
+        return true;
+      }
+      if (sourceEnvValues.get(parsedEnv.name) !== parsedEnv.value) {
+        return true;
+      }
+      const targetEnvValue = targetEnvValues.get(parsedEnv.name);
+      if (targetEnvValue === parsedEnv.value) {
+        return true;
+      }
+      logContainer?.info?.(
+        `Dropping stale image-inherited environment variable ${parsedEnv.name} from cloned container spec so target image default can be used`,
+      );
+      return false;
+    });
+
+    return filteredEnv.length === containerEnv.length ? containerEnv : filteredEnv;
+  }
+
+  sanitizeImageInheritedLabels(
+    containerLabels: Record<string, string> | undefined,
+    sourceImageConfig: RuntimeConfigObject | undefined,
+    targetImageConfig: RuntimeConfigObject | undefined,
+    logContainer: RuntimeConfigLogger | undefined,
+  ) {
+    const sourceLabels = sourceImageConfig?.Labels;
+    if (
+      !isRecord(containerLabels) ||
+      !isRecord(sourceLabels) ||
+      !targetImageConfig ||
+      Object.keys(sourceLabels).length === 0
+    ) {
+      return containerLabels;
+    }
+
+    const targetLabels = isRecord(targetImageConfig.Labels) ? targetImageConfig.Labels : {};
+    let changed = false;
+    const filteredLabels: Record<string, string> = {};
+    for (const [labelKey, labelValue] of Object.entries(containerLabels)) {
+      if (sourceLabels[labelKey] === labelValue && targetLabels[labelKey] !== labelValue) {
+        changed = true;
+        logContainer?.info?.(
+          `Dropping stale image-inherited label ${labelKey} from cloned container spec so target image default can be used`,
+        );
+        continue;
+      }
+      filteredLabels[labelKey] = labelValue;
+    }
+
+    return changed ? filteredLabels : containerLabels;
   }
 
   async inspectImageConfig(
