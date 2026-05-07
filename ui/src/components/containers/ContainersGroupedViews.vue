@@ -635,15 +635,19 @@ onScopeDispose(() => {
         </template>
         <!-- Version comparison -->
         <template #cell-version="{ row: c }">
-            <div v-if="c.updateKind === 'digest' && c.newDigest && c.currentDigest" class="flex items-center justify-center gap-1.5 w-full">
-            <span class="text-2xs-plus dd-text-secondary truncate shrink-0 max-w-[100px]" v-tooltip.top="c.currentDigest">{{ formatShortDigest(c.currentDigest) }}</span>
-            <AppIcon name="arrow-right" :size="8" class="dd-text-muted shrink-0" />
-            <CopyableTag :tag="c.newDigest" class="text-2xs-plus font-semibold truncate max-w-[140px]" style="color: var(--dd-primary);" @click.stop>{{ formatShortDigest(c.newDigest) }}</CopyableTag>
+          <div v-if="c.updateKind === 'digest' && c.newDigest && c.currentDigest" class="container-version-query">
+            <div class="container-version-flow">
+              <span class="container-version-tag text-2xs-plus dd-text-secondary" v-tooltip.top="c.currentDigest">{{ formatShortDigest(c.currentDigest) }}</span>
+              <AppIcon name="arrow-right" :size="8" class="container-version-arrow dd-text-muted shrink-0" />
+              <CopyableTag :tag="c.newDigest" class="container-version-tag container-version-tag-target text-2xs-plus font-semibold" style="color: var(--dd-primary);" @click.stop>{{ formatShortDigest(c.newDigest) }}</CopyableTag>
+            </div>
           </div>
-          <div v-else-if="c.newTag" class="flex items-center justify-center gap-1.5 w-full">
-            <span class="text-2xs-plus dd-text-secondary truncate shrink-0 max-w-[100px]" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
-            <AppIcon name="arrow-right" :size="8" class="dd-text-muted shrink-0" />
-            <CopyableTag :tag="c.newTag" class="text-2xs-plus font-semibold truncate max-w-[140px]" style="color: var(--dd-primary);" @click.stop>{{ c.newTag }}</CopyableTag>
+          <div v-else-if="c.newTag" class="container-version-query">
+            <div class="container-version-flow">
+              <span class="container-version-tag text-2xs-plus dd-text-secondary" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
+              <AppIcon name="arrow-right" :size="8" class="container-version-arrow dd-text-muted shrink-0" />
+              <CopyableTag :tag="c.newTag" class="container-version-tag container-version-tag-target text-2xs-plus font-semibold" style="color: var(--dd-primary);" @click.stop>{{ c.newTag }}</CopyableTag>
+            </div>
           </div>
           <div v-else class="text-center">
             <div v-if="c.registryError" class="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 dd-rounded" style="background-color: var(--dd-danger-muted);" v-tooltip.top="tt(registryErrorTooltip(c))">
@@ -1422,3 +1426,50 @@ onScopeDispose(() => {
                   @clear="clearFilters" />
   </div>
 </template>
+
+<style scoped>
+.container-version-query {
+  container-type: inline-size;
+  min-width: 0;
+  width: 100%;
+}
+
+.container-version-flow {
+  align-items: center;
+  display: flex;
+  gap: 0.375rem;
+  justify-content: center;
+  min-width: 0;
+  width: 100%;
+}
+
+.container-version-tag {
+  display: inline-block;
+  max-width: min(8.75rem, 48cqw);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.container-version-flow .container-version-tag:first-child {
+  max-width: min(6.25rem, 44cqw);
+}
+
+@container (max-width: 15rem) {
+  .container-version-flow {
+    flex-direction: column;
+    gap: 0.125rem;
+    line-height: 1.15;
+  }
+
+  .container-version-arrow {
+    transform: rotate(90deg);
+  }
+
+  .container-version-tag,
+  .container-version-flow .container-version-tag:first-child {
+    max-width: 100%;
+  }
+}
+</style>

@@ -660,11 +660,15 @@ function isInteractiveRow(row: Record<string, unknown>): boolean {
   return !isFullWidthRow(row);
 }
 
+function isSelectedRow(row: Record<string, unknown>): boolean {
+  return props.selectedKey != null && getRowKey(row, props.rowKey) === props.selectedKey;
+}
+
 function rowBackgroundColor(row: Record<string, unknown>, localIndex: number): string {
   if (isFullWidthRow(row)) {
     return 'transparent';
   }
-  if (props.selectedKey != null && getRowKey(row, props.rowKey) === props.selectedKey) {
+  if (isSelectedRow(row)) {
     return 'var(--dd-bg-elevated)';
   }
   return rowAbsoluteIndex(localIndex) % 2 === 0 ? 'var(--dd-bg-card)' : 'var(--dd-bg-inset)';
@@ -759,13 +763,15 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
           </tr>
           <tr v-for="(row, i) in visibleRows" :key="getRowKey(row, rowKey)"
               :class="[
-                isInteractiveRow(row) ? 'cursor-pointer transition-colors hover:dd-bg-hover' : '',
-                isInteractiveRow(row) && selectedKey != null && getRowKey(row, rowKey) === selectedKey
-                  ? 'ring-1 ring-inset ring-drydock-secondary'
+                'dd-data-table-row',
+                isInteractiveRow(row) ? 'cursor-pointer transition-colors dd-data-table-row-hoverable' : '',
+                isInteractiveRow(row) && isSelectedRow(row)
+                  ? 'dd-data-table-row-selected'
                   : '',
                 rowClass?.(row) ?? '',
               ]"
               :style="{
+                '--dd-data-table-row-bg': rowBackgroundColor(row, i),
                 backgroundColor: rowBackgroundColor(row, i),
                 borderBottom: 'none',
               }"
@@ -773,14 +779,14 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
               @keydown="isInteractiveRow(row) && handleRowKeydown($event, row)"
               @click="isInteractiveRow(row) && emit('row-click', row)">
             <template v-if="isFullWidthRow(row)">
-              <td :colspan="totalColumnCount" class="p-0 border-0">
+              <td :colspan="totalColumnCount" class="dd-data-table-cell p-0 border-0">
                 <slot name="full-row" :row="row" :index="rowAbsoluteIndex(i)" />
               </td>
             </template>
             <template v-else>
               <td v-for="col in resolvedColumns" :key="col.key"
                   :data-col-key="col.key"
-                  class="py-3 align-middle"
+                  class="dd-data-table-cell py-3 align-middle"
                   :class="col.icon ? 'text-center pl-5 pr-0' : ['overflow-hidden', col.align ?? 'text-center', col.px ?? 'px-5']">
                 <div v-if="!col.icon" :class="cellContentClass(col)">
                   <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
@@ -796,8 +802,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
               <td
                 v-if="showActions"
                 :data-col-key="ACTIONS_COLUMN_KEY"
-                class="sticky right-0 z-10 px-3 py-3 text-right whitespace-nowrap relative"
-                :style="{ backgroundColor: rowBackgroundColor(row, i) }"
+                class="dd-data-table-cell dd-data-table-actions-cell sticky right-0 z-10 px-3 py-3 text-right whitespace-nowrap relative"
               >
                 <slot name="actions" :row="row" />
               </td>
@@ -816,3 +821,38 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
     <slot v-if="rows.length === 0" name="empty" />
   </div>
 </template>
+
+<style scoped>
+tbody tr.dd-data-table-row > td.dd-data-table-cell {
+  background-color: var(--dd-data-table-row-bg);
+  transition:
+    background-color var(--dd-duration-enter),
+    box-shadow var(--dd-duration-enter);
+}
+
+tbody
+  tr.dd-data-table-row-hoverable:not(.dd-data-table-row-selected):hover
+  > td.dd-data-table-cell {
+  background-color: var(--dd-hover-overlay);
+}
+
+tbody tr.dd-data-table-row-selected > td.dd-data-table-cell {
+  box-shadow:
+    inset 0 1px 0 var(--dd-primary),
+    inset 0 -1px 0 var(--dd-primary);
+}
+
+tbody tr.dd-data-table-row-selected > td.dd-data-table-cell:first-child {
+  box-shadow:
+    inset 1px 0 0 var(--dd-primary),
+    inset 0 1px 0 var(--dd-primary),
+    inset 0 -1px 0 var(--dd-primary);
+}
+
+tbody tr.dd-data-table-row-selected > td.dd-data-table-cell:last-child {
+  box-shadow:
+    inset -1px 0 0 var(--dd-primary),
+    inset 0 1px 0 var(--dd-primary),
+    inset 0 -1px 0 var(--dd-primary);
+}
+</style>
