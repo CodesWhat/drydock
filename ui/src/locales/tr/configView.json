@@ -85,7 +85,15 @@
         "title": "Dil"
       },
       "colorTheme": {
-        "title": "Renk teması"
+        "title": "Renk teması",
+        "descriptions": {
+          "oneDark": "Temiz ve dengeli",
+          "github": "Temiz ve tanıdık",
+          "dracula": "Canlı mor tonlar",
+          "catppuccin": "Sıcak pastel tonlar",
+          "gruvbox": "Retro toprak sıcaklığı",
+          "ayu": "Yumuşak altın tonlar"
+        }
       },
       "fontFamily": {
         "title": "Yazı tipi ailesi",
@@ -102,7 +110,14 @@
         "title": "Simge boyutu"
       },
       "borderRadius": {
-        "title": "Kenar yuvarlaklığı"
+        "title": "Kenar yuvarlaklığı",
+        "labels": {
+          "none": "Yok",
+          "sharp": "Keskin",
+          "modern": "Modern",
+          "soft": "Yumuşak",
+          "round": "Yuvarlak"
+        }
       }
     },
     "profile": {

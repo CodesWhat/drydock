@@ -85,7 +85,15 @@
         "title": "Sprache"
       },
       "colorTheme": {
-        "title": "Farb-Theme"
+        "title": "Farb-Theme",
+        "descriptions": {
+          "oneDark": "Sauber und ausgewogen",
+          "github": "Vertraut und klar",
+          "dracula": "Kräftige Violetttöne",
+          "catppuccin": "Warme Pastelltöne",
+          "gruvbox": "Erdige Retro-Wärme",
+          "ayu": "Weiche Goldtöne"
+        }
       },
       "fontFamily": {
         "title": "Schriftfamilie",
@@ -102,7 +110,14 @@
         "title": "Icon-Größe"
       },
       "borderRadius": {
-        "title": "Eckenradius"
+        "title": "Eckenradius",
+        "labels": {
+          "none": "Keine",
+          "sharp": "Scharf",
+          "modern": "Modern",
+          "soft": "Weich",
+          "round": "Rund"
+        }
       }
     },
     "profile": {

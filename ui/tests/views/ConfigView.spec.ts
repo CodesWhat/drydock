@@ -648,14 +648,10 @@ describe('ConfigView', () => {
     async function mountAppearanceTab() {
       mockGetServer.mockResolvedValue({ configuration: {} });
       mockGetSettings.mockResolvedValue({ internetlessMode: false });
+      mockRouteQuery.value = { tab: 'appearance' };
 
       const w = factory();
       await vi.waitFor(() => expect(mockGetServer).toHaveBeenCalled());
-      await nextTick();
-
-      const tabs = w.findAll('button');
-      const appearanceTab = tabs.find((t) => t.text().includes('Appearance'));
-      await appearanceTab?.trigger('click');
       await nextTick();
       return w;
     }
@@ -685,6 +681,48 @@ describe('ConfigView', () => {
       const w = await mountAppearanceTab();
       expect(w.text()).toContain('IBM Plex Mono');
       expect(w.text()).toContain('JetBrains Mono');
+    });
+
+    it('renders appearance choices with smaller choice typography and no default font badge', async () => {
+      const w = await mountAppearanceTab();
+
+      const oneDarkButton = w.findAll('button').find((btn) => btn.text().includes('One Dark'));
+      const ibmPlexButton = w.findAll('button').find((btn) => btn.text().includes('IBM Plex Mono'));
+
+      expect(oneDarkButton?.find('.dd-text-choice-title').text()).toBe('One Dark');
+      expect(oneDarkButton?.find('.dd-text-choice-description').text()).toBe('Clean and balanced');
+      expect(ibmPlexButton?.find('.dd-text-choice-title').text()).toBe('IBM Plex Mono');
+      expect(ibmPlexButton?.find('.dd-text-choice-description').text()).toContain(
+        'The quick brown fox',
+      );
+      expect(ibmPlexButton?.text()).not.toMatch(/\bdefault\b/i);
+    });
+
+    it('renders localized theme descriptions from i18n keys', async () => {
+      preferences.locale.language = 'zh-CN';
+      setI18nLocale('zh-CN');
+
+      const w = await mountAppearanceTab();
+
+      expect(w.text()).not.toContain('Clean and balanced');
+      expect(w.text()).not.toContain('Bold purple vibes');
+      expect(w.text()).toContain('清爽均衡');
+      expect(w.text()).toContain('清爽熟悉');
+    });
+
+    it('renders localized border radius labels from i18n keys', async () => {
+      preferences.locale.language = 'zh-CN';
+      setI18nLocale('zh-CN');
+
+      const w = await mountAppearanceTab();
+
+      expect(w.text()).not.toContain('Sharp');
+      expect(w.text()).not.toContain('Round');
+      expect(w.text()).toContain('无');
+      expect(w.text()).toContain('锐利');
+      expect(w.text()).toContain('现代');
+      expect(w.text()).toContain('柔和');
+      expect(w.text()).toContain('圆润');
     });
 
     it('updates root font classes when each font is selected', async () => {

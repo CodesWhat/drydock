@@ -85,7 +85,15 @@
         "title": "Langue"
       },
       "colorTheme": {
-        "title": "Thème couleur"
+        "title": "Thème couleur",
+        "descriptions": {
+          "oneDark": "Propre et équilibré",
+          "github": "Clair et familier",
+          "dracula": "Ambiance violette marquée",
+          "catppuccin": "Tons pastel chaleureux",
+          "gruvbox": "Chaleur rétro terreuse",
+          "ayu": "Tons dorés doux"
+        }
       },
       "fontFamily": {
         "title": "Famille de police",
@@ -102,7 +110,14 @@
         "title": "Taille des icônes"
       },
       "borderRadius": {
-        "title": "Rayon des bordures"
+        "title": "Rayon des bordures",
+        "labels": {
+          "none": "Aucun",
+          "sharp": "Net",
+          "modern": "Moderne",
+          "soft": "Doux",
+          "round": "Rond"
+        }
       }
     },
     "profile": {

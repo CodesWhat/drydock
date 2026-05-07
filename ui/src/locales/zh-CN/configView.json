@@ -85,12 +85,20 @@
         "title": "语言"
       },
       "colorTheme": {
-        "title": "颜色主题"
+        "title": "颜色主题",
+        "descriptions": {
+          "oneDark": "清爽均衡",
+          "github": "清爽熟悉",
+          "dracula": "醒目的紫色风格",
+          "catppuccin": "温暖的柔和色调",
+          "gruvbox": "复古的大地暖色",
+          "ayu": "柔和的金色调"
+        }
       },
       "fontFamily": {
         "title": "字体",
         "defaultBadge": "默认",
-        "preview": "The quick brown fox jumps over the lazy dog"
+        "preview": "敏捷的棕狐跃过懒狗"
       },
       "fontSize": {
         "title": "字体大小"
@@ -102,7 +110,14 @@
         "title": "图标大小"
       },
       "borderRadius": {
-        "title": "圆角"
+        "title": "圆角",
+        "labels": {
+          "none": "无",
+          "sharp": "锐利",
+          "modern": "现代",
+          "soft": "柔和",
+          "round": "圆润"
+        }
       }
     },
     "profile": {

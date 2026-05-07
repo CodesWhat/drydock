@@ -85,7 +85,15 @@
         "title": "Taal"
       },
       "colorTheme": {
-        "title": "Kleurthema"
+        "title": "Kleurthema",
+        "descriptions": {
+          "oneDark": "Schoon en evenwichtig",
+          "github": "Vertrouwd en overzichtelijk",
+          "dracula": "Krachtige paarse sfeer",
+          "catppuccin": "Warme pasteltinten",
+          "gruvbox": "Aardse retro-warmte",
+          "ayu": "Zachte goudtinten"
+        }
       },
       "fontFamily": {
         "title": "Lettertypefamilie",
@@ -102,7 +110,14 @@
         "title": "Pictogramgrootte"
       },
       "borderRadius": {
-        "title": "Randradius"
+        "title": "Randradius",
+        "labels": {
+          "none": "Geen",
+          "sharp": "Strak",
+          "modern": "Modern",
+          "soft": "Zacht",
+          "round": "Rond"
+        }
       }
     },
     "profile": {

@@ -85,7 +85,15 @@
         "title": "Język"
       },
       "colorTheme": {
-        "title": "Motyw kolorów"
+        "title": "Motyw kolorów",
+        "descriptions": {
+          "oneDark": "Czysty i zbalansowany",
+          "github": "Czysty i znajomy",
+          "dracula": "Wyraziste fioletowe klimaty",
+          "catppuccin": "Ciepłe pastele",
+          "gruvbox": "Ziemiste retro ciepło",
+          "ayu": "Miękkie złote tony"
+        }
       },
       "fontFamily": {
         "title": "Rodzina czcionek",
@@ -102,7 +110,14 @@
         "title": "Rozmiar ikon"
       },
       "borderRadius": {
-        "title": "Zaokrąglenie rogów"
+        "title": "Zaokrąglenie rogów",
+        "labels": {
+          "none": "Brak",
+          "sharp": "Ostry",
+          "modern": "Nowoczesny",
+          "soft": "Miękki",
+          "round": "Okrągły"
+        }
       }
     },
     "profile": {

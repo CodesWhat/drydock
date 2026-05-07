@@ -122,11 +122,11 @@ function togglePin() {
       }"
     >
       <div class="p-5 flex flex-col flex-1 min-h-0 gap-4">
-        <div v-if="props.loading" class="text-xs dd-text-muted text-center py-6">{{ t('configView.logs.loading') }}</div>
+        <div v-if="props.loading" class="dd-text-body dd-text-muted text-center py-6">{{ t('configView.logs.loading') }}</div>
 
         <div
           v-else-if="props.error"
-          class="text-2xs-plus px-3 py-2 dd-rounded"
+          class="dd-text-body px-3 py-2 dd-rounded"
           :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }"
         >
           {{ props.error }}
@@ -148,7 +148,7 @@ function togglePin() {
         >
           <template #toolbar-left>
             <label
-              class="flex items-center gap-1.5 px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide cursor-pointer dd-bg dd-text select-none"
+              class="flex items-center gap-1.5 px-2 py-1.5 dd-rounded dd-text-tab cursor-pointer dd-bg dd-text select-none"
             >
               <input
                 type="checkbox"
@@ -166,7 +166,7 @@ function togglePin() {
 
             <select
               v-model="logLevelFilterModel"
-              class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
+              class="px-2 py-1.5 dd-rounded dd-text-tab outline-none cursor-pointer dd-bg dd-text"
             >
               <option value="all">{{ t('configView.logs.toolbar.allLevels') }}</option>
               <option value="debug">{{ t('configView.logs.toolbar.debug') }}</option>
@@ -177,7 +177,7 @@ function togglePin() {
 
             <select
               v-model.number="tailModel"
-              class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
+              class="px-2 py-1.5 dd-rounded dd-text-tab outline-none cursor-pointer dd-bg dd-text"
             >
               <option :value="50">{{ t('configView.logs.tail.50') }}</option>
               <option :value="100">{{ t('configView.logs.tail.100') }}</option>
@@ -187,7 +187,7 @@ function togglePin() {
 
             <select
               v-model="componentFilterModel"
-              class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
+              class="px-2 py-1.5 dd-rounded dd-text-tab outline-none cursor-pointer dd-bg dd-text"
             >
               <option value="">{{ t('configView.logs.toolbar.allComponents') }}</option>
               <option v-for="comp in props.components" :key="comp" :value="comp">{{ comp }}</option>
@@ -205,14 +205,14 @@ function togglePin() {
 
           <template #footer-extra>
             <span
-              class="px-1.5 py-0.5 dd-rounded text-3xs font-bold uppercase tracking-wider dd-text-muted cursor-default"
+              class="px-1.5 py-0.5 dd-rounded dd-text-badge-xs uppercase tracking-wider dd-text-muted cursor-default"
               style="background-color: var(--dd-log-footer-bg); border: 1px solid var(--dd-log-divider)"
               v-tooltip="t('configView.logs.logLevelBadge', { level: props.logLevel })"
             >{{ props.logLevel }}</span>
           </template>
 
           <template #entry-prefix="{ entry }">
-            <span class="shrink-0 w-10 uppercase font-semibold text-2xs" :style="{ color: levelColor(entry.level) }">
+            <span class="shrink-0 w-10 uppercase font-semibold dd-text-body-sm" :style="{ color: levelColor(entry.level) }">
               {{ entry.level || 'info' }}
             </span>
             <span
