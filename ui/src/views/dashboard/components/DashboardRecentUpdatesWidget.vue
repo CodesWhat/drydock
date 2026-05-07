@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
-import AppBadge from '@/components/AppBadge.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
+import AppStatusIndicator from '@/components/AppStatusIndicator.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
 import type { DashboardUpdateSequenceEntry, RecentUpdateRow, UpdateKind } from '../dashboardTypes';
 
@@ -74,6 +74,14 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+
+function getUpdateKindTone(kind: UpdateKind | null) {
+  if (kind === 'major') return 'danger';
+  if (kind === 'minor') return 'warning';
+  if (kind === 'patch') return 'primary';
+  if (kind === 'digest') return 'neutral';
+  return 'neutral';
+}
 
 const dashboardUpdateSequenceHeadPosition = computed<number | null>(() => {
   let headPosition: number | null = null;
@@ -225,14 +233,12 @@ watchEffect(() => {
         <AppButton
           v-if="pendingUpdatesCount > 0"
           data-test="dashboard-update-all-btn"
-          size="none"
-          variant="plain"
-          weight="none"
+          size="compact"
+          :variant="isDashboardBulkUpdateLocked ? 'muted-subtle' : 'success'"
+          weight="semibold"
           type="button"
-          class="inline-flex items-center justify-center px-2 py-1 dd-rounded border text-2xs font-semibold transition-colors"
-          :class="isDashboardBulkUpdateLocked
-            ? 'dd-text-muted cursor-not-allowed opacity-60'
-            : 'dd-text hover:dd-bg-elevated'"
+          class="inline-flex items-center justify-center"
+          :class="isDashboardBulkUpdateLocked ? 'cursor-not-allowed' : ''"
           :disabled="isDashboardBulkUpdateLocked"
           @click="handleConfirmUpdateAll">
           <AppIcon
@@ -243,7 +249,7 @@ watchEffect(() => {
           {{ t('dashboardView.recentUpdates.updateAll') }}
         </AppButton>
         <AppButton
-          size="none"
+          size="compact"
           variant="link-secondary"
           weight="medium"
           type="button"
@@ -351,27 +357,23 @@ watchEffect(() => {
           </template>
 
           <template #cell-type="{ row }">
-            <AppBadge
+            <AppStatusIndicator
               v-tooltip.top="row.updateKind ?? 'unknown'"
+              marker="icon"
+              :icon="getUpdateKindIcon(row.updateKind)"
+              :tone="getUpdateKindTone(row.updateKind)"
+              :label="(row.updateKind ?? 'unknown').slice(0, 1)"
               size="xs"
-              class="px-1.5 py-0 sm:!hidden"
-              :custom="{
-                bg: getUpdateKindMutedColor(row.updateKind),
-                text: getUpdateKindColor(row.updateKind),
-              }">
-              <AppIcon :name="getUpdateKindIcon(row.updateKind)" :size="12" />
-            </AppBadge>
-            <AppBadge
+              uppercase
+              class="sm:!hidden" />
+            <AppStatusIndicator
               v-tooltip.top="row.updateKind ?? 'unknown'"
+              marker="icon"
+              :icon="getUpdateKindIcon(row.updateKind)"
+              :tone="getUpdateKindTone(row.updateKind)"
+              :label="row.updateKind ?? 'unknown'"
               size="sm"
-              class="max-sm:!hidden"
-              :custom="{
-                bg: getUpdateKindMutedColor(row.updateKind),
-                text: getUpdateKindColor(row.updateKind),
-              }">
-              <AppIcon :name="getUpdateKindIcon(row.updateKind)" :size="12" class="mr-1" />
-              {{ row.updateKind ?? 'unknown' }}
-            </AppBadge>
+              class="max-sm:!hidden" />
           </template>
 
           <template #cell-actions="{ row }">
@@ -427,12 +429,12 @@ watchEffect(() => {
       <div class="flex items-center gap-2 cursor-pointer" @click="handleViewAll">
         <AppIcon name="recent-updates" :size="16" class="text-drydock-secondary" />
         <span class="text-xs font-semibold dd-text">{{ pendingUpdatesCount === 1 ? t('dashboardView.recentUpdates.compactSingle', { count: pendingUpdatesCount }) : t('dashboardView.recentUpdates.compactPlural', { count: pendingUpdatesCount }) }}</span>
-        <AppBadge
+        <AppStatusIndicator
           v-if="pendingUpdatesCount > 0"
+          marker="none"
           tone="warning"
-          size="xs">
-          {{ pendingUpdatesCount }}
-        </AppBadge>
+          size="xs"
+          :label="pendingUpdatesCount" />
       </div>
     </div>
   </div>

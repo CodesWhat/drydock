@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, onUpdated, ref, watch, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
-import AppBadge from '@/components/AppBadge.vue';
+import AppStatusIndicator from '@/components/AppStatusIndicator.vue';
 import type { DashboardServerRow } from '../dashboardTypes';
 
 interface Props {
@@ -19,6 +19,10 @@ const emit = defineEmits<{
 
 function handleViewAll() {
   emit('viewAll');
+}
+
+function serverTone(status: DashboardServerRow['status']) {
+  return status === 'connected' ? 'success' : 'danger';
 }
 
 const rootEl = ref<HTMLElement | null>(null);
@@ -136,7 +140,7 @@ watch(
         <AppIcon name="servers" :size="14" class="text-drydock-secondary" />
         <h2 class="dd-text-heading-section dd-text">{{ t('dashboardView.hostStatus.title') }}</h2>
       </div>
-      <AppButton size="none" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">{{ t('dashboardView.viewAll') }}</AppButton>
+      <AppButton size="compact" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">{{ t('dashboardView.viewAll') }}</AppButton>
     </div>
 
     <!-- Full mode: wide rows, vertical scroll -->
@@ -151,24 +155,17 @@ watch(
         class="flex items-start gap-3 snap-start p-3 dd-rounded cursor-pointer transition-colors hover:dd-bg-elevated"
         :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
         @click="handleViewAll">
-        <AppBadge
-          v-tooltip.top="server.status === 'connected' ? t('dashboardView.hostStatus.connected') : t('dashboardView.hostStatus.disconnected')"
-          size="xs"
-          class="mt-0.5 shrink-0 px-1.5 py-0"
-          :tone="server.status === 'connected' ? 'success' : 'danger'">
-          <AppIcon :name="server.status === 'connected' ? 'check' : 'xmark'" :size="12" />
-        </AppBadge>
         <div class="flex-1 min-w-0">
           <div class="text-xs font-semibold truncate dd-text">{{ server.name }}</div>
           <div v-if="server.host" class="text-2xs font-mono dd-text-muted truncate mt-0.5">{{ server.host }}</div>
           <div class="text-2xs dd-text-muted">{{ t('dashboardView.hostStatus.containerCount', { running: server.containers.running, total: server.containers.total }) }}</div>
         </div>
-        <AppBadge
-          size="xs"
+        <AppStatusIndicator
+          v-tooltip.top="server.status === 'connected' ? t('dashboardView.hostStatus.connected') : t('dashboardView.hostStatus.disconnected')"
+          size="sm"
           class="mt-0.5 shrink-0"
-          :tone="server.status === 'connected' ? 'success' : 'danger'">
-          {{ server.statusLabel ?? server.status }}
-        </AppBadge>
+          :tone="serverTone(server.status)"
+          :label="server.statusLabel ?? server.status" />
       </div>
       <div
         v-if="fullModeTailSpacerHeight > 0"
@@ -188,23 +185,17 @@ watch(
           class="flex-none w-40 p-3 dd-rounded cursor-pointer transition-colors hover:dd-bg-elevated text-center flex flex-col items-center justify-center gap-1.5"
           :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
           @click="handleViewAll">
-          <span
+          <AppStatusIndicator
             v-tooltip.top="server.status === 'connected' ? t('dashboardView.hostStatus.connected') : t('dashboardView.hostStatus.disconnected')"
-            class="w-7 h-7 dd-rounded flex items-center justify-center"
-            :style="{
-              backgroundColor: server.status === 'connected' ? 'var(--dd-success-muted)' : 'var(--dd-danger-muted)',
-              color: server.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)',
-            }">
-            <AppIcon :name="server.status === 'connected' ? 'check' : 'xmark'" :size="14" />
-          </span>
+            marker="icon"
+            :icon="server.status === 'connected' ? 'check' : 'xmark'"
+            :tone="serverTone(server.status)"
+            :label="server.statusLabel ?? server.status"
+            size="sm"
+            class="justify-center" />
           <div class="text-xs font-semibold dd-text truncate w-full">{{ server.name }}</div>
           <div v-if="server.host" class="text-3xs font-mono dd-text-muted truncate w-full">{{ server.host }}</div>
           <div class="text-2xs dd-text-muted">{{ t('dashboardView.hostStatus.containerCount', { running: server.containers.running, total: server.containers.total }) }}</div>
-          <span
-            class="text-3xs font-bold uppercase"
-            :style="{ color: server.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }">
-            {{ server.statusLabel ?? server.status }}
-          </span>
         </div>
       </div>
     </div>

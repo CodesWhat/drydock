@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import AppBadge from '@/components/AppBadge.vue';
+import AppStatusIndicator from '@/components/AppStatusIndicator.vue';
 import StatusDot from '@/components/StatusDot.vue';
 
 interface SecuritySeverityTotals {
@@ -43,6 +43,10 @@ const emit = defineEmits<{
 
 function handleViewAll() {
   emit('viewAll');
+}
+
+function severityTone(severity: VulnerabilityRow['severity']) {
+  return severity === 'CRITICAL' ? 'danger' : 'warning';
 }
 
 const rootEl = ref<HTMLElement | null>(null);
@@ -95,7 +99,7 @@ watchEffect(() => {
         <AppIcon name="security" :size="14" class="text-drydock-accent" />
         <h2 class="dd-text-heading-section dd-text">{{ t('dashboardView.securityOverview.title') }}</h2>
       </div>
-      <AppButton size="none" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">{{ t('dashboardView.viewAll') }}</AppButton>
+      <AppButton size="compact" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">{{ t('dashboardView.viewAll') }}</AppButton>
     </div>
 
     <div class="flex-1 min-h-0 overflow-hidden p-5 flex flex-col items-center justify-center relative">
@@ -146,17 +150,17 @@ watchEffect(() => {
       <div v-if="showBreakdown && showSecuritySeverityBreakdown" data-test="security-severity-breakdown" class="w-full mb-5">
         <div class="dd-text-label mb-2 dd-text-muted">{{ t('dashboardView.securityOverview.severityBreakdown') }}</div>
         <div class="grid grid-cols-2 gap-2">
-          <div class="flex items-center justify-between px-2 py-1.5 dd-rounded" :style="{ backgroundColor: 'var(--dd-danger-muted)' }">
-            <span class="text-2xs font-semibold" style="color: var(--dd-danger);">{{ t('dashboardView.securityOverview.critical', { count: securitySeverityTotals.critical }) }}</span>
+          <div class="flex items-center justify-between px-2 py-1.5 dd-rounded dd-bg-danger-muted">
+            <AppStatusIndicator marker="none" tone="danger" size="sm" :label="t('dashboardView.securityOverview.critical', { count: securitySeverityTotals.critical })" />
           </div>
-          <div class="flex items-center justify-between px-2 py-1.5 dd-rounded" :style="{ backgroundColor: 'var(--dd-warning-muted)' }">
-            <span class="text-2xs font-semibold" style="color: var(--dd-warning);">{{ t('dashboardView.securityOverview.high', { count: securitySeverityTotals.high }) }}</span>
+          <div class="flex items-center justify-between px-2 py-1.5 dd-rounded dd-bg-warning-muted">
+            <AppStatusIndicator marker="none" tone="warning" size="sm" :label="t('dashboardView.securityOverview.high', { count: securitySeverityTotals.high })" />
           </div>
-          <div class="flex items-center justify-between px-2 py-1.5 dd-rounded" :style="{ backgroundColor: 'var(--dd-caution-muted)' }">
-            <span class="text-2xs font-semibold" style="color: var(--dd-caution);">{{ t('dashboardView.securityOverview.medium', { count: securitySeverityTotals.medium }) }}</span>
+          <div class="flex items-center justify-between px-2 py-1.5 dd-rounded dd-bg-caution-muted">
+            <AppStatusIndicator marker="none" tone="caution" size="sm" :label="t('dashboardView.securityOverview.medium', { count: securitySeverityTotals.medium })" />
           </div>
-          <div class="flex items-center justify-between px-2 py-1.5 dd-rounded" :style="{ backgroundColor: 'var(--dd-info-muted)' }">
-            <span class="text-2xs font-semibold" style="color: var(--dd-info);">{{ t('dashboardView.securityOverview.low', { count: securitySeverityTotals.low }) }}</span>
+          <div class="flex items-center justify-between px-2 py-1.5 dd-rounded dd-bg-info-muted">
+            <AppStatusIndicator marker="none" tone="info" size="sm" :label="t('dashboardView.securityOverview.low', { count: securitySeverityTotals.low })" />
           </div>
         </div>
       </div>
@@ -170,11 +174,10 @@ watchEffect(() => {
             class="flex items-start gap-3 p-2.5 dd-rounded"
             :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
             <div class="shrink-0 mt-0.5">
-              <AppBadge
+              <AppStatusIndicator
                 size="xs"
-                :tone="vuln.severity === 'CRITICAL' ? 'danger' : 'warning'">
-                {{ vuln.severity }}
-              </AppBadge>
+                :tone="severityTone(vuln.severity)"
+                :label="vuln.severity" />
             </div>
             <div class="flex-1 min-w-0">
               <div class="text-2xs-plus font-semibold truncate dd-text">{{ vuln.id }}</div>

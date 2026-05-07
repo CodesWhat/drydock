@@ -13,13 +13,6 @@ const ALLOWED_RAW_BUTTON_FILES = new Set([
   'src/components/ToggleSwitch.vue',
 ]);
 
-const ALLOWED_ICON_ONLY_APP_BUTTON_FILES = new Set([
-  'src/components/containers/ContainerFullPageActionsTab.vue',
-  'src/components/containers/ContainerFullPageEnvironmentTab.vue',
-  'src/components/containers/ContainerFullPageTabContent.vue',
-  'src/components/containers/ContainerSideTabContent.vue',
-]);
-
 function getVisibleText(source: string): string {
   const dom = new JSDOM(`<body>${source}</body>`);
   const { document, Node } = dom.window;
@@ -100,10 +93,6 @@ describe('button standard', () => {
 
     for (const filePath of vueFiles) {
       const relPath = relative(process.cwd(), filePath).replaceAll('\\', '/');
-      if (ALLOWED_ICON_ONLY_APP_BUTTON_FILES.has(relPath)) {
-        continue;
-      }
-
       const source = readFileSync(filePath, 'utf8');
       const buttonBlocks: string[] = source.match(/<AppButton\b[\s\S]*?<\/AppButton>/g) ?? [];
       const hasIconOnlyAppButton = buttonBlocks.some((block) => {
@@ -118,6 +107,49 @@ describe('button standard', () => {
       });
 
       if (hasIconOnlyAppButton) {
+        offenders.push(relPath);
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('keeps container AppButtons on shared size variants', () => {
+    const vueFiles = collectVueFiles(join(SRC_DIR, 'components/containers'));
+    const offenders: string[] = [];
+
+    for (const filePath of vueFiles) {
+      const relPath = relative(process.cwd(), filePath).replaceAll('\\', '/');
+      const source = readFileSync(filePath, 'utf8');
+      const buttonBlocks: string[] = source.match(/<AppButton\b[\s\S]*?<\/AppButton>/g) ?? [];
+      const hasUnspecifiedSizeButton = buttonBlocks.some((block) =>
+        /\bsize=["']none["']/.test(block),
+      );
+
+      if (hasUnspecifiedSizeButton) {
+        offenders.push(relPath);
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('keeps dashboard and security AppButtons on shared size variants', () => {
+    const targetFiles = [
+      ...collectVueFiles(join(SRC_DIR, 'views/dashboard')),
+      join(SRC_DIR, 'views/SecurityView.vue'),
+    ];
+    const offenders: string[] = [];
+
+    for (const filePath of targetFiles) {
+      const relPath = relative(process.cwd(), filePath).replaceAll('\\', '/');
+      const source = readFileSync(filePath, 'utf8');
+      const buttonBlocks: string[] = source.match(/<AppButton\b[\s\S]*?<\/AppButton>/g) ?? [];
+      const hasUnspecifiedSizeButton = buttonBlocks.some((block) =>
+        /\bsize=["']none["']/.test(block),
+      );
+
+      if (hasUnspecifiedSizeButton) {
         offenders.push(relPath);
       }
     }
