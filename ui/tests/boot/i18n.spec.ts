@@ -55,6 +55,11 @@ describe('buildMessages', () => {
     expect(LOCALE_OPTIONS).toContainEqual({ id: 'tr', label: 'Türkçe' });
   });
 
+  it('exposes Traditional Chinese as a supported picker option', () => {
+    expect(SUPPORTED_LOCALES).toContain('zh-TW');
+    expect(LOCALE_OPTIONS).toContainEqual({ id: 'zh-TW', label: '繁體中文' });
+  });
+
   it('skips paths that do not match the /locales/<locale>/ pattern', () => {
     const modules = {
       // no /locales/<x>/ segment — should be silently skipped
@@ -95,12 +100,14 @@ describe('buildMessages', () => {
     }
   });
 
-  it('handles locale codes with hyphens (e.g. zh-CN)', () => {
+  it('handles locale codes with hyphens (e.g. zh-CN and zh-TW)', () => {
     const modules = {
       '../locales/zh-CN/common.json': { hello: '你好' },
+      '../locales/zh-TW/common.json': { hello: '你好' },
     };
     const result = buildMessages(modules);
     expect((result as Record<string, unknown>)['zh-CN']).toEqual({ hello: '你好' });
+    expect((result as Record<string, unknown>)['zh-TW']).toEqual({ hello: '你好' });
   });
 
   it('handles Italian locale namespaces', () => {

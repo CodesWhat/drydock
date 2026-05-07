@@ -1,0 +1,94 @@
+{
+  "dashboardView": {
+    "loading": "正在載入儀表板...",
+    "loadFailed": "無法載入儀表板",
+    "dragToReorder": "拖動以重新排序",
+    "viewAll": "檢視全部 →",
+    "editToggle": {
+      "showWidgetPanel": "顯示小工具面板",
+      "doneCustomizing": "完成自訂",
+      "customize": "自訂儀表板"
+    },
+    "widgetPanel": {
+      "title": "小工具",
+      "closePanel": "關閉面板",
+      "resetToDefault": "重設為預設"
+    },
+    "confirm": {
+      "updateContainer": {
+        "header": "更新容器",
+        "message": "立即更新 {name}？這將應用最新發現的映像檔。",
+        "accept": "更新"
+      },
+      "updateAll": {
+        "header": "更新所有容器",
+        "message": "{count} 個容器將被更新。繼續嗎？",
+        "accept": "全部更新"
+      }
+    },
+    "toast": {
+      "updated": "已更新：{name}",
+      "updateFailed": "更新失敗：{name}",
+      "updateFailedWithReason": "更新失敗：{name} — {reason}",
+      "cancelled": "已取消：{name}",
+      "rolledBack": "已回滾：{name}",
+      "rolledBackWithReason": "已回滾：{name} — {reason}",
+      "updateError": "無法更新 {name}",
+      "updateAllError": "無法更新所有容器"
+    },
+    "recentUpdates": {
+      "title": "可用更新",
+      "updateAll": "全部更新",
+      "noUpdates": "沒有可用更新",
+      "releaseNotes": "發行說明",
+      "securityBlocked": "被安全機制阻止",
+      "updateContainer": "更新容器",
+      "compactSingle": "{count} 個可用更新",
+      "compactPlural": "{count} 個可用更新",
+      "status": {
+        "queued": "排隊中",
+        "updating": "更新中"
+      },
+      "columns": {
+        "container": "容器",
+        "version": "版本",
+        "type": "類型",
+        "actions": "操作"
+      }
+    },
+    "hostStatus": {
+      "title": "主機狀態",
+      "connected": "已連接",
+      "disconnected": "已斷開",
+      "containerCount": "{running}/{total} 個容器"
+    },
+    "resourceUsage": {
+      "title": "資源使用",
+      "totalUsage": "總使用量（監視 {watched} 個）",
+      "cpu": "CPU",
+      "memory": "記憶體",
+      "topCpu": "CPU 最高",
+      "topMemory": "記憶體最高",
+      "noCpuData": "無即時 CPU 資料",
+      "noMemoryData": "無即時記憶體資料"
+    },
+    "securityOverview": {
+      "title": "安全概覽",
+      "images": "個映像檔",
+      "clean": "無風險",
+      "issues": "安全風險",
+      "notScanned": "未掃描",
+      "severityBreakdown": "嚴重程度分佈",
+      "critical": "{count} 個嚴重",
+      "high": "{count} 個高危",
+      "medium": "{count} 個中危",
+      "low": "{count} 個低危",
+      "topVulnerabilities": "主要漏洞",
+      "noVulnerabilities": "未報告任何漏洞"
+    },
+    "updateBreakdown": {
+      "title": "更新分佈",
+      "noUpdates": "沒有要分類的更新"
+    }
+  }
+}

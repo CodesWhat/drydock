@@ -1,0 +1,156 @@
+{
+  "configView": {
+    "tabs": {
+      "general": "通用",
+      "appearance": "外觀",
+      "profile": "個人資料"
+    },
+    "general": {
+      "application": {
+        "title": "應用程式",
+        "loadingServerInfo": "正在載入伺服器資訊"
+      },
+      "store": {
+        "title": "儲存"
+      },
+      "webhookApi": {
+        "title": "Webhook API",
+        "enabled": "已啟用",
+        "disabled": "已停用",
+        "description": "使用這些端點透過 HTTP 觸發監視週期和更新。所有請求都需要在 Authorization 標頭中攜帶 Bearer 令牌。",
+        "disabledMessage": "Webhook API 已停用。請設定",
+        "disabledHint": "Webhook API 已停用。請設定 {envEnabled} 並配置至少一個令牌（{envToken} 或 {envTokens}）以啟用它。",
+        "table": {
+          "endpoint": "端點",
+          "description": "描述"
+        },
+        "example": "範例",
+        "endpoints": {
+          "watchAll": "在所有監視器上觸發完整監視週期",
+          "watchOne": "按名稱監視特定容器",
+          "updateOne": "觸發特定容器的更新"
+        }
+      },
+      "network": {
+        "title": "網路",
+        "internetlessMode": {
+          "label": "離線模式",
+          "description": "阻止所有出站請求（容器圖示、外部取得）"
+        }
+      },
+      "iconCache": {
+        "title": "容器圖示快取",
+        "cachedIcons": {
+          "label": "已快取圖示",
+          "description": "常用圖示已打包；其他圖示在首次取得時快取到磁碟"
+        },
+        "cleared": "已清除 {count} 個",
+        "clearButton": "清除快取"
+      },
+      "diagnostics": {
+        "title": "診斷",
+        "debugDump": {
+          "label": "診斷偵錯轉儲",
+          "description": "下載用於故障排除的執行時狀態精簡 JSON 快照",
+          "preparing": "準備中...",
+          "download": "下載偵錯轉儲"
+        }
+      },
+      "fields": {
+        "version": "版本",
+        "serverPort": "伺服器埠",
+        "containerActions": "容器操作",
+        "webhook": "Webhook",
+        "deleteEnabled": "允許刪除",
+        "trustProxy": "信任代理",
+        "metricsAuth": "指標認證",
+        "storePath": "儲存路徑",
+        "storeFile": "儲存檔案",
+        "enabled": "已啟用",
+        "disabled": "已停用",
+        "yes": "是",
+        "no": "否"
+      },
+      "errors": {
+        "loadServerInfo": "無法載入伺服器資訊",
+        "loadProfileData": "無法載入個人資料資料",
+        "updateNetworkSettings": "無法更新網路設定",
+        "clearIconCache": "無法清除圖示快取",
+        "downloadDebugDump": "無法下載偵錯轉儲",
+        "errorLabel": "錯誤"
+      }
+    },
+    "appearance": {
+      "language": {
+        "title": "語言"
+      },
+      "colorTheme": {
+        "title": "顏色主題",
+        "descriptions": {
+          "oneDark": "清爽且平衡",
+          "github": "清爽且熟悉",
+          "dracula": "醒目的紫色風格",
+          "catppuccin": "溫暖柔和色調",
+          "gruvbox": "復古大地暖色",
+          "ayu": "柔和金色調"
+        }
+      },
+      "fontFamily": {
+        "title": "字型",
+        "defaultBadge": "預設",
+        "preview": "敏捷的棕色狐狸跳過懶狗"
+      },
+      "fontSize": {
+        "title": "字型大小"
+      },
+      "iconLibrary": {
+        "title": "圖示庫"
+      },
+      "iconSize": {
+        "title": "圖示大小"
+      },
+      "borderRadius": {
+        "title": "圓角",
+        "labels": {
+          "none": "無",
+          "sharp": "銳利",
+          "modern": "現代",
+          "soft": "柔和",
+          "round": "圓潤"
+        }
+      }
+    },
+    "profile": {
+      "loading": "正在載入個人資料",
+      "fields": {
+        "username": "使用者名稱",
+        "email": "信箱",
+        "role": "角色",
+        "provider": "提供者",
+        "lastLogin": "上次登入",
+        "activeSessions": "活躍工作階段"
+      }
+    },
+    "logs": {
+      "loading": "正在載入日誌...",
+      "emptyMessage": "當前篩選條件下沒有日誌條目。",
+      "toolbar": {
+        "live": "即時",
+        "allLevels": "所有級別",
+        "debug": "偵錯",
+        "info": "資訊",
+        "warn": "警告",
+        "error": "錯誤",
+        "allComponents": "所有組件",
+        "resetFilters": "重設篩選"
+      },
+      "tail": {
+        "50": "末尾 50 條",
+        "100": "末尾 100 條",
+        "500": "末尾 500 條",
+        "1000": "末尾 1000 條"
+      },
+      "logLevelBadge": "伺服器日誌級別：{level}。僅捕獲此級別及更高級別的訊息。"
+    }
+  }
+}

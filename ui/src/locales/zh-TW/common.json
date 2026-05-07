@@ -1,0 +1,13 @@
+{
+  "common": {
+    "loading": "載入中...",
+    "back": "返回",
+    "cancel": "取消",
+    "save": "儲存",
+    "delete": "刪除",
+    "confirm": "確認",
+    "close": "關閉",
+    "retry": "重試",
+    "unknown": "未知"
+  }
+}

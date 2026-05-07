@@ -1,6 +1,7 @@
 export const SUPPORTED_LOCALES = [
   'en',
   'zh-CN',
+  'zh-TW',
   'it',
   'es',
   'de',
@@ -22,6 +23,7 @@ export interface LocaleOption {
 export const LOCALE_OPTIONS: LocaleOption[] = [
   { id: 'en', label: 'English' },
   { id: 'zh-CN', label: '简体中文' },
+  { id: 'zh-TW', label: '繁體中文' },
   { id: 'it', label: 'Italiano' },
   { id: 'es', label: 'Español' },
   { id: 'de', label: 'Deutsch' },
