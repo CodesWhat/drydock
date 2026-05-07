@@ -469,6 +469,24 @@ describe('ContainerRuntimeConfigManager', () => {
     expect(
       manager.sanitizeImageInheritedEnv(containerEnv, { Env: [] }, targetImageConfig, log),
     ).toBe(containerEnv);
+    expect(
+      manager.sanitizeImageInheritedEnv(
+        containerEnv,
+        { Env: 'not-an-array' },
+        targetImageConfig,
+        log,
+      ),
+    ).toBe(containerEnv);
+
+    const unchangedEnv = ['PATH=/usr/local/bin'];
+    expect(
+      manager.sanitizeImageInheritedEnv(
+        unchangedEnv,
+        { Env: ['PATH=/usr/local/bin', 'MALFORMED'] },
+        { Env: ['PATH=/usr/local/bin'] },
+        log,
+      ),
+    ).toBe(unchangedEnv);
   });
 
   test('sanitizeImageInheritedLabels should preserve runtime and unchanged labels', () => {

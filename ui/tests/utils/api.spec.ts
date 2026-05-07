@@ -1,4 +1,4 @@
-import { extractCollectionData } from '@/utils/api';
+import { extractCollectionData, readJsonResponse } from '@/utils/api';
 
 describe('extractCollectionData', () => {
   const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -82,5 +82,65 @@ describe('extractCollectionData', () => {
     const payload = { data: [{ id: 'a' }, 42] };
 
     expect(extractCollectionData(payload, isRecord)).toEqual([]);
+  });
+});
+
+describe('readJsonResponse', () => {
+  it('throws a clearer error for invalid JSON payloads', async () => {
+    const response = new Response('not-json', {
+      headers: { 'content-type': 'application/json' },
+    });
+
+    await expect(readJsonResponse(response, 'Test API')).rejects.toThrow(
+      'Test API returned invalid JSON.',
+    );
+  });
+
+  it('uses the original response body when clone is unavailable while checking content type', async () => {
+    const response = {
+      headers: {
+        get: () => 'text/html',
+      },
+      clone: undefined,
+      bodyUsed: false,
+      text: vi.fn().mockResolvedValue('<!DOCTYPE html><html></html>'),
+    } as unknown as Response;
+
+    await expect(readJsonResponse(response, 'Test API')).rejects.toThrow(
+      'Test API returned HTML instead of JSON',
+    );
+  });
+
+  it('does not consume an already-used body when clone is unavailable', async () => {
+    const text = vi.fn();
+    const response = {
+      headers: {
+        get: () => 'text/plain',
+      },
+      clone: undefined,
+      bodyUsed: true,
+      text,
+    } as unknown as Response;
+
+    await expect(readJsonResponse(response, 'Test API')).rejects.toThrow(
+      'Test API returned text/plain instead of JSON.',
+    );
+    expect(text).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the content-type message when preview reading fails', async () => {
+    const response = {
+      headers: {
+        get: () => 'text/plain',
+      },
+      clone: vi.fn(() => {
+        throw new Error('clone unavailable');
+      }),
+      text: vi.fn(),
+    } as unknown as Response;
+
+    await expect(readJsonResponse(response, 'Test API')).rejects.toThrow(
+      'Test API returned text/plain instead of JSON.',
+    );
   });
 });

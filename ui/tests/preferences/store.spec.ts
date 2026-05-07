@@ -35,8 +35,9 @@ describe('preferences store', () => {
   }
 
   it('should return defaults when localStorage is empty', async () => {
+    const { CURRENT_SCHEMA_VERSION } = await import('@/preferences/schema');
     const { preferences } = await loadStore();
-    expect(preferences.schemaVersion).toBe(5);
+    expect(preferences.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
     expect(preferences.theme.family).toBe('one-dark');
     expect(preferences.theme.variant).toBe('dark');
     expect(preferences.locale.language).toBe('en');

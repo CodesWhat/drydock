@@ -160,6 +160,44 @@ describe('preferences migration', () => {
       });
     });
 
+    it('should preserve defaults when table widths are omitted', () => {
+      const result = migrate({
+        schemaVersion: 1,
+        tables: {},
+      });
+
+      expect(result.tables.columnWidths).toEqual({});
+    });
+
+    it('should drop invalid table width buckets', () => {
+      const result = migrate({
+        schemaVersion: 1,
+        tables: {
+          columnWidths: 'invalid-widths',
+        },
+      });
+
+      expect(result.tables.columnWidths).toEqual({});
+    });
+
+    it('should drop table width entries left empty after sanitization', () => {
+      const result = migrate({
+        schemaVersion: 1,
+        tables: {
+          columnWidths: {
+            containers: { tooSmall: 10 },
+          },
+        },
+      });
+
+      expect(result.tables.columnWidths).toEqual({});
+    });
+
+    it('should drop malformed table preferences', () => {
+      const result = migrate({ schemaVersion: 1, tables: 'invalid-tables' });
+      expect(result.tables.columnWidths).toEqual({});
+    });
+
     it('should preserve valid fontSize', () => {
       const result = migrate({ schemaVersion: 1, appearance: { fontSize: 1.1 } });
       expect(result.appearance.fontSize).toBe(1.1);
@@ -213,6 +251,11 @@ describe('preferences migration', () => {
     it('should preserve Turkish as a supported locale', () => {
       const result = migrate({ schemaVersion: 1, locale: { language: 'tr' } });
       expect(result.locale.language).toBe('tr');
+    });
+
+    it('should drop malformed locale preferences', () => {
+      const result = migrate({ schemaVersion: 1, locale: 'zh-TW' });
+      expect(result.locale.language).toBe(DEFAULTS.locale.language);
     });
 
     it('should replace an unsupported locale with the default', () => {

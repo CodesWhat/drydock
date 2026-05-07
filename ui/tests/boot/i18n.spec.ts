@@ -249,4 +249,16 @@ describe('setI18nLocale', () => {
     expect(i18n.global.locale.value).toBe('zh-CN');
     expect(document.documentElement.lang).toBe('zh-CN');
   });
+
+  it('updates the vue-i18n global locale when document is unavailable', () => {
+    const originalDocument = globalThis.document;
+    try {
+      vi.stubGlobal('document', undefined);
+      setI18nLocale('zh-TW');
+
+      expect(i18n.global.locale.value).toBe('zh-TW');
+    } finally {
+      vi.stubGlobal('document', originalDocument);
+    }
+  });
 });
