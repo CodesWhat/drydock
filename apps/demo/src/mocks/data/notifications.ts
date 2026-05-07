@@ -1,3 +1,5 @@
+import type { NotificationOutboxEntry } from '@/services/notification-outbox';
+
 export const notificationRules = [
   {
     id: 'rule-1',
@@ -33,5 +35,81 @@ export const notificationRules = [
     description: 'Notify on media container updates',
     enabled: true,
     triggers: ['slack.homelab'],
+  },
+];
+
+export const notificationOutboxEntries: NotificationOutboxEntry[] = [
+  {
+    id: 'outbox-dead-letter-grafana',
+    eventName: 'container.update.available',
+    triggerId: 'slack.homelab',
+    containerId: 'grafana',
+    payload: {
+      containerId: 'grafana',
+      containerName: 'Grafana',
+      reason: 'minor-update',
+      status: 'running',
+      container: {
+        id: 'grafana',
+        name: 'grafana/grafana',
+        displayName: 'Grafana',
+        status: 'running',
+      },
+    },
+    attempts: 3,
+    maxAttempts: 3,
+    nextAttemptAt: '2026-05-07T14:30:00.000Z',
+    status: 'dead-letter',
+    lastError: 'Slack webhook returned 500 after the retry budget was exhausted.',
+    createdAt: '2026-05-07T12:45:00.000Z',
+    failedAt: '2026-05-07T13:05:00.000Z',
+  },
+  {
+    id: 'outbox-pending-jellyfin',
+    eventName: 'container.security.alert',
+    triggerId: 'discord.updates',
+    containerId: 'jellyfin',
+    payload: {
+      containerId: 'jellyfin',
+      containerName: 'Jellyfin',
+      reason: 'security-alert',
+      status: 'running',
+      blockingCount: 2,
+      container: {
+        id: 'jellyfin',
+        name: 'jellyfin/jellyfin',
+        displayName: 'Jellyfin',
+        status: 'running',
+      },
+    },
+    attempts: 1,
+    maxAttempts: 3,
+    nextAttemptAt: '2026-05-07T15:10:00.000Z',
+    status: 'pending',
+    createdAt: '2026-05-07T15:05:00.000Z',
+  },
+  {
+    id: 'outbox-delivered-adguard',
+    eventName: 'container.update.applied',
+    triggerId: 'smtp.email',
+    containerId: 'adguard',
+    payload: {
+      containerId: 'adguard',
+      containerName: 'AdGuard Home',
+      reason: 'update-applied',
+      status: 'running',
+      container: {
+        id: 'adguard',
+        name: 'adguardteam/adguardhome',
+        displayName: 'AdGuard Home',
+        status: 'running',
+      },
+    },
+    attempts: 1,
+    maxAttempts: 3,
+    nextAttemptAt: '2026-05-07T11:30:00.000Z',
+    status: 'delivered',
+    createdAt: '2026-05-07T11:25:00.000Z',
+    deliveredAt: '2026-05-07T11:26:00.000Z',
   },
 ];

@@ -71,9 +71,14 @@ function makeResponse(
  * buttons in #cell-actions are reachable from tests.
  */
 const DataTableStub = defineComponent({
-  props: ['columns', 'rows', 'rowKey'],
+  props: ['columns', 'rows', 'rowKey', 'showActions', 'actionsWidth', 'fixedLayout'],
   template: `
-    <div class="data-table" :data-row-count="rows?.length ?? 0">
+    <div
+      class="data-table"
+      :data-row-count="rows?.length ?? 0"
+      :data-show-actions="String(Boolean(showActions))"
+      :data-actions-width="actionsWidth"
+    >
       <template v-for="row in rows" :key="row.id">
         <div class="data-table-row" :data-row-id="row.id">
           <slot name="cell-eventName" :row="row" />
@@ -81,6 +86,7 @@ const DataTableStub = defineComponent({
           <slot name="cell-attempts" :row="row" />
           <slot name="cell-lastError" :row="row" />
           <slot name="cell-createdAt" :row="row" />
+          <slot name="actions" :row="row" />
           <slot name="cell-actions" :row="row" />
         </div>
       </template>
@@ -129,6 +135,13 @@ describe('NotificationOutboxView', () => {
   });
 
   describe('initial load', () => {
+    it('renders the translated Outbox heading', async () => {
+      const wrapper = await mountView();
+
+      expect(wrapper.find('h2').text()).toBe('Outbox');
+      expect(wrapper.text()).not.toContain('Notification outbox');
+    });
+
     it('calls getOutboxEntries with dead-letter by default on mount', async () => {
       await mountView();
 
@@ -157,6 +170,44 @@ describe('NotificationOutboxView', () => {
       const wrapper = await mountView();
 
       expect(wrapper.text()).toContain('smtp.notifications');
+    });
+
+    it('uses the shared DataTable action column instead of a custom actions data column', async () => {
+      const wrapper = await mountView();
+      const table = wrapper.findComponent(DataTableStub);
+      const columnKeys = (table.props('columns') as Array<{ key: string }>).map((col) => col.key);
+
+      expect(table.props('showActions')).toBe(true);
+      expect(table.props('actionsWidth')).toBe('180px');
+      expect(table.props('fixedLayout')).toBe(true);
+      expect(columnKeys).not.toContain('actions');
+    });
+
+    it('keeps dense table text intentional with truncation instead of random wrapping', async () => {
+      mockGetOutboxEntries.mockResolvedValue(
+        makeResponse([
+          makeEntry({
+            eventName: 'container.update.available.with.long.identifier',
+            triggerId: 'slack.homelab.production.notifications',
+            containerId: 'linuxserver/radarr:5.27.5-ls300',
+            lastError: 'Slack webhook returned a very long diagnostic message from the receiver',
+          }),
+        ]),
+      );
+      const wrapper = await mountView();
+
+      expect(wrapper.find('[data-testid="outbox-event-name"]').classes()).toEqual(
+        expect.arrayContaining(['block', 'truncate', 'whitespace-nowrap']),
+      );
+      expect(wrapper.find('[data-testid="outbox-trigger-id"]').classes()).toEqual(
+        expect.arrayContaining(['block', 'truncate', 'whitespace-nowrap']),
+      );
+      expect(wrapper.find('[data-testid="outbox-last-error"]').classes()).toEqual(
+        expect.arrayContaining(['line-clamp-2', 'break-words']),
+      );
+      expect(wrapper.find('[data-testid="outbox-created-at"]').classes()).toEqual(
+        expect.arrayContaining(['block', 'whitespace-nowrap']),
+      );
     });
 
     it('shows empty state when response has no entries', async () => {

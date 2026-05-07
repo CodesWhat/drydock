@@ -61,6 +61,7 @@
         "settingsGroup": "Ustawienia",
         "general": "Ogólne",
         "notifications": "Powiadomienia",
+        "outbox": "Skrzynka nadawcza",
         "triggers": "Wyzwalacze",
         "auth": "Uwierzytelnianie",
         "agents": "Agenty"

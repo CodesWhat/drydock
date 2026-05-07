@@ -175,6 +175,20 @@ describe('AppLayout', () => {
   });
 
   describe('layout spacing', () => {
+    it('labels the notification delivery queue as Outbox with an outbox icon', async () => {
+      const wrapper = mountLayout();
+      mountedWrappers.push(wrapper);
+      await flushPromises();
+
+      const navItem = wrapper
+        .findAll('.nav-item-wrapper')
+        .find((candidate) => candidate.text().includes('Outbox'));
+
+      expect(navItem).toBeDefined();
+      expect(navItem?.text()).not.toContain('Notification outbox');
+      expect(navItem?.find('.app-icon-stub').attributes('data-icon')).toBe('outbox');
+    });
+
     it('applies asymmetric horizontal padding on main: pl-6 left, pr-[9px] right', async () => {
       const wrapper = mountLayout();
       mountedWrappers.push(wrapper);

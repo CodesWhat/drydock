@@ -61,6 +61,7 @@
         "settingsGroup": "设置",
         "general": "通用",
         "notifications": "通知",
+        "outbox": "发件箱",
         "triggers": "触发器",
         "auth": "认证",
         "agents": "代理"

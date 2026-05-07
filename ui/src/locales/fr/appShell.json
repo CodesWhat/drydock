@@ -61,6 +61,7 @@
         "settingsGroup": "Paramètres",
         "general": "Général",
         "notifications": "Notifications",
+        "outbox": "Boîte d’envoi",
         "triggers": "Triggers",
         "auth": "Auth",
         "agents": "Agents"

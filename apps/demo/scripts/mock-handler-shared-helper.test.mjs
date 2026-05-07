@@ -6,6 +6,8 @@ const registriesHandlerPath = new URL('../src/mocks/handlers/registries.ts', imp
 const watchersHandlerPath = new URL('../src/mocks/handlers/watchers.ts', import.meta.url);
 const agentsHandlerPath = new URL('../src/mocks/handlers/agents.ts', import.meta.url);
 const containersDataPath = new URL('../src/mocks/data/containers.ts', import.meta.url);
+const notificationsHandlerPath = new URL('../src/mocks/handlers/notifications.ts', import.meta.url);
+const notificationsDataPath = new URL('../src/mocks/data/notifications.ts', import.meta.url);
 
 function readSource(url) {
   return readFileSync(url, 'utf8');
@@ -36,4 +38,23 @@ test('LSCR media containers use a shared factory and common env block', () => {
 
   assert.match(containersSource, /\blscrMediaContainer\(/);
   assert.equal((containersSource.match(/key: 'TZ', value: 'America\/New_York'/g) ?? []).length, 1);
+});
+
+test('demo notification mocks include outbox routes and all status states', () => {
+  const notificationsHandlerSource = readSource(notificationsHandlerPath);
+  const notificationsDataSource = readSource(notificationsDataPath);
+
+  assert.match(notificationsHandlerSource, /\/api\/v1\/notifications\/outbox/);
+  assert.match(
+    notificationsHandlerSource,
+    /\bhttp\.post\('\/api\/v1\/notifications\/outbox\/:id\/retry'/,
+  );
+  assert.match(
+    notificationsHandlerSource,
+    /\bhttp\.delete\('\/api\/v1\/notifications\/outbox\/:id'/,
+  );
+
+  for (const status of ['pending', 'delivered', 'dead-letter']) {
+    assert.match(notificationsDataSource, new RegExp(`status: '${status}'`));
+  }
 });

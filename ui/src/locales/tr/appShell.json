@@ -61,6 +61,7 @@
         "settingsGroup": "Ayarlar",
         "general": "Genel",
         "notifications": "Bildirimler",
+        "outbox": "Giden kutusu",
         "triggers": "Tetikleyiciler",
         "auth": "Kimlik doğrulama",
         "agents": "Aracılar"

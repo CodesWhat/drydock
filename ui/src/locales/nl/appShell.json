@@ -61,6 +61,7 @@
         "settingsGroup": "Instellingen",
         "general": "Algemeen",
         "notifications": "Meldingen",
+        "outbox": "Postvak uit",
         "triggers": "Triggers",
         "auth": "Authenticatie",
         "agents": "Agents"
