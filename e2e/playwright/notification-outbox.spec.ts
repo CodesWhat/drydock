@@ -44,7 +44,7 @@ const EMPTY_COUNTS: OutboxCounts = {
   deadLetter: 0,
 };
 
-const OUTBOX_PATH = '/api/notifications/outbox';
+const OUTBOX_PATH = '/api/v1/notifications/outbox';
 
 function buildOutboxEntry(overrides: Partial<OutboxEntry> = {}): OutboxEntry {
   return {
@@ -93,7 +93,7 @@ async function mockOutboxReads(
   page: Page,
   responses: Partial<Record<OutboxStatus, OutboxResponse>>,
 ): Promise<void> {
-  await page.route('**/api/notifications/outbox**', async (route) => {
+  await page.route('**/api/v1/notifications/outbox**', async (route) => {
     const request = route.request();
     const requestUrl = new URL(request.url());
     if (request.method() !== 'GET' || requestUrl.pathname !== OUTBOX_PATH) {
@@ -109,7 +109,7 @@ async function mockOutboxReads(
 async function openOutbox(page: Page, path = '/notifications/outbox'): Promise<void> {
   await page.goto(path);
   await dismissAnnouncementBanners(page);
-  await expect(page.locator('main')).toContainText('Notification outbox', { timeout: 30_000 });
+  await expect(page.locator('main')).toContainText('Outbox', { timeout: 30_000 });
 }
 
 test.describe('Notification outbox', () => {
@@ -173,7 +173,7 @@ test.describe('Notification outbox', () => {
     });
     let retryRequested = false;
 
-    await page.route('**/api/notifications/outbox**', async (route) => {
+    await page.route('**/api/v1/notifications/outbox**', async (route) => {
       const request = route.request();
       const requestUrl = new URL(request.url());
 
@@ -208,7 +208,7 @@ test.describe('Notification outbox', () => {
     const retryResponse = page.waitForResponse(
       (response) =>
         response.request().method() === 'POST' &&
-        response.url().includes('/api/notifications/outbox/retry-target/retry') &&
+        response.url().includes('/api/v1/notifications/outbox/retry-target/retry') &&
         response.status() === 200,
     );
     await page
@@ -242,7 +242,7 @@ test.describe('Notification outbox', () => {
     });
     let deleted = false;
 
-    await page.route('**/api/notifications/outbox**', async (route) => {
+    await page.route('**/api/v1/notifications/outbox**', async (route) => {
       const request = route.request();
       const requestUrl = new URL(request.url());
 
@@ -272,7 +272,7 @@ test.describe('Notification outbox', () => {
     const deleteResponse = page.waitForResponse(
       (response) =>
         response.request().method() === 'DELETE' &&
-        response.url().includes('/api/notifications/outbox/discard-target') &&
+        response.url().includes('/api/v1/notifications/outbox/discard-target') &&
         response.status() === 204,
     );
     await page
@@ -294,7 +294,7 @@ test.describe('Notification outbox', () => {
   test('surfaces load errors and recovers on refresh', async ({ page }) => {
     let requestCount = 0;
 
-    await page.route('**/api/notifications/outbox**', async (route) => {
+    await page.route('**/api/v1/notifications/outbox**', async (route) => {
       const request = route.request();
       const requestUrl = new URL(request.url());
 
@@ -320,7 +320,7 @@ test.describe('Notification outbox', () => {
     const refreshResponse = page.waitForResponse(
       (response) =>
         response.request().method() === 'GET' &&
-        response.url().includes('/api/notifications/outbox') &&
+        response.url().includes('/api/v1/notifications/outbox') &&
         response.status() === 200,
     );
     await main.getByRole('button', { name: 'Refresh' }).click();
@@ -341,9 +341,9 @@ test.describe('Notification outbox', () => {
     await dismissAnnouncementBanners(page);
     await ensureSidebarExpanded(page);
 
-    await clickSidebarNavItem(page, 'Notification outbox');
+    await clickSidebarNavItem(page, 'Outbox');
 
     await expect(page).toHaveURL(/\/notifications\/outbox(?:\?|$)/);
-    await expect(page.locator('main')).toContainText('Notification outbox', { timeout: 30_000 });
+    await expect(page.locator('main')).toContainText('Outbox', { timeout: 30_000 });
   });
 });
