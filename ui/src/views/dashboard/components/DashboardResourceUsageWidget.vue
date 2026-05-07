@@ -87,7 +87,7 @@ watchEffect(() => {
           {{ t('dashboardView.resourceUsage.title') }}
         </h2>
       </div>
-      <AppButton size="none" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">{{ t('dashboardView.viewAll') }}</AppButton>
+      <AppButton size="compact" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">{{ t('dashboardView.viewAll') }}</AppButton>
     </div>
 
     <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain dd-scroll-stable p-4 space-y-4 relative">

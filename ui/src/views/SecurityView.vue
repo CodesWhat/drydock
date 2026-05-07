@@ -4,11 +4,11 @@ import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import AppBadge from '../components/AppBadge.vue';
 import AppIconButton from '../components/AppIconButton.vue';
+import AppStatusIndicator from '../components/AppStatusIndicator.vue';
 import ContainerUpdateDialog from '../components/containers/ContainerUpdateDialog.vue';
 import ReleaseNotesLink from '../components/containers/ReleaseNotesLink.vue';
 import ScanProgressBanner from '../components/ScanProgressBanner.vue';
 import SecurityEmptyState from '../components/SecurityEmptyState.vue';
-import StatusDot from '../components/StatusDot.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useSbomDetail } from '../composables/useSbomDetail';
 import { useScanProgress } from '../composables/useScanProgress';
@@ -31,7 +31,6 @@ import {
   highestSeverity,
   severityColor,
   severityIcon,
-  statusBadgeTone,
   toSafeExternalUrl,
 } from './security/securityViewUtils';
 
@@ -66,6 +65,19 @@ const { isMobile, windowNarrow: isCompact } = useBreakpoints();
 const { scanning, scanProgress, scanAllContainers: runScanAll } = useScanProgress();
 
 const containers = ref<Container[]>([]);
+
+function runtimeToolTone(status: SecurityRuntimeStatus['scanner']['status']) {
+  if (status === 'ready') return 'success';
+  if (status === 'missing') return 'danger';
+  return 'neutral';
+}
+
+function severityTone(severity: string) {
+  if (severity === 'CRITICAL') return 'danger';
+  if (severity === 'HIGH') return 'warning';
+  if (severity === 'MEDIUM') return 'caution';
+  return 'info';
+}
 
 async function fetchContainers() {
   try {
@@ -421,40 +433,53 @@ onUnmounted(() => {
             <option value="yes">{{ t('securityView.filters.fixYes') }}</option>
             <option value="no">{{ t('securityView.filters.fixNo') }}</option>
           </select>
-          <AppButton size="none" variant="plain" weight="none" v-if="activeSecFilterCount > 0"
-                  class="text-2xs font-medium px-2 py-1 dd-rounded transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+          <AppButton
+                  v-if="activeSecFilterCount > 0"
+                  size="xs"
+                  variant="muted"
+                  weight="medium"
                   @click="clearSecFilters">
             {{ t('securityView.filters.clearAll') }}
           </AppButton>
         </template>
         <template #left>
           <template v-if="runtimeStatus">
-            <!-- Compact: single combined badge -->
-            <AppBadge v-if="isCompact"
-                  :custom="{ bg: statusBadgeTone(runtimeStatus.scanner.status).bg, text: statusBadgeTone(runtimeStatus.scanner.status).text }"
-                  size="xs" class="cursor-default flex items-center gap-1"
-                  v-tooltip.top="`Trivy: ${runtimeStatus.scanner.message} · Cosign: ${runtimeStatus.signature.message} · SBOM: ${runtimeStatus.sbom.enabled ? 'enabled' : 'disabled'}`">
-              <StatusDot :color="statusBadgeTone(runtimeStatus.scanner.status).text" size="sm" />
-              <StatusDot :color="statusBadgeTone(runtimeStatus.signature.status).text" size="sm" />
-              <StatusDot :color="runtimeStatus.sbom.enabled ? 'var(--dd-info)' : 'var(--dd-neutral)'" size="sm" />
-            </AppBadge>
-            <!-- Full: individual badges -->
+            <div v-if="isCompact" class="inline-flex items-center gap-2">
+              <AppStatusIndicator
+                :tone="runtimeToolTone(runtimeStatus.scanner.status)"
+                label="T"
+                size="xs"
+                uppercase
+                v-tooltip.top="`Trivy: ${runtimeStatus.scanner.message}`" />
+              <AppStatusIndicator
+                :tone="runtimeToolTone(runtimeStatus.signature.status)"
+                label="C"
+                size="xs"
+                uppercase
+                v-tooltip.top="`Cosign: ${runtimeStatus.signature.message}`" />
+              <AppStatusIndicator
+                :tone="runtimeStatus.sbom.enabled ? 'info' : 'neutral'"
+                label="S"
+                size="xs"
+                uppercase
+                v-tooltip.top="runtimeStatus.sbom.enabled ? 'SBOM generation enabled (' + runtimeStatus.sbom.formats.join(', ') + ')' : 'SBOM generation disabled'" />
+            </div>
             <template v-else>
-              <AppBadge :custom="{ bg: statusBadgeTone(runtimeStatus.scanner.status).bg, text: statusBadgeTone(runtimeStatus.scanner.status).text }"
-                    size="xs" class="cursor-default"
-                    v-tooltip.top="runtimeStatus.scanner.message + (runtimeStatus.scanner.server ? ' · server: ' + runtimeStatus.scanner.server : '')">
-                trivy
-              </AppBadge>
-              <AppBadge :custom="{ bg: statusBadgeTone(runtimeStatus.signature.status).bg, text: statusBadgeTone(runtimeStatus.signature.status).text }"
-                    size="xs" class="cursor-default"
-                    v-tooltip.top="runtimeStatus.signature.message">
-                cosign
-              </AppBadge>
-              <AppBadge :tone="runtimeStatus.sbom.enabled ? 'info' : 'neutral'"
-                    size="xs" class="cursor-default"
-                    v-tooltip.top="runtimeStatus.sbom.enabled ? 'SBOM generation enabled (' + runtimeStatus.sbom.formats.join(', ') + ')' : 'SBOM generation disabled'">
-                sbom
-              </AppBadge>
+              <AppStatusIndicator
+                :tone="runtimeToolTone(runtimeStatus.scanner.status)"
+                label="trivy"
+                size="xs"
+                v-tooltip.top="runtimeStatus.scanner.message + (runtimeStatus.scanner.server ? ' · server: ' + runtimeStatus.scanner.server : '')" />
+              <AppStatusIndicator
+                :tone="runtimeToolTone(runtimeStatus.signature.status)"
+                label="cosign"
+                size="xs"
+                v-tooltip.top="runtimeStatus.signature.message" />
+              <AppStatusIndicator
+                :tone="runtimeStatus.sbom.enabled ? 'info' : 'neutral'"
+                label="sbom"
+                size="xs"
+                v-tooltip.top="runtimeStatus.sbom.enabled ? 'SBOM generation enabled (' + runtimeStatus.sbom.formats.join(', ') + ')' : 'SBOM generation disabled'" />
             </template>
           </template>
         </template>
@@ -471,11 +496,11 @@ onUnmounted(() => {
                     :aria-label="t('securityView.scanAllAriaLabel')"
                     :disabled="scanning || runtimeLoading || !scannerReady"
                     @click="scanAllContainers" />
-            <AppButton v-else size="none" variant="plain" weight="none" class="dd-rounded flex items-center justify-center gap-1.5 px-3 text-2xs-plus font-semibold transition-colors h-8"
+            <AppButton v-else size="md" variant="muted" weight="semibold" class="flex items-center justify-center gap-1.5 h-8"
                     :class="[
                       scanning || runtimeLoading || !scannerReady
-                        ? 'dd-text-muted cursor-not-allowed'
-                        : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated',
+                        ? 'cursor-not-allowed'
+                        : '',
                     ]"
                     :disabled="scanning || runtimeLoading || !scannerReady"
                     @click="scanAllContainers">
@@ -521,14 +546,11 @@ onUnmounted(() => {
             </AppBadge>
             <template v-if="row.hasUpdate">
               <AppButton
-                size="none"
-                variant="plain"
-                weight="none"
-                class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-3xs font-semibold uppercase tracking-wide shrink-0 transition-colors"
+                size="xs"
+                :variant="isSummaryUpdateBlocked(row) ? 'danger-subtle' : 'info-subtle'"
+                weight="semibold"
+                class="inline-flex items-center gap-1 shrink-0 uppercase tracking-wide"
                 :class="isSummaryUpdateBlocked(row) ? 'opacity-60 cursor-not-allowed' : ''"
-                :style="isSummaryUpdateBlocked(row)
-                  ? { backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }
-                  : { backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }"
                 data-test="security-update-btn"
                 :disabled="isSummaryUpdateBlocked(row)"
                 v-tooltip.top="getSummaryUpdateTooltip(row)"
@@ -537,11 +559,10 @@ onUnmounted(() => {
                 {{ t('securityView.update') }}
               </AppButton>
               <AppButton
-                size="none"
-                variant="plain"
-                weight="none"
-                class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-3xs font-medium shrink-0 transition-colors"
-                :style="{ color: 'var(--dd-text-secondary)' }"
+                size="xs"
+                variant="text-secondary"
+                weight="medium"
+                class="inline-flex items-center gap-1 shrink-0"
                 data-test="security-containers-link"
                 v-tooltip.top="t('securityView.viewInContainers')"
                 @click.stop="navigateToContainerUpdate(row)">
@@ -557,27 +578,19 @@ onUnmounted(() => {
           </div>
         </template>
         <template #cell-critical="{ row }">
-          <AppBadge v-if="row.critical > 0" tone="danger" size="xs">
-            {{ row.critical }}
-          </AppBadge>
+          <AppStatusIndicator v-if="row.critical > 0" marker="none" tone="danger" size="sm" :label="row.critical" />
           <span v-else class="text-2xs dd-text-muted">&mdash;</span>
         </template>
         <template #cell-high="{ row }">
-          <AppBadge v-if="row.high > 0" tone="warning" size="xs">
-            {{ row.high }}
-          </AppBadge>
+          <AppStatusIndicator v-if="row.high > 0" marker="none" tone="warning" size="sm" :label="row.high" />
           <span v-else class="text-2xs dd-text-muted">&mdash;</span>
         </template>
         <template #cell-medium="{ row }">
-          <AppBadge v-if="row.medium > 0" tone="caution" size="xs">
-            {{ row.medium }}
-          </AppBadge>
+          <AppStatusIndicator v-if="row.medium > 0" marker="none" tone="caution" size="sm" :label="row.medium" />
           <span v-else class="text-2xs dd-text-muted">&mdash;</span>
         </template>
         <template #cell-low="{ row }">
-          <AppBadge v-if="row.low > 0" tone="info" size="xs">
-            {{ row.low }}
-          </AppBadge>
+          <AppStatusIndicator v-if="row.low > 0" marker="none" tone="info" size="sm" :label="row.low" />
           <span v-else class="text-2xs dd-text-muted">&mdash;</span>
         </template>
         <template #cell-fixable="{ row }">
@@ -662,14 +675,11 @@ onUnmounted(() => {
             <span v-else class="text-2xs-plus dd-text-muted">{{ t('securityView.card.noFixesAvailable') }}</span>
             <template v-if="summary.hasUpdate">
               <AppButton
-                size="none"
-                variant="plain"
-                weight="none"
-                class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-3xs font-semibold uppercase tracking-wide transition-colors"
+                size="xs"
+                :variant="isSummaryUpdateBlocked(summary) ? 'danger-subtle' : 'info-subtle'"
+                weight="semibold"
+                class="inline-flex items-center gap-1 uppercase tracking-wide"
                 :class="isSummaryUpdateBlocked(summary) ? 'opacity-60 cursor-not-allowed' : ''"
-                :style="isSummaryUpdateBlocked(summary)
-                  ? { backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }
-                  : { backgroundColor: 'var(--dd-info-muted)', color: 'var(--dd-info)' }"
                 data-test="security-update-btn"
                 :disabled="isSummaryUpdateBlocked(summary)"
                 @click.stop="openUpdateAction(summary)">
@@ -677,11 +687,10 @@ onUnmounted(() => {
                 {{ t('securityView.update') }}
               </AppButton>
               <AppButton
-                size="none"
-                variant="plain"
-                weight="none"
-                class="inline-flex items-center gap-1 px-1.5 py-0.5 dd-rounded text-3xs font-medium transition-colors"
-                :style="{ color: 'var(--dd-text-secondary)' }"
+                size="xs"
+                variant="text-secondary"
+                weight="medium"
+                class="inline-flex items-center gap-1"
                 data-test="security-containers-link"
                 @click.stop="navigateToContainerUpdate(summary)">
                 {{ t('securityView.viewInContainers') }}
@@ -812,11 +821,10 @@ onUnmounted(() => {
               {{ t('securityView.update') }}
             </AppButton>
             <AppButton
-              size="none"
-              variant="plain"
-              weight="none"
-              class="inline-flex items-center text-2xs font-medium underline hover:no-underline"
-              :style="{ color: 'var(--dd-text-secondary)' }"
+              size="xs"
+              variant="text-secondary"
+              weight="medium"
+              class="inline-flex items-center underline hover:no-underline"
               data-test="security-detail-containers-link"
               @click="navigateToContainerUpdate(selectedImage)">
               {{ t('securityView.viewInContainers') }}
@@ -978,10 +986,10 @@ onUnmounted(() => {
           <AppButton
             v-for="choice in chooserChoices"
             :key="choice.id"
-            size="none"
+            size="md"
             variant="plain"
-            weight="none"
-            class="w-full text-left px-4 py-2.5 flex items-start gap-2 hover:dd-bg-hover transition-colors"
+            weight="medium"
+            class="w-full text-left flex items-start gap-2 hover:dd-bg-hover transition-colors"
             :class="choice.blocked ? 'opacity-60 cursor-not-allowed' : ''"
             :disabled="choice.blocked"
             data-test="security-chooser-item"
@@ -1001,11 +1009,10 @@ onUnmounted(() => {
         </div>
         <div class="px-4 py-2.5 flex items-center justify-between" :style="{ borderTop: '1px solid var(--dd-border)' }">
           <AppButton
-            size="none"
-            variant="plain"
-            weight="none"
-            class="text-2xs font-medium underline hover:no-underline"
-            :style="{ color: 'var(--dd-text-secondary)' }"
+            size="xs"
+            variant="text-secondary"
+            weight="medium"
+            class="underline hover:no-underline"
             data-test="security-chooser-view-all"
             @click="navigateToContainerUpdate(chooserSummary!); closeChooser()">
             {{ t('securityView.viewAllInContainers') }}

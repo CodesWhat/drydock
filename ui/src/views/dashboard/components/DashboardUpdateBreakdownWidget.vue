@@ -67,7 +67,7 @@ onBeforeUnmount(() => {
         <AppIcon name="updates" :size="14" class="text-drydock-secondary" />
         <h2 class="dd-text-heading-section dd-text">{{ t('dashboardView.updateBreakdown.title') }}</h2>
       </div>
-      <AppButton size="none" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">{{ t('dashboardView.viewAll') }}</AppButton>
+      <AppButton size="compact" variant="link-secondary" weight="medium" class="text-2xs-plus" @click="handleViewAll">{{ t('dashboardView.viewAll') }}</AppButton>
     </div>
 
     <!-- Icon grid — shown in full and medium modes (medium = no header) -->
