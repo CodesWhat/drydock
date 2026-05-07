@@ -17,7 +17,7 @@ describe('AppButton', () => {
     expect(button.classes()).toContain('transition-colors');
     expect(button.classes()).toContain('px-3');
     expect(button.classes()).toContain('py-1.5');
-    expect(button.classes()).toContain('text-2xs-plus');
+    expect(button.classes()).toContain('dd-text-button');
     expect(button.classes()).toContain('font-semibold');
     expect(button.classes()).toContain('dd-text-muted');
     expect(button.classes()).toContain('hover:dd-text');
@@ -46,7 +46,7 @@ describe('AppButton', () => {
     expect(button.attributes('data-test')).toBe('secondary-action');
     expect(button.classes()).toContain('px-2');
     expect(button.classes()).toContain('py-1');
-    expect(button.classes()).toContain('text-2xs');
+    expect(button.classes()).toContain('dd-text-button-sm');
     expect(button.classes()).toContain('font-medium');
     expect(button.classes()).toContain('dd-text-secondary');
     expect(button.classes()).toContain('disabled:cursor-not-allowed');
@@ -135,6 +135,89 @@ describe('AppButton', () => {
     expect(button.classes()).toContain('text-drydock-secondary');
     expect(button.classes()).toContain('hover:underline');
     expect(button.classes()).toContain('font-medium');
+  });
+
+  it('supports semantic action variants without inline token styles', () => {
+    const cases = [
+      ['danger', 'dd-bg-danger-muted', 'dd-text-danger', 'dd-border-danger'],
+      ['success', 'dd-bg-success-muted', 'dd-text-success', 'dd-border-success'],
+      ['warning', 'dd-bg-warning-muted', 'dd-text-warning', 'dd-border-warning'],
+    ] as const;
+
+    for (const [variant, bgClass, textClass, borderClass] of cases) {
+      const wrapper = mount(AppButton, {
+        props: {
+          variant,
+        },
+        slots: {
+          default: variant,
+        },
+      });
+
+      const button = wrapper.get('button');
+
+      expect(button.classes()).toContain(bgClass);
+      expect(button.classes()).toContain(textClass);
+      expect(button.classes()).toContain('border');
+      expect(button.classes()).toContain(borderClass);
+      expect(button.attributes('style')).toBeUndefined();
+    }
+  });
+
+  it('supports semantic subtle variants without inline token styles', () => {
+    const cases = [
+      ['muted-subtle', 'dd-bg-button', 'dd-text-muted'],
+      ['danger-subtle', 'dd-bg-danger-muted', 'dd-text-danger'],
+      ['success-subtle', 'dd-bg-success-muted', 'dd-text-success'],
+      ['warning-subtle', 'dd-bg-warning-muted', 'dd-text-warning'],
+      ['info-subtle', 'dd-bg-info-muted', 'dd-text-info'],
+    ] as const;
+
+    for (const [variant, bgClass, textClass] of cases) {
+      const wrapper = mount(AppButton, {
+        props: {
+          variant,
+        },
+        slots: {
+          default: variant,
+        },
+      });
+
+      const button = wrapper.get('button');
+
+      expect(button.classes()).toContain(bgClass);
+      expect(button.classes()).toContain(textClass);
+      expect(button.classes()).not.toContain('border');
+      expect(button.classes()).toContain('hover:opacity-90');
+      expect(button.attributes('style')).toBeUndefined();
+    }
+  });
+
+  it('supports semantic text variants without inline token styles', () => {
+    const cases = [
+      ['text-danger', 'dd-text-danger'],
+      ['text-success', 'dd-text-success'],
+      ['text-warning', 'dd-text-warning'],
+      ['text-info', 'dd-text-info'],
+    ] as const;
+
+    for (const [variant, textClass] of cases) {
+      const wrapper = mount(AppButton, {
+        props: {
+          size: 'none',
+          variant,
+        },
+        slots: {
+          default: variant,
+        },
+      });
+
+      const button = wrapper.get('button');
+
+      expect(button.classes()).toContain(textClass);
+      expect(button.classes()).toContain('hover:opacity-85');
+      expect(button.attributes('style')).toBeUndefined();
+    }
   });
 
   it('supports weight none for passthrough button styling', () => {

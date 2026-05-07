@@ -20,6 +20,35 @@ body {
   --dd-radius-sm: 2px; /* Small elements (badges, chips) */
   --dd-radius-lg: 4px; /* Large panels (modals, detail panels) */
   --dd-font-size: 1; /* Font size scale factor (1 = 100% = default) */
+  --dd-font-body: var(--text-2xs-plus);
+  --dd-font-body-sm: var(--text-2xs);
+  --dd-font-caption: var(--text-2xs);
+  --dd-font-label: var(--text-2xs);
+  --dd-font-card-title: var(--text-xs);
+  --dd-font-card-description: var(--text-2xs-plus);
+  --dd-font-choice-title: var(--text-sm);
+  --dd-font-choice-description: var(--text-2xs);
+  --dd-font-badge-xs: var(--text-3xs);
+  --dd-font-badge-sm: var(--text-2xs);
+  --dd-font-badge-md: var(--text-2xs-plus);
+  --dd-font-value: var(--text-xs);
+  --dd-font-value-sm: var(--text-2xs-plus);
+  --dd-font-code: var(--text-2xs);
+  --dd-font-heading-section: var(--text-lg);
+  --dd-font-heading-panel: var(--text-sm);
+  --dd-font-heading-page: var(--text-base);
+  --dd-font-nav: var(--text-xs);
+  --dd-font-tab: var(--text-2xs-plus);
+  --dd-font-tab-sm: var(--text-2xs);
+  --dd-font-column: var(--text-2xs);
+  --dd-font-button: var(--text-2xs-plus);
+  --dd-font-button-sm: var(--text-2xs);
+  --dd-font-indicator: var(--text-2xs);
+  --dd-font-indicator-xs: var(--text-3xs);
+  --dd-font-indicator-md: var(--text-2xs-plus);
+  --dd-font-tooltip: var(--text-2xs-plus);
+  --dd-font-scale-control-sm: var(--text-2xs);
+  --dd-font-scale-control-lg: var(--text-base);
   --dd-space-4: 4px;
   --dd-space-6: 6px;
   --dd-space-8: 8px;
@@ -220,15 +249,15 @@ html.dd-font-comic-mono {
 
 /* ─── Z-index utilities ───
    Tailwind v4's @theme doesn't map --z-* variables to z-* utilities
-   (z-index isn't in the theme namespace), so these must be declared
-   as explicit @utility rules that pull from the same tokens. */
-@utility z-popover {
+   (z-index isn't in the theme namespace), so these pull directly from
+   the same tokens and work consistently in dev and production. */
+.z-popover {
   z-index: var(--z-popover);
 }
-@utility z-overlay {
+.z-overlay {
   z-index: var(--z-overlay);
 }
-@utility z-modal {
+.z-modal {
   z-index: var(--z-modal);
 }
 
@@ -266,70 +295,125 @@ tr.dd-row-scanning {
 }
 
 /* ─── Semantic typography ─── */
-@utility dd-text-body {
-  font-size: var(--text-2xs-plus); /* 11px — primary body text */
+.dd-text-body {
+  font-size: var(--dd-font-body);
 }
-@utility dd-text-body-sm {
-  font-size: var(--text-2xs); /* 10px — secondary/compact body */
+.dd-text-body-sm {
+  font-size: var(--dd-font-body-sm);
 }
-@utility dd-text-caption {
-  font-size: var(--text-2xs); /* 10px */
+.dd-text-caption {
+  font-size: var(--dd-font-caption);
   color: var(--dd-text-muted);
 }
-@utility dd-text-label {
-  font-size: var(--text-2xs); /* 10px */
+.dd-text-label {
+  font-size: var(--dd-font-label);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-@utility dd-text-badge {
-  font-size: var(--text-3xs); /* 9px */
+.dd-text-badge {
+  font-size: var(--dd-font-badge-xs);
   font-weight: 700;
   text-transform: uppercase;
 }
-@utility dd-text-badge-lg {
-  font-size: var(--text-2xs); /* 10px */
-  font-weight: 600;
-}
-@utility dd-text-value {
-  font-size: var(--text-xs); /* 12px */
-  font-family: var(--font-mono);
-}
-@utility dd-text-value-sm {
-  font-size: var(--text-2xs-plus); /* 11px */
-  font-family: var(--font-mono);
-}
-@utility dd-text-code {
-  font-size: var(--text-2xs); /* 10px */
-  font-family: var(--font-mono);
-}
-@utility dd-text-heading-section {
-  font-size: var(--text-sm); /* 14px */
-  font-weight: 600;
-}
-@utility dd-text-heading-panel {
-  font-size: var(--text-sm); /* 14px */
+.dd-text-badge-xs {
+  font-size: var(--dd-font-badge-xs);
   font-weight: 700;
 }
-@utility dd-text-heading-page {
-  font-size: var(--text-base); /* 16px */
+.dd-text-badge-sm {
+  font-size: var(--dd-font-badge-sm);
+  font-weight: 600;
+}
+.dd-text-badge-md {
+  font-size: var(--dd-font-badge-md);
+  font-weight: 600;
+}
+.dd-text-badge-lg {
+  font-size: var(--dd-font-badge-sm);
+  font-weight: 600;
+}
+.dd-text-value {
+  font-size: var(--dd-font-value);
+  font-family: var(--font-mono);
+}
+.dd-text-value-sm {
+  font-size: var(--dd-font-value-sm);
+  font-family: var(--font-mono);
+}
+.dd-text-code {
+  font-size: var(--dd-font-code);
+  font-family: var(--font-mono);
+}
+.dd-text-heading-section {
+  font-size: var(--dd-font-heading-section);
+  font-weight: 600;
+}
+.dd-text-heading-panel {
+  font-size: var(--dd-font-heading-panel);
   font-weight: 700;
 }
-@utility dd-text-nav {
-  font-size: var(--text-xs); /* 12px */
+.dd-text-heading-page {
+  font-size: var(--dd-font-heading-page);
+  font-weight: 700;
+}
+.dd-text-card-title {
+  font-size: var(--dd-font-card-title);
+  font-weight: 600;
+}
+.dd-text-card-description {
+  font-size: var(--dd-font-card-description);
+  color: var(--dd-text-muted);
+}
+.dd-text-choice-title {
+  font-size: var(--dd-font-choice-title);
+  font-weight: 600;
+}
+.dd-text-choice-description {
+  font-size: var(--dd-font-choice-description);
+  color: var(--dd-text-muted);
+}
+.dd-text-nav {
+  font-size: var(--dd-font-nav);
   font-weight: 500;
 }
-@utility dd-text-tab {
-  font-size: var(--text-2xs-plus); /* 11px */
+.dd-text-tab {
+  font-size: var(--dd-font-tab);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-@utility dd-text-column {
-  font-size: var(--text-2xs); /* 10px */
+.dd-text-tab-sm {
+  font-size: var(--dd-font-tab-sm);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.dd-text-column {
+  font-size: var(--dd-font-column);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+.dd-text-button {
+  font-size: var(--dd-font-button);
+}
+.dd-text-button-sm {
+  font-size: var(--dd-font-button-sm);
+}
+.dd-text-indicator {
+  font-size: var(--dd-font-indicator);
+}
+.dd-text-indicator-xs {
+  font-size: var(--dd-font-indicator-xs);
+}
+.dd-text-indicator-md {
+  font-size: var(--dd-font-indicator-md);
+}
+.dd-text-scale-control-sm {
+  font-size: var(--dd-font-scale-control-sm);
+}
+.dd-text-scale-control-lg {
+  font-size: var(--dd-font-scale-control-lg);
 }
 
 /* Border */
@@ -515,7 +599,7 @@ body.dd-col-resizing {
   pointer-events: none;
   opacity: 0;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: var(--dd-font-tooltip);
   line-height: 1.1;
   padding: var(--dd-space-4) var(--dd-space-8);
   border-radius: var(--dd-radius-sm);
@@ -645,7 +729,7 @@ body.dd-col-resizing {
   left: 64px;
   padding: 4px 10px;
   border-radius: var(--dd-radius-sm);
-  font-size: 0.75rem;
+  font-size: var(--dd-font-nav);
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
@@ -662,7 +746,7 @@ body.dd-col-resizing {
   align-items: center;
   padding: 3px 10px;
   border-radius: var(--dd-radius-sm);
-  font-size: 0.6875rem;
+  font-size: var(--dd-font-badge-sm);
   font-weight: 600;
   letter-spacing: var(--dd-letter-spacing-badge);
 }

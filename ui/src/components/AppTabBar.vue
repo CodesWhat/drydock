@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import AppIcon from './AppIcon.vue';
+import { iconButtonIconSizes, iconButtonSizeClasses } from './appIconButtonSizes';
 
 interface Tab {
   id: string;
@@ -27,12 +28,16 @@ defineEmits<{
 }>();
 
 const sizeClasses = computed(() =>
-  props.size === 'compact'
-    ? 'px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide'
-    : 'px-3 py-2 text-2xs-plus font-semibold uppercase tracking-wide',
+  props.iconOnly
+    ? `inline-flex items-center justify-center ${iconButtonSizeClasses.toolbar} dd-text-tab-sm`
+    : props.size === 'compact'
+      ? 'px-2 py-1.5 dd-text-tab-sm'
+      : 'px-3 py-2 dd-text-tab',
 );
 
-const iconSize = computed(() => (props.size === 'compact' ? 10 : 12));
+const iconSize = computed(() =>
+  props.iconOnly ? iconButtonIconSizes.toolbar : props.size === 'compact' ? 10 : 12,
+);
 
 const countStyle = {
   backgroundColor: 'var(--dd-neutral-muted)',
@@ -62,7 +67,7 @@ const countStyle = {
         <span v-if="!iconOnly">{{ tab.label }}</span>
         <span
           v-if="tab.count != null"
-          class="ml-1.5 badge text-4xs font-bold px-1.5 py-0"
+          class="ml-1.5 badge dd-text-badge-xs px-1.5 py-0"
           :style="countStyle"
         >
           {{ tab.count }}

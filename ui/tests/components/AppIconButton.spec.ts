@@ -149,6 +149,25 @@ describe('AppIconButton', () => {
     expect(button.classes()).toContain('hover:dd-bg-elevated');
   });
 
+  it('applies semantic subtle variant classes without inline token styles', () => {
+    const cases = [
+      ['muted-subtle', 'dd-bg-button', 'dd-text-muted'],
+      ['danger-subtle', 'dd-bg-danger-muted', 'dd-text-danger'],
+      ['success-subtle', 'dd-bg-success-muted', 'dd-text-success'],
+      ['warning-subtle', 'dd-bg-warning-muted', 'dd-text-warning'],
+    ] as const;
+
+    for (const [variant, bgClass, textClass] of cases) {
+      const wrapper = mountButton({ variant });
+      const button = wrapper.get('button');
+
+      expect(button.classes()).toContain(bgClass);
+      expect(button.classes()).toContain(textClass);
+      expect(button.classes()).toContain('hover:opacity-90');
+      expect(button.attributes('style')).toBeUndefined();
+    }
+  });
+
   it('applies plain variant with no extra classes', () => {
     const wrapper = mountButton({ variant: 'plain' });
     const button = wrapper.get('button');
