@@ -632,12 +632,19 @@ function getLink(container: Container, originalTagValue: string) {
     return undefined;
   }
 
+  let transformedTagValue = originalTagValue;
+  if (container.transformTags) {
+    try {
+      transformedTagValue = transformTag(container.transformTags, originalTagValue);
+    } catch {
+      transformedTagValue = originalTagValue;
+    }
+  }
+
   const vars: Record<string, string> = {};
   vars.raw = originalTagValue; // deprecated, kept for backward compatibility
   vars.original = originalTagValue;
-  vars.transformed = container.transformTags
-    ? transformTag(container.transformTags, originalTagValue)
-    : originalTagValue;
+  vars.transformed = transformedTagValue;
   vars.major = '';
   vars.minor = '';
   vars.patch = '';
