@@ -89,7 +89,14 @@ export interface ContainersViewTableColumn {
   label: string;
   align?: string;
   sortable: boolean;
-  width?: string;
+  size?: number;
+  minSize?: number;
+  maxSize?: number;
+  flex?: number;
+  priority?: number;
+  overflow?: 'truncate' | 'clamp-2' | 'wrap';
+  autoSize?: 'content' | 'fixed' | 'fill';
+  px?: string;
   icon: boolean;
 }
 

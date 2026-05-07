@@ -63,9 +63,16 @@ const filteredAuth = computed(() => {
 });
 
 const tableColumns = computed(() => [
-  { key: 'name', label: t('authView.columns.provider'), width: '99%' },
-  { key: 'type', label: t('authView.columns.type') },
-  { key: 'status', label: t('authView.columns.status') },
+  {
+    key: 'name',
+    label: t('authView.columns.provider'),
+    size: 300,
+    minSize: 220,
+    maxSize: 560,
+    flex: 1,
+  },
+  { key: 'type', label: t('authView.columns.type'), size: 120, minSize: 96, maxSize: 150 },
+  { key: 'status', label: t('authView.columns.status'), size: 120, minSize: 96, maxSize: 150 },
 ]);
 
 function mapAuthentication(authentication: ApiComponent, status = 'active') {
@@ -168,6 +175,7 @@ onMounted(async () => {
       <DataTable
         v-if="authViewMode === 'table' && !loading"
         :columns="tableColumns"
+        storage-key="auth"
         :rows="filteredAuth"
         row-key="id"
         :active-row="selectedAuth?.id"

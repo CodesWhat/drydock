@@ -1,53 +1,92 @@
 import type { ComputedRef, Ref } from 'vue';
 import { computed, ref, watch } from 'vue';
 import { preferences } from '../preferences/store';
+import { type ResponsiveSizingColumn, responsiveAutoHiddenColumns } from '../utils/table-sizing';
 
-interface ColumnDef {
+interface ColumnDef extends ResponsiveSizingColumn {
   key: string;
   label: string;
   align?: string;
   px: string;
-  width: string;
   required: boolean;
 }
 
-const RESPONSIVE_DROP_ORDER = ['registry', 'server', 'kind', 'status'] as const;
-
-// Overhead to subtract from availableWidth before comparing against column widths.
-// Matches actions-width="180px" in ContainersGroupedViews.vue plus a safety buffer.
-const ACTIONS_OVERHEAD_PX = 180 + 24;
+export const CONTAINER_TABLE_ACTIONS_SIZE = 180;
 
 const allColumns: ColumnDef[] = [
   {
     key: 'icon',
     label: '',
     px: 'px-0',
-    width: '40px',
+    size: 40,
+    minSize: 40,
+    maxSize: 40,
+    autoSize: 'fixed',
     required: true,
+    icon: true,
   },
   {
     key: 'name',
     label: 'Container',
     align: 'text-left',
     px: 'px-5',
-    width: '360px',
+    size: 360,
+    minSize: 220,
+    maxSize: 640,
+    flex: 1,
+    priority: 0,
+    overflow: 'truncate',
     required: true,
   },
   {
     key: 'version',
     label: 'Version',
     px: 'px-5',
-    width: '260px',
+    size: 220,
+    minSize: 150,
+    maxSize: 320,
+    priority: 0,
+    overflow: 'truncate',
     required: false,
   },
-  { key: 'kind', label: 'Update', px: 'px-3', width: '130px', required: false },
-  { key: 'status', label: 'Status', px: 'px-3', width: '120px', required: false },
-  { key: 'server', label: 'Host', px: 'px-3', width: '100px', required: false },
+  {
+    key: 'kind',
+    label: 'Update',
+    px: 'px-3',
+    size: 128,
+    minSize: 116,
+    maxSize: 180,
+    priority: 60,
+    required: false,
+  },
+  {
+    key: 'status',
+    label: 'Status',
+    px: 'px-3',
+    size: 118,
+    minSize: 112,
+    maxSize: 160,
+    priority: 50,
+    required: false,
+  },
+  {
+    key: 'server',
+    label: 'Host',
+    px: 'px-3',
+    size: 112,
+    minSize: 96,
+    maxSize: 160,
+    priority: 70,
+    required: false,
+  },
   {
     key: 'registry',
     label: 'Registry',
     px: 'px-3',
-    width: '120px',
+    size: 126,
+    minSize: 116,
+    maxSize: 180,
+    priority: 80,
     required: false,
   },
 ];
@@ -72,44 +111,24 @@ function toggleColumn(key: string) {
 }
 
 export function useColumnVisibility(availableWidth?: Ref<number> | ComputedRef<number>) {
+  const preferenceVisibleColumns = computed(() =>
+    allColumns.filter((c) => visibleColumns.value.has(c.key)),
+  );
+
+  const autoHiddenColumns = computed(() =>
+    responsiveAutoHiddenColumns(
+      preferenceVisibleColumns.value,
+      availableWidth?.value,
+      CONTAINER_TABLE_ACTIONS_SIZE,
+    ),
+  );
+
   const activeColumns = computed(() => {
     const prefVisible = allColumns.filter((c) => visibleColumns.value.has(c.key));
     const width = availableWidth?.value;
     if (!width || width <= 0) return prefVisible;
-
-    const budget = width - ACTIONS_OVERHEAD_PX;
-    const dropped = new Set<string>();
-    let sum = prefVisible.reduce((acc, c) => acc + parseInt(c.width, 10), 0);
-
-    for (const key of RESPONSIVE_DROP_ORDER) {
-      if (sum <= budget) break;
-      const col = prefVisible.find((c) => c.key === key);
-      if (!col) continue;
-      dropped.add(key);
-      sum -= parseInt(col.width, 10);
-    }
-
+    const dropped = new Set(autoHiddenColumns.value.map((column) => column.key));
     return prefVisible.filter((c) => !dropped.has(c.key));
-  });
-
-  const autoHiddenColumns = computed(() => {
-    const width = availableWidth?.value;
-    if (!width || width <= 0) return [] as ColumnDef[];
-
-    const prefVisible = allColumns.filter((c) => visibleColumns.value.has(c.key));
-    const budget = width - ACTIONS_OVERHEAD_PX;
-    const dropped: ColumnDef[] = [];
-    let sum = prefVisible.reduce((acc, c) => acc + parseInt(c.width, 10), 0);
-
-    for (const key of RESPONSIVE_DROP_ORDER) {
-      if (sum <= budget) break;
-      const col = prefVisible.find((c) => c.key === key);
-      if (!col) continue;
-      dropped.push(col);
-      sum -= parseInt(col.width, 10);
-    }
-
-    return dropped;
   });
 
   return {

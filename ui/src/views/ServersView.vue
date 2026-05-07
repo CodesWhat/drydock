@@ -53,14 +53,47 @@ function closeDetail() {
 }
 
 const tableColumns = computed(() => [
-  { key: 'name', label: t('serversView.columns.host'), width: '30%', sortable: false },
-  { key: 'host', label: t('serversView.columns.address'), width: '30%', sortable: false },
-  { key: 'status', label: t('serversView.columns.status'), sortable: false },
-  { key: 'containers', label: t('serversView.columns.containers'), sortable: false },
+  {
+    key: 'name',
+    label: t('serversView.columns.host'),
+    size: 220,
+    minSize: 160,
+    maxSize: 360,
+    flex: 1,
+    sortable: false,
+  },
+  {
+    key: 'host',
+    label: t('serversView.columns.address'),
+    size: 240,
+    minSize: 180,
+    maxSize: 420,
+    flex: 1,
+    sortable: false,
+  },
+  {
+    key: 'status',
+    label: t('serversView.columns.status'),
+    size: 120,
+    minSize: 96,
+    maxSize: 150,
+    sortable: false,
+  },
+  {
+    key: 'containers',
+    label: t('serversView.columns.containers'),
+    size: 150,
+    minSize: 120,
+    maxSize: 190,
+    sortable: false,
+  },
   {
     key: 'lastSeen',
     label: t('serversView.columns.lastSeen'),
     align: 'text-right',
+    size: 140,
+    minSize: 116,
+    maxSize: 190,
     sortable: false,
   },
 ]);
@@ -202,6 +235,7 @@ onMounted(fetchServers);
         <DataTable
           v-if="serversViewMode === 'table' && filteredServers.length > 0 && !loading"
           :columns="tableColumns"
+          storage-key="servers"
           :rows="filteredServers"
           row-key="id"
           :active-row="selectedServer?.id"

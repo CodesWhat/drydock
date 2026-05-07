@@ -16,45 +16,67 @@ const tableColumns = computed(() =>
           key: 'container',
           label: t('dashboardView.recentUpdates.columns.container'),
           sortable: false,
-          width: '55%',
+          size: 240,
+          minSize: 170,
+          maxSize: 420,
+          flex: 1,
         },
         {
           key: 'version',
           label: t('dashboardView.recentUpdates.columns.version'),
           sortable: false,
           align: 'text-center',
-          width: '22%',
+          size: 150,
+          minSize: 120,
+          maxSize: 220,
         },
-        { key: 'type', label: '', sortable: false, width: '11%' },
-        { key: 'actions', label: '', sortable: false, align: 'text-center', width: '12%' },
+        { key: 'type', label: '', sortable: false, size: 64, minSize: 56, maxSize: 82 },
+        {
+          key: 'actions',
+          label: '',
+          sortable: false,
+          align: 'text-center',
+          size: 72,
+          minSize: 64,
+          maxSize: 90,
+        },
       ]
     : [
-        { key: 'icon', label: '', icon: true, width: '6%' },
+        { key: 'icon', label: '', icon: true, size: 42, minSize: 42, maxSize: 42 },
         {
           key: 'container',
           label: t('dashboardView.recentUpdates.columns.container'),
           sortable: false,
-          width: '38%',
+          size: 260,
+          minSize: 180,
+          maxSize: 460,
+          flex: 1,
         },
         {
           key: 'version',
           label: t('dashboardView.recentUpdates.columns.version'),
           sortable: false,
           align: 'text-center',
-          width: '28%',
+          size: 180,
+          minSize: 140,
+          maxSize: 260,
         },
         {
           key: 'type',
           label: t('dashboardView.recentUpdates.columns.type'),
           sortable: false,
-          width: '16%',
+          size: 110,
+          minSize: 90,
+          maxSize: 150,
         },
         {
           key: 'actions',
           label: t('dashboardView.recentUpdates.columns.actions'),
           sortable: false,
           align: 'text-center',
-          width: '12%',
+          size: 90,
+          minSize: 76,
+          maxSize: 120,
         },
       ],
 );
@@ -273,6 +295,7 @@ watchEffect(() => {
       <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain dd-scroll-stable" :class="{ 'mobile-updates-table': isMobile }">
         <DataTable
           :columns="tableColumns"
+          storage-key="dashboard-recent-updates"
           :rows="recentUpdates"
           row-key="id"
           :row-class="getRowClass"

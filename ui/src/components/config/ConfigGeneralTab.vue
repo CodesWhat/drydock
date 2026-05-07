@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppBadge from '@/components/AppBadge.vue';
+import DataTable from '@/components/DataTable.vue';
 
 const { t } = useI18n();
 
@@ -36,6 +38,36 @@ const emit = defineEmits<{
   (e: 'clear-icon-cache'): void;
   (e: 'download-debug-dump'): void;
 }>();
+
+const webhookColumns = computed(() => [
+  {
+    key: 'endpoint',
+    label: t('configView.general.webhookApi.table.endpoint'),
+    sortable: false,
+    size: 260,
+    minSize: 180,
+    maxSize: 420,
+    align: 'text-left',
+    overflow: 'truncate',
+    px: 'px-3',
+  },
+  {
+    key: 'description',
+    label: t('configView.general.webhookApi.table.description'),
+    sortable: false,
+    size: 420,
+    minSize: 260,
+    maxSize: 720,
+    flex: 1,
+    align: 'text-left',
+    overflow: 'clamp-2',
+    px: 'px-3',
+  },
+]);
+
+function isStaticTableRow() {
+  return false;
+}
 </script>
 
 <template>
@@ -138,28 +170,21 @@ const emit = defineEmits<{
           configure at least one token (<code class="font-mono">DD_SERVER_WEBHOOK_TOKEN</code> or
           <code class="font-mono">DD_SERVER_WEBHOOK_TOKENS_*</code>) to enable it.
         </p>
-        <div class="overflow-x-auto dd-rounded">
-          <table class="w-full text-left dd-text-body">
-            <thead :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-              <tr>
-                <th class="px-3 py-2 font-semibold uppercase tracking-wider dd-text-muted">{{ t('configView.general.webhookApi.table.endpoint') }}</th>
-                <th class="px-3 py-2 font-semibold uppercase tracking-wider dd-text-muted">{{ t('configView.general.webhookApi.table.description') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="entry in props.webhookEndpoints"
-                :key="entry.endpoint"
-                :style="{ borderTop: '1px solid var(--dd-border)' }"
-              >
-                <td class="px-3 py-2">
-                  <code class="dd-text-code dd-text">{{ entry.endpoint }}</code>
-                </td>
-                <td class="px-3 py-2 dd-text-secondary">{{ entry.description }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          :columns="webhookColumns"
+          :rows="props.webhookEndpoints"
+          row-key="endpoint"
+          storage-key="config-webhook-endpoints"
+          :row-interactive="isStaticTableRow"
+          fixed-layout
+        >
+          <template #cell-endpoint="{ value }">
+            <code class="dd-text-code dd-text">{{ value }}</code>
+          </template>
+          <template #cell-description="{ value }">
+            <span class="dd-text-secondary">{{ value }}</span>
+          </template>
+        </DataTable>
         <div>
           <div class="dd-text-label dd-text-muted mb-1.5">{{ t('configView.general.webhookApi.example') }}</div>
           <pre

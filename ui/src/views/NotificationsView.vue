@@ -176,13 +176,31 @@ const filteredNotifications = computed(() => {
 });
 
 const tableColumns = computed(() => [
-  { key: 'enabled', label: t('notificationsView.columns.on'), sortable: false, width: '48px' },
-  { key: 'name', label: t('notificationsView.columns.rule'), sortable: false, width: '99%' },
+  {
+    key: 'enabled',
+    label: t('notificationsView.columns.on'),
+    sortable: false,
+    size: 56,
+    minSize: 48,
+    maxSize: 72,
+  },
+  {
+    key: 'name',
+    label: t('notificationsView.columns.rule'),
+    sortable: false,
+    size: 320,
+    minSize: 220,
+    maxSize: 560,
+    flex: 1,
+  },
   {
     key: 'triggers',
     label: t('notificationsView.columns.triggers'),
     align: 'text-right',
     sortable: false,
+    size: 260,
+    minSize: 180,
+    maxSize: 420,
   },
 ]);
 
@@ -364,6 +382,7 @@ onMounted(async () => {
     <DataTable
       v-if="notificationsViewMode === 'table' && !loading"
       :columns="tableColumns"
+      storage-key="notifications"
       :rows="filteredNotifications"
       row-key="id"
       :active-row="selectedRule?.id"

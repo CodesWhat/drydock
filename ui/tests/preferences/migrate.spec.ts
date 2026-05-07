@@ -129,6 +129,37 @@ describe('preferences migration', () => {
       expect(result.appearance.fontSize).toBe(DEFAULTS.appearance.fontSize);
     });
 
+    it('should add the table width preference bucket when migrating older schema data', () => {
+      const result = migrate({ schemaVersion: 1 });
+      expect(result.tables.columnWidths).toEqual({});
+    });
+
+    it('should upgrade schema v5 preferences to the current version when adding table widths', () => {
+      const result = migrate({
+        schemaVersion: 5,
+        tables: { columnWidths: { containers: { name: 360 } } },
+      });
+
+      expect(result.schemaVersion).toBe(DEFAULTS.schemaVersion);
+      expect(result.tables.columnWidths.containers.name).toBe(360);
+    });
+
+    it('should preserve valid table width preferences and drop invalid ones', () => {
+      const result = migrate({
+        schemaVersion: 1,
+        tables: {
+          columnWidths: {
+            containers: { name: 360, version: 220, badSmall: 10, badLarge: 9000 },
+            invalid: 'not-a-record',
+          },
+        },
+      });
+
+      expect(result.tables.columnWidths).toEqual({
+        containers: { name: 360, version: 220 },
+      });
+    });
+
     it('should preserve valid fontSize', () => {
       const result = migrate({ schemaVersion: 1, appearance: { fontSize: 1.1 } });
       expect(result.appearance.fontSize).toBe(1.1);

@@ -566,6 +566,7 @@ onScopeDispose(() => {
       <DataTable
         v-if="containerViewMode === 'table'"
         :columns="tableColumns"
+        storage-key="containers"
         :fixed-layout="true"
         :rows="tableRows"
         :row-key="getTableRowKey"

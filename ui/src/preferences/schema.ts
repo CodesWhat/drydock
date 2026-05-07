@@ -48,6 +48,9 @@ export interface PreferencesSchema {
     gridLayout: PersistedLayoutItem[];
     gridLayouts: PersistedResponsiveLayoutMap;
   };
+  tables: {
+    columnWidths: Record<string, Record<string, number>>;
+  };
   views: {
     logs: { newestFirst: boolean };
     security: { mode: ViewMode; sortField: string; sortAsc: boolean };
@@ -62,7 +65,7 @@ export interface PreferencesSchema {
   };
 }
 
-export const CURRENT_SCHEMA_VERSION = 5;
+export const CURRENT_SCHEMA_VERSION = 6;
 
 export const CONTAINER_TABLE_COLUMN_KEYS = [
   'icon',
@@ -120,6 +123,9 @@ export const DEFAULTS: PreferencesSchema = {
       md: undefined,
       lg: undefined,
     },
+  },
+  tables: {
+    columnWidths: {},
   },
   views: {
     logs: { newestFirst: false },

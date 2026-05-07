@@ -115,9 +115,31 @@ const filteredTriggers = computed(() => {
 });
 
 const tableColumns = computed(() => [
-  { key: 'name', label: t('triggersView.columns.trigger'), sortable: false, width: '99%' },
-  { key: 'type', label: t('triggersView.columns.type'), sortable: false },
-  { key: 'status', label: t('triggersView.columns.status'), sortable: false },
+  {
+    key: 'name',
+    label: t('triggersView.columns.trigger'),
+    sortable: false,
+    size: 300,
+    minSize: 220,
+    maxSize: 560,
+    flex: 1,
+  },
+  {
+    key: 'type',
+    label: t('triggersView.columns.type'),
+    sortable: false,
+    size: 120,
+    minSize: 96,
+    maxSize: 150,
+  },
+  {
+    key: 'status',
+    label: t('triggersView.columns.status'),
+    sortable: false,
+    size: 120,
+    minSize: 96,
+    maxSize: 150,
+  },
 ]);
 
 function clearFilters() {
@@ -223,6 +245,7 @@ onMounted(async () => {
     <DataTable
       v-if="triggersViewMode === 'table' && !loading"
       :columns="tableColumns"
+      storage-key="triggers"
       :rows="filteredTriggers"
       row-key="id"
       :active-row="selectedTrigger?.id"

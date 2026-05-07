@@ -97,6 +97,7 @@ const DEEP_WATCH_SECTIONS = [
   'layout',
   'containers',
   'dashboard',
+  'tables',
   'views',
 ] as const satisfies ReadonlyArray<Exclude<keyof PreferencesSchema, 'schemaVersion'>>;
 

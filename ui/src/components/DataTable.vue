@@ -1,6 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { preferences } from '../preferences/store';
+import {
+  ACTIONS_COLUMN_KEY,
+  clampColumnSize,
+  normalizeTableColumnSizing,
+  parsePixelSize,
+  type NormalizedTableColumnSizing,
+  type TableColumnAutoSize,
+  type TableColumnOverflow,
+} from '../utils/table-sizing';
 
 const { t } = useI18n();
 
@@ -9,6 +19,14 @@ export interface DataTableColumn {
   label: string;
   align?: string;
   sortable?: boolean;
+  size?: number;
+  minSize?: number;
+  maxSize?: number;
+  flex?: number;
+  priority?: number;
+  overflow?: TableColumnOverflow;
+  autoSize?: TableColumnAutoSize;
+  /** Legacy compatibility. First-party callers should use numeric sizing fields. */
   width?: string;
   /** Tailwind horizontal padding class (e.g. 'px-3', 'px-5'). Defaults to px-5. */
   px?: string;
@@ -25,6 +43,8 @@ const props = withDefaults(
     sortAsc?: boolean;
     selectedKey?: string | null;
     showActions?: boolean;
+    /** Stable per-view key used for persisted column widths. */
+    storageKey?: string;
     /** Optional width (e.g. '160px') for the trailing actions column. Defaults to 80px. */
     actionsWidth?: string;
     compact?: boolean;
@@ -84,41 +104,157 @@ function toggleSort(
 // -- Column resizing --
 const tableRef = ref<HTMLTableElement | null>(null);
 const scrollViewportRef = ref<HTMLDivElement | null>(null);
-const colWidths = reactive<Record<string, number>>({});
+const liveColumnWidths = reactive<Record<string, number>>({});
+const viewportWidth = ref(0);
 const resizing = ref(false);
 const virtualScrollTop = ref(0);
 const virtualViewportHeight = ref(0);
 const BODY_RESIZE_CLASS = 'dd-col-resizing';
 let activeResizeCleanup: (() => void) | null = null;
-const lastResizableColumnKey = computed(() => {
-  for (let i = props.columns.length - 1; i >= 0; i -= 1) {
-    if (!props.columns[i].icon) {
-      return props.columns[i].key;
-    }
-  }
-  return null;
-});
+let tableResizeObserver: ResizeObserver | null = null;
 
-function initWidths() {
-  if (!tableRef.value) return;
-  const ths = tableRef.value.querySelectorAll('thead th[data-col-key]');
-  for (const th of ths) {
-    const key = (th as HTMLElement).dataset.colKey;
-    if (key && !(key in colWidths)) {
-      colWidths[key] = (th as HTMLElement).getBoundingClientRect().width;
-    }
+interface ResolvedDataTableColumn extends DataTableColumn {
+  resolvedWidth: number;
+  sizing: NormalizedTableColumnSizing;
+}
+
+function ensureTableWidthPreferences(): Record<string, Record<string, number>> {
+  preferences.tables ??= { columnWidths: {} };
+  preferences.tables.columnWidths ??= {};
+  return preferences.tables.columnWidths;
+}
+
+function getPersistedColumnWidth(colKey: string): number | undefined {
+  if (!props.storageKey) {
+    return undefined;
+  }
+  const width = ensureTableWidthPreferences()[props.storageKey]?.[colKey];
+  return typeof width === 'number' && Number.isFinite(width) ? width : undefined;
+}
+
+function persistColumnWidth(colKey: string, width: number): void {
+  if (!props.storageKey) {
+    return;
+  }
+  const tables = ensureTableWidthPreferences();
+  tables[props.storageKey] ??= {};
+  tables[props.storageKey][colKey] = Math.round(width);
+}
+
+function clearPersistedColumnWidth(colKey: string): void {
+  delete liveColumnWidths[colKey];
+  if (!props.storageKey) {
+    return;
+  }
+  const bucket = ensureTableWidthPreferences()[props.storageKey];
+  if (!bucket) {
+    return;
+  }
+  delete bucket[colKey];
+  if (Object.keys(bucket).length === 0) {
+    delete ensureTableWidthPreferences()[props.storageKey];
   }
 }
 
-function getHeaderEl(colKey: string): HTMLElement | null {
-  if (!tableRef.value) return null;
-  const headers = tableRef.value.querySelectorAll<HTMLElement>('thead th[data-col-key]');
-  for (const header of headers) {
-    if (header.dataset.colKey === colKey) {
-      return header;
-    }
+function actionColumnSize(): number {
+  return parsePixelSize(props.actionsWidth) ?? 80;
+}
+
+const actionsColumn = computed<ResolvedDataTableColumn>(() => {
+  const size = actionColumnSize();
+  const sizing = normalizeTableColumnSizing({
+    key: ACTIONS_COLUMN_KEY,
+    size,
+    minSize: Math.max(80, size),
+    maxSize: Math.max(80, size),
+    autoSize: 'fixed',
+  });
+  return {
+    key: ACTIONS_COLUMN_KEY,
+    label: t('sharedComponents.dataTable.actions'),
+    sortable: false,
+    align: 'text-right',
+    size,
+    minSize: sizing.minSize,
+    maxSize: sizing.maxSize,
+    autoSize: 'fixed',
+    overflow: 'truncate',
+    resolvedWidth: sizing.size,
+    sizing,
+  };
+});
+
+const normalizedColumns = computed(() =>
+  props.columns.map((column) => ({
+    column,
+    sizing: normalizeTableColumnSizing(column),
+  })),
+);
+
+function resolveColumnWidths(): Record<string, number> {
+  const base = normalizedColumns.value.map(({ column, sizing }) => {
+    const manual = liveColumnWidths[column.key];
+    const persisted = getPersistedColumnWidth(column.key);
+    const width = manual ?? persisted ?? sizing.size;
+    return {
+      key: column.key,
+      width: clampColumnSize(width, sizing.minSize, sizing.maxSize),
+      sizing,
+    };
+  });
+
+  const widthMap = Object.fromEntries(base.map((entry) => [entry.key, entry.width]));
+  const available = viewportWidth.value;
+  const flexColumns = base.filter((entry) => entry.sizing.flex > 0);
+  if (available <= 0 || flexColumns.length === 0) {
+    return widthMap;
   }
-  return null;
+
+  const actionsWidth = props.showActions ? actionsColumn.value.resolvedWidth : 0;
+  const totalBaseWidth = base.reduce((acc, entry) => acc + entry.width, 0) + actionsWidth;
+  const extra = available - totalBaseWidth;
+  if (extra <= 0) {
+    return widthMap;
+  }
+
+  const totalFlex = flexColumns.reduce((acc, entry) => acc + entry.sizing.flex, 0);
+  if (totalFlex <= 0) {
+    return widthMap;
+  }
+
+  let remainingExtra = extra;
+  let remainingFlex = totalFlex;
+  for (const entry of flexColumns) {
+    const share = remainingExtra * (entry.sizing.flex / remainingFlex);
+    const nextWidth = clampColumnSize(
+      entry.width + share,
+      entry.sizing.minSize,
+      entry.sizing.maxSize,
+    );
+    widthMap[entry.key] = nextWidth;
+    remainingExtra -= nextWidth - entry.width;
+    remainingFlex -= entry.sizing.flex;
+  }
+
+  return widthMap;
+}
+
+const resolvedColumnWidths = computed(resolveColumnWidths);
+
+const resolvedColumns = computed<ResolvedDataTableColumn[]>(() =>
+  normalizedColumns.value.map(({ column, sizing }) => ({
+    ...column,
+    resolvedWidth: resolvedColumnWidths.value[column.key] ?? sizing.size,
+    sizing,
+  })),
+);
+
+const allResolvedColumns = computed(() =>
+  props.showActions ? [...resolvedColumns.value, actionsColumn.value] : resolvedColumns.value,
+);
+
+function resolvedColumn(colKey: string): ResolvedDataTableColumn | undefined {
+  return allResolvedColumns.value.find((column) => column.key === colKey);
 }
 
 function parsePixelHeight(value: string): number | null {
@@ -134,7 +270,7 @@ const totalColumnCount = computed(() => props.columns.length + (props.showAction
 const normalizedRowHeight = computed(() => Math.max(24, props.virtualRowHeight));
 const normalizedOverscan = computed(() => Math.max(0, props.virtualOverscan));
 const virtualizationEnabled = computed(() => props.virtualScroll && props.rows.length > 0);
-const useFixedLayout = computed(() => props.fixedLayout || Object.keys(colWidths).length > 0);
+const useFixedLayout = computed(() => props.fixedLayout || allResolvedColumns.value.length > 0);
 
 function fallbackViewportHeight(): number {
   const explicitMaxHeight = parsePixelHeight(props.virtualMaxHeight);
@@ -151,6 +287,10 @@ function syncViewportHeight() {
   }
   const measured = scrollViewportRef.value?.clientHeight ?? 0;
   virtualViewportHeight.value = measured > 0 ? measured : fallbackViewportHeight();
+}
+
+function syncTableViewportWidth() {
+  viewportWidth.value = scrollViewportRef.value?.clientWidth ?? 0;
 }
 
 // Prefix sums over caller-estimated row heights so the visible window and spacers can be
@@ -257,7 +397,13 @@ watch(normalizedRowHeight, () => {
 
 onMounted(() => {
   syncViewportHeight();
+  syncTableViewportWidth();
+  if (scrollViewportRef.value && typeof ResizeObserver !== 'undefined') {
+    tableResizeObserver = new ResizeObserver(syncTableViewportWidth);
+    tableResizeObserver.observe(scrollViewportRef.value);
+  }
   globalThis.addEventListener('resize', syncViewportHeight);
+  globalThis.addEventListener('resize', syncTableViewportWidth);
 });
 
 onUnmounted(() => {
@@ -267,7 +413,10 @@ onUnmounted(() => {
   }
   document.body.classList.remove(BODY_RESIZE_CLASS);
   resizing.value = false;
+  tableResizeObserver?.disconnect();
+  tableResizeObserver = null;
   globalThis.removeEventListener('resize', syncViewportHeight);
+  globalThis.removeEventListener('resize', syncTableViewportWidth);
 });
 
 function handleVirtualScroll(event: Event) {
@@ -327,60 +476,156 @@ function rowAbsoluteIndex(localIndex: number): number {
   return visibleRangeStart.value + localIndex;
 }
 
-function applyLiveWidth(colKey: string, width: number) {
-  const header = getHeaderEl(colKey);
-  if (!header) return;
-  header.setAttribute('width', String(Math.round(width)));
+function setColumnWidth(colKey: string, width: number, persist = true): void {
+  const column = resolvedColumn(colKey);
+  if (!column) {
+    return;
+  }
+  const nextWidth = clampColumnSize(width, column.sizing.minSize, column.sizing.maxSize);
+  liveColumnWidths[colKey] = nextWidth;
+  if (persist) {
+    persistColumnWidth(colKey, nextWidth);
+  }
 }
 
-function onResizeStart(colKey: string, event: MouseEvent) {
+function measureColumnContentWidth(colKey: string): number {
+  const table = tableRef.value;
+  if (!table) {
+    return resolvedColumn(colKey)?.resolvedWidth ?? 0;
+  }
+
+  const candidates = [
+    ...Array.from(table.querySelectorAll<HTMLElement>('thead th[data-col-key]')),
+    ...Array.from(table.querySelectorAll<HTMLElement>('tbody td[data-col-key]')),
+  ].filter((element) => element.dataset.colKey === colKey);
+
+  const measured = candidates.reduce((maxWidth, element) => {
+    const scrollWidth = element.scrollWidth;
+    const rectWidth = element.getBoundingClientRect().width;
+    return Math.max(maxWidth, scrollWidth, rectWidth);
+  }, 0);
+
+  return measured + 24;
+}
+
+function autosizeColumn(colKey: string): void {
+  const column = resolvedColumn(colKey);
+  if (!column) {
+    return;
+  }
+  setColumnWidth(colKey, measureColumnContentWidth(colKey));
+}
+
+function resetColumnWidth(colKey: string): void {
+  clearPersistedColumnWidth(colKey);
+}
+
+function onResizeStart(colKey: string, event: PointerEvent) {
+  if (event.button !== undefined && event.button !== 0) {
+    return;
+  }
   event.preventDefault();
   event.stopPropagation();
+  const column = resolvedColumn(colKey);
+  if (!column || column.icon) {
+    return;
+  }
   if (activeResizeCleanup) {
     activeResizeCleanup();
     activeResizeCleanup = null;
   }
   resizing.value = true;
 
-  // Initialize widths from DOM if not yet done
-  initWidths();
-
   const startX = event.clientX;
-  const headerWidth = getHeaderEl(colKey)?.getBoundingClientRect().width;
-  const startWidth = (headerWidth && headerWidth > 0 ? headerWidth : colWidths[colKey]) ?? 100;
-  let liveWidth = Math.max(40, startWidth);
+  const startWidth = column.resolvedWidth;
+  const pointerId = event.pointerId;
+  const target = event.currentTarget as HTMLElement | null;
+  target?.setPointerCapture?.(pointerId);
+  let liveWidth = startWidth;
 
-  function onMove(e: MouseEvent) {
+  function onMove(e: PointerEvent) {
+    if (pointerId !== undefined && e.pointerId !== pointerId) {
+      return;
+    }
     const delta = e.clientX - startX;
-    liveWidth = Math.max(40, startWidth + delta);
-    applyLiveWidth(colKey, liveWidth);
+    liveWidth = clampColumnSize(startWidth + delta, column.sizing.minSize, column.sizing.maxSize);
+    setColumnWidth(colKey, liveWidth, false);
   }
 
-  function onUp() {
+  function onUp(e: PointerEvent) {
+    if (pointerId !== undefined && e.pointerId !== pointerId) {
+      return;
+    }
     activeResizeCleanup?.();
     activeResizeCleanup = null;
-    colWidths[colKey] = liveWidth;
-    // Delay clearing resizing flag to prevent click-through to sort
-    setTimeout(() => {
-      resizing.value = false;
-    }, 50);
+    target?.releasePointerCapture?.(pointerId);
+    setColumnWidth(colKey, liveWidth, true);
+    resizing.value = false;
   }
 
   document.body.classList.add(BODY_RESIZE_CLASS);
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('mouseup', onUp);
+  document.addEventListener('pointermove', onMove);
+  document.addEventListener('pointerup', onUp);
+  document.addEventListener('pointercancel', onUp);
   activeResizeCleanup = () => {
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    document.removeEventListener('pointercancel', onUp);
     document.body.classList.remove(BODY_RESIZE_CLASS);
   };
 }
 
-function colStyle(col: DataTableColumn): Record<string, string> {
-  if (col.key in colWidths) {
-    return { width: `${colWidths[col.key]}px`, minWidth: `${Math.min(colWidths[col.key], 40)}px` };
+function handleResizeKeydown(colKey: string, event: KeyboardEvent): void {
+  const column = resolvedColumn(colKey);
+  if (!column) {
+    return;
   }
-  return col.width ? { width: col.width } : {};
+  const step = event.shiftKey ? 50 : 10;
+  if (event.key === 'ArrowLeft') {
+    event.preventDefault();
+    event.stopPropagation();
+    setColumnWidth(colKey, column.resolvedWidth - step);
+  } else if (event.key === 'ArrowRight') {
+    event.preventDefault();
+    event.stopPropagation();
+    setColumnWidth(colKey, column.resolvedWidth + step);
+  } else if (event.key === 'Home') {
+    event.preventDefault();
+    event.stopPropagation();
+    setColumnWidth(colKey, column.sizing.minSize);
+  } else if (event.key === 'End') {
+    event.preventDefault();
+    event.stopPropagation();
+    setColumnWidth(colKey, column.sizing.maxSize);
+  } else if (event.key === 'Enter') {
+    event.preventDefault();
+    event.stopPropagation();
+    autosizeColumn(colKey);
+  } else if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopPropagation();
+    resetColumnWidth(colKey);
+  }
+}
+
+function resizeHandleAriaValue(colKey: string, field: 'min' | 'max' | 'now'): number {
+  const column = resolvedColumn(colKey);
+  if (!column) {
+    return 0;
+  }
+  if (field === 'min') return Math.round(column.sizing.minSize);
+  if (field === 'max') return Math.round(column.sizing.maxSize);
+  return Math.round(column.resolvedWidth);
+}
+
+function cellContentClass(col: ResolvedDataTableColumn): string[] {
+  if (col.sizing.overflow === 'wrap') {
+    return ['@container', 'dd-cell', 'min-w-0', 'whitespace-normal', 'break-words'];
+  }
+  if (col.sizing.overflow === 'clamp-2') {
+    return ['@container', 'dd-cell', 'min-w-0', 'line-clamp-2', 'whitespace-normal'];
+  }
+  return ['@container', 'dd-cell', 'min-w-0', 'truncate'];
 }
 
 function isSortableColumn(col: DataTableColumn): boolean {
@@ -450,9 +695,22 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
         ref="tableRef"
         class="w-full text-xs isolate"
         :style="{ borderCollapse: 'separate', borderSpacing: '0', ...(useFixedLayout ? { tableLayout: 'fixed' } : {}) }">
+        <colgroup>
+          <col
+            v-for="col in resolvedColumns"
+            :key="col.key"
+            :data-col-key="col.key"
+            :style="{ width: `${Math.round(col.resolvedWidth)}px` }"
+          />
+          <col
+            v-if="showActions"
+            :data-col-key="ACTIONS_COLUMN_KEY"
+            :style="{ width: `${Math.round(actionsColumn.resolvedWidth)}px` }"
+          />
+        </colgroup>
         <thead>
           <tr :style="{ backgroundColor: 'var(--dd-bg-inset)', borderBottom: 'none' }">
-            <th v-for="(col, colIdx) in columns" :key="col.key"
+            <th v-for="col in resolvedColumns" :key="col.key"
                 :data-col-key="col.key"
                 :class="[
                   col.icon ? 'text-center pl-5 pr-0' : [col.align ?? 'text-center', col.px ?? 'px-5'],
@@ -460,7 +718,6 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
                   isSortableColumn(col) ? 'cursor-pointer' : '',
                   sortKey === col.key ? 'dd-text-secondary' : 'dd-text-muted hover:dd-text-secondary',
                 ]"
-                :style="colStyle(col)"
                 :tabindex="isSortableColumn(col) ? 0 : undefined"
                 :aria-sort="ariaSort(col)"
                 @keydown="handleHeaderKeydown($event, col)"
@@ -468,25 +725,28 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
               {{ col.label }}
               <span v-if="sortKey === col.key" class="inline-block ml-0.5 text-4xs">{{ sortAsc ? '\u25B2' : '\u25BC' }}</span>
               <!-- Resize handle -->
-              <div v-if="!col.icon && colIdx < columns.length - 1"
+              <div v-if="!col.icon"
                    role="separator"
                    :aria-label="t('sharedComponents.dataTable.resizeColumn')"
+                   aria-orientation="vertical"
+                   :aria-valuemin="resizeHandleAriaValue(col.key, 'min')"
+                   :aria-valuemax="resizeHandleAriaValue(col.key, 'max')"
+                   :aria-valuenow="resizeHandleAriaValue(col.key, 'now')"
+                   tabindex="0"
                    class="absolute top-0 right-0 w-2 h-full cursor-col-resize z-10 flex items-center justify-center transition-colors hover:bg-drydock-secondary/20"
-                   @mousedown="onResizeStart(col.key, $event)">
+                   @pointerdown="onResizeStart(col.key, $event)"
+                   @keydown="handleResizeKeydown(col.key, $event)"
+                   @dblclick.stop.prevent="autosizeColumn(col.key)"
+                   @click.stop>
                 <div class="w-px h-3/5 rounded-full opacity-25 hover:opacity-60 transition-opacity"
                      style="background: var(--dd-text-muted)" />
               </div>
             </th>
-            <th v-if="showActions" class="sticky right-0 z-20 text-right px-3 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative" :style="{ width: actionsWidth, backgroundColor: 'var(--dd-bg-inset)' }">
+            <th v-if="showActions"
+                :data-col-key="ACTIONS_COLUMN_KEY"
+                class="sticky right-0 z-20 text-right px-3 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative"
+                :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
               {{ t('sharedComponents.dataTable.actions') }}
-              <div v-if="lastResizableColumnKey"
-                   role="separator"
-                   :aria-label="t('sharedComponents.dataTable.resizeColumn')"
-                   class="absolute top-0 left-0 w-2 h-full cursor-col-resize z-10 flex items-center justify-center transition-colors hover:bg-drydock-secondary/20"
-                   @mousedown="onResizeStart(lastResizableColumnKey, $event)">
-                <div class="w-px h-3/5 rounded-full opacity-25 hover:opacity-60 transition-opacity"
-                     style="background: var(--dd-text-muted)" />
-              </div>
             </th>
           </tr>
         </thead>
@@ -518,10 +778,11 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
               </td>
             </template>
             <template v-else>
-              <td v-for="col in columns" :key="col.key"
+              <td v-for="col in resolvedColumns" :key="col.key"
+                  :data-col-key="col.key"
                   class="py-3 align-middle"
                   :class="col.icon ? 'text-center pl-5 pr-0' : ['overflow-hidden', col.align ?? 'text-center', col.px ?? 'px-5']">
-                <div v-if="!col.icon" class="@container dd-cell">
+                <div v-if="!col.icon" :class="cellContentClass(col)">
                   <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
                     {{ row[col.key] }}
                   </slot>
@@ -534,6 +795,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
               </td>
               <td
                 v-if="showActions"
+                :data-col-key="ACTIONS_COLUMN_KEY"
                 class="sticky right-0 z-10 px-3 py-3 text-right whitespace-nowrap relative"
                 :style="{ backgroundColor: rowBackgroundColor(row, i) }"
               >

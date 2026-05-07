@@ -78,15 +78,53 @@ const filteredWatchers = computed(() => {
 });
 
 const tableColumns = computed(() => [
-  { key: 'name', label: t('watchersView.columns.watcher'), width: '28%', sortable: false },
-  { key: 'status', label: t('watchersView.columns.status'), width: '12%', sortable: false },
-  { key: 'containers', label: t('watchersView.columns.containers'), width: '12%', sortable: false },
-  { key: 'cron', label: t('watchersView.columns.schedule'), width: '18%', sortable: false },
-  { key: 'nextRun', label: t('watchersView.columns.nextRun'), width: '15%', sortable: false },
+  {
+    key: 'name',
+    label: t('watchersView.columns.watcher'),
+    size: 240,
+    minSize: 180,
+    maxSize: 360,
+    flex: 1,
+    sortable: false,
+  },
+  {
+    key: 'status',
+    label: t('watchersView.columns.status'),
+    size: 110,
+    minSize: 96,
+    maxSize: 140,
+    sortable: false,
+  },
+  {
+    key: 'containers',
+    label: t('watchersView.columns.containers'),
+    size: 110,
+    minSize: 96,
+    maxSize: 140,
+    sortable: false,
+  },
+  {
+    key: 'cron',
+    label: t('watchersView.columns.schedule'),
+    size: 180,
+    minSize: 130,
+    maxSize: 280,
+    sortable: false,
+  },
+  {
+    key: 'nextRun',
+    label: t('watchersView.columns.nextRun'),
+    size: 140,
+    minSize: 116,
+    maxSize: 180,
+    sortable: false,
+  },
   {
     key: 'lastRun',
     label: t('watchersView.columns.lastRun'),
-    width: '15%',
+    size: 140,
+    minSize: 116,
+    maxSize: 180,
     align: 'text-right',
     sortable: false,
   },
@@ -206,6 +244,7 @@ onMounted(async () => {
     <DataTable
       v-if="watchersViewMode === 'table' && filteredWatchers.length > 0 && !loading"
       :columns="tableColumns"
+      storage-key="watchers"
       :rows="filteredWatchers"
       row-key="id"
       :active-row="selectedWatcher?.id"
