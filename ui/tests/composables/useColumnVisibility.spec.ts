@@ -61,6 +61,13 @@ describe('useColumnVisibility', () => {
     expect(visibleColumns.value.has('name')).toBe(true);
   });
 
+  it('should ignore unknown column keys', async () => {
+    const { useColumnVisibility } = await loadColumnVisibility();
+    const { allColumns, visibleColumns, toggleColumn } = useColumnVisibility();
+    toggleColumn('missing-column');
+    expect(visibleColumns.value.size).toBe(allColumns.length);
+  });
+
   it('should include all columns in activeColumns regardless of external compact state', async () => {
     const { useColumnVisibility } = await loadColumnVisibility();
     const { allColumns, activeColumns } = useColumnVisibility();

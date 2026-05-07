@@ -19,10 +19,10 @@ describe('preferences store watcher registration', () => {
   it('registers section-level watchers instead of one full-tree deep watcher', async () => {
     await import('@/preferences/store');
 
-    expect(mockWatch).toHaveBeenCalledTimes(10);
+    expect(mockWatch).toHaveBeenCalledTimes(11);
     const deepWatchCount = mockWatch.mock.calls.filter(
       ([, , options]) => options?.deep === true,
     ).length;
-    expect(deepWatchCount).toBe(9);
+    expect(deepWatchCount).toBe(10);
   });
 });
