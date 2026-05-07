@@ -23,7 +23,13 @@ import {
 
 /** Deep-merge source into a clone of defaults, preserving only keys that exist in defaults. */
 export function mergeDefaults(source: Record<string, unknown>): PreferencesSchema {
-  return deepMerge(structuredClone(DEFAULTS), source) as PreferencesSchema;
+  const merged = deepMerge(structuredClone(DEFAULTS), source) as PreferencesSchema;
+  if (isRecord(source.tables) && isRecord(source.tables.columnWidths)) {
+    merged.tables.columnWidths = structuredClone(
+      source.tables.columnWidths as Record<string, Record<string, number>>,
+    );
+  }
+  return merged;
 }
 
 // ─── Sanitize persisted data ─────────────────────────────────
@@ -124,6 +130,7 @@ function sanitize(data: Record<string, unknown>): void {
   sanitizeIcons(data);
   sanitizeAppearance(data);
   sanitizeContainers(data);
+  sanitizeTables(data);
   sanitizeViews(data);
 }
 
@@ -197,6 +204,41 @@ function sanitizeContainers(data: Record<string, unknown>): void {
             (CONTAINER_TABLE_REQUIRED_COLUMN_KEYS as readonly string[]).includes(key),
         );
       }
+    }
+  }
+}
+
+function sanitizeTables(data: Record<string, unknown>): void {
+  const tables = data.tables;
+  if (tables === undefined) {
+    return;
+  }
+  if (!isRecord(tables)) {
+    delete data.tables;
+    return;
+  }
+
+  const columnWidths = tables.columnWidths;
+  if (columnWidths === undefined) {
+    return;
+  }
+  if (!isRecord(columnWidths)) {
+    delete tables.columnWidths;
+    return;
+  }
+
+  for (const [tableKey, tableWidths] of Object.entries(columnWidths)) {
+    if (!isRecord(tableWidths)) {
+      delete columnWidths[tableKey];
+      continue;
+    }
+    for (const [columnKey, value] of Object.entries(tableWidths)) {
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < 40 || value > 2000) {
+        delete tableWidths[columnKey];
+      }
+    }
+    if (Object.keys(tableWidths).length === 0) {
+      delete columnWidths[tableKey];
     }
   }
 }
@@ -629,6 +671,10 @@ export function migrate(data: Record<string, unknown>): PreferencesSchema {
   }
 
   if (data.schemaVersion === 3) {
+    data = { ...data, schemaVersion: CURRENT_SCHEMA_VERSION };
+  }
+
+  if (typeof data.schemaVersion === 'number' && data.schemaVersion < CURRENT_SCHEMA_VERSION) {
     data = { ...data, schemaVersion: CURRENT_SCHEMA_VERSION };
   }
 

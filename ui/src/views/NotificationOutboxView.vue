@@ -52,11 +52,37 @@ const error = ref('');
 const actingId = ref<string | null>(null);
 
 const tableColumns = computed(() => [
-  { key: 'eventName', label: 'Event', sortable: false, width: '220px', align: 'text-left' },
-  { key: 'triggerId', label: 'Trigger', sortable: false, width: '260px', align: 'text-left' },
-  { key: 'attempts', label: 'Attempts', sortable: false, width: '100px' },
-  { key: 'lastError', label: 'Last error', sortable: false, width: '360px', align: 'text-left' },
-  { key: 'createdAt', label: 'Created', sortable: false, width: '160px' },
+  {
+    key: 'eventName',
+    label: 'Event',
+    sortable: false,
+    size: 220,
+    minSize: 160,
+    maxSize: 320,
+    align: 'text-left',
+  },
+  {
+    key: 'triggerId',
+    label: 'Trigger',
+    sortable: false,
+    size: 260,
+    minSize: 180,
+    maxSize: 360,
+    align: 'text-left',
+  },
+  { key: 'attempts', label: 'Attempts', sortable: false, size: 100, minSize: 88, maxSize: 130 },
+  {
+    key: 'lastError',
+    label: 'Last error',
+    sortable: false,
+    size: 360,
+    minSize: 220,
+    maxSize: 520,
+    flex: 1,
+    overflow: 'clamp-2',
+    align: 'text-left',
+  },
+  { key: 'createdAt', label: 'Created', sortable: false, size: 160, minSize: 140, maxSize: 220 },
 ]);
 
 function statusToCount(s: NotificationOutboxEntryStatus): number {
@@ -178,6 +204,7 @@ onMounted(() => {
     <DataTable
       v-if="!loading"
       :columns="tableColumns"
+      storage-key="notification-outbox"
       :rows="entries"
       row-key="id"
       :fixed-layout="true"

@@ -360,18 +360,83 @@ async function scanAllContainers() {
 const tableColumns = computed(() => {
   if (isCompact.value) {
     return [
-      { key: 'image', label: t('securityView.columns.image'), align: 'text-left', width: '99%' },
-      { key: 'total', label: t('securityView.columns.total'), sortable: true },
+      {
+        key: 'image',
+        label: t('securityView.columns.image'),
+        align: 'text-left',
+        size: 320,
+        minSize: 220,
+        maxSize: 720,
+        flex: 1,
+      },
+      {
+        key: 'total',
+        label: t('securityView.columns.total'),
+        sortable: true,
+        size: 96,
+        minSize: 80,
+        maxSize: 120,
+      },
     ];
   }
   return [
-    { key: 'image', label: t('securityView.columns.image'), align: 'text-left', width: '99%' },
-    { key: 'critical', label: t('securityView.columns.critical'), sortable: true },
-    { key: 'high', label: t('securityView.columns.high'), sortable: true },
-    { key: 'medium', label: t('securityView.columns.medium'), sortable: true },
-    { key: 'low', label: t('securityView.columns.low'), sortable: true },
-    { key: 'fixable', label: t('securityView.columns.fixable'), sortable: true },
-    { key: 'total', label: t('securityView.columns.total'), sortable: true },
+    {
+      key: 'image',
+      label: t('securityView.columns.image'),
+      align: 'text-left',
+      size: 360,
+      minSize: 240,
+      maxSize: 760,
+      flex: 1,
+    },
+    {
+      key: 'critical',
+      label: t('securityView.columns.critical'),
+      sortable: true,
+      size: 96,
+      minSize: 84,
+      maxSize: 120,
+    },
+    {
+      key: 'high',
+      label: t('securityView.columns.high'),
+      sortable: true,
+      size: 96,
+      minSize: 84,
+      maxSize: 120,
+    },
+    {
+      key: 'medium',
+      label: t('securityView.columns.medium'),
+      sortable: true,
+      size: 96,
+      minSize: 84,
+      maxSize: 120,
+    },
+    {
+      key: 'low',
+      label: t('securityView.columns.low'),
+      sortable: true,
+      size: 96,
+      minSize: 84,
+      maxSize: 120,
+    },
+    {
+      key: 'fixable',
+      label: t('securityView.columns.fixable'),
+      sortable: true,
+      size: 110,
+      minSize: 92,
+      maxSize: 140,
+    },
+    {
+      key: 'total',
+      label: t('securityView.columns.total'),
+      sortable: true,
+      size: 96,
+      minSize: 84,
+      maxSize: 120,
+    },
   ];
 });
 
@@ -517,6 +582,7 @@ onUnmounted(() => {
       <!-- Table view — grouped by image -->
       <DataTable v-if="securityViewMode === 'table' && !loading"
                  :columns="tableColumns"
+                 storage-key="security"
                  :rows="filteredSummaries"
                  row-key="image"
                  :selected-key="selectedImage?.image"

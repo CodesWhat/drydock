@@ -196,11 +196,49 @@ function formatTimestamp(ts: string) {
 }
 
 const tableColumns = computed(() => [
-  { key: 'timestamp', label: t('auditView.columns.time'), width: '15%', sortable: false },
-  { key: 'action', label: t('auditView.columns.event'), width: '20%', sortable: false },
-  { key: 'containerName', label: t('auditView.columns.target'), width: '99%', sortable: false },
-  { key: 'status', label: t('auditView.columns.status'), sortable: false },
-  { key: 'details', label: t('auditView.columns.details'), align: 'text-right', sortable: false },
+  {
+    key: 'timestamp',
+    label: t('auditView.columns.time'),
+    size: 150,
+    minSize: 130,
+    maxSize: 210,
+    sortable: false,
+  },
+  {
+    key: 'action',
+    label: t('auditView.columns.event'),
+    size: 190,
+    minSize: 150,
+    maxSize: 280,
+    sortable: false,
+  },
+  {
+    key: 'containerName',
+    label: t('auditView.columns.target'),
+    size: 260,
+    minSize: 180,
+    maxSize: 420,
+    flex: 1,
+    sortable: false,
+  },
+  {
+    key: 'status',
+    label: t('auditView.columns.status'),
+    size: 110,
+    minSize: 92,
+    maxSize: 140,
+    sortable: false,
+  },
+  {
+    key: 'details',
+    label: t('auditView.columns.details'),
+    align: 'text-right',
+    size: 220,
+    minSize: 160,
+    maxSize: 380,
+    overflow: 'clamp-2',
+    sortable: false,
+  },
 ]);
 
 async function fetchAudit() {
@@ -366,6 +404,7 @@ onUnmounted(() => {
     <DataTable
       v-if="auditViewMode === 'table' && filteredEntries.length > 0 && !loading"
       :columns="tableColumns"
+      storage-key="audit"
       :rows="filteredEntries"
       row-key="id"
       :active-row="selectedEntry?.id"

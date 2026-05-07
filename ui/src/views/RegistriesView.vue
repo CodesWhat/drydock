@@ -140,15 +140,40 @@ const filteredRegistries = computed(() => {
 });
 
 const tableColumns = computed(() => [
-  { key: 'name', label: t('registriesView.columns.registry'), align: 'text-left', sortable: false },
-  { key: 'type', label: t('registriesView.columns.type'), sortable: false },
-  { key: 'status', label: t('registriesView.columns.status'), sortable: false },
+  {
+    key: 'name',
+    label: t('registriesView.columns.registry'),
+    align: 'text-left',
+    sortable: false,
+    size: 180,
+    minSize: 140,
+    maxSize: 280,
+  },
+  {
+    key: 'type',
+    label: t('registriesView.columns.type'),
+    sortable: false,
+    size: 120,
+    minSize: 96,
+    maxSize: 150,
+  },
+  {
+    key: 'status',
+    label: t('registriesView.columns.status'),
+    sortable: false,
+    size: 120,
+    minSize: 96,
+    maxSize: 150,
+  },
   {
     key: 'url',
     label: t('registriesView.columns.url'),
     align: 'text-left',
     sortable: false,
-    width: '99%',
+    size: 360,
+    minSize: 220,
+    maxSize: 720,
+    flex: 1,
   },
 ]);
 
@@ -197,6 +222,7 @@ onMounted(async () => {
       <!-- Table view -->
       <DataTable v-if="registriesViewMode === 'table' && !loading"
                  :columns="tableColumns"
+                 storage-key="registries"
                  :rows="filteredRegistries"
                  row-key="id"
                  :active-row="selectedRegistry?.id"
