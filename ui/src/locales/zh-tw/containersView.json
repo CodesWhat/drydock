@@ -1,0 +1,28 @@
+{
+  "containersView": {
+    "error": {
+      "loadFailed": "無法載入容器",
+      "recheckFailed": "無法重新檢查容器"
+    },
+    "toast": {
+      "updated": "已更新：{name}",
+      "updateFailed": "更新失敗：{name}",
+      "updateFailedWithReason": "更新失敗：{name} — {reason}",
+      "cancelled": "已取消：{name}",
+      "rolledBack": "已回滾：{name}",
+      "rolledBackWithReason": "已回滾：{name} — {reason}",
+      "updateAlreadyInProgress": "此組中部分容器已有更新進行中",
+      "batchUpdated": "已更新 {group} 中的 {count} 個容器",
+      "batchUpdatedNoGroup": "已更新 {count} 個容器",
+      "batchPartial": "已更新 {group} 中 {total} 個容器中的 {succeeded} 個；{failed} 個失敗",
+      "batchPartialNoGroup": "已更新 {total} 個容器中的 {succeeded} 個；{failed} 個失敗",
+      "batchFailed": "無法更新 {group} 中的 {count} 個容器",
+      "batchFailedNoGroup": "無法更新 {count} 個容器",
+      "unknownGroup": "未知組"
+    },
+    "registryError": {
+      "generic": "倉庫錯誤",
+      "detail": "倉庫錯誤：{error}"
+    }
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "agentsView": {
+    "list": {
+      "loading": "正在載入代理...",
+      "filterPlaceholder": "按名稱篩選...",
+      "clearFilter": "清除",
+      "emptyFiltered": "沒有代理匹配您的篩選條件",
+      "toggleColumns": "切換列",
+      "columnPickerHeading": "列",
+      "loadError": "無法載入代理",
+      "status": {
+        "connected": "已連接",
+        "disconnected": "已斷開"
+      },
+      "columns": {
+        "name": "代理",
+        "status": "狀態",
+        "containers": "容器",
+        "docker": "Docker",
+        "os": "作業系統",
+        "version": "版本",
+        "lastSeen": "最後活躍"
+      },
+      "card": {
+        "running": "執行中",
+        "stopped": "已停止"
+      }
+    },
+    "detail": {
+      "tabs": {
+        "overview": "概覽",
+        "logs": "日誌",
+        "config": "配置"
+      },
+      "overview": {
+        "resources": "資源",
+        "system": "系統",
+        "containers": "容器",
+        "containerTotal": "總計",
+        "containerRunning": "執行中",
+        "containerStopped": "已停止",
+        "viewContainers": "查看容器",
+        "automation": "自動化",
+        "watchers": "監視器",
+        "triggers": "觸發器",
+        "none": "無"
+      },
+      "logs": {
+        "allLevels": "所有級別",
+        "levelDebug": "偵錯",
+        "levelInfo": "資訊",
+        "levelWarn": "警告",
+        "levelError": "錯誤",
+        "tail50": "最近 50 條",
+        "tail100": "最近 100 條",
+        "tail500": "最近 500 條",
+        "tail1000": "最近 1000 條",
+        "componentPlaceholder": "按組件篩選...",
+        "apply": "應用",
+        "reset": "重設",
+        "refresh": "重新整理",
+        "emptyMessage": "當前篩選條件下沒有日誌條目。",
+        "lastFetched": "最後取得時間：{time}",
+        "entries": "{count} 條記錄",
+        "statusLive": "線上",
+        "statusOffline": "離線"
+      },
+      "fields": {
+        "cpus": "CPUs",
+        "memory": "記憶體",
+        "images": "映像檔",
+        "uptime": "執行時間",
+        "docker": "Docker",
+        "os": "作業系統",
+        "architecture": "架構",
+        "agent": "代理",
+        "host": "主機",
+        "agentVersion": "代理版本",
+        "logLevel": "日誌級別",
+        "pollInterval": "輪詢間隔",
+        "dockerSocket": "Docker Socket",
+        "lastSeen": "最後活躍",
+        "never": "從未"
+      },
+      "listView": {
+        "details": "詳情"
+      }
+    }
+  }
+}

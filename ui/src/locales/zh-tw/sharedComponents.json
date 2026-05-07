@@ -1,0 +1,55 @@
+{
+  "sharedComponents": {
+    "confirmDialog": {
+      "cancel": "取消",
+      "confirm": "確認"
+    },
+    "copyableTag": {
+      "copied": "已複製！",
+      "clickToCopy": "點選複製"
+    },
+    "dataCardGrid": {
+      "selectItem": "選擇 {name}"
+    },
+    "dataFilterBar": {
+      "filters": "篩選",
+      "toggleFilters": "切換篩選",
+      "viewMode": "檢視模式",
+      "viewModeLabel": "{label} 檢視"
+    },
+    "dataListAccordion": {
+      "toggleDetails": "切換 {name} 詳情",
+      "selectItem": "選擇 {name}"
+    },
+    "dataTable": {
+      "actions": "操作",
+      "resizeColumn": "調整列寬"
+    },
+    "detailPanel": {
+      "openFullPage": "開啟全頁檢視",
+      "closePanel": "關閉詳情面板",
+      "ariaLabel": "詳情面板"
+    },
+    "emptyState": {
+      "clearFilters": "清除所有篩選"
+    },
+    "logViewer": {
+      "emptyMessage": "未找到日誌條目。",
+      "loadingMessage": "正在載入日誌..."
+    },
+    "scanProgressBanner": {
+      "scanning": "正在掃描 {done}/{total} 個容器..."
+    },
+    "scanProgressText": {
+      "scanning": "正在掃描 {done}/{total}..."
+    },
+    "securityEmptyState": {
+      "noDataTitle": "暫無漏洞資料",
+      "noDataBody": "執行掃描以檢查您的容器的已知漏洞",
+      "filteredTitle": "沒有映像檔匹配您的篩選條件",
+      "clearFilters": "清除所有篩選",
+      "setupGuide": "設定指南",
+      "scanNow": "立即掃描"
+    }
+  }
+}
