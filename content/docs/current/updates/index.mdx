@@ -5,6 +5,8 @@ description: "Release update notes and feature highlights, with direct links to 
 
 ## Release Highlights (March 2026)
 
+- **Shared data table sizing** — Tables now share one sizing model with stable columns, sticky actions, pointer/keyboard resize, double-click autosize, and persisted per-view widths. Containers also folds lower-priority metadata at narrow widths instead of compressing primary identifiers.
+  Docs: [UI customization — Data Tables](/docs/configuration/ui#data-tables).
 - **System log live streaming** — The Configuration Logs view now supports live WebSocket system logs with level/component filtering and tail backfill.  
   Docs: [Logs configuration](/docs/configuration/logs), [Log API stream endpoint](/docs/api/log#stream-application-logs-websocket).
 - **Watcher run-time visibility** — Watchers expose `metadata.lastRunAt` and `metadata.nextRunAt`, and the UI surfaces these in the Watchers and Agents views as **Last run** and **Next run**.  
