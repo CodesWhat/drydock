@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import AppButton from '../AppButton.vue';
+import AppIconButton from '../AppIconButton.vue';
 import { revealContainerEnv } from '../../services/container';
 import { errorMessage } from '../../utils/error';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
@@ -80,11 +80,13 @@ const { selectedContainer } = useContainersViewTemplateContext();
             <template v-else>
               <span v-if="getRevealedValue(selectedContainer.id, e.key)" class="truncate dd-text">{{ getRevealedValue(selectedContainer.id, e.key) }}</span>
               <span v-else class="truncate dd-text-muted">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>
-              <AppButton size="none" variant="plain" weight="none" class="shrink-0 p-0.5 dd-text-muted hover:dd-text transition-colors"
-                      :disabled="envRevealLoading"
-                      @click="toggleReveal(selectedContainer.id, e.key)">
-                <AppIcon :name="getRevealedValue(selectedContainer.id, e.key) ? 'eye-slash' : 'eye'" :size="11" />
-              </AppButton>
+              <AppIconButton
+                :icon="getRevealedValue(selectedContainer.id, e.key) ? 'eye-slash' : 'eye'"
+                size="toolbar"
+                variant="muted"
+                class="shrink-0"
+                :disabled="envRevealLoading"
+                @click="toggleReveal(selectedContainer.id, e.key)" />
             </template>
           </div>
         </div>

@@ -507,6 +507,19 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.text()).toContain('/opt/stack/compose.override.yml');
   });
 
+  it('shows image age in overview version details instead of browse columns', () => {
+    activeDetailTab.value = 'overview';
+    const withImageAge = createSelectedContainer();
+    withImageAge.imageCreated = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
+    selectedContainer.value = withImageAge;
+
+    const wrapper = mountComponent();
+    const imageAgeDetail = wrapper.get('[data-test="container-image-age-detail"]');
+
+    expect(imageAgeDetail.text()).toContain('Image age');
+    expect(imageAgeDetail.text()).toContain('10d');
+  });
+
   it('renders compose preview rows without dropping generic preview rows', async () => {
     activeDetailTab.value = 'actions';
     detailPreview.value = {

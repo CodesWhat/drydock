@@ -70,7 +70,6 @@ export const CONTAINER_TABLE_COLUMN_KEYS = [
   'version',
   'kind',
   'status',
-  'imageAge',
   'server',
   'registry',
 ] as const;

@@ -242,29 +242,19 @@ function handleKeydown(e: KeyboardEvent) {
           </div>
           <div class="px-5 pt-3 pb-4.5 flex items-center justify-end gap-2.5">
             <AppButton
-              size="none"
-              variant="plain"
-              weight="none"
-              class="px-4 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors cursor-pointer"
-              :style="{
-                backgroundColor: 'var(--dd-bg-inset)',
-                border: '1px solid var(--dd-border-strong)',
-                color: 'var(--dd-text)',
-              }"
+              size="md"
+              variant="outlined"
+              weight="semibold"
+              class="cursor-pointer"
               :disabled="inProgress"
               @click="close">
               {{ t('common.cancel') }}
             </AppButton>
             <AppButton
-              size="none"
-              variant="plain"
-              weight="none"
-              class="px-4 py-1.5 dd-rounded text-2xs-plus font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
-              :style="{
-                backgroundColor: 'var(--dd-warning-muted)',
-                border: '1px solid var(--dd-warning)',
-                color: 'var(--dd-warning)',
-              }"
+              size="md"
+              variant="warning"
+              weight="semibold"
+              class="flex items-center gap-1.5 cursor-pointer"
               :disabled="inProgress || updateBlocked"
               @click="confirm">
               <AppIcon v-if="inProgress" name="restart" :size="11" class="animate-spin" />

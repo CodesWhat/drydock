@@ -11,7 +11,7 @@ interface ColumnDef {
   required: boolean;
 }
 
-const RESPONSIVE_DROP_ORDER = ['imageAge', 'registry', 'server', 'kind', 'status'] as const;
+const RESPONSIVE_DROP_ORDER = ['registry', 'server', 'kind', 'status'] as const;
 
 // Overhead to subtract from availableWidth before comparing against column widths.
 // Matches actions-width="180px" in ContainersGroupedViews.vue plus a safety buffer.
@@ -40,9 +40,8 @@ const allColumns: ColumnDef[] = [
     width: '260px',
     required: false,
   },
-  { key: 'kind', label: 'Kind', px: 'px-3', width: '130px', required: false },
+  { key: 'kind', label: 'Update', px: 'px-3', width: '130px', required: false },
   { key: 'status', label: 'Status', px: 'px-3', width: '120px', required: false },
-  { key: 'imageAge', label: 'Image Age', px: 'px-3', width: '90px', required: false },
   { key: 'server', label: 'Host', px: 'px-3', width: '100px', required: false },
   {
     key: 'registry',
@@ -66,6 +65,7 @@ const showColumnPicker = ref(false);
 
 function toggleColumn(key: string) {
   const col = allColumns.find((c) => c.key === key);
+  if (!col) return;
   if (col?.required) return;
   if (visibleColumns.value.has(key)) visibleColumns.value.delete(key);
   else visibleColumns.value.add(key);

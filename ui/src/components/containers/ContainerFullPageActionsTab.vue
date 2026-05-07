@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
 import AppButton from '../AppButton.vue';
+import AppIconButton from '../AppIconButton.vue';
 import { hasTrackedContainerAction } from '../../utils/container-action-key';
 import type { UpdateEligibility } from '../../types/container';
 import { getPrimaryHardBlocker } from '../../utils/update-eligibility';
@@ -92,11 +93,11 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
                       @click="runContainerPreview">
                 {{ previewLoading ? t('containerComponents.fullPageActions.previewing') : t('containerComponents.fullPageActions.previewUpdate') }}
               </AppButton>
-	              <AppButton v-if="isUpdateHardBlocked(selectedContainer)" size="md" variant="plain" :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+	              <AppButton v-if="isUpdateHardBlocked(selectedContainer)" size="md" variant="danger"
 	                      :disabled="true">
 	                <AppIcon name="lock" :size="10" class="mr-1 inline" />{{ t('containerComponents.fullPageDetail.blockedButton') }}
 	              </AppButton>
-	              <AppButton v-else-if="selectedContainer.bouncer === 'blocked'" size="md" variant="plain" :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)', border: '1px solid var(--dd-danger)' }"
+	              <AppButton v-else-if="selectedContainer.bouncer === 'blocked'" size="md" variant="danger"
 	                      :disabled="isActionInProgress(selectedContainer)"
 	                      @click="confirmForceUpdate(selectedContainer)">
 	                <AppIcon name="lock" :size="10" class="mr-1 inline" />{{ t('containerComponents.fullPageActions.forceUpdate') }}
@@ -206,12 +207,14 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
                       class="inline-flex items-center gap-1.5 px-2 py-1 dd-rounded text-2xs-plus font-mono"
                       :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <span class="dd-text">{{ tag }}</span>
-                  <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                          :tooltip="t('containerComponents.fullPageActions.removeSkip')"
-                          :disabled="policyInProgress !== null"
-                          @click="removeSkipTagSelected(tag)">
-                    <AppIcon name="xmark" :size="9" />
-                  </AppButton>
+                  <AppIconButton
+                    icon="xmark"
+                    size="toolbar"
+                    variant="muted"
+                    class="shrink-0"
+                    :tooltip="t('containerComponents.fullPageActions.removeSkip')"
+                    :disabled="policyInProgress !== null"
+                    @click="removeSkipTagSelected(tag)" />
                 </span>
               </div>
             </div>
@@ -222,12 +225,14 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
                       class="inline-flex items-center gap-1.5 px-2 py-1 dd-rounded text-2xs-plus font-mono"
                       :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <span class="dd-text">{{ digest }}</span>
-                  <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center justify-center w-4 h-4 dd-rounded-sm transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-                          :tooltip="t('containerComponents.fullPageActions.removeSkip')"
-                          :disabled="policyInProgress !== null"
-                          @click="removeSkipDigestSelected(digest)">
-                    <AppIcon name="xmark" :size="9" />
-                  </AppButton>
+                  <AppIconButton
+                    icon="xmark"
+                    size="toolbar"
+                    variant="muted"
+                    class="shrink-0"
+                    :tooltip="t('containerComponents.fullPageActions.removeSkip')"
+                    :disabled="policyInProgress !== null"
+                    @click="removeSkipDigestSelected(digest)" />
                 </span>
               </div>
             </div>

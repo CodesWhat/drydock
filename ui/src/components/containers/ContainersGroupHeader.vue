@@ -53,14 +53,18 @@ const emit = defineEmits<{
     </AppBadge>
     <AppButton
       v-if="group.updatesAvailable > 0 || !containerActionsEnabled"
-      size="none"
-      variant="plain"
-      weight="none"
-      class="ml-auto inline-flex items-center justify-center px-2 py-1 dd-rounded border text-2xs font-semibold transition-colors"
+      size="compact"
+      :variant="
+        !containerActionsEnabled || group.updatableCount === 0 || inProgress
+          ? 'muted-subtle'
+          : 'success'
+      "
+      weight="semibold"
+      class="ml-auto inline-flex items-center justify-center"
       :class="
         !containerActionsEnabled || inProgress
-          ? 'dd-text-muted cursor-not-allowed opacity-60'
-          : 'dd-text hover:dd-bg-elevated'
+          ? 'cursor-not-allowed'
+          : ''
       "
       :disabled="!containerActionsEnabled || group.updatableCount === 0 || inProgress"
       v-tooltip.top="

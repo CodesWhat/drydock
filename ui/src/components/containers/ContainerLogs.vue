@@ -283,10 +283,12 @@ onBeforeUnmount(() => {
       </template>
 
       <template #toolbar-right>
-        <AppButton size="none" variant="plain" weight="none"
+        <AppButton
+          size="compact"
+          variant="muted"
           type="button"
           data-test="container-log-download"
-          class="px-2 py-1 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
+          class="inline-flex items-center"
           :class="downloadInProgress ? 'opacity-50 pointer-events-none' : ''"
           @click="downloadLogs"
         >
@@ -298,26 +300,28 @@ onBeforeUnmount(() => {
       </template>
 
       <template #filter-bar>
-        <AppButton size="none" variant="plain" weight="none"
+        <AppButton
+          size="compact"
+          variant="text-success"
           type="button"
-          class="px-2 py-1.5 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-          :class="showStdout ? 'ring-1 ring-white/10' : ''"
+          :class="showStdout ? 'ring-1 ring-[var(--dd-border-strong)]' : ''"
           @click="showStdout = !showStdout"
         >
-          <span class="inline-flex items-center gap-1" style="color: var(--dd-success)">
+          <span class="inline-flex items-center gap-1">
             <span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--dd-success)" />
             stdout
           </span>
         </AppButton>
 
-        <AppButton size="none" variant="plain" weight="none"
+        <AppButton
+          size="compact"
+          variant="text-danger"
           type="button"
           data-test="container-log-toggle-stderr"
-          class="px-2 py-1.5 dd-rounded text-2xs font-semibold transition-colors dd-text-muted hover:dd-text hover:dd-bg-elevated"
-          :class="showStderr ? 'ring-1 ring-white/10' : ''"
+          :class="showStderr ? 'ring-1 ring-[var(--dd-border-strong)]' : ''"
           @click="showStderr = !showStderr"
         >
-          <span class="inline-flex items-center gap-1" style="color: var(--dd-danger)">
+          <span class="inline-flex items-center gap-1">
             <span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--dd-danger)" />
             stderr
           </span>
