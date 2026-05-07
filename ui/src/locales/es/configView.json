@@ -85,7 +85,15 @@
         "title": "Idioma"
       },
       "colorTheme": {
-        "title": "Tema de color"
+        "title": "Tema de color",
+        "descriptions": {
+          "oneDark": "Limpio y equilibrado",
+          "github": "Limpio y familiar",
+          "dracula": "Tonos morados intensos",
+          "catppuccin": "Tonos pastel cálidos",
+          "gruvbox": "Calidez retro terrosa",
+          "ayu": "Tonos dorados suaves"
+        }
       },
       "fontFamily": {
         "title": "Familia tipográfica",
@@ -102,7 +110,14 @@
         "title": "Tamaño de iconos"
       },
       "borderRadius": {
-        "title": "Radio de borde"
+        "title": "Radio de borde",
+        "labels": {
+          "none": "Ninguno",
+          "sharp": "Nítido",
+          "modern": "Moderno",
+          "soft": "Suave",
+          "round": "Redondo"
+        }
       }
     },
     "profile": {

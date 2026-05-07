@@ -85,7 +85,15 @@
         "title": "Language"
       },
       "colorTheme": {
-        "title": "Color Theme"
+        "title": "Color Theme",
+        "descriptions": {
+          "oneDark": "Clean and balanced",
+          "github": "Clean and familiar",
+          "dracula": "Bold purple vibes",
+          "catppuccin": "Warm pastel tones",
+          "gruvbox": "Retro earthy warmth",
+          "ayu": "Soft golden tones"
+        }
       },
       "fontFamily": {
         "title": "Font Family",
@@ -102,7 +110,14 @@
         "title": "Icon Size"
       },
       "borderRadius": {
-        "title": "Border Radius"
+        "title": "Border Radius",
+        "labels": {
+          "none": "None",
+          "sharp": "Sharp",
+          "modern": "Modern",
+          "soft": "Soft",
+          "round": "Round"
+        }
       }
     },
     "profile": {

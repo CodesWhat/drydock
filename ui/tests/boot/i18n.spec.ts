@@ -1,5 +1,14 @@
 import { buildMessages, i18n, LOCALE_OPTIONS, SUPPORTED_LOCALES, setI18nLocale } from '@/boot/i18n';
 
+function getMessagePath(source: Record<string, unknown>, path: string): unknown {
+  return path.split('.').reduce<unknown>((current, key) => {
+    if (!current || typeof current !== 'object') {
+      return undefined;
+    }
+    return (current as Record<string, unknown>)[key];
+  }, source);
+}
+
 describe('buildMessages', () => {
   it('returns an object keyed by supported locales', () => {
     const result = buildMessages({});
@@ -156,6 +165,69 @@ describe('buildMessages', () => {
     };
     const result = buildMessages(modules);
     expect((result as Record<string, unknown>).tr).toEqual({ hello: 'Merhaba' });
+  });
+
+  it('translates the Outbox sidebar label in every supported locale', () => {
+    const messages = buildMessages();
+
+    for (const locale of SUPPORTED_LOCALES) {
+      const label = getMessagePath(messages[locale], 'appShell.layout.nav.outbox');
+      expect(label, `${locale} missing appShell.layout.nav.outbox`).toBeTypeOf('string');
+      expect(label, `${locale} appShell.layout.nav.outbox should not be empty`).not.toBe('');
+    }
+  });
+
+  it('translates appearance choice descriptions and previews in every supported locale', () => {
+    const messages = buildMessages();
+    const descriptionKeys = ['oneDark', 'github', 'dracula', 'catppuccin', 'gruvbox', 'ayu'];
+    const radiusLabelKeys = ['none', 'sharp', 'modern', 'soft', 'round'];
+    const englishPreview = getMessagePath(messages.en, 'configView.appearance.fontFamily.preview');
+
+    for (const locale of SUPPORTED_LOCALES) {
+      for (const key of descriptionKeys) {
+        const label = getMessagePath(
+          messages[locale],
+          `configView.appearance.colorTheme.descriptions.${key}`,
+        );
+        expect(
+          label,
+          `${locale} missing configView.appearance.colorTheme.descriptions.${key}`,
+        ).toBeTypeOf('string');
+        expect(
+          label,
+          `${locale} configView.appearance.colorTheme.descriptions.${key} should not be empty`,
+        ).not.toBe('');
+      }
+
+      for (const key of radiusLabelKeys) {
+        const label = getMessagePath(
+          messages[locale],
+          `configView.appearance.borderRadius.labels.${key}`,
+        );
+        expect(
+          label,
+          `${locale} missing configView.appearance.borderRadius.labels.${key}`,
+        ).toBeTypeOf('string');
+        expect(
+          label,
+          `${locale} configView.appearance.borderRadius.labels.${key} should not be empty`,
+        ).not.toBe('');
+      }
+
+      const preview = getMessagePath(messages[locale], 'configView.appearance.fontFamily.preview');
+      expect(preview, `${locale} missing configView.appearance.fontFamily.preview`).toBeTypeOf(
+        'string',
+      );
+      expect(
+        preview,
+        `${locale} configView.appearance.fontFamily.preview should not be empty`,
+      ).not.toBe('');
+      if (locale !== 'en') {
+        expect(preview, `${locale} should localize the font preview sentence`).not.toBe(
+          englishPreview,
+        );
+      }
+    }
   });
 });
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
 import type { LocaleOption, SupportedLocale } from '../../i18n/locales';
-import type { RadiusPreset, RadiusPresetId } from '../../preferences/radius';
+import type { RadiusPresetId } from '../../preferences/radius';
 
 const { t } = useI18n();
 
@@ -21,6 +21,14 @@ interface FontOption {
   bundled?: boolean;
 }
 
+interface RadiusPresetOption {
+  id: RadiusPresetId;
+  label: string;
+  sm: number;
+  md: number;
+  lg: number;
+}
+
 const props = withDefaults(
   defineProps<{
     themeFamilies: ThemeFamilyOption[];
@@ -38,7 +46,7 @@ const props = withDefaults(
     iconScale?: number;
     fontSize?: number;
     activeRadius?: RadiusPresetId;
-    radiusPresets: RadiusPreset[];
+    radiusPresets: RadiusPresetOption[];
     onSelectThemeFamily: (familyId: string, event: Event) => void;
     onSelectLocale: (locale: SupportedLocale) => void;
     onSelectFont: (fontId: string) => void;
@@ -99,7 +107,7 @@ function handleFontSizeInput(event: Event) {
             @click="props.onSelectLocale(option.id)"
           >
             <span
-              class="text-xs font-semibold"
+              class="dd-text-choice-title"
               :class="props.activeLocale === option.id ? 'text-drydock-secondary' : 'dd-text'"
             >
               {{ option.label }}
@@ -148,13 +156,13 @@ function handleFontSizeInput(event: Event) {
                 }"
               />
               <span
-                class="text-xs font-semibold"
+                class="dd-text-choice-title"
                 :class="props.themeFamily === fam.id ? 'text-drydock-secondary' : 'dd-text'"
               >
                 {{ fam.label }}
               </span>
             </div>
-            <div class="text-2xs dd-text-muted">
+            <div class="dd-text-choice-description">
               {{ fam.description }}
             </div>
           </AppButton>
@@ -192,22 +200,15 @@ function handleFontSizeInput(event: Event) {
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-1.5">
                 <span
-                  class="text-xs-plus font-semibold truncate"
+                  class="dd-text-choice-title truncate"
                   :style="props.isFontLoaded(font.id) ? { fontFamily: font.family } : {}"
                   :class="props.activeFont === font.id ? 'text-drydock-secondary' : 'dd-text'"
                 >
                   {{ font.label }}
                 </span>
-                <span
-                  v-if="font.bundled"
-                  class="text-4xs font-bold uppercase tracking-wider dd-text-muted px-1 py-0.5 dd-rounded-sm"
-                  :style="{ backgroundColor: 'var(--dd-bg-elevated)' }"
-                >
-                  {{ t('configView.appearance.fontFamily.defaultBadge') }}
-                </span>
               </div>
               <div
-                class="text-2xs mt-0.5 truncate dd-text-muted"
+                class="dd-text-choice-description mt-0.5 truncate"
                 :style="props.isFontLoaded(font.id) ? { fontFamily: font.family } : {}"
               >
                 {{ t('configView.appearance.fontFamily.preview') }}
@@ -237,7 +238,7 @@ function handleFontSizeInput(event: Event) {
       </div>
       <div class="p-5">
         <div class="flex items-center gap-4">
-          <span class="text-2xs dd-text-muted font-semibold">A</span>
+          <span class="dd-text-scale-control-sm dd-text-muted font-semibold">A</span>
           <input
             type="range"
             min="0.8"
@@ -248,9 +249,9 @@ function handleFontSizeInput(event: Event) {
             :style="{ background: 'var(--dd-border-strong)', accentColor: 'var(--dd-primary)' }"
             @input="handleFontSizeInput"
           />
-          <span class="text-base dd-text-muted font-semibold">A</span>
+          <span class="dd-text-scale-control-lg dd-text-muted font-semibold">A</span>
         </div>
-        <div class="text-center mt-2 text-2xs-plus dd-text-muted">
+        <div class="text-center mt-2 dd-text-caption">
           {{ Math.round(props.fontSize * 100) }}%
         </div>
       </div>
@@ -294,10 +295,10 @@ function handleFontSizeInput(event: Event) {
               />
             </div>
             <div class="min-w-0">
-              <div class="text-xs font-semibold" :class="props.iconLibrary === lib ? 'text-drydock-secondary' : 'dd-text'">
+              <div class="dd-text-choice-title" :class="props.iconLibrary === lib ? 'text-drydock-secondary' : 'dd-text'">
                 {{ label }}
               </div>
-              <div class="text-2xs dd-text-muted">
+              <div class="dd-text-choice-description">
                 {{ lib }}
               </div>
             </div>
@@ -335,7 +336,7 @@ function handleFontSizeInput(event: Event) {
           />
           <AppIcon name="dashboard" :size="20" class="dd-text-muted" />
         </div>
-        <div class="text-center mt-2 text-2xs-plus dd-text-muted">
+        <div class="text-center mt-2 dd-text-caption">
           {{ Math.round(props.iconScale * 100) }}%
         </div>
       </div>
@@ -371,7 +372,7 @@ function handleFontSizeInput(event: Event) {
               :style="{ borderRadius: p.md + 'px', backgroundColor: props.activeRadius === p.id ? 'var(--dd-primary-muted)' : 'transparent' }"
             />
             <div
-              class="text-2xs-plus font-semibold"
+              class="dd-text-choice-title"
               :class="props.activeRadius === p.id ? 'text-drydock-secondary' : 'dd-text'"
             >
               {{ p.label }}

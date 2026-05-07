@@ -43,8 +43,8 @@
 }
 
 /* One Dark Light */
-.light:not([class*="theme-"]),
-.theme-one-dark.light {
+html.light:not([class*="theme-"]),
+html.theme-one-dark.light {
   --dd-bg: #fafafa;
   --dd-bg-sidebar: #f0f0f0;
   --dd-bg-card: #ffffff;
@@ -70,7 +70,7 @@
 }
 
 /* GitHub Dark */
-.theme-github.dark {
+html.theme-github.dark {
   --dd-bg: #0d1117;
   --dd-bg-sidebar: #010409;
   --dd-bg-card: #161b22;
@@ -96,7 +96,7 @@
 }
 
 /* GitHub Light */
-.theme-github.light {
+html.theme-github.light {
   --dd-bg: #ffffff;
   --dd-bg-sidebar: #f6f8fa;
   --dd-bg-card: #ffffff;
@@ -122,7 +122,7 @@
 }
 
 /* Dracula Dark */
-.theme-dracula.dark {
+html.theme-dracula.dark {
   --dd-bg: #282a36;
   --dd-bg-sidebar: #21222c;
   --dd-bg-card: #44475a;
@@ -148,7 +148,7 @@
 }
 
 /* Dracula Light (Alucard) */
-.theme-dracula.light {
+html.theme-dracula.light {
   --dd-bg: #f8f8f2;
   --dd-bg-sidebar: #eee8e4;
   --dd-bg-card: #ffffff;
@@ -174,7 +174,7 @@
 }
 
 /* Catppuccin Mocha (Dark) */
-.theme-catppuccin.dark {
+html.theme-catppuccin.dark {
   --dd-bg: #1e1e2e;
   --dd-bg-sidebar: #181825;
   --dd-bg-card: #313244;
@@ -200,7 +200,7 @@
 }
 
 /* Catppuccin Latte (Light) */
-.theme-catppuccin.light {
+html.theme-catppuccin.light {
   --dd-bg: #eff1f5;
   --dd-bg-sidebar: #e6e9ef;
   --dd-bg-card: #ffffff;
@@ -226,7 +226,7 @@
 }
 
 /* Gruvbox Dark */
-.theme-gruvbox.dark {
+html.theme-gruvbox.dark {
   --dd-bg: #282828;
   --dd-bg-sidebar: #1d2021;
   --dd-bg-card: #3c3836;
@@ -252,7 +252,7 @@
 }
 
 /* Gruvbox Light */
-.theme-gruvbox.light {
+html.theme-gruvbox.light {
   --dd-bg: #fbf1c7;
   --dd-bg-sidebar: #f9f5d7;
   --dd-bg-card: #ffffff;
@@ -278,7 +278,7 @@
 }
 
 /* Ayu Mirage (Dark) */
-.theme-ayu.dark {
+html.theme-ayu.dark {
   --dd-bg: #242936;
   --dd-bg-sidebar: #1f2430;
   --dd-bg-card: #2d3440;
@@ -304,7 +304,7 @@
 }
 
 /* Ayu Light */
-.theme-ayu.light {
+html.theme-ayu.light {
   --dd-bg: #fcfcfc;
   --dd-bg-sidebar: #f8f9fa;
   --dd-bg-card: #ffffff;

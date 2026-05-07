@@ -85,7 +85,15 @@
         "title": "Lingua"
       },
       "colorTheme": {
-        "title": "Tema colori"
+        "title": "Tema colori",
+        "descriptions": {
+          "oneDark": "Pulito ed equilibrato",
+          "github": "Pulito e familiare",
+          "dracula": "Toni viola decisi",
+          "catppuccin": "Toni pastello caldi",
+          "gruvbox": "Calore rétro terroso",
+          "ayu": "Toni dorati delicati"
+        }
       },
       "fontFamily": {
         "title": "Famiglia font",
@@ -102,7 +110,14 @@
         "title": "Dimensione icone"
       },
       "borderRadius": {
-        "title": "Raggio bordi"
+        "title": "Raggio bordi",
+        "labels": {
+          "none": "Nessuno",
+          "sharp": "Netto",
+          "modern": "Moderno",
+          "soft": "Morbido",
+          "round": "Rotondo"
+        }
       }
     },
     "profile": {

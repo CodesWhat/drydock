@@ -12,7 +12,7 @@ import ConfigGeneralTab from '../components/config/ConfigGeneralTab.vue';
 import ConfigProfileTab from '../components/config/ConfigProfileTab.vue';
 import { type IconLibrary, iconMap, libraryLabels } from '../icons';
 import { LOCALE_OPTIONS, type SupportedLocale } from '../i18n/locales';
-import { themeFamilies } from '../theme/palettes';
+import { type ThemeFamily, themeFamilies } from '../theme/palettes';
 import { getAppInfos } from '../services/app';
 import { getUser } from '../services/auth';
 import { downloadDebugDump } from '../services/debug';
@@ -30,9 +30,6 @@ const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const { themeFamily, themeVariant, isDark, setThemeFamily, transitionTheme } = useTheme();
-
-// --- Border Radius ---
-const radiusPresets = RADIUS_PRESET_VALUES;
 
 const activeRadius = usePreference(
   () => preferences.appearance.radius,
@@ -103,7 +100,31 @@ const settingsTabs = computed(() => [
   { id: 'appearance' as const, label: t('configView.tabs.appearance'), icon: 'config' },
   { id: 'profile' as const, label: t('configView.tabs.profile'), icon: 'user' },
 ]);
-const availableThemeFamilies = themeFamilies;
+
+const radiusPresets = computed(() =>
+  RADIUS_PRESET_VALUES.map((preset) => ({
+    ...preset,
+    label: t(`configView.appearance.borderRadius.labels.${preset.id}`),
+  })),
+);
+
+const themeDescriptionKeys: Record<ThemeFamily, string> = {
+  'one-dark': 'oneDark',
+  github: 'github',
+  dracula: 'dracula',
+  catppuccin: 'catppuccin',
+  gruvbox: 'gruvbox',
+  ayu: 'ayu',
+};
+
+const availableThemeFamilies = computed(() =>
+  themeFamilies.map((family) => ({
+    ...family,
+    description: t(
+      `configView.appearance.colorTheme.descriptions.${themeDescriptionKeys[family.id]}`,
+    ),
+  })),
+);
 
 const loading = ref(true);
 const serverFields = ref<Array<{ label: string; value: string }>>([]);
@@ -363,10 +384,7 @@ async function handleDownloadDebugDump() {
 }
 
 function handleSelectThemeFamily(familyId: string, event: Event) {
-  transitionTheme(
-    () => setThemeFamily(familyId as (typeof availableThemeFamilies)[number]['id']),
-    event,
-  );
+  transitionTheme(() => setThemeFamily(familyId as ThemeFamily), event);
 }
 
 function handleSelectFont(fontId: string) {
