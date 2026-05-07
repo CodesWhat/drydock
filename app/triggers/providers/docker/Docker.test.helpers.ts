@@ -104,6 +104,7 @@ const mockUpdateOperation = vi.hoisted(() => vi.fn());
 const mockGetOperationById = vi.hoisted(() => vi.fn());
 const mockMarkOperationTerminal = vi.hoisted(() => vi.fn());
 const mockGetInProgressOperationByContainerName = vi.hoisted(() => vi.fn());
+const mockGetInProgressOperationByContainerId = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerName = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerId = vi.hoisted(() => vi.fn());
 const mockIsOperationCancelRequested = vi.hoisted(() => vi.fn(() => false));
@@ -114,6 +115,8 @@ vi.mock('../../../store/update-operation.js', () => ({
   markOperationTerminal: (...args: any[]) => mockMarkOperationTerminal(...args),
   getInProgressOperationByContainerName: (...args: any[]) =>
     mockGetInProgressOperationByContainerName(...args),
+  getInProgressOperationByContainerId: (...args: any[]) =>
+    mockGetInProgressOperationByContainerId(...args),
   getActiveOperationByContainerName: (...args: any[]) =>
     mockGetActiveOperationByContainerName(...args),
   getActiveOperationByContainerId: (...args: any[]) => mockGetActiveOperationByContainerId(...args),
@@ -442,6 +445,7 @@ export function registerCommonDockerBeforeEach() {
     }));
     mockUpdateOperation.mockImplementation((id, patch = {}) => ({ id, ...patch }));
     mockGetInProgressOperationByContainerName.mockReturnValue(undefined);
+    mockGetInProgressOperationByContainerId.mockReturnValue(undefined);
     mockIsOperationCancelRequested.mockReturnValue(false);
   });
 }
@@ -466,6 +470,7 @@ export function getDockerTestMocks() {
     mockGetOperationById,
     mockMarkOperationTerminal,
     mockGetInProgressOperationByContainerName,
+    mockGetInProgressOperationByContainerId,
     mockGetActiveOperationByContainerName,
     mockGetActiveOperationByContainerId,
     mockIsOperationCancelRequested,

@@ -399,6 +399,137 @@ describe('ContainerRuntimeConfigManager', () => {
     ).toEqual({});
   });
 
+  test('sanitizeClonedRuntimeConfig should drop stale image-inherited env and labels', () => {
+    const manager = createManager();
+    const log = createLog();
+
+    const result = manager.sanitizeClonedRuntimeConfig(
+      {
+        Env: ['DD_VERSION=1.5.0-rc.15'],
+        Labels: {
+          'org.opencontainers.image.version': '1.5.0-rc.15',
+        },
+      },
+      {
+        Env: ['DD_VERSION=1.5.0-rc.15'],
+        Labels: {
+          'org.opencontainers.image.version': '1.5.0-rc.15',
+        },
+      },
+      {
+        Env: ['DD_VERSION=1.5.0-rc.17'],
+        Labels: {
+          'org.opencontainers.image.version': '1.5.0-rc.17',
+        },
+      },
+      {},
+      log,
+    );
+
+    expect(result).toEqual({});
+    expect(log.info).toHaveBeenCalledWith(
+      expect.stringContaining('Dropping stale image-inherited environment variable DD_VERSION'),
+    );
+    expect(log.info).toHaveBeenCalledWith(
+      expect.stringContaining('Dropping stale image-inherited label'),
+    );
+  });
+
+  test('sanitizeImageInheritedEnv should preserve explicit, unchanged, malformed, and untraceable env entries', () => {
+    const manager = createManager();
+    const log = createLog();
+    const containerEnv = [
+      'DD_VERSION=1.5.0-rc.15',
+      'PATH=/usr/local/bin',
+      'REMOVED=old',
+      'PUID=1000',
+      'NOVALUE',
+      '=bad',
+      null,
+    ];
+    const sourceImageConfig = {
+      Env: ['DD_VERSION=1.5.0-rc.15', 'PATH=/usr/local/bin', 'REMOVED=old'],
+    };
+    const targetImageConfig = {
+      Env: ['DD_VERSION=1.5.0-rc.17', 'PATH=/usr/local/bin'],
+    };
+
+    expect(
+      manager.sanitizeImageInheritedEnv(containerEnv, sourceImageConfig, targetImageConfig, log),
+    ).toEqual(['PATH=/usr/local/bin', 'PUID=1000', 'NOVALUE', '=bad', null]);
+    expect(
+      manager.sanitizeImageInheritedEnv(undefined, sourceImageConfig, targetImageConfig, log),
+    ).toBeUndefined();
+    expect(manager.sanitizeImageInheritedEnv(containerEnv, undefined, targetImageConfig, log)).toBe(
+      containerEnv,
+    );
+    expect(manager.sanitizeImageInheritedEnv(containerEnv, sourceImageConfig, undefined, log)).toBe(
+      containerEnv,
+    );
+    expect(
+      manager.sanitizeImageInheritedEnv(containerEnv, { Env: [] }, targetImageConfig, log),
+    ).toBe(containerEnv);
+  });
+
+  test('sanitizeImageInheritedLabels should preserve runtime and unchanged labels', () => {
+    const manager = createManager();
+    const log = createLog();
+    const labels = {
+      'dd.watch': 'true',
+      'org.opencontainers.image.title': 'Drydock',
+      'org.opencontainers.image.version': '1.5.0-rc.15',
+      custom: 'operator',
+    };
+    const sourceImageConfig = {
+      Labels: {
+        'org.opencontainers.image.title': 'Drydock',
+        'org.opencontainers.image.version': '1.5.0-rc.15',
+        custom: 'source-default',
+      },
+    };
+    const targetImageConfig = {
+      Labels: {
+        'org.opencontainers.image.title': 'Drydock',
+        'org.opencontainers.image.version': '1.5.0-rc.17',
+      },
+    };
+
+    expect(
+      manager.sanitizeImageInheritedLabels(labels, sourceImageConfig, targetImageConfig, log),
+    ).toEqual({
+      'dd.watch': 'true',
+      'org.opencontainers.image.title': 'Drydock',
+      custom: 'operator',
+    });
+
+    expect(
+      manager.sanitizeImageInheritedLabels(undefined, sourceImageConfig, targetImageConfig, log),
+    ).toBeUndefined();
+    expect(manager.sanitizeImageInheritedLabels(labels, {}, targetImageConfig, log)).toBe(labels);
+    expect(
+      manager.sanitizeImageInheritedLabels(labels, { Labels: [] } as never, targetImageConfig, log),
+    ).toBe(labels);
+    expect(manager.sanitizeImageInheritedLabels(labels, sourceImageConfig, undefined, log)).toBe(
+      labels,
+    );
+    expect(
+      manager.sanitizeImageInheritedLabels(
+        { 'org.opencontainers.image.version': '1.5.0-rc.15' },
+        sourceImageConfig,
+        { Labels: undefined },
+        log,
+      ),
+    ).toEqual({});
+    expect(
+      manager.sanitizeImageInheritedLabels(
+        { 'org.opencontainers.image.title': 'Drydock' },
+        sourceImageConfig,
+        targetImageConfig,
+        log,
+      ),
+    ).toEqual({ 'org.opencontainers.image.title': 'Drydock' });
+  });
+
   test('inspectImageConfig should handle missing api methods, successful inspect, and inspect failures', async () => {
     const manager = createManager();
     const log = createLog();

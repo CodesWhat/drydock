@@ -104,6 +104,7 @@ const mockUpdateOperation = vi.hoisted(() => vi.fn());
 const mockGetOperationById = vi.hoisted(() => vi.fn());
 const mockMarkOperationTerminal = vi.hoisted(() => vi.fn());
 const mockGetInProgressOperationByContainerName = vi.hoisted(() => vi.fn());
+const mockGetInProgressOperationByContainerId = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerName = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerId = vi.hoisted(() => vi.fn());
 const mockIsOperationCancelRequested = vi.hoisted(() => vi.fn(() => false));
@@ -126,6 +127,8 @@ vi.mock('../../../store/update-operation.js', () => ({
   markOperationTerminal: (...args: any[]) => mockMarkOperationTerminal(...args),
   getInProgressOperationByContainerName: (...args: any[]) =>
     mockGetInProgressOperationByContainerName(...args),
+  getInProgressOperationByContainerId: (...args: any[]) =>
+    mockGetInProgressOperationByContainerId(...args),
   getActiveOperationByContainerName: (...args: any[]) =>
     mockGetActiveOperationByContainerName(...args),
   getActiveOperationByContainerId: (...args: any[]) => mockGetActiveOperationByContainerId(...args),
@@ -818,6 +821,51 @@ test('clone should clone an existing container spec', async () => {
         test: { Aliases: ['9708fc7b44f2', 'test'] },
       },
     },
+  });
+});
+
+test('cloneContainer should drop stale image-inherited env and labels from the source image', () => {
+  const clone = docker.cloneContainer(
+    {
+      Name: '/drydock',
+      Id: 'abc123',
+      HostConfig: {},
+      Config: {
+        Env: ['DD_VERSION=1.5.0-rc.15', 'PATH=/usr/local/bin', 'PUID=1000'],
+        Labels: {
+          'dd.watch': 'true',
+          'org.opencontainers.image.title': 'Drydock',
+          'org.opencontainers.image.version': '1.5.0-rc.15',
+        },
+      },
+      NetworkSettings: { Networks: {} },
+    },
+    'codeswhat/drydock:1.5.0-rc.17',
+    {
+      sourceImageConfig: {
+        Env: ['DD_VERSION=1.5.0-rc.15', 'PATH=/usr/local/bin'],
+        Labels: {
+          'org.opencontainers.image.title': 'Drydock',
+          'org.opencontainers.image.version': '1.5.0-rc.15',
+        },
+      },
+      targetImageConfig: {
+        Env: ['DD_VERSION=1.5.0-rc.17', 'PATH=/usr/local/bin'],
+        Labels: {
+          'org.opencontainers.image.title': 'Drydock',
+          'org.opencontainers.image.version': '1.5.0-rc.17',
+        },
+      },
+    },
+  );
+
+  expect(clone.Env).not.toContain('DD_VERSION=1.5.0-rc.15');
+  expect(clone.Env).toContain('PATH=/usr/local/bin');
+  expect(clone.Env).toContain('PUID=1000');
+  expect(clone.Labels).not.toHaveProperty('org.opencontainers.image.version');
+  expect(clone.Labels).toMatchObject({
+    'dd.watch': 'true',
+    'org.opencontainers.image.title': 'Drydock',
   });
 });
 
