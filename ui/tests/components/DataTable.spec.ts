@@ -235,22 +235,43 @@ describe('DataTable', () => {
   });
 
   describe('selection', () => {
-    it('applies ring class to the selected row', () => {
+    it('applies selected row class to the selected row', () => {
       const w = factory({ selectedKey: '2' });
       const trs = w.findAll('tbody tr');
-      expect(trs[1].classes()).toContain('ring-1');
-      expect(trs[1].classes()).toContain('ring-drydock-secondary');
+      expect(trs[1].classes()).toContain('dd-data-table-row-selected');
     });
 
-    it('does not apply ring class to unselected rows', () => {
+    it('does not apply selected row class to unselected rows', () => {
       const w = factory({ selectedKey: '2' });
-      expect(w.findAll('tbody tr')[0].classes()).not.toContain('ring-1');
+      expect(w.findAll('tbody tr')[0].classes()).not.toContain('dd-data-table-row-selected');
     });
 
     it('applies elevated bg to the selected row', () => {
       const w = factory({ selectedKey: '1' });
       const style = w.findAll('tbody tr')[0].attributes('style');
       expect(style).toContain('dd-bg-elevated');
+    });
+
+    it('extends selected row styling through the sticky actions cell', () => {
+      const w = factory(
+        { selectedKey: '2', showActions: true },
+        { actions: '<span class="action-btn">Act</span>' },
+      );
+      const selectedRow = w.findAll('tbody tr')[1];
+      const cells = selectedRow.findAll('td');
+      const actionsCell = cells[cells.length - 1];
+
+      expect(selectedRow.classes()).toContain('dd-data-table-row-selected');
+      expect(selectedRow.attributes('style')).toContain('--dd-data-table-row-bg');
+      expect(actionsCell.classes()).toEqual(
+        expect.arrayContaining([
+          'dd-data-table-cell',
+          'dd-data-table-actions-cell',
+          'sticky',
+          'right-0',
+        ]),
+      );
+      expect(actionsCell.attributes('style') ?? '').not.toContain('background-color');
     });
   });
 
@@ -340,7 +361,8 @@ describe('DataTable', () => {
 
       expect(actionsHeader.classes()).toEqual(expect.arrayContaining(['sticky', 'right-0']));
       expect(actionsCell.classes()).toEqual(expect.arrayContaining(['sticky', 'right-0']));
-      expect(actionsCell.attributes('style')).toContain('var(--dd-bg-card)');
+      expect(actionsCell.classes()).toContain('dd-data-table-actions-cell');
+      expect(actionsCell.attributes('style') ?? '').not.toContain('background-color');
     });
   });
 
