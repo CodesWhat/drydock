@@ -55,7 +55,7 @@ All non-default fonts are served locally from the container's `/fonts/` director
 
 ## Font Size
 
-An adjustable font size slider in **Config > Appearance** scales text across the entire UI. The setting is persisted in localStorage.
+An adjustable font size slider in **Config > Appearance** scales semantic text tokens across the entire UI. Headings, table headers, card titles, labels, body copy, and metadata use separate tokens so relative hierarchy stays intact as the global scale changes. The setting is persisted in localStorage.
 
 ## Command Palette
 
@@ -91,17 +91,31 @@ Select a preset in **Config > Appearance**. The choice is persisted in localStor
 
 The dashboard is a customizable grid of 9 widgets — 4 stat cards and 5 detail widgets — with drag-to-reorder, resize, and per-widget visibility controls. See the dedicated [Dashboard guide](/docs/configuration/dashboard) for full details on widgets, edit mode, responsive breakpoints, and real-time updates.
 
+## Data Tables
+
+All first-party table surfaces use the shared Drydock data table component. That includes Containers, Security, Audit, Agents, Watchers, Registries, Servers, Triggers, Auth, Notifications, Notification Outbox, dashboard table widgets, and compact configuration tables.
+
+Data tables support:
+
+- Stable column widths driven by each column's content role.
+- Drag resizing with mouse or touch.
+- Keyboard resizing from the column separator: **ArrowLeft** / **ArrowRight** adjust the width, and **Shift** makes larger steps.
+- Double-click autosize on a column separator.
+- Sticky action columns where row actions need to remain reachable while horizontally scrolling.
+- Per-view width persistence in browser localStorage.
+- Responsive column hiding on dense views such as Containers, where lower-priority metadata folds away before primary identifiers become unreadable.
+
 ## View Modes
 
-All data views (Containers, Watchers, Registries, Triggers, Auth, Agents, Security) support three display modes:
+Data views that expose view-mode controls support table, card, or list presentation depending on the page:
 
 | Mode | Description |
 | --- | --- |
-| **Table** (default) | Rows with interactive column resizing |
+| **Table** (default) | Rows with shared sizing, interactive column resizing, persisted widths, and sticky actions where relevant |
 | **Cards** | Grid layout |
 | **List** | Accordion-style |
 
-Toggle between modes using the view mode buttons in the toolbar.
+Toggle between modes using the view mode buttons in the toolbar where they are available. Utility pages with naturally tabular data may use table-only presentation.
 
 ## Keyboard Shortcuts
 
