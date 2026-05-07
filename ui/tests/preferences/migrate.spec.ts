@@ -170,6 +170,11 @@ describe('preferences migration', () => {
       expect(result.locale.language).toBe('zh-CN');
     });
 
+    it('should preserve Traditional Chinese as a supported locale', () => {
+      const result = migrate({ schemaVersion: 1, locale: { language: 'zh-TW' } });
+      expect(result.locale.language).toBe('zh-TW');
+    });
+
     it('should preserve Italian as a supported locale', () => {
       const result = migrate({ schemaVersion: 1, locale: { language: 'it' } });
       expect(result.locale.language).toBe('it');

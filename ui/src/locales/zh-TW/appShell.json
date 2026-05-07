@@ -1,0 +1,133 @@
+{
+  "appShell": {
+    "toast": {
+      "dismiss": "關閉"
+    },
+    "logViewer": {
+      "toolbar": {
+        "resume": "恢復",
+        "pause": "暫停",
+        "unpinAutoScroll": "取消固定自動捲動",
+        "pinAutoScroll": "固定自動捲動",
+        "newestFirst": "最新在前",
+        "oldestFirst": "最舊在前",
+        "regexToggle": ".* 正則",
+        "showMatchesOnly": "僅顯示匹配項",
+        "showingMatchesOnly": "僅顯示匹配項",
+        "prev": "上一個",
+        "next": "下一個"
+      },
+      "search": {
+        "placeholder": "搜尋日誌",
+        "copied": "已複製！",
+        "copyLogs": "複製日誌"
+      },
+      "empty": {
+        "noMatchingEntries": "沒有匹配的條目",
+        "defaultMessage": "暫無日誌條目"
+      },
+      "footer": {
+        "lines": "行",
+        "defaultStatusLabel": "離線"
+      }
+    },
+    "notificationBell": {
+      "buttonLabel": "通知",
+      "tooltip": "通知",
+      "header": "通知",
+      "clear": "清除",
+      "loading": "載入中...",
+      "empty": "暫無通知",
+      "markAllRead": "全部標記為已讀",
+      "openAuditLog": "開啟稽核日誌",
+      "dismiss": "關閉通知"
+    },
+    "themeToggle": {
+      "mobileLabel": "主題：{id}（點選切換）",
+      "switchTo": "切換到 {id} 主題",
+      "variantLabel": "{label}"
+    },
+    "layout": {
+      "nav": {
+        "dashboard": "儀表板",
+        "containers": "容器",
+        "security": "安全",
+        "audit": "稽核",
+        "systemLogs": "系統日誌",
+        "manageGroup": "管理",
+        "hosts": "主機",
+        "registries": "倉庫",
+        "watchers": "監視器",
+        "settingsGroup": "設定",
+        "general": "通用",
+        "notifications": "通知",
+        "outbox": "寄件匣",
+        "triggers": "觸發器",
+        "auth": "認證",
+        "agents": "代理"
+      },
+      "sidebar": {
+        "closeMobileMenu": "關閉選單",
+        "searchButton": "搜尋",
+        "searchAriaLabel": "搜尋",
+        "aboutTooltip": "關於 Drydock",
+        "aboutAriaLabel": "關於 Drydock",
+        "expandSidebar": "展開側邊欄",
+        "collapseSidebar": "收起側邊欄"
+      },
+      "topbar": {
+        "openMenu": "開啟選單",
+        "closeMenu": "關閉選單",
+        "userMenu": "使用者選單",
+        "profile": "個人資料",
+        "signOut": "登出"
+      },
+      "about": {
+        "title": "Drydock",
+        "subtitle": "Docker 容器更新管理器",
+        "documentation": "文件",
+        "github": "GitHub",
+        "changelog": "更新日誌",
+        "close": "關閉"
+      },
+      "search": {
+        "ariaLabel": "搜尋",
+        "placeholder": "跳轉到頁面、容器、代理、觸發器...",
+        "shown": "顯示 {count} 條",
+        "refreshing": "正在重新整理搜尋索引...",
+        "noMatches": "沒有找到 \"{query}\" 的匹配項。",
+        "hint": "輸入以搜尋頁面、容器、代理、觸發器、監視器和設定。",
+        "prefixScopeHint": "前置詞作用域已啟動",
+        "typeHint": "輸入",
+        "useTab": " 以更改作用域",
+        "moveHint": "移動",
+        "openHint": "開啟"
+      },
+      "connection": {
+        "lostTitle": "連線遺失",
+        "applyingUpdateTitle": "正在應用更新",
+        "lostMessage": "伺服器無法存取。正在等待其重新上線...",
+        "restartingMessage": "Drydock 正在重新啟動{opId}。服務恢復後將重新連線...",
+        "reconnecting": "重新連線中",
+        "restartingService": "重啟服務中"
+      }
+    },
+    "announcementBanner": {
+      "defaultDismiss": "關閉",
+      "defaultLinkLabel": "檢視遷移指南"
+    },
+    "banners": {
+      "legacyConfigTitleSingular": "偵測到 {total} 個舊配置別名",
+      "legacyConfigTitlePlural": "偵測到 {total} 個舊配置別名",
+      "legacyApiPathTitle": "偵測到 {total} 個舊 API 路徑",
+      "dontShowAgain": "不再顯示",
+      "oidcHttpTitle": "偵測到 HTTP OIDC 發現",
+      "legacyHashTitle": "偵測到舊版密碼雜湊",
+      "curlHealthcheckTitle": "偵測到自訂 curl 健康檢查覆蓋",
+      "envKeysLabel": "環境變數金鑰 ({count}): {keys}",
+      "labelKeysLabel": "Label keys ({count}): {keys}",
+      "apiPathsLabel": "API 路徑 ({count}): {keys}",
+      "healthcheckCommandLabel": "健康檢查命令：{command}"
+    }
+  }
+}

@@ -1,0 +1,271 @@
+{
+  "auditView": {
+    "loadingAuditLog": "正在載入稽核日誌...",
+    "loadError": "無法載入稽核日誌",
+    "filterPlaceholder": "按目標或事件篩選...",
+    "containerFilterPlaceholder": "容器名稱...",
+    "allEvents": "所有事件",
+    "eventsSelected": "已選擇 {count} 個事件",
+    "clear": "清除",
+    "fromDateLabel": "開始日期",
+    "toDateLabel": "結束日期",
+    "pagination": {
+      "summary": "第 {page} 頁，共 {totalPages} 頁（{total} 條記錄）",
+      "previousPage": "上一頁",
+      "nextPage": "下一頁"
+    },
+    "emptyFiltered": "沒有稽核記錄匹配您的篩選條件",
+    "columns": {
+      "time": "時間",
+      "event": "事件",
+      "target": "目標",
+      "status": "狀態",
+      "details": "詳情"
+    },
+    "card": {
+      "time": "時間",
+      "version": "版本"
+    },
+    "detail": {
+      "timestamp": "時間戳",
+      "event": "事件",
+      "image": "映像檔",
+      "fromVersion": "從版本",
+      "toVersion": "到版本",
+      "trigger": "觸發器",
+      "details": "詳情"
+    }
+  },
+  "notificationsView": {
+    "loadingRules": "正在載入通知規則...",
+    "loadError": "無法載入通知規則",
+    "filterPlaceholder": "按名稱、描述或觸發器篩選...",
+    "clear": "清除",
+    "allNotificationTriggers": "所有通知觸發器",
+    "noTriggers": "無觸發器",
+    "columns": {
+      "on": "開啟",
+      "rule": "規則",
+      "triggers": "觸發器"
+    },
+    "toggleAriaLabel": "切換通知規則",
+    "emptyFiltered": "沒有通知規則匹配您的篩選條件",
+    "detail": {
+      "ruleStatusLabel": "規則狀態",
+      "ruleStatusAriaLabel": "規則狀態",
+      "enabledText": "已啟用：此事件可以觸發通知。",
+      "disabledText": "已停用：此事件的通知被抑制。",
+      "assignedTriggersLabel": "分配的觸發器",
+      "noTriggersConfigured": "未配置觸發器。請在",
+      "triggersPageLink": "觸發器頁面",
+      "helpTextImplicitAll": "留空將此事件發送到所有通知觸發器。選擇任何觸發器會將此規則轉為允許清單。",
+      "helpTextExplicit": "只有選定的觸發器會接收此事件。留空會抑制此事件對所有觸發器的通知。",
+      "saving": "儲存中...",
+      "saveChanges": "儲存變更",
+      "reset": "重設",
+      "enabled": "已啟用",
+      "disabled": "已停用"
+    }
+  },
+  "securityView": {
+    "loadingVulnerabilityData": "正在載入漏洞資料...",
+    "scanNow": "立即掃描",
+    "scanning": "掃描中...",
+    "scanAllAriaLabel": "掃描所有容器",
+    "scanAllContainers": "掃描所有容器的漏洞",
+    "checkingScanner": "正在檢查掃描器可用性",
+    "runtimeUnavailable": "執行時檢查不可用；仍可嘗試掃描",
+    "filters": {
+      "severity": "嚴重程度",
+      "severityCritical": "嚴重",
+      "severityHigh": "高危",
+      "severityMedium": "中危",
+      "severityLow": "低危",
+      "fixAvailable": "修復可用",
+      "fixYes": "是",
+      "fixNo": "否",
+      "clearAll": "清除全部"
+    },
+    "columns": {
+      "image": "映像檔",
+      "critical": "嚴重",
+      "high": "高危",
+      "medium": "中危",
+      "low": "低危",
+      "fixable": "可修復",
+      "total": "總計"
+    },
+    "card": {
+      "vulnerabilities": "個漏洞",
+      "vsUpdate": "對比更新",
+      "fixable": "可修復",
+      "noFixesAvailable": "沒有可用修復",
+      "total": "總計"
+    },
+    "badge": {
+      "critical": "嚴重",
+      "high": "高危",
+      "medium": "中危",
+      "low": "低危"
+    },
+    "update": "更新",
+    "viewInContainers": "在容器中檢視",
+    "viewAllInContainers": "在容器中檢視全部",
+    "export": {
+      "label": "匯出",
+      "downloadReport": "下載報告"
+    },
+    "sbom": {
+      "label": "SBOM",
+      "loading": "正在載入 SBOM 文件...",
+      "loadingButton": "載入中...",
+      "refresh": "重新整理",
+      "hide": "隱藏",
+      "view": "檢視",
+      "download": "下載",
+      "format": "格式：",
+      "components": "組件：",
+      "generated": "產生時間："
+    },
+    "vuln": {
+      "noFix": "無修復",
+      "target": "目標："
+    },
+    "chooser": {
+      "title": "選擇要更新的容器",
+      "cancel": "取消"
+    }
+  },
+  "registriesView": {
+    "loadingRegistries": "正在載入倉庫...",
+    "loadError": "無法載入倉庫",
+    "filterPlaceholder": "按名稱或類型篩選...",
+    "clear": "清除",
+    "emptyFiltered": "沒有倉庫匹配您的篩選條件",
+    "columns": {
+      "registry": "倉庫",
+      "type": "類型",
+      "status": "狀態",
+      "url": "URL"
+    },
+    "badge": {
+      "private": "私有",
+      "public": "公開"
+    },
+    "card": {
+      "auth": "認證",
+      "status": "狀態"
+    },
+    "detail": {
+      "refreshing": "正在重新整理倉庫詳情...",
+      "status": "狀態",
+      "authentication": "認證",
+      "url": "URL"
+    }
+  },
+  "serversView": {
+    "loadingServerData": "正在載入伺服器資料...",
+    "loadError": "無法載入伺服器資料",
+    "filterPlaceholder": "按名稱或地址篩選...",
+    "clear": "清除",
+    "emptyFiltered": "沒有主機匹配您的篩選條件",
+    "justNow": "剛剛",
+    "never": "從未",
+    "columns": {
+      "host": "主機",
+      "address": "地址",
+      "status": "狀態",
+      "containers": "容器",
+      "lastSeen": "最後活躍"
+    },
+    "card": {
+      "containers": "容器",
+      "running": "執行中",
+      "images": "映像檔",
+      "lastSeen": "最後活躍"
+    },
+    "list": {
+      "containers": "個容器"
+    },
+    "detail": {
+      "containers": "容器",
+      "running": "執行中",
+      "stopped": "已停止",
+      "images": "映像檔",
+      "lastSeen": "最後活躍",
+      "refresh": "重新整理"
+    }
+  },
+  "triggersView": {
+    "loadingTriggers": "正在載入觸發器...",
+    "loadError": "無法載入觸發器",
+    "filterPlaceholder": "按名稱篩選...",
+    "clear": "清除",
+    "emptyFiltered": "沒有觸發器匹配您的篩選條件",
+    "columns": {
+      "trigger": "觸發器",
+      "type": "類型",
+      "status": "狀態"
+    },
+    "status": {
+      "active": "活躍",
+      "inactive": "不活躍"
+    },
+    "test": {
+      "testing": "測試中...",
+      "sent": "已發送！",
+      "failed": "失敗",
+      "test": "測試",
+      "testTrigger": "測試觸發器",
+      "runTest": "執行測試",
+      "testPassed": "測試通過",
+      "testFailed": "測試失敗",
+      "defaultError": "觸發器測試失敗"
+    },
+    "detail": {
+      "status": "狀態",
+      "refreshing": "正在重新整理觸發器詳情...",
+      "noConfig": "無配置屬性"
+    },
+    "list": {
+      "status": "狀態"
+    }
+  },
+  "watchersView": {
+    "loadingWatchers": "正在載入監視器...",
+    "loadError": "無法載入監視器",
+    "filterPlaceholder": "按名稱篩選...",
+    "clear": "清除",
+    "emptyFiltered": "沒有監視器匹配您的篩選條件",
+    "columns": {
+      "watcher": "監視器",
+      "status": "狀態",
+      "containers": "容器",
+      "schedule": "計劃",
+      "nextRun": "下次執行",
+      "lastRun": "上次執行"
+    },
+    "status": {
+      "watching": "監視中",
+      "paused": "已暫停"
+    },
+    "card": {
+      "containers": "容器",
+      "nextRun": "下次執行",
+      "lastRun": "上次執行",
+      "containersWatched": "監視 {count} 個容器"
+    },
+    "badge": {
+      "maint": "維護"
+    },
+    "detail": {
+      "cron": "Cron",
+      "lastRun": "上次執行",
+      "containersWatched": "監視的容器",
+      "schedule": "計劃",
+      "nextRun": "下次執行",
+      "viewContainers": "檢視容器",
+      "refreshing": "正在重新整理監視器詳情..."
+    }
+  }
+}

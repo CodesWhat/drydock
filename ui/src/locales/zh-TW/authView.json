@@ -1,0 +1,24 @@
+{
+  "authView": {
+    "loadingProviders": "正在載入身份驗證提供者...",
+    "loadError": "無法載入身份驗證提供者",
+    "filterPlaceholder": "按名稱篩選...",
+    "clearFilter": "清除",
+    "emptyFiltered": "沒有匹配篩選條件的提供者",
+    "detailRefreshing": "正在重新整理身份驗證詳情...",
+    "detailLoadError": "無法載入最新的身份驗證詳情",
+    "noConfig": "無配置屬性",
+    "columns": {
+      "provider": "提供者",
+      "type": "類型",
+      "status": "狀態"
+    },
+    "fields": {
+      "status": "狀態"
+    },
+    "badge": {
+      "basic": "基本",
+      "oidc": "OIDC"
+    }
+  }
+}
