@@ -15,4 +15,16 @@ pull_request_labels:
 files:
   - source: /ui/src/locales/en/**/*.json
     translation: /ui/src/locales/%locale%/**/%original_file_name%
+    languages_mapping:
+      locale:
+        de: de
+        es-ES: es
+        fr: fr
+        it: it
+        nl: nl
+        pl: pl
+        pt-BR: pt-BR
+        tr: tr
+        zh-CN: zh-CN
+        zh-TW: zh-TW
     update_option: update_as_unapproved

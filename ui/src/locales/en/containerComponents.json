@@ -251,7 +251,7 @@
       "recheckTooltip": "Recheck for updates",
       "columnsHeader": "Columns",
       "narrowViewportSuffix": "(narrow viewport)",
-      "autoHiddenBadgeTooltip": "{count} column(s) auto-hidden because the window is narrow. Widen the window or hide other columns to free space.",
+      "autoHiddenBadgeTooltip": "{count} columns auto-hidden because the window is narrow. Widen the window or hide other columns to free space.",
       "filterSearch": "Search: {value}",
       "filterStatus": "Status: {value}",
       "filterBouncer": "Bouncer: {value}",
