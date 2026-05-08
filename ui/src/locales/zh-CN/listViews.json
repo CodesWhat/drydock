@@ -14,7 +14,7 @@
       "previousPage": "上一页",
       "nextPage": "下一页"
     },
-    "emptyFiltered": "没有审计记录符合筛选条件",
+    "emptyFiltered": "没有审计记录匹配您的筛选条件",
     "columns": {
       "time": "时间",
       "event": "事件",
@@ -30,8 +30,8 @@
       "timestamp": "时间戳",
       "event": "事件",
       "image": "镜像",
-      "fromVersion": "原版本",
-      "toVersion": "目标版本",
+      "fromVersion": "从版本",
+      "toVersion": "到版本",
       "trigger": "触发器",
       "details": "详情"
     }
@@ -49,17 +49,17 @@
       "triggers": "触发器"
     },
     "toggleAriaLabel": "切换通知规则",
-    "emptyFiltered": "没有通知规则符合筛选条件",
+    "emptyFiltered": "没有通知规则匹配您的筛选条件",
     "detail": {
       "ruleStatusLabel": "规则状态",
       "ruleStatusAriaLabel": "规则状态",
       "enabledText": "已启用：此事件可以触发通知。",
-      "disabledText": "已禁用：此事件不会发送通知。",
-      "assignedTriggersLabel": "已分配的触发器",
+      "disabledText": "已禁用：此事件的通知被抑制。",
+      "assignedTriggersLabel": "分配的触发器",
       "noTriggersConfigured": "未配置触发器。请在",
       "triggersPageLink": "触发器页面",
-      "helpTextImplicitAll": "留空会将此事件发送给所有通知触发器。选择任何触发器后，此规则会变为允许列表。",
-      "helpTextExplicit": "只有选定的触发器会收到此事件。留空会禁止向所有触发器发送此事件。",
+      "helpTextImplicitAll": "留空将此事件发送到所有通知触发器。选择任何触发器会将此规则转为允许列表。",
+      "helpTextExplicit": "只有选定的触发器会接收此事件。留空会抑制此事件对所有触发器的通知。",
       "saving": "保存中...",
       "saveChanges": "保存更改",
       "reset": "重置",
@@ -81,7 +81,7 @@
       "severityHigh": "高危",
       "severityMedium": "中危",
       "severityLow": "低危",
-      "fixAvailable": "有可用修复",
+      "fixAvailable": "修复可用",
       "fixYes": "是",
       "fixNo": "否",
       "clearAll": "清除全部"
@@ -97,9 +97,9 @@
     },
     "card": {
       "vulnerabilities": "个漏洞",
-      "vsUpdate": "与更新相比",
+      "vsUpdate": "对比更新",
       "fixable": "可修复",
-      "noFixesAvailable": "无可用修复",
+      "noFixesAvailable": "没有可用修复",
       "total": "总计"
     },
     "badge": {
@@ -137,13 +137,13 @@
     }
   },
   "registriesView": {
-    "loadingRegistries": "正在加载镜像仓库...",
-    "loadError": "无法加载镜像仓库",
+    "loadingRegistries": "正在加载仓库...",
+    "loadError": "无法加载仓库",
     "filterPlaceholder": "按名称或类型筛选...",
     "clear": "清除",
-    "emptyFiltered": "没有镜像仓库符合筛选条件",
+    "emptyFiltered": "没有仓库匹配您的筛选条件",
     "columns": {
-      "registry": "镜像仓库",
+      "registry": "仓库",
       "type": "类型",
       "status": "状态",
       "url": "URL"
@@ -157,7 +157,7 @@
       "status": "状态"
     },
     "detail": {
-      "refreshing": "正在刷新镜像仓库详情...",
+      "refreshing": "正在刷新仓库详情...",
       "status": "状态",
       "authentication": "认证",
       "url": "URL"

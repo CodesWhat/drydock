@@ -182,7 +182,11 @@
       "emptyState": "沒有容器匹配您的篩選條件",
       "currentLabel": "目前",
       "latestLabel": "最新",
-      "blockedByBouncer": "被 Bouncer 阻止"
+      "blockedByBouncer": "被 Bouncer 阻止",
+      "registryErrorRateLimited": "Rate limited",
+      "registryErrorAuth": "Auth failed",
+      "registryErrorNotFound": "Not found",
+      "registryErrorCheckFailed": "Check failed"
     },
     "groupHeader": {
       "ungrouped": "未分組",
@@ -246,6 +250,8 @@
       "collapseAll": "全部摺疊",
       "recheckTooltip": "重新檢查更新",
       "columnsHeader": "列",
+      "narrowViewportSuffix": "(narrow viewport)",
+      "autoHiddenBadgeTooltip": "{count} column(s) auto-hidden because the window is narrow. Widen the window or hide other columns to free space.",
       "filterSearch": "搜尋：{value}",
       "filterStatus": "狀態：{value}",
       "filterBouncer": "Bouncer：{value}",

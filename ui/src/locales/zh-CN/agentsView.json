@@ -60,8 +60,8 @@
         "reset": "重置",
         "refresh": "刷新",
         "emptyMessage": "当前筛选条件下没有日志条目。",
-        "lastFetched": "上次获取：{time}",
-        "entries": "{count} 条日志",
+        "lastFetched": "最后获取时间：{time}",
+        "entries": "{count} 条记录",
         "statusLive": "在线",
         "statusOffline": "离线"
       },
