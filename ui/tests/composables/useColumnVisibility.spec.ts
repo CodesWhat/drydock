@@ -140,6 +140,15 @@ describe('useColumnVisibility', () => {
     }
   });
 
+  it('keeps host names with numeric suffixes readable by default', async () => {
+    const { useColumnVisibility } = await loadColumnVisibility();
+    const { allColumns } = useColumnVisibility();
+    const hostColumn = allColumns.find((col) => col.key === 'server');
+    expect(hostColumn?.size).toBeGreaterThanOrEqual(152);
+    expect(hostColumn?.minSize).toBeGreaterThanOrEqual(132);
+    expect(hostColumn?.maxSize).toBeGreaterThanOrEqual(240);
+  });
+
   it('should expose a shared actions column sizing value for responsive math', async () => {
     const { CONTAINER_TABLE_ACTIONS_SIZE } = await loadColumnVisibility();
     expect(CONTAINER_TABLE_ACTIONS_SIZE).toBe(180);
