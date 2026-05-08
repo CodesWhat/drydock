@@ -33,11 +33,11 @@ jobs:
           download_translations: true
           localization_branch_name: l10n_crowdin
           create_pull_request: true
-          pull_request_title: "i18n: sync translations from Crowdin"
+          pull_request_title: "🔧 chore(i18n): sync translations from Crowdin"
           pull_request_body: "Automated sync from Crowdin. Review wording, then merge."
           pull_request_labels: "translations,crowdin"
           pull_request_base_branch_name: main
-          commit_message: "i18n: sync translations from Crowdin"
+          commit_message: "🔧 chore(i18n): sync translations from Crowdin"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}

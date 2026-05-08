@@ -2186,6 +2186,20 @@ test('getLink should handle transformed tag in link', () => {
   ).toEqual('https://v1.2.3');
 });
 
+test('getLink should fall back to the original tag when transform regex is invalid', () => {
+  const { testable_getLink: getLink } = container;
+  expect(
+    getLink(
+      {
+        linkTemplate: 'https://v${transformed}',
+        transformTags: '[=>',
+        image: { tag: { semver: false } },
+      },
+      '1.2.3',
+    ),
+  ).toEqual('https://v1.2.3');
+});
+
 test('getLink should handle empty prerelease', () => {
   const { testable_getLink: getLink } = container;
   const result = getLink(
