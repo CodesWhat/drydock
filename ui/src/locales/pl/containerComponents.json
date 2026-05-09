@@ -182,7 +182,11 @@
       "emptyState": "Żadne kontenery nie pasują do wybranych filtrów",
       "currentLabel": "Aktualny",
       "latestLabel": "Najnowsze",
-      "blockedByBouncer": "Zablokowany przez Bouncera"
+      "blockedByBouncer": "Zablokowany przez Bouncera",
+      "registryErrorRateLimited": "Rate limited",
+      "registryErrorAuth": "Auth failed",
+      "registryErrorNotFound": "Not found",
+      "registryErrorCheckFailed": "Check failed"
     },
     "groupHeader": {
       "ungrouped": "Rozgrupowane",
@@ -246,6 +250,8 @@
       "collapseAll": "Zwiń wszystko",
       "recheckTooltip": "Sprawdź ponownie dostępność aktualizacji",
       "columnsHeader": "Kolumny",
+      "narrowViewportSuffix": "(narrow viewport)",
+      "autoHiddenBadgeTooltip": "{count} columns auto-hidden because the window is narrow. Widen the window or hide other columns to free space.",
       "filterSearch": "Szukaj: {value}",
       "filterStatus": "Stan: {value}",
       "filterBouncer": "Bouncer: {value}",

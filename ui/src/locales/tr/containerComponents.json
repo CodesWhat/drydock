@@ -182,7 +182,11 @@
       "emptyState": "Filtrelerinizle eşleşen kapsayıcı yok",
       "currentLabel": "Mevcut",
       "latestLabel": "En son",
-      "blockedByBouncer": "Bouncer tarafından engellendi"
+      "blockedByBouncer": "Bouncer tarafından engellendi",
+      "registryErrorRateLimited": "Rate limited",
+      "registryErrorAuth": "Auth failed",
+      "registryErrorNotFound": "Not found",
+      "registryErrorCheckFailed": "Check failed"
     },
     "groupHeader": {
       "ungrouped": "Gruplandırılmamış",
@@ -246,6 +250,8 @@
       "collapseAll": "Tümünü daralt",
       "recheckTooltip": "Güncellemeleri tekrar kontrol edin",
       "columnsHeader": "Sütunlar",
+      "narrowViewportSuffix": "(narrow viewport)",
+      "autoHiddenBadgeTooltip": "{count} columns auto-hidden because the window is narrow. Widen the window or hide other columns to free space.",
       "filterSearch": "Arama: {value}",
       "filterStatus": "Durum: {value}",
       "filterBouncer": "Bouncer: {value}",

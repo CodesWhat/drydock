@@ -125,7 +125,7 @@
       "legacyHashTitle": "偵測到舊版密碼雜湊",
       "curlHealthcheckTitle": "偵測到自訂 curl 健康檢查覆蓋",
       "envKeysLabel": "環境變數金鑰 ({count}): {keys}",
-      "labelKeysLabel": "Label keys ({count}): {keys}",
+      "labelKeysLabel": "標籤 ({count}): {keys}",
       "apiPathsLabel": "API 路徑 ({count}): {keys}",
       "healthcheckCommandLabel": "健康檢查命令：{command}"
     }
