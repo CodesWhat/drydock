@@ -109,12 +109,22 @@ jobs:
           snyk-version: v${{ env.SNYK_CLI_VERSION }}
 
       - name: Run Snyk Open Source scans
+        id: snyk_open_source
+        continue-on-error: true
         run: |
           set -euo pipefail
           ./scripts/snyk-deps-gate.sh --file=package-lock.json --package-manager=npm
           ./scripts/snyk-deps-gate.sh --file=app/package-lock.json --package-manager=npm
           ./scripts/snyk-deps-gate.sh --file=ui/package-lock.json --package-manager=npm
           ./scripts/snyk-deps-gate.sh --file=e2e/package-lock.json --package-manager=npm
+
+      - name: Fail if any Snyk scan errored
+        if: always()
+        run: |
+          if [ "${{ steps.snyk_open_source.outcome }}" = "failure" ]; then
+            echo "::error::Snyk Open Source scan failed"
+            exit 1
+          fi
 
   code:
     name: "🧠 Security: Snyk Code"
@@ -145,7 +155,17 @@ jobs:
           snyk-version: v${{ env.SNYK_CLI_VERSION }}
 
       - name: Run Snyk Code scan
+        id: snyk_code
+        continue-on-error: true
         run: ./scripts/snyk-code-gate.sh
+
+      - name: Fail if any Snyk scan errored
+        if: always()
+        run: |
+          if [ "${{ steps.snyk_code.outcome }}" = "failure" ]; then
+            echo "::error::Snyk Code scan failed"
+            exit 1
+          fi
 
   container:
     name: "🐳 Security: Snyk Container"
@@ -186,10 +206,20 @@ jobs:
           tags: ${{ env.SNYK_CONTAINER_IMAGE }}
           build-args: DD_VERSION=snyk
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=max,ignore-error=true
 
       - name: Run Snyk Container scan
+        id: snyk_container
+        continue-on-error: true
         run: ./scripts/snyk-container-gate.sh "${SNYK_CONTAINER_IMAGE}" --file=Dockerfile
+
+      - name: Fail if any Snyk scan errored
+        if: always()
+        run: |
+          if [ "${{ steps.snyk_container.outcome }}" = "failure" ]; then
+            echo "::error::Snyk Container scan failed"
+            exit 1
+          fi
 
   iac:
     name: "🏗️ Security: Snyk IaC"
@@ -219,7 +249,17 @@ jobs:
           snyk-version: v${{ env.SNYK_CLI_VERSION }}
 
       - name: Run Snyk IaC scan
+        id: snyk_iac
+        continue-on-error: true
         run: ./scripts/snyk-iac-gate.sh .
+
+      - name: Fail if any Snyk scan errored
+        if: always()
+        run: |
+          if [ "${{ steps.snyk_iac.outcome }}" = "failure" ]; then
+            echo "::error::Snyk IaC scan failed"
+            exit 1
+          fi
 
   skipped:
     name: "⏭️ Security: Snyk Scans Skipped"

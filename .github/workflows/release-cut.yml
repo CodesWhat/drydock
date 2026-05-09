@@ -220,6 +220,8 @@ jobs:
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
 
       - name: Log in to GHCR
+        id: login_ghcr
+        continue-on-error: true
         uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2  # v4.0.0
         with:
           registry: ghcr.io
@@ -227,17 +229,51 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Docker Hub
+        id: login_dockerhub
+        continue-on-error: true
         uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2  # v4.0.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Log in to Quay.io
+        id: login_quay
+        continue-on-error: true
         uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2  # v4.0.0
         with:
           registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Retry registry logins on failure
+        if: steps.login_ghcr.outcome == 'failure' || steps.login_dockerhub.outcome == 'failure' || steps.login_quay.outcome == 'failure'
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+          QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+          GHCR_OUTCOME: ${{ steps.login_ghcr.outcome }}
+          DOCKERHUB_OUTCOME: ${{ steps.login_dockerhub.outcome }}
+          QUAY_OUTCOME: ${{ steps.login_quay.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "${GHCR_OUTCOME}" = "failure" ]; then
+            for i in 1 2 3; do
+              echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin && break || sleep $((5*i))
+            done
+          fi
+          if [ "${DOCKERHUB_OUTCOME}" = "failure" ]; then
+            for i in 1 2 3; do
+              echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin && break || sleep $((5*i))
+            done
+          fi
+          if [ "${QUAY_OUTCOME}" = "failure" ]; then
+            for i in 1 2 3; do
+              echo "${QUAY_PASSWORD}" | docker login quay.io -u "${QUAY_USERNAME}" --password-stdin && break || sleep $((5*i))
+            done
+          fi
 
       - name: Docker metadata labels
         id: meta
@@ -412,12 +448,21 @@ jobs:
         run: |
           set -euo pipefail
           artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
-          cosign sign-blob --yes \
-            --bundle "${artifact}.bundle" \
-            --new-bundle-format=false \
-            --output-signature "${artifact}.sig" \
-            --output-certificate "${artifact}.pem" \
-            "${artifact}"
+          for attempt in 1 2 3; do
+            if cosign sign-blob --yes \
+              --bundle "${artifact}.bundle" \
+              --new-bundle-format=false \
+              --output-signature "${artifact}.sig" \
+              --output-certificate "${artifact}.pem" \
+              "${artifact}"; then
+              break
+            fi
+            if [ "${attempt}" -eq 3 ]; then
+              echo "::error::cosign sign-blob failed after 3 attempts"
+              exit 1
+            fi
+            sleep $((5*attempt))
+          done
 
           # Cosign v3 may only emit bundle output in some keyless flows.
           # Materialize legacy signature/cert files from the bundle when needed.
@@ -544,16 +589,30 @@ jobs:
             prerelease_flag="--prerelease"
           fi
 
-          gh release view "${RELEASE_TAG}" >/dev/null 2>&1 || gh release create "${RELEASE_TAG}" --title "${RELEASE_TAG}" --notes-file "${RELEASE_NOTES_PATH}" ${prerelease_flag}
-          gh release edit "${RELEASE_TAG}" --title "${RELEASE_TAG}" --notes-file "${RELEASE_NOTES_PATH}" ${prerelease_flag}
-          gh release upload "${RELEASE_TAG}" \
-            "dist/drydock-${RELEASE_TAG}.tar.gz" \
-            "dist/drydock-${RELEASE_TAG}.tar.gz.sha256" \
-            "dist/drydock-${RELEASE_TAG}.tar.gz.bundle" \
-            "dist/drydock-${RELEASE_TAG}.tar.gz.sig" \
-            "dist/drydock-${RELEASE_TAG}.tar.gz.intoto.jsonl" \
-            "dist/drydock-${RELEASE_TAG}.tar.gz.pem" \
-            --clobber
+          for attempt in 1 2 3; do
+            if gh release view "${RELEASE_TAG}" >/dev/null 2>&1 || gh release create "${RELEASE_TAG}" --title "${RELEASE_TAG}" --notes-file "${RELEASE_NOTES_PATH}" ${prerelease_flag}; then :; else
+              if [ "${attempt}" -eq 3 ]; then exit 1; fi
+              sleep $((5*attempt))
+              continue
+            fi
+            if gh release edit "${RELEASE_TAG}" --title "${RELEASE_TAG}" --notes-file "${RELEASE_NOTES_PATH}" ${prerelease_flag}; then :; else
+              if [ "${attempt}" -eq 3 ]; then exit 1; fi
+              sleep $((5*attempt))
+              continue
+            fi
+            if gh release upload "${RELEASE_TAG}" \
+              "dist/drydock-${RELEASE_TAG}.tar.gz" \
+              "dist/drydock-${RELEASE_TAG}.tar.gz.sha256" \
+              "dist/drydock-${RELEASE_TAG}.tar.gz.bundle" \
+              "dist/drydock-${RELEASE_TAG}.tar.gz.sig" \
+              "dist/drydock-${RELEASE_TAG}.tar.gz.intoto.jsonl" \
+              "dist/drydock-${RELEASE_TAG}.tar.gz.pem" \
+              --clobber; then
+              break
+            fi
+            if [ "${attempt}" -eq 3 ]; then exit 1; fi
+            sleep $((5*attempt))
+          done
 
       - name: Release summary
         env:

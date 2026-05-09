@@ -150,8 +150,12 @@ jobs:
           package-manager-cache: false
 
       - name: Install dependencies
-        run: npm ci
-        working-directory: ${{ matrix.package }}
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08  # v3.0.2
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: cd ${{ matrix.package }} && npm ci
 
       - name: Restore Stryker incremental cache
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7  # v5.0.4
@@ -256,13 +260,15 @@ jobs:
           REPO_SLUG: ${{ github.repository }}
           REF_NAME: ${{ github.ref_name }}
         run: |
-          curl \
-            --fail-with-body \
-            --request PUT \
-            --header "X-Api-Key: ${STRYKER_DASHBOARD_API_KEY}" \
-            --header "Content-Type: application/json" \
-            --data @artifacts/aggregate/mutation-score.json \
-            "https://dashboard.stryker-mutator.io/api/reports/github.com/${REPO_SLUG}/${REF_NAME}"
+          for attempt in 1 2 3; do
+            curl \
+              --fail-with-body \
+              --request PUT \
+              --header "X-Api-Key: ${STRYKER_DASHBOARD_API_KEY}" \
+              --header "Content-Type: application/json" \
+              --data @artifacts/aggregate/mutation-score.json \
+              "https://dashboard.stryker-mutator.io/api/reports/github.com/${REPO_SLUG}/${REF_NAME}" && break || (rc=$?; if [ $attempt -eq 3 ]; then exit $rc; fi; sleep $((5*attempt)))
+          done
 
       - name: Upload aggregate mutation summary
         if: always()

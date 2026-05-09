@@ -24,6 +24,11 @@
 # Biome runs directly (not via qlty) because qlty's biome integration
 # does not reliably apply fixes. Qlty handles all other linters.
 
+commit-msg:
+  commands:
+    validate:
+      run: node scripts/validate-commit-msg.mjs {1}
+
 pre-commit:
   piped: true
   commands:
@@ -75,6 +80,10 @@ pre-push:
       run: ./scripts/qlty-check-gate.sh all
       priority: 4
       timeout: 4m
+    qlty-smells:
+      run: node scripts/qlty-smells-gate.mjs --scope=all || true
+      priority: 5
+      timeout: 2m
 
     # ── Coverage: sharded app+ui parallel, 100% threshold ────────────
     # Runs tests with coverage. On failure, writes .coverage-gaps.json
@@ -82,15 +91,25 @@ pre-push:
     # Honors DD_COVERAGE_FAIL_FAST=1 for sequential first-failure mode.
     coverage:
       run: ./scripts/pre-push-coverage.sh
-      priority: 5
+      priority: 6
       timeout: 6m
 
     # ── Build: sharded app+ui parallel, no tests ─────────────────────
     # Tests already ran in the coverage step, so this is tsc/vite only.
     build:
       run: ./scripts/pre-push-build.sh
-      priority: 6
+      priority: 7
       timeout: 4m
+
+    # ── Docker build (opt-in via DD_LOCAL_DOCKER=1) ───────────────────
+    # Set DD_LOCAL_DOCKER=1 to catch Dockerfile bugs locally before push.
+    docker-build:
+      run: docker build --build-arg DD_VERSION=local -t drydock:local .
+      skip:
+        - run: '[ -z "$DD_LOCAL_DOCKER" ]'
+      priority: 8
+      timeout: 10m
+      fail_text: "Docker QA build failed — fix Dockerfile before push"
 
     # ── Zizmor: GitHub Actions security scanner (blocking) ───────────
     zizmor:
@@ -98,5 +117,5 @@ pre-push:
       run: zizmor .github/workflows/
       skip:
         - run: '! command -v zizmor >/dev/null 2>&1'
-      priority: 7
+      priority: 9
       timeout: 30s
