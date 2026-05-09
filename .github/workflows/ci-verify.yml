@@ -512,8 +512,8 @@ jobs:
           load: true
           tags: drydock:dev
           build-args: DD_VERSION=ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max,ignore-error=true
+          cache-from: type=gha,scope=drydock
+          cache-to: type=gha,mode=max,scope=drydock,ignore-error=true
 
       - name: Set up QEMU (multi-arch smoke build)
         uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
@@ -525,8 +525,8 @@ jobs:
           push: false
           platforms: linux/amd64,linux/arm64
           build-args: DD_VERSION=ci-multiarch-smoke
-          cache-from: type=gha
-          cache-to: type=gha,mode=max,ignore-error=true
+          cache-from: type=gha,scope=drydock
+          cache-to: type=gha,mode=max,scope=drydock,ignore-error=true
 
       - name: Export QA image artifact
         run: |

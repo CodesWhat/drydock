@@ -299,8 +299,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: DD_VERSION=${{ steps.next.outputs.next_version }}
           sbom: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=drydock
+          cache-to: type=gha,mode=max,scope=drydock,ignore-error=true
 
       - name: Retry manifest publish on transient registry failure
         id: manifest-retry
