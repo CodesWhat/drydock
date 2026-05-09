@@ -66,7 +66,7 @@
         "statusOffline": "離線"
       },
       "fields": {
-        "cpus": "CPUs",
+        "cpus": "CPU",
         "memory": "記憶體",
         "images": "映像檔",
         "uptime": "執行時間",

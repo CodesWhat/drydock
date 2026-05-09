@@ -15,13 +15,13 @@
     },
     "separator": "或使用以下方式继续",
     "rememberMe": "记住我",
-    "noMethods": "未配置身份验证方式。",
+    "noMethods": "未配置任何身份验证方法。",
     "errors": {
-      "loadFailed": "无法加载身份验证方式",
+      "loadFailed": "无法加载身份验证方法",
       "invalidCredentials": "用户名或密码无效",
       "oidcFailed": "无法连接到 {name}",
-      "providerBasic": "基本身份验证 '{name}'：{error}",
-      "providerOidc": "OIDC 提供方 '{name}'：{error}",
+      "providerBasic": "基本认证 '{name}'：{error}",
+      "providerOidc": "OIDC 提供者 '{name}'：{error}",
       "providerNamed": "{type} '{name}'：{error}",
       "providerGeneric": "{provider}：{error}"
     },

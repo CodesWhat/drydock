@@ -45,10 +45,10 @@
     },
     "securityEmptyState": {
       "noDataTitle": "暂无漏洞数据",
-      "noDataBody": "运行扫描以检查容器是否存在已知漏洞",
-      "filteredTitle": "没有镜像符合筛选条件",
+      "noDataBody": "运行扫描以检查您的容器的已知漏洞",
+      "filteredTitle": "没有镜像匹配您的筛选条件",
       "clearFilters": "清除所有筛选",
-      "setupGuide": "配置指南",
+      "setupGuide": "设置指南",
       "scanNow": "立即扫描"
     }
   }

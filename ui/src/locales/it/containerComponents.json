@@ -182,7 +182,11 @@
       "emptyState": "Nessun container corrisponde ai filtri",
       "currentLabel": "Corrente",
       "latestLabel": "Ultima",
-      "blockedByBouncer": "Bloccato da Bouncer"
+      "blockedByBouncer": "Bloccato da Bouncer",
+      "registryErrorRateLimited": "Rate limited",
+      "registryErrorAuth": "Auth failed",
+      "registryErrorNotFound": "Not found",
+      "registryErrorCheckFailed": "Check failed"
     },
     "groupHeader": {
       "ungrouped": "Non raggruppati",
@@ -246,6 +250,8 @@
       "collapseAll": "Comprimi tutto",
       "recheckTooltip": "Ricontrolla aggiornamenti",
       "columnsHeader": "Colonne",
+      "narrowViewportSuffix": "(narrow viewport)",
+      "autoHiddenBadgeTooltip": "{count} columns auto-hidden because the window is narrow. Widen the window or hide other columns to free space.",
       "filterSearch": "Ricerca: {value}",
       "filterStatus": "Stato: {value}",
       "filterBouncer": "Bouncer: {value}",
