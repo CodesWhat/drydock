@@ -261,17 +261,26 @@ jobs:
           set -euo pipefail
           if [ "${GHCR_OUTCOME}" = "failure" ]; then
             for i in 1 2 3; do
-              echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin && break || sleep $((5*i))
+              if echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin; then
+                break
+              fi
+              sleep $((5*i))
             done
           fi
           if [ "${DOCKERHUB_OUTCOME}" = "failure" ]; then
             for i in 1 2 3; do
-              echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin && break || sleep $((5*i))
+              if echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin; then
+                break
+              fi
+              sleep $((5*i))
             done
           fi
           if [ "${QUAY_OUTCOME}" = "failure" ]; then
             for i in 1 2 3; do
-              echo "${QUAY_PASSWORD}" | docker login quay.io -u "${QUAY_USERNAME}" --password-stdin && break || sleep $((5*i))
+              if echo "${QUAY_PASSWORD}" | docker login quay.io -u "${QUAY_USERNAME}" --password-stdin; then
+                break
+              fi
+              sleep $((5*i))
             done
           fi
 

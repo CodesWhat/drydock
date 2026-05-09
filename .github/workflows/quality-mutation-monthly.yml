@@ -261,13 +261,20 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: |
           for attempt in 1 2 3; do
-            curl \
+            if curl \
               --fail-with-body \
               --request PUT \
               --header "X-Api-Key: ${STRYKER_DASHBOARD_API_KEY}" \
               --header "Content-Type: application/json" \
               --data @artifacts/aggregate/mutation-score.json \
-              "https://dashboard.stryker-mutator.io/api/reports/github.com/${REPO_SLUG}/${REF_NAME}" && break || (rc=$?; if [ $attempt -eq 3 ]; then exit $rc; fi; sleep $((5*attempt)))
+              "https://dashboard.stryker-mutator.io/api/reports/github.com/${REPO_SLUG}/${REF_NAME}"; then
+              break
+            fi
+            rc=$?
+            if [ "$attempt" -eq 3 ]; then
+              exit "$rc"
+            fi
+            sleep $((5*attempt))
           done
 
       - name: Upload aggregate mutation summary
