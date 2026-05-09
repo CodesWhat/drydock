@@ -6,11 +6,12 @@ WORKDIR /home/node/app
 LABEL maintainer="CodesWhat"
 EXPOSE 3000
 
-ARG DD_VERSION=unknown
-
 ENV WORKDIR=/home/node/app
 ENV DD_LOG_FORMAT=text
-ENV DD_VERSION=$DD_VERSION
+# DD_VERSION intentionally omitted from base stage so the heavy install/
+# build layers stay cacheable across release tags. The release stage at
+# the bottom of this file reintroduces ARG/ENV DD_VERSION as the final
+# layer, where only the metadata changes per build.
 
 HEALTHCHECK --interval=30s --timeout=5s CMD ["sh", "-c", "if [ -n \"$DD_SERVER_ENABLED\" ] && [ \"$DD_SERVER_ENABLED\" != 'true' ]; then exit 0; fi; /bin/healthcheck ${DD_SERVER_PORT:-3000}"]
 
@@ -92,3 +93,8 @@ COPY --from=app-build /home/node/app/package.json ./package.json
 
 # Copy ui
 COPY --from=ui-build /home/node/ui/dist/ ./ui
+
+# DD_VERSION is the only per-build-tag layer — keep it last so every
+# layer above remains cache-hittable across rc.N → rc.N+1 builds.
+ARG DD_VERSION=unknown
+ENV DD_VERSION=$DD_VERSION

@@ -1,6 +1,6 @@
 {
   "common": {
-    "loading": "正在加载…",
+    "loading": "加载中...",
     "back": "返回",
     "cancel": "取消",
     "save": "保存",

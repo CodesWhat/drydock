@@ -182,7 +182,11 @@
       "emptyState": "Er zijn geen containers die overeenkomen met uw filters",
       "currentLabel": "Huidig",
       "latestLabel": "Nieuwste",
-      "blockedByBouncer": "Geblokkeerd door Bouncer"
+      "blockedByBouncer": "Geblokkeerd door Bouncer",
+      "registryErrorRateLimited": "Rate limited",
+      "registryErrorAuth": "Auth failed",
+      "registryErrorNotFound": "Not found",
+      "registryErrorCheckFailed": "Check failed"
     },
     "groupHeader": {
       "ungrouped": "Niet gegroepeerd",
@@ -246,6 +250,8 @@
       "collapseAll": "Alles samenvouwen",
       "recheckTooltip": "Controleer opnieuw op updates",
       "columnsHeader": "Kolommen",
+      "narrowViewportSuffix": "(narrow viewport)",
+      "autoHiddenBadgeTooltip": "{count} columns auto-hidden because the window is narrow. Widen the window or hide other columns to free space.",
       "filterSearch": "Zoeken: {value}",
       "filterStatus": "Status: {value}",
       "filterBouncer": "Bouncer: {value}",

@@ -1,15 +1,15 @@
 {
   "authView": {
-    "loadingProviders": "正在加载身份验证提供方...",
-    "loadError": "无法加载身份验证提供方",
+    "loadingProviders": "正在加载身份验证提供者...",
+    "loadError": "无法加载身份验证提供者",
     "filterPlaceholder": "按名称筛选...",
     "clearFilter": "清除",
-    "emptyFiltered": "没有提供方符合筛选条件",
+    "emptyFiltered": "没有匹配筛选条件的提供者",
     "detailRefreshing": "正在刷新身份验证详情...",
     "detailLoadError": "无法加载最新的身份验证详情",
     "noConfig": "无配置属性",
     "columns": {
-      "provider": "提供方",
+      "provider": "提供者",
       "type": "类型",
       "status": "状态"
     },
@@ -17,7 +17,7 @@
       "status": "状态"
     },
     "badge": {
-      "basic": "Basic",
+      "basic": "基本",
       "oidc": "OIDC"
     }
   }
