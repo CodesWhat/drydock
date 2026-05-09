@@ -120,8 +120,10 @@ jobs:
 
       - name: Fail if any Snyk scan errored
         if: always()
+        env:
+          OUTCOME: ${{ steps.snyk_open_source.outcome }}
         run: |
-          if [ "${{ steps.snyk_open_source.outcome }}" = "failure" ]; then
+          if [ "$OUTCOME" = "failure" ]; then
             echo "::error::Snyk Open Source scan failed"
             exit 1
           fi
@@ -161,8 +163,10 @@ jobs:
 
       - name: Fail if any Snyk scan errored
         if: always()
+        env:
+          OUTCOME: ${{ steps.snyk_code.outcome }}
         run: |
-          if [ "${{ steps.snyk_code.outcome }}" = "failure" ]; then
+          if [ "$OUTCOME" = "failure" ]; then
             echo "::error::Snyk Code scan failed"
             exit 1
           fi
@@ -215,8 +219,10 @@ jobs:
 
       - name: Fail if any Snyk scan errored
         if: always()
+        env:
+          OUTCOME: ${{ steps.snyk_container.outcome }}
         run: |
-          if [ "${{ steps.snyk_container.outcome }}" = "failure" ]; then
+          if [ "$OUTCOME" = "failure" ]; then
             echo "::error::Snyk Container scan failed"
             exit 1
           fi
@@ -255,8 +261,10 @@ jobs:
 
       - name: Fail if any Snyk scan errored
         if: always()
+        env:
+          OUTCOME: ${{ steps.snyk_iac.outcome }}
         run: |
-          if [ "${{ steps.snyk_iac.outcome }}" = "failure" ]; then
+          if [ "$OUTCOME" = "failure" ]; then
             echo "::error::Snyk IaC scan failed"
             exit 1
           fi
