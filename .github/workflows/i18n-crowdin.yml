@@ -31,6 +31,17 @@ jobs:
           upload_sources: true
           upload_translations: true
           download_translations: true
+          download_translations_args: >-
+            --language=de
+            --language=es-ES
+            --language=fr
+            --language=it
+            --language=nl
+            --language=pl
+            --language=pt-BR
+            --language=tr
+            --language=zh-CN
+            --language=zh-TW
           localization_branch_name: l10n_crowdin
           create_pull_request: true
           pull_request_title: "🔧 chore(i18n): sync translations from Crowdin"
