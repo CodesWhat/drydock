@@ -753,5 +753,127 @@ describe('useGlobalUpdateToast', () => {
       await settle();
       expect(toast.toasts.value.slice(before)).toHaveLength(0);
     });
+
+    it('refuses a duplicate installation and warns', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const first = mountGlobalToast();
+
+      // Second install must bail with a warning rather than register a second
+      // set of listeners. If the guard failed, the next dispatch would
+      // double-fire — so the assertion below also covers that.
+      const second = mountGlobalToast();
+      const myWarns = warnSpy.mock.calls.filter(
+        (c) => typeof c[0] === 'string' && c[0].includes('useGlobalUpdateToast'),
+      );
+      expect(myWarns).toHaveLength(1);
+      expect(myWarns[0][0]).toMatch(/already installed/i);
+
+      const before = first.toast.toasts.value.length;
+      dispatch('dd:sse-update-applied', {
+        containerId: 'c-dup',
+        containerName: 'nginx',
+        operationId: 'op-dup',
+        batchId: null,
+      });
+      await settle();
+      expect(first.toast.toasts.value.slice(before)).toHaveLength(1);
+
+      second.wrapper.unmount();
+      first.wrapper.unmount();
+      warnSpy.mockRestore();
+    });
+
+    it('allows reinstallation after the original scope disposes', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const first = mountGlobalToast();
+      first.wrapper.unmount();
+
+      // After dispose, the module-level `installed` flag resets, so a fresh
+      // install on a new App.vue mount (e.g., after a hot reload) works
+      // without a warning.
+      const second = mountGlobalToast();
+      const myWarns = warnSpy.mock.calls.filter(
+        (c) => typeof c[0] === 'string' && c[0].includes('useGlobalUpdateToast'),
+      );
+      expect(myWarns).toHaveLength(0);
+
+      second.wrapper.unmount();
+      warnSpy.mockRestore();
+    });
+
+    it('evicts the oldest dedup entry once the cap is reached', async () => {
+      const { wrapper } = mountGlobalToast();
+      const store = useToastStore();
+      const addSpy = vi.spyOn(store, 'add');
+
+      // Fire the bookkeeping operationId first so it is the oldest in the map.
+      dispatch('dd:sse-update-applied', {
+        containerName: 'first',
+        operationId: 'op-first',
+        batchId: null,
+      });
+      await settle();
+      expect(addSpy).toHaveBeenCalledTimes(1);
+
+      // Fill the dedup map up to its cap with 500 more distinct operationIds.
+      // After 500 of these (size briefly reaches 501 in flight), the cap check
+      // evicts the oldest entry (`op-first`).
+      for (let i = 0; i < 500; i += 1) {
+        dispatch('dd:sse-update-applied', {
+          containerName: `c-${i}`,
+          operationId: `op-fill-${i}`,
+          batchId: null,
+        });
+      }
+      await settle();
+      expect(addSpy).toHaveBeenCalledTimes(501);
+
+      // Replay `op-first`. If it had still been in the dedup map this would
+      // be suppressed; eviction must allow it to fire again.
+      dispatch('dd:sse-update-applied', {
+        containerName: 'first',
+        operationId: 'op-first',
+        batchId: null,
+      });
+      await settle();
+      expect(addSpy).toHaveBeenCalledTimes(502);
+
+      wrapper.unmount();
+    });
+
+    it('does not evict when the dedup map is below the cap', async () => {
+      const { wrapper } = mountGlobalToast();
+      const store = useToastStore();
+      const addSpy = vi.spyOn(store, 'add');
+
+      dispatch('dd:sse-update-applied', {
+        containerName: 'first',
+        operationId: 'op-first',
+        batchId: null,
+      });
+      await settle();
+      expect(addSpy).toHaveBeenCalledTimes(1);
+
+      // Fill far below the cap; the oldest entry must NOT be evicted, so a
+      // replay of `op-first` should still be deduplicated.
+      for (let i = 0; i < 50; i += 1) {
+        dispatch('dd:sse-update-applied', {
+          containerName: `c-${i}`,
+          operationId: `op-fill-${i}`,
+          batchId: null,
+        });
+      }
+      await settle();
+
+      dispatch('dd:sse-update-applied', {
+        containerName: 'first',
+        operationId: 'op-first',
+        batchId: null,
+      });
+      await settle();
+      expect(addSpy).toHaveBeenCalledTimes(51);
+
+      wrapper.unmount();
+    });
   });
 });

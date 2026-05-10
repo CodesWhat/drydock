@@ -8,11 +8,21 @@ import { useToast } from './useToast';
 // toast for the same terminal event.
 const COMPLETED_OPERATION_TTL_MS = 5 * 60 * 1000;
 
+// Hard ceiling on the dedup map size. The TTL alone bounds memory under
+// normal use; this cap defends against runaway operation throughput
+// (e.g. an agent loop) piling entries faster than the TTL can drain them.
+const COMPLETED_OPERATION_MAX_ENTRIES = 500;
+
 // Safety net: if no matching container-state event arrives (e.g., remote
 // host whose state events do not relay, or the watcher missed the change)
 // fire the toast after this delay so the user is never left without
 // confirmation. The primary trigger is the container-state SSE event.
 export const UPDATE_TOAST_FALLBACK_DELAY_MS = 5000;
+
+// Module-level guard. The composable registers six globalThis listeners
+// and is intended to be installed once at App.vue. A second call would
+// silently double-fire every toast; we log and bail instead.
+let installed = false;
 
 interface PendingToast {
   containerId?: string;
@@ -46,6 +56,12 @@ function getDetail(event: Event): Record<string, unknown> | undefined {
  * deleted containers).
  */
 export function useGlobalUpdateToast() {
+  if (installed) {
+    console.warn('[useGlobalUpdateToast] already installed; ignoring duplicate call');
+    return;
+  }
+  installed = true;
+
   const toast = useToast();
   const { t } = useI18n();
 
@@ -58,6 +74,15 @@ export function useGlobalUpdateToast() {
   let pendingNonce = 0;
 
   function recordCompleted(operationId: string) {
+    if (completedOperationIds.size >= COMPLETED_OPERATION_MAX_ENTRIES) {
+      // Map iteration is insertion-order; the first entry is the oldest.
+      // Size check guarantees at least one entry, so the loop body always runs.
+      for (const [oldestKey, oldestTimer] of completedOperationIds) {
+        clearTimeout(oldestTimer);
+        completedOperationIds.delete(oldestKey);
+        break;
+      }
+    }
     const timer = setTimeout(() => {
       completedOperationIds.delete(operationId);
     }, COMPLETED_OPERATION_TTL_MS);
@@ -147,7 +172,7 @@ export function useGlobalUpdateToast() {
       newContainerId: getDetailString(detail.newContainerId),
       containerName: getDetailString(detail.containerName),
       fire: () => {
-        if (rollbackReason !== undefined) {
+        if (rollbackReason) {
           if (isCancelled) {
             toast.success(t('containersView.toast.cancelled', { name }));
             return;
@@ -222,5 +247,6 @@ export function useGlobalUpdateToast() {
       clearTimeout(timer);
     }
     completedOperationIds.clear();
+    installed = false;
   });
 }
