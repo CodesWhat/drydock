@@ -1689,16 +1689,16 @@ describe('SSE Router', () => {
     test('prefers header over query param when both are present', () => {
       const handler = getHandler();
       const req = createSSERequestWithQuery('127.0.0.1', 'session-127.0.0.1', {
-        'last-event-id': 'query-id',
+        'last-event-id': 'boot-q:2',
       });
-      req.headers = { 'last-event-id': 'header-id' };
+      req.headers = { 'last-event-id': 'boot-h:1' };
       const res = createSSEResponse();
 
       handler(req, res);
 
-      expect(mockSseEventBuffer.replaySince).toHaveBeenCalledWith('header-id', expect.any(Number));
+      expect(mockSseEventBuffer.replaySince).toHaveBeenCalledWith('boot-h:1', expect.any(Number));
       expect(mockSseEventBuffer.replaySince).not.toHaveBeenCalledWith(
-        'query-id',
+        'boot-q:2',
         expect.any(Number),
       );
     });
@@ -1708,6 +1708,53 @@ describe('SSE Router', () => {
       const req = createSSERequestWithQuery('127.0.0.1', 'session-127.0.0.1', {
         'last-event-id': '',
       });
+      const res = createSSEResponse();
+
+      handler(req, res);
+
+      expect(mockSseEventBuffer.replaySince).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['no colon', 'foobar'],
+      ['leading colon', ':5'],
+      ['trailing colon (missing counter)', 'boot-1:'],
+      ['non-integer counter', 'boot-1:abc'],
+      ['negative counter', 'boot-1:-5'],
+      ['floating-point counter', 'boot-1:1.5'],
+      ['whitespace', 'boot 1:5'],
+      ['html injection attempt', '<script>:1'],
+    ])('ignores malformed query last-event-id (%s)', (_label, badValue) => {
+      const handler = getHandler();
+      const req = createSSERequestWithQuery('127.0.0.1', 'session-127.0.0.1', {
+        'last-event-id': badValue,
+      });
+      const res = createSSEResponse();
+
+      handler(req, res);
+
+      expect(mockSseEventBuffer.replaySince).not.toHaveBeenCalled();
+    });
+
+    test('ignores malformed header but falls back to a valid query param', () => {
+      const handler = getHandler();
+      const req = createSSERequestWithQuery('127.0.0.1', 'session-127.0.0.1', {
+        'last-event-id': 'boot-q:7',
+      });
+      req.headers = { 'last-event-id': '<script>' };
+      const res = createSSEResponse();
+
+      handler(req, res);
+
+      expect(mockSseEventBuffer.replaySince).toHaveBeenCalledWith('boot-q:7', expect.any(Number));
+    });
+
+    test('ignores both inputs when both are malformed', () => {
+      const handler = getHandler();
+      const req = createSSERequestWithQuery('127.0.0.1', 'session-127.0.0.1', {
+        'last-event-id': 'still-bad',
+      });
+      req.headers = { 'last-event-id': 'also-bad' };
       const res = createSSEResponse();
 
       handler(req, res);

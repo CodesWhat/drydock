@@ -92,6 +92,17 @@ let processShutdownHandlersRegistered = false;
 // identifiers cannot be correlated across process restarts.
 const SSE_LOG_IP_SALT = randomBytes(16);
 
+// Last-Event-ID values are minted server-side as `<bootId>:<counter>` where
+// bootId is a UUID (hex + hyphens) and counter is a non-negative integer.
+// Anything that does not match this shape is rejected at the request boundary
+// before reaching the buffer code path. Defense in depth: the buffer's own
+// parser also rejects malformed input, but we should not let arbitrary
+// client strings flow into that code at all.
+const LAST_EVENT_ID_PATTERN = /^[A-Za-z0-9_-]+:\d+$/;
+function sanitizeLastEventId(value: unknown): string | undefined {
+  return typeof value === 'string' && LAST_EVENT_ID_PATTERN.test(value) ? value : undefined;
+}
+
 function getClientIp(req: Request): string {
   return req.ip ?? 'unknown';
 }
@@ -266,17 +277,18 @@ function eventsHandler(req: Request, res: Response): void {
   // tick. Any broadcast that fires concurrently will be queued after this
   // synchronous block, and the client will receive it via the live fan-out
   // because we add `client` to `clients` immediately after this block.
-  const headerLastEventId = req.headers?.['last-event-id'];
-  const queryLastEventIdRaw = req.query?.['last-event-id'];
-  const queryLastEventId =
-    typeof queryLastEventIdRaw === 'string' && queryLastEventIdRaw.length > 0
-      ? queryLastEventIdRaw
-      : undefined;
-  const lastEventId =
-    typeof headerLastEventId === 'string' && headerLastEventId.length > 0
-      ? headerLastEventId
-      : queryLastEventId;
-  if (typeof lastEventId === 'string' && lastEventId.length > 0) {
+  //
+  // We accept Last-Event-ID from both the standard header and a query param
+  // (browser EventSource cannot set custom headers on reconnect). Both inputs
+  // are filtered against the canonical `<bootId>:<counter>` shape before any
+  // further processing — malformed values are ignored rather than passed
+  // through. `parseEventId` inside `replaySince` already rejects bad shapes,
+  // but rejecting at the boundary prevents arbitrary client input from
+  // reaching the buffer code path at all.
+  const headerLastEventId = sanitizeLastEventId(req.headers?.['last-event-id']);
+  const queryLastEventId = sanitizeLastEventId(req.query?.['last-event-id']);
+  const lastEventId = headerLastEventId ?? queryLastEventId;
+  if (lastEventId !== undefined) {
     const replayResult = sseEventBuffer.replaySince(lastEventId, Date.now());
     if (replayResult.kind === 'resync-required') {
       eventCounter += 1;
