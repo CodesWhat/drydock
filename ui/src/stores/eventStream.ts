@@ -111,6 +111,7 @@ export interface SseEventBus {
 type EventStreamSubscriber = (payload: unknown, event: EventStreamEvent) => void;
 
 const MAX_RECENT_EVENTS = 500;
+const SSE_BASE_URL = '/api/v1/events/ui';
 
 function getPositiveInteger(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
@@ -232,10 +233,18 @@ export const useEventStreamStore = defineStore('eventStream', () => {
     doConnect();
   }
 
+  function buildSseUrl(): string {
+    const id = lastEventId.value;
+    if (!id) {
+      return SSE_BASE_URL;
+    }
+    return `${SSE_BASE_URL}?last-event-id=${encodeURIComponent(id)}`;
+  }
+
   function doConnect(): void {
     closeSource();
     status.value = 'connecting';
-    eventSource = createManagedEventSource('/api/v1/events/ui');
+    eventSource = createManagedEventSource(buildSseUrl());
     registerEventSourceListeners(eventSource);
   }
 

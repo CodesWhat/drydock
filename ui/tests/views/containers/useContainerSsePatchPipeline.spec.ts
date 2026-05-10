@@ -635,4 +635,174 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
 
     wrapper.unmount();
   });
+
+  // ─── scheduleCompletionAfterTerminalRelease fallback / dedup ───────────────
+
+  it('fires toast via fallback when operationId is missing from dd:sse-update-applied', async () => {
+    const containers = ref([makeContainer()]);
+    const { wrapper, toast } = mountPipeline({ containers });
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-applied', {
+        detail: {
+          containerId: 'c1',
+          containerName: 'nginx',
+          batchId: null,
+          // operationId intentionally omitted
+        },
+      }),
+    );
+    await flushPromises();
+
+    expect(toast.success).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(OPERATION_DISPLAY_HOLD_MS);
+    await flushPromises();
+
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.success).toHaveBeenCalledWith('Updated: nginx');
+
+    wrapper.unmount();
+  });
+
+  it('fires toast via fallback when operationId is empty string in dd:sse-update-applied', async () => {
+    const containers = ref([makeContainer()]);
+    const { wrapper, toast } = mountPipeline({ containers });
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-applied', {
+        detail: {
+          containerId: 'c1',
+          containerName: 'nginx',
+          operationId: '',
+          batchId: null,
+        },
+      }),
+    );
+    await flushPromises();
+
+    expect(toast.success).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(OPERATION_DISPLAY_HOLD_MS);
+    await flushPromises();
+
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.success).toHaveBeenCalledWith('Updated: nginx');
+
+    wrapper.unmount();
+  });
+
+  it('does not fire per-container toast when batchId is non-null', async () => {
+    const containers = ref([makeContainer()]);
+    const { wrapper, toast, schedulePostTerminalReload } = mountPipeline({ containers });
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-applied', {
+        detail: {
+          containerId: 'c1',
+          containerName: 'nginx',
+          operationId: 'op-batch',
+          batchId: 'batch-1',
+        },
+      }),
+    );
+    await flushPromises();
+    await vi.advanceTimersByTimeAsync(OPERATION_DISPLAY_HOLD_MS);
+    await flushPromises();
+
+    expect(toast.success).not.toHaveBeenCalled();
+    // The patch was still applied (terminal event triggered the post-terminal reload)
+    expect(schedulePostTerminalReload).toHaveBeenCalledTimes(1);
+
+    wrapper.unmount();
+  });
+
+  it('deduplicates toast when the same operationId arrives twice in dd:sse-update-applied', async () => {
+    const containers = ref([makeContainer()]);
+    const { wrapper, toast } = mountPipeline({ containers });
+
+    const detail = {
+      containerId: 'c1',
+      containerName: 'nginx',
+      operationId: 'op-dedup',
+      batchId: null,
+    };
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-update-applied', { detail }));
+    globalThis.dispatchEvent(new CustomEvent('dd:sse-update-applied', { detail }));
+    await flushPromises();
+    await vi.advanceTimersByTimeAsync(OPERATION_DISPLAY_HOLD_MS);
+    await flushPromises();
+
+    expect(toast.success).toHaveBeenCalledTimes(1);
+
+    wrapper.unmount();
+  });
+
+  it('fires toast via fallback path when operationId is present but no hold was tracked', async () => {
+    // No prior dd:sse-update-operation-changed, so no hold exists in the map.
+    // applyParsedOperationPatch will return { releaseScheduled: false }.
+    // The fallback scheduleCompletionToast must fire.
+    const containers = ref([makeContainer()]);
+    const { wrapper, toast } = mountPipeline({ containers });
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-applied', {
+        detail: {
+          containerId: 'c1',
+          containerName: 'nginx',
+          operationId: 'op-no-hold',
+          batchId: null,
+        },
+      }),
+    );
+    await flushPromises();
+
+    expect(toast.success).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(OPERATION_DISPLAY_HOLD_MS);
+    await flushPromises();
+
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.success).toHaveBeenCalledWith('Updated: nginx');
+
+    wrapper.unmount();
+  });
+
+  it('fires toast via hold release when a hold was tracked for the operationId', async () => {
+    const activeOperation = makeOperation({ id: 'op-held-release' });
+    const containers = ref([makeContainer({ updateOperation: activeOperation })]);
+    const hold = useOperationDisplayHold();
+    hold.holdOperationDisplay({
+      operationId: activeOperation.id,
+      operation: activeOperation,
+      containerId: 'c1',
+      containerName: 'nginx',
+    });
+    const { wrapper, toast } = mountPipeline({ containers });
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-applied', {
+        detail: {
+          operationId: activeOperation.id,
+          containerId: 'c1',
+          containerName: 'nginx',
+          batchId: null,
+          timestamp: '2026-05-02T12:01:00.000Z',
+        },
+      }),
+    );
+    await flushPromises();
+
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(hold.heldOperations.value.has(activeOperation.id)).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(OPERATION_DISPLAY_HOLD_MS);
+    await flushPromises();
+
+    expect(hold.heldOperations.value.has(activeOperation.id)).toBe(false);
+    expect(toast.success).toHaveBeenCalledTimes(1);
+    expect(toast.success).toHaveBeenCalledWith('Updated: nginx');
+
+    wrapper.unmount();
+  });
 });

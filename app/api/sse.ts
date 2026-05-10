@@ -266,7 +266,16 @@ function eventsHandler(req: Request, res: Response): void {
   // tick. Any broadcast that fires concurrently will be queued after this
   // synchronous block, and the client will receive it via the live fan-out
   // because we add `client` to `clients` immediately after this block.
-  const lastEventId = req.headers?.['last-event-id'];
+  const headerLastEventId = req.headers?.['last-event-id'];
+  const queryLastEventIdRaw = req.query?.['last-event-id'];
+  const queryLastEventId =
+    typeof queryLastEventIdRaw === 'string' && queryLastEventIdRaw.length > 0
+      ? queryLastEventIdRaw
+      : undefined;
+  const lastEventId =
+    typeof headerLastEventId === 'string' && headerLastEventId.length > 0
+      ? headerLastEventId
+      : queryLastEventId;
   if (typeof lastEventId === 'string' && lastEventId.length > 0) {
     const replayResult = sseEventBuffer.replaySince(lastEventId, Date.now());
     if (replayResult.kind === 'resync-required') {
@@ -426,8 +435,9 @@ function buildUpdateAppliedSsePayload(
     container?.image && typeof (container.image as Record<string, unknown>)?.digest === 'string'
       ? ((container.image as Record<string, unknown>).digest as string)
       : null;
+  const operationId = (payload as ContainerUpdateAppliedEventPayload).operationId;
   return {
-    operationId: (payload as ContainerUpdateAppliedEventPayload).operationId ?? '',
+    ...(typeof operationId === 'string' && operationId.length > 0 ? { operationId } : {}),
     containerId,
     containerName,
     imageName,
@@ -442,7 +452,9 @@ function buildUpdateFailedSsePayload(
   payload: ContainerUpdateFailedEventPayload,
 ): Record<string, unknown> {
   return {
-    operationId: payload.operationId ?? '',
+    ...(typeof payload.operationId === 'string' && payload.operationId.length > 0
+      ? { operationId: payload.operationId }
+      : {}),
     containerId: payload.containerId ?? '',
     containerName: payload.containerName,
     error: scrubAuthorizationHeaderValues(payload.error),

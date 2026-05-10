@@ -474,26 +474,41 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
       typeof args.parsed.operationId === 'string' && args.parsed.operationId.length > 0
         ? args.parsed.operationId
         : undefined;
-    const shouldToast = args.batchId === null && operationId !== undefined;
-    const shouldScheduleToast = shouldToast && !completionToastOperationIds.has(operationId);
-    if (shouldScheduleToast) {
-      completionToastOperationIds.add(operationId);
-    }
-    let toastFired = false;
-    const onHoldReleased = shouldScheduleToast
-      ? () => {
-          if (toastFired) {
-            return;
-          }
-          toastFired = true;
-          args.toastCallback();
-        }
-      : undefined;
-    const result = applyParsedOperationPatch(args.parsed, { onHoldReleased });
-    if (!onHoldReleased || result.releaseScheduled) {
+    const isBatch = args.batchId !== null;
+
+    if (isBatch) {
+      // Batch updates use the batch summary toast in ContainersGroupedViews;
+      // suppress the per-container toast but still apply the patch.
+      applyParsedOperationPatch(args.parsed);
       return;
     }
-    scheduleCompletionToast(args.toastCallback);
+
+    if (operationId && completionToastOperationIds.has(operationId)) {
+      // Duplicate terminal event for an already-toasted operation — apply the
+      // patch silently.
+      applyParsedOperationPatch(args.parsed);
+      return;
+    }
+    if (operationId) {
+      completionToastOperationIds.add(operationId);
+    }
+
+    let toastFired = false;
+    const fireToast = () => {
+      if (toastFired) {
+        return;
+      }
+      toastFired = true;
+      args.toastCallback();
+    };
+
+    const result = applyParsedOperationPatch(args.parsed, { onHoldReleased: fireToast });
+    if (!result.releaseScheduled) {
+      // No hold was tracked (operation started before UI loaded, hold expired,
+      // or the SSE payload had no operationId to track). Fire after the
+      // standard settle delay so the toast still appears.
+      scheduleCompletionToast(fireToast);
+    }
   }
 
   function handleSseUpdateApplied(event: Event) {

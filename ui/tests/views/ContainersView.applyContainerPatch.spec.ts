@@ -1228,7 +1228,7 @@ describe('ContainersView — applyContainerPatch', () => {
   });
 
   describe('fail-safe completion toast guards', () => {
-    it('does not schedule a toast when update-applied detail has no operationId', async () => {
+    it('schedules a toast even when update-applied detail has no operationId', async () => {
       vi.useFakeTimers();
 
       try {
@@ -1256,7 +1256,9 @@ describe('ContainersView — applyContainerPatch', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
 
         wrapper.unmount();
       } finally {
@@ -1302,7 +1304,7 @@ describe('ContainersView — applyContainerPatch', () => {
       }
     });
 
-    it('does not schedule a toast when update-failed detail has no operationId', async () => {
+    it('schedules a toast even when update-failed detail has no operationId', async () => {
       vi.useFakeTimers();
 
       try {
@@ -1331,7 +1333,10 @@ describe('ContainersView — applyContainerPatch', () => {
         vi.advanceTimersByTime(1500);
         await flushPromises();
 
-        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts).toHaveLength(1);
+        expect(newToasts[0]).toMatchObject({ tone: 'error' });
+        expect(newToasts[0].title).toContain('nginx');
 
         wrapper.unmount();
       } finally {

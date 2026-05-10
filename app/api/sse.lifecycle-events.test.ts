@@ -508,7 +508,7 @@ describe('SSE lifecycle event handlers', () => {
       expect(eventWrite).toMatch(/^id: test-boot-id:\d+\n/);
     });
 
-    test('update-applied uses empty operationId when operationId is absent from payload', () => {
+    test('update-applied omits operationId when operationId is absent from payload', () => {
       sseRouter.init();
       const handler = getHandler();
       const { res } = connectSseClient(handler);
@@ -525,7 +525,7 @@ describe('SSE lifecycle event handlers', () => {
       } as any);
 
       const payload = parseSseEventPayload(res, 'dd:update-applied');
-      expect(payload.operationId).toBe('');
+      expect(payload).not.toHaveProperty('operationId');
     });
 
     test('update-applied sets container to undefined when payload object has no container key', () => {
@@ -705,7 +705,7 @@ describe('SSE lifecycle event handlers', () => {
       expect(eventWrite).toMatch(/^id: test-boot-id:\d+\n/);
     });
 
-    test('update-failed uses empty string operationId when operationId is undefined', () => {
+    test('update-failed omits operationId when operationId is undefined', () => {
       sseRouter.init();
       const handler = getHandler();
       const { res } = connectSseClient(handler);
@@ -717,7 +717,7 @@ describe('SSE lifecycle event handlers', () => {
       } as any);
 
       const payload = parseSseEventPayload(res, 'dd:update-failed');
-      expect(payload.operationId).toBe('');
+      expect(payload).not.toHaveProperty('operationId');
     });
 
     test('update-failed uses empty string containerId when containerId is undefined', () => {

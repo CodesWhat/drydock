@@ -1601,6 +1601,121 @@ describe('SSE Router', () => {
     });
   });
 
+  describe('buildUpdateAppliedSsePayload', () => {
+    function getUpdateAppliedCallback() {
+      getHandler();
+      return mockRegisterContainerUpdateApplied.mock.calls.at(-1)[0];
+    }
+
+    function captureUpdateAppliedPayload(input: unknown): Record<string, unknown> {
+      const res = createSSEResponse();
+      sseRouter._clients.add(res);
+      const callback = getUpdateAppliedCallback();
+      callback(input);
+      const writes = res.write.mock.calls.map(([v]) => v);
+      const eventCall = writes.find((v) => v.includes('dd:update-applied'));
+      if (!eventCall) throw new Error('dd:update-applied event not written');
+      const dataSection = eventCall.split('\ndata: ')[1];
+      return JSON.parse(dataSection.trim());
+    }
+
+    test('omits operationId when input has no operationId', () => {
+      const result = captureUpdateAppliedPayload({ containerName: 'foo', containerId: 'bar' });
+      expect(result).not.toHaveProperty('operationId');
+    });
+
+    test('includes operationId when input has one', () => {
+      const result = captureUpdateAppliedPayload({ containerName: 'foo', operationId: 'op-1' });
+      expect(result.operationId).toBe('op-1');
+    });
+
+    test('omits operationId when input has empty-string operationId', () => {
+      const result = captureUpdateAppliedPayload({ containerName: 'foo', operationId: '' });
+      expect(result).not.toHaveProperty('operationId');
+    });
+  });
+
+  describe('buildUpdateFailedSsePayload', () => {
+    function getUpdateFailedCallback() {
+      getHandler();
+      return mockRegisterContainerUpdateFailed.mock.calls.at(-1)[0];
+    }
+
+    function captureUpdateFailedPayload(input: unknown): Record<string, unknown> {
+      const res = createSSEResponse();
+      sseRouter._clients.add(res);
+      const callback = getUpdateFailedCallback();
+      callback(input);
+      const writes = res.write.mock.calls.map(([v]) => v);
+      const eventCall = writes.find((v) => v.includes('dd:update-failed'));
+      if (!eventCall) throw new Error('dd:update-failed event not written');
+      const dataSection = eventCall.split('\ndata: ')[1];
+      return JSON.parse(dataSection.trim());
+    }
+
+    test('omits operationId when input has no operationId', () => {
+      const result = captureUpdateFailedPayload({
+        containerName: 'foo',
+        containerId: 'bar',
+        error: 'boom',
+        phase: 'pull',
+      });
+      expect(result).not.toHaveProperty('operationId');
+    });
+  });
+
+  describe('eventsHandler Last-Event-ID from query param', () => {
+    function createSSERequestWithQuery(
+      ip = '127.0.0.1',
+      sessionID = `session-${ip}`,
+      query: Record<string, string> = {},
+    ) {
+      const base = createSSERequest(ip, sessionID);
+      return { ...base, query };
+    }
+
+    test('reads last-event-id from query param when header is absent', () => {
+      const handler = getHandler();
+      const req = createSSERequestWithQuery('127.0.0.1', 'session-127.0.0.1', {
+        'last-event-id': 'boot-1:5',
+      });
+      const res = createSSEResponse();
+
+      handler(req, res);
+
+      expect(mockSseEventBuffer.replaySince).toHaveBeenCalledWith('boot-1:5', expect.any(Number));
+    });
+
+    test('prefers header over query param when both are present', () => {
+      const handler = getHandler();
+      const req = createSSERequestWithQuery('127.0.0.1', 'session-127.0.0.1', {
+        'last-event-id': 'query-id',
+      });
+      req.headers = { 'last-event-id': 'header-id' };
+      const res = createSSEResponse();
+
+      handler(req, res);
+
+      expect(mockSseEventBuffer.replaySince).toHaveBeenCalledWith('header-id', expect.any(Number));
+      expect(mockSseEventBuffer.replaySince).not.toHaveBeenCalledWith(
+        'query-id',
+        expect.any(Number),
+      );
+    });
+
+    test('ignores empty-string query last-event-id', () => {
+      const handler = getHandler();
+      const req = createSSERequestWithQuery('127.0.0.1', 'session-127.0.0.1', {
+        'last-event-id': '',
+      });
+      const res = createSSEResponse();
+
+      handler(req, res);
+
+      expect(mockSseEventBuffer.replaySince).not.toHaveBeenCalled();
+    });
+  });
+
   describe('agent lifecycle broadcasts', () => {
     test('should broadcast dd:agent-connected when agent-connected event fires', () => {
       const handler = getHandler();
