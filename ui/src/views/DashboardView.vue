@@ -11,7 +11,6 @@ import {
 import type { Container } from '../types/container';
 import { type RouteLocationRaw, useRouter } from 'vue-router';
 import type { OperationChangedPayload } from '../services/sse';
-import { TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES } from '../types/update-operation';
 import { GridItem, GridLayout } from 'grid-layout-plus';
 import AppIconButton from '@/components/AppIconButton.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
