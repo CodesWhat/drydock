@@ -83,12 +83,16 @@ describe('useToast', () => {
   });
 
   test('supports replacing the toast list through the compatibility ref', () => {
-    const { toasts } = useToast();
+    vi.useFakeTimers();
+    const { toasts, addToast } = useToast();
+    // Seed an auto-dismiss toast so the setter has to clear an active timer.
+    addToast('Original', { duration: 6000 });
 
     toasts.value = [{ id: 42, title: 'Imported', body: 'Body', tone: 'warning' }];
 
     expect(toasts.value).toEqual([
       expect.objectContaining({ title: 'Imported', body: 'Body', tone: 'warning' }),
     ]);
+    vi.useRealTimers();
   });
 });

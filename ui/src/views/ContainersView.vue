@@ -1304,8 +1304,6 @@ const { hasPendingOperationWatcher } = useContainerSsePatchPipeline({
   loadDetailSecurityData,
   reconcileHoldsAgainstContainers,
   schedulePostTerminalReload,
-  toast,
-  t,
 });
 
 onMounted(() => {

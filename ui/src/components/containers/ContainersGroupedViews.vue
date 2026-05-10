@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useToast } from '../../composables/useToast';
 import AppBadge from '../AppBadge.vue';
 import AppIconButton from '../AppIconButton.vue';
 import type { ContainersViewRenderGroup } from './containersViewTemplateContext';
@@ -12,7 +11,6 @@ import {
   getUpdateInProgressPhaseLabelKey,
   UPDATE_IN_PROGRESS_PHASE_I18N,
 } from '../../utils/container-update';
-import { displayGroupName } from '../../utils/display';
 import { formatShortDigest } from '../../utils/digest-format';
 import {
   getPrimaryHardBlocker,
@@ -77,7 +75,6 @@ const {
 } = useContainersViewTemplateContext();
 const { t } = useI18n();
 const { batches, clearBatch, getBatch, incrementSucceeded, incrementFailed } = useUpdateBatches();
-const toast = useToast();
 
 const openActionsContainer = computed(
   () => displayContainers.value.find((container) => container.id === openActionsMenu.value) ?? null,
@@ -486,66 +483,8 @@ function onUpdateFailed(event: Event) {
   incrementFailed(groupKey);
 }
 
-// Subscribe to the batch-completion SSE event to fire the summary toast.
-function onBatchUpdateCompleted(event: Event) {
-  const payload = (event as CustomEvent).detail as Record<string, unknown> | undefined;
-  if (!payload) return;
-
-  const batchId = typeof payload.batchId === 'string' ? payload.batchId : undefined;
-  const total = typeof payload.total === 'number' ? payload.total : 0;
-  const succeeded = typeof payload.succeeded === 'number' ? payload.succeeded : 0;
-  const failed = typeof payload.failed === 'number' ? payload.failed : 0;
-
-  // Resolve a single group name only when every item in the batch belongs to
-  // the same group; otherwise drop the "in <group>" qualifier rather than
-  // mislabeling a flat "Update All" toast or showing the raw batchId UUID.
-  let groupName: string | undefined;
-  if (Array.isArray(payload.items)) {
-    const items = payload.items as Array<{ containerId?: string }>;
-    const groupKeys = new Set<string>();
-    for (const item of items) {
-      if (typeof item.containerId !== 'string') continue;
-      const groupKey = resolveGroupKeyForContainer(item.containerId);
-      if (groupKey) groupKeys.add(groupKey);
-    }
-    if (groupKeys.size === 1) {
-      const onlyKey = groupKeys.values().next().value as string;
-      const resolvedName =
-        renderGroups.value.find((g: { key: string; name?: string | null }) => g.key === onlyKey)
-          ?.name ?? onlyKey;
-      groupName = displayGroupName(resolvedName);
-    }
-  }
-
-  if (failed === 0) {
-    toast.success(
-      groupName
-        ? t('containersView.toast.batchUpdated', { count: succeeded, group: groupName })
-        : t('containersView.toast.batchUpdatedNoGroup', { count: succeeded }),
-    );
-  } else if (succeeded === 0) {
-    toast.error(
-      groupName
-        ? t('containersView.toast.batchFailed', { count: failed, group: groupName })
-        : t('containersView.toast.batchFailedNoGroup', { count: failed }),
-    );
-  } else {
-    toast.warning(
-      groupName
-        ? t('containersView.toast.batchPartial', {
-            succeeded,
-            total,
-            group: groupName,
-            failed,
-          })
-        : t('containersView.toast.batchPartialNoGroup', { succeeded, total, failed }),
-    );
-  }
-}
-
 globalThis.addEventListener('dd:sse-update-applied', onUpdateApplied);
 globalThis.addEventListener('dd:sse-update-failed', onUpdateFailed);
-globalThis.addEventListener('dd:sse-batch-update-completed', onBatchUpdateCompleted);
 
 // Clean up timers and event listeners when the component is torn down.
 onScopeDispose(() => {
@@ -555,7 +494,6 @@ onScopeDispose(() => {
   batchClearTimers.clear();
   globalThis.removeEventListener('dd:sse-update-applied', onUpdateApplied);
   globalThis.removeEventListener('dd:sse-update-failed', onUpdateFailed);
-  globalThis.removeEventListener('dd:sse-batch-update-completed', onBatchUpdateCompleted);
 });
 </script>
 
