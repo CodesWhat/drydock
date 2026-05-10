@@ -2,8 +2,10 @@ import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defineComponent, nextTick } from 'vue';
-import { useGlobalUpdateToast } from '@/composables/useGlobalUpdateToast';
-import { OPERATION_DISPLAY_HOLD_MS } from '@/composables/useOperationDisplayHold';
+import {
+  UPDATE_TOAST_FALLBACK_DELAY_MS,
+  useGlobalUpdateToast,
+} from '@/composables/useGlobalUpdateToast';
 import { useToast } from '@/composables/useToast';
 import { useToastStore } from '@/stores/toast';
 
@@ -25,7 +27,9 @@ function dispatch(event: string, detail: Record<string, unknown>) {
 }
 
 async function settle() {
-  await vi.advanceTimersByTimeAsync(OPERATION_DISPLAY_HOLD_MS);
+  // Advance past the fallback safety timer so the toast fires even when no
+  // container-state event is dispatched in the test.
+  await vi.advanceTimersByTimeAsync(UPDATE_TOAST_FALLBACK_DELAY_MS);
   await nextTick();
 }
 
@@ -185,6 +189,160 @@ describe('useGlobalUpdateToast', () => {
       globalThis.dispatchEvent(new Event('dd:sse-update-applied'));
       await settle();
 
+      expect(toast.toasts.value.slice(before)).toHaveLength(0);
+
+      wrapper.unmount();
+    });
+
+    it('fires immediately on a matching container-state event without waiting for fallback', async () => {
+      const { wrapper, toast } = mountGlobalToast();
+      const before = toast.toasts.value.length;
+
+      dispatch('dd:sse-update-applied', {
+        operationId: 'op-settle-id',
+        containerId: 'c-settle-1',
+        containerName: 'nginx',
+        batchId: null,
+      });
+      await nextTick();
+      // Toast not yet fired — waiting for the row-settle event.
+      expect(toast.toasts.value.slice(before)).toHaveLength(0);
+
+      // Container-updated event for the same container id arrives → toast fires.
+      dispatch('dd:sse-container-updated', { id: 'c-settle-1', name: 'nginx' });
+      await nextTick();
+
+      expect(toast.toasts.value.slice(before)).toHaveLength(1);
+      expect(toast.toasts.value.slice(before)[0]).toMatchObject({
+        tone: 'success',
+        title: 'Updated: nginx',
+      });
+
+      wrapper.unmount();
+    });
+
+    it('matches a settle event by newContainerId when the container is recreated', async () => {
+      const { wrapper, toast } = mountGlobalToast();
+      const before = toast.toasts.value.length;
+
+      dispatch('dd:sse-update-applied', {
+        operationId: 'op-recreate',
+        containerId: 'c-old',
+        newContainerId: 'c-new',
+        containerName: 'nginx',
+        batchId: null,
+      });
+      await nextTick();
+
+      dispatch('dd:sse-container-added', { id: 'c-new', name: 'nginx' });
+      await nextTick();
+
+      expect(toast.toasts.value.slice(before)).toHaveLength(1);
+
+      wrapper.unmount();
+    });
+
+    it('does not double-fire when the fallback timer expires after a settle event', async () => {
+      const { wrapper, toast } = mountGlobalToast();
+      const before = toast.toasts.value.length;
+
+      dispatch('dd:sse-update-applied', {
+        operationId: 'op-settle-then-timer',
+        containerId: 'c-st',
+        containerName: 'nginx',
+        batchId: null,
+      });
+      await nextTick();
+
+      dispatch('dd:sse-container-updated', { id: 'c-st', name: 'nginx' });
+      await nextTick();
+      expect(toast.toasts.value.slice(before)).toHaveLength(1);
+
+      // Fallback timer expires later — should be a no-op since entry is gone.
+      await settle();
+      expect(toast.toasts.value.slice(before)).toHaveLength(1);
+
+      wrapper.unmount();
+    });
+
+    it('handles a duplicate settle event for the same container as a no-op', async () => {
+      const { wrapper, toast } = mountGlobalToast();
+      const before = toast.toasts.value.length;
+
+      dispatch('dd:sse-update-applied', {
+        operationId: 'op-double-settle',
+        containerId: 'c-double',
+        containerName: 'nginx',
+        batchId: null,
+      });
+      await nextTick();
+
+      dispatch('dd:sse-container-updated', { id: 'c-double', name: 'nginx' });
+      dispatch('dd:sse-container-updated', { id: 'c-double', name: 'nginx' });
+      await nextTick();
+
+      // Toast fires once on the first settle; second settle is a no-op.
+      expect(toast.toasts.value.slice(before)).toHaveLength(1);
+
+      wrapper.unmount();
+    });
+
+    it('matches a settle event by container name when no id matches', async () => {
+      const { wrapper, toast } = mountGlobalToast();
+      const before = toast.toasts.value.length;
+
+      dispatch('dd:sse-update-applied', {
+        operationId: 'op-by-name',
+        containerName: 'redis',
+        batchId: null,
+      });
+      await nextTick();
+
+      dispatch('dd:sse-container-updated', { name: 'redis' });
+      await nextTick();
+
+      expect(toast.toasts.value.slice(before)).toHaveLength(1);
+
+      wrapper.unmount();
+    });
+
+    it('ignores container-state events with neither id nor name', async () => {
+      const { wrapper, toast } = mountGlobalToast();
+      const before = toast.toasts.value.length;
+
+      dispatch('dd:sse-update-applied', {
+        operationId: 'op-no-settle',
+        containerId: 'c-1',
+        containerName: 'nginx',
+        batchId: null,
+      });
+      await nextTick();
+
+      dispatch('dd:sse-container-updated', {});
+      dispatch('dd:sse-container-updated', { id: 'unrelated' });
+      await nextTick();
+      expect(toast.toasts.value.slice(before)).toHaveLength(0);
+
+      // Falls back to the timer.
+      await settle();
+      expect(toast.toasts.value.slice(before)).toHaveLength(1);
+
+      wrapper.unmount();
+    });
+
+    it('ignores container-state events with no detail at all', async () => {
+      const { wrapper, toast } = mountGlobalToast();
+      const before = toast.toasts.value.length;
+
+      dispatch('dd:sse-update-applied', {
+        operationId: 'op-no-detail',
+        containerName: 'nginx',
+        batchId: null,
+      });
+      await nextTick();
+
+      globalThis.dispatchEvent(new Event('dd:sse-container-updated'));
+      await nextTick();
       expect(toast.toasts.value.slice(before)).toHaveLength(0);
 
       wrapper.unmount();
