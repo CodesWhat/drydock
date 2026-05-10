@@ -113,4 +113,18 @@ describe('resolveUpdateFailureReason', () => {
       'disk full',
     );
   });
+
+  it('strips HTML angle brackets from the raw lastError fallback', () => {
+    expect(resolveUpdateFailureReason({ lastError: '<script>alert(1)</script>' })).toBe(
+      'scriptalert(1)/script',
+    );
+  });
+
+  it('returns undefined when stripping leaves only whitespace', () => {
+    expect(resolveUpdateFailureReason({ lastError: '<>' })).toBeUndefined();
+  });
+
+  it('passes plain-text raw lastError through unchanged', () => {
+    expect(resolveUpdateFailureReason({ lastError: 'disk full at 99%' })).toBe('disk full at 99%');
+  });
 });

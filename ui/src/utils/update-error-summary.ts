@@ -31,7 +31,12 @@ export function resolveUpdateFailureReason(args: {
     args.lastError.trim() !== '' &&
     args.lastError.length <= MAX_RAW_ERROR_LENGTH
   ) {
-    return args.lastError;
+    // Defense in depth: strip HTML angle brackets so a malformed/malicious
+    // server-side error string can't sneak markup into a future i18n key
+    // that uses v-html. Vue i18n escapes by default today; this protects
+    // any future key that does not.
+    const stripped = args.lastError.replace(/[<>]/g, '');
+    return stripped.trim() === '' ? undefined : stripped;
   }
   return undefined;
 }
