@@ -441,15 +441,21 @@ function buildUpdateAppliedSsePayload(
     typeof container?.id === 'string' && container.id !== '' ? container.id : topLevelContainerId;
   const candidateImageName = container?.image?.name;
   const imageName = typeof candidateImageName === 'string' ? candidateImageName : undefined;
-  const imageDigest = null;
   const operationId = (payload as ContainerUpdateAppliedEventPayload).operationId;
+  // previousDigest/newDigest are intentionally null. The full container blob
+  // (which carries digests) is stripped from this SSE payload by design — see
+  // commit 60716ba9, which removed the digest extraction to mirror the agent-
+  // side sanitizer and stop the Container object (env, labels, vulnerability
+  // data) flowing to every connected client on every update event. No client
+  // consumes these fields from this payload; the UI sources digests from the
+  // container API. The keys remain to preserve the wire-format contract.
   return {
     ...(typeof operationId === 'string' && operationId.length > 0 ? { operationId } : {}),
     containerId,
     containerName,
     imageName,
     previousDigest: null,
-    newDigest: imageDigest,
+    newDigest: null,
     batchId: (payload as ContainerUpdateAppliedEventPayload).batchId ?? null,
     timestamp: new Date().toISOString(),
   };
