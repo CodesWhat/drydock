@@ -935,6 +935,112 @@ describe('useGlobalUpdateToast', () => {
       wrapper.unmount();
     });
 
+    it('covers indexPendingByContainer falsy-keys path: two pendings sharing containerId reuse the existing Set', async () => {
+      // Line 125 falsy branch: when the bucket already exists,
+      // `if (!keys)` is false and no new Set is created.
+      const { wrapper, toast } = mountGlobalToast();
+      const before = toast.toasts.value.length;
+
+      dispatch('dd:sse-update-applied', {
+        containerId: 'shared-c1',
+        containerName: 'nginx',
+        operationId: 'op-shared-1',
+        batchId: null,
+      });
+      dispatch('dd:sse-update-applied', {
+        containerId: 'shared-c1',
+        containerName: 'redis',
+        operationId: 'op-shared-2',
+        batchId: null,
+      });
+      await settle();
+
+      // Both toasts fire (2 distinct operationIds, same containerId).
+      expect(toast.toasts.value.slice(before)).toHaveLength(2);
+
+      wrapper.unmount();
+    });
+
+    it('covers unindexPending !keys continue: same containerId and newContainerId causes second loop iteration to find no bucket', async () => {
+      // Line 137 truthy branch: queue a pending with containerId === newContainerId.
+      // On settle, unindexPending iterates [id, id]. The first iteration deletes
+      // the bucket (size=0 → delete). The second iteration finds nothing → continue.
+      const { wrapper, toast } = mountGlobalToast();
+      const before = toast.toasts.value.length;
+
+      dispatch('dd:sse-update-applied', {
+        containerId: 'same-c',
+        newContainerId: 'same-c',
+        containerName: 'nginx',
+        operationId: 'op-same-ids',
+        batchId: null,
+      });
+      await nextTick();
+
+      dispatch('dd:sse-container-updated', { id: 'same-c', name: 'nginx' });
+      await nextTick();
+
+      expect(toast.toasts.value.slice(before)).toHaveLength(1);
+
+      wrapper.unmount();
+    });
+
+    it('covers unindexPending keys.size > 0 path: shared bucket not deleted when another key still exists', async () => {
+      // Line 139 falsy branch: two pendings with the same containerId share one bucket.
+      // Settling by id removes key1; unindexPending deletes key1 from the Set but
+      // the Set still has key2 (size=1), so line 140 (delete bucket) is skipped.
+      const { wrapper, toast } = mountGlobalToast();
+      const before = toast.toasts.value.length;
+
+      dispatch('dd:sse-update-applied', {
+        containerId: 'multi-c',
+        containerName: 'nginx',
+        operationId: 'op-multi-1',
+        batchId: null,
+      });
+      dispatch('dd:sse-update-applied', {
+        containerId: 'multi-c',
+        containerName: 'redis',
+        operationId: 'op-multi-2',
+        batchId: null,
+      });
+      await nextTick();
+
+      // Settle the first key via container-state event (hits the id-index fast path
+      // and iterates the full keys set). Both toasts are fired because
+      // settleByContainer iterates all keys for the container.
+      dispatch('dd:sse-container-updated', { id: 'multi-c', name: 'nginx' });
+      await nextTick();
+
+      // Both fire since both share the same containerId bucket.
+      expect(toast.toasts.value.slice(before)).toHaveLength(2);
+
+      wrapper.unmount();
+    });
+
+    it('covers settleByContainer early-return when containerName is undefined after id match', async () => {
+      // Line 194 truthy branch: settleByContainer with a containerId that has a
+      // pending match AND containerName is undefined → return before name scan.
+      const { wrapper, toast } = mountGlobalToast();
+      const before = toast.toasts.value.length;
+
+      dispatch('dd:sse-update-applied', {
+        containerId: 'cid-only',
+        containerName: 'nginx',
+        operationId: 'op-cid-only',
+        batchId: null,
+      });
+      await nextTick();
+
+      // Dispatch container-state with id only — no name field → containerName=undefined.
+      dispatch('dd:sse-container-updated', { id: 'cid-only' });
+      await nextTick();
+
+      expect(toast.toasts.value.slice(before)).toHaveLength(1);
+
+      wrapper.unmount();
+    });
+
     it('does not evict when the dedup map is below the cap', async () => {
       const { wrapper } = mountGlobalToast();
       const store = useToastStore();

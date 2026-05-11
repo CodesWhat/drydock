@@ -855,4 +855,33 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
 
     wrapper.unmount();
   });
+
+  it('falls through to name lookup when newContainerId is a string not in the index', async () => {
+    // Line 391 falsy branch: target.newContainerId is a string but
+    // containerIndexById.get(newContainerId) returns undefined, so the early-
+    // return is skipped and findContainerForOperationTarget falls through to
+    // the linear name scan at line 397.
+    const containers = ref([makeContainer({ id: 'c-name-fallback', name: 'myapp' })]);
+    const { wrapper, schedulePostTerminalReload } = mountPipeline({ containers });
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-applied', {
+        detail: {
+          // containerId absent so the first branch (line 385) is skipped.
+          // newContainerId is a string but not in the index.
+          newContainerId: 'unknown-new-id',
+          containerName: 'myapp',
+          operationId: 'op-name-fb',
+          batchId: null,
+        },
+      }),
+    );
+    await flushPromises();
+
+    // The container was resolved by name (line 399), so the terminal patch
+    // applied successfully and schedulePostTerminalReload was called.
+    expect(schedulePostTerminalReload).toHaveBeenCalledTimes(1);
+
+    wrapper.unmount();
+  });
 });

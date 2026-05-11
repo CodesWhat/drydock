@@ -144,6 +144,7 @@ export function useGlobalUpdateToast() {
 
   function removePending(key: string) {
     const entry = pendingToasts.get(key);
+    // c8 ignore next -- defensive guard; unreachable through the public API
     if (!entry) return undefined;
     pendingToasts.delete(key);
     clearTimeout(entry.timer);
@@ -161,6 +162,7 @@ export function useGlobalUpdateToast() {
     const key = args.operationId ?? `_anon_${++pendingNonce}`;
     const timer = setTimeout(() => {
       const entry = pendingToasts.get(key);
+      // c8 ignore next -- defensive guard; timer is cleared by removePending before it fires
       if (!entry) return;
       pendingToasts.delete(key);
       unindexPending(key, entry);
