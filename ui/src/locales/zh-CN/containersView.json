@@ -12,11 +12,8 @@
       "rolledBack": "已回滚：{name}",
       "rolledBackWithReason": "已回滚：{name} — {reason}",
       "updateAlreadyInProgress": "此组中部分容器已有更新进行中",
-      "batchUpdated": "已更新 {group} 中的 {count} 个容器",
       "batchUpdatedNoGroup": "已更新 {count} 个容器",
-      "batchPartial": "已更新 {group} 中 {total} 个容器中的 {succeeded} 个；{failed} 个失败",
       "batchPartialNoGroup": "已更新 {total} 个容器中的 {succeeded} 个；{failed} 个失败",
-      "batchFailed": "无法更新 {group} 中的 {count} 个容器",
       "batchFailedNoGroup": "无法更新 {count} 个容器",
       "unknownGroup": "未知组"
     },

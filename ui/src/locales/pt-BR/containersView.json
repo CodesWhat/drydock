@@ -12,11 +12,8 @@
       "rolledBack": "Rollback feito: {name}",
       "rolledBackWithReason": "Rollback feito: {name} - {reason}",
       "updateAlreadyInProgress": "Atualização já em andamento para alguns contêineres deste grupo",
-      "batchUpdated": "{count} contêineres atualizados em {group}",
       "batchUpdatedNoGroup": "{count} contêineres atualizados",
-      "batchPartial": "{succeeded} de {total} contêineres atualizados em {group}; {failed} falharam",
       "batchPartialNoGroup": "{succeeded} de {total} contêineres atualizados; {failed} falharam",
-      "batchFailed": "Falha ao atualizar {count} contêineres em {group}",
       "batchFailedNoGroup": "Falha ao atualizar {count} contêineres",
       "unknownGroup": "grupo desconhecido"
     },

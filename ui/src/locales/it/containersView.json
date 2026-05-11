@@ -12,11 +12,8 @@
       "rolledBack": "Rollback eseguito: {name}",
       "rolledBackWithReason": "Rollback eseguito: {name} - {reason}",
       "updateAlreadyInProgress": "Aggiornamento gia in corso per alcuni container in questo gruppo",
-      "batchUpdated": "Aggiornati {count} container in {group}",
       "batchUpdatedNoGroup": "Aggiornati {count} container",
-      "batchPartial": "Aggiornati {succeeded} di {total} container in {group}; {failed} non riusciti",
       "batchPartialNoGroup": "Aggiornati {succeeded} di {total} container; {failed} non riusciti",
-      "batchFailed": "Impossibile aggiornare {count} container in {group}",
       "batchFailedNoGroup": "Impossibile aggiornare {count} container",
       "unknownGroup": "gruppo sconosciuto"
     },
