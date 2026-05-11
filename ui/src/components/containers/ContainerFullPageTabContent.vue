@@ -267,10 +267,10 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
               <div class="flex items-center gap-3 px-3 py-2 dd-rounded text-xs font-mono"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                 <span class="dd-text-secondary">{{ t('containerComponents.fullPageOverview.currentLabel') }}</span>
-                <CopyableTag :tag="selectedContainer.updateKind === 'digest' && selectedContainer.currentDigest ? selectedContainer.currentDigest : selectedContainer.currentTag"
-                             class="font-bold dd-text">{{ selectedContainer.updateKind === 'digest' && selectedContainer.currentDigest ? formatShortDigest(selectedContainer.currentDigest) : selectedContainer.currentTag }}</CopyableTag>
+                <CopyableTag :tag="selectedContainer.isDigestPinned && selectedContainer.currentDigest ? selectedContainer.currentDigest : selectedContainer.currentTag"
+                             class="font-bold dd-text">{{ selectedContainer.isDigestPinned && selectedContainer.currentDigest ? formatShortDigest(selectedContainer.currentDigest) : selectedContainer.currentTag }}</CopyableTag>
               </div>
-              <div v-if="selectedContainer.updateKind === 'digest' && selectedContainer.newDigest && selectedContainer.currentDigest"
+              <div v-if="selectedContainer.isDigestPinned && selectedContainer.updateKind === 'digest' && selectedContainer.newDigest && selectedContainer.currentDigest"
                    class="flex items-center gap-3 px-3 py-2 dd-rounded text-xs font-mono"
                    :style="{ backgroundColor: 'var(--dd-success-muted)' }">
                 <span style="color: var(--dd-success);">{{ t('containerComponents.fullPageOverview.latestLabel') }}</span>
@@ -286,6 +286,15 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 <AppBadge size="xs" :custom="updateKindColor(selectedContainer.updateKind)">
                   {{ getUpdateKindLabel(selectedContainer.updateKind) }}
                 </AppBadge>
+              </div>
+              <div v-if="!selectedContainer.isDigestPinned && selectedContainer.updateKind === 'digest' && selectedContainer.newDigest && selectedContainer.currentDigest"
+                   class="flex items-center gap-3 px-3 py-2 dd-rounded text-xs font-mono dd-text-muted"
+                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
+                   data-test="container-fullpage-digest-subline">
+                <span>{{ t('containerComponents.fullPageOverview.digestLabel') }}</span>
+                <CopyableTag :tag="selectedContainer.currentDigest" class="dd-text-muted">{{ formatShortDigest(selectedContainer.currentDigest) }}</CopyableTag>
+                <AppIcon name="arrow-right" :size="8" class="dd-text-muted" />
+                <CopyableTag :tag="selectedContainer.newDigest" class="font-semibold" style="color: var(--dd-success);">{{ formatShortDigest(selectedContainer.newDigest) }}</CopyableTag>
               </div>
               <div v-else class="flex items-center gap-2 px-3 py-2 dd-rounded text-xs"
                    :style="{ backgroundColor: 'var(--dd-success-muted)' }">

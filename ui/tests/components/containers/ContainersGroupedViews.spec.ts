@@ -138,6 +138,8 @@ function makeContainer(overrides: Partial<Container> & { _pending?: true } = {})
     bouncer: overrides.bouncer ?? 'safe',
     registryError: overrides.registryError,
     server: overrides.server ?? 'local-main',
+    isDigestPinned:
+      overrides.isDigestPinned ?? overrides.currentTag?.startsWith('sha256:') ?? false,
     details: overrides.details ?? { ports: [], volumes: [], env: [], labels: [] },
     ...overrides,
   };
@@ -2320,7 +2322,7 @@ describe('ContainersGroupedViews', () => {
       return mountSubject();
     }
 
-    it('renders the short form of currentDigest → newDigest for a digest update row', async () => {
+    it('renders the short form of currentDigest → newDigest for a digest-pinned update row', async () => {
       const wrapper = mountDigestContainer();
       const row = rowByName(wrapper, 'alpha');
       const text = row.text();
@@ -2328,13 +2330,42 @@ describe('ContainersGroupedViews', () => {
       expect(text).toContain('sha256:deadbeefcafe…');
     });
 
-    it('does NOT render two identical currentTag strings for a digest update row', async () => {
+    it('does NOT render two identical currentTag strings for a digest-pinned update row', async () => {
       const wrapper = mountDigestContainer();
       const row = rowByName(wrapper, 'alpha');
       const text = row.text();
       // The full raw digest should not appear twice (identical-string bug)
       const occurrences = text.split(digestLocal).length - 1;
       expect(occurrences).toBeLessThan(2);
+    });
+
+    it('renders the human-readable tag for a floating-tag + digest-watch update row (#356)', async () => {
+      // Brian's scenario: currentTag is a meaningful tag (`v8.13.2`), digest changed
+      // but tag did not. The version cell must show the tag, NOT two sha256 strings.
+      const wrapper = mountDigestContainer({
+        currentTag: 'v8.13.2',
+        newTag: 'v8.13.2',
+        isDigestPinned: false,
+      });
+      const row = rowByName(wrapper, 'alpha');
+      const text = row.text();
+      expect(text).toContain('v8.13.2');
+      expect(text).not.toContain('sha256:bcf6335aabbb…');
+      expect(text).not.toContain('sha256:deadbeefcafe…');
+    });
+
+    it('renders the human-readable tag for a linuxserver-style transform tag (#356)', async () => {
+      // Reporter's transformed tag like `compose-X-version-9.0.1` — floating-tag
+      // alias with digest watch auto-enabled by `da1334a4`.
+      const wrapper = mountDigestContainer({
+        currentTag: 'compose-X-version-9.0.1',
+        newTag: 'compose-X-version-9.0.1',
+        isDigestPinned: false,
+      });
+      const row = rowByName(wrapper, 'alpha');
+      const text = row.text();
+      expect(text).toContain('compose-X-version-9.0.1');
+      expect(text).not.toContain('sha256:bcf6335aabbb…');
     });
 
     it('still renders currentTag → newTag for a tag update row', async () => {

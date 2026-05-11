@@ -235,9 +235,9 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
               <div class="flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus font-mono"
                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                 <span class="dd-text-secondary">{{ t('containerComponents.fullPageOverview.currentLabel') }}</span>
-                <CopyableTag :tag="selectedContainer.updateKind === 'digest' && selectedContainer.currentDigest ? selectedContainer.currentDigest : selectedContainer.currentTag"
-                             class="font-bold dd-text">{{ selectedContainer.updateKind === 'digest' && selectedContainer.currentDigest ? formatShortDigest(selectedContainer.currentDigest) : selectedContainer.currentTag }}</CopyableTag>
-                <template v-if="selectedContainer.updateKind === 'digest' && selectedContainer.newDigest && selectedContainer.currentDigest">
+                <CopyableTag :tag="selectedContainer.isDigestPinned && selectedContainer.currentDigest ? selectedContainer.currentDigest : selectedContainer.currentTag"
+                             class="font-bold dd-text">{{ selectedContainer.isDigestPinned && selectedContainer.currentDigest ? formatShortDigest(selectedContainer.currentDigest) : selectedContainer.currentTag }}</CopyableTag>
+                <template v-if="selectedContainer.isDigestPinned && selectedContainer.updateKind === 'digest' && selectedContainer.newDigest && selectedContainer.currentDigest">
                   <AppIcon name="arrow-right" :size="8" class="dd-text-muted" />
                   <CopyableTag :tag="selectedContainer.newDigest" class="font-bold" style="color: var(--dd-success);">{{ formatShortDigest(selectedContainer.newDigest) }}</CopyableTag>
                 </template>
@@ -245,6 +245,15 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                   <AppIcon name="arrow-right" :size="8" class="dd-text-muted" />
                   <CopyableTag :tag="selectedContainer.newTag" class="font-bold" style="color: var(--dd-success);">{{ selectedContainer.newTag }}</CopyableTag>
                 </template>
+              </div>
+              <div v-if="!selectedContainer.isDigestPinned && selectedContainer.updateKind === 'digest' && selectedContainer.newDigest && selectedContainer.currentDigest"
+                   class="mt-1.5 flex items-center gap-2 px-2.5 py-1 dd-rounded text-3xs font-mono dd-text-muted"
+                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
+                   data-test="container-side-digest-subline">
+                <span>{{ t('containerComponents.fullPageOverview.digestLabel') }}</span>
+                <CopyableTag :tag="selectedContainer.currentDigest" class="dd-text-muted">{{ formatShortDigest(selectedContainer.currentDigest) }}</CopyableTag>
+                <AppIcon name="arrow-right" :size="7" class="dd-text-muted" />
+                <CopyableTag :tag="selectedContainer.newDigest" class="font-semibold" style="color: var(--dd-success);">{{ formatShortDigest(selectedContainer.newDigest) }}</CopyableTag>
               </div>
               <NoUpdateReasonBadge
                 v-if="!selectedContainer.newTag && !selectedContainer.newDigest && selectedContainer.noUpdateReason"

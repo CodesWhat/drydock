@@ -417,6 +417,18 @@ function deriveCurrentDigest(apiContainer: ApiContainerInput): string | undefine
   return asNonEmptyString(uk.localValue) ?? undefined;
 }
 
+/**
+ * True when `image.tag.value` is a literal `sha256:…` reference — meaning the
+ * container is digest-pinned (`docker run image@sha256:abc`) and has no
+ * meaningful tag to display. False for floating-tag containers (`:latest`,
+ * `v8.13.2`, etc.) even when digest watch is enabled, since those still have
+ * a human-readable tag the user expects to see.
+ */
+function deriveIsDigestPinned(apiContainer: ApiContainerInput): boolean {
+  const tag = asNonEmptyString(apiContainer.image?.tag?.value);
+  return tag !== undefined && tag.startsWith('sha256:');
+}
+
 /** Derive the release/changelog URL for the update when present. */
 function deriveReleaseLink(apiContainer: ApiContainerInput): string | undefined {
   const trimmed = asNonEmptyString(apiContainer.result?.link);
@@ -836,6 +848,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     triggerExclude: asNonEmptyString(apiContainer.triggerExclude),
     currentDigest: deriveCurrentDigest(apiContainer),
     newDigest: deriveNewDigest(apiContainer),
+    isDigestPinned: deriveIsDigestPinned(apiContainer),
     details: {
       ports: runtimeDetails.ports,
       volumes: runtimeDetails.volumes,

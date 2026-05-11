@@ -102,6 +102,7 @@
       "version": "Version",
       "currentLabel": "Current:",
       "latestLabel": "Latest:",
+      "digestLabel": "Digest:",
       "upToDate": "Up to date",
       "tagFilters": "Tag Filters",
       "includeLabel": "Include:",
