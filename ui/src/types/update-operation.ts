@@ -1,3 +1,11 @@
+// Rollback-reason and lastError sentinels emitted by the backend when an
+// operator cancels an in-flight update. The UI uses these to render a
+// "Cancelled" toast instead of the generic "Rolled back" / "Update failed"
+// variant. Kept here so the strings have a single source of truth across the
+// global toast handler and the SSE patch pipeline (both compare against them).
+export const OPERATOR_CANCELLED_ROLLBACK_REASON = 'cancelled';
+export const OPERATOR_CANCELLED_ERROR_MESSAGE = 'Cancelled by operator';
+
 export const CONTAINER_UPDATE_OPERATION_KINDS = ['container-update', 'self-update'] as const;
 
 export type ContainerUpdateOperationKind = (typeof CONTAINER_UPDATE_OPERATION_KINDS)[number];

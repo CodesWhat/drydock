@@ -754,19 +754,19 @@ describe('useGlobalUpdateToast', () => {
       expect(toast.toasts.value.slice(before)).toHaveLength(0);
     });
 
-    it('refuses a duplicate installation and warns', async () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    it('refuses a duplicate installation and logs an error', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const first = mountGlobalToast();
 
-      // Second install must bail with a warning rather than register a second
-      // set of listeners. If the guard failed, the next dispatch would
+      // Second install must bail with an error log rather than register a
+      // second set of listeners. If the guard failed, the next dispatch would
       // double-fire — so the assertion below also covers that.
       const second = mountGlobalToast();
-      const myWarns = warnSpy.mock.calls.filter(
+      const myErrors = errorSpy.mock.calls.filter(
         (c) => typeof c[0] === 'string' && c[0].includes('useGlobalUpdateToast'),
       );
-      expect(myWarns).toHaveLength(1);
-      expect(myWarns[0][0]).toMatch(/already installed/i);
+      expect(myErrors).toHaveLength(1);
+      expect(myErrors[0][0]).toMatch(/already installed/i);
 
       const before = first.toast.toasts.value.length;
       dispatch('dd:sse-update-applied', {
@@ -780,25 +780,25 @@ describe('useGlobalUpdateToast', () => {
 
       second.wrapper.unmount();
       first.wrapper.unmount();
-      warnSpy.mockRestore();
+      errorSpy.mockRestore();
     });
 
     it('allows reinstallation after the original scope disposes', () => {
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const first = mountGlobalToast();
       first.wrapper.unmount();
 
       // After dispose, the module-level `installed` flag resets, so a fresh
       // install on a new App.vue mount (e.g., after a hot reload) works
-      // without a warning.
+      // without an error log.
       const second = mountGlobalToast();
-      const myWarns = warnSpy.mock.calls.filter(
+      const myErrors = errorSpy.mock.calls.filter(
         (c) => typeof c[0] === 'string' && c[0].includes('useGlobalUpdateToast'),
       );
-      expect(myWarns).toHaveLength(0);
+      expect(myErrors).toHaveLength(0);
 
       second.wrapper.unmount();
-      warnSpy.mockRestore();
+      errorSpy.mockRestore();
     });
 
     it('evicts the oldest dedup entry once the cap is reached', async () => {
@@ -837,6 +837,100 @@ describe('useGlobalUpdateToast', () => {
       });
       await settle();
       expect(addSpy).toHaveBeenCalledTimes(502);
+
+      wrapper.unmount();
+    });
+
+    it('does not silently swallow a failed event after applied for the same operationId', async () => {
+      // The dedup map keys by event kind ("applied" vs "failed") so an out-of-
+      // order replay where applied lands first must not block the subsequent
+      // failed event for the same operationId from firing its own toast.
+      const { wrapper, toast } = mountGlobalToast();
+      const before = toast.toasts.value.length;
+
+      const detail = {
+        containerId: 'c-race',
+        containerName: 'nginx',
+        operationId: 'op-applied-then-failed',
+        batchId: null,
+      };
+
+      dispatch('dd:sse-update-applied', detail);
+      await settle();
+      const afterApplied = toast.toasts.value.slice(before);
+      expect(afterApplied).toHaveLength(1);
+      expect(afterApplied[0]).toMatchObject({ tone: 'success', title: 'Updated: nginx' });
+
+      dispatch('dd:sse-update-failed', { ...detail, error: 'pull failed' });
+      await settle();
+
+      const allNew = toast.toasts.value.slice(before);
+      expect(allNew).toHaveLength(2);
+      expect(allNew[1]).toMatchObject({ tone: 'error' });
+      expect(allNew[1].title).toContain('nginx');
+
+      wrapper.unmount();
+    });
+
+    it('does not silently swallow an applied event after failed for the same operationId', async () => {
+      // Mirror of the previous case for the reverse race ordering.
+      const { wrapper, toast } = mountGlobalToast();
+      const before = toast.toasts.value.length;
+
+      const detail = {
+        containerId: 'c-race-2',
+        containerName: 'redis',
+        operationId: 'op-failed-then-applied',
+        batchId: null,
+      };
+
+      dispatch('dd:sse-update-failed', { ...detail, error: 'transient' });
+      await settle();
+      expect(toast.toasts.value.slice(before)).toHaveLength(1);
+
+      dispatch('dd:sse-update-applied', detail);
+      await settle();
+
+      const allNew = toast.toasts.value.slice(before);
+      expect(allNew).toHaveLength(2);
+      expect(allNew[1]).toMatchObject({ tone: 'success', title: 'Updated: redis' });
+
+      wrapper.unmount();
+    });
+
+    it('does not clobber anonymous (no operationId) pending toasts across different containers', async () => {
+      // Two concurrent in-flight updates with no operationId — each gets a
+      // distinct synthetic key. A settle event for one container must fire
+      // only that container's toast, not both.
+      const { wrapper, toast } = mountGlobalToast();
+      const before = toast.toasts.value.length;
+
+      dispatch('dd:sse-update-applied', {
+        containerId: 'c-anon-1',
+        containerName: 'nginx',
+        batchId: null,
+      });
+      dispatch('dd:sse-update-applied', {
+        containerId: 'c-anon-2',
+        containerName: 'redis',
+        batchId: null,
+      });
+      await nextTick();
+      expect(toast.toasts.value.slice(before)).toHaveLength(0);
+
+      dispatch('dd:sse-container-updated', { id: 'c-anon-1', name: 'nginx' });
+      await nextTick();
+
+      const fired = toast.toasts.value.slice(before);
+      expect(fired).toHaveLength(1);
+      expect(fired[0].title).toBe('Updated: nginx');
+
+      // The redis toast must still be pending until its own settle event.
+      dispatch('dd:sse-container-updated', { id: 'c-anon-2', name: 'redis' });
+      await nextTick();
+      const afterSecond = toast.toasts.value.slice(before);
+      expect(afterSecond).toHaveLength(2);
+      expect(afterSecond[1].title).toBe('Updated: redis');
 
       wrapper.unmount();
     });

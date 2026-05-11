@@ -128,6 +128,71 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
     wrapper.unmount();
   });
 
+  it('still releases the hold and schedules reload for a terminal update-applied that arrives 60s after the operation-change event', async () => {
+    // Regression coverage for the "fail-safe completion toast" scenario that
+    // used to live in the deleted ContainersView.spec.ts. Agent-relay paths
+    // can deliver dd:sse-update-applied well after the operation already
+    // transitioned via dd:sse-update-operation-changed. The hold must still
+    // release and the post-terminal reload must still fire, regardless of how
+    // long the gap is.
+    const activeOperation = makeOperation({ id: 'op-late-applied' });
+    const containers = ref([
+      makeContainer({
+        updateOperation: activeOperation,
+      }),
+    ]);
+    const hold = useOperationDisplayHold();
+    hold.holdOperationDisplay({
+      operationId: activeOperation.id,
+      operation: activeOperation,
+      containerId: 'c1',
+      containerName: 'nginx',
+    });
+    const { wrapper, schedulePostTerminalReload } = mountPipeline({ containers });
+
+    // First the operation-change SSE marks the operation in-progress.
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-operation-changed', {
+        detail: {
+          operationId: activeOperation.id,
+          containerId: 'c1',
+          containerName: 'nginx',
+          status: 'in-progress',
+          phase: 'new-started',
+        },
+      }),
+    );
+    await flushPromises();
+    expect(hold.heldOperations.value.has(activeOperation.id)).toBe(true);
+
+    // 60 seconds later — far past any plausible debounce window — the
+    // dd:sse-update-applied finally arrives via the agent relay.
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-applied', {
+        detail: {
+          operationId: activeOperation.id,
+          containerId: 'c1',
+          containerName: 'nginx',
+          batchId: null,
+          timestamp: '2026-05-02T12:01:00.000Z',
+        },
+      }),
+    );
+    await flushPromises();
+
+    // The row's updateOperation clears immediately; the hold releases after
+    // the standard hold window; the post-terminal reload is scheduled.
+    expect(containers.value[0]!.updateOperation).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(OPERATION_DISPLAY_HOLD_MS);
+    await flushPromises();
+    expect(hold.heldOperations.value.has(activeOperation.id)).toBe(false);
+    expect(schedulePostTerminalReload).toHaveBeenCalledTimes(1);
+
+    wrapper.unmount();
+  });
+
   it('keeps the hold pinned until the settle delay elapses, even after a later terminal operation-change event', async () => {
     const activeOperation = makeOperation({ id: 'op-race' });
     const containers = ref([

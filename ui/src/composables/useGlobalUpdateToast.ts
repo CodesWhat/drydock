@@ -1,5 +1,9 @@
 import { onScopeDispose } from 'vue';
 import { useI18n } from 'vue-i18n';
+import {
+  OPERATOR_CANCELLED_ERROR_MESSAGE,
+  OPERATOR_CANCELLED_ROLLBACK_REASON,
+} from '../types/update-operation';
 import { resolveUpdateFailureReason } from '../utils/update-error-summary';
 import { useToast } from './useToast';
 
@@ -23,6 +27,13 @@ export const UPDATE_TOAST_FALLBACK_DELAY_MS = 5000;
 // and is intended to be installed once at App.vue. A second call would
 // silently double-fire every toast; we log and bail instead.
 let installed = false;
+
+// Dedup is namespaced by terminal event-kind. Using a shared map across
+// applied/failed/batch lets an early `update-applied` for opId X silently
+// swallow a later `update-failed` for the same opId — and that can happen
+// when an SSE replay (or out-of-order agent relay) reorders the two events.
+// Separate namespaces let each terminal kind dedup independently.
+type DedupKind = 'applied' | 'failed' | 'batch';
 
 interface PendingToast {
   containerId?: string;
@@ -57,7 +68,10 @@ function getDetail(event: Event): Record<string, unknown> | undefined {
  */
 export function useGlobalUpdateToast() {
   if (installed) {
-    console.warn('[useGlobalUpdateToast] already installed; ignoring duplicate call');
+    // Bumped from warn to error so a duplicate install — which silently
+    // double-fires every toast — surfaces in CI logs and screenshot
+    // artifacts instead of being lost in the noise floor.
+    console.error('[useGlobalUpdateToast] already installed; ignoring duplicate call');
     return;
   }
   installed = true;
@@ -66,14 +80,25 @@ export function useGlobalUpdateToast() {
   const { t } = useI18n();
 
   // Dedup operationIds across SSE replay and across multiple SSE listeners.
+  // Keyed by `${kind}:${operationId}` so an `applied` event does not block
+  // a subsequent `failed` event (or vice versa) for the same operationId.
   const completedOperationIds = new Map<string, ReturnType<typeof setTimeout>>();
   // Pending toasts waiting for a matching container-state event before firing.
   // Keyed by operationId when present, falling back to a containerName + nonce
   // synthetic key when the backend omits operationId.
   const pendingToasts = new Map<string, PendingToast>();
+  // Secondary index: containerId -> set of pending-toast keys. Lets
+  // settleByContainer hit the matching toast(s) in O(1) instead of scanning
+  // the entire pendingToasts Map on every container-state SSE event.
+  const pendingKeysByContainerId = new Map<string, Set<string>>();
   let pendingNonce = 0;
 
-  function recordCompleted(operationId: string) {
+  function dedupKey(kind: DedupKind, id: string): string {
+    return `${kind}:${id}`;
+  }
+
+  function recordCompleted(kind: DedupKind, id: string) {
+    const key = dedupKey(kind, id);
     if (completedOperationIds.size >= COMPLETED_OPERATION_MAX_ENTRIES) {
       // Map iteration is insertion-order; the first entry is the oldest.
       // Size check guarantees at least one entry, so the loop body always runs.
@@ -84,9 +109,46 @@ export function useGlobalUpdateToast() {
       }
     }
     const timer = setTimeout(() => {
-      completedOperationIds.delete(operationId);
+      completedOperationIds.delete(key);
     }, COMPLETED_OPERATION_TTL_MS);
-    completedOperationIds.set(operationId, timer);
+    completedOperationIds.set(key, timer);
+  }
+
+  function hasCompleted(kind: DedupKind, id: string): boolean {
+    return completedOperationIds.has(dedupKey(kind, id));
+  }
+
+  function indexPendingByContainer(key: string, containerIds: Array<string | undefined>) {
+    for (const id of containerIds) {
+      if (!id) continue;
+      let keys = pendingKeysByContainerId.get(id);
+      if (!keys) {
+        keys = new Set();
+        pendingKeysByContainerId.set(id, keys);
+      }
+      keys.add(key);
+    }
+  }
+
+  function unindexPending(key: string, entry: PendingToast) {
+    for (const id of [entry.containerId, entry.newContainerId]) {
+      if (!id) continue;
+      const keys = pendingKeysByContainerId.get(id);
+      if (!keys) continue;
+      keys.delete(key);
+      if (keys.size === 0) {
+        pendingKeysByContainerId.delete(id);
+      }
+    }
+  }
+
+  function removePending(key: string) {
+    const entry = pendingToasts.get(key);
+    if (!entry) return undefined;
+    pendingToasts.delete(key);
+    clearTimeout(entry.timer);
+    unindexPending(key, entry);
+    return entry;
   }
 
   function queuePending(args: {
@@ -98,7 +160,10 @@ export function useGlobalUpdateToast() {
   }) {
     const key = args.operationId ?? `_anon_${++pendingNonce}`;
     const timer = setTimeout(() => {
+      const entry = pendingToasts.get(key);
+      if (!entry) return;
       pendingToasts.delete(key);
+      unindexPending(key, entry);
       args.fire();
     }, UPDATE_TOAST_FALLBACK_DELAY_MS);
     pendingToasts.set(key, {
@@ -108,19 +173,36 @@ export function useGlobalUpdateToast() {
       fire: args.fire,
       timer,
     });
+    indexPendingByContainer(key, [args.containerId, args.newContainerId]);
   }
 
   function settleByContainer(containerId: string | undefined, containerName: string | undefined) {
     if (!containerId && !containerName) return;
-    for (const [key, entry] of pendingToasts) {
-      const idMatch =
-        (containerId && entry.containerId === containerId) ||
-        (containerId && entry.newContainerId === containerId);
-      const nameMatch = containerName && entry.containerName === containerName;
-      if (idMatch || nameMatch) {
-        pendingToasts.delete(key);
-        clearTimeout(entry.timer);
-        entry.fire();
+    // Fast path: container-state events for known IDs hit the secondary index
+    // and skip the Map scan entirely. This is the hot path — fires on every
+    // dd:sse-container-added/updated/removed event.
+    if (containerId) {
+      const keys = pendingKeysByContainerId.get(containerId);
+      if (keys && keys.size > 0) {
+        for (const key of [...keys]) {
+          const entry = removePending(key);
+          entry?.fire();
+        }
+        // When all pending toasts for this container settle via the ID-indexed
+        // path, the name-match scan below is unnecessary. Return only when at
+        // least one match fired, so name-only entries still get a chance.
+        if (containerName === undefined) return;
+      }
+    }
+    // Fallback: name-only match for anonymous (no operationId, no containerId)
+    // queued toasts. Tiny working set in practice (one pending per in-flight
+    // update with a name but no id), so a linear scan is fine here.
+    if (containerName) {
+      for (const [key, entry] of pendingToasts) {
+        if (entry.containerName === containerName) {
+          removePending(key);
+          entry.fire();
+        }
       }
     }
   }
@@ -132,11 +214,11 @@ export function useGlobalUpdateToast() {
       return;
     }
     const operationId = getDetailString(detail.operationId);
-    if (operationId && completedOperationIds.has(operationId)) {
+    if (operationId && hasCompleted('applied', operationId)) {
       return;
     }
     if (operationId) {
-      recordCompleted(operationId);
+      recordCompleted('applied', operationId);
     }
     const name = getDetailString(detail.containerName) ?? 'container';
     queuePending({
@@ -155,17 +237,19 @@ export function useGlobalUpdateToast() {
       return;
     }
     const operationId = getDetailString(detail.operationId);
-    if (operationId && completedOperationIds.has(operationId)) {
+    if (operationId && hasCompleted('failed', operationId)) {
       return;
     }
     if (operationId) {
-      recordCompleted(operationId);
+      recordCompleted('failed', operationId);
     }
     const name = getDetailString(detail.containerName) ?? 'container';
     const error = getDetailString(detail.error);
     const rollbackReason = getDetailString(detail.rollbackReason);
     const reason = resolveUpdateFailureReason({ lastError: error, rollbackReason });
-    const isCancelled = rollbackReason === 'cancelled' || error === 'Cancelled by operator';
+    const isCancelled =
+      rollbackReason === OPERATOR_CANCELLED_ROLLBACK_REASON ||
+      error === OPERATOR_CANCELLED_ERROR_MESSAGE;
     queuePending({
       operationId,
       containerId: getDetailString(detail.containerId),
@@ -205,11 +289,11 @@ export function useGlobalUpdateToast() {
     const detail = getDetail(event);
     if (!detail) return;
     const batchId = getDetailString(detail.batchId);
-    if (batchId && completedOperationIds.has(batchId)) {
+    if (batchId && hasCompleted('batch', batchId)) {
       return;
     }
     if (batchId) {
-      recordCompleted(batchId);
+      recordCompleted('batch', batchId);
     }
     const total = typeof detail.total === 'number' ? detail.total : 0;
     const succeeded = typeof detail.succeeded === 'number' ? detail.succeeded : 0;
@@ -243,6 +327,7 @@ export function useGlobalUpdateToast() {
       clearTimeout(entry.timer);
     }
     pendingToasts.clear();
+    pendingKeysByContainerId.clear();
     for (const timer of completedOperationIds.values()) {
       clearTimeout(timer);
     }

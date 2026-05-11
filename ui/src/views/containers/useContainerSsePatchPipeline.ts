@@ -10,6 +10,7 @@ import type { Container, ContainerUpdateOperation } from '../../types/container'
 import {
   isActiveContainerUpdateOperationPhaseForStatus,
   isActiveContainerUpdateOperationStatus,
+  OPERATOR_CANCELLED_ROLLBACK_REASON,
 } from '../../types/update-operation';
 import { mapApiContainer } from '../../utils/container-mapper';
 import { resolveUpdateFailureReason } from '../../utils/update-error-summary';
@@ -378,13 +379,26 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
     newContainerId?: string;
     containerName?: string;
   }): Container | undefined {
-    const idx = input.containers.value.findIndex(
-      (c) =>
-        (typeof target.containerId === 'string' && c.id === target.containerId) ||
-        (typeof target.newContainerId === 'string' && c.id === target.newContainerId) ||
-        (typeof target.containerName === 'string' && c.name === target.containerName),
-    );
-    return idx === -1 ? undefined : input.containers.value[idx];
+    // Hot path for dd:update-operation-changed: prefer the O(1) Map index built
+    // by setContainerIndex / rebuildContainerIndexById so we don't re-scan
+    // containers.value (which can be 100s of rows) on every operation event.
+    if (typeof target.containerId === 'string') {
+      const idx = containerIndexById.get(target.containerId);
+      if (idx !== undefined) return input.containers.value[idx];
+    }
+    if (typeof target.newContainerId === 'string') {
+      const idx = containerIndexById.get(target.newContainerId);
+      if (idx !== undefined) return input.containers.value[idx];
+    }
+    // Name lookup falls back to a linear scan because the composable does not
+    // maintain a name -> index map; the parent view holds containerIdMap for
+    // that purpose, but it is not in scope here. Name-only targets are rare
+    // (operation events carry containerId in the common path).
+    if (typeof target.containerName === 'string') {
+      const name = target.containerName;
+      return input.containers.value.find((c) => c.name === name);
+    }
+    return undefined;
   }
 
   function applyParsedOperationPatch(parsed: ParsedUpdateOperationSse) {
@@ -409,7 +423,8 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
           (container as Container).updateOperation = undefined;
           if (
             status === 'failed' ||
-            (status === 'rolled-back' && parsed.rollbackReason !== 'cancelled')
+            (status === 'rolled-back' &&
+              parsed.rollbackReason !== OPERATOR_CANCELLED_ROLLBACK_REASON)
           ) {
             (container as Container).lastUpdateFailureReason = reason ?? 'Update failed';
             (container as Container).lastUpdateFailureAt = Date.now();
