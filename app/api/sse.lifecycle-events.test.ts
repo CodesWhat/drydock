@@ -594,6 +594,19 @@ describe('SSE lifecycle event handlers', () => {
       expect(payload.containerName).toBe('');
       expect(payload.operationId).toBe('op-no-cname');
     });
+
+    test('update-applied handles falsy non-string non-object payload', () => {
+      sseRouter.init();
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+
+      const onUpdateApplied = mockRegisterContainerUpdateApplied.mock.calls.at(-1)[0];
+      onUpdateApplied(false as any);
+
+      const payload = parseSseEventPayload(res, 'dd:update-applied');
+      expect(payload.containerName).toBe('');
+      expect(payload.imageName).toBeUndefined();
+    });
   });
 
   describe('dd:update-failed broadcast', () => {
