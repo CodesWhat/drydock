@@ -4413,6 +4413,7 @@ describe('Dockercompose Trigger', () => {
     expect(emitContainerUpdateFailed).toHaveBeenCalledWith({
       containerName: 'local_nginx',
       error: 'compose pull failed',
+      container: expect.objectContaining({ name: 'nginx' }),
     });
   });
 

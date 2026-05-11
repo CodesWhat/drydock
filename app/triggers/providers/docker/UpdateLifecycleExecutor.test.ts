@@ -472,6 +472,7 @@ describe('UpdateLifecycleExecutor', () => {
     expect(harness.emitContainerUpdateFailed).toHaveBeenCalledWith({
       containerName: 'docker.local_web',
       error: 'scan failed hard',
+      container: expect.objectContaining({ name: 'web' }),
     });
     expect(harness.pruneOldBackups).toHaveBeenCalledWith('web', 3);
   });
@@ -491,6 +492,7 @@ describe('UpdateLifecycleExecutor', () => {
     expect(harness.emitContainerUpdateFailed).toHaveBeenCalledWith({
       containerName: 'docker.local_web',
       error: 'scan failed hard',
+      container: expect.objectContaining({ name: 'web' }),
     });
     expect(harness.pruneOldBackups).toHaveBeenCalledWith('web', 3);
   });
@@ -534,6 +536,7 @@ describe('UpdateLifecycleExecutor', () => {
     expect(harness.emitContainerUpdateFailed).toHaveBeenCalledWith({
       containerName: 'docker.local_web',
       error: '503',
+      container: expect.objectContaining({ name: 'web' }),
     });
   });
 
@@ -568,6 +571,7 @@ describe('UpdateLifecycleExecutor', () => {
     expect(harness.emitContainerUpdateFailed).toHaveBeenCalledWith({
       containerName: 'docker.local_web',
       error: 'socket bind failed',
+      container: expect.objectContaining({ name: 'web' }),
     });
   });
 

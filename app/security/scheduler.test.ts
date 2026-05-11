@@ -645,6 +645,88 @@ describe('runScheduledScans', () => {
     );
   });
 
+  test('should preserve previously-stored scan result when scheduled scan returns an error and previous scan is recent (issue #357)', async () => {
+    const previousScan = createScanResult({
+      status: 'passed',
+      scannedAt: new Date().toISOString(), // recent — within preservation window
+      summary: { unknown: 0, low: 2, medium: 3, high: 0, critical: 0 },
+    });
+    const container = createContainer({
+      id: 'c1',
+      security: { scan: previousScan },
+    });
+    mockGetContainers.mockReturnValue([container]);
+    const errorScan = createScanResult({
+      status: 'error',
+      summary: undefined,
+      error: 'dial unix /var/run/docker.sock: ENOENT',
+    });
+    mockScanImageWithDedup.mockResolvedValue({ scanResult: errorScan, fromCache: false });
+
+    await runScheduledScans();
+
+    // The UI still hears the live error so the operator sees the failure...
+    expect(mockBroadcastScanCompleted).toHaveBeenCalledWith('c1', 'error');
+    // ...but persisted state keeps the last-good scan record so prior
+    // passed/blocked history isn't silently wiped by a transient Trivy hiccup.
+    expect(mockUpdateContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'c1',
+        security: expect.objectContaining({ scan: previousScan }),
+      }),
+    );
+  });
+
+  test('should overwrite previously-stored scan when it is older than MAX_PRESERVED_SCAN_AGE_MS even on error result (issue #357)', async () => {
+    const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+    const previousScan = createScanResult({
+      status: 'passed',
+      scannedAt: eightDaysAgo,
+      summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
+    });
+    const container = createContainer({
+      id: 'c1',
+      security: { scan: previousScan },
+    });
+    mockGetContainers.mockReturnValue([container]);
+    const errorScan = createScanResult({
+      status: 'error',
+      summary: undefined,
+      error: 'trivy timeout after weeks of outage',
+    });
+    mockScanImageWithDedup.mockResolvedValue({ scanResult: errorScan, fromCache: false });
+
+    await runScheduledScans();
+
+    // Error is 8 days old → outside 7-day preservation window → overwrite
+    expect(mockUpdateContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'c1',
+        security: expect.objectContaining({ scan: errorScan }),
+      }),
+    );
+  });
+
+  test('should still persist error result when no previous scan exists', async () => {
+    const container = createContainer({ id: 'c1', security: {} });
+    mockGetContainers.mockReturnValue([container]);
+    const errorScan = createScanResult({
+      status: 'error',
+      summary: undefined,
+      error: 'trivy timeout',
+    });
+    mockScanImageWithDedup.mockResolvedValue({ scanResult: errorScan, fromCache: false });
+
+    await runScheduledScans();
+
+    expect(mockUpdateContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'c1',
+        security: expect.objectContaining({ scan: errorScan }),
+      }),
+    );
+  });
+
   test('should log the final summary counts for cached and scanned digests', async () => {
     const container1 = createContainer({ id: 'c1' });
     const container2 = createContainer({

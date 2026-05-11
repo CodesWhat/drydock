@@ -430,8 +430,8 @@ function buildUpdateAppliedSsePayload(
     return { containerName, timestamp: new Date().toISOString() };
   }
   const container =
-    payload && typeof payload === 'object' && 'container' in payload
-      ? (payload.container as Record<string, unknown> | undefined)
+    payload && typeof payload === 'object'
+      ? (payload as ContainerUpdateAppliedEventPayload).container
       : undefined;
   const topLevelContainerId =
     typeof payload.containerId === 'string' && payload.containerId !== ''
@@ -439,14 +439,8 @@ function buildUpdateAppliedSsePayload(
       : '';
   const containerId =
     typeof container?.id === 'string' && container.id !== '' ? container.id : topLevelContainerId;
-  const imageName =
-    container?.image && typeof (container.image as Record<string, unknown>)?.name === 'string'
-      ? ((container.image as Record<string, unknown>).name as string)
-      : undefined;
-  const imageDigest =
-    container?.image && typeof (container.image as Record<string, unknown>)?.digest === 'string'
-      ? ((container.image as Record<string, unknown>).digest as string)
-      : null;
+  const imageName = container?.image?.name ?? undefined;
+  const imageDigest = null;
   const operationId = (payload as ContainerUpdateAppliedEventPayload).operationId;
   return {
     ...(typeof operationId === 'string' && operationId.length > 0 ? { operationId } : {}),

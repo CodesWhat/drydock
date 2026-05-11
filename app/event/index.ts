@@ -96,6 +96,7 @@ export interface SelfUpdateStartingEventPayload {
 export interface ContainerUpdateFailedEventPayload {
   containerName: string;
   error: string;
+  container?: Container;
   operationId?: string;
   containerId?: string;
   batchId?: string | null;
@@ -120,7 +121,7 @@ export interface UpdateOperationChangedEventPayload {
 export interface ContainerUpdateAppliedEventPayload {
   containerName: string;
   containerId?: string;
-  container?: Container | Record<string, unknown>;
+  container?: Container;
   operationId?: string;
   batchId?: string | null;
 }

@@ -189,6 +189,44 @@ function sanitizeSecurityScanCycleCompletePayloadForAgentSse(payload: unknown): 
   };
 }
 
+function sanitizeUpdateAppliedPayloadForAgentSse(
+  payload: event.ContainerUpdateAppliedEvent,
+): unknown {
+  if (typeof payload === 'string') {
+    return payload;
+  }
+  if (!payload || typeof payload !== 'object') {
+    return payload;
+  }
+  const p = payload as event.ContainerUpdateAppliedEventPayload;
+  return {
+    ...(typeof p.operationId === 'string' && p.operationId.length > 0
+      ? { operationId: p.operationId }
+      : {}),
+    containerId: p.containerId ?? '',
+    containerName: p.containerName,
+    batchId: p.batchId ?? null,
+  };
+}
+
+function sanitizeUpdateFailedPayloadForAgentSse(
+  payload: event.ContainerUpdateFailedEventPayload,
+): Record<string, unknown> {
+  return {
+    ...(typeof payload.operationId === 'string' && payload.operationId.length > 0
+      ? { operationId: payload.operationId }
+      : {}),
+    containerId: payload.containerId ?? '',
+    containerName: payload.containerName,
+    error: payload.error,
+    phase: payload.phase ?? '',
+    batchId: payload.batchId ?? null,
+    ...(typeof payload.rollbackReason === 'string' && payload.rollbackReason !== ''
+      ? { rollbackReason: payload.rollbackReason }
+      : {}),
+  };
+}
+
 function computeContainerSummary(): ContainerSummary {
   const containers = storeContainer.getContainers();
   const containerStatus = getContainerStatusSummary(containers);
@@ -279,10 +317,10 @@ export function initEvents() {
     sendSseEvent('dd:watcher-snapshot', sanitizeWatcherSnapshotPayloadForAgentSse(payload)),
   );
   event.registerContainerUpdateApplied((payload: event.ContainerUpdateAppliedEvent) =>
-    sendSseEvent('dd:update-applied', payload),
+    sendSseEvent('dd:update-applied', sanitizeUpdateAppliedPayloadForAgentSse(payload)),
   );
   event.registerContainerUpdateFailed((payload: event.ContainerUpdateFailedEventPayload) =>
-    sendSseEvent('dd:update-failed', payload),
+    sendSseEvent('dd:update-failed', sanitizeUpdateFailedPayloadForAgentSse(payload)),
   );
   event.registerUpdateOperationChanged((payload: event.UpdateOperationChangedEventPayload) =>
     sendSseEvent('dd:update-operation-changed', payload),

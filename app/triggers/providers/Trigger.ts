@@ -72,10 +72,7 @@ type NotificationRuleId =
   | 'agent-disconnect'
   | 'agent-reconnect';
 
-interface ContainerUpdateFailedPayload {
-  containerName: string;
-  error: string;
-}
+type ContainerUpdateFailedPayload = event.ContainerUpdateFailedEventPayload;
 
 interface SecurityAlertSummary {
   unknown: number;
@@ -1081,8 +1078,8 @@ class Trigger<
     }
 
     const payloadContainer =
-      typeof payload === 'object' && payload !== null && 'container' in payload
-        ? (payload.container as Container | undefined)
+      typeof payload === 'object' && payload !== null
+        ? (payload as event.ContainerUpdateAppliedEventPayload).container
         : undefined;
     const container = payloadContainer || this.findContainerByBusinessId(containerName);
     const notificationKey = getContainerNotificationKey(container) || containerName;
@@ -1149,7 +1146,13 @@ class Trigger<
   }
 
   async handleContainerUpdateFailedEvent(payload: ContainerUpdateFailedPayload) {
-    const container = this.findContainerByBusinessId(payload.containerName);
+    // Mirror handleContainerUpdateAppliedEvent: prefer the container carried
+    // on the payload (set by UpdateLifecycleExecutor), fall back to the store
+    // lookup. Without the payload fallback, a post-failure prune / agent-push
+    // race can leave the controller's raw store without the container at the
+    // exact moment update-failed arrives, dropping the notification silently
+    // — see issue #355.
+    const container = payload.container || this.findContainerByBusinessId(payload.containerName);
     const notificationContainer = container
       ? withNotificationEvent(container, {
           kind: 'update-failed',
@@ -2477,8 +2480,8 @@ class Trigger<
   async handleContainerUpdateApplied(payload: ContainerUpdateAppliedEventPayload) {
     const containerName = getContainerUpdateAppliedEventContainerName(payload);
     const payloadContainer =
-      typeof payload === 'object' && payload !== null && 'container' in payload
-        ? (payload.container as Container | undefined)
+      typeof payload === 'object' && payload !== null
+        ? (payload as event.ContainerUpdateAppliedEventPayload).container
         : undefined;
     const containerId =
       getContainerNotificationKey(payloadContainer) ||

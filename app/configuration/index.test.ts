@@ -539,6 +539,7 @@ describe('getSecurityConfiguration', () => {
         server: '',
         command: 'trivy',
         timeout: 120000,
+        imageSrc: '',
       },
       signature: {
         verify: false,
@@ -597,6 +598,7 @@ describe('getSecurityConfiguration', () => {
         server: 'http://trivy:4954',
         command: '/usr/local/bin/trivy',
         timeout: 60000,
+        imageSrc: '',
       },
       signature: {
         verify: true,
@@ -739,6 +741,22 @@ describe('getSecurityConfiguration', () => {
 
     delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
     delete configuration.ddEnvVars.DD_SECURITY_TRIVY_TIMEOUT;
+  });
+
+  test('should read DD_SECURITY_TRIVY_IMAGE_SRC into trivy.imageSrc', () => {
+    configuration.ddEnvVars.DD_SECURITY_TRIVY_IMAGE_SRC = 'remote';
+
+    const result = configuration.getSecurityConfiguration();
+    expect(result.trivy.imageSrc).toBe('remote');
+
+    delete configuration.ddEnvVars.DD_SECURITY_TRIVY_IMAGE_SRC;
+  });
+
+  test('should default trivy.imageSrc to empty string when DD_SECURITY_TRIVY_IMAGE_SRC is not set', () => {
+    delete configuration.ddEnvVars.DD_SECURITY_TRIVY_IMAGE_SRC;
+
+    const result = configuration.getSecurityConfiguration();
+    expect(result.trivy.imageSrc).toBe('');
   });
 
   test('should warn and fallback to default sbom formats when configured list is invalid', () => {

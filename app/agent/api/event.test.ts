@@ -386,7 +386,7 @@ describe('agent API event', () => {
       expect(payload).toContain('"local_nginx"');
     });
 
-    test('update-applied handler should send object payloads to connected clients', () => {
+    test('update-applied handler should strip container object from object payloads', () => {
       eventApi.subscribeEvents(req, res);
       res.write.mockClear();
       eventApi.initEvents();
@@ -405,7 +405,54 @@ describe('agent API event', () => {
       const payload = res.write.mock.calls[0][0];
       expect(payload).toContain('dd:update-applied');
       expect(payload).toContain('"containerName":"local_nginx"');
-      expect(payload).toContain('"name":"nginx"');
+      expect(payload).not.toContain('"container"');
+      expect(payload).not.toContain('"name":"nginx"');
+    });
+
+    test('update-applied handler should preserve operationId and batchId scalars', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updateAppliedHandler = event.registerContainerUpdateApplied.mock.calls[0][0];
+      updateAppliedHandler({
+        containerName: 'local_nginx',
+        containerId: 'c1',
+        operationId: 'op-abc',
+        batchId: 'batch-1',
+        container: { id: 'c1', name: 'nginx', watcher: 'local' },
+      });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"operationId":"op-abc"');
+      expect(payload).toContain('"containerId":"c1"');
+      expect(payload).toContain('"batchId":"batch-1"');
+      expect(payload).not.toContain('"container"');
+    });
+
+    test('update-applied handler should omit operationId when empty string', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updateAppliedHandler = event.registerContainerUpdateApplied.mock.calls[0][0];
+      updateAppliedHandler({ containerName: 'local_nginx', operationId: '' });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).not.toContain('"operationId"');
+    });
+
+    test('update-applied handler should tolerate non-object payloads', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updateAppliedHandler = event.registerContainerUpdateApplied.mock.calls[0][0];
+      updateAppliedHandler(null);
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:update-applied');
     });
 
     test('update-failed handler should send SSE to connected clients', () => {
@@ -424,6 +471,74 @@ describe('agent API event', () => {
       expect(payload).toContain('dd:update-failed');
       expect(payload).toContain('"containerName":"local_nginx"');
       expect(payload).toContain('"error":"compose pull failed"');
+    });
+
+    test('update-failed handler should strip container object and preserve scalar fields', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updateFailedHandler = event.registerContainerUpdateFailed.mock.calls[0][0];
+      updateFailedHandler({
+        containerName: 'local_nginx',
+        containerId: 'c1',
+        operationId: 'op-fail-1',
+        batchId: 'batch-2',
+        phase: 'pulling',
+        rollbackReason: 'health check failed',
+        error: 'pull timed out',
+        container: {
+          id: 'c1',
+          name: 'nginx',
+          watcher: 'local',
+          security: { scan: { vulnerabilities: [{ id: 'CVE-2024-9999' }] } },
+        },
+      });
+
+      expect(res.write).toHaveBeenCalled();
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('dd:update-failed');
+      expect(payload).toContain('"containerName":"local_nginx"');
+      expect(payload).toContain('"containerId":"c1"');
+      expect(payload).toContain('"operationId":"op-fail-1"');
+      expect(payload).toContain('"batchId":"batch-2"');
+      expect(payload).toContain('"phase":"pulling"');
+      expect(payload).toContain('"rollbackReason":"health check failed"');
+      expect(payload).toContain('"error":"pull timed out"');
+      expect(payload).not.toContain('"container"');
+      expect(payload).not.toContain('"vulnerabilities"');
+    });
+
+    test('update-failed handler should omit operationId when empty string', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updateFailedHandler = event.registerContainerUpdateFailed.mock.calls[0][0];
+      updateFailedHandler({
+        containerName: 'local_nginx',
+        error: 'boom',
+        operationId: '',
+      });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).not.toContain('"operationId"');
+    });
+
+    test('update-failed handler should omit rollbackReason when empty string', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updateFailedHandler = event.registerContainerUpdateFailed.mock.calls[0][0];
+      updateFailedHandler({
+        containerName: 'local_nginx',
+        error: 'boom',
+        rollbackReason: '',
+      });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).not.toContain('"rollbackReason"');
     });
 
     test('update-operation-changed handler should send SSE to connected clients', () => {

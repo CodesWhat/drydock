@@ -40,6 +40,7 @@ vi.mock('node:child_process', async () => {
 });
 
 import {
+  _resetErrorRetryFloorForTesting,
   _resetTrivyQueueForTesting,
   _setTrivyQueueRejectedForTesting,
   clearDigestScanCache,
@@ -62,6 +63,7 @@ function createEnabledConfiguration() {
       server: '',
       command: 'trivy',
       timeout: 120000,
+      imageSrc: '',
     },
     signature: {
       verify: true,
@@ -85,6 +87,7 @@ beforeEach(() => {
   childProcessControl.execFileImpl = null;
   _resetTrivyQueueForTesting();
   clearDigestScanCache();
+  _resetErrorRetryFloorForTesting();
   mockHasValidCommandPath.mockReturnValue(true);
   mockGetSecurityConfiguration.mockReturnValue(createEnabledConfiguration());
 });
@@ -536,7 +539,8 @@ test('scanImageForVulnerabilities should pass json format through unchanged in t
   );
 });
 
-test('buildTrivyArgs should include --image-src docker in scan args', async () => {
+test('buildTrivyArgs should NOT pass --image-src when imageSrc is empty so Trivy falls back to registry when docker.sock is unreachable', async () => {
+  // imageSrc is '' in createEnabledConfiguration() — flag must be absent
   const execFileMock = vi.fn((command, args, options, callback) => {
     callback(null, JSON.stringify({ Results: [] }), '');
     return { exitCode: 0 };
@@ -546,11 +550,29 @@ test('buildTrivyArgs should include --image-src docker in scan args', async () =
   await scanImageForVulnerabilities({ image: 'registry.example.com/app:1.2.3' });
 
   const callArgs = execFileMock.mock.calls[0][1] as string[];
-  expect(callArgs).toContain('--image-src');
-  expect(callArgs[callArgs.indexOf('--image-src') + 1]).toBe('docker');
+  expect(callArgs).not.toContain('--image-src');
 });
 
-test('buildTrivyArgs should include --image-src docker in SBOM args', async () => {
+test('buildTrivyArgs should pass --image-src when imageSrc is configured for scan args', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    trivy: { ...createEnabledConfiguration().trivy, imageSrc: 'remote' },
+  });
+  const execFileMock = vi.fn((command, args, options, callback) => {
+    callback(null, JSON.stringify({ Results: [] }), '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  await scanImageForVulnerabilities({ image: 'registry.example.com/app:1.2.3' });
+
+  const callArgs = execFileMock.mock.calls[0][1] as string[];
+  const srcIndex = callArgs.indexOf('--image-src');
+  expect(srcIndex).toBeGreaterThan(-1);
+  expect(callArgs[srcIndex + 1]).toBe('remote');
+});
+
+test('buildTrivyArgs should NOT pass --image-src in SBOM args when imageSrc is empty so Trivy falls back to registry when docker.sock is unreachable', async () => {
   mockGetSecurityConfiguration.mockReturnValue({
     ...createEnabledConfiguration(),
     sbom: { enabled: true, formats: ['spdx-json'] },
@@ -564,8 +586,27 @@ test('buildTrivyArgs should include --image-src docker in SBOM args', async () =
   await generateImageSbom({ image: 'registry.example.com/app:1.2.3' });
 
   const callArgs = execFileMock.mock.calls[0][1] as string[];
-  expect(callArgs).toContain('--image-src');
-  expect(callArgs[callArgs.indexOf('--image-src') + 1]).toBe('docker');
+  expect(callArgs).not.toContain('--image-src');
+});
+
+test('buildTrivyArgs should pass --image-src when imageSrc is configured for SBOM args', async () => {
+  mockGetSecurityConfiguration.mockReturnValue({
+    ...createEnabledConfiguration(),
+    trivy: { ...createEnabledConfiguration().trivy, imageSrc: 'remote' },
+    sbom: { enabled: true, formats: ['spdx-json'] },
+  });
+  const execFileMock = vi.fn((command, args, options, callback) => {
+    callback(null, JSON.stringify({ spdxVersion: 'SPDX-2.3' }), '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  await generateImageSbom({ image: 'registry.example.com/app:1.2.3' });
+
+  const callArgs = execFileMock.mock.calls[0][1] as string[];
+  const srcIndex = callArgs.indexOf('--image-src');
+  expect(srcIndex).toBeGreaterThan(-1);
+  expect(callArgs[srcIndex + 1]).toBe('remote');
 });
 
 test('trivy queue should serialize concurrent scan invocations', async () => {
@@ -1254,6 +1295,142 @@ describe('scanImageWithDedup', () => {
     );
 
     expect(getDigestScanCacheSize()).toBe(1);
+  });
+
+  test('should NOT re-scan within the error retry floor when a prior scan errored (issue #357)', async () => {
+    let invocations = 0;
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      invocations += 1;
+      callback(new Error('trivy boom'), '', 'dial unix /var/run/docker.sock: ENOENT');
+      return { exitCode: 1 };
+    };
+
+    expect(getDigestScanCacheSize()).toBe(0);
+
+    const first = await scanImageWithDedup(
+      {
+        image: 'registry.example.com/app:1.2.3',
+        digest: 'sha256:transient',
+        trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+      },
+      3_600_000,
+    );
+
+    expect(first.scanResult.status).toBe('error');
+    expect(getDigestScanCacheSize()).toBe(0);
+
+    // Second call within the floor window — Trivy should NOT be invoked again.
+    const second = await scanImageWithDedup(
+      {
+        image: 'registry.example.com/app:1.2.3',
+        digest: 'sha256:transient',
+        trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+      },
+      3_600_000,
+    );
+
+    // Returns the same error result from the floor cache, not a fresh scan.
+    expect(second.fromCache).toBe(true);
+    expect(second.scanResult.status).toBe('error');
+    expect(invocations).toBe(1);
+  });
+
+  test('should re-scan after error retry floor expires (issue #357)', async () => {
+    let invocations = 0;
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      invocations += 1;
+      if (invocations === 1) {
+        callback(new Error('trivy boom'), '', 'dial unix /var/run/docker.sock: ENOENT');
+        return { exitCode: 1 };
+      }
+      callback(null, JSON.stringify({ Results: [] }), '');
+      return { exitCode: 0 };
+    };
+
+    vi.useFakeTimers();
+
+    await scanImageWithDedup(
+      {
+        image: 'registry.example.com/app:1.2.3',
+        digest: 'sha256:transient-expire',
+        trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+      },
+      3_600_000,
+    );
+    expect(invocations).toBe(1);
+
+    // Advance past the 15-minute error retry floor
+    vi.advanceTimersByTime(15 * 60 * 1000 + 1);
+
+    const result = await scanImageWithDedup(
+      {
+        image: 'registry.example.com/app:1.2.3',
+        digest: 'sha256:transient-expire',
+        trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+      },
+      3_600_000,
+    );
+
+    vi.useRealTimers();
+
+    expect(result.fromCache).toBe(false);
+    expect(invocations).toBe(2);
+  });
+
+  test('should cache success after a prior error on the same digest (issue #357)', async () => {
+    let invocations = 0;
+    childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+      invocations += 1;
+      if (invocations === 1) {
+        callback(new Error('trivy boom'), '', 'dial unix /var/run/docker.sock: ENOENT');
+        return { exitCode: 1 };
+      }
+      callback(null, JSON.stringify({ Results: [] }), '');
+      return { exitCode: 0 };
+    };
+
+    // First call — error
+    await scanImageWithDedup(
+      {
+        image: 'registry.example.com/app:1.2.3',
+        digest: 'sha256:transient2',
+        trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+      },
+      3_600_000,
+    );
+    expect(invocations).toBe(1);
+    expect(getDigestScanCacheSize()).toBe(0);
+
+    // Reset the floor so the second call can proceed
+    _resetErrorRetryFloorForTesting();
+
+    // Second call — succeeds
+    const second = await scanImageWithDedup(
+      {
+        image: 'registry.example.com/app:1.2.3',
+        digest: 'sha256:transient2',
+        trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+      },
+      3_600_000,
+    );
+    expect(invocations).toBe(2);
+    expect(second.scanResult.status).toBe('passed');
+    expect(getDigestScanCacheSize()).toBe(1);
+
+    // Third call — should come from success cache
+    const execFileMockThird = vi.fn();
+    childProcessControl.execFileImpl = execFileMockThird;
+    const third = await scanImageWithDedup(
+      {
+        image: 'registry.example.com/app:1.2.3',
+        digest: 'sha256:transient2',
+        trivyDbUpdatedAt: '2025-01-01T00:00:00Z',
+      },
+      3_600_000,
+    );
+    expect(third.fromCache).toBe(true);
+    expect(third.scanResult.status).toBe('passed');
+    expect(execFileMockThird).not.toHaveBeenCalled();
   });
 });
 

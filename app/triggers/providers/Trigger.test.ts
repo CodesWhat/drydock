@@ -3323,6 +3323,71 @@ test('handleContainerUpdateFailedEvent should not trigger when container is not 
   expect(triggerSpy).not.toHaveBeenCalled();
 });
 
+test('handleContainerUpdateFailedEvent should dispatch using payload.container when the store lookup misses (issue #355)', async () => {
+  // The lifecycle emits update-failed with the in-scope container so
+  // notification triggers can still dispatch when a post-failure prune /
+  // agent push race leaves the controller's raw store without the row at
+  // the moment the event arrives. Without this fallback, Pushover (and any
+  // other notification trigger) silently swallowed the failure.
+  const payloadContainer = {
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  };
+  storeContainer.getContainers.mockReturnValue([]);
+  storeContainer.getContainersRaw.mockReturnValue([]);
+  trigger.configuration.mode = 'simple';
+  trigger.configuration.threshold = 'all';
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleContainerUpdateFailedEvent({
+    containerName: 'local_container1',
+    error: 'boom',
+    container: payloadContainer,
+  } as any);
+
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: 'container1',
+      notificationEvent: {
+        kind: 'update-failed',
+        error: 'boom',
+      },
+    }),
+  );
+});
+
+test('handleContainerUpdateFailedEvent should fall back to store lookup when payload.container is explicitly undefined', async () => {
+  const storedContainer = {
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  };
+  storeContainer.getContainers.mockReturnValue([storedContainer]);
+  storeContainer.getContainersRaw.mockReturnValue([storedContainer]);
+  trigger.configuration.mode = 'simple';
+  trigger.configuration.threshold = 'all';
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleContainerUpdateFailedEvent({
+    containerName: 'local_container1',
+    error: 'network timeout',
+    container: undefined,
+  });
+
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: 'container1',
+      notificationEvent: {
+        kind: 'update-failed',
+        error: 'network timeout',
+      },
+    }),
+  );
+});
+
 test('handleSecurityAlertEvent should dispatch using payload container when provided', async () => {
   const container = {
     watcher: 'local',

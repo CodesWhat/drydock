@@ -22,6 +22,7 @@ import { clearDigestScanCache, scanImageWithDedup } from './scan.js';
 const logScheduler = log.child({ component: 'security.scheduler' });
 const DEFAULT_CRON_INTERVAL_MS = MS_PER_DAY;
 const CRON_INTERVAL_SAMPLE_SIZE = 64;
+const MAX_PRESERVED_SCAN_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 let cronTask: ReturnType<typeof cron.schedule> | undefined;
 let running = false;
@@ -164,6 +165,11 @@ function withAbortSignal<T>(operation: Promise<T>, signal: AbortSignal): Promise
   });
 }
 
+function isWithinPreservationWindow(previousScan: { scannedAt: string }): boolean {
+  const scannedAtMs = new Date(previousScan.scannedAt).getTime();
+  return Number.isFinite(scannedAtMs) && Date.now() - scannedAtMs < MAX_PRESERVED_SCAN_AGE_MS;
+}
+
 type ScanDigestGroupOutcome = 'cached' | 'scanned' | 'error' | 'aborted';
 
 interface ScanDigestGroupResult {
@@ -202,13 +208,25 @@ async function scanDigestGroup(options: {
       logScheduler.info(`Digest ${digest.slice(0, 12)} unchanged, using cached scan`);
     }
 
-    // Update all containers sharing this digest
+    // Update all containers sharing this digest. Preserve the previously
+    // stored scan record when the new result is an error (transient Trivy
+    // failure, registry timeout, daemon hiccup) AND the previous scan is
+    // still within the preservation window; otherwise an empty
+    // status:'error' record from `mapToErrorResult` would silently wipe
+    // useful passed/blocked history every time the scheduler runs into a
+    // hiccup — see issue #357. After MAX_PRESERVED_SCAN_AGE_MS the stale
+    // record is overwritten so a container cannot be stuck as 'passed'
+    // indefinitely when Trivy errors persist for weeks.
     for (const container of group) {
+      const previousScan = container.security?.scan;
+      const keepPrevious =
+        scanResult.status === 'error' && previousScan && isWithinPreservationWindow(previousScan);
+      const scan = keepPrevious ? previousScan : scanResult;
       const containerToStore = {
         ...container,
         security: {
           ...(container.security || {}),
-          scan: scanResult,
+          scan,
         },
       };
       storeContainer.updateContainer(containerToStore);
