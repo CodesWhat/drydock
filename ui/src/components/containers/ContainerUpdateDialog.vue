@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useToast } from '../../composables/useToast';
 import {
@@ -10,7 +10,6 @@ import {
 } from '../../utils/container-update';
 import { updateContainer as apiUpdateContainer } from '../../services/container-actions';
 import { errorMessage } from '../../utils/error';
-import { resolveUpdateFailureReason } from '../../utils/update-error-summary';
 import type { UpdateEligibility } from '../../types/container';
 import { getPrimaryHardBlocker } from '../../utils/update-eligibility';
 
@@ -33,86 +32,10 @@ const emit = defineEmits<{
 
 const inProgress = ref(false);
 const actionError = ref<string | null>(null);
-const terminalToastStops = new Set<() => void>();
 
 const isOpen = computed(() => props.containerId !== null);
 const hardBlocker = computed(() => getPrimaryHardBlocker(props.updateEligibility));
 const updateBlocked = computed(() => hardBlocker.value !== undefined);
-
-function getDetailString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-function getTerminalEventDetail(event: Event): Record<string, unknown> | undefined {
-  const detail = (event as CustomEvent)?.detail;
-  return detail && typeof detail === 'object' ? (detail as Record<string, unknown>) : undefined;
-}
-
-function watchTerminalToast(operationId: string, fallbackName: string) {
-  let done = false;
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  const cleanup = () => {
-    if (done) {
-      return;
-    }
-    done = true;
-    globalThis.removeEventListener('dd:sse-update-applied', onApplied);
-    globalThis.removeEventListener('dd:sse-update-failed', onFailed);
-    if (timeout !== undefined) {
-      clearTimeout(timeout);
-    }
-    terminalToastStops.delete(cleanup);
-  };
-  const onApplied = (event: Event) => {
-    const detail = getTerminalEventDetail(event);
-    if (getDetailString(detail?.operationId) !== operationId) {
-      return;
-    }
-    const name = getDetailString(detail?.containerName) ?? fallbackName;
-    toast.success(t('containersView.toast.updated', { name }));
-    cleanup();
-  };
-  const onFailed = (event: Event) => {
-    const detail = getTerminalEventDetail(event);
-    if (getDetailString(detail?.operationId) !== operationId) {
-      return;
-    }
-    const name = getDetailString(detail?.containerName) ?? fallbackName;
-    const error = getDetailString(detail?.error);
-    const rollbackReason = getDetailString(detail?.rollbackReason);
-    const reason = resolveUpdateFailureReason({ lastError: error, rollbackReason });
-    const isCancelled = rollbackReason === 'cancelled' || error === 'Cancelled by operator';
-    if (rollbackReason !== undefined) {
-      if (isCancelled) {
-        toast.success(t('containersView.toast.cancelled', { name }));
-      } else {
-        toast.warning(
-          reason
-            ? t('containersView.toast.rolledBackWithReason', { name, reason })
-            : t('containersView.toast.rolledBack', { name }),
-        );
-      }
-    } else {
-      toast.error(
-        reason
-          ? t('containersView.toast.updateFailedWithReason', { name, reason })
-          : t('containersView.toast.updateFailed', { name }),
-      );
-    }
-    cleanup();
-  };
-
-  globalThis.addEventListener('dd:sse-update-applied', onApplied);
-  globalThis.addEventListener('dd:sse-update-failed', onFailed);
-  terminalToastStops.add(cleanup);
-  timeout = setTimeout(cleanup, 10 * 60 * 1000);
-}
-
-onBeforeUnmount(() => {
-  for (const cleanup of [...terminalToastStops]) {
-    cleanup();
-  }
-});
 
 const confirmMessage = computed(() => {
   const name = props.containerName ?? props.containerId ?? 'this container';
@@ -160,12 +83,10 @@ async function confirm() {
   inProgress.value = true;
   actionError.value = null;
   const name = props.containerName ?? id;
-  let operationId: string | undefined;
   try {
     const result = await runContainerUpdateRequest({
       request: async () => {
-        const response = (await apiUpdateContainer(id)) as { operationId?: unknown };
-        operationId = getDetailString(response?.operationId);
+        await apiUpdateContainer(id);
       },
       isStaleError: isStaleContainerUpdateError,
     });
@@ -175,9 +96,6 @@ async function confirm() {
       return;
     }
     toast.success(getContainerUpdateStartedMessage(name));
-    if (operationId) {
-      watchTerminalToast(operationId, name);
-    }
     emit('updated', id);
     emit('update:containerId', null);
   } catch (caught: unknown) {

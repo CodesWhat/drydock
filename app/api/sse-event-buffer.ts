@@ -25,7 +25,17 @@ function parseEventId(lastEventId: string): { bootIdPart: string; counter: numbe
   const bootIdPart = lastEventId.slice(0, colonIdx);
   const counterStr = lastEventId.slice(colonIdx + 1);
   const counter = Number.parseInt(counterStr, 10);
-  if (!Number.isFinite(counter) || counter < 0) {
+  // Reject counters above MAX_SAFE_INTEGER: above that ceiling JS loses
+  // integer precision and the parsed value silently rounds, which could match
+  // a real buffered counter on replay. The buffer monotonic counter starts at
+  // 0 and only increments per broadcast, so a value this large can only come
+  // from a malformed/attacker-supplied Last-Event-ID.
+  if (
+    !Number.isFinite(counter) ||
+    counter < 0 ||
+    counter > Number.MAX_SAFE_INTEGER ||
+    !Number.isInteger(counter)
+  ) {
     return null;
   }
   return { bootIdPart, counter };

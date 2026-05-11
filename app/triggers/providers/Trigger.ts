@@ -72,10 +72,7 @@ type NotificationRuleId =
   | 'agent-disconnect'
   | 'agent-reconnect';
 
-interface ContainerUpdateFailedPayload {
-  containerName: string;
-  error: string;
-}
+type ContainerUpdateFailedPayload = event.ContainerUpdateFailedEventPayload;
 
 interface SecurityAlertSummary {
   unknown: number;
@@ -994,6 +991,24 @@ class Trigger<
     container: TriggerContainer | undefined,
     options: EventDispatchOptions = {},
   ) {
+    // Update-action triggers (docker, dockercompose) implement `trigger()` as
+    // the full pull-scan-recreate update lifecycle. Lifecycle handlers route
+    // here for notification dispatch; calling `trigger()` from this path
+    // re-executes the update lifecycle in response to security-alert /
+    // update-applied / update-failed / agent-* events — the root cause of
+    // "Scan now caused my container to be recreated" (post-#357 fallout).
+    // The legitimate auto-update path (`runUpdateAvailableSimpleTrigger` /
+    // `runAcceptedUpdateBatch`) routes update-action triggers through the
+    // admission queue and never enters `dispatchContainerForEvent` for
+    // `update-available`. The `ruleId !== 'update-available'` clause
+    // remains as forward-compatible defense against future regressions.
+    if (this.isUpdateActionTrigger() && ruleId !== 'update-available') {
+      this.log.debug(
+        `Skipping ${ruleId} dispatch for update-action trigger (lifecycle events do not invoke update lifecycle)`,
+      );
+      return;
+    }
+
     if (!this.isTriggerEnabledForRule(ruleId, options)) {
       return;
     }
@@ -1081,8 +1096,8 @@ class Trigger<
     }
 
     const payloadContainer =
-      typeof payload === 'object' && payload !== null && 'container' in payload
-        ? (payload.container as Container | undefined)
+      typeof payload === 'object' && payload !== null
+        ? (payload as event.ContainerUpdateAppliedEventPayload).container
         : undefined;
     const container = payloadContainer || this.findContainerByBusinessId(containerName);
     const notificationKey = getContainerNotificationKey(container) || containerName;
@@ -1149,7 +1164,13 @@ class Trigger<
   }
 
   async handleContainerUpdateFailedEvent(payload: ContainerUpdateFailedPayload) {
-    const container = this.findContainerByBusinessId(payload.containerName);
+    // Mirror handleContainerUpdateAppliedEvent: prefer the container carried
+    // on the payload (set by UpdateLifecycleExecutor), fall back to the store
+    // lookup. Without the payload fallback, a post-failure prune / agent-push
+    // race can leave the controller's raw store without the container at the
+    // exact moment update-failed arrives, dropping the notification silently
+    // — see issue #355.
+    const container = payload.container || this.findContainerByBusinessId(payload.containerName);
     const notificationContainer = container
       ? withNotificationEvent(container, {
           kind: 'update-failed',
@@ -2477,8 +2498,8 @@ class Trigger<
   async handleContainerUpdateApplied(payload: ContainerUpdateAppliedEventPayload) {
     const containerName = getContainerUpdateAppliedEventContainerName(payload);
     const payloadContainer =
-      typeof payload === 'object' && payload !== null && 'container' in payload
-        ? (payload.container as Container | undefined)
+      typeof payload === 'object' && payload !== null
+        ? (payload as event.ContainerUpdateAppliedEventPayload).container
         : undefined;
     const containerId =
       getContainerNotificationKey(payloadContainer) ||

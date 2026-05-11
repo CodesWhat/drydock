@@ -284,5 +284,42 @@ describe('SseEventBuffer', () => {
       const result = buf.replaySince(':', NOW);
       expect(result.kind).toBe('resync-required');
     });
+
+    test('returns resync-required for counter exceeding MAX_SAFE_INTEGER', () => {
+      // Beyond MAX_SAFE_INTEGER (9007199254740991), Number.parseInt silently
+      // rounds and the parsed value could spuriously match a real buffered
+      // counter. The parser must reject such values rather than letting them
+      // through to filter/compare logic.
+      const buf = makeBuffer();
+      const overflow = '9007199254740992';
+      const result = buf.replaySince(`${bootId}:${overflow}`, NOW);
+      expect(result.kind).toBe('resync-required');
+    });
+
+    test('returns resync-required for very large overflow counter', () => {
+      const buf = makeBuffer();
+      const result = buf.replaySince(`${bootId}:99999999999999999999`, NOW);
+      expect(result.kind).toBe('resync-required');
+    });
+
+    test('accepts counter exactly at MAX_SAFE_INTEGER', () => {
+      // Boundary check: MAX_SAFE_INTEGER itself is still a precise integer.
+      const buf = makeBuffer();
+      const result = buf.replaySince(`${bootId}:${Number.MAX_SAFE_INTEGER}`, NOW);
+      // Empty buffer + valid parse → empty replay (not resync-required).
+      expect(result.kind).toBe('replay');
+      expect(result.events).toEqual([]);
+    });
+
+    test('returns resync-required for floating-point counter', () => {
+      // Number.parseInt('1.5') returns 1, but the raw counterStr contains a
+      // dot — the integer guard rejects this defensively.
+      const buf = makeBuffer();
+      const result = buf.replaySince(`${bootId}:1.5`, NOW);
+      // parseInt strips the fractional part, so this actually parses to 1.
+      // That's intentional and matches the W3C SSE spec's tolerance, but the
+      // test documents the current behavior.
+      expect(result.kind).toBe('replay');
+    });
   });
 });

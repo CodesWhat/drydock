@@ -1852,6 +1852,55 @@ describe('container-mapper', () => {
     });
   });
 
+  describe('isDigestPinned', () => {
+    it('returns true when image.tag.value is a sha256:… literal (digest-pinned)', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          image: {
+            registry: { name: 'hub', url: 'https://registry-1.docker.io' },
+            name: 'nginx',
+            tag: { value: 'sha256:bcf6335aabbb1234567890abcdef1234567890abcdef1234567890abcdef12' },
+          },
+        }),
+      );
+      expect(c.isDigestPinned).toBe(true);
+    });
+
+    it('returns false for a floating tag (`latest`)', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          image: {
+            registry: { name: 'hub', url: 'https://registry-1.docker.io' },
+            name: 'nginx',
+            tag: { value: 'latest' },
+          },
+        }),
+      );
+      expect(c.isDigestPinned).toBe(false);
+    });
+
+    it('returns false for a semver tag with digest watch enabled (#356)', () => {
+      // Floating-tag + digest-watch case introduced by `da1334a4` — tag is a
+      // meaningful version string, even though `updateKind` may be 'digest'.
+      const c = mapApiContainer(
+        makeApiContainer({
+          image: {
+            registry: { name: 'ghcr', url: 'https://ghcr.io' },
+            name: 'linuxserver/calibre',
+            tag: { value: 'v8.13.2' },
+            digest: { watch: true, value: 'sha256:abc', repo: 'sha256:abc' },
+          },
+        }),
+      );
+      expect(c.isDigestPinned).toBe(false);
+    });
+
+    it('returns false when image.tag.value is missing', () => {
+      const c = mapApiContainer(makeApiContainer({ image: { name: 'nginx' } }));
+      expect(c.isDigestPinned).toBe(false);
+    });
+  });
+
   describe('deriveRegistryErrorKind', () => {
     it('returns undefined when no error is present', () => {
       const c = mapApiContainer(makeApiContainer());

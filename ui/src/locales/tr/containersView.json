@@ -12,11 +12,8 @@
       "rolledBack": "Geri alındı: {name}",
       "rolledBackWithReason": "Geri alındı: {name} — {reason}",
       "updateAlreadyInProgress": "Bu gruptaki bazı kapsayıcılar için güncelleme zaten devam ediyor",
-      "batchUpdated": "{count} kapsayıcı {group} içinde güncellendi",
       "batchUpdatedNoGroup": "{count} kapsayıcıları güncellendi",
-      "batchPartial": "{succeeded} / {total} kapsayıcı {group} içinde güncellendi; {failed} başarısız oldu",
       "batchPartialNoGroup": "{succeeded} / {total} kapsayıcı güncellendi; {failed} başarısız oldu",
-      "batchFailed": "{count} kapsayıcı {group} içinde güncellenemedi",
       "batchFailedNoGroup": "{count} kapsayıcıları güncellenemedi",
       "unknownGroup": "bilinmeyen grup"
     },

@@ -411,9 +411,9 @@ describe('ContainersView — applyContainerPatch', () => {
       globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: rawNew }));
       await flushPromises();
 
-      expect(vm.containerIdMap['c2']).toBe('c2');
-      expect(vm.containerIdMap['redis']).toBe('c2');
-      expect(vm.containerMetaMap['c2']).toMatchObject({ id: 'c2', name: 'redis' });
+      expect(vm.containerIdMap.c2).toBe('c2');
+      expect(vm.containerIdMap.redis).toBe('c2');
+      expect(vm.containerMetaMap.c2).toMatchObject({ id: 'c2', name: 'redis' });
     });
 
     it('mutates in place when id already exists (add with duplicate id)', async () => {
@@ -566,9 +566,9 @@ describe('ContainersView — applyContainerPatch', () => {
       globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: raw }));
       await flushPromises();
 
-      expect(vm.containerIdMap['c1']).toBe('c1');
-      expect(vm.containerIdMap['nginx']).toBe('c1');
-      expect(vm.containerMetaMap['c1']).toMatchObject({ id: 'c1', name: 'nginx' });
+      expect(vm.containerIdMap.c1).toBe('c1');
+      expect(vm.containerIdMap.nginx).toBe('c1');
+      expect(vm.containerMetaMap.c1).toMatchObject({ id: 'c1', name: 'nginx' });
     });
   });
 
@@ -612,18 +612,18 @@ describe('ContainersView — applyContainerPatch', () => {
       const vm = wrapper.vm as any;
 
       // Verify they're present before the remove
-      expect(vm.containerIdMap['c1']).toBe('c1');
-      expect(vm.containerIdMap['nginx']).toBe('c1');
+      expect(vm.containerIdMap.c1).toBe('c1');
+      expect(vm.containerIdMap.nginx).toBe('c1');
 
       globalThis.dispatchEvent(
         new CustomEvent('dd:sse-container-removed', { detail: { id: 'c1', name: 'nginx' } }),
       );
       await flushPromises();
 
-      expect(vm.containerIdMap['c1']).toBeUndefined();
-      expect(vm.containerIdMap['nginx']).toBeUndefined();
-      expect(vm.containerMetaMap['c1']).toBeUndefined();
-      expect(vm.containerMetaMap['nginx']).toBeUndefined();
+      expect(vm.containerIdMap.c1).toBeUndefined();
+      expect(vm.containerIdMap.nginx).toBeUndefined();
+      expect(vm.containerMetaMap.c1).toBeUndefined();
+      expect(vm.containerMetaMap.nginx).toBeUndefined();
     });
 
     it('is a no-op when the container id is not in the list', async () => {
@@ -1029,7 +1029,7 @@ describe('ContainersView — applyContainerPatch', () => {
 
       // Store has an operation but mapper also produced one — mapper wins
       const storeOp = makeStoreOp({ operationId: 'op-store', containerId: 'c2' });
-      mockStoreOperationsById.value['c2'] = storeOp;
+      mockStoreOperationsById.value.c2 = storeOp;
 
       const mappedOp: ContainerUpdateOperation = {
         id: 'op-mapper',
@@ -1062,7 +1062,7 @@ describe('ContainersView — applyContainerPatch', () => {
 
       // Store has a different op but the row already has one — row op wins
       const storeOp = makeStoreOp({ operationId: 'op-store', containerId: 'c1' });
-      mockStoreOperationsById.value['c1'] = storeOp;
+      mockStoreOperationsById.value.c1 = storeOp;
 
       const raw = { id: 'c1', name: 'vaultwarden' };
       const mappedWithoutOp = makeContainer({
@@ -1093,7 +1093,7 @@ describe('ContainersView — applyContainerPatch', () => {
         status: 'in-progress',
         phase: 'health-gate',
       });
-      mockStoreOperationsById.value['c1'] = storeOp;
+      mockStoreOperationsById.value.c1 = storeOp;
 
       const raw = { id: 'c1', name: 'nginx' };
       const mappedWithoutOp = makeContainer({
@@ -1224,188 +1224,6 @@ describe('ContainersView — applyContainerPatch', () => {
       await flushPromises();
 
       expect(vm.containers[1].updateOperation!.batchId).toBe('batch-42');
-    });
-  });
-
-  describe('fail-safe completion toast guards', () => {
-    it('does not schedule a toast when update-applied detail has no operationId', async () => {
-      vi.useFakeTimers();
-
-      try {
-        const c = makeContainer({ id: 'c1', name: 'nginx' });
-        const wrapper = await mountContainersView(
-          [c],
-          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
-        );
-
-        const { useToast } = await import('@/composables/useToast');
-        const { toasts } = useToast();
-        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
-
-        globalThis.dispatchEvent(
-          new CustomEvent('dd:sse-update-applied', {
-            detail: {
-              containerId: 'c1',
-              containerName: 'nginx',
-              batchId: null,
-              timestamp: '2026-05-01T12:00:00.000Z',
-            },
-          }),
-        );
-
-        vi.advanceTimersByTime(1500);
-        await flushPromises();
-
-        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
-
-        wrapper.unmount();
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it('defaults the update-applied toast name when containerName is missing', async () => {
-      vi.useFakeTimers();
-
-      try {
-        const c = makeContainer({ id: 'c1', name: 'nginx' });
-        const wrapper = await mountContainersView(
-          [c],
-          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
-        );
-
-        const { useToast } = await import('@/composables/useToast');
-        const { toasts } = useToast();
-        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
-
-        globalThis.dispatchEvent(
-          new CustomEvent('dd:sse-update-applied', {
-            detail: {
-              operationId: 'op-default-name-success',
-              containerId: 'c1',
-              batchId: null,
-              timestamp: '2026-05-01T12:00:00.000Z',
-            },
-          }),
-        );
-
-        vi.advanceTimersByTime(1500);
-        await flushPromises();
-
-        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
-        expect(newToasts).toHaveLength(1);
-        expect(newToasts[0]).toMatchObject({ tone: 'success', title: 'Updated: container' });
-
-        wrapper.unmount();
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it('does not schedule a toast when update-failed detail has no operationId', async () => {
-      vi.useFakeTimers();
-
-      try {
-        const c = makeContainer({ id: 'c1', name: 'nginx' });
-        const wrapper = await mountContainersView(
-          [c],
-          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
-        );
-
-        const { useToast } = await import('@/composables/useToast');
-        const { toasts } = useToast();
-        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
-
-        globalThis.dispatchEvent(
-          new CustomEvent('dd:sse-update-failed', {
-            detail: {
-              containerId: 'c1',
-              containerName: 'nginx',
-              error: 'docker pull failed',
-              batchId: null,
-              timestamp: '2026-05-01T12:00:00.000Z',
-            },
-          }),
-        );
-
-        vi.advanceTimersByTime(1500);
-        await flushPromises();
-
-        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
-
-        wrapper.unmount();
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it('defaults the update-failed toast name when containerName is missing', async () => {
-      vi.useFakeTimers();
-
-      try {
-        const c = makeContainer({ id: 'c1', name: 'nginx' });
-        const wrapper = await mountContainersView(
-          [c],
-          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
-        );
-
-        const { useToast } = await import('@/composables/useToast');
-        const { toasts } = useToast();
-        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
-
-        globalThis.dispatchEvent(
-          new CustomEvent('dd:sse-update-failed', {
-            detail: {
-              operationId: 'op-default-name-failed',
-              containerId: 'c1',
-              error: 'docker pull failed',
-              batchId: null,
-              timestamp: '2026-05-01T12:00:00.000Z',
-            },
-          }),
-        );
-
-        vi.advanceTimersByTime(1500);
-        await flushPromises();
-
-        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
-        expect(newToasts).toHaveLength(1);
-        expect(newToasts[0]).toMatchObject({
-          tone: 'error',
-          title: 'Update failed: container — docker pull failed',
-        });
-
-        wrapper.unmount();
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it('does not schedule a toast when update-failed detail is missing', async () => {
-      vi.useFakeTimers();
-
-      try {
-        const c = makeContainer({ id: 'c1', name: 'nginx' });
-        const wrapper = await mountContainersView(
-          [c],
-          [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
-        );
-
-        const { useToast } = await import('@/composables/useToast');
-        const { toasts } = useToast();
-        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
-
-        globalThis.dispatchEvent(new CustomEvent('dd:sse-update-failed'));
-
-        vi.advanceTimersByTime(1500);
-        await flushPromises();
-
-        expect(toasts.value.filter((t) => t.id > maxIdBefore)).toHaveLength(0);
-
-        wrapper.unmount();
-      } finally {
-        vi.useRealTimers();
-      }
     });
   });
 

@@ -12,11 +12,8 @@
       "rolledBack": "Cofnięto: {name}",
       "rolledBackWithReason": "Cofnięto: {name} — {reason}",
       "updateAlreadyInProgress": "Aktualizacja już trwa dla niektórych kontenerów w tej grupie",
-      "batchUpdated": "Zaktualizowano kontenery {count} w {group}",
       "batchUpdatedNoGroup": "Zaktualizowano kontenery {count}",
-      "batchPartial": "Zaktualizowano {succeeded} z kontenerów {total} w {group}; {failed} nie powiodło się",
       "batchPartialNoGroup": "Zaktualizowano {succeeded} z kontenerów {total}; {failed} nie powiodło się",
-      "batchFailed": "Nie udało się zaktualizować kontenerów {count} w {group}",
       "batchFailedNoGroup": "Nie udało się zaktualizować kontenerów {count}",
       "unknownGroup": "nieznana grupa"
     },

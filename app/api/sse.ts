@@ -92,6 +92,17 @@ let processShutdownHandlersRegistered = false;
 // identifiers cannot be correlated across process restarts.
 const SSE_LOG_IP_SALT = randomBytes(16);
 
+// Last-Event-ID values are minted server-side as `<bootId>:<counter>` where
+// bootId is a UUID (hex + hyphens) and counter is a non-negative integer.
+// Anything that does not match this shape is rejected at the request boundary
+// before reaching the buffer code path. Defense in depth: the buffer's own
+// parser also rejects malformed input, but we should not let arbitrary
+// client strings flow into that code at all.
+const LAST_EVENT_ID_PATTERN = /^[A-Za-z0-9_-]+:\d+$/;
+function sanitizeLastEventId(value: unknown): string | undefined {
+  return typeof value === 'string' && LAST_EVENT_ID_PATTERN.test(value) ? value : undefined;
+}
+
 function getClientIp(req: Request): string {
   return req.ip ?? 'unknown';
 }
@@ -266,8 +277,18 @@ function eventsHandler(req: Request, res: Response): void {
   // tick. Any broadcast that fires concurrently will be queued after this
   // synchronous block, and the client will receive it via the live fan-out
   // because we add `client` to `clients` immediately after this block.
-  const lastEventId = req.headers?.['last-event-id'];
-  if (typeof lastEventId === 'string' && lastEventId.length > 0) {
+  //
+  // We accept Last-Event-ID from both the standard header and a query param
+  // (browser EventSource cannot set custom headers on reconnect). Both inputs
+  // are filtered against the canonical `<bootId>:<counter>` shape before any
+  // further processing — malformed values are ignored rather than passed
+  // through. `parseEventId` inside `replaySince` already rejects bad shapes,
+  // but rejecting at the boundary prevents arbitrary client input from
+  // reaching the buffer code path at all.
+  const headerLastEventId = sanitizeLastEventId(req.headers?.['last-event-id']);
+  const queryLastEventId = sanitizeLastEventId(req.query?.['last-event-id']);
+  const lastEventId = headerLastEventId ?? queryLastEventId;
+  if (lastEventId !== undefined) {
     const replayResult = sseEventBuffer.replaySince(lastEventId, Date.now());
     if (replayResult.kind === 'resync-required') {
       eventCounter += 1;
@@ -409,8 +430,8 @@ function buildUpdateAppliedSsePayload(
     return { containerName, timestamp: new Date().toISOString() };
   }
   const container =
-    payload && typeof payload === 'object' && 'container' in payload
-      ? (payload.container as Record<string, unknown> | undefined)
+    payload && typeof payload === 'object'
+      ? (payload as ContainerUpdateAppliedEventPayload).container
       : undefined;
   const topLevelContainerId =
     typeof payload.containerId === 'string' && payload.containerId !== ''
@@ -418,21 +439,23 @@ function buildUpdateAppliedSsePayload(
       : '';
   const containerId =
     typeof container?.id === 'string' && container.id !== '' ? container.id : topLevelContainerId;
-  const imageName =
-    container?.image && typeof (container.image as Record<string, unknown>)?.name === 'string'
-      ? ((container.image as Record<string, unknown>).name as string)
-      : undefined;
-  const imageDigest =
-    container?.image && typeof (container.image as Record<string, unknown>)?.digest === 'string'
-      ? ((container.image as Record<string, unknown>).digest as string)
-      : null;
+  const candidateImageName = container?.image?.name;
+  const imageName = typeof candidateImageName === 'string' ? candidateImageName : undefined;
+  const operationId = (payload as ContainerUpdateAppliedEventPayload).operationId;
+  // previousDigest/newDigest are intentionally null. The full container blob
+  // (which carries digests) is stripped from this SSE payload by design — see
+  // commit 60716ba9, which removed the digest extraction to mirror the agent-
+  // side sanitizer and stop the Container object (env, labels, vulnerability
+  // data) flowing to every connected client on every update event. No client
+  // consumes these fields from this payload; the UI sources digests from the
+  // container API. The keys remain to preserve the wire-format contract.
   return {
-    operationId: (payload as ContainerUpdateAppliedEventPayload).operationId ?? '',
+    ...(typeof operationId === 'string' && operationId.length > 0 ? { operationId } : {}),
     containerId,
     containerName,
     imageName,
     previousDigest: null,
-    newDigest: imageDigest,
+    newDigest: null,
     batchId: (payload as ContainerUpdateAppliedEventPayload).batchId ?? null,
     timestamp: new Date().toISOString(),
   };
@@ -442,7 +465,9 @@ function buildUpdateFailedSsePayload(
   payload: ContainerUpdateFailedEventPayload,
 ): Record<string, unknown> {
   return {
-    operationId: payload.operationId ?? '',
+    ...(typeof payload.operationId === 'string' && payload.operationId.length > 0
+      ? { operationId: payload.operationId }
+      : {}),
     containerId: payload.containerId ?? '',
     containerName: payload.containerName,
     error: scrubAuthorizationHeaderValues(payload.error),

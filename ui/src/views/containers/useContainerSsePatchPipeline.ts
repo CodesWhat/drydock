@@ -1,7 +1,6 @@
 import { onMounted, onScopeDispose, onUnmounted, type Ref, type WatchStopHandle, watch } from 'vue';
 import {
   applyUpdateOperationSseToHold,
-  OPERATION_DISPLAY_HOLD_MS,
   type ParsedUpdateOperationSse,
   parseUpdateLifecycleSsePayload,
   parseUpdateOperationSsePayload,
@@ -11,19 +10,12 @@ import type { Container, ContainerUpdateOperation } from '../../types/container'
 import {
   isActiveContainerUpdateOperationPhaseForStatus,
   isActiveContainerUpdateOperationStatus,
+  OPERATOR_CANCELLED_ROLLBACK_REASON,
 } from '../../types/update-operation';
 import { mapApiContainer } from '../../utils/container-mapper';
 import { resolveUpdateFailureReason } from '../../utils/update-error-summary';
 
 type ContainerPatchKind = 'added' | 'updated' | 'removed';
-
-type ToastApi = {
-  error: (title: string) => void;
-  success: (title: string) => void;
-  warning: (title: string) => void;
-};
-
-type Translate = (key: string, params?: Record<string, unknown>) => string;
 
 interface UseContainerSsePatchPipelineInput {
   containers: Ref<Container[]>;
@@ -36,16 +28,12 @@ interface UseContainerSsePatchPipelineInput {
     containers: readonly Pick<Container, 'id' | 'name' | 'updateOperation'>[],
   ) => void;
   schedulePostTerminalReload: () => void;
-  toast: ToastApi;
-  t: Translate;
 }
 
 const DEFERRED_OPERATION_ATTACH_TIMEOUT_MS = 30_000;
 
 export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipelineInput) {
   const operationStore = useOperationStore();
-  const completionToastTimers = new Set<ReturnType<typeof setTimeout>>();
-  const completionToastOperationIds = new Set<string>();
 
   // Deferred operation re-attach: when dd:container-added arrives before
   // dd:update-operation-changed (agent-relay path has no ordering guarantee),
@@ -112,20 +100,7 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
     return nameKey ? input.containerIdMap.value[nameKey] : undefined;
   }
 
-  function scheduleCompletionToast(callback: () => void) {
-    const timer = setTimeout(() => {
-      completionToastTimers.delete(timer);
-      callback();
-    }, OPERATION_DISPLAY_HOLD_MS);
-    completionToastTimers.add(timer);
-  }
-
   onScopeDispose(() => {
-    for (const timer of completionToastTimers) {
-      clearTimeout(timer);
-    }
-    completionToastTimers.clear();
-    completionToastOperationIds.clear();
     for (const stop of pendingOperationWatchers.values()) {
       stop();
     }
@@ -404,19 +379,29 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
     newContainerId?: string;
     containerName?: string;
   }): Container | undefined {
-    const idx = input.containers.value.findIndex(
-      (c) =>
-        (typeof target.containerId === 'string' && c.id === target.containerId) ||
-        (typeof target.newContainerId === 'string' && c.id === target.newContainerId) ||
-        (typeof target.containerName === 'string' && c.name === target.containerName),
-    );
-    return idx === -1 ? undefined : input.containers.value[idx];
+    // Hot path for dd:update-operation-changed: prefer the O(1) Map index built
+    // by setContainerIndex / rebuildContainerIndexById so we don't re-scan
+    // containers.value (which can be 100s of rows) on every operation event.
+    if (typeof target.containerId === 'string') {
+      const idx = containerIndexById.get(target.containerId);
+      if (idx !== undefined) return input.containers.value[idx];
+    }
+    if (typeof target.newContainerId === 'string') {
+      const idx = containerIndexById.get(target.newContainerId);
+      if (idx !== undefined) return input.containers.value[idx];
+    }
+    // Name lookup falls back to a linear scan because the composable does not
+    // maintain a name -> index map; the parent view holds containerIdMap for
+    // that purpose, but it is not in scope here. Name-only targets are rare
+    // (operation events carry containerId in the common path).
+    if (typeof target.containerName === 'string') {
+      const name = target.containerName;
+      return input.containers.value.find((c) => c.name === name);
+    }
+    return undefined;
   }
 
-  function applyParsedOperationPatch(
-    parsed: ParsedUpdateOperationSse,
-    options: { onHoldReleased?: () => void } = {},
-  ) {
+  function applyParsedOperationPatch(parsed: ParsedUpdateOperationSse) {
     return applyUpdateOperationSseToHold({
       parsed,
       resolveContainer: findContainerForOperationTarget,
@@ -438,7 +423,8 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
           (container as Container).updateOperation = undefined;
           if (
             status === 'failed' ||
-            (status === 'rolled-back' && parsed.rollbackReason !== 'cancelled')
+            (status === 'rolled-back' &&
+              parsed.rollbackReason !== OPERATOR_CANCELLED_ROLLBACK_REASON)
           ) {
             (container as Container).lastUpdateFailureReason = reason ?? 'Update failed';
             (container as Container).lastUpdateFailureAt = Date.now();
@@ -453,7 +439,6 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
         // cover renames/new container IDs.
         input.schedulePostTerminalReload();
       },
-      onHoldReleased: options.onHoldReleased,
     });
   }
 
@@ -465,37 +450,6 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
     applyParsedOperationPatch(parsed);
   }
 
-  function scheduleCompletionAfterTerminalRelease(args: {
-    parsed: ParsedUpdateOperationSse;
-    batchId: unknown;
-    toastCallback: () => void;
-  }) {
-    const operationId =
-      typeof args.parsed.operationId === 'string' && args.parsed.operationId.length > 0
-        ? args.parsed.operationId
-        : undefined;
-    const shouldToast = args.batchId === null && operationId !== undefined;
-    const shouldScheduleToast = shouldToast && !completionToastOperationIds.has(operationId);
-    if (shouldScheduleToast) {
-      completionToastOperationIds.add(operationId);
-    }
-    let toastFired = false;
-    const onHoldReleased = shouldScheduleToast
-      ? () => {
-          if (toastFired) {
-            return;
-          }
-          toastFired = true;
-          args.toastCallback();
-        }
-      : undefined;
-    const result = applyParsedOperationPatch(args.parsed, { onHoldReleased });
-    if (!onHoldReleased || result.releaseScheduled) {
-      return;
-    }
-    scheduleCompletionToast(args.toastCallback);
-  }
-
   function handleSseUpdateApplied(event: Event) {
     const detail = (event as CustomEvent)?.detail as Record<string, unknown> | undefined;
     if (!detail) {
@@ -505,15 +459,7 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
     if (!parsed) {
       return;
     }
-    const containerName =
-      typeof detail.containerName === 'string' ? detail.containerName : 'container';
-    const batchId = detail.batchId ?? null;
-    scheduleCompletionAfterTerminalRelease({
-      parsed,
-      batchId,
-      toastCallback: () =>
-        input.toast.success(input.t('containersView.toast.updated', { name: containerName })),
-    });
+    applyParsedOperationPatch(parsed);
   }
 
   function handleSseUpdateFailed(event: Event) {
@@ -525,46 +471,7 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
     if (!parsed) {
       return;
     }
-    const containerName =
-      typeof detail.containerName === 'string' ? detail.containerName : 'container';
-    const batchId = detail.batchId ?? null;
-    // Classify the failure reason from the SSE payload. The dd:update-failed
-    // payload carries `error` and `rollbackReason`; the presence of
-    // rollbackReason signals a rolled-back (vs failed) terminal state and drives
-    // the toast variant.
-    const error = typeof detail.error === 'string' ? detail.error : undefined;
-    const rollbackReason =
-      typeof detail.rollbackReason === 'string' ? detail.rollbackReason : undefined;
-    const reason = resolveUpdateFailureReason({ lastError: error, rollbackReason });
-    const isCancelled = rollbackReason === 'cancelled' || error === 'Cancelled by operator';
-    let toastCallback: () => void;
-    if (rollbackReason !== undefined) {
-      if (isCancelled) {
-        toastCallback = () =>
-          input.toast.success(input.t('containersView.toast.cancelled', { name: containerName }));
-      } else {
-        toastCallback = () =>
-          input.toast.warning(
-            reason
-              ? input.t('containersView.toast.rolledBackWithReason', {
-                  name: containerName,
-                  reason,
-                })
-              : input.t('containersView.toast.rolledBack', { name: containerName }),
-          );
-      }
-    } else {
-      toastCallback = () =>
-        input.toast.error(
-          reason
-            ? input.t('containersView.toast.updateFailedWithReason', {
-                name: containerName,
-                reason,
-              })
-            : input.t('containersView.toast.updateFailed', { name: containerName }),
-        );
-    }
-    scheduleCompletionAfterTerminalRelease({ parsed, batchId, toastCallback });
+    applyParsedOperationPatch(parsed);
   }
 
   const sseScanCompletedListener = handleSseScanCompleted as EventListener;

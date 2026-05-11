@@ -286,8 +286,6 @@ function buildTrivyArgs(
     toTrivyFormat(outputFormat),
     '--timeout',
     toTrivyTimeout(configuration.trivy.timeout),
-    '--image-src',
-    'docker',
   ];
 
   if (outputFormat === 'json') {
@@ -296,6 +294,10 @@ function buildTrivyArgs(
 
   if (configuration.trivy.server) {
     args.push('--server', configuration.trivy.server);
+  }
+
+  if (configuration.trivy.imageSrc) {
+    args.push('--image-src', configuration.trivy.imageSrc);
   }
 
   return args;
@@ -691,6 +693,20 @@ export async function generateImageSbom(
 
 // --- Digest-based scan dedup cache ---
 
+const ERROR_RETRY_FLOOR_MS = 15 * 60 * 1000; // 15 minutes
+
+interface ErrorRetryFloorEntry {
+  errorAt: number;
+  scanResult: ContainerSecurityScan;
+}
+
+const errorRetryFloor = new Map<string, ErrorRetryFloorEntry>();
+
+/** @internal — test-only reset */
+export function _resetErrorRetryFloorForTesting(): void {
+  errorRetryFloor.clear();
+}
+
 interface DigestScanCacheEntry {
   digest: string;
   scanResult: ContainerSecurityScan;
@@ -759,9 +775,27 @@ export async function scanImageWithDedup(
     return { scanResult: cached.scanResult, fromCache: true };
   }
 
+  // If the last scan for this digest errored and we're still within the retry
+  // floor window, return the recorded error without spawning Trivy again.
+  // This bounds retry frequency under aggressive cron schedules or registry
+  // outages without letting the error propagate forever. Issue #357.
+  const floorEntry = errorRetryFloor.get(options.digest);
+  if (floorEntry !== undefined && Date.now() - floorEntry.errorAt < ERROR_RETRY_FLOOR_MS) {
+    return { scanResult: floorEntry.scanResult, fromCache: true };
+  }
+
   const scanResult = await scanImageForVulnerabilities(options);
 
-  setDigestScanCacheEntry(options.digest, scanResult, dbUpdatedAt || '');
+  if (scanResult.status === 'error') {
+    // Record the error so we can enforce the retry floor on subsequent calls.
+    // Do not cache the error in the main cache — a later successful scan
+    // should always overwrite without a TTL barrier.
+    errorRetryFloor.set(options.digest, { errorAt: Date.now(), scanResult });
+  } else {
+    // Clear any previous error floor entry and store the successful result.
+    errorRetryFloor.delete(options.digest);
+    setDigestScanCacheEntry(options.digest, scanResult, dbUpdatedAt || '');
+  }
 
   return { scanResult, fromCache: false };
 }

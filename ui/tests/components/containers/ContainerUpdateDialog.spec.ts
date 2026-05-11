@@ -166,7 +166,7 @@ describe('ContainerUpdateDialog', () => {
     });
 
     it('shows a started toast after the update request is accepted', async () => {
-      mockUpdateContainer.mockResolvedValue({ operationId: 'op-accepted' });
+      mockUpdateContainer.mockResolvedValue(undefined);
       const w = factory({ containerId: 'abc123', containerName: 'my-nginx' });
       await nextTick();
       const updateBtn = [...document.body.querySelectorAll('button')].find(
@@ -176,53 +176,6 @@ describe('ContainerUpdateDialog', () => {
       await flushPromises();
       expect(mockGetContainerUpdateStartedMessage).toHaveBeenCalledWith('my-nginx');
       expect(mockToast.success).toHaveBeenCalledWith('Update started');
-      w.unmount();
-    });
-
-    it('shows a success toast when the accepted operation succeeds', async () => {
-      mockUpdateContainer.mockResolvedValue({ operationId: 'op-success' });
-      const w = factory({ containerId: 'abc123', containerName: 'my-nginx' });
-      await nextTick();
-      const updateBtn = [...document.body.querySelectorAll('button')].find(
-        (b) => b.textContent?.trim() === 'Update',
-      );
-      updateBtn!.click();
-      await flushPromises();
-      mockToast.success.mockClear();
-
-      globalThis.dispatchEvent(
-        new CustomEvent('dd:sse-update-applied', {
-          detail: { operationId: 'op-success', containerName: 'my-nginx' },
-        }),
-      );
-      await flushPromises();
-
-      expect(mockToast.success).toHaveBeenCalledWith('Updated: my-nginx');
-      w.unmount();
-    });
-
-    it('shows a failure toast when the accepted operation fails', async () => {
-      mockUpdateContainer.mockResolvedValue({ operationId: 'op-failed' });
-      const w = factory({ containerId: 'abc123', containerName: 'my-nginx' });
-      await nextTick();
-      const updateBtn = [...document.body.querySelectorAll('button')].find(
-        (b) => b.textContent?.trim() === 'Update',
-      );
-      updateBtn!.click();
-      await flushPromises();
-
-      globalThis.dispatchEvent(
-        new CustomEvent('dd:sse-update-failed', {
-          detail: {
-            operationId: 'op-failed',
-            containerName: 'my-nginx',
-            error: 'Network error',
-          },
-        }),
-      );
-      await flushPromises();
-
-      expect(mockToast.error).toHaveBeenCalledWith('Update failed: my-nginx — Network error');
       w.unmount();
     });
 

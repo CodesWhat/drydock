@@ -1,6 +1,19 @@
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFixedRingBuffer, useEventStreamStore } from '@/stores/eventStream';
+
+class MockEventSource {
+  static instances: MockEventSource[] = [];
+  url: string;
+  onerror: (() => void) | undefined;
+  addEventListener = vi.fn();
+  close = vi.fn();
+
+  constructor(url: string) {
+    this.url = url;
+    MockEventSource.instances.push(this);
+  }
+}
 
 describe('createFixedRingBuffer', () => {
   it('rejects non-positive and unsafe capacities', () => {
@@ -84,5 +97,56 @@ describe('useEventStreamStore', () => {
       event: 'container-updated',
       payload: { index: 504 },
     });
+  });
+});
+
+describe('doConnect SSE URL construction', () => {
+  let originalEventSource: typeof EventSource;
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    MockEventSource.instances = [];
+    originalEventSource = globalThis.EventSource;
+    globalThis.EventSource = MockEventSource as unknown as typeof EventSource;
+  });
+
+  afterEach(() => {
+    globalThis.EventSource = originalEventSource;
+  });
+
+  it('uses the base URL on first connect when no lastEventId is recorded', () => {
+    const store = useEventStreamStore();
+    store.connect();
+
+    expect(MockEventSource.instances).toHaveLength(1);
+    expect(MockEventSource.instances[0].url).toBe('/api/v1/events/ui');
+  });
+
+  it('appends last-event-id query param on reconnect after an event is received', () => {
+    const store = useEventStreamStore();
+
+    // Simulate an event arriving (sets lastEventId via publish)
+    store.publish('container-updated', {}, 'evt-001');
+    expect(store.lastEventId).toBe('evt-001');
+
+    // Reconnect — should include the last-event-id query param
+    store.connect();
+
+    expect(MockEventSource.instances).toHaveLength(1);
+    expect(MockEventSource.instances[0].url).toBe('/api/v1/events/ui?last-event-id=evt-001');
+  });
+
+  it('URL-encodes the last-event-id value on reconnect', () => {
+    const store = useEventStreamStore();
+
+    store.publish('container-updated', {}, 'boot-id-with-colon:42');
+    expect(store.lastEventId).toBe('boot-id-with-colon:42');
+
+    store.connect();
+
+    expect(MockEventSource.instances).toHaveLength(1);
+    expect(MockEventSource.instances[0].url).toBe(
+      '/api/v1/events/ui?last-event-id=boot-id-with-colon%3A42',
+    );
   });
 });

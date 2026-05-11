@@ -42,13 +42,7 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
   } as Container;
 }
 
-function mountPipeline(args: { containers: Ref<Container[]>; toast?: Partial<ToastApi> }) {
-  const toast: ToastApi = {
-    error: vi.fn(),
-    success: vi.fn(),
-    warning: vi.fn(),
-    ...args.toast,
-  };
+function mountPipeline(args: { containers: Ref<Container[]> }) {
   const loadContainers = vi.fn().mockResolvedValue(undefined);
   const loadDetailSecurityData = vi.fn().mockResolvedValue(undefined);
   const reconcileHoldsAgainstContainers = vi.fn();
@@ -69,16 +63,6 @@ function mountPipeline(args: { containers: Ref<Container[]>; toast?: Partial<Toa
           loadDetailSecurityData,
           reconcileHoldsAgainstContainers,
           schedulePostTerminalReload,
-          toast,
-          t: (key, params) => {
-            if (key.endsWith('.updated')) {
-              return `Updated: ${String(params?.name)}`;
-            }
-            if (key.endsWith('.updateFailed')) {
-              return `Update failed: ${String(params?.name)}`;
-            }
-            return key;
-          },
         });
         return {};
       },
@@ -86,14 +70,8 @@ function mountPipeline(args: { containers: Ref<Container[]>; toast?: Partial<Toa
     }),
   );
 
-  return { wrapper, toast, schedulePostTerminalReload, pipeline: pipeline!, containerIdMap };
+  return { wrapper, schedulePostTerminalReload, pipeline: pipeline!, containerIdMap };
 }
-
-type ToastApi = {
-  error: (title: string) => void;
-  success: (title: string) => void;
-  warning: (title: string) => void;
-};
 
 describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
   beforeEach(() => {
@@ -109,7 +87,7 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
     vi.useRealTimers();
   });
 
-  it('releases the display hold before firing the applied toast when the terminal operation-change event is missed', async () => {
+  it('releases the display hold and clears the row updateOperation on terminal applied event', async () => {
     const activeOperation = makeOperation();
     const containers = ref([
       makeContainer({
@@ -123,7 +101,7 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
       containerId: 'c1',
       containerName: 'nginx',
     });
-    const { wrapper, toast, schedulePostTerminalReload } = mountPipeline({ containers });
+    const { wrapper, schedulePostTerminalReload } = mountPipeline({ containers });
 
     globalThis.dispatchEvent(
       new CustomEvent('dd:sse-update-applied', {
@@ -140,20 +118,82 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
 
     expect(containers.value[0]!.updateOperation).toBeUndefined();
     expect(hold.heldOperations.value.has(activeOperation.id)).toBe(true);
-    expect(toast.success).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(OPERATION_DISPLAY_HOLD_MS);
     await flushPromises();
 
     expect(hold.heldOperations.value.has(activeOperation.id)).toBe(false);
-    expect(toast.success).toHaveBeenCalledTimes(1);
-    expect(toast.success).toHaveBeenCalledWith('Updated: nginx');
     expect(schedulePostTerminalReload).toHaveBeenCalledTimes(1);
 
     wrapper.unmount();
   });
 
-  it('does not let a later terminal operation-change event move the toast ahead of the row release', async () => {
+  it('still releases the hold and schedules reload for a terminal update-applied that arrives 60s after the operation-change event', async () => {
+    // Regression coverage for the "fail-safe completion toast" scenario that
+    // used to live in the deleted ContainersView.spec.ts. Agent-relay paths
+    // can deliver dd:sse-update-applied well after the operation already
+    // transitioned via dd:sse-update-operation-changed. The hold must still
+    // release and the post-terminal reload must still fire, regardless of how
+    // long the gap is.
+    const activeOperation = makeOperation({ id: 'op-late-applied' });
+    const containers = ref([
+      makeContainer({
+        updateOperation: activeOperation,
+      }),
+    ]);
+    const hold = useOperationDisplayHold();
+    hold.holdOperationDisplay({
+      operationId: activeOperation.id,
+      operation: activeOperation,
+      containerId: 'c1',
+      containerName: 'nginx',
+    });
+    const { wrapper, schedulePostTerminalReload } = mountPipeline({ containers });
+
+    // First the operation-change SSE marks the operation in-progress.
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-operation-changed', {
+        detail: {
+          operationId: activeOperation.id,
+          containerId: 'c1',
+          containerName: 'nginx',
+          status: 'in-progress',
+          phase: 'new-started',
+        },
+      }),
+    );
+    await flushPromises();
+    expect(hold.heldOperations.value.has(activeOperation.id)).toBe(true);
+
+    // 60 seconds later — far past any plausible debounce window — the
+    // dd:sse-update-applied finally arrives via the agent relay.
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-applied', {
+        detail: {
+          operationId: activeOperation.id,
+          containerId: 'c1',
+          containerName: 'nginx',
+          batchId: null,
+          timestamp: '2026-05-02T12:01:00.000Z',
+        },
+      }),
+    );
+    await flushPromises();
+
+    // The row's updateOperation clears immediately; the hold releases after
+    // the standard hold window; the post-terminal reload is scheduled.
+    expect(containers.value[0]!.updateOperation).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(OPERATION_DISPLAY_HOLD_MS);
+    await flushPromises();
+    expect(hold.heldOperations.value.has(activeOperation.id)).toBe(false);
+    expect(schedulePostTerminalReload).toHaveBeenCalledTimes(1);
+
+    wrapper.unmount();
+  });
+
+  it('keeps the hold pinned until the settle delay elapses, even after a later terminal operation-change event', async () => {
     const activeOperation = makeOperation({ id: 'op-race' });
     const containers = ref([
       makeContainer({
@@ -167,7 +207,7 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
       containerId: 'c1',
       containerName: 'nginx',
     });
-    const { wrapper, toast } = mountPipeline({ containers });
+    const { wrapper } = mountPipeline({ containers });
 
     globalThis.dispatchEvent(
       new CustomEvent('dd:sse-update-applied', {
@@ -198,20 +238,18 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
 
     await vi.advanceTimersByTimeAsync(OPERATION_DISPLAY_HOLD_MS - 500);
     expect(hold.heldOperations.value.has(activeOperation.id)).toBe(true);
-    expect(toast.success).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(500);
     await flushPromises();
 
     expect(hold.heldOperations.value.has(activeOperation.id)).toBe(false);
-    expect(toast.success).toHaveBeenCalledTimes(1);
 
     wrapper.unmount();
   });
 
   it('ignores malformed update-applied and update-failed lifecycle details', async () => {
     const containers = ref([makeContainer()]);
-    const { wrapper, toast, schedulePostTerminalReload } = mountPipeline({ containers });
+    const { wrapper, schedulePostTerminalReload } = mountPipeline({ containers });
 
     globalThis.dispatchEvent(
       new CustomEvent('dd:sse-update-applied', {
@@ -226,15 +264,12 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
     await flushPromises();
     await vi.advanceTimersByTimeAsync(OPERATION_DISPLAY_HOLD_MS);
 
-    expect(toast.success).not.toHaveBeenCalled();
-    expect(toast.error).not.toHaveBeenCalled();
-    expect(toast.warning).not.toHaveBeenCalled();
     expect(schedulePostTerminalReload).not.toHaveBeenCalled();
 
     wrapper.unmount();
   });
 
-  it('fires a completion toast once when one lifecycle event releases multiple matching holds', async () => {
+  it('releases multiple matching holds when one lifecycle event resolves them all', async () => {
     const oldOperation = makeOperation({ id: 'op-old' });
     const newOperation = makeOperation({ id: 'op-new' });
     const containers = ref([
@@ -262,7 +297,7 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
       containerId: 'new-c1',
       containerName: 'nginx-new',
     });
-    const { wrapper, toast } = mountPipeline({ containers });
+    const { wrapper } = mountPipeline({ containers });
 
     globalThis.dispatchEvent(
       new CustomEvent('dd:sse-update-applied', {
@@ -281,8 +316,6 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
     await vi.advanceTimersByTimeAsync(OPERATION_DISPLAY_HOLD_MS);
     await flushPromises();
 
-    expect(toast.success).toHaveBeenCalledTimes(1);
-    expect(toast.success).toHaveBeenCalledWith('Updated: nginx');
     expect(hold.heldOperations.value.has(oldOperation.id)).toBe(false);
     expect(hold.heldOperations.value.has(newOperation.id)).toBe(false);
 
@@ -632,6 +665,222 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
     await flushPromises();
 
     expect(containers.value[0]!.updateOperation).toStrictEqual(existingOperation);
+
+    wrapper.unmount();
+  });
+
+  it('schedules a post-terminal reload for non-batch update-applied events with no operationId', async () => {
+    const containers = ref([makeContainer()]);
+    const { wrapper, schedulePostTerminalReload } = mountPipeline({ containers });
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-applied', {
+        detail: {
+          containerId: 'c1',
+          containerName: 'nginx',
+          batchId: null,
+          // operationId intentionally omitted
+        },
+      }),
+    );
+    await flushPromises();
+
+    expect(schedulePostTerminalReload).toHaveBeenCalledTimes(1);
+
+    wrapper.unmount();
+  });
+
+  it('schedules a post-terminal reload for update-applied events with batchId set', async () => {
+    const containers = ref([makeContainer()]);
+    const { wrapper, schedulePostTerminalReload } = mountPipeline({ containers });
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-applied', {
+        detail: {
+          containerId: 'c1',
+          containerName: 'nginx',
+          operationId: 'op-batch',
+          batchId: 'batch-1',
+        },
+      }),
+    );
+    await flushPromises();
+
+    expect(schedulePostTerminalReload).toHaveBeenCalledTimes(1);
+
+    wrapper.unmount();
+  });
+
+  it('schedules a post-terminal reload on dd:sse-update-failed for non-batch events', async () => {
+    const containers = ref([makeContainer()]);
+    const { wrapper, schedulePostTerminalReload } = mountPipeline({ containers });
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-failed', {
+        detail: {
+          containerId: 'c1',
+          containerName: 'nginx',
+          operationId: 'op-fail',
+          error: 'docker pull failed',
+          batchId: null,
+        },
+      }),
+    );
+    await flushPromises();
+
+    expect(schedulePostTerminalReload).toHaveBeenCalledTimes(1);
+
+    wrapper.unmount();
+  });
+
+  it('ignores dd:sse-update-applied with no detail', async () => {
+    const containers = ref([makeContainer()]);
+    const { wrapper, schedulePostTerminalReload } = mountPipeline({ containers });
+
+    globalThis.dispatchEvent(new Event('dd:sse-update-applied'));
+    await flushPromises();
+
+    expect(schedulePostTerminalReload).not.toHaveBeenCalled();
+
+    wrapper.unmount();
+  });
+
+  it('ignores dd:sse-update-failed with no detail', async () => {
+    const containers = ref([makeContainer()]);
+    const { wrapper, schedulePostTerminalReload } = mountPipeline({ containers });
+
+    globalThis.dispatchEvent(new Event('dd:sse-update-failed'));
+    await flushPromises();
+
+    expect(schedulePostTerminalReload).not.toHaveBeenCalled();
+
+    wrapper.unmount();
+  });
+
+  it('records lastUpdateFailureReason on rolled-back terminal events that are not cancellations', async () => {
+    const containers = ref([
+      makeContainer({
+        lastUpdateFailureReason: undefined,
+        lastUpdateFailureAt: undefined,
+      } as Partial<Container>),
+    ]);
+    const { wrapper } = mountPipeline({ containers });
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-failed', {
+        detail: {
+          containerId: 'c1',
+          containerName: 'nginx',
+          operationId: 'op-rb',
+          error: 'health-check failed',
+          rollbackReason: 'health-check',
+          batchId: null,
+        },
+      }),
+    );
+    await flushPromises();
+
+    expect((containers.value[0] as Container).lastUpdateFailureReason).toBeDefined();
+    expect((containers.value[0] as Container).lastUpdateFailureAt).toEqual(expect.any(Number));
+
+    wrapper.unmount();
+  });
+
+  it('does not record lastUpdateFailureReason when the operation was cancelled', async () => {
+    const containers = ref([
+      makeContainer({
+        lastUpdateFailureReason: undefined,
+        lastUpdateFailureAt: undefined,
+      } as Partial<Container>),
+    ]);
+    const { wrapper } = mountPipeline({ containers });
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-failed', {
+        detail: {
+          containerId: 'c1',
+          containerName: 'nginx',
+          operationId: 'op-cancel',
+          error: 'Cancelled by operator',
+          rollbackReason: 'cancelled',
+          batchId: null,
+        },
+      }),
+    );
+    await flushPromises();
+
+    expect((containers.value[0] as Container).lastUpdateFailureReason).toBeUndefined();
+    expect((containers.value[0] as Container).lastUpdateFailureAt).toBeUndefined();
+
+    wrapper.unmount();
+  });
+
+  it('resolves the target container by newContainerId when containerId is absent', async () => {
+    const containers = ref([makeContainer({ id: 'c-new' })]);
+    const { wrapper, schedulePostTerminalReload } = mountPipeline({ containers });
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-applied', {
+        detail: {
+          newContainerId: 'c-new',
+          containerName: 'nginx',
+          operationId: 'op-new-id',
+          batchId: null,
+        },
+      }),
+    );
+    await flushPromises();
+
+    expect(schedulePostTerminalReload).toHaveBeenCalledTimes(1);
+
+    wrapper.unmount();
+  });
+
+  it('resolves the target container by containerName when no ids are present', async () => {
+    const containers = ref([makeContainer({ id: 'c-rename', name: 'redis' })]);
+    const { wrapper, schedulePostTerminalReload } = mountPipeline({ containers });
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-applied', {
+        detail: {
+          containerName: 'redis',
+          operationId: 'op-name-only',
+          batchId: null,
+        },
+      }),
+    );
+    await flushPromises();
+
+    expect(schedulePostTerminalReload).toHaveBeenCalledTimes(1);
+
+    wrapper.unmount();
+  });
+
+  it('falls through to name lookup when newContainerId is a string not in the index', async () => {
+    // Line 391 falsy branch: target.newContainerId is a string but
+    // containerIndexById.get(newContainerId) returns undefined, so the early-
+    // return is skipped and findContainerForOperationTarget falls through to
+    // the linear name scan at line 397.
+    const containers = ref([makeContainer({ id: 'c-name-fallback', name: 'myapp' })]);
+    const { wrapper, schedulePostTerminalReload } = mountPipeline({ containers });
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-applied', {
+        detail: {
+          // containerId absent so the first branch (line 385) is skipped.
+          // newContainerId is a string but not in the index.
+          newContainerId: 'unknown-new-id',
+          containerName: 'myapp',
+          operationId: 'op-name-fb',
+          batchId: null,
+        },
+      }),
+    );
+    await flushPromises();
+
+    // The container was resolved by name (line 399), so the terminal patch
+    // applied successfully and schedulePostTerminalReload was called.
+    expect(schedulePostTerminalReload).toHaveBeenCalledTimes(1);
 
     wrapper.unmount();
   });

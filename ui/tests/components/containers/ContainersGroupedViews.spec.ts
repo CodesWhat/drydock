@@ -138,6 +138,8 @@ function makeContainer(overrides: Partial<Container> & { _pending?: true } = {})
     bouncer: overrides.bouncer ?? 'safe',
     registryError: overrides.registryError,
     server: overrides.server ?? 'local-main',
+    isDigestPinned:
+      overrides.isDigestPinned ?? overrides.currentTag?.startsWith('sha256:') ?? false,
     details: overrides.details ?? { ports: [], volumes: [], env: [], labels: [] },
     ...overrides,
   };
@@ -2078,7 +2080,7 @@ describe('ContainersGroupedViews', () => {
   });
 
   // ──────────────────────────────────────────────────────────────────────────
-  // Batch completion toast
+  // Per-container counter increments (batch progress display)
   // ──────────────────────────────────────────────────────────────────────────
 
   function mountWithGroup(groupKey: string, groupName: string, containers: Container[]) {
@@ -2099,266 +2101,6 @@ describe('ContainersGroupedViews', () => {
     mocked.context = context;
     return mountSubject();
   }
-
-  it('fires a success toast when all containers in a batch succeed', async () => {
-    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
-    const c2 = makeContainer({ id: 'c-2', name: 'beta' });
-    const wrapper = mountWithGroup('tdarr_node', 'tdarr_node', [c1, c2]);
-
-    globalThis.dispatchEvent(
-      new CustomEvent('dd:sse-batch-update-completed', {
-        detail: {
-          batchId: 'batch-abc',
-          total: 2,
-          succeeded: 2,
-          failed: 0,
-          durationMs: 1500,
-          items: [
-            {
-              operationId: 'op-1',
-              containerId: 'c-1',
-              containerName: 'alpha',
-              status: 'succeeded',
-            },
-            { operationId: 'op-2', containerId: 'c-2', containerName: 'beta', status: 'succeeded' },
-          ],
-          timestamp: '2026-04-28T00:00:00.000Z',
-        },
-      }),
-    );
-    await nextTick();
-    wrapper.unmount();
-
-    const { toasts } = useToast();
-    expect(toasts.value).toHaveLength(1);
-    expect(toasts.value[0]?.tone).toBe('success');
-    expect(toasts.value[0]?.title).toBe('Updated 2 containers in tdarr_node');
-  });
-
-  it('fires a warning toast when some containers fail', async () => {
-    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
-    const c2 = makeContainer({ id: 'c-2', name: 'beta' });
-    const c3 = makeContainer({ id: 'c-3', name: 'gamma' });
-    const wrapper = mountWithGroup('tdarr_node', 'tdarr_node', [c1, c2, c3]);
-
-    globalThis.dispatchEvent(
-      new CustomEvent('dd:sse-batch-update-completed', {
-        detail: {
-          batchId: 'batch-abc',
-          total: 3,
-          succeeded: 2,
-          failed: 1,
-          durationMs: 1500,
-          items: [
-            {
-              operationId: 'op-1',
-              containerId: 'c-1',
-              containerName: 'alpha',
-              status: 'succeeded',
-            },
-            { operationId: 'op-2', containerId: 'c-2', containerName: 'beta', status: 'succeeded' },
-            { operationId: 'op-3', containerId: 'c-3', containerName: 'gamma', status: 'failed' },
-          ],
-          timestamp: '2026-04-28T00:00:00.000Z',
-        },
-      }),
-    );
-    await nextTick();
-    wrapper.unmount();
-
-    const { toasts } = useToast();
-    expect(toasts.value).toHaveLength(1);
-    expect(toasts.value[0]?.tone).toBe('warning');
-    expect(toasts.value[0]?.title).toBe('Updated 2 of 3 containers in tdarr_node; 1 failed');
-  });
-
-  it('fires an error toast when all containers fail', async () => {
-    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
-    const c2 = makeContainer({ id: 'c-2', name: 'beta' });
-    const wrapper = mountWithGroup('tdarr_node', 'tdarr_node', [c1, c2]);
-
-    globalThis.dispatchEvent(
-      new CustomEvent('dd:sse-batch-update-completed', {
-        detail: {
-          batchId: 'batch-abc',
-          total: 2,
-          succeeded: 0,
-          failed: 2,
-          durationMs: 1500,
-          items: [
-            { operationId: 'op-1', containerId: 'c-1', containerName: 'alpha', status: 'failed' },
-            { operationId: 'op-2', containerId: 'c-2', containerName: 'beta', status: 'failed' },
-          ],
-          timestamp: '2026-04-28T00:00:00.000Z',
-        },
-      }),
-    );
-    await nextTick();
-    wrapper.unmount();
-
-    const { toasts } = useToast();
-    expect(toasts.value).toHaveLength(1);
-    expect(toasts.value[0]?.tone).toBe('error');
-    expect(toasts.value[0]?.title).toBe('Failed to update 2 containers in tdarr_node');
-  });
-
-  // When the resolved group key is __ungrouped__ (name is null), the toast
-  // must use the no-group locale variant — never emit "in __ungrouped__".
-  function mountWithUngrouped(containers: Container[]) {
-    const { context, refs } = makeContext();
-    refs.groupByStack.value = true;
-    refs.filteredContainers.value = containers;
-    refs.displayContainers.value = containers;
-    refs.renderGroups.value = [
-      {
-        key: '__ungrouped__',
-        name: null as unknown as string,
-        containers,
-        containerCount: containers.length,
-        updatesAvailable: containers.length,
-        updatableCount: containers.length,
-      },
-    ];
-    mocked.context = context;
-    return mountSubject();
-  }
-
-  it('uses no-group locale variant (success) when group key is __ungrouped__', async () => {
-    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
-    const c2 = makeContainer({ id: 'c-2', name: 'beta' });
-    const wrapper = mountWithUngrouped([c1, c2]);
-
-    globalThis.dispatchEvent(
-      new CustomEvent('dd:sse-batch-update-completed', {
-        detail: {
-          batchId: 'batch-ug-ok',
-          total: 2,
-          succeeded: 2,
-          failed: 0,
-          durationMs: 1000,
-          items: [
-            {
-              operationId: 'op-1',
-              containerId: 'c-1',
-              containerName: 'alpha',
-              status: 'succeeded',
-            },
-            { operationId: 'op-2', containerId: 'c-2', containerName: 'beta', status: 'succeeded' },
-          ],
-          timestamp: '2026-04-30T00:00:00.000Z',
-        },
-      }),
-    );
-    await nextTick();
-    wrapper.unmount();
-
-    const { toasts } = useToast();
-    expect(toasts.value).toHaveLength(1);
-    expect(toasts.value[0]?.tone).toBe('success');
-    expect(toasts.value[0]?.title).toBe('Updated 2 containers');
-    expect(toasts.value[0]?.title).not.toContain('__ungrouped__');
-  });
-
-  it('uses no-group locale variant (partial) when group key is __ungrouped__', async () => {
-    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
-    const c2 = makeContainer({ id: 'c-2', name: 'beta' });
-    const wrapper = mountWithUngrouped([c1, c2]);
-
-    globalThis.dispatchEvent(
-      new CustomEvent('dd:sse-batch-update-completed', {
-        detail: {
-          batchId: 'batch-ug-partial',
-          total: 2,
-          succeeded: 1,
-          failed: 1,
-          durationMs: 1000,
-          items: [
-            {
-              operationId: 'op-1',
-              containerId: 'c-1',
-              containerName: 'alpha',
-              status: 'succeeded',
-            },
-            { operationId: 'op-2', containerId: 'c-2', containerName: 'beta', status: 'failed' },
-          ],
-          timestamp: '2026-04-30T00:00:00.000Z',
-        },
-      }),
-    );
-    await nextTick();
-    wrapper.unmount();
-
-    const { toasts } = useToast();
-    expect(toasts.value).toHaveLength(1);
-    expect(toasts.value[0]?.tone).toBe('warning');
-    expect(toasts.value[0]?.title).toBe('Updated 1 of 2 containers; 1 failed');
-    expect(toasts.value[0]?.title).not.toContain('__ungrouped__');
-  });
-
-  it('uses no-group locale variant (failure) when group key is __ungrouped__', async () => {
-    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
-    const c2 = makeContainer({ id: 'c-2', name: 'beta' });
-    const wrapper = mountWithUngrouped([c1, c2]);
-
-    globalThis.dispatchEvent(
-      new CustomEvent('dd:sse-batch-update-completed', {
-        detail: {
-          batchId: 'batch-ug-fail',
-          total: 2,
-          succeeded: 0,
-          failed: 2,
-          durationMs: 1000,
-          items: [
-            { operationId: 'op-1', containerId: 'c-1', containerName: 'alpha', status: 'failed' },
-            { operationId: 'op-2', containerId: 'c-2', containerName: 'beta', status: 'failed' },
-          ],
-          timestamp: '2026-04-30T00:00:00.000Z',
-        },
-      }),
-    );
-    await nextTick();
-    wrapper.unmount();
-
-    const { toasts } = useToast();
-    expect(toasts.value).toHaveLength(1);
-    expect(toasts.value[0]?.tone).toBe('error');
-    expect(toasts.value[0]?.title).toBe('Failed to update 2 containers');
-    expect(toasts.value[0]?.title).not.toContain('__ungrouped__');
-  });
-
-  it('drops the group qualifier when no containerId resolves to a known group', async () => {
-    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
-    const wrapper = mountWithGroup('known-group', 'known-group', [c1]);
-
-    globalThis.dispatchEvent(
-      new CustomEvent('dd:sse-batch-update-completed', {
-        detail: {
-          batchId: 'batch-xyz',
-          total: 1,
-          succeeded: 1,
-          failed: 0,
-          durationMs: 500,
-          items: [
-            // containerId not in renderGroups
-            {
-              operationId: 'op-1',
-              containerId: 'unknown-container',
-              containerName: 'unknown',
-              status: 'succeeded',
-            },
-          ],
-          timestamp: '2026-04-28T00:00:00.000Z',
-        },
-      }),
-    );
-    await nextTick();
-    wrapper.unmount();
-
-    const { toasts } = useToast();
-    expect(toasts.value).toHaveLength(1);
-    expect(toasts.value[0]?.tone).toBe('success');
-    expect(toasts.value[0]?.title).toBe('Updated 1 containers');
-  });
 
   it('ignores terminal events for unknown containers (no batch active)', async () => {
     const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
@@ -2387,20 +2129,6 @@ describe('ContainersGroupedViews', () => {
     wrapper.unmount();
 
     expect(useUpdateBatches().getBatch('stack-a')?.succeededCount).toBe(0);
-  });
-
-  it('ignores dd:sse-batch-update-completed with missing or malformed payload', async () => {
-    const c1 = makeContainer({ id: 'c-1', name: 'alpha' });
-    const wrapper = mountWithGroup('stack-a', 'stack-a', [c1]);
-
-    // No detail
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-batch-update-completed'));
-    // detail is null
-    globalThis.dispatchEvent(new CustomEvent('dd:sse-batch-update-completed', { detail: null }));
-    await nextTick();
-    wrapper.unmount();
-
-    expect(useToast().toasts.value).toHaveLength(0);
   });
 
   it('ignores dd:sse-update-applied with missing containerId', async () => {
@@ -2594,7 +2322,7 @@ describe('ContainersGroupedViews', () => {
       return mountSubject();
     }
 
-    it('renders the short form of currentDigest → newDigest for a digest update row', async () => {
+    it('renders the short form of currentDigest → newDigest for a digest-pinned update row', async () => {
       const wrapper = mountDigestContainer();
       const row = rowByName(wrapper, 'alpha');
       const text = row.text();
@@ -2602,13 +2330,42 @@ describe('ContainersGroupedViews', () => {
       expect(text).toContain('sha256:deadbeefcafe…');
     });
 
-    it('does NOT render two identical currentTag strings for a digest update row', async () => {
+    it('does NOT render two identical currentTag strings for a digest-pinned update row', async () => {
       const wrapper = mountDigestContainer();
       const row = rowByName(wrapper, 'alpha');
       const text = row.text();
       // The full raw digest should not appear twice (identical-string bug)
       const occurrences = text.split(digestLocal).length - 1;
       expect(occurrences).toBeLessThan(2);
+    });
+
+    it('renders the human-readable tag for a floating-tag + digest-watch update row (#356)', async () => {
+      // Brian's scenario: currentTag is a meaningful tag (`v8.13.2`), digest changed
+      // but tag did not. The version cell must show the tag, NOT two sha256 strings.
+      const wrapper = mountDigestContainer({
+        currentTag: 'v8.13.2',
+        newTag: 'v8.13.2',
+        isDigestPinned: false,
+      });
+      const row = rowByName(wrapper, 'alpha');
+      const text = row.text();
+      expect(text).toContain('v8.13.2');
+      expect(text).not.toContain('sha256:bcf6335aabbb…');
+      expect(text).not.toContain('sha256:deadbeefcafe…');
+    });
+
+    it('renders the human-readable tag for a linuxserver-style transform tag (#356)', async () => {
+      // Reporter's transformed tag like `compose-X-version-9.0.1` — floating-tag
+      // alias with digest watch auto-enabled by `da1334a4`.
+      const wrapper = mountDigestContainer({
+        currentTag: 'compose-X-version-9.0.1',
+        newTag: 'compose-X-version-9.0.1',
+        isDigestPinned: false,
+      });
+      const row = rowByName(wrapper, 'alpha');
+      const text = row.text();
+      expect(text).toContain('compose-X-version-9.0.1');
+      expect(text).not.toContain('sha256:bcf6335aabbb…');
     });
 
     it('still renders currentTag → newTag for a tag update row', async () => {

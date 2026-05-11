@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onScopeDispose, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useToast } from '../../composables/useToast';
 import AppBadge from '../AppBadge.vue';
 import AppIconButton from '../AppIconButton.vue';
 import type { ContainersViewRenderGroup } from './containersViewTemplateContext';
@@ -12,7 +11,6 @@ import {
   getUpdateInProgressPhaseLabelKey,
   UPDATE_IN_PROGRESS_PHASE_I18N,
 } from '../../utils/container-update';
-import { displayGroupName } from '../../utils/display';
 import { formatShortDigest } from '../../utils/digest-format';
 import {
   getPrimaryHardBlocker,
@@ -77,7 +75,6 @@ const {
 } = useContainersViewTemplateContext();
 const { t } = useI18n();
 const { batches, clearBatch, getBatch, incrementSucceeded, incrementFailed } = useUpdateBatches();
-const toast = useToast();
 
 const openActionsContainer = computed(
   () => displayContainers.value.find((container) => container.id === openActionsMenu.value) ?? null,
@@ -486,66 +483,8 @@ function onUpdateFailed(event: Event) {
   incrementFailed(groupKey);
 }
 
-// Subscribe to the batch-completion SSE event to fire the summary toast.
-function onBatchUpdateCompleted(event: Event) {
-  const payload = (event as CustomEvent).detail as Record<string, unknown> | undefined;
-  if (!payload) return;
-
-  const batchId = typeof payload.batchId === 'string' ? payload.batchId : undefined;
-  const total = typeof payload.total === 'number' ? payload.total : 0;
-  const succeeded = typeof payload.succeeded === 'number' ? payload.succeeded : 0;
-  const failed = typeof payload.failed === 'number' ? payload.failed : 0;
-
-  // Resolve a single group name only when every item in the batch belongs to
-  // the same group; otherwise drop the "in <group>" qualifier rather than
-  // mislabeling a flat "Update All" toast or showing the raw batchId UUID.
-  let groupName: string | undefined;
-  if (Array.isArray(payload.items)) {
-    const items = payload.items as Array<{ containerId?: string }>;
-    const groupKeys = new Set<string>();
-    for (const item of items) {
-      if (typeof item.containerId !== 'string') continue;
-      const groupKey = resolveGroupKeyForContainer(item.containerId);
-      if (groupKey) groupKeys.add(groupKey);
-    }
-    if (groupKeys.size === 1) {
-      const onlyKey = groupKeys.values().next().value as string;
-      const resolvedName =
-        renderGroups.value.find((g: { key: string; name?: string | null }) => g.key === onlyKey)
-          ?.name ?? onlyKey;
-      groupName = displayGroupName(resolvedName);
-    }
-  }
-
-  if (failed === 0) {
-    toast.success(
-      groupName
-        ? t('containersView.toast.batchUpdated', { count: succeeded, group: groupName })
-        : t('containersView.toast.batchUpdatedNoGroup', { count: succeeded }),
-    );
-  } else if (succeeded === 0) {
-    toast.error(
-      groupName
-        ? t('containersView.toast.batchFailed', { count: failed, group: groupName })
-        : t('containersView.toast.batchFailedNoGroup', { count: failed }),
-    );
-  } else {
-    toast.warning(
-      groupName
-        ? t('containersView.toast.batchPartial', {
-            succeeded,
-            total,
-            group: groupName,
-            failed,
-          })
-        : t('containersView.toast.batchPartialNoGroup', { succeeded, total, failed }),
-    );
-  }
-}
-
 globalThis.addEventListener('dd:sse-update-applied', onUpdateApplied);
 globalThis.addEventListener('dd:sse-update-failed', onUpdateFailed);
-globalThis.addEventListener('dd:sse-batch-update-completed', onBatchUpdateCompleted);
 
 // Clean up timers and event listeners when the component is torn down.
 onScopeDispose(() => {
@@ -555,7 +494,6 @@ onScopeDispose(() => {
   batchClearTimers.clear();
   globalThis.removeEventListener('dd:sse-update-applied', onUpdateApplied);
   globalThis.removeEventListener('dd:sse-update-failed', onUpdateFailed);
-  globalThis.removeEventListener('dd:sse-batch-update-completed', onBatchUpdateCompleted);
 });
 </script>
 
@@ -635,11 +573,16 @@ onScopeDispose(() => {
         </template>
         <!-- Version comparison -->
         <template #cell-version="{ row: c }">
-          <div v-if="c.updateKind === 'digest' && c.newDigest && c.currentDigest" class="container-version-query">
+          <div v-if="c.isDigestPinned && c.updateKind === 'digest' && c.newDigest && c.currentDigest" class="container-version-query">
             <div class="container-version-flow">
               <span class="container-version-tag text-2xs-plus dd-text-secondary" v-tooltip.top="c.currentDigest">{{ formatShortDigest(c.currentDigest) }}</span>
               <AppIcon name="arrow-right" :size="8" class="container-version-arrow dd-text-muted shrink-0" />
               <CopyableTag :tag="c.newDigest" class="container-version-tag container-version-tag-target text-2xs-plus font-semibold" style="color: var(--dd-primary);" @click.stop>{{ formatShortDigest(c.newDigest) }}</CopyableTag>
+            </div>
+          </div>
+          <div v-else-if="c.updateKind === 'digest' && c.newDigest && c.currentDigest" class="container-version-query">
+            <div class="container-version-flow">
+              <CopyableTag :tag="c.currentTag" class="container-version-tag container-version-tag-target text-2xs-plus font-semibold" style="color: var(--dd-primary);" v-tooltip.top="tt(`${c.currentTag} — ${formatShortDigest(c.currentDigest)} → ${formatShortDigest(c.newDigest)}`)" @click.stop>{{ c.currentTag }}</CopyableTag>
             </div>
           </div>
           <div v-else-if="c.newTag" class="container-version-query">
@@ -1025,11 +968,11 @@ onScopeDispose(() => {
           <div class="px-4 py-3 min-w-0">
             <div class="flex items-center gap-2 flex-wrap min-w-0">
               <span class="text-2xs-plus dd-text-muted shrink-0">{{ t('containerComponents.groupedViews.currentLabel') }}</span>
-              <CopyableTag :tag="c.updateKind === 'digest' && c.currentDigest ? c.currentDigest : c.currentTag"
+              <CopyableTag :tag="c.isDigestPinned && c.currentDigest ? c.currentDigest : c.currentTag"
                            class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
-                {{ c.updateKind === 'digest' && c.currentDigest ? formatShortDigest(c.currentDigest) : c.currentTag }}
+                {{ c.isDigestPinned && c.currentDigest ? formatShortDigest(c.currentDigest) : c.currentTag }}
               </CopyableTag>
-              <template v-if="c.updateKind === 'digest' && c.newDigest && c.currentDigest">
+              <template v-if="c.isDigestPinned && c.updateKind === 'digest' && c.newDigest && c.currentDigest">
                 <span class="text-2xs-plus ml-1 dd-text-muted shrink-0">{{ t('containerComponents.groupedViews.latestLabel') }}</span>
                 <CopyableTag :tag="c.newDigest" class="text-xs font-bold truncate max-w-[140px]"
                       :style="{ color: updateKindColor(c.updateKind).text }" @click.stop>
@@ -1039,6 +982,18 @@ onScopeDispose(() => {
                   data-test="container-card-update-state"
                   class="inline-flex items-center gap-1.5 text-2xs-plus font-semibold"
                   :style="{ color: getContainerUpdateStateColor(c) }"
+                >
+                  <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: getContainerUpdateStateColor(c) }"></span>
+                  {{ getContainerUpdateStateLabel(c) }}
+                </span>
+                <span v-if="c.updateMaturity" class="text-2xs dd-text-muted">{{ getUpdateMaturityLabel(c.updateMaturity) }}</span>
+              </template>
+              <template v-else-if="c.updateKind === 'digest' && c.newDigest && c.currentDigest">
+                <span
+                  data-test="container-card-update-state"
+                  class="inline-flex items-center gap-1.5 ml-1 text-2xs-plus font-semibold"
+                  :style="{ color: getContainerUpdateStateColor(c) }"
+                  v-tooltip.top="tt(`${formatShortDigest(c.currentDigest)} → ${formatShortDigest(c.newDigest)}`)"
                 >
                   <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: getContainerUpdateStateColor(c) }"></span>
                   {{ getContainerUpdateStateLabel(c) }}
@@ -1213,7 +1168,7 @@ onScopeDispose(() => {
           <div class="min-w-0 flex-1" :class="{ 'opacity-50': isRowLocked(c) }">
             <div class="text-sm font-semibold truncate dd-text">{{ c.name }}</div>
             <div class="text-2xs mt-0.5 truncate dd-text-muted"
-                 v-tooltip.top="c.updateKind === 'digest' && c.currentDigest ? `${c.image}@${c.currentDigest}` : `${c.image}:${c.currentTag}`">{{ c.image }}{{ c.updateKind === 'digest' && c.currentDigest ? `@${formatShortDigest(c.currentDigest)}` : `:${c.currentTag}` }}</div>
+                 v-tooltip.top="c.isDigestPinned && c.currentDigest ? `${c.image}@${c.currentDigest}` : `${c.image}:${c.currentTag}`">{{ c.image }}{{ c.isDigestPinned && c.currentDigest ? `@${formatShortDigest(c.currentDigest)}` : `:${c.currentTag}` }}</div>
             <div
               v-if="isContainerScanning(c) && !isContainerUpdating(c)"
               class="text-2xs mt-0.5 inline-flex items-center gap-1 dd-text-muted">

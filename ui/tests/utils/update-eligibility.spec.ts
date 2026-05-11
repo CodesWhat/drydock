@@ -44,7 +44,7 @@ describe('BLOCKER_SEVERITY', () => {
   });
 
   it('maps soft blockers correctly', () => {
-    expect(BLOCKER_SEVERITY['snoozed']).toBe('soft');
+    expect(BLOCKER_SEVERITY.snoozed).toBe('soft');
     expect(BLOCKER_SEVERITY['skip-tag']).toBe('soft');
     expect(BLOCKER_SEVERITY['skip-digest']).toBe('soft');
     expect(BLOCKER_SEVERITY['maturity-not-reached']).toBe('soft');

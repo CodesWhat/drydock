@@ -110,6 +110,14 @@ export interface Container {
   imageTagSemver?: boolean;
   tagPrecision?: 'specific' | 'floating';
   tagPinned?: boolean;
+  /**
+   * True when the container is referenced by digest (`image@sha256:…`) rather
+   * than a tag — i.e. `image.tag.value` is a `sha256:…` literal. UI uses this
+   * to decide whether the digest pair is the only meaningful identifier
+   * (digest-pinned) or whether a human-readable tag should take precedence
+   * (floating-tag + digest-watch).
+   */
+  isDigestPinned: boolean;
   releaseLink?: string;
   suggestedTag?: string;
   sourceRepo?: string;

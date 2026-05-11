@@ -1,4 +1,7 @@
-import type { ContainerUpdateAppliedEvent } from '../../../event/index.js';
+import type {
+  ContainerUpdateAppliedEvent,
+  ContainerUpdateFailedEventPayload,
+} from '../../../event/index.js';
 import {
   assertRequiredFunctionDependencies,
   resolveFunctionDependencies,
@@ -150,7 +153,7 @@ type UpdateLifecycleExecutorCallbacks = {
     logger: UpdateLifecycleOperationLogger,
   ) => Promise<void>;
   emitContainerUpdateApplied: (payload: ContainerUpdateAppliedEvent) => Promise<void>;
-  emitContainerUpdateFailed: (payload: { containerName: string; error: string }) => Promise<void>;
+  emitContainerUpdateFailed: (payload: ContainerUpdateFailedEventPayload) => Promise<void>;
   pruneOldBackups: (containerName: string, backupCount: number | undefined) => void;
   getBackupCount: () => number | undefined;
 };
@@ -413,7 +416,7 @@ class UpdateLifecycleExecutor {
       if (!requestedOperationId) {
         await this.telemetry.emitContainerUpdateApplied({
           containerName: this.context.getContainerFullName(container),
-          container,
+          container: container as import('../../../model/container.js').Container,
         });
       }
       this.postUpdate.pruneOldBackups(container.name, this.postUpdate.getBackupCount());
@@ -423,6 +426,7 @@ class UpdateLifecycleExecutor {
         await this.telemetry.emitContainerUpdateFailed({
           containerName: this.context.getContainerFullName(container),
           error: errorMessage,
+          container: container as import('../../../model/container.js').Container,
         });
       }
       try {

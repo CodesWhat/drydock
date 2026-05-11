@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onScopeDispose, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
   applyUpdateOperationSseToHold,
-  OPERATION_DISPLAY_HOLD_MS,
   parseUpdateLifecycleSsePayload,
   parseUpdateOperationSsePayload,
   type ParsedUpdateOperationSse,
@@ -12,7 +11,6 @@ import {
 import type { Container } from '../types/container';
 import { type RouteLocationRaw, useRouter } from 'vue-router';
 import type { OperationChangedPayload } from '../services/sse';
-import { TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES } from '../types/update-operation';
 import { GridItem, GridLayout } from 'grid-layout-plus';
 import AppIconButton from '@/components/AppIconButton.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
@@ -30,7 +28,6 @@ import {
   runContainerUpdateRequest,
 } from '../utils/container-update';
 import { errorMessage } from '../utils/error';
-import { resolveUpdateFailureReason } from '../utils/update-error-summary';
 import { getPrimaryHardBlocker } from '../utils/update-eligibility';
 import type { ContainerStatsSummarySnapshot } from '../services/stats';
 import DashboardHostStatusWidget from './dashboard/components/DashboardHostStatusWidget.vue';
@@ -83,27 +80,9 @@ const dashboardUpdateSequence = ref<Map<string, DashboardUpdateSequenceEntry>>(n
 const dashboardPendingUpdatePollTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 const dashboardPendingUpdatePollInFlight = ref(false);
 const dashboardPendingUpdatePollDelayMs = ref(2_000);
-const completionToastTimers = new Set<ReturnType<typeof setTimeout>>();
-const completionToastOperationIds = new Set<string>();
 const DASHBOARD_PENDING_UPDATE_POLL_INTERVAL_MS = 2_000;
 const DASHBOARD_PENDING_UPDATE_POLL_MAX_INTERVAL_MS = 16_000;
 const DASHBOARD_PENDING_UPDATE_TIMEOUT_MS = 30_000;
-
-function scheduleCompletionToast(callback: () => void) {
-  const timer = setTimeout(() => {
-    completionToastTimers.delete(timer);
-    callback();
-  }, OPERATION_DISPLAY_HOLD_MS);
-  completionToastTimers.add(timer);
-}
-
-onScopeDispose(() => {
-  for (const timer of completionToastTimers) {
-    clearTimeout(timer);
-  }
-  completionToastTimers.clear();
-  completionToastOperationIds.clear();
-});
 
 function navigateTo(route: RouteLocationRaw) {
   router.push(route);
@@ -499,10 +478,7 @@ function findDashboardContainerForOperationTarget(target: {
   return undefined;
 }
 
-function applyDashboardParsedOperationSse(
-  parsed: ParsedUpdateOperationSse,
-  options: { onHoldReleased?: () => void } = {},
-) {
+function applyDashboardParsedOperationSse(parsed: ParsedUpdateOperationSse) {
   return applyUpdateOperationSseToHold({
     parsed,
     resolveContainer: findDashboardContainerForOperationTarget,
@@ -516,7 +492,6 @@ function applyDashboardParsedOperationSse(
         containerName: parsed.containerName,
       });
     },
-    onHoldReleased: options.onHoldReleased,
   });
 }
 
@@ -534,37 +509,6 @@ watch(containers, (next) => {
   reconcileHoldsAgainstContainers(next, Date.now());
 });
 
-function scheduleDashboardCompletionAfterTerminalRelease(args: {
-  parsed: ParsedUpdateOperationSse;
-  batchId: unknown;
-  toastCallback: () => void;
-}) {
-  const operationId =
-    typeof args.parsed.operationId === 'string' && args.parsed.operationId.length > 0
-      ? args.parsed.operationId
-      : undefined;
-  const shouldToast = args.batchId === null && operationId !== undefined;
-  const shouldScheduleToast = shouldToast && !completionToastOperationIds.has(operationId);
-  if (shouldScheduleToast) {
-    completionToastOperationIds.add(operationId);
-  }
-  let toastFired = false;
-  const onHoldReleased = shouldScheduleToast
-    ? () => {
-        if (toastFired) {
-          return;
-        }
-        toastFired = true;
-        args.toastCallback();
-      }
-    : undefined;
-  const result = applyDashboardParsedOperationSse(args.parsed, { onHoldReleased });
-  if (!onHoldReleased || result.releaseScheduled) {
-    return;
-  }
-  scheduleCompletionToast(args.toastCallback);
-}
-
 function handleDashboardSseUpdateApplied(event: Event) {
   const detail = (event as CustomEvent)?.detail as Record<string, unknown> | undefined;
   if (!detail) {
@@ -574,14 +518,9 @@ function handleDashboardSseUpdateApplied(event: Event) {
   if (!parsed) {
     return;
   }
-  const containerName =
-    typeof detail.containerName === 'string' ? detail.containerName : 'container';
-  const batchId = detail.batchId ?? null;
-  scheduleDashboardCompletionAfterTerminalRelease({
-    parsed,
-    batchId,
-    toastCallback: () => toast.success(t('dashboardView.toast.updated', { name: containerName })),
-  });
+  // Toast emission lives in useGlobalUpdateToast (App.vue). This handler only
+  // runs the dashboard-specific row state updates (hold release + ghost prune).
+  applyDashboardParsedOperationSse(parsed);
 }
 
 function handleDashboardSseUpdateFailed(event: Event) {
@@ -593,36 +532,7 @@ function handleDashboardSseUpdateFailed(event: Event) {
   if (!parsed) {
     return;
   }
-  const containerName =
-    typeof detail.containerName === 'string' ? detail.containerName : 'container';
-  const batchId = detail.batchId ?? null;
-  const error = typeof detail.error === 'string' ? detail.error : undefined;
-  const rollbackReason =
-    typeof detail.rollbackReason === 'string' ? detail.rollbackReason : undefined;
-  const reason = resolveUpdateFailureReason({ lastError: error, rollbackReason });
-  const isCancelled = rollbackReason === 'cancelled' || error === 'Cancelled by operator';
-  let toastCallback: () => void;
-  if (rollbackReason !== undefined) {
-    if (isCancelled) {
-      toastCallback = () =>
-        toast.success(t('dashboardView.toast.cancelled', { name: containerName }));
-    } else {
-      toastCallback = () =>
-        toast.warning(
-          reason
-            ? t('dashboardView.toast.rolledBackWithReason', { name: containerName, reason })
-            : t('dashboardView.toast.rolledBack', { name: containerName }),
-        );
-    }
-  } else {
-    toastCallback = () =>
-      toast.error(
-        reason
-          ? t('dashboardView.toast.updateFailedWithReason', { name: containerName, reason })
-          : t('dashboardView.toast.updateFailed', { name: containerName }),
-      );
-  }
-  scheduleDashboardCompletionAfterTerminalRelease({ parsed, batchId, toastCallback });
+  applyDashboardParsedOperationSse(parsed);
 }
 
 onMounted(() => {
