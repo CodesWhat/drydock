@@ -439,7 +439,7 @@ function buildUpdateAppliedSsePayload(
       : '';
   const containerId =
     typeof container?.id === 'string' && container.id !== '' ? container.id : topLevelContainerId;
-  const imageName = container?.image?.name ?? undefined;
+  const imageName = typeof container?.image?.name === 'string' ? container.image.name : undefined;
   const imageDigest = null;
   const operationId = (payload as ContainerUpdateAppliedEventPayload).operationId;
   return {
