@@ -3298,7 +3298,10 @@ test('handleContainerUpdateFailedEvent should skip when mustTrigger returns fals
   };
   trigger.configuration.mode = 'simple';
   trigger.configuration.threshold = 'all';
-  trigger.type = 'docker';
+  // Use a notification trigger type (not docker/dockercompose) so the
+  // update-action guard does not intercept — we want to exercise the
+  // getMustTriggerDecision "not allowed" path in dispatchContainerForEvent.
+  trigger.type = 'slack';
   trigger.name = 'update';
   storeContainer.getContainers.mockReturnValue([container]);
   const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
@@ -8300,4 +8303,133 @@ test('runAcceptedUpdateBatch should emit auto-update-blocked audit for rejected 
   } finally {
     forceRejectedUpdateBatch.enabled = false;
   }
+});
+
+// ---------------------------------------------------------------------------
+// dispatchContainerForEvent — update-action trigger guard (bug #357 fallout)
+// ---------------------------------------------------------------------------
+// Docker and Dockercompose implement trigger() as the full pull-scan-recreate
+// update lifecycle. Routing lifecycle events (security-alert, update-applied,
+// update-failed) through dispatchContainerForEvent must NOT invoke trigger()
+// on these types — doing so would recreate containers without user consent.
+// Command IS an action trigger but is intentionally excluded from the guard
+// because its trigger() runs a user-supplied shell script (notification-shaped
+// behavior). Notification triggers (e.g. slack) must continue to receive all
+// lifecycle events unchanged.
+
+describe('dispatchContainerForEvent update-action guard', () => {
+  const container = {
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'major' },
+  };
+
+  beforeEach(() => {
+    storeContainer.getContainers.mockReturnValue([container]);
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+  });
+
+  test('docker trigger does NOT invoke trigger() on security-alert', async () => {
+    trigger.type = 'docker';
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    const debugSpy = vi.spyOn(trigger.log, 'debug');
+
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'local_container1',
+      container,
+      details: 'critical:1',
+      summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+    } as any);
+
+    expect(triggerSpy).not.toHaveBeenCalled();
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping security-alert dispatch for update-action trigger'),
+    );
+  });
+
+  test('docker trigger does NOT invoke trigger() on update-applied', async () => {
+    trigger.type = 'docker';
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    const debugSpy = vi.spyOn(trigger.log, 'debug');
+
+    await trigger.handleContainerUpdateAppliedEvent('local_container1');
+
+    expect(triggerSpy).not.toHaveBeenCalled();
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping update-applied dispatch for update-action trigger'),
+    );
+  });
+
+  test('docker trigger does NOT invoke trigger() on update-failed', async () => {
+    trigger.type = 'docker';
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    const debugSpy = vi.spyOn(trigger.log, 'debug');
+
+    await trigger.handleContainerUpdateFailedEvent({
+      containerName: 'local_container1',
+      error: 'pull failed',
+    } as any);
+
+    expect(triggerSpy).not.toHaveBeenCalled();
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping update-failed dispatch for update-action trigger'),
+    );
+  });
+
+  test('dockercompose trigger does NOT invoke trigger() on security-alert', async () => {
+    trigger.type = 'dockercompose';
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    const debugSpy = vi.spyOn(trigger.log, 'debug');
+
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'local_container1',
+      container,
+      details: 'high:2',
+      summary: { critical: 0, high: 2, medium: 0, low: 0, unknown: 0 },
+    } as any);
+
+    expect(triggerSpy).not.toHaveBeenCalled();
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping security-alert dispatch for update-action trigger'),
+    );
+  });
+
+  test('command trigger STILL invokes trigger() on security-alert (shell script is notification-shaped)', async () => {
+    trigger.type = 'command';
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'local_container1',
+      container,
+      details: 'critical:1',
+      summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+    } as any);
+
+    expect(triggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'container1',
+        notificationEvent: expect.objectContaining({ kind: 'security-alert' }),
+      }),
+    );
+  });
+
+  test('slack trigger STILL invokes trigger() on security-alert', async () => {
+    trigger.type = 'slack';
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'local_container1',
+      container,
+      details: 'critical:1',
+      summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+    } as any);
+
+    expect(triggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'container1',
+        notificationEvent: expect.objectContaining({ kind: 'security-alert' }),
+      }),
+    );
+  });
 });

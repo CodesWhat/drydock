@@ -991,6 +991,24 @@ class Trigger<
     container: TriggerContainer | undefined,
     options: EventDispatchOptions = {},
   ) {
+    // Update-action triggers (docker, dockercompose) implement `trigger()` as
+    // the full pull-scan-recreate update lifecycle. Lifecycle handlers route
+    // here for notification dispatch; calling `trigger()` from this path
+    // re-executes the update lifecycle in response to security-alert /
+    // update-applied / update-failed / agent-* events — the root cause of
+    // "Scan now caused my container to be recreated" (post-#357 fallout).
+    // The legitimate auto-update path (`runUpdateAvailableSimpleTrigger` /
+    // `runAcceptedUpdateBatch`) routes update-action triggers through the
+    // admission queue and never enters `dispatchContainerForEvent` for
+    // `update-available`. The `ruleId !== 'update-available'` clause
+    // remains as forward-compatible defense against future regressions.
+    if (this.isUpdateActionTrigger() && ruleId !== 'update-available') {
+      this.log.debug(
+        `Skipping ${ruleId} dispatch for update-action trigger (lifecycle events do not invoke update lifecycle)`,
+      );
+      return;
+    }
+
     if (!this.isTriggerEnabledForRule(ruleId, options)) {
       return;
     }
