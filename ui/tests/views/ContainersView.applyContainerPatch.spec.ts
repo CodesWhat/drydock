@@ -411,9 +411,9 @@ describe('ContainersView — applyContainerPatch', () => {
       globalThis.dispatchEvent(new CustomEvent('dd:sse-container-added', { detail: rawNew }));
       await flushPromises();
 
-      expect(vm.containerIdMap['c2']).toBe('c2');
-      expect(vm.containerIdMap['redis']).toBe('c2');
-      expect(vm.containerMetaMap['c2']).toMatchObject({ id: 'c2', name: 'redis' });
+      expect(vm.containerIdMap.c2).toBe('c2');
+      expect(vm.containerIdMap.redis).toBe('c2');
+      expect(vm.containerMetaMap.c2).toMatchObject({ id: 'c2', name: 'redis' });
     });
 
     it('mutates in place when id already exists (add with duplicate id)', async () => {
@@ -566,9 +566,9 @@ describe('ContainersView — applyContainerPatch', () => {
       globalThis.dispatchEvent(new CustomEvent('dd:sse-container-updated', { detail: raw }));
       await flushPromises();
 
-      expect(vm.containerIdMap['c1']).toBe('c1');
-      expect(vm.containerIdMap['nginx']).toBe('c1');
-      expect(vm.containerMetaMap['c1']).toMatchObject({ id: 'c1', name: 'nginx' });
+      expect(vm.containerIdMap.c1).toBe('c1');
+      expect(vm.containerIdMap.nginx).toBe('c1');
+      expect(vm.containerMetaMap.c1).toMatchObject({ id: 'c1', name: 'nginx' });
     });
   });
 
@@ -612,18 +612,18 @@ describe('ContainersView — applyContainerPatch', () => {
       const vm = wrapper.vm as any;
 
       // Verify they're present before the remove
-      expect(vm.containerIdMap['c1']).toBe('c1');
-      expect(vm.containerIdMap['nginx']).toBe('c1');
+      expect(vm.containerIdMap.c1).toBe('c1');
+      expect(vm.containerIdMap.nginx).toBe('c1');
 
       globalThis.dispatchEvent(
         new CustomEvent('dd:sse-container-removed', { detail: { id: 'c1', name: 'nginx' } }),
       );
       await flushPromises();
 
-      expect(vm.containerIdMap['c1']).toBeUndefined();
-      expect(vm.containerIdMap['nginx']).toBeUndefined();
-      expect(vm.containerMetaMap['c1']).toBeUndefined();
-      expect(vm.containerMetaMap['nginx']).toBeUndefined();
+      expect(vm.containerIdMap.c1).toBeUndefined();
+      expect(vm.containerIdMap.nginx).toBeUndefined();
+      expect(vm.containerMetaMap.c1).toBeUndefined();
+      expect(vm.containerMetaMap.nginx).toBeUndefined();
     });
 
     it('is a no-op when the container id is not in the list', async () => {
@@ -1029,7 +1029,7 @@ describe('ContainersView — applyContainerPatch', () => {
 
       // Store has an operation but mapper also produced one — mapper wins
       const storeOp = makeStoreOp({ operationId: 'op-store', containerId: 'c2' });
-      mockStoreOperationsById.value['c2'] = storeOp;
+      mockStoreOperationsById.value.c2 = storeOp;
 
       const mappedOp: ContainerUpdateOperation = {
         id: 'op-mapper',
@@ -1062,7 +1062,7 @@ describe('ContainersView — applyContainerPatch', () => {
 
       // Store has a different op but the row already has one — row op wins
       const storeOp = makeStoreOp({ operationId: 'op-store', containerId: 'c1' });
-      mockStoreOperationsById.value['c1'] = storeOp;
+      mockStoreOperationsById.value.c1 = storeOp;
 
       const raw = { id: 'c1', name: 'vaultwarden' };
       const mappedWithoutOp = makeContainer({
@@ -1093,7 +1093,7 @@ describe('ContainersView — applyContainerPatch', () => {
         status: 'in-progress',
         phase: 'health-gate',
       });
-      mockStoreOperationsById.value['c1'] = storeOp;
+      mockStoreOperationsById.value.c1 = storeOp;
 
       const raw = { id: 'c1', name: 'nginx' };
       const mappedWithoutOp = makeContainer({
