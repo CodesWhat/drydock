@@ -112,6 +112,23 @@ function expectDefaultRedirectPayload(res: any) {
   });
 }
 
+function getUndiciAgentOptions(dispatcher: unknown): Record<string, unknown> | undefined {
+  if (!dispatcher || typeof dispatcher !== 'object') {
+    return undefined;
+  }
+
+  const optionsSymbol = Object.getOwnPropertySymbols(dispatcher).find(
+    (symbol) => symbol.description === 'options',
+  );
+  if (!optionsSymbol) {
+    return undefined;
+  }
+
+  return (dispatcher as Record<symbol, unknown>)[optionsSymbol] as
+    | Record<string, unknown>
+    | undefined;
+}
+
 /** Perform a redirect flow and return the session with pending state */
 async function performRedirect(oidcInstance: any, mock: any, session?: any) {
   const sess = session || { save: vi.fn((cb) => cb()) };
@@ -1560,6 +1577,10 @@ test('initAuthentication should configure custom fetch when cafile is set', asyn
       'https://idp.example.com/.well-known/openid-configuration',
       expect.objectContaining({ dispatcher: expect.anything() }),
     );
+    const requestInit = fetchSpy.mock.calls[0][1] as { dispatcher?: unknown };
+    expect(getUndiciAgentOptions(requestInit.dispatcher)).toEqual(
+      expect.objectContaining({ allowH2: false }),
+    );
   } finally {
     fetchSpy.mockRestore();
     await cleanup();
@@ -1597,6 +1618,10 @@ test('initAuthentication should configure custom fetch and warn when insecure TL
     expect(fetchSpy).toHaveBeenCalledWith(
       'https://idp.example.com/.well-known/openid-configuration',
       expect.objectContaining({ dispatcher: expect.anything() }),
+    );
+    const requestInit = fetchSpy.mock.calls[0][1] as { dispatcher?: unknown };
+    expect(getUndiciAgentOptions(requestInit.dispatcher)).toEqual(
+      expect.objectContaining({ allowH2: false }),
     );
   } finally {
     fetchSpy.mockRestore();

@@ -66,7 +66,7 @@
     "semver": "7.8.0",
     "set-value": "4.1.0",
     "sort-es": "1.7.18",
-    "undici": "7.24.6",
+    "undici": "8.2.0",
     "unix-crypt-td-js": "1.1.4",
     "uuid": "14.0.0",
     "ws": "8.20.1",

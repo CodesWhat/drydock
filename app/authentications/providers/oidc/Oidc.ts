@@ -455,7 +455,10 @@ class Oidc extends Authentication<OidcConfiguration> {
         this.log.warn('TLS certificate verification disabled for OIDC - do not use in production');
         connectOptions.rejectUnauthorized = false;
       }
-      const dispatcher = new Agent({ connect: connectOptions });
+      const dispatcher = new Agent({
+        allowH2: false,
+        connect: connectOptions,
+      });
       const oidcFetch: openidClientLibrary.CustomFetch = (input, init) =>
         fetch(
           input as RequestInfo | URL,
