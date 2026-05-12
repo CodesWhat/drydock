@@ -207,3 +207,18 @@ test('triggerBatch should use both runtimeContext title and body when both are s
     url: 'https://maker.ifttt.com/trigger/event/with/key/key',
   });
 });
+
+test('sendHttpRequest should reject when IFTTT webhook returns 5xx', async () => {
+  ifttt.configuration = {
+    key: 'key',
+    event: 'event',
+  };
+  const error = Object.assign(new Error('IFTTT webhook failed with 500'), {
+    response: { status: 500 },
+  });
+  axios.mockRejectedValueOnce(error);
+
+  await expect(ifttt.sendHttpRequest({ value1: 'container1' })).rejects.toThrow(
+    'IFTTT webhook failed with 500',
+  );
+});

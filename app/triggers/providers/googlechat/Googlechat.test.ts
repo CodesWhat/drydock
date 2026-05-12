@@ -153,3 +153,16 @@ test('postMessage should call Google Chat webhook endpoint', async () => {
     },
   );
 });
+
+test('postMessage should reject when Google Chat webhook returns 4xx', async () => {
+  const { default: axios } = await import('axios');
+  const error = Object.assign(new Error('Google Chat webhook failed with 400'), {
+    response: { status: 400 },
+  });
+  axios.post.mockRejectedValueOnce(error);
+  googlechat.configuration = configurationValid;
+
+  await expect(googlechat.postMessage('Message to Google Chat')).rejects.toThrow(
+    'Google Chat webhook failed with 400',
+  );
+});

@@ -119,3 +119,22 @@ describe('Discord Trigger', () => {
     });
   });
 });
+
+test('sendMessage should reject when Discord webhook returns 5xx', async () => {
+  const { default: axios } = await import('axios');
+  const discordTrigger = new Discord();
+  const error = Object.assign(new Error('Discord webhook failed with 500'), {
+    response: { status: 500 },
+  });
+  axios.mockRejectedValueOnce(error);
+  discordTrigger.configuration = {
+    url: 'https://discord.com/api/webhooks/123/abc',
+    botusername: 'drydock',
+    cardcolor: 65280,
+    cardlabel: '',
+  };
+
+  await expect(discordTrigger.sendMessage('Title', 'Body')).rejects.toThrow(
+    'Discord webhook failed with 500',
+  );
+});

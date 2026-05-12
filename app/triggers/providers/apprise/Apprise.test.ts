@@ -317,3 +317,13 @@ test('maskConfiguration should mask urls', async () => {
   expect(masked.url).toBe('http://xxx.com');
   expect(masked.urls).toBe('[REDACTED]');
 });
+
+test('trigger should reject when Apprise returns 5xx', async () => {
+  apprise.configuration = configurationValid;
+  const error = Object.assign(new Error('Apprise returned 500'), {
+    response: { status: 500 },
+  });
+  axios.mockRejectedValueOnce(error);
+
+  await expect(apprise.trigger({ name: 'container1' })).rejects.toThrow('Apprise returned 500');
+});

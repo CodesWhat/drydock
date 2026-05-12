@@ -141,6 +141,28 @@ test('should handle command execution error', async () => {
   expect(logSpy).toHaveBeenCalledWith(expect.stringContaining('execution error'));
 });
 
+test('runCommand should log execFile callback errors without rejecting', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', {
+    cmd: 'exit 1',
+  });
+  const logSpy = vi.spyOn(cmd.log, 'warn');
+  childProcessMockControl.execFileImpl = (
+    _file: unknown,
+    _args: unknown,
+    _options: unknown,
+    callback: (...callbackArgs: unknown[]) => void,
+  ) => {
+    setImmediate(() => callback(new Error('command failed'), '', ''));
+    return { pid: 2 };
+  };
+
+  await expect(cmd.trigger({ name: 'test' })).resolves.toBeUndefined();
+  expect(logSpy).toHaveBeenCalledWith(
+    expect.stringContaining('Command exit 1 \nexecution error (command failed)'),
+  );
+});
+
 test('should log stderr when present', async () => {
   const cmd = new Command();
   await cmd.register('trigger', 'command', 'test', {

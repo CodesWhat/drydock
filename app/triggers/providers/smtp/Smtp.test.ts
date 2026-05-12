@@ -227,6 +227,15 @@ test('init should default tls rejectUnauthorized to true when tls is undefined',
   expect(smtp.transporter.options.tls.rejectUnauthorized).toBe(true);
 });
 
+test('trigger should reject when SMTP sendMail fails', async () => {
+  smtp.configuration = configurationValid;
+  smtp.transporter = {
+    sendMail: vi.fn().mockRejectedValue(new Error('SMTP rejected recipient')),
+  };
+
+  await expect(smtp.trigger({ name: 'container1' })).rejects.toThrow('SMTP rejected recipient');
+});
+
 test('trigger should format mail as expected', async () => {
   smtp.configuration = configurationValid;
   smtp.transporter = {

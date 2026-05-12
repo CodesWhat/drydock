@@ -153,6 +153,17 @@ test('triggerBatch should send batch notification', async () => {
   });
 });
 
+test('trigger should reject when Gotify createMessage fails', async () => {
+  gotify.configuration = configurationValid;
+  gotify.client = {
+    message: {
+      createMessage: vi.fn().mockRejectedValue(new Error('Gotify returned 500')),
+    },
+  };
+
+  await expect(gotify.trigger({ name: 'container1' })).rejects.toThrow('Gotify returned 500');
+});
+
 test('dismiss should delete Gotify message by id', async () => {
   gotify.configuration = configurationValid;
   gotify.client = {

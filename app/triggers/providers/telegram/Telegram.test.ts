@@ -219,6 +219,18 @@ test('sendMessage should post to telegram API and return data', async () => {
   expect(result).toEqual({ ok: true });
 });
 
+test('sendMessage should reject when Telegram API returns 429', async () => {
+  const tg = new Telegram();
+  tg.configuration = { ...configurationValid };
+  await tg.initTrigger();
+  const error = Object.assign(new Error('Telegram rate limited'), {
+    response: { status: 429 },
+  });
+  axios.post.mockRejectedValueOnce(error);
+
+  await expect(tg.sendMessage('Hello')).rejects.toThrow('Telegram rate limited');
+});
+
 test('getParseMode should return HTML when messageformat is HTML', () => {
   telegram.configuration = { ...configurationValid, messageformat: 'HTML' };
   expect(telegram.getParseMode()).toBe('HTML');

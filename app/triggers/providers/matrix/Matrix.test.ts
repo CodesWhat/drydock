@@ -161,3 +161,17 @@ test('postMessage should call Matrix message endpoint', async () => {
     },
   );
 });
+
+test('postMessage should reject when Matrix API returns 5xx', async () => {
+  const { default: axios } = await import('axios');
+  const error = Object.assign(new Error('Matrix API failed with 500'), {
+    response: { status: 500 },
+  });
+  axios.put.mockRejectedValueOnce(error);
+  matrix.configuration = configurationValid;
+  matrix.generateTransactionId = vi.fn().mockReturnValue('txn-123');
+
+  await expect(matrix.postMessage('Message to Matrix')).rejects.toThrow(
+    'Matrix API failed with 500',
+  );
+});

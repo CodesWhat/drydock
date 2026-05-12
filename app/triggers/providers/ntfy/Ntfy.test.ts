@@ -181,3 +181,13 @@ test('triggerBatch should call http client with batch body', async () => {
     }),
   );
 });
+
+test('sendHttpRequest should reject when Ntfy returns 429', async () => {
+  ntfy.configuration = configurationValid;
+  const error = Object.assign(new Error('Ntfy rate limited'), {
+    response: { status: 429 },
+  });
+  axios.mockRejectedValueOnce(error);
+
+  await expect(ntfy.sendHttpRequest({ message: 'hello' })).rejects.toThrow('Ntfy rate limited');
+});

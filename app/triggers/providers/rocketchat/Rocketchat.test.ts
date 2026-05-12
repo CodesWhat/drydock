@@ -219,4 +219,22 @@ describe('Rocketchat Trigger', () => {
     expect(result).toBe('Batch body');
     expect(rocketchat.renderBatchTitle).not.toHaveBeenCalled();
   });
+
+  test('postMessage should reject when Rocket.Chat API returns 5xx', async () => {
+    const { default: axios } = await import('axios');
+    const error = Object.assign(new Error('Rocket.Chat API failed with 500'), {
+      response: { status: 500 },
+    });
+    axios.post.mockRejectedValueOnce(error);
+    rocketchat.configuration = {
+      url: 'https://open.rocket.chat',
+      user: { id: 'jDdn8oh9BfJKnWdDY' },
+      auth: { token: 'Rbqz90hnkRyVwRfcmE5PzkP5Pqwml_fo7ZUXzxv2_zx' },
+      channel: '#general',
+    };
+
+    await expect(rocketchat.postMessage('Test message')).rejects.toThrow(
+      'Rocket.Chat API failed with 500',
+    );
+  });
 });

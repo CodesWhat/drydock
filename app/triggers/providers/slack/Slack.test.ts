@@ -164,3 +164,20 @@ test('triggerBatch should send body only when disabletitle is true', async () =>
   await slack.triggerBatch(containers);
   expect(slack.sendMessage).toHaveBeenCalledWith(expect.not.stringContaining('updates available'));
 });
+
+test('sendMessage should reject when Slack postMessage fails', async () => {
+  const error = new Error('Slack API returned 500');
+  const slackTrigger = new Slack();
+  slackTrigger.configuration = configurationValid;
+  slackTrigger.client = {
+    chat: {
+      postMessage: vi.fn().mockRejectedValue(error),
+    },
+  };
+
+  await expect(slackTrigger.sendMessage('Test message')).rejects.toThrow('Slack API returned 500');
+  expect(slackTrigger.client.chat.postMessage).toHaveBeenCalledWith({
+    channel: 'channel',
+    text: 'Test message',
+  });
+});
