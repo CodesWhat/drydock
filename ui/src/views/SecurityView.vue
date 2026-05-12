@@ -25,7 +25,11 @@ import { ROUTES } from '../router/routes';
 import { getPrimaryHardBlocker } from '../utils/update-eligibility';
 import SecurityContainerChooser from './security/SecurityContainerChooser.vue';
 import SecurityDetailPanel from './security/SecurityDetailPanel.vue';
-import type { ContainerChoice, SecurityRuntimeStatus } from './security/securityViewTypes';
+import type {
+  ContainerChoice,
+  SbomState,
+  SecurityRuntimeStatus,
+} from './security/securityViewTypes';
 import {
   fixableColor,
   fixablePercent,
@@ -191,6 +195,17 @@ const {
 } = useSbomDetail({
   containerIdsByImage,
 });
+
+const sbomState = computed<SbomState>(() => ({
+  componentCount: detailSbomComponentCount.value,
+  document: detailSbomDocument.value,
+  documentJson: detailSbomDocumentJson.value,
+  error: detailSbomError.value,
+  generatedAt: detailSbomGeneratedAt.value,
+  loading: detailSbomLoading.value,
+  selectedFormat: selectedSbomFormat.value,
+  showDocument: showSbomDocument.value,
+}));
 
 const selectedImageVulns = computed(() => {
   if (!selectedImage.value) return [];
@@ -850,12 +865,7 @@ onUnmounted(() => {
         :selected-image-update-blocked="isSummaryUpdateBlocked(selectedImage)"
         :selected-image-vulns="selectedImageVulns"
         :selected-image-vulns-with-safe-url="selectedImageVulnsWithSafeUrl"
-        :detail-sbom-component-count="detailSbomComponentCount"
-        :detail-sbom-document="detailSbomDocument"
-        :detail-sbom-document-json="detailSbomDocumentJson"
-        :detail-sbom-error="detailSbomError"
-        :detail-sbom-generated-at="detailSbomGeneratedAt"
-        :detail-sbom-loading="detailSbomLoading"
+        :sbom-state="sbomState"
         @download-detail-sbom="downloadDetailSbom"
         @download-vuln-report="downloadVulnReport"
         @load-detail-sbom="loadDetailSbom"

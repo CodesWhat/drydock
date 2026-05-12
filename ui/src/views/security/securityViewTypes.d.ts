@@ -22,6 +22,17 @@ export interface SeveritySummaryCounts {
 
 export type SbomFormat = 'spdx-json' | 'cyclonedx-json';
 
+export interface SbomState {
+  componentCount?: number;
+  document: unknown;
+  documentJson: string;
+  error: string | null;
+  generatedAt?: string | null;
+  loading: boolean;
+  selectedFormat: SbomFormat;
+  showDocument: boolean;
+}
+
 export interface SecurityRuntimeToolStatus {
   enabled: boolean;
   command: string;

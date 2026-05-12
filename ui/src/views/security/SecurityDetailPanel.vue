@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n';
 import AppBadge from '../../components/AppBadge.vue';
 import ReleaseNotesLink from '../../components/containers/ReleaseNotesLink.vue';
 import type { ImageSummary } from '../../composables/useVulnerabilities';
-import type { SbomFormat, Vulnerability } from './securityViewTypes';
+import type { SbomFormat, SbomState, Vulnerability } from './securityViewTypes';
 import {
   formatTimestamp,
   severityColor,
@@ -23,15 +23,8 @@ const props = defineProps<{
   selectedImageUpdateBlocked: boolean;
   selectedImageVulns: Vulnerability[];
   selectedImageVulnsWithSafeUrl: VulnerabilityWithSafeUrl[];
-  detailSbomComponentCount?: number;
-  detailSbomDocument: unknown;
-  detailSbomDocumentJson: string;
-  detailSbomError: string | null;
-  detailSbomGeneratedAt?: string | null;
-  detailSbomLoading: boolean;
-  selectedSbomFormat: SbomFormat;
+  sbomState: SbomState;
   selectedVulnExportFormat: VulnExportFormat;
-  showSbomDocument: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -49,7 +42,7 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 const selectedSbomFormatModel = computed({
-  get: () => props.selectedSbomFormat,
+  get: () => props.sbomState.selectedFormat,
   set: (format: SbomFormat) => emit('update:selectedSbomFormat', format),
 });
 
@@ -59,7 +52,7 @@ const selectedVulnExportFormatModel = computed({
 });
 
 const showSbomDocumentModel = computed({
-  get: () => props.showSbomDocument,
+  get: () => props.sbomState.showDocument,
   set: (show: boolean) => emit('update:showSbomDocument', show),
 });
 </script>
@@ -146,50 +139,50 @@ const showSbomDocumentModel = computed({
             <option value="spdx-json">spdx-json</option>
             <option value="cyclonedx-json">cyclonedx-json</option>
           </select>
-          <AppButton size="xs" variant="secondary" :disabled="detailSbomLoading"
+          <AppButton size="xs" variant="secondary" :disabled="sbomState.loading"
                   @click="emit('loadDetailSbom')">
-            {{ detailSbomLoading ? t('securityView.sbom.loadingButton') : t('securityView.sbom.refresh') }}
+            {{ sbomState.loading ? t('securityView.sbom.loadingButton') : t('securityView.sbom.refresh') }}
           </AppButton>
-          <AppButton size="xs" variant="secondary" :disabled="!detailSbomDocument"
+          <AppButton size="xs" variant="secondary" :disabled="!sbomState.document"
                   @click="showSbomDocumentModel = !showSbomDocumentModel">
             {{ showSbomDocumentModel ? t('securityView.sbom.hide') : t('securityView.sbom.view') }}
           </AppButton>
-          <AppButton size="xs" variant="secondary" :disabled="!detailSbomDocument"
+          <AppButton size="xs" variant="secondary" :disabled="!sbomState.document"
                   @click="emit('downloadDetailSbom')">
             {{ t('securityView.sbom.download') }}
           </AppButton>
         </div>
 
-        <div v-if="detailSbomError"
+        <div v-if="sbomState.error"
              class="px-2.5 py-1.5 dd-rounded text-2xs-plus"
              :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
-          {{ detailSbomError }}
+          {{ sbomState.error }}
         </div>
-        <div v-else-if="detailSbomLoading"
+        <div v-else-if="sbomState.loading"
              class="px-2.5 py-1.5 dd-rounded text-2xs-plus dd-text-muted"
              :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
           {{ t('securityView.sbom.loading') }}
         </div>
-        <div v-else-if="detailSbomDocument"
+        <div v-else-if="sbomState.document"
              class="px-2.5 py-1.5 dd-rounded text-2xs space-y-0.5"
              :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
           <div class="dd-text-muted">
             {{ t('securityView.sbom.format') }}
-            <span class="dd-text font-mono">{{ selectedSbomFormat }}</span>
+            <span class="dd-text font-mono">{{ sbomState.selectedFormat }}</span>
           </div>
-          <div v-if="typeof detailSbomComponentCount === 'number'" class="dd-text-muted">
+          <div v-if="typeof sbomState.componentCount === 'number'" class="dd-text-muted">
             {{ t('securityView.sbom.components') }}
-            <span class="dd-text">{{ detailSbomComponentCount }}</span>
+            <span class="dd-text">{{ sbomState.componentCount }}</span>
           </div>
-          <div v-if="detailSbomGeneratedAt" class="dd-text-muted">
+          <div v-if="sbomState.generatedAt" class="dd-text-muted">
             {{ t('securityView.sbom.generated') }}
-            <span class="dd-text">{{ formatTimestamp(detailSbomGeneratedAt) }}</span>
+            <span class="dd-text">{{ formatTimestamp(sbomState.generatedAt) }}</span>
           </div>
         </div>
 
-        <pre v-if="showSbomDocument && detailSbomDocumentJson"
+        <pre v-if="sbomState.showDocument && sbomState.documentJson"
              class="p-2 dd-rounded text-2xs overflow-auto max-h-64 font-mono"
-             :style="{ backgroundColor: 'var(--dd-bg-code)' }">{{ detailSbomDocumentJson }}</pre>
+             :style="{ backgroundColor: 'var(--dd-bg-code)' }">{{ sbomState.documentJson }}</pre>
       </div>
 
       <div class="divide-y" :style="{ borderColor: 'var(--dd-border)' }">

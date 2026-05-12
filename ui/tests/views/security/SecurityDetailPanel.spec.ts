@@ -1,7 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { defineComponent } from 'vue';
 import SecurityDetailPanel from '@/views/security/SecurityDetailPanel.vue';
-import type { SbomFormat, Vulnerability } from '@/views/security/securityViewTypes';
+import type { SbomState, Vulnerability } from '@/views/security/securityViewTypes';
 import type { VulnExportFormat } from '@/views/security/securityViewUtils';
 
 const detailPanelStub = defineComponent({
@@ -57,6 +57,17 @@ const vulnerabilities: Array<Vulnerability & { safePrimaryUrl: string | null }> 
   },
 ];
 
+const sbomState: SbomState = {
+  componentCount: 42,
+  document: { bomFormat: 'CycloneDX', components: [{ name: 'openssl' }] },
+  documentJson: '{\n  "bomFormat": "CycloneDX"\n}',
+  error: null,
+  generatedAt: '2026-04-05T06:07:08.000Z',
+  loading: false,
+  selectedFormat: 'cyclonedx-json',
+  showDocument: true,
+};
+
 function factory(overrides: Partial<InstanceType<typeof SecurityDetailPanel>['$props']> = {}) {
   const props = {
     open: true,
@@ -65,15 +76,8 @@ function factory(overrides: Partial<InstanceType<typeof SecurityDetailPanel>['$p
     selectedImageUpdateBlocked: false,
     selectedImageVulns: vulnerabilities,
     selectedImageVulnsWithSafeUrl: vulnerabilities,
-    detailSbomComponentCount: 42,
-    detailSbomDocument: { bomFormat: 'CycloneDX', components: [{ name: 'openssl' }] },
-    detailSbomDocumentJson: '{\n  "bomFormat": "CycloneDX"\n}',
-    detailSbomError: null,
-    detailSbomGeneratedAt: '2026-04-05T06:07:08.000Z',
-    detailSbomLoading: false,
-    selectedSbomFormat: 'cyclonedx-json' as SbomFormat,
+    sbomState,
     selectedVulnExportFormat: 'json' as VulnExportFormat,
-    showSbomDocument: true,
     ...overrides,
   };
 
