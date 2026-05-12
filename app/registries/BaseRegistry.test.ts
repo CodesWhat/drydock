@@ -129,11 +129,23 @@ test('authenticateBearer should not add header when no token', async () => {
 });
 
 test('authenticateBasic should attach httpsAgent when insecure=true', async () => {
+  baseRegistry.type = 'registry';
+  baseRegistry.name = 'test';
   baseRegistry.configuration = { insecure: true };
+  const warnSpy = vi.spyOn(baseRegistry.log, 'warn').mockImplementation(() => undefined);
+
   const result = await baseRegistry.authenticateBasic({ headers: {} }, 'dXNlcjpwYXNz');
+  await baseRegistry.authenticateBasic({ headers: {} }, 'dXNlcjpwYXNz');
+
   expect(result.headers.Authorization).toBe('Basic dXNlcjpwYXNz');
   expect(result.httpsAgent).toBeDefined();
   expect(result.httpsAgent.options.rejectUnauthorized).toBe(false);
+  expect(warnSpy).toHaveBeenCalledTimes(2);
+  expect(warnSpy).toHaveBeenCalledWith(
+    'Registry registry.test request is using insecure TLS verification because insecure=true; certificate validation is disabled.',
+  );
+
+  warnSpy.mockRestore();
 });
 
 test('authenticateBearer should attach CA from cafile when configured', async () => {

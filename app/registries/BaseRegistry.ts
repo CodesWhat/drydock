@@ -246,6 +246,11 @@ class BaseRegistry<
     if (!httpsAgent) {
       return requestOptions;
     }
+    if (this.configuration?.insecure === true) {
+      this.log.warn(
+        `Registry ${this.getId()} request is using insecure TLS verification because insecure=true; certificate validation is disabled.`,
+      );
+    }
     return {
       ...requestOptions,
       httpsAgent,
