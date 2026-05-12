@@ -114,6 +114,58 @@ describe('docker tag candidates module', () => {
     expect(filtered).toEqual(['2026.02.0', '2026.2.0']);
   });
 
+  test('rejects floating semver aliases (e.g. "3.3" alongside "3.3.0") as not-greater (#342)', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '3.3.0',
+          semver: true,
+        },
+      },
+      tagFamily: 'strict',
+    });
+    const log = {
+      warn: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    // Mirrors afadil/wealthfolio's published tags: floating "3.3" alias for the
+    // same digest as "3.3.0", plus older releases. The "3.3" alias must not be
+    // counted as a higher-semver candidate dropped by the family filter.
+    const result = getTagCandidates(
+      container,
+      ['3.3', '3.3.0', '3.2', '3.2.1', '3.2.0', '3.1.2'],
+      log,
+    );
+
+    expect(result.tags).toEqual([]);
+    expect(result.noUpdateReason).toBeUndefined();
+    expect(log.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('higher semver tag(s) outside the inferred family'),
+    );
+  });
+
+  test('rejects two-digit prefixed alias ("v3.3") of three-digit current ("v3.3.0") (#342)', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: 'v3.3.0',
+          semver: true,
+        },
+      },
+      tagFamily: 'strict',
+    });
+    const log = {
+      warn: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    const result = getTagCandidates(container, ['v3.3', 'v3.3.0', 'v3.2.1'], log);
+
+    expect(result.tags).toEqual([]);
+    expect(result.noUpdateReason).toBeUndefined();
+  });
+
   test('still rejects zero-padded tags for non-CalVer semver in strict mode', () => {
     const container = createContainer({
       image: {
