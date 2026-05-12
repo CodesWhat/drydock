@@ -365,6 +365,50 @@ test('fetchPrivateEcrAuthToken should reuse an in-flight private token request',
   ]);
 });
 
+test('fetchPrivateEcrAuthToken should not cache stale in-flight tokens after the cache key changes', async () => {
+  const ecrPrivate = new Ecr();
+  ecrPrivate.configuration = {
+    accesskeyid: 'first-access-key',
+    secretaccesskey: 'first-secret-key',
+    region: 'us-east-1',
+  };
+  let resolveFirstToken:
+    | ((value: { authorizationData: { authorizationToken: string }[] }) => void)
+    | undefined;
+  let resolveSecondToken:
+    | ((value: { authorizationData: { authorizationToken: string }[] }) => void)
+    | undefined;
+  mockFetchEcrAuthorizationToken
+    .mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFirstToken = resolve;
+      }),
+    )
+    .mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSecondToken = resolve;
+      }),
+    );
+
+  const firstToken = ecrPrivate.fetchPrivateEcrAuthToken();
+  ecrPrivate.configuration = {
+    accesskeyid: 'second-access-key',
+    secretaccesskey: 'second-secret-key',
+    region: 'us-west-2',
+  };
+  const secondToken = ecrPrivate.fetchPrivateEcrAuthToken();
+
+  expect(mockFetchEcrAuthorizationToken).toHaveBeenCalledTimes(2);
+
+  resolveSecondToken?.({ authorizationData: [{ authorizationToken: 'second-token' }] });
+  await expect(secondToken).resolves.toBe('second-token');
+
+  resolveFirstToken?.({ authorizationData: [{ authorizationToken: 'first-token' }] });
+  await expect(firstToken).resolves.toBe('first-token');
+  await expect(ecrPrivate.fetchPrivateEcrAuthToken()).resolves.toBe('second-token');
+  expect(mockFetchEcrAuthorizationToken).toHaveBeenCalledTimes(2);
+});
+
 test('authenticate should call ecr auth endpoint', async () => {
   await expect(ecr.authenticate(undefined, { headers: {} })).resolves.toEqual({
     headers: {

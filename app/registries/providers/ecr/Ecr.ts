@@ -38,10 +38,15 @@ interface EcrAuthTokenCacheEntry {
   token: string;
 }
 
+interface EcrAuthTokenFetchEntry {
+  cacheKey: string;
+  promise: Promise<string | undefined>;
+}
+
 class Ecr extends Registry<EcrRegistryConfiguration> {
   private privateEcrAuthTokenCache?: EcrAuthTokenCacheEntry;
 
-  private privateEcrAuthTokenFetch?: Promise<string | undefined>;
+  private privateEcrAuthTokenFetch?: EcrAuthTokenFetchEntry;
 
   getConfigurationSchema() {
     return this.joi.alternatives([
@@ -123,19 +128,23 @@ class Ecr extends Registry<EcrRegistryConfiguration> {
     return this.privateEcrAuthTokenCache.token;
   }
 
-  async requestPrivateEcrAuthToken() {
-    const cacheKey = this.getPrivateEcrAuthTokenCacheKey();
+  async requestPrivateEcrAuthToken(cacheKey = this.getPrivateEcrAuthTokenCacheKey()) {
+    const { accesskeyid, region, secretaccesskey } = this.configuration;
     const ecr = new ECRClient({
       credentials: {
-        accessKeyId: this.configuration.accesskeyid,
-        secretAccessKey: this.configuration.secretaccesskey,
+        accessKeyId: accesskeyid,
+        secretAccessKey: secretaccesskey,
       },
-      region: this.configuration.region,
+      region,
     });
     const command = new GetAuthorizationTokenCommand({});
     const authorizationToken = await ecr.send(command);
     const token = authorizationToken.authorizationData[0].authorizationToken;
-    if (typeof token === 'string' && token.trim().length > 0) {
+    if (
+      typeof token === 'string' &&
+      token.trim().length > 0 &&
+      cacheKey === this.getPrivateEcrAuthTokenCacheKey()
+    ) {
       this.privateEcrAuthTokenCache = {
         cacheKey,
         expiresAtMs: Date.now() + PRIVATE_ECR_AUTH_TOKEN_TTL_MS,
@@ -151,14 +160,20 @@ class Ecr extends Registry<EcrRegistryConfiguration> {
     if (cachedToken !== undefined) {
       return cachedToken;
     }
-    if (this.privateEcrAuthTokenFetch) {
-      return this.privateEcrAuthTokenFetch;
+    if (this.privateEcrAuthTokenFetch?.cacheKey === cacheKey) {
+      return this.privateEcrAuthTokenFetch.promise;
     }
 
-    this.privateEcrAuthTokenFetch = this.requestPrivateEcrAuthToken().finally(() => {
-      this.privateEcrAuthTokenFetch = undefined;
-    });
-    return this.privateEcrAuthTokenFetch;
+    const fetchEntry = {
+      cacheKey,
+      promise: this.requestPrivateEcrAuthToken(cacheKey).finally(() => {
+        if (this.privateEcrAuthTokenFetch === fetchEntry) {
+          this.privateEcrAuthTokenFetch = undefined;
+        }
+      }),
+    };
+    this.privateEcrAuthTokenFetch = fetchEntry;
+    return fetchEntry.promise;
   }
 
   async authenticate(image, requestOptions) {
