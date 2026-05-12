@@ -1,3 +1,5 @@
+import type { UpdateEligibility } from '../../types/container';
+
 export interface Vulnerability {
   id: string;
   severity: string;
@@ -54,4 +56,16 @@ export interface SecurityViewEmptyStateInput {
   hasVulnerabilityData: boolean;
   scannerSetupNeeded: boolean;
   scannerMessage: string | null | undefined;
+}
+
+export interface ContainerChoice {
+  id: string;
+  name: string;
+  host?: string;
+  currentTag?: string;
+  newTag?: string;
+  updateKind?: 'major' | 'minor' | 'patch' | 'digest' | null;
+  updateEligibility?: UpdateEligibility;
+  blocked: boolean;
+  blockerMessage?: string;
 }
