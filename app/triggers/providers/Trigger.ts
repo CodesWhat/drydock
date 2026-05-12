@@ -26,6 +26,7 @@ import {
   UpdateRequestError,
 } from '../../updates/request-update.js';
 import { BatchDispatcher, type BatchDispatchState } from './trigger-batch-dispatcher.js';
+import { DigestBuffer } from './trigger-digest-buffer.js';
 import { renderBatch, renderSimple } from './trigger-expression-parser.js';
 import {
   isThresholdReached as isThresholdReachedHelper,
@@ -847,14 +848,28 @@ class Trigger<
     this.eventBatchDispatcher.clear();
   }
 
+  private getBufferedContainerStore(
+    bufferName: string,
+    buffer: BufferedContainerMap,
+    timestamps: BufferedContainerTimestamps,
+    maxEntries: number,
+  ): DigestBuffer<Container> {
+    return new DigestBuffer({
+      name: bufferName,
+      entries: buffer,
+      timestamps,
+      retentionMs: this.bufferEntryRetentionMs,
+      maxEntries,
+      log: this.log,
+    });
+  }
+
   private deleteBufferedContainerEntry(
     buffer: BufferedContainerMap,
     timestamps: BufferedContainerTimestamps,
     key: string,
   ) {
-    const deleted = buffer.delete(key);
-    timestamps.delete(key);
-    return deleted;
+    return DigestBuffer.deleteEntry(buffer, timestamps, key);
   }
 
   private pruneStaleBufferedContainerEntries(
@@ -863,23 +878,12 @@ class Trigger<
     timestamps: BufferedContainerTimestamps,
     now: number,
   ) {
-    if (this.bufferEntryRetentionMs <= 0) {
-      return;
-    }
-
-    const oldestAllowedTimestamp = now - this.bufferEntryRetentionMs;
-    for (const key of buffer.keys()) {
-      const updatedAt = timestamps.get(key);
-      if (updatedAt === undefined) {
-        timestamps.set(key, now);
-        continue;
-      }
-
-      if (updatedAt < oldestAllowedTimestamp) {
-        this.deleteBufferedContainerEntry(buffer, timestamps, key);
-        this.log.debug(`Evicted stale ${bufferName} entry ${key}`);
-      }
-    }
+    this.getBufferedContainerStore(
+      bufferName,
+      buffer,
+      timestamps,
+      Number.POSITIVE_INFINITY,
+    ).pruneStale(now);
   }
 
   private enforceBufferedContainerLimit(
@@ -888,33 +892,7 @@ class Trigger<
     timestamps: BufferedContainerTimestamps,
     maxEntries: number,
   ) {
-    if (maxEntries <= 0) {
-      buffer.clear();
-      timestamps.clear();
-      return;
-    }
-
-    while (buffer.size > maxEntries) {
-      let oldestKey: string | undefined;
-      let oldestUpdatedAt = Number.POSITIVE_INFINITY;
-
-      for (const key of buffer.keys()) {
-        const updatedAt = timestamps.get(key) ?? 0;
-        if (updatedAt < oldestUpdatedAt) {
-          oldestUpdatedAt = updatedAt;
-          oldestKey = key;
-        }
-      }
-
-      if (!oldestKey) {
-        break;
-      }
-
-      this.deleteBufferedContainerEntry(buffer, timestamps, oldestKey);
-      this.log.warn(
-        `Evicted oldest ${bufferName} entry ${oldestKey} after reaching the ${maxEntries}-entry limit`,
-      );
-    }
+    this.getBufferedContainerStore(bufferName, buffer, timestamps, maxEntries).enforceLimit();
   }
 
   private setBufferedContainerEntry(
