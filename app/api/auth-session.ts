@@ -1,4 +1,3 @@
-import { randomBytes } from 'crypto';
 import joi from 'joi';
 import log from '../log/index.js';
 import { getErrorMessage } from '../util/error.js';
@@ -11,7 +10,6 @@ const DEFAULT_MAX_CONCURRENT_SESSIONS_PER_USER = 5;
 const BASIC_SESSION_LOCK_WAIT_TIMEOUT_MS = 10 * 1000;
 const BASIC_SESSION_LOCK_STALE_TTL_MS = 60 * 1000;
 
-let generatedSessionSecret: string | undefined;
 let maxConcurrentSessionsPerUser = DEFAULT_MAX_CONCURRENT_SESSIONS_PER_USER;
 const basicSessionLocks = new Map<string, Promise<void>>();
 
@@ -33,8 +31,7 @@ export function getCookieMaxAge(days: number): number {
 
 /**
  * Get session secret key.
- * Uses DD_SESSION_SECRET env var if set, otherwise falls back to a
- * process-local cryptographic secret.
+ * Uses DD_SESSION_SECRET env var.
  * @returns {string}
  */
 export function getSessionSecretKey(): string {
@@ -43,17 +40,11 @@ export function getSessionSecretKey(): string {
     log.info('Using session secret from DD_SESSION_SECRET environment variable');
     return envSecret;
   }
-  if (!generatedSessionSecret) {
-    generatedSessionSecret = randomBytes(64).toString('hex');
-    const missingSessionSecretMessage =
-      'DD_SESSION_SECRET is not set; using an ephemeral session secret. Set DD_SESSION_SECRET to a strong persistent value.';
-    if (process.env.NODE_ENV === 'production') {
-      log.error(missingSessionSecretMessage);
-    } else {
-      log.warn(missingSessionSecretMessage);
-    }
-  }
-  return generatedSessionSecret;
+
+  const missingSessionSecretMessage =
+    'DD_SESSION_SECRET is required. Set DD_SESSION_SECRET to a strong persistent value.';
+  log.error(missingSessionSecretMessage);
+  throw new Error(missingSessionSecretMessage);
 }
 
 export function deserializeSessionUser(serializedUser: unknown): SessionUser {
