@@ -14,6 +14,7 @@ import Trigger, {
   getNotificationEvent,
   resolveNotificationTemplate,
 } from './Trigger.js';
+import { DigestBuffer } from './trigger-digest-buffer.js';
 
 const mockTriggerCounterInc = vi.hoisted(() => vi.fn());
 const mockGetAgents = vi.hoisted(() => vi.fn(() => []));
@@ -4502,7 +4503,8 @@ test('getBatchRetryContainers should evict stale retry-buffer entries before reu
   } as any;
 
   trigger.batchRetryBuffer.set('stale-id', currentContainer);
-  (trigger as any).batchRetryBufferUpdatedAt = new Map([['stale-id', 1_000]]);
+  (trigger as any).batchRetryBufferUpdatedAt.clear();
+  (trigger as any).batchRetryBufferUpdatedAt.set('stale-id', 1_000);
   (trigger as any).bufferEntryRetentionMs = 100;
   storeContainer.getContainersRaw.mockReturnValue([currentContainer]);
   const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_101);
@@ -5010,13 +5012,34 @@ describe('digest mode', () => {
     }
   });
 
+  test('bufferContainerForDigest should write through the persistent digest buffer store', () => {
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+    } as any;
+
+    expect((trigger as any).digestBufferStore).toBeInstanceOf(DigestBuffer);
+
+    const setSpy = vi.spyOn((trigger as any).digestBufferStore, 'set');
+    try {
+      (trigger as any).bufferContainerForDigest(container);
+
+      expect(setSpy).toHaveBeenCalledTimes(1);
+      expect(setSpy.mock.calls[0]?.slice(0, 2)).toEqual(['c1', container]);
+    } finally {
+      setSpy.mockRestore();
+    }
+  });
+
   test('pruneDigestBuffer should keep buffered entries when retention is disabled', () => {
     trigger.digestBuffer.set('c1', {
       id: 'c1',
       name: 'app',
       watcher: 'test',
     } as any);
-    (trigger as any).digestBufferUpdatedAt = new Map([['c1', 1_000]]);
+    (trigger as any).digestBufferUpdatedAt.clear();
+    (trigger as any).digestBufferUpdatedAt.set('c1', 1_000);
     (trigger as any).bufferEntryRetentionMs = 0;
 
     (trigger as any).pruneDigestBuffer(1_500);
@@ -5037,7 +5060,8 @@ describe('digest mode', () => {
       name: 'app',
       watcher: 'test',
     } as any);
-    (trigger as any).digestBufferUpdatedAt = new Map([['c1', 1_000]]);
+    (trigger as any).digestBufferUpdatedAt.clear();
+    (trigger as any).digestBufferUpdatedAt.set('c1', 1_000);
     (trigger as any).digestBufferMaxEntries = 0;
 
     (trigger as any).pruneDigestBuffer(1_500);
@@ -5046,7 +5070,7 @@ describe('digest mode', () => {
     expect((trigger as any).digestBufferUpdatedAt.size).toBe(0);
   });
 
-  test('enforceBufferedContainerLimit should stop when the oldest key is blank', () => {
+  test('DigestBuffer should stop enforcing limits when the oldest key is blank', () => {
     const buffer = new Map<string, any>([
       [
         '',
@@ -5069,15 +5093,23 @@ describe('digest mode', () => {
       ['', 1_000],
       ['c2', 1_001],
     ]);
+    const bufferStore = new DigestBuffer({
+      name: 'digest buffer',
+      entries: buffer,
+      timestamps,
+      retentionMs: BUFFER_ENTRY_RETENTION_MS,
+      maxEntries: 1,
+      log,
+    });
 
-    (trigger as any).enforceBufferedContainerLimit('digest buffer', buffer, timestamps, 1);
+    bufferStore.enforceLimit();
 
     expect([...buffer.keys()]).toEqual(['', 'c2']);
     expect([...timestamps.keys()]).toEqual(['', 'c2']);
     expect(log.warn).not.toHaveBeenCalled();
   });
 
-  test('enforceBufferedContainerLimit should treat missing timestamps as the oldest entries', () => {
+  test('DigestBuffer should treat missing timestamps as the oldest entries', () => {
     const buffer = new Map<string, any>([
       [
         'c1',
@@ -5097,8 +5129,16 @@ describe('digest mode', () => {
       ],
     ]);
     const timestamps = new Map<string, number>([['c2', 1_001]]);
+    const bufferStore = new DigestBuffer({
+      name: 'digest buffer',
+      entries: buffer,
+      timestamps,
+      retentionMs: BUFFER_ENTRY_RETENTION_MS,
+      maxEntries: 1,
+      log,
+    });
 
-    (trigger as any).enforceBufferedContainerLimit('digest buffer', buffer, timestamps, 1);
+    bufferStore.enforceLimit();
 
     expect([...buffer.keys()]).toEqual(['c2']);
     expect([...timestamps.keys()]).toEqual(['c2']);
@@ -5319,7 +5359,8 @@ describe('digest mode', () => {
       updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
     } as any;
     trigger.digestBuffer.set('c1', staleContainer);
-    (trigger as any).digestBufferUpdatedAt = new Map([['c1', 1_000]]);
+    (trigger as any).digestBufferUpdatedAt.clear();
+    (trigger as any).digestBufferUpdatedAt.set('c1', 1_000);
     (trigger as any).bufferEntryRetentionMs = 100;
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_101);
 
@@ -5930,23 +5971,11 @@ describe('digest mode', () => {
   });
 
   test('flushDigestBuffer should use the accepted update batch path for action triggers', async () => {
-    const actionTrigger = Object.create(Trigger.prototype) as any;
+    const actionTrigger = new Trigger() as any;
     actionTrigger.configuration = { ...configurationValid, mode: 'digest' };
     actionTrigger.type = 'docker';
     actionTrigger.log = trigger.log;
-    actionTrigger.digestBuffer = new Map();
-    actionTrigger.digestBufferUpdatedAt = new Map();
-    actionTrigger.batchRetryBuffer = new Map();
-    actionTrigger.batchRetryBufferUpdatedAt = new Map();
-    actionTrigger.isDigestFlushInProgress = false;
     actionTrigger.pruneDigestBuffer = vi.fn();
-    actionTrigger.deleteBufferedContainerEntry = vi.fn(
-      (buffer: Map<string, unknown>, updatedAt: Map<string, unknown>, key: string) => {
-        buffer.delete(key);
-        updatedAt.delete(key);
-        return true;
-      },
-    );
     actionTrigger.incrementTriggerCounter = vi.fn();
     actionTrigger.isUpdateActionTrigger = () => true;
     const runAcceptedUpdateBatch = vi.fn().mockResolvedValue(undefined);
@@ -5961,7 +5990,7 @@ describe('digest mode', () => {
       updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
     };
     actionTrigger.digestBuffer.set('c1', container as any);
-    actionTrigger.digestBufferUpdatedAt = new Map([['c1', 1_000]]);
+    actionTrigger.digestBufferUpdatedAt.set('c1', 1_000);
     storeContainer.getContainersRaw.mockReturnValue([container]);
 
     expect(actionTrigger.isUpdateActionTrigger()).toBe(true);

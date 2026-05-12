@@ -535,9 +535,6 @@ interface ContainerReport {
 
 type EventBatchDispatchState = BatchDispatchState<Container>;
 
-type BufferedContainerMap = Map<string, Container>;
-type BufferedContainerTimestamps = Map<string, number>;
-
 /**
  * Entry stored in the security digest buffer while waiting for cycle-complete.
  */
@@ -594,6 +591,28 @@ class Trigger<
   private bufferEntryRetentionMs = BUFFER_ENTRY_RETENTION_MS;
   private digestBufferMaxEntries = 5_000;
   private batchRetryBufferMaxEntries = 5_000;
+  private readonly digestBufferStore = new DigestBuffer<Container>({
+    name: 'digest buffer',
+    entries: this.digestBuffer,
+    timestamps: this.digestBufferUpdatedAt,
+    retentionMs: () => this.bufferEntryRetentionMs,
+    maxEntries: () => this.digestBufferMaxEntries,
+    log: {
+      debug: (message) => this.log.debug(message),
+      warn: (message) => this.log.warn(message),
+    },
+  });
+  private readonly batchRetryBufferStore = new DigestBuffer<Container>({
+    name: 'batch retry buffer',
+    entries: this.batchRetryBuffer,
+    timestamps: this.batchRetryBufferUpdatedAt,
+    retentionMs: () => this.bufferEntryRetentionMs,
+    maxEntries: () => this.batchRetryBufferMaxEntries,
+    log: {
+      debug: (message) => this.log.debug(message),
+      warn: (message) => this.log.warn(message),
+    },
+  });
   private readonly eventBatchDispatches: Map<NotificationRuleId, EventBatchDispatchState> =
     new Map();
   private readonly eventBatchDispatcher = new BatchDispatcher<NotificationRuleId, Container>({
@@ -837,96 +856,12 @@ class Trigger<
     this.eventBatchDispatcher.clear();
   }
 
-  private getBufferedContainerStore(
-    bufferName: string,
-    buffer: BufferedContainerMap,
-    timestamps: BufferedContainerTimestamps,
-    maxEntries: number,
-  ): DigestBuffer<Container> {
-    return new DigestBuffer({
-      name: bufferName,
-      entries: buffer,
-      timestamps,
-      retentionMs: this.bufferEntryRetentionMs,
-      maxEntries,
-      log: this.log,
-    });
-  }
-
-  private deleteBufferedContainerEntry(
-    buffer: BufferedContainerMap,
-    timestamps: BufferedContainerTimestamps,
-    key: string,
-  ) {
-    return DigestBuffer.deleteEntry(buffer, timestamps, key);
-  }
-
-  private pruneStaleBufferedContainerEntries(
-    bufferName: string,
-    buffer: BufferedContainerMap,
-    timestamps: BufferedContainerTimestamps,
-    now: number,
-  ) {
-    this.getBufferedContainerStore(
-      bufferName,
-      buffer,
-      timestamps,
-      Number.POSITIVE_INFINITY,
-    ).pruneStale(now);
-  }
-
-  private enforceBufferedContainerLimit(
-    bufferName: string,
-    buffer: BufferedContainerMap,
-    timestamps: BufferedContainerTimestamps,
-    maxEntries: number,
-  ) {
-    this.getBufferedContainerStore(bufferName, buffer, timestamps, maxEntries).enforceLimit();
-  }
-
-  private setBufferedContainerEntry(
-    bufferName: string,
-    buffer: BufferedContainerMap,
-    timestamps: BufferedContainerTimestamps,
-    key: string,
-    container: Container,
-    maxEntries: number,
-    now = Date.now(),
-  ) {
-    this.pruneStaleBufferedContainerEntries(bufferName, buffer, timestamps, now);
-    buffer.set(key, container);
-    timestamps.set(key, now);
-    this.enforceBufferedContainerLimit(bufferName, buffer, timestamps, maxEntries);
-  }
-
   private pruneDigestBuffer(now = Date.now()) {
-    this.pruneStaleBufferedContainerEntries(
-      'digest buffer',
-      this.digestBuffer,
-      this.digestBufferUpdatedAt,
-      now,
-    );
-    this.enforceBufferedContainerLimit(
-      'digest buffer',
-      this.digestBuffer,
-      this.digestBufferUpdatedAt,
-      this.digestBufferMaxEntries,
-    );
+    this.digestBufferStore.prune(now);
   }
 
   private pruneBatchRetryBuffer(now = Date.now()) {
-    this.pruneStaleBufferedContainerEntries(
-      'batch retry buffer',
-      this.batchRetryBuffer,
-      this.batchRetryBufferUpdatedAt,
-      now,
-    );
-    this.enforceBufferedContainerLimit(
-      'batch retry buffer',
-      this.batchRetryBuffer,
-      this.batchRetryBufferUpdatedAt,
-      this.batchRetryBufferMaxEntries,
-    );
+    this.batchRetryBufferStore.prune(now);
   }
 
   private shouldDispatchNotificationEventInBatch(
@@ -1055,26 +990,14 @@ class Trigger<
     const notificationKey = getContainerNotificationKey(container) || containerName;
 
     // Evict from digest buffer — container is already updated, no need to notify.
-    let evictedBufferedUpdate = this.deleteBufferedContainerEntry(
-      this.digestBuffer,
-      this.digestBufferUpdatedAt,
-      notificationKey,
-    );
+    let evictedBufferedUpdate = this.digestBufferStore.delete(notificationKey);
     if (!evictedBufferedUpdate && containerName !== notificationKey) {
-      evictedBufferedUpdate = this.deleteBufferedContainerEntry(
-        this.digestBuffer,
-        this.digestBufferUpdatedAt,
-        containerName,
-      );
+      evictedBufferedUpdate = this.digestBufferStore.delete(containerName);
     }
     if (!evictedBufferedUpdate) {
       for (const [bufferKey, bufferedContainer] of this.digestBuffer.entries()) {
         if (fullName(bufferedContainer) === containerName) {
-          this.deleteBufferedContainerEntry(
-            this.digestBuffer,
-            this.digestBufferUpdatedAt,
-            bufferKey,
-          );
+          this.digestBufferStore.delete(bufferKey);
           evictedBufferedUpdate = true;
         }
       }
@@ -1493,24 +1416,12 @@ class Trigger<
 
       if (!currentContainer || !this.shouldDispatchUpdateAvailableContainer(currentContainer)) {
         if (this.batchRetryBuffer.get(containerName) === bufferedContainer) {
-          this.deleteBufferedContainerEntry(
-            this.batchRetryBuffer,
-            this.batchRetryBufferUpdatedAt,
-            containerName,
-          );
+          this.batchRetryBufferStore.delete(containerName);
         }
         continue;
       }
 
-      this.setBufferedContainerEntry(
-        'batch retry buffer',
-        this.batchRetryBuffer,
-        this.batchRetryBufferUpdatedAt,
-        containerName,
-        currentContainer,
-        this.batchRetryBufferMaxEntries,
-        now,
-      );
+      this.batchRetryBufferStore.set(containerName, currentContainer, now);
     }
 
     return Array.from(this.batchRetryBuffer.values());
@@ -1723,9 +1634,7 @@ class Trigger<
       }
       if (this.batchRetryBuffer.size > 0) {
         for (const container of containersToSend) {
-          this.deleteBufferedContainerEntry(
-            this.batchRetryBuffer,
-            this.batchRetryBufferUpdatedAt,
+          this.batchRetryBufferStore.delete(
             getContainerNotificationKey(container) || fullName(container),
           );
         }
@@ -1734,13 +1643,9 @@ class Trigger<
       const errorMessage = Trigger.getErrorMessage(e);
       if (this.isPureBatchMode()) {
         for (const container of containersToSend) {
-          this.setBufferedContainerEntry(
-            'batch retry buffer',
-            this.batchRetryBuffer,
-            this.batchRetryBufferUpdatedAt,
+          this.batchRetryBufferStore.set(
             getContainerNotificationKey(container) || fullName(container),
             container,
-            this.batchRetryBufferMaxEntries,
           );
         }
       }
@@ -1765,14 +1670,7 @@ class Trigger<
    */
   private bufferContainerForDigest(container: Container) {
     const containerKey = getContainerNotificationKey(container) || fullName(container);
-    this.setBufferedContainerEntry(
-      'digest buffer',
-      this.digestBuffer,
-      this.digestBufferUpdatedAt,
-      containerKey,
-      container,
-      this.digestBufferMaxEntries,
-    );
+    this.digestBufferStore.set(containerKey, container);
     this.log.debug(`Buffered ${containerKey} for digest (${this.digestBuffer.size} buffered)`);
   }
 
@@ -1786,13 +1684,7 @@ class Trigger<
     const containerName = getContainerNotificationKey(container) || fullName(container);
 
     if (!container.updateAvailable) {
-      if (
-        this.deleteBufferedContainerEntry(
-          this.digestBuffer,
-          this.digestBufferUpdatedAt,
-          containerName,
-        )
-      ) {
+      if (this.digestBufferStore.delete(containerName)) {
         this.log.debug(`Evicted ${containerName} from digest buffer (update no longer available)`);
       }
       return;
@@ -1933,11 +1825,7 @@ class Trigger<
       }
 
       if (this.digestBuffer.get(containerName) === bufferedContainer) {
-        this.deleteBufferedContainerEntry(
-          this.digestBuffer,
-          this.digestBufferUpdatedAt,
-          containerName,
-        );
+        this.digestBufferStore.delete(containerName);
       }
       return [];
     });
@@ -1963,11 +1851,7 @@ class Trigger<
       }
       for (const { containerName, bufferedContainer } of dispatchEntries) {
         if (this.digestBuffer.get(containerName) === bufferedContainer) {
-          this.deleteBufferedContainerEntry(
-            this.digestBuffer,
-            this.digestBufferUpdatedAt,
-            containerName,
-          );
+          this.digestBufferStore.delete(containerName);
         }
       }
     } catch (e: unknown) {

@@ -3,12 +3,14 @@ export interface DigestBufferLog {
   warn(message: string): void;
 }
 
+type DigestBufferNumberOption = number | (() => number);
+
 export interface DigestBufferOptions<TEntry> {
   name: string;
   entries: Map<string, TEntry>;
   timestamps: Map<string, number>;
-  retentionMs: number;
-  maxEntries: number;
+  retentionMs: DigestBufferNumberOption;
+  maxEntries: DigestBufferNumberOption;
   log: DigestBufferLog;
 }
 
@@ -16,17 +18,21 @@ export class DigestBuffer<TEntry> {
   private readonly name: string;
   private readonly entries: Map<string, TEntry>;
   private readonly timestamps: Map<string, number>;
-  private readonly retentionMs: number;
-  private readonly maxEntries: number;
+  private readonly retentionMs: () => number;
+  private readonly maxEntries: () => number;
   private readonly log: DigestBufferLog;
 
   constructor(options: DigestBufferOptions<TEntry>) {
     this.name = options.name;
     this.entries = options.entries;
     this.timestamps = options.timestamps;
-    this.retentionMs = options.retentionMs;
-    this.maxEntries = options.maxEntries;
+    this.retentionMs = DigestBuffer.resolveNumberOption(options.retentionMs);
+    this.maxEntries = DigestBuffer.resolveNumberOption(options.maxEntries);
     this.log = options.log;
+  }
+
+  private static resolveNumberOption(option: DigestBufferNumberOption): () => number {
+    return typeof option === 'function' ? option : () => option;
   }
 
   static deleteEntry<TEntry>(
@@ -56,11 +62,12 @@ export class DigestBuffer<TEntry> {
   }
 
   pruneStale(now: number): void {
-    if (this.retentionMs <= 0) {
+    const retentionMs = this.retentionMs();
+    if (retentionMs <= 0) {
       return;
     }
 
-    const oldestAllowedTimestamp = now - this.retentionMs;
+    const oldestAllowedTimestamp = now - retentionMs;
     for (const key of this.entries.keys()) {
       const updatedAt = this.timestamps.get(key);
       if (updatedAt === undefined) {
@@ -76,13 +83,14 @@ export class DigestBuffer<TEntry> {
   }
 
   enforceLimit(): void {
-    if (this.maxEntries <= 0) {
+    const maxEntries = this.maxEntries();
+    if (maxEntries <= 0) {
       this.entries.clear();
       this.timestamps.clear();
       return;
     }
 
-    while (this.entries.size > this.maxEntries) {
+    while (this.entries.size > maxEntries) {
       let oldestKey: string | undefined;
       let oldestUpdatedAt = Number.POSITIVE_INFINITY;
 
@@ -100,7 +108,7 @@ export class DigestBuffer<TEntry> {
 
       this.delete(oldestKey);
       this.log.warn(
-        `Evicted oldest ${this.name} entry ${oldestKey} after reaching the ${this.maxEntries}-entry limit`,
+        `Evicted oldest ${this.name} entry ${oldestKey} after reaching the ${maxEntries}-entry limit`,
       );
     }
   }
