@@ -562,6 +562,7 @@ class Trigger<
   public configuration = {} as TConfiguration;
   public strictAgentMatch = false;
   private unregisterContainerReport?: () => void;
+  private unregisterDigestContainerReport?: () => void;
   private unregisterContainerReports?: () => void;
   private unregisterContainerUpdateAppliedForAutoDispatch?: () => void;
   private unregisterContainerUpdateFailed?: () => void;
@@ -2243,7 +2244,7 @@ class Trigger<
         );
       }
       if (shouldRegisterDigestHandler) {
-        this.unregisterContainerReport = event.registerContainerReport(
+        this.unregisterDigestContainerReport = event.registerContainerReport(
           async (containerReport) => this.handleContainerReportDigest(containerReport),
           {
             id: this.getId(),
@@ -2320,6 +2321,9 @@ class Trigger<
   async deregisterComponent(): Promise<void> {
     this.unregisterContainerReport?.();
     this.unregisterContainerReport = undefined;
+
+    this.unregisterDigestContainerReport?.();
+    this.unregisterDigestContainerReport = undefined;
 
     this.unregisterContainerReports?.();
     this.unregisterContainerReports = undefined;

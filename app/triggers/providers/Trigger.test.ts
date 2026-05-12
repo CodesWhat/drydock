@@ -4832,6 +4832,23 @@ describe('digest mode', () => {
     expect(mockCron.schedule).toHaveBeenCalledWith('0 9 * * *', expect.any(Function));
   });
 
+  test('deregister should keep simple and digest report unregister callbacks independent', async () => {
+    const unregisterSimple = vi.fn();
+    const unregisterDigest = vi.fn();
+    trigger.unregisterContainerReport = unregisterSimple;
+    vi.mocked(event.registerContainerReport).mockReturnValue(unregisterDigest);
+
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+
+    await trigger.deregister();
+
+    expect(unregisterSimple).toHaveBeenCalledTimes(1);
+    expect(unregisterDigest).toHaveBeenCalledTimes(1);
+  });
+
   test('handleContainerReportDigest should buffer containers', async () => {
     await trigger.register('trigger', 'test', 'digest-trigger', {
       ...configurationValid,
