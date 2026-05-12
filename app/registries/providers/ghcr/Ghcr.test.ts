@@ -157,7 +157,7 @@ describe('GitHub Container Registry', () => {
     };
 
     await expect(ghcr.authenticate(image, requestOptions)).rejects.toThrow(
-      'token request failed (undefined)',
+      'token request failed (raw failure)',
     );
     expect(axios).toHaveBeenCalledTimes(1);
   });
