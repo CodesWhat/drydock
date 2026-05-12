@@ -754,7 +754,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
 
   private appendBoundedHistoryEntry<T>(history: T[], entry: T, maxEntries: number): void {
     history.push(entry);
-    if (history.length <= maxEntries * 2) {
+    if (history.length <= maxEntries) {
       return;
     }
     history.splice(0, history.length - maxEntries);
