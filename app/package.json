@@ -34,7 +34,7 @@
     "connect-loki": "1.2.0",
     "cors": "2.8.6",
     "cron-parser": "5.5.0",
-    "dockerode": "4.0.10",
+    "dockerode": "5.0.0",
     "express": "5.2.1",
     "express-healthcheck": "0.1.0",
     "express-rate-limit": "8.5.1",
