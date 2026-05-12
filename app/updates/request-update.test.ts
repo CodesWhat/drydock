@@ -7,6 +7,7 @@ const {
   mockInsertOperation,
   mockMarkOperationTerminal,
   mockGetState,
+  mockLogWarn,
 } = vi.hoisted(() => ({
   mockGetOperationById: vi.fn(),
   mockGetActiveOperationByContainerId: vi.fn(),
@@ -14,6 +15,7 @@ const {
   mockInsertOperation: vi.fn(),
   mockMarkOperationTerminal: vi.fn(),
   mockGetState: vi.fn(() => ({ trigger: {} })),
+  mockLogWarn: vi.fn(),
 }));
 
 vi.mock('../store/update-operation.js', () => ({
@@ -29,7 +31,7 @@ vi.mock('../registry/index.js', () => ({
 }));
 
 vi.mock('../log/index.js', () => ({
-  default: { child: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn() })) },
+  default: { child: vi.fn(() => ({ info: vi.fn(), warn: mockLogWarn, debug: vi.fn() })) },
 }));
 
 import {
@@ -448,6 +450,11 @@ describe('request-update', () => {
       phase: 'failed',
       lastError: 'explosion',
     });
+    await vi.waitFor(() =>
+      expect(mockLogWarn).toHaveBeenCalledWith(
+        'Accepted update dispatch failed for nginx (operation op-bg-2): explosion',
+      ),
+    );
   });
 
   test('runAcceptedContainerUpdates leaves successful terminalization to the trigger lifecycle', async () => {
