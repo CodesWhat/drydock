@@ -35,7 +35,11 @@ function stripLokiMetadata(container: Record<string, unknown>) {
 export function getContainers(req: Request, res: Response) {
   const containers = storeContainer
     .getContainersRaw()
-    .map((container) => stripLokiMetadata(container as unknown as Record<string, unknown>));
+    .map((container) =>
+      stripLokiMetadata(
+        storeContainer.cloneContainer(container) as unknown as Record<string, unknown>,
+      ),
+    );
   res.json(containers);
 }
 

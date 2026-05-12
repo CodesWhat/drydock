@@ -798,10 +798,11 @@ class Trigger<
   }
 
   private findContainerByBusinessId(containerName: string): Container | undefined {
-    return storeContainer.getContainersRaw().find((container) => {
+    const container = storeContainer.getContainersRaw().find((container) => {
       const notificationKey = getContainerNotificationKey(container);
       return notificationKey === containerName || fullName(container) === containerName;
     });
+    return container ? storeContainer.cloneContainer(container) : undefined;
   }
 
   private buildAutoTriggerErrorSignature(
@@ -1404,7 +1405,7 @@ class Trigger<
             [
               getContainerNotificationKey(container as Container) ||
                 fullName(container as Container),
-              container as Container,
+              storeContainer.cloneContainer(container as Container),
             ] as const,
         ),
     );
@@ -1797,7 +1798,7 @@ class Trigger<
             [
               getContainerNotificationKey(container as Container) ||
                 fullName(container as Container),
-              container as Container,
+              storeContainer.cloneContainer(container as Container),
             ] as const,
         ),
     );

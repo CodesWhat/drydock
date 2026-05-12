@@ -66,6 +66,7 @@ vi.mock('../api/sse.js', () => ({
 vi.mock('../store/container.js', () => ({
   getContainers: (...args: unknown[]) => mockGetContainers(...args),
   getContainersRaw: (...args: unknown[]) => mockGetContainersRaw(...args),
+  cloneContainer: (container: unknown) => structuredClone(container),
   updateContainer: (...args: unknown[]) => mockUpdateContainer(...args),
 }));
 

@@ -47,6 +47,7 @@ vi.mock('../../store/notification.js', () => ({
 vi.mock('../../store/container.js', () => ({
   getContainers: vi.fn(() => []),
   getContainersRaw: vi.fn(() => []),
+  cloneContainer: vi.fn((container) => structuredClone(container)),
 }));
 vi.mock('../../store/notification-history.js', () => {
   const notificationHistoryByKey = new Map();
@@ -4484,7 +4485,9 @@ test('getBatchRetryContainers should match raw containers by fallback fullName w
   const retryContainers = (trigger as any).getBatchRetryContainers([]);
 
   expect(retryContainers).toEqual([currentContainer]);
-  expect(trigger.batchRetryBuffer.get('undefined_container1')).toBe(currentContainer);
+  expect(retryContainers[0]).not.toBe(currentContainer);
+  expect(trigger.batchRetryBuffer.get('undefined_container1')).toEqual(currentContainer);
+  expect(trigger.batchRetryBuffer.get('undefined_container1')).not.toBe(currentContainer);
 });
 
 test('getBatchRetryContainers should evict stale retry-buffer entries before reuse', () => {
@@ -5590,6 +5593,56 @@ describe('digest mode', () => {
     triggerBatchSpy.mockRestore();
   });
 
+  test('flushDigestBuffer should not expose raw store containers to trigger mutations', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        image: {
+          tag: {
+            value: '1.0',
+          },
+        },
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    const currentStoreContainer = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      image: {
+        tag: {
+          value: '1.0',
+        },
+      },
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+    storeContainer.getContainersRaw.mockReturnValue([currentStoreContainer] as any);
+    const triggerBatchSpy = vi
+      .spyOn(trigger, 'triggerBatch')
+      .mockImplementation(async (containers) => {
+        containers[0].name = 'mutated';
+        containers[0].image.tag.value = 'mutated';
+      });
+
+    await trigger.flushDigestBuffer();
+
+    expect(currentStoreContainer.name).toBe('app');
+    expect(currentStoreContainer.image.tag.value).toBe('1.0');
+    triggerBatchSpy.mockRestore();
+  });
+
   test('flushDigestBuffer should use fallback fullName keys when digest containers lack notification keys', async () => {
     await trigger.register('trigger', 'test', 'digest-trigger', {
       ...configurationValid,
@@ -5616,7 +5669,8 @@ describe('digest mode', () => {
     const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
     await trigger.flushDigestBuffer();
 
-    expect(triggerBatchSpy).toHaveBeenCalledWith([currentContainer]);
+    expect(triggerBatchSpy).toHaveBeenCalledWith([expect.objectContaining(currentContainer)]);
+    expect(triggerBatchSpy.mock.calls[0]?.[0][0]).not.toBe(currentContainer);
     expect(trigger.digestBuffer.size).toBe(0);
     triggerBatchSpy.mockRestore();
   });

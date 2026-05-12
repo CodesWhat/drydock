@@ -22,6 +22,7 @@ vi.mock('../../log/index.js', () => ({
 
 vi.mock('../../store/container.js', () => ({
   getContainersRaw: vi.fn(),
+  cloneContainer: vi.fn((container) => structuredClone(container)),
   getContainer: vi.fn(),
   deleteContainer: vi.fn(),
 }));
