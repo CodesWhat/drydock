@@ -71,4 +71,4 @@ async function sendMissingIconResponse({
   });
 }
 
-export { sendCachedIcon, sendMissingIconResponse };
+export { sendCachedIcon, sendMissingIconResponse, shouldServeImageFallback };
