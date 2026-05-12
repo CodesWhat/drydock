@@ -25,7 +25,7 @@ import {
   enqueueContainerUpdates,
   UpdateRequestError,
 } from '../../updates/request-update.js';
-import { BatchDispatcher, type BatchDispatchState } from './trigger-batch-dispatcher.js';
+import { BatchDispatcher } from './trigger-batch-dispatcher.js';
 import { OneShotKeyTracker, RecentSignatureSuppressor } from './trigger-deduplicator.js';
 import { DigestBuffer } from './trigger-digest-buffer.js';
 import { renderBatch, renderSimple } from './trigger-expression-parser.js';
@@ -533,8 +533,6 @@ interface ContainerReport {
   changed: boolean;
 }
 
-type EventBatchDispatchState = BatchDispatchState<Container>;
-
 /**
  * Entry stored in the security digest buffer while waiting for cycle-complete.
  */
@@ -615,10 +613,7 @@ class Trigger<
       warn: (message) => this.log.warn(message),
     },
   });
-  private readonly eventBatchDispatches: Map<NotificationRuleId, EventBatchDispatchState> =
-    new Map();
   private readonly eventBatchDispatcher = new BatchDispatcher<NotificationRuleId, Container>({
-    dispatches: this.eventBatchDispatches,
     flushDelayMs: AUTO_EVENT_BATCH_FLUSH_DELAY_MS,
     getKey: (container) => this.buildEventBatchDispatchKey(container),
     flush: (ruleId, containers) => this.flushEventBatchDispatch(ruleId, containers),

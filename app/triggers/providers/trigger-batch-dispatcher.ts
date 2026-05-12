@@ -1,10 +1,9 @@
-export interface BatchDispatchState<TEntry> {
+interface BatchDispatchState<TEntry> {
   timer?: ReturnType<typeof setTimeout>;
   containers: Map<string, TEntry>;
 }
 
 export interface BatchDispatcherOptions<TRuleId extends string, TEntry> {
-  dispatches: Map<TRuleId, BatchDispatchState<TEntry>>;
   flushDelayMs: number;
   getKey: (entry: TEntry) => string;
   flush: (ruleId: TRuleId, entries: TEntry[]) => Promise<void>;
@@ -12,21 +11,20 @@ export interface BatchDispatcherOptions<TRuleId extends string, TEntry> {
 }
 
 export class BatchDispatcher<TRuleId extends string, TEntry> {
-  private readonly dispatches: Map<TRuleId, BatchDispatchState<TEntry>>;
+  private readonly dispatches = new Map<TRuleId, BatchDispatchState<TEntry>>();
   private readonly flushDelayMs: number;
   private readonly getKey: (entry: TEntry) => string;
   private readonly flush: (ruleId: TRuleId, entries: TEntry[]) => Promise<void>;
   private readonly onUnexpectedError: (ruleId: TRuleId, error: unknown) => void;
 
   constructor(options: BatchDispatcherOptions<TRuleId, TEntry>) {
-    this.dispatches = options.dispatches;
     this.flushDelayMs = options.flushDelayMs;
     this.getKey = options.getKey;
     this.flush = options.flush;
     this.onUnexpectedError = options.onUnexpectedError;
   }
 
-  getOrCreate(ruleId: TRuleId): BatchDispatchState<TEntry> {
+  private getOrCreate(ruleId: TRuleId): BatchDispatchState<TEntry> {
     const existing = this.dispatches.get(ruleId);
     if (existing) {
       return existing;

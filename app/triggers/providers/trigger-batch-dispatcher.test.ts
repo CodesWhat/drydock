@@ -9,7 +9,6 @@ describe('BatchDispatcher', () => {
     vi.useFakeTimers();
     const flush = vi.fn().mockResolvedValue(undefined);
     const dispatcher = new BatchDispatcher<string, { key: string; value: number }>({
-      dispatches: new Map(),
       flushDelayMs: 10,
       getKey: (entry) => entry.key,
       flush,
@@ -27,12 +26,11 @@ describe('BatchDispatcher', () => {
 
   test('clears timers and buffered entries', () => {
     vi.useFakeTimers();
-    const dispatches = new Map();
+    const flush = vi.fn().mockResolvedValue(undefined);
     const dispatcher = new BatchDispatcher<string, { key: string }>({
-      dispatches,
       flushDelayMs: 10,
       getKey: (entry) => entry.key,
-      flush: vi.fn().mockResolvedValue(undefined),
+      flush,
       onUnexpectedError: vi.fn(),
     });
 
@@ -40,14 +38,13 @@ describe('BatchDispatcher', () => {
     dispatcher.clear();
     vi.advanceTimersByTime(10);
 
-    expect(dispatches.size).toBe(0);
+    expect(flush).not.toHaveBeenCalled();
   });
 
   test('routes unexpected flush rejections to the error handler', async () => {
     vi.useFakeTimers();
     const onUnexpectedError = vi.fn();
     const dispatcher = new BatchDispatcher<string, { key: string }>({
-      dispatches: new Map(),
       flushDelayMs: 10,
       getKey: (entry) => entry.key,
       flush: vi.fn().mockRejectedValue(new Error('flush failed')),
