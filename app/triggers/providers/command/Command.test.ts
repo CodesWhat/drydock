@@ -194,6 +194,59 @@ test('runCommand should use execFile with shell and -c arguments', async () => {
   expect(childProcessMockControl.execCalls).toBe(0);
 });
 
+test('trigger should sanitize shell metacharacters from container-derived env vars', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: 'echo test' });
+
+  let capturedEnv: Record<string, string | undefined> | undefined;
+  childProcessMockControl.execFileImpl = (
+    _file: unknown,
+    _args: unknown,
+    options: unknown,
+    callback: (...callbackArgs: unknown[]) => void,
+  ) => {
+    capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    setImmediate(() => callback(null, '', ''));
+    return { pid: 2 };
+  };
+
+  await cmd.trigger({
+    id: '123',
+    name: 'test',
+    watcher: 'local',
+    image: {
+      id: 'image-123',
+      registry: { name: 'hub', url: 'https://registry.example.test' },
+      name: 'library/nginx',
+      tag: {
+        value: '1.0.0$(touch /tmp/drydock-pwn)`id`',
+        semver: false,
+      },
+      digest: { watch: false },
+      architecture: 'amd64',
+      os: 'linux',
+    },
+    result: {
+      tag: '2.0.0; touch /tmp/drydock-pwn',
+    },
+    updateAvailable: true,
+    updateKind: {
+      kind: 'tag',
+      localValue: '1.0.0$(touch /tmp/drydock-pwn)',
+      remoteValue: '2.0.0`id`',
+    },
+  });
+
+  const shellMetacharacters = /[$`;()]/u;
+  expect(capturedEnv?.image_tag_value).not.toMatch(shellMetacharacters);
+  expect(capturedEnv?.result_tag).not.toMatch(shellMetacharacters);
+  expect(capturedEnv?.update_kind_local_value).not.toMatch(shellMetacharacters);
+  expect(capturedEnv?.update_kind_remote_value).not.toMatch(shellMetacharacters);
+  expect(capturedEnv?.container_json).not.toContain('$(touch /tmp/drydock-pwn)');
+  expect(capturedEnv?.container_json).not.toContain('; touch /tmp/drydock-pwn');
+  expect(capturedEnv?.container_json).not.toContain('`id`');
+});
+
 test('triggerBatch should pass dd_title env var when runtimeContext.title is set', async () => {
   const cmd = new Command();
   await cmd.register('trigger', 'command', 'test', { cmd: 'echo batch' });
