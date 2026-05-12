@@ -67,7 +67,7 @@ class Command extends Trigger<CommandConfiguration> {
 
     hasLoggedShellExecutionWarning = true;
     this.log.warn(
-      `Security: Command trigger executes DD_TRIGGER_COMMAND_* cmd using ${this.configuration.shell} -c with drydock process privileges. Use only trusted command strings and interpolated values.`,
+      `Security: Command trigger executes DD_ACTION_COMMAND_* cmd using ${this.configuration.shell} -c with drydock process privileges. Use only trusted command strings and interpolated values.`,
     );
   }
 
@@ -127,7 +127,7 @@ class Command extends Trigger<CommandConfiguration> {
     try {
       const { stdout, stderr } = await new Promise<{ stdout: string; stderr: string }>(
         (resolve, reject) => {
-          // Intentional admin-controlled shell execution from DD_TRIGGER_COMMAND_* env configuration.
+          // Intentional admin-controlled shell execution from DD_ACTION_COMMAND_* env configuration.
           execFile(
             this.configuration.shell,
             ['-c', this.configuration.cmd],

@@ -102,7 +102,7 @@ test('should log shell execution security warning once on first command trigger 
   await cmd.trigger({ name: 'test', id: '2' });
 
   const securityWarningCalls = warnSpy.mock.calls.filter(([message]) =>
-    String(message).includes('Security: Command trigger executes DD_TRIGGER_COMMAND_* cmd'),
+    String(message).includes('Security: Command trigger executes DD_ACTION_COMMAND_* cmd'),
   );
   expect(securityWarningCalls).toHaveLength(1);
 });
