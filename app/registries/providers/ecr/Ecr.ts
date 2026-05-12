@@ -4,6 +4,8 @@ import { requireAuthString, withAuthorizationHeader } from '../../../security/au
 import Registry from '../../Registry.js';
 
 const ECR_PUBLIC_GALLERY_HOSTNAME = 'public.ecr.aws';
+const PRIVATE_ECR_AUTH_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
+const ECR_AUTH_TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000;
 
 function getRegistryHost(registryUrl: string | undefined): string {
   if (!registryUrl) {
@@ -30,7 +32,17 @@ interface EcrRegistryConfiguration {
   region?: string;
 }
 
+interface EcrAuthTokenCacheEntry {
+  cacheKey: string;
+  expiresAtMs: number;
+  token: string;
+}
+
 class Ecr extends Registry<EcrRegistryConfiguration> {
+  private privateEcrAuthTokenCache?: EcrAuthTokenCacheEntry;
+
+  private privateEcrAuthTokenFetch?: Promise<string | undefined>;
+
   getConfigurationSchema() {
     return this.joi.alternatives([
       this.joi.string().allow(''),
@@ -90,7 +102,29 @@ class Ecr extends Registry<EcrRegistryConfiguration> {
     return imageNormalized;
   }
 
-  async fetchPrivateEcrAuthToken() {
+  getPrivateEcrAuthTokenCacheKey() {
+    return [
+      this.configuration.accesskeyid,
+      this.configuration.secretaccesskey,
+      this.configuration.region,
+    ].join('\0');
+  }
+
+  getCachedPrivateEcrAuthToken(cacheKey: string) {
+    if (!this.privateEcrAuthTokenCache || this.privateEcrAuthTokenCache.cacheKey !== cacheKey) {
+      return undefined;
+    }
+    if (
+      Date.now() >=
+      this.privateEcrAuthTokenCache.expiresAtMs - ECR_AUTH_TOKEN_REFRESH_WINDOW_MS
+    ) {
+      return undefined;
+    }
+    return this.privateEcrAuthTokenCache.token;
+  }
+
+  async requestPrivateEcrAuthToken() {
+    const cacheKey = this.getPrivateEcrAuthTokenCacheKey();
     const ecr = new ECRClient({
       credentials: {
         accessKeyId: this.configuration.accesskeyid,
@@ -100,7 +134,31 @@ class Ecr extends Registry<EcrRegistryConfiguration> {
     });
     const command = new GetAuthorizationTokenCommand({});
     const authorizationToken = await ecr.send(command);
-    return authorizationToken.authorizationData[0].authorizationToken;
+    const token = authorizationToken.authorizationData[0].authorizationToken;
+    if (typeof token === 'string' && token.trim().length > 0) {
+      this.privateEcrAuthTokenCache = {
+        cacheKey,
+        expiresAtMs: Date.now() + PRIVATE_ECR_AUTH_TOKEN_TTL_MS,
+        token,
+      };
+    }
+    return token;
+  }
+
+  async fetchPrivateEcrAuthToken() {
+    const cacheKey = this.getPrivateEcrAuthTokenCacheKey();
+    const cachedToken = this.getCachedPrivateEcrAuthToken(cacheKey);
+    if (cachedToken !== undefined) {
+      return cachedToken;
+    }
+    if (this.privateEcrAuthTokenFetch) {
+      return this.privateEcrAuthTokenFetch;
+    }
+
+    this.privateEcrAuthTokenFetch = this.requestPrivateEcrAuthToken().finally(() => {
+      this.privateEcrAuthTokenFetch = undefined;
+    });
+    return this.privateEcrAuthTokenFetch;
   }
 
   async authenticate(image, requestOptions) {

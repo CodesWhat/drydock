@@ -284,6 +284,87 @@ test('fetchPrivateEcrAuthToken should construct the ECR client with configured c
   expect(mockGetAuthorizationTokenCommand).toHaveBeenCalledWith({});
 });
 
+test('fetchPrivateEcrAuthToken should reuse cached private tokens before the refresh window', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+  try {
+    const ecrPrivate = new Ecr();
+    ecrPrivate.configuration = {
+      accesskeyid: 'accesskeyid',
+      secretaccesskey: 'secretaccesskey',
+      region: 'region',
+    };
+    mockFetchEcrAuthorizationToken.mockResolvedValueOnce({
+      authorizationData: [{ authorizationToken: 'first-token' }],
+    });
+
+    await expect(ecrPrivate.fetchPrivateEcrAuthToken()).resolves.toBe('first-token');
+    vi.setSystemTime(new Date('2026-01-01T11:54:59.999Z'));
+    await expect(ecrPrivate.fetchPrivateEcrAuthToken()).resolves.toBe('first-token');
+
+    expect(mockFetchEcrAuthorizationToken).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('fetchPrivateEcrAuthToken should refresh cached private tokens inside the refresh window', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+  try {
+    const ecrPrivate = new Ecr();
+    ecrPrivate.configuration = {
+      accesskeyid: 'accesskeyid',
+      secretaccesskey: 'secretaccesskey',
+      region: 'region',
+    };
+    mockFetchEcrAuthorizationToken
+      .mockResolvedValueOnce({
+        authorizationData: [{ authorizationToken: 'first-token' }],
+      })
+      .mockResolvedValueOnce({
+        authorizationData: [{ authorizationToken: 'second-token' }],
+      });
+
+    await expect(ecrPrivate.fetchPrivateEcrAuthToken()).resolves.toBe('first-token');
+    vi.setSystemTime(new Date('2026-01-01T11:55:00.000Z'));
+    await expect(ecrPrivate.fetchPrivateEcrAuthToken()).resolves.toBe('second-token');
+
+    expect(mockFetchEcrAuthorizationToken).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('fetchPrivateEcrAuthToken should reuse an in-flight private token request', async () => {
+  const ecrPrivate = new Ecr();
+  ecrPrivate.configuration = {
+    accesskeyid: 'accesskeyid',
+    secretaccesskey: 'secretaccesskey',
+    region: 'region',
+  };
+  let resolveToken:
+    | ((value: { authorizationData: { authorizationToken: string }[] }) => void)
+    | undefined;
+  mockFetchEcrAuthorizationToken.mockReturnValueOnce(
+    new Promise((resolve) => {
+      resolveToken = resolve;
+    }),
+  );
+
+  const firstToken = ecrPrivate.fetchPrivateEcrAuthToken();
+  const secondToken = ecrPrivate.fetchPrivateEcrAuthToken();
+
+  expect(mockFetchEcrAuthorizationToken).toHaveBeenCalledTimes(1);
+
+  resolveToken?.({ authorizationData: [{ authorizationToken: 'shared-token' }] });
+
+  await expect(Promise.all([firstToken, secondToken])).resolves.toEqual([
+    'shared-token',
+    'shared-token',
+  ]);
+});
+
 test('authenticate should call ecr auth endpoint', async () => {
   await expect(ecr.authenticate(undefined, { headers: {} })).resolves.toEqual({
     headers: {
