@@ -206,6 +206,28 @@ test('runCommand should use execFile with shell and -c arguments', async () => {
   expect(childProcessMockControl.execCalls).toBe(0);
 });
 
+test('runCommand should coerce null, numeric, and control-character env values', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: 'echo test' });
+
+  let capturedEnv: Record<string, string | undefined> | undefined;
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    onCall: (_file, _args, options) => {
+      capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    },
+  });
+
+  await cmd.runCommand({
+    control_value: 'a\x00b\x1bc\x7fd',
+    null_value: null,
+    number_value: 42,
+  });
+
+  expect(capturedEnv?.null_value).toBe('');
+  expect(capturedEnv?.number_value).toBe('42');
+  expect(capturedEnv?.control_value).toBe('a_b_c_d');
+});
+
 test('trigger should sanitize shell metacharacters from container-derived env vars', async () => {
   const cmd = new Command();
   await cmd.register('trigger', 'command', 'test', { cmd: 'echo test' });
