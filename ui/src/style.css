@@ -267,18 +267,13 @@ html.dd-font-comic-mono {
    as inactive, while the centered "Updating / Queued" badge — marked
    `.dd-row-overlay` — stays at full opacity.
 
-   `position: relative` alone on <tr> does not reliably establish a
-   containing block for absolutely-positioned descendants (the CSS
-   spec is undefined for table-internal elements and most browsers
-   let the overlay escape up the ancestor chain, producing a
-   badge floating near viewport-center instead of on the row).
-   Adding `transform: translateZ(0)` forces the <tr> to create a
-   stacking context and containing block, pinning the `.dd-row-overlay`
-   to the row's bounding box so it centers horizontally and vertically
-   on the row like the card view. */
+   Absolutely-positioned descendants of table rows do not have a
+   reliable containing block across browsers, so DataTable marks the
+   first cell as `.dd-data-table-row-overlay-host`. Row overlays anchor
+   to that cell, stretch to the measured table viewport width, and stay
+   vertically centered on the correct row. */
 tr.dd-row-updating {
   position: relative;
-  transform: translateZ(0);
 }
 tr.dd-row-updating > td > *:not(.dd-row-overlay) {
   opacity: 0.3;
@@ -291,7 +286,18 @@ tr.dd-row-updating > td > *:not(.dd-row-overlay) {
    stays interactive while the chip is visible. */
 tr.dd-row-scanning {
   position: relative;
-  transform: translateZ(0);
+}
+
+tr.dd-row-updating > td.dd-data-table-row-overlay-host,
+tr.dd-row-scanning > td.dd-data-table-row-overlay-host {
+  position: relative;
+  overflow: visible;
+}
+
+tr.dd-row-updating > td.dd-data-table-row-overlay-host > .dd-row-overlay,
+tr.dd-row-scanning > td.dd-data-table-row-overlay-host > .dd-row-overlay {
+  right: auto;
+  width: var(--dd-data-table-row-overlay-width, 100%);
 }
 
 /* ─── Semantic typography ─── */

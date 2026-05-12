@@ -253,6 +253,10 @@ const allResolvedColumns = computed(() =>
   props.showActions ? [...resolvedColumns.value, actionsColumn.value] : resolvedColumns.value,
 );
 
+const rowOverlayWidth = computed(() =>
+  viewportWidth.value > 0 ? `${Math.round(viewportWidth.value)}px` : '100%',
+);
+
 function resolvedColumn(colKey: string): ResolvedDataTableColumn | undefined {
   return allResolvedColumns.value.find((column) => column.key === colKey);
 }
@@ -698,7 +702,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
       <table
         ref="tableRef"
         class="w-full text-xs isolate"
-        :style="{ borderCollapse: 'separate', borderSpacing: '0', ...(useFixedLayout ? { tableLayout: 'fixed' } : {}) }">
+        :style="{ '--dd-data-table-row-overlay-width': rowOverlayWidth, borderCollapse: 'separate', borderSpacing: '0', ...(useFixedLayout ? { tableLayout: 'fixed' } : {}) }">
         <colgroup>
           <col
             v-for="col in resolvedColumns"
@@ -784,10 +788,13 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
               </td>
             </template>
             <template v-else>
-              <td v-for="col in resolvedColumns" :key="col.key"
+              <td v-for="(col, colIndex) in resolvedColumns" :key="col.key"
                   :data-col-key="col.key"
                   class="dd-data-table-cell py-3 align-middle"
-                  :class="col.icon ? 'text-center pl-5 pr-0' : ['overflow-hidden', col.align ?? 'text-center', col.px ?? 'px-5']">
+                  :class="[
+                    colIndex === 0 ? 'dd-data-table-row-overlay-host' : '',
+                    col.icon ? 'text-center pl-5 pr-0' : ['overflow-hidden', col.align ?? 'text-center', col.px ?? 'px-5'],
+                  ]">
                 <div v-if="!col.icon" :class="cellContentClass(col)">
                   <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
                     {{ row[col.key] }}
