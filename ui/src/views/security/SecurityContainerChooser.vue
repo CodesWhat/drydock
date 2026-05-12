@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppBadge from '../../components/AppBadge.vue';
 import type { ContainerChoice } from './securityViewTypes';
@@ -14,14 +15,82 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const modalRoot = ref<HTMLElement | null>(null);
+let previouslyFocusedElement: HTMLElement | null = null;
+
+const focusableSelector = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
+function getFocusableElements() {
+  return Array.from(modalRoot.value?.querySelectorAll<HTMLElement>(focusableSelector) ?? []).filter(
+    (element) => element.tabIndex >= 0,
+  );
+}
+
+function focusFirstElement() {
+  getFocusableElements()[0]?.focus();
+}
+
+function handleModalKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Tab') {
+    return;
+  }
+
+  const focusableElements = getFocusableElements();
+  if (focusableElements.length === 0) {
+    event.preventDefault();
+    modalRoot.value?.focus();
+    return;
+  }
+
+  const firstElement = focusableElements[0];
+  const lastElement = focusableElements.at(-1);
+  if (!lastElement) {
+    return;
+  }
+
+  if (event.shiftKey && document.activeElement === firstElement) {
+    event.preventDefault();
+    lastElement.focus();
+    return;
+  }
+
+  if (!event.shiftKey && document.activeElement === lastElement) {
+    event.preventDefault();
+    firstElement.focus();
+  }
+}
+
+onMounted(() => {
+  previouslyFocusedElement =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  void nextTick(() => focusFirstElement());
+});
+
+onBeforeUnmount(() => {
+  if (previouslyFocusedElement && document.body.contains(previouslyFocusedElement)) {
+    previouslyFocusedElement.focus();
+  }
+});
 </script>
 
 <template>
   <Teleport to="body">
     <div
+      ref="modalRoot"
       class="fixed inset-0 z-overlay"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
       @pointerdown.self="emit('close')"
-      @keydown.escape="emit('close')">
+      @keydown.escape="emit('close')"
+      @keydown="handleModalKeydown">
       <div
         class="fixed left-1/2 top-1/3 -translate-x-1/2 w-full max-w-xs mx-4 dd-rounded-lg overflow-hidden shadow-lg"
         :style="{

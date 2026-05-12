@@ -92,4 +92,36 @@ describe('SecurityContainerChooser', () => {
     expect(wrapper.emitted('viewAll')).toHaveLength(1);
     wrapper.unmount();
   });
+
+  it('traps tab focus inside the modal controls', async () => {
+    const outsideButton = document.createElement('button');
+    outsideButton.textContent = 'Outside';
+    document.body.appendChild(outsideButton);
+
+    const wrapper = factory();
+    await nextTick();
+
+    const focusableButtons = [
+      ...document.body.querySelectorAll<HTMLButtonElement>(
+        '[data-test="security-chooser-item"]:not(:disabled), [data-test="security-chooser-view-all"], .z-overlay button:not(:disabled)',
+      ),
+    ];
+    const firstButton = focusableButtons[0];
+    const lastButton = focusableButtons.at(-1);
+
+    expect(document.activeElement).toBe(firstButton);
+
+    firstButton.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true }),
+    );
+    await nextTick();
+    expect(document.activeElement).toBe(lastButton);
+
+    lastButton?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    await nextTick();
+    expect(document.activeElement).toBe(firstButton);
+    expect(document.activeElement).not.toBe(outsideButton);
+
+    wrapper.unmount();
+  });
 });
