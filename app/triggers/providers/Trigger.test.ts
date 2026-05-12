@@ -1839,7 +1839,7 @@ test('renderSimpleBody should expose releaseNotes variables and truncate body fo
   const [title, url, body] = renderedBody.split('|');
   expect(title).toBe('Release 2.0.0');
   expect(url).toBe('https://github.com/acme/service/releases/tag/v2.0.0');
-  expect(body.length).toBeLessThanOrEqual(500);
+  expect(body).toBe(`${longReleaseBody.slice(0, 500)}...`);
 });
 
 test('renderSimpleBody should keep short releaseNotes body unchanged', () => {

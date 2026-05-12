@@ -336,7 +336,7 @@ function truncateReleaseNotesBody(body: string, maxLength: number) {
   if (body.length <= maxLength) {
     return body;
   }
-  return body.slice(0, maxLength);
+  return `${body.slice(0, maxLength)}...`;
 }
 
 function buildAgentContainer(
