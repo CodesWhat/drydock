@@ -70,6 +70,8 @@ interface UseContainerActionsInput {
 
 export const ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS = 250;
 export const PENDING_ACTIONS_POLL_INTERVAL_MS = 2000;
+export const PENDING_ACTIONS_POLL_MAX_INTERVAL_MS = 8000;
+const PENDING_ACTIONS_POLL_BACKOFF_FACTOR = 2;
 const PENDING_UPDATE_GRACE_MS = 6000;
 
 type PendingActionLifecycleMode = 'presence' | 'update';
@@ -426,13 +428,20 @@ async function deleteContainerState(args: {
 }
 
 function stopPendingActionsPollingState(
-  pendingActionsPollTimer: Ref<ReturnType<typeof setInterval> | null>,
+  pendingActionsPollTimer: Ref<ReturnType<typeof setTimeout> | null>,
+  pendingActionsPollIntervalMs?: Ref<number>,
 ) {
   if (!pendingActionsPollTimer.value) {
+    if (pendingActionsPollIntervalMs) {
+      pendingActionsPollIntervalMs.value = PENDING_ACTIONS_POLL_INTERVAL_MS;
+    }
     return;
   }
-  clearInterval(pendingActionsPollTimer.value);
+  clearTimeout(pendingActionsPollTimer.value);
   pendingActionsPollTimer.value = null;
+  if (pendingActionsPollIntervalMs) {
+    pendingActionsPollIntervalMs.value = PENDING_ACTIONS_POLL_INTERVAL_MS;
+  }
 }
 
 function clearPendingActionState(args: {
@@ -522,7 +531,7 @@ export function prunePendingActionsState(args: {
       liveContainersByActionKey.get(pendingKey) ??
       (snapshotIdentityKey ? liveContainersByIdentityKey.get(snapshotIdentityKey) : undefined);
     const pendingMode = args.actionPendingLifecycleModes.value.get(pendingKey);
-    const timedOut = args.now - startTime > args.pollTimeout;
+    const timedOut = args.now - startTime >= args.pollTimeout;
     const settled =
       pendingMode === 'update'
         ? isPendingUpdateSettled({
@@ -574,9 +583,13 @@ export async function pollPendingActionsState(args: {
 
 function startPollingState(args: {
   pendingKey: string;
+  actionPending: Ref<Map<string, Container>>;
   actionPendingStartTimes: Ref<Map<string, number>>;
-  pendingActionsPollTimer: Ref<ReturnType<typeof setInterval> | null>;
-  pollInterval: number;
+  pendingActionsPollTimer: Ref<ReturnType<typeof setTimeout> | null>;
+  pendingActionsPollIntervalMs: Ref<number>;
+  initialPollInterval: number;
+  maxPollInterval: number;
+  pollBackoffFactor: number;
   pollPendingActions: () => Promise<void>;
 }) {
   if (!args.actionPendingStartTimes.value.has(args.pendingKey)) {
@@ -585,9 +598,32 @@ function startPollingState(args: {
   if (args.pendingActionsPollTimer.value) {
     return;
   }
-  args.pendingActionsPollTimer.value = setInterval(() => {
+  args.pendingActionsPollIntervalMs.value = args.initialPollInterval;
+  schedulePendingActionsPoll(args);
+}
+
+function schedulePendingActionsPoll(args: {
+  actionPending: Ref<Map<string, Container>>;
+  pendingActionsPollTimer: Ref<ReturnType<typeof setTimeout> | null>;
+  pendingActionsPollIntervalMs: Ref<number>;
+  initialPollInterval: number;
+  maxPollInterval: number;
+  pollBackoffFactor: number;
+  pollPendingActions: () => Promise<void>;
+}) {
+  args.pendingActionsPollTimer.value = setTimeout(() => {
+    args.pendingActionsPollTimer.value = null;
     void args.pollPendingActions();
-  }, args.pollInterval);
+    if (args.actionPending.value.size === 0) {
+      args.pendingActionsPollIntervalMs.value = args.initialPollInterval;
+      return;
+    }
+    args.pendingActionsPollIntervalMs.value = Math.min(
+      args.pendingActionsPollIntervalMs.value * args.pollBackoffFactor,
+      args.maxPollInterval,
+    );
+    schedulePendingActionsPoll(args);
+  }, args.pendingActionsPollIntervalMs.value);
 }
 
 function createConfirmHandlers(args: {
@@ -986,13 +1022,14 @@ export function useContainerActions(input: UseContainerActionsInput) {
   const actionPendingStartTimes = ref<Map<string, number>>(new Map());
   const actionPendingLifecycleModes = ref<Map<string, PendingActionLifecycleMode>>(new Map());
   const actionPendingLifecycleObserved = ref<Set<string>>(new Set());
-  const pendingActionsPollTimer = ref<ReturnType<typeof setInterval> | null>(null);
+  const pendingActionsPollTimer = ref<ReturnType<typeof setTimeout> | null>(null);
+  const pendingActionsPollIntervalMs = ref(PENDING_ACTIONS_POLL_INTERVAL_MS);
   const pendingActionsPollInFlight = ref(false);
   const POLL_TIMEOUT = 30000;
   const { captureBatch, clearBatch } = useUpdateBatches();
 
   function stopPendingActionsPolling() {
-    stopPendingActionsPollingState(pendingActionsPollTimer);
+    stopPendingActionsPollingState(pendingActionsPollTimer, pendingActionsPollIntervalMs);
   }
 
   function prunePendingActions(now: number) {
@@ -1019,9 +1056,13 @@ export function useContainerActions(input: UseContainerActionsInput) {
   function startPolling(pendingKey: string) {
     startPollingState({
       pendingKey,
+      actionPending,
       actionPendingStartTimes,
       pendingActionsPollTimer,
-      pollInterval: PENDING_ACTIONS_POLL_INTERVAL_MS,
+      pendingActionsPollIntervalMs,
+      initialPollInterval: PENDING_ACTIONS_POLL_INTERVAL_MS,
+      maxPollInterval: PENDING_ACTIONS_POLL_MAX_INTERVAL_MS,
+      pollBackoffFactor: PENDING_ACTIONS_POLL_BACKOFF_FACTOR,
       pollPendingActions,
     });
   }

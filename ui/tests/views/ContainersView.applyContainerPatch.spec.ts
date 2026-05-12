@@ -466,6 +466,49 @@ describe('ContainersView — applyContainerPatch', () => {
       expect(vm.containers[0].currentTag).toBe('1.1.0');
     });
 
+    it('keeps cached host filter options stable unless an SSE patch changes the server set', async () => {
+      const existing = makeContainer({
+        id: 'c1',
+        name: 'nginx',
+        currentTag: '1.0.0',
+        server: 'Datavault',
+      });
+      const wrapper = await mountContainersView([existing]);
+      const vm = wrapper.vm as any;
+      const originalServerNames = vm.serverNames;
+
+      mockMapApiContainer.mockReturnValueOnce(
+        makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          currentTag: '1.1.0',
+          server: 'Datavault',
+        }),
+      );
+      globalThis.dispatchEvent(
+        new CustomEvent('dd:sse-container-updated', { detail: { id: 'c1', name: 'nginx' } }),
+      );
+      await flushPromises();
+
+      expect(vm.serverNames).toBe(originalServerNames);
+
+      mockMapApiContainer.mockReturnValueOnce(
+        makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          currentTag: '1.1.0',
+          server: 'Tmvault',
+        }),
+      );
+      globalThis.dispatchEvent(
+        new CustomEvent('dd:sse-container-updated', { detail: { id: 'c1', name: 'nginx' } }),
+      );
+      await flushPromises();
+
+      expect(vm.serverNames).toEqual(['Tmvault']);
+      expect(vm.serverNames).not.toBe(originalServerNames);
+    });
+
     it('merges fields in place when row matched by name when id is absent', async () => {
       const existing = makeContainer({ id: 'c1', name: 'nginx', currentTag: '1.0.0' });
       const wrapper = await mountContainersView([existing]);

@@ -10,6 +10,8 @@ const props = defineProps<{
   minWidth?: string;
   /** Return a human-readable label for a card (used in aria-label). Falls back to item.name. */
   itemLabel?: (item: Record<string, unknown>) => string;
+  /** Return additional v-memo dependencies for item content. */
+  itemMemo?: (item: Record<string, unknown>) => unknown[];
 }>();
 
 function cardLabel(item: Record<string, unknown>): string {
@@ -28,6 +30,11 @@ function getKey(
   return typeof itemKeyProp === 'function' ? itemKeyProp(item) : item[itemKeyProp];
 }
 
+function getItemMemo(item: Record<string, unknown>): unknown[] {
+  const key = getKey(item, props.itemKey);
+  return [key, props.selectedKey === key, ...(props.itemMemo?.(item) ?? [])];
+}
+
 function onCardKeydown(event: KeyboardEvent, item: Record<string, unknown>) {
   if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault();
@@ -39,7 +46,7 @@ function onCardKeydown(event: KeyboardEvent, item: Record<string, unknown>) {
 <template>
   <div class="grid gap-4"
        :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(${minWidth ?? '280px'}, 1fr))` }">
-    <div v-for="item in items" :key="getKey(item, itemKey)"
+    <div v-for="item in items" :key="getKey(item, itemKey)" v-memo="getItemMemo(item)"
          class="container-card dd-rounded cursor-pointer overflow-hidden flex flex-col relative"
          :style="{
            backgroundColor: 'var(--dd-bg-card)',

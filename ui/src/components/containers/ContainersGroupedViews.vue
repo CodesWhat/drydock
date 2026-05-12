@@ -156,6 +156,60 @@ const selectedContainerKey = computed(() =>
   selectedContainer.value ? getContainerViewKey(selectedContainer.value) : null,
 );
 
+function getContainerViewMemo(containerInput: Record<string, unknown>): unknown[] {
+  const container = containerInput as DisplayContainer;
+  const operation = container.updateOperation;
+  const policyState = getContainerListPolicyState(container);
+  return [
+    container.name,
+    container.image,
+    container.icon,
+    container.currentTag,
+    container.currentDigest ?? '',
+    container.isDigestPinned ?? false,
+    container.newTag ?? '',
+    container.newDigest ?? '',
+    container.status,
+    container.server,
+    container.registry,
+    container.registryUrl ?? '',
+    container.registryName ?? '',
+    container.registryError ?? '',
+    container.registryErrorKind ?? '',
+    container.updateKind ?? '',
+    container.updateMaturity ?? '',
+    container.updateMaturityTooltip ?? '',
+    container.updateBouncer ?? '',
+    container.updatePolicyState ?? '',
+    container.suggestedTag ?? '',
+    container.noUpdateReason ?? '',
+    container.bouncer,
+    container.updateEligibility,
+    container.updateSecuritySummary?.critical ?? 0,
+    container.updateSecuritySummary?.high ?? 0,
+    container.lastUpdateFailureAt ?? 0,
+    container.lastUpdateFailureReason ?? '',
+    container.releaseNotes?.url ?? '',
+    container.currentReleaseNotes?.url ?? '',
+    container.releaseLink ?? '',
+    container.sourceRepo ?? '',
+    policyState.snoozed,
+    policyState.skipped,
+    policyState.maturityBlocked,
+    operation?.id ?? '',
+    operation?.status ?? '',
+    operation?.phase ?? '',
+    operation?.updatedAt ?? '',
+    isContainerUpdating(container),
+    isContainerQueued(container),
+    isContainerScanning(container),
+    isRowLocked(container),
+    updateBtnState(container),
+    containerActionsEnabled.value,
+    containerActionsDisabledReason.value,
+  ];
+}
+
 function isContainerUpdating(container: { id?: unknown; name?: unknown }) {
   return isContainerUpdateInProgress(container);
 }
@@ -904,6 +958,7 @@ onScopeDispose(() => {
       <DataCardGrid v-if="containerViewMode === 'cards'"
                     :items="group.containers"
                     :item-key="getContainerViewKey"
+                    :item-memo="getContainerViewMemo"
                     :selected-key="selectedContainer ? getContainerViewKey(selectedContainer) : null"
                     @item-click="selectContainer($event)">
         <template #card="{ item: c }">
@@ -1159,6 +1214,7 @@ onScopeDispose(() => {
       <DataListAccordion v-if="containerViewMode === 'list'"
                          :items="group.containers"
                          :item-key="getContainerViewKey"
+                         :item-memo="getContainerViewMemo"
                          :selected-key="selectedContainer ? getContainerViewKey(selectedContainer) : null"
                          @item-click="selectContainer($event)">
         <template #header="{ item: c }">

@@ -13,6 +13,7 @@ import {
   ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS,
   isPendingUpdateSettled,
   PENDING_ACTIONS_POLL_INTERVAL_MS,
+  PENDING_ACTIONS_POLL_MAX_INTERVAL_MS,
   pollPendingActionsState,
   prunePendingActionsState,
   useContainerActions,
@@ -2574,6 +2575,46 @@ describe('useContainerActions', () => {
     containers.value = [web];
     await nextTick();
     expect(composable.actionPending.value.has('web')).toBe(false);
+  });
+
+  it('backs off pending-action polling while waiting for SSE state', async () => {
+    vi.useFakeTimers();
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    const web = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable, containers, loadContainers } = await mountActionsHarness({
+      containers: [web],
+      containerIdMap: { web: 'container-1' },
+    });
+    loadContainers.mockImplementation(async () => {
+      containers.value = [];
+    });
+
+    try {
+      await composable.startContainer('web');
+      expect(composable.actionPending.value.has('web')).toBe(true);
+
+      vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS);
+      await flushPromises();
+      vi.advanceTimersByTime(PENDING_ACTIONS_POLL_INTERVAL_MS * 2);
+      await flushPromises();
+
+      const pollDelays = setTimeoutSpy.mock.calls
+        .map((call) => call[1])
+        .filter((delay) =>
+          [
+            PENDING_ACTIONS_POLL_INTERVAL_MS,
+            PENDING_ACTIONS_POLL_INTERVAL_MS * 2,
+            PENDING_ACTIONS_POLL_MAX_INTERVAL_MS,
+          ].includes(Number(delay)),
+        );
+      expect(pollDelays.slice(0, 3)).toEqual([
+        PENDING_ACTIONS_POLL_INTERVAL_MS,
+        PENDING_ACTIONS_POLL_INTERVAL_MS * 2,
+        PENDING_ACTIONS_POLL_MAX_INTERVAL_MS,
+      ]);
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
   });
 
   it('stops pending-action polling when the harness is unmounted', async () => {
