@@ -6,7 +6,6 @@ import {
   ChevronDown,
   Container,
   Eye,
-  Github,
   History,
   Layers,
   Lock,
@@ -20,6 +19,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { DemoSection } from "@/components/demo-section";
+import { GithubIcon } from "@/components/github-icon";
 import { RoadmapTimeline } from "@/components/roadmap-timeline";
 import { SiteFooter } from "@/components/site-footer";
 import { Badge } from "@/components/ui/badge";
@@ -496,7 +496,7 @@ export default function Home() {
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      <Github className="h-4 w-4" />
+                      <GithubIcon className="h-4 w-4" />
                       View on GitHub
                     </a>
                   </Button>
