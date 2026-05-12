@@ -13,6 +13,7 @@ const RECREATED_ALIAS_RE = /^[a-f0-9]{12}_(.+)$/i;
 import type { NotificationOutboxEntry } from '../../model/notification-outbox.js';
 import { getTriggerCounter } from '../../prometheus/trigger.js';
 import Component, { type ComponentConfiguration } from '../../registry/Component.js';
+import { redactTriggerConfigurationInfrastructureDetails } from '../../registry/trigger-config-redaction.js';
 import * as auditStore from '../../store/audit.js';
 import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
@@ -160,6 +161,7 @@ interface EventDispatchOptions extends notificationStore.NotificationRuleDispatc
 const AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS = 15_000;
 const AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS = AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS * 4;
 const AUTO_EVENT_BATCH_FLUSH_DELAY_MS = 250;
+export const BUFFER_ENTRY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const UPDATE_ACTION_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
 
 function getContainerNotificationKey(
@@ -585,7 +587,7 @@ class Trigger<
   private readonly securityDigestBuffer: Map<string, Map<string, SecurityDigestEntry>> = new Map();
   private digestBufferUpdatedAt: Map<string, number> = new Map();
   private batchRetryBufferUpdatedAt: Map<string, number> = new Map();
-  private bufferEntryRetentionMs = 7 * 24 * 60 * 60 * 1000;
+  private bufferEntryRetentionMs = BUFFER_ENTRY_RETENTION_MS;
   private digestBufferMaxEntries = 5_000;
   private batchRetryBufferMaxEntries = 5_000;
   private readonly eventBatchDispatches: Map<NotificationRuleId, EventBatchDispatchState> =
@@ -596,6 +598,10 @@ class Trigger<
 
   static getSupportedThresholds() {
     return [...SUPPORTED_THRESHOLDS];
+  }
+
+  protected override maskRegistrationLogConfiguration(configuration: unknown): unknown {
+    return redactTriggerConfigurationInfrastructureDetails(configuration);
   }
 
   static parseThresholdWithDigestBehavior(threshold: string | undefined) {
@@ -848,7 +854,12 @@ class Trigger<
       const containers = Array.from(eventBatchDispatch.containers.values());
       eventBatchDispatch.containers.clear();
       eventBatchDispatch.timer = undefined;
-      void this.flushEventBatchDispatch(ruleId, containers);
+      void this.flushEventBatchDispatch(ruleId, containers).catch((e: unknown) => {
+        this.log.warn(
+          `Unexpected error flushing ${ruleId} event batch (${Trigger.getErrorMessage(e)})`,
+        );
+        this.log.debug(e);
+      });
     }, AUTO_EVENT_BATCH_FLUSH_DELAY_MS);
   }
 

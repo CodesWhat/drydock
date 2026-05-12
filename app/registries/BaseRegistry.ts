@@ -261,7 +261,7 @@ class BaseRegistry<
   /**
    * Common URL normalization for registries that need https:// prefix and /v2 suffix
    */
-  normalizeImageUrl(image, registryUrl = null) {
+  normalizeImageUrl(image: ContainerImage, registryUrl: string | null = null): ContainerImage {
     const imageNormalized = {
       ...image,
       registry: { ...image.registry },
@@ -511,7 +511,7 @@ class BaseRegistry<
   /**
    * Common URL pattern matching
    */
-  matchUrlPattern(image, pattern) {
+  matchUrlPattern(image: Pick<ContainerImage, 'registry'>, pattern: RegExp): boolean {
     return pattern.test(image.registry.url);
   }
 
@@ -555,14 +555,14 @@ class BaseRegistry<
   /**
    * Common mask configuration for sensitive fields
    */
-  maskSensitiveFields(fields) {
-    const masked = { ...this.configuration };
+  maskSensitiveFields(fields: string[]): Partial<TConfiguration> {
+    const masked = { ...this.configuration } as Record<string, unknown>;
     fields.forEach((field) => {
       if (masked[field]) {
-        masked[field] = BaseRegistry.mask(masked[field]);
+        masked[field] = BaseRegistry.mask(String(masked[field]));
       }
     });
-    return masked;
+    return masked as Partial<TConfiguration>;
   }
 }
 

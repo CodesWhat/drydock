@@ -9,6 +9,7 @@ import * as notificationStore from '../../store/notification.js';
 import * as notificationHistoryStore from '../../store/notification-history.js';
 import { UpdateRequestError } from '../../updates/request-update.js';
 import Trigger, {
+  BUFFER_ENTRY_RETENTION_MS,
   buildLiteralTemplateExpression,
   getNotificationEvent,
   resolveNotificationTemplate,
@@ -4724,6 +4725,30 @@ test('flushEventBatchDispatch should suppress repeated auto event batch errors',
   expect(debugSpy).toHaveBeenCalledWith(expect.any(Error));
 });
 
+test('queueEventBatchDispatch should warn when scheduled flush rejects unexpectedly', async () => {
+  vi.useFakeTimers();
+  try {
+    const warnSpy = vi.spyOn(log, 'warn');
+    vi.spyOn(trigger as any, 'flushEventBatchDispatch').mockRejectedValueOnce(
+      new Error('unexpected flush failure'),
+    );
+
+    (trigger as any).queueEventBatchDispatch('update-applied', {
+      name: 'c1',
+      watcher: 'local',
+    });
+
+    vi.advanceTimersByTime(250);
+    await Promise.resolve();
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Unexpected error flushing update-applied event batch (unexpected flush failure)',
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test('shouldSuppressAutoTriggerError should prune stale cache entries', () => {
   const triggerAny = trigger as any;
   triggerAny.autoTriggerErrorSeenAt.set('stale-signature', 0);
@@ -4747,6 +4772,19 @@ test('parseThresholdWithDigestBehavior should parse suffix behavior', () => {
     thresholdBase: 'minor',
     nonDigestOnly: true,
   });
+});
+
+test('maskRegistrationLogConfiguration should redact trigger infrastructure fields', () => {
+  const sanitized = (trigger as any).maskRegistrationLogConfiguration({
+    channel: 'C01FAKECHANNEL',
+    url: 'http://httpbin.org/post',
+    mode: 'simple',
+  });
+
+  expect(sanitized.channel).toBe('[REDACTED]');
+  expect(sanitized.url).toBe('[REDACTED]');
+  expect(JSON.stringify(sanitized)).not.toContain('C01FAKECHANNEL');
+  expect(JSON.stringify(sanitized)).not.toContain('http://httpbin.org/post');
 });
 
 test('doesReferenceMatchId should return false when trigger id has no name segment', () => {
@@ -4990,6 +5028,11 @@ describe('digest mode', () => {
     expect(trigger.digestBuffer.size).toBe(1);
     expect(trigger.digestBuffer.get('c1')).toMatchObject({ id: 'c1' });
     expect((trigger as any).digestBufferUpdatedAt.get('c1')).toBe(1_000);
+  });
+
+  test('buffer retention should use the named default retention constant', () => {
+    expect((trigger as any).bufferEntryRetentionMs).toBe(BUFFER_ENTRY_RETENTION_MS);
+    expect(BUFFER_ENTRY_RETENTION_MS).toBe(7 * 24 * 60 * 60 * 1000);
   });
 
   test('pruneDigestBuffer should clear buffered entries when max entries is zero', () => {
