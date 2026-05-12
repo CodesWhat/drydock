@@ -6,6 +6,7 @@ const joi = JoiCronExpression(Joi);
 
 import debounceImport from 'just-debounce';
 import cron, { type ScheduledTask } from 'node-cron';
+import pLimit from 'p-limit';
 import parse from 'parse-docker-image-name';
 
 type DebounceFn = <T extends (...args: any[]) => void>(
@@ -170,9 +171,26 @@ const MAINTENANCE_WINDOW_QUEUE_POLL_MS = 60 * 1000;
 const SWARM_SERVICE_ID_LABEL = 'com.docker.swarm.service.id';
 const RECENT_DOCKER_EVENT_LIMIT = 1000;
 const RECENT_ALIAS_FILTER_DECISION_LIMIT = 1000;
+const DOCKER_WATCH_CONCURRENCY = 10;
 const joiWildcardSchema = (joi as unknown as Record<string, () => Joi.Schema>)[`a${'ny'}`].bind(
   joi,
 );
+
+function mapWithDockerWatchConcurrency<T, R>(
+  items: T[],
+  mapper: (item: T, index: number) => Promise<R> | R,
+) {
+  const limit = pLimit(DOCKER_WATCH_CONCURRENCY);
+  return Promise.all(items.map((item, index) => limit(() => mapper(item, index))));
+}
+
+function allSettledWithDockerWatchConcurrency<T, R>(
+  items: T[],
+  mapper: (item: T, index: number) => Promise<R> | R,
+) {
+  const limit = pLimit(DOCKER_WATCH_CONCURRENCY);
+  return Promise.allSettled(items.map((item, index) => limit(() => mapper(item, index))));
+}
 
 interface DockerEventsStream {
   on: (eventName: string, handler: (...args: unknown[]) => unknown) => unknown;
@@ -1080,8 +1098,9 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         });
       }
 
-      const containerReportsSettled = await Promise.allSettled(
-        containers.map((container) => this.watchContainer(container)),
+      const containerReportsSettled = await allSettledWithDockerWatchConcurrency(
+        containers,
+        (container) => this.watchContainer(container),
       );
       const containerReports: ContainerReport[] = [];
       for (const [index, containerReport] of containerReportsSettled.entries()) {
@@ -1180,12 +1199,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     )) as unknown as DockerContainerSummaryLike[];
 
     const swarmServiceLabelsCache = new Map<string, Promise<Record<string, string>>>();
-    const containersWithResolvedLabels: DockerContainerSummaryWithLabels[] = await Promise.all(
-      containers.map(async (container) => ({
+    const containersWithResolvedLabels: DockerContainerSummaryWithLabels[] =
+      await mapWithDockerWatchConcurrency(containers, async (container) => ({
         ...container,
         Labels: await this.getEffectiveContainerLabels(container, swarmServiceLabelsCache),
-      })),
-    );
+      }));
 
     // Filter on containers to watch
     const filteredContainers = containersWithResolvedLabels.filter((container) =>
@@ -1200,34 +1218,33 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     );
     this.recordAliasFilterDecisions(decisions);
 
-    const containerPromises = containersToWatch.map((container) =>
-      this.addImageDetailsToContainer(container, {
-        includeTags: getLabel(container.Labels, ddTagInclude, wudTagInclude),
-        excludeTags: getLabel(container.Labels, ddTagExclude, wudTagExclude),
-        transformTags: getLabel(container.Labels, ddTagTransform, wudTagTransform),
-        tagFamily: getLabel(container.Labels, ddTagFamily),
-        linkTemplate: getLabel(container.Labels, ddLinkTemplate, wudLinkTemplate),
-        displayName: getLabel(container.Labels, ddDisplayName, wudDisplayName),
-        displayIcon: getLabel(container.Labels, ddDisplayIcon, wudDisplayIcon),
-        triggerInclude: getLabel(container.Labels, ddTriggerInclude, wudTriggerInclude),
-        triggerExclude: getLabel(container.Labels, ddTriggerExclude, wudTriggerExclude),
-        registryLookupImage: getLabel(
-          container.Labels,
-          ddRegistryLookupImage,
-          wudRegistryLookupImage,
-        ),
-        registryLookupUrl: getLabel(container.Labels, ddRegistryLookupUrl, wudRegistryLookupUrl),
-      }).catch((error: unknown) => {
-        const errorMessage = getErrorMessage(error);
-        this.log.warn(
-          `${container.Names?.[0]?.replace(/^\//, '') || container.Id?.substring(0, 12)}: Failed to fetch image detail (${errorMessage || `${error}`})`,
-        );
-        return error;
-      }),
-    );
-    const containersToReturn = (await Promise.all(containerPromises)).filter(
-      (result): result is Container => !(result instanceof Error) && result != null,
-    );
+    const containersToReturn = (
+      await mapWithDockerWatchConcurrency(containersToWatch, (container) =>
+        this.addImageDetailsToContainer(container, {
+          includeTags: getLabel(container.Labels, ddTagInclude, wudTagInclude),
+          excludeTags: getLabel(container.Labels, ddTagExclude, wudTagExclude),
+          transformTags: getLabel(container.Labels, ddTagTransform, wudTagTransform),
+          tagFamily: getLabel(container.Labels, ddTagFamily),
+          linkTemplate: getLabel(container.Labels, ddLinkTemplate, wudLinkTemplate),
+          displayName: getLabel(container.Labels, ddDisplayName, wudDisplayName),
+          displayIcon: getLabel(container.Labels, ddDisplayIcon, wudDisplayIcon),
+          triggerInclude: getLabel(container.Labels, ddTriggerInclude, wudTriggerInclude),
+          triggerExclude: getLabel(container.Labels, ddTriggerExclude, wudTriggerExclude),
+          registryLookupImage: getLabel(
+            container.Labels,
+            ddRegistryLookupImage,
+            wudRegistryLookupImage,
+          ),
+          registryLookupUrl: getLabel(container.Labels, ddRegistryLookupUrl, wudRegistryLookupUrl),
+        }).catch((error: unknown) => {
+          const errorMessage = getErrorMessage(error);
+          this.log.warn(
+            `${container.Names?.[0]?.replace(/^\//, '') || container.Id?.substring(0, 12)}: Failed to fetch image detail (${errorMessage || `${error}`})`,
+          );
+          return error;
+        }),
+      )
+    ).filter((result): result is Container => !(result instanceof Error) && result != null);
 
     // Prune old containers from the store
     try {

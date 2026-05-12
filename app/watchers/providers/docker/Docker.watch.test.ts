@@ -69,6 +69,41 @@ function createMockLog(methods = ['info', 'warn', 'debug', 'error']) {
   return log;
 }
 
+function createConcurrencyProbe<T, R>(resolveValue: (input: T) => R) {
+  let active = 0;
+  let maxActive = 0;
+  let started = 0;
+  const blockers = new Set<() => void>();
+
+  return {
+    get maxActive() {
+      return maxActive;
+    },
+    get started() {
+      return started;
+    },
+    releaseAll() {
+      for (const release of Array.from(blockers)) {
+        release();
+      }
+    },
+    async run(input: T) {
+      active += 1;
+      started += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise<void>((resolve) => {
+        const release = () => {
+          blockers.delete(release);
+          active -= 1;
+          resolve();
+        };
+        blockers.add(release);
+      });
+      return resolveValue(input);
+    },
+  };
+}
+
 let mockImage;
 
 describe('Docker Watcher', () => {
@@ -452,6 +487,34 @@ describe('Docker Watcher', () => {
       expect(endDigestCachePollCycle).toHaveBeenCalledTimes(1);
     });
 
+    test('should limit concurrent container processing during watch', async () => {
+      const containers = Array.from({ length: 12 }, (_unused, index) => ({ id: `c${index}` }));
+      const concurrencyProbe = createConcurrencyProbe((container: { id: string }) => ({
+        container,
+        changed: false,
+      }));
+      docker.log = createMockLog(['warn', 'debug']);
+      docker.getContainers = vi.fn().mockResolvedValue(containers);
+      docker.watchContainer = vi.fn((container) => concurrencyProbe.run(container));
+
+      const watchPromise = docker.watch();
+
+      try {
+        await vi.waitFor(() => expect(concurrencyProbe.started).toBeGreaterThan(0));
+        await Promise.resolve();
+
+        expect(concurrencyProbe.maxActive).toBeLessThanOrEqual(10);
+        expect(concurrencyProbe.started).toBeLessThan(containers.length);
+
+        concurrencyProbe.releaseAll();
+        await vi.waitFor(() => expect(concurrencyProbe.started).toBe(containers.length));
+        concurrencyProbe.releaseAll();
+        await expect(watchPromise).resolves.toHaveLength(containers.length);
+      } finally {
+        concurrencyProbe.releaseAll();
+      }
+    });
+
     test('should handle error getting containers', async () => {
       const mockLog = createMockLog(['warn']);
       docker.log = mockLog;
@@ -681,6 +744,79 @@ describe('Docker Watcher', () => {
         expect.stringContaining('1234567890ab: Failed to fetch image detail'),
       );
       expect(result).toHaveLength(0);
+    });
+
+    test('should limit concurrent effective label resolution during getContainers', async () => {
+      const rawContainers = Array.from({ length: 12 }, (_unused, index) => ({
+        Id: `container-${index}`,
+        Labels: { 'dd.watch': 'true' },
+        Names: [`/container-${index}`],
+      }));
+      const concurrencyProbe = createConcurrencyProbe(
+        (container: { Labels: Record<string, string> }) => ({
+          ...container.Labels,
+        }),
+      );
+      mockDockerApi.listContainers.mockResolvedValue(rawContainers);
+      docker.getEffectiveContainerLabels = vi.fn((container) => concurrencyProbe.run(container));
+      docker.addImageDetailsToContainer = vi.fn((container) =>
+        Promise.resolve({ id: container.Id, name: container.Names[0].slice(1) }),
+      );
+      await docker.register('watcher', 'docker', 'test', { watchbydefault: true });
+      docker.log = createMockLog(['warn', 'info', 'debug']);
+
+      const getContainersPromise = docker.getContainers();
+
+      try {
+        await vi.waitFor(() => expect(concurrencyProbe.started).toBeGreaterThan(0));
+        await Promise.resolve();
+
+        expect(concurrencyProbe.maxActive).toBeLessThanOrEqual(10);
+        expect(concurrencyProbe.started).toBeLessThan(rawContainers.length);
+
+        concurrencyProbe.releaseAll();
+        await vi.waitFor(() => expect(concurrencyProbe.started).toBe(rawContainers.length));
+        concurrencyProbe.releaseAll();
+        await expect(getContainersPromise).resolves.toHaveLength(rawContainers.length);
+      } finally {
+        concurrencyProbe.releaseAll();
+      }
+    });
+
+    test('should limit concurrent image-detail enrichment during getContainers', async () => {
+      const rawContainers = Array.from({ length: 12 }, (_unused, index) => ({
+        Id: `container-${index}`,
+        Labels: { 'dd.watch': 'true' },
+        Names: [`/container-${index}`],
+      }));
+      const concurrencyProbe = createConcurrencyProbe(
+        (container: { Id: string; Names: string[] }) => ({
+          id: container.Id,
+          name: container.Names[0].slice(1),
+        }),
+      );
+      mockDockerApi.listContainers.mockResolvedValue(rawContainers);
+      docker.getEffectiveContainerLabels = vi.fn((container) => Promise.resolve(container.Labels));
+      docker.addImageDetailsToContainer = vi.fn((container) => concurrencyProbe.run(container));
+      await docker.register('watcher', 'docker', 'test', { watchbydefault: true });
+      docker.log = createMockLog(['warn', 'info', 'debug']);
+
+      const getContainersPromise = docker.getContainers();
+
+      try {
+        await vi.waitFor(() => expect(concurrencyProbe.started).toBeGreaterThan(0));
+        await Promise.resolve();
+
+        expect(concurrencyProbe.maxActive).toBeLessThanOrEqual(10);
+        expect(concurrencyProbe.started).toBeLessThan(rawContainers.length);
+
+        concurrencyProbe.releaseAll();
+        await vi.waitFor(() => expect(concurrencyProbe.started).toBe(rawContainers.length));
+        concurrencyProbe.releaseAll();
+        await expect(getContainersPromise).resolves.toHaveLength(rawContainers.length);
+      } finally {
+        concurrencyProbe.releaseAll();
+      }
     });
 
     test('should skip maintenance counter increment when counter is unavailable', async () => {
