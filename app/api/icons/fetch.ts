@@ -2,6 +2,7 @@ import axios from 'axios';
 import { providers } from './providers.js';
 import { getIconInFlightTimeoutMs } from './settings.js';
 import { enforceIconCacheLimits, isCachedIconUsable, writeIconAtomically } from './storage.js';
+import { sanitizeSvgPayload } from './svg.js';
 
 const inFlightIconFetches = new Map<string, Promise<void>>();
 const MAX_ICON_DOWNLOAD_BYTES = 2 * 1024 * 1024;
@@ -51,7 +52,7 @@ function validateFetchedIconPayload(data: unknown, extension: string): Buffer {
     if (!looksLikeSvg(payload)) {
       throw new Error('Invalid icon payload: expected svg bytes');
     }
-    return payload;
+    return sanitizeSvgPayload(payload);
   }
 
   throw new Error('Invalid icon payload: unsupported icon extension');

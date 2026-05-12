@@ -30,10 +30,22 @@ describe('icons/response', () => {
     sendCachedIcon(res as never, '/store/icons/simple/docker.svg', 'image/svg+xml');
 
     expect(res.set).toHaveBeenCalledWith('Cache-Control', 'public, max-age=31536000, immutable');
+    expect(res.set).toHaveBeenCalledWith('X-Content-Type-Options', 'nosniff');
     expect(res.type).toHaveBeenCalledWith('image/svg+xml');
     expect(res.sendFile).toHaveBeenCalledWith('docker.svg', {
       root: '/store/icons/simple',
     });
+  });
+
+  test('sends script-blocking content security policy for cached svg icons', () => {
+    const res = createResponse();
+
+    sendCachedIcon(res as never, '/store/icons/simple/docker.svg', 'image/svg+xml');
+
+    expect(res.set).toHaveBeenCalledWith(
+      'Content-Security-Policy',
+      "sandbox; script-src 'none'; object-src 'none'; base-uri 'none'",
+    );
   });
 
   test('serves bundled fallback image for browser image requests', async () => {

@@ -150,6 +150,28 @@ describe('icons/fetch', () => {
     );
   });
 
+  test('sanitizes active content from upstream svg payloads before caching', async () => {
+    mockAxiosGet.mockResolvedValue({
+      data: Buffer.from(
+        '<svg viewBox="0 0 1 1" onload="alert(1)"><script>alert(1)</script><path d="M0 0h1v1z" onclick="alert(1)" /></svg>',
+      ),
+    });
+
+    await fetchAndCacheIconOnce({
+      provider: 'simple',
+      slug: 'unsafe-svg',
+      cachePath: '/store/icons/simple/unsafe-svg.svg',
+    });
+
+    const cachedPayload = mockWriteIconAtomically.mock.calls[0]?.[1] as Buffer;
+    const cachedSvg = cachedPayload.toString('utf8');
+    expect(cachedSvg).toContain('<svg');
+    expect(cachedSvg).toContain('<path');
+    expect(cachedSvg).not.toContain('<script');
+    expect(cachedSvg).not.toContain('onload');
+    expect(cachedSvg).not.toContain('onclick');
+  });
+
   test('rejects upstream payload when response cannot be converted to a buffer', async () => {
     mockAxiosGet.mockResolvedValue({ data: Symbol('not-binary') });
 
