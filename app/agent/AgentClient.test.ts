@@ -69,7 +69,9 @@ describe('AgentClient', () => {
       host: 'localhost',
       port: 3001,
       secret: 'test-secret',
+      cafile: '/path/to/ca.pem',
     });
+    vi.mocked(fs.readFileSync).mockClear();
   });
 
   afterEach(() => {
@@ -88,7 +90,7 @@ describe('AgentClient', () => {
       const c = new AgentClient('a', {
         host: 'myhost',
         port: 4000,
-        secret: 's',
+        secret: '',
       });
       expect(c.baseUrl).toBe('http://myhost:4000');
     });
@@ -119,7 +121,7 @@ describe('AgentClient', () => {
       const c = new AgentClient('a', {
         host: 'http://myhost',
         port: 4000,
-        secret: 's',
+        secret: '',
       });
       expect(c.baseUrl).toBe('http://myhost:4000');
     });
@@ -128,7 +130,7 @@ describe('AgentClient', () => {
       const c = new AgentClient('a', {
         host: 'myhost',
         port: 0,
-        secret: 's',
+        secret: '',
       });
       expect(c.baseUrl).toBe('http://myhost:3000');
     });
@@ -185,14 +187,15 @@ describe('AgentClient', () => {
       ).toThrowError('Invalid agent URL protocol: httpx:');
     });
 
-    test('should warn when secret is configured over plaintext http', () => {
-      const c = new AgentClient('a', {
-        host: 'myhost',
-        port: 4000,
-        secret: 's',
-      });
-
-      expect(c.log.warn).toHaveBeenCalledWith(
+    test('should reject secrets configured over plaintext http', () => {
+      expect(
+        () =>
+          new AgentClient('a', {
+            host: 'myhost',
+            port: 4000,
+            secret: 's',
+          }),
+      ).toThrow(
         'Agent a is configured with a secret over insecure HTTP (http://myhost:4000). Configure HTTPS (certfile/cafile) to protect X-Dd-Agent-Secret.',
       );
     });
