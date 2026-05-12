@@ -847,8 +847,7 @@ export function getContainersRaw(
   pagination: ContainerListPaginationOptions = {},
 ) {
   const containerListSorted = getCachedOrComputedContainersByQuery(query);
-  const containerListSortedPaged = applyContainerListPagination(containerListSorted, pagination);
-  return cloneContainers(containerListSortedPaged);
+  return applyContainerListPagination(containerListSorted, pagination);
 }
 
 /**
@@ -920,7 +919,7 @@ export function getContainers(
   query: Record<string, unknown> = {},
   pagination: ContainerListPaginationOptions = {},
 ) {
-  return redactContainersRuntimeEnv(getContainersRaw(query, pagination));
+  return redactContainersRuntimeEnv(cloneContainers(getContainersRaw(query, pagination)));
 }
 
 /**
