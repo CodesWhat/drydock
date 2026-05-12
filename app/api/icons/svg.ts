@@ -43,6 +43,7 @@ const ALLOWED_SVG_ATTRIBUTES = new Set([
   'gradienttransform',
   'gradientunits',
   'height',
+  'href',
   'id',
   'mask',
   'offset',
@@ -71,7 +72,6 @@ const ALLOWED_SVG_ATTRIBUTES = new Set([
   'x',
   'x1',
   'x2',
-  'xlink:href',
   'xmlns',
   'xmlns:xlink',
   'y',
@@ -87,15 +87,7 @@ const SVG_ATTRIBUTE_OUTPUT_NAMES = new Map([
   ['viewbox', 'viewBox'],
 ]);
 
-const URL_REFERENCE_ATTRIBUTES = new Set([
-  'clip-path',
-  'fill',
-  'filter',
-  'href',
-  'mask',
-  'stroke',
-  'xlink:href',
-]);
+const URL_REFERENCE_ATTRIBUTES = new Set(['clip-path', 'fill', 'href', 'mask', 'stroke']);
 
 const parser = new XMLParser({
   preserveOrder: true,
@@ -178,10 +170,7 @@ function isSafeSvgAttributeValue(attributeName: string, attributeValue: unknown)
     return false;
   }
   if (URL_REFERENCE_ATTRIBUTES.has(attributeName)) {
-    if (
-      (attributeName === 'href' || attributeName === 'xlink:href') &&
-      !attributeValue.startsWith('#')
-    ) {
+    if (attributeName === 'href' && !attributeValue.startsWith('#')) {
       return false;
     }
     return containsOnlyLocalUrlReferences(attributeValue);
