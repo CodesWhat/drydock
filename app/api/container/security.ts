@@ -161,6 +161,12 @@ async function handleGetContainerSbom(
     return;
   }
 
+  const securityConfiguration = context.getSecurityConfiguration();
+  if (!securityConfiguration.enabled || securityConfiguration.scanner !== 'trivy') {
+    sendErrorResponse(res, 503, 'Security scanner is not configured');
+    return;
+  }
+
   const existingSbom = container.security?.sbom;
   const existingSbomDocument = existingSbom?.documents?.[sbomFormat];
   if (existingSbom?.status === 'generated' && existingSbomDocument) {
