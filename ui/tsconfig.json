@@ -4,17 +4,15 @@
     "module": "esnext",
     "strict": false,
     "jsx": "preserve",
-    "downlevelIteration": true,
     "moduleResolution": "bundler",
     "skipLibCheck": true,
     "isolatedModules": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "sourceMap": true,
-    "baseUrl": ".",
     "types": ["vitest/globals", "node"],
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     },
     "lib": ["esnext", "dom", "dom.iterable"]
   },
