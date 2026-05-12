@@ -1,4 +1,5 @@
 import joi from 'joi';
+import { rejectOnceWithHttpStatus } from '../../../test/notification-provider-mocks.js';
 import Googlechat from './Googlechat.js';
 
 vi.mock('axios', () => ({
@@ -156,10 +157,7 @@ test('postMessage should call Google Chat webhook endpoint', async () => {
 
 test('postMessage should reject when Google Chat webhook returns 4xx', async () => {
   const { default: axios } = await import('axios');
-  const error = Object.assign(new Error('Google Chat webhook failed with 400'), {
-    response: { status: 400 },
-  });
-  axios.post.mockRejectedValueOnce(error);
+  rejectOnceWithHttpStatus(axios.post, 'Google Chat webhook failed with 400', 400);
   googlechat.configuration = configurationValid;
 
   await expect(googlechat.postMessage('Message to Google Chat')).rejects.toThrow(

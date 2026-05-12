@@ -1,5 +1,6 @@
 import axios from 'axios';
 import joi from 'joi';
+import { rejectOnceWithHttpStatus } from '../../../test/notification-provider-mocks.js';
 
 vi.mock('axios');
 
@@ -213,10 +214,7 @@ test('sendHttpRequest should reject when IFTTT webhook returns 5xx', async () =>
     key: 'key',
     event: 'event',
   };
-  const error = Object.assign(new Error('IFTTT webhook failed with 500'), {
-    response: { status: 500 },
-  });
-  axios.mockRejectedValueOnce(error);
+  rejectOnceWithHttpStatus(axios, 'IFTTT webhook failed with 500', 500);
 
   await expect(ifttt.sendHttpRequest({ value1: 'container1' })).rejects.toThrow(
     'IFTTT webhook failed with 500',

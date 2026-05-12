@@ -1,4 +1,5 @@
 import { GotifyClient } from 'gotify-client';
+import { createRejectedAsyncMethod } from '../../../test/notification-provider-mocks.js';
 import Gotify from './Gotify.js';
 
 vi.mock('axios');
@@ -157,7 +158,7 @@ test('trigger should reject when Gotify createMessage fails', async () => {
   gotify.configuration = configurationValid;
   gotify.client = {
     message: {
-      createMessage: vi.fn().mockRejectedValue(new Error('Gotify returned 500')),
+      createMessage: createRejectedAsyncMethod('Gotify returned 500'),
     },
   };
 

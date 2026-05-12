@@ -1,5 +1,6 @@
 import axios from 'axios';
 import joi from 'joi';
+import { rejectOnceWithHttpStatus } from '../../../test/notification-provider-mocks.js';
 
 vi.mock('axios');
 
@@ -320,10 +321,7 @@ test('maskConfiguration should mask urls', async () => {
 
 test('trigger should reject when Apprise returns 5xx', async () => {
   apprise.configuration = configurationValid;
-  const error = Object.assign(new Error('Apprise returned 500'), {
-    response: { status: 500 },
-  });
-  axios.mockRejectedValueOnce(error);
+  rejectOnceWithHttpStatus(axios, 'Apprise returned 500', 500);
 
   await expect(apprise.trigger({ name: 'container1' })).rejects.toThrow('Apprise returned 500');
 });

@@ -1,3 +1,4 @@
+import { rejectOnceWithHttpStatus } from '../../../test/notification-provider-mocks.js';
 import Discord from './Discord.js';
 
 // Mock axios
@@ -123,10 +124,7 @@ describe('Discord Trigger', () => {
 test('sendMessage should reject when Discord webhook returns 5xx', async () => {
   const { default: axios } = await import('axios');
   const discordTrigger = new Discord();
-  const error = Object.assign(new Error('Discord webhook failed with 500'), {
-    response: { status: 500 },
-  });
-  axios.mockRejectedValueOnce(error);
+  rejectOnceWithHttpStatus(axios, 'Discord webhook failed with 500', 500);
   discordTrigger.configuration = {
     url: 'https://discord.com/api/webhooks/123/abc',
     botusername: 'drydock',

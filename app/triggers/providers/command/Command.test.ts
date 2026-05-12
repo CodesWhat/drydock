@@ -1,4 +1,5 @@
 import joi from 'joi';
+import { createChildProcessCallbackMock } from '../../../test/notification-provider-mocks.js';
 
 var childProcessMockControl = vi.hoisted(() => ({
   execCalls: 0,
@@ -147,15 +148,9 @@ test('runCommand should log execFile callback errors without rejecting', async (
     cmd: 'exit 1',
   });
   const logSpy = vi.spyOn(cmd.log, 'warn');
-  childProcessMockControl.execFileImpl = (
-    _file: unknown,
-    _args: unknown,
-    _options: unknown,
-    callback: (...callbackArgs: unknown[]) => void,
-  ) => {
-    setImmediate(() => callback(new Error('command failed'), '', ''));
-    return { pid: 2 };
-  };
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    error: new Error('command failed'),
+  });
 
   await expect(cmd.trigger({ name: 'test' })).resolves.toBeUndefined();
   expect(logSpy).toHaveBeenCalledWith(
@@ -185,23 +180,18 @@ test('runCommand should use execFile with shell and -c arguments', async () => {
     setImmediate(() => callback(null, '', ''));
     return { pid: 1 };
   };
-  childProcessMockControl.execFileImpl = (
-    file: unknown,
-    args: unknown,
-    options: unknown,
-    callback: (...callbackArgs: unknown[]) => void,
-  ) => {
-    expect(file).toBe('/bin/sh');
-    expect(args).toStrictEqual(['-c', 'echo test']);
-    expect((options as { timeout?: number }).timeout).toBe(1234);
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    stdout: 'ok',
+    onCall: (file, args, options) => {
+      expect(file).toBe('/bin/sh');
+      expect(args).toStrictEqual(['-c', 'echo test']);
+      expect((options as { timeout?: number }).timeout).toBe(1234);
 
-    const env = (options as { env?: Record<string, string | undefined> }).env;
-    expect(env?.name).toBe('test');
-    expect(env?.id).toBe('123');
-
-    setImmediate(() => callback(null, 'ok', ''));
-    return { pid: 2 };
-  };
+      const env = (options as { env?: Record<string, string | undefined> }).env;
+      expect(env?.name).toBe('test');
+      expect(env?.id).toBe('123');
+    },
+  });
 
   const cmd = new Command();
   await cmd.register('trigger', 'command', 'test', {
@@ -221,16 +211,11 @@ test('trigger should sanitize shell metacharacters from container-derived env va
   await cmd.register('trigger', 'command', 'test', { cmd: 'echo test' });
 
   let capturedEnv: Record<string, string | undefined> | undefined;
-  childProcessMockControl.execFileImpl = (
-    _file: unknown,
-    _args: unknown,
-    options: unknown,
-    callback: (...callbackArgs: unknown[]) => void,
-  ) => {
-    capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
-    setImmediate(() => callback(null, '', ''));
-    return { pid: 2 };
-  };
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    onCall: (_file, _args, options) => {
+      capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    },
+  });
 
   await cmd.trigger({
     id: '123',
@@ -274,16 +259,12 @@ test('triggerBatch should pass dd_title env var when runtimeContext.title is set
   await cmd.register('trigger', 'command', 'test', { cmd: 'echo batch' });
 
   let capturedEnv: Record<string, string | undefined> | undefined;
-  childProcessMockControl.execFileImpl = (
-    _file: unknown,
-    _args: unknown,
-    options: unknown,
-    callback: (...args: unknown[]) => void,
-  ) => {
-    capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
-    setImmediate(() => callback(null, '', ''));
-    return { pid: 42 };
-  };
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    pid: 42,
+    onCall: (_file, _args, options) => {
+      capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    },
+  });
 
   await cmd.triggerBatch([{ name: 'c1' }], {
     title: 'Security scan: 1 finding',
@@ -300,16 +281,12 @@ test('triggerBatch should pass dd_body env var when runtimeContext.body is set',
   await cmd.register('trigger', 'command', 'test', { cmd: 'echo batch' });
 
   let capturedEnv: Record<string, string | undefined> | undefined;
-  childProcessMockControl.execFileImpl = (
-    _file: unknown,
-    _args: unknown,
-    options: unknown,
-    callback: (...args: unknown[]) => void,
-  ) => {
-    capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
-    setImmediate(() => callback(null, '', ''));
-    return { pid: 42 };
-  };
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    pid: 42,
+    onCall: (_file, _args, options) => {
+      capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    },
+  });
 
   await cmd.triggerBatch([{ name: 'c1' }], { body: '- app1: 1 critical' });
 
@@ -323,16 +300,12 @@ test('triggerBatch should pass all three env vars when full runtimeContext is se
   await cmd.register('trigger', 'command', 'test', { cmd: 'echo batch' });
 
   let capturedEnv: Record<string, string | undefined> | undefined;
-  childProcessMockControl.execFileImpl = (
-    _file: unknown,
-    _args: unknown,
-    options: unknown,
-    callback: (...args: unknown[]) => void,
-  ) => {
-    capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
-    setImmediate(() => callback(null, '', ''));
-    return { pid: 42 };
-  };
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    pid: 42,
+    onCall: (_file, _args, options) => {
+      capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    },
+  });
 
   await cmd.triggerBatch([{ name: 'c1' }], {
     title: 'Security scan: 1 finding',
@@ -350,16 +323,12 @@ test('triggerBatch should not set runtimeContext env vars when runtimeContext is
   await cmd.register('trigger', 'command', 'test', { cmd: 'echo batch' });
 
   let capturedEnv: Record<string, string | undefined> | undefined;
-  childProcessMockControl.execFileImpl = (
-    _file: unknown,
-    _args: unknown,
-    options: unknown,
-    callback: (...args: unknown[]) => void,
-  ) => {
-    capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
-    setImmediate(() => callback(null, '', ''));
-    return { pid: 42 };
-  };
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    pid: 42,
+    onCall: (_file, _args, options) => {
+      capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    },
+  });
 
   await cmd.triggerBatch([{ name: 'c1' }]);
 
@@ -374,15 +343,10 @@ test('runCommand should coerce non-string stdout/stderr values to empty strings'
   const logInfoSpy = vi.spyOn(cmd.log, 'info');
   const logWarnSpy = vi.spyOn(cmd.log, 'warn');
 
-  childProcessMockControl.execFileImpl = (
-    _file: unknown,
-    _args: unknown,
-    _options: unknown,
-    callback: (...callbackArgs: unknown[]) => void,
-  ) => {
-    setImmediate(() => callback(null, Buffer.from('ok'), Buffer.from('warn')));
-    return { pid: 2 };
-  };
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    stdout: Buffer.from('ok'),
+    stderr: Buffer.from('warn'),
+  });
 
   await cmd.trigger({ name: 'test', id: '123' });
 

@@ -1,3 +1,4 @@
+import { rejectOnceWithHttpStatus } from '../../../test/notification-provider-mocks.js';
 import Rocketchat from './Rocketchat.js';
 
 // Mock axios
@@ -222,10 +223,7 @@ describe('Rocketchat Trigger', () => {
 
   test('postMessage should reject when Rocket.Chat API returns 5xx', async () => {
     const { default: axios } = await import('axios');
-    const error = Object.assign(new Error('Rocket.Chat API failed with 500'), {
-      response: { status: 500 },
-    });
-    axios.post.mockRejectedValueOnce(error);
+    rejectOnceWithHttpStatus(axios.post, 'Rocket.Chat API failed with 500', 500);
     rocketchat.configuration = {
       url: 'https://open.rocket.chat',
       user: { id: 'jDdn8oh9BfJKnWdDY' },

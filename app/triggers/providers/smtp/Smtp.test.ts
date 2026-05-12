@@ -1,5 +1,6 @@
 import joi from 'joi';
 import log from '../../../log/index.js';
+import { createRejectedAsyncMethod } from '../../../test/notification-provider-mocks.js';
 import Smtp from './Smtp.js';
 
 const smtp = new Smtp();
@@ -230,7 +231,7 @@ test('init should default tls rejectUnauthorized to true when tls is undefined',
 test('trigger should reject when SMTP sendMail fails', async () => {
   smtp.configuration = configurationValid;
   smtp.transporter = {
-    sendMail: vi.fn().mockRejectedValue(new Error('SMTP rejected recipient')),
+    sendMail: createRejectedAsyncMethod('SMTP rejected recipient'),
   };
 
   await expect(smtp.trigger({ name: 'container1' })).rejects.toThrow('SMTP rejected recipient');

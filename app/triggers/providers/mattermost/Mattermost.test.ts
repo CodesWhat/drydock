@@ -1,4 +1,5 @@
 import joi from 'joi';
+import { rejectOnceWithHttpStatus } from '../../../test/notification-provider-mocks.js';
 import Mattermost from './Mattermost.js';
 
 vi.mock('axios', () => ({
@@ -176,10 +177,7 @@ test('postMessage should call Mattermost webhook endpoint', async () => {
 
 test('postMessage should reject when Mattermost webhook returns 5xx', async () => {
   const { default: axios } = await import('axios');
-  const error = Object.assign(new Error('Mattermost webhook failed with 502'), {
-    response: { status: 502 },
-  });
-  axios.post.mockRejectedValueOnce(error);
+  rejectOnceWithHttpStatus(axios.post, 'Mattermost webhook failed with 502', 502);
   mattermost.configuration = configurationValid;
 
   await expect(mattermost.postMessage('Message to Mattermost')).rejects.toThrow(
