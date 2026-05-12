@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { RE2JS } from 're2js';
 import * as registryPrometheus from '../prometheus/registry.js';
 import BaseRegistry from './BaseRegistry.js';
 import { REGISTRY_BEARER_TOKEN_CACHE_TTL_MS } from './configuration.js';
@@ -477,6 +478,23 @@ test('authenticateBearerFromAuthUrlWithPublicFallback should retry without crede
   expect(warnSpy).toHaveBeenCalledWith(
     expect.stringContaining('Docker Hub credentials were rejected for registry'),
   );
+});
+
+test('getRejectedCredentialStatus should use RE2JS for status matching', () => {
+  const compileSpy = vi.spyOn(RE2JS, 'compile');
+
+  try {
+    expect(
+      (baseRegistry as any).getRejectedCredentialStatus(
+        new Error('token request failed (Request failed with status code 403)'),
+      ),
+    ).toBe('403');
+    expect(compileSpy).toHaveBeenCalledWith(
+      'token request failed \\(Request failed with status code (401|403)\\)',
+    );
+  } finally {
+    compileSpy.mockRestore();
+  }
 });
 
 test('authenticateBearerFromAuthUrlWithPublicFallback should rethrow non-Error failures', async () => {

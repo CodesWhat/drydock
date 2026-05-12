@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import https from 'node:https';
 import axios, { type AxiosRequestConfig } from 'axios';
+import { RE2JS } from 're2js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import type { ContainerImage } from '../model/container.js';
 import * as registryPrometheus from '../prometheus/registry.js';
@@ -426,11 +427,11 @@ class BaseRegistry<
     }
 
     const allowedStatuses = rejectedCredentialStatuses.join('|');
-    const rejectedStatusPattern = new RegExp(
+    const rejectedStatusPattern = RE2JS.compile(
       `token request failed \\(Request failed with status code (${allowedStatuses})\\)`,
     );
-    const match = error.message.match(rejectedStatusPattern);
-    return match ? match[1] : undefined;
+    const match = rejectedStatusPattern.matcher(error.message);
+    return match.find() ? match.group(1) : undefined;
   }
 
   protected async authenticateBearerFromAuthUrlWithPublicFallback(
