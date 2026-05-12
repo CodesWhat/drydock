@@ -26,6 +26,7 @@ import {
   UpdateRequestError,
 } from '../../updates/request-update.js';
 import { BatchDispatcher, type BatchDispatchState } from './trigger-batch-dispatcher.js';
+import { Deduplicator } from './trigger-deduplicator.js';
 import { DigestBuffer } from './trigger-digest-buffer.js';
 import { renderBatch, renderSimple } from './trigger-expression-parser.js';
 import {
@@ -574,9 +575,13 @@ class Trigger<
   private readonly notificationResults: Map<string, unknown> = new Map();
   private readonly autoTriggerErrorSeenAt: Map<string, number> = new Map();
   private readonly notificationRuleWarningsSeen: Set<string> = new Set();
-  // Tracks container+reason keys that have already produced an auto-update-blocked audit event.
-  // Cleared when the reason lifts, so we only emit once per (container, reason) until it clears.
   private readonly autoUpdateBlockedSeen: Set<string> = new Set();
+  private readonly deduplicator = new Deduplicator({
+    recentSeenAt: this.autoTriggerErrorSeenAt,
+    onceSeen: this.autoUpdateBlockedSeen,
+    suppressionWindowMs: AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS,
+    retentionMs: AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS,
+  });
   private readonly digestBuffer: Map<string, Container> = new Map();
   private readonly batchRetryBuffer: Map<string, Container> = new Map();
   /**
@@ -791,15 +796,6 @@ class Trigger<
     return `${this.getId()}|${ruleId}|${container?.watcher ?? 'unknown'}|${errorMessage}`;
   }
 
-  private pruneAutoTriggerErrorCache(now: number) {
-    const oldestAllowedTimestamp = now - AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS;
-    for (const [signature, seenAt] of this.autoTriggerErrorSeenAt.entries()) {
-      if (seenAt < oldestAllowedTimestamp) {
-        this.autoTriggerErrorSeenAt.delete(signature);
-      }
-    }
-  }
-
   private shouldSuppressAutoTriggerError(
     ruleId: NotificationRuleId,
     container: Container | undefined,
@@ -807,14 +803,7 @@ class Trigger<
   ) {
     const now = Date.now();
     const signature = this.buildAutoTriggerErrorSignature(ruleId, container, errorMessage);
-    const previousSeenAt = this.autoTriggerErrorSeenAt.get(signature);
-    this.autoTriggerErrorSeenAt.set(signature, now);
-    this.pruneAutoTriggerErrorCache(now);
-
-    return (
-      previousSeenAt !== undefined &&
-      now - previousSeenAt < AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS
-    );
+    return this.deduplicator.shouldSuppressRecent(signature, now);
   }
 
   private buildEventBatchDispatchKey(container: Container): string {
@@ -1554,11 +1543,10 @@ class Trigger<
     const containerKey = getContainerNotificationKey(container) || fullName(container);
     const seenKey = `${containerKey}|${reason}`;
 
-    if (this.autoUpdateBlockedSeen.has(seenKey)) {
+    if (!this.deduplicator.markOnce(seenKey)) {
       return;
     }
 
-    this.autoUpdateBlockedSeen.add(seenKey);
     auditStore.insertAudit({
       id: '',
       timestamp: new Date().toISOString(),
@@ -1572,11 +1560,7 @@ class Trigger<
   }
 
   private clearAutoUpdateBlockedForContainerKey(containerKey: string) {
-    for (const key of this.autoUpdateBlockedSeen) {
-      if (key.startsWith(`${containerKey}|`)) {
-        this.autoUpdateBlockedSeen.delete(key);
-      }
-    }
+    this.deduplicator.clearOnceByPrefix(`${containerKey}|`);
   }
 
   private async runUpdateAvailableSimpleTrigger(
@@ -2321,7 +2305,7 @@ class Trigger<
     this.batchRetryBufferUpdatedAt.clear();
     this.clearEventBatchDispatches();
 
-    this.autoTriggerErrorSeenAt.clear();
+    this.deduplicator.clear();
     this.notificationRuleWarningsSeen.clear();
   }
 
