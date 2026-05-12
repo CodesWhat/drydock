@@ -559,55 +559,63 @@ test('timeout warning is logged with handler id and order', async () => {
 }, 3000);
 
 test('fast handler does not trigger a timeout warning', async () => {
-  event.setHandlerTimeoutMsForTests(200);
+  vi.useFakeTimers();
+  try {
+    event.setHandlerTimeoutMsForTests(200);
 
-  event.registerContainerReport(
-    async () => {
-      // Resolves well within the 200ms timeout.
-    },
-    { id: 'quick.handler', order: 10 },
-  );
+    event.registerContainerReport(
+      async () => {
+        // Resolves well within the 200ms timeout.
+      },
+      { id: 'quick.handler', order: 10 },
+    );
 
-  await event.emitContainerReport({});
+    await event.emitContainerReport({});
 
-  // Give enough time for any stray timer to fire before asserting.
-  await new Promise<void>((resolve) => setTimeout(resolve, 10));
-  expect(warnMock).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(warnMock).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('multiple slow handlers do not compound indefinitely; third fast handler still runs', async () => {
-  event.setHandlerTimeoutMsForTests(50);
-  const calls: string[] = [];
+  vi.useFakeTimers();
+  try {
+    event.setHandlerTimeoutMsForTests(50);
+    const calls: string[] = [];
 
-  event.registerContainerReport(
-    () =>
-      new Promise<void>(() => {
-        /* never resolves */
-      }),
-    { id: 'slow.one', order: 10 },
-  );
-  event.registerContainerReport(
-    () =>
-      new Promise<void>(() => {
-        /* never resolves */
-      }),
-    { id: 'slow.two', order: 20 },
-  );
-  event.registerContainerReport(
-    async () => {
-      calls.push('fast');
-    },
-    { id: 'fast.three', order: 30 },
-  );
+    event.registerContainerReport(
+      () =>
+        new Promise<void>(() => {
+          /* never resolves */
+        }),
+      { id: 'slow.one', order: 10 },
+    );
+    event.registerContainerReport(
+      () =>
+        new Promise<void>(() => {
+          /* never resolves */
+        }),
+      { id: 'slow.two', order: 20 },
+    );
+    event.registerContainerReport(
+      async () => {
+        calls.push('fast');
+      },
+      { id: 'fast.three', order: 30 },
+    );
 
-  const start = Date.now();
-  await event.emitContainerReport({});
-  const elapsed = Date.now() - start;
+    const emitPromise = event.emitContainerReport({});
+    await vi.advanceTimersByTimeAsync(50);
+    await vi.advanceTimersByTimeAsync(50);
+    await emitPromise;
 
-  // Two timeouts at 50ms each = ~100ms total. Should not balloon beyond a generous bound.
-  expect(elapsed).toBeLessThan(2000);
-  expect(calls).toEqual(['fast']);
-  expect(warnMock).toHaveBeenCalledTimes(2);
+    expect(calls).toEqual(['fast']);
+    expect(warnMock).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
 }, 5000);
 
 test('setHandlerTimeoutMsForTests and getHandlerTimeoutMsForTests round-trip', () => {
@@ -651,21 +659,27 @@ test('timeout warning identifies anonymous handlers without an id', async () => 
 });
 
 test('late rejection from a timed-out handler does not surface as unhandled', async () => {
-  event.setHandlerTimeoutMsForTests(50);
-  // Handler that rejects AFTER the timeout window. Without the .catch detach
-  // in runHandlerWithTimeout, this would surface as an unhandled rejection.
-  event.registerContainerReport(
-    () =>
-      new Promise<void>((_resolve, reject) => {
-        setTimeout(() => reject(new Error('late-failure')), 150);
-      }),
-    { id: 'late.reject', order: 10 },
-  );
+  vi.useFakeTimers();
+  try {
+    event.setHandlerTimeoutMsForTests(50);
+    // Handler that rejects AFTER the timeout window. Without the .catch detach
+    // in runHandlerWithTimeout, this would surface as an unhandled rejection.
+    event.registerContainerReport(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          setTimeout(() => reject(new Error('late-failure')), 150);
+        }),
+      { id: 'late.reject', order: 10 },
+    );
 
-  await event.emitContainerReport({});
+    const emitPromise = event.emitContainerReport({});
+    await vi.advanceTimersByTimeAsync(50);
+    await emitPromise;
 
-  // Wait past the late rejection so the registered .catch handler runs.
-  await new Promise((resolve) => setTimeout(resolve, 250));
+    await vi.advanceTimersByTimeAsync(100);
 
-  expect(warnMock).toHaveBeenCalledTimes(1);
+    expect(warnMock).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+  }
 });

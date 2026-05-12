@@ -4526,11 +4526,8 @@ test('handleContainerReports should cap retry-buffer growth by evicting the olde
   (trigger as any).batchRetryBufferMaxEntries = 2;
   trigger.triggerBatch = vi.fn().mockRejectedValue(new Error('SMTP timeout'));
 
-  const nowSpy = vi
-    .spyOn(Date, 'now')
-    .mockReturnValueOnce(1_000)
-    .mockReturnValueOnce(1_001)
-    .mockReturnValueOnce(1_002);
+  vi.useFakeTimers();
+  vi.setSystemTime(1_000);
 
   try {
     await trigger.handleContainerReports([
@@ -4568,7 +4565,7 @@ test('handleContainerReports should cap retry-buffer growth by evicting the olde
 
     expect([...trigger.batchRetryBuffer.keys()]).toEqual(['c2', 'c3']);
   } finally {
-    nowSpy.mockRestore();
+    vi.useRealTimers();
   }
 });
 
@@ -4985,23 +4982,22 @@ describe('digest mode', () => {
 
   test('bufferContainerForDigest should cap digest-buffer growth by evicting the oldest entries', () => {
     (trigger as any).digestBufferMaxEntries = 2;
-    const nowSpy = vi
-      .spyOn(Date, 'now')
-      .mockReturnValueOnce(1_000)
-      .mockReturnValueOnce(1_001)
-      .mockReturnValueOnce(1_002);
+    vi.useFakeTimers();
 
     try {
+      vi.setSystemTime(1_000);
       (trigger as any).bufferContainerForDigest({
         id: 'c1',
         name: 'app-1',
         watcher: 'test',
       });
+      vi.setSystemTime(1_001);
       (trigger as any).bufferContainerForDigest({
         id: 'c2',
         name: 'app-2',
         watcher: 'test',
       });
+      vi.setSystemTime(1_002);
       (trigger as any).bufferContainerForDigest({
         id: 'c3',
         name: 'app-3',
@@ -5010,7 +5006,7 @@ describe('digest mode', () => {
 
       expect([...trigger.digestBuffer.keys()]).toEqual(['c2', 'c3']);
     } finally {
-      nowSpy.mockRestore();
+      vi.useRealTimers();
     }
   });
 

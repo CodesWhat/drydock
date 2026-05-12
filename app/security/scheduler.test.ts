@@ -270,10 +270,9 @@ describe('init', () => {
     // Should not throw
     cronCallback!();
 
-    // Wait a tick so the promise rejection is caught
-    await new Promise((resolve) => setTimeout(resolve, 10));
-
-    expect(mockLogWarn).toHaveBeenCalledWith('Scheduled scan run failed: scan exploded');
+    await vi.waitFor(() => {
+      expect(mockLogWarn).toHaveBeenCalledWith('Scheduled scan run failed: scan exploded');
+    });
   });
 
   test('should catch non-Error thrown by runScheduledScans in the cron callback', async () => {
@@ -290,9 +289,9 @@ describe('init', () => {
     init();
     cronCallback!();
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
-
-    expect(mockLogWarn).toHaveBeenCalledWith('Scheduled scan run failed: string error');
+    await vi.waitFor(() => {
+      expect(mockLogWarn).toHaveBeenCalledWith('Scheduled scan run failed: string error');
+    });
   });
 
   test('should include message from object-like errors thrown by runScheduledScans in the cron callback', async () => {
@@ -309,9 +308,9 @@ describe('init', () => {
     init();
     cronCallback!();
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
-
-    expect(mockLogWarn).toHaveBeenCalledWith('Scheduled scan run failed: scan exploded');
+    await vi.waitFor(() => {
+      expect(mockLogWarn).toHaveBeenCalledWith('Scheduled scan run failed: scan exploded');
+    });
   });
 });
 

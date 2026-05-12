@@ -603,16 +603,19 @@ describe('api/container/bulk-security', () => {
       const scanAllPromise = callScanAll(harness.handlers);
       await scanAllPromise; // 202 response arrives immediately
 
-      // Give the concurrent pool time to fill to its limit
-      // Allow up to MAX_CONCURRENT_BULK_SCANS slots to be occupied
-      await new Promise((r) => setTimeout(r, 10));
+      await vi.waitFor(() => {
+        expect(resolvers).toHaveLength(MAX_CONCURRENT_BULK_SCANS);
+      });
 
       // Now resolve them all so the cycle finishes
       while (resolvers.length > 0) {
         const resolve = resolvers.shift()!;
         resolve();
-        // Small yield between resolutions to allow pool to refill
-        await new Promise((r) => setTimeout(r, 0));
+        if (harness.deps.scanImageForVulnerabilities.mock.calls.length < totalContainers) {
+          await vi.waitFor(() => {
+            expect(resolvers.length).toBeGreaterThan(0);
+          });
+        }
       }
 
       await waitForCycleComplete(harness.deps);
@@ -652,8 +655,9 @@ describe('api/container/bulk-security', () => {
         (c: any[]) => c[0] === 'close',
       )?.[1];
 
-      // Trigger abort after first scan slot fills
-      await new Promise((r) => setTimeout(r, 5));
+      await vi.waitFor(() => {
+        expect(resolvers.length).toBeGreaterThan(0);
+      });
       abortHandler?.();
 
       // Resolve whatever scans started
