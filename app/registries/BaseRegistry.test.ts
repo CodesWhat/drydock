@@ -1343,7 +1343,7 @@ test('authenticateBearerFromAuthUrl should wrap 503 Service Unavailable in error
   ).rejects.toThrow('token request failed (Request failed with status code 503)');
 });
 
-test('authenticateBearerFromAuthUrl should handle non-Error rejection values', async () => {
+test('authenticateBearerFromAuthUrl should preserve non-Error rejection messages', async () => {
   const { default: axios } = await import('axios');
   axios.mockRejectedValue('string rejection');
 
@@ -1353,7 +1353,20 @@ test('authenticateBearerFromAuthUrl should handle non-Error rejection values', a
       'https://auth.example.com/token',
       undefined,
     ),
-  ).rejects.toThrow('token request failed');
+  ).rejects.toThrow('token request failed (string rejection)');
+});
+
+test('authenticateBearerFromAuthUrl should handle null token request rejections', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockRejectedValue(null);
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('token request failed (unknown error)');
 });
 
 test('authenticateBearerFromAuthUrl should handle null response data', async () => {

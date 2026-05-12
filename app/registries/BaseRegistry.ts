@@ -397,9 +397,9 @@ class BaseRegistry<
     let response: { data?: Record<string, unknown> } | undefined;
     try {
       response = await axios(request);
-    } catch (e) {
+    } catch (e: unknown) {
       failClosedAuth(
-        `Unable to authenticate registry ${this.getId()}: token request failed (${e.message})`,
+        `Unable to authenticate registry ${this.getId()}: token request failed (${getErrorMessage(e)})`,
       );
     }
 
