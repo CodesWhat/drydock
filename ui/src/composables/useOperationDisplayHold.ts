@@ -17,7 +17,11 @@ interface OperationDisplayHoldTarget {
   containerId?: string;
   newContainerId?: string;
   containerName?: string;
+  identityKey?: string;
 }
+
+type OperationDisplayHoldContainerTarget = Pick<Container, 'id' | 'name'> &
+  Partial<Pick<Container, 'identityKey'>>;
 
 /** Frozen snapshot of sort-affecting container fields captured at hold start. */
 export interface ContainerSortSnapshot {
@@ -35,6 +39,7 @@ export interface ContainerSortSnapshot {
 
 interface OperationDisplayHoldRecord {
   containerIds: string[];
+  identityKey?: string;
   containerName?: string;
   displayUntil: number;
   operation: ContainerUpdateOperation;
@@ -83,7 +88,7 @@ function normalizeContainerIds(
 
 function holdMatchesTarget(
   hold: OperationDisplayHoldRecord,
-  target: string | Pick<Container, 'id' | 'name'> | OperationDisplayHoldTarget,
+  target: string | OperationDisplayHoldContainerTarget | OperationDisplayHoldTarget,
 ) {
   const targetIds =
     typeof target === 'string'
@@ -96,6 +101,26 @@ function holdMatchesTarget(
 
   if (targetIds.some((id) => hold.containerIds.includes(id))) {
     return true;
+  }
+
+  const targetIdentityKey =
+    typeof target === 'string'
+      ? undefined
+      : 'identityKey' in target &&
+          typeof target.identityKey === 'string' &&
+          target.identityKey.length > 0
+        ? target.identityKey
+        : undefined;
+
+  if (targetIdentityKey && hold.identityKey && targetIdentityKey === hold.identityKey) {
+    return true;
+  }
+
+  if (
+    (targetIds.length > 0 && hold.containerIds.length > 0) ||
+    (targetIdentityKey && hold.identityKey)
+  ) {
+    return false;
   }
 
   const targetName =
@@ -147,6 +172,10 @@ function updateHoldTargets(hold: OperationDisplayHoldRecord, target: OperationDi
       target.containerId,
       target.newContainerId,
     ),
+    identityKey:
+      typeof target.identityKey === 'string' && target.identityKey.length > 0
+        ? target.identityKey
+        : hold.identityKey,
     containerName:
       typeof target.containerName === 'string' && target.containerName.length > 0
         ? target.containerName
@@ -155,7 +184,7 @@ function updateHoldTargets(hold: OperationDisplayHoldRecord, target: OperationDi
 }
 
 function getHeldOperation(
-  target: string | Pick<Container, 'id' | 'name'> | OperationDisplayHoldTarget,
+  target: string | OperationDisplayHoldContainerTarget | OperationDisplayHoldTarget,
 ) {
   const now = Date.now();
   for (const hold of heldOperations.value.values()) {
@@ -174,6 +203,7 @@ function holdOperationDisplay(args: {
   operation: ContainerUpdateOperation;
   containerId?: string;
   newContainerId?: string;
+  identityKey?: string;
   containerName?: string;
   sortSnapshot?: ContainerSortSnapshot;
   now?: number;
@@ -191,6 +221,10 @@ function holdOperationDisplay(args: {
       args.containerId,
       args.newContainerId,
     ),
+    identityKey:
+      typeof args.identityKey === 'string' && args.identityKey.length > 0
+        ? args.identityKey
+        : existing?.identityKey,
     containerName:
       typeof args.containerName === 'string' && args.containerName.length > 0
         ? args.containerName
@@ -261,7 +295,10 @@ function clearHeldOperation(args: {
 }
 
 function getDisplayUpdateOperation(
-  target: string | Pick<Container, 'id' | 'name' | 'updateOperation'>,
+  target:
+    | string
+    | (Pick<Container, 'id' | 'name' | 'updateOperation'> &
+        Partial<Pick<Container, 'identityKey'>>),
 ) {
   return (
     getHeldOperation(target) ?? (typeof target === 'string' ? undefined : target.updateOperation)
@@ -269,7 +306,7 @@ function getDisplayUpdateOperation(
 }
 
 function getHeldState(
-  target: Pick<Container, 'id' | 'name'>,
+  target: OperationDisplayHoldContainerTarget,
 ): { operation: ContainerUpdateOperation; sortSnapshot?: ContainerSortSnapshot } | undefined {
   const now = Date.now();
   for (const hold of heldOperations.value.values()) {
@@ -350,7 +387,7 @@ export interface TerminalResolvedArgs {
  * the replayable dd:update-applied / dd:update-failed path.
  */
 function reconcileHoldsAgainstContainers(
-  containers: readonly Pick<Container, 'id' | 'name' | 'updateOperation'>[],
+  containers: readonly Pick<Container, 'id' | 'identityKey' | 'name' | 'updateOperation'>[],
   now?: number,
   onTerminalResolved?: (args: TerminalResolvedArgs) => void | Promise<void>,
 ) {
@@ -481,6 +518,7 @@ function resolveActiveOperationPhase(args: {
 export type HoldSourceContainer = Pick<
   Container,
   | 'id'
+  | 'identityKey'
   | 'name'
   | 'status'
   | 'updateKind'
@@ -594,6 +632,7 @@ export function applyUpdateOperationSseToHold(
         operation: nextOperation,
         containerId: parsed.containerId,
         newContainerId: parsed.newContainerId,
+        identityKey: container.identityKey,
         containerName: parsed.containerName,
         sortSnapshot: {
           status: container.status,

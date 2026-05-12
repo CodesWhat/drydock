@@ -21,6 +21,7 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
     icon: '',
     currentTag: 'latest',
     newTag: '1.0.0',
+    isDigestPinned: false,
     status: 'running',
     registry: 'dockerhub',
     updateKind: 'minor',
@@ -66,7 +67,7 @@ describe('useOperationDisplayHold', () => {
     expect(hold.getDisplayUpdateOperation({ id: 'container-a', name: 'ignored' })).toEqual(
       operation,
     );
-    expect(hold.getDisplayUpdateOperation({ id: 'other', name: 'web' })).toEqual(operation);
+    expect(hold.getDisplayUpdateOperation({ id: 'other', name: 'web' })).toBeUndefined();
 
     hold.clearHeldOperation({ newContainerId: 'container-b' });
     expect(hold.getDisplayUpdateOperation('web')).toBeUndefined();
@@ -386,6 +387,24 @@ describe('useOperationDisplayHold', () => {
       ...container,
       updateOperation: displayOperation,
     });
+  });
+
+  it('does not project an id-keyed hold onto a same-name sibling with a different id', async () => {
+    const hold = await loadComposable();
+    const operation = makeOperation({ id: 'op-pihole' });
+    const selected = makeContainer({ id: 'pihole-media', name: 'pi-hole' });
+    const sibling = makeContainer({ id: 'pihole-service', name: 'pi-hole' });
+
+    hold.holdOperationDisplay({
+      operationId: operation.id,
+      operation,
+      containerId: selected.id,
+      containerName: selected.name,
+      now: Date.now(),
+    });
+
+    expect(hold.projectContainerDisplayState(selected).updateOperation).toStrictEqual(operation);
+    expect(hold.projectContainerDisplayState(sibling)).toBe(sibling);
   });
 
   it('clears all held operations and cancels scheduled timers', async () => {
@@ -739,7 +758,7 @@ describe('useOperationDisplayHold', () => {
       expect(hold.heldOperations.value.get(operation.id)?.displayUntil).toBe(t0 + 1500);
     });
 
-    it('matches by container name when the container id has changed (recreate scenario)', async () => {
+    it('matches by identity key when the container id has changed (recreate scenario)', async () => {
       const hold = await loadComposable();
       const operation = makeOperation({ id: 'op-reconcile-name-fallback' });
       const t0 = Date.now();
@@ -749,13 +768,21 @@ describe('useOperationDisplayHold', () => {
         operationId: operation.id,
         operation,
         containerId: 'old-id',
+        identityKey: 'local::docker::web',
         containerName: 'web',
         now: t0,
       });
 
-      // New container has a different id but the same name (post-recreate)
+      // New container has a different id but the same stable source identity (post-recreate)
       hold.reconcileHoldsAgainstContainers(
-        [makeContainer({ id: 'new-id', name: 'web', updateOperation: undefined })],
+        [
+          makeContainer({
+            id: 'new-id',
+            identityKey: 'local::docker::web',
+            name: 'web',
+            updateOperation: undefined,
+          }),
+        ],
         t0,
       );
 

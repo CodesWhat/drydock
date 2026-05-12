@@ -25,7 +25,7 @@ interface UseContainerSsePatchPipelineInput {
   loadContainers: () => Promise<void>;
   loadDetailSecurityData: () => Promise<void>;
   reconcileHoldsAgainstContainers: (
-    containers: readonly Pick<Container, 'id' | 'name' | 'updateOperation'>[],
+    containers: readonly Pick<Container, 'id' | 'identityKey' | 'name' | 'updateOperation'>[],
   ) => void;
   refreshServerNames?: () => void;
   schedulePostTerminalReload: () => void;
