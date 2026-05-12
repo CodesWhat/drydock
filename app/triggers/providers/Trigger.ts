@@ -26,7 +26,7 @@ import {
   UpdateRequestError,
 } from '../../updates/request-update.js';
 import { BatchDispatcher, type BatchDispatchState } from './trigger-batch-dispatcher.js';
-import { Deduplicator } from './trigger-deduplicator.js';
+import { OneShotKeyTracker, RecentSignatureSuppressor } from './trigger-deduplicator.js';
 import { DigestBuffer } from './trigger-digest-buffer.js';
 import { renderBatch, renderSimple } from './trigger-expression-parser.js';
 import {
@@ -573,11 +573,13 @@ class Trigger<
   private readonly autoTriggerErrorSeenAt: Map<string, number> = new Map();
   private readonly notificationRuleWarningsSeen: Set<string> = new Set();
   private readonly autoUpdateBlockedSeen: Set<string> = new Set();
-  private readonly deduplicator = new Deduplicator({
-    recentSeenAt: this.autoTriggerErrorSeenAt,
-    onceSeen: this.autoUpdateBlockedSeen,
+  private readonly autoTriggerErrorSuppressor = new RecentSignatureSuppressor({
+    seenAt: this.autoTriggerErrorSeenAt,
     suppressionWindowMs: AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS,
     retentionMs: AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS,
+  });
+  private readonly autoUpdateBlockedTracker = new OneShotKeyTracker({
+    seenKeys: this.autoUpdateBlockedSeen,
   });
   private readonly digestBuffer: Map<string, Container> = new Map();
   private readonly batchRetryBuffer: Map<string, Container> = new Map();
@@ -823,7 +825,7 @@ class Trigger<
   ) {
     const now = Date.now();
     const signature = this.buildAutoTriggerErrorSignature(ruleId, container, errorMessage);
-    return this.deduplicator.shouldSuppressRecent(signature, now);
+    return this.autoTriggerErrorSuppressor.shouldSuppress(signature, now);
   }
 
   private buildEventBatchDispatchKey(container: Container): string {
@@ -1455,7 +1457,7 @@ class Trigger<
     const containerKey = getContainerNotificationKey(container) || fullName(container);
     const seenKey = `${containerKey}|${reason}`;
 
-    if (!this.deduplicator.markOnce(seenKey)) {
+    if (!this.autoUpdateBlockedTracker.markOnce(seenKey)) {
       return;
     }
 
@@ -1472,7 +1474,7 @@ class Trigger<
   }
 
   private clearAutoUpdateBlockedForContainerKey(containerKey: string) {
-    this.deduplicator.clearOnceByPrefix(`${containerKey}|`);
+    this.autoUpdateBlockedTracker.clearByPrefix(`${containerKey}|`);
   }
 
   private async runUpdateAvailableSimpleTrigger(
@@ -2190,7 +2192,8 @@ class Trigger<
     this.batchRetryBufferUpdatedAt.clear();
     this.clearEventBatchDispatches();
 
-    this.deduplicator.clear();
+    this.autoTriggerErrorSuppressor.clear();
+    this.autoUpdateBlockedTracker.clear();
     this.notificationRuleWarningsSeen.clear();
   }
 

@@ -1,17 +1,16 @@
-import { Deduplicator } from './trigger-deduplicator.js';
+import { OneShotKeyTracker, RecentSignatureSuppressor } from './trigger-deduplicator.js';
 
-describe('Deduplicator', () => {
+describe('RecentSignatureSuppressor', () => {
   test('suppresses recent duplicate signatures within the window', () => {
-    const deduplicator = new Deduplicator({
-      recentSeenAt: new Map(),
-      onceSeen: new Set(),
+    const suppressor = new RecentSignatureSuppressor({
+      seenAt: new Map(),
       suppressionWindowMs: 100,
       retentionMs: 1_000,
     });
 
-    expect(deduplicator.shouldSuppressRecent('smtp-down', 1_000)).toBe(false);
-    expect(deduplicator.shouldSuppressRecent('smtp-down', 1_050)).toBe(true);
-    expect(deduplicator.shouldSuppressRecent('smtp-down', 1_200)).toBe(false);
+    expect(suppressor.shouldSuppress('smtp-down', 1_000)).toBe(false);
+    expect(suppressor.shouldSuppress('smtp-down', 1_050)).toBe(true);
+    expect(suppressor.shouldSuppress('smtp-down', 1_200)).toBe(false);
   });
 
   test('prunes stale recent signatures by retention window', () => {
@@ -19,60 +18,70 @@ describe('Deduplicator', () => {
       ['stale', 1_000],
       ['fresh', 1_900],
     ]);
-    const deduplicator = new Deduplicator({
-      recentSeenAt,
-      onceSeen: new Set(),
+    const suppressor = new RecentSignatureSuppressor({
+      seenAt: recentSeenAt,
       suppressionWindowMs: 100,
       retentionMs: 500,
     });
 
-    deduplicator.pruneRecent(2_000);
+    suppressor.prune(2_000);
 
     expect(recentSeenAt.has('stale')).toBe(false);
     expect(recentSeenAt.has('fresh')).toBe(true);
   });
 
-  test('marks one-shot keys once', () => {
-    const onceSeen = new Set<string>();
-    const deduplicator = new Deduplicator({
-      recentSeenAt: new Map(),
-      onceSeen,
+  test('clears recent signature timestamps only', () => {
+    const recentSeenAt = new Map([['smtp-down', 1_000]]);
+    const suppressor = new RecentSignatureSuppressor({
+      seenAt: recentSeenAt,
       suppressionWindowMs: 100,
       retentionMs: 1_000,
     });
 
-    expect(deduplicator.markOnce('web|rejected')).toBe(true);
-    expect(deduplicator.markOnce('web|rejected')).toBe(false);
+    suppressor.clear();
+
+    expect(recentSeenAt.size).toBe(0);
+  });
+});
+
+describe('OneShotKeyTracker', () => {
+  test('marks one-shot keys once', () => {
+    const onceSeen = new Set<string>();
+    const tracker = new OneShotKeyTracker({
+      seenKeys: onceSeen,
+    });
+
+    expect(tracker.markOnce('web|rejected')).toBe(true);
+    expect(tracker.markOnce('web|rejected')).toBe(false);
     expect([...onceSeen]).toEqual(['web|rejected']);
   });
 
   test('clears one-shot keys by prefix', () => {
     const onceSeen = new Set(['web|rejected', 'web|held', 'api|rejected']);
-    const deduplicator = new Deduplicator({
-      recentSeenAt: new Map(),
-      onceSeen,
-      suppressionWindowMs: 100,
-      retentionMs: 1_000,
+    const tracker = new OneShotKeyTracker({
+      seenKeys: onceSeen,
     });
 
-    deduplicator.clearOnceByPrefix('web|');
+    tracker.clearByPrefix('web|');
 
     expect([...onceSeen]).toEqual(['api|rejected']);
   });
 
-  test('clears all tracked state', () => {
-    const recentSeenAt = new Map([['smtp-down', 1_000]]);
+  test('one-shot keys are retained until explicitly cleared by prefix', () => {
     const onceSeen = new Set(['web|rejected']);
-    const deduplicator = new Deduplicator({
-      recentSeenAt,
-      onceSeen,
-      suppressionWindowMs: 100,
-      retentionMs: 1_000,
+    const tracker = new OneShotKeyTracker({
+      seenKeys: onceSeen,
     });
 
-    deduplicator.clear();
+    expect(tracker.markOnce('web|rejected')).toBe(false);
+    expect(tracker.markOnce('web|held')).toBe(true);
 
-    expect(recentSeenAt.size).toBe(0);
+    tracker.clearByPrefix('api|');
+
+    expect([...onceSeen]).toEqual(['web|rejected', 'web|held']);
+
+    tracker.clearByPrefix('web|');
+
     expect(onceSeen.size).toBe(0);
   });
 });
