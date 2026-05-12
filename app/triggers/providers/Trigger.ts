@@ -25,6 +25,7 @@ import {
   enqueueContainerUpdates,
   UpdateRequestError,
 } from '../../updates/request-update.js';
+import { BatchDispatcher, type BatchDispatchState } from './trigger-batch-dispatcher.js';
 import { renderBatch, renderSimple } from './trigger-expression-parser.js';
 import {
   isThresholdReached as isThresholdReachedHelper,
@@ -530,10 +531,7 @@ interface ContainerReport {
   changed: boolean;
 }
 
-interface EventBatchDispatchState {
-  containers: Map<string, Container>;
-  timer?: ReturnType<typeof setTimeout>;
-}
+type EventBatchDispatchState = BatchDispatchState<Container>;
 
 type BufferedContainerMap = Map<string, Container>;
 type BufferedContainerTimestamps = Map<string, number>;
@@ -592,6 +590,18 @@ class Trigger<
   private batchRetryBufferMaxEntries = 5_000;
   private readonly eventBatchDispatches: Map<NotificationRuleId, EventBatchDispatchState> =
     new Map();
+  private readonly eventBatchDispatcher = new BatchDispatcher<NotificationRuleId, Container>({
+    dispatches: this.eventBatchDispatches,
+    flushDelayMs: AUTO_EVENT_BATCH_FLUSH_DELAY_MS,
+    getKey: (container) => this.buildEventBatchDispatchKey(container),
+    flush: (ruleId, containers) => this.flushEventBatchDispatch(ruleId, containers),
+    onUnexpectedError: (ruleId, e) => {
+      this.log.warn(
+        `Unexpected error flushing ${ruleId} event batch (${Trigger.getErrorMessage(e)})`,
+      );
+      this.log.debug(e);
+    },
+  });
   private digestCronTask?: ScheduledTask;
   private isDigestFlushInProgress = false;
   private unregisterSecurityScanCycleComplete?: () => void;
@@ -806,19 +816,6 @@ class Trigger<
     );
   }
 
-  private getOrCreateEventBatchDispatch(ruleId: NotificationRuleId): EventBatchDispatchState {
-    const existing = this.eventBatchDispatches.get(ruleId);
-    if (existing) {
-      return existing;
-    }
-
-    const created: EventBatchDispatchState = {
-      containers: new Map(),
-    };
-    this.eventBatchDispatches.set(ruleId, created);
-    return created;
-  }
-
   private buildEventBatchDispatchKey(container: Container): string {
     return getContainerNotificationKey(container) || fullName(container);
   }
@@ -843,35 +840,11 @@ class Trigger<
   }
 
   private queueEventBatchDispatch(ruleId: NotificationRuleId, container: Container) {
-    const eventBatchDispatch = this.getOrCreateEventBatchDispatch(ruleId);
-    eventBatchDispatch.containers.set(this.buildEventBatchDispatchKey(container), container);
-
-    if (eventBatchDispatch.timer) {
-      clearTimeout(eventBatchDispatch.timer);
-    }
-
-    eventBatchDispatch.timer = setTimeout(() => {
-      const containers = Array.from(eventBatchDispatch.containers.values());
-      eventBatchDispatch.containers.clear();
-      eventBatchDispatch.timer = undefined;
-      void this.flushEventBatchDispatch(ruleId, containers).catch((e: unknown) => {
-        this.log.warn(
-          `Unexpected error flushing ${ruleId} event batch (${Trigger.getErrorMessage(e)})`,
-        );
-        this.log.debug(e);
-      });
-    }, AUTO_EVENT_BATCH_FLUSH_DELAY_MS);
+    this.eventBatchDispatcher.queue(ruleId, container);
   }
 
   private clearEventBatchDispatches() {
-    for (const eventBatchDispatch of this.eventBatchDispatches.values()) {
-      if (eventBatchDispatch.timer) {
-        clearTimeout(eventBatchDispatch.timer);
-      }
-      eventBatchDispatch.containers.clear();
-      eventBatchDispatch.timer = undefined;
-    }
-    this.eventBatchDispatches.clear();
+    this.eventBatchDispatcher.clear();
   }
 
   private deleteBufferedContainerEntry(
