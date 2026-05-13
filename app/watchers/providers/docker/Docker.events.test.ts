@@ -756,6 +756,50 @@ describe('Docker Watcher', () => {
     });
   });
 
+  describe('Additional Coverage - applyDerivedLabelFieldsToContainer wiring', () => {
+    test('should re-derive tagFamily / includeTags / transformTags from new labels on a real start event', async () => {
+      await docker.register('watcher', 'docker', 'test', {});
+      docker.log = createMockLogWithChild(['info']);
+
+      // Existing container has old labels with no tag filter
+      const existing = {
+        id: 'c-wiring',
+        name: 'wiring-test',
+        displayName: 'wiring-test',
+        status: 'running',
+        labels: {},
+        includeTags: undefined as string | undefined,
+        excludeTags: undefined as string | undefined,
+        transformTags: undefined as string | undefined,
+        tagFamily: undefined as string | undefined,
+        image: { name: 'library/nginx' },
+      };
+      storeContainer.getContainer.mockReturnValue(existing);
+
+      // Inspect returns updated labels with real dd.tag.* values
+      mockContainer.inspect.mockResolvedValue({
+        Name: '/wiring-test',
+        State: { Status: 'running' },
+        Config: {
+          Labels: {
+            'dd.tag.include': '^3\\.',
+            'dd.tag.exclude': '^alpha',
+            'dd.tag.family': 'loose',
+          },
+        },
+      });
+
+      // Fire the start event — uses the REAL applyDerivedLabelFieldsToContainer
+      await docker.onDockerEvent(Buffer.from('{"Action":"start","id":"c-wiring"}\n'));
+
+      // Assert that derived fields were updated via real wiring (not a mock)
+      expect(existing.includeTags).toBe('^3\\.');
+      expect(existing.excludeTags).toBe('^alpha');
+      expect(existing.tagFamily).toBe('loose');
+      expect(storeContainer.updateContainer).toHaveBeenCalledWith(existing);
+    });
+  });
+
   describe('Additional Coverage - processDockerEventPayload', () => {
     test('should treat empty payload as processed', async () => {
       docker.log = createMockLog(['debug']);

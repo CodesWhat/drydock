@@ -651,6 +651,54 @@ describe('container event update helpers', () => {
     expect(updateContainer).toHaveBeenCalledWith(container);
   });
 
+  test('processDockerEvent re-derives label fields on die event when labels changed', async () => {
+    const ensureRemoteAuthHeaders = vi.fn().mockResolvedValue(undefined);
+    const inspectContainer = vi.fn().mockResolvedValue({
+      Name: '/my-app',
+      State: { Status: 'exited' },
+      Config: { Labels: { 'dd.tag.include': '^2\\.', 'dd.tag.family': 'loose' } },
+    });
+    const container = createMockContainer({
+      name: 'my-app',
+      displayName: 'my-app',
+      status: 'running',
+      labels: { 'dd.tag.include': '^1\\.' },
+      includeTags: '^1\\.',
+      tagFamily: undefined,
+    });
+    const getContainerFromStore = vi.fn().mockReturnValue(container);
+    const applyDerivedLabelFieldsToContainer = vi.fn((c, labels) => {
+      c.includeTags = labels['dd.tag.include'];
+      c.tagFamily = labels['dd.tag.family'];
+    });
+    const updateContainerMock = vi.fn();
+
+    await processDockerEvent(
+      { Action: 'die', id: 'container123' },
+      {
+        watchCronDebounced: vi.fn(),
+        ensureRemoteAuthHeaders,
+        inspectContainer,
+        getContainerFromStore,
+        updateContainerFromInspect: (found, inspected) =>
+          updateContainerFromInspect(found, inspected, {
+            getCustomDisplayNameFromLabels: () => undefined,
+            updateContainer: updateContainerMock,
+            applyDerivedLabelFieldsToContainer,
+          }),
+        debug: vi.fn(),
+      },
+    );
+
+    expect(applyDerivedLabelFieldsToContainer).toHaveBeenCalledWith(
+      container,
+      expect.objectContaining({ 'dd.tag.include': '^2\\.', 'dd.tag.family': 'loose' }),
+    );
+    expect(container.includeTags).toBe('^2\\.');
+    expect(container.tagFamily).toBe('loose');
+    expect(updateContainerMock).toHaveBeenCalledWith(container);
+  });
+
   test('updateContainerFromInspect does not call applyDerivedLabelFieldsToContainer when labels are unchanged', () => {
     const container = createMockContainer({
       name: 'my-app',

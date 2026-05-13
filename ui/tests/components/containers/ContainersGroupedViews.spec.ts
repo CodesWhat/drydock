@@ -2522,6 +2522,40 @@ describe('ContainersGroupedViews', () => {
       expect(text).toContain('sha256:deadbeefcafe…');
     });
 
+    it('renders currentTag + digest delta when BOTH tag and digest change simultaneously (hybrid both-halves)', async () => {
+      // Both tag and digest change: e.g. 1.2.3 → 1.2.4 AND sha256:aaa → sha256:bbb.
+      // updateKind is 'digest' so the component takes the hybrid digest branch.
+      // It renders currentTag (muted) plus the digest short-form delta.
+      const wrapper = mountDigestContainer({
+        currentTag: '1.2.3',
+        newTag: '1.2.4',
+        isDigestPinned: false,
+        updateKind: 'digest',
+      });
+      const row = rowByName(wrapper, 'alpha');
+      const text = row.text();
+      // currentTag is shown in the muted span
+      expect(text).toContain('1.2.3');
+      // digest delta is shown (both sides)
+      expect(text).toContain('sha256:bcf6335aabbb…');
+      expect(text).toContain('sha256:deadbeefcafe…');
+    });
+
+    it('does NOT render two identical full digest strings for a hybrid both-halves-change row (regression)', async () => {
+      // Regression guard: the full raw digest should not appear twice in the row
+      // even when both tag and digest change simultaneously.
+      const wrapper = mountDigestContainer({
+        currentTag: '1.2.3',
+        newTag: '1.2.4',
+        isDigestPinned: false,
+        updateKind: 'digest',
+      });
+      const row = rowByName(wrapper, 'alpha');
+      const text = row.text();
+      const occurrences = text.split(digestLocal).length - 1;
+      expect(occurrences).toBeLessThan(2);
+    });
+
     it('does NOT render the registry-error pill in the version cell when newTag is set', async () => {
       const container = makeContainer({
         id: 'c-ratelimited-with-newtag',
