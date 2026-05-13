@@ -2709,3 +2709,15 @@ test('identityKey: stored value is replaced by the freshly derived value on vali
   );
   expect(validated.identityKey).toBe('local::test::test');
 });
+
+test('deriveContainerIdentityKey returns undefined when watcher is missing', () => {
+  expect(
+    container.deriveContainerIdentityKey({ name: 'nginx', watcher: '' } as never),
+  ).toBeUndefined();
+});
+
+test('deriveContainerIdentityKey returns undefined when name is missing', () => {
+  expect(
+    container.deriveContainerIdentityKey({ name: '', watcher: 'local' } as never),
+  ).toBeUndefined();
+});

@@ -5862,8 +5862,8 @@ describe('digest mode', () => {
       containers: new Map([['test_web', { name: 'web', watcher: 'test' }]]),
     };
 
-    (trigger as any).eventBatchDispatches.set('update-applied', scheduledDispatch);
-    (trigger as any).eventBatchDispatches.set('update-failed', unscheduledDispatch);
+    (trigger as any).eventBatchDispatcher.dispatches.set('update-applied', scheduledDispatch);
+    (trigger as any).eventBatchDispatcher.dispatches.set('update-failed', unscheduledDispatch);
 
     (trigger as any).clearEventBatchDispatches();
 
@@ -5872,7 +5872,7 @@ describe('digest mode', () => {
     expect(scheduledDispatch.timer).toBeUndefined();
     expect(unscheduledDispatch.containers.size).toBe(0);
     expect(unscheduledDispatch.timer).toBeUndefined();
-    expect((trigger as any).eventBatchDispatches.size).toBe(0);
+    expect((trigger as any).eventBatchDispatcher.dispatches.size).toBe(0);
   });
 
   test('handleContainerUpdateAppliedEvent should evict container from digest buffer', async () => {

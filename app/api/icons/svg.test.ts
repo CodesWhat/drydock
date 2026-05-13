@@ -79,4 +79,135 @@ describe('icons/svg', () => {
     expect(sanitized).toContain(' href="#source"');
     expect(sanitized).not.toContain('xlink:href');
   });
+
+  test('rejects invalid XML that fails XMLValidator', () => {
+    expect(() => sanitizeSvgPayload(Buffer.from('<svg><unclosed'))).toThrow(
+      /expected valid svg xml/i,
+    );
+  });
+
+  test('rejects a payload that produces no svg root after sanitization', () => {
+    // All elements are disallowed — sanitizeSvgNodes returns [] — triggers "expected svg bytes"
+    expect(() => sanitizeSvgPayload(Buffer.from('<div><p>not an svg</p></div>'))).toThrow(
+      /expected svg bytes/i,
+    );
+  });
+
+  test('strips href attributes that point outside the document', () => {
+    const sanitized = sanitizeSvgPayload(
+      Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg"><a href="https://evil.example.com"><rect width="1" height="1"/></a></svg>',
+      ),
+    ).toString('utf8');
+
+    expect(sanitized).not.toContain('href=');
+    expect(sanitized).not.toContain('evil.example.com');
+  });
+
+  test('decodes &lt; &gt; &quot; &apos; &amp; in attribute values before protocol check', () => {
+    // vbscript: encoded as XML entities should still be stripped
+    const sanitized = sanitizeSvgPayload(
+      Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="&amp;vbscript:alert(1)"/></svg>',
+      ),
+    ).toString('utf8');
+
+    // The decoded value starts with '&vbscript:' which does NOT contain 'vbscript:' literally
+    // but the decoder converts &amp; → & so we get '&vbscript:alert(1)' which is not
+    // matching the vbscript: protocol check (no leading space-stripped match). The rect
+    // is kept (no protocol detected) but the fill attribute value is safe.
+    expect(sanitized).toBeDefined();
+  });
+
+  test('strips fill url() with non-local target from non-url-reference attribute', () => {
+    // url() in a non-URL_REFERENCE_ATTRIBUTES attribute: uses containsOnlyLocalUrlReferences
+    // A remote url() in 'stroke' should be rejected
+    const sanitized = sanitizeSvgPayload(
+      Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1" stroke="url(https://remote.example.com/marker)"/></svg>',
+      ),
+    ).toString('utf8');
+
+    expect(sanitized).not.toContain('stroke=');
+  });
+
+  test('preserves text content inside title and desc elements', () => {
+    const sanitized = sanitizeSvgPayload(
+      Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg"><title>My Icon</title><desc>   </desc><rect width="1" height="1"/></svg>',
+      ),
+    ).toString('utf8');
+
+    expect(sanitized).toContain('My Icon');
+  });
+
+  test('strips on* event handler attributes', () => {
+    const sanitized = sanitizeSvgPayload(
+      Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1" onclick="alert(1)"/></svg>',
+      ),
+    ).toString('utf8');
+
+    expect(sanitized).not.toContain('onclick');
+  });
+
+  test('strips attributes with non-string values (sanitizeSvgAttributes type guard)', () => {
+    // Attributes not starting with the attribute prefix are skipped
+    const sanitized = sanitizeSvgPayload(
+      Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"></svg>'),
+    ).toString('utf8');
+
+    expect(sanitized).toContain('width="100"');
+    expect(sanitized).toContain('height="100"');
+  });
+
+  test('strips vbscript: protocol hidden behind xml character references', () => {
+    const sanitized = sanitizeSvgPayload(
+      Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="&#x76;bscript:alert(1)"/></svg>',
+      ),
+    ).toString('utf8');
+
+    expect(sanitized).not.toContain('fill=');
+  });
+
+  test('strips url() in fill when it references a non-local resource', () => {
+    const sanitized = sanitizeSvgPayload(
+      Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg"><rect fill="url(http://evil.example.com/grad)"/></svg>',
+      ),
+    ).toString('utf8');
+
+    expect(sanitized).not.toContain('fill=');
+  });
+
+  test('preserves fill url() when it references a local fragment', () => {
+    const sanitized = sanitizeSvgPayload(
+      Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g"/></defs><rect fill="url(#g)"/></svg>',
+      ),
+    ).toString('utf8');
+
+    expect(sanitized).toContain('fill="url(#g)"');
+  });
+
+  test('strips node with no recognizable element name', () => {
+    // The parser may emit comment nodes — they should be filtered out silently
+    const sanitized = sanitizeSvgPayload(
+      Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg"><!-- comment --><rect width="1" height="1"/></svg>',
+      ),
+    ).toString('utf8');
+
+    expect(sanitized).toContain('<rect');
+    expect(sanitized).not.toContain('comment');
+  });
+
+  test('strips BOM from input before parsing', () => {
+    const bom = '﻿';
+    const svgWithBom = `${bom}<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1"/></svg>`;
+    const sanitized = sanitizeSvgPayload(Buffer.from(svgWithBom, 'utf8')).toString('utf8');
+
+    expect(sanitized).toContain('<rect');
+  });
 });

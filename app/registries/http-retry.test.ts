@@ -336,4 +336,13 @@ describe('withRetry', () => {
     expect(result.headers['x-ratelimit-remaining']).toBe('99');
     expect(result.data).toEqual({ val: 1 });
   });
+
+  test('throws lastError when maxRetries is negative (loop body never executes)', async () => {
+    const request = vi.fn().mockRejectedValue(new Error('should not be called'));
+
+    // maxRetries=-1 means the loop condition (0 <= -1) is false immediately,
+    // so lastError stays undefined and the post-loop throw executes.
+    await expect(withRetry(request, { maxRetries: -1 })).rejects.toBeUndefined();
+    expect(request).not.toHaveBeenCalled();
+  });
 });

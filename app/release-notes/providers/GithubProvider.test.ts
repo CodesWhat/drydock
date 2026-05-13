@@ -308,4 +308,19 @@ describe('release-notes/providers/GithubProvider', () => {
 
     vi.useRealTimers();
   });
+
+  test('fetchByTag logs the error message when a network error object with a message is thrown', async () => {
+    const provider = new GithubProvider();
+    // Throw an actual Error (has a .message property) with no .response — hits getDebugErrorMessage line 31
+    mockAxiosGet.mockRejectedValueOnce(
+      new Error('ECONNREFUSED connect ECONNREFUSED 127.0.0.1:443'),
+    );
+
+    const result = await provider.fetchByTag('github.com/acme/service', '1.0.0');
+
+    expect(result).toBeUndefined();
+    expect(mockLogDebug).toHaveBeenCalledWith(
+      expect.stringContaining('ECONNREFUSED connect ECONNREFUSED 127.0.0.1:443'),
+    );
+  });
 });

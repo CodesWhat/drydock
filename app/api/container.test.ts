@@ -1149,6 +1149,40 @@ describe('Container Router', () => {
   });
 
   describe('getContainerSbom', () => {
+    beforeEach(() => {
+      // SBOM endpoint requires enabled scanner; individual tests override as needed.
+      getSecurityConfiguration.mockReturnValue({
+        enabled: true,
+        scanner: 'trivy',
+        signature: { verify: false },
+        sbom: { enabled: false, formats: [] },
+      });
+    });
+
+    afterEach(() => {
+      getSecurityConfiguration.mockReturnValue({
+        enabled: false,
+        scanner: undefined,
+        signature: { verify: false },
+        sbom: { enabled: false, formats: [] },
+      });
+    });
+
+    test('should return 503 when security scanner is disabled', async () => {
+      getSecurityConfiguration.mockReturnValue({
+        enabled: false,
+        scanner: undefined,
+        signature: { verify: false },
+        sbom: { enabled: false, formats: [] },
+      });
+      storeContainer.getContainer.mockReturnValue({ id: 'c1' });
+      const handler = getHandler('get', '/:id/sbom');
+      const res = createResponse();
+      await handler({ params: { id: 'c1' }, query: {} }, res);
+      expect(res.status).toHaveBeenCalledWith(503);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Security scanner is not configured' });
+    });
+
     test('should return 404 when container not found', async () => {
       storeContainer.getContainer.mockReturnValue(undefined);
       const handler = getHandler('get', '/:id/sbom');

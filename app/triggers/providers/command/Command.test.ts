@@ -221,11 +221,13 @@ test('runCommand should coerce null, numeric, and control-character env values',
     control_value: 'a\x00b\x1bc\x7fd',
     null_value: null,
     number_value: 42,
+    undefined_value: undefined,
   });
 
   expect(capturedEnv?.null_value).toBe('');
   expect(capturedEnv?.number_value).toBe('42');
   expect(capturedEnv?.control_value).toBe('a_b_c_d');
+  expect(capturedEnv?.undefined_value).toBeUndefined();
 });
 
 test('trigger should sanitize shell metacharacters from container-derived env vars', async () => {

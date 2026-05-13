@@ -203,3 +203,9 @@ test('dismiss should do nothing when triggerResult is undefined', async () => {
   await gotify.dismiss('watcher_container1', undefined);
   expect(gotify.client.message.deleteMessage).not.toHaveBeenCalled();
 });
+
+test('createRejectedAsyncMethod passes through an Error argument unchanged', async () => {
+  const cause = new Error('pre-built error');
+  const rejectedFn = createRejectedAsyncMethod(cause);
+  await expect(rejectedFn()).rejects.toBe(cause);
+});

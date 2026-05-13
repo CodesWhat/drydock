@@ -58,6 +58,14 @@ describe('getBucketForUrl cache', () => {
     const b = getBucketForUrl('https://registry-1.docker.io/v2/b');
     expect(a).not.toBe(b);
   });
+
+  test('falls back to raw string as hostname when URL is unparseable', () => {
+    // ':::invalid:::' causes new URL() to throw — the catch block uses the raw string as key
+    const bucket = getBucketForUrl(':::invalid:::');
+    expect(bucket.key).toBe(':::invalid:::');
+    expect(bucket.ratePerSec).toBe(5);
+    expect(bucket.burst).toBe(10);
+  });
 });
 
 describe('acquireToken', () => {

@@ -1338,5 +1338,40 @@ describe('Docker Watcher', () => {
         'Unable to inspect image for container 123: inspect failed',
       );
     });
+
+    test('should fall back past hybrid path when port-in-hostname ref has no tag after parse', async () => {
+      // 'localhost:5000/image@sha256:abc' has a colon before '@sha256:' (port 5000),
+      // so it enters the hybrid branch but parsedHybrid.tag is falsy — falls through
+      // to the RepoTags branch.
+      const hybridRef = 'localhost:5000/image@sha256:abcdef123456';
+      const container = await setupContainerDetailTest(docker, {
+        container: {
+          Image: hybridRef,
+          Names: ['/portimage'],
+        },
+        imageDetails: {
+          RepoTags: ['localhost:5000/image:stable'],
+          Config: {
+            Image: hybridRef,
+          },
+        },
+        parseImpl: (value) => {
+          if (value === hybridRef) {
+            // Parsed hybrid: no tag (only digest)
+            return { domain: 'localhost:5000', path: 'image', digest: 'sha256:abcdef123456' };
+          }
+          if (value === 'localhost:5000/image:stable') {
+            return { domain: 'localhost:5000', path: 'image', tag: 'stable' };
+          }
+          return { path: 'image', tag: 'stable' };
+        },
+        validateImpl: (c) => c,
+      });
+
+      const result = await docker.addImageDetailsToContainer(container);
+      expect(result).toBeDefined();
+      // Should have fallen through to use RepoTags
+      expect(result.image.tag.value).toBe('stable');
+    });
   });
 });
