@@ -101,6 +101,7 @@ DOCKER_ARGS+=(--env "DD_REGISTRY_GCR_PRIVATE_PRIVATEKEY=${GCR_PRIVATE_KEY:------
 DOCKER_ARGS+=(
 	--env DD_AUTH_BASIC_JOHN_USER="john"
 	--env DD_AUTH_BASIC_JOHN_HASH="argon2id\$65536\$3\$4\$ZHJ5ZG9jay1iYXNpYy1hdXRoLXNhbHQ=\$GumQTfvOsp+hTyVxLIQvvP2izj/+lCCVYTPnwm9+ZC0+x0OQomJgNgIYFI7e5iUZtblM2rlIIYIwxaAeegWMKQ=="
+	--env DD_SESSION_SECRET="drydock-e2e-ci-session-secret-do-not-use-in-prod-9c4a2f8b1d6e7a3f"
 	drydock
 )
 
