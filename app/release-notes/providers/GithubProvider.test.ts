@@ -82,8 +82,9 @@ describe('release-notes/providers/GithubProvider', () => {
     );
   });
 
-  test('fetchByTag should stop on non-rate-limited 403 responses', async () => {
+  test('fetchByTag should stop on non-rate-limited 403 responses with no token', async () => {
     const provider = new GithubProvider();
+    mockGetGhcrTokenFallback.mockReturnValueOnce(undefined);
     mockAxiosGet.mockRejectedValueOnce({
       response: {
         status: 403,
@@ -95,7 +96,8 @@ describe('release-notes/providers/GithubProvider', () => {
     const releaseNotes = await provider.fetchByTag('github.com/acme/service', '1.0.0');
 
     expect(releaseNotes).toBeUndefined();
-    expect(mockLogDebug).toHaveBeenCalledTimes(1);
+    // No token involved — neither debug nor warn for auth rejection
+    expect(mockLogDebug).not.toHaveBeenCalled();
     expect(mockLogWarn).not.toHaveBeenCalled();
   });
 
@@ -233,6 +235,59 @@ describe('release-notes/providers/GithubProvider', () => {
     expect(mockAxiosGet).toHaveBeenCalledTimes(2);
 
     vi.useRealTimers();
+  });
+
+  test('fetchByTag logs warn when GHCR fallback token is rejected with 401', async () => {
+    const provider = new GithubProvider();
+    mockGetGhcrTokenFallback.mockReturnValueOnce('ghcr-fallback-token');
+    mockAxiosGet.mockRejectedValueOnce({
+      response: { status: 401, headers: {} },
+      message: 'unauthorized',
+    });
+
+    const result = await provider.fetchByTag('github.com/acme/service', '1.0.0');
+
+    expect(result).toBeUndefined();
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      expect.stringMatching(/GHCR token fallback.*rejected/i),
+    );
+    expect(mockLogDebug).not.toHaveBeenCalled();
+  });
+
+  test('fetchByTag logs different warn when configured token is rejected with 401', async () => {
+    const provider = new GithubProvider();
+    mockAxiosGet.mockRejectedValueOnce({
+      response: { status: 401, headers: {} },
+      message: 'unauthorized',
+    });
+
+    const result = await provider.fetchByTag(
+      'github.com/acme/service',
+      '1.0.0',
+      'explicit-bad-token',
+    );
+
+    expect(result).toBeUndefined();
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      expect.stringMatching(/Configured GITHUB_TOKEN rejected/i),
+    );
+    expect(mockLogDebug).not.toHaveBeenCalled();
+  });
+
+  test('fetchByTag makes unauthenticated request and returns undefined on 401 when no token at all', async () => {
+    const provider = new GithubProvider();
+    mockGetGhcrTokenFallback.mockReturnValueOnce(undefined);
+    mockAxiosGet.mockRejectedValueOnce({
+      response: { status: 401, headers: {} },
+      message: 'unauthorized',
+    });
+
+    const result = await provider.fetchByTag('github.com/acme/service', '1.0.0');
+
+    expect(result).toBeUndefined();
+    // No special warn for unauthenticated case, and no debug — just a silent return
+    expect(mockLogWarn).not.toHaveBeenCalled();
+    expect(mockLogDebug).not.toHaveBeenCalled();
   });
 
   test('fetchByTag returns undefined after rate-limit 429 exhausts all retries', async () => {

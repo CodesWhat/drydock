@@ -156,6 +156,14 @@ class GithubProvider implements ReleaseNotesProviderClient {
           log.warn('GitHub release notes lookup is rate-limited');
           return undefined;
         }
+        if (statusCode === 401 || statusCode === 403) {
+          if (token === undefined && effectiveToken !== undefined) {
+            log.warn('GHCR token fallback was rejected by GitHub API — check token scopes');
+          } else if (token !== undefined) {
+            log.warn('Configured GITHUB_TOKEN rejected by GitHub API — check token scopes');
+          }
+          return undefined;
+        }
         log.debug(`Unable to fetch GitHub release notes (${getDebugErrorMessage(error)})`);
         return undefined;
       }

@@ -15,7 +15,7 @@ export function getGhcrTokenFallback(): string | undefined {
     // Duck-type: we only need the provider type and the token field.
     const cfg = (instance as { type?: string; configuration?: { token?: string } }).configuration;
     const type = (instance as { type?: string }).type;
-    if (type === 'ghcr' && typeof cfg?.token === 'string' && cfg.token.length > 0) {
+    if (type === 'ghcr' && typeof cfg?.token === 'string' && cfg.token.trim().length > 0) {
       return cfg.token;
     }
   }
