@@ -18,6 +18,7 @@ const expectedCrowdinLocaleMapping = {
   'pt-BR': 'pt-BR',
   ru: 'ru',
   tr: 'tr',
+  uk: 'uk',
   vi: 'vi',
   'zh-CN': 'zh-CN',
   'zh-TW': 'zh-TW',
