@@ -407,6 +407,59 @@ describe('useOperationDisplayHold', () => {
     expect(hold.projectContainerDisplayState(sibling)).toBe(sibling);
   });
 
+  it('does not project a hold across same-name compose siblings with distinct backend identityKeys (#289)', async () => {
+    // Mirrors the production code path: SSE event arrives with the container's
+    // backend-derived identityKey, and projectContainerDisplayState is called
+    // for every container in the list. Same-name siblings from different
+    // compose projects must NOT share the hold.
+    const hold = await loadComposable();
+    const operation = makeOperation({ id: 'op-pihole-media' });
+    const selected = makeContainer({
+      id: 'pihole-media',
+      name: 'pi-hole',
+      identityKey: 'local::docker::compose:media/pi-hole',
+    });
+    const sibling = makeContainer({
+      id: 'pihole-service',
+      name: 'pi-hole',
+      identityKey: 'local::docker::compose:services/pi-hole',
+    });
+
+    hold.holdOperationDisplay({
+      operationId: operation.id,
+      operation,
+      containerId: selected.id,
+      identityKey: selected.identityKey,
+      containerName: selected.name,
+      now: Date.now(),
+    });
+
+    expect(hold.projectContainerDisplayState(selected).updateOperation).toStrictEqual(operation);
+    expect(hold.projectContainerDisplayState(sibling)).toBe(sibling);
+  });
+
+  it('still projects a hold onto the same compose container after id changes (recreate, #289)', async () => {
+    const hold = await loadComposable();
+    const operation = makeOperation({ id: 'op-pihole-media' });
+    const identityKey = 'local::docker::compose:media/pi-hole';
+
+    hold.holdOperationDisplay({
+      operationId: operation.id,
+      operation,
+      containerId: 'pihole-media-old',
+      identityKey,
+      containerName: 'pi-hole',
+      now: Date.now(),
+    });
+
+    const recreated = makeContainer({
+      id: 'pihole-media-new',
+      name: 'pi-hole',
+      identityKey,
+    });
+    expect(hold.projectContainerDisplayState(recreated).updateOperation).toStrictEqual(operation);
+  });
+
   it('clears all held operations and cancels scheduled timers', async () => {
     const hold = await loadComposable();
     const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
