@@ -12,6 +12,7 @@ const expectedCrowdinLocaleMapping = {
   fr: 'fr',
   it: 'it',
   ja: 'ja',
+  ko: 'ko',
   nl: 'nl',
   pl: 'pl',
   'pt-BR': 'pt-BR',

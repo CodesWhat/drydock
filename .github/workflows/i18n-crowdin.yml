@@ -41,6 +41,7 @@ jobs:
             --language=fr
             --language=it
             --language=ja
+            --language=ko
             --language=nl
             --language=pl
             --language=pt-BR
