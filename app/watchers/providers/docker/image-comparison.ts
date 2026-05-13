@@ -9,6 +9,7 @@ import {
 } from '../../../model/container.js';
 import type Registry from '../../../registries/Registry.js';
 import * as registry from '../../../registry/index.js';
+import { isCredentialedInstance } from '../../../registry/index.js';
 import { suggest as suggestTag } from '../../../tag/suggest.js';
 import { getErrorMessage } from '../../../util/error.js';
 import { getImageForRegistryLookup } from './docker-helpers.js';
@@ -161,16 +162,7 @@ function pickRegistryProvider(image: ContainerImage): Registry | undefined {
     return matches[0];
   }
 
-  const isCredentialed = (p: Registry): boolean =>
-    Boolean(
-      (p.configuration as Record<string, unknown>)?.token ||
-        (p.configuration as Record<string, unknown>)?.password ||
-        (p.configuration as Record<string, unknown>)?.auth ||
-        (p.configuration as Record<string, unknown>)?.clientemail ||
-        (p.configuration as Record<string, unknown>)?.privatekey ||
-        (p.configuration as Record<string, unknown>)?.accesskeyid ||
-        (p.configuration as Record<string, unknown>)?.secretaccesskey,
-    );
+  const isCredentialed = (p: Registry): boolean => isCredentialedInstance(p.configuration);
 
   const credentialed = matches.filter(isCredentialed).sort((a, b) => a.name.localeCompare(b.name));
   if (credentialed.length > 0) {

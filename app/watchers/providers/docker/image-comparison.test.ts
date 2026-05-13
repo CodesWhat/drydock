@@ -5,9 +5,13 @@ const { mockGetState, mockSuggestTag } = vi.hoisted(() => ({
   mockSuggestTag: vi.fn(),
 }));
 
-vi.mock('../../../registry/index.js', () => ({
-  getState: mockGetState,
-}));
+vi.mock('../../../registry/index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../registry/index.js')>();
+  return {
+    ...actual,
+    getState: mockGetState,
+  };
+});
 
 vi.mock('../../../tag/suggest.js', () => ({
   suggest: mockSuggestTag,
@@ -412,6 +416,39 @@ describe('image-comparison', () => {
         const result = normalizeContainer(container as never);
 
         expect(result.image.registry.name).toBe('hub.public');
+      });
+
+      test('whitespace-only token is treated as anonymous — public wins alphabetical tie-break', () => {
+        // Registry with token='   ' must NOT be treated as credentialed
+        mockGetState.mockReturnValue({
+          registry: {
+            'ghcr.aaa': makeProvider('ghcr.aaa', {}),
+            'ghcr.ws': makeProvider('ghcr.ws', { token: '   ' }),
+          },
+        });
+
+        const container = createBaseContainer({ url: 'ghcr.io' });
+        const result = normalizeContainer(container as never);
+
+        // Both are treated as anonymous; alphabetical tie-break picks 'aaa'
+        expect(result.image.registry.name).toBe('ghcr.aaa');
+      });
+
+      test('ECR-style accesskeyid/secretaccesskey causes registry to be picked as credentialed', () => {
+        mockGetState.mockReturnValue({
+          registry: {
+            'ecr.public': makeProvider('ecr.public', {}),
+            'ecr.creds': makeProvider('ecr.creds', {
+              accesskeyid: 'AKIAIOSFODNN7EXAMPLE',
+              secretaccesskey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+            }),
+          },
+        });
+
+        const container = createBaseContainer({ url: '123456789.dkr.ecr.us-east-1.amazonaws.com' });
+        const result = normalizeContainer(container as never);
+
+        expect(result.image.registry.name).toBe('ecr.creds');
       });
     });
   });

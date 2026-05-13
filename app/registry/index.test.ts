@@ -490,6 +490,43 @@ test('registerRegistries should not suppress public default when only a username
   expect(Object.keys(registry.getState().registry)).toContain('ghcr.public');
 });
 
+describe('isCredentialedInstance', () => {
+  test('whitespace-only token does NOT count as credentialed', () => {
+    expect(registry.isCredentialedInstance({ token: '   ' })).toBe(false);
+  });
+
+  test('whitespace-only password does NOT count as credentialed', () => {
+    expect(registry.isCredentialedInstance({ password: '\t\n' })).toBe(false);
+  });
+
+  test('ECR-style accesskeyid/secretaccesskey counts as credentialed', () => {
+    expect(
+      registry.isCredentialedInstance({
+        accesskeyid: 'AKIAIOSFODNN7EXAMPLE',
+        secretaccesskey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+      }),
+    ).toBe(true);
+  });
+
+  test('only secretaccesskey present is sufficient to count as credentialed', () => {
+    expect(registry.isCredentialedInstance({ secretaccesskey: 'abc123' })).toBe(true);
+  });
+
+  test('username alone (no secret field) does NOT count as credentialed', () => {
+    expect(registry.isCredentialedInstance({ username: 'onlyuser' })).toBe(false);
+  });
+
+  test('non-object values return false', () => {
+    expect(registry.isCredentialedInstance(null)).toBe(false);
+    expect(registry.isCredentialedInstance('string')).toBe(false);
+    expect(registry.isCredentialedInstance(42)).toBe(false);
+  });
+
+  test('valid token counts as credentialed', () => {
+    expect(registry.isCredentialedInstance({ token: 'ghp_secret' })).toBe(true);
+  });
+});
+
 test('registerRegistries should keep fail-closed behavior for incomplete hub.private auth', async () => {
   const spyLog = vi.spyOn(registry.testable_log, 'warn');
   registries = {

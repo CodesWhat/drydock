@@ -507,7 +507,7 @@ async function registerTriggers(options: RegistrationOptions = {}) {
  * Secret-bearing fields that indicate a registry instance is credentialed.
  * A username/login alone without a paired secret is NOT sufficient.
  */
-const CREDENTIALED_REGISTRY_SECRET_FIELDS = [
+export const CREDENTIALED_REGISTRY_SECRET_FIELDS = [
   'token',
   'password',
   'auth',
@@ -516,6 +516,19 @@ const CREDENTIALED_REGISTRY_SECRET_FIELDS = [
   'accesskeyid',
   'secretaccesskey',
 ] as const;
+
+/**
+ * Returns true if `instance` (a registry configuration object) has at least
+ * one non-blank secret-bearing field. Whitespace-only strings do NOT count.
+ */
+export function isCredentialedInstance(instance: unknown): boolean {
+  if (!isObjectRecord(instance)) {
+    return false;
+  }
+  return CREDENTIALED_REGISTRY_SECRET_FIELDS.some(
+    (field) => typeof instance[field] === 'string' && (instance[field] as string).trim().length > 0,
+  );
+}
 
 /**
  * Returns true if `configuredRegistries[providerName]` has at least one
@@ -532,15 +545,7 @@ function providerHasCredentialedInstance(
   if (!isObjectRecord(providerConfig)) {
     return false;
   }
-  return Object.values(providerConfig).some((instance) => {
-    if (!isObjectRecord(instance)) {
-      return false;
-    }
-    return CREDENTIALED_REGISTRY_SECRET_FIELDS.some(
-      (field) =>
-        typeof instance[field] === 'string' && (instance[field] as string).trim().length > 0,
-    );
-  });
+  return Object.values(providerConfig).some(isCredentialedInstance);
 }
 
 /**
