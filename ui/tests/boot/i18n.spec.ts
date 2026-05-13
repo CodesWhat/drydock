@@ -65,6 +65,11 @@ describe('buildMessages', () => {
     expect(LOCALE_OPTIONS).toContainEqual({ id: 'ko', label: '한국어' });
   });
 
+  it('exposes Russian as a supported picker option', () => {
+    expect(SUPPORTED_LOCALES).toContain('ru');
+    expect(LOCALE_OPTIONS).toContainEqual({ id: 'ru', label: 'Русский' });
+  });
+
   it('exposes Traditional Chinese as a supported picker option', () => {
     expect(SUPPORTED_LOCALES).toContain('zh-TW');
     expect(LOCALE_OPTIONS).toContainEqual({ id: 'zh-TW', label: '繁體中文' });
@@ -198,6 +203,14 @@ describe('buildMessages', () => {
     };
     const result = buildMessages(modules);
     expect((result as Record<string, unknown>).ko).toEqual({ hello: '안녕하세요' });
+  });
+
+  it('handles Russian locale namespaces', () => {
+    const modules = {
+      '../locales/ru/common.json': { hello: 'Привет' },
+    };
+    const result = buildMessages(modules);
+    expect((result as Record<string, unknown>).ru).toEqual({ hello: 'Привет' });
   });
 
   it('translates the Outbox sidebar label in every supported locale', () => {

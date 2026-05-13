@@ -45,6 +45,7 @@ jobs:
             --language=nl
             --language=pl
             --language=pt-BR
+            --language=ru
             --language=tr
             --language=zh-CN
             --language=zh-TW
