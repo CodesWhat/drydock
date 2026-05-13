@@ -602,6 +602,45 @@ export function resolveLabelsFromContainer(
   return resolvedOverrides;
 }
 
+/**
+ * Re-derive label-driven container fields from a fresh label set and write
+ * them back onto the stored container record.
+ *
+ * Used on the Docker-event update path (start/die/update events) where the
+ * container already exists in the store but its labels may have changed since
+ * it was first registered — e.g. after `docker compose up -d` recreates a
+ * service with a new `dd.tag.family` label.
+ *
+ * Note: imgset configuration is intentionally NOT re-applied here because
+ * imgset matching requires a parsed image reference that is not available on
+ * the event path. The imgset defaults established during the last full watch
+ * cycle remain in effect; only direct label values are refreshed.
+ */
+export function applyDerivedLabelFieldsToContainer(
+  container: Container,
+  labels: Record<string, string>,
+): void {
+  const resolved = resolveLabelsFromContainer(labels);
+  container.includeTags = resolved.includeTags;
+  container.excludeTags = resolved.excludeTags;
+  container.transformTags = resolved.transformTags;
+  container.tagFamily = resolved.tagFamily;
+  container.linkTemplate = resolved.linkTemplate;
+  container.triggerInclude = resolved.triggerInclude;
+  container.triggerExclude = resolved.triggerExclude;
+  // displayName is managed separately by updateContainerFromInspect via
+  // getCustomDisplayNameFromLabels, which handles the "no custom name →
+  // fall back to container name" logic. We do not overwrite it here.
+  //
+  // displayIcon is stored but not re-derived on the event path because
+  // Docker events do not carry image metadata needed to validate icon refs.
+  // It will be refreshed on the next full watch cycle.
+  //
+  // lookupImage / registryLookupUrl flow into image.registry.lookupImage
+  // which is part of the image reference block — only re-derived during a
+  // full addImageDetailsToContainer pass, not on lightweight event updates.
+}
+
 function resolveLookupImageFromContainerLabels(
   containerLabels: Record<string, string>,
   overrides: ContainerLabelOverrides,

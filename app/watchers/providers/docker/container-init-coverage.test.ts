@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 import {
+  applyDerivedLabelFieldsToContainer,
   filterRecreatedContainerAliases,
   getLabel,
   getMatchingImgsetConfiguration,
@@ -328,6 +329,99 @@ describe('container-init coverage', () => {
         reason: 'base-name-present-in-store',
       }),
     ]);
+  });
+
+  describe('applyDerivedLabelFieldsToContainer', () => {
+    function makeContainer(overrides: Record<string, any> = {}) {
+      return {
+        id: 'ctr1',
+        name: 'my-app',
+        displayName: 'my-app',
+        status: 'running',
+        watcher: 'local',
+        image: { name: 'library/nginx', tag: { value: '1.0', semver: true } },
+        labels: {},
+        updateAvailable: false,
+        updateKind: { kind: 'unknown' },
+        ...overrides,
+      } as any;
+    }
+
+    test('derives tagFamily from dd.tag.family label', () => {
+      const container = makeContainer();
+      applyDerivedLabelFieldsToContainer(container, { 'dd.tag.family': 'loose' });
+      expect(container.tagFamily).toBe('loose');
+    });
+
+    test('derives includeTags from dd.tag.include label', () => {
+      const container = makeContainer();
+      applyDerivedLabelFieldsToContainer(container, { 'dd.tag.include': '^1\\..*' });
+      expect(container.includeTags).toBe('^1\\..*');
+    });
+
+    test('derives excludeTags from dd.tag.exclude label', () => {
+      const container = makeContainer();
+      applyDerivedLabelFieldsToContainer(container, { 'dd.tag.exclude': '^alpha' });
+      expect(container.excludeTags).toBe('^alpha');
+    });
+
+    test('derives transformTags from dd.tag.transform label', () => {
+      const container = makeContainer();
+      applyDerivedLabelFieldsToContainer(container, { 'dd.tag.transform': 's/v//' });
+      expect(container.transformTags).toBe('s/v//');
+    });
+
+    test('derives linkTemplate from dd.link.template label', () => {
+      const container = makeContainer();
+      applyDerivedLabelFieldsToContainer(container, {
+        'dd.link.template': 'https://example.com/${major}',
+      });
+      expect(container.linkTemplate).toBe('https://example.com/${major}');
+    });
+
+    test('derives triggerInclude from dd.action.include label', () => {
+      const container = makeContainer();
+      applyDerivedLabelFieldsToContainer(container, { 'dd.action.include': 'my-action' });
+      expect(container.triggerInclude).toBe('my-action');
+    });
+
+    test('derives triggerExclude from dd.notification.exclude label', () => {
+      const container = makeContainer();
+      applyDerivedLabelFieldsToContainer(container, { 'dd.notification.exclude': 'slack' });
+      expect(container.triggerExclude).toBe('slack');
+    });
+
+    test('falls back to wud.* label when dd.* label is absent', () => {
+      const container = makeContainer();
+      applyDerivedLabelFieldsToContainer(container, { 'wud.tag.include': '^v' });
+      expect(container.includeTags).toBe('^v');
+    });
+
+    test('clears derived fields when labels are removed', () => {
+      const container = makeContainer({
+        tagFamily: 'loose',
+        includeTags: '^1\\..*',
+        excludeTags: '^alpha',
+      });
+      applyDerivedLabelFieldsToContainer(container, {});
+      expect(container.tagFamily).toBeUndefined();
+      expect(container.includeTags).toBeUndefined();
+      expect(container.excludeTags).toBeUndefined();
+    });
+
+    test('handles undefined labels gracefully by treating as empty object', () => {
+      const container = makeContainer({ tagFamily: 'loose' });
+      // Pass empty record (undefined labels are normalized upstream before this point)
+      applyDerivedLabelFieldsToContainer(container, {});
+      expect(container.tagFamily).toBeUndefined();
+    });
+
+    test('does not modify displayName (managed separately by event handler)', () => {
+      const container = makeContainer({ displayName: 'My Custom App' });
+      applyDerivedLabelFieldsToContainer(container, { 'dd.display.name': 'New Display Name' });
+      // displayName is intentionally NOT updated by applyDerivedLabelFieldsToContainer
+      expect(container.displayName).toBe('My Custom App');
+    });
   });
 
   test('filterRecreatedContainerAliases skips aliases that are still fresh', () => {

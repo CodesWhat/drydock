@@ -619,4 +619,134 @@ describe('container event update helpers', () => {
     expect(container.labels).toEqual({ alpha: '1', beta: 'changed' });
     expect(updateContainer).toHaveBeenCalledWith(container);
   });
+
+  test('updateContainerFromInspect calls applyDerivedLabelFieldsToContainer when labels change', () => {
+    const container = createMockContainer({
+      name: 'my-app',
+      displayName: 'my-app',
+      status: 'running',
+      labels: {},
+      tagFamily: undefined,
+    });
+    const updateContainer = vi.fn();
+    const applyDerivedLabelFieldsToContainer = vi.fn();
+
+    updateContainerFromInspect(
+      container as any,
+      {
+        Name: '/my-app',
+        State: { Status: 'running' },
+        Config: { Labels: { 'dd.tag.family': 'loose' } },
+      },
+      {
+        getCustomDisplayNameFromLabels: () => undefined,
+        updateContainer,
+        applyDerivedLabelFieldsToContainer,
+      },
+    );
+
+    expect(applyDerivedLabelFieldsToContainer).toHaveBeenCalledWith(container, {
+      'dd.tag.family': 'loose',
+    });
+    expect(updateContainer).toHaveBeenCalledWith(container);
+  });
+
+  test('updateContainerFromInspect does not call applyDerivedLabelFieldsToContainer when labels are unchanged', () => {
+    const container = createMockContainer({
+      name: 'my-app',
+      displayName: 'my-app',
+      status: 'running',
+      labels: { 'dd.tag.family': 'loose' },
+    });
+    const updateContainer = vi.fn();
+    const applyDerivedLabelFieldsToContainer = vi.fn();
+
+    updateContainerFromInspect(
+      container as any,
+      {
+        Name: '/my-app',
+        State: { Status: 'running' },
+        Config: { Labels: { 'dd.tag.family': 'loose' } },
+      },
+      {
+        getCustomDisplayNameFromLabels: () => undefined,
+        updateContainer,
+        applyDerivedLabelFieldsToContainer,
+      },
+    );
+
+    expect(applyDerivedLabelFieldsToContainer).not.toHaveBeenCalled();
+    expect(updateContainer).not.toHaveBeenCalled();
+  });
+
+  test('updateContainerFromInspect works without applyDerivedLabelFieldsToContainer dependency (backward compat)', () => {
+    const container = createMockContainer({
+      name: 'my-app',
+      displayName: 'my-app',
+      status: 'running',
+      labels: {},
+    });
+    const updateContainer = vi.fn();
+
+    expect(() =>
+      updateContainerFromInspect(
+        container as any,
+        {
+          Name: '/my-app',
+          State: { Status: 'running' },
+          Config: { Labels: { 'dd.tag.family': 'loose' } },
+        },
+        {
+          getCustomDisplayNameFromLabels: () => undefined,
+          updateContainer,
+          // applyDerivedLabelFieldsToContainer intentionally omitted
+        },
+      ),
+    ).not.toThrow();
+
+    expect(updateContainer).toHaveBeenCalledWith(container);
+  });
+
+  test('updateContainerFromInspect re-derives multiple label fields when labels change', () => {
+    const container = createMockContainer({
+      name: 'my-app',
+      status: 'running',
+      labels: { 'dd.tag.include': '^1\\.' },
+      tagFamily: undefined,
+      includeTags: '^1\\.',
+      excludeTags: undefined,
+    });
+    const updateContainer = vi.fn();
+    const applyDerivedLabelFieldsToContainer = vi.fn((c, labels) => {
+      // Simulate what the real function does
+      c.includeTags = labels['dd.tag.include'];
+      c.excludeTags = labels['dd.tag.exclude'];
+      c.tagFamily = labels['dd.tag.family'];
+    });
+
+    updateContainerFromInspect(
+      container as any,
+      {
+        Name: '/my-app',
+        State: { Status: 'running' },
+        Config: {
+          Labels: {
+            'dd.tag.include': '^2\\.',
+            'dd.tag.exclude': '^alpha',
+            'dd.tag.family': 'loose',
+          },
+        },
+      },
+      {
+        getCustomDisplayNameFromLabels: () => undefined,
+        updateContainer,
+        applyDerivedLabelFieldsToContainer,
+      },
+    );
+
+    expect(container.includeTags).toBe('^2\\.');
+    expect(container.excludeTags).toBe('^alpha');
+    expect(container.tagFamily).toBe('loose');
+    expect(updateContainer).toHaveBeenCalledWith(container);
+  });
 });

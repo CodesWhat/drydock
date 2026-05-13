@@ -173,6 +173,14 @@ interface UpdateContainerFromInspectDependencies {
   getCustomDisplayNameFromLabels: (labels: Record<string, string>) => string | undefined;
   updateContainer: (container: Container) => void;
   logInfo?: (message: string) => void;
+  /**
+   * Re-derive label-driven fields (tagFamily, includeTags, etc.) from a fresh
+   * label set and write them onto the container. Called when labels change.
+   */
+  applyDerivedLabelFieldsToContainer?: (
+    container: Container,
+    labels: Record<string, string>,
+  ) => void;
 }
 
 function areLabelsEqual(labelsA: Record<string, string>, labelsB: Record<string, string>): boolean {
@@ -238,6 +246,7 @@ export function updateContainerFromInspect(
 
   if (labelsChanged) {
     containerFound.labels = labelsToApply;
+    dependencies.applyDerivedLabelFieldsToContainer?.(containerFound, labelsToApply);
     changed = true;
   }
 

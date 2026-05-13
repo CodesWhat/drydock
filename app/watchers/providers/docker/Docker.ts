@@ -37,6 +37,7 @@ import Watcher from '../../Watcher.js';
 import { updateContainerFromInspect as updateContainerFromInspectState } from './container-event-update.js';
 import {
   type AliasFilterDecision,
+  applyDerivedLabelFieldsToContainer,
   filterRecreatedContainerAliases,
   getDockerWatcherRegistryId,
   getDockerWatcherSourceKey,
@@ -990,6 +991,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       getCustomDisplayNameFromLabels: (labels) => getLabel(labels, ddDisplayName, wudDisplayName),
       updateContainer: (container) => storeContainer.updateContainer(container),
       logInfo: (message) => logContainer.info(message),
+      applyDerivedLabelFieldsToContainer,
     });
   }
 
