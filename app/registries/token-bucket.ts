@@ -24,6 +24,9 @@ interface Bucket {
 const buckets = new Map<string, Bucket>();
 
 function getOrCreateBucket(config: BucketConfig): Bucket {
+  if (config.ratePerSec <= 0) {
+    throw new Error('BucketConfig.ratePerSec must be > 0');
+  }
   let bucket = buckets.get(config.key);
   if (!bucket) {
     bucket = {
@@ -83,10 +86,19 @@ const HOST_CONFIGS: Array<{ pattern: RegExp; ratePerSec: number; burst: number }
 const DEFAULT_RATE_PER_SEC = 5;
 const DEFAULT_BURST = 10;
 
+/** Memoized BucketConfig by full URL string to avoid repeated URL allocations per tick. */
+const bucketConfigCache = new Map<string, BucketConfig>();
+
 /**
  * Map a full URL to its bucket config (key + rate limits).
+ * Results are memoized by URL string — same URL always returns the same object instance.
  */
 export function getBucketForUrl(url: string): BucketConfig {
+  const cached = bucketConfigCache.get(url);
+  if (cached) {
+    return cached;
+  }
+
   let hostname: string;
   try {
     hostname = new URL(url).hostname;
@@ -94,11 +106,18 @@ export function getBucketForUrl(url: string): BucketConfig {
     hostname = url;
   }
 
+  let config: BucketConfig | undefined;
   for (const { pattern, ratePerSec, burst } of HOST_CONFIGS) {
     if (pattern.test(hostname)) {
-      return { key: hostname, ratePerSec, burst };
+      config = { key: hostname, ratePerSec, burst };
+      break;
     }
   }
 
-  return { key: hostname, ratePerSec: DEFAULT_RATE_PER_SEC, burst: DEFAULT_BURST };
+  if (!config) {
+    config = { key: hostname, ratePerSec: DEFAULT_RATE_PER_SEC, burst: DEFAULT_BURST };
+  }
+
+  bucketConfigCache.set(url, config);
+  return config;
 }

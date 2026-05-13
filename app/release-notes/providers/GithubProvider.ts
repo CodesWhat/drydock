@@ -102,7 +102,7 @@ class GithubProvider implements ReleaseNotesProviderClient {
         tagVariant,
       )}`;
       try {
-        const data = await withRetry(
+        const envelope = await withRetry<UnknownRecord>(
           () =>
             axios
               .get(endpoint, {
@@ -123,6 +123,7 @@ class GithubProvider implements ReleaseNotesProviderClient {
             retryableStatuses: [429, 503],
           },
         );
+        const data = envelope.data;
 
         const body = typeof data?.body === 'string' ? data.body : '';
         const title =

@@ -9,7 +9,9 @@ import { resolveConfiguredPath } from '../runtime/paths.js';
 import { failClosedAuth, requireAuthString, withAuthorizationHeader } from '../security/auth.js';
 import { getErrorMessage } from '../util/error.js';
 import { REGISTRY_BEARER_TOKEN_CACHE_TTL_MS } from './configuration.js';
+import { withRetry } from './http-retry.js';
 import Registry from './Registry.js';
+import { acquireToken, getBucketForUrl } from './token-bucket.js';
 
 export interface BaseRegistryConfiguration {
   url?: string;
@@ -402,7 +404,19 @@ class BaseRegistry<
 
     let response: { data?: Record<string, unknown> } | undefined;
     try {
-      response = await axios(request);
+      await acquireToken(getBucketForUrl(authUrl));
+      const envelope = await withRetry<Record<string, unknown>>(
+        async () => {
+          const r = await axios<Record<string, unknown>>(request);
+          return {
+            status: r.status,
+            headers: r.headers as Record<string, string | undefined>,
+            data: r.data,
+          };
+        },
+        { logger: this.log, requestLabel: `${this.getId()} auth ${authUrl}` },
+      );
+      response = { data: envelope.data };
     } catch (e: unknown) {
       failClosedAuth(
         `Unable to authenticate registry ${this.getId()}: token request failed (${getErrorMessage(e)})`,

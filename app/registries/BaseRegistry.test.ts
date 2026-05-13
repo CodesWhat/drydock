@@ -9,6 +9,17 @@ vi.mock('axios', () => ({
   default: vi.fn(),
 }));
 
+// Pass-through withRetry so the request fn is called once and returns its data.
+vi.mock('./http-retry.js', () => ({
+  withRetry: vi.fn(async (requestFn) => requestFn()),
+}));
+
+// No-op token bucket — unit tests don't need rate-limiting
+vi.mock('./token-bucket.js', () => ({
+  acquireToken: vi.fn(() => Promise.resolve()),
+  getBucketForUrl: vi.fn(() => ({ key: 'mock-host', ratePerSec: 10, burst: 10 })),
+}));
+
 let baseRegistry;
 
 class TestBaseRegistry extends BaseRegistry {
@@ -1658,4 +1669,45 @@ test('getImageManifestDigest should increment digest cache hit and miss counters
   expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
   expect(hitsIncSpy).toHaveBeenCalledTimes(1);
   expect(missesIncSpy).toHaveBeenCalledTimes(1);
+});
+
+describe('authenticateBearerFromAuthUrl rate-limit and retry', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('acquires a rate-limit token for the auth host before making the request', async () => {
+    const { default: axios } = await import('axios');
+    const { acquireToken, getBucketForUrl } = await import('./token-bucket.js');
+    axios.mockResolvedValue({ data: { token: 'auth-token' } });
+
+    const authUrl = 'https://auth.example.com/token';
+    await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      authUrl,
+      'dXNlcjpwYXNz',
+    );
+
+    expect(getBucketForUrl).toHaveBeenCalledWith(authUrl);
+    expect(acquireToken).toHaveBeenCalledWith(expect.objectContaining({ key: 'mock-host' }));
+  });
+
+  test('wraps the auth call with withRetry so 429 responses are retried', async () => {
+    const { withRetry } = await import('./http-retry.js');
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: { token: 'auth-token' } });
+
+    const authUrl = 'https://auth.example.com/token';
+    await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      authUrl,
+      'dXNlcjpwYXNz',
+    );
+
+    // withRetry should have been called with a request fn and options containing the auth label
+    expect(withRetry).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({ requestLabel: expect.stringContaining('auth') }),
+    );
+  });
 });

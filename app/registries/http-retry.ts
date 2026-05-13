@@ -4,11 +4,13 @@
  * Falls back to exponential backoff when no header is present.
  */
 
-export type RetryableHttpRequest<T> = () => Promise<{
+export interface HttpEnvelope<T> {
   status: number;
   headers: Record<string, string | undefined>;
   data: T;
-}>;
+}
+
+export type RetryableHttpRequest<T> = () => Promise<HttpEnvelope<T>>;
 
 export interface WithRetryOptions {
   /** Maximum number of retries after the initial attempt (default: 3). */
@@ -49,10 +51,13 @@ function parseRetryAfterMs(headerValue: string | undefined): number | undefined 
     return Number.parseInt(trimmed, 10) * 1000;
   }
 
-  // HTTP-date form
-  const parsed = Date.parse(trimmed);
-  if (!Number.isNaN(parsed)) {
-    return Math.max(0, parsed - Date.now());
+  // HTTP-date form: must contain at least one space or comma (e.g. "Mon, 01 Jan 2024 00:00:00 GMT")
+  // Reject decimal seconds and other non-date strings that Date.parse might accept.
+  if (/[, ]/.test(trimmed)) {
+    const parsed = Date.parse(trimmed);
+    if (!Number.isNaN(parsed)) {
+      return Math.max(0, parsed - Date.now());
+    }
   }
 
   return undefined;
@@ -65,7 +70,7 @@ function sleep(ms: number): Promise<void> {
 export async function withRetry<T>(
   request: RetryableHttpRequest<T>,
   options: WithRetryOptions = {},
-): Promise<T> {
+): Promise<HttpEnvelope<T>> {
   const {
     maxRetries = 3,
     retryableStatuses = [429, 503],
@@ -80,7 +85,7 @@ export async function withRetry<T>(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const response = await request();
-      return response.data;
+      return response;
     } catch (err: unknown) {
       lastError = err;
 
@@ -105,7 +110,7 @@ export async function withRetry<T>(
       const retryAfterHeader = err.response.headers?.['retry-after'];
       const parsedDelay = parseRetryAfterMs(retryAfterHeader);
       const backoffDelay = Math.min(backoffBaseMs * 2 ** attempt, backoffMaxMs);
-      const delay = parsedDelay ?? backoffDelay;
+      const delay = Math.min(parsedDelay ?? backoffDelay, backoffMaxMs);
 
       const label = requestLabel ? `Retrying ${requestLabel}` : 'Retrying request';
       logger?.debug(

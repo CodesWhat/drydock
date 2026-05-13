@@ -8,12 +8,11 @@ vi.mock('../prometheus/registry', () => ({
   }),
 }));
 
-// withRetry: pass-through by default (calls the request fn once and returns its data).
+// withRetry: pass-through by default (calls the request fn once and returns the full envelope).
 // acquireToken: no-op (token bucket has no effect on unit tests).
 vi.mock('./http-retry.js', () => ({
   withRetry: vi.fn(async (requestFn) => {
-    const response = await requestFn();
-    return response.data;
+    return requestFn();
   }),
 }));
 vi.mock('./token-bucket.js', () => ({
@@ -1204,7 +1203,11 @@ describe('callRegistry', () => {
 
   test('should return full response when resolveWithFullResponse is true', async () => {
     const { default: axios } = await import('axios');
-    const mockResponse = { data: { tags: ['v1'] }, headers: {} };
+    const mockResponse = {
+      data: { tags: ['v1'] },
+      headers: { 'content-type': 'application/json' },
+      status: 200,
+    };
     axios.mockResolvedValue(mockResponse);
     const registryMocked = createMockedRegistry();
     registryMocked.type = 'hub';
@@ -1215,7 +1218,11 @@ describe('callRegistry', () => {
       method: 'get',
       resolveWithFullResponse: true,
     });
-    expect(result).toBe(mockResponse);
+    expect(result).toEqual({
+      data: { tags: ['v1'] },
+      headers: { 'content-type': 'application/json' },
+      status: 200,
+    });
   });
 
   test('acquires a token bucket token before each request', async () => {

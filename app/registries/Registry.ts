@@ -470,31 +470,28 @@ class Registry<
       // Rate-limit ourselves before hitting the registry
       await acquireToken(getBucketForUrl(url));
 
-      // Capture the full axios response so we can return headers when needed.
-      let lastAxiosResponse: AxiosResponse<T> | undefined;
-
-      await withRetry<T>(
+      const envelope = await withRetry<T>(
         () =>
-          axios<T>(axiosOptionsWithConnectionReuse).then((r) => {
-            lastAxiosResponse = r;
-            return {
-              status: r.status,
-              headers: r.headers as Record<string, string | undefined>,
-              data: r.data,
-            };
-          }),
+          axios<T>(axiosOptionsWithConnectionReuse).then((r) => ({
+            status: r.status,
+            headers: r.headers as Record<string, string | undefined>,
+            data: r.data,
+          })),
         {
           logger: this.log,
-          requestLabel: `${this.getId()} ${method} ${url}`,
+          requestLabel: this.buildRequestLabel(url, method),
         },
       );
 
       const end = Date.now();
       getSummaryTags()?.observe({ type: this.type, name: this.name }, (end - start) / 1000);
-      // lastAxiosResponse is always set when withRetry resolves
       return resolveWithFullResponse
-        ? (lastAxiosResponse as AxiosResponse<T>)
-        : lastAxiosResponse!.data;
+        ? ({
+            status: envelope.status,
+            headers: envelope.headers,
+            data: envelope.data,
+          } as unknown as AxiosResponse<T>)
+        : envelope.data;
     } catch (error) {
       const end = Date.now();
       getSummaryTags()?.observe({ type: this.type, name: this.name }, (end - start) / 1000);
@@ -521,6 +518,19 @@ class Registry<
 
   async getAuthPull(): Promise<{ username?: string; password?: string } | undefined> {
     return undefined;
+  }
+
+  /**
+   * Build a human-readable label for retry log messages.
+   * Strips query parameters so secrets in query strings are not logged.
+   */
+  private buildRequestLabel(url: string, method: string): string {
+    try {
+      const parsed = new URL(url);
+      return `${this.getId()} ${method} ${parsed.origin}${parsed.pathname}`;
+    } catch {
+      return `${this.getId()} ${method} ${url}`;
+    }
   }
 }
 

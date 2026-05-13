@@ -33,6 +33,33 @@ describe('getBucketForUrl', () => {
   });
 });
 
+describe('getOrCreateBucket guard', () => {
+  test('throws when ratePerSec is zero', async () => {
+    const config = { key: `guard-zero-${Math.random()}`, ratePerSec: 0, burst: 5 };
+    await expect(acquireToken(config)).rejects.toThrow('BucketConfig.ratePerSec must be > 0');
+  });
+
+  test('throws when ratePerSec is negative', async () => {
+    const config = { key: `guard-neg-${Math.random()}`, ratePerSec: -1, burst: 5 };
+    await expect(acquireToken(config)).rejects.toThrow('BucketConfig.ratePerSec must be > 0');
+  });
+});
+
+describe('getBucketForUrl cache', () => {
+  test('same URL returns the identical BucketConfig object instance', () => {
+    const url = 'https://ghcr.io/v2/acme/img/tags/list';
+    const first = getBucketForUrl(url);
+    const second = getBucketForUrl(url);
+    expect(first).toBe(second);
+  });
+
+  test('different URLs return different BucketConfig objects', () => {
+    const a = getBucketForUrl('https://ghcr.io/v2/a');
+    const b = getBucketForUrl('https://registry-1.docker.io/v2/b');
+    expect(a).not.toBe(b);
+  });
+});
+
 describe('acquireToken', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -43,14 +70,19 @@ describe('acquireToken', () => {
   });
 
   test('resolves immediately when bucket has tokens', async () => {
-    const start = Date.now();
     // Use a unique host to avoid pollution between tests
     const config = { key: `test-host-${Math.random()}`, ratePerSec: 10, burst: 10 };
 
-    await acquireToken(config);
+    let resolved = false;
+    const promise = acquireToken(config).then(() => {
+      resolved = true;
+    });
 
-    // Should have resolved without any timer advances
-    expect(Date.now() - start).toBeLessThan(50);
+    // Flush microtasks without advancing timers — should resolve with tokens available
+    await Promise.resolve();
+    await promise;
+
+    expect(resolved).toBe(true);
   });
 
   test('different hosts get independent buckets', async () => {

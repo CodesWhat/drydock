@@ -3,6 +3,15 @@ import Hub from './Hub.js';
 // Mock axios
 vi.mock('axios', () => ({ default: vi.fn() }));
 
+// Pass-through withRetry; no-op acquireToken — unit tests don't need real retry/rate-limiting
+vi.mock('../../http-retry.js', () => ({
+  withRetry: vi.fn(async (requestFn) => requestFn()),
+}));
+vi.mock('../../token-bucket.js', () => ({
+  acquireToken: vi.fn(() => Promise.resolve()),
+  getBucketForUrl: vi.fn(() => ({ key: 'mock-host', ratePerSec: 10, burst: 10 })),
+}));
+
 describe('Docker Hub Registry', () => {
   let hub;
 
