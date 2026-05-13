@@ -7,6 +7,7 @@ const repoRoot = resolve(import.meta.dirname, '../../..');
 const supportedTranslationLocales = SUPPORTED_LOCALES.filter((locale) => locale !== 'en').sort();
 
 const expectedCrowdinLocaleMapping = {
+  ar: 'ar',
   de: 'de',
   'es-ES': 'es',
   fr: 'fr',

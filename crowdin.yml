@@ -17,6 +17,7 @@ files:
     translation: /ui/src/locales/%locale%/**/%original_file_name%
     languages_mapping:
       locale:
+        ar: ar
         de: de
         es-ES: es
         fr: fr

@@ -36,6 +36,7 @@ jobs:
           upload_translations: true
           download_translations: true
           download_translations_args: >-
+            --language=ar
             --language=de
             --language=es-ES
             --language=fr

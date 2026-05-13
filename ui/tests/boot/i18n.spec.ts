@@ -80,6 +80,11 @@ describe('buildMessages', () => {
     expect(LOCALE_OPTIONS).toContainEqual({ id: 'uk', label: 'Українська' });
   });
 
+  it('exposes Arabic as a supported picker option', () => {
+    expect(SUPPORTED_LOCALES).toContain('ar');
+    expect(LOCALE_OPTIONS).toContainEqual({ id: 'ar', label: 'العربية' });
+  });
+
   it('exposes Traditional Chinese as a supported picker option', () => {
     expect(SUPPORTED_LOCALES).toContain('zh-TW');
     expect(LOCALE_OPTIONS).toContainEqual({ id: 'zh-TW', label: '繁體中文' });
@@ -237,6 +242,14 @@ describe('buildMessages', () => {
     };
     const result = buildMessages(modules);
     expect((result as Record<string, unknown>).uk).toEqual({ hello: 'Привіт' });
+  });
+
+  it('handles Arabic locale namespaces', () => {
+    const modules = {
+      '../locales/ar/common.json': { hello: 'مرحبا' },
+    };
+    const result = buildMessages(modules);
+    expect((result as Record<string, unknown>).ar).toEqual({ hello: 'مرحبا' });
   });
 
   it('translates the Outbox sidebar label in every supported locale', () => {
