@@ -433,16 +433,10 @@ test('authenticateBearerFromAuthUrl should throw when token is missing', async (
   ).rejects.toThrow('token endpoint response does not contain token');
 });
 
-test('authenticateBearerFromAuthUrlWithPublicFallback should retry without credentials and honor providerLabel', async () => {
+test('authenticateBearerFromAuthUrlWithPublicFallback should throw actionable error (not silently retry) when credentials are rejected with 401', async () => {
   const authenticateSpy = vi
     .spyOn(baseRegistry as any, 'authenticateBearerFromAuthUrl')
-    .mockRejectedValueOnce(new Error('token request failed (Request failed with status code 401)'))
-    .mockResolvedValueOnce({
-      headers: {
-        Authorization: 'Bearer public-token',
-      },
-    });
-  const warnSpy = vi.spyOn(baseRegistry.log, 'warn').mockImplementation(() => undefined);
+    .mockRejectedValueOnce(new Error('token request failed (Request failed with status code 401)'));
 
   await expect(
     (baseRegistry as any).authenticateBearerFromAuthUrlWithPublicFallback(
@@ -453,31 +447,12 @@ test('authenticateBearerFromAuthUrlWithPublicFallback should retry without crede
         providerLabel: 'Docker Hub',
       },
     ),
-  ).resolves.toEqual({
-    headers: {
-      Authorization: 'Bearer public-token',
-    },
-  });
+  ).rejects.toThrow(
+    /Authentication failed for registry.*HTTP 401.*Docker Hub credentials were rejected/,
+  );
 
-  expect(authenticateSpy).toHaveBeenNthCalledWith(
-    1,
-    { headers: {}, url: 'https://registry.example.com/v2/library/nginx/manifests/latest' },
-    'https://registry.example.com/token',
-    'dXNlcjpwYXNz',
-    undefined,
-    undefined,
-  );
-  expect(authenticateSpy).toHaveBeenNthCalledWith(
-    2,
-    { headers: {}, url: 'https://registry.example.com/v2/library/nginx/manifests/latest' },
-    'https://registry.example.com/token',
-    undefined,
-    undefined,
-    undefined,
-  );
-  expect(warnSpy).toHaveBeenCalledWith(
-    expect.stringContaining('Docker Hub credentials were rejected for registry'),
-  );
+  // Must NOT retry anonymously — only one call
+  expect(authenticateSpy).toHaveBeenCalledTimes(1);
 });
 
 test('getRejectedCredentialStatus should use RE2JS for status matching', () => {
@@ -567,18 +542,12 @@ test('authenticateBearerFromAuthUrlWithPublicFallback should rethrow when reject
   ).rejects.toBe(error);
 });
 
-test('authenticateBearerFromAuthUrlWithPublicFallback should default providerLabel to registry id', async () => {
+test('authenticateBearerFromAuthUrlWithPublicFallback should use registry id as provider label when none is supplied', async () => {
   baseRegistry.type = 'registry';
   baseRegistry.name = 'base';
-  const authenticateSpy = vi
-    .spyOn(baseRegistry as any, 'authenticateBearerFromAuthUrl')
-    .mockRejectedValueOnce(new Error('token request failed (Request failed with status code 403)'))
-    .mockResolvedValueOnce({
-      headers: {
-        Authorization: 'Bearer public-token',
-      },
-    });
-  const warnSpy = vi.spyOn(baseRegistry.log, 'warn').mockImplementation(() => undefined);
+  vi.spyOn(baseRegistry as any, 'authenticateBearerFromAuthUrl').mockRejectedValueOnce(
+    new Error('token request failed (Request failed with status code 403)'),
+  );
 
   await expect(
     (baseRegistry as any).authenticateBearerFromAuthUrlWithPublicFallback(
@@ -586,15 +555,8 @@ test('authenticateBearerFromAuthUrlWithPublicFallback should default providerLab
       'https://registry.example.com/token',
       'dXNlcjpwYXNz',
     ),
-  ).resolves.toEqual({
-    headers: {
-      Authorization: 'Bearer public-token',
-    },
-  });
-
-  expect(authenticateSpy).toHaveBeenCalledTimes(2);
-  expect(warnSpy).toHaveBeenCalledWith(
-    'registry.base credentials were rejected for registry registry.base (status 403); retrying token request without credentials for public image checks',
+  ).rejects.toThrow(
+    /Authentication failed for registry registry\.base.*HTTP 403.*registry\.base credentials were rejected/,
   );
 });
 

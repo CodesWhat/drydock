@@ -185,18 +185,17 @@ test('registerRegistries should register all registries', async () => {
     },
   };
   await registry.testable_registerRegistries();
+  // hub.public and ecr.public are suppressed because credentialed instances exist for those providers
   expect(Object.keys(registry.getState().registry).sort()).toEqual([
     'alicr.public',
     'codeberg.public',
     'dhi.public',
     'docr.public',
     'ecr.private',
-    'ecr.public',
     'gar.public',
     'gcr.public',
     'ghcr.public',
     'hub.private',
-    'hub.public',
     'ibmcr.public',
     'lscr.public',
     'mau.public',
@@ -435,6 +434,60 @@ test('registerRegistries should register defaults when registry configuration is
       originalGetRegistryConfigurations || (() => registries),
     );
   }
+});
+
+test('registerRegistries should suppress anonymous public default when a credentialed ghcr instance is configured', async () => {
+  const spyLog = vi.spyOn(registry.testable_log, 'info');
+  registries = {
+    ghcr: {
+      token: {
+        username: 'myuser',
+        token: 'ghp_secret',
+      },
+    },
+  };
+  await registry.testable_registerRegistries();
+  // ghcr.public anonymous default is suppressed; only the credentialed token instance exists
+  expect(Object.keys(registry.getState().registry)).not.toContain('ghcr.public');
+  expect(Object.keys(registry.getState().registry)).toContain('ghcr.token');
+  expect(spyLog).toHaveBeenCalledWith(
+    expect.stringContaining(
+      "Skipping anonymous 'ghcr.public' default because credentialed instance(s) are configured",
+    ),
+  );
+});
+
+test('registerRegistries should keep anonymous public default when no credentialed ghcr instance is configured', async () => {
+  // No user-configured registries at all → defaults should include ghcr.public
+  await registry.testable_registerRegistries();
+  expect(Object.keys(registry.getState().registry)).toContain('ghcr.public');
+});
+
+test('registerRegistries should suppress public default for gcr when clientemail/privatekey are set', async () => {
+  registries = {
+    gcr: {
+      myaccount: {
+        clientemail: 'sa@project.iam.gserviceaccount.com',
+        privatekey: '-----BEGIN RSA PRIVATE KEY-----',
+      },
+    },
+  };
+  await registry.testable_registerRegistries();
+  expect(Object.keys(registry.getState().registry)).not.toContain('gcr.public');
+  expect(Object.keys(registry.getState().registry)).toContain('gcr.myaccount');
+});
+
+test('registerRegistries should not suppress public default when only a username (no secret) is configured', async () => {
+  // username alone is not a secret field — anonymous default must be kept
+  registries = {
+    ghcr: {
+      nopass: {
+        username: 'onlyuser',
+      },
+    },
+  };
+  await registry.testable_registerRegistries();
+  expect(Object.keys(registry.getState().registry)).toContain('ghcr.public');
 });
 
 test('registerRegistries should keep fail-closed behavior for incomplete hub.private auth', async () => {
@@ -950,18 +1003,17 @@ test('init should register all components', async () => {
     },
   };
   await registry.init();
+  // hub.public and ecr.public are suppressed because credentialed instances exist for those providers
   expect(Object.keys(registry.getState().registry).sort()).toEqual([
     'alicr.public',
     'codeberg.public',
     'dhi.public',
     'docr.public',
     'ecr.private',
-    'ecr.public',
     'gar.public',
     'gcr.public',
     'ghcr.public',
     'hub.private',
-    'hub.public',
     'ibmcr.public',
     'lscr.public',
     'mau.public',

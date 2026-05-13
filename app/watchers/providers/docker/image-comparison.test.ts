@@ -325,5 +325,94 @@ describe('image-comparison', () => {
 
       expect(result.image.registry.name).toBe('unknown');
     });
+
+    describe('pickRegistryProvider — deterministic routing', () => {
+      function makeProvider(
+        id: string,
+        configuration: Record<string, unknown> = {},
+        matchAll = true,
+      ) {
+        return {
+          getId: () => id,
+          name: id.split('.').pop() ?? id,
+          match: () => matchAll,
+          normalizeImage: identityNormalizeImage,
+          configuration,
+        };
+      }
+
+      test('credentialed instance wins over anonymous regardless of insertion order', () => {
+        // anonymous inserted first, credentialed second
+        mockGetState.mockReturnValue({
+          registry: {
+            'ghcr.public': makeProvider('ghcr.public', {}),
+            'ghcr.token': makeProvider('ghcr.token', { token: 'ghp_secret' }),
+          },
+        });
+
+        const container = createBaseContainer({ url: 'ghcr.io' });
+        const result = normalizeContainer(container as never);
+
+        expect(result.image.registry.name).toBe('ghcr.token');
+      });
+
+      test('credentialed instance wins even when inserted first and anonymous second', () => {
+        // credentialed first, anonymous second — order must not matter
+        mockGetState.mockReturnValue({
+          registry: {
+            'ghcr.token': makeProvider('ghcr.token', { token: 'ghp_secret' }),
+            'ghcr.public': makeProvider('ghcr.public', {}),
+          },
+        });
+
+        const container = createBaseContainer({ url: 'ghcr.io' });
+        const result = normalizeContainer(container as never);
+
+        expect(result.image.registry.name).toBe('ghcr.token');
+      });
+
+      test('alphabetical tie-break when multiple anonymous instances match', () => {
+        mockGetState.mockReturnValue({
+          registry: {
+            'ghcr.zzz': makeProvider('ghcr.zzz', {}),
+            'ghcr.aaa': makeProvider('ghcr.aaa', {}),
+          },
+        });
+
+        const container = createBaseContainer({ url: 'ghcr.io' });
+        const result = normalizeContainer(container as never);
+
+        // 'aaa' sorts before 'zzz' → aaa wins
+        expect(result.image.registry.name).toBe('ghcr.aaa');
+      });
+
+      test('alphabetical tie-break when multiple credentialed instances match', () => {
+        mockGetState.mockReturnValue({
+          registry: {
+            'ghcr.zzz': makeProvider('ghcr.zzz', { token: 'tok1' }),
+            'ghcr.aaa': makeProvider('ghcr.aaa', { token: 'tok2' }),
+          },
+        });
+
+        const container = createBaseContainer({ url: 'ghcr.io' });
+        const result = normalizeContainer(container as never);
+
+        expect(result.image.registry.name).toBe('ghcr.aaa');
+      });
+
+      test('single matching provider is returned directly without sorting', () => {
+        mockGetState.mockReturnValue({
+          registry: {
+            'hub.public': makeProvider('hub.public', {}),
+            'ghcr.public': { ...makeProvider('ghcr.public', {}), match: () => false },
+          },
+        });
+
+        const container = createBaseContainer({});
+        const result = normalizeContainer(container as never);
+
+        expect(result.image.registry.name).toBe('hub.public');
+      });
+    });
   });
 });

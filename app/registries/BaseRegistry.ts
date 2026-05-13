@@ -434,6 +434,22 @@ class BaseRegistry<
     return match.find() ? match.group(1) : undefined;
   }
 
+  /**
+   * Bearer-token auth via the registry's token endpoint.
+   *
+   * - When `credentials` is undefined (the instance is registered as
+   *   anonymous), this is a single unauthenticated token request.
+   * - When `credentials` is supplied (the instance is registered as
+   *   credentialed) and the token endpoint rejects them with one of
+   *   `rejectedCredentialStatuses`, this throws an actionable error instead
+   *   of silently falling back to anonymous. Silent anonymous fallback for
+   *   credentialed instances was the root cause of authenticated users still
+   *   hitting per-IP anonymous rate limits (issue #342).
+   *
+   * The historical `WithPublicFallback` suffix in the name is retained for
+   * caller stability; the semantic it referred to (silent retry without
+   * credentials on rejection) is intentionally removed.
+   */
   protected async authenticateBearerFromAuthUrlWithPublicFallback(
     requestOptions: RegistryRequestOptions,
     authUrl: string,
@@ -461,17 +477,12 @@ class BaseRegistry<
         throw error;
       }
 
+      // Credentials were supplied but rejected — throw a clear, actionable
+      // error instead of silently falling back to anonymous. The anonymous
+      // tier would cause 429s that are harder to diagnose than a clean failure.
       const providerLabel = options.providerLabel || this.getId();
-      this.log.warn(
-        `${providerLabel} credentials were rejected for registry ${this.getId()} (status ${rejectedStatus}); retrying token request without credentials for public image checks`,
-      );
-
-      return this.authenticateBearerFromAuthUrl(
-        requestOptions,
-        authUrl,
-        undefined,
-        options.tokenExtractor,
-        options.tokenFailureMessage,
+      throw new Error(
+        `Authentication failed for registry ${this.getId()} (HTTP ${rejectedStatus}): ${providerLabel} credentials were rejected. Check the configured token/login/password and their scopes.`,
       );
     }
   }

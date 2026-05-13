@@ -86,21 +86,22 @@ describe('GitHub Container Registry', () => {
     expect(result.headers.Authorization).toBe('Bearer registry-token');
   });
 
-  test('should retry anonymously when configured credentials are rejected with 403', async () => {
+  test('should throw actionable error when configured credentials are rejected with 403', async () => {
     ghcr.configuration = { username: 'test-user', token: 'test-token' };
     axios.mockRejectedValueOnce(new Error('Request failed with status code 403'));
-    axios.mockResolvedValueOnce({ data: { token: 'anon-token' } });
     const image = { name: 'user/repo' };
     const requestOptions = {
       headers: {},
       url: 'https://ghcr.io/v2/user/repo/manifests/latest',
     };
-    const warnSpy = vi.spyOn(ghcr.log, 'warn');
 
-    const result = await ghcr.authenticate(image, requestOptions);
+    await expect(ghcr.authenticate(image, requestOptions)).rejects.toThrow(
+      /Authentication failed for registry ghcr\.test \(HTTP 403\): GHCR credentials were rejected/,
+    );
 
     const expectedBasic = Buffer.from('test-user:test-token', 'utf-8').toString('base64');
-    expect(axios).toHaveBeenNthCalledWith(1, {
+    expect(axios).toHaveBeenCalledTimes(1);
+    expect(axios).toHaveBeenCalledWith({
       method: 'GET',
       url: 'https://ghcr.io/token?service=ghcr.io&scope=repository%3Auser%2Frepo%3Apull',
       headers: {
@@ -108,17 +109,6 @@ describe('GitHub Container Registry', () => {
         Authorization: `Basic ${expectedBasic}`,
       },
     });
-    expect(axios).toHaveBeenNthCalledWith(2, {
-      method: 'GET',
-      url: 'https://ghcr.io/token?service=ghcr.io&scope=repository%3Auser%2Frepo%3Apull',
-      headers: {
-        Accept: 'application/json',
-      },
-    });
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('GHCR credentials were rejected for registry ghcr.test (status 403)'),
-    );
-    expect(result.headers.Authorization).toBe('Bearer anon-token');
   });
 
   test('should not retry anonymously when no credentials are configured', async () => {

@@ -158,21 +158,21 @@ describe('Docker Hub Registry', () => {
     expect(result.headers.Authorization).toBe('Bearer public-token');
   });
 
-  test('should retry anonymously when configured credentials are rejected with 401', async () => {
+  test('should throw actionable error when configured credentials are rejected with 401', async () => {
     const { default: axios } = await import('axios');
-    axios
-      .mockRejectedValueOnce(new Error('Request failed with status code 401'))
-      .mockResolvedValueOnce({ data: { token: 'public-token' } });
+    axios.mockRejectedValueOnce(new Error('Request failed with status code 401'));
 
     hub.getAuthCredentials = vi.fn().mockReturnValue('base64credentials');
-    const warnSpy = vi.spyOn(hub.log, 'warn');
 
     const image = { name: 'library/nginx' };
     const requestOptions = { headers: {} };
 
-    const result = await hub.authenticate(image, requestOptions);
+    await expect(hub.authenticate(image, requestOptions)).rejects.toThrow(
+      /Authentication failed for registry hub\.test \(HTTP 401\): Docker Hub credentials were rejected/,
+    );
 
-    expect(axios).toHaveBeenNthCalledWith(1, {
+    expect(axios).toHaveBeenCalledTimes(1);
+    expect(axios).toHaveBeenCalledWith({
       method: 'GET',
       url: 'https://auth.docker.io/token?service=registry.docker.io&scope=repository%3Alibrary%2Fnginx%3Apull&grant_type=password',
       headers: {
@@ -180,19 +180,6 @@ describe('Docker Hub Registry', () => {
         Authorization: 'Basic base64credentials',
       },
     });
-    expect(axios).toHaveBeenNthCalledWith(2, {
-      method: 'GET',
-      url: 'https://auth.docker.io/token?service=registry.docker.io&scope=repository%3Alibrary%2Fnginx%3Apull&grant_type=password',
-      headers: {
-        Accept: 'application/json',
-      },
-    });
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'Docker Hub credentials were rejected for registry hub.test (status 401)',
-      ),
-    );
-    expect(result.headers.Authorization).toBe('Bearer public-token');
   });
 
   test('should fetch published date from Docker Hub tag metadata', async () => {
