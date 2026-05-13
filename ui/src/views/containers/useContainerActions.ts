@@ -432,6 +432,8 @@ function stopPendingActionsPollingState(
   pendingActionsPollIntervalMs?: Ref<number>,
 ) {
   if (!pendingActionsPollTimer.value) {
+    // c8 ignore next 3: the optional param is always passed by the only caller; defensive guard
+    /* c8 ignore next 3 */
     if (pendingActionsPollIntervalMs) {
       pendingActionsPollIntervalMs.value = PENDING_ACTIONS_POLL_INTERVAL_MS;
     }
@@ -439,6 +441,8 @@ function stopPendingActionsPollingState(
   }
   clearTimeout(pendingActionsPollTimer.value);
   pendingActionsPollTimer.value = null;
+  // c8 ignore next 3: the optional param is always passed by the only caller; defensive guard
+  /* c8 ignore next 3 */
   if (pendingActionsPollIntervalMs) {
     pendingActionsPollIntervalMs.value = PENDING_ACTIONS_POLL_INTERVAL_MS;
   }

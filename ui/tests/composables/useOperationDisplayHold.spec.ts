@@ -1,3 +1,4 @@
+import { useOperationDisplayHold } from '@/composables/useOperationDisplayHold';
 import type { Container, ContainerUpdateOperation } from '@/types/container';
 
 function makeOperation(
@@ -1615,6 +1616,188 @@ describe('useOperationDisplayHold', () => {
         resolveContainer: () => undefined,
       });
       expect(composable.heldOperations.value.has('op-unknown')).toBe(false);
+    });
+  });
+
+  describe('holdMatchesTarget branch coverage (static import, coverage-safe)', () => {
+    // Use the static import so v8 coverage accumulates properly (vi.resetModules()
+    // creates isolated instances whose branch hits are not merged into the main run).
+    const hold = useOperationDisplayHold();
+
+    beforeEach(() => {
+      // Clear all module-level state between sub-tests.
+      // Do NOT call vi.useFakeTimers() again — the outer beforeEach already does it.
+      hold.clearAllOperationDisplayHolds();
+    });
+
+    afterEach(() => {
+      hold.clearAllOperationDisplayHolds();
+    });
+
+    it('name-only match: if-guard evaluates to false and falls through to name comparison (line 120 branch 3)', () => {
+      // Hold has no containerId and no identityKey → containerIds=[], identityKey=undefined.
+      // Target (scheduleHeldOperationRelease arg) also has no containerId/identityKey.
+      // Condition: (0>0 && 0>0) || (undefined && undefined) → false → guard body skipped.
+      // Then targetName resolved from containerName → matches hold.containerName.
+      const operation = makeOperation({ id: 'op-name-only' });
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerName: 'alpha',
+        now: Date.now(),
+      });
+      // scheduleHeldOperationRelease by name only — exercises the branch-3 (false) path
+      const released = hold.scheduleHeldOperationRelease({
+        containerName: 'alpha',
+        now: Date.now(),
+      });
+      expect(released).toBe(true);
+    });
+
+    it('containerName fallback in targetName resolution when target has no name but has containerName (lines 129-131)', () => {
+      // When holdMatchesTarget receives a target object with only containerName (and no
+      // 'name' property), the first ternary arm ('name' in target → false) is skipped and
+      // the second arm ('containerName' in target → true) provides the target name.
+      const operation = makeOperation({ id: 'op-cn-branch' });
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerName: 'beta',
+        now: Date.now(),
+      });
+      // clearHeldOperation receives { containerName: 'beta' } — no 'name' key — which
+      // flows through holdMatchesTarget's containerName ternary arm.
+      hold.clearHeldOperation({ containerName: 'beta' });
+      expect(hold.heldOperations.value.has(operation.id)).toBe(false);
+    });
+
+    it('identityKey preserved when updateHoldTargets receives target with no identityKey (line 176 false branch)', () => {
+      // scheduleHeldOperationRelease args never include identityKey, so
+      // updateHoldTargets always takes the false arm: hold.identityKey is retained.
+      const operation = makeOperation({ id: 'op-ik-preserve' });
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerId: 'c-ik',
+        identityKey: 'keep-me',
+        containerName: 'gamma',
+        now: Date.now(),
+      });
+      hold.scheduleHeldOperationRelease({
+        operationId: operation.id,
+        containerId: 'c-ik',
+        // No identityKey → updateHoldTargets false branch retains 'keep-me'
+        now: Date.now(),
+      });
+      expect(hold.heldOperations.value.get(operation.id)?.identityKey).toBe('keep-me');
+    });
+
+    it('returns false early when both target and hold have ids but none match (line 120 true branch c: both have ids)', () => {
+      // Hold has containerIds=['c-delta']. Target has containerId='c-epsilon' (different).
+      // Line 120: (targetIds.length > 0 && hold.containerIds.length > 0) → true → return false.
+      // clearHeldOperation must NOT clear the hold.
+      const operation = makeOperation({ id: 'op-id-mismatch' });
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerId: 'c-delta',
+        containerName: 'delta',
+        now: Date.now(),
+      });
+      hold.clearHeldOperation({ containerId: 'c-epsilon' });
+      // Hold must still be present — mismatch triggered return false on line 120
+      expect(hold.heldOperations.value.has(operation.id)).toBe(true);
+    });
+
+    it('falls through line 120 when target has ids but hold has no containerIds (line 120 branch b: && short-circuit)', () => {
+      // Hold created without containerId → hold.containerIds = [].
+      // Target has containerId='c-theta'. targetIds.length > 0 = true, hold.containerIds.length = 0.
+      // Line 120: (true && false) → false; line 121: (undefined && undefined) → false → skip guard.
+      // Falls through to name comparison (containerName matches → returns true).
+      const operation = makeOperation({ id: 'op-no-hold-ids' });
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        // No containerId → hold.containerIds = []
+        containerName: 'theta',
+        now: Date.now(),
+      });
+      // Target has containerId but hold has none → line 120 && short-circuits to false.
+      // Falls through to name match via containerName.
+      hold.scheduleHeldOperationRelease({
+        containerId: 'c-theta',
+        containerName: 'theta',
+        now: Date.now(),
+      });
+      expect(hold.heldOperations.value.has(operation.id)).toBe(true);
+    });
+
+    it('exercises line 121 false-D branch: target has identityKey but hold has no identityKey (targetIdentityKey && hold.identityKey → falsy)', () => {
+      // Hold has no identityKey. Target (Container-like) has identityKey='ik-kappa'.
+      // In holdMatchesTarget: targetIdentityKey='ik-kappa' (truthy), hold.identityKey=undefined (falsy).
+      // Line 121: (targetIdentityKey && hold.identityKey) → ('ik-kappa' && undefined) → false.
+      // Line 120: (targetIds.length > 0 && hold.containerIds.length > 0) also false (hold has no ids).
+      // Falls through to name check. containerName 'kappa' matches → returns true.
+      const operation = makeOperation({ id: 'op-ik-falsy-hold' });
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        // No identityKey, no containerId → hold.containerIds=[], hold.identityKey=undefined
+        containerName: 'kappa',
+        now: Date.now(),
+      });
+      // getDisplayUpdateOperation with identityKey — target has identityKey but hold doesn't.
+      // This is the Container-like call path that reaches holdMatchesTarget.
+      const result = hold.getDisplayUpdateOperation({
+        id: 'c-kappa',
+        name: 'kappa',
+        identityKey: 'ik-kappa',
+        updateOperation: undefined,
+      });
+      expect(result).toStrictEqual(operation);
+    });
+
+    it('targetName resolves to undefined when target object has neither name nor containerName (lines 129-131 undefined branch)', () => {
+      // When holdMatchesTarget is called with a target that is an object without
+      // 'name' or 'containerName' keys, targetName evaluates to undefined and the
+      // function returns false (line 137-139 guard fails).
+      const operation = makeOperation({ id: 'op-no-name' });
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerName: 'zeta',
+        now: Date.now(),
+      });
+      // clearHeldOperation({ operationId: 'missing' }) → findMatchingOperationIds iterates
+      // all holds and calls holdMatchesTarget(hold, { operationId: 'missing' }).
+      // That target has no name/containerName → targetName = undefined → returns false.
+      hold.clearHeldOperation({ operationId: 'missing-op' });
+      // Hold must still be present — no match found
+      expect(hold.heldOperations.value.has(operation.id)).toBe(true);
+    });
+
+    it("'name' in target true branch: target with valid name string matches by containerName fallback (line 129 true path)", () => {
+      // getDisplayUpdateOperation receives an object with 'name' (Container-like target).
+      // holdMatchesTarget checks: 'name' in target → true; typeof target.name === 'string' → true.
+      // Hold has containerName='eta' and no containerIds.
+      // Target has id='c-eta' and name='eta'. targetIds=['c-eta'], hold.containerIds=[].
+      // Line 120: (1>0 && 0>0) → false, (undefined && undefined) → false → skip.
+      // Line 129: 'name' in target → true, name === 'eta' → targetName = 'eta'.
+      // Matches hold.containerName → returns true.
+      const operation = makeOperation({ id: 'op-name-match' });
+      hold.holdOperationDisplay({
+        operationId: operation.id,
+        operation,
+        containerName: 'eta',
+        now: Date.now(),
+      });
+      // getDisplayUpdateOperation with a Container-like target (has 'name') exercises line 129
+      const result = hold.getDisplayUpdateOperation({
+        id: 'c-eta',
+        name: 'eta',
+        updateOperation: undefined,
+      });
+      expect(result).toStrictEqual(operation);
     });
   });
 });

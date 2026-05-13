@@ -704,6 +704,81 @@ describe('request-update', () => {
     );
   });
 
+  test('dispatchAccepted formats multi-entry context with joined operation ids', async () => {
+    // Exercises the multi-entry branch where operationIds is non-empty (joined result).
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockRejectedValue(new Error('boom')),
+    };
+    mockGetOperationById.mockImplementation((id: string) => ({
+      id,
+      status: 'queued',
+      phase: 'queued',
+    }));
+
+    dispatchAccepted([
+      { container: createContainer({ id: 'c1', name: 'nginx' }), operationId: 'op-a', trigger },
+      { container: createContainer({ id: 'c2', name: 'redis' }), operationId: 'op-b', trigger },
+    ]);
+
+    await vi.waitFor(() =>
+      expect(mockLogWarn).toHaveBeenCalledWith(
+        expect.stringMatching(/2 accepted updates \(operations op-a, op-b\)/),
+      ),
+    );
+  });
+
+  test('dispatchAccepted formats multi-entry context without operation ids when all are empty', async () => {
+    // Exercises the ternary `: ''` branch where all operationIds filter out to empty strings.
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockRejectedValue(new Error('boom')),
+    };
+    mockGetOperationById.mockImplementation((id: string) => ({
+      id,
+      status: 'queued',
+      phase: 'queued',
+    }));
+
+    dispatchAccepted([
+      { container: createContainer({ id: 'c1', name: 'nginx' }), operationId: '', trigger },
+      { container: createContainer({ id: 'c2', name: 'redis' }), operationId: '', trigger },
+    ]);
+
+    await vi.waitFor(() => {
+      expect(mockLogWarn).toHaveBeenCalledWith(
+        expect.stringMatching(/^Accepted update dispatch failed for 2 accepted updates: boom$/),
+      );
+    });
+  });
+
+  test('dispatchAccepted formats single-entry context with <unknown> when container has no name or id', async () => {
+    // Exercises the '<unknown>' fallback in the `||` chain for the single-entry branch.
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockRejectedValue(new Error('bang')),
+    };
+    mockGetOperationById.mockImplementation((id: string) => ({
+      id,
+      status: 'queued',
+      phase: 'queued',
+    }));
+
+    dispatchAccepted([
+      {
+        container: createContainer({ id: '', name: '' }),
+        operationId: 'op-x',
+        trigger,
+      },
+    ]);
+
+    await vi.waitFor(() =>
+      expect(mockLogWarn).toHaveBeenCalledWith(
+        expect.stringContaining('<unknown> (operation op-x)'),
+      ),
+    );
+  });
+
   test('requestContainerUpdates enqueues all containers and dispatches accepted', async () => {
     const trigger = {
       type: 'docker',

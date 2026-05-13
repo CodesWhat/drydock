@@ -210,4 +210,41 @@ describe('icons/svg', () => {
 
     expect(sanitized).toContain('<rect');
   });
+
+  test('preserves url(#local) reference on a non-URL_REFERENCE_ATTRIBUTES attribute', () => {
+    // 'color' is in ALLOWED_SVG_ATTRIBUTES but NOT in URL_REFERENCE_ATTRIBUTES.
+    // When color="url(#g)", !/url\(/.test('url(#g)') is false, so containsOnlyLocalUrlReferences
+    // is called and returns true — the attribute is kept (exercises line 184 branch 1).
+    const sanitized = sanitizeSvgPayload(
+      Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g"/></defs><rect width="1" height="1" color="url(#g)"/></svg>',
+      ),
+    ).toString('utf8');
+
+    expect(sanitized).toContain('color="url(#g)"');
+  });
+
+  test('strips external href on a URL-reference attribute element (linearGradient)', () => {
+    // linearGradient href="http://..." triggers the URL_REFERENCE_ATTRIBUTES href branch (line 174)
+    const sanitized = sanitizeSvgPayload(
+      Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="g1" href="http://evil.example.com"/></defs><rect width="1" height="1"/></svg>',
+      ),
+    ).toString('utf8');
+
+    expect(sanitized).not.toContain('href=');
+    expect(sanitized).not.toContain('evil.example.com');
+  });
+
+  test('strips whitespace-only text nodes inside non-title/desc elements', () => {
+    // A space before <rect> inside <g> produces a '#text': ' ' node with parent 'g'.
+    // Since text.trim() === '' and parentElementName !== 'title'/'desc', line 231 returns null.
+    const sanitized = sanitizeSvgPayload(
+      Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg"><g> <rect width="1" height="1"/></g></svg>',
+      ),
+    ).toString('utf8');
+
+    expect(sanitized).toContain('<rect');
+  });
 });

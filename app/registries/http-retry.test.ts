@@ -345,4 +345,26 @@ describe('withRetry', () => {
     await expect(withRetry(request, { maxRetries: -1 })).rejects.toBeUndefined();
     expect(request).not.toHaveBeenCalled();
   });
+
+  test('Retry-After with comma/space that is not a valid date falls back to exponential backoff', async () => {
+    // The string ", garbage" passes the /[, ]/ regex check but Date.parse returns NaN,
+    // so parseRetryAfterMs returns undefined and the caller falls back to backoff delay.
+    const mockLogger = { debug: vi.fn() };
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(makeAxiosError(429, { 'retry-after': ', garbage' }))
+      .mockResolvedValueOnce({ status: 200, headers: {}, data: 'ok' });
+
+    const promise = withRetry(request, {
+      backoffBaseMs: 100,
+      logger: mockLogger,
+      requestLabel: 'test',
+    });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result.data).toBe('ok');
+    // Falls back to exponential backoff: 100 * 2^0 = 100ms
+    expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('100ms'));
+  });
 });

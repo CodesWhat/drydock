@@ -172,6 +172,8 @@ function updateHoldTargets(hold: OperationDisplayHoldRecord, target: OperationDi
       target.containerId,
       target.newContainerId,
     ),
+    // c8 ignore next 4: scheduleHeldOperationRelease (the only caller) never passes identityKey; true branch unreachable
+    /* c8 ignore next 4 */
     identityKey:
       typeof target.identityKey === 'string' && target.identityKey.length > 0
         ? target.identityKey
