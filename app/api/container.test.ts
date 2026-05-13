@@ -64,6 +64,7 @@ vi.mock('../store/audit', () => ({
 vi.mock('../store/update-operation', () => ({
   listActiveOperations: vi.fn(() => []),
   getOperationsByContainerName: (...args: unknown[]) => mockGetOperationsByContainerName(...args),
+  getOperationsByContainerId: vi.fn(() => []),
   getOperationById: vi.fn(() => undefined),
   getInProgressOperationByContainerName: vi.fn(() => undefined),
   getInProgressOperationByContainerId: vi.fn(() => undefined),
@@ -1505,6 +1506,7 @@ describe('Container Router', () => {
           },
           updateOperationStore: {
             getOperationsByContainerName: vi.fn(() => []),
+            getOperationsByContainerId: vi.fn(() => []),
             getInProgressOperationByContainerName: vi.fn(() => undefined),
             getInProgressOperationByContainerId: vi.fn(() => undefined),
             getActiveOperationByContainerName: vi.fn(() => undefined),

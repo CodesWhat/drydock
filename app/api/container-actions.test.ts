@@ -66,6 +66,7 @@ vi.mock('../store/update-operation', () => ({
   markOperationTerminal: mockMarkOperationTerminal,
   getOperationById: vi.fn(),
   getOperationsByContainerName: vi.fn(() => []),
+  getOperationsByContainerId: vi.fn(() => []),
   getInProgressOperationByContainerName: vi.fn(),
   getInProgressOperationByContainerId: vi.fn(),
   getActiveOperationByContainerName: vi.fn(),

@@ -1811,6 +1811,66 @@ describe('Update Operation Store', () => {
     expect(fresh.getOperationsByContainerName('web')).toEqual([]);
   });
 
+  test('getOperationsByContainerId should return empty array when uninitialized', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    expect(fresh.getOperationsByContainerId('abc')).toEqual([]);
+  });
+
+  test('getOperationsByContainerId should return empty array for empty string', () => {
+    expect(updateOperation.getOperationsByContainerId('')).toEqual([]);
+  });
+
+  test('getOperationsByContainerId should return empty array when no operations match', () => {
+    updateOperation.insertOperation({ containerName: 'web', containerId: 'other-id' });
+    expect(updateOperation.getOperationsByContainerId('no-match')).toEqual([]);
+  });
+
+  test('getOperationsByContainerId should return operations matched by containerId', () => {
+    updateOperation.insertOperation({ containerName: 'sibling', containerId: 'sibling-id' });
+    const op = updateOperation.insertOperation({ containerName: 'web', containerId: 'target-id' });
+
+    const results = updateOperation.getOperationsByContainerId('target-id');
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe(op.id);
+  });
+
+  test('getOperationsByContainerId should return operations matched by newContainerId', () => {
+    const op = updateOperation.insertOperation({ containerName: 'web', containerId: 'old-id' });
+    updateOperation.updateOperation(op.id, { newContainerId: 'new-id' });
+
+    const results = updateOperation.getOperationsByContainerId('new-id');
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe(op.id);
+  });
+
+  test('getOperationsByContainerId should deduplicate an operation that matches both containerId and newContainerId', () => {
+    const op = updateOperation.insertOperation({ containerName: 'web', containerId: 'shared-id' });
+    updateOperation.updateOperation(op.id, { newContainerId: 'shared-id' });
+
+    const results = updateOperation.getOperationsByContainerId('shared-id');
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe(op.id);
+  });
+
+  test('getOperationsByContainerId should sort results by timestamp descending', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
+      const first = updateOperation.insertOperation({ containerName: 'web', containerId: 'c1' });
+
+      vi.setSystemTime(new Date('2026-02-23T00:01:00.000Z'));
+      const second = updateOperation.insertOperation({ containerName: 'web', containerId: 'c1' });
+
+      const results = updateOperation.getOperationsByContainerId('c1');
+      expect(results).toHaveLength(2);
+      expect(results[0].id).toBe(second.id);
+      expect(results[1].id).toBe(first.id);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('insertOperation should work without initialized collection', async () => {
     vi.resetModules();
     const fresh = await import('./update-operation.js');

@@ -161,6 +161,7 @@ function createHarness(options: { containers?: any[] } = {}) {
     },
     updateOperationStore: {
       getOperationsByContainerName: vi.fn(() => []),
+      getOperationsByContainerId: vi.fn(() => []),
       getInProgressOperationByContainerName: vi.fn(() => undefined),
       getInProgressOperationByContainerId: vi.fn(() => undefined),
       getActiveOperationByContainerName: vi.fn(() => undefined),
@@ -2691,6 +2692,119 @@ describe('api/container/crud', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
       expect(harness.deps.updateOperationStore.getOperationsByContainerName).not.toHaveBeenCalled();
     });
+
+    test('returns operations matched by container id even when containerName differs', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', name: 'pihole-1' })],
+      });
+      harness.deps.updateOperationStore.getOperationsByContainerId.mockReturnValue([
+        {
+          id: 'op-1',
+          containerId: 'c1',
+          containerName: 'pihole-old',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ]);
+      harness.deps.updateOperationStore.getOperationsByContainerName.mockReturnValue([]);
+
+      const res = callGetContainerUpdateOperations(harness.handlers, 'c1');
+
+      expect(harness.deps.updateOperationStore.getOperationsByContainerId).toHaveBeenCalledWith(
+        'c1',
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: [
+            {
+              id: 'op-1',
+              containerId: 'c1',
+              containerName: 'pihole-old',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          total: 1,
+        }),
+      );
+    });
+
+    test('excludes sibling container operations that share a name but have a different id', () => {
+      const harness = createHarness({
+        containers: [
+          createContainer({ id: 'c1', name: 'pihole' }),
+          createContainer({ id: 'c2', name: 'pihole' }),
+        ],
+      });
+      // c1's operations matched by id
+      harness.deps.updateOperationStore.getOperationsByContainerId.mockReturnValue([
+        {
+          id: 'op-c1',
+          containerId: 'c1',
+          containerName: 'pihole',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ]);
+      // Name lookup returns both containers' ops — sibling (c2) should be excluded
+      harness.deps.updateOperationStore.getOperationsByContainerName.mockReturnValue([
+        {
+          id: 'op-c1',
+          containerId: 'c1',
+          containerName: 'pihole',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'op-c2',
+          containerId: 'c2',
+          containerName: 'pihole',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ]);
+
+      const res = callGetContainerUpdateOperations(harness.handlers, 'c1');
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      const jsonArg = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(jsonArg.total).toBe(1);
+      expect(jsonArg.data.map((op: { id: string }) => op.id)).toEqual(['op-c1']);
+    });
+
+    test('includes legacy operations (no containerId field) matched by name', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', name: 'edge-api' })],
+      });
+      harness.deps.updateOperationStore.getOperationsByContainerId.mockReturnValue([]);
+      harness.deps.updateOperationStore.getOperationsByContainerName.mockReturnValue([
+        { id: 'op-legacy', containerName: 'edge-api', updatedAt: '2026-01-01T00:00:00.000Z' },
+      ]);
+
+      const res = callGetContainerUpdateOperations(harness.handlers, 'c1');
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      const jsonArg = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(jsonArg.total).toBe(1);
+      expect(jsonArg.data[0].id).toBe('op-legacy');
+    });
+
+    test('deduplicates an operation that matches both by id and by name', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', name: 'edge-api' })],
+      });
+      const op = {
+        id: 'op-1',
+        containerId: 'c1',
+        containerName: 'edge-api',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      };
+      harness.deps.updateOperationStore.getOperationsByContainerId.mockReturnValue([op]);
+      harness.deps.updateOperationStore.getOperationsByContainerName.mockReturnValue([op]);
+
+      const res = callGetContainerUpdateOperations(harness.handlers, 'c1');
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      const jsonArg = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(jsonArg.total).toBe(1);
+      expect(jsonArg.data).toHaveLength(1);
+    });
   });
 
   describe('release notes handler', () => {
@@ -2776,6 +2890,7 @@ describe('api/container/crud', () => {
           },
           updateOperationStore: {
             getOperationsByContainerName: vi.fn(() => []),
+            getOperationsByContainerId: vi.fn(() => []),
             getInProgressOperationByContainerName: vi.fn(() => undefined),
             getInProgressOperationByContainerId: vi.fn(() => undefined),
           },

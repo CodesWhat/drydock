@@ -124,7 +124,21 @@ export function createGetContainerUpdateOperationsHandler(context: CrudHandlerCo
       return;
     }
 
-    const operations = context.updateOperationStore.getOperationsByContainerName(container.name);
+    const byId = context.updateOperationStore.getOperationsByContainerId(container.id) as Array<
+      Record<string, unknown>
+    >;
+    const byName = context.updateOperationStore.getOperationsByContainerName(
+      container.name,
+    ) as Array<Record<string, unknown>>;
+    const idSet = new Set(byId.map((op) => op['id']));
+    // Include name-matched ops only when they are legacy (no containerId field) and not already in byId.
+    const legacyByName = byName.filter((op) => !idSet.has(op['id']) && !('containerId' in op));
+    const merged = [...byId, ...legacyByName];
+    const operations = merged.sort(
+      (a, b) =>
+        new Date(String((b['updatedAt'] ?? b['createdAt']) || 0)).getTime() -
+        new Date(String((a['updatedAt'] ?? a['createdAt']) || 0)).getTime(),
+    );
     const pagination = normalizeContainerListPagination(req.query);
     const data = paginateCollection(operations, pagination);
     const hasMore = pagination.limit > 0 && pagination.offset + data.length < operations.length;

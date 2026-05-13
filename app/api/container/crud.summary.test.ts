@@ -32,6 +32,7 @@ function createHandlers(getContainersFromStore: () => unknown) {
       },
       updateOperationStore: {
         getOperationsByContainerName: vi.fn(() => []),
+        getOperationsByContainerId: vi.fn(() => []),
         getInProgressOperationByContainerName: vi.fn(),
         getInProgressOperationByContainerId: vi.fn(),
         getActiveOperationByContainerName: vi.fn(),
