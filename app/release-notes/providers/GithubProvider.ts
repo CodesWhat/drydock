@@ -1,5 +1,7 @@
 import axios from 'axios';
 import logger from '../../log/index.js';
+import { getGhcrTokenFallback } from '../../registries/ghcr-token-fallback.js';
+import { withRetry } from '../../registries/http-retry.js';
 import type { ReleaseNotes, ReleaseNotesProviderClient } from '../types.js';
 
 const log = logger.child({ component: 'release-notes.provider.github' });
@@ -91,32 +93,47 @@ class GithubProvider implements ReleaseNotesProviderClient {
       return undefined;
     }
 
+    // Use explicitly provided token, then fall back to any configured GHCR PAT
+    // (GitHub PATs work for both ghcr.io and api.github.com).
+    const effectiveToken = token ?? getGhcrTokenFallback();
+
     for (const tagVariant of tagVariants) {
       const endpoint = `https://api.github.com/repos/${repo.owner}/${repo.repo}/releases/tags/${encodeURIComponent(
         tagVariant,
       )}`;
       try {
-        const response = await axios.get(endpoint, {
-          headers: {
-            Accept: 'application/vnd.github+json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        const data = await withRetry(
+          () =>
+            axios
+              .get(endpoint, {
+                headers: {
+                  Accept: 'application/vnd.github+json',
+                  ...(effectiveToken ? { Authorization: `Bearer ${effectiveToken}` } : {}),
+                },
+                timeout: 10_000,
+              })
+              .then((r) => ({
+                status: r.status,
+                headers: r.headers as Record<string, string | undefined>,
+                data: r.data,
+              })),
+          {
+            logger: log,
+            requestLabel: `github-release-notes GET ${endpoint}`,
+            retryableStatuses: [429, 503],
           },
-          timeout: 10_000,
-        });
+        );
 
-        const body = typeof response?.data?.body === 'string' ? response.data.body : '';
+        const body = typeof data?.body === 'string' ? data.body : '';
         const title =
-          typeof response?.data?.name === 'string' && response.data.name.trim() !== ''
-            ? response.data.name
-            : tagVariant;
+          typeof data?.name === 'string' && data.name.trim() !== '' ? data.name : tagVariant;
         const url =
-          typeof response?.data?.html_url === 'string' && response.data.html_url.trim() !== ''
-            ? response.data.html_url
+          typeof data?.html_url === 'string' && data.html_url.trim() !== ''
+            ? data.html_url
             : `https://github.com/${repo.owner}/${repo.repo}/releases/tag/${encodeURIComponent(tagVariant)}`;
         const publishedAt =
-          typeof response?.data?.published_at === 'string' &&
-          !Number.isNaN(Date.parse(response.data.published_at))
-            ? response.data.published_at
+          typeof data?.published_at === 'string' && !Number.isNaN(Date.parse(data.published_at))
+            ? data.published_at
             : new Date(0).toISOString();
 
         return {

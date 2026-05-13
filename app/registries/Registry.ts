@@ -6,6 +6,8 @@ import { getSummaryTags } from '../prometheus/registry.js';
 import Component, { type ComponentConfiguration } from '../registry/Component.js';
 import { getErrorMessage } from '../util/error.js';
 import { getRegistryRequestTimeoutMs } from './configuration.js';
+import { withRetry } from './http-retry.js';
+import { acquireToken, getBucketForUrl } from './token-bucket.js';
 
 interface RegistryManifest {
   digest?: string;
@@ -465,10 +467,34 @@ class Registry<
     };
 
     try {
-      const response = await axios<T>(axiosOptionsWithConnectionReuse);
+      // Rate-limit ourselves before hitting the registry
+      await acquireToken(getBucketForUrl(url));
+
+      // Capture the full axios response so we can return headers when needed.
+      let lastAxiosResponse: AxiosResponse<T> | undefined;
+
+      await withRetry<T>(
+        () =>
+          axios<T>(axiosOptionsWithConnectionReuse).then((r) => {
+            lastAxiosResponse = r;
+            return {
+              status: r.status,
+              headers: r.headers as Record<string, string | undefined>,
+              data: r.data,
+            };
+          }),
+        {
+          logger: this.log,
+          requestLabel: `${this.getId()} ${method} ${url}`,
+        },
+      );
+
       const end = Date.now();
       getSummaryTags()?.observe({ type: this.type, name: this.name }, (end - start) / 1000);
-      return resolveWithFullResponse ? response : response.data;
+      // lastAxiosResponse is always set when withRetry resolves
+      return resolveWithFullResponse
+        ? (lastAxiosResponse as AxiosResponse<T>)
+        : lastAxiosResponse!.data;
     } catch (error) {
       const end = Date.now();
       getSummaryTags()?.observe({ type: this.type, name: this.name }, (end - start) / 1000);

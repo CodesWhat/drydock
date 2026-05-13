@@ -8,6 +8,19 @@ vi.mock('../prometheus/registry', () => ({
   }),
 }));
 
+// withRetry: pass-through by default (calls the request fn once and returns its data).
+// acquireToken: no-op (token bucket has no effect on unit tests).
+vi.mock('./http-retry.js', () => ({
+  withRetry: vi.fn(async (requestFn) => {
+    const response = await requestFn();
+    return response.data;
+  }),
+}));
+vi.mock('./token-bucket.js', () => ({
+  acquireToken: vi.fn(() => Promise.resolve()),
+  getBucketForUrl: vi.fn(() => ({ key: 'mock-host', ratePerSec: 10, burst: 10 })),
+}));
+
 import Registry from './Registry.js';
 
 // --- Factory helpers (not used inside vi.mock, safe to define here) ---
@@ -1203,5 +1216,75 @@ describe('callRegistry', () => {
       resolveWithFullResponse: true,
     });
     expect(result).toBe(mockResponse);
+  });
+
+  test('acquires a token bucket token before each request', async () => {
+    const { default: axios } = await import('axios');
+    const { acquireToken } = await import('./token-bucket.js');
+    vi.clearAllMocks();
+    axios.mockResolvedValue({ data: 'ok', headers: {} });
+    const registryMocked = createMockedRegistry();
+    await registryMocked.callRegistry({
+      image: {},
+      url: 'https://ghcr.io/v2/img/tags/list',
+      method: 'get',
+    });
+    expect(acquireToken).toHaveBeenCalledTimes(1);
+    expect(acquireToken).toHaveBeenCalledWith(expect.objectContaining({ key: expect.any(String) }));
+  });
+
+  test('delegates 429 retry to withRetry and rethrows after exhaustion', async () => {
+    const { withRetry } = await import('./http-retry.js');
+    // Override withRetry to simulate exhausted retries throwing the 429
+    const err429 = new Error('Request failed with status code 429');
+    (err429 as any).response = { status: 429, headers: {} };
+    (withRetry as ReturnType<typeof vi.fn>).mockRejectedValueOnce(err429);
+
+    const registryMocked = createMockedRegistry();
+    registryMocked.type = 'hub';
+    registryMocked.name = 'test';
+
+    await expect(
+      registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+    ).rejects.toThrow('status code 429');
+  });
+
+  test('delegates 503 retry to withRetry and rethrows after exhaustion', async () => {
+    const { withRetry } = await import('./http-retry.js');
+    const err503 = new Error('Request failed with status code 503');
+    (err503 as any).response = { status: 503, headers: {} };
+    (withRetry as ReturnType<typeof vi.fn>).mockRejectedValueOnce(err503);
+
+    const registryMocked = createMockedRegistry();
+    registryMocked.type = 'hub';
+    registryMocked.name = 'test';
+
+    await expect(
+      registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+    ).rejects.toThrow('status code 503');
+  });
+
+  test('passes logger and requestLabel to withRetry', async () => {
+    const { default: axios } = await import('axios');
+    const { withRetry } = await import('./http-retry.js');
+    axios.mockResolvedValue({ data: 'payload', headers: {} });
+
+    const registryMocked = createMockedRegistry();
+    registryMocked.type = 'hub';
+    registryMocked.name = 'myname';
+
+    await registryMocked.callRegistry({
+      image: {},
+      url: 'https://registry.io/v2/img/tags/list',
+      method: 'get',
+    });
+
+    expect(withRetry).toHaveBeenCalledWith(
+      expect.any(Function),
+      expect.objectContaining({
+        logger: expect.objectContaining({ debug: expect.any(Function) }),
+        requestLabel: expect.stringContaining('https://registry.io/v2/img/tags/list'),
+      }),
+    );
   });
 });

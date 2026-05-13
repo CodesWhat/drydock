@@ -12,6 +12,19 @@ import Ocir from '../ocir/Ocir.js';
 
 vi.mock('axios');
 
+// withRetry: pass-through so provider tests control axios mock behaviour directly.
+// acquireToken: no-op in unit tests.
+vi.mock('../../http-retry.js', () => ({
+  withRetry: vi.fn(async (requestFn) => {
+    const response = await requestFn();
+    return response.data;
+  }),
+}));
+vi.mock('../../token-bucket.js', () => ({
+  acquireToken: vi.fn(() => Promise.resolve()),
+  getBucketForUrl: vi.fn(() => ({ key: 'mock-host', ratePerSec: 10, burst: 10 })),
+}));
+
 function createHttpError(message: string, status?: number) {
   const error = new Error(message);
   if (status) {
