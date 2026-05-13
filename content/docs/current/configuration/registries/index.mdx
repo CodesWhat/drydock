@@ -31,5 +31,18 @@ drydock supports 23 registries:
 - [**Quay**](/docs/configuration/registries/quay)
 - [**TrueForge** (TrueForge OCI Registry)](/docs/configuration/registries/trueforge)
 
+<Callout type="info" title="Naming registry instances">
+Registry env vars use the pattern `DD_REGISTRY_<TYPE>_<INSTANCE>_<KEY>` — the `<INSTANCE>` part (shown as `{REGISTRY_NAME}` in tables on the pages below) is a label you pick. It lets you register multiple instances of the same registry type (e.g. one private GHCR account plus the public one). Existing examples use `PUBLIC` for Docker Hub and `PRIVATE` for GHCR:
+
+```yaml
+- DD_REGISTRY_HUB_PUBLIC_LOGIN=myuser
+- DD_REGISTRY_HUB_PUBLIC_PASSWORD=dckr_pat_xxx
+- DD_REGISTRY_GHCR_PRIVATE_USERNAME=myuser
+- DD_REGISTRY_GHCR_PRIVATE_TOKEN=ghp_xxx
+```
+
+Pick whatever label is meaningful for you — `PRIVATE`, `WORK`, `MYCO` all work. The label is internal-only; it never appears in image references.
+</Callout>
+
 <Callout type="info">By default, without any further configuration, drydock handles _out-of-the-box_ public images hosted on
 ALICR, Codeberg, DHI, DOCR, ECR (public.ecr.aws), GAR, GCR, GHCR, HUB, IBMCR, LSCR, MAU, OCIR, QUAY, TrueForge</Callout>

@@ -1398,6 +1398,19 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     const imageRecord = image as DockerImageInspectPayloadLike;
     let imageNameToParse = imageName;
     if (imageNameToParse.includes('sha256:')) {
+      // Hybrid form: image:tag@sha256:digest — a colon (for the tag) appears
+      // before the '@sha256:' suffix. The deploy ref already carries an
+      // authoritative tag — return it directly without consulting RepoTags.
+      const atDigestIndex = imageNameToParse.indexOf('@sha256:');
+      if (atDigestIndex > 0 && imageNameToParse.lastIndexOf(':', atDigestIndex) > 0) {
+        const parsedHybrid = parse(imageNameToParse);
+        if (parsedHybrid.tag) {
+          return parsedHybrid;
+        }
+      }
+      // Raw image ID (sha256:...) or digest-pinned ref without a tag
+      // (image@sha256:...): need a tag from RepoTags, or fall back to
+      // resolveDigestOnlyImage.
       if (!imageRecord.RepoTags || imageRecord.RepoTags.length === 0) {
         this.ensureLogger();
         const namePrefix = containerName ? `${containerName}: ` : '';

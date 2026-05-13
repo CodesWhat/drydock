@@ -1177,6 +1177,53 @@ describe('Docker Watcher', () => {
       );
     });
 
+    test('should resolve hybrid tag@digest ref without warning when RepoTags is empty', async () => {
+      const hybridRef =
+        'docker.io/valkey/valkey:9@sha256:3b55fbaa0cd93cf0d9d961f405e4dfcc70efe325e2d84da207a0a8e6d8fde4f9';
+      const container = await setupContainerDetailTest(docker, {
+        container: {
+          Image: 'sha256:3b55fbaa0cd93cf0d9d961f405e4dfcc70efe325e2d84da207a0a8e6d8fde4f9',
+          Names: ['/valkey'],
+        },
+        imageDetails: {
+          RepoTags: [],
+          RepoDigests: [
+            'valkey/valkey@sha256:3b55fbaa0cd93cf0d9d961f405e4dfcc70efe325e2d84da207a0a8e6d8fde4f9',
+          ],
+          Config: {
+            Image: hybridRef,
+          },
+        },
+        parseImpl: (value) => {
+          if (value === hybridRef) {
+            return {
+              domain: 'docker.io',
+              path: 'valkey/valkey',
+              tag: '9',
+              digest: 'sha256:3b55fbaa0cd93cf0d9d961f405e4dfcc70efe325e2d84da207a0a8e6d8fde4f9',
+            };
+          }
+          if (value === 'valkey/valkey') {
+            return { path: 'valkey/valkey' };
+          }
+          return { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' };
+        },
+        semverValue: { major: 9, minor: 0, patch: 0 },
+        validateImpl: (c) => c,
+      });
+
+      // Simulate inspect returning Config.Image = hybrid ref
+      mockContainer.inspect.mockResolvedValue({ Config: { Image: hybridRef } });
+
+      docker.log = createMockLog(['warn', 'info', 'debug']);
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result.image.tag.value).toBe('9');
+      expect(docker.log.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('Cannot get a reliable tag'),
+      );
+    });
+
     test('should fall back when repo digest is malformed and missing "@"', async () => {
       const container = await setupContainerDetailTest(docker, {
         container: {
