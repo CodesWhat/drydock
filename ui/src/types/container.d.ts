@@ -1,7 +1,7 @@
 import type {
+  ActiveContainerUpdateOperationPhase,
   ContainerUpdateOperationKind,
   ContainerUpdateOperationStatus,
-  ActiveContainerUpdateOperationPhase,
 } from './update-operation';
 
 export type UpdateBlockerReason =

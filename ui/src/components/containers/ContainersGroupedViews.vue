@@ -635,8 +635,13 @@ onScopeDispose(() => {
             </div>
           </div>
           <div v-else-if="c.updateKind === 'digest' && c.newDigest && c.currentDigest" class="container-version-query">
-            <div class="container-version-flow">
-              <CopyableTag :tag="c.currentTag" class="container-version-tag container-version-tag-target text-2xs-plus font-semibold" style="color: var(--dd-primary);" v-tooltip.top="tt(`${c.currentTag} — ${formatShortDigest(c.currentDigest)} → ${formatShortDigest(c.newDigest)}`)" @click.stop>{{ c.currentTag }}</CopyableTag>
+            <div class="container-version-flow flex-col items-start gap-0.5">
+              <span class="text-2xs dd-text-muted truncate max-w-[140px]" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
+              <div class="container-version-flow">
+                <span class="container-version-tag text-2xs-plus dd-text-secondary" v-tooltip.top="c.currentDigest">{{ formatShortDigest(c.currentDigest) }}</span>
+                <AppIcon name="arrow-right" :size="8" class="container-version-arrow dd-text-muted shrink-0" />
+                <CopyableTag :tag="c.newDigest" class="container-version-tag container-version-tag-target text-2xs-plus font-semibold" style="color: var(--dd-primary);" @click.stop>{{ formatShortDigest(c.newDigest) }}</CopyableTag>
+              </div>
             </div>
           </div>
           <div v-else-if="c.newTag" class="container-version-query">
@@ -1044,11 +1049,17 @@ onScopeDispose(() => {
                 <span v-if="c.updateMaturity" class="text-2xs dd-text-muted">{{ getUpdateMaturityLabel(c.updateMaturity) }}</span>
               </template>
               <template v-else-if="c.updateKind === 'digest' && c.newDigest && c.currentDigest">
+                <span class="text-2xs-plus ml-1 dd-text-muted shrink-0">{{ t('containerComponents.groupedViews.latestLabel') }}</span>
+                <CopyableTag :tag="c.currentDigest" class="text-xs dd-text-muted truncate max-w-[80px]" @click.stop>{{ formatShortDigest(c.currentDigest) }}</CopyableTag>
+                <AppIcon name="arrow-right" :size="8" class="dd-text-muted shrink-0" />
+                <CopyableTag :tag="c.newDigest" class="text-xs font-bold truncate max-w-[80px]"
+                      :style="{ color: updateKindColor(c.updateKind).text }" @click.stop>
+                  {{ formatShortDigest(c.newDigest) }}
+                </CopyableTag>
                 <span
                   data-test="container-card-update-state"
-                  class="inline-flex items-center gap-1.5 ml-1 text-2xs-plus font-semibold"
+                  class="inline-flex items-center gap-1.5 text-2xs-plus font-semibold"
                   :style="{ color: getContainerUpdateStateColor(c) }"
-                  v-tooltip.top="tt(`${formatShortDigest(c.currentDigest)} → ${formatShortDigest(c.newDigest)}`)"
                 >
                   <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: getContainerUpdateStateColor(c) }"></span>
                   {{ getContainerUpdateStateLabel(c) }}
