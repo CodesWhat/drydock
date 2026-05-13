@@ -47,6 +47,7 @@ jobs:
             --language=pt-BR
             --language=ru
             --language=tr
+            --language=vi
             --language=zh-CN
             --language=zh-TW
           localization_branch_name: l10n_crowdin

@@ -28,6 +28,7 @@ files:
         pt-BR: pt-BR
         ru: ru
         tr: tr
+        vi: vi
         zh-CN: zh-CN
         zh-TW: zh-TW
     update_option: update_as_unapproved

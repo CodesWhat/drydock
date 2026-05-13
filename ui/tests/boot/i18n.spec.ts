@@ -70,6 +70,11 @@ describe('buildMessages', () => {
     expect(LOCALE_OPTIONS).toContainEqual({ id: 'ru', label: 'Русский' });
   });
 
+  it('exposes Vietnamese as a supported picker option', () => {
+    expect(SUPPORTED_LOCALES).toContain('vi');
+    expect(LOCALE_OPTIONS).toContainEqual({ id: 'vi', label: 'Tiếng Việt' });
+  });
+
   it('exposes Traditional Chinese as a supported picker option', () => {
     expect(SUPPORTED_LOCALES).toContain('zh-TW');
     expect(LOCALE_OPTIONS).toContainEqual({ id: 'zh-TW', label: '繁體中文' });
@@ -211,6 +216,14 @@ describe('buildMessages', () => {
     };
     const result = buildMessages(modules);
     expect((result as Record<string, unknown>).ru).toEqual({ hello: 'Привет' });
+  });
+
+  it('handles Vietnamese locale namespaces', () => {
+    const modules = {
+      '../locales/vi/common.json': { hello: 'Xin chào' },
+    };
+    const result = buildMessages(modules);
+    expect((result as Record<string, unknown>).vi).toEqual({ hello: 'Xin chào' });
   });
 
   it('translates the Outbox sidebar label in every supported locale', () => {
