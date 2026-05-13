@@ -259,7 +259,7 @@ describe('preferences migration', () => {
     });
 
     it('should replace an unsupported locale with the default', () => {
-      const result = migrate({ schemaVersion: 1, locale: { language: 'ja' } });
+      const result = migrate({ schemaVersion: 1, locale: { language: 'xx' } });
       expect(result.locale.language).toBe(DEFAULTS.locale.language);
     });
 

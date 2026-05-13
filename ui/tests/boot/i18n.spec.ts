@@ -55,6 +55,11 @@ describe('buildMessages', () => {
     expect(LOCALE_OPTIONS).toContainEqual({ id: 'tr', label: 'Türkçe' });
   });
 
+  it('exposes Japanese as a supported picker option', () => {
+    expect(SUPPORTED_LOCALES).toContain('ja');
+    expect(LOCALE_OPTIONS).toContainEqual({ id: 'ja', label: '日本語' });
+  });
+
   it('exposes Traditional Chinese as a supported picker option', () => {
     expect(SUPPORTED_LOCALES).toContain('zh-TW');
     expect(LOCALE_OPTIONS).toContainEqual({ id: 'zh-TW', label: '繁體中文' });
@@ -75,12 +80,12 @@ describe('buildMessages', () => {
 
   it('skips paths whose locale segment is not in SUPPORTED_LOCALES', () => {
     const modules = {
-      '../locales/ja/common.json': { hello: 'こんにちは' },
+      '../locales/xx/common.json': { hello: 'unknown' },
       '../locales/en/common.json': { hello: 'Hello' },
     };
     const result = buildMessages(modules);
-    // ja is not supported — its keys must not appear
-    expect((result as Record<string, unknown>).ja).toBeUndefined();
+    // xx is not supported — its keys must not appear
+    expect((result as Record<string, unknown>).xx).toBeUndefined();
     expect(result.en).toEqual({ hello: 'Hello' });
   });
 
@@ -172,6 +177,14 @@ describe('buildMessages', () => {
     };
     const result = buildMessages(modules);
     expect((result as Record<string, unknown>).tr).toEqual({ hello: 'Merhaba' });
+  });
+
+  it('handles Japanese locale namespaces', () => {
+    const modules = {
+      '../locales/ja/common.json': { hello: 'こんにちは' },
+    };
+    const result = buildMessages(modules);
+    expect((result as Record<string, unknown>).ja).toEqual({ hello: 'こんにちは' });
   });
 
   it('translates the Outbox sidebar label in every supported locale', () => {
