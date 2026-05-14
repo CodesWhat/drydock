@@ -38,6 +38,7 @@
     },
     "recentUpdates": {
       "title": "可用更新",
+      "widgetAria": "可用更新小部件",
       "updateAll": "全部更新",
       "noUpdates": "没有可用更新",
       "releaseNotes": "发布说明",
