@@ -112,8 +112,6 @@ const builder = new XMLBuilder({
 
 type SvgNode = Record<string, unknown>;
 
-const MAX_DECODE_PASSES = 5;
-
 function decodeXmlCharacterReferencesOnce(value: string) {
   return value
     .replace(/&#x([0-9a-f]+);?/giu, (_match, codePointHex: string) => {
@@ -144,15 +142,15 @@ function decodeXmlCharacterReferencesOnce(value: string) {
 
 // Iterate decoding until the output is stable so multi-pass encodings like
 // `&amp;#106;avascript:` (which a browser will fully decode to `javascript:`)
-// can't slip past the protocol check after a single decode pass.
+// can't slip past the protocol check after a single decode pass. Termination
+// is bounded by input length: every entity decodes to a strictly shorter
+// sequence, so when the output changes its total length decreases.
 function decodeXmlCharacterReferences(value: string) {
   let current = value;
-  for (let pass = 0; pass < MAX_DECODE_PASSES; pass++) {
-    const next = decodeXmlCharacterReferencesOnce(current);
-    if (next === current) {
-      return next;
-    }
+  let next = decodeXmlCharacterReferencesOnce(current);
+  while (next !== current) {
     current = next;
+    next = decodeXmlCharacterReferencesOnce(current);
   }
   return current;
 }
