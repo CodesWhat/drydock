@@ -268,20 +268,72 @@ onBeforeUnmount(removeIconPopoverListeners);
       </Transition>
     </Teleport>
   </span>
-  <!-- Icon-only fallback: no structured notes, so open the external release URL directly. -->
-  <AppIconButton
-    v-else-if="iconOnly && props.releaseLink"
-    icon="file-text"
-    :size="iconSize"
-    variant="muted"
-    :href="props.releaseLink"
-    target="_blank"
-    rel="noopener noreferrer"
-    :tooltip="releaseNotesLabel"
-    :aria-label="releaseNotesLabel"
-    :data-test="iconTestId"
-    @click.stop
-  />
+  <!-- Icon-only fallback: no structured notes, but still open a popover with a single external link row. -->
+  <span v-else-if="iconOnly && props.releaseLink" class="inline-flex">
+    <AppIconButton
+      icon="file-text"
+      :size="iconSize"
+      variant="muted"
+      :tooltip="releaseNotesLabel"
+      :aria-label="releaseNotesLabel"
+      aria-haspopup="dialog"
+      :aria-expanded="String(iconPopoverOpen)"
+      :data-test="iconTestId"
+      @click.stop="toggleIconPopover"
+    />
+    <Teleport to="body">
+      <Transition name="menu-fade">
+        <div
+          v-if="iconPopoverOpen"
+          class="dd-rounded shadow-lg overflow-y-auto text-left"
+          :style="{
+            ...iconPopoverStyle,
+            zIndex: 'var(--z-popover)',
+            backgroundColor: 'var(--dd-bg-card)',
+            border: '1px solid var(--dd-border-strong)',
+            boxShadow: 'var(--dd-shadow-tooltip)',
+          }"
+          role="dialog"
+          :aria-label="releaseNotesLabel"
+          data-test="release-notes-popover"
+          @click.stop
+        >
+          <div
+            class="flex items-center justify-between gap-2 px-3 py-2"
+            :style="{ backgroundColor: 'var(--dd-bg-sidebar)' }"
+          >
+            <span class="text-2xs-plus font-semibold uppercase tracking-wider dd-text-secondary">
+              {{ releaseNotesLabel }}
+            </span>
+            <AppIconButton
+              icon="xmark"
+              size="xs"
+              variant="muted"
+              :tooltip="t('common.close')"
+              :aria-label="t('common.close')"
+              @click.stop="closeIconPopover"
+            />
+          </div>
+          <div class="p-2.5">
+            <a
+              :href="props.releaseLink"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="w-full min-w-0 flex items-center justify-between gap-2 px-2 py-1.5 dd-rounded dd-text-info hover:dd-bg-elevated transition-colors"
+              data-test="release-link-row"
+              @click="closeIconPopover"
+            >
+              <span class="min-w-0 inline-flex items-center gap-1.5">
+                <AppIcon name="file-text" :size="12" class="shrink-0" />
+                <span class="truncate">{{ releaseNotesLabel }}</span>
+              </span>
+              <AppIcon name="external-link" :size="10" class="shrink-0" />
+            </a>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+  </span>
   <!-- Inline release notes: render up to two panels (current running tag + new update tag) -->
   <div
     v-else-if="props.releaseNotes || props.currentReleaseNotes"
