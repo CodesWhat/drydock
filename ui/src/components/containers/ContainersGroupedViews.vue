@@ -73,7 +73,7 @@ const {
   filterSearch,
   clearFilters,
 } = useContainersViewTemplateContext();
-const { t } = useI18n();
+const { t, te } = useI18n();
 const { batches, clearBatch, getBatch, incrementSucceeded, incrementFailed } = useUpdateBatches();
 
 const openActionsContainer = computed(
@@ -352,6 +352,12 @@ function getGroupDoneCount(group: ContainersViewRenderGroup) {
   return batch.succeededCount + batch.failedCount;
 }
 
+function localizeStatus(status: string | undefined): string {
+  if (!status) return t('common.unknown');
+  const key = `containersView.status.${status}`;
+  return te(key) ? t(key) : status;
+}
+
 function getContainerStatusLabel(container: {
   id?: unknown;
   name?: unknown;
@@ -367,7 +373,7 @@ function getContainerStatusLabel(container: {
   if (isContainerQueued(container)) {
     return t('containerComponents.groupedViews.statusQueued');
   }
-  return container.status ?? 'unknown';
+  return localizeStatus(container.status);
 }
 
 function getContainerStatusIcon(container: { id?: unknown; name?: unknown; status?: string }) {
@@ -402,15 +408,15 @@ function getContainerStatusColor(container: { id?: unknown; name?: unknown; stat
   return getContainerStatusIconStyle(container).color;
 }
 
-const updateKindLabels: Record<NonNullable<Container['updateKind']>, string> = {
-  major: 'Major',
-  minor: 'Minor',
-  patch: 'Patch',
-  digest: 'Digest',
-};
-
-function getUpdateKindLabel(kind: Container['updateKind']) {
-  return kind ? updateKindLabels[kind] : '';
+function getUpdateKindLabel(kind: Container['updateKind']): string {
+  if (!kind) return '';
+  const keyMap: Record<NonNullable<Container['updateKind']>, string> = {
+    major: 'containerComponents.listContent.major',
+    minor: 'containerComponents.listContent.minor',
+    patch: 'containerComponents.listContent.patch',
+    digest: 'containerComponents.listContent.digest',
+  };
+  return t(keyMap[kind]);
 }
 
 function getUpdateMaturityLabel(maturity: Container['updateMaturity']) {
@@ -432,7 +438,7 @@ function getContainerUpdateStateLabel(
   if (getContainerListPolicyState(container).skipped) {
     return t('containerComponents.groupedViews.pinnedTooltip');
   }
-  return 'Current';
+  return t('containerComponents.groupedViews.currentLabel');
 }
 
 function getContainerUpdateStateColor(
