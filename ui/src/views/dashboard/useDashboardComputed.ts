@@ -1,4 +1,5 @@
 import { type ComputedRef, computed, type Ref } from 'vue';
+import { i18n } from '../../boot/i18n';
 import { ROUTES } from '../../router/routes';
 import type { Container } from '../../types/container';
 import { shouldRenderStandaloneQueuedUpdateAsUpdating } from '../../utils/container-update';
@@ -25,36 +26,39 @@ const DONUT_CIRCUMFERENCE = 301.6;
 
 const FILTER_KIND_ANY = 'ANY'.toLowerCase();
 
-const UPDATE_BREAKDOWN_BUCKETS: ReadonlyArray<Omit<UpdateBreakdownBucket, 'count'>> = [
-  {
-    kind: 'major',
-    label: 'Major',
-    color: 'var(--dd-danger)',
-    colorMuted: 'var(--dd-danger-muted)',
-    icon: 'chevrons-up',
-  },
-  {
-    kind: 'minor',
-    label: 'Minor',
-    color: 'var(--dd-warning)',
-    colorMuted: 'var(--dd-warning-muted)',
-    icon: 'chevron-up',
-  },
-  {
-    kind: 'patch',
-    label: 'Patch',
-    color: 'var(--dd-primary)',
-    colorMuted: 'var(--dd-primary-muted)',
-    icon: 'hashtag',
-  },
-  {
-    kind: 'digest',
-    label: 'Digest',
-    color: 'var(--dd-neutral)',
-    colorMuted: 'var(--dd-neutral-muted)',
-    icon: 'fingerprint',
-  },
-];
+function getUpdateBreakdownBucketDefs(): ReadonlyArray<Omit<UpdateBreakdownBucket, 'count'>> {
+  const t = i18n.global.t;
+  return [
+    {
+      kind: 'major',
+      label: t('dashboardView.updateKind.major'),
+      color: 'var(--dd-danger)',
+      colorMuted: 'var(--dd-danger-muted)',
+      icon: 'chevrons-up',
+    },
+    {
+      kind: 'minor',
+      label: t('dashboardView.updateKind.minor'),
+      color: 'var(--dd-warning)',
+      colorMuted: 'var(--dd-warning-muted)',
+      icon: 'chevron-up',
+    },
+    {
+      kind: 'patch',
+      label: t('dashboardView.updateKind.patch'),
+      color: 'var(--dd-primary)',
+      colorMuted: 'var(--dd-primary-muted)',
+      icon: 'hashtag',
+    },
+    {
+      kind: 'digest',
+      label: t('dashboardView.updateKind.digest'),
+      color: 'var(--dd-neutral)',
+      colorMuted: 'var(--dd-neutral-muted)',
+      icon: 'fingerprint',
+    },
+  ];
+}
 
 function assertNever(value: never): never {
   throw new Error(`Unexpected dashboard status: ${String(value)}`);
@@ -556,20 +560,21 @@ function useStatsComputed(
           ? 'var(--dd-success-muted)'
           : 'var(--dd-neutral-muted)';
 
+    const t = i18n.global.t;
     return [
       {
         id: 'stat-containers',
-        label: 'Containers',
+        label: t('dashboardView.stats.containers'),
         value: String(total),
         icon: 'containers',
         color: 'var(--dd-primary)',
         colorMuted: 'var(--dd-primary-muted)',
         route: ROUTES.CONTAINERS,
-        detail: `${running} running · ${stopped} stopped`,
+        detail: t('dashboardView.stats.containerDetail', { running, stopped }),
       },
       {
         id: 'stat-updates',
-        label: 'Updates Available',
+        label: t('dashboardView.stats.updatesAvailable'),
         value: String(updatesAvailable),
         icon: 'updates',
         color: updatesStatColor,
@@ -577,12 +582,15 @@ function useStatsComputed(
         route: { path: ROUTES.CONTAINERS, query: { filterKind: FILTER_KIND_ANY } },
         detail:
           freshUpdates > 0
-            ? `${freshUpdates} new · ${updatesAvailable - freshUpdates} mature`
+            ? t('dashboardView.stats.updateDetail', {
+                fresh: freshUpdates,
+                mature: updatesAvailable - freshUpdates,
+              })
             : undefined,
       },
       {
         id: 'stat-security',
-        label: 'Security Issues',
+        label: t('dashboardView.stats.securityIssues'),
         value: String(securityIssues),
         icon: 'security',
         color: securityStatColor,
@@ -591,7 +599,7 @@ function useStatsComputed(
       },
       {
         id: 'stat-registries',
-        label: 'Registries',
+        label: t('dashboardView.stats.registries'),
         value: String(registryCount),
         icon: 'registries',
         color: 'var(--dd-primary)',
@@ -930,7 +938,7 @@ function buildUpdateKindCounts(containers: Container[]): Record<UpdateKind, numb
 function useUpdateBreakdownComputed(updateContainers: ComputedRef<Container[]>) {
   const updateBreakdownBuckets = computed<UpdateBreakdownBucket[]>(() => {
     const counts = buildUpdateKindCounts(updateContainers.value);
-    return UPDATE_BREAKDOWN_BUCKETS.map((bucket) => ({
+    return getUpdateBreakdownBucketDefs().map((bucket) => ({
       ...bucket,
       count: counts[bucket.kind],
     }));
