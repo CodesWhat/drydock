@@ -532,30 +532,30 @@ onUnmounted(() => {
                 label="C"
                 size="xs"
                 uppercase
-                v-tooltip.top="`Cosign: ${runtimeStatus.signature.message}`" />
+                v-tooltip.top="t('securityView.runtimeTools.cosignTooltip', { message: runtimeStatus.signature.message })" />
               <AppStatusIndicator
                 :tone="runtimeStatus.sbom.enabled ? 'info' : 'neutral'"
                 label="S"
                 size="xs"
                 uppercase
-                v-tooltip.top="runtimeStatus.sbom.enabled ? 'SBOM generation enabled (' + runtimeStatus.sbom.formats.join(', ') + ')' : 'SBOM generation disabled'" />
+                v-tooltip.top="runtimeStatus.sbom.enabled ? t('securityView.runtimeTools.sbomEnabled', { formats: runtimeStatus.sbom.formats.join(', ') }) : t('securityView.runtimeTools.sbomDisabled')" />
             </div>
             <template v-else>
               <AppStatusIndicator
                 :tone="runtimeToolTone(runtimeStatus.scanner.status)"
-                label="trivy"
+                :label="t('securityView.runtimeTools.trivy')"
                 size="xs"
                 v-tooltip.top="runtimeStatus.scanner.message + (runtimeStatus.scanner.server ? ' · server: ' + runtimeStatus.scanner.server : '')" />
               <AppStatusIndicator
                 :tone="runtimeToolTone(runtimeStatus.signature.status)"
-                label="cosign"
+                :label="t('securityView.runtimeTools.cosign')"
                 size="xs"
                 v-tooltip.top="runtimeStatus.signature.message" />
               <AppStatusIndicator
                 :tone="runtimeStatus.sbom.enabled ? 'info' : 'neutral'"
-                label="sbom"
+                :label="t('securityView.runtimeTools.sbom')"
                 size="xs"
-                v-tooltip.top="runtimeStatus.sbom.enabled ? 'SBOM generation enabled (' + runtimeStatus.sbom.formats.join(', ') + ')' : 'SBOM generation disabled'" />
+                v-tooltip.top="runtimeStatus.sbom.enabled ? t('securityView.runtimeTools.sbomEnabled', { formats: runtimeStatus.sbom.formats.join(', ') }) : t('securityView.runtimeTools.sbomDisabled')" />
             </template>
           </template>
         </template>
