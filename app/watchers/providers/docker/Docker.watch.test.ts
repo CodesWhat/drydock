@@ -359,6 +359,29 @@ describe('Docker Watcher', () => {
       expect(event.emitWatcherStop).toHaveBeenCalledWith(docker);
     });
 
+    test('should emit watcher snapshot when container enumeration succeeds', async () => {
+      docker.getContainers = vi.fn().mockResolvedValue([]);
+
+      await docker.watch();
+
+      expect(event.emitWatcherSnapshot).toHaveBeenCalledTimes(1);
+      expect(event.emitWatcherSnapshot).toHaveBeenCalledWith(
+        expect.objectContaining({ containers: [] }),
+      );
+    });
+
+    test('should NOT emit watcher snapshot when container enumeration fails (issue #362)', async () => {
+      docker.log = createMockLog(['warn']);
+      docker.getContainers = vi.fn().mockRejectedValue(new Error('Docker unavailable'));
+
+      await docker.watch();
+
+      // Empty snapshot would prune every container for this agent on the
+      // controller side; emission is suppressed so the controller keeps its
+      // last-known state until the next clean cycle.
+      expect(event.emitWatcherSnapshot).not.toHaveBeenCalled();
+    });
+
     test('should set lastRunAt after watch completes', async () => {
       docker.getContainers = vi.fn().mockResolvedValue([]);
       expect(docker.lastRunAt).toBeUndefined();

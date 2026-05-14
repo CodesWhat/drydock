@@ -1074,6 +1074,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
   async watch() {
     this.ensureLogger();
     let containers: Container[] = [];
+    let containerEnumerationFailed = false;
     startDigestCachePollCycleForRegistries();
 
     // Dispatch event to notify start watching
@@ -1086,6 +1087,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       this.log.warn(
         `Error when trying to get the list of the containers to watch (${getErrorMessage(e)})`,
       );
+      containerEnumerationFailed = true;
     }
     try {
       if (this.isCronWatchInProgress) {
@@ -1120,15 +1122,22 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       }
       await event.emitContainerReports(containerReports);
       this.lastRunAt = new Date().toISOString();
-      await event.emitWatcherSnapshot({
-        watcher: {
-          type: this.type,
-          name: this.name,
-          configuration: this.maskConfiguration() as Record<string, unknown>,
-          metadata: this.getMetadata(),
-        },
-        containers: containerReports.map((containerReport) => containerReport.container),
-      });
+      // Skip the snapshot emit when container enumeration itself failed.
+      // The snapshot is authoritative — downstream prunes everything not in
+      // `containers` — so emitting an empty list after a transient docker /
+      // socket-proxy hiccup would wipe the controller's view of this agent
+      // (issue #362). Preserve last-known state until the next clean cycle.
+      if (!containerEnumerationFailed) {
+        await event.emitWatcherSnapshot({
+          watcher: {
+            type: this.type,
+            name: this.name,
+            configuration: this.maskConfiguration() as Record<string, unknown>,
+            metadata: this.getMetadata(),
+          },
+          containers: containerReports.map((containerReport) => containerReport.container),
+        });
+      }
       return containerReports;
     } finally {
       endDigestCachePollCycleForRegistries();
