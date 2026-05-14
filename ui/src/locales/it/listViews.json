@@ -90,11 +90,11 @@
     }
   },
   "securityView": {
-    "loadingVulnerabilityData": "Caricamento dati vulnerabilita...",
+    "loadingVulnerabilityData": "Caricamento dati vulnerabilità...",
     "scanNow": "Scansiona ora",
     "scanning": "Scansione...",
     "scanAllAriaLabel": "Scansiona tutti i container",
-    "scanAllContainers": "Scansiona tutti i container per vulnerabilita",
+    "scanAllContainers": "Scansiona tutti i container per vulnerabilità",
     "checkingScanner": "Controllo disponibilita scanner",
     "runtimeUnavailable": "Controllo runtime non disponibile; la scansione puo comunque essere tentata",
     "filters": {
@@ -118,7 +118,7 @@
       "total": "Totale"
     },
     "card": {
-      "vulnerabilities": "vulnerabilita",
+      "vulnerabilities": "vulnerabilità",
       "vsUpdate": "vs aggiornamento",
       "fixable": "risolvibili",
       "noFixesAvailable": "Nessun fix disponibile",
@@ -206,13 +206,13 @@
       "address": "Indirizzo",
       "status": "Stato",
       "containers": "Container",
-      "lastSeen": "Ultima attivita"
+      "lastSeen": "Ultima attività"
     },
     "card": {
       "containers": "Container",
       "running": "In esecuzione",
       "images": "Immagini",
-      "lastSeen": "Ultima attivita"
+      "lastSeen": "Ultima attività"
     },
     "list": {
       "containers": "container"
@@ -222,7 +222,7 @@
       "running": "in esecuzione",
       "stopped": "arrestati",
       "images": "Immagini",
-      "lastSeen": "Ultima attivita",
+      "lastSeen": "Ultima attività",
       "refresh": "Aggiorna"
     }
   },

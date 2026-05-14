@@ -17,7 +17,7 @@
     "confirm": {
       "updateContainer": {
         "header": "Aggiorna container",
-        "message": "Aggiornare {name} ora? Verra applicata l'immagine piu recente rilevata.",
+        "message": "Aggiornare {name} ora? Verrà applicata l'immagine più recente rilevata.",
         "accept": "Aggiorna"
       },
       "updateAll": {
@@ -83,8 +83,8 @@
       "high": "{count} Alte",
       "medium": "{count} Medie",
       "low": "{count} Basse",
-      "topVulnerabilities": "Vulnerabilita principali",
-      "noVulnerabilities": "Nessuna vulnerabilita segnalata"
+      "topVulnerabilities": "Vulnerabilità principali",
+      "noVulnerabilities": "Nessuna vulnerabilità segnalata"
     },
     "updateBreakdown": {
       "title": "Ripartizione aggiornamenti",

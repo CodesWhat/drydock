@@ -251,7 +251,7 @@
       "recheckTooltip": "重新檢查更新",
       "columnsHeader": "列",
       "narrowViewportSuffix": "(窄視圖)",
-      "autoHiddenBadgeTooltip": "視窗寬度不足，已自動隱藏 ({count}) 欄。請拉寬視窗，或隱藏其他欄位以釋放空間。",
+      "autoHiddenBadgeTooltip": "視窗寬度不足，已自動隱藏 {count} 欄。請拉寬視窗，或隱藏其他欄位以釋放空間。",
       "filterSearch": "搜尋：{value}",
       "filterStatus": "狀態：{value}",
       "filterBouncer": "Bouncer：{value}",

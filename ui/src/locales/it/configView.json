@@ -34,7 +34,7 @@
       "network": {
         "title": "Rete",
         "internetlessMode": {
-          "label": "Modalita senza Internet",
+          "label": "Modalità senza Internet",
           "description": "Blocca tutte le richieste in uscita (icone container, fetch esterni)"
         }
       },
