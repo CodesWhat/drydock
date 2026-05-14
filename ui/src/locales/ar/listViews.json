@@ -34,6 +34,28 @@
       "toVersion": "To Version",
       "trigger": "Trigger",
       "details": "Details"
+    },
+    "actions": {
+      "container-update": "تحديث الحاوية",
+      "container-added": "إضافة الحاوية",
+      "container-removed": "إزالة الحاوية",
+      "container-start": "تشغيل الحاوية",
+      "container-stop": "إيقاف الحاوية",
+      "container-restart": "إعادة تشغيل الحاوية",
+      "update-available": "تحديث متاح",
+      "update-applied": "تم تطبيق التحديث",
+      "update-failed": "فشل التحديث",
+      "auto-update-blocked": "التحديث التلقائي محظور",
+      "auto-rollback": "تراجع تلقائي",
+      "rollback": "تراجع",
+      "preview": "معاينة",
+      "agent-disconnect": "قطع اتصال الوكيل",
+      "notification-delivery-failed": "فشل تسليم الإشعار",
+      "security-alert": "تنبيه أمني"
+    },
+    "target": {
+      "container": "الحاوية",
+      "agent": "الوكيل"
     }
   },
   "notificationsView": {
@@ -134,6 +156,14 @@
     "chooser": {
       "title": "Select container to update",
       "cancel": "Cancel"
+    },
+    "runtimeTools": {
+      "trivy": "Trivy",
+      "cosign": "Cosign",
+      "sbom": "SBOM",
+      "cosignTooltip": "Cosign: {message}",
+      "sbomEnabled": "إنشاء SBOM مُفعَّل ({formats})",
+      "sbomDisabled": "إنشاء SBOM مُعطَّل"
     }
   },
   "registriesView": {

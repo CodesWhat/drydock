@@ -34,6 +34,28 @@
       "toVersion": "To Version",
       "trigger": "Trigger",
       "details": "Details"
+    },
+    "actions": {
+      "container-update": "Обновление контейнера",
+      "container-added": "Контейнер добавлен",
+      "container-removed": "Контейнер удалён",
+      "container-start": "Запуск контейнера",
+      "container-stop": "Остановка контейнера",
+      "container-restart": "Перезапуск контейнера",
+      "update-available": "Доступно обновление",
+      "update-applied": "Обновление применено",
+      "update-failed": "Ошибка обновления",
+      "auto-update-blocked": "Автообновление заблокировано",
+      "auto-rollback": "Автооткат",
+      "rollback": "Откат",
+      "preview": "Предпросмотр",
+      "agent-disconnect": "Отключение агента",
+      "notification-delivery-failed": "Ошибка доставки уведомления",
+      "security-alert": "Предупреждение безопасности"
+    },
+    "target": {
+      "container": "Контейнер",
+      "agent": "Агент"
     }
   },
   "notificationsView": {
@@ -134,6 +156,14 @@
     "chooser": {
       "title": "Select container to update",
       "cancel": "Cancel"
+    },
+    "runtimeTools": {
+      "trivy": "Trivy",
+      "cosign": "Cosign",
+      "sbom": "SBOM",
+      "cosignTooltip": "Cosign: {message}",
+      "sbomEnabled": "Генерация SBOM включена ({formats})",
+      "sbomDisabled": "Генерация SBOM отключена"
     }
   },
   "registriesView": {

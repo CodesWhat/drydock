@@ -20,6 +20,24 @@
     "registryError": {
       "generic": "Registry error",
       "detail": "Registry error: {error}"
+    },
+    "columns": {
+      "container": "الحاوية",
+      "version": "الإصدار",
+      "update": "التحديث",
+      "status": "الحالة",
+      "host": "المضيف",
+      "registry": "السجل"
+    },
+    "status": {
+      "running": "تعمل",
+      "stopped": "متوقفة",
+      "paused": "متوقفة مؤقتاً",
+      "exited": "منتهية",
+      "dead": "معطلة",
+      "created": "منشأة",
+      "restarting": "تُعاد تشغيلها",
+      "removing": "يُجرى حذفها"
     }
   }
 }

@@ -89,6 +89,20 @@
     "updateBreakdown": {
       "title": "Update Breakdown",
       "noUpdates": "No updates to categorize"
+    },
+    "stats": {
+      "containers": "الحاويات",
+      "containerDetail": "{running} تعمل · {stopped} متوقفة",
+      "updatesAvailable": "التحديثات المتاحة",
+      "updateDetail": "{fresh} جديدة · {mature} ناضجة",
+      "securityIssues": "مشكلات الأمان",
+      "registries": "السجلات"
+    },
+    "updateKind": {
+      "major": "رئيسي",
+      "minor": "ثانوي",
+      "patch": "تصحيح",
+      "digest": "ملخص"
     }
   }
 }

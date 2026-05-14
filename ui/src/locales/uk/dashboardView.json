@@ -89,6 +89,20 @@
     "updateBreakdown": {
       "title": "Update Breakdown",
       "noUpdates": "No updates to categorize"
+    },
+    "stats": {
+      "containers": "Контейнери",
+      "containerDetail": "{running} працює · {stopped} зупинено",
+      "updatesAvailable": "Доступні оновлення",
+      "updateDetail": "{fresh} нових · {mature} зрілих",
+      "securityIssues": "Проблеми безпеки",
+      "registries": "Реєстри"
+    },
+    "updateKind": {
+      "major": "Мажорне",
+      "minor": "Мінорне",
+      "patch": "Патч",
+      "digest": "Дайджест"
     }
   }
 }

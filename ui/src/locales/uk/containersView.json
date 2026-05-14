@@ -20,6 +20,24 @@
     "registryError": {
       "generic": "Registry error",
       "detail": "Registry error: {error}"
+    },
+    "columns": {
+      "container": "Контейнер",
+      "version": "Версія",
+      "update": "Оновлення",
+      "status": "Статус",
+      "host": "Хост",
+      "registry": "Реєстр"
+    },
+    "status": {
+      "running": "працює",
+      "stopped": "зупинено",
+      "paused": "призупинено",
+      "exited": "завершено",
+      "dead": "мертвий",
+      "created": "створено",
+      "restarting": "перезапускається",
+      "removing": "видаляється"
     }
   }
 }
