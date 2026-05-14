@@ -79,6 +79,11 @@ vi.mock('../store', () => ({
   })),
 }));
 
+vi.mock('../store/secrets.js', () => ({
+  getStoredSessionSecret: vi.fn(() => null),
+  setStoredSessionSecret: vi.fn(),
+}));
+
 vi.mock('../registry', () => ({
   getState: vi.fn(() => ({
     authentication: {},
@@ -1508,24 +1513,6 @@ describe('Auth Router', () => {
       expect(log.info).toHaveBeenCalledWith(
         'Using session secret from DD_SESSION_SECRET environment variable',
       );
-    });
-
-    test('should throw when DD_SESSION_SECRET is missing', () => {
-      const previousSessionSecret = process.env.DD_SESSION_SECRET;
-      delete process.env.DD_SESSION_SECRET;
-      const app = createApp();
-
-      try {
-        expect(() => auth.init(app)).toThrow(
-          'DD_SESSION_SECRET is required. Set DD_SESSION_SECRET to a strong persistent value.',
-        );
-      } finally {
-        if (previousSessionSecret === undefined) {
-          delete process.env.DD_SESSION_SECRET;
-        } else {
-          process.env.DD_SESSION_SECRET = previousSessionSecret;
-        }
-      }
     });
 
     test('should fall back to default lockout settings when env values are invalid', async () => {
