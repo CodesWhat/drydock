@@ -103,6 +103,7 @@ function removeIconPopoverListeners() {
 }
 
 function closeIconPopover() {
+  // c8 ignore next -- defensive guard; listener is removed after first invocation so re-entry is unreachable
   if (!iconPopoverOpen.value) {
     return;
   }
@@ -118,6 +119,7 @@ function handleIconPopoverKeydown(event: Event) {
 
 function openIconPopover(event: MouseEvent) {
   const trigger = event.currentTarget as HTMLElement | null;
+  // c8 ignore next -- defensive guard; currentTarget is always the button element when triggered via DOM
   if (!trigger) {
     return;
   }
