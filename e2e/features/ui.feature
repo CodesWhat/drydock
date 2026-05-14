@@ -22,7 +22,7 @@ Feature: Drydock UI Exposure
     Examples:
       | view                 | path                               | text              |
       | Dashboard            | /                                  | Updates Available |
-      | Containers           | /containers                        | Table view        |
+      | Containers           | /containers                        | Version           |
       | Container logs       | /containers/missing-container/logs | Container Logs    |
       | Security             | /security                          | Scan Now          |
       | Hosts                | /servers                           | Host              |
@@ -34,5 +34,5 @@ Feature: Drydock UI Exposure
       | Auth                 | /auth                              | Provider          |
       | Notifications        | /notifications                     | Rule              |
       | Notification outbox  | /notifications/outbox              | Dead-letter       |
-      | Audit                | /audit                             | All events        |
+      | Audit                | /audit                             | Event             |
       | Logs                 | /logs                              | Live              |
