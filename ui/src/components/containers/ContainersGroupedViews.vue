@@ -279,10 +279,13 @@ function blockedUpdateTooltip(container: {
   const summary = container.updateSecuritySummary;
   const critical = summary?.critical ?? 0;
   if (critical > 0) {
-    const noun = critical === 1 ? 'critical CVE' : 'critical CVEs';
-    return `Blocked: ${tag} (${critical} ${noun})`;
+    const key =
+      critical === 1
+        ? 'containerComponents.groupedViews.blockedTagWithCriticals'
+        : 'containerComponents.groupedViews.blockedTagWithCriticalsCVEs';
+    return t(key, { tag, count: critical });
   }
-  return `Blocked: ${tag}`;
+  return t('containerComponents.groupedViews.blockedTag', { tag });
 }
 
 function canCancelUpdate(c: { updateOperation?: { status?: string; id?: string } }): boolean {
@@ -320,7 +323,9 @@ function updateBtnTooltip(c: {
   if (state === 'hard') return blockedUpdateTooltip(c);
   if (state === 'soft') {
     const soft = getPrimarySoftBlocker(c.updateEligibility);
-    return soft ? `Manual update only — ${soft.message}` : 'Manual update only';
+    return soft
+      ? t('containerComponents.groupedViews.manualUpdateOnlyWithMessage', { message: soft.message })
+      : t('containerComponents.groupedViews.manualUpdateOnly');
   }
   return 'Update';
 }
@@ -772,7 +777,7 @@ onScopeDispose(() => {
             <span v-if="hasRegistryError(c)"
                   class="inline-flex items-center justify-center"
                   style="color: var(--dd-danger);"
-                  aria-label="Registry error"
+                  :aria-label="t('containerComponents.groupedViews.ariaRegistryError')"
                   v-tooltip.top="tt(registryErrorTooltip(c))">
               <AppIcon name="warning" :size="12" />
             </span>
@@ -1321,28 +1326,28 @@ onScopeDispose(() => {
             <span v-if="hasRegistryError(c)"
                   class="inline-flex items-center justify-center"
                   style="color: var(--dd-danger);"
-                  aria-label="Registry error"
+                  :aria-label="t('containerComponents.groupedViews.ariaRegistryError')"
                   v-tooltip.top="tt(registryErrorTooltip(c))">
               <AppIcon name="warning" :size="12" />
             </span>
             <span v-if="getContainerListPolicyState(c).snoozed"
                   class="inline-flex items-center justify-center"
                   style="color: var(--dd-info);"
-                  aria-label="Snoozed updates"
+                  :aria-label="t('containerComponents.groupedViews.ariaSnoozedUpdates')"
                   v-tooltip.top="tt(containerPolicyTooltip(c, 'snoozed'))">
               <AppIcon name="pause" :size="12" />
             </span>
             <span v-if="getContainerListPolicyState(c).skipped"
                   class="inline-flex items-center justify-center"
                   style="color: var(--dd-warning);"
-                  aria-label="Skipped updates"
+                  :aria-label="t('containerComponents.groupedViews.ariaSkippedUpdates')"
                   v-tooltip.top="tt(containerPolicyTooltip(c, 'skipped'))">
               <AppIcon name="skip-forward" :size="12" />
             </span>
             <span v-if="getContainerListPolicyState(c).maturityBlocked"
                   class="inline-flex items-center justify-center"
                   style="color: var(--dd-primary);"
-                  aria-label="Maturity-blocked updates"
+                  :aria-label="t('containerComponents.groupedViews.ariaMaturityBlocked')"
                   v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
               <AppIcon name="clock" :size="12" />
             </span>
@@ -1449,7 +1454,7 @@ onScopeDispose(() => {
       <!-- EMPTY STATE -->
       <EmptyState v-if="filteredContainers.length === 0"
                   icon="filter"
-                  message="No containers match your filters"
+                  :message="t('containerComponents.groupedViews.emptyState')"
                   :show-clear="activeFilterCount > 0 || !!filterSearch"
                   @clear="clearFilters" />
   </div>

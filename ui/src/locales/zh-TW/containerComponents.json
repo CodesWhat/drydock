@@ -186,7 +186,12 @@
       "registryErrorRateLimited": "速率限制",
       "registryErrorAuth": "認證失敗",
       "registryErrorNotFound": "未找到",
-      "registryErrorCheckFailed": "檢查失敗"
+      "registryErrorCheckFailed": "檢查失敗",
+      "blockedTag": "已封鎖：{tag}",
+      "blockedTagWithCriticals": "已封鎖：{tag}（{count} 個嚴重）",
+      "blockedTagWithCriticalsCVEs": "已封鎖：{tag}（{count} 個嚴重）",
+      "manualUpdateOnly": "僅支援手動更新",
+      "manualUpdateOnlyWithMessage": "僅支援手動更新 — {message}"
     },
     "groupHeader": {
       "ungrouped": "未分組",
