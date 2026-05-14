@@ -18,7 +18,7 @@ import {
 } from '../utils/audit-helpers';
 import { resolveAuditViewModeFromQuery } from './auditViewMode';
 
-const { t } = useI18n();
+const { t, te } = useI18n();
 
 const actionTypes = [
   'update-available',
@@ -140,7 +140,7 @@ const activeFilterCount = computed(() => {
 
 const eventFilterLabel = computed(() => {
   if (actionFilter.value.length === 0) return t('auditView.allEvents');
-  if (actionFilter.value.length === 1) return actionLabel(actionFilter.value[0]);
+  if (actionFilter.value.length === 1) return actionLabel(actionFilter.value[0], { t, te });
   return t('auditView.eventsSelected', { count: actionFilter.value.length });
 });
 
@@ -378,7 +378,7 @@ onUnmounted(() => {
                 :name="actionFilter.includes(a) ? 'check' : 'square'"
                 :size="13"
                 :style="actionFilter.includes(a) ? { color: 'var(--dd-primary)' } : {}" />
-              {{ actionLabel(a) }}
+              {{ actionLabel(a, { t, te }) }}
             </AppButton>
           </div>
         </div>
@@ -416,7 +416,7 @@ onUnmounted(() => {
       <template #cell-action="{ row }">
         <div class="flex items-center gap-2">
           <AppIcon :name="actionIcon(row.action)" :size="12" class="dd-text-secondary shrink-0" />
-          <span class="font-medium text-2xs-plus dd-text">{{ actionLabel(row.action) }}</span>
+          <span class="font-medium text-2xs-plus dd-text">{{ actionLabel(row.action, { t, te }) }}</span>
         </div>
       </template>
       <template #cell-containerName="{ row }">
@@ -458,7 +458,7 @@ onUnmounted(() => {
           <div class="flex items-center gap-2.5 min-w-0">
             <AppIcon :name="actionIcon(entry.action)" :size="14" class="dd-text-secondary shrink-0 mt-0.5" />
             <div class="min-w-0">
-              <div class="text-sm font-semibold truncate dd-text">{{ actionLabel(entry.action) }}</div>
+              <div class="text-sm font-semibold truncate dd-text">{{ actionLabel(entry.action, { t, te }) }}</div>
               <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono">{{ entry.containerName }}</div>
             </div>
           </div>
@@ -501,7 +501,7 @@ onUnmounted(() => {
       <template #header="{ item: entry }">
         <AppIcon :name="actionIcon(entry.action)" :size="14" class="dd-text-secondary shrink-0" />
         <div class="flex-1 min-w-0">
-          <div class="text-sm font-semibold truncate dd-text">{{ actionLabel(entry.action) }}</div>
+          <div class="text-sm font-semibold truncate dd-text">{{ actionLabel(entry.action, { t, te }) }}</div>
           <div class="text-2xs font-mono dd-text-muted truncate mt-0.5">{{ entry.containerName }}</div>
         </div>
         <span class="text-2xs font-mono dd-text-muted shrink-0 hidden md:inline">{{ formatTimestamp(entry.timestamp) }}</span>
@@ -512,7 +512,7 @@ onUnmounted(() => {
       <template #details="{ item: entry }">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
           <DetailField :label="t('auditView.detail.timestamp')" mono compact>{{ formatTimestamp(entry.timestamp) }}</DetailField>
-          <DetailField :label="targetLabel(entry.action)" mono compact>{{ entry.containerName }}</DetailField>
+          <DetailField :label="targetLabel(entry.action, { t, te })" mono compact>{{ entry.containerName }}</DetailField>
           <DetailField v-if="entry.containerImage" :label="t('auditView.detail.image')" mono compact>{{ entry.containerImage }}</DetailField>
           <DetailField v-if="entry.fromVersion" :label="t('auditView.detail.fromVersion')" mono compact>{{ entry.fromVersion }}</DetailField>
           <DetailField v-if="entry.toVersion" :label="t('auditView.detail.toVersion')" mono compact>{{ entry.toVersion }}</DetailField>
@@ -561,7 +561,7 @@ onUnmounted(() => {
         <template #header>
           <div class="flex items-center gap-2.5 min-w-0">
             <AppIcon v-if="selectedEntry" :name="actionIcon(selectedEntry.action)" :size="14" class="dd-text-secondary shrink-0" />
-            <span class="text-sm font-bold truncate dd-text">{{ selectedEntry ? actionLabel(selectedEntry.action) : '' }}</span>
+            <span class="text-sm font-bold truncate dd-text">{{ selectedEntry ? actionLabel(selectedEntry.action, { t, te }) : '' }}</span>
             <AppBadge v-if="selectedEntry" :custom="{ bg: statusBg(selectedEntry.status), text: statusColor(selectedEntry.status) }" size="xs" class="shrink-0">
               {{ selectedEntry.status }}
             </AppBadge>
@@ -576,9 +576,9 @@ onUnmounted(() => {
           <div class="p-4 space-y-5">
             <DetailField :label="t('auditView.detail.timestamp')" mono>{{ formatTimestamp(selectedEntry.timestamp) }}</DetailField>
             <DetailField :label="t('auditView.detail.event')">
-              <span class="font-medium">{{ actionLabel(selectedEntry.action) }}</span>
+              <span class="font-medium">{{ actionLabel(selectedEntry.action, { t, te }) }}</span>
             </DetailField>
-            <DetailField :label="targetLabel(selectedEntry.action)" mono>
+            <DetailField :label="targetLabel(selectedEntry.action, { t, te })" mono>
               <span class="break-all">{{ selectedEntry.containerName }}</span>
             </DetailField>
             <DetailField v-if="selectedEntry.containerImage" :label="t('auditView.detail.image')" mono>
