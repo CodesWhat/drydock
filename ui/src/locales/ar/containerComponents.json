@@ -219,7 +219,8 @@
       "digest": "Digest",
       "created": "Created",
       "unknown": "Unknown",
-      "imageMetadata": "Image Metadata"
+      "imageMetadata": "Image Metadata",
+      "imageAge": "عمر الصورة"
     },
     "listContent": {
       "loadingContainers": "Loading containers...",

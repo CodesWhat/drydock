@@ -218,7 +218,8 @@
       "digest": "Özet",
       "created": "Oluşturuldu",
       "unknown": "Bilinmiyor",
-      "imageMetadata": "İmaj Meta Verileri"
+      "imageMetadata": "İmaj Meta Verileri",
+      "imageAge": "İmaj yaşı"
     },
     "listContent": {
       "loadingContainers": "Konteynerler yükleniyor...",

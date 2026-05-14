@@ -218,7 +218,8 @@
       "digest": "摘要",
       "created": "创建时间",
       "unknown": "未知",
-      "imageMetadata": "镜像元数据"
+      "imageMetadata": "镜像元数据",
+      "imageAge": "镜像时龄"
     },
     "listContent": {
       "loadingContainers": "正在加载容器...",

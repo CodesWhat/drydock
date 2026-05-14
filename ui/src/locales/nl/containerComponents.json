@@ -218,7 +218,8 @@
       "digest": "Verteren",
       "created": "Gemaakt",
       "unknown": "Onbekend",
-      "imageMetadata": "Image-metadata"
+      "imageMetadata": "Image-metadata",
+      "imageAge": "Leeftijd image"
     },
     "listContent": {
       "loadingContainers": "Containers laden...",

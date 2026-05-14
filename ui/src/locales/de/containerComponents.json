@@ -218,7 +218,8 @@
       "digest": "Digest",
       "created": "Erstellt",
       "unknown": "Unbekannt",
-      "imageMetadata": "Image-Metadaten"
+      "imageMetadata": "Image-Metadaten",
+      "imageAge": "Image-Alter"
     },
     "listContent": {
       "loadingContainers": "Container werden geladen...",
