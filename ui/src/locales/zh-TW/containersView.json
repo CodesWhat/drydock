@@ -20,6 +20,24 @@
     "registryError": {
       "generic": "倉庫錯誤",
       "detail": "倉庫錯誤：{error}"
+    },
+    "columns": {
+      "container": "容器",
+      "version": "版本",
+      "update": "更新",
+      "status": "狀態",
+      "host": "主機",
+      "registry": "倉庫"
+    },
+    "status": {
+      "running": "執行中",
+      "stopped": "已停止",
+      "paused": "已暫停",
+      "exited": "已結束",
+      "dead": "異常停止",
+      "created": "已建立",
+      "restarting": "重新啟動中",
+      "removing": "移除中"
     }
   }
 }

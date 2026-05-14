@@ -20,6 +20,24 @@
     "registryError": {
       "generic": "Registry error",
       "detail": "Registry error: {error}"
+    },
+    "columns": {
+      "container": "Container",
+      "version": "Version",
+      "update": "Update",
+      "status": "Status",
+      "host": "Host",
+      "registry": "Registry"
+    },
+    "status": {
+      "running": "running",
+      "stopped": "stopped",
+      "paused": "paused",
+      "exited": "exited",
+      "dead": "dead",
+      "created": "created",
+      "restarting": "restarting",
+      "removing": "removing"
     }
   }
 }

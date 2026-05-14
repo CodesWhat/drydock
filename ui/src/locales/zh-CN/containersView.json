@@ -20,6 +20,24 @@
     "registryError": {
       "generic": "仓库错误",
       "detail": "仓库错误：{error}"
+    },
+    "columns": {
+      "container": "容器",
+      "version": "版本",
+      "update": "更新",
+      "status": "状态",
+      "host": "主机",
+      "registry": "仓库"
+    },
+    "status": {
+      "running": "运行中",
+      "stopped": "已停止",
+      "paused": "已暂停",
+      "exited": "已退出",
+      "dead": "异常停止",
+      "created": "已创建",
+      "restarting": "重启中",
+      "removing": "移除中"
     }
   }
 }

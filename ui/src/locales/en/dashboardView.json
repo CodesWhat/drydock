@@ -89,6 +89,20 @@
     "updateBreakdown": {
       "title": "Update Breakdown",
       "noUpdates": "No updates to categorize"
+    },
+    "stats": {
+      "containers": "Containers",
+      "containerDetail": "{running} running · {stopped} stopped",
+      "updatesAvailable": "Updates Available",
+      "updateDetail": "{fresh} new · {mature} mature",
+      "securityIssues": "Security Issues",
+      "registries": "Registries"
+    },
+    "updateKind": {
+      "major": "Major",
+      "minor": "Minor",
+      "patch": "Patch",
+      "digest": "Digest"
     }
   }
 }

@@ -89,6 +89,20 @@
     "updateBreakdown": {
       "title": "更新分佈",
       "noUpdates": "沒有要分類的更新"
+    },
+    "stats": {
+      "containers": "容器",
+      "containerDetail": "{running} 執行中 · {stopped} 已停止",
+      "updatesAvailable": "可用更新",
+      "updateDetail": "{fresh} 新 · {mature} 穩定",
+      "securityIssues": "安全風險",
+      "registries": "倉庫"
+    },
+    "updateKind": {
+      "major": "主要",
+      "minor": "次要",
+      "patch": "修補",
+      "digest": "摘要"
     }
   }
 }
