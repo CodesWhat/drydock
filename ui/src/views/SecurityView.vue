@@ -64,6 +64,21 @@ function runtimeToolTone(status: SecurityRuntimeStatus['scanner']['status']) {
   return 'neutral';
 }
 
+function scannerStatusLabel(scanner: SecurityRuntimeStatus['scanner']): string {
+  if (scanner.status === 'disabled') return t('securityView.runtimeTools.scannerDisabled');
+  if (scanner.status === 'missing')
+    return t('securityView.runtimeTools.scannerMissing', { command: scanner.command });
+  if (scanner.server) return t('securityView.runtimeTools.scannerReadyServer');
+  return t('securityView.runtimeTools.scannerReady');
+}
+
+function signatureStatusLabel(signature: SecurityRuntimeStatus['signature']): string {
+  if (signature.status === 'disabled') return t('securityView.runtimeTools.signatureDisabled');
+  if (signature.status === 'missing')
+    return t('securityView.runtimeTools.signatureMissing', { command: signature.command });
+  return t('securityView.runtimeTools.signatureReady');
+}
+
 function severityTone(severity: string) {
   if (severity === 'CRITICAL') return 'danger';
   if (severity === 'HIGH') return 'warning';
@@ -111,7 +126,7 @@ const scanDisabledReason = computed(() => {
     return t('securityView.scanAllContainers');
   }
   if (!scannerReady.value) {
-    return runtimeStatus.value.scanner.message;
+    return scannerStatusLabel(runtimeStatus.value.scanner);
   }
   return t('securityView.scanAllContainers');
 });
@@ -526,13 +541,13 @@ onUnmounted(() => {
                 label="T"
                 size="xs"
                 uppercase
-                v-tooltip.top="`Trivy: ${runtimeStatus.scanner.message}`" />
+                v-tooltip.top="runtimeStatus.scanner.server ? t('securityView.runtimeTools.scannerTooltipServer', { message: scannerStatusLabel(runtimeStatus.scanner), server: runtimeStatus.scanner.server }) : t('securityView.runtimeTools.scannerTooltip', { message: scannerStatusLabel(runtimeStatus.scanner) })" />
               <AppStatusIndicator
                 :tone="runtimeToolTone(runtimeStatus.signature.status)"
                 label="C"
                 size="xs"
                 uppercase
-                v-tooltip.top="t('securityView.runtimeTools.cosignTooltip', { message: runtimeStatus.signature.message })" />
+                v-tooltip.top="t('securityView.runtimeTools.cosignTooltip', { message: signatureStatusLabel(runtimeStatus.signature) })" />
               <AppStatusIndicator
                 :tone="runtimeStatus.sbom.enabled ? 'info' : 'neutral'"
                 label="S"
@@ -545,12 +560,12 @@ onUnmounted(() => {
                 :tone="runtimeToolTone(runtimeStatus.scanner.status)"
                 :label="t('securityView.runtimeTools.trivy')"
                 size="xs"
-                v-tooltip.top="runtimeStatus.scanner.message + (runtimeStatus.scanner.server ? ' · server: ' + runtimeStatus.scanner.server : '')" />
+                v-tooltip.top="runtimeStatus.scanner.server ? t('securityView.runtimeTools.scannerTooltipServer', { message: scannerStatusLabel(runtimeStatus.scanner), server: runtimeStatus.scanner.server }) : t('securityView.runtimeTools.scannerTooltip', { message: scannerStatusLabel(runtimeStatus.scanner) })" />
               <AppStatusIndicator
                 :tone="runtimeToolTone(runtimeStatus.signature.status)"
                 :label="t('securityView.runtimeTools.cosign')"
                 size="xs"
-                v-tooltip.top="runtimeStatus.signature.message" />
+                v-tooltip.top="t('securityView.runtimeTools.cosignTooltip', { message: signatureStatusLabel(runtimeStatus.signature) })" />
               <AppStatusIndicator
                 :tone="runtimeStatus.sbom.enabled ? 'info' : 'neutral'"
                 :label="t('securityView.runtimeTools.sbom')"
@@ -684,7 +699,7 @@ onUnmounted(() => {
           <SecurityEmptyState
             :has-vulnerability-data="securityVulnerabilities.length > 0"
             :scanner-setup-needed="scannerSetupNeeded"
-            :scanner-message="runtimeStatus?.scanner.message"
+            :scanner-message="runtimeStatus ? scannerStatusLabel(runtimeStatus.scanner) : undefined"
             :active-filter-count="activeSecFilterCount"
             :scan-disabled-reason="scanDisabledReason"
             :scanning="scanning"
