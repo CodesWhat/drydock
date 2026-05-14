@@ -2028,7 +2028,11 @@ describe('ContainersGroupedViews', () => {
     expect(projectLink.exists()).toBe(true);
     expect(releaseLink.exists()).toBe(true);
     expect(projectLink.element.tagName).toBe('A');
-    expect(releaseLink.element.tagName).toBe('A');
+    // releaseLink is the popover trigger (button) — clicking it opens the
+    // unified release-notes popover; the external link lives inside the
+    // popover body. See discussion #295.
+    expect(releaseLink.element.tagName).toBe('BUTTON');
+    expect(releaseLink.attributes('aria-haspopup')).toBe('dialog');
   });
 
   it('flat-mode tableRows reads from renderGroups[0].containers, not displayContainers', async () => {
