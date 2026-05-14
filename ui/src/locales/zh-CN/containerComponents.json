@@ -266,7 +266,8 @@
       "filterKind": "类型：{value}",
       "filterHiddenPinned": "已隐藏：已固定",
       "filtersLabel": "筛选器",
-      "filteredContainers": "已筛选 {count} 个容器 | 已筛选 {count} 个容器"
+      "filteredContainers": "已筛选 {count} 个容器 | 已筛选 {count} 个容器",
+      "clearContainerIdFilter": "清除容器 ID 筛选条件"
     },
     "stats": {
       "paused": "已暂停",
@@ -304,7 +305,8 @@
     },
     "suggestedTag": {
       "badgeText": "建议",
-      "tooltip": "可用的最佳稳定 semver 标签 — 建议固定使用"
+      "tooltip": "可用的最佳稳定 semver 标签 — 建议固定使用",
+      "tooltipWithTag": "建议：{tag}\n{hint}"
     },
     "eligibilityBadges": {
       "securityBlocked": "安全阻止",

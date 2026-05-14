@@ -231,7 +231,7 @@ const activeFilterChips = computed(() => {
             size="toolbar"
             variant="plain"
             class="-my-1 ml-1 dd-text-info hover:opacity-70"
-            aria-label="Clear container ID filter"
+            :aria-label="t('containerComponents.listContent.clearContainerIdFilter')"
             @click="clearContainerIdsFilter" />
         </div>
         <div
