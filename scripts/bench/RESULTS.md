@@ -16,7 +16,7 @@
 
 ## watcher-api-hotspots
 
-```
+```text
 ## Watcher/agents API hotspot regression baseline
 
 Fixtures: 3 agents × 5 watchers × 4 containers = 60 containers
@@ -46,7 +46,7 @@ Iterations per scenario: 5 (reported: median / min / max)
 
 ## store-read-path
 
-```
+```text
 ## Store read-path regression baseline
 
 Fixture: 88 validated containers in Loki memory store, transform-tag regex applied.
@@ -69,7 +69,7 @@ Summary computed from fixture:
 
 ## dashboard-summary
 
-```
+```text
 ## Dashboard summary regression baseline
 
 Fixtures: 88 containers (reporter topology), 200 iterations per scenario.
@@ -94,7 +94,7 @@ Fixtures: 88 containers (reporter topology), 200 iterations per scenario.
 
 ## registry-rate
 
-```
+```text
 ## Registry rate-limit bench — rc.21 cron default validation
 
 Fleet: 24 containers (14 Docker Hub, 10 GHCR)
@@ -144,7 +144,7 @@ GitHub REST API release-notes (5,000/hr authenticated → 30,000/6h ceiling):
 
 ## aggregator-tick
 
-```
+```text
 ## Aggregator tick hot-path bench — rc.17 ContainerStatsAggregator
 
 Benching calculateContainerStatsSnapshot across fleet sizes (200 iterations each).
@@ -169,7 +169,7 @@ Sanity check (1 container):
 
 ## lock-manager
 
-```
+```text
 ## Lock-manager concurrency bench — rc.17 LockManager + Semaphore
 
 Hold duration per acquirer: 50ms, N=10 concurrent acquirers.
