@@ -27,6 +27,10 @@ const DONUT_CIRCUMFERENCE = 301.6;
 const FILTER_KIND_ANY = 'ANY'.toLowerCase();
 
 function getUpdateBreakdownBucketDefs(): ReadonlyArray<Omit<UpdateBreakdownBucket, 'count'>> {
+  // Read locale.value so callers running inside a Vue computed register a dep
+  // and re-evaluate when the user switches language. Without this, switching
+  // locale at runtime leaves the previously rendered labels in place.
+  void i18n.global.locale.value;
   const t = i18n.global.t;
   return [
     {
@@ -536,6 +540,8 @@ function useStatsComputed(
   securityTotalCount: ComputedRef<number>,
 ) {
   return computed<DashboardStatCard[]>(() => {
+    // Register dep on the i18n locale so labels reactively update on switch.
+    void i18n.global.locale.value;
     const summary = input.containerSummary.value;
     const total = summary?.containers.total ?? containerMetrics.value.totalContainers;
     const running = summary?.containers.running ?? containerMetrics.value.runningContainers;
