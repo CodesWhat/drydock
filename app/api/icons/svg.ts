@@ -112,7 +112,9 @@ const builder = new XMLBuilder({
 
 type SvgNode = Record<string, unknown>;
 
-function decodeXmlCharacterReferences(value: string) {
+const MAX_DECODE_PASSES = 5;
+
+function decodeXmlCharacterReferencesOnce(value: string) {
   return value
     .replace(/&#x([0-9a-f]+);?/giu, (_match, codePointHex: string) => {
       const codePoint = Number.parseInt(codePointHex, 16);
@@ -138,6 +140,21 @@ function decodeXmlCharacterReferences(value: string) {
     .replace(/&(?:gt);/giu, '>')
     .replace(/&(?:quot);/giu, '"')
     .replace(/&(?:apos);/giu, "'");
+}
+
+// Iterate decoding until the output is stable so multi-pass encodings like
+// `&amp;#106;avascript:` (which a browser will fully decode to `javascript:`)
+// can't slip past the protocol check after a single decode pass.
+function decodeXmlCharacterReferences(value: string) {
+  let current = value;
+  for (let pass = 0; pass < MAX_DECODE_PASSES; pass++) {
+    const next = decodeXmlCharacterReferencesOnce(current);
+    if (next === current) {
+      return next;
+    }
+    current = next;
+  }
+  return current;
 }
 
 function containsUnsafeProtocol(value: string) {

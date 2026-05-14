@@ -119,6 +119,21 @@ describe('icons/svg', () => {
     expect(sanitized).toBeDefined();
   });
 
+  test('strips double-encoded javascript protocol revealed only after multi-pass decode', () => {
+    // `&amp;#106;avascript:` decodes once to `&#106;avascript:` (still no `javascript:`),
+    // but a browser will keep decoding and end up with `javascript:`. The sanitizer must
+    // iterate decode passes until stable so the protocol check sees the final form.
+    const sanitized = sanitizeSvgPayload(
+      Buffer.from(
+        '<svg xmlns="http://www.w3.org/2000/svg"><a href="&amp;#106;avascript:alert(1)"><rect width="1" height="1"/></a></svg>',
+      ),
+    ).toString('utf8');
+
+    expect(sanitized).not.toContain('href=');
+    expect(sanitized).not.toMatch(/javascript/i);
+    expect(sanitized).not.toContain('#106');
+  });
+
   test('strips fill url() with non-local target from non-url-reference attribute', () => {
     // url() in a non-URL_REFERENCE_ATTRIBUTES attribute: uses containsOnlyLocalUrlReferences
     // A remote url() in 'stroke' should be rejected
