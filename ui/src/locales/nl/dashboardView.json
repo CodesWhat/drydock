@@ -89,6 +89,20 @@
     "updateBreakdown": {
       "title": "Uitsplitsing bijwerken",
       "noUpdates": "Geen updates om te categoriseren"
+    },
+    "stats": {
+      "containers": "Containers",
+      "containerDetail": "{running} actief · {stopped} gestopt",
+      "updatesAvailable": "Updates beschikbaar",
+      "updateDetail": "{fresh} nieuw · {mature} volwassen",
+      "securityIssues": "Beveiligingsproblemen",
+      "registries": "Registers"
+    },
+    "updateKind": {
+      "major": "Major",
+      "minor": "Minor",
+      "patch": "Patch",
+      "digest": "Digest"
     }
   }
 }
