@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 // Validates rc.17's keyed LockManager + Semaphore in updates/lock-primitives.
 // Three scenarios with N=10 concurrent acquirers each holding for 50ms:
 //
@@ -8,8 +9,8 @@
 //
 // Run as: node scripts/bench/lock-manager.mjs
 
-import { LockManager, Semaphore } from '../../app/dist/updates/lock-primitives.js';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { LockManager, Semaphore } from '../../app/dist/updates/lock-primitives.js';
 
 const HOLD_MS = 50;
 const N = 10;
@@ -139,8 +140,12 @@ async function main() {
     `| Semaphore(4) cap (16 acquirers)  | ${fmtMs(s3.elapsed).padStart(11)} | ${fmtMs(s3.expectedMin)}–${fmtMs(s3.expectedMax).padEnd(13)} | ${s3.passed ? 'PASS  ' : 'FAIL  '} |`,
   );
   console.log('');
-  console.log(`Serial/parallel speedup: ${(s2.elapsed / s1.elapsed).toFixed(1)}× slower when same key`);
-  console.log(`Overall: ${allPassed ? 'ALL PASS' : 'SOME FAILURES — check observed vs expected above'}`);
+  console.log(
+    `Serial/parallel speedup: ${(s2.elapsed / s1.elapsed).toFixed(1)}× slower when same key`,
+  );
+  console.log(
+    `Overall: ${allPassed ? 'ALL PASS' : 'SOME FAILURES — check observed vs expected above'}`,
+  );
   console.log('');
 
   process.exit(allPassed ? 0 : 1);

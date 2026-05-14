@@ -27,7 +27,9 @@ function buildStats(containerId, tick) {
       online_cpus: 4,
       cpu_usage: {
         total_usage: Number(cpuBase + tickOffset + 50_000_000n),
-        percpu_usage: [1, 2, 3, 4].map((i) => Number(cpuBase / 4n + tickOffset / 4n + BigInt(i) * 1_000_000n)),
+        percpu_usage: [1, 2, 3, 4].map((i) =>
+          Number(cpuBase / 4n + tickOffset / 4n + BigInt(i) * 1_000_000n),
+        ),
       },
       system_cpu_usage: Number(systemBase + tickOffset * 8n),
     },
@@ -40,7 +42,7 @@ function buildStats(containerId, tick) {
       system_cpu_usage: Number(systemBase + tickOffset * 7n),
     },
     memory_stats: {
-      usage: 256 * 1024 * 1024 + (containerId.charCodeAt(0) * 1024 * 1024),
+      usage: 256 * 1024 * 1024 + containerId.charCodeAt(0) * 1024 * 1024,
       limit: 2 * 1024 * 1024 * 1024,
     },
     networks: {
@@ -133,7 +135,12 @@ function main() {
 
   // Verify output is sensible for a single container
   const sample = buildFleet(1)[0];
-  const snap = calculateContainerStatsSnapshot(sample.id, sample.current, sample.previous, Date.now());
+  const snap = calculateContainerStatsSnapshot(
+    sample.id,
+    sample.current,
+    sample.previous,
+    Date.now(),
+  );
   console.log('Sanity check (1 container):');
   console.log(`  cpuPercent=${snap.cpuPercent}`);
   console.log(`  memoryUsageBytes=${snap.memoryUsageBytes.toLocaleString()}`);
