@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0-rc.21] — 2026-05-14
+
 ### Added
 
 - **`DD_AGENT_ALLOW_INSECURE_SECRET` escape hatch for closed-LAN deployments.** rc.20 tightened the agent-secret-over-HTTP check from a warning to a hard error in `app/agent/AgentClient.ts`. rc.21 introduces `DD_AGENT_ALLOW_INSECURE_SECRET=true` as an explicit controller-side opt-in for environments (isolated private LANs, air-gapped setups) where the operator accepts that the agent secret travels in cleartext. Default behavior is unchanged — without the flag the boot-time error is still thrown. When the flag is set to exactly `true`, the error is downgraded to a `log.warn` on every startup so the security signal is preserved and visible in logs. Any other value (e.g. `1`, `yes`, `TRUE`) continues to throw. See `content/docs/current/configuration/agents/index.mdx` for guidance on recommended alternatives (certfile/cafile, reverse proxy TLS termination).
