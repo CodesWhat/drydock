@@ -89,6 +89,20 @@
     "updateBreakdown": {
       "title": "Update Breakdown",
       "noUpdates": "No updates to categorize"
+    },
+    "stats": {
+      "containers": "컨테이너",
+      "containerDetail": "{running} 실행 중 · {stopped} 중지됨",
+      "updatesAvailable": "사용 가능한 업데이트",
+      "updateDetail": "{fresh} 신규 · {mature} 기존",
+      "securityIssues": "보안 문제",
+      "registries": "레지스트리"
+    },
+    "updateKind": {
+      "major": "메이저",
+      "minor": "마이너",
+      "patch": "패치",
+      "digest": "다이제스트"
     }
   }
 }

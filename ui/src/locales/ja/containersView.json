@@ -20,6 +20,24 @@
     "registryError": {
       "generic": "Registry error",
       "detail": "Registry error: {error}"
+    },
+    "columns": {
+      "container": "コンテナ",
+      "version": "バージョン",
+      "update": "更新",
+      "status": "ステータス",
+      "host": "ホスト",
+      "registry": "レジストリ"
+    },
+    "status": {
+      "running": "稼働中",
+      "stopped": "停止中",
+      "paused": "一時停止",
+      "exited": "終了",
+      "dead": "異常停止",
+      "created": "作成済み",
+      "restarting": "再起動中",
+      "removing": "削除中"
     }
   }
 }

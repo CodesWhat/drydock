@@ -34,6 +34,28 @@
       "toVersion": "To Version",
       "trigger": "Trigger",
       "details": "Details"
+    },
+    "actions": {
+      "container-update": "Cập nhật Container",
+      "container-added": "Container đã được thêm",
+      "container-removed": "Container đã bị xóa",
+      "container-start": "Khởi động Container",
+      "container-stop": "Dừng Container",
+      "container-restart": "Khởi động lại Container",
+      "update-available": "Có bản cập nhật",
+      "update-applied": "Đã áp dụng cập nhật",
+      "update-failed": "Cập nhật thất bại",
+      "auto-update-blocked": "Tự động cập nhật bị chặn",
+      "auto-rollback": "Tự động khôi phục",
+      "rollback": "Khôi phục",
+      "preview": "Xem trước",
+      "agent-disconnect": "Agent ngắt kết nối",
+      "notification-delivery-failed": "Gửi thông báo thất bại",
+      "security-alert": "Cảnh báo bảo mật"
+    },
+    "target": {
+      "container": "Container",
+      "agent": "Agent"
     }
   },
   "notificationsView": {
@@ -134,6 +156,14 @@
     "chooser": {
       "title": "Select container to update",
       "cancel": "Cancel"
+    },
+    "runtimeTools": {
+      "trivy": "Trivy",
+      "cosign": "Cosign",
+      "sbom": "SBOM",
+      "cosignTooltip": "Cosign: {message}",
+      "sbomEnabled": "Tạo SBOM đã bật ({formats})",
+      "sbomDisabled": "Tạo SBOM đã tắt"
     }
   },
   "registriesView": {

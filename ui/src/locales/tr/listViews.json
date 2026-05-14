@@ -34,6 +34,28 @@
       "toVersion": "Sürüme",
       "trigger": "Tetikleyici",
       "details": "Ayrıntılar"
+    },
+    "actions": {
+      "container-update": "Kapsayıcı Güncellemesi",
+      "container-added": "Kapsayıcı Eklendi",
+      "container-removed": "Kapsayıcı Kaldırıldı",
+      "container-start": "Kapsayıcı Başlatma",
+      "container-stop": "Kapsayıcı Durdurma",
+      "container-restart": "Kapsayıcı Yeniden Başlatma",
+      "update-available": "Güncelleme Mevcut",
+      "update-applied": "Güncelleme Uygulandı",
+      "update-failed": "Güncelleme Başarısız",
+      "auto-update-blocked": "Otomatik Güncelleme Engellendi",
+      "auto-rollback": "Otomatik Geri Alma",
+      "rollback": "Geri Al",
+      "preview": "Önizleme",
+      "agent-disconnect": "Ajan Bağlantı Kesimi",
+      "notification-delivery-failed": "Bildirim Teslimi Başarısız",
+      "security-alert": "Güvenlik Uyarısı"
+    },
+    "target": {
+      "container": "Kapsayıcı",
+      "agent": "Ajan"
     }
   },
   "notificationsView": {
@@ -134,6 +156,14 @@
     "chooser": {
       "title": "Güncellenecek kapsayıcıyı seçin",
       "cancel": "İptal"
+    },
+    "runtimeTools": {
+      "trivy": "Trivy",
+      "cosign": "Cosign",
+      "sbom": "SBOM",
+      "cosignTooltip": "Cosign: {message}",
+      "sbomEnabled": "SBOM oluşturma etkin ({formats})",
+      "sbomDisabled": "SBOM oluşturma devre dışı"
     }
   },
   "registriesView": {

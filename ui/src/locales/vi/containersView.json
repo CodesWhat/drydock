@@ -20,6 +20,24 @@
     "registryError": {
       "generic": "Registry error",
       "detail": "Registry error: {error}"
+    },
+    "columns": {
+      "container": "Container",
+      "version": "Phiên bản",
+      "update": "Cập nhật",
+      "status": "Trạng thái",
+      "host": "Máy chủ",
+      "registry": "Registry"
+    },
+    "status": {
+      "running": "đang chạy",
+      "stopped": "đã dừng",
+      "paused": "tạm dừng",
+      "exited": "đã thoát",
+      "dead": "lỗi nghiêm trọng",
+      "created": "đã tạo",
+      "restarting": "đang khởi động lại",
+      "removing": "đang xóa"
     }
   }
 }

@@ -20,6 +20,24 @@
     "registryError": {
       "generic": "Kayıt defteri hatası",
       "detail": "Kayıt defteri hatası: {error}"
+    },
+    "columns": {
+      "container": "Kapsayıcı",
+      "version": "Sürüm",
+      "update": "Güncelle",
+      "status": "Durum",
+      "host": "Sunucu",
+      "registry": "Kayıt Defteri"
+    },
+    "status": {
+      "running": "çalışıyor",
+      "stopped": "durduruldu",
+      "paused": "duraklatıldı",
+      "exited": "çıkıldı",
+      "dead": "çöktü",
+      "created": "oluşturuldu",
+      "restarting": "yeniden başlatılıyor",
+      "removing": "kaldırılıyor"
     }
   }
 }

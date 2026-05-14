@@ -89,6 +89,20 @@
     "updateBreakdown": {
       "title": "Update Breakdown",
       "noUpdates": "No updates to categorize"
+    },
+    "stats": {
+      "containers": "コンテナ",
+      "containerDetail": "{running} 稼働中 · {stopped} 停止中",
+      "updatesAvailable": "利用可能な更新",
+      "updateDetail": "{fresh} 新規 · {mature} 既存",
+      "securityIssues": "セキュリティ問題",
+      "registries": "レジストリ"
+    },
+    "updateKind": {
+      "major": "メジャー",
+      "minor": "マイナー",
+      "patch": "パッチ",
+      "digest": "ダイジェスト"
     }
   }
 }

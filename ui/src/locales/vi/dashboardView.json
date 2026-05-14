@@ -89,6 +89,20 @@
     "updateBreakdown": {
       "title": "Update Breakdown",
       "noUpdates": "No updates to categorize"
+    },
+    "stats": {
+      "containers": "Container",
+      "containerDetail": "{running} đang chạy · {stopped} đã dừng",
+      "updatesAvailable": "Bản cập nhật có sẵn",
+      "updateDetail": "{fresh} mới · {mature} cũ",
+      "securityIssues": "Vấn đề bảo mật",
+      "registries": "Registry"
+    },
+    "updateKind": {
+      "major": "Major",
+      "minor": "Minor",
+      "patch": "Patch",
+      "digest": "Digest"
     }
   }
 }

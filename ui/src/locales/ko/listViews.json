@@ -34,6 +34,28 @@
       "toVersion": "To Version",
       "trigger": "Trigger",
       "details": "Details"
+    },
+    "actions": {
+      "container-update": "컨테이너 업데이트",
+      "container-added": "컨테이너 추가됨",
+      "container-removed": "컨테이너 제거됨",
+      "container-start": "컨테이너 시작",
+      "container-stop": "컨테이너 중지",
+      "container-restart": "컨테이너 재시작",
+      "update-available": "업데이트 가능",
+      "update-applied": "업데이트 적용됨",
+      "update-failed": "업데이트 실패",
+      "auto-update-blocked": "자동 업데이트 차단됨",
+      "auto-rollback": "자동 롤백",
+      "rollback": "롤백",
+      "preview": "미리 보기",
+      "agent-disconnect": "에이전트 연결 해제",
+      "notification-delivery-failed": "알림 전송 실패",
+      "security-alert": "보안 경고"
+    },
+    "target": {
+      "container": "컨테이너",
+      "agent": "에이전트"
     }
   },
   "notificationsView": {
@@ -134,6 +156,14 @@
     "chooser": {
       "title": "Select container to update",
       "cancel": "Cancel"
+    },
+    "runtimeTools": {
+      "trivy": "Trivy",
+      "cosign": "Cosign",
+      "sbom": "SBOM",
+      "cosignTooltip": "Cosign: {message}",
+      "sbomEnabled": "SBOM 생성 활성화됨 ({formats})",
+      "sbomDisabled": "SBOM 생성 비활성화됨"
     }
   },
   "registriesView": {

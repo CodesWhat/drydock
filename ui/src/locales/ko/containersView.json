@@ -20,6 +20,24 @@
     "registryError": {
       "generic": "Registry error",
       "detail": "Registry error: {error}"
+    },
+    "columns": {
+      "container": "컨테이너",
+      "version": "버전",
+      "update": "업데이트",
+      "status": "상태",
+      "host": "호스트",
+      "registry": "레지스트리"
+    },
+    "status": {
+      "running": "실행 중",
+      "stopped": "중지됨",
+      "paused": "일시 정지",
+      "exited": "종료됨",
+      "dead": "비정상 종료",
+      "created": "생성됨",
+      "restarting": "재시작 중",
+      "removing": "삭제 중"
     }
   }
 }
