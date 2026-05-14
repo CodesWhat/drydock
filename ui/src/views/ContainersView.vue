@@ -1197,7 +1197,7 @@ const {
 const tableColumns = computed(() =>
   activeColumns.value.map((column) => ({
     key: column.key,
-    label: column.label,
+    label: column.labelKey ? t(column.labelKey) : column.label,
     align: column.align,
     sortable: column.key !== 'icon',
     size: column.size,

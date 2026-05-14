@@ -6,6 +6,7 @@ import { type ResponsiveSizingColumn, responsiveAutoHiddenColumns } from '../uti
 interface ColumnDef extends ResponsiveSizingColumn {
   key: string;
   label: string;
+  labelKey?: string;
   align?: string;
   px: string;
   required: boolean;
@@ -28,6 +29,7 @@ const allColumns: ColumnDef[] = [
   {
     key: 'name',
     label: 'Container',
+    labelKey: 'containersView.columns.container',
     align: 'text-left',
     px: 'px-5',
     size: 360,
@@ -41,6 +43,7 @@ const allColumns: ColumnDef[] = [
   {
     key: 'version',
     label: 'Version',
+    labelKey: 'containersView.columns.version',
     px: 'px-5',
     size: 220,
     minSize: 150,
@@ -52,6 +55,7 @@ const allColumns: ColumnDef[] = [
   {
     key: 'kind',
     label: 'Update',
+    labelKey: 'containersView.columns.update',
     px: 'px-3',
     size: 128,
     minSize: 116,
@@ -62,6 +66,7 @@ const allColumns: ColumnDef[] = [
   {
     key: 'status',
     label: 'Status',
+    labelKey: 'containersView.columns.status',
     px: 'px-3',
     size: 118,
     minSize: 112,
@@ -72,6 +77,7 @@ const allColumns: ColumnDef[] = [
   {
     key: 'server',
     label: 'Host',
+    labelKey: 'containersView.columns.host',
     px: 'px-3',
     size: 152,
     minSize: 132,
@@ -82,6 +88,7 @@ const allColumns: ColumnDef[] = [
   {
     key: 'registry',
     label: 'Registry',
+    labelKey: 'containersView.columns.registry',
     px: 'px-3',
     size: 126,
     minSize: 116,
