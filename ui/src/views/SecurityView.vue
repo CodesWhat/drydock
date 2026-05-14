@@ -277,7 +277,9 @@ function getSummaryUpdateTooltip(summary: ImageSummary | null | undefined): stri
     }
     return t('containerComponents.groupHeader.allBlockedTooltip');
   }
-  return ids.length > 1 ? `Update one of ${ids.length} containers` : 'Update this container';
+  return ids.length > 1
+    ? t('securityView.updateOneOfButton', { count: ids.length })
+    : t('securityView.updateThisContainerButton');
 }
 
 function resolveContainerChoices(summary: ImageSummary): ContainerChoice[] {
@@ -623,17 +625,17 @@ onUnmounted(() => {
             <span class="font-medium dd-text truncate">{{ row.image }}</span>
             <AppBadge v-if="row.delta && row.delta.fixed > 0 && row.delta.new === 0"
                   tone="success" size="xs" class="px-1.5 py-0 shrink-0"
-                  v-tooltip.top="`Update fixes ${row.delta.fixed} vulnerability${row.delta.fixed !== 1 ? 'ies' : 'y'}`">
+                  v-tooltip.top="row.delta.fixed === 1 ? t('securityView.deltaTooltips.fixedSingle', { count: row.delta.fixed }) : t('securityView.deltaTooltips.fixedMultiple', { count: row.delta.fixed })">
               <AppIcon name="trending-down" :size="9" class="mr-0.5" />{{ row.delta.fixed }} fixed
             </AppBadge>
             <AppBadge v-else-if="row.delta && row.delta.new > 0 && row.delta.fixed === 0"
                   tone="warning" size="xs" class="px-1.5 py-0 shrink-0"
-                  v-tooltip.top="`Update introduces ${row.delta.new} new vulnerability${row.delta.new !== 1 ? 'ies' : 'y'}`">
+                  v-tooltip.top="row.delta.new === 1 ? t('securityView.deltaTooltips.newSingle', { count: row.delta.new }) : t('securityView.deltaTooltips.newMultiple', { count: row.delta.new })">
               <AppIcon name="trending-up" :size="9" class="mr-0.5" />{{ row.delta.new }} new
             </AppBadge>
             <AppBadge v-else-if="row.delta && (row.delta.fixed > 0 || row.delta.new > 0)"
                   tone="caution" size="xs" class="px-1.5 py-0 shrink-0"
-                  v-tooltip.top="`Update: ${row.delta.fixed} fixed, ${row.delta.new} new`">
+                  v-tooltip.top="t('securityView.deltaTooltips.both', { fixed: row.delta.fixed, new: row.delta.new })">
               {{ row.delta.fixed }} fixed, {{ row.delta.new }} new
             </AppBadge>
             <template v-if="row.hasUpdate">

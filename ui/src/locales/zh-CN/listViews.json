@@ -140,6 +140,15 @@
       "medium": "中危",
       "low": "低危"
     },
+    "deltaTooltips": {
+      "fixedSingle": "更新可修复 {count} 个漏洞",
+      "fixedMultiple": "更新可修复 {count} 个漏洞",
+      "newSingle": "更新会引入 {count} 个新漏洞",
+      "newMultiple": "更新会引入 {count} 个新漏洞",
+      "both": "更新：修复 {fixed} 个，新增 {new} 个"
+    },
+    "updateOneOfButton": "更新 {count} 个容器之一",
+    "updateThisContainerButton": "更新此容器",
     "update": "更新",
     "viewInContainers": "在容器中查看",
     "viewAllInContainers": "在容器中查看全部",

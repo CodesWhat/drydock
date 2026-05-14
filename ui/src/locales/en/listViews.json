@@ -140,6 +140,15 @@
       "medium": "Medium",
       "low": "Low"
     },
+    "deltaTooltips": {
+      "fixedSingle": "Update fixes {count} vulnerability",
+      "fixedMultiple": "Update fixes {count} vulnerabilities",
+      "newSingle": "Update introduces {count} new vulnerability",
+      "newMultiple": "Update introduces {count} new vulnerabilities",
+      "both": "Update: {fixed} fixed, {new} new"
+    },
+    "updateOneOfButton": "Update one of {count} containers",
+    "updateThisContainerButton": "Update this container",
     "update": "Update",
     "viewInContainers": "View in Containers",
     "viewAllInContainers": "View all in Containers",
