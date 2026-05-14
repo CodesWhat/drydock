@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0-rc.20] — 2026-05-14
+
 ### Added
 
 - **Fleet-aggregate stats subsystem ([commits `feature/v1.5-rc17`](https://github.com/CodesWhat/drydock/commits/feature/v1.5-rc17)).** New `ContainerStatsAggregator` polls each locally-monitored container once per tick (default 10 s) and computes a fleet-wide `ContainerStatsSummary` (total CPU%, total memory, top-N rows). Two new endpoints — `GET /api/v1/stats/summary` and `GET /api/v1/stats/summary/stream` — expose the current snapshot and a live SSE feed; the dashboard Resource Usage widget now consumes the SSE stream directly, fixing the regression (introduced in rc.13 by the `?touch=false` workaround) where the widget showed zeros because the per-container cache was never warmed. The legacy `GET /api/v1/containers/stats` endpoint and the client-side `summarizeContainerResourceUsage` rollup have been removed.
@@ -139,6 +141,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Agent connections over plain HTTP with a configured secret are now rejected at startup ([commit `7c6f6c20`](https://github.com/CodesWhat/drydock/commit/7c6f6c20)).** Previously, configuring an agent secret over a non-TLS connection logged only a warning, allowing the secret to be transmitted in cleartext. Agent clients with a non-empty `secret` and a plain-HTTP base URL now throw at initialization, blocking the connection before any secret can be sent over the wire. Use HTTPS or a TLS-terminating proxy for agent connections that require a shared secret.
 
 - **GHCR token fallback treats whitespace-only tokens as missing ([commit `711d583c`](https://github.com/CodesWhat/drydock/commit/711d583c)).** `getGhcrTokenFallback` and the registry suppression logic were testing `token.length > 0`, which treated a token value of `"   "` as a valid credential. All token checks now call `.trim().length > 0`. The GitHub release-notes provider also logs a warn when `api.github.com` rejects a configured token or GHCR fallback, instead of silently swallowing the auth failure.
+
+### i18n (rc.20)
+
+- **14 new locales bundled ([discussion #329](https://github.com/CodesWhat/drydock/discussions/329)).** Italian, Spanish, German, French, Brazilian Portuguese, Dutch, Polish, Turkish, Japanese, Korean, Russian, Vietnamese, Ukrainian, and Arabic now ship with the same namespace coverage as the existing English / Simplified Chinese / Traditional Chinese catalogs. Initial machine-translation seeds were authored against the rc.17 catalog snapshot and then run through Crowdin QA — 28 real bugs were fixed via the Crowdin API (Italian accent recovery, capitalization mismatches, one zh-TW stray symbol) and ~700 false-positive brand/tech terms (Drydock, Trivy, Cosign, SBOM, GHCR, etc.) were added to the per-language Crowdin dictionaries to silence spellcheck noise. 17 locales total in the picker.
+- **Dashboard stat cards now react to runtime locale changes ([commit `f3df9b41`](https://github.com/CodesWhat/drydock/commit/f3df9b41)).** `useDashboardComputed` was reading `i18n.global.t` inside `computed()` without touching `i18n.global.locale.value`, so Vue's reactivity graph never registered a dependency on the locale ref. Switching language in Config → Appearance left the dashboard `CONTAINERS / SECURITY ISSUES / REGISTRIES / UPDATES AVAILABLE` labels in English until a page reload. The two affected computeds (`useStatsComputed`, `getUpdateBreakdownBucketDefs`) now read `i18n.global.locale.value` at the top so the dependency is captured and the labels re-render on locale switch.
+- **23 remaining hardcoded English strings localized across container, security, dashboard, and audit surfaces (commits [`5b29e134`](https://github.com/CodesWhat/drydock/commit/5b29e134), [`c426f047`](https://github.com/CodesWhat/drydock/commit/c426f047), [`79b472ff`](https://github.com/CodesWhat/drydock/commit/79b472ff), [`8576f9de`](https://github.com/CodesWhat/drydock/commit/8576f9de), [`1fd32f9e`](https://github.com/CodesWhat/drydock/commit/1fd32f9e), [`2a5183cd`](https://github.com/CodesWhat/drydock/commit/2a5183cd), [`a05e34c3`](https://github.com/CodesWhat/drydock/commit/a05e34c3)).** Update toast messages, security delta tooltips, container row tooltips/aria labels/empty states, suggested-tag + update-dialog content, dashboard updates-widget aria, the "Image age" detail label, audit event names, security-scanner-disabled status, and empty-state copy were all still emitting English even when a non-English locale was selected. Each surface now flows through `t()` (toast helpers `getContainerUpdateStartedMessage`, `getForceContainerUpdateStartedMessage`, `getContainerAlreadyUpToDateMessage`, etc. now accept a `TranslateFn` parameter rather than baking English in). Catalog keys added to all 17 locales.
 
 ### Performance (rc.20)
 
@@ -1587,7 +1595,8 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.19...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.20...HEAD
+[1.5.0-rc.20]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.19...v1.5.0-rc.20
 [1.5.0-rc.16]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.15...v1.5.0-rc.16
 [1.5.0-rc.15]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.14...v1.5.0-rc.15
 [1.5.0-rc.14]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.13...v1.5.0-rc.14
