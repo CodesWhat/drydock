@@ -34,6 +34,28 @@
       "toVersion": "A versión",
       "trigger": "Trigger",
       "details": "Detalles"
+    },
+    "actions": {
+      "container-update": "Actualización de contenedor",
+      "container-added": "Contenedor añadido",
+      "container-removed": "Contenedor eliminado",
+      "container-start": "Inicio de contenedor",
+      "container-stop": "Detención de contenedor",
+      "container-restart": "Reinicio de contenedor",
+      "update-available": "Actualización disponible",
+      "update-applied": "Actualización aplicada",
+      "update-failed": "Actualización fallida",
+      "auto-update-blocked": "Actualización automática bloqueada",
+      "auto-rollback": "Rollback automático",
+      "rollback": "Rollback",
+      "preview": "Vista previa",
+      "agent-disconnect": "Desconexión de agente",
+      "notification-delivery-failed": "Fallo al entregar notificación",
+      "security-alert": "Alerta de seguridad"
+    },
+    "target": {
+      "container": "Contenedor",
+      "agent": "Agente"
     }
   },
   "notificationsView": {
@@ -134,6 +156,14 @@
     "chooser": {
       "title": "Seleccionar contenedor para actualizar",
       "cancel": "Cancelar"
+    },
+    "runtimeTools": {
+      "trivy": "Trivy",
+      "cosign": "Cosign",
+      "sbom": "SBOM",
+      "cosignTooltip": "Cosign: {message}",
+      "sbomEnabled": "Generación de SBOM habilitada ({formats})",
+      "sbomDisabled": "Generación de SBOM deshabilitada"
     }
   },
   "registriesView": {

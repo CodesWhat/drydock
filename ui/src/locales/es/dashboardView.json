@@ -89,6 +89,20 @@
     "updateBreakdown": {
       "title": "Desglose de actualizaciones",
       "noUpdates": "No hay actualizaciones para categorizar"
+    },
+    "stats": {
+      "containers": "Contenedores",
+      "containerDetail": "{running} en ejecución · {stopped} detenidos",
+      "updatesAvailable": "Actualizaciones disponibles",
+      "updateDetail": "{fresh} nuevas · {mature} maduras",
+      "securityIssues": "Problemas de seguridad",
+      "registries": "Registros"
+    },
+    "updateKind": {
+      "major": "Mayor",
+      "minor": "Menor",
+      "patch": "Parche",
+      "digest": "Digest"
     }
   }
 }

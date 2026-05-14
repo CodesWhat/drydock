@@ -89,6 +89,20 @@
     "updateBreakdown": {
       "title": "Ripartizione aggiornamenti",
       "noUpdates": "Nessun aggiornamento da categorizzare"
+    },
+    "stats": {
+      "containers": "Container",
+      "containerDetail": "{running} in esecuzione · {stopped} fermi",
+      "updatesAvailable": "Aggiornamenti disponibili",
+      "updateDetail": "{fresh} nuovi · {mature} maturi",
+      "securityIssues": "Problemi di sicurezza",
+      "registries": "Registry"
+    },
+    "updateKind": {
+      "major": "Principale",
+      "minor": "Minore",
+      "patch": "Patch",
+      "digest": "Digest"
     }
   }
 }

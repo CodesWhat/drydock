@@ -20,6 +20,24 @@
     "registryError": {
       "generic": "Errore registry",
       "detail": "Errore registry: {error}"
+    },
+    "columns": {
+      "container": "Container",
+      "version": "Versione",
+      "update": "Aggiornamento",
+      "status": "Stato",
+      "host": "Host",
+      "registry": "Registry"
+    },
+    "status": {
+      "running": "in esecuzione",
+      "stopped": "fermo",
+      "paused": "in pausa",
+      "exited": "terminato",
+      "dead": "morto",
+      "created": "creato",
+      "restarting": "in riavvio",
+      "removing": "in rimozione"
     }
   }
 }
