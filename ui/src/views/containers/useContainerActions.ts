@@ -652,6 +652,7 @@ function createConfirmHandlers(args: {
   clearPolicySelected: () => Promise<void>;
   selectedContainer: Readonly<Ref<Container | null | undefined>>;
   rollbackToBackup: (backupId?: string) => Promise<void>;
+  t: TranslateFn;
 }) {
   function confirmStop(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
@@ -1345,6 +1346,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     clearPolicySelected: policy.clearPolicySelected,
     selectedContainer: input.selectedContainer,
     rollbackToBackup: backups.rollbackToBackup,
+    t: t as TranslateFn,
   });
 
   return {
