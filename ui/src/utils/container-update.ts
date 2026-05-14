@@ -177,24 +177,30 @@ export function isStaleContainerUpdateError(error: unknown): boolean {
   return isNoUpdateAvailableError(error);
 }
 
-export function getContainerUpdateStartedMessage(name: string): string {
-  return `Update started: ${name}`;
+export type TranslateFn = (key: string, params?: Record<string, unknown>) => string;
+
+export function getContainerUpdateStartedMessage(name: string, t: TranslateFn): string {
+  return t('containersView.toast.updateStarted', { name });
 }
 
-export function getForceContainerUpdateStartedMessage(name: string): string {
-  return `Force update started: ${name}`;
+export function getForceContainerUpdateStartedMessage(name: string, t: TranslateFn): string {
+  return t('containersView.toast.forceUpdateStarted', { name });
 }
 
-export function getContainerAlreadyUpToDateMessage(name: string): string {
-  return `Already up to date: ${name}`;
+export function getContainerAlreadyUpToDateMessage(name: string, t: TranslateFn): string {
+  return t('containersView.toast.alreadyUpToDate', { name });
 }
 
-export function formatContainerUpdateStartedCountMessage(count: number): string {
-  return `Queued update${count === 1 ? '' : 's'} for ${count} container${count === 1 ? '' : 's'}`;
+export function formatContainerUpdateStartedCountMessage(count: number, t: TranslateFn): string {
+  return count === 1
+    ? t('containersView.toast.queuedUpdateSingle', { count })
+    : t('containersView.toast.queuedUpdateMultiple', { count });
 }
 
-export function formatContainersAlreadyUpToDateMessage(count: number): string {
-  return `${count} container${count === 1 ? '' : 's'} already up to date`;
+export function formatContainersAlreadyUpToDateMessage(count: number, t: TranslateFn): string {
+  return count === 1
+    ? t('containersView.toast.countAlreadyUpToDateSingle', { count })
+    : t('containersView.toast.countAlreadyUpToDateMultiple', { count });
 }
 
 export async function runContainerUpdateRequest(args: {

@@ -91,16 +91,16 @@ async function confirm() {
       isStaleError: isStaleContainerUpdateError,
     });
     if (result === 'stale') {
-      toast.info(getContainerAlreadyUpToDateMessage(name));
+      toast.info(getContainerAlreadyUpToDateMessage(name, t));
       emit('update:containerId', null);
       return;
     }
-    toast.success(getContainerUpdateStartedMessage(name));
+    toast.success(getContainerUpdateStartedMessage(name, t));
     emit('updated', id);
     emit('update:containerId', null);
   } catch (caught: unknown) {
     actionError.value = errorMessage(caught, 'Update failed');
-    toast.error(`Update failed: ${name}`, actionError.value);
+    toast.error(t('containersView.toast.updateFailed', { name }), actionError.value);
   } finally {
     inProgress.value = false;
   }

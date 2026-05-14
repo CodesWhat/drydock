@@ -619,13 +619,13 @@ function confirmDashboardUpdate(row: RecentUpdateRow) {
           isStaleError: isStaleContainerUpdateError,
         });
         if (result === 'accepted') {
-          toast.success(getContainerUpdateStartedMessage(row.name));
+          toast.success(getContainerUpdateStartedMessage(row.name, t));
         } else {
           // Stale/up-to-date: clear optimistic state immediately since no update started
           const next = new Map(dashboardUpdatingById.value);
           next.delete(row.id);
           dashboardUpdatingById.value = next;
-          toast.info(getContainerAlreadyUpToDateMessage(row.name));
+          toast.info(getContainerAlreadyUpToDateMessage(row.name, t));
         }
       } catch (e: unknown) {
         // Clear optimistic state on error so the row returns to its normal state
@@ -691,13 +691,13 @@ function confirmDashboardUpdateAll() {
         await fetchDashboardData({ background: true });
         capturePendingDashboardRows(successfulRows);
         if (successfulRows.length > 0) {
-          toast.success(formatContainerUpdateStartedCountMessage(successfulRows.length));
+          toast.success(formatContainerUpdateStartedCountMessage(successfulRows.length, t));
         }
         if (staleRows.length > 0) {
           toast.info(
             staleRows.length === 1
-              ? getContainerAlreadyUpToDateMessage(staleRows[0]!.name)
-              : formatContainersAlreadyUpToDateMessage(staleRows.length),
+              ? getContainerAlreadyUpToDateMessage(staleRows[0]!.name, t)
+              : formatContainersAlreadyUpToDateMessage(staleRows.length, t),
           );
         }
         if (firstRejectedUpdate) {

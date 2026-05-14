@@ -15,7 +15,14 @@
       "batchUpdatedNoGroup": "已更新 {count} 個容器",
       "batchPartialNoGroup": "已更新 {total} 個容器中的 {succeeded} 個；{failed} 個失敗",
       "batchFailedNoGroup": "無法更新 {count} 個容器",
-      "unknownGroup": "未知組"
+      "unknownGroup": "未知組",
+      "updateStarted": "已開始更新：{name}",
+      "forceUpdateStarted": "已開始強制更新：{name}",
+      "alreadyUpToDate": "{name} 已是最新",
+      "queuedUpdateSingle": "已為 {count} 個容器排隊更新",
+      "queuedUpdateMultiple": "已為 {count} 個容器排隊更新",
+      "countAlreadyUpToDateSingle": "{count} 個容器已是最新",
+      "countAlreadyUpToDateMultiple": "{count} 個容器已是最新"
     },
     "registryError": {
       "generic": "倉庫錯誤",

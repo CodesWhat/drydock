@@ -34,6 +34,7 @@ import {
   isStaleContainerUpdateError,
   runContainerUpdateRequest,
   shouldRenderStandaloneQueuedUpdateAsUpdating,
+  type TranslateFn,
 } from '../../utils/container-update';
 import { errorMessage } from '../../utils/error';
 import {
@@ -283,6 +284,7 @@ async function updateAllInGroupState(args: {
   captureBatch: (groupKey: string, frozenTotal: number) => void;
   clearBatch: (groupKey: string) => void;
   alreadyInProgressMessage: string;
+  t: TranslateFn;
 }) {
   if (!args.containerActionsEnabled) {
     args.inputError.value = args.containerActionsDisabledReason;
@@ -361,7 +363,7 @@ async function updateAllInGroupState(args: {
     }
     if (acceptedTargetIds.length > 0) {
       toast.success(
-        `${formatContainerUpdateStartedCountMessage(acceptedTargetIds.length)} in ${args.group.key}`,
+        `${formatContainerUpdateStartedCountMessage(acceptedTargetIds.length, args.t)} in ${args.group.key}`,
       );
     }
   } catch (error: unknown) {
@@ -739,7 +741,7 @@ function createConfirmHandlers(args: {
       accept: () =>
         args.executeAction(target, apiUpdateContainer, {
           kind: 'update',
-          successMessage: getContainerUpdateStartedMessage(name),
+          successMessage: getContainerUpdateStartedMessage(name, args.t),
           treatNoUpdateAsStale: true,
           pendingLifecycleMode: 'update',
         }) as unknown as Promise<void>,
@@ -830,6 +832,7 @@ function createContainerActionHandlers(args: {
   inputError: Ref<string | null>;
   markScanStarted: (containerId: string | undefined) => void;
   markScanCompleted: (containerId: string | undefined) => void;
+  t: TranslateFn;
 }) {
   async function startContainer(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
@@ -843,8 +846,8 @@ function createContainerActionHandlers(args: {
     const name = typeof target === 'string' ? target : target.name;
     await args.executeAction(target, apiUpdateContainer, {
       kind: 'update',
-      successMessage: getContainerUpdateStartedMessage(name),
-      staleMessage: getContainerAlreadyUpToDateMessage(name),
+      successMessage: getContainerUpdateStartedMessage(name, args.t),
+      staleMessage: getContainerAlreadyUpToDateMessage(name, args.t),
       treatNoUpdateAsStale: true,
       pendingLifecycleMode: 'update',
     });
@@ -905,8 +908,8 @@ function createContainerActionHandlers(args: {
     await args.applyPolicy(target, 'clear', {}, `Cleared update policy for ${name}`);
     await args.executeAction(target, apiUpdateContainer, {
       kind: 'update',
-      successMessage: getForceContainerUpdateStartedMessage(name),
-      staleMessage: getContainerAlreadyUpToDateMessage(name),
+      successMessage: getForceContainerUpdateStartedMessage(name, args.t),
+      staleMessage: getContainerAlreadyUpToDateMessage(name, args.t),
       treatNoUpdateAsStale: true,
       pendingLifecycleMode: 'update',
     });
@@ -1258,6 +1261,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       captureBatch,
       clearBatch,
       alreadyInProgressMessage: t('containersView.toast.updateAlreadyInProgress'),
+      t: t as TranslateFn,
     });
   }
 
@@ -1275,6 +1279,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       inputError: input.error,
       markScanStarted: scanLifecycle.markScanStarted,
       markScanCompleted: scanLifecycle.markScanCompleted,
+      t: t as TranslateFn,
     });
 
   async function cancelUpdate(target: Pick<Container, 'id' | 'name' | 'updateOperation'>) {
