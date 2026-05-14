@@ -25,7 +25,7 @@ curl http://drydock:3000/api/v1/watchers
       "configuration":{
          "socket":"/var/run/docker.sock",
          "port":2375,
-         "cron":"0 * * * *",
+         "cron":"0 */6 * * *",
          "watchbydefault":true
       },
       "metadata": {
@@ -70,7 +70,7 @@ curl http://drydock:3000/api/v1/watchers/docker/local
    "configuration":{
       "socket":"/var/run/docker.sock",
       "port":2375,
-      "cron":"0 * * * *",
+      "cron":"0 */6 * * *",
       "watchbydefault":true
    },
    "metadata":{
