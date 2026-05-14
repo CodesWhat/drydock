@@ -15,11 +15,36 @@
       "batchUpdatedNoGroup": "已更新 {count} 个容器",
       "batchPartialNoGroup": "已更新 {total} 个容器中的 {succeeded} 个；{failed} 个失败",
       "batchFailedNoGroup": "无法更新 {count} 个容器",
-      "unknownGroup": "未知组"
+      "unknownGroup": "未知组",
+      "updateStarted": "已开始更新：{name}",
+      "forceUpdateStarted": "已开始强制更新：{name}",
+      "alreadyUpToDate": "{name} 已是最新",
+      "queuedUpdateSingle": "已为 {count} 个容器排队更新",
+      "queuedUpdateMultiple": "已为 {count} 个容器排队更新",
+      "countAlreadyUpToDateSingle": "{count} 个容器已是最新",
+      "countAlreadyUpToDateMultiple": "{count} 个容器已是最新"
     },
     "registryError": {
       "generic": "仓库错误",
       "detail": "仓库错误：{error}"
+    },
+    "columns": {
+      "container": "容器",
+      "version": "版本",
+      "update": "更新",
+      "status": "状态",
+      "host": "主机",
+      "registry": "仓库"
+    },
+    "status": {
+      "running": "运行中",
+      "stopped": "已停止",
+      "paused": "已暂停",
+      "exited": "已退出",
+      "dead": "异常停止",
+      "created": "已创建",
+      "restarting": "重启中",
+      "removing": "移除中"
     }
   }
 }

@@ -179,7 +179,7 @@ export class AgentClient {
     this.log = logger.child({ component: `agent-client.${name}` });
     const parsedBaseUrl = this.parseBaseUrl();
     this.baseUrl = parsedBaseUrl.origin;
-    this.warnIfSecretConfiguredOverHttp(parsedBaseUrl.protocol);
+    this.rejectSecretConfiguredOverHttp(parsedBaseUrl.protocol);
     this.axiosOptions = this.buildAxiosOptions();
 
     this.isConnected = false;
@@ -227,11 +227,11 @@ export class AgentClient {
     }
   }
 
-  private warnIfSecretConfiguredOverHttp(protocol: string) {
+  private rejectSecretConfiguredOverHttp(protocol: string) {
     const hasSecretConfigured =
       typeof this.config.secret === 'string' && this.config.secret.trim().length > 0;
     if (protocol === 'http:' && hasSecretConfigured) {
-      this.log.warn(
+      throw new Error(
         `Agent ${this.name} is configured with a secret over insecure HTTP (${this.baseUrl}). Configure HTTPS (certfile/cafile) to protect X-Dd-Agent-Secret.`,
       );
     }

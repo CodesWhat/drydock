@@ -19,7 +19,7 @@
         "docker": "Docker",
         "os": "OS",
         "version": "Versione",
-        "lastSeen": "Ultima attivita"
+        "lastSeen": "Ultima attività"
       },
       "card": {
         "running": "in esecuzione",
@@ -69,7 +69,7 @@
         "cpus": "CPU",
         "memory": "Memoria",
         "images": "Immagini",
-        "uptime": "Tempo di attivita",
+        "uptime": "Tempo di attività",
         "docker": "Docker",
         "os": "OS",
         "architecture": "Architettura",
@@ -79,7 +79,7 @@
         "logLevel": "Livello log",
         "pollInterval": "Intervallo polling",
         "dockerSocket": "Socket Docker",
-        "lastSeen": "Ultima attivita",
+        "lastSeen": "Ultima attività",
         "never": "mai"
       },
       "listView": {

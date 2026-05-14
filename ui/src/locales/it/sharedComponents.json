@@ -14,7 +14,7 @@
     "dataFilterBar": {
       "filters": "Filtri",
       "toggleFilters": "Attiva/disattiva filtri",
-      "viewMode": "Modalita visualizzazione",
+      "viewMode": "Modalità visualizzazione",
       "viewModeLabel": "Vista {label}"
     },
     "dataListAccordion": {
@@ -44,8 +44,8 @@
       "scanning": "Scansione {done}/{total}..."
     },
     "securityEmptyState": {
-      "noDataTitle": "Ancora nessun dato vulnerabilita",
-      "noDataBody": "Esegui una scansione per controllare i tuoi container rispetto a vulnerabilita note",
+      "noDataTitle": "Ancora nessun dato vulnerabilità",
+      "noDataBody": "Esegui una scansione per controllare i tuoi container rispetto a vulnerabilità note",
       "filteredTitle": "Nessuna immagine corrisponde ai filtri",
       "clearFilters": "Cancella tutti i filtri",
       "setupGuide": "Guida configurazione",

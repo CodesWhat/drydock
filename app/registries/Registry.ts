@@ -6,6 +6,8 @@ import { getSummaryTags } from '../prometheus/registry.js';
 import Component, { type ComponentConfiguration } from '../registry/Component.js';
 import { getErrorMessage } from '../util/error.js';
 import { getRegistryRequestTimeoutMs } from './configuration.js';
+import { withRetry } from './http-retry.js';
+import { acquireToken, getBucketForUrl } from './token-bucket.js';
 
 interface RegistryManifest {
   digest?: string;
@@ -465,10 +467,31 @@ class Registry<
     };
 
     try {
-      const response = await axios<T>(axiosOptionsWithConnectionReuse);
+      // Rate-limit ourselves before hitting the registry
+      await acquireToken(getBucketForUrl(url));
+
+      const envelope = await withRetry<T>(
+        () =>
+          axios<T>(axiosOptionsWithConnectionReuse).then((r) => ({
+            status: r.status,
+            headers: r.headers as Record<string, string | undefined>,
+            data: r.data,
+          })),
+        {
+          logger: this.log,
+          requestLabel: this.buildRequestLabel(url, method),
+        },
+      );
+
       const end = Date.now();
       getSummaryTags()?.observe({ type: this.type, name: this.name }, (end - start) / 1000);
-      return resolveWithFullResponse ? response : response.data;
+      return resolveWithFullResponse
+        ? ({
+            status: envelope.status,
+            headers: envelope.headers,
+            data: envelope.data,
+          } as unknown as AxiosResponse<T>)
+        : envelope.data;
     } catch (error) {
       const end = Date.now();
       getSummaryTags()?.observe({ type: this.type, name: this.name }, (end - start) / 1000);
@@ -495,6 +518,19 @@ class Registry<
 
   async getAuthPull(): Promise<{ username?: string; password?: string } | undefined> {
     return undefined;
+  }
+
+  /**
+   * Build a human-readable label for retry log messages.
+   * Strips query parameters so secrets in query strings are not logged.
+   */
+  private buildRequestLabel(url: string, method: string): string {
+    try {
+      const parsed = new URL(url);
+      return `${this.getId()} ${method} ${parsed.origin}${parsed.pathname}`;
+    } catch {
+      return `${this.getId()} ${method} ${url}`;
+    }
   }
 }
 

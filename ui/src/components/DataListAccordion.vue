@@ -9,6 +9,8 @@ const props = defineProps<{
   itemKey: string | ((item: Record<string, unknown>) => string);
   selectedKey?: string | null;
   expandable?: boolean;
+  /** Return additional v-memo dependencies for item content. */
+  itemMemo?: (item: Record<string, unknown>) => unknown[];
 }>();
 
 const emit = defineEmits<{
@@ -22,6 +24,16 @@ function getKey(
   itemKeyProp: string | ((item: Record<string, unknown>) => string),
 ): string {
   return typeof itemKeyProp === 'function' ? itemKeyProp(item) : item[itemKeyProp];
+}
+
+function getItemMemo(item: Record<string, unknown>): unknown[] {
+  const key = getKey(item, props.itemKey);
+  return [
+    key,
+    props.selectedKey === key,
+    props.expandable ? isExpanded(item) : false,
+    ...(props.itemMemo?.(item) ?? []),
+  ];
 }
 
 function toggleItem(key: string) {
@@ -59,7 +71,7 @@ function onItemKeydown(event: KeyboardEvent, item: Record<string, unknown>) {
 
 <template>
   <div class="space-y-2">
-    <div v-for="item in items" :key="getKey(item, itemKey)"
+    <div v-for="item in items" :key="getKey(item, itemKey)" v-memo="getItemMemo(item)"
          class="dd-rounded transition-[color,background-color,border-color,opacity,transform,box-shadow] cursor-pointer"
          role="button"
          tabindex="0"

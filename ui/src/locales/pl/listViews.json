@@ -34,6 +34,38 @@
       "toVersion": "Do wersji",
       "trigger": "Wyzwalacz",
       "details": "Szczegóły"
+    },
+    "actions": {
+      "container-update": "Aktualizacja kontenera",
+      "container-added": "Kontener dodany",
+      "container-removed": "Kontener usunięty",
+      "container-start": "Uruchomienie kontenera",
+      "container-stop": "Zatrzymanie kontenera",
+      "container-restart": "Restart kontenera",
+      "auth-login": "Logowanie uwierzytelniające",
+      "authenticated": "Uwierzytelniony",
+      "authfail": "Błąd uwierzytelniania",
+      "hook-configured": "Hak skonfigurowany",
+      "hook-pre-success": "Hak wstępny zakończony sukcesem",
+      "hook-post-success": "Hak końcowy zakończony sukcesem",
+      "hook-pre-failed": "Hak wstępny zakończony niepowodzeniem",
+      "hook-post-failed": "Hak końcowy zakończony niepowodzeniem",
+      "connected": "Połączono",
+      "closed": "Zamknięto",
+      "update-available": "Dostępna aktualizacja",
+      "update-applied": "Aktualizacja zastosowana",
+      "update-failed": "Aktualizacja nie powiodła się",
+      "auto-update-blocked": "Automatyczna aktualizacja zablokowana",
+      "auto-rollback": "Automatyczne cofnięcie",
+      "rollback": "Cofnięcie",
+      "preview": "Podgląd",
+      "agent-disconnect": "Rozłączenie agenta",
+      "notification-delivery-failed": "Dostarczenie powiadomienia nie powiodło się",
+      "security-alert": "Alert bezpieczeństwa"
+    },
+    "target": {
+      "container": "Kontener",
+      "agent": "Agent"
     }
   },
   "notificationsView": {
@@ -134,6 +166,29 @@
     "chooser": {
       "title": "Wybierz kontener do aktualizacji",
       "cancel": "Anuluj"
+    },
+    "runtimeTools": {
+      "trivy": "Trivy",
+      "cosign": "Cosign",
+      "sbom": "SBOM",
+      "scannerReady": "Klient Trivy jest gotowy",
+      "scannerReadyServer": "Klient Trivy jest gotowy (tryb serwera włączony)",
+      "scannerDisabled": "Skaner podatności jest wyłączony",
+      "scannerMissing": "Polecenie Trivy \"{command}\" nie jest dostępne w tym środowisku",
+      "signatureReady": "Cosign jest gotowy do weryfikacji podpisów",
+      "signatureDisabled": "Weryfikacja podpisów jest wyłączona",
+      "signatureMissing": "Polecenie Cosign \"{command}\" nie jest dostępne w tym środowisku",
+      "scannerTooltip": "Trivy: {message}",
+      "scannerTooltipServer": "Trivy: {message} · serwer: {server}",
+      "cosignTooltip": "Cosign: {message}",
+      "sbomEnabled": "Generowanie SBOM włączone ({formats})",
+      "sbomDisabled": "Generowanie SBOM wyłączone"
+    },
+    "emptyState": {
+      "noDataTitle": "Brak danych o podatnościach",
+      "scannerNotReady": "Skaner nie jest jeszcze gotowy.",
+      "runScanHint": "Uruchom skanowanie, aby sprawdzić znane podatności w kontenerach",
+      "noMatchTitle": "Żaden obraz nie pasuje do filtrów"
     }
   },
   "registriesView": {

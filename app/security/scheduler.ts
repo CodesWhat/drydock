@@ -346,7 +346,7 @@ type ScheduledBatchPreparation = {
 async function prepareScheduledBatch(
   securityConfig: ReturnType<typeof getSecurityConfiguration>,
 ): Promise<ScheduledBatchPreparation | undefined> {
-  const containers = storeContainer.getContainersRaw();
+  const containers = storeContainer.getContainersRaw().map(storeContainer.cloneContainer);
   const containersWithDigest = getContainersWithDigestValues(containers);
 
   if (containersWithDigest.length === 0) {

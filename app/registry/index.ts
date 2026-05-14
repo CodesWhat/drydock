@@ -504,6 +504,51 @@ async function registerTriggers(options: RegistrationOptions = {}) {
 }
 
 /**
+ * Secret-bearing fields that indicate a registry instance is credentialed.
+ * A username/login alone without a paired secret is NOT sufficient.
+ */
+export const CREDENTIALED_REGISTRY_SECRET_FIELDS = [
+  'token',
+  'password',
+  'auth',
+  'clientemail',
+  'privatekey',
+  'accesskeyid',
+  'secretaccesskey',
+] as const;
+
+/**
+ * Returns true if `instance` (a registry configuration object) has at least
+ * one non-blank secret-bearing field. Whitespace-only strings do NOT count.
+ */
+export function isCredentialedInstance(instance: unknown): boolean {
+  if (!isObjectRecord(instance)) {
+    return false;
+  }
+  return CREDENTIALED_REGISTRY_SECRET_FIELDS.some(
+    (field) => typeof instance[field] === 'string' && (instance[field] as string).trim().length > 0,
+  );
+}
+
+/**
+ * Returns true if `configuredRegistries[providerName]` has at least one
+ * instance with a non-empty secret-bearing auth field.
+ */
+function providerHasCredentialedInstance(
+  providerName: string,
+  configuredRegistries: ProviderConfigurationsByProvider | null | undefined,
+): boolean {
+  if (!configuredRegistries) {
+    return false;
+  }
+  const providerConfig = (configuredRegistries as Record<string, unknown>)[providerName];
+  if (!isObjectRecord(providerConfig)) {
+    return false;
+  }
+  return Object.values(providerConfig).some(isCredentialedInstance);
+}
+
+/**
  * Register registries.
  * @returns {Promise}
  */
@@ -534,12 +579,28 @@ async function registerRegistries() {
   ]);
   const registriesToRegister = {
     ...Array.from(providers).reduce((mergedRegistries, provider) => {
-      const defaultProviderConfiguration = toNamedConfigurationMap(
+      const rawDefaultProviderConfiguration = toNamedConfigurationMap(
         (defaultRegistries as Record<string, unknown>)[provider],
       );
       const configuredProviderConfiguration = toNamedConfigurationMap(
         (configuredRegistries as Record<string, unknown>)?.[provider],
       );
+      // Skip the anonymous 'public' default when the user has configured at
+      // least one credentialed instance for this provider. The credentialed
+      // instance(s) will handle all traffic; keeping the public seed would
+      // create a second, anonymous instance that can win the routing race and
+      // send authenticated users through the anonymous tier (→ 429s).
+      let defaultProviderConfiguration = rawDefaultProviderConfiguration;
+      if (
+        'public' in rawDefaultProviderConfiguration &&
+        providerHasCredentialedInstance(provider, configuredRegistries)
+      ) {
+        const { public: _dropped, ...rest } = rawDefaultProviderConfiguration;
+        defaultProviderConfiguration = rest;
+        log.info(
+          `Skipping anonymous '${provider}.public' default because credentialed instance(s) are configured`,
+        );
+      }
       mergedRegistries[provider] = mergeProviderConfigurations(
         defaultProviderConfiguration,
         configuredProviderConfiguration,

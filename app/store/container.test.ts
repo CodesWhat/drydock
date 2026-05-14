@@ -1244,7 +1244,28 @@ test('getContainersRaw should return unredacted env values', async () => {
   });
 });
 
-test('getContainersRaw should preserve Date and RegExp values when cloning', async () => {
+test('getContainersRaw should reuse cached raw objects without cloning after cache hit', async () => {
+  const containerExample = createContainerFixture();
+  const collection = {
+    find: vi.fn(() => [{ data: containerExample }]),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => ({
+      findOne: () => {},
+      insert: () => {},
+    }),
+  };
+  container.createCollections(db);
+
+  const firstResult = container.getContainersRaw({});
+  const secondResult = container.getContainersRaw({});
+
+  expect(collection.find).toHaveBeenCalledTimes(1);
+  expect(secondResult[0]).toBe(firstResult[0]);
+});
+
+test('getContainersRaw should preserve Date and RegExp values', async () => {
   const buildDate = new Date('2026-03-05T09:00:00.000Z');
   const namePattern = /^drydock-container$/i;
   const containerExample = createContainerFixture();

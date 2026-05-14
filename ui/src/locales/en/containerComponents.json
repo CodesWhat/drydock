@@ -187,7 +187,12 @@
       "registryErrorRateLimited": "Rate limited",
       "registryErrorAuth": "Auth failed",
       "registryErrorNotFound": "Not found",
-      "registryErrorCheckFailed": "Check failed"
+      "registryErrorCheckFailed": "Check failed",
+      "blockedTag": "Blocked: {tag}",
+      "blockedTagWithCriticals": "Blocked: {tag} ({count} critical CVE)",
+      "blockedTagWithCriticalsCVEs": "Blocked: {tag} ({count} critical CVEs)",
+      "manualUpdateOnly": "Manual update only",
+      "manualUpdateOnlyWithMessage": "Manual update only — {message}"
     },
     "groupHeader": {
       "ungrouped": "Ungrouped",
@@ -219,7 +224,8 @@
       "digest": "Digest",
       "created": "Created",
       "unknown": "Unknown",
-      "imageMetadata": "Image Metadata"
+      "imageMetadata": "Image Metadata",
+      "imageAge": "Image age"
     },
     "listContent": {
       "loadingContainers": "Loading containers...",
@@ -261,7 +267,8 @@
       "filterKind": "Kind: {value}",
       "filterHiddenPinned": "Hidden: Pinned",
       "filtersLabel": "Filters",
-      "filteredContainers": "Filtered to {count} container | Filtered to {count} containers"
+      "filteredContainers": "Filtered to {count} container | Filtered to {count} containers",
+      "clearContainerIdFilter": "Clear container ID filter"
     },
     "stats": {
       "paused": "Paused",
@@ -299,7 +306,8 @@
     },
     "suggestedTag": {
       "badgeText": "Suggested",
-      "tooltip": "Best stable semver tag available — consider pinning"
+      "tooltip": "Best stable semver tag available — consider pinning",
+      "tooltipWithTag": "Suggested: {tag}\n{hint}"
     },
     "eligibilityBadges": {
       "securityBlocked": "Security blocked",

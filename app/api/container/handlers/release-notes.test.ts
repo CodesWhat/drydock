@@ -33,6 +33,7 @@ function createMockContext(overrides: Partial<CrudHandlerContext> = {}): CrudHan
     storeContainer: { getContainer: vi.fn(), deleteContainer: vi.fn() },
     updateOperationStore: {
       getOperationsByContainerName: vi.fn(),
+      getOperationsByContainerId: vi.fn(() => []),
       getInProgressOperationByContainerName: vi.fn(),
       getInProgressOperationByContainerId: vi.fn(),
       getActiveOperationByContainerName: vi.fn(),

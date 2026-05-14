@@ -518,6 +518,23 @@ describe('ContainersView', () => {
       expect(vm.containerMetaMap.tdarr_node).toBeUndefined();
     });
 
+    it('caches host filter options from the committed container list', async () => {
+      const datavaultNode = makeContainer({
+        id: 'c1',
+        name: 'tdarr_node',
+        server: 'Datavault',
+      });
+      const tmvaultNode = makeContainer({
+        id: 'c2',
+        name: 'worker',
+        server: 'Tmvault',
+      });
+      const wrapper = await mountContainersView([datavaultNode, tmvaultNode]);
+      const vm = wrapper.vm as any;
+
+      expect(vm.serverNames).toEqual(['Datavault', 'Tmvault']);
+    });
+
     describe('identical-list dedup optimisation', () => {
       it('does not reassign containers.value when a reload returns identical data', async () => {
         const container = makeContainer({ id: 'c1', name: 'nginx', status: 'running' });
@@ -1276,7 +1293,7 @@ describe('ContainersView', () => {
         .mockReturnValueOnce([second])
         .mockReturnValueOnce([]);
 
-      const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+      const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
       try {
         await vm.executeAction('alpha', mockApiUpdate);
         await vm.executeAction('beta', mockApiUpdate);
@@ -1284,9 +1301,9 @@ describe('ContainersView', () => {
 
         expect(vm.actionPending.has('alpha')).toBe(true);
         expect(vm.actionPending.has('beta')).toBe(true);
-        expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+        expect(setTimeoutSpy.mock.calls.filter((call) => call[1] === 2000)).toHaveLength(1);
       } finally {
-        setIntervalSpy.mockRestore();
+        setTimeoutSpy.mockRestore();
       }
     });
   });

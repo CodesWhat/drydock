@@ -50,15 +50,20 @@ describe('securityViewUtils', () => {
   });
 
   describe('buildSecurityEmptyState', () => {
+    const t = (key: string) => key;
+
     it('returns scan setup state when scanner setup is needed and no vulnerabilities are loaded', () => {
       expect(
-        buildSecurityEmptyState({
-          hasVulnerabilityData: false,
-          scannerSetupNeeded: true,
-          scannerMessage: 'Trivy missing from PATH',
-        }),
+        buildSecurityEmptyState(
+          {
+            hasVulnerabilityData: false,
+            scannerSetupNeeded: true,
+            scannerMessage: 'Trivy missing from PATH',
+          },
+          t,
+        ),
       ).toEqual({
-        title: 'No vulnerability data yet',
+        title: 'securityView.emptyState.noDataTitle',
         description: 'Trivy missing from PATH',
         showSetupGuide: true,
         showScanButton: false,
@@ -67,14 +72,17 @@ describe('securityViewUtils', () => {
 
     it('falls back to default scanner setup message when none is provided', () => {
       expect(
-        buildSecurityEmptyState({
-          hasVulnerabilityData: false,
-          scannerSetupNeeded: true,
-          scannerMessage: '',
-        }),
+        buildSecurityEmptyState(
+          {
+            hasVulnerabilityData: false,
+            scannerSetupNeeded: true,
+            scannerMessage: '',
+          },
+          t,
+        ),
       ).toEqual({
-        title: 'No vulnerability data yet',
-        description: 'Scanner is not ready yet.',
+        title: 'securityView.emptyState.noDataTitle',
+        description: 'securityView.emptyState.scannerNotReady',
         showSetupGuide: true,
         showScanButton: false,
       });
@@ -82,14 +90,17 @@ describe('securityViewUtils', () => {
 
     it('returns scan CTA when scanner is ready and no vulnerabilities are loaded', () => {
       expect(
-        buildSecurityEmptyState({
-          hasVulnerabilityData: false,
-          scannerSetupNeeded: false,
-          scannerMessage: '',
-        }),
+        buildSecurityEmptyState(
+          {
+            hasVulnerabilityData: false,
+            scannerSetupNeeded: false,
+            scannerMessage: '',
+          },
+          t,
+        ),
       ).toEqual({
-        title: 'No vulnerability data yet',
-        description: 'Run a scan to check your containers for known vulnerabilities',
+        title: 'securityView.emptyState.noDataTitle',
+        description: 'securityView.emptyState.runScanHint',
         showSetupGuide: false,
         showScanButton: true,
       });
@@ -97,13 +108,16 @@ describe('securityViewUtils', () => {
 
     it('returns filter-empty state when vulnerabilities exist but are filtered out', () => {
       expect(
-        buildSecurityEmptyState({
-          hasVulnerabilityData: true,
-          scannerSetupNeeded: false,
-          scannerMessage: 'ignored',
-        }),
+        buildSecurityEmptyState(
+          {
+            hasVulnerabilityData: true,
+            scannerSetupNeeded: false,
+            scannerMessage: 'ignored',
+          },
+          t,
+        ),
       ).toEqual({
-        title: 'No images match your filters',
+        title: 'securityView.emptyState.noMatchTitle',
         description: null,
         showSetupGuide: false,
         showScanButton: false,

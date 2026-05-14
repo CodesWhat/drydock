@@ -1,5 +1,6 @@
 import axios from 'axios';
 import joi from 'joi';
+import { rejectOnceWithHttpStatus } from '../../../test/notification-provider-mocks.js';
 
 vi.mock('axios', () => ({
   default: {
@@ -217,6 +218,15 @@ test('sendMessage should post to telegram API and return data', async () => {
     { timeout: 30000 },
   );
   expect(result).toEqual({ ok: true });
+});
+
+test('sendMessage should reject when Telegram API returns 429', async () => {
+  const tg = new Telegram();
+  tg.configuration = { ...configurationValid };
+  await tg.initTrigger();
+  rejectOnceWithHttpStatus(axios.post, 'Telegram rate limited', 429);
+
+  await expect(tg.sendMessage('Hello')).rejects.toThrow('Telegram rate limited');
 });
 
 test('getParseMode should return HTML when messageformat is HTML', () => {

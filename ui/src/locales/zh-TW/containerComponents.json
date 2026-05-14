@@ -186,7 +186,12 @@
       "registryErrorRateLimited": "速率限制",
       "registryErrorAuth": "認證失敗",
       "registryErrorNotFound": "未找到",
-      "registryErrorCheckFailed": "檢查失敗"
+      "registryErrorCheckFailed": "檢查失敗",
+      "blockedTag": "已封鎖：{tag}",
+      "blockedTagWithCriticals": "已封鎖：{tag}（{count} 個嚴重）",
+      "blockedTagWithCriticalsCVEs": "已封鎖：{tag}（{count} 個嚴重）",
+      "manualUpdateOnly": "僅支援手動更新",
+      "manualUpdateOnlyWithMessage": "僅支援手動更新 — {message}"
     },
     "groupHeader": {
       "ungrouped": "未分組",
@@ -218,7 +223,8 @@
       "digest": "摘要",
       "created": "建立時間",
       "unknown": "未知",
-      "imageMetadata": "映像檔元資料"
+      "imageMetadata": "映像檔元資料",
+      "imageAge": "映像檔存在時間"
     },
     "listContent": {
       "loadingContainers": "正在載入容器...",
@@ -251,7 +257,7 @@
       "recheckTooltip": "重新檢查更新",
       "columnsHeader": "列",
       "narrowViewportSuffix": "(窄視圖)",
-      "autoHiddenBadgeTooltip": "視窗寬度不足，已自動隱藏 ({count}) 欄。請拉寬視窗，或隱藏其他欄位以釋放空間。",
+      "autoHiddenBadgeTooltip": "視窗寬度不足，已自動隱藏 {count} 欄。請拉寬視窗，或隱藏其他欄位以釋放空間。",
       "filterSearch": "搜尋：{value}",
       "filterStatus": "狀態：{value}",
       "filterBouncer": "Bouncer：{value}",
@@ -260,7 +266,8 @@
       "filterKind": "類型：{value}",
       "filterHiddenPinned": "已隱藏：已固定",
       "filtersLabel": "篩選器",
-      "filteredContainers": "已篩選 {count} 個容器 | 已篩選 {count} 個容器"
+      "filteredContainers": "已篩選 {count} 個容器 | 已篩選 {count} 個容器",
+      "clearContainerIdFilter": "清除容器 ID 篩選條件"
     },
     "stats": {
       "paused": "已暫停",
@@ -298,7 +305,8 @@
     },
     "suggestedTag": {
       "badgeText": "建議",
-      "tooltip": "可用的最佳穩定 semver 標籤 — 建議固定使用"
+      "tooltip": "可用的最佳穩定 semver 標籤 — 建議固定使用",
+      "tooltipWithTag": "建議：{tag}\n{hint}"
     },
     "eligibilityBadges": {
       "securityBlocked": "安全阻止",

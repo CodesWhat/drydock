@@ -5,10 +5,51 @@ import Trigger, { type BatchRuntimeContext, type TriggerConfiguration } from '..
 
 let hasLoggedShellExecutionWarning = false;
 
+const SHELL_UNSAFE_ENV_CHARACTERS = new Set(['`', '$', ';', '&', '|', '<', '>', '(', ')']);
+const DELETE_CONTROL_CODE_POINT = 0x7f;
+
 interface CommandConfiguration extends TriggerConfiguration {
   cmd: string;
   shell: string;
   timeout: number;
+}
+
+function sanitizeCommandEnvString(value: string) {
+  return Array.from(value)
+    .map((character) => {
+      const codePoint = character.codePointAt(0);
+      if (
+        codePoint === undefined ||
+        codePoint < 0x20 ||
+        codePoint === DELETE_CONTROL_CODE_POINT ||
+        SHELL_UNSAFE_ENV_CHARACTERS.has(character)
+      ) {
+        return '_';
+      }
+      return character;
+    })
+    .join('');
+}
+
+function toCommandEnvValue(value: unknown) {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return '';
+  }
+  if (typeof value === 'string') {
+    return sanitizeCommandEnvString(value);
+  }
+  return sanitizeCommandEnvString(String(value));
+}
+
+function sanitizeCommandEnvVars(extraEnvVars: Record<string, unknown>) {
+  const sanitizedEnvVars: Record<string, string | undefined> = {};
+  for (const [key, value] of Object.entries(extraEnvVars)) {
+    sanitizedEnvVars[key] = toCommandEnvValue(value);
+  }
+  return sanitizedEnvVars;
 }
 
 export function resetShellExecutionWarningStateForTests() {
@@ -26,7 +67,7 @@ class Command extends Trigger<CommandConfiguration> {
 
     hasLoggedShellExecutionWarning = true;
     this.log.warn(
-      `Security: Command trigger executes DD_TRIGGER_COMMAND_* cmd using ${this.configuration.shell} -c with drydock process privileges. Use only trusted command strings and interpolated values.`,
+      `Security: Command trigger executes DD_ACTION_COMMAND_* cmd using ${this.configuration.shell} -c with drydock process privileges. Use only trusted command strings and interpolated values.`,
     );
   }
 
@@ -73,20 +114,20 @@ class Command extends Trigger<CommandConfiguration> {
    * Run the command.
    * @param {*} extraEnvVars
    */
-  async runCommand(extraEnvVars) {
+  async runCommand(extraEnvVars: Record<string, unknown>) {
     this.logShellExecutionWarningOnce();
 
     const commandOptions = {
       env: {
         ...process.env,
-        ...extraEnvVars,
+        ...sanitizeCommandEnvVars(extraEnvVars),
       },
       timeout: this.configuration.timeout,
     };
     try {
       const { stdout, stderr } = await new Promise<{ stdout: string; stderr: string }>(
         (resolve, reject) => {
-          // Intentional admin-controlled shell execution from DD_TRIGGER_COMMAND_* env configuration.
+          // Intentional admin-controlled shell execution from DD_ACTION_COMMAND_* env configuration.
           execFile(
             this.configuration.shell,
             ['-c', this.configuration.cmd],

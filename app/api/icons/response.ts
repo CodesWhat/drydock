@@ -10,8 +10,15 @@ import {
 } from './settings.js';
 import { findBundledIconPath } from './storage.js';
 
+const SVG_CONTENT_SECURITY_POLICY =
+  "sandbox; script-src 'none'; object-src 'none'; base-uri 'none'";
+
 function sendCachedIcon(res: Response, iconPath: string, contentType: string) {
   res.set('Cache-Control', CACHE_CONTROL_HEADER);
+  res.set('X-Content-Type-Options', 'nosniff');
+  if (contentType.toLowerCase() === 'image/svg+xml') {
+    res.set('Content-Security-Policy', SVG_CONTENT_SECURITY_POLICY);
+  }
   res.type(contentType);
   res.sendFile(path.basename(iconPath), { root: path.dirname(iconPath) });
 }
@@ -64,4 +71,4 @@ async function sendMissingIconResponse({
   });
 }
 
-export { sendCachedIcon, sendMissingIconResponse };
+export { sendCachedIcon, sendMissingIconResponse, shouldServeImageFallback };

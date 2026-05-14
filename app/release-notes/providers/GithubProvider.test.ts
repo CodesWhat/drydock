@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 const mockAxiosGet = vi.hoisted(() => vi.fn());
 const mockLogDebug = vi.hoisted(() => vi.fn());
 const mockLogWarn = vi.hoisted(() => vi.fn());
+const mockGetGhcrTokenFallback = vi.hoisted(() => vi.fn<[], string | undefined>(() => undefined));
 
 vi.mock('axios', () => ({
   default: {
@@ -19,6 +20,10 @@ vi.mock('../../log/index.js', () => ({
       error: vi.fn(),
     }),
   },
+}));
+
+vi.mock('../../registries/ghcr-token-fallback.js', () => ({
+  getGhcrTokenFallback: () => mockGetGhcrTokenFallback(),
 }));
 
 import GithubProvider from './GithubProvider.js';
@@ -77,8 +82,9 @@ describe('release-notes/providers/GithubProvider', () => {
     );
   });
 
-  test('fetchByTag should stop on non-rate-limited 403 responses', async () => {
+  test('fetchByTag should stop on non-rate-limited 403 responses with no token', async () => {
     const provider = new GithubProvider();
+    mockGetGhcrTokenFallback.mockReturnValueOnce(undefined);
     mockAxiosGet.mockRejectedValueOnce({
       response: {
         status: 403,
@@ -90,7 +96,8 @@ describe('release-notes/providers/GithubProvider', () => {
     const releaseNotes = await provider.fetchByTag('github.com/acme/service', '1.0.0');
 
     expect(releaseNotes).toBeUndefined();
-    expect(mockLogDebug).toHaveBeenCalledTimes(1);
+    // No token involved — neither debug nor warn for auth rejection
+    expect(mockLogDebug).not.toHaveBeenCalled();
     expect(mockLogWarn).not.toHaveBeenCalled();
   });
 
@@ -124,5 +131,196 @@ describe('release-notes/providers/GithubProvider', () => {
       publishedAt: new Date(0).toISOString(),
       provider: 'github',
     });
+  });
+
+  test('fetchByTag uses GHCR token fallback when no token is provided', async () => {
+    const provider = new GithubProvider();
+    mockGetGhcrTokenFallback.mockReturnValueOnce('ghcr-pat-token');
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        body: 'release body',
+        name: 'v1.0.0',
+        html_url: 'https://github.com/acme/service/releases/tag/v1.0.0',
+        published_at: '2024-01-01T00:00:00Z',
+      },
+    });
+
+    const releaseNotes = await provider.fetchByTag('github.com/acme/service', '1.0.0');
+
+    expect(releaseNotes).toBeDefined();
+    // The authorization header should contain the GHCR fallback token
+    expect(mockAxiosGet).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer ghcr-pat-token',
+        }),
+      }),
+    );
+  });
+
+  test('fetchByTag does not use GHCR fallback when explicit token is provided', async () => {
+    const provider = new GithubProvider();
+    // Do not queue a fallback value — getGhcrTokenFallback won't be called when token is explicit
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        body: 'body',
+        name: 'v1.0.0',
+        html_url: 'https://github.com/acme/service/releases/tag/v1.0.0',
+        published_at: '2024-01-01T00:00:00Z',
+      },
+    });
+
+    await provider.fetchByTag('github.com/acme/service', '1.0.0', 'explicit-token');
+
+    // Should use the explicit token, not the fallback
+    expect(mockAxiosGet).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer explicit-token',
+        }),
+      }),
+    );
+  });
+
+  test('fetchByTag makes unauthenticated request when no token and no GHCR fallback', async () => {
+    const provider = new GithubProvider();
+    mockGetGhcrTokenFallback.mockReturnValueOnce(undefined);
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        body: 'body',
+        name: 'v1.0.0',
+        html_url: 'https://github.com/acme/service/releases/tag/v1.0.0',
+        published_at: '2024-01-01T00:00:00Z',
+      },
+    });
+
+    await provider.fetchByTag('github.com/acme/service', '1.0.0');
+
+    // No Authorization header when no token available
+    expect(mockAxiosGet).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.not.objectContaining({
+          Authorization: expect.any(String),
+        }),
+      }),
+    );
+  });
+
+  test('fetchByTag retries on 429 and returns data on success', async () => {
+    vi.useFakeTimers();
+    const provider = new GithubProvider();
+
+    mockAxiosGet
+      .mockRejectedValueOnce({
+        response: { status: 429, headers: { 'retry-after': '0' } },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          body: 'release body',
+          name: 'v1.2.3',
+          html_url: 'https://github.com/acme/service/releases/tag/v1.2.3',
+          published_at: '2024-06-01T00:00:00Z',
+        },
+      });
+
+    const promise = provider.fetchByTag('github.com/acme/service', '1.2.3');
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result).toBeDefined();
+    expect(result?.title).toBe('v1.2.3');
+    expect(mockAxiosGet).toHaveBeenCalledTimes(2);
+
+    vi.useRealTimers();
+  });
+
+  test('fetchByTag logs warn when GHCR fallback token is rejected with 401', async () => {
+    const provider = new GithubProvider();
+    mockGetGhcrTokenFallback.mockReturnValueOnce('ghcr-fallback-token');
+    mockAxiosGet.mockRejectedValueOnce({
+      response: { status: 401, headers: {} },
+      message: 'unauthorized',
+    });
+
+    const result = await provider.fetchByTag('github.com/acme/service', '1.0.0');
+
+    expect(result).toBeUndefined();
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      expect.stringMatching(/GHCR token fallback.*rejected/i),
+    );
+    expect(mockLogDebug).not.toHaveBeenCalled();
+  });
+
+  test('fetchByTag logs different warn when configured token is rejected with 401', async () => {
+    const provider = new GithubProvider();
+    mockAxiosGet.mockRejectedValueOnce({
+      response: { status: 401, headers: {} },
+      message: 'unauthorized',
+    });
+
+    const result = await provider.fetchByTag(
+      'github.com/acme/service',
+      '1.0.0',
+      'explicit-bad-token',
+    );
+
+    expect(result).toBeUndefined();
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      expect.stringMatching(/Configured GITHUB_TOKEN rejected/i),
+    );
+    expect(mockLogDebug).not.toHaveBeenCalled();
+  });
+
+  test('fetchByTag makes unauthenticated request and returns undefined on 401 when no token at all', async () => {
+    const provider = new GithubProvider();
+    mockGetGhcrTokenFallback.mockReturnValueOnce(undefined);
+    mockAxiosGet.mockRejectedValueOnce({
+      response: { status: 401, headers: {} },
+      message: 'unauthorized',
+    });
+
+    const result = await provider.fetchByTag('github.com/acme/service', '1.0.0');
+
+    expect(result).toBeUndefined();
+    // No special warn for unauthenticated case, and no debug — just a silent return
+    expect(mockLogWarn).not.toHaveBeenCalled();
+    expect(mockLogDebug).not.toHaveBeenCalled();
+  });
+
+  test('fetchByTag returns undefined after rate-limit 429 exhausts all retries', async () => {
+    vi.useFakeTimers();
+    const provider = new GithubProvider();
+
+    mockAxiosGet.mockRejectedValue({
+      response: { status: 429, headers: { 'retry-after': '0' } },
+    });
+
+    const promise = provider.fetchByTag('github.com/acme/service', '1.2.3');
+    const expectation = expect(promise).resolves.toBeUndefined();
+    await vi.runAllTimersAsync();
+    await expectation;
+
+    // withRetry throws after exhaustion — caught by fetchByTag's catch block → returns undefined
+    expect(mockLogDebug).toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+
+  test('fetchByTag logs the error message when a network error object with a message is thrown', async () => {
+    const provider = new GithubProvider();
+    // Throw an actual Error (has a .message property) with no .response — hits getDebugErrorMessage line 31
+    mockAxiosGet.mockRejectedValueOnce(
+      new Error('ECONNREFUSED connect ECONNREFUSED 127.0.0.1:443'),
+    );
+
+    const result = await provider.fetchByTag('github.com/acme/service', '1.0.0');
+
+    expect(result).toBeUndefined();
+    expect(mockLogDebug).toHaveBeenCalledWith(
+      expect.stringContaining('ECONNREFUSED connect ECONNREFUSED 127.0.0.1:443'),
+    );
   });
 });

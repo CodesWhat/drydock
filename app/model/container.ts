@@ -158,6 +158,7 @@ export interface Container {
   status: string;
   watcher: string;
   agent?: string;
+  identityKey?: string;
   includeTags?: string;
   excludeTags?: string;
   transformTags?: string;
@@ -260,6 +261,7 @@ const schema = joi.object({
   status: joi.string().default('unknown'),
   watcher: joi.string().min(1).required(),
   agent: joi.string().optional(),
+  identityKey: joi.string().optional(),
   includeTags: joi.string(),
   excludeTags: joi.string(),
   transformTags: joi.string(),
@@ -817,7 +819,11 @@ export function validate(container: unknown): Container {
   }
   delete containerValidated.image?.registry?.lookupUrl;
 
-  // Add computed properties
+  // Always derived from the canonical fields (agent, watcher, name, compose
+  // labels) — recompute on every validate() so renames or label edits flow
+  // through. The schema permits identityKey as an input so persisted store
+  // entries round-trip cleanly, but the derived value wins.
+  containerValidated.identityKey = deriveContainerIdentityKey(containerValidated);
   addTagPinnedProperty(containerValidated);
   addUpdateAvailableProperty(containerValidated);
   addUpdateKindProperty(containerValidated);
@@ -893,6 +899,39 @@ export function getContainerIdentityKey(containerIdentity: ContainerIdentity) {
   }
 
   return `${getContainerIdentityAgentPrefix(containerIdentity)}::${containerIdentity.watcher}::${containerIdentity.name}`;
+}
+
+const COMPOSE_PROJECT_LABEL = 'com.docker.compose.project';
+const COMPOSE_SERVICE_LABEL = 'com.docker.compose.service';
+
+/**
+ * Build a stable per-container identity key that survives container recreates
+ * but still discriminates between same-named siblings (e.g. two `pi-hole`
+ * services in different compose projects, or a service vs container created
+ * separately). Compose labels take priority because they survive recreates;
+ * without them we fall back to the legacy `${agent}::${watcher}::${name}` key.
+ */
+export function deriveContainerIdentityKey(container: Container): string | undefined {
+  if (
+    typeof container.watcher !== 'string' ||
+    container.watcher.length === 0 ||
+    typeof container.name !== 'string' ||
+    container.name.length === 0
+  ) {
+    return undefined;
+  }
+  const agent = typeof container.agent === 'string' ? container.agent : '';
+  const composeProject = container.labels?.[COMPOSE_PROJECT_LABEL];
+  const composeService = container.labels?.[COMPOSE_SERVICE_LABEL];
+  if (
+    typeof composeProject === 'string' &&
+    composeProject.length > 0 &&
+    typeof composeService === 'string' &&
+    composeService.length > 0
+  ) {
+    return `${agent}::${container.watcher}::compose:${composeProject}/${composeService}`;
+  }
+  return `${agent}::${container.watcher}::${container.name}`;
 }
 
 /**

@@ -4,6 +4,8 @@ import { requireAuthString, withAuthorizationHeader } from '../../../security/au
 import Registry from '../../Registry.js';
 
 const ECR_PUBLIC_GALLERY_HOSTNAME = 'public.ecr.aws';
+const PRIVATE_ECR_AUTH_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
+const ECR_AUTH_TOKEN_REFRESH_WINDOW_MS = 5 * 60 * 1000;
 
 function getRegistryHost(registryUrl: string | undefined): string {
   if (!registryUrl) {
@@ -30,7 +32,22 @@ interface EcrRegistryConfiguration {
   region?: string;
 }
 
+interface EcrAuthTokenCacheEntry {
+  cacheKey: string;
+  expiresAtMs: number;
+  token: string;
+}
+
+interface EcrAuthTokenFetchEntry {
+  cacheKey: string;
+  promise: Promise<string | undefined>;
+}
+
 class Ecr extends Registry<EcrRegistryConfiguration> {
+  private privateEcrAuthTokenCache?: EcrAuthTokenCacheEntry;
+
+  private privateEcrAuthTokenFetch?: EcrAuthTokenFetchEntry;
+
   getConfigurationSchema() {
     return this.joi.alternatives([
       this.joi.string().allow(''),
@@ -90,17 +107,73 @@ class Ecr extends Registry<EcrRegistryConfiguration> {
     return imageNormalized;
   }
 
-  async fetchPrivateEcrAuthToken() {
+  getPrivateEcrAuthTokenCacheKey() {
+    return [
+      this.configuration.accesskeyid,
+      this.configuration.secretaccesskey,
+      this.configuration.region,
+    ].join('\0');
+  }
+
+  getCachedPrivateEcrAuthToken(cacheKey: string) {
+    if (!this.privateEcrAuthTokenCache || this.privateEcrAuthTokenCache.cacheKey !== cacheKey) {
+      return undefined;
+    }
+    if (
+      Date.now() >=
+      this.privateEcrAuthTokenCache.expiresAtMs - ECR_AUTH_TOKEN_REFRESH_WINDOW_MS
+    ) {
+      return undefined;
+    }
+    return this.privateEcrAuthTokenCache.token;
+  }
+
+  async requestPrivateEcrAuthToken(cacheKey = this.getPrivateEcrAuthTokenCacheKey()) {
+    const { accesskeyid, region, secretaccesskey } = this.configuration;
     const ecr = new ECRClient({
       credentials: {
-        accessKeyId: this.configuration.accesskeyid,
-        secretAccessKey: this.configuration.secretaccesskey,
+        accessKeyId: accesskeyid,
+        secretAccessKey: secretaccesskey,
       },
-      region: this.configuration.region,
+      region,
     });
     const command = new GetAuthorizationTokenCommand({});
     const authorizationToken = await ecr.send(command);
-    return authorizationToken.authorizationData[0].authorizationToken;
+    const token = authorizationToken.authorizationData[0].authorizationToken;
+    if (
+      typeof token === 'string' &&
+      token.trim().length > 0 &&
+      cacheKey === this.getPrivateEcrAuthTokenCacheKey()
+    ) {
+      this.privateEcrAuthTokenCache = {
+        cacheKey,
+        expiresAtMs: Date.now() + PRIVATE_ECR_AUTH_TOKEN_TTL_MS,
+        token,
+      };
+    }
+    return token;
+  }
+
+  async fetchPrivateEcrAuthToken() {
+    const cacheKey = this.getPrivateEcrAuthTokenCacheKey();
+    const cachedToken = this.getCachedPrivateEcrAuthToken(cacheKey);
+    if (cachedToken !== undefined) {
+      return cachedToken;
+    }
+    if (this.privateEcrAuthTokenFetch?.cacheKey === cacheKey) {
+      return this.privateEcrAuthTokenFetch.promise;
+    }
+
+    const fetchEntry = {
+      cacheKey,
+      promise: this.requestPrivateEcrAuthToken(cacheKey).finally(() => {
+        if (this.privateEcrAuthTokenFetch === fetchEntry) {
+          this.privateEcrAuthTokenFetch = undefined;
+        }
+      }),
+    };
+    this.privateEcrAuthTokenFetch = fetchEntry;
+    return fetchEntry.promise;
   }
 
   async authenticate(image, requestOptions) {

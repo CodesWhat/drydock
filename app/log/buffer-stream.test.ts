@@ -27,6 +27,18 @@ describe('Logger bufferStream integration', () => {
     return { logger, getEntries };
   }
 
+  async function findBufferedEntry(
+    getEntries: (options: { tail: number }) => Array<Record<string, unknown>>,
+    predicate: (entry: Record<string, unknown>) => boolean,
+  ) {
+    let found: Record<string, unknown> | undefined;
+    await vi.waitFor(() => {
+      found = getEntries({ tail: 1000 }).find(predicate);
+      expect(found).toBeDefined();
+    });
+    return found;
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetLogLevel.mockReturnValue('info');
@@ -41,12 +53,7 @@ describe('Logger bufferStream integration', () => {
     var marker = `test-marker-${Date.now()}`;
     logger.info({ component: 'test-comp' }, marker);
 
-    // pino writes asynchronously via the stream; give it a tick
-    await new Promise((r) => globalThis.setTimeout(r, 50));
-
-    var entries = getEntries({ tail: 1000 });
-    var found = entries.find((e) => e.msg === marker);
-    expect(found).toBeDefined();
+    var found = await findBufferedEntry(getEntries, (e) => e.msg === marker);
     expect(found.component).toBe('test-comp');
     expect(found.level).toBe('info');
   });
@@ -56,11 +63,7 @@ describe('Logger bufferStream integration', () => {
     var marker = `no-comp-${Date.now()}`;
     logger.warn(marker);
 
-    await new Promise((r) => globalThis.setTimeout(r, 50));
-
-    var entries = getEntries({ tail: 1000 });
-    var found = entries.find((e) => e.msg === marker);
-    expect(found).toBeDefined();
+    var found = await findBufferedEntry(getEntries, (e) => e.msg === marker);
     // Should fall back to the logger name 'drydock'
     expect(found.component).toBe('drydock');
   });
@@ -70,11 +73,7 @@ describe('Logger bufferStream integration', () => {
     var marker = `level-test-${Date.now()}`;
     logger.error(marker);
 
-    await new Promise((r) => globalThis.setTimeout(r, 50));
-
-    var entries = getEntries({ tail: 1000 });
-    var found = entries.find((e) => e.msg === marker);
-    expect(found).toBeDefined();
+    var found = await findBufferedEntry(getEntries, (e) => e.msg === marker);
     expect(found.level).toBe('error');
   });
 
@@ -83,11 +82,7 @@ describe('Logger bufferStream integration', () => {
     // Logging with only metadata, no message string
     logger.info({ component: 'empty-msg' }, '');
 
-    await new Promise((r) => globalThis.setTimeout(r, 50));
-
-    var entries = getEntries({ tail: 1000 });
-    var found = entries.find((e) => e.component === 'empty-msg');
-    expect(found).toBeDefined();
+    var found = await findBufferedEntry(getEntries, (e) => e.component === 'empty-msg');
     expect(found.msg).toBe('');
   });
 
@@ -96,8 +91,6 @@ describe('Logger bufferStream integration', () => {
     var { logger, getEntries } = await createLoggerAndBuffer();
     var marker = `disabled-marker-${Date.now()}`;
     logger.info({ component: 'disabled-comp' }, marker);
-
-    await new Promise((r) => globalThis.setTimeout(r, 50));
 
     var entries = getEntries({ tail: 1000 });
     expect(entries.find((e) => e.msg === marker)).toBeUndefined();

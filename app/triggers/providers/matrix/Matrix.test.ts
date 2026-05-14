@@ -1,4 +1,5 @@
 import joi from 'joi';
+import { rejectOnceWithHttpStatus } from '../../../test/notification-provider-mocks.js';
 import Matrix from './Matrix.js';
 
 vi.mock('axios', () => ({
@@ -159,5 +160,16 @@ test('postMessage should call Matrix message endpoint', async () => {
       },
       timeout: 30000,
     },
+  );
+});
+
+test('postMessage should reject when Matrix API returns 5xx', async () => {
+  const { default: axios } = await import('axios');
+  rejectOnceWithHttpStatus(axios.put, 'Matrix API failed with 500', 500);
+  matrix.configuration = configurationValid;
+  matrix.generateTransactionId = vi.fn().mockReturnValue('txn-123');
+
+  await expect(matrix.postMessage('Message to Matrix')).rejects.toThrow(
+    'Matrix API failed with 500',
   );
 });

@@ -114,6 +114,7 @@ import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
 const lockoutStateFiles = new Map<string, string>();
 const LOCKOUT_STATE_PATH = '/test/store/db.json.auth-lockouts.json';
+const previousSessionSecretForSuite = process.env.DD_SESSION_SECRET;
 
 function createApp() {
   return {
@@ -179,6 +180,12 @@ function getRouteMiddleware(method, path) {
 
 describe('Auth Router', () => {
   afterAll(() => {
+    if (previousSessionSecretForSuite === undefined) {
+      delete process.env.DD_SESSION_SECRET;
+    } else {
+      process.env.DD_SESSION_SECRET = previousSessionSecretForSuite;
+    }
+
     if (previousMaxTrackedLockoutIdentities === undefined) {
       delete process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES;
       return;
@@ -189,6 +196,7 @@ describe('Auth Router', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.DD_SESSION_SECRET = 'test-suite-session-secret';
     mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(false);
     mockCreateAuthenticatedRouteRateLimitKeyGenerator.mockReturnValue(undefined);
     lockoutStateFiles.clear();
@@ -1502,36 +1510,22 @@ describe('Auth Router', () => {
       );
     });
 
-    test('should log an error when DD_SESSION_SECRET is missing in production', async () => {
+    test('should throw when DD_SESSION_SECRET is missing', () => {
       const previousSessionSecret = process.env.DD_SESSION_SECRET;
-      const previousNodeEnv = process.env.NODE_ENV;
       delete process.env.DD_SESSION_SECRET;
-      process.env.NODE_ENV = 'production';
-
-      vi.resetModules();
-      const freshAuth = await import('./auth.js');
-      const freshLog = (await import('../log/index.js')).default;
       const app = createApp();
 
       try {
-        freshAuth.init(app);
+        expect(() => auth.init(app)).toThrow(
+          'DD_SESSION_SECRET is required. Set DD_SESSION_SECRET to a strong persistent value.',
+        );
       } finally {
         if (previousSessionSecret === undefined) {
           delete process.env.DD_SESSION_SECRET;
         } else {
           process.env.DD_SESSION_SECRET = previousSessionSecret;
         }
-
-        if (previousNodeEnv === undefined) {
-          delete process.env.NODE_ENV;
-        } else {
-          process.env.NODE_ENV = previousNodeEnv;
-        }
       }
-
-      expect(freshLog.error).toHaveBeenCalledWith(
-        'DD_SESSION_SECRET is not set; using an ephemeral session secret. Set DD_SESSION_SECRET to a strong persistent value.',
-      );
     });
 
     test('should fall back to default lockout settings when env values are invalid', async () => {

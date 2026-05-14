@@ -2339,9 +2339,25 @@ describe('ContainersGroupedViews', () => {
       expect(occurrences).toBeLessThan(2);
     });
 
-    it('renders the human-readable tag for a floating-tag + digest-watch update row (#356)', async () => {
+    it('renders tag AND digest delta for a hybrid tag+digest update row (fix #342)', async () => {
+      // Hybrid scenario: image has a real tag (e.g. `v8.13.2`), digest changed.
+      // The version cell must show BOTH the unchanged tag (muted) AND the digest
+      // delta (formatShortDigest(current) → formatShortDigest(new)).
+      const wrapper = mountDigestContainer({
+        currentTag: '14-vectorchord0.4.3-pgvectors0.2.0',
+        newTag: '14-vectorchord0.4.3-pgvectors0.2.0',
+        isDigestPinned: false,
+      });
+      const row = rowByName(wrapper, 'alpha');
+      const text = row.text();
+      expect(text).toContain('14-vectorchord0.4.3-pgvectors0.2.0');
+      expect(text).toContain('sha256:bcf6335aabbb…');
+      expect(text).toContain('sha256:deadbeefcafe…');
+    });
+
+    it('renders tag AND digest delta for a floating-tag + digest-watch update row (#356, updated #342)', async () => {
       // Brian's scenario: currentTag is a meaningful tag (`v8.13.2`), digest changed
-      // but tag did not. The version cell must show the tag, NOT two sha256 strings.
+      // but tag did not. The version cell must show the tag AND the digest delta.
       const wrapper = mountDigestContainer({
         currentTag: 'v8.13.2',
         newTag: 'v8.13.2',
@@ -2350,13 +2366,13 @@ describe('ContainersGroupedViews', () => {
       const row = rowByName(wrapper, 'alpha');
       const text = row.text();
       expect(text).toContain('v8.13.2');
-      expect(text).not.toContain('sha256:bcf6335aabbb…');
-      expect(text).not.toContain('sha256:deadbeefcafe…');
+      expect(text).toContain('sha256:bcf6335aabbb…');
+      expect(text).toContain('sha256:deadbeefcafe…');
     });
 
-    it('renders the human-readable tag for a linuxserver-style transform tag (#356)', async () => {
+    it('renders tag AND digest delta for a linuxserver-style transform tag (#356, updated #342)', async () => {
       // Reporter's transformed tag like `compose-X-version-9.0.1` — floating-tag
-      // alias with digest watch auto-enabled by `da1334a4`.
+      // alias with digest watch auto-enabled by `da1334a4`. Now shows digest delta too.
       const wrapper = mountDigestContainer({
         currentTag: 'compose-X-version-9.0.1',
         newTag: 'compose-X-version-9.0.1',
@@ -2365,7 +2381,8 @@ describe('ContainersGroupedViews', () => {
       const row = rowByName(wrapper, 'alpha');
       const text = row.text();
       expect(text).toContain('compose-X-version-9.0.1');
-      expect(text).not.toContain('sha256:bcf6335aabbb…');
+      expect(text).toContain('sha256:bcf6335aabbb…');
+      expect(text).toContain('sha256:deadbeefcafe…');
     });
 
     it('still renders currentTag → newTag for a tag update row', async () => {
@@ -2430,6 +2447,113 @@ describe('ContainersGroupedViews', () => {
       const wrapper = mountSubject();
       const row = rowByName(wrapper, 'alpha');
       expect(row.text()).toContain('Rate limited');
+    });
+
+    it('renders tag AND digest delta in the card body for a hybrid tag+digest update (fix #342)', async () => {
+      const container = makeContainer({
+        id: 'c-card-hybrid-digest',
+        name: 'alpha',
+        currentTag: '14-vectorchord0.4.3-pgvectors0.2.0',
+        newTag: '14-vectorchord0.4.3-pgvectors0.2.0',
+        updateKind: 'digest',
+        currentDigest: digestLocal,
+        newDigest: digestRemote,
+        isDigestPinned: false,
+        status: 'running',
+        bouncer: 'safe',
+      });
+      const { context } = makeContext();
+      context.containerViewMode.value = 'cards';
+      context.filteredContainers.value = [container];
+      context.displayContainers.value = [container];
+      context.renderGroups.value = [
+        {
+          key: 'g',
+          name: null,
+          containers: [container],
+          containerCount: 1,
+          updatesAvailable: 1,
+          updatableCount: 1,
+        },
+      ];
+      mocked.context = context;
+      const wrapper = mountSubject();
+      const card = wrapper.findAll('.card-item-stub').find((c) => c.text().includes('alpha'));
+      expect(card).toBeDefined();
+      const text = card!.text();
+      expect(text).toContain('14-vectorchord0.4.3-pgvectors0.2.0');
+      expect(text).toContain('sha256:bcf6335aabbb…');
+      expect(text).toContain('sha256:deadbeefcafe…');
+    });
+
+    it('renders digest-pinned update in the card body (pure-digest, regression for #342 fix)', async () => {
+      const container = makeContainer({
+        id: 'c-card-pure-digest',
+        name: 'alpha',
+        currentTag: digestLocal,
+        newTag: digestLocal,
+        updateKind: 'digest',
+        currentDigest: digestLocal,
+        newDigest: digestRemote,
+        isDigestPinned: true,
+        status: 'running',
+        bouncer: 'safe',
+      });
+      const { context } = makeContext();
+      context.containerViewMode.value = 'cards';
+      context.filteredContainers.value = [container];
+      context.displayContainers.value = [container];
+      context.renderGroups.value = [
+        {
+          key: 'g',
+          name: null,
+          containers: [container],
+          containerCount: 1,
+          updatesAvailable: 1,
+          updatableCount: 1,
+        },
+      ];
+      mocked.context = context;
+      const wrapper = mountSubject();
+      const card = wrapper.findAll('.card-item-stub').find((c) => c.text().includes('alpha'));
+      expect(card).toBeDefined();
+      const text = card!.text();
+      expect(text).toContain('sha256:bcf6335aabbb…');
+      expect(text).toContain('sha256:deadbeefcafe…');
+    });
+
+    it('renders currentTag + digest delta when BOTH tag and digest change simultaneously (hybrid both-halves)', async () => {
+      // Both tag and digest change: e.g. 1.2.3 → 1.2.4 AND sha256:aaa → sha256:bbb.
+      // updateKind is 'digest' so the component takes the hybrid digest branch.
+      // It renders currentTag (muted) plus the digest short-form delta.
+      const wrapper = mountDigestContainer({
+        currentTag: '1.2.3',
+        newTag: '1.2.4',
+        isDigestPinned: false,
+        updateKind: 'digest',
+      });
+      const row = rowByName(wrapper, 'alpha');
+      const text = row.text();
+      // currentTag is shown in the muted span
+      expect(text).toContain('1.2.3');
+      // digest delta is shown (both sides)
+      expect(text).toContain('sha256:bcf6335aabbb…');
+      expect(text).toContain('sha256:deadbeefcafe…');
+    });
+
+    it('does NOT render two identical full digest strings for a hybrid both-halves-change row (regression)', async () => {
+      // Regression guard: the full raw digest should not appear twice in the row
+      // even when both tag and digest change simultaneously.
+      const wrapper = mountDigestContainer({
+        currentTag: '1.2.3',
+        newTag: '1.2.4',
+        isDigestPinned: false,
+        updateKind: 'digest',
+      });
+      const row = rowByName(wrapper, 'alpha');
+      const text = row.text();
+      const occurrences = text.split(digestLocal).length - 1;
+      expect(occurrences).toBeLessThan(2);
     });
 
     it('does NOT render the registry-error pill in the version cell when newTag is set', async () => {

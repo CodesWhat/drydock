@@ -10,7 +10,7 @@ import { useNotificationStore } from '../stores/notifications';
 import type { AuditEntry } from '../utils/audit-helpers';
 import { actionIcon, actionLabel, statusColor, timeAgo } from '../utils/audit-helpers';
 
-const { t } = useI18n();
+const { t, te } = useI18n();
 const router = useRouter();
 const notificationStore = useNotificationStore();
 const { lastSeen, loading, unreadCount, visibleEntries } = storeToRefs(notificationStore);
@@ -148,7 +148,7 @@ function isUnread(entry: AuditEntry): boolean {
               <div class="flex-1 min-w-0">
                 <div class="text-2xs-plus truncate dd-text"
                      :class="{ 'font-bold': isUnread(entry), 'font-medium': !isUnread(entry) }">
-                  {{ actionLabel(entry.action) }}
+                  {{ actionLabel(entry.action, { t, te }) }}
                 </div>
                 <div class="text-2xs truncate dd-text-muted font-mono mt-0.5"
                      :title="entry.containerName"

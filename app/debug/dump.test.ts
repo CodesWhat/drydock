@@ -59,6 +59,7 @@ vi.mock('../registry/index.js', () => ({
 
 vi.mock('../store/container.js', () => ({
   getContainersRaw: mockGetContainersRaw,
+  cloneContainer: (container: unknown) => structuredClone(container),
 }));
 
 vi.mock('../store/index.js', () => ({

@@ -55,6 +55,36 @@ describe('buildMessages', () => {
     expect(LOCALE_OPTIONS).toContainEqual({ id: 'tr', label: 'Türkçe' });
   });
 
+  it('exposes Japanese as a supported picker option', () => {
+    expect(SUPPORTED_LOCALES).toContain('ja');
+    expect(LOCALE_OPTIONS).toContainEqual({ id: 'ja', label: '日本語' });
+  });
+
+  it('exposes Korean as a supported picker option', () => {
+    expect(SUPPORTED_LOCALES).toContain('ko');
+    expect(LOCALE_OPTIONS).toContainEqual({ id: 'ko', label: '한국어' });
+  });
+
+  it('exposes Russian as a supported picker option', () => {
+    expect(SUPPORTED_LOCALES).toContain('ru');
+    expect(LOCALE_OPTIONS).toContainEqual({ id: 'ru', label: 'Русский' });
+  });
+
+  it('exposes Vietnamese as a supported picker option', () => {
+    expect(SUPPORTED_LOCALES).toContain('vi');
+    expect(LOCALE_OPTIONS).toContainEqual({ id: 'vi', label: 'Tiếng Việt' });
+  });
+
+  it('exposes Ukrainian as a supported picker option', () => {
+    expect(SUPPORTED_LOCALES).toContain('uk');
+    expect(LOCALE_OPTIONS).toContainEqual({ id: 'uk', label: 'Українська' });
+  });
+
+  it('exposes Arabic as a supported picker option', () => {
+    expect(SUPPORTED_LOCALES).toContain('ar');
+    expect(LOCALE_OPTIONS).toContainEqual({ id: 'ar', label: 'العربية' });
+  });
+
   it('exposes Traditional Chinese as a supported picker option', () => {
     expect(SUPPORTED_LOCALES).toContain('zh-TW');
     expect(LOCALE_OPTIONS).toContainEqual({ id: 'zh-TW', label: '繁體中文' });
@@ -75,12 +105,12 @@ describe('buildMessages', () => {
 
   it('skips paths whose locale segment is not in SUPPORTED_LOCALES', () => {
     const modules = {
-      '../locales/ja/common.json': { hello: 'こんにちは' },
+      '../locales/xx/common.json': { hello: 'unknown' },
       '../locales/en/common.json': { hello: 'Hello' },
     };
     const result = buildMessages(modules);
-    // ja is not supported — its keys must not appear
-    expect((result as Record<string, unknown>).ja).toBeUndefined();
+    // xx is not supported — its keys must not appear
+    expect((result as Record<string, unknown>).xx).toBeUndefined();
     expect(result.en).toEqual({ hello: 'Hello' });
   });
 
@@ -172,6 +202,54 @@ describe('buildMessages', () => {
     };
     const result = buildMessages(modules);
     expect((result as Record<string, unknown>).tr).toEqual({ hello: 'Merhaba' });
+  });
+
+  it('handles Japanese locale namespaces', () => {
+    const modules = {
+      '../locales/ja/common.json': { hello: 'こんにちは' },
+    };
+    const result = buildMessages(modules);
+    expect((result as Record<string, unknown>).ja).toEqual({ hello: 'こんにちは' });
+  });
+
+  it('handles Korean locale namespaces', () => {
+    const modules = {
+      '../locales/ko/common.json': { hello: '안녕하세요' },
+    };
+    const result = buildMessages(modules);
+    expect((result as Record<string, unknown>).ko).toEqual({ hello: '안녕하세요' });
+  });
+
+  it('handles Russian locale namespaces', () => {
+    const modules = {
+      '../locales/ru/common.json': { hello: 'Привет' },
+    };
+    const result = buildMessages(modules);
+    expect((result as Record<string, unknown>).ru).toEqual({ hello: 'Привет' });
+  });
+
+  it('handles Vietnamese locale namespaces', () => {
+    const modules = {
+      '../locales/vi/common.json': { hello: 'Xin chào' },
+    };
+    const result = buildMessages(modules);
+    expect((result as Record<string, unknown>).vi).toEqual({ hello: 'Xin chào' });
+  });
+
+  it('handles Ukrainian locale namespaces', () => {
+    const modules = {
+      '../locales/uk/common.json': { hello: 'Привіт' },
+    };
+    const result = buildMessages(modules);
+    expect((result as Record<string, unknown>).uk).toEqual({ hello: 'Привіт' });
+  });
+
+  it('handles Arabic locale namespaces', () => {
+    const modules = {
+      '../locales/ar/common.json': { hello: 'مرحبا' },
+    };
+    const result = buildMessages(modules);
+    expect((result as Record<string, unknown>).ar).toEqual({ hello: 'مرحبا' });
   });
 
   it('translates the Outbox sidebar label in every supported locale', () => {

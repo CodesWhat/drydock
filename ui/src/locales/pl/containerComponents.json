@@ -218,7 +218,8 @@
       "digest": "Podsumowanie",
       "created": "Utworzono",
       "unknown": "Nieznany",
-      "imageMetadata": "Metadane obrazu"
+      "imageMetadata": "Metadane obrazu",
+      "imageAge": "Wiek obrazu"
     },
     "listContent": {
       "loadingContainers": "Ładowanie kontenerów...",

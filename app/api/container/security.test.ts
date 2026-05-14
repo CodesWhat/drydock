@@ -241,6 +241,23 @@ describe('api/container/security', () => {
       expect(harness.deps.generateImageSbom).not.toHaveBeenCalled();
     });
 
+    test('returns 503 when security scanner is disabled', async () => {
+      const harness = createHarness({
+        securityConfiguration: {
+          enabled: false,
+          scanner: 'trivy',
+          signature: { verify: false },
+          sbom: { enabled: false, formats: [] },
+        },
+      });
+
+      const res = await callGetContainerSbom(harness.handlers, { format: 'spdx-json' });
+
+      expect(res.status).toHaveBeenCalledWith(503);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Security scanner is not configured' });
+      expect(harness.deps.generateImageSbom).not.toHaveBeenCalled();
+    });
+
     test('returns cached generated sbom document when requested format exists', async () => {
       const cachedSbom = createSbomResult(CURRENT_IMAGE, {
         status: 'generated',

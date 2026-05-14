@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { afterEach, vi } from 'vitest';
 
 const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
 
@@ -68,6 +68,10 @@ beforeEach(() => {
   childProcessControl.execFileImpl = null;
   mockGetSecurityConfiguration.mockReturnValue(createEnabledConfiguration());
   clearTrivyDatabaseStatusCache();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 test('hasValidCommandPath should reject Windows absolute paths on non-Windows runtimes', () => {
@@ -954,12 +958,13 @@ describe('getTrivyDatabaseStatus', () => {
   test('should make a fresh execFile call after cache TTL expires', async () => {
     const execFileMock = mockExecFileSuccess(validTrivyVersionOutput);
 
-    vi.spyOn(Date, 'now')
-      .mockReturnValueOnce(1000) // first call — cache miss
-      .mockReturnValueOnce(1000 + 5 * 60 * 1000 + 1); // second call — past TTL
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
 
     await getTrivyDatabaseStatus();
     expect(execFileMock).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(1_000 + 5 * 60 * 1000 + 1);
 
     await getTrivyDatabaseStatus();
     expect(execFileMock).toHaveBeenCalledTimes(2);
@@ -968,11 +973,13 @@ describe('getTrivyDatabaseStatus', () => {
   test('should keep using the cache until just before the TTL boundary', async () => {
     const execFileMock = mockExecFileSuccess(validTrivyVersionOutput);
 
-    vi.spyOn(Date, 'now')
-      .mockReturnValueOnce(1_000)
-      .mockReturnValueOnce(1_000 + 5 * 60 * 1000 - 1);
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
 
     await getTrivyDatabaseStatus();
+
+    vi.setSystemTime(1_000 + 5 * 60 * 1000 - 1);
+
     await getTrivyDatabaseStatus();
 
     expect(execFileMock).toHaveBeenCalledTimes(1);
@@ -981,11 +988,13 @@ describe('getTrivyDatabaseStatus', () => {
   test('should treat the exact cache expiry boundary as stale', async () => {
     const execFileMock = mockExecFileSuccess(validTrivyVersionOutput);
 
-    vi.spyOn(Date, 'now')
-      .mockReturnValueOnce(1_000)
-      .mockReturnValueOnce(1_000 + 5 * 60 * 1000);
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
 
     await getTrivyDatabaseStatus();
+
+    vi.setSystemTime(1_000 + 5 * 60 * 1000);
+
     await getTrivyDatabaseStatus();
 
     expect(execFileMock).toHaveBeenCalledTimes(2);

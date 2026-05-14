@@ -20,6 +20,24 @@
     "registryError": {
       "generic": "Registerfout",
       "detail": "Registerfout: {error}"
+    },
+    "columns": {
+      "container": "Container",
+      "version": "Versie",
+      "update": "Update",
+      "status": "Status",
+      "host": "Host",
+      "registry": "Register"
+    },
+    "status": {
+      "running": "actief",
+      "stopped": "gestopt",
+      "paused": "gepauzeerd",
+      "exited": "afgesloten",
+      "dead": "dood",
+      "created": "aangemaakt",
+      "restarting": "herstarten",
+      "removing": "verwijderen"
     }
   }
 }

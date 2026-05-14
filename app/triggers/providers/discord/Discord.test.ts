@@ -1,3 +1,4 @@
+import { rejectOnceWithHttpStatus } from '../../../test/notification-provider-mocks.js';
 import Discord from './Discord.js';
 
 // Mock axios
@@ -118,4 +119,20 @@ describe('Discord Trigger', () => {
       timeout: 30000,
     });
   });
+});
+
+test('sendMessage should reject when Discord webhook returns 5xx', async () => {
+  const { default: axios } = await import('axios');
+  const discordTrigger = new Discord();
+  rejectOnceWithHttpStatus(axios, 'Discord webhook failed with 500', 500);
+  discordTrigger.configuration = {
+    url: 'https://discord.com/api/webhooks/123/abc',
+    botusername: 'drydock',
+    cardcolor: 65280,
+    cardlabel: '',
+  };
+
+  await expect(discordTrigger.sendMessage('Title', 'Body')).rejects.toThrow(
+    'Discord webhook failed with 500',
+  );
 });

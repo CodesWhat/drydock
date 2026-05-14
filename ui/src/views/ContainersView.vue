@@ -171,6 +171,24 @@ function containerListFingerprint(list: Container[]): string {
   return parts.join('\n');
 }
 
+function sameStringList(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+function getContainerServerNames(list: readonly Container[]): string[] {
+  return [...new Set(list.map((container) => container.server))];
+}
+
+const serverNameOptions = ref<string[]>([]);
+const serverNames = computed(() => serverNameOptions.value);
+
+function refreshServerNames(list: readonly Container[] = containers.value) {
+  const next = getContainerServerNames(list);
+  if (!sameStringList(serverNameOptions.value, next)) {
+    serverNameOptions.value = next;
+  }
+}
+
 // UI-only fields that mapApiContainer does not produce. Preserve them across
 // loadContainers() reassignments so an immediate post-update reload does not
 // wipe the freshly-set failure reason banner.
@@ -224,6 +242,7 @@ async function loadContainers() {
       containerListFingerprint(mapped) !== containerListFingerprint(containers.value)
     ) {
       containers.value = mapped;
+      refreshServerNames(mapped);
       const { idMap, metaMap } = buildContainerLookupMaps(
         apiContainers as Record<string, unknown>[],
       );
@@ -706,10 +725,6 @@ watch(
   { immediate: true },
 );
 
-const serverNames = computed(() => [
-  ...new Set(containers.value.map((container) => container.server)),
-]);
-
 const containerSortKey = usePreference(
   () => preferences.containers.sort.key,
   (value) => {
@@ -1182,7 +1197,7 @@ const {
 const tableColumns = computed(() =>
   activeColumns.value.map((column) => ({
     key: column.key,
-    label: column.label,
+    label: column.labelKey ? t(column.labelKey) : column.label,
     align: column.align,
     sortable: column.key !== 'icon',
     size: column.size,
@@ -1303,6 +1318,7 @@ const { hasPendingOperationWatcher } = useContainerSsePatchPipeline({
   loadContainers,
   loadDetailSecurityData,
   reconcileHoldsAgainstContainers,
+  refreshServerNames,
   schedulePostTerminalReload,
 });
 

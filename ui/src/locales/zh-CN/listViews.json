@@ -34,6 +34,38 @@
       "toVersion": "到版本",
       "trigger": "触发器",
       "details": "详情"
+    },
+    "actions": {
+      "container-update": "容器更新",
+      "container-added": "容器已添加",
+      "container-removed": "容器已移除",
+      "container-start": "容器启动",
+      "container-stop": "容器停止",
+      "container-restart": "容器重启",
+      "auth-login": "认证登录",
+      "authenticated": "已认证",
+      "authfail": "认证失败",
+      "hook-configured": "钩子已配置",
+      "hook-pre-success": "前置钩子成功",
+      "hook-post-success": "后置钩子成功",
+      "hook-pre-failed": "前置钩子失败",
+      "hook-post-failed": "后置钩子失败",
+      "connected": "已连接",
+      "closed": "已关闭",
+      "update-available": "可用更新",
+      "update-applied": "更新已应用",
+      "update-failed": "更新失败",
+      "auto-update-blocked": "自动更新被阻止",
+      "auto-rollback": "自动回滚",
+      "rollback": "回滚",
+      "preview": "预览",
+      "agent-disconnect": "代理已断开",
+      "notification-delivery-failed": "通知发送失败",
+      "security-alert": "安全警报"
+    },
+    "target": {
+      "container": "容器",
+      "agent": "代理"
     }
   },
   "notificationsView": {
@@ -108,6 +140,15 @@
       "medium": "中危",
       "low": "低危"
     },
+    "deltaTooltips": {
+      "fixedSingle": "更新可修复 {count} 个漏洞",
+      "fixedMultiple": "更新可修复 {count} 个漏洞",
+      "newSingle": "更新会引入 {count} 个新漏洞",
+      "newMultiple": "更新会引入 {count} 个新漏洞",
+      "both": "更新：修复 {fixed} 个，新增 {new} 个"
+    },
+    "updateOneOfButton": "更新 {count} 个容器之一",
+    "updateThisContainerButton": "更新此容器",
     "update": "更新",
     "viewInContainers": "在容器中查看",
     "viewAllInContainers": "在容器中查看全部",
@@ -134,6 +175,29 @@
     "chooser": {
       "title": "选择要更新的容器",
       "cancel": "取消"
+    },
+    "runtimeTools": {
+      "trivy": "Trivy",
+      "cosign": "Cosign",
+      "sbom": "SBOM",
+      "scannerReady": "Trivy 客户端就绪",
+      "scannerReadyServer": "Trivy 客户端就绪（服务器模式已启用）",
+      "scannerDisabled": "漏洞扫描器已禁用",
+      "scannerMissing": "Trivy 命令 \"{command}\" 在此运行时不可用",
+      "signatureReady": "Cosign 已就绪，可进行签名验证",
+      "signatureDisabled": "签名验证已禁用",
+      "signatureMissing": "Cosign 命令 \"{command}\" 在此运行时不可用",
+      "scannerTooltip": "Trivy：{message}",
+      "scannerTooltipServer": "Trivy：{message} · 服务器：{server}",
+      "cosignTooltip": "Cosign：{message}",
+      "sbomEnabled": "SBOM 生成已启用（{formats}）",
+      "sbomDisabled": "SBOM 生成已禁用"
+    },
+    "emptyState": {
+      "noDataTitle": "暂无漏洞数据",
+      "scannerNotReady": "扫描器尚未就绪。",
+      "runScanHint": "运行扫描以检查容器中的已知漏洞",
+      "noMatchTitle": "没有镜像匹配您的筛选条件"
     }
   },
   "registriesView": {

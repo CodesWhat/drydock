@@ -1,4 +1,5 @@
 import joi from 'joi';
+import { rejectOnceWithHttpStatus } from '../../../test/notification-provider-mocks.js';
 import Teams from './Teams.js';
 
 vi.mock('axios', () => ({
@@ -181,5 +182,15 @@ test('postMessage should call Teams webhook endpoint', async () => {
       },
       timeout: 30000,
     },
+  );
+});
+
+test('postMessage should reject when Teams webhook returns 5xx', async () => {
+  const { default: axios } = await import('axios');
+  rejectOnceWithHttpStatus(axios.post, 'Teams webhook failed with 503', 503);
+  teams.configuration = configurationValid;
+
+  await expect(teams.postMessage('Message to Teams')).rejects.toThrow(
+    'Teams webhook failed with 503',
   );
 });

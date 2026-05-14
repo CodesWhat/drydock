@@ -14,7 +14,13 @@ import { getPrimaryHardBlocker } from '../../utils/update-eligibility';
 import ContainerFullPageTabContent from './ContainerFullPageTabContent.vue';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 
-const { t } = useI18n();
+const { t, te } = useI18n();
+
+function localizeStatus(status: string | undefined): string {
+  if (!status) return t('common.unknown');
+  const key = `containersView.status.${status}`;
+  return te(key) ? t(key) : status;
+}
 
 const {
   selectedContainer,
@@ -85,7 +91,7 @@ function getStatusLabel(container: {
   if (isActionQueued(container)) {
     return t('containerComponents.fullPageDetail.statusQueued');
   }
-  return container.status ?? t('common.unknown');
+  return localizeStatus(container.status);
 }
 
 function getStatusTone(container: { id?: unknown; name?: unknown; status?: string }) {

@@ -73,7 +73,7 @@ const {
   filterSearch,
   clearFilters,
 } = useContainersViewTemplateContext();
-const { t } = useI18n();
+const { t, te } = useI18n();
 const { batches, clearBatch, getBatch, incrementSucceeded, incrementFailed } = useUpdateBatches();
 
 const openActionsContainer = computed(
@@ -156,6 +156,60 @@ const selectedContainerKey = computed(() =>
   selectedContainer.value ? getContainerViewKey(selectedContainer.value) : null,
 );
 
+function getContainerViewMemo(containerInput: Record<string, unknown>): unknown[] {
+  const container = containerInput as DisplayContainer;
+  const operation = container.updateOperation;
+  const policyState = getContainerListPolicyState(container);
+  return [
+    container.name,
+    container.image,
+    container.icon,
+    container.currentTag,
+    container.currentDigest ?? '',
+    container.isDigestPinned ?? false,
+    container.newTag ?? '',
+    container.newDigest ?? '',
+    container.status,
+    container.server,
+    container.registry,
+    container.registryUrl ?? '',
+    container.registryName ?? '',
+    container.registryError ?? '',
+    container.registryErrorKind ?? '',
+    container.updateKind ?? '',
+    container.updateMaturity ?? '',
+    container.updateMaturityTooltip ?? '',
+    container.updateBouncer ?? '',
+    container.updatePolicyState ?? '',
+    container.suggestedTag ?? '',
+    container.noUpdateReason ?? '',
+    container.bouncer,
+    container.updateEligibility,
+    container.updateSecuritySummary?.critical ?? 0,
+    container.updateSecuritySummary?.high ?? 0,
+    container.lastUpdateFailureAt ?? 0,
+    container.lastUpdateFailureReason ?? '',
+    container.releaseNotes?.url ?? '',
+    container.currentReleaseNotes?.url ?? '',
+    container.releaseLink ?? '',
+    container.sourceRepo ?? '',
+    policyState.snoozed,
+    policyState.skipped,
+    policyState.maturityBlocked,
+    operation?.id ?? '',
+    operation?.status ?? '',
+    operation?.phase ?? '',
+    operation?.updatedAt ?? '',
+    isContainerUpdating(container),
+    isContainerQueued(container),
+    isContainerScanning(container),
+    isRowLocked(container),
+    updateBtnState(container),
+    containerActionsEnabled.value,
+    containerActionsDisabledReason.value,
+  ];
+}
+
 function isContainerUpdating(container: { id?: unknown; name?: unknown }) {
   return isContainerUpdateInProgress(container);
 }
@@ -225,10 +279,13 @@ function blockedUpdateTooltip(container: {
   const summary = container.updateSecuritySummary;
   const critical = summary?.critical ?? 0;
   if (critical > 0) {
-    const noun = critical === 1 ? 'critical CVE' : 'critical CVEs';
-    return `Blocked: ${tag} (${critical} ${noun})`;
+    const key =
+      critical === 1
+        ? 'containerComponents.groupedViews.blockedTagWithCriticals'
+        : 'containerComponents.groupedViews.blockedTagWithCriticalsCVEs';
+    return t(key, { tag, count: critical });
   }
-  return `Blocked: ${tag}`;
+  return t('containerComponents.groupedViews.blockedTag', { tag });
 }
 
 function canCancelUpdate(c: { updateOperation?: { status?: string; id?: string } }): boolean {
@@ -266,7 +323,9 @@ function updateBtnTooltip(c: {
   if (state === 'hard') return blockedUpdateTooltip(c);
   if (state === 'soft') {
     const soft = getPrimarySoftBlocker(c.updateEligibility);
-    return soft ? `Manual update only — ${soft.message}` : 'Manual update only';
+    return soft
+      ? t('containerComponents.groupedViews.manualUpdateOnlyWithMessage', { message: soft.message })
+      : t('containerComponents.groupedViews.manualUpdateOnly');
   }
   return 'Update';
 }
@@ -298,6 +357,12 @@ function getGroupDoneCount(group: ContainersViewRenderGroup) {
   return batch.succeededCount + batch.failedCount;
 }
 
+function localizeStatus(status: string | undefined): string {
+  if (!status) return t('common.unknown');
+  const key = `containersView.status.${status}`;
+  return te(key) ? t(key) : status;
+}
+
 function getContainerStatusLabel(container: {
   id?: unknown;
   name?: unknown;
@@ -313,7 +378,7 @@ function getContainerStatusLabel(container: {
   if (isContainerQueued(container)) {
     return t('containerComponents.groupedViews.statusQueued');
   }
-  return container.status ?? 'unknown';
+  return localizeStatus(container.status);
 }
 
 function getContainerStatusIcon(container: { id?: unknown; name?: unknown; status?: string }) {
@@ -348,15 +413,15 @@ function getContainerStatusColor(container: { id?: unknown; name?: unknown; stat
   return getContainerStatusIconStyle(container).color;
 }
 
-const updateKindLabels: Record<NonNullable<Container['updateKind']>, string> = {
-  major: 'Major',
-  minor: 'Minor',
-  patch: 'Patch',
-  digest: 'Digest',
-};
-
-function getUpdateKindLabel(kind: Container['updateKind']) {
-  return kind ? updateKindLabels[kind] : '';
+function getUpdateKindLabel(kind: Container['updateKind']): string {
+  if (!kind) return '';
+  const keyMap: Record<NonNullable<Container['updateKind']>, string> = {
+    major: 'containerComponents.listContent.major',
+    minor: 'containerComponents.listContent.minor',
+    patch: 'containerComponents.listContent.patch',
+    digest: 'containerComponents.listContent.digest',
+  };
+  return t(keyMap[kind]);
 }
 
 function getUpdateMaturityLabel(maturity: Container['updateMaturity']) {
@@ -378,7 +443,7 @@ function getContainerUpdateStateLabel(
   if (getContainerListPolicyState(container).skipped) {
     return t('containerComponents.groupedViews.pinnedTooltip');
   }
-  return 'Current';
+  return t('containerComponents.groupedViews.currentLabel');
 }
 
 function getContainerUpdateStateColor(
@@ -581,8 +646,13 @@ onScopeDispose(() => {
             </div>
           </div>
           <div v-else-if="c.updateKind === 'digest' && c.newDigest && c.currentDigest" class="container-version-query">
-            <div class="container-version-flow">
-              <CopyableTag :tag="c.currentTag" class="container-version-tag container-version-tag-target text-2xs-plus font-semibold" style="color: var(--dd-primary);" v-tooltip.top="tt(`${c.currentTag} — ${formatShortDigest(c.currentDigest)} → ${formatShortDigest(c.newDigest)}`)" @click.stop>{{ c.currentTag }}</CopyableTag>
+            <div class="container-version-flow flex-col items-start gap-0.5">
+              <span class="text-2xs dd-text-muted truncate max-w-[140px]" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
+              <div class="container-version-flow">
+                <span class="container-version-tag text-2xs-plus dd-text-secondary" v-tooltip.top="c.currentDigest">{{ formatShortDigest(c.currentDigest) }}</span>
+                <AppIcon name="arrow-right" :size="8" class="container-version-arrow dd-text-muted shrink-0" />
+                <CopyableTag :tag="c.newDigest" class="container-version-tag container-version-tag-target text-2xs-plus font-semibold" style="color: var(--dd-primary);" @click.stop>{{ formatShortDigest(c.newDigest) }}</CopyableTag>
+              </div>
             </div>
           </div>
           <div v-else-if="c.newTag" class="container-version-query">
@@ -707,7 +777,7 @@ onScopeDispose(() => {
             <span v-if="hasRegistryError(c)"
                   class="inline-flex items-center justify-center"
                   style="color: var(--dd-danger);"
-                  aria-label="Registry error"
+                  :aria-label="t('containerComponents.groupedViews.ariaRegistryError')"
                   v-tooltip.top="tt(registryErrorTooltip(c))">
               <AppIcon name="warning" :size="12" />
             </span>
@@ -904,6 +974,7 @@ onScopeDispose(() => {
       <DataCardGrid v-if="containerViewMode === 'cards'"
                     :items="group.containers"
                     :item-key="getContainerViewKey"
+                    :item-memo="getContainerViewMemo"
                     :selected-key="selectedContainer ? getContainerViewKey(selectedContainer) : null"
                     @item-click="selectContainer($event)">
         <template #card="{ item: c }">
@@ -989,11 +1060,17 @@ onScopeDispose(() => {
                 <span v-if="c.updateMaturity" class="text-2xs dd-text-muted">{{ getUpdateMaturityLabel(c.updateMaturity) }}</span>
               </template>
               <template v-else-if="c.updateKind === 'digest' && c.newDigest && c.currentDigest">
+                <span class="text-2xs-plus ml-1 dd-text-muted shrink-0">{{ t('containerComponents.groupedViews.latestLabel') }}</span>
+                <CopyableTag :tag="c.currentDigest" class="text-xs dd-text-muted truncate max-w-[80px]" @click.stop>{{ formatShortDigest(c.currentDigest) }}</CopyableTag>
+                <AppIcon name="arrow-right" :size="8" class="dd-text-muted shrink-0" />
+                <CopyableTag :tag="c.newDigest" class="text-xs font-bold truncate max-w-[80px]"
+                      :style="{ color: updateKindColor(c.updateKind).text }" @click.stop>
+                  {{ formatShortDigest(c.newDigest) }}
+                </CopyableTag>
                 <span
                   data-test="container-card-update-state"
-                  class="inline-flex items-center gap-1.5 ml-1 text-2xs-plus font-semibold"
+                  class="inline-flex items-center gap-1.5 text-2xs-plus font-semibold"
                   :style="{ color: getContainerUpdateStateColor(c) }"
-                  v-tooltip.top="tt(`${formatShortDigest(c.currentDigest)} → ${formatShortDigest(c.newDigest)}`)"
                 >
                   <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: getContainerUpdateStateColor(c) }"></span>
                   {{ getContainerUpdateStateLabel(c) }}
@@ -1159,6 +1236,7 @@ onScopeDispose(() => {
       <DataListAccordion v-if="containerViewMode === 'list'"
                          :items="group.containers"
                          :item-key="getContainerViewKey"
+                         :item-memo="getContainerViewMemo"
                          :selected-key="selectedContainer ? getContainerViewKey(selectedContainer) : null"
                          @item-click="selectContainer($event)">
         <template #header="{ item: c }">
@@ -1248,28 +1326,28 @@ onScopeDispose(() => {
             <span v-if="hasRegistryError(c)"
                   class="inline-flex items-center justify-center"
                   style="color: var(--dd-danger);"
-                  aria-label="Registry error"
+                  :aria-label="t('containerComponents.groupedViews.ariaRegistryError')"
                   v-tooltip.top="tt(registryErrorTooltip(c))">
               <AppIcon name="warning" :size="12" />
             </span>
             <span v-if="getContainerListPolicyState(c).snoozed"
                   class="inline-flex items-center justify-center"
                   style="color: var(--dd-info);"
-                  aria-label="Snoozed updates"
+                  :aria-label="t('containerComponents.groupedViews.ariaSnoozedUpdates')"
                   v-tooltip.top="tt(containerPolicyTooltip(c, 'snoozed'))">
               <AppIcon name="pause" :size="12" />
             </span>
             <span v-if="getContainerListPolicyState(c).skipped"
                   class="inline-flex items-center justify-center"
                   style="color: var(--dd-warning);"
-                  aria-label="Skipped updates"
+                  :aria-label="t('containerComponents.groupedViews.ariaSkippedUpdates')"
                   v-tooltip.top="tt(containerPolicyTooltip(c, 'skipped'))">
               <AppIcon name="skip-forward" :size="12" />
             </span>
             <span v-if="getContainerListPolicyState(c).maturityBlocked"
                   class="inline-flex items-center justify-center"
                   style="color: var(--dd-primary);"
-                  aria-label="Maturity-blocked updates"
+                  :aria-label="t('containerComponents.groupedViews.ariaMaturityBlocked')"
                   v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
               <AppIcon name="clock" :size="12" />
             </span>
@@ -1376,7 +1454,7 @@ onScopeDispose(() => {
       <!-- EMPTY STATE -->
       <EmptyState v-if="filteredContainers.length === 0"
                   icon="filter"
-                  message="No containers match your filters"
+                  :message="t('containerComponents.groupedViews.emptyState')"
                   :show-clear="activeFilterCount > 0 || !!filterSearch"
                   @clear="clearFilters" />
   </div>

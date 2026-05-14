@@ -1,3 +1,5 @@
+import type { UpdateEligibility } from '../../types/container';
+
 export interface Vulnerability {
   id: string;
   severity: string;
@@ -19,6 +21,17 @@ export interface SeveritySummaryCounts {
 }
 
 export type SbomFormat = 'spdx-json' | 'cyclonedx-json';
+
+export interface SbomState {
+  componentCount?: number;
+  document: unknown;
+  documentJson: string;
+  error: string | null;
+  generatedAt?: string | null;
+  loading: boolean;
+  selectedFormat: SbomFormat;
+  showDocument: boolean;
+}
 
 export interface SecurityRuntimeToolStatus {
   enabled: boolean;
@@ -54,4 +67,16 @@ export interface SecurityViewEmptyStateInput {
   hasVulnerabilityData: boolean;
   scannerSetupNeeded: boolean;
   scannerMessage: string | null | undefined;
+}
+
+export interface ContainerChoice {
+  id: string;
+  name: string;
+  host?: string;
+  currentTag?: string;
+  newTag?: string;
+  updateKind?: 'major' | 'minor' | 'patch' | 'digest' | null;
+  updateEligibility?: UpdateEligibility;
+  blocked: boolean;
+  blockerMessage?: string;
 }

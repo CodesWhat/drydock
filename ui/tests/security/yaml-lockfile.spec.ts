@@ -24,7 +24,7 @@ describe('ui yaml security', () => {
       overrides?: Record<string, string>;
     };
 
-    expect(packageJson.overrides?.yaml).toBe('2.8.3');
+    expect(packageJson.overrides?.yaml).toBe('2.9.0');
   });
 
   it('package lockfile does not resolve vulnerable yaml versions', () => {
@@ -34,7 +34,7 @@ describe('ui yaml security', () => {
 
     const vulnerableEntries = Object.entries(lockfile.packages ?? {})
       .filter(([path, value]) => path === 'node_modules/yaml' && typeof value.version === 'string')
-      .filter(([, value]) => compareSemver(value.version, '2.8.3') < 0);
+      .filter(([, value]) => compareSemver(value.version, '2.9.0') < 0);
 
     expect(vulnerableEntries).toEqual([]);
   });

@@ -10,6 +10,15 @@ axios.mockImplementation(() => ({
   data: { token: TEST_TOKEN },
 }));
 
+// Pass-through withRetry; no-op acquireToken — unit tests don't need real retry/rate-limiting
+vi.mock('../../http-retry.js', () => ({
+  withRetry: vi.fn(async (requestFn) => requestFn()),
+}));
+vi.mock('../../token-bucket.js', () => ({
+  acquireToken: vi.fn(() => Promise.resolve()),
+  getBucketForUrl: vi.fn(() => ({ key: 'mock-host', ratePerSec: 10, burst: 10 })),
+}));
+
 const quay = new Quay();
 quay.configuration = {
   namespace: 'namespace',
@@ -159,7 +168,7 @@ test('authenticate should not populate header with base64 bearer when anonymous'
   );
 });
 
-test('authenticate should retry anonymously when configured credentials are rejected with 403', async () => {
+test('authenticate should throw actionable error when configured credentials are rejected with 403', async () => {
   const quayInstance = new Quay();
   await quayInstance.register('registry', 'quay', 'test', {
     namespace: 'namespace',
@@ -168,15 +177,18 @@ test('authenticate should retry anonymously when configured credentials are reje
   });
   quayInstance.log = log;
   axios.mockRejectedValueOnce(new Error('Request failed with status code 403'));
-  axios.mockResolvedValueOnce({ data: { token: 'anon-token' } });
-  const warnSpy = vi.spyOn(quayInstance.log, 'warn');
 
-  const result = await quayInstance.authenticate(
-    { name: 'test/image' },
-    { headers: {}, url: 'https://quay.io/v2/test/image/manifests/latest' },
+  await expect(
+    quayInstance.authenticate(
+      { name: 'test/image' },
+      { headers: {}, url: 'https://quay.io/v2/test/image/manifests/latest' },
+    ),
+  ).rejects.toThrow(
+    /Authentication failed for registry quay\.test \(HTTP 403\): Quay credentials were rejected/,
   );
 
-  expect(axios).toHaveBeenNthCalledWith(1, {
+  expect(axios).toHaveBeenCalledTimes(1);
+  expect(axios).toHaveBeenCalledWith({
     method: 'GET',
     url: 'https://quay.io/v2/auth?service=quay.io&scope=repository:test/image:pull',
     headers: {
@@ -184,23 +196,6 @@ test('authenticate should retry anonymously when configured credentials are reje
       Authorization: 'Basic bmFtZXNwYWNlK2FjY291bnQ6dG9rZW4=',
     },
   });
-  expect(axios).toHaveBeenNthCalledWith(2, {
-    method: 'GET',
-    url: 'https://quay.io/v2/auth?service=quay.io&scope=repository:test/image:pull',
-    headers: {
-      Accept: 'application/json',
-    },
-  });
-  expect(warnSpy).toHaveBeenCalledWith(
-    expect.stringContaining('Quay credentials were rejected for registry quay.test (status 403)'),
-  );
-  expect(result).toEqual(
-    expect.objectContaining({
-      headers: {
-        Authorization: 'Bearer anon-token',
-      },
-    }),
-  );
 });
 
 test('authenticate should throw when token request fails', async () => {

@@ -20,6 +20,24 @@
     "registryError": {
       "generic": "Błąd rejestru",
       "detail": "Błąd rejestru: {error}"
+    },
+    "columns": {
+      "container": "Kontener",
+      "version": "Wersja",
+      "update": "Aktualizacja",
+      "status": "Stan",
+      "host": "Host",
+      "registry": "Rejestr"
+    },
+    "status": {
+      "running": "działa",
+      "stopped": "zatrzymany",
+      "paused": "wstrzymany",
+      "exited": "zakończony",
+      "dead": "martwy",
+      "created": "utworzony",
+      "restarting": "restartowanie",
+      "removing": "usuwanie"
     }
   }
 }

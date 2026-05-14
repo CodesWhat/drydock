@@ -1,5 +1,6 @@
 import axios from 'axios';
 import joi from 'joi';
+import { rejectOnceWithHttpStatus } from '../../../test/notification-provider-mocks.js';
 import Ntfy from './Ntfy.js';
 
 vi.mock('axios');
@@ -180,4 +181,11 @@ test('triggerBatch should call http client with batch body', async () => {
       timeout: 30000,
     }),
   );
+});
+
+test('sendHttpRequest should reject when Ntfy returns 429', async () => {
+  ntfy.configuration = configurationValid;
+  rejectOnceWithHttpStatus(axios, 'Ntfy rate limited', 429);
+
+  await expect(ntfy.sendHttpRequest({ message: 'hello' })).rejects.toThrow('Ntfy rate limited');
 });

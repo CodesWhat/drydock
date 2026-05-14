@@ -10,6 +10,15 @@ vi.mock('axios', () => ({
   })),
 }));
 
+// Pass-through withRetry; no-op acquireToken — unit tests don't need real retry/rate-limiting
+vi.mock('../../http-retry.js', () => ({
+  withRetry: vi.fn(async (requestFn) => requestFn()),
+}));
+vi.mock('../../token-bucket.js', () => ({
+  acquireToken: vi.fn(() => Promise.resolve()),
+  getBucketForUrl: vi.fn(() => ({ key: 'mock-host', ratePerSec: 10, burst: 10 })),
+}));
+
 let gcr;
 
 beforeEach(() => {
@@ -118,19 +127,20 @@ test('authenticate should return unchanged options when no clientemail configure
   expect(result).toEqual({ headers: {} });
 });
 
-test('authenticate should retry anonymously when configured credentials are rejected with 403', async () => {
+test('authenticate should throw actionable error when configured credentials are rejected with 403', async () => {
   const { default: axios } = await import('axios');
   const gcrWithCreds = new Gcr();
   await gcrWithCreds.register('registry', 'gcr', 'test', {
     clientemail: TEST_CLIENT_EMAIL,
     privatekey: TEST_PRIVATE_KEY,
   });
-  axios
-    .mockRejectedValueOnce(new Error('Request failed with status code 403'))
-    .mockResolvedValueOnce({ data: { token: 'anon-token' } });
-  const warnSpy = vi.spyOn(gcrWithCreds.log, 'warn');
+  axios.mockRejectedValueOnce(new Error('Request failed with status code 403'));
 
-  const result = await gcrWithCreds.authenticate({ name: 'project/image' }, { headers: {} });
+  await expect(
+    gcrWithCreds.authenticate({ name: 'project/image' }, { headers: {} }),
+  ).rejects.toThrow(
+    /Authentication failed for registry gcr\.test \(HTTP 403\): GCR credentials were rejected/,
+  );
 
   const expectedBasic = Buffer.from(
     `_json_key:${JSON.stringify({
@@ -139,27 +149,13 @@ test('authenticate should retry anonymously when configured credentials are reje
     })}`,
     'utf-8',
   ).toString('base64');
-  expect(axios).toHaveBeenNthCalledWith(1, {
+  expect(axios).toHaveBeenCalledTimes(1);
+  expect(axios).toHaveBeenCalledWith({
     method: 'GET',
     url: 'https://gcr.io/v2/token?scope=repository:project/image:pull',
     headers: {
       Accept: 'application/json',
       Authorization: `Basic ${expectedBasic}`,
-    },
-  });
-  expect(axios).toHaveBeenNthCalledWith(2, {
-    method: 'GET',
-    url: 'https://gcr.io/v2/token?scope=repository:project/image:pull',
-    headers: {
-      Accept: 'application/json',
-    },
-  });
-  expect(warnSpy).toHaveBeenCalledWith(
-    expect.stringContaining('GCR credentials were rejected for registry gcr.test (status 403)'),
-  );
-  expect(result).toEqual({
-    headers: {
-      Authorization: 'Bearer anon-token',
     },
   });
 });

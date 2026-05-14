@@ -89,6 +89,20 @@
     "updateBreakdown": {
       "title": "Aktualizuj podział",
       "noUpdates": "Brak aktualizacji do kategoryzacji"
+    },
+    "stats": {
+      "containers": "Kontenery",
+      "containerDetail": "{running} aktywnych · {stopped} zatrzymanych",
+      "updatesAvailable": "Dostępne aktualizacje",
+      "updateDetail": "{fresh} nowych · {mature} dojrzałych",
+      "securityIssues": "Problemy z bezpieczeństwem",
+      "registries": "Rejestry"
+    },
+    "updateKind": {
+      "major": "Główna",
+      "minor": "Pomniejsza",
+      "patch": "Łatka",
+      "digest": "Digest"
     }
   }
 }

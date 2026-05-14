@@ -1,6 +1,5 @@
 import joi from 'joi';
 import log from '../log/index.js';
-import { redactTriggerConfigurationInfrastructureDetails } from './trigger-config-redaction.js';
 
 type AppLogger = typeof log;
 
@@ -59,10 +58,7 @@ class Component<TConfiguration extends ComponentConfiguration = ComponentConfigu
 
     this.configuration = this.validateConfiguration(configuration);
     const maskedConfiguration = this.maskConfiguration(configuration);
-    const sanitizedConfiguration =
-      kind.toLowerCase() === 'trigger'
-        ? redactTriggerConfigurationInfrastructureDetails(maskedConfiguration)
-        : maskedConfiguration;
+    const sanitizedConfiguration = this.maskRegistrationLogConfiguration(maskedConfiguration);
     this.log.info(`Register with configuration ${JSON.stringify(sanitizedConfiguration)}`);
     await this.init();
     return this;
@@ -129,8 +125,12 @@ class Component<TConfiguration extends ComponentConfiguration = ComponentConfigu
    * Sanitize sensitive data
    * @returns {*}
    */
-  maskConfiguration(configuration?: TConfiguration): TConfiguration {
+  maskConfiguration(configuration?: TConfiguration): unknown {
     return configuration || this.configuration;
+  }
+
+  protected maskRegistrationLogConfiguration(configuration: unknown): unknown {
+    return configuration;
   }
 
   /**
@@ -145,11 +145,9 @@ class Component<TConfiguration extends ComponentConfiguration = ComponentConfigu
   /**
    * Mask a String
    * @param value the value to mask
-   * @param _nb unused legacy parameter
-   * @param _char unused legacy parameter
    * @returns {string|undefined} the masked string
    */
-  static mask(value: string | undefined, _nb = 1, _char = '*'): string | undefined {
+  static mask(value: string | undefined): string | undefined {
     if (!value) {
       return undefined;
     }

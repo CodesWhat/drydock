@@ -13,20 +13,12 @@ test('mask should return fixed redaction marker for non-empty values', () => {
   expect(Component.mask('registry-token')).toBe('[REDACTED]');
 });
 
-test('mask should ignore masking char and keep fixed redaction marker', async () => {
-  expect(Component.mask('abcdefgh', 1, '§')).toStrictEqual('[REDACTED]');
-});
-
-test('mask should ignore keep-count and keep fixed redaction marker', async () => {
-  expect(Component.mask('abcdefgh', 3, '§')).toStrictEqual('[REDACTED]');
-});
-
 test('mask should return undefined when value is undefined', async () => {
   expect(Component.mask(undefined)).toStrictEqual(undefined);
 });
 
-test('mask should not fail when mask is longer than original string', async () => {
-  expect(Component.mask('abc', 5)).toStrictEqual('[REDACTED]');
+test('mask should redact short values', async () => {
+  expect(Component.mask('abc')).toStrictEqual('[REDACTED]');
 });
 
 test('getId should return the concatenation $type.$name', async () => {
@@ -44,22 +36,27 @@ test('register should call validateConfiguration and init methods of the compone
   expect(spyInit).toHaveBeenCalledTimes(1);
 });
 
-test('register should redact trigger infrastructure details in startup logs', async () => {
-  const component = new Component();
+test('register should use component hook to sanitize startup logs', async () => {
+  class SanitizingComponent extends Component<Record<string, string>> {
+    protected override maskRegistrationLogConfiguration(configuration: unknown) {
+      return {
+        ...(configuration as Record<string, string>),
+        secret: '[HOOKED]',
+      };
+    }
+  }
+
+  const component = new SanitizingComponent();
   const info = vi.fn();
   vi.spyOn(log, 'child').mockReturnValue({ info } as any);
 
-  await component.register('trigger', 'slack', 'ops', {
-    channel: 'C01FAKECHANNEL',
-    url: 'http://httpbin.org/post',
-    mode: 'simple',
+  await component.register('registry', 'custom', 'main', {
+    secret: 'raw-secret',
   });
 
   const registrationLogMessage = info.mock.calls[0][0] as string;
-  expect(registrationLogMessage).toContain('"channel":"[REDACTED]"');
-  expect(registrationLogMessage).toContain('"url":"[REDACTED]"');
-  expect(registrationLogMessage).not.toContain('C01FAKECHANNEL');
-  expect(registrationLogMessage).not.toContain('http://httpbin.org/post');
+  expect(registrationLogMessage).toContain('"secret":"[HOOKED]"');
+  expect(registrationLogMessage).not.toContain('raw-secret');
 });
 
 test('register should not call init when validateConfiguration fails', async () => {

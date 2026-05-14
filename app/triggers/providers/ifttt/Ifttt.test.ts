@@ -1,5 +1,6 @@
 import axios from 'axios';
 import joi from 'joi';
+import { rejectOnceWithHttpStatus } from '../../../test/notification-provider-mocks.js';
 
 vi.mock('axios');
 
@@ -206,4 +207,16 @@ test('triggerBatch should use both runtimeContext title and body when both are s
     method: 'POST',
     url: 'https://maker.ifttt.com/trigger/event/with/key/key',
   });
+});
+
+test('sendHttpRequest should reject when IFTTT webhook returns 5xx', async () => {
+  ifttt.configuration = {
+    key: 'key',
+    event: 'event',
+  };
+  rejectOnceWithHttpStatus(axios, 'IFTTT webhook failed with 500', 500);
+
+  await expect(ifttt.sendHttpRequest({ value1: 'container1' })).rejects.toThrow(
+    'IFTTT webhook failed with 500',
+  );
 });

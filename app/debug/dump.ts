@@ -308,7 +308,7 @@ function collectMqttHomeAssistantSensors(
 
 export async function collectDebugDump(options: CollectDebugDumpOptions = {}) {
   const recentMinutes = normalizeRecentMinutes(options.recentMinutes);
-  const containers = storeContainer.getContainersRaw();
+  const containers = storeContainer.getContainersRaw().map(storeContainer.cloneContainer);
   const registryState = registry.getState();
   const dockerWatchers = getDockerWatchers(registryState.watcher);
 

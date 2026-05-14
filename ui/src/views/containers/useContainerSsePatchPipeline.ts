@@ -25,8 +25,9 @@ interface UseContainerSsePatchPipelineInput {
   loadContainers: () => Promise<void>;
   loadDetailSecurityData: () => Promise<void>;
   reconcileHoldsAgainstContainers: (
-    containers: readonly Pick<Container, 'id' | 'name' | 'updateOperation'>[],
+    containers: readonly Pick<Container, 'id' | 'identityKey' | 'name' | 'updateOperation'>[],
   ) => void;
+  refreshServerNames?: () => void;
   schedulePostTerminalReload: () => void;
 }
 
@@ -324,6 +325,7 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
         }
       }
       removeLookupMapsForContainer(id ?? '', name);
+      input.refreshServerNames?.();
       input.reconcileHoldsAgainstContainers(input.containers.value);
       return;
     }
@@ -348,6 +350,7 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
         }
         input.containers.value.push(mapped);
         setContainerIndex(mapped, input.containers.value.length - 1);
+        input.refreshServerNames?.();
         // Deferred fallback: if the synchronous lookup still found nothing, set
         // up a one-shot watcher so the operation is attached as soon as it
         // arrives in the store. This covers the agent-relay path where
@@ -360,6 +363,7 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
     } else {
       const existing = input.containers.value[idx]!;
       const previousId = existing.id;
+      const previousServer = existing.server;
       const existingOp = existing.updateOperation;
       Object.assign(existing, mapped);
       if (previousId !== existing.id) {
@@ -368,6 +372,9 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
       setContainerIndex(existing, idx);
       if (mapped.updateOperation === undefined) {
         existing.updateOperation = existingOp ?? resolveStoreOperation(existing.id);
+      }
+      if (existing.server !== previousServer) {
+        input.refreshServerNames?.();
       }
     }
     updateLookupMapsForContainer(raw);

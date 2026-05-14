@@ -353,6 +353,7 @@ export const openApiSchemas = {
       status: { type: 'string' },
       watcher: { type: 'string' },
       agent: { type: 'string' },
+      identityKey: { type: 'string' },
       updateAvailable: { type: 'boolean' },
       image: { ...genericObjectSchema },
     },

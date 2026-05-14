@@ -5,6 +5,7 @@ import * as container from './container.js';
 vi.mock('../log', () => ({ default: { child: vi.fn(() => ({ info: mockLogInfo })) } }));
 vi.mock('./container', () => ({
   getContainersRaw: vi.fn(() => []),
+  cloneContainer: vi.fn((container) => structuredClone(container)),
   updateContainer: vi.fn(),
   deleteContainer: vi.fn(),
 }));

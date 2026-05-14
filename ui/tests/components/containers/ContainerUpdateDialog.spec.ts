@@ -174,7 +174,10 @@ describe('ContainerUpdateDialog', () => {
       );
       updateBtn!.click();
       await flushPromises();
-      expect(mockGetContainerUpdateStartedMessage).toHaveBeenCalledWith('my-nginx');
+      expect(mockGetContainerUpdateStartedMessage).toHaveBeenCalledWith(
+        'my-nginx',
+        expect.any(Function),
+      );
       expect(mockToast.success).toHaveBeenCalledWith('Update started');
       w.unmount();
     });
@@ -188,7 +191,10 @@ describe('ContainerUpdateDialog', () => {
       );
       updateBtn!.click();
       await flushPromises();
-      expect(mockGetContainerAlreadyUpToDateMessage).toHaveBeenCalledWith('my-nginx');
+      expect(mockGetContainerAlreadyUpToDateMessage).toHaveBeenCalledWith(
+        'my-nginx',
+        expect.any(Function),
+      );
       expect(mockToast.info).toHaveBeenCalledWith('Already up to date');
       expect(w.emitted('updated')).toBeUndefined();
       expect(w.emitted('update:containerId')).toEqual([[null]]);

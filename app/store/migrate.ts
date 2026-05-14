@@ -7,7 +7,7 @@ const log = logger.child({ component: 'store' });
 const TAG_PRECISION_BACKFILL_VERSION = '1.5.0';
 
 function backfillMissingTagPrecision() {
-  const containers = storeContainer.getContainersRaw();
+  const containers = storeContainer.getContainersRaw().map(storeContainer.cloneContainer);
 
   for (const container of containers) {
     const tag = container.image?.tag;

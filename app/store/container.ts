@@ -148,7 +148,7 @@ function cloneContainers(containersToClone) {
   return containersToClone.map((container) => cloneContainer(container));
 }
 
-function cloneContainer(containerToClone) {
+export function cloneContainer(containerToClone) {
   const clonedContainer = structuredClone(containerToClone);
   if (
     clonedContainer &&
@@ -838,6 +838,12 @@ function getCachedOrComputedContainersByQuery(query: Record<string, unknown> = {
 /**
  * Get all (filtered) containers without redacting sensitive env values.
  * Intended for internal callers that do not return container data to users.
+ *
+ * WARNING: this returns live validated container objects backed by LokiJS and
+ * the query cache. Treat the returned containers as read-only. Call
+ * `cloneContainer()` before mutating a container or passing it to code that may
+ * mutate it.
+ *
  * @param query
  * @param pagination
  * @returns {*}
@@ -847,8 +853,7 @@ export function getContainersRaw(
   pagination: ContainerListPaginationOptions = {},
 ) {
   const containerListSorted = getCachedOrComputedContainersByQuery(query);
-  const containerListSortedPaged = applyContainerListPagination(containerListSorted, pagination);
-  return cloneContainers(containerListSortedPaged);
+  return applyContainerListPagination(containerListSorted, pagination);
 }
 
 /**
@@ -920,7 +925,7 @@ export function getContainers(
   query: Record<string, unknown> = {},
   pagination: ContainerListPaginationOptions = {},
 ) {
-  return redactContainersRuntimeEnv(getContainersRaw(query, pagination));
+  return redactContainersRuntimeEnv(cloneContainers(getContainersRaw(query, pagination)));
 }
 
 /**

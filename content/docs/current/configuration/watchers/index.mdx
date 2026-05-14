@@ -42,6 +42,10 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 
 <Callout type="warn">`DD_WATCHER_{watcher_name}_WATCHDIGEST` is deprecated and will be removed in a future release. Use the `dd.watch.digest` container label instead.</Callout>
 
+<Callout type="warn" title="Watcher frequency and registry rate limits">
+The default `0 * * * *` (hourly) cron polls every container's registry once per hour. With 20+ watched containers and tag lists that paginate to thousands of entries (GHCR images can require 20+ paginated calls each), this can saturate anonymous Docker Hub limits (100 pulls / 6h) and trigger 429 responses. As of v1.5.0-rc.20 drydock automatically retries 429s with `Retry-After` honored and rate-limits its own outbound calls via a per-host token bucket, but if you watch many containers and don't need near-real-time detection, drop the cron to every 6 hours (`0 */6 * * *`) or once a day (`0 1 * * *`). New updates rarely ship more than once per day per image anyway.
+</Callout>
+
 **Notes:**
 
 - If no watcher is configured, a default one named `local` will be automatically created (reading the Docker socket). To suppress this default watcher (e.g. when running as a controller-only node for remote agents), set `DD_LOCAL_WATCHER=false`.

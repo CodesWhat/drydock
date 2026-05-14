@@ -186,7 +186,12 @@
       "registryErrorRateLimited": "速率限制",
       "registryErrorAuth": "验证失败",
       "registryErrorNotFound": "未找到",
-      "registryErrorCheckFailed": "检查失败"
+      "registryErrorCheckFailed": "检查失败",
+      "blockedTag": "已阻止：{tag}",
+      "blockedTagWithCriticals": "已阻止：{tag}（{count} 个严重）",
+      "blockedTagWithCriticalsCVEs": "已阻止：{tag}（{count} 个严重）",
+      "manualUpdateOnly": "仅支持手动更新",
+      "manualUpdateOnlyWithMessage": "仅支持手动更新 — {message}"
     },
     "groupHeader": {
       "ungrouped": "未分组",
@@ -218,7 +223,8 @@
       "digest": "摘要",
       "created": "创建时间",
       "unknown": "未知",
-      "imageMetadata": "镜像元数据"
+      "imageMetadata": "镜像元数据",
+      "imageAge": "镜像时龄"
     },
     "listContent": {
       "loadingContainers": "正在加载容器...",
@@ -260,7 +266,8 @@
       "filterKind": "类型：{value}",
       "filterHiddenPinned": "已隐藏：已固定",
       "filtersLabel": "筛选器",
-      "filteredContainers": "已筛选 {count} 个容器 | 已筛选 {count} 个容器"
+      "filteredContainers": "已筛选 {count} 个容器 | 已筛选 {count} 个容器",
+      "clearContainerIdFilter": "清除容器 ID 筛选条件"
     },
     "stats": {
       "paused": "已暂停",
@@ -298,7 +305,8 @@
     },
     "suggestedTag": {
       "badgeText": "建议",
-      "tooltip": "可用的最佳稳定 semver 标签 — 建议固定使用"
+      "tooltip": "可用的最佳稳定 semver 标签 — 建议固定使用",
+      "tooltipWithTag": "建议：{tag}\n{hint}"
     },
     "eligibilityBadges": {
       "securityBlocked": "安全阻止",

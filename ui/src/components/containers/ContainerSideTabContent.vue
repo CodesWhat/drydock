@@ -284,7 +284,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 class="mt-2 flex items-center gap-2 px-2.5 py-1.5 dd-rounded text-2xs-plus"
                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
               >
-                <span class="dd-text-secondary">Image age</span>
+                <span class="dd-text-secondary">{{ t('containerComponents.sideTabContent.imageAge') }}</span>
                 <span class="font-mono dd-text">
                   {{ imageAge(selectedContainer.imageCreated || selectedImageMetadata.created) }}
                 </span>

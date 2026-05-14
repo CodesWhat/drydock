@@ -36,14 +36,20 @@ jobs:
           upload_translations: true
           download_translations: true
           download_translations_args: >-
+            --language=ar
             --language=de
             --language=es-ES
             --language=fr
             --language=it
+            --language=ja
+            --language=ko
             --language=nl
             --language=pl
             --language=pt-BR
+            --language=ru
             --language=tr
+            --language=uk
+            --language=vi
             --language=zh-CN
             --language=zh-TW
           localization_branch_name: l10n_crowdin

@@ -17,6 +17,10 @@ describe('ReleaseNotesLink', () => {
 
   const longBody = 'A'.repeat(250);
 
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
   it('renders nothing when neither releaseNotes nor releaseLink is provided', () => {
     const wrapper = mount(ReleaseNotesLink, {
       props: {},
@@ -130,17 +134,51 @@ describe('ReleaseNotesLink', () => {
     expect(wrapper.find('[data-test="release-link"]').exists()).toBe(false);
   });
 
-  it('renders icon-only anchor linking to releaseNotes.url when iconOnly is true', () => {
+  it('renders icon-only button that opens structured release notes when iconOnly is true', async () => {
     const wrapper = mount(ReleaseNotesLink, {
       props: { releaseNotes: sampleNotes, iconOnly: true },
       global: globalConfig,
+      attachTo: document.body,
     });
-    const link = wrapper.find('[data-test="release-notes-link"]');
-    expect(link.exists()).toBe(true);
-    expect(link.attributes('href')).toBe(sampleNotes.url);
-    expect(link.attributes('aria-label')).toBe('Release notes');
-    expect(link.element.tagName).toBe('A');
-    expect(link.text()).not.toContain('Release notes');
+    const trigger = wrapper.find('[data-test="release-notes-link"]');
+    expect(trigger.exists()).toBe(true);
+    expect(trigger.element.tagName).toBe('BUTTON');
+    expect(trigger.attributes('aria-label')).toBe('Release notes');
+    expect(trigger.attributes('aria-expanded')).toBe('false');
+    expect(document.body.querySelector('[data-test="release-notes-popover"]')).toBeNull();
+
+    await trigger.trigger('click');
+    await nextTick();
+
+    const popover = document.body.querySelector('[data-test="release-notes-popover"]');
+    expect(popover?.textContent).toContain('Release notes - v2.0.0 Release');
+    expect(trigger.attributes('aria-expanded')).toBe('true');
+
+    wrapper.unmount();
+  });
+
+  it('icon-only popover expands preview and keeps the full-notes link inside the panel', async () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseNotes: sampleNotes, iconOnly: true },
+      global: globalConfig,
+      attachTo: document.body,
+    });
+
+    await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+    await nextTick();
+    const panel = document.body.querySelector('[data-test="update-release-notes-panel"]');
+    const button = panel?.querySelector('button');
+    expect(button).not.toBeNull();
+
+    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+
+    expect(panel?.textContent).toContain(sampleNotes.body);
+    const link = panel?.querySelector('a');
+    expect(link?.textContent).toContain('View full notes');
+    expect(link?.getAttribute('href')).toBe(sampleNotes.url);
+
+    wrapper.unmount();
   });
 
   it('renders icon-only anchor linking to releaseLink fallback when iconOnly is true', () => {
@@ -245,7 +283,7 @@ describe('ReleaseNotesLink', () => {
       expect(wrapper.find('[data-test="current-release-notes-panel"]').exists()).toBe(false);
     });
 
-    it('icon-only prefers releaseNotes over currentReleaseNotes', () => {
+    it('icon-only shows both current and available notes in the popover', async () => {
       const wrapper = mount(ReleaseNotesLink, {
         props: {
           currentReleaseNotes: currentNotes,
@@ -253,22 +291,38 @@ describe('ReleaseNotesLink', () => {
           iconOnly: true,
         },
         global: globalConfig,
+        attachTo: document.body,
       });
-      const link = wrapper.find('[data-test="release-notes-link"]');
-      expect(link.attributes('href')).toBe(sampleNotes.url);
+      await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+      await nextTick();
+
+      const popover = document.body.querySelector('[data-test="release-notes-popover"]');
+      expect(popover?.textContent).toContain('Release notes - v1.5.0 Release (current)');
+      expect(popover?.textContent).toContain('Release notes - v2.0.0 Release (available)');
+
+      wrapper.unmount();
     });
 
-    it('icon-only falls back to currentReleaseNotes when releaseNotes is absent', () => {
+    it('icon-only falls back to currentReleaseNotes when releaseNotes is absent', async () => {
       const wrapper = mount(ReleaseNotesLink, {
         props: {
           currentReleaseNotes: currentNotes,
           iconOnly: true,
         },
         global: globalConfig,
+        attachTo: document.body,
       });
-      const link = wrapper.find('[data-test="current-release-notes-link"]');
-      expect(link.exists()).toBe(true);
-      expect(link.attributes('href')).toBe(currentNotes.url);
+      const trigger = wrapper.find('[data-test="current-release-notes-link"]');
+      expect(trigger.exists()).toBe(true);
+      expect(trigger.element.tagName).toBe('BUTTON');
+
+      await trigger.trigger('click');
+      await nextTick();
+
+      const popover = document.body.querySelector('[data-test="release-notes-popover"]');
+      expect(popover?.textContent).toContain('Release notes - v1.5.0 Release (current)');
+
+      wrapper.unmount();
     });
 
     it('expanding update panel does not affect current panel state when both rendered', async () => {

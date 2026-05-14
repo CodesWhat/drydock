@@ -1,11 +1,19 @@
 import {
   formatContainersAlreadyUpToDateMessage,
+  formatContainerUpdateStartedCountMessage,
+  getContainerAlreadyUpToDateMessage,
   getContainerUpdateStartedMessage,
   getForceContainerUpdateStartedMessage,
   getUpdateInProgressPhaseLabelKey,
   shouldRenderStandaloneQueuedUpdateAsUpdating,
+  type TranslateFn,
   UPDATE_IN_PROGRESS_PHASE_I18N,
 } from '@/utils/container-update';
+
+const mockT: TranslateFn = (key, params) => {
+  if (!params) return key;
+  return key + ':' + JSON.stringify(params);
+};
 
 describe('container-update utils', () => {
   it('yields standalone queued updates to persisted queued batch heads', () => {
@@ -122,7 +130,9 @@ describe('container-update utils', () => {
   });
 
   it('uses the singular already-up-to-date label for one container', () => {
-    expect(formatContainersAlreadyUpToDateMessage(1)).toBe('1 container already up to date');
+    expect(formatContainersAlreadyUpToDateMessage(1, mockT)).toBe(
+      'containersView.toast.countAlreadyUpToDateSingle:{"count":1}',
+    );
   });
 
   it('treats invalid queued timestamps as the newest standalone item', () => {
@@ -321,15 +331,39 @@ describe('container-update utils', () => {
   });
 
   it('uses the plural already-up-to-date label for multiple containers', () => {
-    expect(formatContainersAlreadyUpToDateMessage(2)).toBe('2 containers already up to date');
+    expect(formatContainersAlreadyUpToDateMessage(2, mockT)).toBe(
+      'containersView.toast.countAlreadyUpToDateMultiple:{"count":2}',
+    );
   });
 
-  it('getContainerUpdateStartedMessage returns "Update started: <name>"', () => {
-    expect(getContainerUpdateStartedMessage('foo')).toBe('Update started: foo');
+  it('getContainerUpdateStartedMessage returns the i18n key with name param', () => {
+    expect(getContainerUpdateStartedMessage('foo', mockT)).toBe(
+      'containersView.toast.updateStarted:{"name":"foo"}',
+    );
   });
 
-  it('getForceContainerUpdateStartedMessage returns "Force update started: <name>"', () => {
-    expect(getForceContainerUpdateStartedMessage('foo')).toBe('Force update started: foo');
+  it('getForceContainerUpdateStartedMessage returns the i18n key with name param', () => {
+    expect(getForceContainerUpdateStartedMessage('foo', mockT)).toBe(
+      'containersView.toast.forceUpdateStarted:{"name":"foo"}',
+    );
+  });
+
+  it('getContainerAlreadyUpToDateMessage returns the i18n key with name param', () => {
+    expect(getContainerAlreadyUpToDateMessage('bar', mockT)).toBe(
+      'containersView.toast.alreadyUpToDate:{"name":"bar"}',
+    );
+  });
+
+  it('formatContainerUpdateStartedCountMessage singular returns the singular i18n key', () => {
+    expect(formatContainerUpdateStartedCountMessage(1, mockT)).toBe(
+      'containersView.toast.queuedUpdateSingle:{"count":1}',
+    );
+  });
+
+  it('formatContainerUpdateStartedCountMessage plural returns the plural i18n key', () => {
+    expect(formatContainerUpdateStartedCountMessage(3, mockT)).toBe(
+      'containersView.toast.queuedUpdateMultiple:{"count":3}',
+    );
   });
 });
 

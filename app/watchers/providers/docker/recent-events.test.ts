@@ -129,18 +129,22 @@ describe('Docker recent-event helpers', () => {
     ]);
   });
 
-  test('defers trimming until array exceeds 2x the configured max', () => {
+  test('amortizes history pruning until exceeding twice the configured max', () => {
     const docker = createDocker();
     const history = [{ value: 1 }, { value: 2 }];
+    const spliceSpy = vi.spyOn(history, 'splice');
 
     (docker as any).appendBoundedHistoryEntry(history, { value: 3 }, 2);
-    expect(history).toHaveLength(3);
+    expect(history).toEqual([{ value: 1 }, { value: 2 }, { value: 3 }]);
 
     (docker as any).appendBoundedHistoryEntry(history, { value: 4 }, 2);
-    expect(history).toHaveLength(4);
+    expect(history).toEqual([{ value: 1 }, { value: 2 }, { value: 3 }, { value: 4 }]);
+    expect(spliceSpy).not.toHaveBeenCalled();
 
-    // At 2x+1 the splice fires, trimming back to maxEntries
     (docker as any).appendBoundedHistoryEntry(history, { value: 5 }, 2);
+
+    expect(spliceSpy).toHaveBeenCalledOnce();
+    expect(spliceSpy).toHaveBeenCalledWith(0, 3);
     expect(history).toEqual([{ value: 4 }, { value: 5 }]);
   });
 

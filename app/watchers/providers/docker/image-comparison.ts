@@ -9,6 +9,7 @@ import {
 } from '../../../model/container.js';
 import type Registry from '../../../registries/Registry.js';
 import * as registry from '../../../registry/index.js';
+import { isCredentialedInstance } from '../../../registry/index.js';
 import { suggest as suggestTag } from '../../../tag/suggest.js';
 import { getErrorMessage } from '../../../util/error.js';
 import { getImageForRegistryLookup } from './docker-helpers.js';
@@ -143,12 +144,43 @@ function getRegistries(): Record<string, Registry> {
   return registry.getState().registry;
 }
 
+/**
+ * Pick the best-matching registry provider for an image.
+ *
+ * When multiple providers match (e.g. both `ghcr.public` and `ghcr.token`
+ * match `ghcr.io` images), credentialed instances win over anonymous ones so
+ * the user's PAT is always preferred. Within a tier, instances are sorted
+ * alphabetically by name for deterministic selection regardless of object
+ * insertion order.
+ */
+function pickRegistryProvider(image: ContainerImage): Registry | undefined {
+  const matches = Object.values(getRegistries()).filter((p) => p.match(image));
+  if (matches.length === 0) {
+    return undefined;
+  }
+  if (matches.length === 1) {
+    return matches[0];
+  }
+
+  const isCredentialed = (p: Registry): boolean => isCredentialedInstance(p.configuration);
+
+  const credentialed = matches.filter(isCredentialed).sort((a, b) => a.name.localeCompare(b.name));
+  if (credentialed.length > 0) {
+    log.debug(
+      `Routing ${image.name} to credentialed ${credentialed[0].getId()} (${matches.length} matched)`,
+    );
+    return credentialed[0];
+  }
+
+  const anonymous = matches.slice().sort((a, b) => a.name.localeCompare(b.name));
+  log.debug(`Routing ${image.name} to anonymous ${anonymous[0].getId()} (no credentialed match)`);
+  return anonymous[0];
+}
+
 export function normalizeContainer(container: Container) {
   const containerWithNormalizedImage = structuredClone(container);
   const imageForMatching = getImageForRegistryLookup(containerWithNormalizedImage.image);
-  const registryProvider = Object.values(getRegistries()).find((provider) =>
-    provider.match(imageForMatching),
-  );
+  const registryProvider = pickRegistryProvider(imageForMatching);
   if (registryProvider) {
     // `image.name` is the deploy identity — what gets written to compose
     // files, recreated, and shown in the UI. We must not overwrite it with

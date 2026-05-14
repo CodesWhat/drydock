@@ -9,7 +9,11 @@ import { sendErrorResponse } from './error-response.js';
 import { sanitizeApiError } from './helpers.js';
 import { fetchAndCacheIconOnce } from './icons/fetch.js';
 import { normalizeSlug, providers } from './icons/providers.js';
-import { sendCachedIcon, sendMissingIconResponse } from './icons/response.js';
+import {
+  sendCachedIcon,
+  sendMissingIconResponse,
+  shouldServeImageFallback,
+} from './icons/response.js';
 import {
   ICON_PROXY_RATE_LIMIT_MAX,
   ICON_PROXY_RATE_LIMIT_WINDOW_MS,
@@ -86,6 +90,14 @@ async function getIcon(req: Request, res: Response) {
     log.warn(
       `Unable to fetch icon provider=${sanitizeLogParam(provider)} slug=${sanitizeLogParam(slug)} (${sanitizeLogParam(errorMessage)})`,
     );
+    if (shouldServeImageFallback(req)) {
+      await sendMissingIconResponse({
+        req,
+        res,
+        errorMessage: `Unable to fetch icon ${provider}/${slug}`,
+      });
+      return;
+    }
     sendErrorResponse(res, 502, `Unable to fetch icon ${provider}/${slug}`);
   }
 }

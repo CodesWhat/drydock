@@ -1,4 +1,5 @@
 import { GotifyClient } from 'gotify-client';
+import { createRejectedAsyncMethod } from '../../../test/notification-provider-mocks.js';
 import Gotify from './Gotify.js';
 
 vi.mock('axios');
@@ -153,6 +154,17 @@ test('triggerBatch should send batch notification', async () => {
   });
 });
 
+test('trigger should reject when Gotify createMessage fails', async () => {
+  gotify.configuration = configurationValid;
+  gotify.client = {
+    message: {
+      createMessage: createRejectedAsyncMethod('Gotify returned 500'),
+    },
+  };
+
+  await expect(gotify.trigger({ name: 'container1' })).rejects.toThrow('Gotify returned 500');
+});
+
 test('dismiss should delete Gotify message by id', async () => {
   gotify.configuration = configurationValid;
   gotify.client = {
@@ -190,4 +202,10 @@ test('dismiss should do nothing when triggerResult is undefined', async () => {
   };
   await gotify.dismiss('watcher_container1', undefined);
   expect(gotify.client.message.deleteMessage).not.toHaveBeenCalled();
+});
+
+test('createRejectedAsyncMethod passes through an Error argument unchanged', async () => {
+  const cause = new Error('pre-built error');
+  const rejectedFn = createRejectedAsyncMethod(cause);
+  await expect(rejectedFn()).rejects.toBe(cause);
 });

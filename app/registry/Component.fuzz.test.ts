@@ -13,28 +13,11 @@ describe('registry/Component fuzz tests', () => {
   });
 
   test('Component.mask returns fixed redaction marker for non-empty values', () => {
-    expect(Component.mask('token-value', 2, '#')).toBe('[REDACTED]');
+    expect(Component.mask('token-value')).toBe('[REDACTED]');
   });
 
   fcTest.prop([fc.string()])('Component.mask never throws on arbitrary strings', (input) => {
     const result = Component.mask(input);
-    expect(result === undefined || typeof result === 'string').toBe(true);
-  });
-
-  fcTest.prop([fc.string(), fc.integer({ min: 0, max: 20 })])(
-    'Component.mask with arbitrary nb parameter never throws',
-    (input, nb) => {
-      const result = Component.mask(input, nb);
-      expect(result === undefined || typeof result === 'string').toBe(true);
-    },
-  );
-
-  fcTest.prop([
-    fc.string(),
-    fc.integer({ min: 0, max: 20 }),
-    fc.string({ minLength: 1, maxLength: 5 }),
-  ])('Component.mask with arbitrary char parameter never throws', (input, nb, char) => {
-    const result = Component.mask(input, nb, char);
     expect(result === undefined || typeof result === 'string').toBe(true);
   });
 

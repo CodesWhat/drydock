@@ -14,6 +14,7 @@ function createMockContext(operation?: unknown): CrudHandlerContext {
     storeContainer: { getContainer: vi.fn(), deleteContainer: vi.fn() },
     updateOperationStore: {
       getOperationsByContainerName: vi.fn(),
+      getOperationsByContainerId: vi.fn(() => []),
       getInProgressOperationByContainerName: vi.fn().mockReturnValue(operation),
       getInProgressOperationByContainerId: vi.fn(),
       getActiveOperationByContainerName: vi.fn().mockReturnValue(operation),

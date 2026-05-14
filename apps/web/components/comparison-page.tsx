@@ -1,7 +1,8 @@
 import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, BookOpen, Check, Clock, Github, Minus, Terminal, X } from "lucide-react";
+import { AlertTriangle, BookOpen, Check, Clock, Minus, Terminal, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { GithubIcon } from "@/components/github-icon";
 import { SiteFooter } from "@/components/site-footer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -285,7 +286,7 @@ export function ComparisonPage({
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    <Github className="h-4 w-4" />
+                    <GithubIcon className="h-4 w-4" />
                     View on GitHub
                   </a>
                 </Button>

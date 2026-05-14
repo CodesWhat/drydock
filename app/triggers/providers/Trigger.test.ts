@@ -9,10 +9,12 @@ import * as notificationStore from '../../store/notification.js';
 import * as notificationHistoryStore from '../../store/notification-history.js';
 import { UpdateRequestError } from '../../updates/request-update.js';
 import Trigger, {
+  BUFFER_ENTRY_RETENTION_MS,
   buildLiteralTemplateExpression,
   getNotificationEvent,
   resolveNotificationTemplate,
 } from './Trigger.js';
+import { DigestBuffer } from './trigger-digest-buffer.js';
 
 const mockTriggerCounterInc = vi.hoisted(() => vi.fn());
 const mockGetAgents = vi.hoisted(() => vi.fn(() => []));
@@ -45,6 +47,7 @@ vi.mock('../../store/notification.js', () => ({
 vi.mock('../../store/container.js', () => ({
   getContainers: vi.fn(() => []),
   getContainersRaw: vi.fn(() => []),
+  cloneContainer: vi.fn((container) => structuredClone(container)),
 }));
 vi.mock('../../store/notification-history.js', () => {
   const notificationHistoryByKey = new Map();
@@ -1836,7 +1839,7 @@ test('renderSimpleBody should expose releaseNotes variables and truncate body fo
   const [title, url, body] = renderedBody.split('|');
   expect(title).toBe('Release 2.0.0');
   expect(url).toBe('https://github.com/acme/service/releases/tag/v2.0.0');
-  expect(body.length).toBeLessThanOrEqual(500);
+  expect(body).toBe(`${longReleaseBody.slice(0, 500)}...`);
 });
 
 test('renderSimpleBody should keep short releaseNotes body unchanged', () => {
@@ -4482,7 +4485,9 @@ test('getBatchRetryContainers should match raw containers by fallback fullName w
   const retryContainers = (trigger as any).getBatchRetryContainers([]);
 
   expect(retryContainers).toEqual([currentContainer]);
-  expect(trigger.batchRetryBuffer.get('undefined_container1')).toBe(currentContainer);
+  expect(retryContainers[0]).not.toBe(currentContainer);
+  expect(trigger.batchRetryBuffer.get('undefined_container1')).toEqual(currentContainer);
+  expect(trigger.batchRetryBuffer.get('undefined_container1')).not.toBe(currentContainer);
 });
 
 test('getBatchRetryContainers should evict stale retry-buffer entries before reuse', () => {
@@ -4501,7 +4506,8 @@ test('getBatchRetryContainers should evict stale retry-buffer entries before reu
   } as any;
 
   trigger.batchRetryBuffer.set('stale-id', currentContainer);
-  (trigger as any).batchRetryBufferUpdatedAt = new Map([['stale-id', 1_000]]);
+  (trigger as any).batchRetryBufferUpdatedAt.clear();
+  (trigger as any).batchRetryBufferUpdatedAt.set('stale-id', 1_000);
   (trigger as any).bufferEntryRetentionMs = 100;
   storeContainer.getContainersRaw.mockReturnValue([currentContainer]);
   const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_101);
@@ -4525,11 +4531,8 @@ test('handleContainerReports should cap retry-buffer growth by evicting the olde
   (trigger as any).batchRetryBufferMaxEntries = 2;
   trigger.triggerBatch = vi.fn().mockRejectedValue(new Error('SMTP timeout'));
 
-  const nowSpy = vi
-    .spyOn(Date, 'now')
-    .mockReturnValueOnce(1_000)
-    .mockReturnValueOnce(1_001)
-    .mockReturnValueOnce(1_002);
+  vi.useFakeTimers();
+  vi.setSystemTime(1_000);
 
   try {
     await trigger.handleContainerReports([
@@ -4567,7 +4570,7 @@ test('handleContainerReports should cap retry-buffer growth by evicting the olde
 
     expect([...trigger.batchRetryBuffer.keys()]).toEqual(['c2', 'c3']);
   } finally {
-    nowSpy.mockRestore();
+    vi.useRealTimers();
   }
 });
 
@@ -4724,6 +4727,30 @@ test('flushEventBatchDispatch should suppress repeated auto event batch errors',
   expect(debugSpy).toHaveBeenCalledWith(expect.any(Error));
 });
 
+test('queueEventBatchDispatch should warn when scheduled flush rejects unexpectedly', async () => {
+  vi.useFakeTimers();
+  try {
+    const warnSpy = vi.spyOn(log, 'warn');
+    vi.spyOn(trigger as any, 'flushEventBatchDispatch').mockRejectedValueOnce(
+      new Error('unexpected flush failure'),
+    );
+
+    (trigger as any).queueEventBatchDispatch('update-applied', {
+      name: 'c1',
+      watcher: 'local',
+    });
+
+    vi.advanceTimersByTime(250);
+    await Promise.resolve();
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Unexpected error flushing update-applied event batch (unexpected flush failure)',
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test('shouldSuppressAutoTriggerError should prune stale cache entries', () => {
   const triggerAny = trigger as any;
   triggerAny.autoTriggerErrorSeenAt.set('stale-signature', 0);
@@ -4747,6 +4774,19 @@ test('parseThresholdWithDigestBehavior should parse suffix behavior', () => {
     thresholdBase: 'minor',
     nonDigestOnly: true,
   });
+});
+
+test('maskRegistrationLogConfiguration should redact trigger infrastructure fields', () => {
+  const sanitized = (trigger as any).maskRegistrationLogConfiguration({
+    channel: 'C01FAKECHANNEL',
+    url: 'http://httpbin.org/post',
+    mode: 'simple',
+  });
+
+  expect(sanitized.channel).toBe('[REDACTED]');
+  expect(sanitized.url).toBe('[REDACTED]');
+  expect(JSON.stringify(sanitized)).not.toContain('C01FAKECHANNEL');
+  expect(JSON.stringify(sanitized)).not.toContain('http://httpbin.org/post');
 });
 
 test('doesReferenceMatchId should return false when trigger id has no name segment', () => {
@@ -4830,6 +4870,23 @@ describe('digest mode', () => {
 
     expect(event.registerContainerReport).toHaveBeenCalled();
     expect(mockCron.schedule).toHaveBeenCalledWith('0 9 * * *', expect.any(Function));
+  });
+
+  test('deregister should keep simple and digest report unregister callbacks independent', async () => {
+    const unregisterSimple = vi.fn();
+    const unregisterDigest = vi.fn();
+    trigger.unregisterContainerReport = unregisterSimple;
+    vi.mocked(event.registerContainerReport).mockReturnValue(unregisterDigest);
+
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+
+    await trigger.deregister();
+
+    expect(unregisterSimple).toHaveBeenCalledTimes(1);
+    expect(unregisterDigest).toHaveBeenCalledTimes(1);
   });
 
   test('handleContainerReportDigest should buffer containers', async () => {
@@ -4930,23 +4987,22 @@ describe('digest mode', () => {
 
   test('bufferContainerForDigest should cap digest-buffer growth by evicting the oldest entries', () => {
     (trigger as any).digestBufferMaxEntries = 2;
-    const nowSpy = vi
-      .spyOn(Date, 'now')
-      .mockReturnValueOnce(1_000)
-      .mockReturnValueOnce(1_001)
-      .mockReturnValueOnce(1_002);
+    vi.useFakeTimers();
 
     try {
+      vi.setSystemTime(1_000);
       (trigger as any).bufferContainerForDigest({
         id: 'c1',
         name: 'app-1',
         watcher: 'test',
       });
+      vi.setSystemTime(1_001);
       (trigger as any).bufferContainerForDigest({
         id: 'c2',
         name: 'app-2',
         watcher: 'test',
       });
+      vi.setSystemTime(1_002);
       (trigger as any).bufferContainerForDigest({
         id: 'c3',
         name: 'app-3',
@@ -4955,7 +5011,27 @@ describe('digest mode', () => {
 
       expect([...trigger.digestBuffer.keys()]).toEqual(['c2', 'c3']);
     } finally {
-      nowSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  test('bufferContainerForDigest should write through the persistent digest buffer store', () => {
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+    } as any;
+
+    expect((trigger as any).digestBufferStore).toBeInstanceOf(DigestBuffer);
+
+    const setSpy = vi.spyOn((trigger as any).digestBufferStore, 'set');
+    try {
+      (trigger as any).bufferContainerForDigest(container);
+
+      expect(setSpy).toHaveBeenCalledTimes(1);
+      expect(setSpy.mock.calls[0]?.slice(0, 2)).toEqual(['c1', container]);
+    } finally {
+      setSpy.mockRestore();
     }
   });
 
@@ -4965,7 +5041,8 @@ describe('digest mode', () => {
       name: 'app',
       watcher: 'test',
     } as any);
-    (trigger as any).digestBufferUpdatedAt = new Map([['c1', 1_000]]);
+    (trigger as any).digestBufferUpdatedAt.clear();
+    (trigger as any).digestBufferUpdatedAt.set('c1', 1_000);
     (trigger as any).bufferEntryRetentionMs = 0;
 
     (trigger as any).pruneDigestBuffer(1_500);
@@ -4975,13 +5052,19 @@ describe('digest mode', () => {
     expect((trigger as any).digestBufferUpdatedAt.get('c1')).toBe(1_000);
   });
 
+  test('buffer retention should use the named default retention constant', () => {
+    expect((trigger as any).bufferEntryRetentionMs).toBe(BUFFER_ENTRY_RETENTION_MS);
+    expect(BUFFER_ENTRY_RETENTION_MS).toBe(7 * 24 * 60 * 60 * 1000);
+  });
+
   test('pruneDigestBuffer should clear buffered entries when max entries is zero', () => {
     trigger.digestBuffer.set('c1', {
       id: 'c1',
       name: 'app',
       watcher: 'test',
     } as any);
-    (trigger as any).digestBufferUpdatedAt = new Map([['c1', 1_000]]);
+    (trigger as any).digestBufferUpdatedAt.clear();
+    (trigger as any).digestBufferUpdatedAt.set('c1', 1_000);
     (trigger as any).digestBufferMaxEntries = 0;
 
     (trigger as any).pruneDigestBuffer(1_500);
@@ -4990,7 +5073,7 @@ describe('digest mode', () => {
     expect((trigger as any).digestBufferUpdatedAt.size).toBe(0);
   });
 
-  test('enforceBufferedContainerLimit should stop when the oldest key is blank', () => {
+  test('DigestBuffer should stop enforcing limits when the oldest key is blank', () => {
     const buffer = new Map<string, any>([
       [
         '',
@@ -5013,15 +5096,23 @@ describe('digest mode', () => {
       ['', 1_000],
       ['c2', 1_001],
     ]);
+    const bufferStore = new DigestBuffer({
+      name: 'digest buffer',
+      entries: buffer,
+      timestamps,
+      retentionMs: BUFFER_ENTRY_RETENTION_MS,
+      maxEntries: 1,
+      log,
+    });
 
-    (trigger as any).enforceBufferedContainerLimit('digest buffer', buffer, timestamps, 1);
+    bufferStore.enforceLimit();
 
     expect([...buffer.keys()]).toEqual(['', 'c2']);
     expect([...timestamps.keys()]).toEqual(['', 'c2']);
     expect(log.warn).not.toHaveBeenCalled();
   });
 
-  test('enforceBufferedContainerLimit should treat missing timestamps as the oldest entries', () => {
+  test('DigestBuffer should treat missing timestamps as the oldest entries', () => {
     const buffer = new Map<string, any>([
       [
         'c1',
@@ -5041,8 +5132,16 @@ describe('digest mode', () => {
       ],
     ]);
     const timestamps = new Map<string, number>([['c2', 1_001]]);
+    const bufferStore = new DigestBuffer({
+      name: 'digest buffer',
+      entries: buffer,
+      timestamps,
+      retentionMs: BUFFER_ENTRY_RETENTION_MS,
+      maxEntries: 1,
+      log,
+    });
 
-    (trigger as any).enforceBufferedContainerLimit('digest buffer', buffer, timestamps, 1);
+    bufferStore.enforceLimit();
 
     expect([...buffer.keys()]).toEqual(['c2']);
     expect([...timestamps.keys()]).toEqual(['c2']);
@@ -5263,7 +5362,8 @@ describe('digest mode', () => {
       updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
     } as any;
     trigger.digestBuffer.set('c1', staleContainer);
-    (trigger as any).digestBufferUpdatedAt = new Map([['c1', 1_000]]);
+    (trigger as any).digestBufferUpdatedAt.clear();
+    (trigger as any).digestBufferUpdatedAt.set('c1', 1_000);
     (trigger as any).bufferEntryRetentionMs = 100;
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_101);
 
@@ -5493,6 +5593,56 @@ describe('digest mode', () => {
     triggerBatchSpy.mockRestore();
   });
 
+  test('flushDigestBuffer should not expose raw store containers to trigger mutations', async () => {
+    await trigger.register('trigger', 'test', 'digest-trigger', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    trigger.init();
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        image: {
+          tag: {
+            value: '1.0',
+          },
+        },
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    });
+
+    const currentStoreContainer = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      image: {
+        tag: {
+          value: '1.0',
+        },
+      },
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+    storeContainer.getContainersRaw.mockReturnValue([currentStoreContainer] as any);
+    const triggerBatchSpy = vi
+      .spyOn(trigger, 'triggerBatch')
+      .mockImplementation(async (containers) => {
+        containers[0].name = 'mutated';
+        containers[0].image.tag.value = 'mutated';
+      });
+
+    await trigger.flushDigestBuffer();
+
+    expect(currentStoreContainer.name).toBe('app');
+    expect(currentStoreContainer.image.tag.value).toBe('1.0');
+    triggerBatchSpy.mockRestore();
+  });
+
   test('flushDigestBuffer should use fallback fullName keys when digest containers lack notification keys', async () => {
     await trigger.register('trigger', 'test', 'digest-trigger', {
       ...configurationValid,
@@ -5519,7 +5669,8 @@ describe('digest mode', () => {
     const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
     await trigger.flushDigestBuffer();
 
-    expect(triggerBatchSpy).toHaveBeenCalledWith([currentContainer]);
+    expect(triggerBatchSpy).toHaveBeenCalledWith([expect.objectContaining(currentContainer)]);
+    expect(triggerBatchSpy.mock.calls[0]?.[0][0]).not.toBe(currentContainer);
     expect(trigger.digestBuffer.size).toBe(0);
     triggerBatchSpy.mockRestore();
   });
@@ -5711,8 +5862,8 @@ describe('digest mode', () => {
       containers: new Map([['test_web', { name: 'web', watcher: 'test' }]]),
     };
 
-    (trigger as any).eventBatchDispatches.set('update-applied', scheduledDispatch);
-    (trigger as any).eventBatchDispatches.set('update-failed', unscheduledDispatch);
+    (trigger as any).eventBatchDispatcher.dispatches.set('update-applied', scheduledDispatch);
+    (trigger as any).eventBatchDispatcher.dispatches.set('update-failed', unscheduledDispatch);
 
     (trigger as any).clearEventBatchDispatches();
 
@@ -5721,7 +5872,7 @@ describe('digest mode', () => {
     expect(scheduledDispatch.timer).toBeUndefined();
     expect(unscheduledDispatch.containers.size).toBe(0);
     expect(unscheduledDispatch.timer).toBeUndefined();
-    expect((trigger as any).eventBatchDispatches.size).toBe(0);
+    expect((trigger as any).eventBatchDispatcher.dispatches.size).toBe(0);
   });
 
   test('handleContainerUpdateAppliedEvent should evict container from digest buffer', async () => {
@@ -5874,23 +6025,11 @@ describe('digest mode', () => {
   });
 
   test('flushDigestBuffer should use the accepted update batch path for action triggers', async () => {
-    const actionTrigger = Object.create(Trigger.prototype) as any;
+    const actionTrigger = new Trigger() as any;
     actionTrigger.configuration = { ...configurationValid, mode: 'digest' };
     actionTrigger.type = 'docker';
     actionTrigger.log = trigger.log;
-    actionTrigger.digestBuffer = new Map();
-    actionTrigger.digestBufferUpdatedAt = new Map();
-    actionTrigger.batchRetryBuffer = new Map();
-    actionTrigger.batchRetryBufferUpdatedAt = new Map();
-    actionTrigger.isDigestFlushInProgress = false;
     actionTrigger.pruneDigestBuffer = vi.fn();
-    actionTrigger.deleteBufferedContainerEntry = vi.fn(
-      (buffer: Map<string, unknown>, updatedAt: Map<string, unknown>, key: string) => {
-        buffer.delete(key);
-        updatedAt.delete(key);
-        return true;
-      },
-    );
     actionTrigger.incrementTriggerCounter = vi.fn();
     actionTrigger.isUpdateActionTrigger = () => true;
     const runAcceptedUpdateBatch = vi.fn().mockResolvedValue(undefined);
@@ -5905,7 +6044,7 @@ describe('digest mode', () => {
       updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
     };
     actionTrigger.digestBuffer.set('c1', container as any);
-    actionTrigger.digestBufferUpdatedAt = new Map([['c1', 1_000]]);
+    actionTrigger.digestBufferUpdatedAt.set('c1', 1_000);
     storeContainer.getContainersRaw.mockReturnValue([container]);
 
     expect(actionTrigger.isUpdateActionTrigger()).toBe(true);

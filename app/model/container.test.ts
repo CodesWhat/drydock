@@ -521,6 +521,7 @@ test('model should be validated when compliant', async () => {
       tag: '2.0.0',
     },
     watcher: 'test',
+    identityKey: '::test::test',
   });
 });
 
@@ -1606,6 +1607,7 @@ test('flatten should be flatten the nested properties with underscores when call
     update_kind_remote_value: '2.0.0',
     update_kind_semver_diff: 'major',
     watcher: 'test',
+    identity_key: '::test::test',
   });
 });
 
@@ -2603,4 +2605,119 @@ test('model should reject invalid updateSbom schema payloads', async () => {
       }),
     );
   }).toThrow('security.updateSbom.formats');
+});
+
+test('identityKey: derives from agent::watcher::name when no compose labels present', () => {
+  const validated = container.validate(createValidContainer({ agent: 'local' }));
+  expect(validated.identityKey).toBe('local::test::test');
+});
+
+test('identityKey: omits agent prefix when agent is absent', () => {
+  const validated = container.validate(createValidContainer());
+  expect(validated.identityKey).toBe('::test::test');
+});
+
+test('identityKey: prefers compose project + service when labels are present (#289)', () => {
+  const validated = container.validate(
+    createValidContainer({
+      agent: 'local',
+      labels: {
+        'com.docker.compose.project': 'media',
+        'com.docker.compose.service': 'pi-hole',
+      },
+    }),
+  );
+  expect(validated.identityKey).toBe('local::test::compose:media/pi-hole');
+});
+
+test('identityKey: same-name siblings from different compose projects get distinct keys (#289)', () => {
+  const mediaPihole = container.validate(
+    createValidContainer({
+      id: 'pihole-media',
+      name: 'pi-hole',
+      agent: 'local',
+      labels: {
+        'com.docker.compose.project': 'media',
+        'com.docker.compose.service': 'pi-hole',
+      },
+    }),
+  );
+  const servicesPihole = container.validate(
+    createValidContainer({
+      id: 'pihole-services',
+      name: 'pi-hole',
+      agent: 'local',
+      labels: {
+        'com.docker.compose.project': 'services',
+        'com.docker.compose.service': 'pi-hole',
+      },
+    }),
+  );
+  expect(mediaPihole.identityKey).not.toBe(servicesPihole.identityKey);
+});
+
+test('identityKey: same-name siblings as distinct services in one project get distinct keys', () => {
+  const a = container.validate(
+    createValidContainer({
+      id: 'a',
+      name: 'pi-hole-1',
+      labels: {
+        'com.docker.compose.project': 'home',
+        'com.docker.compose.service': 'pi-hole-primary',
+      },
+    }),
+  );
+  const b = container.validate(
+    createValidContainer({
+      id: 'b',
+      name: 'pi-hole-2',
+      labels: {
+        'com.docker.compose.project': 'home',
+        'com.docker.compose.service': 'pi-hole-secondary',
+      },
+    }),
+  );
+  expect(a.identityKey).not.toBe(b.identityKey);
+});
+
+test('identityKey: survives container recreate (id changes, compose labels stable)', () => {
+  const labels = {
+    'com.docker.compose.project': 'media',
+    'com.docker.compose.service': 'pi-hole',
+  };
+  const before = container.validate(
+    createValidContainer({ id: 'old-id', name: 'pi-hole', labels }),
+  );
+  const after = container.validate(createValidContainer({ id: 'new-id', name: 'pi-hole', labels }));
+  expect(before.identityKey).toBe(after.identityKey);
+});
+
+test('identityKey: ignores partial compose labels and falls back to name-based key', () => {
+  const onlyProject = container.validate(
+    createValidContainer({ labels: { 'com.docker.compose.project': 'media' } }),
+  );
+  const onlyService = container.validate(
+    createValidContainer({ labels: { 'com.docker.compose.service': 'pi-hole' } }),
+  );
+  expect(onlyProject.identityKey).toBe('::test::test');
+  expect(onlyService.identityKey).toBe('::test::test');
+});
+
+test('identityKey: stored value is replaced by the freshly derived value on validate', () => {
+  const validated = container.validate(
+    createValidContainer({ identityKey: 'stale-leftover-key', agent: 'local' }),
+  );
+  expect(validated.identityKey).toBe('local::test::test');
+});
+
+test('deriveContainerIdentityKey returns undefined when watcher is missing', () => {
+  expect(
+    container.deriveContainerIdentityKey({ name: 'nginx', watcher: '' } as never),
+  ).toBeUndefined();
+});
+
+test('deriveContainerIdentityKey returns undefined when name is missing', () => {
+  expect(
+    container.deriveContainerIdentityKey({ name: '', watcher: 'local' } as never),
+  ).toBeUndefined();
 });

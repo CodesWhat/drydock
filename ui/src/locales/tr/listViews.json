@@ -34,6 +34,38 @@
       "toVersion": "Sürüme",
       "trigger": "Tetikleyici",
       "details": "Ayrıntılar"
+    },
+    "actions": {
+      "container-update": "Kapsayıcı Güncellemesi",
+      "container-added": "Kapsayıcı Eklendi",
+      "container-removed": "Kapsayıcı Kaldırıldı",
+      "container-start": "Kapsayıcı Başlatma",
+      "container-stop": "Kapsayıcı Durdurma",
+      "container-restart": "Kapsayıcı Yeniden Başlatma",
+      "auth-login": "Kimlik doğrulama girişi",
+      "authenticated": "Kimliği doğrulandı",
+      "authfail": "Kimlik doğrulama başarısız",
+      "hook-configured": "Hook yapılandırıldı",
+      "hook-pre-success": "Ön hook başarılı",
+      "hook-post-success": "Son hook başarılı",
+      "hook-pre-failed": "Ön hook başarısız",
+      "hook-post-failed": "Son hook başarısız",
+      "connected": "Bağlandı",
+      "closed": "Kapatıldı",
+      "update-available": "Güncelleme Mevcut",
+      "update-applied": "Güncelleme Uygulandı",
+      "update-failed": "Güncelleme Başarısız",
+      "auto-update-blocked": "Otomatik Güncelleme Engellendi",
+      "auto-rollback": "Otomatik Geri Alma",
+      "rollback": "Geri Al",
+      "preview": "Önizleme",
+      "agent-disconnect": "Ajan Bağlantı Kesimi",
+      "notification-delivery-failed": "Bildirim Teslimi Başarısız",
+      "security-alert": "Güvenlik Uyarısı"
+    },
+    "target": {
+      "container": "Kapsayıcı",
+      "agent": "Ajan"
     }
   },
   "notificationsView": {
@@ -134,6 +166,29 @@
     "chooser": {
       "title": "Güncellenecek kapsayıcıyı seçin",
       "cancel": "İptal"
+    },
+    "runtimeTools": {
+      "trivy": "Trivy",
+      "cosign": "Cosign",
+      "sbom": "SBOM",
+      "scannerReady": "Trivy istemcisi hazır",
+      "scannerReadyServer": "Trivy istemcisi hazır (sunucu modu etkin)",
+      "scannerDisabled": "Güvenlik açığı tarayıcısı devre dışı",
+      "scannerMissing": "Trivy komutu \"{command}\" bu çalışma zamanında mevcut değil",
+      "signatureReady": "Cosign imza doğrulaması için hazır",
+      "signatureDisabled": "İmza doğrulama devre dışı",
+      "signatureMissing": "Cosign komutu \"{command}\" bu çalışma zamanında mevcut değil",
+      "scannerTooltip": "Trivy: {message}",
+      "scannerTooltipServer": "Trivy: {message} · sunucu: {server}",
+      "cosignTooltip": "Cosign: {message}",
+      "sbomEnabled": "SBOM oluşturma etkin ({formats})",
+      "sbomDisabled": "SBOM oluşturma devre dışı"
+    },
+    "emptyState": {
+      "noDataTitle": "Henüz güvenlik açığı verisi yok",
+      "scannerNotReady": "Tarayıcı henüz hazır değil.",
+      "runScanHint": "Bilinen güvenlik açıkları için konteynerlerinizi kontrol etmek üzere tarama başlatın",
+      "noMatchTitle": "Hiçbir imaj filtrelerinizle eşleşmiyor"
     }
   },
   "registriesView": {

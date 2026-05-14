@@ -1,5 +1,6 @@
 import { WebClient } from '@slack/web-api';
 import joi from 'joi';
+import { createRejectedAsyncMethod } from '../../../test/notification-provider-mocks.js';
 
 vi.mock('@slack/web-api');
 
@@ -163,4 +164,20 @@ test('triggerBatch should send body only when disabletitle is true', async () =>
   ];
   await slack.triggerBatch(containers);
   expect(slack.sendMessage).toHaveBeenCalledWith(expect.not.stringContaining('updates available'));
+});
+
+test('sendMessage should reject when Slack postMessage fails', async () => {
+  const slackTrigger = new Slack();
+  slackTrigger.configuration = configurationValid;
+  slackTrigger.client = {
+    chat: {
+      postMessage: createRejectedAsyncMethod('Slack API returned 500'),
+    },
+  };
+
+  await expect(slackTrigger.sendMessage('Test message')).rejects.toThrow('Slack API returned 500');
+  expect(slackTrigger.client.chat.postMessage).toHaveBeenCalledWith({
+    channel: 'channel',
+    text: 'Test message',
+  });
 });

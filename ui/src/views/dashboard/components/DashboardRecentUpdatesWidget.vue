@@ -233,12 +233,21 @@ watchEffect(() => {
   const h = containerHeight.value;
   showHeader.value = h >= 200;
 });
+
+function updateKindLabel(kind?: string): string {
+  if (!kind) return t('common.unknown');
+  return t(`dashboardView.updateKind.${kind}`);
+}
+
+function updateKindInitial(kind?: string): string {
+  return updateKindLabel(kind).slice(0, 1);
+}
 </script>
 
 <template>
   <div
     ref="rootEl"
-    aria-label="Updates Available widget"
+    :aria-label="t('dashboardView.recentUpdates.widgetAria')"
     class="dashboard-widget xl:col-span-2 dd-rounded overflow-hidden min-w-0 flex flex-col"
     :style="{ backgroundColor: 'var(--dd-bg-card)' }">
 
@@ -381,20 +390,20 @@ watchEffect(() => {
 
           <template #cell-type="{ row }">
             <AppStatusIndicator
-              v-tooltip.top="row.updateKind ?? 'unknown'"
+              v-tooltip.top="updateKindLabel(row.updateKind)"
               marker="icon"
               :icon="getUpdateKindIcon(row.updateKind)"
               :tone="getUpdateKindTone(row.updateKind)"
-              :label="(row.updateKind ?? 'unknown').slice(0, 1)"
+              :label="updateKindInitial(row.updateKind)"
               size="xs"
               uppercase
               class="sm:!hidden" />
             <AppStatusIndicator
-              v-tooltip.top="row.updateKind ?? 'unknown'"
+              v-tooltip.top="updateKindLabel(row.updateKind)"
               marker="icon"
               :icon="getUpdateKindIcon(row.updateKind)"
               :tone="getUpdateKindTone(row.updateKind)"
-              :label="row.updateKind ?? 'unknown'"
+              :label="updateKindLabel(row.updateKind)"
               size="sm"
               class="max-sm:!hidden" />
           </template>

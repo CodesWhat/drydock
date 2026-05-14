@@ -3,6 +3,8 @@ import {
   findDockerTriggerForContainer,
   NO_DOCKER_TRIGGER_FOUND_ERROR,
 } from '../api/docker-trigger.js';
+import logger from '../log/index.js';
+import { sanitizeLogParam } from '../log/sanitize.js';
 import type { Container } from '../model/container.js';
 import {
   computeUpdateEligibility,
@@ -73,6 +75,7 @@ interface EnqueueContainerUpdateOptions {
 export interface RequestContainerUpdateOptions extends EnqueueContainerUpdateOptions {}
 
 const DEFAULT_UPDATE_TRIGGER_TYPES: UpdateTriggerType[] = ['docker', 'dockercompose'];
+const log = logger.child({ component: 'updates.request-update' });
 
 export class UpdateRequestError extends Error {
   statusCode: number;
@@ -171,6 +174,19 @@ function markAcceptedQueuedOperationFailed(operationId: string, error: unknown) 
     phase: 'failed',
     lastError: getErrorMessage(error),
   });
+}
+
+function formatAcceptedDispatchContext(accepted: AcceptedContainerUpdateRequest[]): string {
+  if (accepted.length === 1) {
+    const entry = accepted[0];
+    return `${sanitizeLogParam(entry.container.name || entry.container.id || '<unknown>')} (operation ${sanitizeLogParam(entry.operationId)})`;
+  }
+
+  const operationIds = accepted
+    .map((entry) => sanitizeLogParam(entry.operationId, 80))
+    .filter((operationId) => operationId !== '')
+    .join(', ');
+  return `${accepted.length} accepted updates${operationIds ? ` (operations ${operationIds})` : ''}`;
 }
 
 function prepareContainerUpdateRequest(
@@ -351,16 +367,19 @@ export async function runAcceptedContainerUpdates(
 
 /**
  * Dispatch already-accepted update requests in the background. Per-operation
- * failures are terminalised inside the lifecycle handler (see Docker.ts), so
- * the rejection from runAcceptedContainerUpdates carries no information that
- * isn't already persisted on the operation row — swallow it to avoid
- * unhandled rejections.
+ * failures are terminalised inside the lifecycle handler (see Docker.ts). Log
+ * the background rejection for operators, then swallow it to avoid unhandled
+ * rejections.
  */
 export function dispatchAccepted(
   accepted: AcceptedContainerUpdateRequest[],
   options: AcceptedUpdateDispatchOptions = {},
 ): void {
-  void runAcceptedContainerUpdates(accepted, options).catch(() => undefined);
+  void runAcceptedContainerUpdates(accepted, options).catch((error: unknown) => {
+    log.warn(
+      `Accepted update dispatch failed for ${formatAcceptedDispatchContext(accepted)}: ${sanitizeLogParam(getErrorMessage(error), 500)}`,
+    );
+  });
 }
 
 export async function requestContainerUpdate(

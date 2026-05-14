@@ -19,7 +19,9 @@ const shouldShow = computed(() => !!props.tag && isLatestOrUntagged.value);
 
 const tooltip = computed(() => {
   const hint = t('containerComponents.suggestedTag.tooltip');
-  return props.tag ? `Suggested: ${props.tag}\n${hint}` : hint;
+  return props.tag
+    ? t('containerComponents.suggestedTag.tooltipWithTag', { tag: props.tag, hint })
+    : hint;
 });
 
 const colors = suggestedTagColor();

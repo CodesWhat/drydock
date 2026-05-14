@@ -972,6 +972,34 @@ export function getOperationsByContainerName(containerName: string): UpdateOpera
     .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
 }
 
+/**
+ * Return all operations for a container ID (matches both containerId and newContainerId),
+ * deduped by operation id, sorted by timestamp descending.
+ */
+export function getOperationsByContainerId(containerId: string): UpdateOperation[] {
+  if (!updateOperationCollection || !containerId) {
+    return [];
+  }
+
+  const operationsById = new Map<string, UpdateOperation>();
+
+  for (const document of updateOperationCollection.find({
+    'data.containerId': containerId,
+  })) {
+    operationsById.set(document.data.id, document.data);
+  }
+
+  for (const document of updateOperationCollection.find({
+    'data.newContainerId': containerId,
+  })) {
+    operationsById.set(document.data.id, document.data);
+  }
+
+  return [...operationsById.values()].sort(
+    (a, b) => getOperationTimestamp(b) - getOperationTimestamp(a),
+  );
+}
+
 export function cancelQueuedOperation(id: string): UpdateOperation | undefined {
   if (!updateOperationCollection) {
     return undefined;

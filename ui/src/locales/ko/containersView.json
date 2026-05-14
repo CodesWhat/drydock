@@ -1,0 +1,43 @@
+{
+  "containersView": {
+    "error": {
+      "loadFailed": "Failed to load containers",
+      "recheckFailed": "Failed to recheck containers"
+    },
+    "toast": {
+      "updated": "Updated: {name}",
+      "updateFailed": "Update failed: {name}",
+      "updateFailedWithReason": "Update failed: {name} — {reason}",
+      "cancelled": "Cancelled: {name}",
+      "rolledBack": "Rolled back: {name}",
+      "rolledBackWithReason": "Rolled back: {name} — {reason}",
+      "updateAlreadyInProgress": "Update already in progress for some containers in this group",
+      "batchUpdatedNoGroup": "Updated {count} containers",
+      "batchPartialNoGroup": "Updated {succeeded} of {total} containers; {failed} failed",
+      "batchFailedNoGroup": "Failed to update {count} containers",
+      "unknownGroup": "unknown group"
+    },
+    "registryError": {
+      "generic": "Registry error",
+      "detail": "Registry error: {error}"
+    },
+    "columns": {
+      "container": "컨테이너",
+      "version": "버전",
+      "update": "업데이트",
+      "status": "상태",
+      "host": "호스트",
+      "registry": "레지스트리"
+    },
+    "status": {
+      "running": "실행 중",
+      "stopped": "중지됨",
+      "paused": "일시 정지",
+      "exited": "종료됨",
+      "dead": "비정상 종료",
+      "created": "생성됨",
+      "restarting": "재시작 중",
+      "removing": "삭제 중"
+    }
+  }
+}

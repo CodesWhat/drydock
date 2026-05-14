@@ -17,14 +17,20 @@ files:
     translation: /ui/src/locales/%locale%/**/%original_file_name%
     languages_mapping:
       locale:
+        ar: ar
         de: de
         es-ES: es
         fr: fr
         it: it
+        ja: ja
+        ko: ko
         nl: nl
         pl: pl
         pt-BR: pt-BR
+        ru: ru
         tr: tr
+        uk: uk
+        vi: vi
         zh-CN: zh-CN
         zh-TW: zh-TW
     update_option: update_as_unapproved

@@ -23,11 +23,16 @@ import { mapApiContainers } from '../utils/container-mapper';
 import { errorMessage } from '../utils/error';
 import { ROUTES } from '../router/routes';
 import { getPrimaryHardBlocker } from '../utils/update-eligibility';
-import type { SecurityRuntimeStatus } from './security/securityViewTypes';
+import SecurityContainerChooser from './security/SecurityContainerChooser.vue';
+import SecurityDetailPanel from './security/SecurityDetailPanel.vue';
+import type {
+  ContainerChoice,
+  SbomState,
+  SecurityRuntimeStatus,
+} from './security/securityViewTypes';
 import {
   fixableColor,
   fixablePercent,
-  formatTimestamp,
   highestSeverity,
   severityColor,
   severityIcon,
@@ -47,19 +52,6 @@ const updateDialogUpdateKind = ref<'major' | 'minor' | 'patch' | 'digest' | null
 const updateDialogUpdateEligibility = ref<UpdateEligibility | undefined>(undefined);
 
 const chooserSummary = ref<ImageSummary | null>(null);
-const chooserAnchorStyle = ref<Record<string, string>>({});
-
-interface ContainerChoice {
-  id: string;
-  name: string;
-  host?: string;
-  currentTag?: string;
-  newTag?: string;
-  updateKind?: 'major' | 'minor' | 'patch' | 'digest' | null;
-  updateEligibility?: UpdateEligibility;
-  blocked: boolean;
-  blockerMessage?: string;
-}
 
 const { isMobile, windowNarrow: isCompact } = useBreakpoints();
 const { scanning, scanProgress, scanAllContainers: runScanAll } = useScanProgress();
@@ -70,6 +62,21 @@ function runtimeToolTone(status: SecurityRuntimeStatus['scanner']['status']) {
   if (status === 'ready') return 'success';
   if (status === 'missing') return 'danger';
   return 'neutral';
+}
+
+function scannerStatusLabel(scanner: SecurityRuntimeStatus['scanner']): string {
+  if (scanner.status === 'disabled') return t('securityView.runtimeTools.scannerDisabled');
+  if (scanner.status === 'missing')
+    return t('securityView.runtimeTools.scannerMissing', { command: scanner.command });
+  if (scanner.server) return t('securityView.runtimeTools.scannerReadyServer');
+  return t('securityView.runtimeTools.scannerReady');
+}
+
+function signatureStatusLabel(signature: SecurityRuntimeStatus['signature']): string {
+  if (signature.status === 'disabled') return t('securityView.runtimeTools.signatureDisabled');
+  if (signature.status === 'missing')
+    return t('securityView.runtimeTools.signatureMissing', { command: signature.command });
+  return t('securityView.runtimeTools.signatureReady');
 }
 
 function severityTone(severity: string) {
@@ -119,7 +126,7 @@ const scanDisabledReason = computed(() => {
     return t('securityView.scanAllContainers');
   }
   if (!scannerReady.value) {
-    return runtimeStatus.value.scanner.message;
+    return scannerStatusLabel(runtimeStatus.value.scanner);
   }
   return t('securityView.scanAllContainers');
 });
@@ -204,6 +211,17 @@ const {
   containerIdsByImage,
 });
 
+const sbomState = computed<SbomState>(() => ({
+  componentCount: detailSbomComponentCount.value,
+  document: detailSbomDocument.value,
+  documentJson: detailSbomDocumentJson.value,
+  error: detailSbomError.value,
+  generatedAt: detailSbomGeneratedAt.value,
+  loading: detailSbomLoading.value,
+  selectedFormat: selectedSbomFormat.value,
+  showDocument: showSbomDocument.value,
+}));
+
 const selectedImageVulns = computed(() => {
   if (!selectedImage.value) return [];
   return vulnerabilitiesByImage.value[selectedImage.value.image] || [];
@@ -259,7 +277,9 @@ function getSummaryUpdateTooltip(summary: ImageSummary | null | undefined): stri
     }
     return t('containerComponents.groupHeader.allBlockedTooltip');
   }
-  return ids.length > 1 ? `Update one of ${ids.length} containers` : 'Update this container';
+  return ids.length > 1
+    ? t('securityView.updateOneOfButton', { count: ids.length })
+    : t('securityView.updateThisContainerButton');
 }
 
 function resolveContainerChoices(summary: ImageSummary): ContainerChoice[] {
@@ -322,6 +342,14 @@ function openUpdateFromChooser(choice: ContainerChoice) {
 
 function closeChooser() {
   chooserSummary.value = null;
+}
+
+function viewAllChooserContainers() {
+  if (!chooserSummary.value) {
+    return;
+  }
+  navigateToContainerUpdate(chooserSummary.value);
+  closeChooser();
 }
 
 const chooserChoices = computed<ContainerChoice[]>(() => {
@@ -515,36 +543,36 @@ onUnmounted(() => {
                 label="T"
                 size="xs"
                 uppercase
-                v-tooltip.top="`Trivy: ${runtimeStatus.scanner.message}`" />
+                v-tooltip.top="runtimeStatus.scanner.server ? t('securityView.runtimeTools.scannerTooltipServer', { message: scannerStatusLabel(runtimeStatus.scanner), server: runtimeStatus.scanner.server }) : t('securityView.runtimeTools.scannerTooltip', { message: scannerStatusLabel(runtimeStatus.scanner) })" />
               <AppStatusIndicator
                 :tone="runtimeToolTone(runtimeStatus.signature.status)"
                 label="C"
                 size="xs"
                 uppercase
-                v-tooltip.top="`Cosign: ${runtimeStatus.signature.message}`" />
+                v-tooltip.top="t('securityView.runtimeTools.cosignTooltip', { message: signatureStatusLabel(runtimeStatus.signature) })" />
               <AppStatusIndicator
                 :tone="runtimeStatus.sbom.enabled ? 'info' : 'neutral'"
                 label="S"
                 size="xs"
                 uppercase
-                v-tooltip.top="runtimeStatus.sbom.enabled ? 'SBOM generation enabled (' + runtimeStatus.sbom.formats.join(', ') + ')' : 'SBOM generation disabled'" />
+                v-tooltip.top="runtimeStatus.sbom.enabled ? t('securityView.runtimeTools.sbomEnabled', { formats: runtimeStatus.sbom.formats.join(', ') }) : t('securityView.runtimeTools.sbomDisabled')" />
             </div>
             <template v-else>
               <AppStatusIndicator
                 :tone="runtimeToolTone(runtimeStatus.scanner.status)"
-                label="trivy"
+                :label="t('securityView.runtimeTools.trivy')"
                 size="xs"
-                v-tooltip.top="runtimeStatus.scanner.message + (runtimeStatus.scanner.server ? ' · server: ' + runtimeStatus.scanner.server : '')" />
+                v-tooltip.top="runtimeStatus.scanner.server ? t('securityView.runtimeTools.scannerTooltipServer', { message: scannerStatusLabel(runtimeStatus.scanner), server: runtimeStatus.scanner.server }) : t('securityView.runtimeTools.scannerTooltip', { message: scannerStatusLabel(runtimeStatus.scanner) })" />
               <AppStatusIndicator
                 :tone="runtimeToolTone(runtimeStatus.signature.status)"
-                label="cosign"
+                :label="t('securityView.runtimeTools.cosign')"
                 size="xs"
-                v-tooltip.top="runtimeStatus.signature.message" />
+                v-tooltip.top="t('securityView.runtimeTools.cosignTooltip', { message: signatureStatusLabel(runtimeStatus.signature) })" />
               <AppStatusIndicator
                 :tone="runtimeStatus.sbom.enabled ? 'info' : 'neutral'"
-                label="sbom"
+                :label="t('securityView.runtimeTools.sbom')"
                 size="xs"
-                v-tooltip.top="runtimeStatus.sbom.enabled ? 'SBOM generation enabled (' + runtimeStatus.sbom.formats.join(', ') + ')' : 'SBOM generation disabled'" />
+                v-tooltip.top="runtimeStatus.sbom.enabled ? t('securityView.runtimeTools.sbomEnabled', { formats: runtimeStatus.sbom.formats.join(', ') }) : t('securityView.runtimeTools.sbomDisabled')" />
             </template>
           </template>
         </template>
@@ -597,17 +625,17 @@ onUnmounted(() => {
             <span class="font-medium dd-text truncate">{{ row.image }}</span>
             <AppBadge v-if="row.delta && row.delta.fixed > 0 && row.delta.new === 0"
                   tone="success" size="xs" class="px-1.5 py-0 shrink-0"
-                  v-tooltip.top="`Update fixes ${row.delta.fixed} vulnerability${row.delta.fixed !== 1 ? 'ies' : 'y'}`">
+                  v-tooltip.top="row.delta.fixed === 1 ? t('securityView.deltaTooltips.fixedSingle', { count: row.delta.fixed }) : t('securityView.deltaTooltips.fixedMultiple', { count: row.delta.fixed })">
               <AppIcon name="trending-down" :size="9" class="mr-0.5" />{{ row.delta.fixed }} fixed
             </AppBadge>
             <AppBadge v-else-if="row.delta && row.delta.new > 0 && row.delta.fixed === 0"
                   tone="warning" size="xs" class="px-1.5 py-0 shrink-0"
-                  v-tooltip.top="`Update introduces ${row.delta.new} new vulnerability${row.delta.new !== 1 ? 'ies' : 'y'}`">
+                  v-tooltip.top="row.delta.new === 1 ? t('securityView.deltaTooltips.newSingle', { count: row.delta.new }) : t('securityView.deltaTooltips.newMultiple', { count: row.delta.new })">
               <AppIcon name="trending-up" :size="9" class="mr-0.5" />{{ row.delta.new }} new
             </AppBadge>
             <AppBadge v-else-if="row.delta && (row.delta.fixed > 0 || row.delta.new > 0)"
                   tone="caution" size="xs" class="px-1.5 py-0 shrink-0"
-                  v-tooltip.top="`Update: ${row.delta.fixed} fixed, ${row.delta.new} new`">
+                  v-tooltip.top="t('securityView.deltaTooltips.both', { fixed: row.delta.fixed, new: row.delta.new })">
               {{ row.delta.fixed }} fixed, {{ row.delta.new }} new
             </AppBadge>
             <template v-if="row.hasUpdate">
@@ -673,7 +701,7 @@ onUnmounted(() => {
           <SecurityEmptyState
             :has-vulnerability-data="securityVulnerabilities.length > 0"
             :scanner-setup-needed="scannerSetupNeeded"
-            :scanner-message="runtimeStatus?.scanner.message"
+            :scanner-message="runtimeStatus ? scannerStatusLabel(runtimeStatus.scanner) : undefined"
             :active-filter-count="activeSecFilterCount"
             :scan-disabled-reason="scanDisabledReason"
             :scanning="scanning"
@@ -843,184 +871,24 @@ onUnmounted(() => {
         @scan-now="scanAllContainers"
       />
 
-    <!-- Detail panel — full vulnerability report for selected image -->
     <template #panel>
-      <DetailPanel
+      <SecurityDetailPanel
+        v-model:selected-sbom-format="selectedSbomFormat"
+        v-model:selected-vuln-export-format="selectedVulnExportFormat"
+        v-model:show-sbom-document="showSbomDocument"
         :open="detailOpen"
         :is-mobile="isMobile"
-        :show-size-controls="false"
-        :show-full-page="false"
-        @update:open="handleDetailOpenChange"
-      >
-        <template #header>
-          <div class="flex items-center gap-2.5 min-w-0">
-            <AppIcon name="security" :size="14" class="shrink-0 dd-text-secondary" />
-            <span class="text-sm font-bold truncate dd-text">{{ selectedImage?.image }}</span>
-          </div>
-        </template>
-
-        <template #subtitle>
-          <div class="flex items-center gap-2 flex-wrap">
-            <AppBadge v-if="selectedImage?.critical" tone="danger" size="xs">
-              {{ selectedImage.critical }} {{ t('securityView.badge.critical') }}
-            </AppBadge>
-            <AppBadge v-if="selectedImage?.high" tone="warning" size="xs">
-              {{ selectedImage.high }} {{ t('securityView.badge.high') }}
-            </AppBadge>
-            <AppBadge v-if="selectedImage?.medium" tone="caution" size="xs">
-              {{ selectedImage.medium }} {{ t('securityView.badge.medium') }}
-            </AppBadge>
-            <AppBadge v-if="selectedImage?.low" tone="info" size="xs">
-              {{ selectedImage.low }} {{ t('securityView.badge.low') }}
-            </AppBadge>
-            <span class="text-2xs dd-text-muted ml-auto">{{ selectedImage?.total }} {{ t('securityView.card.total') }}</span>
-          </div>
-          <div v-if="selectedImage?.hasUpdate" class="mt-2 flex items-center gap-2 flex-wrap">
-            <AppButton
-              size="xs"
-              variant="secondary"
-              class="inline-flex items-center gap-1.5"
-              :disabled="isSummaryUpdateBlocked(selectedImage)"
-              data-test="security-detail-update-btn"
-              @click="openUpdateAction(selectedImage)">
-              <AppIcon :name="isSummaryUpdateBlocked(selectedImage) ? 'lock' : 'cloud-download'" :size="10" />
-              {{ t('securityView.update') }}
-            </AppButton>
-            <AppButton
-              size="xs"
-              variant="text-secondary"
-              weight="medium"
-              class="inline-flex items-center underline hover:no-underline"
-              data-test="security-detail-containers-link"
-              @click="navigateToContainerUpdate(selectedImage)">
-              {{ t('securityView.viewInContainers') }}
-            </AppButton>
-            <ReleaseNotesLink
-              v-if="selectedImage.releaseNotes || selectedImage.currentReleaseNotes || selectedImage.releaseLink"
-              :release-notes="selectedImage.releaseNotes"
-              :current-release-notes="selectedImage.currentReleaseNotes"
-              :release-link="selectedImage.releaseLink"
-              data-test="security-detail-release-notes" />
-          </div>
-        </template>
-
-        <template v-if="selectedImage" #default>
-          <!-- Export controls -->
-          <div class="px-4 py-3 space-y-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="text-2xs font-semibold uppercase tracking-wide dd-text-muted">{{ t('securityView.export.label') }}</span>
-              <select v-model="selectedVulnExportFormat"
-                      class="px-2 py-1 dd-rounded text-2xs font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
-                <option value="csv">CSV</option>
-                <option value="json">JSON</option>
-              </select>
-              <AppButton size="xs" variant="secondary" :disabled="selectedImageVulns.length === 0"
-                      @click="downloadVulnReport">
-                {{ t('securityView.export.downloadReport') }}
-              </AppButton>
-            </div>
-            <div class="flex items-center gap-2 flex-wrap">
-              <span class="text-2xs font-semibold uppercase tracking-wide dd-text-muted">{{ t('securityView.sbom.label') }}</span>
-              <select v-model="selectedSbomFormat"
-                      class="px-2 py-1 dd-rounded text-2xs font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
-                      @change="loadDetailSbom">
-                <option value="spdx-json">spdx-json</option>
-                <option value="cyclonedx-json">cyclonedx-json</option>
-              </select>
-              <AppButton size="xs" variant="secondary" :disabled="detailSbomLoading"
-                      @click="loadDetailSbom">
-                {{ detailSbomLoading ? t('securityView.sbom.loadingButton') : t('securityView.sbom.refresh') }}
-              </AppButton>
-              <AppButton size="xs" variant="secondary" :disabled="!detailSbomDocument"
-                      @click="showSbomDocument = !showSbomDocument">
-                {{ showSbomDocument ? t('securityView.sbom.hide') : t('securityView.sbom.view') }}
-              </AppButton>
-              <AppButton size="xs" variant="secondary" :disabled="!detailSbomDocument"
-                      @click="downloadDetailSbom">
-                {{ t('securityView.sbom.download') }}
-              </AppButton>
-            </div>
-
-            <div v-if="detailSbomError"
-                 class="px-2.5 py-1.5 dd-rounded text-2xs-plus"
-                 :style="{ backgroundColor: 'var(--dd-danger-muted)', color: 'var(--dd-danger)' }">
-              {{ detailSbomError }}
-            </div>
-            <div v-else-if="detailSbomLoading"
-                 class="px-2.5 py-1.5 dd-rounded text-2xs-plus dd-text-muted"
-                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-              {{ t('securityView.sbom.loading') }}
-            </div>
-            <div v-else-if="detailSbomDocument"
-                 class="px-2.5 py-1.5 dd-rounded text-2xs space-y-0.5"
-                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
-              <div class="dd-text-muted">
-                {{ t('securityView.sbom.format') }}
-                <span class="dd-text font-mono">{{ selectedSbomFormat }}</span>
-              </div>
-              <div v-if="typeof detailSbomComponentCount === 'number'" class="dd-text-muted">
-                {{ t('securityView.sbom.components') }}
-                <span class="dd-text">{{ detailSbomComponentCount }}</span>
-              </div>
-              <div v-if="detailSbomGeneratedAt" class="dd-text-muted">
-                {{ t('securityView.sbom.generated') }}
-                <span class="dd-text">{{ formatTimestamp(detailSbomGeneratedAt) }}</span>
-              </div>
-            </div>
-
-            <pre v-if="showSbomDocument && detailSbomDocumentJson"
-                 class="p-2 dd-rounded text-2xs overflow-auto max-h-64 font-mono"
-                 :style="{ backgroundColor: 'var(--dd-bg-code)' }">{{ detailSbomDocumentJson }}</pre>
-          </div>
-
-          <!-- Vulnerability list -->
-          <div class="divide-y" :style="{ borderColor: 'var(--dd-border)' }">
-            <div v-for="vuln in selectedImageVulnsWithSafeUrl" :key="vuln.id + vuln.package"
-                 class="px-4 py-3 hover:dd-bg-hover transition-colors">
-              <div class="flex items-start gap-2 mb-1.5">
-                <AppIcon :name="severityIcon(vuln.severity)" :size="12"
-                         class="mt-0.5 shrink-0"
-                         :style="{ color: severityColor(vuln.severity).text }" />
-                <AppBadge :custom="{ bg: severityColor(vuln.severity).bg, text: severityColor(vuln.severity).text }" size="xs" class="mt-0.5 shrink-0 px-1.5 py-0">
-                  {{ vuln.severity }}
-                </AppBadge>
-                <span class="min-w-0 font-mono text-2xs-plus font-semibold dd-text truncate">{{ vuln.id }}</span>
-              </div>
-              <div class="flex items-start gap-2 text-2xs-plus ml-5 min-w-0">
-                <span class="font-medium dd-text">{{ vuln.package }}</span>
-                <span class="dd-text-muted">{{ vuln.version }}</span>
-                <AppBadge v-if="vuln.fixedIn" tone="success" size="xs" class="ml-auto mt-0.5 shrink-0 px-1.5 py-0">
-                  <AppIcon name="check" :size="9" class="mr-0.5 shrink-0" />
-                  {{ vuln.fixedIn }}
-                </AppBadge>
-                <span v-else class="ml-auto mt-0.5 shrink-0 text-2xs dd-text-muted">{{ t('securityView.vuln.noFix') }}</span>
-              </div>
-              <div
-                v-if="vuln.title || vuln.target || vuln.safePrimaryUrl"
-                class="ml-5 mt-1.5 space-y-1"
-              >
-                <div v-if="vuln.title" class="text-2xs dd-text">
-                  {{ vuln.title }}
-                </div>
-                <div v-if="vuln.target" class="text-2xs dd-text-muted">
-                  {{ t('securityView.vuln.target') }}
-                  <span class="font-mono dd-text">{{ vuln.target }}</span>
-                </div>
-                <a
-                  v-if="vuln.safePrimaryUrl"
-                  :href="vuln.safePrimaryUrl"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="inline-flex text-2xs underline hover:no-underline break-all"
-                  style="color: var(--dd-info);"
-                >
-                  {{ vuln.primaryUrl }}
-                </a>
-              </div>
-            </div>
-          </div>
-        </template>
-      </DetailPanel>
+        :selected-image="selectedImage"
+        :selected-image-update-blocked="isSummaryUpdateBlocked(selectedImage)"
+        :selected-image-vulns="selectedImageVulns"
+        :selected-image-vulns-with-safe-url="selectedImageVulnsWithSafeUrl"
+        :sbom-state="sbomState"
+        @download-detail-sbom="downloadDetailSbom"
+        @download-vuln-report="downloadVulnReport"
+        @load-detail-sbom="loadDetailSbom"
+        @navigate-to-container-update="selectedImage && navigateToContainerUpdate(selectedImage)"
+        @open-update="selectedImage && openUpdateAction(selectedImage)"
+        @update:open="handleDetailOpenChange" />
     </template>
   </DataViewLayout>
 
@@ -1032,60 +900,10 @@ onUnmounted(() => {
     :update-kind="updateDialogUpdateKind"
     :update-eligibility="updateDialogUpdateEligibility" />
 
-  <!-- Multi-container chooser -->
-  <Teleport v-if="chooserSummary" to="body">
-    <div
-      class="fixed inset-0 z-overlay"
-      @pointerdown.self="closeChooser"
-      @keydown.escape="closeChooser">
-      <div
-        class="fixed left-1/2 top-1/3 -translate-x-1/2 w-full max-w-xs mx-4 dd-rounded-lg overflow-hidden shadow-lg"
-        :style="{
-          backgroundColor: 'var(--dd-bg-card)',
-          border: '1px solid var(--dd-border-strong)',
-          boxShadow: 'var(--dd-shadow-modal)',
-        }">
-        <div class="px-4 pt-3 pb-2" :style="{ borderBottom: '1px solid var(--dd-border)' }">
-          <span class="text-2xs-plus font-semibold dd-text">{{ t('securityView.chooser.title') }}</span>
-        </div>
-        <div class="py-1 max-h-64 overflow-y-auto">
-          <AppButton
-            v-for="choice in chooserChoices"
-            :key="choice.id"
-            size="md"
-            variant="plain"
-            weight="medium"
-            class="w-full text-left flex items-start gap-2 hover:dd-bg-hover transition-colors"
-            :class="choice.blocked ? 'opacity-60 cursor-not-allowed' : ''"
-            :disabled="choice.blocked"
-            data-test="security-chooser-item"
-            v-tooltip.top="choice.blockerMessage"
-            @click="openUpdateFromChooser(choice)">
-            <div class="min-w-0 flex-1">
-              <div class="text-2xs-plus font-semibold dd-text truncate">{{ choice.name }}</div>
-              <div v-if="choice.host" class="text-3xs dd-text-muted mt-0.5">{{ choice.host }}</div>
-            </div>
-            <AppBadge v-if="choice.blocked" tone="danger" size="xs" class="shrink-0 mt-0.5">
-              {{ t('containerComponents.fullPageDetail.blockedButton') }}
-            </AppBadge>
-            <AppBadge v-else-if="choice.newTag" tone="info" size="xs" class="shrink-0 mt-0.5">
-              {{ choice.newTag }}
-            </AppBadge>
-          </AppButton>
-        </div>
-        <div class="px-4 py-2.5 flex items-center justify-between" :style="{ borderTop: '1px solid var(--dd-border)' }">
-          <AppButton
-            size="xs"
-            variant="text-secondary"
-            weight="medium"
-            class="underline hover:no-underline"
-            data-test="security-chooser-view-all"
-            @click="navigateToContainerUpdate(chooserSummary!); closeChooser()">
-            {{ t('securityView.viewAllInContainers') }}
-          </AppButton>
-          <AppButton size="xs" variant="secondary" @click="closeChooser">{{ t('securityView.chooser.cancel') }}</AppButton>
-        </div>
-      </div>
-    </div>
-  </Teleport>
+  <SecurityContainerChooser
+    v-if="chooserSummary"
+    :choices="chooserChoices"
+    @close="closeChooser"
+    @open-choice="openUpdateFromChooser"
+    @view-all="viewAllChooserContainers" />
 </template>

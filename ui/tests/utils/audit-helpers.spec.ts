@@ -50,6 +50,23 @@ describe('audit-helpers', () => {
     it('handles multi-segment actions', () => {
       expect(actionLabel('hook-pre-success')).toBe('Hook Pre Success');
     });
+    it('uses i18n translation when key exists', () => {
+      const i18n = {
+        te: (key: string) => key === 'auditView.actions.container-update',
+        t: (key: string) => (key === 'auditView.actions.container-update' ? '容器更新' : key),
+      };
+      expect(actionLabel('container-update', i18n)).toBe('容器更新');
+    });
+    it('falls back to title-case when i18n key is missing', () => {
+      const i18n = {
+        te: (_key: string) => false,
+        t: (key: string) => key,
+      };
+      expect(actionLabel('hook-pre-success', i18n)).toBe('Hook Pre Success');
+    });
+    it('falls back to title-case when i18n param is omitted', () => {
+      expect(actionLabel('container-update')).toBe('Container Update');
+    });
   });
 
   describe('actionIcon', () => {
@@ -87,6 +104,28 @@ describe('audit-helpers', () => {
     });
     it('returns Container for unknown actions', () => {
       expect(targetLabel('something')).toBe('Container');
+    });
+    it('uses i18n translation for agent-disconnect when key exists', () => {
+      const i18n = {
+        te: (key: string) => key === 'auditView.target.agent',
+        t: (key: string) => (key === 'auditView.target.agent' ? '代理' : key),
+      };
+      expect(targetLabel('agent-disconnect', i18n)).toBe('代理');
+    });
+    it('uses i18n translation for container target when key exists', () => {
+      const i18n = {
+        te: (key: string) => key === 'auditView.target.container',
+        t: (key: string) => (key === 'auditView.target.container' ? '容器' : key),
+      };
+      expect(targetLabel('update-available', i18n)).toBe('容器');
+    });
+    it('falls back to hardcoded strings when i18n keys are missing', () => {
+      const i18n = {
+        te: (_key: string) => false,
+        t: (key: string) => key,
+      };
+      expect(targetLabel('agent-disconnect', i18n)).toBe('Agent');
+      expect(targetLabel('update-available', i18n)).toBe('Container');
     });
   });
 

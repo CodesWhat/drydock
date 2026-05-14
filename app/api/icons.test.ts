@@ -1321,6 +1321,40 @@ describe('Icons Router', () => {
     });
   });
 
+  test('should serve bundled fallback image when upstream fetch times out for browser image request', async () => {
+    mockAccess.mockImplementation(async (targetPath: string) => {
+      if (targetPath === '/runtime/assets/icons/selfhst/docker.png') {
+        return;
+      }
+      throw new Error('not found');
+    });
+    mockAxiosGet.mockRejectedValue(new Error('timeout of 10000ms exceeded'));
+    mockAxiosIsAxiosError.mockReturnValue(false);
+    const handler = getHandler();
+    const res = createResponse();
+
+    await handler(
+      {
+        params: {
+          provider: 'selfhst',
+          slug: 'missing',
+        },
+        headers: {
+          'sec-fetch-dest': 'image',
+          accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+        },
+      },
+      res,
+    );
+
+    expect(res.status).not.toHaveBeenCalledWith(502);
+    expect(res.set).toHaveBeenCalledWith('Cache-Control', 'no-store');
+    expect(res.type).toHaveBeenCalledWith('image/png');
+    expect(res.sendFile).toHaveBeenCalledWith('docker.png', {
+      root: '/runtime/assets/icons/selfhst',
+    });
+  });
+
   test('should deduplicate concurrent fetches for the same icon', async () => {
     mockAccess.mockRejectedValue(new Error('not found'));
     let resolveFetch;

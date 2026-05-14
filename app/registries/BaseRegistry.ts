@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import https from 'node:https';
 import axios, { type AxiosRequestConfig } from 'axios';
+import { RE2JS } from 're2js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import type { ContainerImage } from '../model/container.js';
 import * as registryPrometheus from '../prometheus/registry.js';
@@ -8,7 +9,9 @@ import { resolveConfiguredPath } from '../runtime/paths.js';
 import { failClosedAuth, requireAuthString, withAuthorizationHeader } from '../security/auth.js';
 import { getErrorMessage } from '../util/error.js';
 import { REGISTRY_BEARER_TOKEN_CACHE_TTL_MS } from './configuration.js';
+import { withRetry } from './http-retry.js';
 import Registry from './Registry.js';
+import { acquireToken, getBucketForUrl } from './token-bucket.js';
 
 export interface BaseRegistryConfiguration {
   url?: string;
@@ -246,6 +249,11 @@ class BaseRegistry<
     if (!httpsAgent) {
       return requestOptions;
     }
+    if (this.configuration?.insecure === true) {
+      this.log.warn(
+        `Registry ${this.getId()} request is using insecure TLS verification because insecure=true; certificate validation is disabled.`,
+      );
+    }
     return {
       ...requestOptions,
       httpsAgent,
@@ -255,7 +263,7 @@ class BaseRegistry<
   /**
    * Common URL normalization for registries that need https:// prefix and /v2 suffix
    */
-  normalizeImageUrl(image, registryUrl = null) {
+  normalizeImageUrl(image: ContainerImage, registryUrl: string | null = null): ContainerImage {
     const imageNormalized = {
       ...image,
       registry: { ...image.registry },
@@ -396,10 +404,22 @@ class BaseRegistry<
 
     let response: { data?: Record<string, unknown> } | undefined;
     try {
-      response = await axios(request);
-    } catch (e) {
+      await acquireToken(getBucketForUrl(authUrl));
+      const envelope = await withRetry<Record<string, unknown>>(
+        async () => {
+          const r = await axios<Record<string, unknown>>(request);
+          return {
+            status: r.status,
+            headers: r.headers as Record<string, string | undefined>,
+            data: r.data,
+          };
+        },
+        { logger: this.log, requestLabel: `${this.getId()} auth ${authUrl}` },
+      );
+      response = { data: envelope.data };
+    } catch (e: unknown) {
       failClosedAuth(
-        `Unable to authenticate registry ${this.getId()}: token request failed (${e.message})`,
+        `Unable to authenticate registry ${this.getId()}: token request failed (${getErrorMessage(e)})`,
       );
     }
 
@@ -421,13 +441,29 @@ class BaseRegistry<
     }
 
     const allowedStatuses = rejectedCredentialStatuses.join('|');
-    const rejectedStatusPattern = new RegExp(
+    const rejectedStatusPattern = RE2JS.compile(
       `token request failed \\(Request failed with status code (${allowedStatuses})\\)`,
     );
-    const match = error.message.match(rejectedStatusPattern);
-    return match ? match[1] : undefined;
+    const match = rejectedStatusPattern.matcher(error.message);
+    return match.find() ? match.group(1) : undefined;
   }
 
+  /**
+   * Bearer-token auth via the registry's token endpoint.
+   *
+   * - When `credentials` is undefined (the instance is registered as
+   *   anonymous), this is a single unauthenticated token request.
+   * - When `credentials` is supplied (the instance is registered as
+   *   credentialed) and the token endpoint rejects them with one of
+   *   `rejectedCredentialStatuses`, this throws an actionable error instead
+   *   of silently falling back to anonymous. Silent anonymous fallback for
+   *   credentialed instances was the root cause of authenticated users still
+   *   hitting per-IP anonymous rate limits (issue #342).
+   *
+   * The historical `WithPublicFallback` suffix in the name is retained for
+   * caller stability; the semantic it referred to (silent retry without
+   * credentials on rejection) is intentionally removed.
+   */
   protected async authenticateBearerFromAuthUrlWithPublicFallback(
     requestOptions: RegistryRequestOptions,
     authUrl: string,
@@ -455,17 +491,12 @@ class BaseRegistry<
         throw error;
       }
 
+      // Credentials were supplied but rejected — throw a clear, actionable
+      // error instead of silently falling back to anonymous. The anonymous
+      // tier would cause 429s that are harder to diagnose than a clean failure.
       const providerLabel = options.providerLabel || this.getId();
-      this.log.warn(
-        `${providerLabel} credentials were rejected for registry ${this.getId()} (status ${rejectedStatus}); retrying token request without credentials for public image checks`,
-      );
-
-      return this.authenticateBearerFromAuthUrl(
-        requestOptions,
-        authUrl,
-        undefined,
-        options.tokenExtractor,
-        options.tokenFailureMessage,
+      throw new Error(
+        `Authentication failed for registry ${this.getId()} (HTTP ${rejectedStatus}): ${providerLabel} credentials were rejected. Check the configured token/login/password and their scopes.`,
       );
     }
   }
@@ -505,7 +536,7 @@ class BaseRegistry<
   /**
    * Common URL pattern matching
    */
-  matchUrlPattern(image, pattern) {
+  matchUrlPattern(image: Pick<ContainerImage, 'registry'>, pattern: RegExp): boolean {
     return pattern.test(image.registry.url);
   }
 
@@ -549,14 +580,14 @@ class BaseRegistry<
   /**
    * Common mask configuration for sensitive fields
    */
-  maskSensitiveFields(fields) {
-    const masked = { ...this.configuration };
+  maskSensitiveFields(fields: string[]): Partial<TConfiguration> {
+    const masked = { ...this.configuration } as Record<string, unknown>;
     fields.forEach((field) => {
       if (masked[field]) {
-        masked[field] = BaseRegistry.mask(masked[field]);
+        masked[field] = BaseRegistry.mask(String(masked[field]));
       }
     });
-    return masked;
+    return masked as Partial<TConfiguration>;
   }
 }
 

@@ -231,7 +231,7 @@ const activeFilterChips = computed(() => {
             size="toolbar"
             variant="plain"
             class="-my-1 ml-1 dd-text-info hover:opacity-70"
-            aria-label="Clear container ID filter"
+            :aria-label="t('containerComponents.listContent.clearContainerIdFilter')"
             @click="clearContainerIdsFilter" />
         </div>
         <div
@@ -270,7 +270,7 @@ const activeFilterChips = computed(() => {
         @click.stop>
         <div class="px-3 py-1 text-3xs font-bold uppercase tracking-wider dd-text-muted">{{ t('containerComponents.listContent.columnsHeader') }}</div>
         <AppButton
-          v-for="column in allColumns.filter((columnItem) => columnItem.label)"
+          v-for="column in allColumns.filter((columnItem) => columnItem.labelKey)"
           :key="column.key"
           size="md"
           variant="plain"
@@ -282,7 +282,7 @@ const activeFilterChips = computed(() => {
             :name="visibleColumns.has(column.key) ? 'check' : 'square'"
             :size="13"
             :style="visibleColumns.has(column.key) ? { color: 'var(--dd-primary)' } : {}" />
-          {{ column.label }}<em
+          {{ column.labelKey ? t(column.labelKey) : column.label }}<em
             v-if="visibleColumns.has(column.key) && autoHiddenColumns.some((c) => c.key === column.key)"
             class="not-italic dd-text-muted"> {{ t('containerComponents.listContent.narrowViewportSuffix') }}</em>
         </AppButton>

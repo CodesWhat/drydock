@@ -23,7 +23,14 @@ export function statusBg(status: string): string {
   return 'var(--dd-info-muted)';
 }
 
-export function actionLabel(action: string): string {
+export function actionLabel(
+  action: string,
+  i18n?: { t: (key: string) => string; te: (key: string) => boolean },
+): string {
+  if (i18n) {
+    const key = `auditView.actions.${action}`;
+    if (i18n.te(key)) return i18n.t(key);
+  }
   return action
     .split('-')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
@@ -49,7 +56,16 @@ export function actionIcon(action: string): string {
   return 'info';
 }
 
-export function targetLabel(action: string): string {
+export function targetLabel(
+  action: string,
+  i18n?: { t: (key: string) => string; te: (key: string) => boolean },
+): string {
+  if (i18n) {
+    const key = action.includes('agent-disconnect')
+      ? 'auditView.target.agent'
+      : 'auditView.target.container';
+    if (i18n.te(key)) return i18n.t(key);
+  }
   return action.includes('agent-disconnect') ? 'Agent' : 'Container';
 }
 

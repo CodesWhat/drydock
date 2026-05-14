@@ -221,11 +221,20 @@ function isGreaterCandidateTag(
   currentTransformedTag: string,
   allowIncludeFilterRecovery: boolean,
 ): boolean {
-  return (
-    allowIncludeFilterRecovery ||
-    (transformedTag !== currentTransformedTag &&
-      isGreaterSemver(transformedTag, currentTransformedTag))
-  );
+  if (allowIncludeFilterRecovery) {
+    return true;
+  }
+  if (transformedTag === currentTransformedTag) {
+    return false;
+  }
+  if (!isGreaterSemver(transformedTag, currentTransformedTag)) {
+    return false;
+  }
+  // isGreaterSemver implements >= (semver.gte) for backwards compatibility,
+  // so floating aliases like "3.3" and "3.3.0" both pass the >= check in both
+  // directions. Reject candidates that are semver-equal to current — they are
+  // aliases, not higher versions.
+  return !isGreaterSemver(currentTransformedTag, transformedTag);
 }
 
 function trackCrossFamilyGreaterDrop(

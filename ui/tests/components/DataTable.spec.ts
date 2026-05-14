@@ -158,6 +158,33 @@ describe('DataTable', () => {
       expect(cells[0].attributes('colspan')).toBe('3');
       expect(firstRow.text()).toContain('Header: Group A');
     });
+
+    it('provides a stable first-cell host for row overlay badges', () => {
+      const w = mount(DataTable, {
+        props: {
+          columns: [
+            { key: 'icon', label: '', icon: true },
+            { key: 'name', label: 'Name' },
+            { key: 'status', label: 'Status' },
+          ],
+          rowClass: (row: { id: string }) => (row.id === '2' ? 'dd-row-updating' : ''),
+          rowKey: 'id',
+          rows,
+        },
+        slots: {
+          'cell-icon':
+            '<div class="dd-row-overlay absolute inset-0"><span>Pulling...</span></div><span class="icon">icon</span>',
+        },
+        global: { stubs: { AppIcon: { template: '<span />' } } },
+      });
+
+      const updatingRow = w.findAll('tbody tr')[1];
+      const overlayHost = updatingRow.find('td.dd-data-table-row-overlay-host');
+
+      expect(overlayHost.exists()).toBe(true);
+      expect(overlayHost.find('.dd-row-overlay').exists()).toBe(true);
+      expect(w.find('table').attributes('style')).toContain('--dd-data-table-row-overlay-width');
+    });
   });
 
   describe('row key', () => {

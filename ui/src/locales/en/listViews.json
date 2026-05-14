@@ -34,6 +34,38 @@
       "toVersion": "To Version",
       "trigger": "Trigger",
       "details": "Details"
+    },
+    "actions": {
+      "container-update": "Container Update",
+      "container-added": "Container Added",
+      "container-removed": "Container Removed",
+      "container-start": "Container Start",
+      "container-stop": "Container Stop",
+      "container-restart": "Container Restart",
+      "auth-login": "Auth Login",
+      "authenticated": "Authenticated",
+      "authfail": "Authentication Failed",
+      "hook-configured": "Hook Configured",
+      "hook-pre-success": "Hook Pre Success",
+      "hook-post-success": "Hook Post Success",
+      "hook-pre-failed": "Hook Pre Failed",
+      "hook-post-failed": "Hook Post Failed",
+      "connected": "Connected",
+      "closed": "Closed",
+      "update-available": "Update Available",
+      "update-applied": "Update Applied",
+      "update-failed": "Update Failed",
+      "auto-update-blocked": "Auto-Update Blocked",
+      "auto-rollback": "Auto Rollback",
+      "rollback": "Rollback",
+      "preview": "Preview",
+      "agent-disconnect": "Agent Disconnect",
+      "notification-delivery-failed": "Notification Delivery Failed",
+      "security-alert": "Security Alert"
+    },
+    "target": {
+      "container": "Container",
+      "agent": "Agent"
     }
   },
   "notificationsView": {
@@ -108,6 +140,15 @@
       "medium": "Medium",
       "low": "Low"
     },
+    "deltaTooltips": {
+      "fixedSingle": "Update fixes {count} vulnerability",
+      "fixedMultiple": "Update fixes {count} vulnerabilities",
+      "newSingle": "Update introduces {count} new vulnerability",
+      "newMultiple": "Update introduces {count} new vulnerabilities",
+      "both": "Update: {fixed} fixed, {new} new"
+    },
+    "updateOneOfButton": "Update one of {count} containers",
+    "updateThisContainerButton": "Update this container",
     "update": "Update",
     "viewInContainers": "View in Containers",
     "viewAllInContainers": "View all in Containers",
@@ -134,6 +175,29 @@
     "chooser": {
       "title": "Select container to update",
       "cancel": "Cancel"
+    },
+    "runtimeTools": {
+      "trivy": "Trivy",
+      "cosign": "Cosign",
+      "sbom": "SBOM",
+      "scannerReady": "Trivy client is ready",
+      "scannerReadyServer": "Trivy client is ready (server mode enabled)",
+      "scannerDisabled": "Vulnerability scanner is disabled",
+      "scannerMissing": "Trivy command \"{command}\" is not available in this runtime",
+      "signatureReady": "Cosign is ready for signature verification",
+      "signatureDisabled": "Signature verification is disabled",
+      "signatureMissing": "Cosign command \"{command}\" is not available in this runtime",
+      "scannerTooltip": "Trivy: {message}",
+      "scannerTooltipServer": "Trivy: {message} · server: {server}",
+      "cosignTooltip": "Cosign: {message}",
+      "sbomEnabled": "SBOM generation enabled ({formats})",
+      "sbomDisabled": "SBOM generation disabled"
+    },
+    "emptyState": {
+      "noDataTitle": "No vulnerability data yet",
+      "scannerNotReady": "Scanner is not ready yet.",
+      "runScanHint": "Run a scan to check your containers for known vulnerabilities",
+      "noMatchTitle": "No images match your filters"
     }
   },
   "registriesView": {

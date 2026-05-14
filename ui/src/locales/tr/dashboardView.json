@@ -89,6 +89,20 @@
     "updateBreakdown": {
       "title": "Dökümü Güncelle",
       "noUpdates": "Kategorize edilecek güncelleme yok"
+    },
+    "stats": {
+      "containers": "Kapsayıcılar",
+      "containerDetail": "{running} çalışıyor · {stopped} durduruldu",
+      "updatesAvailable": "Mevcut Güncellemeler",
+      "updateDetail": "{fresh} yeni · {mature} mevcut",
+      "securityIssues": "Güvenlik Sorunları",
+      "registries": "Kayıt Defterleri"
+    },
+    "updateKind": {
+      "major": "Ana",
+      "minor": "Alt",
+      "patch": "Yama",
+      "digest": "Özet"
     }
   }
 }

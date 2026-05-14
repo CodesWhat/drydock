@@ -34,6 +34,38 @@
       "toVersion": "Naar versie",
       "trigger": "Trigger",
       "details": "Details"
+    },
+    "actions": {
+      "container-update": "Container bijgewerkt",
+      "container-added": "Container toegevoegd",
+      "container-removed": "Container verwijderd",
+      "container-start": "Container gestart",
+      "container-stop": "Container gestopt",
+      "container-restart": "Container herstart",
+      "auth-login": "Auth-aanmelding",
+      "authenticated": "Geverifieerd",
+      "authfail": "Authenticatie mislukt",
+      "hook-configured": "Hook geconfigureerd",
+      "hook-pre-success": "Pre-hook geslaagd",
+      "hook-post-success": "Post-hook geslaagd",
+      "hook-pre-failed": "Pre-hook mislukt",
+      "hook-post-failed": "Post-hook mislukt",
+      "connected": "Verbonden",
+      "closed": "Gesloten",
+      "update-available": "Update beschikbaar",
+      "update-applied": "Update toegepast",
+      "update-failed": "Update mislukt",
+      "auto-update-blocked": "Automatische update geblokkeerd",
+      "auto-rollback": "Automatisch terugdraaien",
+      "rollback": "Terugdraaien",
+      "preview": "Voorbeeld",
+      "agent-disconnect": "Agent verbroken",
+      "notification-delivery-failed": "Melding mislukt",
+      "security-alert": "Beveiligingswaarschuwing"
+    },
+    "target": {
+      "container": "Container",
+      "agent": "Agent"
     }
   },
   "notificationsView": {
@@ -134,6 +166,29 @@
     "chooser": {
       "title": "Selecteer de container om bij te werken",
       "cancel": "Annuleren"
+    },
+    "runtimeTools": {
+      "trivy": "Trivy",
+      "cosign": "Cosign",
+      "sbom": "SBOM",
+      "scannerReady": "Trivy-client is gereed",
+      "scannerReadyServer": "Trivy-client is gereed (servermodus ingeschakeld)",
+      "scannerDisabled": "Kwetsbaarheidsscanner is uitgeschakeld",
+      "scannerMissing": "Trivy-opdracht \"{command}\" is niet beschikbaar in deze runtime",
+      "signatureReady": "Cosign is gereed voor handtekeningverificatie",
+      "signatureDisabled": "Handtekeningverificatie is uitgeschakeld",
+      "signatureMissing": "Cosign-opdracht \"{command}\" is niet beschikbaar in deze runtime",
+      "scannerTooltip": "Trivy: {message}",
+      "scannerTooltipServer": "Trivy: {message} · server: {server}",
+      "cosignTooltip": "Cosign: {message}",
+      "sbomEnabled": "SBOM-generatie ingeschakeld ({formats})",
+      "sbomDisabled": "SBOM-generatie uitgeschakeld"
+    },
+    "emptyState": {
+      "noDataTitle": "Nog geen kwetsbaarheidsgegevens",
+      "scannerNotReady": "Scanner is nog niet gereed.",
+      "runScanHint": "Voer een scan uit om uw containers op bekende kwetsbaarheden te controleren",
+      "noMatchTitle": "Geen images komen overeen met uw filters"
     }
   },
   "registriesView": {

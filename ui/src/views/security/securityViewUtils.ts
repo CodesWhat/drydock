@@ -6,6 +6,8 @@ import type {
   Vulnerability,
 } from './securityViewTypes';
 
+type TranslateFn = (key: string) => string;
+
 export const severityOrder: Record<string, number> = {
   CRITICAL: 0,
   HIGH: 1,
@@ -121,27 +123,30 @@ export function toSafeExternalUrl(value: string | null | undefined): string | nu
   return null;
 }
 
-export function buildSecurityEmptyState(input: SecurityViewEmptyStateInput): SecurityEmptyState {
+export function buildSecurityEmptyState(
+  input: SecurityViewEmptyStateInput,
+  t: TranslateFn,
+): SecurityEmptyState {
   if (!input.hasVulnerabilityData) {
     if (input.scannerSetupNeeded) {
       return {
-        title: 'No vulnerability data yet',
-        description: input.scannerMessage || 'Scanner is not ready yet.',
+        title: t('securityView.emptyState.noDataTitle'),
+        description: input.scannerMessage || t('securityView.emptyState.scannerNotReady'),
         showSetupGuide: true,
         showScanButton: false,
       };
     }
 
     return {
-      title: 'No vulnerability data yet',
-      description: 'Run a scan to check your containers for known vulnerabilities',
+      title: t('securityView.emptyState.noDataTitle'),
+      description: t('securityView.emptyState.runScanHint'),
       showSetupGuide: false,
       showScanButton: true,
     };
   }
 
   return {
-    title: 'No images match your filters',
+    title: t('securityView.emptyState.noMatchTitle'),
     description: null,
     showSetupGuide: false,
     showScanButton: false,
