@@ -143,6 +143,11 @@ function capitalize(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
+function serverStatusLabel(status: string): string {
+  if (status === 'connected') return t('serversView.status.connected');
+  return t('serversView.status.disconnected');
+}
+
 async function fetchServers() {
   loading.value = true;
   error.value = null;
@@ -255,11 +260,11 @@ onMounted(fetchServers);
             </span>
           </template>
           <template #cell-status="{ row }">
-            <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 md:!hidden" v-tooltip.top="row.status === 'connected' ? 'Connected' : 'Disconnected'">
+            <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 md:!hidden" v-tooltip.top="serverStatusLabel(row.status)">
               <AppIcon :name="row.status === 'connected' ? 'check' : 'xmark'" :size="12" />
             </AppBadge>
             <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="max-md:!hidden">
-              {{ row.status }}
+              {{ serverStatusLabel(row.status) }}
             </AppBadge>
           </template>
           <template #cell-containers="{ row }">
@@ -298,11 +303,11 @@ onMounted(fetchServers);
                   </div>
                 </div>
               </div>
-              <AppBadge :tone="server.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 shrink-0 ml-2 md:!hidden" v-tooltip.top="server.status === 'connected' ? 'Connected' : 'Disconnected'">
+              <AppBadge :tone="server.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 shrink-0 ml-2 md:!hidden" v-tooltip.top="serverStatusLabel(server.status)">
                 <AppIcon :name="server.status === 'connected' ? 'check' : 'xmark'" :size="12" />
               </AppBadge>
               <AppBadge :tone="server.status === 'connected' ? 'success' : 'danger'" size="xs" class="shrink-0 ml-2 max-md:!hidden">
-                {{ server.status }}
+                {{ serverStatusLabel(server.status) }}
               </AppBadge>
             </div>
             <div class="px-4 py-3">
@@ -333,7 +338,7 @@ onMounted(fetchServers);
                  :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
               <span class="text-2xs"
                     :style="{ color: server.containers.running > 0 ? 'var(--dd-success)' : 'var(--dd-text-muted)' }">
-                {{ server.containers.running }}/{{ server.containers.total }} running
+                {{ server.containers.running }}/{{ server.containers.total }} {{ t('serversView.detail.running') }}
               </span>
             </div>
           </template>
@@ -366,7 +371,7 @@ onMounted(fetchServers);
                 {{ server.lastSeen }}
               </span>
               <AppBadge :tone="server.status === 'connected' ? 'success' : 'danger'" size="xs" class="hidden md:inline-flex">
-                {{ server.status }}
+                {{ serverStatusLabel(server.status) }}
               </AppBadge>
             </div>
           </template>
@@ -394,7 +399,7 @@ onMounted(fetchServers);
           <div class="flex items-center gap-2.5 min-w-0">
             <span class="text-sm font-bold truncate dd-text">{{ selectedServer?.name }}</span>
             <AppBadge v-if="selectedServer" :tone="selectedServer.status === 'connected' ? 'success' : 'danger'" size="xs" class="shrink-0">
-              {{ selectedServer.status }}
+              {{ serverStatusLabel(selectedServer.status) }}
             </AppBadge>
           </div>
         </template>
