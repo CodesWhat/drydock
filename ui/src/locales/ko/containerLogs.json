@@ -1,9 +1,9 @@
 {
   "containerLogs": {
-    "backTooltip": "Back to containers",
-    "title": "Container Logs",
-    "loading": "Loading container…",
-    "notFound": "Container \"{name}\" not found",
-    "loadFailed": "Failed to load container info"
+    "backTooltip": "컨테이너 목록으로 돌아가기",
+    "title": "컨테이너 로그",
+    "loading": "컨테이너 불러오는 중…",
+    "notFound": "컨테이너 \"{name}\"을(를) 찾을 수 없습니다",
+    "loadFailed": "컨테이너 정보를 불러오지 못했습니다"
   }
 }

@@ -3,13 +3,13 @@ import type { ConnectionOptions } from 'node:tls';
 import type { Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import * as openidClientLibrary from 'openid-client';
-import { Agent } from 'undici';
+import { Agent, fetch as undiciFetch } from 'undici';
 import { v4 as uuid } from 'uuid';
 import { ddEnvVars, getPublicUrl, getServerConfiguration } from '../../../configuration/index.js';
 import { sanitizeLogParam } from '../../../log/sanitize.js';
 import { observeAuthLoginDuration, recordAuthLogin } from '../../../prometheus/auth.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
-import { getErrorMessage } from '../../../util/error.js';
+import { getErrorChainMessage } from '../../../util/error.js';
 import { enforceConcurrentSessionLimit } from '../../../util/session-limit.js';
 import Authentication from '../Authentication.js';
 import OidcStrategy from './OidcStrategy.js';
@@ -139,7 +139,7 @@ function redactUrlParams(url: string): string {
 }
 
 function sanitizeOidcErrorMessage(error: unknown): string {
-  const rawMessage = getErrorMessage(error);
+  const rawMessage = getErrorChainMessage(error);
   const urlRedactedMessage = rawMessage.replace(OIDC_URL_IN_TEXT_PATTERN, (match) =>
     redactUrlParams(match),
   );
@@ -459,14 +459,33 @@ class Oidc extends Authentication<OidcConfiguration> {
         allowH2: false,
         connect: connectOptions,
       });
+      // Use undici's own fetch rather than Node's global fetch. Node 24
+      // ships with built-in undici 7 (v1 dispatcher interface), while the
+      // app's userland undici@8 Agent has the v2 interface. Passing a v2
+      // Agent as `dispatcher` to the global fetch fails silently with
+      // "fetch failed" because the handlers don't satisfy the v1 contract
+      // (see undici PR #4827 — the Node 22 Dispatcher1Wrapper bridge is
+      // not present on Node 24). Pairing undici@8's fetch with undici@8's
+      // Agent keeps both halves on the same dispatcher version.
+      //
+      // Casts go through `unknown` because undici's RequestInfo /
+      // RequestInit / Response are nominally distinct from the lib.dom
+      // types that openid-client's CustomFetch is typed against. The
+      // runtime shapes match (Node 24's global fetch is undici under
+      // the hood), so the casts are safe.
+      //
+      // `Response` is already in scope as Express's response type from
+      // the top-of-file import, so the cast target is reached via
+      // `ReturnType<openidClientLibrary.CustomFetch>` to avoid colliding
+      // with that name.
+      type UndiciFetchInput = Parameters<typeof undiciFetch>[0];
+      type UndiciFetchInit = Parameters<typeof undiciFetch>[1];
+      type CustomFetchResult = ReturnType<openidClientLibrary.CustomFetch>;
       const oidcFetch: openidClientLibrary.CustomFetch = (input, init) =>
-        fetch(
-          input as RequestInfo | URL,
-          {
-            ...(init as unknown as RequestInit),
-            dispatcher,
-          } as RequestInit & { dispatcher: Agent },
-        );
+        undiciFetch(input as unknown as UndiciFetchInput, {
+          ...(init as unknown as UndiciFetchInit),
+          dispatcher,
+        }) as unknown as CustomFetchResult;
       discoveryOptions[openidClient.customFetch] = oidcFetch;
     }
     this.client = await openidClient.discovery(

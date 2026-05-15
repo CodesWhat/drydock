@@ -1,0 +1,39 @@
+{
+  "notificationOutboxView": {
+    "heading": "صندوق الصادر",
+    "refresh": "تحديث",
+    "loading": "جارٍ تحميل إدخالات صندوق الصادر…",
+    "tabs": {
+      "dead-letter": "رسائل فاشلة",
+      "pending": "قيد الانتظار",
+      "delivered": "تم التسليم"
+    },
+    "columns": {
+      "event": "الحدث",
+      "trigger": "المشغّل",
+      "attempts": "المحاولات",
+      "lastError": "آخر خطأ",
+      "created": "تاريخ الإنشاء"
+    },
+    "actions": {
+      "retry": "إعادة المحاولة",
+      "discard": "تجاهل"
+    },
+    "status": {
+      "dead-letter": "رسائل فاشلة",
+      "pending": "قيد الانتظار",
+      "delivered": "تم التسليم"
+    },
+    "empty": {
+      "dead-letter": "لا توجد رسائل فاشلة",
+      "pending": "لا توجد إدخالات قيد الانتظار",
+      "delivered": "لا توجد إدخالات مُسلَّمة"
+    },
+    "toast": {
+      "requeued": "تمت إعادة الإدراج في قائمة الانتظار: {name}",
+      "discarded": "تم التجاهل: {name}",
+      "retryFailed": "فشلت إعادة محاولة {name}",
+      "discardFailed": "فشل تجاهل {name}"
+    }
+  }
+}

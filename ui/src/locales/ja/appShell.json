@@ -1,133 +1,133 @@
 {
   "appShell": {
     "toast": {
-      "dismiss": "Dismiss"
+      "dismiss": "閉じる"
     },
     "logViewer": {
       "toolbar": {
-        "resume": "Resume",
-        "pause": "Pause",
-        "unpinAutoScroll": "Unpin auto-scroll",
-        "pinAutoScroll": "Pin auto-scroll",
-        "newestFirst": "Newest first",
-        "oldestFirst": "Oldest first",
-        "regexToggle": ".* Regex",
-        "showMatchesOnly": "Show matches only",
-        "showingMatchesOnly": "Showing matches only",
-        "prev": "Prev",
-        "next": "Next"
+        "resume": "再開",
+        "pause": "一時停止",
+        "unpinAutoScroll": "自動スクロールを解除",
+        "pinAutoScroll": "自動スクロールを固定",
+        "newestFirst": "新しい順",
+        "oldestFirst": "古い順",
+        "regexToggle": ".* 正規表現",
+        "showMatchesOnly": "一致のみ表示",
+        "showingMatchesOnly": "一致のみ表示中",
+        "prev": "前へ",
+        "next": "次へ"
       },
       "search": {
-        "placeholder": "Search logs",
-        "copied": "Copied!",
-        "copyLogs": "Copy logs"
+        "placeholder": "ログを検索",
+        "copied": "コピーしました！",
+        "copyLogs": "ログをコピー"
       },
       "empty": {
-        "noMatchingEntries": "No matching entries",
-        "defaultMessage": "No log entries yet"
+        "noMatchingEntries": "一致するエントリがありません",
+        "defaultMessage": "ログエントリがまだありません"
       },
       "footer": {
-        "lines": "lines",
-        "defaultStatusLabel": "Offline"
+        "lines": "行",
+        "defaultStatusLabel": "オフライン"
       }
     },
     "notificationBell": {
-      "buttonLabel": "Notifications",
-      "tooltip": "Notifications",
-      "header": "Notifications",
-      "clear": "Clear",
-      "loading": "Loading...",
-      "empty": "No notifications yet",
-      "markAllRead": "Mark all as read",
-      "openAuditLog": "Open audit log",
-      "dismiss": "Dismiss notification"
+      "buttonLabel": "通知",
+      "tooltip": "通知",
+      "header": "通知",
+      "clear": "クリア",
+      "loading": "読み込み中...",
+      "empty": "通知はまだありません",
+      "markAllRead": "すべて既読にする",
+      "openAuditLog": "監査ログを開く",
+      "dismiss": "通知を閉じる"
     },
     "themeToggle": {
-      "mobileLabel": "Theme: {id} (tap to cycle)",
-      "switchTo": "Switch to {id} theme",
+      "mobileLabel": "テーマ：{id}（タップで切替）",
+      "switchTo": "{id} テーマに切替",
       "variantLabel": "{label}"
     },
     "layout": {
       "nav": {
-        "dashboard": "Dashboard",
-        "containers": "Containers",
-        "security": "Security",
-        "audit": "Audit",
-        "systemLogs": "System Logs",
-        "manageGroup": "Manage",
-        "hosts": "Hosts",
-        "registries": "Registries",
-        "watchers": "Watchers",
-        "settingsGroup": "Settings",
-        "general": "General",
-        "notifications": "Notifications",
-        "outbox": "Outbox",
-        "triggers": "Triggers",
-        "auth": "Auth",
-        "agents": "Agents"
+        "dashboard": "ダッシュボード",
+        "containers": "コンテナ",
+        "security": "セキュリティ",
+        "audit": "監査",
+        "systemLogs": "システムログ",
+        "manageGroup": "管理",
+        "hosts": "ホスト",
+        "registries": "レジストリ",
+        "watchers": "ウォッチャー",
+        "settingsGroup": "設定",
+        "general": "一般",
+        "notifications": "通知",
+        "outbox": "送信済み",
+        "triggers": "トリガー",
+        "auth": "認証",
+        "agents": "エージェント"
       },
       "sidebar": {
-        "closeMobileMenu": "Close menu",
-        "searchButton": "Search",
-        "searchAriaLabel": "Search",
-        "aboutTooltip": "About Drydock",
-        "aboutAriaLabel": "About Drydock",
-        "expandSidebar": "Expand sidebar",
-        "collapseSidebar": "Collapse sidebar"
+        "closeMobileMenu": "メニューを閉じる",
+        "searchButton": "検索",
+        "searchAriaLabel": "検索",
+        "aboutTooltip": "Drydock について",
+        "aboutAriaLabel": "Drydock について",
+        "expandSidebar": "サイドバーを展開",
+        "collapseSidebar": "サイドバーを折りたたむ"
       },
       "topbar": {
-        "openMenu": "Open menu",
-        "closeMenu": "Close menu",
-        "userMenu": "User menu",
-        "profile": "Profile",
-        "signOut": "Sign out"
+        "openMenu": "メニューを開く",
+        "closeMenu": "メニューを閉じる",
+        "userMenu": "ユーザーメニュー",
+        "profile": "プロフィール",
+        "signOut": "サインアウト"
       },
       "about": {
         "title": "Drydock",
-        "subtitle": "Docker Container Update Manager",
-        "documentation": "Documentation",
+        "subtitle": "Docker コンテナ更新マネージャー",
+        "documentation": "ドキュメント",
         "github": "GitHub",
-        "changelog": "Changelog",
-        "close": "Close"
+        "changelog": "変更履歴",
+        "close": "閉じる"
       },
       "search": {
-        "ariaLabel": "Search",
-        "placeholder": "Jump to pages, containers, agents, triggers...",
-        "shown": "{count} shown",
-        "refreshing": "Refreshing search index...",
-        "noMatches": "No matches for \"{query}\".",
-        "hint": "Type to search pages, containers, agents, triggers, watchers, and settings.",
-        "prefixScopeHint": "Prefix scope active; use ",
-        "typeHint": "Type",
-        "useTab": " to change scope",
-        "moveHint": "move",
-        "openHint": "open"
+        "ariaLabel": "検索",
+        "placeholder": "ページ、コンテナ、エージェント、トリガーへジャンプ...",
+        "shown": "{count} 件表示",
+        "refreshing": "検索インデックスを更新中...",
+        "noMatches": "「{query}」に一致する結果がありません。",
+        "hint": "ページ、コンテナ、エージェント、トリガー、ウォッチャー、設定を検索するには入力してください。",
+        "prefixScopeHint": "プレフィックススコープが有効です。",
+        "typeHint": "入力",
+        "useTab": "でスコープを変更",
+        "moveHint": "移動",
+        "openHint": "開く"
       },
       "connection": {
-        "lostTitle": "Connection Lost",
-        "applyingUpdateTitle": "Applying Update",
-        "lostMessage": "The server is unreachable. Waiting for it to come back online...",
-        "restartingMessage": "Drydock is restarting after a self-update{opId}. Reconnecting when the service is back...",
-        "reconnecting": "Reconnecting",
-        "restartingService": "Restarting service"
+        "lostTitle": "接続が切断されました",
+        "applyingUpdateTitle": "更新を適用中",
+        "lostMessage": "サーバーに接続できません。オンラインに戻るまでお待ちください...",
+        "restartingMessage": "Drydock は自己更新後に再起動中です{opId}。サービスが復帰したら再接続します...",
+        "reconnecting": "再接続中",
+        "restartingService": "サービスを再起動中"
       }
     },
     "announcementBanner": {
-      "defaultDismiss": "Dismiss",
-      "defaultLinkLabel": "View migration guide"
+      "defaultDismiss": "閉じる",
+      "defaultLinkLabel": "移行ガイドを表示"
     },
     "banners": {
-      "legacyConfigTitleSingular": "{total} legacy configuration alias detected",
-      "legacyConfigTitlePlural": "{total} legacy configuration aliases detected",
-      "legacyApiPathTitle": "{total} legacy API paths detected",
-      "dontShowAgain": "Don't show again",
-      "oidcHttpTitle": "HTTP OIDC discovery detected",
-      "legacyHashTitle": "Legacy password hash detected",
-      "curlHealthcheckTitle": "Custom curl healthcheck override detected",
-      "envKeysLabel": "Env keys ({count}): {keys}",
-      "labelKeysLabel": "Label keys ({count}): {keys}",
-      "apiPathsLabel": "API paths ({count}): {keys}",
-      "healthcheckCommandLabel": "Healthcheck command: {command}"
+      "legacyConfigTitleSingular": "{total} 件のレガシー設定エイリアスを検出しました",
+      "legacyConfigTitlePlural": "{total} 件のレガシー設定エイリアスを検出しました",
+      "legacyApiPathTitle": "{total} 件のレガシー API パスを検出しました",
+      "dontShowAgain": "今後表示しない",
+      "oidcHttpTitle": "HTTP OIDC ディスカバリーを検出しました",
+      "legacyHashTitle": "レガシーパスワードハッシュを検出しました",
+      "curlHealthcheckTitle": "カスタム curl ヘルスチェックのオーバーライドを検出しました",
+      "envKeysLabel": "環境変数キー（{count} 件）：{keys}",
+      "labelKeysLabel": "ラベルキー（{count} 件）：{keys}",
+      "apiPathsLabel": "API パス（{count} 件）：{keys}",
+      "healthcheckCommandLabel": "ヘルスチェックコマンド：{command}"
     }
   }
 }

@@ -1,25 +1,32 @@
 {
   "containersView": {
     "error": {
-      "loadFailed": "Failed to load containers",
-      "recheckFailed": "Failed to recheck containers"
+      "loadFailed": "コンテナの読み込みに失敗しました",
+      "recheckFailed": "コンテナの再確認に失敗しました"
     },
     "toast": {
-      "updated": "Updated: {name}",
-      "updateFailed": "Update failed: {name}",
-      "updateFailedWithReason": "Update failed: {name} — {reason}",
-      "cancelled": "Cancelled: {name}",
-      "rolledBack": "Rolled back: {name}",
-      "rolledBackWithReason": "Rolled back: {name} — {reason}",
-      "updateAlreadyInProgress": "Update already in progress for some containers in this group",
-      "batchUpdatedNoGroup": "Updated {count} containers",
-      "batchPartialNoGroup": "Updated {succeeded} of {total} containers; {failed} failed",
-      "batchFailedNoGroup": "Failed to update {count} containers",
-      "unknownGroup": "unknown group"
+      "updated": "更新しました：{name}",
+      "updateFailed": "更新に失敗しました：{name}",
+      "updateFailedWithReason": "更新に失敗しました：{name} — {reason}",
+      "cancelled": "キャンセルしました：{name}",
+      "rolledBack": "ロールバックしました：{name}",
+      "rolledBackWithReason": "ロールバックしました：{name} — {reason}",
+      "updateAlreadyInProgress": "このグループの一部のコンテナですでに更新が進行中です",
+      "batchUpdatedNoGroup": "{count} 件のコンテナを更新しました",
+      "batchPartialNoGroup": "{total} 件中 {succeeded} 件を更新しました。{failed} 件が失敗しました",
+      "batchFailedNoGroup": "{count} 件のコンテナの更新に失敗しました",
+      "unknownGroup": "不明なグループ",
+      "updateStarted": "更新を開始しました：{name}",
+      "forceUpdateStarted": "強制更新を開始しました：{name}",
+      "alreadyUpToDate": "すでに最新です：{name}",
+      "queuedUpdateSingle": "{count} 件のコンテナの更新をキューに追加しました",
+      "queuedUpdateMultiple": "{count} 件のコンテナの更新をキューに追加しました",
+      "countAlreadyUpToDateSingle": "{count} 件のコンテナはすでに最新です",
+      "countAlreadyUpToDateMultiple": "{count} 件のコンテナはすでに最新です"
     },
     "registryError": {
-      "generic": "Registry error",
-      "detail": "Registry error: {error}"
+      "generic": "レジストリエラー",
+      "detail": "レジストリエラー：{error}"
     },
     "columns": {
       "container": "コンテナ",

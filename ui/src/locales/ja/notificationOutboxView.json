@@ -1,0 +1,39 @@
+{
+  "notificationOutboxView": {
+    "heading": "送信済み",
+    "refresh": "更新",
+    "loading": "アウトボックスのエントリを読み込み中…",
+    "tabs": {
+      "dead-letter": "デッドレター",
+      "pending": "保留中",
+      "delivered": "配信済み"
+    },
+    "columns": {
+      "event": "イベント",
+      "trigger": "トリガー",
+      "attempts": "試行回数",
+      "lastError": "最後のエラー",
+      "created": "作成日時"
+    },
+    "actions": {
+      "retry": "再試行",
+      "discard": "破棄"
+    },
+    "status": {
+      "dead-letter": "デッドレター",
+      "pending": "保留中",
+      "delivered": "配信済み"
+    },
+    "empty": {
+      "dead-letter": "デッドレターエントリがありません",
+      "pending": "保留中のエントリがありません",
+      "delivered": "配信済みエントリがありません"
+    },
+    "toast": {
+      "requeued": "再キューに追加しました：{name}",
+      "discarded": "破棄しました：{name}",
+      "retryFailed": "{name} の再試行に失敗しました",
+      "discardFailed": "{name} の破棄に失敗しました"
+    }
+  }
+}

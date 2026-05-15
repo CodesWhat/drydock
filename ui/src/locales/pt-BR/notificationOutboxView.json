@@ -1,0 +1,39 @@
+{
+  "notificationOutboxView": {
+    "heading": "Caixa de saída",
+    "refresh": "Atualizar",
+    "loading": "Carregando entradas da caixa de saída…",
+    "tabs": {
+      "dead-letter": "Dead-letter",
+      "pending": "Pendente",
+      "delivered": "Entregue"
+    },
+    "columns": {
+      "event": "Evento",
+      "trigger": "Trigger",
+      "attempts": "Tentativas",
+      "lastError": "Último erro",
+      "created": "Criado"
+    },
+    "actions": {
+      "retry": "Tentar novamente",
+      "discard": "Descartar"
+    },
+    "status": {
+      "dead-letter": "Dead-letter",
+      "pending": "Pendente",
+      "delivered": "Entregue"
+    },
+    "empty": {
+      "dead-letter": "Nenhuma entrada dead-letter",
+      "pending": "Nenhuma entrada pendente",
+      "delivered": "Nenhuma entrada entregue"
+    },
+    "toast": {
+      "requeued": "Reenfileirado: {name}",
+      "discarded": "Descartado: {name}",
+      "retryFailed": "Falha ao tentar novamente: {name}",
+      "discardFailed": "Falha ao descartar: {name}"
+    }
+  }
+}

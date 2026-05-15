@@ -75,6 +75,32 @@
     "clear": "Cancella",
     "allNotificationTriggers": "Tutti i trigger notifiche",
     "noTriggers": "Nessun trigger",
+    "rules": {
+      "update-available": {
+        "name": "Aggiornamento disponibile",
+        "description": "Quando un container ha una nuova versione"
+      },
+      "update-applied": {
+        "name": "Aggiornamento applicato",
+        "description": "Dopo che un container è stato aggiornato con successo"
+      },
+      "update-failed": {
+        "name": "Aggiornamento non riuscito",
+        "description": "Quando un aggiornamento fallisce o viene eseguito un rollback"
+      },
+      "security-alert": {
+        "name": "Avviso di sicurezza",
+        "description": "Vulnerabilità critica/alta rilevata"
+      },
+      "agent-disconnect": {
+        "name": "Agent disconnesso",
+        "description": "Quando un agent remoto perde la connessione"
+      },
+      "agent-reconnect": {
+        "name": "Agent riconnesso",
+        "description": "Quando un agent remoto si riconnette dopo aver perso la connessione"
+      }
+    },
     "columns": {
       "on": "Su",
       "rule": "Regola",
@@ -140,6 +166,15 @@
       "medium": "Media",
       "low": "Bassa"
     },
+    "deltaTooltips": {
+      "fixedSingle": "L'aggiornamento risolve {count} vulnerabilità",
+      "fixedMultiple": "L'aggiornamento risolve {count} vulnerabilità",
+      "newSingle": "L'aggiornamento introduce {count} nuova vulnerabilità",
+      "newMultiple": "L'aggiornamento introduce {count} nuove vulnerabilità",
+      "both": "Aggiornamento: {fixed} risolte, {new} nuove"
+    },
+    "updateOneOfButton": "Aggiorna uno dei {count} container",
+    "updateThisContainerButton": "Aggiorna questo container",
     "update": "Aggiorna",
     "viewInContainers": "Vedi in Container",
     "viewAllInContainers": "Vedi tutto in Container",
@@ -211,6 +246,11 @@
       "auth": "Auth",
       "status": "Stato"
     },
+    "status": {
+      "connected": "Connesso",
+      "error": "Errore",
+      "unknown": "Sconosciuto"
+    },
     "detail": {
       "refreshing": "Aggiornamento dettagli registry...",
       "status": "Stato",
@@ -226,6 +266,10 @@
     "emptyFiltered": "Nessun host corrisponde ai filtri",
     "justNow": "Ora",
     "never": "Mai",
+    "status": {
+      "connected": "Connesso",
+      "disconnected": "Disconnesso"
+    },
     "columns": {
       "host": "Host",
       "address": "Indirizzo",

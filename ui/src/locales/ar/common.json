@@ -1,13 +1,13 @@
 {
   "common": {
-    "loading": "Loading…",
-    "back": "Back",
-    "cancel": "Cancel",
-    "save": "Save",
-    "delete": "Delete",
-    "confirm": "Confirm",
-    "close": "Close",
-    "retry": "Retry",
-    "unknown": "unknown"
+    "loading": "جارٍ التحميل…",
+    "back": "رجوع",
+    "cancel": "إلغاء",
+    "save": "حفظ",
+    "delete": "حذف",
+    "confirm": "تأكيد",
+    "close": "إغلاق",
+    "retry": "إعادة المحاولة",
+    "unknown": "غير معروف"
   }
 }

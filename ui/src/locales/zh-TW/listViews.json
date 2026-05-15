@@ -75,6 +75,32 @@
     "clear": "清除",
     "allNotificationTriggers": "所有通知觸發器",
     "noTriggers": "無觸發器",
+    "rules": {
+      "update-available": {
+        "name": "可用更新",
+        "description": "當容器有新版本時"
+      },
+      "update-applied": {
+        "name": "更新已套用",
+        "description": "容器成功更新後"
+      },
+      "update-failed": {
+        "name": "更新失敗",
+        "description": "當更新失敗或回滾時"
+      },
+      "security-alert": {
+        "name": "安全警報",
+        "description": "偵測到嚴重/高危漏洞"
+      },
+      "agent-disconnect": {
+        "name": "代理已斷線",
+        "description": "遠端代理失去連線時"
+      },
+      "agent-reconnect": {
+        "name": "代理已重新連線",
+        "description": "遠端代理在失去連線後重新連線時"
+      }
+    },
     "columns": {
       "on": "開啟",
       "rule": "規則",
@@ -212,6 +238,11 @@
       "status": "狀態",
       "url": "URL"
     },
+    "status": {
+      "connected": "已連線",
+      "error": "錯誤",
+      "unknown": "未知"
+    },
     "badge": {
       "private": "私有",
       "public": "公開"
@@ -233,6 +264,10 @@
     "filterPlaceholder": "按名稱或地址篩選...",
     "clear": "清除",
     "emptyFiltered": "沒有主機匹配您的篩選條件",
+    "status": {
+      "connected": "已連線",
+      "disconnected": "已斷線"
+    },
     "justNow": "剛剛",
     "never": "從未",
     "columns": {

@@ -1,148 +1,148 @@
 {
   "configView": {
     "tabs": {
-      "general": "General",
-      "appearance": "Appearance",
-      "profile": "Profile"
+      "general": "Загальні",
+      "appearance": "Вигляд",
+      "profile": "Профіль"
     },
     "general": {
       "application": {
-        "title": "Application",
-        "loadingServerInfo": "Loading server info"
+        "title": "Застосунок",
+        "loadingServerInfo": "Завантаження інформації про сервер"
       },
       "store": {
-        "title": "Store"
+        "title": "Сховище"
       },
       "webhookApi": {
         "title": "Webhook API",
-        "enabled": "Enabled",
-        "disabled": "Disabled",
-        "description": "Use these endpoints to trigger watch cycles and updates via HTTP. All requests require a Bearer token in the Authorization header.",
-        "disabledMessage": "Webhook API is disabled. Set",
-        "disabledHint": "Webhook API is disabled. Set {envEnabled} and configure at least one token ({envToken} or {envTokens}) to enable it.",
+        "enabled": "Увімкнено",
+        "disabled": "Вимкнено",
+        "description": "Використовуйте ці кінцеві точки для запуску циклів спостереження та оновлень через HTTP. Усі запити вимагають Bearer-токен у заголовку Authorization.",
+        "disabledMessage": "Webhook API вимкнено. Встановіть",
+        "disabledHint": "Webhook API вимкнено. Встановіть {envEnabled} та налаштуйте принаймні один токен ({envToken} або {envTokens}) для увімкнення.",
         "table": {
-          "endpoint": "Endpoint",
-          "description": "Description"
+          "endpoint": "Кінцева точка",
+          "description": "Опис"
         },
-        "example": "Example",
+        "example": "Приклад",
         "endpoints": {
-          "watchAll": "Trigger a full watch cycle on all watchers",
-          "watchOne": "Watch a specific container by name",
-          "updateOne": "Trigger an update on a specific container"
+          "watchAll": "Запустити повний цикл спостереження на всіх спостерігачах",
+          "watchOne": "Спостерігати за конкретним контейнером за назвою",
+          "updateOne": "Запустити оновлення конкретного контейнера"
         }
       },
       "network": {
-        "title": "Network",
+        "title": "Мережа",
         "internetlessMode": {
-          "label": "Internetless Mode",
-          "description": "Block all outbound requests (container icons, external fetches)"
+          "label": "Режим без інтернету",
+          "description": "Блокувати всі вихідні запити (іконки контейнерів, зовнішні запити)"
         }
       },
       "iconCache": {
-        "title": "Container Icon Cache",
+        "title": "Кеш іконок контейнерів",
         "cachedIcons": {
-          "label": "Cached Icons",
-          "description": "Common icons are bundled; other icons are cached to disk on first fetch"
+          "label": "Кешовані іконки",
+          "description": "Типові іконки вбудовані; інші іконки кешуються на диск при першому завантаженні"
         },
-        "cleared": "{count} cleared",
-        "clearButton": "Clear Cache"
+        "cleared": "{count} очищено",
+        "clearButton": "Очистити кеш"
       },
       "diagnostics": {
-        "title": "Diagnostics",
+        "title": "Діагностика",
         "debugDump": {
-          "label": "Diagnostic Debug Dump",
-          "description": "Download a redacted JSON snapshot of runtime state for troubleshooting",
-          "preparing": "Preparing...",
-          "download": "Download Debug Dump"
+          "label": "Діагностичний дамп",
+          "description": "Завантажити редагований JSON-знімок стану виконання для усунення несправностей",
+          "preparing": "Підготовка...",
+          "download": "Завантажити діагностичний дамп"
         }
       },
       "fields": {
-        "version": "Version",
-        "serverPort": "Server Port",
-        "containerActions": "Container Actions",
+        "version": "Версія",
+        "serverPort": "Порт сервера",
+        "containerActions": "Дії з контейнером",
         "webhook": "Webhook",
-        "deleteEnabled": "Delete Enabled",
-        "trustProxy": "Trust Proxy",
-        "metricsAuth": "Metrics Auth",
-        "storePath": "Store Path",
-        "storeFile": "Store File",
-        "enabled": "Enabled",
-        "disabled": "Disabled",
-        "yes": "Yes",
-        "no": "No"
+        "deleteEnabled": "Видалення увімкнено",
+        "trustProxy": "Довіряти проксі",
+        "metricsAuth": "Автентифікація метрик",
+        "storePath": "Шлях до сховища",
+        "storeFile": "Файл сховища",
+        "enabled": "Увімкнено",
+        "disabled": "Вимкнено",
+        "yes": "Так",
+        "no": "Ні"
       },
       "errors": {
-        "loadServerInfo": "Failed to load server info",
-        "loadProfileData": "Failed to load profile data",
-        "updateNetworkSettings": "Failed to update network settings",
-        "clearIconCache": "Failed to clear icon cache",
-        "downloadDebugDump": "Unable to download debug dump",
-        "errorLabel": "Error"
+        "loadServerInfo": "Не вдалося завантажити інформацію про сервер",
+        "loadProfileData": "Не вдалося завантажити дані профілю",
+        "updateNetworkSettings": "Не вдалося оновити мережеві налаштування",
+        "clearIconCache": "Не вдалося очистити кеш іконок",
+        "downloadDebugDump": "Не вдалося завантажити діагностичний дамп",
+        "errorLabel": "Помилка"
       }
     },
     "appearance": {
       "language": {
-        "title": "Language"
+        "title": "Мова"
       },
       "colorTheme": {
-        "title": "Color Theme",
+        "title": "Кольорова тема",
         "descriptions": {
-          "oneDark": "Clean and balanced",
-          "github": "Clean and familiar",
-          "dracula": "Bold purple vibes",
-          "catppuccin": "Warm pastel tones",
-          "gruvbox": "Retro earthy warmth",
-          "ayu": "Soft golden tones"
+          "oneDark": "Чиста та збалансована",
+          "github": "Чиста та знайома",
+          "dracula": "Насичений фіолетовий стиль",
+          "catppuccin": "Теплі пастельні відтінки",
+          "gruvbox": "Ретро-земляне тепло",
+          "ayu": "М'які золотисті тони"
         }
       },
       "fontFamily": {
-        "title": "Font Family",
-        "defaultBadge": "default",
+        "title": "Гарнітура шрифту",
+        "defaultBadge": "за замовчуванням",
         "preview": "Жебракують філософи при ґанку церкви в Гадячі"
       },
       "fontSize": {
-        "title": "Font Size"
+        "title": "Розмір шрифту"
       },
       "iconLibrary": {
-        "title": "Icon Library"
+        "title": "Бібліотека іконок"
       },
       "iconSize": {
-        "title": "Icon Size"
+        "title": "Розмір іконки"
       },
       "borderRadius": {
-        "title": "Border Radius",
+        "title": "Заокруглення кутів",
         "labels": {
-          "none": "None",
-          "sharp": "Sharp",
-          "modern": "Modern",
-          "soft": "Soft",
-          "round": "Round"
+          "none": "Немає",
+          "sharp": "Гострі",
+          "modern": "Сучасні",
+          "soft": "М'які",
+          "round": "Круглі"
         }
       }
     },
     "profile": {
-      "loading": "Loading profile",
+      "loading": "Завантаження профілю",
       "fields": {
-        "username": "Username",
+        "username": "Ім'я користувача",
         "email": "Email",
-        "role": "Role",
-        "provider": "Provider",
-        "lastLogin": "Last Login",
-        "activeSessions": "Active Sessions"
+        "role": "Роль",
+        "provider": "Постачальник",
+        "lastLogin": "Останній вхід",
+        "activeSessions": "Активні сесії"
       }
     },
     "logs": {
-      "loading": "Loading logs...",
-      "emptyMessage": "No log entries found for current filters.",
+      "loading": "Завантаження журналів...",
+      "emptyMessage": "Записи журналу не знайдено для поточних фільтрів.",
       "toolbar": {
-        "live": "Live",
-        "allLevels": "All Levels",
+        "live": "В ефірі",
+        "allLevels": "Всі рівні",
         "debug": "Debug",
         "info": "Info",
         "warn": "Warn",
         "error": "Error",
-        "allComponents": "All Components",
-        "resetFilters": "Reset filters"
+        "allComponents": "Всі компоненти",
+        "resetFilters": "Скинути фільтри"
       },
       "tail": {
         "50": "Tail 50",
@@ -150,7 +150,7 @@
         "500": "Tail 500",
         "1000": "Tail 1000"
       },
-      "logLevelBadge": "Server log level: {level}. Only messages at this level or above are captured."
+      "logLevelBadge": "Рівень журналювання сервера: {level}. Фіксуються лише повідомлення цього рівня та вище."
     }
   }
 }

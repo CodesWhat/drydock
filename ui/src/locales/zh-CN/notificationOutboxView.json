@@ -1,0 +1,39 @@
+{
+  "notificationOutboxView": {
+    "heading": "发件箱",
+    "refresh": "刷新",
+    "loading": "正在加载发件箱条目…",
+    "tabs": {
+      "dead-letter": "死信",
+      "pending": "待发送",
+      "delivered": "已发送"
+    },
+    "columns": {
+      "event": "事件",
+      "trigger": "触发器",
+      "attempts": "尝试次数",
+      "lastError": "最后错误",
+      "created": "创建时间"
+    },
+    "actions": {
+      "retry": "重试",
+      "discard": "丢弃"
+    },
+    "status": {
+      "dead-letter": "死信",
+      "pending": "待发送",
+      "delivered": "已发送"
+    },
+    "empty": {
+      "dead-letter": "没有死信条目",
+      "pending": "没有待发送条目",
+      "delivered": "没有已发送条目"
+    },
+    "toast": {
+      "requeued": "已重新排队：{name}",
+      "discarded": "已丢弃：{name}",
+      "retryFailed": "重试 {name} 失败",
+      "discardFailed": "丢弃 {name} 失败"
+    }
+  }
+}

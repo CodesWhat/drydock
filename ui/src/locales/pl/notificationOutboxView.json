@@ -1,0 +1,39 @@
+{
+  "notificationOutboxView": {
+    "heading": "Skrzynka nadawcza",
+    "refresh": "Odśwież",
+    "loading": "Ładowanie wpisów skrzynki nadawczej…",
+    "tabs": {
+      "dead-letter": "Niedostarczone",
+      "pending": "Oczekujące",
+      "delivered": "Dostarczone"
+    },
+    "columns": {
+      "event": "Zdarzenie",
+      "trigger": "Wyzwalacz",
+      "attempts": "Próby",
+      "lastError": "Ostatni błąd",
+      "created": "Utworzono"
+    },
+    "actions": {
+      "retry": "Ponów",
+      "discard": "Odrzuć"
+    },
+    "status": {
+      "dead-letter": "Niedostarczone",
+      "pending": "Oczekujące",
+      "delivered": "Dostarczone"
+    },
+    "empty": {
+      "dead-letter": "Brak niedostarczonych wpisów",
+      "pending": "Brak oczekujących wpisów",
+      "delivered": "Brak dostarczonych wpisów"
+    },
+    "toast": {
+      "requeued": "Ponownie kolejkowane: {name}",
+      "discarded": "Odrzucono: {name}",
+      "retryFailed": "Nie udało się ponowić {name}",
+      "discardFailed": "Nie udało się odrzucić {name}"
+    }
+  }
+}

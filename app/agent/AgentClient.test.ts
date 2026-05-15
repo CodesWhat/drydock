@@ -1168,6 +1168,113 @@ describe('AgentClient', () => {
 
       expect(reconnectDelays).toEqual([1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 60_000, 60_000]);
     });
+
+    test('should escalate reconnect backoff when stream returns 200 then ends before SSE_STABLE_CONNECTION_MS (#362 regression)', async () => {
+      // Each reconnect attempt gets a fresh EventEmitter so listeners do not accumulate.
+      axios.mockImplementation(() => Promise.resolve({ data: new EventEmitter() }));
+
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+
+      // Cycle 1: startSse → 200 → stream end immediately → scheduleReconnect (delay=1000)
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0); // axios resolves, stability timer set (30s)
+      // Grab the stream that was attached and end it before 30s
+      const stream1 = axios.mock.results[0].value as Promise<{ data: EventEmitter }>;
+      const resolved1 = await stream1;
+      resolved1.data.emit('end'); // triggers scheduleReconnect → clears stability timer
+      // Advance past the reconnect delay so startSse is called again
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      // Cycle 2: startSse → 200 → stream end immediately → scheduleReconnect (delay=2000)
+      await vi.advanceTimersByTimeAsync(0);
+      const stream2 = axios.mock.results[1].value as Promise<{ data: EventEmitter }>;
+      const resolved2 = await stream2;
+      resolved2.data.emit('end');
+      await vi.advanceTimersByTimeAsync(2_000);
+
+      // Cycle 3: startSse → 200 → stream end immediately → scheduleReconnect (delay=4000)
+      await vi.advanceTimersByTimeAsync(0);
+      const stream3 = axios.mock.results[2].value as Promise<{ data: EventEmitter }>;
+      const resolved3 = await stream3;
+      resolved3.data.emit('end');
+      await vi.advanceTimersByTimeAsync(4_000);
+
+      // Collect only reconnect delays (filter out the 30_000 stability-timer calls)
+      const reconnectDelays = setTimeoutSpy.mock.calls
+        .map(([, delay]) => delay)
+        .filter((delay): delay is number => typeof delay === 'number' && delay !== 30_000);
+
+      expect(reconnectDelays).toEqual([1_000, 2_000, 4_000]);
+    });
+
+    test('should reset backoff to initial delay after stream stays open past SSE_STABLE_CONNECTION_MS', async () => {
+      // Phase 1: force two connect→end cycles so reconnectAttempts > 0
+      axios.mockImplementation(() => Promise.resolve({ data: new EventEmitter() }));
+
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+      const r1 = await (axios.mock.results[0].value as Promise<{ data: EventEmitter }>);
+      r1.data.emit('end'); // reconnectAttempts → 1, next delay would be 1000 (1st attempt)
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      await vi.advanceTimersByTimeAsync(0);
+      const r2 = await (axios.mock.results[1].value as Promise<{ data: EventEmitter }>);
+      r2.data.emit('end'); // reconnectAttempts → 2, next delay would be 2000
+      await vi.advanceTimersByTimeAsync(2_000);
+
+      // Phase 2: let the connection stay open past 30s so stability timer fires and resets backoff
+      await vi.advanceTimersByTimeAsync(0);
+      // Advance 30 001 ms so SSE_STABLE_CONNECTION_MS elapses and reconnectAttempts resets to 0
+      await vi.advanceTimersByTimeAsync(30_001);
+
+      // Phase 3: now end the stream — next reconnect delay must be back to 1000
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+      const r3 = await (axios.mock.results[2].value as Promise<{ data: EventEmitter }>);
+      r3.data.emit('end');
+
+      const reconnectDelays = setTimeoutSpy.mock.calls
+        .map(([, delay]) => delay)
+        .filter((delay): delay is number => typeof delay === 'number' && delay !== 30_000);
+
+      expect(reconnectDelays).toEqual([1_000]);
+    });
+
+    test('should not reset reconnect backoff when stability timer is cleared before it fires (early stream end)', async () => {
+      // Prove that a pending stability timer that gets cleared does NOT later drop
+      // an already-escalated reconnect delay back to 1000 ms.
+      axios.mockImplementation(() => Promise.resolve({ data: new EventEmitter() }));
+
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0); // stability timer scheduled for t+30s
+
+      // End the stream early (before 30s) — scheduleReconnect clears the stability timer
+      const r1 = await (axios.mock.results[0].value as Promise<{ data: EventEmitter }>);
+      r1.data.emit('end'); // reconnectAttempts → 1, delay = 1000
+      await vi.advanceTimersByTimeAsync(1_000); // fires reconnect → startSse cycle 2
+
+      // Cycle 2: end early again
+      await vi.advanceTimersByTimeAsync(0);
+      const r2 = await (axios.mock.results[1].value as Promise<{ data: EventEmitter }>);
+      r2.data.emit('end'); // reconnectAttempts → 2, delay = 2000
+      await vi.advanceTimersByTimeAsync(2_000); // fires reconnect → startSse cycle 3
+
+      // Cycle 3: start it and advance past where cycle 1's stability timer would have fired
+      // (absolute t=30_000), but stay well BEFORE cycle 3's own stability timer (absolute t=33_000).
+      // Cycle 3 starts at absolute t=3_000; cycle 1's timer would fire 27_000 ms into cycle 3.
+      await vi.advanceTimersByTimeAsync(0); // cycle 3 starts; its own stability timer arms at +30_000ms
+      await vi.advanceTimersByTimeAsync(28_000); // past cycle-1 window, before cycle-3 timer
+
+      // Now spy and end cycle 3 early — must produce delay=4000, not 1000
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+      const r3 = await (axios.mock.results[2].value as Promise<{ data: EventEmitter }>);
+      r3.data.emit('end'); // reconnectAttempts → 3, delay = 4000
+
+      const reconnectDelays = setTimeoutSpy.mock.calls
+        .map(([, delay]) => delay)
+        .filter((delay): delay is number => typeof delay === 'number' && delay !== 30_000);
+
+      expect(reconnectDelays).toEqual([4_000]);
+    });
   });
 
   describe('handleEvent', () => {

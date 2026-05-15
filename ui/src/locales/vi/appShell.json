@@ -1,133 +1,133 @@
 {
   "appShell": {
     "toast": {
-      "dismiss": "Dismiss"
+      "dismiss": "Đóng"
     },
     "logViewer": {
       "toolbar": {
-        "resume": "Resume",
-        "pause": "Pause",
-        "unpinAutoScroll": "Unpin auto-scroll",
-        "pinAutoScroll": "Pin auto-scroll",
-        "newestFirst": "Newest first",
-        "oldestFirst": "Oldest first",
+        "resume": "Tiếp tục",
+        "pause": "Tạm dừng",
+        "unpinAutoScroll": "Bỏ ghim tự động cuộn",
+        "pinAutoScroll": "Ghim tự động cuộn",
+        "newestFirst": "Mới nhất trước",
+        "oldestFirst": "Cũ nhất trước",
         "regexToggle": ".* Regex",
-        "showMatchesOnly": "Show matches only",
-        "showingMatchesOnly": "Showing matches only",
-        "prev": "Prev",
-        "next": "Next"
+        "showMatchesOnly": "Chỉ hiển thị kết quả khớp",
+        "showingMatchesOnly": "Đang hiển thị kết quả khớp",
+        "prev": "Trước",
+        "next": "Tiếp"
       },
       "search": {
-        "placeholder": "Search logs",
-        "copied": "Copied!",
-        "copyLogs": "Copy logs"
+        "placeholder": "Tìm kiếm nhật ký",
+        "copied": "Đã sao chép!",
+        "copyLogs": "Sao chép nhật ký"
       },
       "empty": {
-        "noMatchingEntries": "No matching entries",
-        "defaultMessage": "No log entries yet"
+        "noMatchingEntries": "Không có mục nào khớp",
+        "defaultMessage": "Chưa có mục nhật ký"
       },
       "footer": {
-        "lines": "lines",
-        "defaultStatusLabel": "Offline"
+        "lines": "dòng",
+        "defaultStatusLabel": "Ngoại tuyến"
       }
     },
     "notificationBell": {
-      "buttonLabel": "Notifications",
-      "tooltip": "Notifications",
-      "header": "Notifications",
-      "clear": "Clear",
-      "loading": "Loading...",
-      "empty": "No notifications yet",
-      "markAllRead": "Mark all as read",
-      "openAuditLog": "Open audit log",
-      "dismiss": "Dismiss notification"
+      "buttonLabel": "Thông báo",
+      "tooltip": "Thông báo",
+      "header": "Thông báo",
+      "clear": "Xóa",
+      "loading": "Đang tải...",
+      "empty": "Chưa có thông báo",
+      "markAllRead": "Đánh dấu tất cả đã đọc",
+      "openAuditLog": "Mở nhật ký kiểm tra",
+      "dismiss": "Đóng thông báo"
     },
     "themeToggle": {
-      "mobileLabel": "Theme: {id} (tap to cycle)",
-      "switchTo": "Switch to {id} theme",
+      "mobileLabel": "Giao diện: {id} (chạm để đổi)",
+      "switchTo": "Chuyển sang giao diện {id}",
       "variantLabel": "{label}"
     },
     "layout": {
       "nav": {
-        "dashboard": "Dashboard",
-        "containers": "Containers",
-        "security": "Security",
-        "audit": "Audit",
-        "systemLogs": "System Logs",
-        "manageGroup": "Manage",
-        "hosts": "Hosts",
-        "registries": "Registries",
-        "watchers": "Watchers",
-        "settingsGroup": "Settings",
-        "general": "General",
-        "notifications": "Notifications",
-        "outbox": "Outbox",
-        "triggers": "Triggers",
-        "auth": "Auth",
-        "agents": "Agents"
+        "dashboard": "Bảng điều khiển",
+        "containers": "Container",
+        "security": "Bảo mật",
+        "audit": "Kiểm tra",
+        "systemLogs": "Nhật ký hệ thống",
+        "manageGroup": "Quản lý",
+        "hosts": "Máy chủ",
+        "registries": "Registry",
+        "watchers": "Watcher",
+        "settingsGroup": "Cài đặt",
+        "general": "Tổng quan",
+        "notifications": "Thông báo",
+        "outbox": "Hộp thư đi",
+        "triggers": "Trigger",
+        "auth": "Xác thực",
+        "agents": "Agent"
       },
       "sidebar": {
-        "closeMobileMenu": "Close menu",
-        "searchButton": "Search",
-        "searchAriaLabel": "Search",
-        "aboutTooltip": "About Drydock",
-        "aboutAriaLabel": "About Drydock",
-        "expandSidebar": "Expand sidebar",
-        "collapseSidebar": "Collapse sidebar"
+        "closeMobileMenu": "Đóng menu",
+        "searchButton": "Tìm kiếm",
+        "searchAriaLabel": "Tìm kiếm",
+        "aboutTooltip": "Giới thiệu về Drydock",
+        "aboutAriaLabel": "Giới thiệu về Drydock",
+        "expandSidebar": "Mở rộng thanh bên",
+        "collapseSidebar": "Thu gọn thanh bên"
       },
       "topbar": {
-        "openMenu": "Open menu",
-        "closeMenu": "Close menu",
-        "userMenu": "User menu",
-        "profile": "Profile",
-        "signOut": "Sign out"
+        "openMenu": "Mở menu",
+        "closeMenu": "Đóng menu",
+        "userMenu": "Menu người dùng",
+        "profile": "Hồ sơ",
+        "signOut": "Đăng xuất"
       },
       "about": {
         "title": "Drydock",
-        "subtitle": "Docker Container Update Manager",
-        "documentation": "Documentation",
+        "subtitle": "Trình quản lý cập nhật Docker Container",
+        "documentation": "Tài liệu",
         "github": "GitHub",
-        "changelog": "Changelog",
-        "close": "Close"
+        "changelog": "Nhật ký thay đổi",
+        "close": "Đóng"
       },
       "search": {
-        "ariaLabel": "Search",
-        "placeholder": "Jump to pages, containers, agents, triggers...",
-        "shown": "{count} shown",
-        "refreshing": "Refreshing search index...",
-        "noMatches": "No matches for \"{query}\".",
-        "hint": "Type to search pages, containers, agents, triggers, watchers, and settings.",
-        "prefixScopeHint": "Prefix scope active; use ",
-        "typeHint": "Type",
-        "useTab": " to change scope",
-        "moveHint": "move",
-        "openHint": "open"
+        "ariaLabel": "Tìm kiếm",
+        "placeholder": "Chuyển đến trang, container, agent, trigger...",
+        "shown": "{count} kết quả",
+        "refreshing": "Đang làm mới chỉ mục tìm kiếm...",
+        "noMatches": "Không có kết quả cho \"{query}\".",
+        "hint": "Nhập để tìm kiếm trang, container, agent, trigger, watcher và cài đặt.",
+        "prefixScopeHint": "Phạm vi tiền tố đang hoạt động; dùng ",
+        "typeHint": "Nhập",
+        "useTab": " để đổi phạm vi",
+        "moveHint": "di chuyển",
+        "openHint": "mở"
       },
       "connection": {
-        "lostTitle": "Connection Lost",
-        "applyingUpdateTitle": "Applying Update",
-        "lostMessage": "The server is unreachable. Waiting for it to come back online...",
-        "restartingMessage": "Drydock is restarting after a self-update{opId}. Reconnecting when the service is back...",
-        "reconnecting": "Reconnecting",
-        "restartingService": "Restarting service"
+        "lostTitle": "Mất kết nối",
+        "applyingUpdateTitle": "Đang áp dụng cập nhật",
+        "lostMessage": "Máy chủ không thể truy cập. Đang chờ máy chủ trở lại...",
+        "restartingMessage": "Drydock đang khởi động lại sau khi tự cập nhật{opId}. Đang kết nối lại khi dịch vụ trở lại...",
+        "reconnecting": "Đang kết nối lại",
+        "restartingService": "Đang khởi động lại dịch vụ"
       }
     },
     "announcementBanner": {
-      "defaultDismiss": "Dismiss",
-      "defaultLinkLabel": "View migration guide"
+      "defaultDismiss": "Đóng",
+      "defaultLinkLabel": "Xem hướng dẫn chuyển đổi"
     },
     "banners": {
-      "legacyConfigTitleSingular": "{total} legacy configuration alias detected",
-      "legacyConfigTitlePlural": "{total} legacy configuration aliases detected",
-      "legacyApiPathTitle": "{total} legacy API paths detected",
-      "dontShowAgain": "Don't show again",
-      "oidcHttpTitle": "HTTP OIDC discovery detected",
-      "legacyHashTitle": "Legacy password hash detected",
-      "curlHealthcheckTitle": "Custom curl healthcheck override detected",
+      "legacyConfigTitleSingular": "Phát hiện {total} bí danh cấu hình cũ",
+      "legacyConfigTitlePlural": "Phát hiện {total} bí danh cấu hình cũ",
+      "legacyApiPathTitle": "Phát hiện {total} đường dẫn API cũ",
+      "dontShowAgain": "Không hiển thị lại",
+      "oidcHttpTitle": "Phát hiện OIDC discovery qua HTTP",
+      "legacyHashTitle": "Phát hiện hash mật khẩu cũ",
+      "curlHealthcheckTitle": "Phát hiện ghi đè healthcheck curl tùy chỉnh",
       "envKeysLabel": "Env keys ({count}): {keys}",
       "labelKeysLabel": "Label keys ({count}): {keys}",
       "apiPathsLabel": "API paths ({count}): {keys}",
-      "healthcheckCommandLabel": "Healthcheck command: {command}"
+      "healthcheckCommandLabel": "Lệnh healthcheck: {command}"
     }
   }
 }

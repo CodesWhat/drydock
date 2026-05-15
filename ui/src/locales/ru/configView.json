@@ -1,148 +1,148 @@
 {
   "configView": {
     "tabs": {
-      "general": "General",
-      "appearance": "Appearance",
-      "profile": "Profile"
+      "general": "Общие",
+      "appearance": "Внешний вид",
+      "profile": "Профиль"
     },
     "general": {
       "application": {
-        "title": "Application",
-        "loadingServerInfo": "Loading server info"
+        "title": "Приложение",
+        "loadingServerInfo": "Загрузка информации о сервере"
       },
       "store": {
-        "title": "Store"
+        "title": "Хранилище"
       },
       "webhookApi": {
         "title": "Webhook API",
-        "enabled": "Enabled",
-        "disabled": "Disabled",
-        "description": "Use these endpoints to trigger watch cycles and updates via HTTP. All requests require a Bearer token in the Authorization header.",
-        "disabledMessage": "Webhook API is disabled. Set",
-        "disabledHint": "Webhook API is disabled. Set {envEnabled} and configure at least one token ({envToken} or {envTokens}) to enable it.",
+        "enabled": "Включён",
+        "disabled": "Отключён",
+        "description": "Используйте эти эндпоинты для запуска циклов наблюдения и обновлений через HTTP. Все запросы требуют Bearer-токен в заголовке Authorization.",
+        "disabledMessage": "Webhook API отключён. Задайте",
+        "disabledHint": "Webhook API отключён. Задайте {envEnabled} и настройте хотя бы один токен ({envToken} или {envTokens}) для его включения.",
         "table": {
-          "endpoint": "Endpoint",
-          "description": "Description"
+          "endpoint": "Эндпоинт",
+          "description": "Описание"
         },
-        "example": "Example",
+        "example": "Пример",
         "endpoints": {
-          "watchAll": "Trigger a full watch cycle on all watchers",
-          "watchOne": "Watch a specific container by name",
-          "updateOne": "Trigger an update on a specific container"
+          "watchAll": "Запустить полный цикл наблюдения по всем наблюдателям",
+          "watchOne": "Наблюдать за конкретным контейнером по имени",
+          "updateOne": "Запустить обновление конкретного контейнера"
         }
       },
       "network": {
-        "title": "Network",
+        "title": "Сеть",
         "internetlessMode": {
-          "label": "Internetless Mode",
-          "description": "Block all outbound requests (container icons, external fetches)"
+          "label": "Режим без интернета",
+          "description": "Блокировать все исходящие запросы (иконки контейнеров, внешние загрузки)"
         }
       },
       "iconCache": {
-        "title": "Container Icon Cache",
+        "title": "Кеш иконок контейнеров",
         "cachedIcons": {
-          "label": "Cached Icons",
-          "description": "Common icons are bundled; other icons are cached to disk on first fetch"
+          "label": "Кешированные иконки",
+          "description": "Основные иконки встроены; остальные кешируются на диск при первом запросе"
         },
-        "cleared": "{count} cleared",
-        "clearButton": "Clear Cache"
+        "cleared": "Очищено: {count}",
+        "clearButton": "Очистить кеш"
       },
       "diagnostics": {
-        "title": "Diagnostics",
+        "title": "Диагностика",
         "debugDump": {
-          "label": "Diagnostic Debug Dump",
-          "description": "Download a redacted JSON snapshot of runtime state for troubleshooting",
-          "preparing": "Preparing...",
-          "download": "Download Debug Dump"
+          "label": "Диагностический дамп",
+          "description": "Скачать редактированный JSON-снимок состояния среды выполнения для диагностики",
+          "preparing": "Подготовка...",
+          "download": "Скачать дамп"
         }
       },
       "fields": {
-        "version": "Version",
-        "serverPort": "Server Port",
-        "containerActions": "Container Actions",
+        "version": "Версия",
+        "serverPort": "Порт сервера",
+        "containerActions": "Действия с контейнерами",
         "webhook": "Webhook",
-        "deleteEnabled": "Delete Enabled",
-        "trustProxy": "Trust Proxy",
-        "metricsAuth": "Metrics Auth",
-        "storePath": "Store Path",
-        "storeFile": "Store File",
-        "enabled": "Enabled",
-        "disabled": "Disabled",
-        "yes": "Yes",
-        "no": "No"
+        "deleteEnabled": "Удаление включено",
+        "trustProxy": "Доверять прокси",
+        "metricsAuth": "Аутентификация метрик",
+        "storePath": "Путь к хранилищу",
+        "storeFile": "Файл хранилища",
+        "enabled": "Включено",
+        "disabled": "Отключено",
+        "yes": "Да",
+        "no": "Нет"
       },
       "errors": {
-        "loadServerInfo": "Failed to load server info",
-        "loadProfileData": "Failed to load profile data",
-        "updateNetworkSettings": "Failed to update network settings",
-        "clearIconCache": "Failed to clear icon cache",
-        "downloadDebugDump": "Unable to download debug dump",
-        "errorLabel": "Error"
+        "loadServerInfo": "Не удалось загрузить информацию о сервере",
+        "loadProfileData": "Не удалось загрузить данные профиля",
+        "updateNetworkSettings": "Не удалось обновить сетевые настройки",
+        "clearIconCache": "Не удалось очистить кеш иконок",
+        "downloadDebugDump": "Не удалось скачать диагностический дамп",
+        "errorLabel": "Ошибка"
       }
     },
     "appearance": {
       "language": {
-        "title": "Language"
+        "title": "Язык"
       },
       "colorTheme": {
-        "title": "Color Theme",
+        "title": "Цветовая тема",
         "descriptions": {
-          "oneDark": "Clean and balanced",
-          "github": "Clean and familiar",
-          "dracula": "Bold purple vibes",
-          "catppuccin": "Warm pastel tones",
-          "gruvbox": "Retro earthy warmth",
-          "ayu": "Soft golden tones"
+          "oneDark": "Чистый и сбалансированный",
+          "github": "Чистый и привычный",
+          "dracula": "Яркий фиолетовый",
+          "catppuccin": "Тёплые пастельные тона",
+          "gruvbox": "Ретро-земляная теплота",
+          "ayu": "Мягкие золотистые тона"
         }
       },
       "fontFamily": {
-        "title": "Font Family",
-        "defaultBadge": "default",
+        "title": "Шрифт",
+        "defaultBadge": "по умолчанию",
         "preview": "Съешь же ещё этих мягких французских булок, да выпей чаю"
       },
       "fontSize": {
-        "title": "Font Size"
+        "title": "Размер шрифта"
       },
       "iconLibrary": {
-        "title": "Icon Library"
+        "title": "Библиотека иконок"
       },
       "iconSize": {
-        "title": "Icon Size"
+        "title": "Размер иконок"
       },
       "borderRadius": {
-        "title": "Border Radius",
+        "title": "Скругление углов",
         "labels": {
-          "none": "None",
-          "sharp": "Sharp",
-          "modern": "Modern",
-          "soft": "Soft",
-          "round": "Round"
+          "none": "Нет",
+          "sharp": "Острые",
+          "modern": "Современные",
+          "soft": "Мягкие",
+          "round": "Круглые"
         }
       }
     },
     "profile": {
-      "loading": "Loading profile",
+      "loading": "Загрузка профиля",
       "fields": {
-        "username": "Username",
+        "username": "Имя пользователя",
         "email": "Email",
-        "role": "Role",
-        "provider": "Provider",
-        "lastLogin": "Last Login",
-        "activeSessions": "Active Sessions"
+        "role": "Роль",
+        "provider": "Провайдер",
+        "lastLogin": "Последний вход",
+        "activeSessions": "Активные сессии"
       }
     },
     "logs": {
-      "loading": "Loading logs...",
-      "emptyMessage": "No log entries found for current filters.",
+      "loading": "Загрузка журналов...",
+      "emptyMessage": "Записей журнала для текущих фильтров не найдено.",
       "toolbar": {
-        "live": "Live",
-        "allLevels": "All Levels",
+        "live": "В эфире",
+        "allLevels": "Все уровни",
         "debug": "Debug",
         "info": "Info",
         "warn": "Warn",
         "error": "Error",
-        "allComponents": "All Components",
-        "resetFilters": "Reset filters"
+        "allComponents": "Все компоненты",
+        "resetFilters": "Сбросить фильтры"
       },
       "tail": {
         "50": "Tail 50",
@@ -150,7 +150,7 @@
         "500": "Tail 500",
         "1000": "Tail 1000"
       },
-      "logLevelBadge": "Server log level: {level}. Only messages at this level or above are captured."
+      "logLevelBadge": "Уровень журнала сервера: {level}. Фиксируются только сообщения этого уровня и выше."
     }
   }
 }

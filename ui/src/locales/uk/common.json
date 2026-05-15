@@ -1,13 +1,13 @@
 {
   "common": {
-    "loading": "Loading…",
-    "back": "Back",
-    "cancel": "Cancel",
-    "save": "Save",
-    "delete": "Delete",
-    "confirm": "Confirm",
-    "close": "Close",
-    "retry": "Retry",
-    "unknown": "unknown"
+    "loading": "Завантаження…",
+    "back": "Назад",
+    "cancel": "Скасувати",
+    "save": "Зберегти",
+    "delete": "Видалити",
+    "confirm": "Підтвердити",
+    "close": "Закрити",
+    "retry": "Повторити",
+    "unknown": "невідомо"
   }
 }

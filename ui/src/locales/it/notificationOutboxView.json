@@ -1,0 +1,39 @@
+{
+  "notificationOutboxView": {
+    "heading": "Posta in uscita",
+    "refresh": "Aggiorna",
+    "loading": "Caricamento voci in uscita...",
+    "tabs": {
+      "dead-letter": "Dead-letter",
+      "pending": "In attesa",
+      "delivered": "Consegnato"
+    },
+    "columns": {
+      "event": "Evento",
+      "trigger": "Trigger",
+      "attempts": "Tentativi",
+      "lastError": "Ultimo errore",
+      "created": "Creato"
+    },
+    "actions": {
+      "retry": "Riprova",
+      "discard": "Scarta"
+    },
+    "status": {
+      "dead-letter": "Dead-letter",
+      "pending": "In attesa",
+      "delivered": "Consegnato"
+    },
+    "empty": {
+      "dead-letter": "Nessuna voce dead-letter",
+      "pending": "Nessuna voce in attesa",
+      "delivered": "Nessuna voce consegnata"
+    },
+    "toast": {
+      "requeued": "Rimesso in coda: {name}",
+      "discarded": "Scartato: {name}",
+      "retryFailed": "Impossibile riprovare {name}",
+      "discardFailed": "Impossibile scartare {name}"
+    }
+  }
+}

@@ -1,52 +1,52 @@
 {
   "agentsView": {
     "list": {
-      "loading": "Loading agents...",
-      "filterPlaceholder": "Filter by name...",
-      "clearFilter": "Clear",
-      "emptyFiltered": "No agents match your filters",
-      "toggleColumns": "Toggle columns",
-      "columnPickerHeading": "Columns",
-      "loadError": "Failed to load agents",
+      "loading": "에이전트 불러오는 중...",
+      "filterPlaceholder": "이름으로 필터...",
+      "clearFilter": "초기화",
+      "emptyFiltered": "필터와 일치하는 에이전트가 없습니다",
+      "toggleColumns": "열 표시/숨기기",
+      "columnPickerHeading": "열",
+      "loadError": "에이전트를 불러오지 못했습니다",
       "status": {
-        "connected": "Connected",
-        "disconnected": "Disconnected"
+        "connected": "연결됨",
+        "disconnected": "연결 해제됨"
       },
       "columns": {
-        "name": "Agent",
-        "status": "Status",
-        "containers": "Containers",
+        "name": "에이전트",
+        "status": "상태",
+        "containers": "컨테이너",
         "docker": "Docker",
         "os": "OS",
-        "version": "Version",
-        "lastSeen": "Last Seen"
+        "version": "버전",
+        "lastSeen": "마지막 접속"
       },
       "card": {
-        "running": "running",
-        "stopped": "stopped"
+        "running": "실행 중",
+        "stopped": "중지됨"
       }
     },
     "detail": {
       "tabs": {
-        "overview": "Overview",
-        "logs": "Logs",
-        "config": "Config"
+        "overview": "개요",
+        "logs": "로그",
+        "config": "설정"
       },
       "overview": {
-        "resources": "Resources",
-        "system": "System",
-        "containers": "Containers",
-        "containerTotal": "Total",
-        "containerRunning": "Running",
-        "containerStopped": "Stopped",
-        "viewContainers": "View containers",
-        "automation": "Automation",
-        "watchers": "Watchers",
-        "triggers": "Triggers",
-        "none": "None"
+        "resources": "리소스",
+        "system": "시스템",
+        "containers": "컨테이너",
+        "containerTotal": "전체",
+        "containerRunning": "실행 중",
+        "containerStopped": "중지됨",
+        "viewContainers": "컨테이너 보기",
+        "automation": "자동화",
+        "watchers": "워처",
+        "triggers": "트리거",
+        "none": "없음"
       },
       "logs": {
-        "allLevels": "All Levels",
+        "allLevels": "전체 레벨",
         "levelDebug": "Debug",
         "levelInfo": "Info",
         "levelWarn": "Warn",
@@ -55,35 +55,35 @@
         "tail100": "Tail 100",
         "tail500": "Tail 500",
         "tail1000": "Tail 1000",
-        "componentPlaceholder": "Filter by component...",
-        "apply": "Apply",
-        "reset": "Reset",
-        "refresh": "Refresh",
-        "emptyMessage": "No log entries found for current filters.",
-        "lastFetched": "Last fetched: {time}",
-        "entries": "{count} entries",
-        "statusLive": "Live",
-        "statusOffline": "Offline"
+        "componentPlaceholder": "컴포넌트로 필터...",
+        "apply": "적용",
+        "reset": "초기화",
+        "refresh": "새로 고침",
+        "emptyMessage": "현재 필터에 해당하는 로그가 없습니다.",
+        "lastFetched": "마지막 조회: {time}",
+        "entries": "{count}개 항목",
+        "statusLive": "실시간",
+        "statusOffline": "오프라인"
       },
       "fields": {
-        "cpus": "CPUs",
-        "memory": "Memory",
-        "images": "Images",
-        "uptime": "Uptime",
+        "cpus": "CPU",
+        "memory": "메모리",
+        "images": "이미지",
+        "uptime": "가동 시간",
         "docker": "Docker",
         "os": "OS",
-        "architecture": "Architecture",
-        "agent": "Agent",
-        "host": "Host",
-        "agentVersion": "Agent Version",
-        "logLevel": "Log Level",
-        "pollInterval": "Poll Interval",
-        "dockerSocket": "Docker Socket",
-        "lastSeen": "Last Seen",
-        "never": "never"
+        "architecture": "아키텍처",
+        "agent": "에이전트",
+        "host": "호스트",
+        "agentVersion": "에이전트 버전",
+        "logLevel": "로그 레벨",
+        "pollInterval": "폴링 간격",
+        "dockerSocket": "Docker 소켓",
+        "lastSeen": "마지막 접속",
+        "never": "없음"
       },
       "listView": {
-        "details": "Details"
+        "details": "상세 정보"
       }
     }
   }

@@ -1,13 +1,13 @@
 {
   "common": {
-    "loading": "Loading…",
-    "back": "Back",
-    "cancel": "Cancel",
-    "save": "Save",
-    "delete": "Delete",
-    "confirm": "Confirm",
-    "close": "Close",
-    "retry": "Retry",
-    "unknown": "unknown"
+    "loading": "Загрузка…",
+    "back": "Назад",
+    "cancel": "Отмена",
+    "save": "Сохранить",
+    "delete": "Удалить",
+    "confirm": "Подтвердить",
+    "close": "Закрыть",
+    "retry": "Повторить",
+    "unknown": "неизвестно"
   }
 }

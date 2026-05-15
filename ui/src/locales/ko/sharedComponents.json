@@ -1,55 +1,55 @@
 {
   "sharedComponents": {
     "confirmDialog": {
-      "cancel": "Cancel",
-      "confirm": "Confirm"
+      "cancel": "취소",
+      "confirm": "확인"
     },
     "copyableTag": {
-      "copied": "Copied!",
-      "clickToCopy": "Click to copy"
+      "copied": "복사됨!",
+      "clickToCopy": "클릭하여 복사"
     },
     "dataCardGrid": {
-      "selectItem": "Select {name}"
+      "selectItem": "{name} 선택"
     },
     "dataFilterBar": {
-      "filters": "Filters",
-      "toggleFilters": "Toggle filters",
-      "viewMode": "View mode",
-      "viewModeLabel": "{label} view"
+      "filters": "필터",
+      "toggleFilters": "필터 표시/숨기기",
+      "viewMode": "보기 모드",
+      "viewModeLabel": "{label} 보기"
     },
     "dataListAccordion": {
-      "toggleDetails": "Toggle {name} details",
-      "selectItem": "Select {name}"
+      "toggleDetails": "{name} 상세 정보 표시/숨기기",
+      "selectItem": "{name} 선택"
     },
     "dataTable": {
-      "actions": "Actions",
-      "resizeColumn": "Resize column"
+      "actions": "작업",
+      "resizeColumn": "열 크기 조정"
     },
     "detailPanel": {
-      "openFullPage": "Open full page view",
-      "closePanel": "Close details panel",
-      "ariaLabel": "Detail panel"
+      "openFullPage": "전체 페이지 보기 열기",
+      "closePanel": "상세 패널 닫기",
+      "ariaLabel": "상세 패널"
     },
     "emptyState": {
-      "clearFilters": "Clear all filters"
+      "clearFilters": "모든 필터 초기화"
     },
     "logViewer": {
-      "emptyMessage": "No log entries found.",
-      "loadingMessage": "Loading logs..."
+      "emptyMessage": "로그 항목이 없습니다.",
+      "loadingMessage": "로그 불러오는 중..."
     },
     "scanProgressBanner": {
-      "scanning": "Scanning {done}/{total} containers..."
+      "scanning": "{done}/{total}개 컨테이너 스캔 중..."
     },
     "scanProgressText": {
-      "scanning": "Scanning {done}/{total}..."
+      "scanning": "{done}/{total} 스캔 중..."
     },
     "securityEmptyState": {
-      "noDataTitle": "No vulnerability data yet",
-      "noDataBody": "Run a scan to check your containers for known vulnerabilities",
-      "filteredTitle": "No images match your filters",
-      "clearFilters": "Clear all filters",
-      "setupGuide": "Setup Guide",
-      "scanNow": "Scan Now"
+      "noDataTitle": "아직 취약성 데이터가 없습니다",
+      "noDataBody": "스캔을 실행하여 컨테이너의 알려진 취약성을 확인하세요",
+      "filteredTitle": "필터와 일치하는 이미지가 없습니다",
+      "clearFilters": "모든 필터 초기화",
+      "setupGuide": "설정 가이드",
+      "scanNow": "지금 스캔"
     }
   }
 }

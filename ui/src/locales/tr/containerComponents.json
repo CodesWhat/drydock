@@ -102,6 +102,7 @@
       "version": "Sürüm",
       "currentLabel": "Güncel:",
       "latestLabel": "En son:",
+      "digestLabel": "Özet:",
       "upToDate": "güncel",
       "tagFilters": "Etiket Filtreleri",
       "includeLabel": "Dahil et:",
@@ -183,10 +184,15 @@
       "currentLabel": "Mevcut",
       "latestLabel": "En son",
       "blockedByBouncer": "Bouncer tarafından engellendi",
-      "registryErrorRateLimited": "Rate limited",
-      "registryErrorAuth": "Auth failed",
-      "registryErrorNotFound": "Not found",
-      "registryErrorCheckFailed": "Check failed"
+      "registryErrorRateLimited": "İstek sınırı aşıldı",
+      "registryErrorAuth": "Kimlik doğrulama başarısız",
+      "registryErrorNotFound": "Bulunamadı",
+      "registryErrorCheckFailed": "Kontrol başarısız",
+      "blockedTag": "Engellendi: {tag}",
+      "blockedTagWithCriticals": "Engellendi: {tag} ({count} kritik CVE)",
+      "blockedTagWithCriticalsCVEs": "Engellendi: {tag} ({count} kritik CVE)",
+      "manualUpdateOnly": "Yalnızca manuel güncelleme",
+      "manualUpdateOnlyWithMessage": "Yalnızca manuel güncelleme — {message}"
     },
     "groupHeader": {
       "ungrouped": "Gruplandırılmamış",
@@ -251,8 +257,8 @@
       "collapseAll": "Tümünü daralt",
       "recheckTooltip": "Güncellemeleri tekrar kontrol edin",
       "columnsHeader": "Sütunlar",
-      "narrowViewportSuffix": "(narrow viewport)",
-      "autoHiddenBadgeTooltip": "{count} columns auto-hidden because the window is narrow. Widen the window or hide other columns to free space.",
+      "narrowViewportSuffix": "(dar görünüm alanı)",
+      "autoHiddenBadgeTooltip": "Pencere dar olduğu için {count} sütun otomatik gizlendi. Alan açmak için pencereyi genişletin veya diğer sütunları gizleyin.",
       "filterSearch": "Arama: {value}",
       "filterStatus": "Durum: {value}",
       "filterBouncer": "Bouncer: {value}",
@@ -261,7 +267,8 @@
       "filterKind": "Tür: {value}",
       "filterHiddenPinned": "Gizli: Sabitlendi",
       "filtersLabel": "Filtreler",
-      "filteredContainers": "{count} kapsayıcısına filtre uygulandı | {count} kapsayıcılara filtrelendi"
+      "filteredContainers": "{count} kapsayıcısına filtre uygulandı | {count} kapsayıcılara filtrelendi",
+      "clearContainerIdFilter": "Konteyner kimliği filtresini temizle"
     },
     "stats": {
       "paused": "Duraklatıldı",
@@ -299,7 +306,8 @@
     },
     "suggestedTag": {
       "badgeText": "Önerilen",
-      "tooltip": "Mevcut en iyi kararlı semver etiketi — sabitlemeyi düşünün"
+      "tooltip": "Mevcut en iyi kararlı semver etiketi — sabitlemeyi düşünün",
+      "tooltipWithTag": "Önerilen: {tag}\n{hint}"
     },
     "eligibilityBadges": {
       "securityBlocked": "Güvenlik engellendi",

@@ -1,100 +1,101 @@
 {
   "dashboardView": {
-    "loading": "Loading dashboard...",
-    "loadFailed": "Failed to load dashboard",
-    "dragToReorder": "Drag to reorder",
-    "viewAll": "View all →",
+    "loading": "ダッシュボードを読み込み中...",
+    "loadFailed": "ダッシュボードの読み込みに失敗しました",
+    "dragToReorder": "ドラッグして並び替え",
+    "viewAll": "すべて表示 →",
     "editToggle": {
-      "showWidgetPanel": "Show widget panel",
-      "doneCustomizing": "Done customizing",
-      "customize": "Customize dashboard"
+      "showWidgetPanel": "ウィジェットパネルを表示",
+      "doneCustomizing": "カスタマイズ完了",
+      "customize": "ダッシュボードをカスタマイズ"
     },
     "widgetPanel": {
-      "title": "Widgets",
-      "closePanel": "Close panel",
-      "resetToDefault": "Reset to Default"
+      "title": "ウィジェット",
+      "closePanel": "パネルを閉じる",
+      "resetToDefault": "デフォルトに戻す"
     },
     "confirm": {
       "updateContainer": {
-        "header": "Update Container",
-        "message": "Update {name} now? This will apply the latest discovered image.",
-        "accept": "Update"
+        "header": "コンテナを更新",
+        "message": "{name} を今すぐ更新しますか？最新のイメージが適用されます。",
+        "accept": "更新"
       },
       "updateAll": {
-        "header": "Update All Containers",
-        "message": "{count} containers will be updated. Continue?",
-        "accept": "Update All"
+        "header": "全コンテナを更新",
+        "message": "{count} 件のコンテナが更新されます。続行しますか？",
+        "accept": "すべて更新"
       }
     },
     "toast": {
-      "updated": "Updated: {name}",
-      "updateFailed": "Update failed: {name}",
-      "updateFailedWithReason": "Update failed: {name} — {reason}",
-      "cancelled": "Cancelled: {name}",
-      "rolledBack": "Rolled back: {name}",
-      "rolledBackWithReason": "Rolled back: {name} — {reason}",
-      "updateError": "Failed to update {name}",
-      "updateAllError": "Failed to update all containers"
+      "updated": "更新しました：{name}",
+      "updateFailed": "更新に失敗しました：{name}",
+      "updateFailedWithReason": "更新に失敗しました：{name} — {reason}",
+      "cancelled": "キャンセルしました：{name}",
+      "rolledBack": "ロールバックしました：{name}",
+      "rolledBackWithReason": "ロールバックしました：{name} — {reason}",
+      "updateError": "{name} の更新に失敗しました",
+      "updateAllError": "全コンテナの更新に失敗しました"
     },
     "recentUpdates": {
-      "title": "Updates Available",
-      "updateAll": "Update all",
-      "noUpdates": "No updates available",
-      "releaseNotes": "Release notes",
-      "securityBlocked": "Security blocked",
-      "updateContainer": "Update container",
-      "compactSingle": "{count} update available",
-      "compactPlural": "{count} updates available",
+      "title": "利用可能な更新",
+      "widgetAria": "利用可能な更新ウィジェット",
+      "updateAll": "すべて更新",
+      "noUpdates": "利用可能な更新はありません",
+      "releaseNotes": "リリースノート",
+      "securityBlocked": "セキュリティによりブロック",
+      "updateContainer": "コンテナを更新",
+      "compactSingle": "{count} 件の更新が利用可能",
+      "compactPlural": "{count} 件の更新が利用可能",
       "status": {
-        "queued": "Queued",
-        "updating": "Updating"
+        "queued": "キュー済み",
+        "updating": "更新中"
       },
       "columns": {
-        "container": "Container",
-        "version": "Version",
-        "type": "Type",
-        "actions": "Actions"
+        "container": "コンテナ",
+        "version": "バージョン",
+        "type": "種別",
+        "actions": "アクション"
       }
     },
     "hostStatus": {
-      "title": "Host Status",
-      "connected": "Connected",
-      "disconnected": "Disconnected",
-      "containerCount": "{running}/{total} containers"
+      "title": "ホストステータス",
+      "connected": "接続済み",
+      "disconnected": "切断済み",
+      "containerCount": "{running}/{total} 件のコンテナ"
     },
     "resourceUsage": {
-      "title": "Resource Usage",
-      "totalUsage": "Total Usage ({watched} watched)",
-      "cpu": "Avg CPU",
-      "memory": "Memory",
-      "topCpu": "Top CPU",
-      "topMemory": "Top Memory",
-      "noCpuData": "No live CPU data",
-      "noMemoryData": "No live memory data"
+      "title": "リソース使用状況",
+      "totalUsage": "合計使用量（{watched} 件監視中）",
+      "cpu": "平均 CPU",
+      "memory": "メモリ",
+      "topCpu": "CPU トップ",
+      "topMemory": "メモリトップ",
+      "noCpuData": "ライブ CPU データがありません",
+      "noMemoryData": "ライブメモリデータがありません"
     },
     "securityOverview": {
-      "title": "Security Overview",
-      "images": "images",
-      "clean": "Clean",
-      "issues": "Issues",
-      "notScanned": "Not Scanned",
-      "severityBreakdown": "Severity Breakdown",
-      "critical": "{count} Critical",
-      "high": "{count} High",
-      "medium": "{count} Medium",
-      "low": "{count} Low",
-      "topVulnerabilities": "Top Vulnerabilities",
-      "noVulnerabilities": "No vulnerabilities reported"
+      "title": "セキュリティ概要",
+      "images": "イメージ",
+      "clean": "問題なし",
+      "issues": "問題あり",
+      "notScanned": "未スキャン",
+      "severityBreakdown": "深刻度内訳",
+      "critical": "{count} 件 致命的",
+      "high": "{count} 件 高",
+      "medium": "{count} 件 中",
+      "low": "{count} 件 低",
+      "topVulnerabilities": "主な脆弱性",
+      "noVulnerabilities": "脆弱性の報告はありません"
     },
     "updateBreakdown": {
-      "title": "Update Breakdown",
-      "noUpdates": "No updates to categorize"
+      "title": "更新内訳",
+      "noUpdates": "分類する更新がありません"
     },
     "stats": {
       "containers": "コンテナ",
       "containerDetail": "{running} 稼働中 · {stopped} 停止中",
       "updatesAvailable": "利用可能な更新",
-      "updateDetail": "{fresh} 新規 · {mature} 既存",
+      "updateDetail": "{fresh} 新規 · {mature} 成熟",
       "securityIssues": "セキュリティ問題",
       "registries": "レジストリ"
     },

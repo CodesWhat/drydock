@@ -1,94 +1,95 @@
 {
   "dashboardView": {
-    "loading": "Loading dashboard...",
-    "loadFailed": "Failed to load dashboard",
-    "dragToReorder": "Drag to reorder",
-    "viewAll": "View all →",
+    "loading": "Завантаження панелі керування...",
+    "loadFailed": "Не вдалося завантажити панель керування",
+    "dragToReorder": "Перетягніть для зміни порядку",
+    "viewAll": "Переглянути всі →",
     "editToggle": {
-      "showWidgetPanel": "Show widget panel",
-      "doneCustomizing": "Done customizing",
-      "customize": "Customize dashboard"
+      "showWidgetPanel": "Показати панель віджетів",
+      "doneCustomizing": "Завершити налаштування",
+      "customize": "Налаштувати панель керування"
     },
     "widgetPanel": {
-      "title": "Widgets",
-      "closePanel": "Close panel",
-      "resetToDefault": "Reset to Default"
+      "title": "Віджети",
+      "closePanel": "Закрити панель",
+      "resetToDefault": "Скинути до стандартного"
     },
     "confirm": {
       "updateContainer": {
-        "header": "Update Container",
-        "message": "Update {name} now? This will apply the latest discovered image.",
-        "accept": "Update"
+        "header": "Оновити контейнер",
+        "message": "Оновити {name} зараз? Буде застосовано останній виявлений образ.",
+        "accept": "Оновити"
       },
       "updateAll": {
-        "header": "Update All Containers",
-        "message": "{count} containers will be updated. Continue?",
-        "accept": "Update All"
+        "header": "Оновити всі контейнери",
+        "message": "Буде оновлено {count} контейнерів. Продовжити?",
+        "accept": "Оновити всі"
       }
     },
     "toast": {
-      "updated": "Updated: {name}",
-      "updateFailed": "Update failed: {name}",
-      "updateFailedWithReason": "Update failed: {name} — {reason}",
-      "cancelled": "Cancelled: {name}",
-      "rolledBack": "Rolled back: {name}",
-      "rolledBackWithReason": "Rolled back: {name} — {reason}",
-      "updateError": "Failed to update {name}",
-      "updateAllError": "Failed to update all containers"
+      "updated": "Оновлено: {name}",
+      "updateFailed": "Помилка оновлення: {name}",
+      "updateFailedWithReason": "Помилка оновлення: {name} — {reason}",
+      "cancelled": "Скасовано: {name}",
+      "rolledBack": "Відкат виконано: {name}",
+      "rolledBackWithReason": "Відкат виконано: {name} — {reason}",
+      "updateError": "Не вдалося оновити {name}",
+      "updateAllError": "Не вдалося оновити всі контейнери"
     },
     "recentUpdates": {
-      "title": "Updates Available",
-      "updateAll": "Update all",
-      "noUpdates": "No updates available",
-      "releaseNotes": "Release notes",
-      "securityBlocked": "Security blocked",
-      "updateContainer": "Update container",
-      "compactSingle": "{count} update available",
-      "compactPlural": "{count} updates available",
+      "title": "Доступні оновлення",
+      "widgetAria": "Віджет доступних оновлень",
+      "updateAll": "Оновити всі",
+      "noUpdates": "Оновлень немає",
+      "releaseNotes": "Примітки до випуску",
+      "securityBlocked": "Заблоковано безпекою",
+      "updateContainer": "Оновити контейнер",
+      "compactSingle": "{count} доступне оновлення",
+      "compactPlural": "{count} доступних оновлень",
       "status": {
-        "queued": "Queued",
-        "updating": "Updating"
+        "queued": "В черзі",
+        "updating": "Оновлення"
       },
       "columns": {
-        "container": "Container",
-        "version": "Version",
-        "type": "Type",
-        "actions": "Actions"
+        "container": "Контейнер",
+        "version": "Версія",
+        "type": "Тип",
+        "actions": "Дії"
       }
     },
     "hostStatus": {
-      "title": "Host Status",
-      "connected": "Connected",
-      "disconnected": "Disconnected",
-      "containerCount": "{running}/{total} containers"
+      "title": "Статус хостів",
+      "connected": "Підключено",
+      "disconnected": "Відключено",
+      "containerCount": "{running}/{total} контейнерів"
     },
     "resourceUsage": {
-      "title": "Resource Usage",
-      "totalUsage": "Total Usage ({watched} watched)",
-      "cpu": "Avg CPU",
-      "memory": "Memory",
-      "topCpu": "Top CPU",
-      "topMemory": "Top Memory",
-      "noCpuData": "No live CPU data",
-      "noMemoryData": "No live memory data"
+      "title": "Використання ресурсів",
+      "totalUsage": "Загальне використання ({watched} під спостереженням)",
+      "cpu": "Сер. CPU",
+      "memory": "Пам'ять",
+      "topCpu": "Топ CPU",
+      "topMemory": "Топ пам'яті",
+      "noCpuData": "Немає актуальних даних CPU",
+      "noMemoryData": "Немає актуальних даних пам'яті"
     },
     "securityOverview": {
-      "title": "Security Overview",
-      "images": "images",
-      "clean": "Clean",
-      "issues": "Issues",
-      "notScanned": "Not Scanned",
-      "severityBreakdown": "Severity Breakdown",
-      "critical": "{count} Critical",
-      "high": "{count} High",
-      "medium": "{count} Medium",
-      "low": "{count} Low",
-      "topVulnerabilities": "Top Vulnerabilities",
-      "noVulnerabilities": "No vulnerabilities reported"
+      "title": "Огляд безпеки",
+      "images": "образів",
+      "clean": "Чисті",
+      "issues": "Проблеми",
+      "notScanned": "Не скановано",
+      "severityBreakdown": "Розподіл за рівнем серйозності",
+      "critical": "{count} критичних",
+      "high": "{count} високих",
+      "medium": "{count} середніх",
+      "low": "{count} низьких",
+      "topVulnerabilities": "Топ вразливостей",
+      "noVulnerabilities": "Вразливостей не виявлено"
     },
     "updateBreakdown": {
-      "title": "Update Breakdown",
-      "noUpdates": "No updates to categorize"
+      "title": "Розподіл оновлень",
+      "noUpdates": "Немає оновлень для категоризації"
     },
     "stats": {
       "containers": "Контейнери",

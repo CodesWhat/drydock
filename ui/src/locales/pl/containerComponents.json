@@ -102,6 +102,7 @@
       "version": "Wersja",
       "currentLabel": "Aktualne:",
       "latestLabel": "Najnowsze:",
+      "digestLabel": "Skrót:",
       "upToDate": "Aktualne",
       "tagFilters": "Filtry tagów",
       "includeLabel": "Uwzględnij:",
@@ -183,10 +184,15 @@
       "currentLabel": "Aktualny",
       "latestLabel": "Najnowsze",
       "blockedByBouncer": "Zablokowany przez Bouncera",
-      "registryErrorRateLimited": "Rate limited",
-      "registryErrorAuth": "Auth failed",
-      "registryErrorNotFound": "Not found",
-      "registryErrorCheckFailed": "Check failed"
+      "registryErrorRateLimited": "Limit zapytań przekroczony",
+      "registryErrorAuth": "Błąd uwierzytelniania",
+      "registryErrorNotFound": "Nie znaleziono",
+      "registryErrorCheckFailed": "Sprawdzanie nieudane",
+      "blockedTag": "Zablokowano: {tag}",
+      "blockedTagWithCriticals": "Zablokowano: {tag} ({count} krytyczne CVE)",
+      "blockedTagWithCriticalsCVEs": "Zablokowano: {tag} ({count} krytycznych CVE)",
+      "manualUpdateOnly": "Tylko aktualizacja ręczna",
+      "manualUpdateOnlyWithMessage": "Tylko aktualizacja ręczna — {message}"
     },
     "groupHeader": {
       "ungrouped": "Rozgrupowane",
@@ -251,8 +257,8 @@
       "collapseAll": "Zwiń wszystko",
       "recheckTooltip": "Sprawdź ponownie dostępność aktualizacji",
       "columnsHeader": "Kolumny",
-      "narrowViewportSuffix": "(narrow viewport)",
-      "autoHiddenBadgeTooltip": "{count} columns auto-hidden because the window is narrow. Widen the window or hide other columns to free space.",
+      "narrowViewportSuffix": "(wąskie okno)",
+      "autoHiddenBadgeTooltip": "{count} kolumn ukrytych automatycznie, ponieważ okno jest wąskie. Poszerz okno lub ukryj inne kolumny, aby zwolnić miejsce.",
       "filterSearch": "Szukaj: {value}",
       "filterStatus": "Stan: {value}",
       "filterBouncer": "Bouncer: {value}",
@@ -261,7 +267,8 @@
       "filterKind": "Rodzaj: {value}",
       "filterHiddenPinned": "Ukryty: przypięty",
       "filtersLabel": "Filtry",
-      "filteredContainers": "Filtrowano do kontenera {count} | Filtrowane do kontenerów {count}"
+      "filteredContainers": "Filtrowano do kontenera {count} | Filtrowane do kontenerów {count}",
+      "clearContainerIdFilter": "Wyczyść filtr ID kontenera"
     },
     "stats": {
       "paused": "Wstrzymano",
@@ -299,7 +306,8 @@
     },
     "suggestedTag": {
       "badgeText": "Sugerowane",
-      "tooltip": "Najlepszy dostępny stabilny tag semver — rozważ przypięcie"
+      "tooltip": "Najlepszy dostępny stabilny tag semver — rozważ przypięcie",
+      "tooltipWithTag": "Sugerowane: {tag}\n{hint}"
     },
     "eligibilityBadges": {
       "securityBlocked": "Zabezpieczenia zablokowane",

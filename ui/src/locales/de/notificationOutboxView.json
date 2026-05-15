@@ -1,0 +1,39 @@
+{
+  "notificationOutboxView": {
+    "heading": "Ausgang",
+    "refresh": "Aktualisieren",
+    "loading": "Ausgangseinträge werden geladen…",
+    "tabs": {
+      "dead-letter": "Dead-Letter",
+      "pending": "Ausstehend",
+      "delivered": "Zugestellt"
+    },
+    "columns": {
+      "event": "Ereignis",
+      "trigger": "Trigger",
+      "attempts": "Versuche",
+      "lastError": "Letzter Fehler",
+      "created": "Erstellt"
+    },
+    "actions": {
+      "retry": "Erneut versuchen",
+      "discard": "Verwerfen"
+    },
+    "status": {
+      "dead-letter": "Dead-Letter",
+      "pending": "Ausstehend",
+      "delivered": "Zugestellt"
+    },
+    "empty": {
+      "dead-letter": "Keine Dead-Letter-Einträge",
+      "pending": "Keine ausstehenden Einträge",
+      "delivered": "Keine zugestellten Einträge"
+    },
+    "toast": {
+      "requeued": "Erneut eingereiht: {name}",
+      "discarded": "Verworfen: {name}",
+      "retryFailed": "Erneuter Versuch für {name} fehlgeschlagen",
+      "discardFailed": "Verwerfen von {name} fehlgeschlagen"
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "notificationOutboxView": {
+    "heading": "Boîte d'envoi",
+    "refresh": "Actualiser",
+    "loading": "Chargement des entrées...",
+    "tabs": {
+      "dead-letter": "Dead-letter",
+      "pending": "En attente",
+      "delivered": "Envoyées"
+    },
+    "columns": {
+      "event": "Événement",
+      "trigger": "Trigger",
+      "attempts": "Tentatives",
+      "lastError": "Dernière erreur",
+      "created": "Créé"
+    },
+    "actions": {
+      "retry": "Réessayer",
+      "discard": "Rejeter"
+    },
+    "status": {
+      "dead-letter": "Dead-letter",
+      "pending": "En attente",
+      "delivered": "Envoyée"
+    },
+    "empty": {
+      "dead-letter": "Aucune entrée dead-letter",
+      "pending": "Aucune entrée en attente",
+      "delivered": "Aucune entrée envoyée"
+    },
+    "toast": {
+      "requeued": "Remis en file : {name}",
+      "discarded": "Rejeté : {name}",
+      "retryFailed": "Impossible de réessayer {name}",
+      "discardFailed": "Impossible de rejeter {name}"
+    }
+  }
+}

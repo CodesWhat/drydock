@@ -1,9 +1,9 @@
 {
   "containerLogs": {
-    "backTooltip": "Back to containers",
-    "title": "Container Logs",
-    "loading": "Loading container…",
-    "notFound": "Container \"{name}\" not found",
-    "loadFailed": "Failed to load container info"
+    "backTooltip": "العودة إلى الحاويات",
+    "title": "سجلات الحاوية",
+    "loading": "جارٍ تحميل الحاوية…",
+    "notFound": "الحاوية \"{name}\" غير موجودة",
+    "loadFailed": "فشل تحميل معلومات الحاوية"
   }
 }

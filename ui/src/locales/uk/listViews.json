@@ -1,39 +1,39 @@
 {
   "auditView": {
-    "loadingAuditLog": "Loading audit log...",
-    "loadError": "Failed to load audit log",
-    "filterPlaceholder": "Filter by target or event...",
-    "containerFilterPlaceholder": "Container name...",
-    "allEvents": "All events",
-    "eventsSelected": "{count} events selected",
-    "clear": "Clear",
-    "fromDateLabel": "From date",
-    "toDateLabel": "To date",
+    "loadingAuditLog": "Завантаження журналу аудиту...",
+    "loadError": "Не вдалося завантажити журнал аудиту",
+    "filterPlaceholder": "Фільтр за цільовим об'єктом або подією...",
+    "containerFilterPlaceholder": "Назва контейнера...",
+    "allEvents": "Всі події",
+    "eventsSelected": "{count} подій вибрано",
+    "clear": "Очистити",
+    "fromDateLabel": "Від дати",
+    "toDateLabel": "До дати",
     "pagination": {
-      "summary": "Page {page} of {totalPages} ({total} entries)",
-      "previousPage": "Previous page",
-      "nextPage": "Next page"
+      "summary": "Сторінка {page} з {totalPages} ({total} записів)",
+      "previousPage": "Попередня сторінка",
+      "nextPage": "Наступна сторінка"
     },
-    "emptyFiltered": "No audit entries match your filters",
+    "emptyFiltered": "Записи аудиту не відповідають вашим фільтрам",
     "columns": {
-      "time": "Time",
-      "event": "Event",
-      "target": "Target",
-      "status": "Status",
-      "details": "Details"
+      "time": "Час",
+      "event": "Подія",
+      "target": "Об'єкт",
+      "status": "Статус",
+      "details": "Деталі"
     },
     "card": {
-      "time": "Time",
-      "version": "Version"
+      "time": "Час",
+      "version": "Версія"
     },
     "detail": {
-      "timestamp": "Timestamp",
-      "event": "Event",
-      "image": "Image",
-      "fromVersion": "From Version",
-      "toVersion": "To Version",
-      "trigger": "Trigger",
-      "details": "Details"
+      "timestamp": "Часова мітка",
+      "event": "Подія",
+      "image": "Образ",
+      "fromVersion": "З версії",
+      "toVersion": "До версії",
+      "trigger": "Тригер",
+      "details": "Деталі"
     },
     "actions": {
       "container-update": "Оновлення контейнера",
@@ -69,103 +69,138 @@
     }
   },
   "notificationsView": {
-    "loadingRules": "Loading notification rules...",
-    "loadError": "Failed to load notification rules",
-    "filterPlaceholder": "Filter by name, description, or trigger...",
-    "clear": "Clear",
-    "allNotificationTriggers": "All notification triggers",
-    "noTriggers": "No triggers",
-    "columns": {
-      "on": "On",
-      "rule": "Rule",
-      "triggers": "Triggers"
+    "loadingRules": "Завантаження правил сповіщень...",
+    "loadError": "Не вдалося завантажити правила сповіщень",
+    "filterPlaceholder": "Фільтр за назвою, описом або тригером...",
+    "clear": "Очистити",
+    "allNotificationTriggers": "Всі тригери сповіщень",
+    "noTriggers": "Немає тригерів",
+    "rules": {
+      "update-available": {
+        "name": "Доступне оновлення",
+        "description": "Коли для контейнера є нова версія"
+      },
+      "update-applied": {
+        "name": "Оновлення застосовано",
+        "description": "Після успішного оновлення контейнера"
+      },
+      "update-failed": {
+        "name": "Помилка оновлення",
+        "description": "Коли оновлення не вдалося або виконано відкат"
+      },
+      "security-alert": {
+        "name": "Попередження безпеки",
+        "description": "Виявлено критичну/високу вразливість"
+      },
+      "agent-disconnect": {
+        "name": "Агент відключено",
+        "description": "Коли віддалений агент втрачає з'єднання"
+      },
+      "agent-reconnect": {
+        "name": "Агент підключено знову",
+        "description": "Коли віддалений агент відновлює з'єднання після втрати"
+      }
     },
-    "toggleAriaLabel": "Toggle notification rule",
-    "emptyFiltered": "No notification rules match your filters",
+    "columns": {
+      "on": "Увімк.",
+      "rule": "Правило",
+      "triggers": "Тригери"
+    },
+    "toggleAriaLabel": "Перемкнути правило сповіщення",
+    "emptyFiltered": "Правила сповіщень не відповідають вашим фільтрам",
     "detail": {
-      "ruleStatusLabel": "Rule status",
-      "ruleStatusAriaLabel": "Rule status",
-      "enabledText": "Enabled: notifications can fire for this event.",
-      "disabledText": "Disabled: notifications are suppressed for this event.",
-      "assignedTriggersLabel": "Assigned Triggers",
-      "noTriggersConfigured": "No triggers configured. Add triggers on the",
-      "triggersPageLink": "Triggers page",
-      "helpTextImplicitAll": "Leave this empty to send this event to all notification triggers. Selecting any trigger turns this rule into an allow-list.",
-      "helpTextExplicit": "Only selected triggers will receive this event. Leave it empty to suppress this event for all triggers.",
-      "saving": "Saving...",
-      "saveChanges": "Save changes",
-      "reset": "Reset",
-      "enabled": "enabled",
-      "disabled": "disabled"
+      "ruleStatusLabel": "Статус правила",
+      "ruleStatusAriaLabel": "Статус правила",
+      "enabledText": "Увімкнено: сповіщення можуть надсилатися для цієї події.",
+      "disabledText": "Вимкнено: сповіщення для цієї події придушено.",
+      "assignedTriggersLabel": "Призначені тригери",
+      "noTriggersConfigured": "Тригери не налаштовані. Додайте тригери на",
+      "triggersPageLink": "сторінці тригерів",
+      "helpTextImplicitAll": "Залиште порожнім, щоб надсилати цю подію всім тригерам сповіщень. Вибір будь-якого тригера перетворює це правило на список дозволених.",
+      "helpTextExplicit": "Лише вибрані тригери отримуватимуть цю подію. Залиште порожнім, щоб придушити цю подію для всіх тригерів.",
+      "saving": "Збереження...",
+      "saveChanges": "Зберегти зміни",
+      "reset": "Скинути",
+      "enabled": "увімкнено",
+      "disabled": "вимкнено"
     }
   },
   "securityView": {
-    "loadingVulnerabilityData": "Loading vulnerability data...",
-    "scanNow": "Scan Now",
-    "scanning": "Scanning...",
-    "scanAllAriaLabel": "Scan all containers",
-    "scanAllContainers": "Scan all containers for vulnerabilities",
-    "checkingScanner": "Checking scanner availability",
-    "runtimeUnavailable": "Runtime check unavailable; scan can still be attempted",
+    "loadingVulnerabilityData": "Завантаження даних про вразливості...",
+    "scanNow": "Сканувати зараз",
+    "scanning": "Сканування...",
+    "scanAllAriaLabel": "Сканувати всі контейнери",
+    "scanAllContainers": "Сканувати всі контейнери на вразливості",
+    "checkingScanner": "Перевірка доступності сканера",
+    "runtimeUnavailable": "Перевірка середовища виконання недоступна; сканування все одно можна спробувати",
     "filters": {
-      "severity": "Severity",
-      "severityCritical": "Critical",
-      "severityHigh": "High",
-      "severityMedium": "Medium",
-      "severityLow": "Low",
-      "fixAvailable": "Fix Available",
-      "fixYes": "Yes",
-      "fixNo": "No",
-      "clearAll": "Clear all"
+      "severity": "Рівень серйозності",
+      "severityCritical": "Критичний",
+      "severityHigh": "Високий",
+      "severityMedium": "Середній",
+      "severityLow": "Низький",
+      "fixAvailable": "Є виправлення",
+      "fixYes": "Так",
+      "fixNo": "Ні",
+      "clearAll": "Очистити все"
     },
     "columns": {
-      "image": "Image",
-      "critical": "Critical",
-      "high": "High",
-      "medium": "Medium",
-      "low": "Low",
-      "fixable": "Fixable",
-      "total": "Total"
+      "image": "Образ",
+      "critical": "Критичні",
+      "high": "Високі",
+      "medium": "Середні",
+      "low": "Низькі",
+      "fixable": "Виправлені",
+      "total": "Всього"
     },
     "card": {
-      "vulnerabilities": "vulnerabilities",
-      "vsUpdate": "vs update",
-      "fixable": "fixable",
-      "noFixesAvailable": "No fixes available",
-      "total": "total"
+      "vulnerabilities": "вразливостей",
+      "vsUpdate": "порівняно з оновленням",
+      "fixable": "виправлено",
+      "noFixesAvailable": "Виправлень немає",
+      "total": "всього"
     },
     "badge": {
-      "critical": "Critical",
-      "high": "High",
-      "medium": "Medium",
-      "low": "Low"
+      "critical": "Критичний",
+      "high": "Високий",
+      "medium": "Середній",
+      "low": "Низький"
     },
-    "update": "Update",
-    "viewInContainers": "View in Containers",
-    "viewAllInContainers": "View all in Containers",
+    "deltaTooltips": {
+      "fixedSingle": "Оновлення усуває {count} вразливість",
+      "fixedMultiple": "Оновлення усуває {count} вразливості",
+      "newSingle": "Оновлення вносить {count} нову вразливість",
+      "newMultiple": "Оновлення вносить {count} нові вразливості",
+      "both": "Оновлення: {fixed} усунуто, {new} нових"
+    },
+    "updateOneOfButton": "Оновити один із {count} контейнерів",
+    "updateThisContainerButton": "Оновити цей контейнер",
+    "update": "Оновити",
+    "viewInContainers": "Переглянути в контейнерах",
+    "viewAllInContainers": "Переглянути всі в контейнерах",
     "export": {
-      "label": "Export",
-      "downloadReport": "Download Report"
+      "label": "Експорт",
+      "downloadReport": "Завантажити звіт"
     },
     "sbom": {
       "label": "SBOM",
-      "loading": "Loading SBOM document...",
-      "loadingButton": "Loading...",
-      "refresh": "Refresh",
-      "hide": "Hide",
-      "view": "View",
-      "download": "Download",
-      "format": "format:",
-      "components": "components:",
-      "generated": "generated:"
+      "loading": "Завантаження документа SBOM...",
+      "loadingButton": "Завантаження...",
+      "refresh": "Оновити",
+      "hide": "Приховати",
+      "view": "Переглянути",
+      "download": "Завантажити",
+      "format": "формат:",
+      "components": "компоненти:",
+      "generated": "згенеровано:"
     },
     "vuln": {
-      "noFix": "No fix",
-      "target": "Target:"
+      "noFix": "Виправлення відсутнє",
+      "target": "Ціль:"
     },
     "chooser": {
-      "title": "Select container to update",
-      "cancel": "Cancel"
+      "title": "Виберіть контейнер для оновлення",
+      "cancel": "Скасувати"
     },
     "runtimeTools": {
       "trivy": "Trivy",
@@ -192,135 +227,144 @@
     }
   },
   "registriesView": {
-    "loadingRegistries": "Loading registries...",
-    "loadError": "Failed to load registries",
-    "filterPlaceholder": "Filter by name or type...",
-    "clear": "Clear",
-    "emptyFiltered": "No registries match your filters",
+    "loadingRegistries": "Завантаження реєстрів...",
+    "loadError": "Не вдалося завантажити реєстри",
+    "filterPlaceholder": "Фільтр за назвою або типом...",
+    "clear": "Очистити",
+    "emptyFiltered": "Жоден реєстр не відповідає вашим фільтрам",
     "columns": {
-      "registry": "Registry",
-      "type": "Type",
-      "status": "Status",
+      "registry": "Реєстр",
+      "type": "Тип",
+      "status": "Статус",
       "url": "URL"
     },
     "badge": {
-      "private": "Private",
-      "public": "Public"
+      "private": "Приватний",
+      "public": "Публічний"
     },
     "card": {
-      "auth": "Auth",
-      "status": "Status"
+      "auth": "Автентифікація",
+      "status": "Статус"
+    },
+    "status": {
+      "connected": "Підключено",
+      "error": "Помилка",
+      "unknown": "Невідомо"
     },
     "detail": {
-      "refreshing": "Refreshing registry details...",
-      "status": "Status",
-      "authentication": "Authentication",
+      "refreshing": "Оновлення даних реєстру...",
+      "status": "Статус",
+      "authentication": "Автентифікація",
       "url": "URL"
     }
   },
   "serversView": {
-    "loadingServerData": "Loading server data...",
-    "loadError": "Failed to load server data",
-    "filterPlaceholder": "Filter by name or address...",
-    "clear": "Clear",
-    "emptyFiltered": "No hosts match your filters",
-    "justNow": "Just now",
-    "never": "Never",
+    "loadingServerData": "Завантаження даних про сервери...",
+    "loadError": "Не вдалося завантажити дані про сервери",
+    "filterPlaceholder": "Фільтр за назвою або адресою...",
+    "clear": "Очистити",
+    "emptyFiltered": "Жоден хост не відповідає вашим фільтрам",
+    "justNow": "Щойно",
+    "never": "Ніколи",
+    "status": {
+      "connected": "Підключено",
+      "disconnected": "Відключено"
+    },
     "columns": {
-      "host": "Host",
-      "address": "Address",
-      "status": "Status",
-      "containers": "Containers",
-      "lastSeen": "Last Seen"
+      "host": "Хост",
+      "address": "Адреса",
+      "status": "Статус",
+      "containers": "Контейнери",
+      "lastSeen": "Остання активність"
     },
     "card": {
-      "containers": "Containers",
-      "running": "Running",
-      "images": "Images",
-      "lastSeen": "Last seen"
+      "containers": "Контейнери",
+      "running": "Запущено",
+      "images": "Образи",
+      "lastSeen": "Остання активність"
     },
     "list": {
-      "containers": "containers"
+      "containers": "контейнерів"
     },
     "detail": {
-      "containers": "Containers",
-      "running": "running",
-      "stopped": "stopped",
-      "images": "Images",
-      "lastSeen": "Last Seen",
-      "refresh": "Refresh"
+      "containers": "Контейнери",
+      "running": "запущено",
+      "stopped": "зупинено",
+      "images": "Образи",
+      "lastSeen": "Остання активність",
+      "refresh": "Оновити"
     }
   },
   "triggersView": {
-    "loadingTriggers": "Loading triggers...",
-    "loadError": "Failed to load triggers",
-    "filterPlaceholder": "Filter by name...",
-    "clear": "Clear",
-    "emptyFiltered": "No triggers match your filters",
+    "loadingTriggers": "Завантаження тригерів...",
+    "loadError": "Не вдалося завантажити тригери",
+    "filterPlaceholder": "Фільтр за назвою...",
+    "clear": "Очистити",
+    "emptyFiltered": "Жоден тригер не відповідає вашим фільтрам",
     "columns": {
-      "trigger": "Trigger",
-      "type": "Type",
-      "status": "Status"
+      "trigger": "Тригер",
+      "type": "Тип",
+      "status": "Статус"
     },
     "status": {
-      "active": "Active",
-      "inactive": "Inactive"
+      "active": "Активний",
+      "inactive": "Неактивний"
     },
     "test": {
-      "testing": "Testing...",
-      "sent": "Sent!",
-      "failed": "Failed",
-      "test": "Test",
-      "testTrigger": "Test Trigger",
-      "runTest": "Run test",
-      "testPassed": "Test passed",
-      "testFailed": "Test failed",
-      "defaultError": "Trigger test failed"
+      "testing": "Тестування...",
+      "sent": "Надіслано!",
+      "failed": "Помилка",
+      "test": "Тест",
+      "testTrigger": "Тестувати тригер",
+      "runTest": "Запустити тест",
+      "testPassed": "Тест пройдено",
+      "testFailed": "Тест не пройдено",
+      "defaultError": "Тест тригера не вдався"
     },
     "detail": {
-      "status": "Status",
-      "refreshing": "Refreshing trigger details...",
-      "noConfig": "No configuration properties"
+      "status": "Статус",
+      "refreshing": "Оновлення даних тригера...",
+      "noConfig": "Немає властивостей конфігурації"
     },
     "list": {
-      "status": "Status"
+      "status": "Статус"
     }
   },
   "watchersView": {
-    "loadingWatchers": "Loading watchers...",
-    "loadError": "Failed to load watchers",
-    "filterPlaceholder": "Filter by name...",
-    "clear": "Clear",
-    "emptyFiltered": "No watchers match your filters",
+    "loadingWatchers": "Завантаження спостерігачів...",
+    "loadError": "Не вдалося завантажити спостерігачів",
+    "filterPlaceholder": "Фільтр за назвою...",
+    "clear": "Очистити",
+    "emptyFiltered": "Жоден спостерігач не відповідає вашим фільтрам",
     "columns": {
-      "watcher": "Watcher",
-      "status": "Status",
-      "containers": "Containers",
-      "schedule": "Schedule",
-      "nextRun": "Next Run",
-      "lastRun": "Last Run"
+      "watcher": "Спостерігач",
+      "status": "Статус",
+      "containers": "Контейнери",
+      "schedule": "Розклад",
+      "nextRun": "Наступний запуск",
+      "lastRun": "Останній запуск"
     },
     "status": {
-      "watching": "Watching",
-      "paused": "Paused"
+      "watching": "Спостерігає",
+      "paused": "Призупинено"
     },
     "card": {
-      "containers": "Containers",
-      "nextRun": "Next run",
-      "lastRun": "Last run",
-      "containersWatched": "{count} containers watched"
+      "containers": "Контейнери",
+      "nextRun": "Наступний запуск",
+      "lastRun": "Останній запуск",
+      "containersWatched": "{count} контейнерів під спостереженням"
     },
     "badge": {
-      "maint": "Maint"
+      "maint": "Обслуговування"
     },
     "detail": {
       "cron": "Cron",
-      "lastRun": "Last Run",
-      "containersWatched": "Containers Watched",
-      "schedule": "Schedule",
-      "nextRun": "Next Run",
-      "viewContainers": "View containers",
-      "refreshing": "Refreshing watcher details..."
+      "lastRun": "Останній запуск",
+      "containersWatched": "Контейнери під спостереженням",
+      "schedule": "Розклад",
+      "nextRun": "Наступний запуск",
+      "viewContainers": "Переглянути контейнери",
+      "refreshing": "Оновлення даних спостерігача..."
     }
   }
 }

@@ -1,9 +1,9 @@
 {
   "containerLogs": {
-    "backTooltip": "Back to containers",
-    "title": "Container Logs",
-    "loading": "Loading container…",
-    "notFound": "Container \"{name}\" not found",
-    "loadFailed": "Failed to load container info"
+    "backTooltip": "Назад к контейнерам",
+    "title": "Журналы контейнера",
+    "loading": "Загрузка контейнера…",
+    "notFound": "Контейнер \"{name}\" не найден",
+    "loadFailed": "Не удалось загрузить информацию о контейнере"
   }
 }

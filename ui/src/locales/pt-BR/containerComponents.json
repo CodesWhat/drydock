@@ -102,6 +102,7 @@
       "version": "Versão",
       "currentLabel": "Atual:",
       "latestLabel": "Mais recente:",
+      "digestLabel": "Digest:",
       "upToDate": "Atualizado",
       "tagFilters": "Filtros de tag",
       "includeLabel": "Incluir:",
@@ -186,7 +187,12 @@
       "registryErrorRateLimited": "Rate limited",
       "registryErrorAuth": "Auth failed",
       "registryErrorNotFound": "Not found",
-      "registryErrorCheckFailed": "Check failed"
+      "registryErrorCheckFailed": "Check failed",
+      "blockedTag": "Bloqueado: {tag}",
+      "blockedTagWithCriticals": "Bloqueado: {tag} ({count} CVE crítico)",
+      "blockedTagWithCriticalsCVEs": "Bloqueado: {tag} ({count} CVEs críticos)",
+      "manualUpdateOnly": "Somente atualização manual",
+      "manualUpdateOnlyWithMessage": "Somente atualização manual — {message}"
     },
     "groupHeader": {
       "ungrouped": "Sem grupo",
@@ -251,8 +257,8 @@
       "collapseAll": "Recolher tudo",
       "recheckTooltip": "Verificar atualizações novamente",
       "columnsHeader": "Colunas",
-      "narrowViewportSuffix": "(narrow viewport)",
-      "autoHiddenBadgeTooltip": "{count} columns auto-hidden because the window is narrow. Widen the window or hide other columns to free space.",
+      "narrowViewportSuffix": "(viewport estreita)",
+      "autoHiddenBadgeTooltip": "{count} colunas ocultadas automaticamente porque a janela é estreita. Alargue a janela ou oculte outras colunas para liberar espaço.",
       "filterSearch": "Busca: {value}",
       "filterStatus": "Status: {value}",
       "filterBouncer": "Bouncer: {value}",
@@ -261,7 +267,8 @@
       "filterKind": "Tipo: {value}",
       "filterHiddenPinned": "Ocultos: fixados",
       "filtersLabel": "Filtros",
-      "filteredContainers": "Filtrado para {count} contêiner | Filtrado para {count} contêineres"
+      "filteredContainers": "Filtrado para {count} contêiner | Filtrado para {count} contêineres",
+      "clearContainerIdFilter": "Limpar filtro de ID do contêiner"
     },
     "stats": {
       "paused": "Pausado",
@@ -299,7 +306,8 @@
     },
     "suggestedTag": {
       "badgeText": "Sugerida",
-      "tooltip": "Melhor tag semver estável disponível - considere fixar"
+      "tooltip": "Melhor tag semver estável disponível - considere fixar",
+      "tooltipWithTag": "Sugerida: {tag}\n{hint}"
     },
     "eligibilityBadges": {
       "securityBlocked": "Bloqueado por segurança",

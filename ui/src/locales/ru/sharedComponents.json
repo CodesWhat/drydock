@@ -1,55 +1,55 @@
 {
   "sharedComponents": {
     "confirmDialog": {
-      "cancel": "Cancel",
-      "confirm": "Confirm"
+      "cancel": "Отмена",
+      "confirm": "Подтвердить"
     },
     "copyableTag": {
-      "copied": "Copied!",
-      "clickToCopy": "Click to copy"
+      "copied": "Скопировано!",
+      "clickToCopy": "Нажмите для копирования"
     },
     "dataCardGrid": {
-      "selectItem": "Select {name}"
+      "selectItem": "Выбрать {name}"
     },
     "dataFilterBar": {
-      "filters": "Filters",
-      "toggleFilters": "Toggle filters",
-      "viewMode": "View mode",
-      "viewModeLabel": "{label} view"
+      "filters": "Фильтры",
+      "toggleFilters": "Переключить фильтры",
+      "viewMode": "Режим просмотра",
+      "viewModeLabel": "Вид {label}"
     },
     "dataListAccordion": {
-      "toggleDetails": "Toggle {name} details",
-      "selectItem": "Select {name}"
+      "toggleDetails": "Переключить детали {name}",
+      "selectItem": "Выбрать {name}"
     },
     "dataTable": {
-      "actions": "Actions",
-      "resizeColumn": "Resize column"
+      "actions": "Действия",
+      "resizeColumn": "Изменить ширину столбца"
     },
     "detailPanel": {
-      "openFullPage": "Open full page view",
-      "closePanel": "Close details panel",
-      "ariaLabel": "Detail panel"
+      "openFullPage": "Открыть на полной странице",
+      "closePanel": "Закрыть панель деталей",
+      "ariaLabel": "Панель деталей"
     },
     "emptyState": {
-      "clearFilters": "Clear all filters"
+      "clearFilters": "Очистить все фильтры"
     },
     "logViewer": {
-      "emptyMessage": "No log entries found.",
-      "loadingMessage": "Loading logs..."
+      "emptyMessage": "Записей журнала не найдено.",
+      "loadingMessage": "Загрузка журналов..."
     },
     "scanProgressBanner": {
-      "scanning": "Scanning {done}/{total} containers..."
+      "scanning": "Сканирование {done}/{total} контейнеров..."
     },
     "scanProgressText": {
-      "scanning": "Scanning {done}/{total}..."
+      "scanning": "Сканирование {done}/{total}..."
     },
     "securityEmptyState": {
-      "noDataTitle": "No vulnerability data yet",
-      "noDataBody": "Run a scan to check your containers for known vulnerabilities",
-      "filteredTitle": "No images match your filters",
-      "clearFilters": "Clear all filters",
-      "setupGuide": "Setup Guide",
-      "scanNow": "Scan Now"
+      "noDataTitle": "Данных об уязвимостях пока нет",
+      "noDataBody": "Запустите сканирование для проверки контейнеров на известные уязвимости",
+      "filteredTitle": "Нет образов, соответствующих фильтрам",
+      "clearFilters": "Очистить все фильтры",
+      "setupGuide": "Руководство по настройке",
+      "scanNow": "Сканировать сейчас"
     }
   }
 }

@@ -126,6 +126,11 @@ const SECURITY_ALERT_SUMMARY_KEYS = ['unknown', 'low', 'medium', 'high', 'critic
 
 const INITIAL_SSE_RECONNECT_DELAY_MS = 1_000;
 const MAX_SSE_RECONNECT_DELAY_MS = 60_000;
+// An SSE stream must stay open at least this long before it counts as a
+// healthy connection that resets the reconnect backoff. Resetting the backoff
+// on response-received alone lets a stream that returns HTTP 200 then ends
+// immediately defeat the backoff, producing a flat 1s reconnect loop (#362).
+const SSE_STABLE_CONNECTION_MS = 30_000;
 const REMOTE_UPDATE_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
 
 function watcherSnapshotCacheKey(watcherType: string, watcherName: string): string {
@@ -168,6 +173,7 @@ export class AgentClient {
   public info: AgentClientRuntimeInfo;
   private reconnectTimer: NodeJS.Timeout | null;
   private reconnectAttempts: number;
+  private stableConnectionTimer: NodeJS.Timeout | null;
   private hasConnectedOnce: boolean;
   private readonly pendingFreshStateAfterRemoteUpdate: Set<string>;
   private readonly pendingWatcherCycleReports: Map<string, Map<string, ContainerReport>>;
@@ -186,6 +192,7 @@ export class AgentClient {
     this.info = {};
     this.reconnectTimer = null;
     this.reconnectAttempts = 0;
+    this.stableConnectionTimer = null;
     this.hasConnectedOnce = false;
     this.pendingFreshStateAfterRemoteUpdate = new Set();
     this.pendingWatcherCycleReports = new Map();
@@ -545,6 +552,13 @@ export class AgentClient {
     return containerReport;
   }
 
+  private clearStableConnectionTimer() {
+    if (this.stableConnectionTimer) {
+      clearTimeout(this.stableConnectionTimer);
+      this.stableConnectionTimer = null;
+    }
+  }
+
   private getNextReconnectDelayMs(): number {
     const nextDelay = Math.min(
       INITIAL_SSE_RECONNECT_DELAY_MS * 2 ** this.reconnectAttempts,
@@ -555,6 +569,7 @@ export class AgentClient {
   }
 
   scheduleReconnect(delay?: number) {
+    this.clearStableConnectionTimer();
     if (this.reconnectTimer) {
       return;
     }
@@ -650,7 +665,13 @@ export class AgentClient {
       ...this.axiosOptions,
     })
       .then((response) => {
-        this.reconnectAttempts = 0;
+        // Reset the backoff only after the stream stays open long enough to be
+        // considered healthy. A stream that returns 200 then ends immediately
+        // must not reset the backoff, or reconnects loop at a flat 1s (#362).
+        this.stableConnectionTimer = setTimeout(() => {
+          this.stableConnectionTimer = null;
+          this.reconnectAttempts = 0;
+        }, SSE_STABLE_CONNECTION_MS);
         this.attachStreamHandlers(response.data);
       })
       .catch((error: unknown) => {

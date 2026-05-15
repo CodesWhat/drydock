@@ -15,7 +15,14 @@
       "batchUpdatedNoGroup": "{count} conteneurs mis à jour",
       "batchPartialNoGroup": "{succeeded} sur {total} conteneurs mis à jour ; {failed} en échec",
       "batchFailedNoGroup": "Impossible de mettre à jour {count} conteneurs",
-      "unknownGroup": "groupe inconnu"
+      "unknownGroup": "groupe inconnu",
+      "updateStarted": "Mise à jour démarrée : {name}",
+      "forceUpdateStarted": "Mise à jour forcée démarrée : {name}",
+      "alreadyUpToDate": "Déjà à jour : {name}",
+      "queuedUpdateSingle": "Mise à jour en file pour {count} conteneur",
+      "queuedUpdateMultiple": "Mises à jour en file pour {count} conteneurs",
+      "countAlreadyUpToDateSingle": "{count} conteneur déjà à jour",
+      "countAlreadyUpToDateMultiple": "{count} conteneurs déjà à jour"
     },
     "registryError": {
       "generic": "Erreur registry",

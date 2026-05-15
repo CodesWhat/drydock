@@ -15,7 +15,14 @@
       "batchUpdatedNoGroup": "Actualizados {count} contenedores",
       "batchPartialNoGroup": "Actualizados {succeeded} de {total} contenedores; {failed} fallidos",
       "batchFailedNoGroup": "No se pudieron actualizar {count} contenedores",
-      "unknownGroup": "grupo desconocido"
+      "unknownGroup": "grupo desconocido",
+      "updateStarted": "Actualización iniciada: {name}",
+      "forceUpdateStarted": "Actualización forzada iniciada: {name}",
+      "alreadyUpToDate": "Ya está actualizado: {name}",
+      "queuedUpdateSingle": "Actualización en cola para {count} contenedor",
+      "queuedUpdateMultiple": "Actualizaciones en cola para {count} contenedores",
+      "countAlreadyUpToDateSingle": "{count} contenedor ya actualizado",
+      "countAlreadyUpToDateMultiple": "{count} contenedores ya actualizados"
     },
     "registryError": {
       "generic": "Error de registro",

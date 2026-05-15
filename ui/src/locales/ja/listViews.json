@@ -1,39 +1,39 @@
 {
   "auditView": {
-    "loadingAuditLog": "Loading audit log...",
-    "loadError": "Failed to load audit log",
-    "filterPlaceholder": "Filter by target or event...",
-    "containerFilterPlaceholder": "Container name...",
-    "allEvents": "All events",
-    "eventsSelected": "{count} events selected",
-    "clear": "Clear",
-    "fromDateLabel": "From date",
-    "toDateLabel": "To date",
+    "loadingAuditLog": "監査ログを読み込み中...",
+    "loadError": "監査ログの読み込みに失敗しました",
+    "filterPlaceholder": "対象またはイベントで絞り込む...",
+    "containerFilterPlaceholder": "コンテナ名...",
+    "allEvents": "全イベント",
+    "eventsSelected": "{count} 件のイベントを選択",
+    "clear": "クリア",
+    "fromDateLabel": "開始日",
+    "toDateLabel": "終了日",
     "pagination": {
-      "summary": "Page {page} of {totalPages} ({total} entries)",
-      "previousPage": "Previous page",
-      "nextPage": "Next page"
+      "summary": "{totalPages} ページ中 {page} ページ目（{total} 件）",
+      "previousPage": "前のページ",
+      "nextPage": "次のページ"
     },
-    "emptyFiltered": "No audit entries match your filters",
+    "emptyFiltered": "フィルターに一致する監査エントリがありません",
     "columns": {
-      "time": "Time",
-      "event": "Event",
-      "target": "Target",
-      "status": "Status",
-      "details": "Details"
+      "time": "時刻",
+      "event": "イベント",
+      "target": "対象",
+      "status": "ステータス",
+      "details": "詳細"
     },
     "card": {
-      "time": "Time",
-      "version": "Version"
+      "time": "時刻",
+      "version": "バージョン"
     },
     "detail": {
-      "timestamp": "Timestamp",
-      "event": "Event",
-      "image": "Image",
-      "fromVersion": "From Version",
-      "toVersion": "To Version",
-      "trigger": "Trigger",
-      "details": "Details"
+      "timestamp": "タイムスタンプ",
+      "event": "イベント",
+      "image": "イメージ",
+      "fromVersion": "更新前バージョン",
+      "toVersion": "更新後バージョン",
+      "trigger": "トリガー",
+      "details": "詳細"
     },
     "actions": {
       "container-update": "コンテナ更新",
@@ -69,103 +69,138 @@
     }
   },
   "notificationsView": {
-    "loadingRules": "Loading notification rules...",
-    "loadError": "Failed to load notification rules",
-    "filterPlaceholder": "Filter by name, description, or trigger...",
-    "clear": "Clear",
-    "allNotificationTriggers": "All notification triggers",
-    "noTriggers": "No triggers",
-    "columns": {
-      "on": "On",
-      "rule": "Rule",
-      "triggers": "Triggers"
+    "loadingRules": "通知ルールを読み込み中...",
+    "loadError": "通知ルールの読み込みに失敗しました",
+    "filterPlaceholder": "名前、説明、またはトリガーで絞り込む...",
+    "clear": "クリア",
+    "allNotificationTriggers": "全通知トリガー",
+    "noTriggers": "トリガーがありません",
+    "rules": {
+      "update-available": {
+        "name": "更新利用可能",
+        "description": "コンテナに新しいバージョンがある場合"
+      },
+      "update-applied": {
+        "name": "更新適用済み",
+        "description": "コンテナが正常に更新された後"
+      },
+      "update-failed": {
+        "name": "更新失敗",
+        "description": "更新が失敗またはロールバックされた場合"
+      },
+      "security-alert": {
+        "name": "セキュリティアラート",
+        "description": "致命的/高の脆弱性が検出された場合"
+      },
+      "agent-disconnect": {
+        "name": "エージェント切断",
+        "description": "リモートエージェントの接続が切断された場合"
+      },
+      "agent-reconnect": {
+        "name": "エージェント再接続",
+        "description": "切断後にリモートエージェントが再接続した場合"
+      }
     },
-    "toggleAriaLabel": "Toggle notification rule",
-    "emptyFiltered": "No notification rules match your filters",
+    "columns": {
+      "on": "有効",
+      "rule": "ルール",
+      "triggers": "トリガー"
+    },
+    "toggleAriaLabel": "通知ルールの切替",
+    "emptyFiltered": "フィルターに一致する通知ルールがありません",
     "detail": {
-      "ruleStatusLabel": "Rule status",
-      "ruleStatusAriaLabel": "Rule status",
-      "enabledText": "Enabled: notifications can fire for this event.",
-      "disabledText": "Disabled: notifications are suppressed for this event.",
-      "assignedTriggersLabel": "Assigned Triggers",
-      "noTriggersConfigured": "No triggers configured. Add triggers on the",
-      "triggersPageLink": "Triggers page",
-      "helpTextImplicitAll": "Leave this empty to send this event to all notification triggers. Selecting any trigger turns this rule into an allow-list.",
-      "helpTextExplicit": "Only selected triggers will receive this event. Leave it empty to suppress this event for all triggers.",
-      "saving": "Saving...",
-      "saveChanges": "Save changes",
-      "reset": "Reset",
-      "enabled": "enabled",
-      "disabled": "disabled"
+      "ruleStatusLabel": "ルールステータス",
+      "ruleStatusAriaLabel": "ルールステータス",
+      "enabledText": "有効：このイベントの通知が送信されます。",
+      "disabledText": "無効：このイベントの通知は抑制されます。",
+      "assignedTriggersLabel": "割り当て済みトリガー",
+      "noTriggersConfigured": "トリガーが設定されていません。",
+      "triggersPageLink": "トリガーページ",
+      "helpTextImplicitAll": "空のままにすると、このイベントはすべての通知トリガーに送信されます。トリガーを選択するとこのルールが許可リストになります。",
+      "helpTextExplicit": "選択したトリガーのみがこのイベントを受信します。空のままにすると、すべてのトリガーでこのイベントが抑制されます。",
+      "saving": "保存中...",
+      "saveChanges": "変更を保存",
+      "reset": "リセット",
+      "enabled": "有効",
+      "disabled": "無効"
     }
   },
   "securityView": {
-    "loadingVulnerabilityData": "Loading vulnerability data...",
-    "scanNow": "Scan Now",
-    "scanning": "Scanning...",
-    "scanAllAriaLabel": "Scan all containers",
-    "scanAllContainers": "Scan all containers for vulnerabilities",
-    "checkingScanner": "Checking scanner availability",
-    "runtimeUnavailable": "Runtime check unavailable; scan can still be attempted",
+    "loadingVulnerabilityData": "脆弱性データを読み込み中...",
+    "scanNow": "今すぐスキャン",
+    "scanning": "スキャン中...",
+    "scanAllAriaLabel": "全コンテナをスキャン",
+    "scanAllContainers": "全コンテナの脆弱性をスキャン",
+    "checkingScanner": "スキャナーの利用可否を確認中",
+    "runtimeUnavailable": "ランタイムチェックは利用できませんが、スキャンは試みることができます",
     "filters": {
-      "severity": "Severity",
-      "severityCritical": "Critical",
-      "severityHigh": "High",
-      "severityMedium": "Medium",
-      "severityLow": "Low",
-      "fixAvailable": "Fix Available",
-      "fixYes": "Yes",
-      "fixNo": "No",
-      "clearAll": "Clear all"
+      "severity": "深刻度",
+      "severityCritical": "致命的",
+      "severityHigh": "高",
+      "severityMedium": "中",
+      "severityLow": "低",
+      "fixAvailable": "修正あり",
+      "fixYes": "はい",
+      "fixNo": "いいえ",
+      "clearAll": "すべてクリア"
     },
     "columns": {
-      "image": "Image",
-      "critical": "Critical",
-      "high": "High",
-      "medium": "Medium",
-      "low": "Low",
-      "fixable": "Fixable",
-      "total": "Total"
+      "image": "イメージ",
+      "critical": "致命的",
+      "high": "高",
+      "medium": "中",
+      "low": "低",
+      "fixable": "修正可能",
+      "total": "合計"
     },
     "card": {
-      "vulnerabilities": "vulnerabilities",
-      "vsUpdate": "vs update",
-      "fixable": "fixable",
-      "noFixesAvailable": "No fixes available",
-      "total": "total"
+      "vulnerabilities": "件の脆弱性",
+      "vsUpdate": "更新との比較",
+      "fixable": "修正可能",
+      "noFixesAvailable": "修正はありません",
+      "total": "合計"
     },
     "badge": {
-      "critical": "Critical",
-      "high": "High",
-      "medium": "Medium",
-      "low": "Low"
+      "critical": "致命的",
+      "high": "高",
+      "medium": "中",
+      "low": "低"
     },
-    "update": "Update",
-    "viewInContainers": "View in Containers",
-    "viewAllInContainers": "View all in Containers",
+    "deltaTooltips": {
+      "fixedSingle": "更新により {count} 件の脆弱性が修正されます",
+      "fixedMultiple": "更新により {count} 件の脆弱性が修正されます",
+      "newSingle": "更新により {count} 件の新しい脆弱性が導入されます",
+      "newMultiple": "更新により {count} 件の新しい脆弱性が導入されます",
+      "both": "更新：{fixed} 件修正、{new} 件新規"
+    },
+    "updateOneOfButton": "{count} 件のコンテナのうち 1 件を更新",
+    "updateThisContainerButton": "このコンテナを更新",
+    "update": "更新",
+    "viewInContainers": "コンテナで表示",
+    "viewAllInContainers": "コンテナですべて表示",
     "export": {
-      "label": "Export",
-      "downloadReport": "Download Report"
+      "label": "エクスポート",
+      "downloadReport": "レポートをダウンロード"
     },
     "sbom": {
       "label": "SBOM",
-      "loading": "Loading SBOM document...",
-      "loadingButton": "Loading...",
-      "refresh": "Refresh",
-      "hide": "Hide",
-      "view": "View",
-      "download": "Download",
-      "format": "format:",
-      "components": "components:",
-      "generated": "generated:"
+      "loading": "SBOM ドキュメントを読み込み中...",
+      "loadingButton": "読み込み中...",
+      "refresh": "更新",
+      "hide": "非表示",
+      "view": "表示",
+      "download": "ダウンロード",
+      "format": "フォーマット：",
+      "components": "コンポーネント：",
+      "generated": "生成日時："
     },
     "vuln": {
-      "noFix": "No fix",
-      "target": "Target:"
+      "noFix": "修正なし",
+      "target": "対象："
     },
     "chooser": {
-      "title": "Select container to update",
-      "cancel": "Cancel"
+      "title": "更新するコンテナを選択",
+      "cancel": "キャンセル"
     },
     "runtimeTools": {
       "trivy": "Trivy",
@@ -174,10 +209,10 @@
       "scannerReady": "Trivy クライアントの準備が完了しました",
       "scannerReadyServer": "Trivy クライアントの準備が完了しました（サーバーモード有効）",
       "scannerDisabled": "脆弱性スキャナーが無効です",
-      "scannerMissing": "Trivy コマンド \"{command}\" はこのランタイムで利用できません",
+      "scannerMissing": "Trivy コマンド「{command}」はこのランタイムで利用できません",
       "signatureReady": "Cosign による署名検証の準備が完了しました",
       "signatureDisabled": "署名検証が無効です",
-      "signatureMissing": "Cosign コマンド \"{command}\" はこのランタイムで利用できません",
+      "signatureMissing": "Cosign コマンド「{command}」はこのランタイムで利用できません",
       "scannerTooltip": "Trivy：{message}",
       "scannerTooltipServer": "Trivy：{message} · サーバー：{server}",
       "cosignTooltip": "Cosign：{message}",
@@ -192,135 +227,144 @@
     }
   },
   "registriesView": {
-    "loadingRegistries": "Loading registries...",
-    "loadError": "Failed to load registries",
-    "filterPlaceholder": "Filter by name or type...",
-    "clear": "Clear",
-    "emptyFiltered": "No registries match your filters",
+    "loadingRegistries": "レジストリを読み込み中...",
+    "loadError": "レジストリの読み込みに失敗しました",
+    "filterPlaceholder": "名前または種別で絞り込む...",
+    "clear": "クリア",
+    "emptyFiltered": "フィルターに一致するレジストリがありません",
     "columns": {
-      "registry": "Registry",
-      "type": "Type",
-      "status": "Status",
+      "registry": "レジストリ",
+      "type": "種別",
+      "status": "ステータス",
       "url": "URL"
     },
     "badge": {
-      "private": "Private",
-      "public": "Public"
+      "private": "プライベート",
+      "public": "パブリック"
     },
     "card": {
-      "auth": "Auth",
-      "status": "Status"
+      "auth": "認証",
+      "status": "ステータス"
+    },
+    "status": {
+      "connected": "接続済み",
+      "error": "エラー",
+      "unknown": "不明"
     },
     "detail": {
-      "refreshing": "Refreshing registry details...",
-      "status": "Status",
-      "authentication": "Authentication",
+      "refreshing": "レジストリの詳細を更新中...",
+      "status": "ステータス",
+      "authentication": "認証",
       "url": "URL"
     }
   },
   "serversView": {
-    "loadingServerData": "Loading server data...",
-    "loadError": "Failed to load server data",
-    "filterPlaceholder": "Filter by name or address...",
-    "clear": "Clear",
-    "emptyFiltered": "No hosts match your filters",
-    "justNow": "Just now",
-    "never": "Never",
+    "loadingServerData": "サーバーデータを読み込み中...",
+    "loadError": "サーバーデータの読み込みに失敗しました",
+    "filterPlaceholder": "名前またはアドレスで絞り込む...",
+    "clear": "クリア",
+    "emptyFiltered": "フィルターに一致するホストがありません",
+    "justNow": "たった今",
+    "never": "なし",
+    "status": {
+      "connected": "接続済み",
+      "disconnected": "切断済み"
+    },
     "columns": {
-      "host": "Host",
-      "address": "Address",
-      "status": "Status",
-      "containers": "Containers",
-      "lastSeen": "Last Seen"
+      "host": "ホスト",
+      "address": "アドレス",
+      "status": "ステータス",
+      "containers": "コンテナ",
+      "lastSeen": "最終確認"
     },
     "card": {
-      "containers": "Containers",
-      "running": "Running",
-      "images": "Images",
-      "lastSeen": "Last seen"
+      "containers": "コンテナ",
+      "running": "稼働中",
+      "images": "イメージ",
+      "lastSeen": "最終確認"
     },
     "list": {
-      "containers": "containers"
+      "containers": "コンテナ"
     },
     "detail": {
-      "containers": "Containers",
-      "running": "running",
-      "stopped": "stopped",
-      "images": "Images",
-      "lastSeen": "Last Seen",
-      "refresh": "Refresh"
+      "containers": "コンテナ",
+      "running": "稼働中",
+      "stopped": "停止中",
+      "images": "イメージ",
+      "lastSeen": "最終確認",
+      "refresh": "更新"
     }
   },
   "triggersView": {
-    "loadingTriggers": "Loading triggers...",
-    "loadError": "Failed to load triggers",
-    "filterPlaceholder": "Filter by name...",
-    "clear": "Clear",
-    "emptyFiltered": "No triggers match your filters",
+    "loadingTriggers": "トリガーを読み込み中...",
+    "loadError": "トリガーの読み込みに失敗しました",
+    "filterPlaceholder": "名前で絞り込む...",
+    "clear": "クリア",
+    "emptyFiltered": "フィルターに一致するトリガーがありません",
     "columns": {
-      "trigger": "Trigger",
-      "type": "Type",
-      "status": "Status"
+      "trigger": "トリガー",
+      "type": "種別",
+      "status": "ステータス"
     },
     "status": {
-      "active": "Active",
-      "inactive": "Inactive"
+      "active": "有効",
+      "inactive": "無効"
     },
     "test": {
-      "testing": "Testing...",
-      "sent": "Sent!",
-      "failed": "Failed",
-      "test": "Test",
-      "testTrigger": "Test Trigger",
-      "runTest": "Run test",
-      "testPassed": "Test passed",
-      "testFailed": "Test failed",
-      "defaultError": "Trigger test failed"
+      "testing": "テスト中...",
+      "sent": "送信しました！",
+      "failed": "失敗",
+      "test": "テスト",
+      "testTrigger": "トリガーをテスト",
+      "runTest": "テストを実行",
+      "testPassed": "テスト成功",
+      "testFailed": "テスト失敗",
+      "defaultError": "トリガーテストが失敗しました"
     },
     "detail": {
-      "status": "Status",
-      "refreshing": "Refreshing trigger details...",
-      "noConfig": "No configuration properties"
+      "status": "ステータス",
+      "refreshing": "トリガーの詳細を更新中...",
+      "noConfig": "設定プロパティがありません"
     },
     "list": {
-      "status": "Status"
+      "status": "ステータス"
     }
   },
   "watchersView": {
-    "loadingWatchers": "Loading watchers...",
-    "loadError": "Failed to load watchers",
-    "filterPlaceholder": "Filter by name...",
-    "clear": "Clear",
-    "emptyFiltered": "No watchers match your filters",
+    "loadingWatchers": "ウォッチャーを読み込み中...",
+    "loadError": "ウォッチャーの読み込みに失敗しました",
+    "filterPlaceholder": "名前で絞り込む...",
+    "clear": "クリア",
+    "emptyFiltered": "フィルターに一致するウォッチャーがありません",
     "columns": {
-      "watcher": "Watcher",
-      "status": "Status",
-      "containers": "Containers",
-      "schedule": "Schedule",
-      "nextRun": "Next Run",
-      "lastRun": "Last Run"
+      "watcher": "ウォッチャー",
+      "status": "ステータス",
+      "containers": "コンテナ",
+      "schedule": "スケジュール",
+      "nextRun": "次回実行",
+      "lastRun": "前回実行"
     },
     "status": {
-      "watching": "Watching",
-      "paused": "Paused"
+      "watching": "監視中",
+      "paused": "一時停止"
     },
     "card": {
-      "containers": "Containers",
-      "nextRun": "Next run",
-      "lastRun": "Last run",
-      "containersWatched": "{count} containers watched"
+      "containers": "コンテナ",
+      "nextRun": "次回実行",
+      "lastRun": "前回実行",
+      "containersWatched": "{count} 件のコンテナを監視中"
     },
     "badge": {
-      "maint": "Maint"
+      "maint": "メンテナンス"
     },
     "detail": {
       "cron": "Cron",
-      "lastRun": "Last Run",
-      "containersWatched": "Containers Watched",
-      "schedule": "Schedule",
-      "nextRun": "Next Run",
-      "viewContainers": "View containers",
-      "refreshing": "Refreshing watcher details..."
+      "lastRun": "前回実行",
+      "containersWatched": "監視中のコンテナ",
+      "schedule": "スケジュール",
+      "nextRun": "次回実行",
+      "viewContainers": "コンテナを表示",
+      "refreshing": "ウォッチャーの詳細を更新中..."
     }
   }
 }

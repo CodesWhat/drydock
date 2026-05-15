@@ -75,6 +75,32 @@
     "clear": "清除",
     "allNotificationTriggers": "所有通知触发器",
     "noTriggers": "无触发器",
+    "rules": {
+      "update-available": {
+        "name": "可用更新",
+        "description": "当容器有新版本时"
+      },
+      "update-applied": {
+        "name": "更新已应用",
+        "description": "容器成功更新后"
+      },
+      "update-failed": {
+        "name": "更新失败",
+        "description": "当更新失败或回滚时"
+      },
+      "security-alert": {
+        "name": "安全警报",
+        "description": "检测到严重/高危漏洞"
+      },
+      "agent-disconnect": {
+        "name": "代理已断开",
+        "description": "当远程代理丢失连接时"
+      },
+      "agent-reconnect": {
+        "name": "代理已重连",
+        "description": "当远程代理断连后重新连接时"
+      }
+    },
     "columns": {
       "on": "开启",
       "rule": "规则",
@@ -220,6 +246,11 @@
       "auth": "认证",
       "status": "状态"
     },
+    "status": {
+      "connected": "已连接",
+      "error": "错误",
+      "unknown": "未知"
+    },
     "detail": {
       "refreshing": "正在刷新仓库详情...",
       "status": "状态",
@@ -235,6 +266,10 @@
     "emptyFiltered": "没有主机匹配您的筛选条件",
     "justNow": "刚刚",
     "never": "从未",
+    "status": {
+      "connected": "已连接",
+      "disconnected": "已断开"
+    },
     "columns": {
       "host": "主机",
       "address": "地址",

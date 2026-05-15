@@ -1,20 +1,20 @@
 {
   "authView": {
-    "loadingProviders": "Loading authentication providers...",
-    "loadError": "Failed to load authentication providers",
-    "filterPlaceholder": "Filter by name...",
-    "clearFilter": "Clear",
-    "emptyFiltered": "No providers match your filters",
-    "detailRefreshing": "Refreshing authentication details...",
-    "detailLoadError": "Unable to load latest authentication details",
-    "noConfig": "No configuration properties",
+    "loadingProviders": "인증 공급자 불러오는 중...",
+    "loadError": "인증 공급자를 불러오지 못했습니다",
+    "filterPlaceholder": "이름으로 필터...",
+    "clearFilter": "초기화",
+    "emptyFiltered": "필터와 일치하는 공급자가 없습니다",
+    "detailRefreshing": "인증 상세 정보 새로 고침 중...",
+    "detailLoadError": "최신 인증 상세 정보를 불러올 수 없습니다",
+    "noConfig": "구성 속성이 없습니다",
     "columns": {
-      "provider": "Provider",
-      "type": "Type",
-      "status": "Status"
+      "provider": "공급자",
+      "type": "유형",
+      "status": "상태"
     },
     "fields": {
-      "status": "Status"
+      "status": "상태"
     },
     "badge": {
       "basic": "Basic",

@@ -1,0 +1,39 @@
+{
+  "notificationOutboxView": {
+    "heading": "Исходящие",
+    "refresh": "Обновить",
+    "loading": "Загрузка исходящих…",
+    "tabs": {
+      "dead-letter": "Необработанные",
+      "pending": "Ожидающие",
+      "delivered": "Доставленные"
+    },
+    "columns": {
+      "event": "Событие",
+      "trigger": "Триггер",
+      "attempts": "Попытки",
+      "lastError": "Последняя ошибка",
+      "created": "Создано"
+    },
+    "actions": {
+      "retry": "Повторить",
+      "discard": "Отклонить"
+    },
+    "status": {
+      "dead-letter": "Необработанные",
+      "pending": "Ожидающие",
+      "delivered": "Доставленные"
+    },
+    "empty": {
+      "dead-letter": "Необработанных записей нет",
+      "pending": "Ожидающих записей нет",
+      "delivered": "Доставленных записей нет"
+    },
+    "toast": {
+      "requeued": "Поставлено в очередь повторно: {name}",
+      "discarded": "Отклонено: {name}",
+      "retryFailed": "Не удалось повторить {name}",
+      "discardFailed": "Не удалось отклонить {name}"
+    }
+  }
+}

@@ -102,6 +102,7 @@
       "version": "Versione",
       "currentLabel": "Corrente:",
       "latestLabel": "Ultima:",
+      "digestLabel": "Digest:",
       "upToDate": "Aggiornato",
       "tagFilters": "Filtri tag",
       "includeLabel": "Includi:",
@@ -186,7 +187,12 @@
       "registryErrorRateLimited": "Rate limited",
       "registryErrorAuth": "Auth failed",
       "registryErrorNotFound": "Not found",
-      "registryErrorCheckFailed": "Check failed"
+      "registryErrorCheckFailed": "Check failed",
+      "blockedTag": "Bloccato: {tag}",
+      "blockedTagWithCriticals": "Bloccato: {tag} ({count} CVE critica)",
+      "blockedTagWithCriticalsCVEs": "Bloccato: {tag} ({count} CVE critiche)",
+      "manualUpdateOnly": "Solo aggiornamento manuale",
+      "manualUpdateOnlyWithMessage": "Solo aggiornamento manuale — {message}"
     },
     "groupHeader": {
       "ungrouped": "Non raggruppati",
@@ -251,8 +257,8 @@
       "collapseAll": "Comprimi tutto",
       "recheckTooltip": "Ricontrolla aggiornamenti",
       "columnsHeader": "Colonne",
-      "narrowViewportSuffix": "(narrow viewport)",
-      "autoHiddenBadgeTooltip": "{count} columns auto-hidden because the window is narrow. Widen the window or hide other columns to free space.",
+      "narrowViewportSuffix": "(viewport stretto)",
+      "autoHiddenBadgeTooltip": "{count} colonne nascoste automaticamente perché la finestra è stretta. Allarga la finestra o nascondi altre colonne per liberare spazio.",
       "filterSearch": "Ricerca: {value}",
       "filterStatus": "Stato: {value}",
       "filterBouncer": "Bouncer: {value}",
@@ -261,7 +267,8 @@
       "filterKind": "Tipo: {value}",
       "filterHiddenPinned": "Nascosti: bloccati",
       "filtersLabel": "Filtri",
-      "filteredContainers": "Filtrato a {count} container | Filtrati a {count} container"
+      "filteredContainers": "Filtrato a {count} container | Filtrati a {count} container",
+      "clearContainerIdFilter": "Cancella filtro ID container"
     },
     "stats": {
       "paused": "In pausa",
@@ -299,7 +306,8 @@
     },
     "suggestedTag": {
       "badgeText": "Suggerito",
-      "tooltip": "Miglior tag semver stabile disponibile - valuta il pin"
+      "tooltip": "Miglior tag semver stabile disponibile - valuta il pin",
+      "tooltipWithTag": "Suggerito: {tag}\n{hint}"
     },
     "eligibilityBadges": {
       "securityBlocked": "Bloccato da sicurezza",

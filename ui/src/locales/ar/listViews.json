@@ -1,39 +1,39 @@
 {
   "auditView": {
-    "loadingAuditLog": "Loading audit log...",
-    "loadError": "Failed to load audit log",
-    "filterPlaceholder": "Filter by target or event...",
-    "containerFilterPlaceholder": "Container name...",
-    "allEvents": "All events",
-    "eventsSelected": "{count} events selected",
-    "clear": "Clear",
-    "fromDateLabel": "From date",
-    "toDateLabel": "To date",
+    "loadingAuditLog": "جارٍ تحميل سجل التدقيق...",
+    "loadError": "فشل تحميل سجل التدقيق",
+    "filterPlaceholder": "تصفية حسب الهدف أو الحدث...",
+    "containerFilterPlaceholder": "اسم الحاوية...",
+    "allEvents": "جميع الأحداث",
+    "eventsSelected": "{count} أحداث محددة",
+    "clear": "مسح",
+    "fromDateLabel": "من تاريخ",
+    "toDateLabel": "إلى تاريخ",
     "pagination": {
-      "summary": "Page {page} of {totalPages} ({total} entries)",
-      "previousPage": "Previous page",
-      "nextPage": "Next page"
+      "summary": "الصفحة {page} من {totalPages} ({total} إدخال)",
+      "previousPage": "الصفحة السابقة",
+      "nextPage": "الصفحة التالية"
     },
-    "emptyFiltered": "No audit entries match your filters",
+    "emptyFiltered": "لا توجد إدخالات تدقيق تطابق عوامل التصفية",
     "columns": {
-      "time": "Time",
-      "event": "Event",
-      "target": "Target",
-      "status": "Status",
-      "details": "Details"
+      "time": "الوقت",
+      "event": "الحدث",
+      "target": "الهدف",
+      "status": "الحالة",
+      "details": "التفاصيل"
     },
     "card": {
-      "time": "Time",
-      "version": "Version"
+      "time": "الوقت",
+      "version": "الإصدار"
     },
     "detail": {
-      "timestamp": "Timestamp",
-      "event": "Event",
-      "image": "Image",
-      "fromVersion": "From Version",
-      "toVersion": "To Version",
-      "trigger": "Trigger",
-      "details": "Details"
+      "timestamp": "الطابع الزمني",
+      "event": "الحدث",
+      "image": "الصورة",
+      "fromVersion": "من الإصدار",
+      "toVersion": "إلى الإصدار",
+      "trigger": "المشغّل",
+      "details": "التفاصيل"
     },
     "actions": {
       "container-update": "تحديث الحاوية",
@@ -69,103 +69,138 @@
     }
   },
   "notificationsView": {
-    "loadingRules": "Loading notification rules...",
-    "loadError": "Failed to load notification rules",
-    "filterPlaceholder": "Filter by name, description, or trigger...",
-    "clear": "Clear",
-    "allNotificationTriggers": "All notification triggers",
-    "noTriggers": "No triggers",
-    "columns": {
-      "on": "On",
-      "rule": "Rule",
-      "triggers": "Triggers"
+    "loadingRules": "جارٍ تحميل قواعد الإشعارات...",
+    "loadError": "فشل تحميل قواعد الإشعارات",
+    "filterPlaceholder": "تصفية حسب الاسم أو الوصف أو المشغّل...",
+    "clear": "مسح",
+    "allNotificationTriggers": "جميع مشغّلات الإشعارات",
+    "noTriggers": "لا توجد مشغّلات",
+    "rules": {
+      "update-available": {
+        "name": "تحديث متاح",
+        "description": "عندما تتوفر نسخة جديدة للحاوية"
+      },
+      "update-applied": {
+        "name": "تم تطبيق التحديث",
+        "description": "بعد تحديث الحاوية بنجاح"
+      },
+      "update-failed": {
+        "name": "فشل التحديث",
+        "description": "عند فشل تحديث أو تراجع عنه"
+      },
+      "security-alert": {
+        "name": "تنبيه أمني",
+        "description": "اكتشاف ثغرة حرجة/عالية"
+      },
+      "agent-disconnect": {
+        "name": "قُطع اتصال الوكيل",
+        "description": "عند فقدان وكيل بعيد للاتصال"
+      },
+      "agent-reconnect": {
+        "name": "أُعيد اتصال الوكيل",
+        "description": "عند إعادة اتصال وكيل بعيد بعد انقطاعه"
+      }
     },
-    "toggleAriaLabel": "Toggle notification rule",
-    "emptyFiltered": "No notification rules match your filters",
+    "columns": {
+      "on": "على",
+      "rule": "القاعدة",
+      "triggers": "المشغّلات"
+    },
+    "toggleAriaLabel": "تبديل قاعدة الإشعار",
+    "emptyFiltered": "لا توجد قواعد إشعارات تطابق عوامل التصفية",
     "detail": {
-      "ruleStatusLabel": "Rule status",
-      "ruleStatusAriaLabel": "Rule status",
-      "enabledText": "Enabled: notifications can fire for this event.",
-      "disabledText": "Disabled: notifications are suppressed for this event.",
-      "assignedTriggersLabel": "Assigned Triggers",
-      "noTriggersConfigured": "No triggers configured. Add triggers on the",
-      "triggersPageLink": "Triggers page",
-      "helpTextImplicitAll": "Leave this empty to send this event to all notification triggers. Selecting any trigger turns this rule into an allow-list.",
-      "helpTextExplicit": "Only selected triggers will receive this event. Leave it empty to suppress this event for all triggers.",
-      "saving": "Saving...",
-      "saveChanges": "Save changes",
-      "reset": "Reset",
-      "enabled": "enabled",
-      "disabled": "disabled"
+      "ruleStatusLabel": "حالة القاعدة",
+      "ruleStatusAriaLabel": "حالة القاعدة",
+      "enabledText": "مفعّلة: يمكن إطلاق الإشعارات لهذا الحدث.",
+      "disabledText": "معطّلة: الإشعارات مُعلَّقة لهذا الحدث.",
+      "assignedTriggersLabel": "المشغّلات المعيّنة",
+      "noTriggersConfigured": "لم تُعيَّن مشغّلات. أضف مشغّلات من",
+      "triggersPageLink": "صفحة المشغّلات",
+      "helpTextImplicitAll": "اتركه فارغاً لإرسال هذا الحدث إلى جميع مشغّلات الإشعارات. تحديد أي مشغّل يحوّل هذه القاعدة إلى قائمة مسموح بها.",
+      "helpTextExplicit": "ستتلقى المشغّلات المحددة فقط هذا الحدث. اتركه فارغاً لقمع هذا الحدث لجميع المشغّلات.",
+      "saving": "جارٍ الحفظ...",
+      "saveChanges": "حفظ التغييرات",
+      "reset": "إعادة ضبط",
+      "enabled": "مفعّلة",
+      "disabled": "معطّلة"
     }
   },
   "securityView": {
-    "loadingVulnerabilityData": "Loading vulnerability data...",
-    "scanNow": "Scan Now",
-    "scanning": "Scanning...",
-    "scanAllAriaLabel": "Scan all containers",
-    "scanAllContainers": "Scan all containers for vulnerabilities",
-    "checkingScanner": "Checking scanner availability",
-    "runtimeUnavailable": "Runtime check unavailable; scan can still be attempted",
+    "loadingVulnerabilityData": "جارٍ تحميل بيانات الثغرات...",
+    "scanNow": "فحص الآن",
+    "scanning": "جارٍ الفحص...",
+    "scanAllAriaLabel": "فحص جميع الحاويات",
+    "scanAllContainers": "فحص جميع الحاويات بحثاً عن الثغرات",
+    "checkingScanner": "جارٍ التحقق من توفر الماسح",
+    "runtimeUnavailable": "فحص وقت التشغيل غير متاح؛ لا يزال بالإمكان محاولة الفحص",
     "filters": {
-      "severity": "Severity",
-      "severityCritical": "Critical",
-      "severityHigh": "High",
-      "severityMedium": "Medium",
-      "severityLow": "Low",
-      "fixAvailable": "Fix Available",
-      "fixYes": "Yes",
-      "fixNo": "No",
-      "clearAll": "Clear all"
+      "severity": "الخطورة",
+      "severityCritical": "حرجة",
+      "severityHigh": "عالية",
+      "severityMedium": "متوسطة",
+      "severityLow": "منخفضة",
+      "fixAvailable": "يتوفر إصلاح",
+      "fixYes": "نعم",
+      "fixNo": "لا",
+      "clearAll": "مسح الكل"
     },
     "columns": {
-      "image": "Image",
-      "critical": "Critical",
-      "high": "High",
-      "medium": "Medium",
-      "low": "Low",
-      "fixable": "Fixable",
-      "total": "Total"
+      "image": "الصورة",
+      "critical": "حرجة",
+      "high": "عالية",
+      "medium": "متوسطة",
+      "low": "منخفضة",
+      "fixable": "قابلة للإصلاح",
+      "total": "الإجمالي"
     },
     "card": {
-      "vulnerabilities": "vulnerabilities",
-      "vsUpdate": "vs update",
-      "fixable": "fixable",
-      "noFixesAvailable": "No fixes available",
-      "total": "total"
+      "vulnerabilities": "ثغرة",
+      "vsUpdate": "مقابل التحديث",
+      "fixable": "قابلة للإصلاح",
+      "noFixesAvailable": "لا تتوفر إصلاحات",
+      "total": "الإجمالي"
     },
     "badge": {
-      "critical": "Critical",
-      "high": "High",
-      "medium": "Medium",
-      "low": "Low"
+      "critical": "حرجة",
+      "high": "عالية",
+      "medium": "متوسطة",
+      "low": "منخفضة"
     },
-    "update": "Update",
-    "viewInContainers": "View in Containers",
-    "viewAllInContainers": "View all in Containers",
+    "deltaTooltips": {
+      "fixedSingle": "التحديث يُصلح {count} ثغرة",
+      "fixedMultiple": "التحديث يُصلح {count} ثغرة",
+      "newSingle": "التحديث يُدخل {count} ثغرة جديدة",
+      "newMultiple": "التحديث يُدخل {count} ثغرات جديدة",
+      "both": "التحديث: {fixed} مُصلَّحة، {new} جديدة"
+    },
+    "updateOneOfButton": "تحديث واحدة من {count} حاوية",
+    "updateThisContainerButton": "تحديث هذه الحاوية",
+    "update": "تحديث",
+    "viewInContainers": "عرض في الحاويات",
+    "viewAllInContainers": "عرض الكل في الحاويات",
     "export": {
-      "label": "Export",
-      "downloadReport": "Download Report"
+      "label": "تصدير",
+      "downloadReport": "تنزيل التقرير"
     },
     "sbom": {
       "label": "SBOM",
-      "loading": "Loading SBOM document...",
-      "loadingButton": "Loading...",
-      "refresh": "Refresh",
-      "hide": "Hide",
-      "view": "View",
-      "download": "Download",
-      "format": "format:",
-      "components": "components:",
-      "generated": "generated:"
+      "loading": "جارٍ تحميل مستند SBOM...",
+      "loadingButton": "جارٍ التحميل...",
+      "refresh": "تحديث",
+      "hide": "إخفاء",
+      "view": "عرض",
+      "download": "تنزيل",
+      "format": "الصيغة:",
+      "components": "المكوّنات:",
+      "generated": "تم الإنشاء:"
     },
     "vuln": {
-      "noFix": "No fix",
-      "target": "Target:"
+      "noFix": "لا يوجد إصلاح",
+      "target": "الهدف:"
     },
     "chooser": {
-      "title": "Select container to update",
-      "cancel": "Cancel"
+      "title": "اختر الحاوية للتحديث",
+      "cancel": "إلغاء"
     },
     "runtimeTools": {
       "trivy": "Trivy",
@@ -186,141 +221,150 @@
     },
     "emptyState": {
       "noDataTitle": "لا توجد بيانات ثغرات بعد",
-      "scannerNotReady": "الماسح الضوئي غير جاهز بعد.",
-      "runScanHint": "قم بتشغيل فحص للتحقق من الثغرات المعروفة في حاوياتك",
-      "noMatchTitle": "لا توجد صور تطابق عوامل التصفية الخاصة بك"
+      "scannerNotReady": "الماسح غير جاهز بعد.",
+      "runScanHint": "شغّل فحصاً للتحقق من الثغرات المعروفة في حاوياتك",
+      "noMatchTitle": "لا توجد صور تطابق عوامل التصفية"
     }
   },
   "registriesView": {
-    "loadingRegistries": "Loading registries...",
-    "loadError": "Failed to load registries",
-    "filterPlaceholder": "Filter by name or type...",
-    "clear": "Clear",
-    "emptyFiltered": "No registries match your filters",
+    "loadingRegistries": "جارٍ تحميل السجلات...",
+    "loadError": "فشل تحميل السجلات",
+    "filterPlaceholder": "تصفية حسب الاسم أو النوع...",
+    "clear": "مسح",
+    "emptyFiltered": "لا توجد سجلات تطابق عوامل التصفية",
     "columns": {
-      "registry": "Registry",
-      "type": "Type",
-      "status": "Status",
+      "registry": "السجل",
+      "type": "النوع",
+      "status": "الحالة",
       "url": "URL"
     },
     "badge": {
-      "private": "Private",
-      "public": "Public"
+      "private": "خاص",
+      "public": "عام"
     },
     "card": {
-      "auth": "Auth",
-      "status": "Status"
+      "auth": "المصادقة",
+      "status": "الحالة"
+    },
+    "status": {
+      "connected": "متصل",
+      "error": "خطأ",
+      "unknown": "غير معروف"
     },
     "detail": {
-      "refreshing": "Refreshing registry details...",
-      "status": "Status",
-      "authentication": "Authentication",
+      "refreshing": "جارٍ تحديث تفاصيل السجل...",
+      "status": "الحالة",
+      "authentication": "المصادقة",
       "url": "URL"
     }
   },
   "serversView": {
-    "loadingServerData": "Loading server data...",
-    "loadError": "Failed to load server data",
-    "filterPlaceholder": "Filter by name or address...",
-    "clear": "Clear",
-    "emptyFiltered": "No hosts match your filters",
-    "justNow": "Just now",
-    "never": "Never",
+    "loadingServerData": "جارٍ تحميل بيانات الخادم...",
+    "loadError": "فشل تحميل بيانات الخادم",
+    "filterPlaceholder": "تصفية حسب الاسم أو العنوان...",
+    "clear": "مسح",
+    "emptyFiltered": "لا يوجد مضيفون يطابقون عوامل التصفية",
+    "justNow": "الآن",
+    "never": "أبداً",
+    "status": {
+      "connected": "متصل",
+      "disconnected": "غير متصل"
+    },
     "columns": {
-      "host": "Host",
-      "address": "Address",
-      "status": "Status",
-      "containers": "Containers",
-      "lastSeen": "Last Seen"
+      "host": "المضيف",
+      "address": "العنوان",
+      "status": "الحالة",
+      "containers": "الحاويات",
+      "lastSeen": "آخر ظهور"
     },
     "card": {
-      "containers": "Containers",
-      "running": "Running",
-      "images": "Images",
-      "lastSeen": "Last seen"
+      "containers": "الحاويات",
+      "running": "تعمل",
+      "images": "الصور",
+      "lastSeen": "آخر ظهور"
     },
     "list": {
-      "containers": "containers"
+      "containers": "حاوية"
     },
     "detail": {
-      "containers": "Containers",
-      "running": "running",
-      "stopped": "stopped",
-      "images": "Images",
-      "lastSeen": "Last Seen",
-      "refresh": "Refresh"
+      "containers": "الحاويات",
+      "running": "تعمل",
+      "stopped": "متوقفة",
+      "images": "الصور",
+      "lastSeen": "آخر ظهور",
+      "refresh": "تحديث"
     }
   },
   "triggersView": {
-    "loadingTriggers": "Loading triggers...",
-    "loadError": "Failed to load triggers",
-    "filterPlaceholder": "Filter by name...",
-    "clear": "Clear",
-    "emptyFiltered": "No triggers match your filters",
+    "loadingTriggers": "جارٍ تحميل المشغّلات...",
+    "loadError": "فشل تحميل المشغّلات",
+    "filterPlaceholder": "تصفية حسب الاسم...",
+    "clear": "مسح",
+    "emptyFiltered": "لا توجد مشغّلات تطابق عوامل التصفية",
     "columns": {
-      "trigger": "Trigger",
-      "type": "Type",
-      "status": "Status"
+      "trigger": "المشغّل",
+      "type": "النوع",
+      "status": "الحالة"
     },
     "status": {
-      "active": "Active",
-      "inactive": "Inactive"
+      "active": "نشط",
+      "inactive": "غير نشط"
     },
     "test": {
-      "testing": "Testing...",
-      "sent": "Sent!",
-      "failed": "Failed",
-      "test": "Test",
-      "testTrigger": "Test Trigger",
-      "runTest": "Run test",
-      "testPassed": "Test passed",
-      "testFailed": "Test failed",
-      "defaultError": "Trigger test failed"
+      "testing": "جارٍ الاختبار...",
+      "sent": "تم الإرسال!",
+      "failed": "فشل",
+      "test": "اختبار",
+      "testTrigger": "اختبار المشغّل",
+      "runTest": "تشغيل الاختبار",
+      "testPassed": "نجح الاختبار",
+      "testFailed": "فشل الاختبار",
+      "defaultError": "فشل اختبار المشغّل"
     },
     "detail": {
-      "status": "Status",
-      "refreshing": "Refreshing trigger details...",
-      "noConfig": "No configuration properties"
+      "status": "الحالة",
+      "refreshing": "جارٍ تحديث تفاصيل المشغّل...",
+      "noConfig": "لا توجد خصائص إعداد"
     },
     "list": {
-      "status": "Status"
+      "status": "الحالة"
     }
   },
   "watchersView": {
-    "loadingWatchers": "Loading watchers...",
-    "loadError": "Failed to load watchers",
-    "filterPlaceholder": "Filter by name...",
-    "clear": "Clear",
-    "emptyFiltered": "No watchers match your filters",
+    "loadingWatchers": "جارٍ تحميل المراقبين...",
+    "loadError": "فشل تحميل المراقبين",
+    "filterPlaceholder": "تصفية حسب الاسم...",
+    "clear": "مسح",
+    "emptyFiltered": "لا يوجد مراقبون يطابقون عوامل التصفية",
     "columns": {
-      "watcher": "Watcher",
-      "status": "Status",
-      "containers": "Containers",
-      "schedule": "Schedule",
-      "nextRun": "Next Run",
-      "lastRun": "Last Run"
+      "watcher": "المراقب",
+      "status": "الحالة",
+      "containers": "الحاويات",
+      "schedule": "الجدول الزمني",
+      "nextRun": "التشغيل التالي",
+      "lastRun": "آخر تشغيل"
     },
     "status": {
-      "watching": "Watching",
-      "paused": "Paused"
+      "watching": "يراقب",
+      "paused": "متوقف مؤقتاً"
     },
     "card": {
-      "containers": "Containers",
-      "nextRun": "Next run",
-      "lastRun": "Last run",
-      "containersWatched": "{count} containers watched"
+      "containers": "الحاويات",
+      "nextRun": "التشغيل التالي",
+      "lastRun": "آخر تشغيل",
+      "containersWatched": "{count} حاوية تحت المراقبة"
     },
     "badge": {
-      "maint": "Maint"
+      "maint": "صيانة"
     },
     "detail": {
       "cron": "Cron",
-      "lastRun": "Last Run",
-      "containersWatched": "Containers Watched",
-      "schedule": "Schedule",
-      "nextRun": "Next Run",
-      "viewContainers": "View containers",
-      "refreshing": "Refreshing watcher details..."
+      "lastRun": "آخر تشغيل",
+      "containersWatched": "الحاويات تحت المراقبة",
+      "schedule": "الجدول الزمني",
+      "nextRun": "التشغيل التالي",
+      "viewContainers": "عرض الحاويات",
+      "refreshing": "جارٍ تحديث تفاصيل المراقب..."
     }
   }
 }

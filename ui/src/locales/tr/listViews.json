@@ -75,6 +75,32 @@
     "clear": "Temizle",
     "allNotificationTriggers": "Tüm bildirim tetikleyicileri",
     "noTriggers": "Tetikleyici yok",
+    "rules": {
+      "update-available": {
+        "name": "Güncelleme Mevcut",
+        "description": "Bir konteynerin yeni sürümü olduğunda"
+      },
+      "update-applied": {
+        "name": "Güncelleme Uygulandı",
+        "description": "Konteyner başarıyla güncellendikten sonra"
+      },
+      "update-failed": {
+        "name": "Güncelleme Başarısız",
+        "description": "Bir güncelleme başarısız olduğunda veya geri alındığında"
+      },
+      "security-alert": {
+        "name": "Güvenlik Uyarısı",
+        "description": "Kritik/Yüksek güvenlik açığı tespit edildi"
+      },
+      "agent-disconnect": {
+        "name": "Aracı Bağlantısı Kesildi",
+        "description": "Uzak aracı bağlantısını kaybettiğinde"
+      },
+      "agent-reconnect": {
+        "name": "Aracı Yeniden Bağlandı",
+        "description": "Uzak aracı bağlantısını kaybettikten sonra yeniden bağlandığında"
+      }
+    },
     "columns": {
       "on": "Açık",
       "rule": "Kural",
@@ -140,6 +166,15 @@
       "medium": "Orta",
       "low": "Düşük"
     },
+    "deltaTooltips": {
+      "fixedSingle": "Güncelleme {count} güvenlik açığını giderir",
+      "fixedMultiple": "Güncelleme {count} güvenlik açığını giderir",
+      "newSingle": "Güncelleme {count} yeni güvenlik açığı getirir",
+      "newMultiple": "Güncelleme {count} yeni güvenlik açığı getirir",
+      "both": "Güncelleme: {fixed} giderildi, {new} yeni"
+    },
+    "updateOneOfButton": "{count} konteynerden birini güncelle",
+    "updateThisContainerButton": "Bu konteyneri güncelle",
     "update": "Güncelle",
     "viewInContainers": "Kapsayıcılarda Görüntüle",
     "viewAllInContainers": "Tümünü Container'larda görüntüle",
@@ -211,6 +246,11 @@
       "auth": "Kimlik doğrulama",
       "status": "Durum"
     },
+    "status": {
+      "connected": "Bağlı",
+      "error": "Hata",
+      "unknown": "Bilinmiyor"
+    },
     "detail": {
       "refreshing": "Kayıt defteri ayrıntıları yenileniyor...",
       "status": "Durum",
@@ -226,6 +266,10 @@
     "emptyFiltered": "Filtrelerinizle eşleşen ana makine yok",
     "justNow": "Az önce",
     "never": "Asla",
+    "status": {
+      "connected": "Bağlı",
+      "disconnected": "Bağlantı kesildi"
+    },
     "columns": {
       "host": "Sunucu",
       "address": "Adres",

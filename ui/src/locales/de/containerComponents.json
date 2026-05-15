@@ -102,6 +102,7 @@
       "version": "Version",
       "currentLabel": "Aktuell:",
       "latestLabel": "Neueste:",
+      "digestLabel": "Digest:",
       "upToDate": "Aktuell",
       "tagFilters": "Tag-Filter",
       "includeLabel": "Einschließen:",
@@ -183,10 +184,15 @@
       "currentLabel": "Aktuell",
       "latestLabel": "Neueste",
       "blockedByBouncer": "Durch Bouncer blockiert",
-      "registryErrorRateLimited": "Rate limited",
-      "registryErrorAuth": "Auth failed",
-      "registryErrorNotFound": "Not found",
-      "registryErrorCheckFailed": "Check failed"
+      "registryErrorRateLimited": "Rate-Limit erreicht",
+      "registryErrorAuth": "Authentifizierung fehlgeschlagen",
+      "registryErrorNotFound": "Nicht gefunden",
+      "registryErrorCheckFailed": "Prüfung fehlgeschlagen",
+      "blockedTag": "Blockiert: {tag}",
+      "blockedTagWithCriticals": "Blockiert: {tag} ({count} kritische CVE)",
+      "blockedTagWithCriticalsCVEs": "Blockiert: {tag} ({count} kritische CVEs)",
+      "manualUpdateOnly": "Nur manuelles Update",
+      "manualUpdateOnlyWithMessage": "Nur manuelles Update — {message}"
     },
     "groupHeader": {
       "ungrouped": "Nicht gruppiert",
@@ -251,8 +257,6 @@
       "collapseAll": "Alle einklappen",
       "recheckTooltip": "Erneut auf Updates prüfen",
       "columnsHeader": "Spalten",
-      "narrowViewportSuffix": "(narrow viewport)",
-      "autoHiddenBadgeTooltip": "{count} columns auto-hidden because the window is narrow. Widen the window or hide other columns to free space.",
       "filterSearch": "Suche: {value}",
       "filterStatus": "Status: {value}",
       "filterBouncer": "Bouncer: {value}",
@@ -260,8 +264,11 @@
       "filterHost": "Host: {value}",
       "filterKind": "Typ: {value}",
       "filterHiddenPinned": "Ausgeblendet: Gepinnt",
+      "narrowViewportSuffix": "(schmales Fenster)",
+      "autoHiddenBadgeTooltip": "{count} Spalten automatisch ausgeblendet, da das Fenster zu schmal ist. Fenster verbreitern oder andere Spalten ausblenden, um Platz zu schaffen.",
       "filtersLabel": "Filter",
-      "filteredContainers": "Auf {count} Container gefiltert | Auf {count} Container gefiltert"
+      "filteredContainers": "Auf {count} Container gefiltert | Auf {count} Container gefiltert",
+      "clearContainerIdFilter": "Container-ID-Filter löschen"
     },
     "stats": {
       "paused": "Pausiert",
@@ -299,7 +306,8 @@
     },
     "suggestedTag": {
       "badgeText": "Vorgeschlagen",
-      "tooltip": "Bester verfügbarer stabiler Semver-Tag - Pinning erwägen"
+      "tooltip": "Bester verfügbarer stabiler Semver-Tag - Pinning erwägen",
+      "tooltipWithTag": "Vorgeschlagen: {tag}\n{hint}"
     },
     "eligibilityBadges": {
       "securityBlocked": "Durch Sicherheit blockiert",

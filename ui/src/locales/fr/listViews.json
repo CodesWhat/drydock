@@ -75,6 +75,32 @@
     "clear": "Effacer",
     "allNotificationTriggers": "Tous les triggers de notification",
     "noTriggers": "Aucun trigger",
+    "rules": {
+      "update-available": {
+        "name": "Mise à jour disponible",
+        "description": "Quand un conteneur a une nouvelle version"
+      },
+      "update-applied": {
+        "name": "Mise à jour appliquée",
+        "description": "Après qu'un conteneur a été mis à jour avec succès"
+      },
+      "update-failed": {
+        "name": "Échec de la mise à jour",
+        "description": "Quand une mise à jour échoue ou est annulée par rollback"
+      },
+      "security-alert": {
+        "name": "Alerte de sécurité",
+        "description": "Vulnérabilité critique/élevée détectée"
+      },
+      "agent-disconnect": {
+        "name": "Agent déconnecté",
+        "description": "Quand un agent distant perd la connexion"
+      },
+      "agent-reconnect": {
+        "name": "Agent reconnecté",
+        "description": "Quand un agent distant se reconnecte après une perte de connexion"
+      }
+    },
     "columns": {
       "on": "Sur",
       "rule": "Règle",
@@ -140,6 +166,15 @@
       "medium": "Moyenne",
       "low": "Faible"
     },
+    "deltaTooltips": {
+      "fixedSingle": "La mise à jour corrige {count} vulnérabilité",
+      "fixedMultiple": "La mise à jour corrige {count} vulnérabilités",
+      "newSingle": "La mise à jour introduit {count} nouvelle vulnérabilité",
+      "newMultiple": "La mise à jour introduit {count} nouvelles vulnérabilités",
+      "both": "Mise à jour : {fixed} corrigées, {new} nouvelles"
+    },
+    "updateOneOfButton": "Mettre à jour l'un des {count} conteneurs",
+    "updateThisContainerButton": "Mettre à jour ce conteneur",
     "update": "Mettre à jour",
     "viewInContainers": "Voir dans Conteneurs",
     "viewAllInContainers": "Tout voir dans Conteneurs",
@@ -211,6 +246,11 @@
       "auth": "Auth",
       "status": "État"
     },
+    "status": {
+      "connected": "Connectée",
+      "error": "Erreur",
+      "unknown": "Inconnue"
+    },
     "detail": {
       "refreshing": "Actualisation des détails de registry...",
       "status": "État",
@@ -249,6 +289,10 @@
       "images": "Images",
       "lastSeen": "Dernière activité",
       "refresh": "Actualiser"
+    },
+    "status": {
+      "connected": "Connecté",
+      "disconnected": "Déconnecté"
     }
   },
   "triggersView": {

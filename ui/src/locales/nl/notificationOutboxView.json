@@ -1,0 +1,39 @@
+{
+  "notificationOutboxView": {
+    "heading": "Postvak uit",
+    "refresh": "Vernieuwen",
+    "loading": "Postvakuitems laden…",
+    "tabs": {
+      "dead-letter": "Dead-letter",
+      "pending": "In behandeling",
+      "delivered": "Afgeleverd"
+    },
+    "columns": {
+      "event": "Gebeurtenis",
+      "trigger": "Trigger",
+      "attempts": "Pogingen",
+      "lastError": "Laatste fout",
+      "created": "Aangemaakt"
+    },
+    "actions": {
+      "retry": "Opnieuw proberen",
+      "discard": "Verwijderen"
+    },
+    "status": {
+      "dead-letter": "Dead-letter",
+      "pending": "In behandeling",
+      "delivered": "Afgeleverd"
+    },
+    "empty": {
+      "dead-letter": "Geen dead-letter-items",
+      "pending": "Geen items in behandeling",
+      "delivered": "Geen afgeleverde items"
+    },
+    "toast": {
+      "requeued": "Opnieuw in de wachtrij: {name}",
+      "discarded": "Verwijderd: {name}",
+      "retryFailed": "Opnieuw proberen mislukt voor {name}",
+      "discardFailed": "Verwijderen mislukt voor {name}"
+    }
+  }
+}

@@ -97,6 +97,32 @@
       "reset": "Restablecer",
       "enabled": "habilitada",
       "disabled": "deshabilitada"
+    },
+    "rules": {
+      "update-available": {
+        "name": "Actualización disponible",
+        "description": "Cuando un contenedor tiene una nueva versión"
+      },
+      "update-applied": {
+        "name": "Actualización aplicada",
+        "description": "Después de actualizar correctamente un contenedor"
+      },
+      "update-failed": {
+        "name": "Actualización fallida",
+        "description": "Cuando una actualización falla o se revierte"
+      },
+      "security-alert": {
+        "name": "Alerta de seguridad",
+        "description": "Vulnerabilidad crítica/alta detectada"
+      },
+      "agent-disconnect": {
+        "name": "Agente desconectado",
+        "description": "Cuando un agente remoto pierde la conexión"
+      },
+      "agent-reconnect": {
+        "name": "Agente reconectado",
+        "description": "Cuando un agente remoto se vuelve a conectar tras perder la conexión"
+      }
     }
   },
   "securityView": {
@@ -140,6 +166,15 @@
       "medium": "Media",
       "low": "Baja"
     },
+    "deltaTooltips": {
+      "fixedSingle": "La actualización corrige {count} vulnerabilidad",
+      "fixedMultiple": "La actualización corrige {count} vulnerabilidades",
+      "newSingle": "La actualización introduce {count} nueva vulnerabilidad",
+      "newMultiple": "La actualización introduce {count} nuevas vulnerabilidades",
+      "both": "Actualización: {fixed} corregidas, {new} nuevas"
+    },
+    "updateOneOfButton": "Actualizar uno de {count} contenedores",
+    "updateThisContainerButton": "Actualizar este contenedor",
     "update": "Actualizar",
     "viewInContainers": "Ver en Contenedores",
     "viewAllInContainers": "Ver todo en Contenedores",
@@ -216,6 +251,11 @@
       "status": "Estado",
       "authentication": "Autenticación",
       "url": "URL"
+    },
+    "status": {
+      "connected": "Conectado",
+      "error": "Error",
+      "unknown": "Desconocido"
     }
   },
   "serversView": {
@@ -249,6 +289,10 @@
       "images": "Imágenes",
       "lastSeen": "Última vez visto",
       "refresh": "Actualizar"
+    },
+    "status": {
+      "connected": "Conectado",
+      "disconnected": "Desconectado"
     }
   },
   "triggersView": {

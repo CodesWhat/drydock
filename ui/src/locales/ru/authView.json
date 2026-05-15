@@ -1,20 +1,20 @@
 {
   "authView": {
-    "loadingProviders": "Loading authentication providers...",
-    "loadError": "Failed to load authentication providers",
-    "filterPlaceholder": "Filter by name...",
-    "clearFilter": "Clear",
-    "emptyFiltered": "No providers match your filters",
-    "detailRefreshing": "Refreshing authentication details...",
-    "detailLoadError": "Unable to load latest authentication details",
-    "noConfig": "No configuration properties",
+    "loadingProviders": "Загрузка провайдеров аутентификации...",
+    "loadError": "Не удалось загрузить провайдеры аутентификации",
+    "filterPlaceholder": "Фильтр по имени...",
+    "clearFilter": "Очистить",
+    "emptyFiltered": "Нет провайдеров, соответствующих фильтрам",
+    "detailRefreshing": "Обновление данных аутентификации...",
+    "detailLoadError": "Не удалось загрузить последние данные аутентификации",
+    "noConfig": "Свойства конфигурации отсутствуют",
     "columns": {
-      "provider": "Provider",
-      "type": "Type",
-      "status": "Status"
+      "provider": "Провайдер",
+      "type": "Тип",
+      "status": "Статус"
     },
     "fields": {
-      "status": "Status"
+      "status": "Статус"
     },
     "badge": {
       "basic": "Basic",
