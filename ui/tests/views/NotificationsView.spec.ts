@@ -113,7 +113,7 @@ describe('NotificationsView', () => {
 
     mockGetAllNotificationRules.mockResolvedValue([
       makeRule({
-        id: 'security-alert',
+        id: 'custom-rule',
         name: longRuleName,
         description: longDescription,
         triggers: ['trigger:slack-alerts'],

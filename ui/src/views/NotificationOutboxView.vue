@@ -24,10 +24,10 @@ const router = useRouter();
 const toast = useToast();
 const { t } = useI18n();
 
-const STATUS_TABS: Array<{ key: NotificationOutboxEntryStatus; label: string }> = [
-  { key: 'dead-letter', label: 'Dead-letter' },
-  { key: 'pending', label: 'Pending' },
-  { key: 'delivered', label: 'Delivered' },
+const STATUS_TABS: Array<{ key: NotificationOutboxEntryStatus }> = [
+  { key: 'dead-letter' },
+  { key: 'pending' },
+  { key: 'delivered' },
 ];
 
 const VALID_STATUSES: NotificationOutboxEntryStatus[] = ['dead-letter', 'pending', 'delivered'];
@@ -54,7 +54,7 @@ const actingId = ref<string | null>(null);
 const tableColumns = computed(() => [
   {
     key: 'eventName',
-    label: 'Event',
+    label: t('notificationOutboxView.columns.event'),
     sortable: false,
     size: 220,
     minSize: 160,
@@ -63,17 +63,24 @@ const tableColumns = computed(() => [
   },
   {
     key: 'triggerId',
-    label: 'Trigger',
+    label: t('notificationOutboxView.columns.trigger'),
     sortable: false,
     size: 260,
     minSize: 180,
     maxSize: 360,
     align: 'text-left',
   },
-  { key: 'attempts', label: 'Attempts', sortable: false, size: 100, minSize: 88, maxSize: 130 },
+  {
+    key: 'attempts',
+    label: t('notificationOutboxView.columns.attempts'),
+    sortable: false,
+    size: 100,
+    minSize: 88,
+    maxSize: 130,
+  },
   {
     key: 'lastError',
-    label: 'Last error',
+    label: t('notificationOutboxView.columns.lastError'),
     sortable: false,
     size: 360,
     minSize: 220,
@@ -82,7 +89,14 @@ const tableColumns = computed(() => [
     overflow: 'clamp-2',
     align: 'text-left',
   },
-  { key: 'createdAt', label: 'Created', sortable: false, size: 160, minSize: 140, maxSize: 220 },
+  {
+    key: 'createdAt',
+    label: t('notificationOutboxView.columns.created'),
+    sortable: false,
+    size: 160,
+    minSize: 140,
+    maxSize: 220,
+  },
 ]);
 
 function statusToCount(s: NotificationOutboxEntryStatus): number {
@@ -126,10 +140,12 @@ async function retryEntry(entry: NotificationOutboxEntry) {
   actingId.value = entry.id;
   try {
     await retryOutboxEntry(entry.id);
-    toast.success(`Requeued: ${entry.eventName}`);
+    toast.success(t('notificationOutboxView.toast.requeued', { name: entry.eventName }));
     await loadEntries();
   } catch (e: unknown) {
-    toast.error(errorMessage(e, `Failed to retry ${entry.eventName}`));
+    toast.error(
+      errorMessage(e, t('notificationOutboxView.toast.retryFailed', { name: entry.eventName })),
+    );
   } finally {
     actingId.value = null;
   }
@@ -140,10 +156,12 @@ async function discardEntry(entry: NotificationOutboxEntry) {
   actingId.value = entry.id;
   try {
     await deleteOutboxEntry(entry.id);
-    toast.success(`Discarded: ${entry.eventName}`);
+    toast.success(t('notificationOutboxView.toast.discarded', { name: entry.eventName }));
     await loadEntries();
   } catch (e: unknown) {
-    toast.error(errorMessage(e, `Failed to discard ${entry.eventName}`));
+    toast.error(
+      errorMessage(e, t('notificationOutboxView.toast.discardFailed', { name: entry.eventName })),
+    );
   } finally {
     actingId.value = null;
   }
@@ -160,9 +178,11 @@ function statusBadge(s: NotificationOutboxEntryStatus): {
   tone: 'danger' | 'warning' | 'success';
   label: string;
 } {
-  if (s === 'dead-letter') return { tone: 'danger', label: 'Dead-letter' };
-  if (s === 'pending') return { tone: 'warning', label: 'Pending' };
-  return { tone: 'success', label: 'Delivered' };
+  if (s === 'dead-letter')
+    return { tone: 'danger', label: t('notificationOutboxView.status.dead-letter') };
+  if (s === 'pending')
+    return { tone: 'warning', label: t('notificationOutboxView.status.pending') };
+  return { tone: 'success', label: t('notificationOutboxView.status.delivered') };
 }
 
 onMounted(() => {
@@ -178,7 +198,7 @@ onMounted(() => {
         <span class="text-xs dd-text-muted">{{ entries.length }} of {{ statusToCount(status) }}</span>
       </div>
       <AppButton size="xs" variant="text-muted" weight="medium" :disabled="loading" @click="loadEntries">
-        <AppIcon name="refresh" :size="14" class="mr-1" /> Refresh
+        <AppIcon name="refresh" :size="14" class="mr-1" /> {{ t('notificationOutboxView.refresh') }}
       </AppButton>
     </div>
 
@@ -186,7 +206,7 @@ onMounted(() => {
       <AppButton v-for="tab in STATUS_TABS" :key="tab.key" type="button" size="md" weight="medium"
                  :variant="status === tab.key ? 'elevated' : 'text-muted'"
                  @click="selectStatus(tab.key)">
-        {{ tab.label }}
+        {{ t(`notificationOutboxView.tabs.${tab.key}`) }}
         <AppBadge :tone="statusBadge(tab.key).tone" size="xs" class="ml-2">
           {{ statusToCount(tab.key) }}
         </AppBadge>
@@ -199,7 +219,7 @@ onMounted(() => {
       {{ error }}
     </div>
 
-    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">Loading outbox entries…</div>
+    <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('notificationOutboxView.loading') }}</div>
 
     <DataTable
       v-if="!loading"
@@ -275,7 +295,7 @@ onMounted(() => {
             @click.stop="retryEntry(row)"
           >
             <AppIcon name="refresh" :size="12" />
-            Retry
+            {{ t('notificationOutboxView.actions.retry') }}
           </AppButton>
           <AppButton
             size="sm"
@@ -287,12 +307,12 @@ onMounted(() => {
             @click.stop="discardEntry(row)"
           >
             <AppIcon name="trash" :size="12" />
-            Discard
+            {{ t('notificationOutboxView.actions.discard') }}
           </AppButton>
         </div>
       </template>
       <template #empty>
-        <EmptyState icon="notifications" :message="`No ${status} entries`" />
+        <EmptyState icon="notifications" :message="t('notificationOutboxView.empty', { status: t(`notificationOutboxView.tabs.${status}`) })" />
       </template>
     </DataTable>
   </DataViewLayout>
