@@ -467,14 +467,25 @@ class Oidc extends Authentication<OidcConfiguration> {
       // (see undici PR #4827 — the Node 22 Dispatcher1Wrapper bridge is
       // not present on Node 24). Pairing undici@8's fetch with undici@8's
       // Agent keeps both halves on the same dispatcher version.
+      //
+      // Casts go through `unknown` because undici's RequestInfo /
+      // RequestInit / Response are nominally distinct from the lib.dom
+      // types that openid-client's CustomFetch is typed against. The
+      // runtime shapes match (Node 24's global fetch is undici under
+      // the hood), so the casts are safe.
+      //
+      // `Response` is already in scope as Express's response type from
+      // the top-of-file import, so the cast target is reached via
+      // `ReturnType<openidClientLibrary.CustomFetch>` to avoid colliding
+      // with that name.
+      type UndiciFetchInput = Parameters<typeof undiciFetch>[0];
+      type UndiciFetchInit = Parameters<typeof undiciFetch>[1];
+      type CustomFetchResult = ReturnType<openidClientLibrary.CustomFetch>;
       const oidcFetch: openidClientLibrary.CustomFetch = (input, init) =>
-        undiciFetch(
-          input as RequestInfo | URL,
-          {
-            ...(init as unknown as RequestInit),
-            dispatcher,
-          } as RequestInit & { dispatcher: Agent },
-        );
+        undiciFetch(input as unknown as UndiciFetchInput, {
+          ...(init as unknown as UndiciFetchInit),
+          dispatcher,
+        }) as unknown as CustomFetchResult;
       discoveryOptions[openidClient.customFetch] = oidcFetch;
     }
     this.client = await openidClient.discovery(
