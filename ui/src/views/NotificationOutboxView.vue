@@ -312,7 +312,7 @@ onMounted(() => {
         </div>
       </template>
       <template #empty>
-        <EmptyState icon="notifications" :message="t('notificationOutboxView.empty', { status: t(`notificationOutboxView.tabs.${status}`) })" />
+        <EmptyState icon="notifications" :message="t(`notificationOutboxView.empty.${status}`)" />
       </template>
     </DataTable>
   </DataViewLayout>
