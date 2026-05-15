@@ -11,8 +11,14 @@ const mockResolveConfiguredPath = vi.hoisted(() => vi.fn((path) => path));
 vi.mock('../runtime/paths.js', () => ({
   resolveConfiguredPath: mockResolveConfiguredPath,
 }));
+const mockLogChild = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
 vi.mock('../log/index.js', () => ({
-  default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) },
+  default: { child: () => mockLogChild },
 }));
 vi.mock('../store/container.js', () => ({
   getContainers: vi.fn().mockReturnValue([]),
@@ -198,6 +204,41 @@ describe('AgentClient', () => {
       ).toThrow(
         'Agent a is configured with a secret over insecure HTTP (http://myhost:4000). Configure HTTPS (certfile/cafile) to protect X-Dd-Agent-Secret.',
       );
+    });
+
+    describe('DD_AGENT_ALLOW_INSECURE_SECRET opt-in', () => {
+      afterEach(() => {
+        delete process.env.DD_AGENT_ALLOW_INSECURE_SECRET;
+      });
+
+      test('should warn instead of throw when DD_AGENT_ALLOW_INSECURE_SECRET=true', () => {
+        process.env.DD_AGENT_ALLOW_INSECURE_SECRET = 'true';
+        expect(
+          () =>
+            new AgentClient('a', {
+              host: 'myhost',
+              port: 4000,
+              secret: 's',
+            }),
+        ).not.toThrow();
+        expect(mockLogChild.warn).toHaveBeenCalledWith(
+          'Agent a is configured with a secret over insecure HTTP (http://myhost:4000). Configure HTTPS (certfile/cafile) to protect X-Dd-Agent-Secret.',
+        );
+      });
+
+      test('should still throw when DD_AGENT_ALLOW_INSECURE_SECRET is not exactly "true"', () => {
+        process.env.DD_AGENT_ALLOW_INSECURE_SECRET = '1';
+        expect(
+          () =>
+            new AgentClient('a', {
+              host: 'myhost',
+              port: 4000,
+              secret: 's',
+            }),
+        ).toThrow(
+          'Agent a is configured with a secret over insecure HTTP (http://myhost:4000). Configure HTTPS (certfile/cafile) to protect X-Dd-Agent-Secret.',
+        );
+      });
     });
   });
 

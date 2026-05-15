@@ -181,15 +181,58 @@ describe('ReleaseNotesLink', () => {
     wrapper.unmount();
   });
 
-  it('renders icon-only anchor linking to releaseLink fallback when iconOnly is true', () => {
+  it('renders icon-only button with popover when only releaseLink is provided and iconOnly is true', async () => {
     const wrapper = mount(ReleaseNotesLink, {
       props: { releaseLink: 'https://example.com/releases', iconOnly: true },
       global: globalConfig,
+      attachTo: document.body,
     });
-    const link = wrapper.find('[data-test="release-link"]');
-    expect(link.exists()).toBe(true);
-    expect(link.attributes('href')).toBe('https://example.com/releases');
-    expect(link.attributes('aria-label')).toBe('Release notes');
+    const trigger = wrapper.find('[data-test="release-link"]');
+    expect(trigger.exists()).toBe(true);
+    expect(trigger.element.tagName).toBe('BUTTON');
+    expect(trigger.attributes('aria-haspopup')).toBe('dialog');
+    expect(document.body.querySelector('[data-test="release-notes-popover"]')).toBeNull();
+
+    await trigger.trigger('click');
+    await nextTick();
+
+    const popover = document.body.querySelector('[data-test="release-notes-popover"]');
+    expect(popover).not.toBeNull();
+    const linkRow = popover?.querySelector(
+      '[data-test="release-link-row"]',
+    ) as HTMLAnchorElement | null;
+    expect(linkRow).not.toBeNull();
+    expect(linkRow?.getAttribute('href')).toBe('https://example.com/releases');
+    expect(linkRow?.getAttribute('target')).toBe('_blank');
+    expect(linkRow?.getAttribute('rel')).toContain('noopener');
+    expect(linkRow?.getAttribute('rel')).toContain('noreferrer');
+
+    wrapper.unmount();
+  });
+
+  it('clicking the release-link-row closes the popover', async () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseLink: 'https://example.com/releases', iconOnly: true },
+      global: globalConfig,
+      attachTo: document.body,
+    });
+
+    // Open the popover first
+    await wrapper.find('[data-test="release-link"]').trigger('click');
+    await nextTick();
+    expect(document.body.querySelector('[data-test="release-notes-popover"]')).not.toBeNull();
+
+    // Click the link row — should close the popover
+    const linkRow = document.body.querySelector(
+      '[data-test="release-link-row"]',
+    ) as HTMLElement | null;
+    expect(linkRow).not.toBeNull();
+    linkRow?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+
+    expect(document.body.querySelector('[data-test="release-notes-popover"]')).toBeNull();
+
+    wrapper.unmount();
   });
 
   describe('currentReleaseNotes (current running tag)', () => {
@@ -344,5 +387,111 @@ describe('ReleaseNotesLink', () => {
         currentNotes.body,
       );
     });
+
+    it('icon-only popover expands the current-notes panel when clicked', async () => {
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          currentReleaseNotes: currentNotes,
+          releaseNotes: sampleNotes,
+          iconOnly: true,
+        },
+        global: globalConfig,
+        attachTo: document.body,
+      });
+
+      await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+      await nextTick();
+
+      const currentPanel = document.body.querySelector('[data-test="current-release-notes-panel"]');
+      const currentButton = currentPanel?.querySelector('button');
+      expect(currentButton).not.toBeNull();
+
+      currentButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await nextTick();
+
+      expect(currentPanel?.textContent).toContain(currentNotes.body);
+
+      wrapper.unmount();
+    });
+  });
+
+  it('toggleIconPopover closes the popover when it is already open', async () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseNotes: sampleNotes, iconOnly: true },
+      global: globalConfig,
+      attachTo: document.body,
+    });
+    const trigger = wrapper.find('[data-test="release-notes-link"]');
+
+    // Open the popover
+    await trigger.trigger('click');
+    await nextTick();
+    expect(document.body.querySelector('[data-test="release-notes-popover"]')).not.toBeNull();
+
+    // Click again — should close via toggleIconPopover's close branch
+    await trigger.trigger('click');
+    await nextTick();
+    expect(document.body.querySelector('[data-test="release-notes-popover"]')).toBeNull();
+
+    wrapper.unmount();
+  });
+
+  it('pressing Escape closes an open icon-only popover', async () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseNotes: sampleNotes, iconOnly: true },
+      global: globalConfig,
+      attachTo: document.body,
+    });
+
+    await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+    await nextTick();
+    expect(document.body.querySelector('[data-test="release-notes-popover"]')).not.toBeNull();
+
+    globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await nextTick();
+    expect(document.body.querySelector('[data-test="release-notes-popover"]')).toBeNull();
+
+    wrapper.unmount();
+  });
+
+  it('pressing a non-Escape key does not close the popover', async () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseNotes: sampleNotes, iconOnly: true },
+      global: globalConfig,
+      attachTo: document.body,
+    });
+
+    await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+    await nextTick();
+    expect(document.body.querySelector('[data-test="release-notes-popover"]')).not.toBeNull();
+
+    globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await nextTick();
+    expect(document.body.querySelector('[data-test="release-notes-popover"]')).not.toBeNull();
+
+    wrapper.unmount();
+  });
+
+  it('closeIconPopover is a no-op when the popover is already closed', async () => {
+    const wrapper = mount(ReleaseNotesLink, {
+      props: { releaseNotes: sampleNotes, iconOnly: true },
+      global: globalConfig,
+      attachTo: document.body,
+    });
+
+    // Popover starts closed — clicking the global handler (registered after open) should not throw
+    // Open then close cleanly first
+    await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+    await nextTick();
+    await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+    await nextTick();
+    expect(document.body.querySelector('[data-test="release-notes-popover"]')).toBeNull();
+
+    // Calling close again (when already closed) must be safe — exercises the early-return branch
+    globalThis.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+    expect(document.body.querySelector('[data-test="release-notes-popover"]')).toBeNull();
+
+    wrapper.unmount();
   });
 });

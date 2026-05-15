@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Microbench for the drydock #301 rc.10 slow-dashboard/slow-containers
-// fix set. Compares the three backend hotspots that this PR addressed,
-// sized for the reporter's topology (88 containers).
+// Regression baseline: dashboard summary computation and clone paths.
+// Compares the three backend hotspots before and after the fix, sized for
+// the reporter's topology (88 containers).
 //
 // Before-scenarios deliberately reconstruct the pre-fix behavior
 // (4-pass filter summary, live `tagPinned` getter that recompiles the
@@ -9,11 +9,11 @@
 // twice) against the same fixture as the after-scenario. Each scenario
 // is warmed up once and then timed over ITERATIONS runs.
 //
-// Run as: node scripts/bench-301-rc10-dashboard.mjs
+// Run as: node scripts/bench/dashboard-summary.mjs
 
 import { performance } from 'node:perf_hooks';
-import { isTagPinned } from '../app/dist/tag/precision.js';
-import { buildContainerDashboardSummary } from '../app/dist/util/container-summary.js';
+import { isTagPinned } from '../../app/dist/tag/precision.js';
+import { buildContainerDashboardSummary } from '../../app/dist/util/container-summary.js';
 
 const CONTAINERS = 88;
 const ITERATIONS = 200;
@@ -198,7 +198,7 @@ function speedup(before, after) {
 }
 
 function main() {
-  console.log('\n## Drydock #301 rc.10 slow-dashboard/containers microbench\n');
+  console.log('\n## Dashboard summary regression baseline\n');
   console.log(
     `Fixtures: ${CONTAINERS} containers (reporter topology), ${ITERATIONS} iterations per scenario.\n`,
   );

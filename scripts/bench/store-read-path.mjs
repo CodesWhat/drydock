@@ -1,16 +1,15 @@
 #!/usr/bin/env node
-// End-to-end drydock #301 rc.10 read-path bench. Boots the real in-memory
-// store, seeds 88 validated containers (same shape validate() produces in
-// production), and times GET /api/containers plus the dashboard summary
-// handler against that fixture. Intended to confirm that the rc.10
-// regression is actually gone — not a unit test.
+// Regression baseline: store read path.
+// Boots the real in-memory Loki store, seeds 88 validated containers (same
+// shape validate() produces in production), and times GET /api/containers
+// plus the dashboard summary handler against that fixture.
 //
-// Run as: node scripts/bench-301-rc10-e2e.mjs
+// Run as: node scripts/bench/store-read-path.mjs
 
 import { performance } from 'node:perf_hooks';
-import { getContainersRaw, insertContainer } from '../app/dist/store/container.js';
-import { init as storeInit } from '../app/dist/store/index.js';
-import { buildContainerDashboardSummary } from '../app/dist/util/container-summary.js';
+import { getContainersRaw, insertContainer } from '../../app/dist/store/container.js';
+import { init as storeInit } from '../../app/dist/store/index.js';
+import { buildContainerDashboardSummary } from '../../app/dist/util/container-summary.js';
 
 const CONTAINERS = 88;
 const LIST_ITERATIONS = 50;
@@ -95,7 +94,7 @@ async function main() {
   const sumP95 = summaryRuns[Math.floor(summaryRuns.length * 0.95)];
   const sumMax = summaryRuns[summaryRuns.length - 1];
 
-  console.log('\n## Drydock #301 rc.10 end-to-end read-path bench\n');
+  console.log('\n## Store read-path regression baseline\n');
   console.log(
     `Fixture: ${CONTAINERS} validated containers in Loki memory store, transform-tag regex applied.\n`,
   );

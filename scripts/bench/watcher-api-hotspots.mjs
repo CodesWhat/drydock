@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// One-off microbench for drydock #301 rc.9 watcher/agents hotspot fix.
-// Simulates the four code paths before and after the fix, using synthetic
+// Regression baseline: watcher/agents API hotspots.
+// Simulates four code paths before and after the hotspot fix, using synthetic
 // fixtures sized to the reporter's Synology LAN topology (3 agents,
 // 5 watchers each, 60 containers distributed across them).
 //
-// Runs as: node scripts/bench-301-watcher-api.mjs
+// Runs as: node scripts/bench/watcher-api-hotspots.mjs
 //
 // Outputs a table comparing before/after wall-clock for GET /api/watchers,
 // GET /api/agents, AgentsView mount, and ServersView mount.
@@ -204,7 +204,7 @@ function speedup(before, after) {
 
 async function main() {
   const fixtures = buildFixtures();
-  console.log('\n## Drydock #301 watcher/agents hotspot microbench\n');
+  console.log('\n## Watcher/agents API hotspot regression baseline\n');
   console.log(
     `Fixtures: ${AGENTS} agents × ${WATCHERS_PER_AGENT} watchers × ${CONTAINERS_PER_WATCHER} containers = ${fixtures.containers.length} containers`,
   );

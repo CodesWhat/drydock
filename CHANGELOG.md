@@ -10,6 +10,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0-rc.21] — 2026-05-14
+
+### Added
+
+- **`DD_AGENT_ALLOW_INSECURE_SECRET` escape hatch for closed-LAN deployments.** rc.20 tightened the agent-secret-over-HTTP check from a warning to a hard error in `app/agent/AgentClient.ts`. rc.21 introduces `DD_AGENT_ALLOW_INSECURE_SECRET=true` as an explicit controller-side opt-in for environments (isolated private LANs, air-gapped setups) where the operator accepts that the agent secret travels in cleartext. Default behavior is unchanged — without the flag the boot-time error is still thrown. When the flag is set to exactly `true`, the error is downgraded to a `log.warn` on every startup so the security signal is preserved and visible in logs. Any other value (e.g. `1`, `yes`, `TRUE`) continues to throw. See `content/docs/current/configuration/agents/index.mdx` for guidance on recommended alternatives (certfile/cafile, reverse proxy TLS termination).
+
+### Changed
+
+- **Default watcher cron relaxed from hourly to every 6 hours ([#342](https://github.com/CodesWhat/drydock/issues/342) follow-up).** `app/watchers/providers/docker/Docker.ts` now defaults `cron` to `0 */6 * * *` (every 6 hours) instead of `0 * * * *` (hourly). Hourly polling was the most aggressive default among active 2026 update managers — Diun ships `0 */6 * * *`, Watchtower (archived Dec 2025) defaulted to 24 h, and our upstream WUD ships no default at all. With fleets of 20+ containers and image tag lists that paginate to thousands of entries (immich-server is 24+ GHCR pages), hourly polling saturates anonymous Docker Hub limits (100 pulls / 6 h) and trips GitHub's 5 k req/h release-notes ceiling. rc.20's per-host token bucket + `Retry-After` handling stays as the safety net; the default change addresses the root cause. Users who set `DD_WATCHER_{name}_CRON` explicitly are unaffected. Users who want near-real-time detection (security patches) can still set `DD_WATCHER_{name}_CRON=0 * * * *`. Docs (`content/docs/current/configuration/watchers/index.mdx`, `content/docs/current/api/watcher.mdx`, `content/docs/current/api/agent.mdx`) updated to reflect the new default.
+
+### Fixed
+
+- **[discussion #295](https://github.com/CodesWhat/drydock/discussions/295) — Release-notes icon in the container table now always opens the same popover, even when only an external release URL is available.** Previously the file-text icon in the actions column had two different behaviors depending on what release-notes metadata we'd fetched for the container: containers with structured notes (title + body, e.g. from the GitHub release-notes provider) got an icon button that opened a popover with an expandable preview; containers with only a bare `releaseLink` URL got an icon that was a direct external `<a>` — no popover. The popover shell now renders uniformly for both cases. When only `releaseLink` is available, the popover contains a single row that links out to the external URL (with an `external-link` indicator instead of the chevron used by expandable rows), and clicking the row dismisses the popover before navigating. No change for containers that already have structured notes — the existing popover and inline-expander behavior are unchanged.
+
+- **[#362](https://github.com/CodesWhat/drydock/issues/362) — `DD_SESSION_SECRET` no longer crashes startup when unset; secret is auto-generated and persisted to the store on first boot.** rc.20 made `DD_SESSION_SECRET` a hard requirement (commit `b9e8be38`) to close a real issue — the prior fallback generated a fresh per-process random secret on every restart, which silently invalidated every active session whenever drydock restarted. But the hard-require shipped without a migration path: existing deployments that didn't set the variable hit an immediate boot crash on upgrade. The fallback is now restored as a *persisted* secret: on first boot without `DD_SESSION_SECRET` set, drydock generates 64 random bytes (`randomBytes(64).toString('hex')`) and writes them to a new `secrets` collection inside `/store/dd.json`. Subsequent boots read the persisted value, so sessions survive restarts. The env var still takes precedence when set (and whitespace-only values are treated as unset). Operators upgrading from rc.20 with no `DD_SESSION_SECRET` configured will boot cleanly; deployments that already set the variable see no change.
+
 ## [1.5.0-rc.20] — 2026-05-14
 
 ### Added

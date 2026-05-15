@@ -230,11 +230,13 @@ export class AgentClient {
   private rejectSecretConfiguredOverHttp(protocol: string) {
     const hasSecretConfigured =
       typeof this.config.secret === 'string' && this.config.secret.trim().length > 0;
-    if (protocol === 'http:' && hasSecretConfigured) {
-      throw new Error(
-        `Agent ${this.name} is configured with a secret over insecure HTTP (${this.baseUrl}). Configure HTTPS (certfile/cafile) to protect X-Dd-Agent-Secret.`,
-      );
+    if (protocol !== 'http:' || !hasSecretConfigured) return;
+    const message = `Agent ${this.name} is configured with a secret over insecure HTTP (${this.baseUrl}). Configure HTTPS (certfile/cafile) to protect X-Dd-Agent-Secret.`;
+    if (process.env.DD_AGENT_ALLOW_INSECURE_SECRET === 'true') {
+      this.log.warn(message);
+      return;
     }
+    throw new Error(message);
   }
 
   private buildAxiosOptions(): AxiosRequestConfig {

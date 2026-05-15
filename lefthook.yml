@@ -92,7 +92,7 @@ pre-push:
     coverage:
       run: ./scripts/pre-push-coverage.sh
       priority: 6
-      timeout: 6m
+      timeout: 10m
 
     # ── Build: sharded app+ui parallel, no tests ─────────────────────
     # Tests already ran in the coverage step, so this is tsc/vite only.

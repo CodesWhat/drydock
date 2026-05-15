@@ -95,6 +95,9 @@ To connect a Controller to an Agent, use the `DD_AGENT_{name}_*` environment var
 | `DD_AGENT_{name}_CAFILE` | ⚪ | CA certificate path for TLS connection | |
 | `DD_AGENT_{name}_CERTFILE` | ⚪ | Client certificate path for TLS connection | |
 | `DD_AGENT_{name}_KEYFILE` | ⚪ | Client key path for TLS connection | |
+| `DD_AGENT_ALLOW_INSECURE_SECRET` | ⚪ | **Insecure.** When `true`, allows configuring agents with a `secret` over plain HTTP. Drydock will log a warning on every startup but won't refuse to boot. Only enable on trusted private networks where you accept that the agent secret is sent in cleartext. | `false` |
+
+<Callout type="warn">Setting `DD_AGENT_ALLOW_INSECURE_SECRET=true` means your agent secret is transmitted over the network in cleartext on every request. An attacker with network access can capture it and impersonate the controller. Prefer HTTPS (configure `DD_AGENT_{name}_CERTFILE`/`DD_AGENT_{name}_CAFILE`) or terminate TLS at a reverse proxy. Only use this flag on isolated private networks where you explicitly accept that risk.</Callout>
 
 ### Controller Example (Docker Compose)
 

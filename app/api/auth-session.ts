@@ -1,5 +1,7 @@
+import { randomBytes } from 'node:crypto';
 import joi from 'joi';
 import log from '../log/index.js';
+import { getStoredSessionSecret, setStoredSessionSecret } from '../store/secrets.js';
 import { getErrorMessage } from '../util/error.js';
 import { enforceConcurrentSessionLimit } from '../util/session-limit.js';
 import type { AuthRequest, SessionUser } from './auth-types.js';
@@ -31,20 +33,31 @@ export function getCookieMaxAge(days: number): number {
 
 /**
  * Get session secret key.
- * Uses DD_SESSION_SECRET env var.
+ *
+ * Precedence:
+ * 1. DD_SESSION_SECRET env var (non-empty after trim) — operator-supplied, highest priority.
+ * 2. Persisted secret in the LokiJS store — survives restarts without operator intervention.
+ * 3. Auto-generated: 64 random bytes (hex) written to the store so it persists across restarts.
+ *
  * @returns {string}
  */
 export function getSessionSecretKey(): string {
-  const envSecret = process.env.DD_SESSION_SECRET;
+  const envSecret = process.env.DD_SESSION_SECRET?.trim();
   if (envSecret) {
     log.info('Using session secret from DD_SESSION_SECRET environment variable');
     return envSecret;
   }
 
-  const missingSessionSecretMessage =
-    'DD_SESSION_SECRET is required. Set DD_SESSION_SECRET to a strong persistent value.';
-  log.error(missingSessionSecretMessage);
-  throw new Error(missingSessionSecretMessage);
+  const storedSecret = getStoredSessionSecret();
+  if (storedSecret) {
+    log.info('Using persisted session secret from store');
+    return storedSecret;
+  }
+
+  const newSecret = randomBytes(64).toString('hex');
+  setStoredSessionSecret(newSecret);
+  log.info('Generated and persisted a new session secret to the store');
+  return newSecret;
 }
 
 export function deserializeSessionUser(serializedUser: unknown): SessionUser {

@@ -379,7 +379,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       cafile: this.joi.string(),
       certfile: this.joi.string(),
       keyfile: this.joi.string(),
-      cron: joi.string().cron().default('0 * * * *'),
+      cron: joi.string().cron().default('0 */6 * * *'),
       jitter: this.joi.number().integer().min(0).default(60000),
       watchbydefault: this.joi.boolean().default(true),
       watchall: this.joi.boolean().default(false),

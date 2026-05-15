@@ -23,7 +23,7 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 | `DD_WATCHER_{watcher_name}_AUTH_TYPE` | ⚪ | Auth mode for remote Docker API auth | `BASIC`, `BEARER`, `OIDC` | auto-detected from provided credentials |
 | `DD_WATCHER_{watcher_name}_AUTH_USER` | ⚪ | Username for remote Docker API basic auth (HTTPS only) | | |
 | `DD_WATCHER_{watcher_name}_CERTFILE` | ⚪ | Certificate pem file path (only for TLS connection) | | |
-| `DD_WATCHER_{watcher_name}_CRON` | ⚪ | Scheduling options | [Valid CRON expression](https://crontab.guru/) | `0 * * * *` (every hour) |
+| `DD_WATCHER_{watcher_name}_CRON` | ⚪ | Scheduling options | [Valid CRON expression](https://crontab.guru/) | `0 */6 * * *` (every 6 hours) |
 | `DD_WATCHER_{watcher_name}_HOST` | ⚪ | Docker hostname or ip of the host to watch | | |
 | `DD_WATCHER_{watcher_name}_JITTER` | ⚪ | Jitter in ms applied to the CRON to better distribute the load on the registries (on the Hub at the first place) | > 0 | `60000` (1 minute) |
 | `DD_WATCHER_{watcher_name}_KEYFILE` | ⚪ | Key pem file path (only for TLS connection) | | |
@@ -43,7 +43,7 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 <Callout type="warn">`DD_WATCHER_{watcher_name}_WATCHDIGEST` is deprecated and will be removed in a future release. Use the `dd.watch.digest` container label instead.</Callout>
 
 <Callout type="warn" title="Watcher frequency and registry rate limits">
-The default `0 * * * *` (hourly) cron polls every container's registry once per hour. With 20+ watched containers and tag lists that paginate to thousands of entries (GHCR images can require 20+ paginated calls each), this can saturate anonymous Docker Hub limits (100 pulls / 6h) and trigger 429 responses. As of v1.5.0-rc.20 drydock automatically retries 429s with `Retry-After` honored and rate-limits its own outbound calls via a per-host token bucket, but if you watch many containers and don't need near-real-time detection, drop the cron to every 6 hours (`0 */6 * * *`) or once a day (`0 1 * * *`). New updates rarely ship more than once per day per image anyway.
+As of **v1.5.0-rc.21** the default cron is `0 */6 * * *` (every 6 hours), matching Diun and the broader 2026 community consensus for self-hosted update managers. Earlier RCs defaulted to `0 * * * *` (hourly); if you have an explicit hourly cron set via `DD_WATCHER_{watcher_name}_CRON` it is preserved. With 20+ watched containers and tag lists that paginate to thousands of entries (GHCR images can require 20+ paginated calls each), hourly polling can saturate anonymous Docker Hub limits (100 pulls / 6h) and trigger 429 responses. drydock additionally retries 429s with `Retry-After` honored and rate-limits its own outbound calls via a per-host token bucket. If you need near-real-time detection (security patches), drop the cron to `0 * * * *`; if you want even quieter polling, use `0 1 * * *` (once daily). New updates rarely ship more than once per day per image anyway.
 </Callout>
 
 **Notes:**
