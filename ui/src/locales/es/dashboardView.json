@@ -38,6 +38,7 @@
     },
     "recentUpdates": {
       "title": "Actualizaciones disponibles",
+      "widgetAria": "Updates Available widget",
       "updateAll": "Actualizar todo",
       "noUpdates": "No hay actualizaciones disponibles",
       "releaseNotes": "Notas de versión",

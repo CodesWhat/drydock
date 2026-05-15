@@ -15,7 +15,14 @@
       "batchUpdatedNoGroup": "{count} conteneurs mis à jour",
       "batchPartialNoGroup": "{succeeded} sur {total} conteneurs mis à jour ; {failed} en échec",
       "batchFailedNoGroup": "Impossible de mettre à jour {count} conteneurs",
-      "unknownGroup": "groupe inconnu"
+      "unknownGroup": "groupe inconnu",
+      "updateStarted": "Update started: {name}",
+      "forceUpdateStarted": "Force update started: {name}",
+      "alreadyUpToDate": "Already up to date: {name}",
+      "queuedUpdateSingle": "Queued update for {count} container",
+      "queuedUpdateMultiple": "Queued updates for {count} containers",
+      "countAlreadyUpToDateSingle": "{count} container already up to date",
+      "countAlreadyUpToDateMultiple": "{count} containers already up to date"
     },
     "registryError": {
       "generic": "Erreur registry",

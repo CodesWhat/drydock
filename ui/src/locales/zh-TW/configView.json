@@ -52,7 +52,7 @@
         "debugDump": {
           "label": "診斷偵錯轉儲",
           "description": "下載用於故障排除的執行時狀態精簡 JSON 快照",
-          "preparing": "準備中...",
+          "preparing": "準備中……",
           "download": "下載偵錯轉儲"
         }
       },
@@ -132,7 +132,7 @@
       }
     },
     "logs": {
-      "loading": "正在載入日誌...",
+      "loading": "正在載入日誌……",
       "emptyMessage": "當前篩選條件下沒有日誌條目。",
       "toolbar": {
         "live": "即時",

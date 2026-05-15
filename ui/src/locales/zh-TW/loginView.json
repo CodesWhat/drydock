@@ -11,7 +11,7 @@
     },
     "submit": {
       "signIn": "登入",
-      "signingIn": "登入中..."
+      "signingIn": "登入中……"
     },
     "separator": "或使用以下方式繼續",
     "rememberMe": "記住我",
@@ -27,7 +27,7 @@
     },
     "connectionLost": {
       "title": "連線遺失",
-      "body": "伺服器無法存取。正在等待其重新上線...",
+      "body": "伺服器無法存取。正在等待其重新上線……",
       "reconnecting": "重新連線中"
     }
   }

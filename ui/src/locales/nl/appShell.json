@@ -97,9 +97,9 @@
         "refreshing": "Zoekindex vernieuwen...",
         "noMatches": "Geen overeenkomsten voor \"{query}\".",
         "hint": "Typ om te zoeken naar pagina's, containers, agenten, triggers, watchers en instellingen.",
-        "prefixScopeHint": "Voorvoegselbereik actief; gebruik",
+        "prefixScopeHint": "Voorvoegselbereik actief; gebruik ",
         "typeHint": "Typ",
-        "useTab": "om de reikwijdte te veranderen",
+        "useTab": " om de reikwijdte te veranderen",
         "moveHint": "bewegen",
         "openHint": "geopend"
       },

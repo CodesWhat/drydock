@@ -36,7 +36,7 @@
       "tooltip": "通知",
       "header": "通知",
       "clear": "清除",
-      "loading": "載入中...",
+      "loading": "載入中……",
       "empty": "暫無通知",
       "markAllRead": "全部標記為已讀",
       "openAuditLog": "開啟稽核日誌",
@@ -92,12 +92,12 @@
       },
       "search": {
         "ariaLabel": "搜尋",
-        "placeholder": "跳轉到頁面、容器、代理、觸發器...",
+        "placeholder": "跳轉到頁面、容器、代理、觸發器……",
         "shown": "顯示 {count} 條",
-        "refreshing": "正在重新整理搜尋索引...",
+        "refreshing": "正在重新整理搜尋索引……",
         "noMatches": "沒有找到 \"{query}\" 的匹配項。",
         "hint": "輸入以搜尋頁面、容器、代理、觸發器、監視器和設定。",
-        "prefixScopeHint": "前置詞作用域已啟動",
+        "prefixScopeHint": "前置詞作用域已啟動 ",
         "typeHint": "輸入",
         "useTab": " 以更改作用域",
         "moveHint": "移動",
@@ -106,8 +106,8 @@
       "connection": {
         "lostTitle": "連線遺失",
         "applyingUpdateTitle": "正在應用更新",
-        "lostMessage": "伺服器無法存取。正在等待其重新上線...",
-        "restartingMessage": "Drydock 正在重新啟動{opId}。服務恢復後將重新連線...",
+        "lostMessage": "伺服器無法存取。正在等待其重新上線……",
+        "restartingMessage": "Drydock 正在重新啟動{opId}。服務恢復後將重新連線……",
         "reconnecting": "重新連線中",
         "restartingService": "重啟服務中"
       }

@@ -38,6 +38,7 @@
     },
     "recentUpdates": {
       "title": "Güncellemeler Mevcut",
+      "widgetAria": "Updates Available widget",
       "updateAll": "Tümünü güncelle",
       "noUpdates": "Güncelleme yok",
       "releaseNotes": "Sürüm notları",

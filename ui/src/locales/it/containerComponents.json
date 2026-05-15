@@ -102,6 +102,7 @@
       "version": "Versione",
       "currentLabel": "Corrente:",
       "latestLabel": "Ultima:",
+      "digestLabel": "Digest:",
       "upToDate": "Aggiornato",
       "tagFilters": "Filtri tag",
       "includeLabel": "Includi:",
@@ -153,12 +154,12 @@
       "statusQueued": "In coda",
       "statusScanning": "Scansione",
       "statusUpdating": "Aggiornamento",
-      "statusPulling": "Pull in corso...",
-      "statusScanningPhase": "Scansione...",
-      "statusGeneratingSbom": "Generazione SBOM...",
-      "statusHealthChecking": "Healthcheck...",
-      "statusFinalizing": "Finalizzazione...",
-      "statusRollingBack": "Rollback in corso...",
+      "statusPulling": "Pull in corso…",
+      "statusScanningPhase": "Scansione…",
+      "statusGeneratingSbom": "Generazione SBOM…",
+      "statusHealthChecking": "Healthcheck…",
+      "statusFinalizing": "Finalizzazione…",
+      "statusRollingBack": "Rollback in corso…",
       "lastUpdateFailed": "Ultimo aggiornamento non riuscito: {reason}",
       "stopAction": "Arresta",
       "startAction": "Avvia",
@@ -186,7 +187,12 @@
       "registryErrorRateLimited": "Rate limited",
       "registryErrorAuth": "Auth failed",
       "registryErrorNotFound": "Not found",
-      "registryErrorCheckFailed": "Check failed"
+      "registryErrorCheckFailed": "Check failed",
+      "blockedTag": "Blocked: {tag}",
+      "blockedTagWithCriticals": "Blocked: {tag} ({count} critical CVE)",
+      "blockedTagWithCriticalsCVEs": "Blocked: {tag} ({count} critical CVEs)",
+      "manualUpdateOnly": "Manual update only",
+      "manualUpdateOnlyWithMessage": "Manual update only — {message}"
     },
     "groupHeader": {
       "ungrouped": "Non raggruppati",
@@ -261,7 +267,8 @@
       "filterKind": "Tipo: {value}",
       "filterHiddenPinned": "Nascosti: bloccati",
       "filtersLabel": "Filtri",
-      "filteredContainers": "Filtrato a {count} container | Filtrati a {count} container"
+      "filteredContainers": "Filtrato a {count} container | Filtrati a {count} container",
+      "clearContainerIdFilter": "Clear container ID filter"
     },
     "stats": {
       "paused": "In pausa",
@@ -299,7 +306,8 @@
     },
     "suggestedTag": {
       "badgeText": "Suggerito",
-      "tooltip": "Miglior tag semver stabile disponibile - valuta il pin"
+      "tooltip": "Miglior tag semver stabile disponibile - valuta il pin",
+      "tooltipWithTag": "Suggested: {tag}\n{hint}"
     },
     "eligibilityBadges": {
       "securityBlocked": "Bloccato da sicurezza",

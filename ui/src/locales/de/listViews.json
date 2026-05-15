@@ -75,6 +75,32 @@
     "clear": "Löschen",
     "allNotificationTriggers": "Alle Benachrichtigungstrigger",
     "noTriggers": "Keine Trigger",
+    "rules": {
+      "update-available": {
+        "name": "Update Available",
+        "description": "When a container has a new version"
+      },
+      "update-applied": {
+        "name": "Update Applied",
+        "description": "After a container is successfully updated"
+      },
+      "update-failed": {
+        "name": "Update Failed",
+        "description": "When an update fails or is rolled back"
+      },
+      "security-alert": {
+        "name": "Security Alert",
+        "description": "Critical/High vulnerability detected"
+      },
+      "agent-disconnect": {
+        "name": "Agent Disconnected",
+        "description": "When a remote agent loses connection"
+      },
+      "agent-reconnect": {
+        "name": "Agent Reconnected",
+        "description": "When a remote agent reconnects after losing connection"
+      }
+    },
     "columns": {
       "on": "Bei",
       "rule": "Regel",
@@ -140,6 +166,15 @@
       "medium": "Mittel",
       "low": "Niedrig"
     },
+    "deltaTooltips": {
+      "fixedSingle": "Update fixes {count} vulnerability",
+      "fixedMultiple": "Update fixes {count} vulnerabilities",
+      "newSingle": "Update introduces {count} new vulnerability",
+      "newMultiple": "Update introduces {count} new vulnerabilities",
+      "both": "Update: {fixed} fixed, {new} new"
+    },
+    "updateOneOfButton": "Update one of {count} containers",
+    "updateThisContainerButton": "Update this container",
     "update": "Aktualisieren",
     "viewInContainers": "In Containern anzeigen",
     "viewAllInContainers": "Alle in Containern anzeigen",
@@ -211,6 +246,11 @@
       "auth": "Auth",
       "status": "Status"
     },
+    "status": {
+      "connected": "Connected",
+      "error": "Error",
+      "unknown": "Unknown"
+    },
     "detail": {
       "refreshing": "Registry-Details werden aktualisiert...",
       "status": "Status",
@@ -226,6 +266,10 @@
     "emptyFiltered": "Keine Hosts passen zu deinen Filtern",
     "justNow": "Gerade eben",
     "never": "Nie",
+    "status": {
+      "connected": "Connected",
+      "disconnected": "Disconnected"
+    },
     "columns": {
       "host": "Host",
       "address": "Adresse",
@@ -311,7 +355,7 @@
       "containersWatched": "{count} Container beobachtet"
     },
     "badge": {
-      "maint": "Wart."
+      "maint": "Wart"
     },
     "detail": {
       "cron": "Cron",

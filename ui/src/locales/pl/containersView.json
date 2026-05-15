@@ -15,7 +15,14 @@
       "batchUpdatedNoGroup": "Zaktualizowano kontenery {count}",
       "batchPartialNoGroup": "Zaktualizowano {succeeded} z kontenerów {total}; {failed} nie powiodło się",
       "batchFailedNoGroup": "Nie udało się zaktualizować kontenerów {count}",
-      "unknownGroup": "nieznana grupa"
+      "unknownGroup": "nieznana grupa",
+      "updateStarted": "Update started: {name}",
+      "forceUpdateStarted": "Force update started: {name}",
+      "alreadyUpToDate": "Already up to date: {name}",
+      "queuedUpdateSingle": "Queued update for {count} container",
+      "queuedUpdateMultiple": "Queued updates for {count} containers",
+      "countAlreadyUpToDateSingle": "{count} container already up to date",
+      "countAlreadyUpToDateMultiple": "{count} containers already up to date"
     },
     "registryError": {
       "generic": "Błąd rejestru",

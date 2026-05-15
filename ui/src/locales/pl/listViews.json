@@ -75,6 +75,32 @@
     "clear": "Wyczyść",
     "allNotificationTriggers": "Wszystkie wyzwalacze powiadomień",
     "noTriggers": "Żadnych wyzwalaczy",
+    "rules": {
+      "update-available": {
+        "name": "Update Available",
+        "description": "When a container has a new version"
+      },
+      "update-applied": {
+        "name": "Update Applied",
+        "description": "After a container is successfully updated"
+      },
+      "update-failed": {
+        "name": "Update Failed",
+        "description": "When an update fails or is rolled back"
+      },
+      "security-alert": {
+        "name": "Security Alert",
+        "description": "Critical/High vulnerability detected"
+      },
+      "agent-disconnect": {
+        "name": "Agent Disconnected",
+        "description": "When a remote agent loses connection"
+      },
+      "agent-reconnect": {
+        "name": "Agent Reconnected",
+        "description": "When a remote agent reconnects after losing connection"
+      }
+    },
     "columns": {
       "on": "Włączone",
       "rule": "Reguła",
@@ -140,6 +166,15 @@
       "medium": "Średni",
       "low": "Niski"
     },
+    "deltaTooltips": {
+      "fixedSingle": "Update fixes {count} vulnerability",
+      "fixedMultiple": "Update fixes {count} vulnerabilities",
+      "newSingle": "Update introduces {count} new vulnerability",
+      "newMultiple": "Update introduces {count} new vulnerabilities",
+      "both": "Update: {fixed} fixed, {new} new"
+    },
+    "updateOneOfButton": "Update one of {count} containers",
+    "updateThisContainerButton": "Update this container",
     "update": "Zaktualizuj",
     "viewInContainers": "Zobacz w kontenerach",
     "viewAllInContainers": "Zobacz wszystko w Kontenery",
@@ -211,6 +246,11 @@
       "auth": "Uwierzytelnianie",
       "status": "Stan"
     },
+    "status": {
+      "connected": "Connected",
+      "error": "Error",
+      "unknown": "Unknown"
+    },
     "detail": {
       "refreshing": "Odświeżanie szczegółów rejestru...",
       "status": "Stan",
@@ -226,6 +266,10 @@
     "emptyFiltered": "Żaden host nie pasuje do Twoich filtrów",
     "justNow": "Właśnie teraz",
     "never": "Nigdy",
+    "status": {
+      "connected": "Connected",
+      "disconnected": "Disconnected"
+    },
     "columns": {
       "host": "Gospodarz",
       "address": "Adres",

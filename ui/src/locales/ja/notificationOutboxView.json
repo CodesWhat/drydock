@@ -1,0 +1,39 @@
+{
+  "notificationOutboxView": {
+    "heading": "Outbox",
+    "refresh": "Refresh",
+    "loading": "Loading outbox entries…",
+    "tabs": {
+      "dead-letter": "Dead-letter",
+      "pending": "Pending",
+      "delivered": "Delivered"
+    },
+    "columns": {
+      "event": "Event",
+      "trigger": "Trigger",
+      "attempts": "Attempts",
+      "lastError": "Last error",
+      "created": "Created"
+    },
+    "actions": {
+      "retry": "Retry",
+      "discard": "Discard"
+    },
+    "status": {
+      "dead-letter": "Dead-letter",
+      "pending": "Pending",
+      "delivered": "Delivered"
+    },
+    "empty": {
+      "dead-letter": "No dead-letter entries",
+      "pending": "No pending entries",
+      "delivered": "No delivered entries"
+    },
+    "toast": {
+      "requeued": "Requeued: {name}",
+      "discarded": "Discarded: {name}",
+      "retryFailed": "Failed to retry {name}",
+      "discardFailed": "Failed to discard {name}"
+    }
+  }
+}

@@ -102,6 +102,7 @@
       "version": "Wersja",
       "currentLabel": "Aktualne:",
       "latestLabel": "Najnowsze:",
+      "digestLabel": "Digest:",
       "upToDate": "Aktualne",
       "tagFilters": "Filtry tagów",
       "includeLabel": "Uwzględnij:",
@@ -186,7 +187,12 @@
       "registryErrorRateLimited": "Rate limited",
       "registryErrorAuth": "Auth failed",
       "registryErrorNotFound": "Not found",
-      "registryErrorCheckFailed": "Check failed"
+      "registryErrorCheckFailed": "Check failed",
+      "blockedTag": "Blocked: {tag}",
+      "blockedTagWithCriticals": "Blocked: {tag} ({count} critical CVE)",
+      "blockedTagWithCriticalsCVEs": "Blocked: {tag} ({count} critical CVEs)",
+      "manualUpdateOnly": "Manual update only",
+      "manualUpdateOnlyWithMessage": "Manual update only — {message}"
     },
     "groupHeader": {
       "ungrouped": "Rozgrupowane",
@@ -261,7 +267,8 @@
       "filterKind": "Rodzaj: {value}",
       "filterHiddenPinned": "Ukryty: przypięty",
       "filtersLabel": "Filtry",
-      "filteredContainers": "Filtrowano do kontenera {count} | Filtrowane do kontenerów {count}"
+      "filteredContainers": "Filtrowano do kontenera {count} | Filtrowane do kontenerów {count}",
+      "clearContainerIdFilter": "Clear container ID filter"
     },
     "stats": {
       "paused": "Wstrzymano",
@@ -299,7 +306,8 @@
     },
     "suggestedTag": {
       "badgeText": "Sugerowane",
-      "tooltip": "Najlepszy dostępny stabilny tag semver — rozważ przypięcie"
+      "tooltip": "Najlepszy dostępny stabilny tag semver — rozważ przypięcie",
+      "tooltipWithTag": "Suggested: {tag}\n{hint}"
     },
     "eligibilityBadges": {
       "securityBlocked": "Zabezpieczenia zablokowane",

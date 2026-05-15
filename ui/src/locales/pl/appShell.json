@@ -97,9 +97,9 @@
         "refreshing": "Odświeżanie indeksu wyszukiwania...",
         "noMatches": "Brak dopasowań dla „{query}”.",
         "hint": "Wpisz, aby przeszukać strony, kontenery, agentów, wyzwalacze, obserwatorów i ustawienia.",
-        "prefixScopeHint": "Zakres prefiksu aktywny; używać",
+        "prefixScopeHint": "Zakres prefiksu aktywny; używać ",
         "typeHint": "Wpisz",
-        "useTab": "zmienić zakres",
+        "useTab": " zmienić zakres",
         "moveHint": "ruszaj się",
         "openHint": "otwarte"
       },

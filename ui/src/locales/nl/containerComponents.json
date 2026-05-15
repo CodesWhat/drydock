@@ -102,6 +102,7 @@
       "version": "Versie",
       "currentLabel": "Huidig:",
       "latestLabel": "Nieuwste:",
+      "digestLabel": "Digest:",
       "upToDate": "Up-to-date",
       "tagFilters": "Tagfilters",
       "includeLabel": "Inclusief:",
@@ -186,7 +187,12 @@
       "registryErrorRateLimited": "Rate limited",
       "registryErrorAuth": "Auth failed",
       "registryErrorNotFound": "Not found",
-      "registryErrorCheckFailed": "Check failed"
+      "registryErrorCheckFailed": "Check failed",
+      "blockedTag": "Blocked: {tag}",
+      "blockedTagWithCriticals": "Blocked: {tag} ({count} critical CVE)",
+      "blockedTagWithCriticalsCVEs": "Blocked: {tag} ({count} critical CVEs)",
+      "manualUpdateOnly": "Manual update only",
+      "manualUpdateOnlyWithMessage": "Manual update only — {message}"
     },
     "groupHeader": {
       "ungrouped": "Niet gegroepeerd",
@@ -261,7 +267,8 @@
       "filterKind": "Soort: {value}",
       "filterHiddenPinned": "Verborgen: vastgezet",
       "filtersLabel": "Filters",
-      "filteredContainers": "Gefilterd naar {count} container | Gefilterd op {count} containers"
+      "filteredContainers": "Gefilterd naar {count} container | Gefilterd op {count} containers",
+      "clearContainerIdFilter": "Clear container ID filter"
     },
     "stats": {
       "paused": "Gepauzeerd",
@@ -299,7 +306,8 @@
     },
     "suggestedTag": {
       "badgeText": "Voorgesteld",
-      "tooltip": "Beste stabiele semver-tag die beschikbaar is – overweeg vastzetten"
+      "tooltip": "Beste stabiele semver-tag die beschikbaar is – overweeg vastzetten",
+      "tooltipWithTag": "Suggested: {tag}\n{hint}"
     },
     "eligibilityBadges": {
       "securityBlocked": "Beveiliging geblokkeerd",

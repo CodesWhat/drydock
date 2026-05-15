@@ -12,7 +12,7 @@
       "skipThisUpdate": "Bu Güncellemeyi Atla",
       "snooze1d": "1 gün ertele",
       "snooze7d": "7 gün ertele",
-      "snoozeUntil": "Şu tarihe kadar ertele:",
+      "snoozeUntil": "Şu tarihe kadar ertele",
       "unsnooze": "Ertelemeyi kaldır",
       "maturityGroup": "Vade",
       "allowNewMature": "Yeni + olgun olanlara izin ver",
@@ -102,6 +102,7 @@
       "version": "Sürüm",
       "currentLabel": "Güncel:",
       "latestLabel": "En son:",
+      "digestLabel": "Digest:",
       "upToDate": "güncel",
       "tagFilters": "Etiket Filtreleri",
       "includeLabel": "Dahil et:",
@@ -186,7 +187,12 @@
       "registryErrorRateLimited": "Rate limited",
       "registryErrorAuth": "Auth failed",
       "registryErrorNotFound": "Not found",
-      "registryErrorCheckFailed": "Check failed"
+      "registryErrorCheckFailed": "Check failed",
+      "blockedTag": "Blocked: {tag}",
+      "blockedTagWithCriticals": "Blocked: {tag} ({count} critical CVE)",
+      "blockedTagWithCriticalsCVEs": "Blocked: {tag} ({count} critical CVEs)",
+      "manualUpdateOnly": "Manual update only",
+      "manualUpdateOnlyWithMessage": "Manual update only — {message}"
     },
     "groupHeader": {
       "ungrouped": "Gruplandırılmamış",
@@ -261,7 +267,8 @@
       "filterKind": "Tür: {value}",
       "filterHiddenPinned": "Gizli: Sabitlendi",
       "filtersLabel": "Filtreler",
-      "filteredContainers": "{count} kapsayıcısına filtre uygulandı | {count} kapsayıcılara filtrelendi"
+      "filteredContainers": "{count} kapsayıcısına filtre uygulandı | {count} kapsayıcılara filtrelendi",
+      "clearContainerIdFilter": "Clear container ID filter"
     },
     "stats": {
       "paused": "Duraklatıldı",
@@ -299,7 +306,8 @@
     },
     "suggestedTag": {
       "badgeText": "Önerilen",
-      "tooltip": "Mevcut en iyi kararlı semver etiketi — sabitlemeyi düşünün"
+      "tooltip": "Mevcut en iyi kararlı semver etiketi — sabitlemeyi düşünün",
+      "tooltipWithTag": "Suggested: {tag}\n{hint}"
     },
     "eligibilityBadges": {
       "securityBlocked": "Güvenlik engellendi",

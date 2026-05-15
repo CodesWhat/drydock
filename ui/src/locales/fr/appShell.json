@@ -14,8 +14,8 @@
         "regexToggle": ".* Regex",
         "showMatchesOnly": "Afficher seulement les correspondances",
         "showingMatchesOnly": "Correspondances seulement",
-        "prev": "Préc.",
-        "next": "Suiv."
+        "prev": "Préc",
+        "next": "Suiv"
       },
       "search": {
         "placeholder": "Rechercher dans les logs",

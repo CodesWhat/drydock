@@ -15,7 +15,14 @@
       "batchUpdatedNoGroup": "{count} kapsayıcıları güncellendi",
       "batchPartialNoGroup": "{succeeded} / {total} kapsayıcı güncellendi; {failed} başarısız oldu",
       "batchFailedNoGroup": "{count} kapsayıcıları güncellenemedi",
-      "unknownGroup": "bilinmeyen grup"
+      "unknownGroup": "bilinmeyen grup",
+      "updateStarted": "Update started: {name}",
+      "forceUpdateStarted": "Force update started: {name}",
+      "alreadyUpToDate": "Already up to date: {name}",
+      "queuedUpdateSingle": "Queued update for {count} container",
+      "queuedUpdateMultiple": "Queued updates for {count} containers",
+      "countAlreadyUpToDateSingle": "{count} container already up to date",
+      "countAlreadyUpToDateMultiple": "{count} containers already up to date"
     },
     "registryError": {
       "generic": "Kayıt defteri hatası",

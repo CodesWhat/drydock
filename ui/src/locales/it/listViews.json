@@ -75,6 +75,32 @@
     "clear": "Cancella",
     "allNotificationTriggers": "Tutti i trigger notifiche",
     "noTriggers": "Nessun trigger",
+    "rules": {
+      "update-available": {
+        "name": "Update Available",
+        "description": "When a container has a new version"
+      },
+      "update-applied": {
+        "name": "Update Applied",
+        "description": "After a container is successfully updated"
+      },
+      "update-failed": {
+        "name": "Update Failed",
+        "description": "When an update fails or is rolled back"
+      },
+      "security-alert": {
+        "name": "Security Alert",
+        "description": "Critical/High vulnerability detected"
+      },
+      "agent-disconnect": {
+        "name": "Agent Disconnected",
+        "description": "When a remote agent loses connection"
+      },
+      "agent-reconnect": {
+        "name": "Agent Reconnected",
+        "description": "When a remote agent reconnects after losing connection"
+      }
+    },
     "columns": {
       "on": "Su",
       "rule": "Regola",
@@ -140,6 +166,15 @@
       "medium": "Media",
       "low": "Bassa"
     },
+    "deltaTooltips": {
+      "fixedSingle": "Update fixes {count} vulnerability",
+      "fixedMultiple": "Update fixes {count} vulnerabilities",
+      "newSingle": "Update introduces {count} new vulnerability",
+      "newMultiple": "Update introduces {count} new vulnerabilities",
+      "both": "Update: {fixed} fixed, {new} new"
+    },
+    "updateOneOfButton": "Update one of {count} containers",
+    "updateThisContainerButton": "Update this container",
     "update": "Aggiorna",
     "viewInContainers": "Vedi in Container",
     "viewAllInContainers": "Vedi tutto in Container",
@@ -211,6 +246,11 @@
       "auth": "Auth",
       "status": "Stato"
     },
+    "status": {
+      "connected": "Connected",
+      "error": "Error",
+      "unknown": "Unknown"
+    },
     "detail": {
       "refreshing": "Aggiornamento dettagli registry...",
       "status": "Stato",
@@ -226,6 +266,10 @@
     "emptyFiltered": "Nessun host corrisponde ai filtri",
     "justNow": "Ora",
     "never": "Mai",
+    "status": {
+      "connected": "Connected",
+      "disconnected": "Disconnected"
+    },
     "columns": {
       "host": "Host",
       "address": "Indirizzo",
@@ -311,7 +355,7 @@
       "containersWatched": "{count} container monitorati"
     },
     "badge": {
-      "maint": "Manut."
+      "maint": "Manut"
     },
     "detail": {
       "cron": "Cron",

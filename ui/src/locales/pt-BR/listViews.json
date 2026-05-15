@@ -75,6 +75,32 @@
     "clear": "Limpar",
     "allNotificationTriggers": "Todos os triggers de notificação",
     "noTriggers": "Sem triggers",
+    "rules": {
+      "update-available": {
+        "name": "Update Available",
+        "description": "When a container has a new version"
+      },
+      "update-applied": {
+        "name": "Update Applied",
+        "description": "After a container is successfully updated"
+      },
+      "update-failed": {
+        "name": "Update Failed",
+        "description": "When an update fails or is rolled back"
+      },
+      "security-alert": {
+        "name": "Security Alert",
+        "description": "Critical/High vulnerability detected"
+      },
+      "agent-disconnect": {
+        "name": "Agent Disconnected",
+        "description": "When a remote agent loses connection"
+      },
+      "agent-reconnect": {
+        "name": "Agent Reconnected",
+        "description": "When a remote agent reconnects after losing connection"
+      }
+    },
     "columns": {
       "on": "Em",
       "rule": "Regra",
@@ -140,6 +166,15 @@
       "medium": "Média",
       "low": "Baixa"
     },
+    "deltaTooltips": {
+      "fixedSingle": "Update fixes {count} vulnerability",
+      "fixedMultiple": "Update fixes {count} vulnerabilities",
+      "newSingle": "Update introduces {count} new vulnerability",
+      "newMultiple": "Update introduces {count} new vulnerabilities",
+      "both": "Update: {fixed} fixed, {new} new"
+    },
+    "updateOneOfButton": "Update one of {count} containers",
+    "updateThisContainerButton": "Update this container",
     "update": "Atualizar",
     "viewInContainers": "Ver em Contêineres",
     "viewAllInContainers": "Ver tudo em Contêineres",
@@ -211,6 +246,11 @@
       "auth": "Auth",
       "status": "Status"
     },
+    "status": {
+      "connected": "Connected",
+      "error": "Error",
+      "unknown": "Unknown"
+    },
     "detail": {
       "refreshing": "Atualizando detalhes do registry...",
       "status": "Status",
@@ -226,6 +266,10 @@
     "emptyFiltered": "Nenhum host corresponde aos filtros",
     "justNow": "Agora",
     "never": "Nunca",
+    "status": {
+      "connected": "Connected",
+      "disconnected": "Disconnected"
+    },
     "columns": {
       "host": "Host",
       "address": "Endereço",
@@ -311,7 +355,7 @@
       "containersWatched": "{count} contêineres monitorados"
     },
     "badge": {
-      "maint": "Manut."
+      "maint": "Manut"
     },
     "detail": {
       "cron": "Cron",

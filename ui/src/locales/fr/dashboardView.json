@@ -38,6 +38,7 @@
     },
     "recentUpdates": {
       "title": "Mises à jour disponibles",
+      "widgetAria": "Updates Available widget",
       "updateAll": "Tout mettre à jour",
       "noUpdates": "Aucune mise à jour disponible",
       "releaseNotes": "Notes de version",
@@ -65,7 +66,7 @@
     "resourceUsage": {
       "title": "Utilisation des ressources",
       "totalUsage": "Utilisation totale ({watched} surveillés)",
-      "cpu": "CPU moy.",
+      "cpu": "CPU moy",
       "memory": "Mémoire",
       "topCpu": "Top CPU",
       "topMemory": "Top mémoire",

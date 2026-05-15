@@ -75,6 +75,32 @@
     "clear": "Temizle",
     "allNotificationTriggers": "Tüm bildirim tetikleyicileri",
     "noTriggers": "Tetikleyici yok",
+    "rules": {
+      "update-available": {
+        "name": "Update Available",
+        "description": "When a container has a new version"
+      },
+      "update-applied": {
+        "name": "Update Applied",
+        "description": "After a container is successfully updated"
+      },
+      "update-failed": {
+        "name": "Update Failed",
+        "description": "When an update fails or is rolled back"
+      },
+      "security-alert": {
+        "name": "Security Alert",
+        "description": "Critical/High vulnerability detected"
+      },
+      "agent-disconnect": {
+        "name": "Agent Disconnected",
+        "description": "When a remote agent loses connection"
+      },
+      "agent-reconnect": {
+        "name": "Agent Reconnected",
+        "description": "When a remote agent reconnects after losing connection"
+      }
+    },
     "columns": {
       "on": "Açık",
       "rule": "Kural",
@@ -140,6 +166,15 @@
       "medium": "Orta",
       "low": "Düşük"
     },
+    "deltaTooltips": {
+      "fixedSingle": "Update fixes {count} vulnerability",
+      "fixedMultiple": "Update fixes {count} vulnerabilities",
+      "newSingle": "Update introduces {count} new vulnerability",
+      "newMultiple": "Update introduces {count} new vulnerabilities",
+      "both": "Update: {fixed} fixed, {new} new"
+    },
+    "updateOneOfButton": "Update one of {count} containers",
+    "updateThisContainerButton": "Update this container",
     "update": "Güncelle",
     "viewInContainers": "Kapsayıcılarda Görüntüle",
     "viewAllInContainers": "Tümünü Container'larda görüntüle",
@@ -211,6 +246,11 @@
       "auth": "Kimlik doğrulama",
       "status": "Durum"
     },
+    "status": {
+      "connected": "Connected",
+      "error": "Error",
+      "unknown": "Unknown"
+    },
     "detail": {
       "refreshing": "Kayıt defteri ayrıntıları yenileniyor...",
       "status": "Durum",
@@ -226,6 +266,10 @@
     "emptyFiltered": "Filtrelerinizle eşleşen ana makine yok",
     "justNow": "Az önce",
     "never": "Asla",
+    "status": {
+      "connected": "Connected",
+      "disconnected": "Disconnected"
+    },
     "columns": {
       "host": "Sunucu",
       "address": "Adres",

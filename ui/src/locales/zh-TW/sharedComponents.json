@@ -35,13 +35,13 @@
     },
     "logViewer": {
       "emptyMessage": "未找到日誌條目。",
-      "loadingMessage": "正在載入日誌..."
+      "loadingMessage": "正在載入日誌……"
     },
     "scanProgressBanner": {
-      "scanning": "正在掃描 {done}/{total} 個容器..."
+      "scanning": "正在掃描 {done}/{total} 個容器……"
     },
     "scanProgressText": {
-      "scanning": "正在掃描 {done}/{total}..."
+      "scanning": "正在掃描 {done}/{total}……"
     },
     "securityEmptyState": {
       "noDataTitle": "暫無漏洞資料",

@@ -97,9 +97,9 @@
         "refreshing": "Arama dizini yenileniyor...",
         "noMatches": "\"{query}\" için eşleşme yok.",
         "hint": "Sayfaları, kapsayıcıları, aracıları, tetikleyicileri, izleyicileri ve ayarları aramak için yazın.",
-        "prefixScopeHint": "Önek kapsamı etkin; kullanmak",
+        "prefixScopeHint": "Önek kapsamı etkin; kullanmak ",
         "typeHint": "Tür",
-        "useTab": "kapsamı değiştirmek",
+        "useTab": " kapsamı değiştirmek",
         "moveHint": "hareket etmek",
         "openHint": "açık"
       },

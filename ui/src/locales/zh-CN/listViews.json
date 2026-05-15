@@ -75,6 +75,32 @@
     "clear": "清除",
     "allNotificationTriggers": "所有通知触发器",
     "noTriggers": "无触发器",
+    "rules": {
+      "update-available": {
+        "name": "Update Available",
+        "description": "When a container has a new version"
+      },
+      "update-applied": {
+        "name": "Update Applied",
+        "description": "After a container is successfully updated"
+      },
+      "update-failed": {
+        "name": "Update Failed",
+        "description": "When an update fails or is rolled back"
+      },
+      "security-alert": {
+        "name": "Security Alert",
+        "description": "Critical/High vulnerability detected"
+      },
+      "agent-disconnect": {
+        "name": "Agent Disconnected",
+        "description": "When a remote agent loses connection"
+      },
+      "agent-reconnect": {
+        "name": "Agent Reconnected",
+        "description": "When a remote agent reconnects after losing connection"
+      }
+    },
     "columns": {
       "on": "开启",
       "rule": "规则",
@@ -220,6 +246,11 @@
       "auth": "认证",
       "status": "状态"
     },
+    "status": {
+      "connected": "Connected",
+      "error": "Error",
+      "unknown": "Unknown"
+    },
     "detail": {
       "refreshing": "正在刷新仓库详情...",
       "status": "状态",
@@ -235,6 +266,10 @@
     "emptyFiltered": "没有主机匹配您的筛选条件",
     "justNow": "刚刚",
     "never": "从未",
+    "status": {
+      "connected": "Connected",
+      "disconnected": "Disconnected"
+    },
     "columns": {
       "host": "主机",
       "address": "地址",
