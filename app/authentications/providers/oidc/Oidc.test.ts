@@ -5,15 +5,24 @@ import express from 'express';
 import { ClientSecretPost, Configuration } from 'openid-client';
 import * as configuration from '../../../configuration/index.js';
 
-const { mockRecordAuthLogin, mockObserveAuthLoginDuration } = vi.hoisted(() => ({
+const { mockRecordAuthLogin, mockObserveAuthLoginDuration, mockUndiciFetch } = vi.hoisted(() => ({
   mockRecordAuthLogin: vi.fn(),
   mockObserveAuthLoginDuration: vi.fn(),
+  mockUndiciFetch: vi.fn(),
 }));
 
 vi.mock('../../../prometheus/auth.js', () => ({
   recordAuthLogin: mockRecordAuthLogin,
   observeAuthLoginDuration: mockObserveAuthLoginDuration,
 }));
+
+vi.mock('undici', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('undici')>();
+  return {
+    ...actual,
+    fetch: mockUndiciFetch,
+  };
+});
 
 import Oidc from './Oidc.js';
 
@@ -1566,9 +1575,7 @@ test('initAuthentication should configure custom fetch when cafile is set', asyn
   oidc.client = undefined;
   oidc.logoutUrl = undefined;
   const { caPath, cleanup } = await createTemporaryCaFile();
-  const fetchSpy = vi
-    .spyOn(globalThis, 'fetch')
-    .mockResolvedValue(new Response(null, { status: 200 }) as Response);
+  mockUndiciFetch.mockResolvedValue(new Response(null, { status: 200 }) as Response);
   oidc.configuration = {
     ...configurationValid,
     cafile: caPath,
@@ -1587,16 +1594,15 @@ test('initAuthentication should configure custom fetch when cafile is set', asyn
     await customFetch('https://idp.example.com/.well-known/openid-configuration', {
       method: 'GET',
     });
-    expect(fetchSpy).toHaveBeenCalledWith(
+    expect(mockUndiciFetch).toHaveBeenCalledWith(
       'https://idp.example.com/.well-known/openid-configuration',
       expect.objectContaining({ dispatcher: expect.anything() }),
     );
-    const requestInit = fetchSpy.mock.calls[0][1] as { dispatcher?: unknown };
+    const requestInit = mockUndiciFetch.mock.calls[0][1] as { dispatcher?: unknown };
     expect(getUndiciAgentOptions(requestInit.dispatcher)).toEqual(
       expect.objectContaining({ allowH2: false }),
     );
   } finally {
-    fetchSpy.mockRestore();
     await cleanup();
   }
 });
@@ -1604,9 +1610,7 @@ test('initAuthentication should configure custom fetch when cafile is set', asyn
 test('initAuthentication should configure custom fetch and warn when insecure TLS is enabled', async () => {
   oidc.client = undefined;
   oidc.logoutUrl = undefined;
-  const fetchSpy = vi
-    .spyOn(globalThis, 'fetch')
-    .mockResolvedValue(new Response(null, { status: 200 }) as Response);
+  mockUndiciFetch.mockResolvedValue(new Response(null, { status: 200 }) as Response);
   oidc.configuration = {
     ...configurationValid,
     insecure: true,
@@ -1615,31 +1619,27 @@ test('initAuthentication should configure custom fetch and warn when insecure TL
   openidClientMock.discovery = vi.fn().mockResolvedValue(mockClient);
   openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
 
-  try {
-    await oidc.initAuthentication();
+  await oidc.initAuthentication();
 
-    expect(oidc.log.warn).toHaveBeenCalledWith(
-      'TLS certificate verification disabled for OIDC - do not use in production',
-    );
+  expect(oidc.log.warn).toHaveBeenCalledWith(
+    'TLS certificate verification disabled for OIDC - do not use in production',
+  );
 
-    const callArgs = openidClientMock.discovery.mock.calls[0];
-    const customFetch = callArgs[4][openidClientMock.customFetch];
-    expect(typeof customFetch).toBe('function');
+  const callArgs = openidClientMock.discovery.mock.calls[0];
+  const customFetch = callArgs[4][openidClientMock.customFetch];
+  expect(typeof customFetch).toBe('function');
 
-    await customFetch('https://idp.example.com/.well-known/openid-configuration', {
-      method: 'GET',
-    });
-    expect(fetchSpy).toHaveBeenCalledWith(
-      'https://idp.example.com/.well-known/openid-configuration',
-      expect.objectContaining({ dispatcher: expect.anything() }),
-    );
-    const requestInit = fetchSpy.mock.calls[0][1] as { dispatcher?: unknown };
-    expect(getUndiciAgentOptions(requestInit.dispatcher)).toEqual(
-      expect.objectContaining({ allowH2: false }),
-    );
-  } finally {
-    fetchSpy.mockRestore();
-  }
+  await customFetch('https://idp.example.com/.well-known/openid-configuration', {
+    method: 'GET',
+  });
+  expect(mockUndiciFetch).toHaveBeenCalledWith(
+    'https://idp.example.com/.well-known/openid-configuration',
+    expect.objectContaining({ dispatcher: expect.anything() }),
+  );
+  const requestInit = mockUndiciFetch.mock.calls[0][1] as { dispatcher?: unknown };
+  expect(getUndiciAgentOptions(requestInit.dispatcher)).toEqual(
+    expect.objectContaining({ allowH2: false }),
+  );
 });
 
 test('initAuthentication should use configured logouturl when end session url is unsupported', async () => {

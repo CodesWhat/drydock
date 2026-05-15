@@ -3,7 +3,7 @@ import type { ConnectionOptions } from 'node:tls';
 import type { Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import * as openidClientLibrary from 'openid-client';
-import { Agent } from 'undici';
+import { Agent, fetch as undiciFetch } from 'undici';
 import { v4 as uuid } from 'uuid';
 import { ddEnvVars, getPublicUrl, getServerConfiguration } from '../../../configuration/index.js';
 import { sanitizeLogParam } from '../../../log/sanitize.js';
@@ -459,8 +459,16 @@ class Oidc extends Authentication<OidcConfiguration> {
         allowH2: false,
         connect: connectOptions,
       });
+      // Use undici's own fetch rather than Node's global fetch. Node 24
+      // ships with built-in undici 7 (v1 dispatcher interface), while the
+      // app's userland undici@8 Agent has the v2 interface. Passing a v2
+      // Agent as `dispatcher` to the global fetch fails silently with
+      // "fetch failed" because the handlers don't satisfy the v1 contract
+      // (see undici PR #4827 — the Node 22 Dispatcher1Wrapper bridge is
+      // not present on Node 24). Pairing undici@8's fetch with undici@8's
+      // Agent keeps both halves on the same dispatcher version.
       const oidcFetch: openidClientLibrary.CustomFetch = (input, init) =>
-        fetch(
+        undiciFetch(
           input as RequestInfo | URL,
           {
             ...(init as unknown as RequestInit),
