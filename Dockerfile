@@ -15,10 +15,14 @@ ENV DD_LOG_FORMAT=text
 
 HEALTHCHECK --interval=30s --timeout=5s CMD ["sh", "-c", "if [ -n \"$DD_SERVER_ENABLED\" ] && [ \"$DD_SERVER_ENABLED\" != 'true' ]; then exit 0; fi; /bin/healthcheck ${DD_SERVER_PORT:-3000}"]
 
-# Install system packages, trivy, and cosign
+# Install system packages, trivy, and cosign.
+# hadolint ignore=DL3018: curl is intentionally unpinned because Alpine's
+# per-arch mirrors rotate -rN releases at different times; pinning to one
+# version breaks multi-arch builds during the sync window (see rc.21).
+# hadolint ignore=DL3018
 RUN apk add --no-cache \
     bash=5.3.3-r1 \
-    curl=8.17.0-r1 \
+    curl \
     git=2.52.0-r0 \
     jq=1.8.1-r0 \
     openssl=3.5.6-r0 \
