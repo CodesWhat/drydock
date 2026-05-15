@@ -1,94 +1,95 @@
 {
   "dashboardView": {
-    "loading": "Loading dashboard...",
-    "loadFailed": "Failed to load dashboard",
-    "dragToReorder": "Drag to reorder",
-    "viewAll": "View all →",
+    "loading": "Загрузка панели управления...",
+    "loadFailed": "Не удалось загрузить панель управления",
+    "dragToReorder": "Перетащите для изменения порядка",
+    "viewAll": "Смотреть все →",
     "editToggle": {
-      "showWidgetPanel": "Show widget panel",
-      "doneCustomizing": "Done customizing",
-      "customize": "Customize dashboard"
+      "showWidgetPanel": "Показать панель виджетов",
+      "doneCustomizing": "Готово",
+      "customize": "Настроить панель управления"
     },
     "widgetPanel": {
-      "title": "Widgets",
-      "closePanel": "Close panel",
-      "resetToDefault": "Reset to Default"
+      "title": "Виджеты",
+      "closePanel": "Закрыть панель",
+      "resetToDefault": "Сбросить к умолчанию"
     },
     "confirm": {
       "updateContainer": {
-        "header": "Update Container",
-        "message": "Update {name} now? This will apply the latest discovered image.",
-        "accept": "Update"
+        "header": "Обновить контейнер",
+        "message": "Обновить {name} сейчас? Будет применён последний обнаруженный образ.",
+        "accept": "Обновить"
       },
       "updateAll": {
-        "header": "Update All Containers",
-        "message": "{count} containers will be updated. Continue?",
-        "accept": "Update All"
+        "header": "Обновить все контейнеры",
+        "message": "Будет обновлено {count} контейнеров. Продолжить?",
+        "accept": "Обновить все"
       }
     },
     "toast": {
-      "updated": "Updated: {name}",
-      "updateFailed": "Update failed: {name}",
-      "updateFailedWithReason": "Update failed: {name} — {reason}",
-      "cancelled": "Cancelled: {name}",
-      "rolledBack": "Rolled back: {name}",
-      "rolledBackWithReason": "Rolled back: {name} — {reason}",
-      "updateError": "Failed to update {name}",
-      "updateAllError": "Failed to update all containers"
+      "updated": "Обновлено: {name}",
+      "updateFailed": "Ошибка обновления: {name}",
+      "updateFailedWithReason": "Ошибка обновления: {name} — {reason}",
+      "cancelled": "Отменено: {name}",
+      "rolledBack": "Откат выполнен: {name}",
+      "rolledBackWithReason": "Откат выполнен: {name} — {reason}",
+      "updateError": "Не удалось обновить {name}",
+      "updateAllError": "Не удалось обновить все контейнеры"
     },
     "recentUpdates": {
-      "title": "Updates Available",
-      "updateAll": "Update all",
-      "noUpdates": "No updates available",
-      "releaseNotes": "Release notes",
-      "securityBlocked": "Security blocked",
-      "updateContainer": "Update container",
-      "compactSingle": "{count} update available",
-      "compactPlural": "{count} updates available",
+      "title": "Доступные обновления",
+      "widgetAria": "Виджет «Доступные обновления»",
+      "updateAll": "Обновить все",
+      "noUpdates": "Обновлений нет",
+      "releaseNotes": "Примечания к выпуску",
+      "securityBlocked": "Заблокировано безопасностью",
+      "updateContainer": "Обновить контейнер",
+      "compactSingle": "Доступно {count} обновление",
+      "compactPlural": "Доступно {count} обновлений",
       "status": {
-        "queued": "Queued",
-        "updating": "Updating"
+        "queued": "В очереди",
+        "updating": "Обновляется"
       },
       "columns": {
-        "container": "Container",
-        "version": "Version",
-        "type": "Type",
-        "actions": "Actions"
+        "container": "Контейнер",
+        "version": "Версия",
+        "type": "Тип",
+        "actions": "Действия"
       }
     },
     "hostStatus": {
-      "title": "Host Status",
-      "connected": "Connected",
-      "disconnected": "Disconnected",
-      "containerCount": "{running}/{total} containers"
+      "title": "Статус хостов",
+      "connected": "Подключён",
+      "disconnected": "Отключён",
+      "containerCount": "{running}/{total} контейнеров"
     },
     "resourceUsage": {
-      "title": "Resource Usage",
-      "totalUsage": "Total Usage ({watched} watched)",
-      "cpu": "Avg CPU",
-      "memory": "Memory",
-      "topCpu": "Top CPU",
-      "topMemory": "Top Memory",
-      "noCpuData": "No live CPU data",
-      "noMemoryData": "No live memory data"
+      "title": "Использование ресурсов",
+      "totalUsage": "Всего ({watched} наблюдаемых)",
+      "cpu": "Средний CPU",
+      "memory": "Память",
+      "topCpu": "Топ CPU",
+      "topMemory": "Топ по памяти",
+      "noCpuData": "Нет данных CPU в реальном времени",
+      "noMemoryData": "Нет данных памяти в реальном времени"
     },
     "securityOverview": {
-      "title": "Security Overview",
-      "images": "images",
-      "clean": "Clean",
-      "issues": "Issues",
-      "notScanned": "Not Scanned",
-      "severityBreakdown": "Severity Breakdown",
-      "critical": "{count} Critical",
-      "high": "{count} High",
-      "medium": "{count} Medium",
-      "low": "{count} Low",
-      "topVulnerabilities": "Top Vulnerabilities",
-      "noVulnerabilities": "No vulnerabilities reported"
+      "title": "Обзор безопасности",
+      "images": "образов",
+      "clean": "Без уязвимостей",
+      "issues": "Проблемы",
+      "notScanned": "Не сканировалось",
+      "severityBreakdown": "Разбивка по серьёзности",
+      "critical": "{count} критических",
+      "high": "{count} высоких",
+      "medium": "{count} средних",
+      "low": "{count} низких",
+      "topVulnerabilities": "Топ уязвимостей",
+      "noVulnerabilities": "Уязвимостей не обнаружено"
     },
     "updateBreakdown": {
-      "title": "Update Breakdown",
-      "noUpdates": "No updates to categorize"
+      "title": "Разбивка обновлений",
+      "noUpdates": "Нет обновлений для категоризации"
     },
     "stats": {
       "containers": "Контейнеры",

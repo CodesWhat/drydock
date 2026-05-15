@@ -1,13 +1,13 @@
 {
   "common": {
-    "loading": "Loading…",
-    "back": "Back",
-    "cancel": "Cancel",
-    "save": "Save",
-    "delete": "Delete",
-    "confirm": "Confirm",
-    "close": "Close",
-    "retry": "Retry",
-    "unknown": "unknown"
+    "loading": "読み込み中…",
+    "back": "戻る",
+    "cancel": "キャンセル",
+    "save": "保存",
+    "delete": "削除",
+    "confirm": "確認",
+    "close": "閉じる",
+    "retry": "再試行",
+    "unknown": "不明"
   }
 }

@@ -1,0 +1,39 @@
+{
+  "notificationOutboxView": {
+    "heading": "Вихідні",
+    "refresh": "Оновити",
+    "loading": "Завантаження вихідних записів…",
+    "tabs": {
+      "dead-letter": "Мертві листи",
+      "pending": "Очікують",
+      "delivered": "Доставлено"
+    },
+    "columns": {
+      "event": "Подія",
+      "trigger": "Тригер",
+      "attempts": "Спроби",
+      "lastError": "Остання помилка",
+      "created": "Створено"
+    },
+    "actions": {
+      "retry": "Повторити",
+      "discard": "Відхилити"
+    },
+    "status": {
+      "dead-letter": "Мертвий лист",
+      "pending": "Очікує",
+      "delivered": "Доставлено"
+    },
+    "empty": {
+      "dead-letter": "Немає мертвих листів",
+      "pending": "Немає записів в очікуванні",
+      "delivered": "Немає доставлених записів"
+    },
+    "toast": {
+      "requeued": "Повторно поставлено в чергу: {name}",
+      "discarded": "Відхилено: {name}",
+      "retryFailed": "Не вдалося повторити {name}",
+      "discardFailed": "Не вдалося відхилити {name}"
+    }
+  }
+}

@@ -1,9 +1,9 @@
 {
   "containerLogs": {
-    "backTooltip": "Back to containers",
-    "title": "Container Logs",
-    "loading": "Loading container…",
-    "notFound": "Container \"{name}\" not found",
-    "loadFailed": "Failed to load container info"
+    "backTooltip": "コンテナ一覧に戻る",
+    "title": "コンテナログ",
+    "loading": "コンテナを読み込み中…",
+    "notFound": "コンテナ「{name}」が見つかりません",
+    "loadFailed": "コンテナ情報の読み込みに失敗しました"
   }
 }

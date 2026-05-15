@@ -1,34 +1,34 @@
 {
   "loginView": {
-    "heading": "Sign in to Drydock",
+    "heading": "Войти в Drydock",
     "username": {
-      "label": "Username",
-      "placeholder": "Enter your username"
+      "label": "Имя пользователя",
+      "placeholder": "Введите имя пользователя"
     },
     "password": {
-      "label": "Password",
-      "placeholder": "Enter your password"
+      "label": "Пароль",
+      "placeholder": "Введите пароль"
     },
     "submit": {
-      "signIn": "Sign in",
-      "signingIn": "Signing in..."
+      "signIn": "Войти",
+      "signingIn": "Вход..."
     },
-    "separator": "or continue with",
-    "rememberMe": "Remember me",
-    "noMethods": "No authentication methods configured.",
+    "separator": "или продолжить с помощью",
+    "rememberMe": "Запомнить меня",
+    "noMethods": "Методы аутентификации не настроены.",
     "errors": {
-      "loadFailed": "Failed to load authentication methods",
-      "invalidCredentials": "Invalid username or password",
-      "oidcFailed": "Failed to connect to {name}",
+      "loadFailed": "Не удалось загрузить методы аутентификации",
+      "invalidCredentials": "Неверное имя пользователя или пароль",
+      "oidcFailed": "Не удалось подключиться к {name}",
       "providerBasic": "Basic auth '{name}': {error}",
       "providerOidc": "OIDC provider '{name}': {error}",
       "providerNamed": "{type} '{name}': {error}",
       "providerGeneric": "{provider}: {error}"
     },
     "connectionLost": {
-      "title": "Connection Lost",
-      "body": "The server is unreachable. Waiting for it to come back online...",
-      "reconnecting": "Reconnecting"
+      "title": "Соединение потеряно",
+      "body": "Сервер недоступен. Ожидание восстановления соединения...",
+      "reconnecting": "Переподключение"
     }
   }
 }

@@ -1,133 +1,133 @@
 {
   "appShell": {
     "toast": {
-      "dismiss": "Dismiss"
+      "dismiss": "Закрити"
     },
     "logViewer": {
       "toolbar": {
-        "resume": "Resume",
-        "pause": "Pause",
-        "unpinAutoScroll": "Unpin auto-scroll",
-        "pinAutoScroll": "Pin auto-scroll",
-        "newestFirst": "Newest first",
-        "oldestFirst": "Oldest first",
+        "resume": "Відновити",
+        "pause": "Призупинити",
+        "unpinAutoScroll": "Вимкнути автопрокрутку",
+        "pinAutoScroll": "Увімкнути автопрокрутку",
+        "newestFirst": "Спочатку нові",
+        "oldestFirst": "Спочатку старі",
         "regexToggle": ".* Regex",
-        "showMatchesOnly": "Show matches only",
-        "showingMatchesOnly": "Showing matches only",
-        "prev": "Prev",
-        "next": "Next"
+        "showMatchesOnly": "Показати лише збіги",
+        "showingMatchesOnly": "Показуються лише збіги",
+        "prev": "Попередній",
+        "next": "Наступний"
       },
       "search": {
-        "placeholder": "Search logs",
-        "copied": "Copied!",
-        "copyLogs": "Copy logs"
+        "placeholder": "Пошук у журналах",
+        "copied": "Скопійовано!",
+        "copyLogs": "Копіювати журнали"
       },
       "empty": {
-        "noMatchingEntries": "No matching entries",
-        "defaultMessage": "No log entries yet"
+        "noMatchingEntries": "Збігів не знайдено",
+        "defaultMessage": "Записів журналу ще немає"
       },
       "footer": {
-        "lines": "lines",
-        "defaultStatusLabel": "Offline"
+        "lines": "рядків",
+        "defaultStatusLabel": "Офлайн"
       }
     },
     "notificationBell": {
-      "buttonLabel": "Notifications",
-      "tooltip": "Notifications",
-      "header": "Notifications",
-      "clear": "Clear",
-      "loading": "Loading...",
-      "empty": "No notifications yet",
-      "markAllRead": "Mark all as read",
-      "openAuditLog": "Open audit log",
-      "dismiss": "Dismiss notification"
+      "buttonLabel": "Сповіщення",
+      "tooltip": "Сповіщення",
+      "header": "Сповіщення",
+      "clear": "Очистити",
+      "loading": "Завантаження...",
+      "empty": "Сповіщень поки що немає",
+      "markAllRead": "Позначити всі як прочитані",
+      "openAuditLog": "Відкрити журнал аудиту",
+      "dismiss": "Закрити сповіщення"
     },
     "themeToggle": {
-      "mobileLabel": "Theme: {id} (tap to cycle)",
-      "switchTo": "Switch to {id} theme",
+      "mobileLabel": "Тема: {id} (торкніться для переключення)",
+      "switchTo": "Переключитися на тему {id}",
       "variantLabel": "{label}"
     },
     "layout": {
       "nav": {
-        "dashboard": "Dashboard",
-        "containers": "Containers",
-        "security": "Security",
-        "audit": "Audit",
-        "systemLogs": "System Logs",
-        "manageGroup": "Manage",
-        "hosts": "Hosts",
-        "registries": "Registries",
-        "watchers": "Watchers",
-        "settingsGroup": "Settings",
-        "general": "General",
-        "notifications": "Notifications",
-        "outbox": "Outbox",
-        "triggers": "Triggers",
-        "auth": "Auth",
-        "agents": "Agents"
+        "dashboard": "Панель керування",
+        "containers": "Контейнери",
+        "security": "Безпека",
+        "audit": "Аудит",
+        "systemLogs": "Системні журнали",
+        "manageGroup": "Керування",
+        "hosts": "Хости",
+        "registries": "Реєстри",
+        "watchers": "Спостерігачі",
+        "settingsGroup": "Налаштування",
+        "general": "Загальні",
+        "notifications": "Сповіщення",
+        "outbox": "Вихідні",
+        "triggers": "Тригери",
+        "auth": "Автентифікація",
+        "agents": "Агенти"
       },
       "sidebar": {
-        "closeMobileMenu": "Close menu",
-        "searchButton": "Search",
-        "searchAriaLabel": "Search",
-        "aboutTooltip": "About Drydock",
-        "aboutAriaLabel": "About Drydock",
-        "expandSidebar": "Expand sidebar",
-        "collapseSidebar": "Collapse sidebar"
+        "closeMobileMenu": "Закрити меню",
+        "searchButton": "Пошук",
+        "searchAriaLabel": "Пошук",
+        "aboutTooltip": "Про Drydock",
+        "aboutAriaLabel": "Про Drydock",
+        "expandSidebar": "Розгорнути бічну панель",
+        "collapseSidebar": "Згорнути бічну панель"
       },
       "topbar": {
-        "openMenu": "Open menu",
-        "closeMenu": "Close menu",
-        "userMenu": "User menu",
-        "profile": "Profile",
-        "signOut": "Sign out"
+        "openMenu": "Відкрити меню",
+        "closeMenu": "Закрити меню",
+        "userMenu": "Меню користувача",
+        "profile": "Профіль",
+        "signOut": "Вийти"
       },
       "about": {
         "title": "Drydock",
-        "subtitle": "Docker Container Update Manager",
-        "documentation": "Documentation",
+        "subtitle": "Менеджер оновлень Docker-контейнерів",
+        "documentation": "Документація",
         "github": "GitHub",
-        "changelog": "Changelog",
-        "close": "Close"
+        "changelog": "Журнал змін",
+        "close": "Закрити"
       },
       "search": {
-        "ariaLabel": "Search",
-        "placeholder": "Jump to pages, containers, agents, triggers...",
-        "shown": "{count} shown",
-        "refreshing": "Refreshing search index...",
-        "noMatches": "No matches for \"{query}\".",
-        "hint": "Type to search pages, containers, agents, triggers, watchers, and settings.",
-        "prefixScopeHint": "Prefix scope active; use ",
-        "typeHint": "Type",
-        "useTab": " to change scope",
-        "moveHint": "move",
-        "openHint": "open"
+        "ariaLabel": "Пошук",
+        "placeholder": "Перейти до сторінок, контейнерів, агентів, тригерів...",
+        "shown": "{count} показано",
+        "refreshing": "Оновлення пошукового індексу...",
+        "noMatches": "Збігів за запитом \"{query}\" не знайдено.",
+        "hint": "Вводьте для пошуку сторінок, контейнерів, агентів, тригерів, спостерігачів і налаштувань.",
+        "prefixScopeHint": "Активний префіксний фільтр; використовуйте ",
+        "typeHint": "Вводьте",
+        "useTab": " для зміни фільтра",
+        "moveHint": "переміщення",
+        "openHint": "відкрити"
       },
       "connection": {
-        "lostTitle": "Connection Lost",
-        "applyingUpdateTitle": "Applying Update",
-        "lostMessage": "The server is unreachable. Waiting for it to come back online...",
-        "restartingMessage": "Drydock is restarting after a self-update{opId}. Reconnecting when the service is back...",
-        "reconnecting": "Reconnecting",
-        "restartingService": "Restarting service"
+        "lostTitle": "З'єднання перервано",
+        "applyingUpdateTitle": "Застосування оновлення",
+        "lostMessage": "Сервер недоступний. Очікування відновлення зв'язку...",
+        "restartingMessage": "Drydock перезапускається після самооновлення{opId}. Підключення буде відновлено після запуску сервісу...",
+        "reconnecting": "Підключення",
+        "restartingService": "Перезапуск сервісу"
       }
     },
     "announcementBanner": {
-      "defaultDismiss": "Dismiss",
-      "defaultLinkLabel": "View migration guide"
+      "defaultDismiss": "Закрити",
+      "defaultLinkLabel": "Переглянути інструкцію з міграції"
     },
     "banners": {
-      "legacyConfigTitleSingular": "{total} legacy configuration alias detected",
-      "legacyConfigTitlePlural": "{total} legacy configuration aliases detected",
-      "legacyApiPathTitle": "{total} legacy API paths detected",
-      "dontShowAgain": "Don't show again",
-      "oidcHttpTitle": "HTTP OIDC discovery detected",
-      "legacyHashTitle": "Legacy password hash detected",
-      "curlHealthcheckTitle": "Custom curl healthcheck override detected",
-      "envKeysLabel": "Env keys ({count}): {keys}",
-      "labelKeysLabel": "Label keys ({count}): {keys}",
-      "apiPathsLabel": "API paths ({count}): {keys}",
-      "healthcheckCommandLabel": "Healthcheck command: {command}"
+      "legacyConfigTitleSingular": "Виявлено {total} застарілий псевдонім конфігурації",
+      "legacyConfigTitlePlural": "Виявлено {total} застарілих псевдоніми конфігурації",
+      "legacyApiPathTitle": "Виявлено {total} застарілих шляхів API",
+      "dontShowAgain": "Більше не показувати",
+      "oidcHttpTitle": "Виявлено HTTP OIDC discovery",
+      "legacyHashTitle": "Виявлено застарілий хеш пароля",
+      "curlHealthcheckTitle": "Виявлено користувацький healthcheck на основі curl",
+      "envKeysLabel": "Env-ключі ({count}): {keys}",
+      "labelKeysLabel": "Ключі міток ({count}): {keys}",
+      "apiPathsLabel": "Шляхи API ({count}): {keys}",
+      "healthcheckCommandLabel": "Команда healthcheck: {command}"
     }
   }
 }

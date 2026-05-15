@@ -1,148 +1,148 @@
 {
   "configView": {
     "tabs": {
-      "general": "General",
-      "appearance": "Appearance",
-      "profile": "Profile"
+      "general": "Tổng quan",
+      "appearance": "Giao diện",
+      "profile": "Hồ sơ"
     },
     "general": {
       "application": {
-        "title": "Application",
-        "loadingServerInfo": "Loading server info"
+        "title": "Ứng dụng",
+        "loadingServerInfo": "Đang tải thông tin máy chủ"
       },
       "store": {
-        "title": "Store"
+        "title": "Kho dữ liệu"
       },
       "webhookApi": {
         "title": "Webhook API",
-        "enabled": "Enabled",
-        "disabled": "Disabled",
-        "description": "Use these endpoints to trigger watch cycles and updates via HTTP. All requests require a Bearer token in the Authorization header.",
-        "disabledMessage": "Webhook API is disabled. Set",
-        "disabledHint": "Webhook API is disabled. Set {envEnabled} and configure at least one token ({envToken} or {envTokens}) to enable it.",
+        "enabled": "Đã bật",
+        "disabled": "Đã tắt",
+        "description": "Sử dụng các endpoint này để kích hoạt chu kỳ theo dõi và cập nhật qua HTTP. Tất cả yêu cầu cần Bearer token trong header Authorization.",
+        "disabledMessage": "Webhook API đã bị tắt. Đặt",
+        "disabledHint": "Webhook API đã bị tắt. Đặt {envEnabled} và cấu hình ít nhất một token ({envToken} hoặc {envTokens}) để bật.",
         "table": {
           "endpoint": "Endpoint",
-          "description": "Description"
+          "description": "Mô tả"
         },
-        "example": "Example",
+        "example": "Ví dụ",
         "endpoints": {
-          "watchAll": "Trigger a full watch cycle on all watchers",
-          "watchOne": "Watch a specific container by name",
-          "updateOne": "Trigger an update on a specific container"
+          "watchAll": "Kích hoạt chu kỳ theo dõi đầy đủ trên tất cả watcher",
+          "watchOne": "Theo dõi một container cụ thể theo tên",
+          "updateOne": "Kích hoạt cập nhật cho một container cụ thể"
         }
       },
       "network": {
-        "title": "Network",
+        "title": "Mạng",
         "internetlessMode": {
-          "label": "Internetless Mode",
-          "description": "Block all outbound requests (container icons, external fetches)"
+          "label": "Chế độ không có Internet",
+          "description": "Chặn tất cả yêu cầu ra ngoài (icon container, tải ngoài)"
         }
       },
       "iconCache": {
-        "title": "Container Icon Cache",
+        "title": "Bộ đệm icon Container",
         "cachedIcons": {
-          "label": "Cached Icons",
-          "description": "Common icons are bundled; other icons are cached to disk on first fetch"
+          "label": "Icon đã lưu đệm",
+          "description": "Các icon phổ biến được đóng gói sẵn; các icon khác được lưu vào đĩa lần đầu tải"
         },
-        "cleared": "{count} cleared",
-        "clearButton": "Clear Cache"
+        "cleared": "{count} đã xóa",
+        "clearButton": "Xóa bộ đệm"
       },
       "diagnostics": {
-        "title": "Diagnostics",
+        "title": "Chẩn đoán",
         "debugDump": {
-          "label": "Diagnostic Debug Dump",
-          "description": "Download a redacted JSON snapshot of runtime state for troubleshooting",
-          "preparing": "Preparing...",
-          "download": "Download Debug Dump"
+          "label": "Kết xuất debug chẩn đoán",
+          "description": "Tải xuống bản chụp JSON đã ẩn thông tin nhạy cảm của trạng thái runtime để xử lý sự cố",
+          "preparing": "Đang chuẩn bị...",
+          "download": "Tải xuống kết xuất debug"
         }
       },
       "fields": {
-        "version": "Version",
-        "serverPort": "Server Port",
-        "containerActions": "Container Actions",
+        "version": "Phiên bản",
+        "serverPort": "Cổng máy chủ",
+        "containerActions": "Thao tác Container",
         "webhook": "Webhook",
-        "deleteEnabled": "Delete Enabled",
-        "trustProxy": "Trust Proxy",
-        "metricsAuth": "Metrics Auth",
-        "storePath": "Store Path",
-        "storeFile": "Store File",
-        "enabled": "Enabled",
-        "disabled": "Disabled",
-        "yes": "Yes",
-        "no": "No"
+        "deleteEnabled": "Cho phép xóa",
+        "trustProxy": "Tin tưởng Proxy",
+        "metricsAuth": "Xác thực Metrics",
+        "storePath": "Đường dẫn kho dữ liệu",
+        "storeFile": "Tệp kho dữ liệu",
+        "enabled": "Đã bật",
+        "disabled": "Đã tắt",
+        "yes": "Có",
+        "no": "Không"
       },
       "errors": {
-        "loadServerInfo": "Failed to load server info",
-        "loadProfileData": "Failed to load profile data",
-        "updateNetworkSettings": "Failed to update network settings",
-        "clearIconCache": "Failed to clear icon cache",
-        "downloadDebugDump": "Unable to download debug dump",
-        "errorLabel": "Error"
+        "loadServerInfo": "Không thể tải thông tin máy chủ",
+        "loadProfileData": "Không thể tải dữ liệu hồ sơ",
+        "updateNetworkSettings": "Không thể cập nhật cài đặt mạng",
+        "clearIconCache": "Không thể xóa bộ đệm icon",
+        "downloadDebugDump": "Không thể tải xuống kết xuất debug",
+        "errorLabel": "Lỗi"
       }
     },
     "appearance": {
       "language": {
-        "title": "Language"
+        "title": "Ngôn ngữ"
       },
       "colorTheme": {
-        "title": "Color Theme",
+        "title": "Màu sắc giao diện",
         "descriptions": {
-          "oneDark": "Clean and balanced",
-          "github": "Clean and familiar",
-          "dracula": "Bold purple vibes",
-          "catppuccin": "Warm pastel tones",
-          "gruvbox": "Retro earthy warmth",
-          "ayu": "Soft golden tones"
+          "oneDark": "Sạch sẽ và cân bằng",
+          "github": "Sạch sẽ và quen thuộc",
+          "dracula": "Tím đậm nổi bật",
+          "catppuccin": "Tone pastel ấm áp",
+          "gruvbox": "Ấm áp theo phong cách retro",
+          "ayu": "Tone vàng nhẹ nhàng"
         }
       },
       "fontFamily": {
-        "title": "Font Family",
-        "defaultBadge": "default",
+        "title": "Phông chữ",
+        "defaultBadge": "mặc định",
         "preview": "Tôi yêu tiếng nước tôi từ khi mới ra đời"
       },
       "fontSize": {
-        "title": "Font Size"
+        "title": "Cỡ chữ"
       },
       "iconLibrary": {
-        "title": "Icon Library"
+        "title": "Thư viện icon"
       },
       "iconSize": {
-        "title": "Icon Size"
+        "title": "Kích thước icon"
       },
       "borderRadius": {
-        "title": "Border Radius",
+        "title": "Bo góc",
         "labels": {
-          "none": "None",
-          "sharp": "Sharp",
-          "modern": "Modern",
-          "soft": "Soft",
-          "round": "Round"
+          "none": "Không",
+          "sharp": "Sắc nét",
+          "modern": "Hiện đại",
+          "soft": "Mềm mại",
+          "round": "Tròn"
         }
       }
     },
     "profile": {
-      "loading": "Loading profile",
+      "loading": "Đang tải hồ sơ",
       "fields": {
-        "username": "Username",
+        "username": "Tên đăng nhập",
         "email": "Email",
-        "role": "Role",
-        "provider": "Provider",
-        "lastLogin": "Last Login",
-        "activeSessions": "Active Sessions"
+        "role": "Vai trò",
+        "provider": "Nhà cung cấp",
+        "lastLogin": "Lần đăng nhập cuối",
+        "activeSessions": "Phiên đang hoạt động"
       }
     },
     "logs": {
-      "loading": "Loading logs...",
-      "emptyMessage": "No log entries found for current filters.",
+      "loading": "Đang tải nhật ký...",
+      "emptyMessage": "Không tìm thấy mục nhật ký nào với bộ lọc hiện tại.",
       "toolbar": {
-        "live": "Live",
-        "allLevels": "All Levels",
+        "live": "Trực tiếp",
+        "allLevels": "Tất cả mức độ",
         "debug": "Debug",
         "info": "Info",
         "warn": "Warn",
         "error": "Error",
-        "allComponents": "All Components",
-        "resetFilters": "Reset filters"
+        "allComponents": "Tất cả thành phần",
+        "resetFilters": "Đặt lại bộ lọc"
       },
       "tail": {
         "50": "Tail 50",
@@ -150,7 +150,7 @@
         "500": "Tail 500",
         "1000": "Tail 1000"
       },
-      "logLevelBadge": "Server log level: {level}. Only messages at this level or above are captured."
+      "logLevelBadge": "Mức độ nhật ký máy chủ: {level}. Chỉ các thông điệp ở mức này trở lên mới được ghi."
     }
   }
 }

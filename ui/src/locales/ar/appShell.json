@@ -1,133 +1,133 @@
 {
   "appShell": {
     "toast": {
-      "dismiss": "Dismiss"
+      "dismiss": "إغلاق"
     },
     "logViewer": {
       "toolbar": {
-        "resume": "Resume",
-        "pause": "Pause",
-        "unpinAutoScroll": "Unpin auto-scroll",
-        "pinAutoScroll": "Pin auto-scroll",
-        "newestFirst": "Newest first",
-        "oldestFirst": "Oldest first",
+        "resume": "استئناف",
+        "pause": "إيقاف مؤقت",
+        "unpinAutoScroll": "إلغاء تثبيت التمرير التلقائي",
+        "pinAutoScroll": "تثبيت التمرير التلقائي",
+        "newestFirst": "الأحدث أولاً",
+        "oldestFirst": "الأقدم أولاً",
         "regexToggle": ".* Regex",
-        "showMatchesOnly": "Show matches only",
-        "showingMatchesOnly": "Showing matches only",
-        "prev": "Prev",
-        "next": "Next"
+        "showMatchesOnly": "إظهار المطابقات فقط",
+        "showingMatchesOnly": "عرض المطابقات فقط",
+        "prev": "السابق",
+        "next": "التالي"
       },
       "search": {
-        "placeholder": "Search logs",
-        "copied": "Copied!",
-        "copyLogs": "Copy logs"
+        "placeholder": "البحث في السجلات",
+        "copied": "تم النسخ!",
+        "copyLogs": "نسخ السجلات"
       },
       "empty": {
-        "noMatchingEntries": "No matching entries",
-        "defaultMessage": "No log entries yet"
+        "noMatchingEntries": "لا توجد إدخالات مطابقة",
+        "defaultMessage": "لا توجد إدخالات سجل بعد"
       },
       "footer": {
-        "lines": "lines",
-        "defaultStatusLabel": "Offline"
+        "lines": "سطر",
+        "defaultStatusLabel": "غير متصل"
       }
     },
     "notificationBell": {
-      "buttonLabel": "Notifications",
-      "tooltip": "Notifications",
-      "header": "Notifications",
-      "clear": "Clear",
-      "loading": "Loading...",
-      "empty": "No notifications yet",
-      "markAllRead": "Mark all as read",
-      "openAuditLog": "Open audit log",
-      "dismiss": "Dismiss notification"
+      "buttonLabel": "الإشعارات",
+      "tooltip": "الإشعارات",
+      "header": "الإشعارات",
+      "clear": "مسح",
+      "loading": "جارٍ التحميل...",
+      "empty": "لا توجد إشعارات بعد",
+      "markAllRead": "تعليم الكل كمقروء",
+      "openAuditLog": "فتح سجل التدقيق",
+      "dismiss": "إغلاق الإشعار"
     },
     "themeToggle": {
-      "mobileLabel": "Theme: {id} (tap to cycle)",
-      "switchTo": "Switch to {id} theme",
+      "mobileLabel": "السمة: {id} (اضغط للتبديل)",
+      "switchTo": "التبديل إلى سمة {id}",
       "variantLabel": "{label}"
     },
     "layout": {
       "nav": {
-        "dashboard": "Dashboard",
-        "containers": "Containers",
-        "security": "Security",
-        "audit": "Audit",
-        "systemLogs": "System Logs",
-        "manageGroup": "Manage",
-        "hosts": "Hosts",
-        "registries": "Registries",
-        "watchers": "Watchers",
-        "settingsGroup": "Settings",
-        "general": "General",
-        "notifications": "Notifications",
-        "outbox": "Outbox",
-        "triggers": "Triggers",
-        "auth": "Auth",
-        "agents": "Agents"
+        "dashboard": "لوحة التحكم",
+        "containers": "الحاويات",
+        "security": "الأمان",
+        "audit": "التدقيق",
+        "systemLogs": "سجلات النظام",
+        "manageGroup": "إدارة",
+        "hosts": "المضيفون",
+        "registries": "السجلات",
+        "watchers": "المراقبون",
+        "settingsGroup": "الإعدادات",
+        "general": "عام",
+        "notifications": "الإشعارات",
+        "outbox": "صندوق الصادر",
+        "triggers": "المشغّلات",
+        "auth": "المصادقة",
+        "agents": "الوكلاء"
       },
       "sidebar": {
-        "closeMobileMenu": "Close menu",
-        "searchButton": "Search",
-        "searchAriaLabel": "Search",
-        "aboutTooltip": "About Drydock",
-        "aboutAriaLabel": "About Drydock",
-        "expandSidebar": "Expand sidebar",
-        "collapseSidebar": "Collapse sidebar"
+        "closeMobileMenu": "إغلاق القائمة",
+        "searchButton": "بحث",
+        "searchAriaLabel": "بحث",
+        "aboutTooltip": "حول Drydock",
+        "aboutAriaLabel": "حول Drydock",
+        "expandSidebar": "توسيع الشريط الجانبي",
+        "collapseSidebar": "طي الشريط الجانبي"
       },
       "topbar": {
-        "openMenu": "Open menu",
-        "closeMenu": "Close menu",
-        "userMenu": "User menu",
-        "profile": "Profile",
-        "signOut": "Sign out"
+        "openMenu": "فتح القائمة",
+        "closeMenu": "إغلاق القائمة",
+        "userMenu": "قائمة المستخدم",
+        "profile": "الملف الشخصي",
+        "signOut": "تسجيل الخروج"
       },
       "about": {
         "title": "Drydock",
-        "subtitle": "Docker Container Update Manager",
-        "documentation": "Documentation",
+        "subtitle": "مدير تحديثات حاويات Docker",
+        "documentation": "التوثيق",
         "github": "GitHub",
-        "changelog": "Changelog",
-        "close": "Close"
+        "changelog": "سجل التغييرات",
+        "close": "إغلاق"
       },
       "search": {
-        "ariaLabel": "Search",
-        "placeholder": "Jump to pages, containers, agents, triggers...",
-        "shown": "{count} shown",
-        "refreshing": "Refreshing search index...",
-        "noMatches": "No matches for \"{query}\".",
-        "hint": "Type to search pages, containers, agents, triggers, watchers, and settings.",
-        "prefixScopeHint": "Prefix scope active; use ",
-        "typeHint": "Type",
-        "useTab": " to change scope",
-        "moveHint": "move",
-        "openHint": "open"
+        "ariaLabel": "بحث",
+        "placeholder": "الانتقال إلى الصفحات، الحاويات، الوكلاء، المشغّلات...",
+        "shown": "{count} معروض",
+        "refreshing": "جارٍ تحديث فهرس البحث...",
+        "noMatches": "لا نتائج لـ \"{query}\".",
+        "hint": "اكتب للبحث في الصفحات، الحاويات، الوكلاء، المشغّلات، المراقبين، والإعدادات.",
+        "prefixScopeHint": "النطاق ببادئة نشط؛ استخدم ",
+        "typeHint": "اكتب",
+        "useTab": " لتغيير النطاق",
+        "moveHint": "تنقل",
+        "openHint": "فتح"
       },
       "connection": {
-        "lostTitle": "Connection Lost",
-        "applyingUpdateTitle": "Applying Update",
-        "lostMessage": "The server is unreachable. Waiting for it to come back online...",
-        "restartingMessage": "Drydock is restarting after a self-update{opId}. Reconnecting when the service is back...",
-        "reconnecting": "Reconnecting",
-        "restartingService": "Restarting service"
+        "lostTitle": "انقطع الاتصال",
+        "applyingUpdateTitle": "جارٍ تطبيق التحديث",
+        "lostMessage": "الخادم غير قابل للوصول. في انتظار عودته...",
+        "restartingMessage": "Drydock يُعيد تشغيله بعد تحديث ذاتي{opId}. جارٍ إعادة الاتصال عند عودة الخدمة...",
+        "reconnecting": "جارٍ إعادة الاتصال",
+        "restartingService": "جارٍ إعادة تشغيل الخدمة"
       }
     },
     "announcementBanner": {
-      "defaultDismiss": "Dismiss",
-      "defaultLinkLabel": "View migration guide"
+      "defaultDismiss": "إغلاق",
+      "defaultLinkLabel": "عرض دليل الترحيل"
     },
     "banners": {
-      "legacyConfigTitleSingular": "{total} legacy configuration alias detected",
-      "legacyConfigTitlePlural": "{total} legacy configuration aliases detected",
-      "legacyApiPathTitle": "{total} legacy API paths detected",
-      "dontShowAgain": "Don't show again",
-      "oidcHttpTitle": "HTTP OIDC discovery detected",
-      "legacyHashTitle": "Legacy password hash detected",
-      "curlHealthcheckTitle": "Custom curl healthcheck override detected",
-      "envKeysLabel": "Env keys ({count}): {keys}",
-      "labelKeysLabel": "Label keys ({count}): {keys}",
-      "apiPathsLabel": "API paths ({count}): {keys}",
-      "healthcheckCommandLabel": "Healthcheck command: {command}"
+      "legacyConfigTitleSingular": "تم اكتشاف {total} اسم مستعار قديم للإعداد",
+      "legacyConfigTitlePlural": "تم اكتشاف {total} اسم مستعار قديم للإعداد",
+      "legacyApiPathTitle": "تم اكتشاف {total} مسار API قديم",
+      "dontShowAgain": "لا تُظهر مجدداً",
+      "oidcHttpTitle": "تم اكتشاف اكتشاف OIDC عبر HTTP",
+      "legacyHashTitle": "تم اكتشاف تجزئة كلمة مرور قديمة",
+      "curlHealthcheckTitle": "تم اكتشاف تجاوز مخصص لفحص صحة curl",
+      "envKeysLabel": "مفاتيح البيئة ({count}): {keys}",
+      "labelKeysLabel": "مفاتيح التسمية ({count}): {keys}",
+      "apiPathsLabel": "مسارات API ({count}): {keys}",
+      "healthcheckCommandLabel": "أمر فحص الصحة: {command}"
     }
   }
 }

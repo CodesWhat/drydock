@@ -1,55 +1,55 @@
 {
   "sharedComponents": {
     "confirmDialog": {
-      "cancel": "Cancel",
-      "confirm": "Confirm"
+      "cancel": "キャンセル",
+      "confirm": "確認"
     },
     "copyableTag": {
-      "copied": "Copied!",
-      "clickToCopy": "Click to copy"
+      "copied": "コピーしました！",
+      "clickToCopy": "クリックしてコピー"
     },
     "dataCardGrid": {
-      "selectItem": "Select {name}"
+      "selectItem": "{name} を選択"
     },
     "dataFilterBar": {
-      "filters": "Filters",
-      "toggleFilters": "Toggle filters",
-      "viewMode": "View mode",
-      "viewModeLabel": "{label} view"
+      "filters": "フィルター",
+      "toggleFilters": "フィルターの切替",
+      "viewMode": "表示モード",
+      "viewModeLabel": "{label} 表示"
     },
     "dataListAccordion": {
-      "toggleDetails": "Toggle {name} details",
-      "selectItem": "Select {name}"
+      "toggleDetails": "{name} の詳細を切替",
+      "selectItem": "{name} を選択"
     },
     "dataTable": {
-      "actions": "Actions",
-      "resizeColumn": "Resize column"
+      "actions": "アクション",
+      "resizeColumn": "列幅を変更"
     },
     "detailPanel": {
-      "openFullPage": "Open full page view",
-      "closePanel": "Close details panel",
-      "ariaLabel": "Detail panel"
+      "openFullPage": "フルページ表示を開く",
+      "closePanel": "詳細パネルを閉じる",
+      "ariaLabel": "詳細パネル"
     },
     "emptyState": {
-      "clearFilters": "Clear all filters"
+      "clearFilters": "すべてのフィルターをクリア"
     },
     "logViewer": {
-      "emptyMessage": "No log entries found.",
-      "loadingMessage": "Loading logs..."
+      "emptyMessage": "ログエントリが見つかりません。",
+      "loadingMessage": "ログを読み込み中..."
     },
     "scanProgressBanner": {
-      "scanning": "Scanning {done}/{total} containers..."
+      "scanning": "{total} 件中 {done} 件のコンテナをスキャン中..."
     },
     "scanProgressText": {
-      "scanning": "Scanning {done}/{total}..."
+      "scanning": "{total} 件中 {done} 件をスキャン中..."
     },
     "securityEmptyState": {
-      "noDataTitle": "No vulnerability data yet",
-      "noDataBody": "Run a scan to check your containers for known vulnerabilities",
-      "filteredTitle": "No images match your filters",
-      "clearFilters": "Clear all filters",
-      "setupGuide": "Setup Guide",
-      "scanNow": "Scan Now"
+      "noDataTitle": "脆弱性データがまだありません",
+      "noDataBody": "スキャンを実行してコンテナの既知の脆弱性を確認してください",
+      "filteredTitle": "フィルターに一致するイメージがありません",
+      "clearFilters": "すべてのフィルターをクリア",
+      "setupGuide": "セットアップガイド",
+      "scanNow": "今すぐスキャン"
     }
   }
 }

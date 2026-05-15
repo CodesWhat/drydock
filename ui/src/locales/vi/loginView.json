@@ -1,34 +1,34 @@
 {
   "loginView": {
-    "heading": "Sign in to Drydock",
+    "heading": "Đăng nhập vào Drydock",
     "username": {
-      "label": "Username",
-      "placeholder": "Enter your username"
+      "label": "Tên đăng nhập",
+      "placeholder": "Nhập tên đăng nhập"
     },
     "password": {
-      "label": "Password",
-      "placeholder": "Enter your password"
+      "label": "Mật khẩu",
+      "placeholder": "Nhập mật khẩu"
     },
     "submit": {
-      "signIn": "Sign in",
-      "signingIn": "Signing in..."
+      "signIn": "Đăng nhập",
+      "signingIn": "Đang đăng nhập..."
     },
-    "separator": "or continue with",
-    "rememberMe": "Remember me",
-    "noMethods": "No authentication methods configured.",
+    "separator": "hoặc tiếp tục với",
+    "rememberMe": "Ghi nhớ đăng nhập",
+    "noMethods": "Chưa cấu hình phương thức xác thực nào.",
     "errors": {
-      "loadFailed": "Failed to load authentication methods",
-      "invalidCredentials": "Invalid username or password",
-      "oidcFailed": "Failed to connect to {name}",
+      "loadFailed": "Không thể tải phương thức xác thực",
+      "invalidCredentials": "Tên đăng nhập hoặc mật khẩu không hợp lệ",
+      "oidcFailed": "Không thể kết nối tới {name}",
       "providerBasic": "Basic auth '{name}': {error}",
       "providerOidc": "OIDC provider '{name}': {error}",
       "providerNamed": "{type} '{name}': {error}",
       "providerGeneric": "{provider}: {error}"
     },
     "connectionLost": {
-      "title": "Connection Lost",
-      "body": "The server is unreachable. Waiting for it to come back online...",
-      "reconnecting": "Reconnecting"
+      "title": "Mất kết nối",
+      "body": "Máy chủ không thể truy cập. Đang chờ máy chủ trở lại...",
+      "reconnecting": "Đang kết nối lại"
     }
   }
 }

@@ -1,39 +1,39 @@
 {
   "auditView": {
-    "loadingAuditLog": "Loading audit log...",
-    "loadError": "Failed to load audit log",
-    "filterPlaceholder": "Filter by target or event...",
-    "containerFilterPlaceholder": "Container name...",
-    "allEvents": "All events",
-    "eventsSelected": "{count} events selected",
-    "clear": "Clear",
-    "fromDateLabel": "From date",
-    "toDateLabel": "To date",
+    "loadingAuditLog": "Загрузка журнала аудита...",
+    "loadError": "Не удалось загрузить журнал аудита",
+    "filterPlaceholder": "Фильтр по цели или событию...",
+    "containerFilterPlaceholder": "Имя контейнера...",
+    "allEvents": "Все события",
+    "eventsSelected": "Выбрано событий: {count}",
+    "clear": "Очистить",
+    "fromDateLabel": "С даты",
+    "toDateLabel": "По дату",
     "pagination": {
-      "summary": "Page {page} of {totalPages} ({total} entries)",
-      "previousPage": "Previous page",
-      "nextPage": "Next page"
+      "summary": "Страница {page} из {totalPages} ({total} записей)",
+      "previousPage": "Предыдущая страница",
+      "nextPage": "Следующая страница"
     },
-    "emptyFiltered": "No audit entries match your filters",
+    "emptyFiltered": "Нет записей аудита, соответствующих фильтрам",
     "columns": {
-      "time": "Time",
-      "event": "Event",
-      "target": "Target",
-      "status": "Status",
-      "details": "Details"
+      "time": "Время",
+      "event": "Событие",
+      "target": "Цель",
+      "status": "Статус",
+      "details": "Детали"
     },
     "card": {
-      "time": "Time",
-      "version": "Version"
+      "time": "Время",
+      "version": "Версия"
     },
     "detail": {
-      "timestamp": "Timestamp",
-      "event": "Event",
-      "image": "Image",
-      "fromVersion": "From Version",
-      "toVersion": "To Version",
-      "trigger": "Trigger",
-      "details": "Details"
+      "timestamp": "Метка времени",
+      "event": "Событие",
+      "image": "Образ",
+      "fromVersion": "Из версии",
+      "toVersion": "В версию",
+      "trigger": "Триггер",
+      "details": "Детали"
     },
     "actions": {
       "container-update": "Обновление контейнера",
@@ -69,103 +69,138 @@
     }
   },
   "notificationsView": {
-    "loadingRules": "Loading notification rules...",
-    "loadError": "Failed to load notification rules",
-    "filterPlaceholder": "Filter by name, description, or trigger...",
-    "clear": "Clear",
-    "allNotificationTriggers": "All notification triggers",
-    "noTriggers": "No triggers",
-    "columns": {
-      "on": "On",
-      "rule": "Rule",
-      "triggers": "Triggers"
+    "loadingRules": "Загрузка правил уведомлений...",
+    "loadError": "Не удалось загрузить правила уведомлений",
+    "filterPlaceholder": "Фильтр по имени, описанию или триггеру...",
+    "clear": "Очистить",
+    "allNotificationTriggers": "Все триггеры уведомлений",
+    "noTriggers": "Нет триггеров",
+    "rules": {
+      "update-available": {
+        "name": "Доступно обновление",
+        "description": "При появлении новой версии контейнера"
+      },
+      "update-applied": {
+        "name": "Обновление применено",
+        "description": "После успешного обновления контейнера"
+      },
+      "update-failed": {
+        "name": "Ошибка обновления",
+        "description": "При сбое или откате обновления"
+      },
+      "security-alert": {
+        "name": "Предупреждение безопасности",
+        "description": "Обнаружена критическая или высокая уязвимость"
+      },
+      "agent-disconnect": {
+        "name": "Агент отключён",
+        "description": "При потере соединения с удалённым агентом"
+      },
+      "agent-reconnect": {
+        "name": "Агент переподключён",
+        "description": "При восстановлении соединения с удалённым агентом"
+      }
     },
-    "toggleAriaLabel": "Toggle notification rule",
-    "emptyFiltered": "No notification rules match your filters",
+    "columns": {
+      "on": "Вкл.",
+      "rule": "Правило",
+      "triggers": "Триггеры"
+    },
+    "toggleAriaLabel": "Переключить правило уведомления",
+    "emptyFiltered": "Нет правил уведомлений, соответствующих фильтрам",
     "detail": {
-      "ruleStatusLabel": "Rule status",
-      "ruleStatusAriaLabel": "Rule status",
-      "enabledText": "Enabled: notifications can fire for this event.",
-      "disabledText": "Disabled: notifications are suppressed for this event.",
-      "assignedTriggersLabel": "Assigned Triggers",
-      "noTriggersConfigured": "No triggers configured. Add triggers on the",
-      "triggersPageLink": "Triggers page",
-      "helpTextImplicitAll": "Leave this empty to send this event to all notification triggers. Selecting any trigger turns this rule into an allow-list.",
-      "helpTextExplicit": "Only selected triggers will receive this event. Leave it empty to suppress this event for all triggers.",
-      "saving": "Saving...",
-      "saveChanges": "Save changes",
-      "reset": "Reset",
-      "enabled": "enabled",
-      "disabled": "disabled"
+      "ruleStatusLabel": "Статус правила",
+      "ruleStatusAriaLabel": "Статус правила",
+      "enabledText": "Включено: уведомления для этого события активны.",
+      "disabledText": "Отключено: уведомления для этого события подавлены.",
+      "assignedTriggersLabel": "Назначенные триггеры",
+      "noTriggersConfigured": "Триггеры не настроены. Добавьте триггеры на",
+      "triggersPageLink": "странице триггеров",
+      "helpTextImplicitAll": "Оставьте поле пустым, чтобы отправлять это событие всем триггерам уведомлений. Выбор любого триггера превращает это правило в список разрешённых.",
+      "helpTextExplicit": "Это событие получат только выбранные триггеры. Оставьте поле пустым, чтобы подавить событие для всех триггеров.",
+      "saving": "Сохранение...",
+      "saveChanges": "Сохранить изменения",
+      "reset": "Сбросить",
+      "enabled": "включено",
+      "disabled": "отключено"
     }
   },
   "securityView": {
-    "loadingVulnerabilityData": "Loading vulnerability data...",
-    "scanNow": "Scan Now",
-    "scanning": "Scanning...",
-    "scanAllAriaLabel": "Scan all containers",
-    "scanAllContainers": "Scan all containers for vulnerabilities",
-    "checkingScanner": "Checking scanner availability",
-    "runtimeUnavailable": "Runtime check unavailable; scan can still be attempted",
+    "loadingVulnerabilityData": "Загрузка данных об уязвимостях...",
+    "scanNow": "Сканировать сейчас",
+    "scanning": "Сканирование...",
+    "scanAllAriaLabel": "Сканировать все контейнеры",
+    "scanAllContainers": "Сканировать все контейнеры на уязвимости",
+    "checkingScanner": "Проверка доступности сканера",
+    "runtimeUnavailable": "Проверка среды выполнения недоступна; сканирование всё равно можно попробовать",
     "filters": {
-      "severity": "Severity",
-      "severityCritical": "Critical",
-      "severityHigh": "High",
-      "severityMedium": "Medium",
-      "severityLow": "Low",
-      "fixAvailable": "Fix Available",
-      "fixYes": "Yes",
-      "fixNo": "No",
-      "clearAll": "Clear all"
+      "severity": "Серьёзность",
+      "severityCritical": "Критическая",
+      "severityHigh": "Высокая",
+      "severityMedium": "Средняя",
+      "severityLow": "Низкая",
+      "fixAvailable": "Есть исправление",
+      "fixYes": "Да",
+      "fixNo": "Нет",
+      "clearAll": "Очистить всё"
     },
     "columns": {
-      "image": "Image",
-      "critical": "Critical",
-      "high": "High",
-      "medium": "Medium",
-      "low": "Low",
-      "fixable": "Fixable",
-      "total": "Total"
+      "image": "Образ",
+      "critical": "Критические",
+      "high": "Высокие",
+      "medium": "Средние",
+      "low": "Низкие",
+      "fixable": "Исправимые",
+      "total": "Всего"
     },
     "card": {
-      "vulnerabilities": "vulnerabilities",
-      "vsUpdate": "vs update",
-      "fixable": "fixable",
-      "noFixesAvailable": "No fixes available",
-      "total": "total"
+      "vulnerabilities": "уязвимостей",
+      "vsUpdate": "vs обновление",
+      "fixable": "исправимых",
+      "noFixesAvailable": "Исправлений нет",
+      "total": "всего"
     },
     "badge": {
-      "critical": "Critical",
-      "high": "High",
-      "medium": "Medium",
-      "low": "Low"
+      "critical": "Критическая",
+      "high": "Высокая",
+      "medium": "Средняя",
+      "low": "Низкая"
     },
-    "update": "Update",
-    "viewInContainers": "View in Containers",
-    "viewAllInContainers": "View all in Containers",
+    "deltaTooltips": {
+      "fixedSingle": "Обновление устраняет {count} уязвимость",
+      "fixedMultiple": "Обновление устраняет {count} уязвимостей",
+      "newSingle": "Обновление вводит {count} новую уязвимость",
+      "newMultiple": "Обновление вводит {count} новых уязвимостей",
+      "both": "Обновление: устранено {fixed}, появилось {new}"
+    },
+    "updateOneOfButton": "Обновить один из {count} контейнеров",
+    "updateThisContainerButton": "Обновить этот контейнер",
+    "update": "Обновить",
+    "viewInContainers": "Показать в контейнерах",
+    "viewAllInContainers": "Показать все в контейнерах",
     "export": {
-      "label": "Export",
-      "downloadReport": "Download Report"
+      "label": "Экспорт",
+      "downloadReport": "Скачать отчёт"
     },
     "sbom": {
       "label": "SBOM",
-      "loading": "Loading SBOM document...",
-      "loadingButton": "Loading...",
-      "refresh": "Refresh",
-      "hide": "Hide",
-      "view": "View",
-      "download": "Download",
-      "format": "format:",
-      "components": "components:",
-      "generated": "generated:"
+      "loading": "Загрузка SBOM-документа...",
+      "loadingButton": "Загрузка...",
+      "refresh": "Обновить",
+      "hide": "Скрыть",
+      "view": "Просмотр",
+      "download": "Скачать",
+      "format": "формат:",
+      "components": "компонентов:",
+      "generated": "сгенерировано:"
     },
     "vuln": {
-      "noFix": "No fix",
-      "target": "Target:"
+      "noFix": "Исправления нет",
+      "target": "Цель:"
     },
     "chooser": {
-      "title": "Select container to update",
-      "cancel": "Cancel"
+      "title": "Выберите контейнер для обновления",
+      "cancel": "Отмена"
     },
     "runtimeTools": {
       "trivy": "Trivy",
@@ -188,139 +223,148 @@
       "noDataTitle": "Данных об уязвимостях пока нет",
       "scannerNotReady": "Сканер ещё не готов.",
       "runScanHint": "Запустите сканирование для проверки контейнеров на известные уязвимости",
-      "noMatchTitle": "Нет образов, соответствующих вашим фильтрам"
+      "noMatchTitle": "Нет образов, соответствующих фильтрам"
     }
   },
   "registriesView": {
-    "loadingRegistries": "Loading registries...",
-    "loadError": "Failed to load registries",
-    "filterPlaceholder": "Filter by name or type...",
-    "clear": "Clear",
-    "emptyFiltered": "No registries match your filters",
+    "loadingRegistries": "Загрузка реестров...",
+    "loadError": "Не удалось загрузить реестры",
+    "filterPlaceholder": "Фильтр по имени или типу...",
+    "clear": "Очистить",
+    "emptyFiltered": "Нет реестров, соответствующих фильтрам",
     "columns": {
-      "registry": "Registry",
-      "type": "Type",
-      "status": "Status",
+      "registry": "Реестр",
+      "type": "Тип",
+      "status": "Статус",
       "url": "URL"
     },
     "badge": {
-      "private": "Private",
-      "public": "Public"
+      "private": "Приватный",
+      "public": "Публичный"
     },
     "card": {
-      "auth": "Auth",
-      "status": "Status"
+      "auth": "Аутентификация",
+      "status": "Статус"
+    },
+    "status": {
+      "connected": "Подключён",
+      "error": "Ошибка",
+      "unknown": "Неизвестно"
     },
     "detail": {
-      "refreshing": "Refreshing registry details...",
-      "status": "Status",
-      "authentication": "Authentication",
+      "refreshing": "Обновление данных реестра...",
+      "status": "Статус",
+      "authentication": "Аутентификация",
       "url": "URL"
     }
   },
   "serversView": {
-    "loadingServerData": "Loading server data...",
-    "loadError": "Failed to load server data",
-    "filterPlaceholder": "Filter by name or address...",
-    "clear": "Clear",
-    "emptyFiltered": "No hosts match your filters",
-    "justNow": "Just now",
-    "never": "Never",
+    "loadingServerData": "Загрузка данных серверов...",
+    "loadError": "Не удалось загрузить данные серверов",
+    "filterPlaceholder": "Фильтр по имени или адресу...",
+    "clear": "Очистить",
+    "emptyFiltered": "Нет хостов, соответствующих фильтрам",
+    "justNow": "Только что",
+    "never": "Никогда",
+    "status": {
+      "connected": "Подключён",
+      "disconnected": "Отключён"
+    },
     "columns": {
-      "host": "Host",
-      "address": "Address",
-      "status": "Status",
-      "containers": "Containers",
-      "lastSeen": "Last Seen"
+      "host": "Хост",
+      "address": "Адрес",
+      "status": "Статус",
+      "containers": "Контейнеры",
+      "lastSeen": "Последняя активность"
     },
     "card": {
-      "containers": "Containers",
-      "running": "Running",
-      "images": "Images",
-      "lastSeen": "Last seen"
+      "containers": "Контейнеры",
+      "running": "Работает",
+      "images": "Образы",
+      "lastSeen": "Последняя активность"
     },
     "list": {
-      "containers": "containers"
+      "containers": "контейнеров"
     },
     "detail": {
-      "containers": "Containers",
-      "running": "running",
-      "stopped": "stopped",
-      "images": "Images",
-      "lastSeen": "Last Seen",
-      "refresh": "Refresh"
+      "containers": "Контейнеры",
+      "running": "работает",
+      "stopped": "остановлен",
+      "images": "Образы",
+      "lastSeen": "Последняя активность",
+      "refresh": "Обновить"
     }
   },
   "triggersView": {
-    "loadingTriggers": "Loading triggers...",
-    "loadError": "Failed to load triggers",
-    "filterPlaceholder": "Filter by name...",
-    "clear": "Clear",
-    "emptyFiltered": "No triggers match your filters",
+    "loadingTriggers": "Загрузка триггеров...",
+    "loadError": "Не удалось загрузить триггеры",
+    "filterPlaceholder": "Фильтр по имени...",
+    "clear": "Очистить",
+    "emptyFiltered": "Нет триггеров, соответствующих фильтрам",
     "columns": {
-      "trigger": "Trigger",
-      "type": "Type",
-      "status": "Status"
+      "trigger": "Триггер",
+      "type": "Тип",
+      "status": "Статус"
     },
     "status": {
-      "active": "Active",
-      "inactive": "Inactive"
+      "active": "Активен",
+      "inactive": "Неактивен"
     },
     "test": {
-      "testing": "Testing...",
-      "sent": "Sent!",
-      "failed": "Failed",
-      "test": "Test",
-      "testTrigger": "Test Trigger",
-      "runTest": "Run test",
-      "testPassed": "Test passed",
-      "testFailed": "Test failed",
-      "defaultError": "Trigger test failed"
+      "testing": "Тестирование...",
+      "sent": "Отправлено!",
+      "failed": "Ошибка",
+      "test": "Тест",
+      "testTrigger": "Тестировать триггер",
+      "runTest": "Запустить тест",
+      "testPassed": "Тест пройден",
+      "testFailed": "Тест не пройден",
+      "defaultError": "Тест триггера не выполнен"
     },
     "detail": {
-      "status": "Status",
-      "refreshing": "Refreshing trigger details...",
-      "noConfig": "No configuration properties"
+      "status": "Статус",
+      "refreshing": "Обновление данных триггера...",
+      "noConfig": "Свойства конфигурации отсутствуют"
     },
     "list": {
-      "status": "Status"
+      "status": "Статус"
     }
   },
   "watchersView": {
-    "loadingWatchers": "Loading watchers...",
-    "loadError": "Failed to load watchers",
-    "filterPlaceholder": "Filter by name...",
-    "clear": "Clear",
-    "emptyFiltered": "No watchers match your filters",
+    "loadingWatchers": "Загрузка наблюдателей...",
+    "loadError": "Не удалось загрузить наблюдателей",
+    "filterPlaceholder": "Фильтр по имени...",
+    "clear": "Очистить",
+    "emptyFiltered": "Нет наблюдателей, соответствующих фильтрам",
     "columns": {
-      "watcher": "Watcher",
-      "status": "Status",
-      "containers": "Containers",
-      "schedule": "Schedule",
-      "nextRun": "Next Run",
-      "lastRun": "Last Run"
+      "watcher": "Наблюдатель",
+      "status": "Статус",
+      "containers": "Контейнеры",
+      "schedule": "Расписание",
+      "nextRun": "Следующий запуск",
+      "lastRun": "Последний запуск"
     },
     "status": {
-      "watching": "Watching",
-      "paused": "Paused"
+      "watching": "Наблюдает",
+      "paused": "Приостановлен"
     },
     "card": {
-      "containers": "Containers",
-      "nextRun": "Next run",
-      "lastRun": "Last run",
-      "containersWatched": "{count} containers watched"
+      "containers": "Контейнеры",
+      "nextRun": "Следующий запуск",
+      "lastRun": "Последний запуск",
+      "containersWatched": "Наблюдается контейнеров: {count}"
     },
     "badge": {
-      "maint": "Maint"
+      "maint": "Обслуживание"
     },
     "detail": {
       "cron": "Cron",
-      "lastRun": "Last Run",
-      "containersWatched": "Containers Watched",
-      "schedule": "Schedule",
-      "nextRun": "Next Run",
-      "viewContainers": "View containers",
-      "refreshing": "Refreshing watcher details..."
+      "lastRun": "Последний запуск",
+      "containersWatched": "Наблюдаемые контейнеры",
+      "schedule": "Расписание",
+      "nextRun": "Следующий запуск",
+      "viewContainers": "Просмотр контейнеров",
+      "refreshing": "Обновление данных наблюдателя..."
     }
   }
 }

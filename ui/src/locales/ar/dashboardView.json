@@ -1,94 +1,95 @@
 {
   "dashboardView": {
-    "loading": "Loading dashboard...",
-    "loadFailed": "Failed to load dashboard",
-    "dragToReorder": "Drag to reorder",
-    "viewAll": "View all →",
+    "loading": "جارٍ تحميل لوحة التحكم...",
+    "loadFailed": "فشل تحميل لوحة التحكم",
+    "dragToReorder": "اسحب لإعادة الترتيب",
+    "viewAll": "عرض الكل →",
     "editToggle": {
-      "showWidgetPanel": "Show widget panel",
-      "doneCustomizing": "Done customizing",
-      "customize": "Customize dashboard"
+      "showWidgetPanel": "إظهار لوحة الأدوات",
+      "doneCustomizing": "انتهاء التخصيص",
+      "customize": "تخصيص لوحة التحكم"
     },
     "widgetPanel": {
-      "title": "Widgets",
-      "closePanel": "Close panel",
-      "resetToDefault": "Reset to Default"
+      "title": "الأدوات",
+      "closePanel": "إغلاق اللوحة",
+      "resetToDefault": "إعادة الضبط الافتراضي"
     },
     "confirm": {
       "updateContainer": {
-        "header": "Update Container",
-        "message": "Update {name} now? This will apply the latest discovered image.",
-        "accept": "Update"
+        "header": "تحديث الحاوية",
+        "message": "تحديث {name} الآن؟ سيُطبَّق آخر صورة مكتشفة.",
+        "accept": "تحديث"
       },
       "updateAll": {
-        "header": "Update All Containers",
-        "message": "{count} containers will be updated. Continue?",
-        "accept": "Update All"
+        "header": "تحديث جميع الحاويات",
+        "message": "سيتم تحديث {count} حاوية. هل تريد المتابعة؟",
+        "accept": "تحديث الكل"
       }
     },
     "toast": {
-      "updated": "Updated: {name}",
-      "updateFailed": "Update failed: {name}",
-      "updateFailedWithReason": "Update failed: {name} — {reason}",
-      "cancelled": "Cancelled: {name}",
-      "rolledBack": "Rolled back: {name}",
-      "rolledBackWithReason": "Rolled back: {name} — {reason}",
-      "updateError": "Failed to update {name}",
-      "updateAllError": "Failed to update all containers"
+      "updated": "تم التحديث: {name}",
+      "updateFailed": "فشل التحديث: {name}",
+      "updateFailedWithReason": "فشل التحديث: {name} — {reason}",
+      "cancelled": "تم الإلغاء: {name}",
+      "rolledBack": "تم التراجع: {name}",
+      "rolledBackWithReason": "تم التراجع: {name} — {reason}",
+      "updateError": "فشل تحديث {name}",
+      "updateAllError": "فشل تحديث جميع الحاويات"
     },
     "recentUpdates": {
-      "title": "Updates Available",
-      "updateAll": "Update all",
-      "noUpdates": "No updates available",
-      "releaseNotes": "Release notes",
-      "securityBlocked": "Security blocked",
-      "updateContainer": "Update container",
-      "compactSingle": "{count} update available",
-      "compactPlural": "{count} updates available",
+      "title": "التحديثات المتاحة",
+      "widgetAria": "أداة التحديثات المتاحة",
+      "updateAll": "تحديث الكل",
+      "noUpdates": "لا توجد تحديثات متاحة",
+      "releaseNotes": "ملاحظات الإصدار",
+      "securityBlocked": "محظور أمنياً",
+      "updateContainer": "تحديث الحاوية",
+      "compactSingle": "{count} تحديث متاح",
+      "compactPlural": "{count} تحديثات متاحة",
       "status": {
-        "queued": "Queued",
-        "updating": "Updating"
+        "queued": "في قائمة الانتظار",
+        "updating": "جارٍ التحديث"
       },
       "columns": {
-        "container": "Container",
-        "version": "Version",
-        "type": "Type",
-        "actions": "Actions"
+        "container": "الحاوية",
+        "version": "الإصدار",
+        "type": "النوع",
+        "actions": "الإجراءات"
       }
     },
     "hostStatus": {
-      "title": "Host Status",
-      "connected": "Connected",
-      "disconnected": "Disconnected",
-      "containerCount": "{running}/{total} containers"
+      "title": "حالة المضيف",
+      "connected": "متصل",
+      "disconnected": "غير متصل",
+      "containerCount": "{running}/{total} حاوية"
     },
     "resourceUsage": {
-      "title": "Resource Usage",
-      "totalUsage": "Total Usage ({watched} watched)",
-      "cpu": "Avg CPU",
-      "memory": "Memory",
-      "topCpu": "Top CPU",
-      "topMemory": "Top Memory",
-      "noCpuData": "No live CPU data",
-      "noMemoryData": "No live memory data"
+      "title": "استخدام الموارد",
+      "totalUsage": "الاستخدام الإجمالي ({watched} مُراقَبة)",
+      "cpu": "متوسط CPU",
+      "memory": "الذاكرة",
+      "topCpu": "أعلى CPU",
+      "topMemory": "أعلى ذاكرة",
+      "noCpuData": "لا تتوفر بيانات CPU مباشرة",
+      "noMemoryData": "لا تتوفر بيانات ذاكرة مباشرة"
     },
     "securityOverview": {
-      "title": "Security Overview",
-      "images": "images",
-      "clean": "Clean",
-      "issues": "Issues",
-      "notScanned": "Not Scanned",
-      "severityBreakdown": "Severity Breakdown",
-      "critical": "{count} Critical",
-      "high": "{count} High",
-      "medium": "{count} Medium",
-      "low": "{count} Low",
-      "topVulnerabilities": "Top Vulnerabilities",
-      "noVulnerabilities": "No vulnerabilities reported"
+      "title": "نظرة عامة على الأمان",
+      "images": "صورة",
+      "clean": "سليمة",
+      "issues": "مشكلات",
+      "notScanned": "غير مفحوصة",
+      "severityBreakdown": "توزيع الخطورة",
+      "critical": "{count} حرجة",
+      "high": "{count} عالية",
+      "medium": "{count} متوسطة",
+      "low": "{count} منخفضة",
+      "topVulnerabilities": "أبرز الثغرات",
+      "noVulnerabilities": "لم تُبلَّغ عن ثغرات"
     },
     "updateBreakdown": {
-      "title": "Update Breakdown",
-      "noUpdates": "No updates to categorize"
+      "title": "توزيع التحديثات",
+      "noUpdates": "لا توجد تحديثات للتصنيف"
     },
     "stats": {
       "containers": "الحاويات",

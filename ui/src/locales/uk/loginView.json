@@ -1,34 +1,34 @@
 {
   "loginView": {
-    "heading": "Sign in to Drydock",
+    "heading": "Увійти до Drydock",
     "username": {
-      "label": "Username",
-      "placeholder": "Enter your username"
+      "label": "Ім'я користувача",
+      "placeholder": "Введіть ім'я користувача"
     },
     "password": {
-      "label": "Password",
-      "placeholder": "Enter your password"
+      "label": "Пароль",
+      "placeholder": "Введіть пароль"
     },
     "submit": {
-      "signIn": "Sign in",
-      "signingIn": "Signing in..."
+      "signIn": "Увійти",
+      "signingIn": "Вхід..."
     },
-    "separator": "or continue with",
-    "rememberMe": "Remember me",
-    "noMethods": "No authentication methods configured.",
+    "separator": "або продовжити через",
+    "rememberMe": "Запам'ятати мене",
+    "noMethods": "Методи автентифікації не налаштовані.",
     "errors": {
-      "loadFailed": "Failed to load authentication methods",
-      "invalidCredentials": "Invalid username or password",
-      "oidcFailed": "Failed to connect to {name}",
+      "loadFailed": "Не вдалося завантажити методи автентифікації",
+      "invalidCredentials": "Неправильне ім'я користувача або пароль",
+      "oidcFailed": "Не вдалося підключитися до {name}",
       "providerBasic": "Basic auth '{name}': {error}",
-      "providerOidc": "OIDC provider '{name}': {error}",
+      "providerOidc": "OIDC-постачальник '{name}': {error}",
       "providerNamed": "{type} '{name}': {error}",
       "providerGeneric": "{provider}: {error}"
     },
     "connectionLost": {
-      "title": "Connection Lost",
-      "body": "The server is unreachable. Waiting for it to come back online...",
-      "reconnecting": "Reconnecting"
+      "title": "З'єднання перервано",
+      "body": "Сервер недоступний. Очікування відновлення зв'язку...",
+      "reconnecting": "Підключення"
     }
   }
 }

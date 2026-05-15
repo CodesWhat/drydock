@@ -1,20 +1,20 @@
 {
   "authView": {
-    "loadingProviders": "Loading authentication providers...",
-    "loadError": "Failed to load authentication providers",
-    "filterPlaceholder": "Filter by name...",
-    "clearFilter": "Clear",
-    "emptyFiltered": "No providers match your filters",
-    "detailRefreshing": "Refreshing authentication details...",
-    "detailLoadError": "Unable to load latest authentication details",
-    "noConfig": "No configuration properties",
+    "loadingProviders": "認証プロバイダーを読み込み中...",
+    "loadError": "認証プロバイダーの読み込みに失敗しました",
+    "filterPlaceholder": "名前で絞り込む...",
+    "clearFilter": "クリア",
+    "emptyFiltered": "フィルターに一致するプロバイダーがありません",
+    "detailRefreshing": "認証の詳細を更新中...",
+    "detailLoadError": "最新の認証詳細を読み込めません",
+    "noConfig": "設定プロパティがありません",
     "columns": {
-      "provider": "Provider",
-      "type": "Type",
-      "status": "Status"
+      "provider": "プロバイダー",
+      "type": "種別",
+      "status": "ステータス"
     },
     "fields": {
-      "status": "Status"
+      "status": "ステータス"
     },
     "badge": {
       "basic": "Basic",

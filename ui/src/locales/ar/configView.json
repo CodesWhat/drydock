@@ -1,156 +1,156 @@
 {
   "configView": {
     "tabs": {
-      "general": "General",
-      "appearance": "Appearance",
-      "profile": "Profile"
+      "general": "عام",
+      "appearance": "المظهر",
+      "profile": "الملف الشخصي"
     },
     "general": {
       "application": {
-        "title": "Application",
-        "loadingServerInfo": "Loading server info"
+        "title": "التطبيق",
+        "loadingServerInfo": "جارٍ تحميل معلومات الخادم"
       },
       "store": {
-        "title": "Store"
+        "title": "المخزن"
       },
       "webhookApi": {
         "title": "Webhook API",
-        "enabled": "Enabled",
-        "disabled": "Disabled",
-        "description": "Use these endpoints to trigger watch cycles and updates via HTTP. All requests require a Bearer token in the Authorization header.",
-        "disabledMessage": "Webhook API is disabled. Set",
-        "disabledHint": "Webhook API is disabled. Set {envEnabled} and configure at least one token ({envToken} or {envTokens}) to enable it.",
+        "enabled": "مفعّل",
+        "disabled": "معطّل",
+        "description": "استخدم هذه النقاط لتشغيل دورات المراقبة والتحديثات عبر HTTP. تتطلب جميع الطلبات رمز Bearer في ترويسة التفويض.",
+        "disabledMessage": "Webhook API معطّل. اضبط",
+        "disabledHint": "Webhook API معطّل. اضبط {envEnabled} وعيّن رمزاً واحداً على الأقل ({envToken} أو {envTokens}) لتفعيله.",
         "table": {
-          "endpoint": "Endpoint",
-          "description": "Description"
+          "endpoint": "النقطة الطرفية",
+          "description": "الوصف"
         },
-        "example": "Example",
+        "example": "مثال",
         "endpoints": {
-          "watchAll": "Trigger a full watch cycle on all watchers",
-          "watchOne": "Watch a specific container by name",
-          "updateOne": "Trigger an update on a specific container"
+          "watchAll": "تشغيل دورة مراقبة كاملة على جميع المراقبين",
+          "watchOne": "مراقبة حاوية محددة بالاسم",
+          "updateOne": "تشغيل تحديث على حاوية محددة"
         }
       },
       "network": {
-        "title": "Network",
+        "title": "الشبكة",
         "internetlessMode": {
-          "label": "Internetless Mode",
-          "description": "Block all outbound requests (container icons, external fetches)"
+          "label": "وضع بلا إنترنت",
+          "description": "حظر جميع الطلبات الصادرة (أيقونات الحاويات، الجلبات الخارجية)"
         }
       },
       "iconCache": {
-        "title": "Container Icon Cache",
+        "title": "ذاكرة تخزين أيقونات الحاويات",
         "cachedIcons": {
-          "label": "Cached Icons",
-          "description": "Common icons are bundled; other icons are cached to disk on first fetch"
+          "label": "الأيقونات المخزّنة مؤقتاً",
+          "description": "الأيقونات الشائعة مضمّنة؛ تُخزَّن الأيقونات الأخرى على القرص عند أول جلب"
         },
-        "cleared": "{count} cleared",
-        "clearButton": "Clear Cache"
+        "cleared": "تم مسح {count}",
+        "clearButton": "مسح الذاكرة المؤقتة"
       },
       "diagnostics": {
-        "title": "Diagnostics",
+        "title": "التشخيصات",
         "debugDump": {
-          "label": "Diagnostic Debug Dump",
-          "description": "Download a redacted JSON snapshot of runtime state for troubleshooting",
-          "preparing": "Preparing...",
-          "download": "Download Debug Dump"
+          "label": "تفريغ بيانات التشخيص",
+          "description": "تنزيل لقطة JSON منقّحة من حالة وقت التشغيل لاستكشاف الأخطاء",
+          "preparing": "جارٍ التحضير...",
+          "download": "تنزيل تفريغ التشخيص"
         }
       },
       "fields": {
-        "version": "Version",
-        "serverPort": "Server Port",
-        "containerActions": "Container Actions",
+        "version": "الإصدار",
+        "serverPort": "منفذ الخادم",
+        "containerActions": "إجراءات الحاوية",
         "webhook": "Webhook",
-        "deleteEnabled": "Delete Enabled",
-        "trustProxy": "Trust Proxy",
-        "metricsAuth": "Metrics Auth",
-        "storePath": "Store Path",
-        "storeFile": "Store File",
-        "enabled": "Enabled",
-        "disabled": "Disabled",
-        "yes": "Yes",
-        "no": "No"
+        "deleteEnabled": "الحذف مفعّل",
+        "trustProxy": "الوثوق بالوكيل",
+        "metricsAuth": "مصادقة المقاييس",
+        "storePath": "مسار المخزن",
+        "storeFile": "ملف المخزن",
+        "enabled": "مفعّل",
+        "disabled": "معطّل",
+        "yes": "نعم",
+        "no": "لا"
       },
       "errors": {
-        "loadServerInfo": "Failed to load server info",
-        "loadProfileData": "Failed to load profile data",
-        "updateNetworkSettings": "Failed to update network settings",
-        "clearIconCache": "Failed to clear icon cache",
-        "downloadDebugDump": "Unable to download debug dump",
-        "errorLabel": "Error"
+        "loadServerInfo": "فشل تحميل معلومات الخادم",
+        "loadProfileData": "فشل تحميل بيانات الملف الشخصي",
+        "updateNetworkSettings": "فشل تحديث إعدادات الشبكة",
+        "clearIconCache": "فشل مسح ذاكرة الأيقونات المؤقتة",
+        "downloadDebugDump": "تعذّر تنزيل تفريغ التشخيص",
+        "errorLabel": "خطأ"
       }
     },
     "appearance": {
       "language": {
-        "title": "Language"
+        "title": "اللغة"
       },
       "colorTheme": {
-        "title": "Color Theme",
+        "title": "سمة الألوان",
         "descriptions": {
-          "oneDark": "Clean and balanced",
-          "github": "Clean and familiar",
-          "dracula": "Bold purple vibes",
-          "catppuccin": "Warm pastel tones",
-          "gruvbox": "Retro earthy warmth",
-          "ayu": "Soft golden tones"
+          "oneDark": "نظيف ومتوازن",
+          "github": "نظيف ومألوف",
+          "dracula": "جريء بألوان بنفسجية",
+          "catppuccin": "ألوان باستيل دافئة",
+          "gruvbox": "دفء ترابي كلاسيكي",
+          "ayu": "ألوان ذهبية ناعمة"
         }
       },
       "fontFamily": {
-        "title": "Font Family",
-        "defaultBadge": "default",
+        "title": "عائلة الخط",
+        "defaultBadge": "افتراضي",
         "preview": "نص حكيم له سر قاطع وذو شأن عظيم مكتوب على ثوب أخضر ومغلف بجلد أزرق"
       },
       "fontSize": {
-        "title": "Font Size"
+        "title": "حجم الخط"
       },
       "iconLibrary": {
-        "title": "Icon Library"
+        "title": "مكتبة الأيقونات"
       },
       "iconSize": {
-        "title": "Icon Size"
+        "title": "حجم الأيقونة"
       },
       "borderRadius": {
-        "title": "Border Radius",
+        "title": "نصف قطر الحواف",
         "labels": {
-          "none": "None",
-          "sharp": "Sharp",
-          "modern": "Modern",
-          "soft": "Soft",
-          "round": "Round"
+          "none": "بلا",
+          "sharp": "حاد",
+          "modern": "عصري",
+          "soft": "ناعم",
+          "round": "مستدير"
         }
       }
     },
     "profile": {
-      "loading": "Loading profile",
+      "loading": "جارٍ تحميل الملف الشخصي",
       "fields": {
-        "username": "Username",
-        "email": "Email",
-        "role": "Role",
-        "provider": "Provider",
-        "lastLogin": "Last Login",
-        "activeSessions": "Active Sessions"
+        "username": "اسم المستخدم",
+        "email": "البريد الإلكتروني",
+        "role": "الدور",
+        "provider": "الموفر",
+        "lastLogin": "آخر تسجيل دخول",
+        "activeSessions": "الجلسات النشطة"
       }
     },
     "logs": {
-      "loading": "Loading logs...",
-      "emptyMessage": "No log entries found for current filters.",
+      "loading": "جارٍ تحميل السجلات...",
+      "emptyMessage": "لا توجد إدخالات سجل للفلاتر الحالية.",
       "toolbar": {
-        "live": "Live",
-        "allLevels": "All Levels",
-        "debug": "Debug",
-        "info": "Info",
-        "warn": "Warn",
-        "error": "Error",
-        "allComponents": "All Components",
-        "resetFilters": "Reset filters"
+        "live": "مباشر",
+        "allLevels": "جميع المستويات",
+        "debug": "تصحيح",
+        "info": "معلومات",
+        "warn": "تحذير",
+        "error": "خطأ",
+        "allComponents": "جميع المكوّنات",
+        "resetFilters": "إعادة ضبط الفلاتر"
       },
       "tail": {
-        "50": "Tail 50",
-        "100": "Tail 100",
-        "500": "Tail 500",
-        "1000": "Tail 1000"
+        "50": "آخر 50",
+        "100": "آخر 100",
+        "500": "آخر 500",
+        "1000": "آخر 1000"
       },
-      "logLevelBadge": "Server log level: {level}. Only messages at this level or above are captured."
+      "logLevelBadge": "مستوى سجل الخادم: {level}. تُسجَّل الرسائل عند هذا المستوى وما فوقه فقط."
     }
   }
 }

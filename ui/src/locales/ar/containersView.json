@@ -1,25 +1,32 @@
 {
   "containersView": {
     "error": {
-      "loadFailed": "Failed to load containers",
-      "recheckFailed": "Failed to recheck containers"
+      "loadFailed": "فشل تحميل الحاويات",
+      "recheckFailed": "فشل إعادة فحص الحاويات"
     },
     "toast": {
-      "updated": "Updated: {name}",
-      "updateFailed": "Update failed: {name}",
-      "updateFailedWithReason": "Update failed: {name} — {reason}",
-      "cancelled": "Cancelled: {name}",
-      "rolledBack": "Rolled back: {name}",
-      "rolledBackWithReason": "Rolled back: {name} — {reason}",
-      "updateAlreadyInProgress": "Update already in progress for some containers in this group",
-      "batchUpdatedNoGroup": "Updated {count} containers",
-      "batchPartialNoGroup": "Updated {succeeded} of {total} containers; {failed} failed",
-      "batchFailedNoGroup": "Failed to update {count} containers",
-      "unknownGroup": "unknown group"
+      "updated": "تم التحديث: {name}",
+      "updateFailed": "فشل التحديث: {name}",
+      "updateFailedWithReason": "فشل التحديث: {name} — {reason}",
+      "cancelled": "تم الإلغاء: {name}",
+      "rolledBack": "تم التراجع: {name}",
+      "rolledBackWithReason": "تم التراجع: {name} — {reason}",
+      "updateAlreadyInProgress": "التحديث قيد التنفيذ بالفعل لبعض الحاويات في هذه المجموعة",
+      "batchUpdatedNoGroup": "تم تحديث {count} حاوية",
+      "batchPartialNoGroup": "تم تحديث {succeeded} من {total} حاوية؛ فشل {failed}",
+      "batchFailedNoGroup": "فشل تحديث {count} حاوية",
+      "unknownGroup": "مجموعة غير معروفة",
+      "updateStarted": "بدأ التحديث: {name}",
+      "forceUpdateStarted": "بدأ فرض التحديث: {name}",
+      "alreadyUpToDate": "محدّث بالفعل: {name}",
+      "queuedUpdateSingle": "تم وضع تحديث {count} حاوية في قائمة الانتظار",
+      "queuedUpdateMultiple": "تم وضع تحديثات {count} حاوية في قائمة الانتظار",
+      "countAlreadyUpToDateSingle": "{count} حاوية محدّثة بالفعل",
+      "countAlreadyUpToDateMultiple": "{count} حاويات محدّثة بالفعل"
     },
     "registryError": {
-      "generic": "Registry error",
-      "detail": "Registry error: {error}"
+      "generic": "خطأ في السجل",
+      "detail": "خطأ في السجل: {error}"
     },
     "columns": {
       "container": "الحاوية",

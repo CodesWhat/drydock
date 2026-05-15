@@ -1,0 +1,39 @@
+{
+  "notificationOutboxView": {
+    "heading": "발신함",
+    "refresh": "새로 고침",
+    "loading": "발신함 항목 불러오는 중…",
+    "tabs": {
+      "dead-letter": "배달 실패",
+      "pending": "대기 중",
+      "delivered": "전송됨"
+    },
+    "columns": {
+      "event": "이벤트",
+      "trigger": "트리거",
+      "attempts": "시도 횟수",
+      "lastError": "마지막 오류",
+      "created": "생성됨"
+    },
+    "actions": {
+      "retry": "재시도",
+      "discard": "삭제"
+    },
+    "status": {
+      "dead-letter": "배달 실패",
+      "pending": "대기 중",
+      "delivered": "전송됨"
+    },
+    "empty": {
+      "dead-letter": "배달 실패 항목 없음",
+      "pending": "대기 중인 항목 없음",
+      "delivered": "전송된 항목 없음"
+    },
+    "toast": {
+      "requeued": "재대기됨: {name}",
+      "discarded": "삭제됨: {name}",
+      "retryFailed": "{name} 재시도 실패",
+      "discardFailed": "{name} 삭제 실패"
+    }
+  }
+}

@@ -1,89 +1,89 @@
 {
   "agentsView": {
     "list": {
-      "loading": "Loading agents...",
-      "filterPlaceholder": "Filter by name...",
-      "clearFilter": "Clear",
-      "emptyFiltered": "No agents match your filters",
-      "toggleColumns": "Toggle columns",
-      "columnPickerHeading": "Columns",
-      "loadError": "Failed to load agents",
+      "loading": "エージェントを読み込み中...",
+      "filterPlaceholder": "名前で絞り込む...",
+      "clearFilter": "クリア",
+      "emptyFiltered": "フィルターに一致するエージェントがありません",
+      "toggleColumns": "列の表示切替",
+      "columnPickerHeading": "列",
+      "loadError": "エージェントの読み込みに失敗しました",
       "status": {
-        "connected": "Connected",
-        "disconnected": "Disconnected"
+        "connected": "接続済み",
+        "disconnected": "切断済み"
       },
       "columns": {
-        "name": "Agent",
-        "status": "Status",
-        "containers": "Containers",
+        "name": "エージェント",
+        "status": "ステータス",
+        "containers": "コンテナ",
         "docker": "Docker",
         "os": "OS",
-        "version": "Version",
-        "lastSeen": "Last Seen"
+        "version": "バージョン",
+        "lastSeen": "最終確認"
       },
       "card": {
-        "running": "running",
-        "stopped": "stopped"
+        "running": "稼働中",
+        "stopped": "停止中"
       }
     },
     "detail": {
       "tabs": {
-        "overview": "Overview",
-        "logs": "Logs",
-        "config": "Config"
+        "overview": "概要",
+        "logs": "ログ",
+        "config": "設定"
       },
       "overview": {
-        "resources": "Resources",
-        "system": "System",
-        "containers": "Containers",
-        "containerTotal": "Total",
-        "containerRunning": "Running",
-        "containerStopped": "Stopped",
-        "viewContainers": "View containers",
-        "automation": "Automation",
-        "watchers": "Watchers",
-        "triggers": "Triggers",
-        "none": "None"
+        "resources": "リソース",
+        "system": "システム",
+        "containers": "コンテナ",
+        "containerTotal": "合計",
+        "containerRunning": "稼働中",
+        "containerStopped": "停止中",
+        "viewContainers": "コンテナを表示",
+        "automation": "自動化",
+        "watchers": "ウォッチャー",
+        "triggers": "トリガー",
+        "none": "なし"
       },
       "logs": {
-        "allLevels": "All Levels",
+        "allLevels": "全レベル",
         "levelDebug": "Debug",
         "levelInfo": "Info",
         "levelWarn": "Warn",
         "levelError": "Error",
-        "tail50": "Tail 50",
-        "tail100": "Tail 100",
-        "tail500": "Tail 500",
-        "tail1000": "Tail 1000",
-        "componentPlaceholder": "Filter by component...",
-        "apply": "Apply",
-        "reset": "Reset",
-        "refresh": "Refresh",
-        "emptyMessage": "No log entries found for current filters.",
-        "lastFetched": "Last fetched: {time}",
-        "entries": "{count} entries",
-        "statusLive": "Live",
-        "statusOffline": "Offline"
+        "tail50": "末尾 50",
+        "tail100": "末尾 100",
+        "tail500": "末尾 500",
+        "tail1000": "末尾 1000",
+        "componentPlaceholder": "コンポーネントで絞り込む...",
+        "apply": "適用",
+        "reset": "リセット",
+        "refresh": "更新",
+        "emptyMessage": "現在のフィルターに一致するログエントリがありません。",
+        "lastFetched": "最終取得：{time}",
+        "entries": "{count} 件",
+        "statusLive": "ライブ",
+        "statusOffline": "オフライン"
       },
       "fields": {
-        "cpus": "CPUs",
-        "memory": "Memory",
-        "images": "Images",
-        "uptime": "Uptime",
+        "cpus": "CPU",
+        "memory": "メモリ",
+        "images": "イメージ",
+        "uptime": "稼働時間",
         "docker": "Docker",
         "os": "OS",
-        "architecture": "Architecture",
-        "agent": "Agent",
-        "host": "Host",
-        "agentVersion": "Agent Version",
-        "logLevel": "Log Level",
-        "pollInterval": "Poll Interval",
-        "dockerSocket": "Docker Socket",
-        "lastSeen": "Last Seen",
-        "never": "never"
+        "architecture": "アーキテクチャ",
+        "agent": "エージェント",
+        "host": "ホスト",
+        "agentVersion": "エージェントバージョン",
+        "logLevel": "ログレベル",
+        "pollInterval": "ポーリング間隔",
+        "dockerSocket": "Docker ソケット",
+        "lastSeen": "最終確認",
+        "never": "なし"
       },
       "listView": {
-        "details": "Details"
+        "details": "詳細"
       }
     }
   }

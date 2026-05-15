@@ -1,89 +1,89 @@
 {
   "agentsView": {
     "list": {
-      "loading": "Loading agents...",
-      "filterPlaceholder": "Filter by name...",
-      "clearFilter": "Clear",
-      "emptyFiltered": "No agents match your filters",
-      "toggleColumns": "Toggle columns",
-      "columnPickerHeading": "Columns",
-      "loadError": "Failed to load agents",
+      "loading": "جارٍ تحميل الوكلاء...",
+      "filterPlaceholder": "تصفية حسب الاسم...",
+      "clearFilter": "مسح",
+      "emptyFiltered": "لا يوجد وكلاء يطابقون عوامل التصفية",
+      "toggleColumns": "تبديل الأعمدة",
+      "columnPickerHeading": "الأعمدة",
+      "loadError": "فشل تحميل الوكلاء",
       "status": {
-        "connected": "Connected",
-        "disconnected": "Disconnected"
+        "connected": "متصل",
+        "disconnected": "غير متصل"
       },
       "columns": {
-        "name": "Agent",
-        "status": "Status",
-        "containers": "Containers",
+        "name": "الوكيل",
+        "status": "الحالة",
+        "containers": "الحاويات",
         "docker": "Docker",
         "os": "OS",
-        "version": "Version",
-        "lastSeen": "Last Seen"
+        "version": "الإصدار",
+        "lastSeen": "آخر ظهور"
       },
       "card": {
-        "running": "running",
-        "stopped": "stopped"
+        "running": "تعمل",
+        "stopped": "متوقفة"
       }
     },
     "detail": {
       "tabs": {
-        "overview": "Overview",
-        "logs": "Logs",
-        "config": "Config"
+        "overview": "نظرة عامة",
+        "logs": "السجلات",
+        "config": "الإعداد"
       },
       "overview": {
-        "resources": "Resources",
-        "system": "System",
-        "containers": "Containers",
-        "containerTotal": "Total",
-        "containerRunning": "Running",
-        "containerStopped": "Stopped",
-        "viewContainers": "View containers",
-        "automation": "Automation",
-        "watchers": "Watchers",
-        "triggers": "Triggers",
-        "none": "None"
+        "resources": "الموارد",
+        "system": "النظام",
+        "containers": "الحاويات",
+        "containerTotal": "الإجمالي",
+        "containerRunning": "تعمل",
+        "containerStopped": "متوقفة",
+        "viewContainers": "عرض الحاويات",
+        "automation": "الأتمتة",
+        "watchers": "المراقبون",
+        "triggers": "المشغّلات",
+        "none": "لا شيء"
       },
       "logs": {
-        "allLevels": "All Levels",
-        "levelDebug": "Debug",
-        "levelInfo": "Info",
-        "levelWarn": "Warn",
-        "levelError": "Error",
-        "tail50": "Tail 50",
-        "tail100": "Tail 100",
-        "tail500": "Tail 500",
-        "tail1000": "Tail 1000",
-        "componentPlaceholder": "Filter by component...",
-        "apply": "Apply",
-        "reset": "Reset",
-        "refresh": "Refresh",
-        "emptyMessage": "No log entries found for current filters.",
-        "lastFetched": "Last fetched: {time}",
-        "entries": "{count} entries",
-        "statusLive": "Live",
-        "statusOffline": "Offline"
+        "allLevels": "جميع المستويات",
+        "levelDebug": "تصحيح",
+        "levelInfo": "معلومات",
+        "levelWarn": "تحذير",
+        "levelError": "خطأ",
+        "tail50": "آخر 50",
+        "tail100": "آخر 100",
+        "tail500": "آخر 500",
+        "tail1000": "آخر 1000",
+        "componentPlaceholder": "تصفية حسب المكوّن...",
+        "apply": "تطبيق",
+        "reset": "إعادة ضبط",
+        "refresh": "تحديث",
+        "emptyMessage": "لا توجد إدخالات سجل للفلاتر الحالية.",
+        "lastFetched": "آخر جلب: {time}",
+        "entries": "{count} إدخال",
+        "statusLive": "مباشر",
+        "statusOffline": "غير متصل"
       },
       "fields": {
-        "cpus": "CPUs",
-        "memory": "Memory",
-        "images": "Images",
-        "uptime": "Uptime",
+        "cpus": "المعالجات",
+        "memory": "الذاكرة",
+        "images": "الصور",
+        "uptime": "وقت التشغيل",
         "docker": "Docker",
         "os": "OS",
-        "architecture": "Architecture",
-        "agent": "Agent",
-        "host": "Host",
-        "agentVersion": "Agent Version",
-        "logLevel": "Log Level",
-        "pollInterval": "Poll Interval",
-        "dockerSocket": "Docker Socket",
-        "lastSeen": "Last Seen",
-        "never": "never"
+        "architecture": "المعمارية",
+        "agent": "الوكيل",
+        "host": "المضيف",
+        "agentVersion": "إصدار الوكيل",
+        "logLevel": "مستوى السجل",
+        "pollInterval": "فترة الاستطلاع",
+        "dockerSocket": "مقبس Docker",
+        "lastSeen": "آخر ظهور",
+        "never": "أبداً"
       },
       "listView": {
-        "details": "Details"
+        "details": "التفاصيل"
       }
     }
   }

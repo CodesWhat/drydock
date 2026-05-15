@@ -1,39 +1,39 @@
 {
   "auditView": {
-    "loadingAuditLog": "Loading audit log...",
-    "loadError": "Failed to load audit log",
-    "filterPlaceholder": "Filter by target or event...",
-    "containerFilterPlaceholder": "Container name...",
-    "allEvents": "All events",
-    "eventsSelected": "{count} events selected",
-    "clear": "Clear",
-    "fromDateLabel": "From date",
-    "toDateLabel": "To date",
+    "loadingAuditLog": "감사 로그 불러오는 중...",
+    "loadError": "감사 로그를 불러오지 못했습니다",
+    "filterPlaceholder": "대상 또는 이벤트로 필터...",
+    "containerFilterPlaceholder": "컨테이너 이름...",
+    "allEvents": "전체 이벤트",
+    "eventsSelected": "{count}개 이벤트 선택됨",
+    "clear": "초기화",
+    "fromDateLabel": "시작 날짜",
+    "toDateLabel": "종료 날짜",
     "pagination": {
-      "summary": "Page {page} of {totalPages} ({total} entries)",
-      "previousPage": "Previous page",
-      "nextPage": "Next page"
+      "summary": "{totalPages}페이지 중 {page}페이지 ({total}개 항목)",
+      "previousPage": "이전 페이지",
+      "nextPage": "다음 페이지"
     },
-    "emptyFiltered": "No audit entries match your filters",
+    "emptyFiltered": "필터와 일치하는 감사 항목이 없습니다",
     "columns": {
-      "time": "Time",
-      "event": "Event",
-      "target": "Target",
-      "status": "Status",
-      "details": "Details"
+      "time": "시간",
+      "event": "이벤트",
+      "target": "대상",
+      "status": "상태",
+      "details": "상세 정보"
     },
     "card": {
-      "time": "Time",
-      "version": "Version"
+      "time": "시간",
+      "version": "버전"
     },
     "detail": {
-      "timestamp": "Timestamp",
-      "event": "Event",
-      "image": "Image",
-      "fromVersion": "From Version",
-      "toVersion": "To Version",
-      "trigger": "Trigger",
-      "details": "Details"
+      "timestamp": "타임스탬프",
+      "event": "이벤트",
+      "image": "이미지",
+      "fromVersion": "이전 버전",
+      "toVersion": "새 버전",
+      "trigger": "트리거",
+      "details": "상세 정보"
     },
     "actions": {
       "container-update": "컨테이너 업데이트",
@@ -69,103 +69,138 @@
     }
   },
   "notificationsView": {
-    "loadingRules": "Loading notification rules...",
-    "loadError": "Failed to load notification rules",
-    "filterPlaceholder": "Filter by name, description, or trigger...",
-    "clear": "Clear",
-    "allNotificationTriggers": "All notification triggers",
-    "noTriggers": "No triggers",
-    "columns": {
-      "on": "On",
-      "rule": "Rule",
-      "triggers": "Triggers"
+    "loadingRules": "알림 규칙 불러오는 중...",
+    "loadError": "알림 규칙을 불러오지 못했습니다",
+    "filterPlaceholder": "이름, 설명 또는 트리거로 필터...",
+    "clear": "초기화",
+    "allNotificationTriggers": "전체 알림 트리거",
+    "noTriggers": "트리거 없음",
+    "rules": {
+      "update-available": {
+        "name": "업데이트 가능",
+        "description": "컨테이너에 새 버전이 있을 때"
+      },
+      "update-applied": {
+        "name": "업데이트 적용됨",
+        "description": "컨테이너가 성공적으로 업데이트된 후"
+      },
+      "update-failed": {
+        "name": "업데이트 실패",
+        "description": "업데이트 실패 또는 롤백 시"
+      },
+      "security-alert": {
+        "name": "보안 경고",
+        "description": "치명적/높은 취약점 감지됨"
+      },
+      "agent-disconnect": {
+        "name": "에이전트 연결 해제됨",
+        "description": "원격 에이전트 연결이 끊겼을 때"
+      },
+      "agent-reconnect": {
+        "name": "에이전트 재연결됨",
+        "description": "원격 에이전트가 연결 해제 후 재연결되었을 때"
+      }
     },
-    "toggleAriaLabel": "Toggle notification rule",
-    "emptyFiltered": "No notification rules match your filters",
+    "columns": {
+      "on": "켜짐",
+      "rule": "규칙",
+      "triggers": "트리거"
+    },
+    "toggleAriaLabel": "알림 규칙 켜기/끄기",
+    "emptyFiltered": "필터와 일치하는 알림 규칙이 없습니다",
     "detail": {
-      "ruleStatusLabel": "Rule status",
-      "ruleStatusAriaLabel": "Rule status",
-      "enabledText": "Enabled: notifications can fire for this event.",
-      "disabledText": "Disabled: notifications are suppressed for this event.",
-      "assignedTriggersLabel": "Assigned Triggers",
-      "noTriggersConfigured": "No triggers configured. Add triggers on the",
-      "triggersPageLink": "Triggers page",
-      "helpTextImplicitAll": "Leave this empty to send this event to all notification triggers. Selecting any trigger turns this rule into an allow-list.",
-      "helpTextExplicit": "Only selected triggers will receive this event. Leave it empty to suppress this event for all triggers.",
-      "saving": "Saving...",
-      "saveChanges": "Save changes",
-      "reset": "Reset",
-      "enabled": "enabled",
-      "disabled": "disabled"
+      "ruleStatusLabel": "규칙 상태",
+      "ruleStatusAriaLabel": "규칙 상태",
+      "enabledText": "활성화됨: 이 이벤트에 대한 알림을 발송할 수 있습니다.",
+      "disabledText": "비활성화됨: 이 이벤트에 대한 알림이 억제됩니다.",
+      "assignedTriggersLabel": "할당된 트리거",
+      "noTriggersConfigured": "구성된 트리거가 없습니다. 트리거를 추가하려면",
+      "triggersPageLink": "트리거 페이지",
+      "helpTextImplicitAll": "비워두면 이 이벤트를 모든 알림 트리거로 전송합니다. 트리거를 선택하면 이 규칙이 허용 목록으로 전환됩니다.",
+      "helpTextExplicit": "선택된 트리거만 이 이벤트를 수신합니다. 비워두면 모든 트리거에서 이 이벤트가 억제됩니다.",
+      "saving": "저장 중...",
+      "saveChanges": "변경 사항 저장",
+      "reset": "초기화",
+      "enabled": "활성화됨",
+      "disabled": "비활성화됨"
     }
   },
   "securityView": {
-    "loadingVulnerabilityData": "Loading vulnerability data...",
-    "scanNow": "Scan Now",
-    "scanning": "Scanning...",
-    "scanAllAriaLabel": "Scan all containers",
-    "scanAllContainers": "Scan all containers for vulnerabilities",
-    "checkingScanner": "Checking scanner availability",
-    "runtimeUnavailable": "Runtime check unavailable; scan can still be attempted",
+    "loadingVulnerabilityData": "취약성 데이터 불러오는 중...",
+    "scanNow": "지금 스캔",
+    "scanning": "스캔 중...",
+    "scanAllAriaLabel": "모든 컨테이너 스캔",
+    "scanAllContainers": "모든 컨테이너에서 취약성 스캔",
+    "checkingScanner": "스캐너 가용성 확인 중",
+    "runtimeUnavailable": "런타임 확인 불가; 스캔은 계속 시도할 수 있습니다",
     "filters": {
-      "severity": "Severity",
-      "severityCritical": "Critical",
-      "severityHigh": "High",
-      "severityMedium": "Medium",
-      "severityLow": "Low",
-      "fixAvailable": "Fix Available",
-      "fixYes": "Yes",
-      "fixNo": "No",
-      "clearAll": "Clear all"
+      "severity": "심각도",
+      "severityCritical": "치명적",
+      "severityHigh": "높음",
+      "severityMedium": "중간",
+      "severityLow": "낮음",
+      "fixAvailable": "수정 가능",
+      "fixYes": "예",
+      "fixNo": "아니요",
+      "clearAll": "모두 초기화"
     },
     "columns": {
-      "image": "Image",
-      "critical": "Critical",
-      "high": "High",
-      "medium": "Medium",
-      "low": "Low",
-      "fixable": "Fixable",
-      "total": "Total"
+      "image": "이미지",
+      "critical": "치명적",
+      "high": "높음",
+      "medium": "중간",
+      "low": "낮음",
+      "fixable": "수정 가능",
+      "total": "전체"
     },
     "card": {
-      "vulnerabilities": "vulnerabilities",
-      "vsUpdate": "vs update",
-      "fixable": "fixable",
-      "noFixesAvailable": "No fixes available",
-      "total": "total"
+      "vulnerabilities": "취약점",
+      "vsUpdate": "업데이트 대비",
+      "fixable": "수정 가능",
+      "noFixesAvailable": "수정 가능한 항목 없음",
+      "total": "전체"
     },
     "badge": {
-      "critical": "Critical",
-      "high": "High",
-      "medium": "Medium",
-      "low": "Low"
+      "critical": "치명적",
+      "high": "높음",
+      "medium": "중간",
+      "low": "낮음"
     },
-    "update": "Update",
-    "viewInContainers": "View in Containers",
-    "viewAllInContainers": "View all in Containers",
+    "deltaTooltips": {
+      "fixedSingle": "업데이트로 {count}개 취약점 수정",
+      "fixedMultiple": "업데이트로 {count}개 취약점 수정",
+      "newSingle": "업데이트로 {count}개 새 취약점 추가",
+      "newMultiple": "업데이트로 {count}개 새 취약점 추가",
+      "both": "업데이트: {fixed}개 수정, {new}개 신규"
+    },
+    "updateOneOfButton": "{count}개 컨테이너 중 하나 업데이트",
+    "updateThisContainerButton": "이 컨테이너 업데이트",
+    "update": "업데이트",
+    "viewInContainers": "컨테이너에서 보기",
+    "viewAllInContainers": "컨테이너에서 모두 보기",
     "export": {
-      "label": "Export",
-      "downloadReport": "Download Report"
+      "label": "내보내기",
+      "downloadReport": "보고서 다운로드"
     },
     "sbom": {
       "label": "SBOM",
-      "loading": "Loading SBOM document...",
-      "loadingButton": "Loading...",
-      "refresh": "Refresh",
-      "hide": "Hide",
-      "view": "View",
-      "download": "Download",
-      "format": "format:",
-      "components": "components:",
-      "generated": "generated:"
+      "loading": "SBOM 문서 불러오는 중...",
+      "loadingButton": "불러오는 중...",
+      "refresh": "새로 고침",
+      "hide": "숨기기",
+      "view": "보기",
+      "download": "다운로드",
+      "format": "형식:",
+      "components": "컴포넌트:",
+      "generated": "생성됨:"
     },
     "vuln": {
-      "noFix": "No fix",
-      "target": "Target:"
+      "noFix": "수정 없음",
+      "target": "대상:"
     },
     "chooser": {
-      "title": "Select container to update",
-      "cancel": "Cancel"
+      "title": "업데이트할 컨테이너 선택",
+      "cancel": "취소"
     },
     "runtimeTools": {
       "trivy": "Trivy",
@@ -192,135 +227,144 @@
     }
   },
   "registriesView": {
-    "loadingRegistries": "Loading registries...",
-    "loadError": "Failed to load registries",
-    "filterPlaceholder": "Filter by name or type...",
-    "clear": "Clear",
-    "emptyFiltered": "No registries match your filters",
+    "loadingRegistries": "레지스트리 불러오는 중...",
+    "loadError": "레지스트리를 불러오지 못했습니다",
+    "filterPlaceholder": "이름 또는 유형으로 필터...",
+    "clear": "초기화",
+    "emptyFiltered": "필터와 일치하는 레지스트리가 없습니다",
     "columns": {
-      "registry": "Registry",
-      "type": "Type",
-      "status": "Status",
+      "registry": "레지스트리",
+      "type": "유형",
+      "status": "상태",
       "url": "URL"
     },
     "badge": {
-      "private": "Private",
-      "public": "Public"
+      "private": "비공개",
+      "public": "공개"
     },
     "card": {
-      "auth": "Auth",
-      "status": "Status"
+      "auth": "인증",
+      "status": "상태"
+    },
+    "status": {
+      "connected": "연결됨",
+      "error": "오류",
+      "unknown": "알 수 없음"
     },
     "detail": {
-      "refreshing": "Refreshing registry details...",
-      "status": "Status",
-      "authentication": "Authentication",
+      "refreshing": "레지스트리 상세 정보 새로 고침 중...",
+      "status": "상태",
+      "authentication": "인증",
       "url": "URL"
     }
   },
   "serversView": {
-    "loadingServerData": "Loading server data...",
-    "loadError": "Failed to load server data",
-    "filterPlaceholder": "Filter by name or address...",
-    "clear": "Clear",
-    "emptyFiltered": "No hosts match your filters",
-    "justNow": "Just now",
-    "never": "Never",
+    "loadingServerData": "서버 데이터 불러오는 중...",
+    "loadError": "서버 데이터를 불러오지 못했습니다",
+    "filterPlaceholder": "이름 또는 주소로 필터...",
+    "clear": "초기화",
+    "emptyFiltered": "필터와 일치하는 호스트가 없습니다",
+    "justNow": "방금",
+    "never": "없음",
+    "status": {
+      "connected": "연결됨",
+      "disconnected": "연결 해제됨"
+    },
     "columns": {
-      "host": "Host",
-      "address": "Address",
-      "status": "Status",
-      "containers": "Containers",
-      "lastSeen": "Last Seen"
+      "host": "호스트",
+      "address": "주소",
+      "status": "상태",
+      "containers": "컨테이너",
+      "lastSeen": "마지막 접속"
     },
     "card": {
-      "containers": "Containers",
-      "running": "Running",
-      "images": "Images",
-      "lastSeen": "Last seen"
+      "containers": "컨테이너",
+      "running": "실행 중",
+      "images": "이미지",
+      "lastSeen": "마지막 접속"
     },
     "list": {
-      "containers": "containers"
+      "containers": "컨테이너"
     },
     "detail": {
-      "containers": "Containers",
-      "running": "running",
-      "stopped": "stopped",
-      "images": "Images",
-      "lastSeen": "Last Seen",
-      "refresh": "Refresh"
+      "containers": "컨테이너",
+      "running": "실행 중",
+      "stopped": "중지됨",
+      "images": "이미지",
+      "lastSeen": "마지막 접속",
+      "refresh": "새로 고침"
     }
   },
   "triggersView": {
-    "loadingTriggers": "Loading triggers...",
-    "loadError": "Failed to load triggers",
-    "filterPlaceholder": "Filter by name...",
-    "clear": "Clear",
-    "emptyFiltered": "No triggers match your filters",
+    "loadingTriggers": "트리거 불러오는 중...",
+    "loadError": "트리거를 불러오지 못했습니다",
+    "filterPlaceholder": "이름으로 필터...",
+    "clear": "초기화",
+    "emptyFiltered": "필터와 일치하는 트리거가 없습니다",
     "columns": {
-      "trigger": "Trigger",
-      "type": "Type",
-      "status": "Status"
+      "trigger": "트리거",
+      "type": "유형",
+      "status": "상태"
     },
     "status": {
-      "active": "Active",
-      "inactive": "Inactive"
+      "active": "활성",
+      "inactive": "비활성"
     },
     "test": {
-      "testing": "Testing...",
-      "sent": "Sent!",
-      "failed": "Failed",
-      "test": "Test",
-      "testTrigger": "Test Trigger",
-      "runTest": "Run test",
-      "testPassed": "Test passed",
-      "testFailed": "Test failed",
-      "defaultError": "Trigger test failed"
+      "testing": "테스트 중...",
+      "sent": "전송됨!",
+      "failed": "실패",
+      "test": "테스트",
+      "testTrigger": "트리거 테스트",
+      "runTest": "테스트 실행",
+      "testPassed": "테스트 통과",
+      "testFailed": "테스트 실패",
+      "defaultError": "트리거 테스트 실패"
     },
     "detail": {
-      "status": "Status",
-      "refreshing": "Refreshing trigger details...",
-      "noConfig": "No configuration properties"
+      "status": "상태",
+      "refreshing": "트리거 상세 정보 새로 고침 중...",
+      "noConfig": "구성 속성이 없습니다"
     },
     "list": {
-      "status": "Status"
+      "status": "상태"
     }
   },
   "watchersView": {
-    "loadingWatchers": "Loading watchers...",
-    "loadError": "Failed to load watchers",
-    "filterPlaceholder": "Filter by name...",
-    "clear": "Clear",
-    "emptyFiltered": "No watchers match your filters",
+    "loadingWatchers": "워처 불러오는 중...",
+    "loadError": "워처를 불러오지 못했습니다",
+    "filterPlaceholder": "이름으로 필터...",
+    "clear": "초기화",
+    "emptyFiltered": "필터와 일치하는 워처가 없습니다",
     "columns": {
-      "watcher": "Watcher",
-      "status": "Status",
-      "containers": "Containers",
-      "schedule": "Schedule",
-      "nextRun": "Next Run",
-      "lastRun": "Last Run"
+      "watcher": "워처",
+      "status": "상태",
+      "containers": "컨테이너",
+      "schedule": "스케줄",
+      "nextRun": "다음 실행",
+      "lastRun": "마지막 실행"
     },
     "status": {
-      "watching": "Watching",
-      "paused": "Paused"
+      "watching": "감시 중",
+      "paused": "일시 정지됨"
     },
     "card": {
-      "containers": "Containers",
-      "nextRun": "Next run",
-      "lastRun": "Last run",
-      "containersWatched": "{count} containers watched"
+      "containers": "컨테이너",
+      "nextRun": "다음 실행",
+      "lastRun": "마지막 실행",
+      "containersWatched": "{count}개 컨테이너 감시 중"
     },
     "badge": {
-      "maint": "Maint"
+      "maint": "유지보수"
     },
     "detail": {
       "cron": "Cron",
-      "lastRun": "Last Run",
-      "containersWatched": "Containers Watched",
-      "schedule": "Schedule",
-      "nextRun": "Next Run",
-      "viewContainers": "View containers",
-      "refreshing": "Refreshing watcher details..."
+      "lastRun": "마지막 실행",
+      "containersWatched": "감시 중인 컨테이너",
+      "schedule": "스케줄",
+      "nextRun": "다음 실행",
+      "viewContainers": "컨테이너 보기",
+      "refreshing": "워처 상세 정보 새로 고침 중..."
     }
   }
 }

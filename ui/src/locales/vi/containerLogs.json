@@ -1,9 +1,9 @@
 {
   "containerLogs": {
-    "backTooltip": "Back to containers",
-    "title": "Container Logs",
-    "loading": "Loading container…",
-    "notFound": "Container \"{name}\" not found",
-    "loadFailed": "Failed to load container info"
+    "backTooltip": "Quay lại danh sách container",
+    "title": "Nhật ký Container",
+    "loading": "Đang tải container…",
+    "notFound": "Không tìm thấy container \"{name}\"",
+    "loadFailed": "Không thể tải thông tin container"
   }
 }

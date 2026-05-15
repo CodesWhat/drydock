@@ -1,25 +1,32 @@
 {
   "containersView": {
     "error": {
-      "loadFailed": "Failed to load containers",
-      "recheckFailed": "Failed to recheck containers"
+      "loadFailed": "컨테이너를 불러오지 못했습니다",
+      "recheckFailed": "컨테이너 재확인에 실패했습니다"
     },
     "toast": {
-      "updated": "Updated: {name}",
-      "updateFailed": "Update failed: {name}",
-      "updateFailedWithReason": "Update failed: {name} — {reason}",
-      "cancelled": "Cancelled: {name}",
-      "rolledBack": "Rolled back: {name}",
-      "rolledBackWithReason": "Rolled back: {name} — {reason}",
-      "updateAlreadyInProgress": "Update already in progress for some containers in this group",
-      "batchUpdatedNoGroup": "Updated {count} containers",
-      "batchPartialNoGroup": "Updated {succeeded} of {total} containers; {failed} failed",
-      "batchFailedNoGroup": "Failed to update {count} containers",
-      "unknownGroup": "unknown group"
+      "updated": "업데이트됨: {name}",
+      "updateFailed": "업데이트 실패: {name}",
+      "updateFailedWithReason": "업데이트 실패: {name} — {reason}",
+      "cancelled": "취소됨: {name}",
+      "rolledBack": "롤백됨: {name}",
+      "rolledBackWithReason": "롤백됨: {name} — {reason}",
+      "updateAlreadyInProgress": "이 그룹의 일부 컨테이너에서 업데이트가 이미 진행 중입니다",
+      "batchUpdatedNoGroup": "{count}개 컨테이너 업데이트됨",
+      "batchPartialNoGroup": "{total}개 중 {succeeded}개 컨테이너 업데이트됨; {failed}개 실패",
+      "batchFailedNoGroup": "{count}개 컨테이너 업데이트 실패",
+      "unknownGroup": "알 수 없는 그룹",
+      "updateStarted": "업데이트 시작됨: {name}",
+      "forceUpdateStarted": "강제 업데이트 시작됨: {name}",
+      "alreadyUpToDate": "이미 최신 버전: {name}",
+      "queuedUpdateSingle": "{count}개 컨테이너 업데이트 대기 중",
+      "queuedUpdateMultiple": "{count}개 컨테이너 업데이트 대기 중",
+      "countAlreadyUpToDateSingle": "{count}개 컨테이너 이미 최신 버전",
+      "countAlreadyUpToDateMultiple": "{count}개 컨테이너 이미 최신 버전"
     },
     "registryError": {
-      "generic": "Registry error",
-      "detail": "Registry error: {error}"
+      "generic": "레지스트리 오류",
+      "detail": "레지스트리 오류: {error}"
     },
     "columns": {
       "container": "컨테이너",

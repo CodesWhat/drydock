@@ -1,133 +1,133 @@
 {
   "appShell": {
     "toast": {
-      "dismiss": "Dismiss"
+      "dismiss": "Закрыть"
     },
     "logViewer": {
       "toolbar": {
-        "resume": "Resume",
-        "pause": "Pause",
-        "unpinAutoScroll": "Unpin auto-scroll",
-        "pinAutoScroll": "Pin auto-scroll",
-        "newestFirst": "Newest first",
-        "oldestFirst": "Oldest first",
+        "resume": "Возобновить",
+        "pause": "Пауза",
+        "unpinAutoScroll": "Отключить автопрокрутку",
+        "pinAutoScroll": "Включить автопрокрутку",
+        "newestFirst": "Сначала новые",
+        "oldestFirst": "Сначала старые",
         "regexToggle": ".* Regex",
-        "showMatchesOnly": "Show matches only",
-        "showingMatchesOnly": "Showing matches only",
-        "prev": "Prev",
-        "next": "Next"
+        "showMatchesOnly": "Только совпадения",
+        "showingMatchesOnly": "Показаны только совпадения",
+        "prev": "Назад",
+        "next": "Вперёд"
       },
       "search": {
-        "placeholder": "Search logs",
-        "copied": "Copied!",
-        "copyLogs": "Copy logs"
+        "placeholder": "Поиск по журналу",
+        "copied": "Скопировано!",
+        "copyLogs": "Копировать журнал"
       },
       "empty": {
-        "noMatchingEntries": "No matching entries",
-        "defaultMessage": "No log entries yet"
+        "noMatchingEntries": "Совпадений не найдено",
+        "defaultMessage": "Записей журнала пока нет"
       },
       "footer": {
-        "lines": "lines",
-        "defaultStatusLabel": "Offline"
+        "lines": "строк",
+        "defaultStatusLabel": "Не в сети"
       }
     },
     "notificationBell": {
-      "buttonLabel": "Notifications",
-      "tooltip": "Notifications",
-      "header": "Notifications",
-      "clear": "Clear",
-      "loading": "Loading...",
-      "empty": "No notifications yet",
-      "markAllRead": "Mark all as read",
-      "openAuditLog": "Open audit log",
-      "dismiss": "Dismiss notification"
+      "buttonLabel": "Уведомления",
+      "tooltip": "Уведомления",
+      "header": "Уведомления",
+      "clear": "Очистить",
+      "loading": "Загрузка...",
+      "empty": "Уведомлений пока нет",
+      "markAllRead": "Отметить все как прочитанные",
+      "openAuditLog": "Открыть журнал аудита",
+      "dismiss": "Закрыть уведомление"
     },
     "themeToggle": {
-      "mobileLabel": "Theme: {id} (tap to cycle)",
-      "switchTo": "Switch to {id} theme",
+      "mobileLabel": "Тема: {id} (нажмите для переключения)",
+      "switchTo": "Переключить на тему {id}",
       "variantLabel": "{label}"
     },
     "layout": {
       "nav": {
-        "dashboard": "Dashboard",
-        "containers": "Containers",
-        "security": "Security",
-        "audit": "Audit",
-        "systemLogs": "System Logs",
-        "manageGroup": "Manage",
-        "hosts": "Hosts",
-        "registries": "Registries",
-        "watchers": "Watchers",
-        "settingsGroup": "Settings",
-        "general": "General",
-        "notifications": "Notifications",
-        "outbox": "Outbox",
-        "triggers": "Triggers",
-        "auth": "Auth",
-        "agents": "Agents"
+        "dashboard": "Панель управления",
+        "containers": "Контейнеры",
+        "security": "Безопасность",
+        "audit": "Аудит",
+        "systemLogs": "Системные журналы",
+        "manageGroup": "Управление",
+        "hosts": "Хосты",
+        "registries": "Реестры",
+        "watchers": "Наблюдатели",
+        "settingsGroup": "Настройки",
+        "general": "Общие",
+        "notifications": "Уведомления",
+        "outbox": "Исходящие",
+        "triggers": "Триггеры",
+        "auth": "Аутентификация",
+        "agents": "Агенты"
       },
       "sidebar": {
-        "closeMobileMenu": "Close menu",
-        "searchButton": "Search",
-        "searchAriaLabel": "Search",
-        "aboutTooltip": "About Drydock",
-        "aboutAriaLabel": "About Drydock",
-        "expandSidebar": "Expand sidebar",
-        "collapseSidebar": "Collapse sidebar"
+        "closeMobileMenu": "Закрыть меню",
+        "searchButton": "Поиск",
+        "searchAriaLabel": "Поиск",
+        "aboutTooltip": "О Drydock",
+        "aboutAriaLabel": "О Drydock",
+        "expandSidebar": "Развернуть панель",
+        "collapseSidebar": "Свернуть панель"
       },
       "topbar": {
-        "openMenu": "Open menu",
-        "closeMenu": "Close menu",
-        "userMenu": "User menu",
-        "profile": "Profile",
-        "signOut": "Sign out"
+        "openMenu": "Открыть меню",
+        "closeMenu": "Закрыть меню",
+        "userMenu": "Меню пользователя",
+        "profile": "Профиль",
+        "signOut": "Выйти"
       },
       "about": {
         "title": "Drydock",
-        "subtitle": "Docker Container Update Manager",
-        "documentation": "Documentation",
+        "subtitle": "Менеджер обновлений Docker-контейнеров",
+        "documentation": "Документация",
         "github": "GitHub",
-        "changelog": "Changelog",
-        "close": "Close"
+        "changelog": "История изменений",
+        "close": "Закрыть"
       },
       "search": {
-        "ariaLabel": "Search",
-        "placeholder": "Jump to pages, containers, agents, triggers...",
-        "shown": "{count} shown",
-        "refreshing": "Refreshing search index...",
-        "noMatches": "No matches for \"{query}\".",
-        "hint": "Type to search pages, containers, agents, triggers, watchers, and settings.",
-        "prefixScopeHint": "Prefix scope active; use ",
-        "typeHint": "Type",
-        "useTab": " to change scope",
-        "moveHint": "move",
-        "openHint": "open"
+        "ariaLabel": "Поиск",
+        "placeholder": "Перейти к страницам, контейнерам, агентам, триггерам...",
+        "shown": "{count} показано",
+        "refreshing": "Обновление поискового индекса...",
+        "noMatches": "Нет результатов для \"{query}\".",
+        "hint": "Введите запрос для поиска страниц, контейнеров, агентов, триггеров, наблюдателей и настроек.",
+        "prefixScopeHint": "Активен префикс области; используйте ",
+        "typeHint": "Тип",
+        "useTab": " для смены области",
+        "moveHint": "переместить",
+        "openHint": "открыть"
       },
       "connection": {
-        "lostTitle": "Connection Lost",
-        "applyingUpdateTitle": "Applying Update",
-        "lostMessage": "The server is unreachable. Waiting for it to come back online...",
-        "restartingMessage": "Drydock is restarting after a self-update{opId}. Reconnecting when the service is back...",
-        "reconnecting": "Reconnecting",
-        "restartingService": "Restarting service"
+        "lostTitle": "Соединение потеряно",
+        "applyingUpdateTitle": "Применение обновления",
+        "lostMessage": "Сервер недоступен. Ожидание восстановления соединения...",
+        "restartingMessage": "Drydock перезапускается после самообновления{opId}. Повторное подключение после восстановления службы...",
+        "reconnecting": "Переподключение",
+        "restartingService": "Перезапуск службы"
       }
     },
     "announcementBanner": {
-      "defaultDismiss": "Dismiss",
-      "defaultLinkLabel": "View migration guide"
+      "defaultDismiss": "Закрыть",
+      "defaultLinkLabel": "Открыть руководство по миграции"
     },
     "banners": {
-      "legacyConfigTitleSingular": "{total} legacy configuration alias detected",
-      "legacyConfigTitlePlural": "{total} legacy configuration aliases detected",
-      "legacyApiPathTitle": "{total} legacy API paths detected",
-      "dontShowAgain": "Don't show again",
-      "oidcHttpTitle": "HTTP OIDC discovery detected",
-      "legacyHashTitle": "Legacy password hash detected",
-      "curlHealthcheckTitle": "Custom curl healthcheck override detected",
-      "envKeysLabel": "Env keys ({count}): {keys}",
-      "labelKeysLabel": "Label keys ({count}): {keys}",
-      "apiPathsLabel": "API paths ({count}): {keys}",
-      "healthcheckCommandLabel": "Healthcheck command: {command}"
+      "legacyConfigTitleSingular": "Обнаружен {total} устаревший псевдоним конфигурации",
+      "legacyConfigTitlePlural": "Обнаружено {total} устаревших псевдонимов конфигурации",
+      "legacyApiPathTitle": "Обнаружено {total} устаревших путей API",
+      "dontShowAgain": "Больше не показывать",
+      "oidcHttpTitle": "Обнаружено HTTP OIDC discovery",
+      "legacyHashTitle": "Обнаружен устаревший хеш пароля",
+      "curlHealthcheckTitle": "Обнаружено переопределение healthcheck через curl",
+      "envKeysLabel": "Переменные окружения ({count}): {keys}",
+      "labelKeysLabel": "Метки ({count}): {keys}",
+      "apiPathsLabel": "Пути API ({count}): {keys}",
+      "healthcheckCommandLabel": "Команда healthcheck: {command}"
     }
   }
 }

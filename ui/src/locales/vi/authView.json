@@ -1,20 +1,20 @@
 {
   "authView": {
-    "loadingProviders": "Loading authentication providers...",
-    "loadError": "Failed to load authentication providers",
-    "filterPlaceholder": "Filter by name...",
-    "clearFilter": "Clear",
-    "emptyFiltered": "No providers match your filters",
-    "detailRefreshing": "Refreshing authentication details...",
-    "detailLoadError": "Unable to load latest authentication details",
-    "noConfig": "No configuration properties",
+    "loadingProviders": "Đang tải nhà cung cấp xác thực...",
+    "loadError": "Không thể tải nhà cung cấp xác thực",
+    "filterPlaceholder": "Lọc theo tên...",
+    "clearFilter": "Xóa",
+    "emptyFiltered": "Không có nhà cung cấp nào khớp với bộ lọc của bạn",
+    "detailRefreshing": "Đang làm mới thông tin xác thực...",
+    "detailLoadError": "Không thể tải thông tin xác thực mới nhất",
+    "noConfig": "Không có thuộc tính cấu hình",
     "columns": {
-      "provider": "Provider",
-      "type": "Type",
-      "status": "Status"
+      "provider": "Nhà cung cấp",
+      "type": "Loại",
+      "status": "Trạng thái"
     },
     "fields": {
-      "status": "Status"
+      "status": "Trạng thái"
     },
     "badge": {
       "basic": "Basic",

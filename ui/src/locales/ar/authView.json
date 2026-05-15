@@ -1,23 +1,23 @@
 {
   "authView": {
-    "loadingProviders": "Loading authentication providers...",
-    "loadError": "Failed to load authentication providers",
-    "filterPlaceholder": "Filter by name...",
-    "clearFilter": "Clear",
-    "emptyFiltered": "No providers match your filters",
-    "detailRefreshing": "Refreshing authentication details...",
-    "detailLoadError": "Unable to load latest authentication details",
-    "noConfig": "No configuration properties",
+    "loadingProviders": "جارٍ تحميل موفري المصادقة...",
+    "loadError": "فشل تحميل موفري المصادقة",
+    "filterPlaceholder": "تصفية حسب الاسم...",
+    "clearFilter": "مسح",
+    "emptyFiltered": "لا يوجد موفرون يطابقون عوامل التصفية",
+    "detailRefreshing": "جارٍ تحديث تفاصيل المصادقة...",
+    "detailLoadError": "تعذّر تحميل أحدث تفاصيل المصادقة",
+    "noConfig": "لا توجد خصائص إعداد",
     "columns": {
-      "provider": "Provider",
-      "type": "Type",
-      "status": "Status"
+      "provider": "الموفر",
+      "type": "النوع",
+      "status": "الحالة"
     },
     "fields": {
-      "status": "Status"
+      "status": "الحالة"
     },
     "badge": {
-      "basic": "Basic",
+      "basic": "أساسي",
       "oidc": "OIDC"
     }
   }

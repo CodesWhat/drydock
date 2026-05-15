@@ -1,25 +1,32 @@
 {
   "containersView": {
     "error": {
-      "loadFailed": "Failed to load containers",
-      "recheckFailed": "Failed to recheck containers"
+      "loadFailed": "Не вдалося завантажити контейнери",
+      "recheckFailed": "Не вдалося повторно перевірити контейнери"
     },
     "toast": {
-      "updated": "Updated: {name}",
-      "updateFailed": "Update failed: {name}",
-      "updateFailedWithReason": "Update failed: {name} — {reason}",
-      "cancelled": "Cancelled: {name}",
-      "rolledBack": "Rolled back: {name}",
-      "rolledBackWithReason": "Rolled back: {name} — {reason}",
-      "updateAlreadyInProgress": "Update already in progress for some containers in this group",
-      "batchUpdatedNoGroup": "Updated {count} containers",
-      "batchPartialNoGroup": "Updated {succeeded} of {total} containers; {failed} failed",
-      "batchFailedNoGroup": "Failed to update {count} containers",
-      "unknownGroup": "unknown group"
+      "updated": "Оновлено: {name}",
+      "updateFailed": "Помилка оновлення: {name}",
+      "updateFailedWithReason": "Помилка оновлення: {name} — {reason}",
+      "cancelled": "Скасовано: {name}",
+      "rolledBack": "Відкат виконано: {name}",
+      "rolledBackWithReason": "Відкат виконано: {name} — {reason}",
+      "updateAlreadyInProgress": "Оновлення вже виконується для деяких контейнерів у цій групі",
+      "batchUpdatedNoGroup": "Оновлено {count} контейнерів",
+      "batchPartialNoGroup": "Оновлено {succeeded} з {total} контейнерів; {failed} не вдалося",
+      "batchFailedNoGroup": "Не вдалося оновити {count} контейнерів",
+      "unknownGroup": "невідома група",
+      "updateStarted": "Оновлення розпочато: {name}",
+      "forceUpdateStarted": "Примусове оновлення розпочато: {name}",
+      "alreadyUpToDate": "Вже актуально: {name}",
+      "queuedUpdateSingle": "В черзі оновлення для {count} контейнера",
+      "queuedUpdateMultiple": "В черзі оновлення для {count} контейнерів",
+      "countAlreadyUpToDateSingle": "{count} контейнер вже актуальний",
+      "countAlreadyUpToDateMultiple": "{count} контейнерів вже актуальні"
     },
     "registryError": {
-      "generic": "Registry error",
-      "detail": "Registry error: {error}"
+      "generic": "Помилка реєстру",
+      "detail": "Помилка реєстру: {error}"
     },
     "columns": {
       "container": "Контейнер",

@@ -1,133 +1,133 @@
 {
   "appShell": {
     "toast": {
-      "dismiss": "Dismiss"
+      "dismiss": "닫기"
     },
     "logViewer": {
       "toolbar": {
-        "resume": "Resume",
-        "pause": "Pause",
-        "unpinAutoScroll": "Unpin auto-scroll",
-        "pinAutoScroll": "Pin auto-scroll",
-        "newestFirst": "Newest first",
-        "oldestFirst": "Oldest first",
+        "resume": "재개",
+        "pause": "일시 정지",
+        "unpinAutoScroll": "자동 스크롤 고정 해제",
+        "pinAutoScroll": "자동 스크롤 고정",
+        "newestFirst": "최신 순",
+        "oldestFirst": "오래된 순",
         "regexToggle": ".* Regex",
-        "showMatchesOnly": "Show matches only",
-        "showingMatchesOnly": "Showing matches only",
-        "prev": "Prev",
-        "next": "Next"
+        "showMatchesOnly": "일치 항목만 표시",
+        "showingMatchesOnly": "일치 항목만 표시 중",
+        "prev": "이전",
+        "next": "다음"
       },
       "search": {
-        "placeholder": "Search logs",
-        "copied": "Copied!",
-        "copyLogs": "Copy logs"
+        "placeholder": "로그 검색",
+        "copied": "복사됨!",
+        "copyLogs": "로그 복사"
       },
       "empty": {
-        "noMatchingEntries": "No matching entries",
-        "defaultMessage": "No log entries yet"
+        "noMatchingEntries": "일치하는 항목 없음",
+        "defaultMessage": "아직 로그 항목이 없습니다"
       },
       "footer": {
-        "lines": "lines",
-        "defaultStatusLabel": "Offline"
+        "lines": "줄",
+        "defaultStatusLabel": "오프라인"
       }
     },
     "notificationBell": {
-      "buttonLabel": "Notifications",
-      "tooltip": "Notifications",
-      "header": "Notifications",
-      "clear": "Clear",
-      "loading": "Loading...",
-      "empty": "No notifications yet",
-      "markAllRead": "Mark all as read",
-      "openAuditLog": "Open audit log",
-      "dismiss": "Dismiss notification"
+      "buttonLabel": "알림",
+      "tooltip": "알림",
+      "header": "알림",
+      "clear": "지우기",
+      "loading": "불러오는 중...",
+      "empty": "아직 알림이 없습니다",
+      "markAllRead": "모두 읽음으로 표시",
+      "openAuditLog": "감사 로그 열기",
+      "dismiss": "알림 닫기"
     },
     "themeToggle": {
-      "mobileLabel": "Theme: {id} (tap to cycle)",
-      "switchTo": "Switch to {id} theme",
+      "mobileLabel": "테마: {id} (탭하여 순환)",
+      "switchTo": "{id} 테마로 전환",
       "variantLabel": "{label}"
     },
     "layout": {
       "nav": {
-        "dashboard": "Dashboard",
-        "containers": "Containers",
-        "security": "Security",
-        "audit": "Audit",
-        "systemLogs": "System Logs",
-        "manageGroup": "Manage",
-        "hosts": "Hosts",
-        "registries": "Registries",
-        "watchers": "Watchers",
-        "settingsGroup": "Settings",
-        "general": "General",
-        "notifications": "Notifications",
-        "outbox": "Outbox",
-        "triggers": "Triggers",
-        "auth": "Auth",
-        "agents": "Agents"
+        "dashboard": "대시보드",
+        "containers": "컨테이너",
+        "security": "보안",
+        "audit": "감사",
+        "systemLogs": "시스템 로그",
+        "manageGroup": "관리",
+        "hosts": "호스트",
+        "registries": "레지스트리",
+        "watchers": "워처",
+        "settingsGroup": "설정",
+        "general": "일반",
+        "notifications": "알림",
+        "outbox": "발신함",
+        "triggers": "트리거",
+        "auth": "인증",
+        "agents": "에이전트"
       },
       "sidebar": {
-        "closeMobileMenu": "Close menu",
-        "searchButton": "Search",
-        "searchAriaLabel": "Search",
-        "aboutTooltip": "About Drydock",
-        "aboutAriaLabel": "About Drydock",
-        "expandSidebar": "Expand sidebar",
-        "collapseSidebar": "Collapse sidebar"
+        "closeMobileMenu": "메뉴 닫기",
+        "searchButton": "검색",
+        "searchAriaLabel": "검색",
+        "aboutTooltip": "Drydock 정보",
+        "aboutAriaLabel": "Drydock 정보",
+        "expandSidebar": "사이드바 펼치기",
+        "collapseSidebar": "사이드바 접기"
       },
       "topbar": {
-        "openMenu": "Open menu",
-        "closeMenu": "Close menu",
-        "userMenu": "User menu",
-        "profile": "Profile",
-        "signOut": "Sign out"
+        "openMenu": "메뉴 열기",
+        "closeMenu": "메뉴 닫기",
+        "userMenu": "사용자 메뉴",
+        "profile": "프로필",
+        "signOut": "로그아웃"
       },
       "about": {
         "title": "Drydock",
-        "subtitle": "Docker Container Update Manager",
-        "documentation": "Documentation",
+        "subtitle": "Docker 컨테이너 업데이트 관리자",
+        "documentation": "문서",
         "github": "GitHub",
-        "changelog": "Changelog",
-        "close": "Close"
+        "changelog": "변경 이력",
+        "close": "닫기"
       },
       "search": {
-        "ariaLabel": "Search",
-        "placeholder": "Jump to pages, containers, agents, triggers...",
-        "shown": "{count} shown",
-        "refreshing": "Refreshing search index...",
-        "noMatches": "No matches for \"{query}\".",
-        "hint": "Type to search pages, containers, agents, triggers, watchers, and settings.",
-        "prefixScopeHint": "Prefix scope active; use ",
-        "typeHint": "Type",
-        "useTab": " to change scope",
-        "moveHint": "move",
-        "openHint": "open"
+        "ariaLabel": "검색",
+        "placeholder": "페이지, 컨테이너, 에이전트, 트리거로 이동...",
+        "shown": "{count}개 표시",
+        "refreshing": "검색 색인 새로 고침 중...",
+        "noMatches": "\"{query}\"에 대한 결과 없음.",
+        "hint": "페이지, 컨테이너, 에이전트, 트리거, 워처, 설정을 검색하려면 입력하세요.",
+        "prefixScopeHint": "접두사 범위 활성화됨; ",
+        "typeHint": "탭",
+        "useTab": "을 눌러 범위 변경",
+        "moveHint": "이동",
+        "openHint": "열기"
       },
       "connection": {
-        "lostTitle": "Connection Lost",
-        "applyingUpdateTitle": "Applying Update",
-        "lostMessage": "The server is unreachable. Waiting for it to come back online...",
-        "restartingMessage": "Drydock is restarting after a self-update{opId}. Reconnecting when the service is back...",
-        "reconnecting": "Reconnecting",
-        "restartingService": "Restarting service"
+        "lostTitle": "연결 끊김",
+        "applyingUpdateTitle": "업데이트 적용 중",
+        "lostMessage": "서버에 연결할 수 없습니다. 서버가 다시 온라인 상태가 될 때까지 기다리는 중...",
+        "restartingMessage": "Drydock이 자체 업데이트{opId} 후 재시작 중입니다. 서비스가 복구되면 자동으로 재연결됩니다...",
+        "reconnecting": "재연결 중",
+        "restartingService": "서비스 재시작 중"
       }
     },
     "announcementBanner": {
-      "defaultDismiss": "Dismiss",
-      "defaultLinkLabel": "View migration guide"
+      "defaultDismiss": "닫기",
+      "defaultLinkLabel": "마이그레이션 가이드 보기"
     },
     "banners": {
-      "legacyConfigTitleSingular": "{total} legacy configuration alias detected",
-      "legacyConfigTitlePlural": "{total} legacy configuration aliases detected",
-      "legacyApiPathTitle": "{total} legacy API paths detected",
-      "dontShowAgain": "Don't show again",
-      "oidcHttpTitle": "HTTP OIDC discovery detected",
-      "legacyHashTitle": "Legacy password hash detected",
-      "curlHealthcheckTitle": "Custom curl healthcheck override detected",
-      "envKeysLabel": "Env keys ({count}): {keys}",
-      "labelKeysLabel": "Label keys ({count}): {keys}",
-      "apiPathsLabel": "API paths ({count}): {keys}",
-      "healthcheckCommandLabel": "Healthcheck command: {command}"
+      "legacyConfigTitleSingular": "레거시 구성 별칭 {total}개 감지됨",
+      "legacyConfigTitlePlural": "레거시 구성 별칭 {total}개 감지됨",
+      "legacyApiPathTitle": "레거시 API 경로 {total}개 감지됨",
+      "dontShowAgain": "다시 표시 안 함",
+      "oidcHttpTitle": "HTTP OIDC 검색 감지됨",
+      "legacyHashTitle": "레거시 비밀번호 해시 감지됨",
+      "curlHealthcheckTitle": "사용자 정의 curl 헬스체크 재정의 감지됨",
+      "envKeysLabel": "환경 변수 키 ({count}개): {keys}",
+      "labelKeysLabel": "레이블 키 ({count}개): {keys}",
+      "apiPathsLabel": "API 경로 ({count}개): {keys}",
+      "healthcheckCommandLabel": "헬스체크 명령: {command}"
     }
   }
 }

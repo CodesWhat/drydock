@@ -1,100 +1,101 @@
 {
   "dashboardView": {
-    "loading": "Loading dashboard...",
-    "loadFailed": "Failed to load dashboard",
-    "dragToReorder": "Drag to reorder",
-    "viewAll": "View all →",
+    "loading": "Đang tải bảng điều khiển...",
+    "loadFailed": "Không thể tải bảng điều khiển",
+    "dragToReorder": "Kéo để sắp xếp lại",
+    "viewAll": "Xem tất cả →",
     "editToggle": {
-      "showWidgetPanel": "Show widget panel",
-      "doneCustomizing": "Done customizing",
-      "customize": "Customize dashboard"
+      "showWidgetPanel": "Hiển thị bảng widget",
+      "doneCustomizing": "Hoàn tất tùy chỉnh",
+      "customize": "Tùy chỉnh bảng điều khiển"
     },
     "widgetPanel": {
-      "title": "Widgets",
-      "closePanel": "Close panel",
-      "resetToDefault": "Reset to Default"
+      "title": "Widget",
+      "closePanel": "Đóng bảng",
+      "resetToDefault": "Đặt về mặc định"
     },
     "confirm": {
       "updateContainer": {
-        "header": "Update Container",
-        "message": "Update {name} now? This will apply the latest discovered image.",
-        "accept": "Update"
+        "header": "Cập nhật Container",
+        "message": "Cập nhật {name} ngay bây giờ? Thao tác này sẽ áp dụng image mới nhất đã phát hiện.",
+        "accept": "Cập nhật"
       },
       "updateAll": {
-        "header": "Update All Containers",
-        "message": "{count} containers will be updated. Continue?",
-        "accept": "Update All"
+        "header": "Cập nhật tất cả Container",
+        "message": "{count} container sẽ được cập nhật. Tiếp tục?",
+        "accept": "Cập nhật tất cả"
       }
     },
     "toast": {
-      "updated": "Updated: {name}",
-      "updateFailed": "Update failed: {name}",
-      "updateFailedWithReason": "Update failed: {name} — {reason}",
-      "cancelled": "Cancelled: {name}",
-      "rolledBack": "Rolled back: {name}",
-      "rolledBackWithReason": "Rolled back: {name} — {reason}",
-      "updateError": "Failed to update {name}",
-      "updateAllError": "Failed to update all containers"
+      "updated": "Đã cập nhật: {name}",
+      "updateFailed": "Cập nhật thất bại: {name}",
+      "updateFailedWithReason": "Cập nhật thất bại: {name} — {reason}",
+      "cancelled": "Đã hủy: {name}",
+      "rolledBack": "Đã khôi phục: {name}",
+      "rolledBackWithReason": "Đã khôi phục: {name} — {reason}",
+      "updateError": "Không thể cập nhật {name}",
+      "updateAllError": "Không thể cập nhật tất cả container"
     },
     "recentUpdates": {
-      "title": "Updates Available",
-      "updateAll": "Update all",
-      "noUpdates": "No updates available",
-      "releaseNotes": "Release notes",
-      "securityBlocked": "Security blocked",
-      "updateContainer": "Update container",
-      "compactSingle": "{count} update available",
-      "compactPlural": "{count} updates available",
+      "title": "Cập nhật có sẵn",
+      "widgetAria": "Widget Cập nhật có sẵn",
+      "updateAll": "Cập nhật tất cả",
+      "noUpdates": "Không có cập nhật nào",
+      "releaseNotes": "Ghi chú phát hành",
+      "securityBlocked": "Bị chặn do bảo mật",
+      "updateContainer": "Cập nhật container",
+      "compactSingle": "{count} bản cập nhật có sẵn",
+      "compactPlural": "{count} bản cập nhật có sẵn",
       "status": {
-        "queued": "Queued",
-        "updating": "Updating"
+        "queued": "Đang chờ",
+        "updating": "Đang cập nhật"
       },
       "columns": {
         "container": "Container",
-        "version": "Version",
-        "type": "Type",
-        "actions": "Actions"
+        "version": "Phiên bản",
+        "type": "Loại",
+        "actions": "Thao tác"
       }
     },
     "hostStatus": {
-      "title": "Host Status",
-      "connected": "Connected",
-      "disconnected": "Disconnected",
-      "containerCount": "{running}/{total} containers"
+      "title": "Trạng thái máy chủ",
+      "connected": "Đã kết nối",
+      "disconnected": "Mất kết nối",
+      "containerCount": "{running}/{total} container"
     },
     "resourceUsage": {
-      "title": "Resource Usage",
-      "totalUsage": "Total Usage ({watched} watched)",
-      "cpu": "Avg CPU",
-      "memory": "Memory",
-      "topCpu": "Top CPU",
-      "topMemory": "Top Memory",
-      "noCpuData": "No live CPU data",
-      "noMemoryData": "No live memory data"
+      "title": "Sử dụng tài nguyên",
+      "totalUsage": "Tổng sử dụng ({watched} đang theo dõi)",
+      "cpu": "CPU trung bình",
+      "memory": "Bộ nhớ",
+      "topCpu": "CPU cao nhất",
+      "topMemory": "Bộ nhớ cao nhất",
+      "noCpuData": "Không có dữ liệu CPU trực tiếp",
+      "noMemoryData": "Không có dữ liệu bộ nhớ trực tiếp"
     },
     "securityOverview": {
-      "title": "Security Overview",
-      "images": "images",
-      "clean": "Clean",
-      "issues": "Issues",
-      "notScanned": "Not Scanned",
-      "severityBreakdown": "Severity Breakdown",
-      "critical": "{count} Critical",
-      "high": "{count} High",
-      "medium": "{count} Medium",
-      "low": "{count} Low",
-      "topVulnerabilities": "Top Vulnerabilities",
-      "noVulnerabilities": "No vulnerabilities reported"
+      "title": "Tổng quan bảo mật",
+      "images": "image",
+      "clean": "Sạch",
+      "issues": "Vấn đề",
+      "notScanned": "Chưa quét",
+      "severityBreakdown": "Phân tích mức độ nghiêm trọng",
+      "critical": "{count} Nghiêm trọng",
+      "high": "{count} Cao",
+      "medium": "{count} Trung bình",
+      "low": "{count} Thấp",
+      "topVulnerabilities": "Lỗ hổng hàng đầu",
+      "noVulnerabilities": "Không có lỗ hổng nào được báo cáo"
     },
     "updateBreakdown": {
-      "title": "Update Breakdown",
-      "noUpdates": "No updates to categorize"
+      "title": "Phân loại cập nhật",
+      "noUpdates": "Không có cập nhật nào để phân loại"
     },
     "stats": {
       "containers": "Container",
       "containerDetail": "{running} đang chạy · {stopped} đã dừng",
       "updatesAvailable": "Bản cập nhật có sẵn",
-      "updateDetail": "{fresh} mới · {mature} cũ",
+      "updateDetail": "{fresh} mới · {mature} chín",
       "securityIssues": "Vấn đề bảo mật",
       "registries": "Registry"
     },

@@ -1,156 +1,156 @@
 {
   "configView": {
     "tabs": {
-      "general": "General",
-      "appearance": "Appearance",
-      "profile": "Profile"
+      "general": "一般",
+      "appearance": "外観",
+      "profile": "プロフィール"
     },
     "general": {
       "application": {
-        "title": "Application",
-        "loadingServerInfo": "Loading server info"
+        "title": "アプリケーション",
+        "loadingServerInfo": "サーバー情報を読み込み中"
       },
       "store": {
-        "title": "Store"
+        "title": "ストア"
       },
       "webhookApi": {
         "title": "Webhook API",
-        "enabled": "Enabled",
-        "disabled": "Disabled",
-        "description": "Use these endpoints to trigger watch cycles and updates via HTTP. All requests require a Bearer token in the Authorization header.",
-        "disabledMessage": "Webhook API is disabled. Set",
-        "disabledHint": "Webhook API is disabled. Set {envEnabled} and configure at least one token ({envToken} or {envTokens}) to enable it.",
+        "enabled": "有効",
+        "disabled": "無効",
+        "description": "これらのエンドポイントを使用して、HTTP 経由でウォッチサイクルや更新をトリガーします。すべてのリクエストには Authorization ヘッダーに Bearer トークンが必要です。",
+        "disabledMessage": "Webhook API は無効です。設定してください",
+        "disabledHint": "Webhook API は無効です。{envEnabled} を設定し、少なくとも 1 つのトークン（{envToken} または {envTokens}）を設定して有効にしてください。",
         "table": {
-          "endpoint": "Endpoint",
-          "description": "Description"
+          "endpoint": "エンドポイント",
+          "description": "説明"
         },
-        "example": "Example",
+        "example": "例",
         "endpoints": {
-          "watchAll": "Trigger a full watch cycle on all watchers",
-          "watchOne": "Watch a specific container by name",
-          "updateOne": "Trigger an update on a specific container"
+          "watchAll": "すべてのウォッチャーでフルウォッチサイクルをトリガー",
+          "watchOne": "名前で特定のコンテナをウォッチ",
+          "updateOne": "特定のコンテナの更新をトリガー"
         }
       },
       "network": {
-        "title": "Network",
+        "title": "ネットワーク",
         "internetlessMode": {
-          "label": "Internetless Mode",
-          "description": "Block all outbound requests (container icons, external fetches)"
+          "label": "インターネット非接続モード",
+          "description": "すべてのアウトバウンドリクエストをブロックします（コンテナアイコン、外部フェッチ）"
         }
       },
       "iconCache": {
-        "title": "Container Icon Cache",
+        "title": "コンテナアイコンキャッシュ",
         "cachedIcons": {
-          "label": "Cached Icons",
-          "description": "Common icons are bundled; other icons are cached to disk on first fetch"
+          "label": "キャッシュ済みアイコン",
+          "description": "一般的なアイコンはバンドル済みです。その他のアイコンは初回取得時にディスクにキャッシュされます"
         },
-        "cleared": "{count} cleared",
-        "clearButton": "Clear Cache"
+        "cleared": "{count} 件削除しました",
+        "clearButton": "キャッシュをクリア"
       },
       "diagnostics": {
-        "title": "Diagnostics",
+        "title": "診断",
         "debugDump": {
-          "label": "Diagnostic Debug Dump",
-          "description": "Download a redacted JSON snapshot of runtime state for troubleshooting",
-          "preparing": "Preparing...",
-          "download": "Download Debug Dump"
+          "label": "診断デバッグダンプ",
+          "description": "トラブルシューティング用に、実行時状態を編集した JSON スナップショットをダウンロードします",
+          "preparing": "準備中...",
+          "download": "デバッグダンプをダウンロード"
         }
       },
       "fields": {
-        "version": "Version",
-        "serverPort": "Server Port",
-        "containerActions": "Container Actions",
+        "version": "バージョン",
+        "serverPort": "サーバーポート",
+        "containerActions": "コンテナアクション",
         "webhook": "Webhook",
-        "deleteEnabled": "Delete Enabled",
-        "trustProxy": "Trust Proxy",
-        "metricsAuth": "Metrics Auth",
-        "storePath": "Store Path",
-        "storeFile": "Store File",
-        "enabled": "Enabled",
-        "disabled": "Disabled",
-        "yes": "Yes",
-        "no": "No"
+        "deleteEnabled": "削除を有効化",
+        "trustProxy": "プロキシを信頼",
+        "metricsAuth": "メトリクス認証",
+        "storePath": "ストアパス",
+        "storeFile": "ストアファイル",
+        "enabled": "有効",
+        "disabled": "無効",
+        "yes": "はい",
+        "no": "いいえ"
       },
       "errors": {
-        "loadServerInfo": "Failed to load server info",
-        "loadProfileData": "Failed to load profile data",
-        "updateNetworkSettings": "Failed to update network settings",
-        "clearIconCache": "Failed to clear icon cache",
-        "downloadDebugDump": "Unable to download debug dump",
-        "errorLabel": "Error"
+        "loadServerInfo": "サーバー情報の読み込みに失敗しました",
+        "loadProfileData": "プロフィールデータの読み込みに失敗しました",
+        "updateNetworkSettings": "ネットワーク設定の更新に失敗しました",
+        "clearIconCache": "アイコンキャッシュのクリアに失敗しました",
+        "downloadDebugDump": "デバッグダンプをダウンロードできません",
+        "errorLabel": "エラー"
       }
     },
     "appearance": {
       "language": {
-        "title": "Language"
+        "title": "言語"
       },
       "colorTheme": {
-        "title": "Color Theme",
+        "title": "カラーテーマ",
         "descriptions": {
-          "oneDark": "Clean and balanced",
-          "github": "Clean and familiar",
-          "dracula": "Bold purple vibes",
-          "catppuccin": "Warm pastel tones",
-          "gruvbox": "Retro earthy warmth",
-          "ayu": "Soft golden tones"
+          "oneDark": "クリーンでバランスの取れた配色",
+          "github": "クリーンで親しみやすい配色",
+          "dracula": "鮮やかなパープル系配色",
+          "catppuccin": "温かみのあるパステルトーン",
+          "gruvbox": "レトロでアーシーな温もり",
+          "ayu": "やわらかなゴールドトーン"
         }
       },
       "fontFamily": {
-        "title": "Font Family",
-        "defaultBadge": "default",
+        "title": "フォントファミリー",
+        "defaultBadge": "デフォルト",
         "preview": "いろはにほへと ちりぬるを わかよたれそ つねならむ"
       },
       "fontSize": {
-        "title": "Font Size"
+        "title": "フォントサイズ"
       },
       "iconLibrary": {
-        "title": "Icon Library"
+        "title": "アイコンライブラリ"
       },
       "iconSize": {
-        "title": "Icon Size"
+        "title": "アイコンサイズ"
       },
       "borderRadius": {
-        "title": "Border Radius",
+        "title": "角丸",
         "labels": {
-          "none": "None",
-          "sharp": "Sharp",
-          "modern": "Modern",
-          "soft": "Soft",
-          "round": "Round"
+          "none": "なし",
+          "sharp": "シャープ",
+          "modern": "モダン",
+          "soft": "ソフト",
+          "round": "ラウンド"
         }
       }
     },
     "profile": {
-      "loading": "Loading profile",
+      "loading": "プロフィールを読み込み中",
       "fields": {
-        "username": "Username",
-        "email": "Email",
-        "role": "Role",
-        "provider": "Provider",
-        "lastLogin": "Last Login",
-        "activeSessions": "Active Sessions"
+        "username": "ユーザー名",
+        "email": "メールアドレス",
+        "role": "ロール",
+        "provider": "プロバイダー",
+        "lastLogin": "最終ログイン",
+        "activeSessions": "アクティブセッション"
       }
     },
     "logs": {
-      "loading": "Loading logs...",
-      "emptyMessage": "No log entries found for current filters.",
+      "loading": "ログを読み込み中...",
+      "emptyMessage": "現在のフィルターに一致するログエントリがありません。",
       "toolbar": {
-        "live": "Live",
-        "allLevels": "All Levels",
+        "live": "ライブ",
+        "allLevels": "全レベル",
         "debug": "Debug",
         "info": "Info",
         "warn": "Warn",
         "error": "Error",
-        "allComponents": "All Components",
-        "resetFilters": "Reset filters"
+        "allComponents": "全コンポーネント",
+        "resetFilters": "フィルターをリセット"
       },
       "tail": {
-        "50": "Tail 50",
-        "100": "Tail 100",
-        "500": "Tail 500",
-        "1000": "Tail 1000"
+        "50": "末尾 50",
+        "100": "末尾 100",
+        "500": "末尾 500",
+        "1000": "末尾 1000"
       },
-      "logLevelBadge": "Server log level: {level}. Only messages at this level or above are captured."
+      "logLevelBadge": "サーバーログレベル：{level}。このレベル以上のメッセージのみ記録されます。"
     }
   }
 }

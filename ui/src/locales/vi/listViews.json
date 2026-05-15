@@ -1,39 +1,39 @@
 {
   "auditView": {
-    "loadingAuditLog": "Loading audit log...",
-    "loadError": "Failed to load audit log",
-    "filterPlaceholder": "Filter by target or event...",
-    "containerFilterPlaceholder": "Container name...",
-    "allEvents": "All events",
-    "eventsSelected": "{count} events selected",
-    "clear": "Clear",
-    "fromDateLabel": "From date",
-    "toDateLabel": "To date",
+    "loadingAuditLog": "Đang tải nhật ký kiểm tra...",
+    "loadError": "Không thể tải nhật ký kiểm tra",
+    "filterPlaceholder": "Lọc theo mục tiêu hoặc sự kiện...",
+    "containerFilterPlaceholder": "Tên container...",
+    "allEvents": "Tất cả sự kiện",
+    "eventsSelected": "{count} sự kiện đã chọn",
+    "clear": "Xóa",
+    "fromDateLabel": "Từ ngày",
+    "toDateLabel": "Đến ngày",
     "pagination": {
-      "summary": "Page {page} of {totalPages} ({total} entries)",
-      "previousPage": "Previous page",
-      "nextPage": "Next page"
+      "summary": "Trang {page}/{totalPages} ({total} mục)",
+      "previousPage": "Trang trước",
+      "nextPage": "Trang tiếp"
     },
-    "emptyFiltered": "No audit entries match your filters",
+    "emptyFiltered": "Không có mục kiểm tra nào khớp với bộ lọc của bạn",
     "columns": {
-      "time": "Time",
-      "event": "Event",
-      "target": "Target",
-      "status": "Status",
-      "details": "Details"
+      "time": "Thời gian",
+      "event": "Sự kiện",
+      "target": "Mục tiêu",
+      "status": "Trạng thái",
+      "details": "Chi tiết"
     },
     "card": {
-      "time": "Time",
-      "version": "Version"
+      "time": "Thời gian",
+      "version": "Phiên bản"
     },
     "detail": {
-      "timestamp": "Timestamp",
-      "event": "Event",
+      "timestamp": "Dấu thời gian",
+      "event": "Sự kiện",
       "image": "Image",
-      "fromVersion": "From Version",
-      "toVersion": "To Version",
+      "fromVersion": "Từ phiên bản",
+      "toVersion": "Đến phiên bản",
       "trigger": "Trigger",
-      "details": "Details"
+      "details": "Chi tiết"
     },
     "actions": {
       "container-update": "Cập nhật Container",
@@ -69,103 +69,138 @@
     }
   },
   "notificationsView": {
-    "loadingRules": "Loading notification rules...",
-    "loadError": "Failed to load notification rules",
-    "filterPlaceholder": "Filter by name, description, or trigger...",
-    "clear": "Clear",
-    "allNotificationTriggers": "All notification triggers",
-    "noTriggers": "No triggers",
-    "columns": {
-      "on": "On",
-      "rule": "Rule",
-      "triggers": "Triggers"
+    "loadingRules": "Đang tải quy tắc thông báo...",
+    "loadError": "Không thể tải quy tắc thông báo",
+    "filterPlaceholder": "Lọc theo tên, mô tả hoặc trigger...",
+    "clear": "Xóa",
+    "allNotificationTriggers": "Tất cả trigger thông báo",
+    "noTriggers": "Không có trigger",
+    "rules": {
+      "update-available": {
+        "name": "Có bản cập nhật",
+        "description": "Khi container có phiên bản mới"
+      },
+      "update-applied": {
+        "name": "Đã áp dụng cập nhật",
+        "description": "Sau khi container được cập nhật thành công"
+      },
+      "update-failed": {
+        "name": "Cập nhật thất bại",
+        "description": "Khi cập nhật thất bại hoặc bị khôi phục"
+      },
+      "security-alert": {
+        "name": "Cảnh báo bảo mật",
+        "description": "Phát hiện lỗ hổng Nghiêm trọng/Cao"
+      },
+      "agent-disconnect": {
+        "name": "Agent ngắt kết nối",
+        "description": "Khi agent từ xa mất kết nối"
+      },
+      "agent-reconnect": {
+        "name": "Agent kết nối lại",
+        "description": "Khi agent từ xa kết nối lại sau khi mất kết nối"
+      }
     },
-    "toggleAriaLabel": "Toggle notification rule",
-    "emptyFiltered": "No notification rules match your filters",
+    "columns": {
+      "on": "Bật",
+      "rule": "Quy tắc",
+      "triggers": "Trigger"
+    },
+    "toggleAriaLabel": "Bật/tắt quy tắc thông báo",
+    "emptyFiltered": "Không có quy tắc thông báo nào khớp với bộ lọc của bạn",
     "detail": {
-      "ruleStatusLabel": "Rule status",
-      "ruleStatusAriaLabel": "Rule status",
-      "enabledText": "Enabled: notifications can fire for this event.",
-      "disabledText": "Disabled: notifications are suppressed for this event.",
-      "assignedTriggersLabel": "Assigned Triggers",
-      "noTriggersConfigured": "No triggers configured. Add triggers on the",
-      "triggersPageLink": "Triggers page",
-      "helpTextImplicitAll": "Leave this empty to send this event to all notification triggers. Selecting any trigger turns this rule into an allow-list.",
-      "helpTextExplicit": "Only selected triggers will receive this event. Leave it empty to suppress this event for all triggers.",
-      "saving": "Saving...",
-      "saveChanges": "Save changes",
-      "reset": "Reset",
-      "enabled": "enabled",
-      "disabled": "disabled"
+      "ruleStatusLabel": "Trạng thái quy tắc",
+      "ruleStatusAriaLabel": "Trạng thái quy tắc",
+      "enabledText": "Đã bật: thông báo có thể kích hoạt cho sự kiện này.",
+      "disabledText": "Đã tắt: thông báo bị chặn cho sự kiện này.",
+      "assignedTriggersLabel": "Trigger được gán",
+      "noTriggersConfigured": "Chưa có trigger nào. Thêm trigger trên",
+      "triggersPageLink": "Trang Trigger",
+      "helpTextImplicitAll": "Để trống để gửi sự kiện này đến tất cả trigger thông báo. Chọn bất kỳ trigger nào sẽ biến quy tắc này thành danh sách cho phép.",
+      "helpTextExplicit": "Chỉ các trigger đã chọn mới nhận sự kiện này. Để trống để chặn sự kiện này với tất cả trigger.",
+      "saving": "Đang lưu...",
+      "saveChanges": "Lưu thay đổi",
+      "reset": "Đặt lại",
+      "enabled": "đã bật",
+      "disabled": "đã tắt"
     }
   },
   "securityView": {
-    "loadingVulnerabilityData": "Loading vulnerability data...",
-    "scanNow": "Scan Now",
-    "scanning": "Scanning...",
-    "scanAllAriaLabel": "Scan all containers",
-    "scanAllContainers": "Scan all containers for vulnerabilities",
-    "checkingScanner": "Checking scanner availability",
-    "runtimeUnavailable": "Runtime check unavailable; scan can still be attempted",
+    "loadingVulnerabilityData": "Đang tải dữ liệu lỗ hổng...",
+    "scanNow": "Quét ngay",
+    "scanning": "Đang quét...",
+    "scanAllAriaLabel": "Quét tất cả container",
+    "scanAllContainers": "Quét tất cả container để tìm lỗ hổng",
+    "checkingScanner": "Đang kiểm tra tính khả dụng của trình quét",
+    "runtimeUnavailable": "Kiểm tra runtime không khả dụng; vẫn có thể thử quét",
     "filters": {
-      "severity": "Severity",
-      "severityCritical": "Critical",
-      "severityHigh": "High",
-      "severityMedium": "Medium",
-      "severityLow": "Low",
-      "fixAvailable": "Fix Available",
-      "fixYes": "Yes",
-      "fixNo": "No",
-      "clearAll": "Clear all"
+      "severity": "Mức độ nghiêm trọng",
+      "severityCritical": "Nghiêm trọng",
+      "severityHigh": "Cao",
+      "severityMedium": "Trung bình",
+      "severityLow": "Thấp",
+      "fixAvailable": "Có bản vá",
+      "fixYes": "Có",
+      "fixNo": "Không",
+      "clearAll": "Xóa tất cả"
     },
     "columns": {
       "image": "Image",
-      "critical": "Critical",
-      "high": "High",
-      "medium": "Medium",
-      "low": "Low",
-      "fixable": "Fixable",
-      "total": "Total"
+      "critical": "Nghiêm trọng",
+      "high": "Cao",
+      "medium": "Trung bình",
+      "low": "Thấp",
+      "fixable": "Có thể vá",
+      "total": "Tổng cộng"
     },
     "card": {
-      "vulnerabilities": "vulnerabilities",
-      "vsUpdate": "vs update",
-      "fixable": "fixable",
-      "noFixesAvailable": "No fixes available",
-      "total": "total"
+      "vulnerabilities": "lỗ hổng",
+      "vsUpdate": "so với bản cập nhật",
+      "fixable": "có thể vá",
+      "noFixesAvailable": "Không có bản vá",
+      "total": "tổng cộng"
     },
     "badge": {
-      "critical": "Critical",
-      "high": "High",
-      "medium": "Medium",
-      "low": "Low"
+      "critical": "Nghiêm trọng",
+      "high": "Cao",
+      "medium": "Trung bình",
+      "low": "Thấp"
     },
-    "update": "Update",
-    "viewInContainers": "View in Containers",
-    "viewAllInContainers": "View all in Containers",
+    "deltaTooltips": {
+      "fixedSingle": "Cập nhật vá {count} lỗ hổng",
+      "fixedMultiple": "Cập nhật vá {count} lỗ hổng",
+      "newSingle": "Cập nhật đưa vào {count} lỗ hổng mới",
+      "newMultiple": "Cập nhật đưa vào {count} lỗ hổng mới",
+      "both": "Cập nhật: {fixed} đã vá, {new} mới"
+    },
+    "updateOneOfButton": "Cập nhật một trong {count} container",
+    "updateThisContainerButton": "Cập nhật container này",
+    "update": "Cập nhật",
+    "viewInContainers": "Xem trong Container",
+    "viewAllInContainers": "Xem tất cả trong Container",
     "export": {
-      "label": "Export",
-      "downloadReport": "Download Report"
+      "label": "Xuất",
+      "downloadReport": "Tải báo cáo"
     },
     "sbom": {
       "label": "SBOM",
-      "loading": "Loading SBOM document...",
-      "loadingButton": "Loading...",
-      "refresh": "Refresh",
-      "hide": "Hide",
-      "view": "View",
-      "download": "Download",
-      "format": "format:",
-      "components": "components:",
-      "generated": "generated:"
+      "loading": "Đang tải tài liệu SBOM...",
+      "loadingButton": "Đang tải...",
+      "refresh": "Làm mới",
+      "hide": "Ẩn",
+      "view": "Xem",
+      "download": "Tải xuống",
+      "format": "định dạng:",
+      "components": "thành phần:",
+      "generated": "đã tạo:"
     },
     "vuln": {
-      "noFix": "No fix",
-      "target": "Target:"
+      "noFix": "Không có bản vá",
+      "target": "Mục tiêu:"
     },
     "chooser": {
-      "title": "Select container to update",
-      "cancel": "Cancel"
+      "title": "Chọn container để cập nhật",
+      "cancel": "Hủy"
     },
     "runtimeTools": {
       "trivy": "Trivy",
@@ -192,135 +227,144 @@
     }
   },
   "registriesView": {
-    "loadingRegistries": "Loading registries...",
-    "loadError": "Failed to load registries",
-    "filterPlaceholder": "Filter by name or type...",
-    "clear": "Clear",
-    "emptyFiltered": "No registries match your filters",
+    "loadingRegistries": "Đang tải registry...",
+    "loadError": "Không thể tải registry",
+    "filterPlaceholder": "Lọc theo tên hoặc loại...",
+    "clear": "Xóa",
+    "emptyFiltered": "Không có registry nào khớp với bộ lọc của bạn",
     "columns": {
       "registry": "Registry",
-      "type": "Type",
-      "status": "Status",
+      "type": "Loại",
+      "status": "Trạng thái",
       "url": "URL"
     },
     "badge": {
-      "private": "Private",
-      "public": "Public"
+      "private": "Riêng tư",
+      "public": "Công khai"
     },
     "card": {
-      "auth": "Auth",
-      "status": "Status"
+      "auth": "Xác thực",
+      "status": "Trạng thái"
+    },
+    "status": {
+      "connected": "Đã kết nối",
+      "error": "Lỗi",
+      "unknown": "Không xác định"
     },
     "detail": {
-      "refreshing": "Refreshing registry details...",
-      "status": "Status",
-      "authentication": "Authentication",
+      "refreshing": "Đang làm mới thông tin registry...",
+      "status": "Trạng thái",
+      "authentication": "Xác thực",
       "url": "URL"
     }
   },
   "serversView": {
-    "loadingServerData": "Loading server data...",
-    "loadError": "Failed to load server data",
-    "filterPlaceholder": "Filter by name or address...",
-    "clear": "Clear",
-    "emptyFiltered": "No hosts match your filters",
-    "justNow": "Just now",
-    "never": "Never",
+    "loadingServerData": "Đang tải dữ liệu máy chủ...",
+    "loadError": "Không thể tải dữ liệu máy chủ",
+    "filterPlaceholder": "Lọc theo tên hoặc địa chỉ...",
+    "clear": "Xóa",
+    "emptyFiltered": "Không có máy chủ nào khớp với bộ lọc của bạn",
+    "justNow": "Vừa xong",
+    "never": "Chưa bao giờ",
+    "status": {
+      "connected": "Đã kết nối",
+      "disconnected": "Mất kết nối"
+    },
     "columns": {
-      "host": "Host",
-      "address": "Address",
-      "status": "Status",
-      "containers": "Containers",
-      "lastSeen": "Last Seen"
+      "host": "Máy chủ",
+      "address": "Địa chỉ",
+      "status": "Trạng thái",
+      "containers": "Container",
+      "lastSeen": "Lần cuối thấy"
     },
     "card": {
-      "containers": "Containers",
-      "running": "Running",
-      "images": "Images",
-      "lastSeen": "Last seen"
+      "containers": "Container",
+      "running": "Đang chạy",
+      "images": "Image",
+      "lastSeen": "Lần cuối thấy"
     },
     "list": {
-      "containers": "containers"
+      "containers": "container"
     },
     "detail": {
-      "containers": "Containers",
-      "running": "running",
-      "stopped": "stopped",
-      "images": "Images",
-      "lastSeen": "Last Seen",
-      "refresh": "Refresh"
+      "containers": "Container",
+      "running": "đang chạy",
+      "stopped": "đã dừng",
+      "images": "Image",
+      "lastSeen": "Lần cuối thấy",
+      "refresh": "Làm mới"
     }
   },
   "triggersView": {
-    "loadingTriggers": "Loading triggers...",
-    "loadError": "Failed to load triggers",
-    "filterPlaceholder": "Filter by name...",
-    "clear": "Clear",
-    "emptyFiltered": "No triggers match your filters",
+    "loadingTriggers": "Đang tải trigger...",
+    "loadError": "Không thể tải trigger",
+    "filterPlaceholder": "Lọc theo tên...",
+    "clear": "Xóa",
+    "emptyFiltered": "Không có trigger nào khớp với bộ lọc của bạn",
     "columns": {
       "trigger": "Trigger",
-      "type": "Type",
-      "status": "Status"
+      "type": "Loại",
+      "status": "Trạng thái"
     },
     "status": {
-      "active": "Active",
-      "inactive": "Inactive"
+      "active": "Đang hoạt động",
+      "inactive": "Không hoạt động"
     },
     "test": {
-      "testing": "Testing...",
-      "sent": "Sent!",
-      "failed": "Failed",
-      "test": "Test",
-      "testTrigger": "Test Trigger",
-      "runTest": "Run test",
-      "testPassed": "Test passed",
-      "testFailed": "Test failed",
-      "defaultError": "Trigger test failed"
+      "testing": "Đang kiểm tra...",
+      "sent": "Đã gửi!",
+      "failed": "Thất bại",
+      "test": "Kiểm tra",
+      "testTrigger": "Kiểm tra Trigger",
+      "runTest": "Chạy kiểm tra",
+      "testPassed": "Kiểm tra thành công",
+      "testFailed": "Kiểm tra thất bại",
+      "defaultError": "Kiểm tra trigger thất bại"
     },
     "detail": {
-      "status": "Status",
-      "refreshing": "Refreshing trigger details...",
-      "noConfig": "No configuration properties"
+      "status": "Trạng thái",
+      "refreshing": "Đang làm mới thông tin trigger...",
+      "noConfig": "Không có thuộc tính cấu hình"
     },
     "list": {
-      "status": "Status"
+      "status": "Trạng thái"
     }
   },
   "watchersView": {
-    "loadingWatchers": "Loading watchers...",
-    "loadError": "Failed to load watchers",
-    "filterPlaceholder": "Filter by name...",
-    "clear": "Clear",
-    "emptyFiltered": "No watchers match your filters",
+    "loadingWatchers": "Đang tải watcher...",
+    "loadError": "Không thể tải watcher",
+    "filterPlaceholder": "Lọc theo tên...",
+    "clear": "Xóa",
+    "emptyFiltered": "Không có watcher nào khớp với bộ lọc của bạn",
     "columns": {
       "watcher": "Watcher",
-      "status": "Status",
-      "containers": "Containers",
-      "schedule": "Schedule",
-      "nextRun": "Next Run",
-      "lastRun": "Last Run"
+      "status": "Trạng thái",
+      "containers": "Container",
+      "schedule": "Lịch trình",
+      "nextRun": "Lần chạy tiếp",
+      "lastRun": "Lần chạy cuối"
     },
     "status": {
-      "watching": "Watching",
-      "paused": "Paused"
+      "watching": "Đang theo dõi",
+      "paused": "Tạm dừng"
     },
     "card": {
-      "containers": "Containers",
-      "nextRun": "Next run",
-      "lastRun": "Last run",
-      "containersWatched": "{count} containers watched"
+      "containers": "Container",
+      "nextRun": "Lần chạy tiếp",
+      "lastRun": "Lần chạy cuối",
+      "containersWatched": "{count} container đang theo dõi"
     },
     "badge": {
-      "maint": "Maint"
+      "maint": "Bảo trì"
     },
     "detail": {
       "cron": "Cron",
-      "lastRun": "Last Run",
-      "containersWatched": "Containers Watched",
-      "schedule": "Schedule",
-      "nextRun": "Next Run",
-      "viewContainers": "View containers",
-      "refreshing": "Refreshing watcher details..."
+      "lastRun": "Lần chạy cuối",
+      "containersWatched": "Container đang theo dõi",
+      "schedule": "Lịch trình",
+      "nextRun": "Lần chạy tiếp",
+      "viewContainers": "Xem container",
+      "refreshing": "Đang làm mới thông tin watcher..."
     }
   }
 }

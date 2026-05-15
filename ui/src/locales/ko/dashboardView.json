@@ -1,94 +1,95 @@
 {
   "dashboardView": {
-    "loading": "Loading dashboard...",
-    "loadFailed": "Failed to load dashboard",
-    "dragToReorder": "Drag to reorder",
-    "viewAll": "View all →",
+    "loading": "대시보드 불러오는 중...",
+    "loadFailed": "대시보드를 불러오지 못했습니다",
+    "dragToReorder": "드래그하여 순서 변경",
+    "viewAll": "모두 보기 →",
     "editToggle": {
-      "showWidgetPanel": "Show widget panel",
-      "doneCustomizing": "Done customizing",
-      "customize": "Customize dashboard"
+      "showWidgetPanel": "위젯 패널 표시",
+      "doneCustomizing": "사용자 지정 완료",
+      "customize": "대시보드 사용자 지정"
     },
     "widgetPanel": {
-      "title": "Widgets",
-      "closePanel": "Close panel",
-      "resetToDefault": "Reset to Default"
+      "title": "위젯",
+      "closePanel": "패널 닫기",
+      "resetToDefault": "기본값으로 초기화"
     },
     "confirm": {
       "updateContainer": {
-        "header": "Update Container",
-        "message": "Update {name} now? This will apply the latest discovered image.",
-        "accept": "Update"
+        "header": "컨테이너 업데이트",
+        "message": "{name}을(를) 지금 업데이트하시겠습니까? 최신 발견된 이미지가 적용됩니다.",
+        "accept": "업데이트"
       },
       "updateAll": {
-        "header": "Update All Containers",
-        "message": "{count} containers will be updated. Continue?",
-        "accept": "Update All"
+        "header": "모든 컨테이너 업데이트",
+        "message": "{count}개 컨테이너가 업데이트됩니다. 계속하시겠습니까?",
+        "accept": "모두 업데이트"
       }
     },
     "toast": {
-      "updated": "Updated: {name}",
-      "updateFailed": "Update failed: {name}",
-      "updateFailedWithReason": "Update failed: {name} — {reason}",
-      "cancelled": "Cancelled: {name}",
-      "rolledBack": "Rolled back: {name}",
-      "rolledBackWithReason": "Rolled back: {name} — {reason}",
-      "updateError": "Failed to update {name}",
-      "updateAllError": "Failed to update all containers"
+      "updated": "업데이트됨: {name}",
+      "updateFailed": "업데이트 실패: {name}",
+      "updateFailedWithReason": "업데이트 실패: {name} — {reason}",
+      "cancelled": "취소됨: {name}",
+      "rolledBack": "롤백됨: {name}",
+      "rolledBackWithReason": "롤백됨: {name} — {reason}",
+      "updateError": "{name} 업데이트에 실패했습니다",
+      "updateAllError": "모든 컨테이너 업데이트에 실패했습니다"
     },
     "recentUpdates": {
-      "title": "Updates Available",
-      "updateAll": "Update all",
-      "noUpdates": "No updates available",
-      "releaseNotes": "Release notes",
-      "securityBlocked": "Security blocked",
-      "updateContainer": "Update container",
-      "compactSingle": "{count} update available",
-      "compactPlural": "{count} updates available",
+      "title": "사용 가능한 업데이트",
+      "widgetAria": "사용 가능한 업데이트 위젯",
+      "updateAll": "모두 업데이트",
+      "noUpdates": "사용 가능한 업데이트 없음",
+      "releaseNotes": "릴리스 노트",
+      "securityBlocked": "보안으로 인해 차단됨",
+      "updateContainer": "컨테이너 업데이트",
+      "compactSingle": "{count}개 업데이트 사용 가능",
+      "compactPlural": "{count}개 업데이트 사용 가능",
       "status": {
-        "queued": "Queued",
-        "updating": "Updating"
+        "queued": "대기 중",
+        "updating": "업데이트 중"
       },
       "columns": {
-        "container": "Container",
-        "version": "Version",
-        "type": "Type",
-        "actions": "Actions"
+        "container": "컨테이너",
+        "version": "버전",
+        "type": "유형",
+        "actions": "작업"
       }
     },
     "hostStatus": {
-      "title": "Host Status",
-      "connected": "Connected",
-      "disconnected": "Disconnected",
-      "containerCount": "{running}/{total} containers"
+      "title": "호스트 상태",
+      "connected": "연결됨",
+      "disconnected": "연결 해제됨",
+      "containerCount": "{running}/{total}개 컨테이너"
     },
     "resourceUsage": {
-      "title": "Resource Usage",
-      "totalUsage": "Total Usage ({watched} watched)",
-      "cpu": "Avg CPU",
-      "memory": "Memory",
-      "topCpu": "Top CPU",
-      "topMemory": "Top Memory",
-      "noCpuData": "No live CPU data",
-      "noMemoryData": "No live memory data"
+      "title": "리소스 사용량",
+      "totalUsage": "전체 사용량 ({watched}개 감시 중)",
+      "cpu": "평균 CPU",
+      "memory": "메모리",
+      "topCpu": "CPU 상위",
+      "topMemory": "메모리 상위",
+      "noCpuData": "실시간 CPU 데이터 없음",
+      "noMemoryData": "실시간 메모리 데이터 없음"
     },
     "securityOverview": {
-      "title": "Security Overview",
-      "images": "images",
-      "clean": "Clean",
-      "issues": "Issues",
-      "notScanned": "Not Scanned",
-      "severityBreakdown": "Severity Breakdown",
-      "critical": "{count} Critical",
-      "high": "{count} High",
-      "medium": "{count} Medium",
-      "low": "{count} Low",
-      "topVulnerabilities": "Top Vulnerabilities",
-      "noVulnerabilities": "No vulnerabilities reported"
+      "title": "보안 개요",
+      "images": "이미지",
+      "clean": "정상",
+      "issues": "문제",
+      "notScanned": "미스캔",
+      "severityBreakdown": "심각도 분류",
+      "critical": "{count}개 치명적",
+      "high": "{count}개 높음",
+      "medium": "{count}개 중간",
+      "low": "{count}개 낮음",
+      "topVulnerabilities": "주요 취약점",
+      "noVulnerabilities": "취약점 없음"
     },
     "updateBreakdown": {
-      "title": "Update Breakdown",
-      "noUpdates": "No updates to categorize"
+      "title": "업데이트 분류",
+      "noUpdates": "분류할 업데이트 없음"
     },
     "stats": {
       "containers": "컨테이너",

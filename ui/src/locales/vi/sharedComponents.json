@@ -1,55 +1,55 @@
 {
   "sharedComponents": {
     "confirmDialog": {
-      "cancel": "Cancel",
-      "confirm": "Confirm"
+      "cancel": "Hủy",
+      "confirm": "Xác nhận"
     },
     "copyableTag": {
-      "copied": "Copied!",
-      "clickToCopy": "Click to copy"
+      "copied": "Đã sao chép!",
+      "clickToCopy": "Nhấn để sao chép"
     },
     "dataCardGrid": {
-      "selectItem": "Select {name}"
+      "selectItem": "Chọn {name}"
     },
     "dataFilterBar": {
-      "filters": "Filters",
-      "toggleFilters": "Toggle filters",
-      "viewMode": "View mode",
-      "viewModeLabel": "{label} view"
+      "filters": "Bộ lọc",
+      "toggleFilters": "Bật/tắt bộ lọc",
+      "viewMode": "Chế độ xem",
+      "viewModeLabel": "Chế độ xem {label}"
     },
     "dataListAccordion": {
-      "toggleDetails": "Toggle {name} details",
-      "selectItem": "Select {name}"
+      "toggleDetails": "Bật/tắt chi tiết {name}",
+      "selectItem": "Chọn {name}"
     },
     "dataTable": {
-      "actions": "Actions",
-      "resizeColumn": "Resize column"
+      "actions": "Thao tác",
+      "resizeColumn": "Thay đổi kích thước cột"
     },
     "detailPanel": {
-      "openFullPage": "Open full page view",
-      "closePanel": "Close details panel",
-      "ariaLabel": "Detail panel"
+      "openFullPage": "Mở chế độ xem toàn trang",
+      "closePanel": "Đóng bảng chi tiết",
+      "ariaLabel": "Bảng chi tiết"
     },
     "emptyState": {
-      "clearFilters": "Clear all filters"
+      "clearFilters": "Xóa tất cả bộ lọc"
     },
     "logViewer": {
-      "emptyMessage": "No log entries found.",
-      "loadingMessage": "Loading logs..."
+      "emptyMessage": "Không tìm thấy mục nhật ký nào.",
+      "loadingMessage": "Đang tải nhật ký..."
     },
     "scanProgressBanner": {
-      "scanning": "Scanning {done}/{total} containers..."
+      "scanning": "Đang quét {done}/{total} container..."
     },
     "scanProgressText": {
-      "scanning": "Scanning {done}/{total}..."
+      "scanning": "Đang quét {done}/{total}..."
     },
     "securityEmptyState": {
-      "noDataTitle": "No vulnerability data yet",
-      "noDataBody": "Run a scan to check your containers for known vulnerabilities",
-      "filteredTitle": "No images match your filters",
-      "clearFilters": "Clear all filters",
-      "setupGuide": "Setup Guide",
-      "scanNow": "Scan Now"
+      "noDataTitle": "Chưa có dữ liệu lỗ hổng bảo mật",
+      "noDataBody": "Chạy quét để kiểm tra các lỗ hổng bảo mật đã biết trong container của bạn",
+      "filteredTitle": "Không có image nào khớp với bộ lọc của bạn",
+      "clearFilters": "Xóa tất cả bộ lọc",
+      "setupGuide": "Hướng dẫn cài đặt",
+      "scanNow": "Quét ngay"
     }
   }
 }

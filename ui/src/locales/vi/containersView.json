@@ -1,25 +1,32 @@
 {
   "containersView": {
     "error": {
-      "loadFailed": "Failed to load containers",
-      "recheckFailed": "Failed to recheck containers"
+      "loadFailed": "Không thể tải danh sách container",
+      "recheckFailed": "Không thể kiểm tra lại container"
     },
     "toast": {
-      "updated": "Updated: {name}",
-      "updateFailed": "Update failed: {name}",
-      "updateFailedWithReason": "Update failed: {name} — {reason}",
-      "cancelled": "Cancelled: {name}",
-      "rolledBack": "Rolled back: {name}",
-      "rolledBackWithReason": "Rolled back: {name} — {reason}",
-      "updateAlreadyInProgress": "Update already in progress for some containers in this group",
-      "batchUpdatedNoGroup": "Updated {count} containers",
-      "batchPartialNoGroup": "Updated {succeeded} of {total} containers; {failed} failed",
-      "batchFailedNoGroup": "Failed to update {count} containers",
-      "unknownGroup": "unknown group"
+      "updated": "Đã cập nhật: {name}",
+      "updateFailed": "Cập nhật thất bại: {name}",
+      "updateFailedWithReason": "Cập nhật thất bại: {name} — {reason}",
+      "cancelled": "Đã hủy: {name}",
+      "rolledBack": "Đã khôi phục: {name}",
+      "rolledBackWithReason": "Đã khôi phục: {name} — {reason}",
+      "updateAlreadyInProgress": "Đã có cập nhật đang thực hiện cho một số container trong nhóm này",
+      "batchUpdatedNoGroup": "Đã cập nhật {count} container",
+      "batchPartialNoGroup": "Đã cập nhật {succeeded}/{total} container; {failed} thất bại",
+      "batchFailedNoGroup": "Không thể cập nhật {count} container",
+      "unknownGroup": "nhóm không xác định",
+      "updateStarted": "Bắt đầu cập nhật: {name}",
+      "forceUpdateStarted": "Bắt đầu cập nhật bắt buộc: {name}",
+      "alreadyUpToDate": "Đã cập nhật rồi: {name}",
+      "queuedUpdateSingle": "Đã xếp hàng cập nhật cho {count} container",
+      "queuedUpdateMultiple": "Đã xếp hàng cập nhật cho {count} container",
+      "countAlreadyUpToDateSingle": "{count} container đã cập nhật rồi",
+      "countAlreadyUpToDateMultiple": "{count} container đã cập nhật rồi"
     },
     "registryError": {
-      "generic": "Registry error",
-      "detail": "Registry error: {error}"
+      "generic": "Lỗi registry",
+      "detail": "Lỗi registry: {error}"
     },
     "columns": {
       "container": "Container",

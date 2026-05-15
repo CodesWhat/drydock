@@ -1,0 +1,39 @@
+{
+  "notificationOutboxView": {
+    "heading": "Hộp thư đi",
+    "refresh": "Làm mới",
+    "loading": "Đang tải mục hộp thư đi…",
+    "tabs": {
+      "dead-letter": "Dead-letter",
+      "pending": "Đang chờ",
+      "delivered": "Đã gửi"
+    },
+    "columns": {
+      "event": "Sự kiện",
+      "trigger": "Trigger",
+      "attempts": "Số lần thử",
+      "lastError": "Lỗi cuối",
+      "created": "Ngày tạo"
+    },
+    "actions": {
+      "retry": "Thử lại",
+      "discard": "Bỏ qua"
+    },
+    "status": {
+      "dead-letter": "Dead-letter",
+      "pending": "Đang chờ",
+      "delivered": "Đã gửi"
+    },
+    "empty": {
+      "dead-letter": "Không có mục dead-letter",
+      "pending": "Không có mục đang chờ",
+      "delivered": "Không có mục đã gửi"
+    },
+    "toast": {
+      "requeued": "Đã xếp hàng lại: {name}",
+      "discarded": "Đã bỏ qua: {name}",
+      "retryFailed": "Không thể thử lại {name}",
+      "discardFailed": "Không thể bỏ qua {name}"
+    }
+  }
+}
