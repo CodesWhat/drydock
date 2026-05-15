@@ -24,7 +24,11 @@
       "pending": "Pending",
       "delivered": "Delivered"
     },
-    "empty": "No {status} entries",
+    "empty": {
+      "dead-letter": "No dead-letter entries",
+      "pending": "No pending entries",
+      "delivered": "No delivered entries"
+    },
     "toast": {
       "requeued": "Requeued: {name}",
       "discarded": "Discarded: {name}",
