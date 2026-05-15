@@ -97,6 +97,32 @@
       "reset": "Zurücksetzen",
       "enabled": "aktiviert",
       "disabled": "deaktiviert"
+    },
+    "rules": {
+      "update-available": {
+        "name": "Update verfügbar",
+        "description": "Wenn für einen Container eine neue Version vorliegt"
+      },
+      "update-applied": {
+        "name": "Update angewendet",
+        "description": "Nachdem ein Container erfolgreich aktualisiert wurde"
+      },
+      "update-failed": {
+        "name": "Update fehlgeschlagen",
+        "description": "Wenn ein Update fehlschlägt oder zurückgesetzt wird"
+      },
+      "security-alert": {
+        "name": "Sicherheitswarnung",
+        "description": "Kritische/hohe Sicherheitslücke erkannt"
+      },
+      "agent-disconnect": {
+        "name": "Agent getrennt",
+        "description": "Wenn ein Remote-Agent die Verbindung verliert"
+      },
+      "agent-reconnect": {
+        "name": "Agent verbunden",
+        "description": "Wenn ein Remote-Agent nach einem Verbindungsverlust wieder verbunden wird"
+      }
     }
   },
   "securityView": {
@@ -140,6 +166,15 @@
       "medium": "Mittel",
       "low": "Niedrig"
     },
+    "deltaTooltips": {
+      "fixedSingle": "Update behebt {count} Schwachstelle",
+      "fixedMultiple": "Update behebt {count} Schwachstellen",
+      "newSingle": "Update bringt {count} neue Schwachstelle",
+      "newMultiple": "Update bringt {count} neue Schwachstellen",
+      "both": "Update: {fixed} behoben, {new} neu"
+    },
+    "updateOneOfButton": "Einen von {count} Containern aktualisieren",
+    "updateThisContainerButton": "Diesen Container aktualisieren",
     "update": "Aktualisieren",
     "viewInContainers": "In Containern anzeigen",
     "viewAllInContainers": "Alle in Containern anzeigen",
@@ -211,6 +246,11 @@
       "auth": "Auth",
       "status": "Status"
     },
+    "status": {
+      "connected": "Verbunden",
+      "error": "Fehler",
+      "unknown": "Unbekannt"
+    },
     "detail": {
       "refreshing": "Registry-Details werden aktualisiert...",
       "status": "Status",
@@ -249,6 +289,10 @@
       "images": "Images",
       "lastSeen": "Zuletzt gesehen",
       "refresh": "Aktualisieren"
+    },
+    "status": {
+      "connected": "Verbunden",
+      "disconnected": "Getrennt"
     }
   },
   "triggersView": {

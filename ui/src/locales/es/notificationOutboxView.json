@@ -1,0 +1,39 @@
+{
+  "notificationOutboxView": {
+    "heading": "Bandeja de salida",
+    "refresh": "Actualizar",
+    "loading": "Cargando entradas de la bandeja de salida…",
+    "tabs": {
+      "dead-letter": "Cola de mensajes fallidos",
+      "pending": "Pendiente",
+      "delivered": "Entregado"
+    },
+    "columns": {
+      "event": "Evento",
+      "trigger": "Trigger",
+      "attempts": "Intentos",
+      "lastError": "Último error",
+      "created": "Creado"
+    },
+    "actions": {
+      "retry": "Reintentar",
+      "discard": "Descartar"
+    },
+    "status": {
+      "dead-letter": "Cola de mensajes fallidos",
+      "pending": "Pendiente",
+      "delivered": "Entregado"
+    },
+    "empty": {
+      "dead-letter": "No hay entradas en la cola de mensajes fallidos",
+      "pending": "No hay entradas pendientes",
+      "delivered": "No hay entradas entregadas"
+    },
+    "toast": {
+      "requeued": "Reencolado: {name}",
+      "discarded": "Descartado: {name}",
+      "retryFailed": "Error al reintentar {name}",
+      "discardFailed": "Error al descartar {name}"
+    }
+  }
+}

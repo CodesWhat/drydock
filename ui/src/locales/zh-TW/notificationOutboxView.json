@@ -1,0 +1,39 @@
+{
+  "notificationOutboxView": {
+    "heading": "寄件匣",
+    "refresh": "重新整理",
+    "loading": "正在載入寄件匣項目…",
+    "tabs": {
+      "dead-letter": "無法投遞",
+      "pending": "待處理",
+      "delivered": "已投遞"
+    },
+    "columns": {
+      "event": "事件",
+      "trigger": "觸發器",
+      "attempts": "嘗試次數",
+      "lastError": "最後錯誤",
+      "created": "建立時間"
+    },
+    "actions": {
+      "retry": "重試",
+      "discard": "捨棄"
+    },
+    "status": {
+      "dead-letter": "無法投遞",
+      "pending": "待處理",
+      "delivered": "已投遞"
+    },
+    "empty": {
+      "dead-letter": "無無法投遞的項目",
+      "pending": "無待處理的項目",
+      "delivered": "無已投遞的項目"
+    },
+    "toast": {
+      "requeued": "已重新排隊：{name}",
+      "discarded": "已捨棄：{name}",
+      "retryFailed": "重試 {name} 失敗",
+      "discardFailed": "捨棄 {name} 失敗"
+    }
+  }
+}

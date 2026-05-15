@@ -15,7 +15,14 @@
       "batchUpdatedNoGroup": "{count} containers bijgewerkt",
       "batchPartialNoGroup": "{succeeded} van {total} containers bijgewerkt; {failed} is mislukt",
       "batchFailedNoGroup": "Kan {count} containers niet updaten",
-      "unknownGroup": "onbekende groep"
+      "unknownGroup": "onbekende groep",
+      "updateStarted": "Update gestart: {name}",
+      "forceUpdateStarted": "Geforceerde update gestart: {name}",
+      "alreadyUpToDate": "Al up-to-date: {name}",
+      "queuedUpdateSingle": "Update in de wachtrij voor {count} container",
+      "queuedUpdateMultiple": "Updates in de wachtrij voor {count} containers",
+      "countAlreadyUpToDateSingle": "{count} container al up-to-date",
+      "countAlreadyUpToDateMultiple": "{count} containers al up-to-date"
     },
     "registryError": {
       "generic": "Registerfout",

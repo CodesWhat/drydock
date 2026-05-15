@@ -1,0 +1,39 @@
+{
+  "notificationOutboxView": {
+    "heading": "Giden Kutusu",
+    "refresh": "Yenile",
+    "loading": "Giden kutusu girişleri yükleniyor…",
+    "tabs": {
+      "dead-letter": "Ölü mektup",
+      "pending": "Beklemede",
+      "delivered": "Teslim edildi"
+    },
+    "columns": {
+      "event": "Etkinlik",
+      "trigger": "Tetikleyici",
+      "attempts": "Denemeler",
+      "lastError": "Son hata",
+      "created": "Oluşturuldu"
+    },
+    "actions": {
+      "retry": "Yeniden dene",
+      "discard": "At"
+    },
+    "status": {
+      "dead-letter": "Ölü mektup",
+      "pending": "Beklemede",
+      "delivered": "Teslim edildi"
+    },
+    "empty": {
+      "dead-letter": "Ölü mektup girişi yok",
+      "pending": "Bekleyen giriş yok",
+      "delivered": "Teslim edilmiş giriş yok"
+    },
+    "toast": {
+      "requeued": "Yeniden kuyruğa alındı: {name}",
+      "discarded": "Atıldı: {name}",
+      "retryFailed": "{name} yeniden denenemedi",
+      "discardFailed": "{name} atılamadı"
+    }
+  }
+}

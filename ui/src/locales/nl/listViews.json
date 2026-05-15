@@ -75,6 +75,32 @@
     "clear": "Wissen",
     "allNotificationTriggers": "Alle meldingen worden geactiveerd",
     "noTriggers": "Geen triggers",
+    "rules": {
+      "update-available": {
+        "name": "Update beschikbaar",
+        "description": "Wanneer een container een nieuwe versie heeft"
+      },
+      "update-applied": {
+        "name": "Update toegepast",
+        "description": "Nadat een container succesvol is bijgewerkt"
+      },
+      "update-failed": {
+        "name": "Update mislukt",
+        "description": "Wanneer een update mislukt of wordt teruggedraaid"
+      },
+      "security-alert": {
+        "name": "Beveiligingswaarschuwing",
+        "description": "Kritieke/hoge kwetsbaarheid gedetecteerd"
+      },
+      "agent-disconnect": {
+        "name": "Agent verbroken",
+        "description": "Wanneer een externe agent de verbinding verliest"
+      },
+      "agent-reconnect": {
+        "name": "Agent opnieuw verbonden",
+        "description": "Wanneer een externe agent opnieuw verbinding maakt na verbindingsverlies"
+      }
+    },
     "columns": {
       "on": "Aan",
       "rule": "Regel",
@@ -140,6 +166,15 @@
       "medium": "Middelmatig",
       "low": "Laag"
     },
+    "deltaTooltips": {
+      "fixedSingle": "Update verhelpt {count} kwetsbaarheid",
+      "fixedMultiple": "Update verhelpt {count} kwetsbaarheden",
+      "newSingle": "Update introduceert {count} nieuwe kwetsbaarheid",
+      "newMultiple": "Update introduceert {count} nieuwe kwetsbaarheden",
+      "both": "Update: {fixed} verholpen, {new} nieuw"
+    },
+    "updateOneOfButton": "Update één van {count} containers",
+    "updateThisContainerButton": "Deze container bijwerken",
     "update": "Bijwerken",
     "viewInContainers": "Bekijken in containers",
     "viewAllInContainers": "Bekijk alles in Containers",
@@ -211,6 +246,11 @@
       "auth": "Authenticatie",
       "status": "Status"
     },
+    "status": {
+      "connected": "Verbonden",
+      "error": "Fout",
+      "unknown": "Onbekend"
+    },
     "detail": {
       "refreshing": "Registergegevens vernieuwen...",
       "status": "Status",
@@ -226,6 +266,10 @@
     "emptyFiltered": "Er zijn geen hosts die overeenkomen met uw filters",
     "justNow": "Zojuist",
     "never": "Nooit",
+    "status": {
+      "connected": "Verbonden",
+      "disconnected": "Verbroken"
+    },
     "columns": {
       "host": "Gastheer",
       "address": "Adres",

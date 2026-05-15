@@ -102,6 +102,7 @@
       "version": "版本",
       "currentLabel": "当前：",
       "latestLabel": "最新：",
+      "digestLabel": "摘要：",
       "upToDate": "已是最新",
       "tagFilters": "标签筛选",
       "includeLabel": "包含：",

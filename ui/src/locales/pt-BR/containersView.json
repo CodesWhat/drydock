@@ -15,7 +15,14 @@
       "batchUpdatedNoGroup": "{count} contêineres atualizados",
       "batchPartialNoGroup": "{succeeded} de {total} contêineres atualizados; {failed} falharam",
       "batchFailedNoGroup": "Falha ao atualizar {count} contêineres",
-      "unknownGroup": "grupo desconhecido"
+      "unknownGroup": "grupo desconhecido",
+      "updateStarted": "Atualização iniciada: {name}",
+      "forceUpdateStarted": "Atualização forçada iniciada: {name}",
+      "alreadyUpToDate": "Já está atualizado: {name}",
+      "queuedUpdateSingle": "Atualização na fila para {count} contêiner",
+      "queuedUpdateMultiple": "Atualizações na fila para {count} contêineres",
+      "countAlreadyUpToDateSingle": "{count} contêiner já está atualizado",
+      "countAlreadyUpToDateMultiple": "{count} contêineres já estão atualizados"
     },
     "registryError": {
       "generic": "Erro de registry",

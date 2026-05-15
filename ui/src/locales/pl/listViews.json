@@ -75,6 +75,32 @@
     "clear": "Wyczyść",
     "allNotificationTriggers": "Wszystkie wyzwalacze powiadomień",
     "noTriggers": "Żadnych wyzwalaczy",
+    "rules": {
+      "update-available": {
+        "name": "Dostępna aktualizacja",
+        "description": "Gdy kontener ma nową wersję"
+      },
+      "update-applied": {
+        "name": "Aktualizacja zastosowana",
+        "description": "Po pomyślnej aktualizacji kontenera"
+      },
+      "update-failed": {
+        "name": "Aktualizacja nie powiodła się",
+        "description": "Gdy aktualizacja nie powiedzie się lub zostanie cofnięta"
+      },
+      "security-alert": {
+        "name": "Alert bezpieczeństwa",
+        "description": "Wykryto krytyczną lub wysoką podatność"
+      },
+      "agent-disconnect": {
+        "name": "Agent rozłączony",
+        "description": "Gdy zdalny agent utraci połączenie"
+      },
+      "agent-reconnect": {
+        "name": "Agent ponownie połączony",
+        "description": "Gdy zdalny agent ponownie się połączy po utracie połączenia"
+      }
+    },
     "columns": {
       "on": "Włączone",
       "rule": "Reguła",
@@ -140,6 +166,15 @@
       "medium": "Średni",
       "low": "Niski"
     },
+    "deltaTooltips": {
+      "fixedSingle": "Aktualizacja naprawia {count} podatność",
+      "fixedMultiple": "Aktualizacja naprawia {count} podatności",
+      "newSingle": "Aktualizacja wprowadza {count} nową podatność",
+      "newMultiple": "Aktualizacja wprowadza {count} nowych podatności",
+      "both": "Aktualizacja: {fixed} naprawionych, {new} nowych"
+    },
+    "updateOneOfButton": "Zaktualizuj jeden z {count} kontenerów",
+    "updateThisContainerButton": "Zaktualizuj ten kontener",
     "update": "Zaktualizuj",
     "viewInContainers": "Zobacz w kontenerach",
     "viewAllInContainers": "Zobacz wszystko w Kontenery",
@@ -211,6 +246,11 @@
       "auth": "Uwierzytelnianie",
       "status": "Stan"
     },
+    "status": {
+      "connected": "Połączono",
+      "error": "Błąd",
+      "unknown": "Nieznany"
+    },
     "detail": {
       "refreshing": "Odświeżanie szczegółów rejestru...",
       "status": "Stan",
@@ -226,6 +266,10 @@
     "emptyFiltered": "Żaden host nie pasuje do Twoich filtrów",
     "justNow": "Właśnie teraz",
     "never": "Nigdy",
+    "status": {
+      "connected": "Połączono",
+      "disconnected": "Rozłączono"
+    },
     "columns": {
       "host": "Gospodarz",
       "address": "Adres",

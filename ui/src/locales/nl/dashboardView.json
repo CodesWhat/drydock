@@ -38,6 +38,7 @@
     },
     "recentUpdates": {
       "title": "Updates beschikbaar",
+      "widgetAria": "Widget Updates beschikbaar",
       "updateAll": "Alles bijwerken",
       "noUpdates": "Geen updates beschikbaar",
       "releaseNotes": "Release-opmerkingen",
