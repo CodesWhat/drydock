@@ -6,7 +6,7 @@ import AppBadge from '../components/AppBadge.vue';
 import ToggleSwitch from '../components/ToggleSwitch.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 
-const { t } = useI18n();
+const { t, te } = useI18n();
 import { useViewMode } from '../preferences/useViewMode';
 import type { NotificationRule, NotificationRuleUpdate } from '../services/notification';
 import { getAllNotificationRules, updateNotificationRule } from '../services/notification';
@@ -24,6 +24,16 @@ const NON_NOTIFICATION_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
 
 function isNotificationTriggerType(type: string) {
   return !NON_NOTIFICATION_TRIGGER_TYPES.has(type.toLowerCase());
+}
+
+function ruleDisplayName(rule: { id: string; name: string }): string {
+  const key = `notificationsView.rules.${rule.id}.name`;
+  return te(key) ? t(key) : rule.name;
+}
+
+function ruleDisplayDescription(rule: { id: string; description: string }): string {
+  const key = `notificationsView.rules.${rule.id}.description`;
+  return te(key) ? t(key) : rule.description;
 }
 
 const notificationsViewMode = useViewMode('notifications');
@@ -401,11 +411,11 @@ onMounted(async () => {
         />
       </template>
       <template #cell-name="{ row }">
-        <div class="font-medium truncate dd-text" :title="row.name" v-tooltip.top="row.name">{{ row.name }}</div>
+        <div class="font-medium truncate dd-text" :title="ruleDisplayName(row)" v-tooltip.top="ruleDisplayName(row)">{{ ruleDisplayName(row) }}</div>
         <div class="text-2xs mt-0.5 dd-text-muted truncate"
-             :title="row.description"
-             v-tooltip.top="row.description">
-          {{ row.description }}
+             :title="ruleDisplayDescription(row)"
+             v-tooltip.top="ruleDisplayDescription(row)">
+          {{ ruleDisplayDescription(row) }}
         </div>
       </template>
       <template #cell-triggers="{ row }">
@@ -441,11 +451,11 @@ onMounted(async () => {
       <template #card="{ item: notif }">
         <div class="px-4 pt-4 pb-2 flex items-start justify-between gap-3">
           <div class="min-w-0 flex-1">
-            <div class="text-sm-plus font-semibold truncate dd-text" :title="notif.name" v-tooltip.top="notif.name">{{ notif.name }}</div>
+            <div class="text-sm-plus font-semibold truncate dd-text" :title="ruleDisplayName(notif)" v-tooltip.top="ruleDisplayName(notif)">{{ ruleDisplayName(notif) }}</div>
             <div class="text-2xs-plus mt-0.5 dd-text-muted truncate"
-                 :title="notif.description"
-                 v-tooltip.top="notif.description">
-              {{ notif.description }}
+                 :title="ruleDisplayDescription(notif)"
+                 v-tooltip.top="ruleDisplayDescription(notif)">
+              {{ ruleDisplayDescription(notif) }}
             </div>
           </div>
           <ToggleSwitch
@@ -496,7 +506,7 @@ onMounted(async () => {
           @click.stop
           @update:model-value="toggleNotification(notif.id)"
         />
-        <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ notif.name }}</span>
+        <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ ruleDisplayName(notif) }}</span>
         <div :class="compactTriggerListRowClass">
           <AppBadge v-for="triggerId in notif.triggers" :key="triggerId"
                     :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }"
@@ -513,7 +523,7 @@ onMounted(async () => {
         </div>
       </template>
       <template #details="{ item: notif }">
-        <div class="text-2xs-plus dd-text-muted">{{ notif.description }}</div>
+        <div class="text-2xs-plus dd-text-muted">{{ ruleDisplayDescription(notif) }}</div>
       </template>
     </DataListAccordion>
 
@@ -534,7 +544,7 @@ onMounted(async () => {
         <template #header>
           <div class="flex items-center gap-2.5 min-w-0">
             <AppIcon name="notifications" :size="14" class="dd-text-secondary" />
-            <span class="text-sm font-bold truncate dd-text">{{ selectedRule?.name }}</span>
+            <span class="text-sm font-bold truncate dd-text">{{ selectedRule ? ruleDisplayName(selectedRule) : '' }}</span>
           </div>
         </template>
 
@@ -552,7 +562,7 @@ onMounted(async () => {
 
         <template v-if="selectedRule" #default>
           <div class="p-4 space-y-5">
-            <div class="text-2xs-plus dd-text-muted">{{ selectedRule.description }}</div>
+            <div class="text-2xs-plus dd-text-muted">{{ ruleDisplayDescription(selectedRule) }}</div>
 
             <div>
               <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">{{ t('notificationsView.detail.ruleStatusLabel') }}</div>
