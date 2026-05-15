@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **[#362](https://github.com/CodesWhat/drydock/issues/362) — SSE reconnect exponential backoff no longer collapses to a flat 1 s loop when the agent is struggling.** `AgentClient.startSse()` previously called `this.reconnectAttempts = 0` the instant the axios response headers arrived — before the stream had proven it could stay open. A crash-looping agent, a reverse-proxy with a short upstream idle timeout, or any situation where the SSE stream returned HTTP 200 and then ended almost immediately would cycle as: connect → 200 → `reconnectAttempts = 0` → stream ends → `scheduleReconnect()` (delay = 1 000 ms, attempts → 1) → 1 s later connect → 200 → `reconnectAttempts = 0` again — and so on forever. The user who filed #362 saw `SSE stream ended. Reconnecting...` in their controller logs every ~1.00 s indefinitely, with no escalation. The backoff now only resets after the stream has stayed open for `SSE_STABLE_CONNECTION_MS` (30 s). A `setTimeout` is armed when the response arrives and cancelled by `scheduleReconnect()` if the stream ends or errors before the window expires; streams that end early therefore keep their accumulated `reconnectAttempts` and the delay continues to double up to the 60 s cap as intended.
+
 ## [1.5.0-rc.21] — 2026-05-15
 
 ### Added
