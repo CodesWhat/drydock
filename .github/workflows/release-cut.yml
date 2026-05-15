@@ -23,6 +23,7 @@ concurrency:
 env:
   DOCKER_PLATFORMS: linux/amd64,linux/arm64
   CI_VERIFY_WORKFLOW_FILE: ci-verify.yml
+  E2E_PLAYWRIGHT_WORKFLOW_FILE: e2e-playwright.yml
 
 jobs:
   release:
@@ -85,6 +86,19 @@ jobs:
           # pathological CodeQL/mutation overlap can push to ~60m. Polling
           # more often than every 5m is wasteful because CI jobs only change
           # state on completion, not mid-flight.
+          max-attempts: '12'
+          sleep-seconds: '300'
+
+      - name: Wait for successful E2E Playwright on target SHA
+        uses: ./.github/actions/wait-for-successful-branch-ci
+        with:
+          github-token: ${{ github.token }}
+          workflow-file: ${{ env.E2E_PLAYWRIGHT_WORKFLOW_FILE }}
+          target-sha: ${{ steps.target.outputs.sha }}
+          # Playwright moved to its own workflow so its failures don't
+          # poison ci-verify's Check Suite for Scorecard. Releases still
+          # gate on it — runs ~10-15m typically, share the same 60-min
+          # budget shape.
           max-attempts: '12'
           sleep-seconds: '300'
 

@@ -1,0 +1,195 @@
+name: "🎭 E2E: Playwright"
+run-name: >-
+  ${{
+    github.event_name == 'pull_request' && format('🎭 E2E: Playwright — PR #{0}: {1}', github.event.pull_request.number, github.event.pull_request.title) ||
+    github.event_name == 'push' && format('🎭 E2E: Playwright — {0}', github.event.head_commit.message) ||
+    github.event_name == 'merge_group' && format('🎭 E2E: Playwright — Merge Queue: {0}', github.ref_name) ||
+    format('🎭 E2E: Playwright — {0}', github.ref_name)
+  }}
+
+# Playwright lives in its own workflow so a single failing UI assertion
+# does not flip the github-actions Check Suite on ci-verify.yml to
+# "failure". A failing suite caused OpenSSF Scorecard's CI-Tests check
+# to mark the merged PR as untested (see alert #43 dismissal context),
+# even though every other job in ci-verify was green. Each workflow
+# file gets its own Check Suite per commit, so isolating Playwright
+# keeps ci-verify's suite reliably green for Scorecard while the
+# Playwright job remains a required status check via branch ruleset.
+
+on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+  pull_request:
+    branches: [main]
+  merge_group:
+    branches: [main]
+
+concurrency:
+  group: e2e-playwright-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  changes:
+    name: "🔎 Changes: Path Filter"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      runtime: ${{ steps.filter.outputs.runtime }}
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Filter paths
+        id: filter
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d  # v4.0.1
+        with:
+          base: ${{ github.event_name == 'push' && github.event.before || '' }}
+          # Mirror ci-verify's runtime filter so the heavy E2E job
+          # short-circuits on pure docs / changelog edits.
+          filters: |
+            runtime:
+              - 'app/**'
+              - 'ui/**'
+              - 'e2e/**'
+              - 'test/**'
+              - 'scripts/**'
+              - 'Dockerfile'
+              - 'Docker.entrypoint.sh'
+              - 'healthcheck.c'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/e2e-playwright.yml'
+
+  playwright:
+    name: "🎭 E2E: Playwright"
+    if: needs.changes.outputs.runtime == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35  # UI build + Docker build + browser install + QA stack startup + UI flow tests
+    needs: [changes]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install ui dependencies
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08  # v3.0.2
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: cd ui && npm ci
+
+      - name: Build ui
+        run: npm run build
+        working-directory: ui
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+
+      # Shares the `drydock` GHA cache scope with ci-verify's build job,
+      # so the second workflow to run hits a warm cache.
+      - name: Docker build (QA image)
+        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
+        with:
+          context: .
+          push: false
+          load: true
+          tags: drydock:dev
+          build-args: DD_VERSION=ci
+          cache-from: type=gha,scope=drydock
+          cache-to: type=gha,mode=max,scope=drydock,ignore-error=true
+
+      - name: Install e2e dependencies
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08  # v3.0.2
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: cd e2e && npm ci
+
+      - name: Install Playwright Chromium
+        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08  # v3.0.2
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: cd e2e && npx playwright install --with-deps chromium
+
+      - name: Start QA stack
+        run: docker compose -p drydock-playwright -f test/qa-compose.yml up -d
+
+      - name: Wait for QA health
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            if curl -sf http://localhost:3333/health >/dev/null 2>&1; then
+              echo "Drydock QA is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Drydock QA failed to become healthy after 120 seconds."
+          docker compose -p drydock-playwright -f test/qa-compose.yml ps
+          exit 1
+
+      - name: Run Playwright tests
+        run: npm run test:playwright
+        working-directory: e2e
+
+      - name: Upload Playwright HTML report
+        if: failure()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        with:
+          name: playwright-html-${{ github.run_id }}-${{ github.run_attempt }}
+          path: e2e/playwright-report
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        with:
+          name: playwright-traces-${{ github.run_id }}-${{ github.run_attempt }}
+          path: e2e/test-results
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Show QA logs on failure
+        if: failure()
+        run: docker compose -p drydock-playwright -f test/qa-compose.yml logs --no-color
+
+      - name: Stop QA stack
+        if: always()
+        run: docker compose -p drydock-playwright -f test/qa-compose.yml down -v --remove-orphans
