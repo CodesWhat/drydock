@@ -9,7 +9,7 @@ import { ddEnvVars, getPublicUrl, getServerConfiguration } from '../../../config
 import { sanitizeLogParam } from '../../../log/sanitize.js';
 import { observeAuthLoginDuration, recordAuthLogin } from '../../../prometheus/auth.js';
 import { resolveConfiguredPath } from '../../../runtime/paths.js';
-import { getErrorMessage } from '../../../util/error.js';
+import { getErrorChainMessage } from '../../../util/error.js';
 import { enforceConcurrentSessionLimit } from '../../../util/session-limit.js';
 import Authentication from '../Authentication.js';
 import OidcStrategy from './OidcStrategy.js';
@@ -139,7 +139,7 @@ function redactUrlParams(url: string): string {
 }
 
 function sanitizeOidcErrorMessage(error: unknown): string {
-  const rawMessage = getErrorMessage(error);
+  const rawMessage = getErrorChainMessage(error);
   const urlRedactedMessage = rawMessage.replace(OIDC_URL_IN_TEXT_PATTERN, (match) =>
     redactUrlParams(match),
   );

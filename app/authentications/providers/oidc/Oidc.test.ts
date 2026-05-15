@@ -1478,6 +1478,20 @@ test('initAuthentication should tolerate startup discovery failure and recover o
   );
 });
 
+test('initAuthentication should include the nested cause chain in the startup warning', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  const cause = Object.assign(new Error('getaddrinfo ENOTFOUND idp.example.com'), {
+    code: 'ENOTFOUND',
+  });
+  const fetchError = Object.assign(new TypeError('fetch failed'), { cause });
+  openidClientMock.discovery = vi.fn().mockRejectedValue(fetchError);
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+
+  expect(oidc.log.warn).toHaveBeenCalledWith(expect.stringMatching(/fetch failed.*ENOTFOUND/));
+});
+
 test('initAuthentication should pass allowInsecureRequests for HTTP discovery URLs', async () => {
   oidc.client = undefined;
   oidc.logoutUrl = undefined;

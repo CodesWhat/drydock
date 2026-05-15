@@ -38,3 +38,32 @@ export function getErrorMessage(error: unknown, fallback = DEFAULT_ERROR_MESSAGE
 
   return fallback;
 }
+
+const MAX_ERROR_CAUSE_DEPTH = 5;
+
+// undici's fetch surfaces as a generic `TypeError: fetch failed`; the
+// actionable detail (DNS error code, TLS error, refused connection, etc.)
+// lives in `error.cause`, sometimes nested. Walk the chain so logs include
+// the underlying reason rather than the opaque top-level message.
+export function getErrorChainMessage(error: unknown, fallback = DEFAULT_ERROR_MESSAGE): string {
+  const parts: string[] = [];
+  const seen = new Set<object>();
+  let current: unknown = error;
+
+  for (let depth = 0; depth < MAX_ERROR_CAUSE_DEPTH; depth += 1) {
+    if (current && typeof current === 'object') {
+      if (seen.has(current)) break;
+      seen.add(current);
+    }
+    const message = getErrorMessage(current, '');
+    if (message) {
+      const code = (current as { code?: unknown } | null)?.code;
+      parts.push(typeof code === 'string' && code.trim() !== '' ? `${message} [${code}]` : message);
+    }
+    const next = (current as { cause?: unknown } | null)?.cause;
+    if (next === undefined || next === null) break;
+    current = next;
+  }
+
+  return parts.length > 0 ? parts.join(' ← ') : fallback;
+}

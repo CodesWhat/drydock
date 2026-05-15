@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from 'vitest';
 import * as errorUtils from './error.js';
 
-const { getErrorMessage } = errorUtils;
+const { getErrorMessage, getErrorChainMessage } = errorUtils;
 
 describe('getErrorMessage', () => {
   test('does not expose the removed toErrorMessage helper', () => {
@@ -47,5 +47,57 @@ describe('getErrorMessage', () => {
     expect(getErrorMessage(undefined, 'Unexpected container processing error')).toBe(
       'Unexpected container processing error',
     );
+  });
+});
+
+describe('getErrorChainMessage', () => {
+  test('returns the message for a plain Error with no cause', () => {
+    expect(getErrorChainMessage(new Error('boom'))).toBe('boom');
+  });
+
+  test('joins top-level message and cause message with the separator', () => {
+    const cause = Object.assign(new Error('getaddrinfo ENOTFOUND host.tld'), { code: 'ENOTFOUND' });
+    const error = Object.assign(new TypeError('fetch failed'), { cause });
+    expect(getErrorChainMessage(error)).toBe(
+      'fetch failed ← getaddrinfo ENOTFOUND host.tld [ENOTFOUND]',
+    );
+  });
+
+  test('joins three-level cause chain with two separators', () => {
+    const level3 = new Error('root cause');
+    const level2 = Object.assign(new Error('middle'), { cause: level3 });
+    const level1 = Object.assign(new Error('top'), { cause: level2 });
+    expect(getErrorChainMessage(level1)).toBe('top ← middle ← root cause');
+  });
+
+  test('does not loop infinitely on a cyclic cause reference', () => {
+    const cyclic = new Error('cyclic');
+    (cyclic as any).cause = cyclic;
+    expect(getErrorChainMessage(cyclic)).toBe('cyclic');
+  });
+
+  test('truncates at depth 5', () => {
+    const errors = Array.from({ length: 7 }, (_, i) => new Error(`level ${i}`));
+    for (let i = 0; i < errors.length - 1; i += 1) {
+      (errors[i] as any).cause = errors[i + 1];
+    }
+    const result = getErrorChainMessage(errors[0]);
+    const parts = result.split(' ← ');
+    expect(parts.length).toBeLessThanOrEqual(5);
+  });
+
+  test('returns the default fallback for undefined input', () => {
+    expect(getErrorChainMessage(undefined)).toBe('unknown error');
+  });
+
+  test('returns a custom fallback when provided and input yields no message', () => {
+    expect(getErrorChainMessage(undefined, 'connection failed')).toBe('connection failed');
+  });
+
+  test('appends [code] only when the node has a non-empty string code property', () => {
+    const withCode = Object.assign(new Error('dns error'), { code: 'ENOTFOUND' });
+    const withoutCode = new Error('plain error');
+    expect(getErrorChainMessage(withCode)).toBe('dns error [ENOTFOUND]');
+    expect(getErrorChainMessage(withoutCode)).toBe('plain error');
   });
 });
