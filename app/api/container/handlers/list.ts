@@ -239,12 +239,13 @@ export function attachUpdateEligibility(
   container: Container,
   eligibilityContext?: UpdateEligibilityContext,
 ): Container {
-  const ctx = eligibilityContext
-    ? { ...eligibilityContext, isSelfUpdateAvailable: isSelfUpdateAvailable(container) }
-    : {
-        ...buildEligibilityContext(context),
-        isSelfUpdateAvailable: isSelfUpdateAvailable(container),
-      };
+  // isSelfUpdateAvailable is always resolved per-container regardless of whether
+  // a pre-built eligibilityContext was supplied, because it depends on the
+  // container's specific watcher configuration.
+  const ctx: UpdateEligibilityContext = {
+    ...(eligibilityContext ?? buildEligibilityContext(context)),
+    isSelfUpdateAvailable: isSelfUpdateAvailable(container),
+  };
   const updateEligibility: UpdateEligibility = computeUpdateEligibility(container, ctx);
   return createProjectionView(container, [['updateEligibility', updateEligibility]]);
 }

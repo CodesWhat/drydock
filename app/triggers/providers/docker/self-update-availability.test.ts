@@ -14,7 +14,10 @@ vi.mock('node:fs', () => ({
 }));
 
 import type { Container } from '../../../model/container.js';
-import { isSelfUpdateAvailable } from './self-update-availability.js';
+import {
+  __resetSelfUpdateAvailabilityCacheForTest,
+  isSelfUpdateAvailable,
+} from './self-update-availability.js';
 
 function makeContainer(overrides: Partial<Container> = {}): Container {
   return {
@@ -51,6 +54,7 @@ describe('isSelfUpdateAvailable', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetState.mockReturnValue({ watcher: {} });
+    __resetSelfUpdateAvailabilityCacheForTest();
   });
 
   describe('fail-open / unknown cases', () => {
@@ -194,6 +198,95 @@ describe('isSelfUpdateAvailable', () => {
 
       const containerSecondary = makeContainer({ watcher: 'secondary' });
       expect(isSelfUpdateAvailable(containerSecondary)).toBe(false);
+    });
+  });
+
+  describe('socket availability cache', () => {
+    test('calls statSync only once across repeated socket-mode calls', () => {
+      mockGetState.mockReturnValue({
+        watcher: { local: makeDockerWatcher({}) },
+      });
+      mockStatSync.mockReturnValue({ isSocket: () => true });
+
+      const container = makeContainer({ watcher: 'local' });
+      isSelfUpdateAvailable(container);
+      isSelfUpdateAvailable(container);
+      isSelfUpdateAvailable(container);
+
+      expect(mockStatSync).toHaveBeenCalledTimes(1);
+    });
+
+    test('returns the cached value on subsequent calls without re-statting', () => {
+      mockGetState.mockReturnValue({
+        watcher: { local: makeDockerWatcher({}) },
+      });
+      // First call: socket present
+      mockStatSync.mockReturnValueOnce({ isSocket: () => true });
+      // If the cache is bypassed a second time, the mock would throw; but we
+      // don't even need to set that up — just verify both results are identical.
+      mockStatSync.mockReturnValue({ isSocket: () => false });
+
+      const container = makeContainer({ watcher: 'local' });
+      const first = isSelfUpdateAvailable(container);
+      const second = isSelfUpdateAvailable(container);
+
+      expect(first).toBe(true);
+      expect(second).toBe(true); // cached — not re-evaluated
+      expect(mockStatSync).toHaveBeenCalledTimes(1);
+    });
+
+    test('caches false result when socket is absent', () => {
+      mockGetState.mockReturnValue({
+        watcher: { local: makeDockerWatcher({}) },
+      });
+      mockStatSync.mockReturnValueOnce({ isSocket: () => false });
+
+      const container = makeContainer({ watcher: 'local' });
+      expect(isSelfUpdateAvailable(container)).toBe(false);
+      expect(isSelfUpdateAvailable(container)).toBe(false);
+      expect(mockStatSync).toHaveBeenCalledTimes(1);
+    });
+
+    test('caches false result when statSync throws', () => {
+      mockGetState.mockReturnValue({
+        watcher: { local: makeDockerWatcher({}) },
+      });
+      mockStatSync.mockImplementationOnce(() => {
+        throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+      });
+
+      const container = makeContainer({ watcher: 'local' });
+      expect(isSelfUpdateAvailable(container)).toBe(false);
+      expect(isSelfUpdateAvailable(container)).toBe(false);
+      expect(mockStatSync).toHaveBeenCalledTimes(1);
+    });
+
+    test('does not cache TCP-mode results — each TCP call skips the socket stat', () => {
+      mockGetState.mockReturnValue({
+        watcher: { remote: makeDockerWatcher({ host: '10.0.0.1' }) },
+      });
+
+      const container = makeContainer({ watcher: 'remote' });
+      isSelfUpdateAvailable(container);
+      isSelfUpdateAvailable(container);
+
+      expect(mockStatSync).not.toHaveBeenCalled();
+    });
+
+    test('reset clears the cache so statSync is called again on next socket-mode call', () => {
+      mockGetState.mockReturnValue({
+        watcher: { local: makeDockerWatcher({}) },
+      });
+      mockStatSync.mockReturnValue({ isSocket: () => true });
+
+      const container = makeContainer({ watcher: 'local' });
+      isSelfUpdateAvailable(container);
+      expect(mockStatSync).toHaveBeenCalledTimes(1);
+
+      __resetSelfUpdateAvailabilityCacheForTest();
+
+      isSelfUpdateAvailable(container);
+      expect(mockStatSync).toHaveBeenCalledTimes(2);
     });
   });
 });
