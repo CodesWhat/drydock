@@ -6,6 +6,7 @@ import {
   executeSelfUpdateTransition,
   findDockerSocketBind,
   resolveHelperDockerConnection,
+  validateTcpDockerHost,
 } from './SelfUpdateTransitionShared.js';
 import {
   SELF_UPDATE_HEALTH_TIMEOUT_MS,
@@ -350,6 +351,105 @@ describe('resolveHelperDockerConnection', () => {
       'Self-update requires the Docker socket to be bind-mounted (e.g. /var/run/docker.sock:/var/run/docker.sock), or the watcher must be configured with a TCP Docker host',
     );
   });
+
+  test('throws when modem.host contains a scheme prefix', () => {
+    const deps = makeDeps(undefined);
+    expect(() =>
+      resolveHelperDockerConnection(
+        deps,
+        { createContainer: vi.fn(), modem: { host: 'tcp://docker-host' } },
+        undefined,
+      ),
+    ).toThrow('must be a bare hostname or IP, not a URL');
+  });
+
+  test('throws when modem.host contains @', () => {
+    const deps = makeDeps(undefined);
+    expect(() =>
+      resolveHelperDockerConnection(
+        deps,
+        { createContainer: vi.fn(), modem: { host: 'user@docker-host' } },
+        undefined,
+      ),
+    ).toThrow('must be a bare hostname or IP, not a userinfo string');
+  });
+
+  test('throws when modem.host contains a path separator', () => {
+    const deps = makeDeps(undefined);
+    expect(() =>
+      resolveHelperDockerConnection(
+        deps,
+        { createContainer: vi.fn(), modem: { host: '/var/run/docker.sock' } },
+        undefined,
+      ),
+    ).toThrow('must be a bare hostname or IP without path separators');
+  });
+});
+
+describe('validateTcpDockerHost', () => {
+  test('accepts a plain hostname', () => {
+    expect(() => validateTcpDockerHost('docker-proxy')).not.toThrow();
+  });
+
+  test('accepts an IPv4 address', () => {
+    expect(() => validateTcpDockerHost('192.168.1.100')).not.toThrow();
+  });
+
+  test('accepts a hostname with dots and hyphens', () => {
+    expect(() => validateTcpDockerHost('my-docker.internal.example.com')).not.toThrow();
+  });
+
+  test('throws for empty string', () => {
+    expect(() => validateTcpDockerHost('')).toThrow('must not be empty');
+  });
+
+  test('throws for http:// scheme prefix', () => {
+    expect(() => validateTcpDockerHost('http://docker-host')).toThrow(
+      'must be a bare hostname or IP, not a URL',
+    );
+  });
+
+  test('throws for tcp:// scheme prefix', () => {
+    expect(() => validateTcpDockerHost('tcp://docker-host')).toThrow(
+      'must be a bare hostname or IP, not a URL',
+    );
+  });
+
+  test('throws for https:// scheme prefix', () => {
+    expect(() => validateTcpDockerHost('https://docker-host:2376')).toThrow(
+      'must be a bare hostname or IP, not a URL',
+    );
+  });
+
+  test('throws when host contains @', () => {
+    expect(() => validateTcpDockerHost('user@docker-host')).toThrow(
+      'must be a bare hostname or IP, not a userinfo string',
+    );
+  });
+
+  test('throws when host contains a space', () => {
+    expect(() => validateTcpDockerHost('docker host')).toThrow(
+      'must be a bare hostname or IP without whitespace',
+    );
+  });
+
+  test('throws when host contains a tab', () => {
+    expect(() => validateTcpDockerHost('docker\thost')).toThrow(
+      'must be a bare hostname or IP without whitespace',
+    );
+  });
+
+  test('throws when host contains a forward slash', () => {
+    expect(() => validateTcpDockerHost('/var/run/docker.sock')).toThrow(
+      'must be a bare hostname or IP without path separators',
+    );
+  });
+
+  test('throws when host contains a backslash', () => {
+    expect(() => validateTcpDockerHost('docker\\host')).toThrow(
+      'must be a bare hostname or IP without path separators',
+    );
+  });
 });
 
 describe('executeSelfUpdateTransition TCP mode', () => {
@@ -400,6 +500,19 @@ describe('executeSelfUpdateTransition TCP mode', () => {
       resolveFinalizeSecret: vi.fn(() => 'tcp-secret'),
     };
   }
+
+  test('tcp mode: logs resolved TCP host at info level', async () => {
+    const context = createTcpContext('host');
+    const deps = createTcpDependencies();
+    deps.createContainer = vi.fn().mockResolvedValue(context.newContainer);
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await executeSelfUpdateTransition(deps, context as never, { name: 'drydock', image: {} }, log);
+
+    expect(log.info).toHaveBeenCalledWith(
+      'Self-update helper will connect to Docker via TCP: docker-proxy:2375',
+    );
+  });
 
   test('tcp mode: helper HostConfig has no Binds and includes TCP env vars', async () => {
     const context = createTcpContext('host');

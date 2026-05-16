@@ -70,6 +70,35 @@ function findDockerSocketBind(spec: SelfUpdateContainerSpec | undefined): string
   return undefined;
 }
 
+/**
+ * Validate that a Docker TCP host value is a bare hostname or IP address.
+ * Rejects values that contain a scheme prefix, path separator, `@`, or whitespace —
+ * anything that is not a plain host suitable for passing to Dockerode.
+ */
+function validateTcpDockerHost(host: string): void {
+  if (host.length === 0) {
+    throw new Error('Docker TCP host must not be empty');
+  }
+  if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//u.test(host)) {
+    throw new Error(`Docker TCP host must be a bare hostname or IP, not a URL (got: ${host})`);
+  }
+  if (host.includes('@')) {
+    throw new Error(
+      `Docker TCP host must be a bare hostname or IP, not a userinfo string (got: ${host})`,
+    );
+  }
+  if (/\s/u.test(host)) {
+    throw new Error(
+      `Docker TCP host must be a bare hostname or IP without whitespace (got: ${host})`,
+    );
+  }
+  if (host.includes('/') || host.includes('\\')) {
+    throw new Error(
+      `Docker TCP host must be a bare hostname or IP without path separators (got: ${host})`,
+    );
+  }
+}
+
 function resolveHelperDockerConnection(
   dependencies: Pick<SelfUpdateTransitionDependencies, 'findDockerSocketBind'>,
   dockerApi: SelfUpdateDockerApi,
@@ -89,6 +118,7 @@ function resolveHelperDockerConnection(
 
   const modemHost = dockerApi.modem?.host;
   if (typeof modemHost === 'string' && modemHost.length > 0) {
+    validateTcpDockerHost(modemHost);
     return {
       mode: 'tcp',
       host: modemHost,
@@ -117,6 +147,11 @@ async function executeSelfUpdateTransition(
   }
 
   const connection = resolveHelperDockerConnection(dependencies, dockerApi, currentContainerSpec);
+  if (connection.mode === 'tcp') {
+    logContainer.info(
+      `Self-update helper will connect to Docker via TCP: ${connection.host}:${connection.port}`,
+    );
+  }
 
   dependencies.insertContainerImageBackup(context, container);
 
@@ -245,4 +280,9 @@ async function executeSelfUpdateTransition(
   return true;
 }
 
-export { executeSelfUpdateTransition, findDockerSocketBind, resolveHelperDockerConnection };
+export {
+  executeSelfUpdateTransition,
+  findDockerSocketBind,
+  resolveHelperDockerConnection,
+  validateTcpDockerHost,
+};

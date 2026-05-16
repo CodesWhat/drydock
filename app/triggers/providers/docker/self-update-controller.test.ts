@@ -603,6 +603,77 @@ describe('self-update-controller orchestration', () => {
     process.exitCode = originalExitCode;
   });
 
+  test('tcp branch: logs resolved host at INFO level', async () => {
+    process.env.DD_SELF_UPDATE_DOCKER_HOST = 'docker-proxy';
+    process.env.DD_SELF_UPDATE_DOCKER_PORT = '2376';
+    const oldContainer = createOldContainer();
+    const newContainer = createNewContainer();
+    mockDocker(oldContainer, newContainer);
+
+    await runSelfUpdateController();
+
+    expect(console.log).toHaveBeenCalledWith(
+      '[self-update] connecting to Docker via TCP: docker-proxy:2376',
+    );
+
+    delete process.env.DD_SELF_UPDATE_DOCKER_HOST;
+    delete process.env.DD_SELF_UPDATE_DOCKER_PORT;
+  });
+
+  test('tcp branch: throws and aborts when DD_SELF_UPDATE_DOCKER_HOST contains a scheme prefix', async () => {
+    process.env.DD_SELF_UPDATE_DOCKER_HOST = 'tcp://docker-proxy';
+    const oldContainer = createOldContainer();
+    const newContainer = createNewContainer();
+    mockDocker(oldContainer, newContainer);
+
+    await expect(runSelfUpdateController()).rejects.toThrow(
+      'must be a bare hostname or IP, not a URL',
+    );
+
+    expect(mockDockerodeCtor).not.toHaveBeenCalled();
+
+    delete process.env.DD_SELF_UPDATE_DOCKER_HOST;
+  });
+
+  test('tcp branch: throws and aborts when DD_SELF_UPDATE_DOCKER_HOST contains @', async () => {
+    process.env.DD_SELF_UPDATE_DOCKER_HOST = 'user@docker-proxy';
+    mockDocker(createOldContainer(), createNewContainer());
+
+    await expect(runSelfUpdateController()).rejects.toThrow(
+      'must be a bare hostname or IP, not a userinfo string',
+    );
+
+    expect(mockDockerodeCtor).not.toHaveBeenCalled();
+
+    delete process.env.DD_SELF_UPDATE_DOCKER_HOST;
+  });
+
+  test('tcp branch: throws and aborts when DD_SELF_UPDATE_DOCKER_HOST contains whitespace', async () => {
+    process.env.DD_SELF_UPDATE_DOCKER_HOST = 'docker proxy';
+    mockDocker(createOldContainer(), createNewContainer());
+
+    await expect(runSelfUpdateController()).rejects.toThrow(
+      'must be a bare hostname or IP without whitespace',
+    );
+
+    expect(mockDockerodeCtor).not.toHaveBeenCalled();
+
+    delete process.env.DD_SELF_UPDATE_DOCKER_HOST;
+  });
+
+  test('tcp branch: throws and aborts when DD_SELF_UPDATE_DOCKER_HOST contains a path separator', async () => {
+    process.env.DD_SELF_UPDATE_DOCKER_HOST = '/var/run/docker.sock';
+    mockDocker(createOldContainer(), createNewContainer());
+
+    await expect(runSelfUpdateController()).rejects.toThrow(
+      'must be a bare hostname or IP without path separators',
+    );
+
+    expect(mockDockerodeCtor).not.toHaveBeenCalled();
+
+    delete process.env.DD_SELF_UPDATE_DOCKER_HOST;
+  });
+
   test('tcp branch: builds Dockerode with host/port/protocol and skips probe and socket redirect', async () => {
     process.env.DD_SELF_UPDATE_DOCKER_HOST = 'docker-proxy';
     process.env.DD_SELF_UPDATE_DOCKER_PORT = '2376';
