@@ -63,7 +63,8 @@
         "lastFetched": "Last fetched: {time}",
         "entries": "{count} entries",
         "statusLive": "Live",
-        "statusOffline": "Offline"
+        "statusOffline": "Offline",
+        "loadError": "Failed to load agent logs"
       },
       "fields": {
         "cpus": "CPUs",

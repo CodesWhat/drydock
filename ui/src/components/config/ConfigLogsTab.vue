@@ -80,9 +80,11 @@ const { t } = useI18n();
 const viewerPaused = computed(() => !props.streamingEnabled);
 const statusLabel = computed(() => {
   if (viewerPaused.value) {
-    return 'Paused';
+    return t('configView.logs.status.paused');
   }
-  return props.streamingConnected ? t('configView.logs.toolbar.live') : 'Offline';
+  return props.streamingConnected
+    ? t('configView.logs.toolbar.live')
+    : t('configView.logs.status.offline');
 });
 const statusColor = computed(() => {
   if (viewerPaused.value) {

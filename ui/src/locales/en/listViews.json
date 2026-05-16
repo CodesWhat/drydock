@@ -71,6 +71,7 @@
   "notificationsView": {
     "loadingRules": "Loading notification rules...",
     "loadError": "Failed to load notification rules",
+    "saveError": "Failed to update notification rule",
     "filterPlaceholder": "Filter by name, description, or trigger...",
     "clear": "Clear",
     "allNotificationTriggers": "All notification triggers",
@@ -127,6 +128,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Loading vulnerability data...",
+    "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "Scan Now",
     "scanning": "Scanning...",
     "scanAllAriaLabel": "Scan all containers",
@@ -165,6 +167,15 @@
       "high": "High",
       "medium": "Medium",
       "low": "Low"
+    },
+    "countLabel": {
+      "images": "images",
+      "scanned": "scanned"
+    },
+    "delta": {
+      "fixed": "{count} fixed",
+      "new": "{count} new",
+      "both": "{fixed} fixed, {new} new"
     },
     "deltaTooltips": {
       "fixedSingle": "Update fixes {count} vulnerability",
@@ -252,6 +263,7 @@
       "unknown": "Unknown"
     },
     "detail": {
+      "loadError": "Unable to load latest registry details",
       "refreshing": "Refreshing registry details...",
       "status": "Status",
       "authentication": "Authentication",
@@ -301,6 +313,7 @@
     "filterPlaceholder": "Filter by name...",
     "clear": "Clear",
     "emptyFiltered": "No triggers match your filters",
+    "testContainerName": "Test Container",
     "columns": {
       "trigger": "Trigger",
       "type": "Type",
@@ -322,6 +335,7 @@
       "defaultError": "Trigger test failed"
     },
     "detail": {
+      "loadError": "Unable to load latest trigger details",
       "status": "Status",
       "refreshing": "Refreshing trigger details...",
       "noConfig": "No configuration properties"
@@ -333,6 +347,7 @@
   "watchersView": {
     "loadingWatchers": "Loading watchers...",
     "loadError": "Failed to load watchers",
+    "soon": "soon",
     "filterPlaceholder": "Filter by name...",
     "clear": "Clear",
     "emptyFiltered": "No watchers match your filters",
@@ -358,6 +373,7 @@
       "maint": "Maint"
     },
     "detail": {
+      "loadError": "Unable to load latest watcher details",
       "cron": "Cron",
       "lastRun": "Last Run",
       "containersWatched": "Containers Watched",

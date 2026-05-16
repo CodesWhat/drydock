@@ -57,12 +57,18 @@ const newestFirst = usePreference(
 let streamConnection: ContainerLogStreamConnection | null = null;
 
 const MAX_VISIBLE_LOGS = 5000;
-const TAIL_OPTIONS: ReadonlyArray<{ label: string; value: TailOption }> = [
-  { label: 'Tail 100', value: 100 },
-  { label: 'Tail 500', value: 500 },
-  { label: 'Tail 1000', value: 1000 },
-  { label: 'Tail All', value: 'all' },
-];
+
+const TAIL_OPTION_VALUES: ReadonlyArray<TailOption> = [100, 500, 1000, 'all'];
+
+const tailOptions = computed(() =>
+  TAIL_OPTION_VALUES.map((value) => ({
+    label:
+      value === 'all'
+        ? t('containerComponents.containerLogs.tailAll')
+        : t('containerComponents.containerLogs.tailCount', { count: value }),
+    value,
+  })),
+);
 
 const levelOptions = computed(() => {
   const uniqueLevels = new Set<string>();
@@ -93,9 +99,11 @@ const visibleEntries = computed(() => {
 
 const statusLabel = computed(() => {
   if (streamPaused.value) {
-    return 'Paused';
+    return t('containerComponents.containerLogs.statusPaused');
   }
-  return streamStatus.value === 'connected' ? 'Live' : 'Offline';
+  return streamStatus.value === 'connected'
+    ? t('containerComponents.containerLogs.statusLive')
+    : t('containerComponents.containerLogs.statusOffline');
 });
 
 const statusColor = computed(() => {
@@ -309,7 +317,7 @@ onBeforeUnmount(() => {
         >
           <span class="inline-flex items-center gap-1">
             <span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--dd-success)" />
-            stdout
+            {{ t('containerComponents.containerLogs.stdout') }}
           </span>
         </AppButton>
 
@@ -323,7 +331,7 @@ onBeforeUnmount(() => {
         >
           <span class="inline-flex items-center gap-1">
             <span class="w-1.5 h-1.5 rounded-full" style="background-color: var(--dd-danger)" />
-            stderr
+            {{ t('containerComponents.containerLogs.stderr') }}
           </span>
         </AppButton>
 
@@ -331,7 +339,7 @@ onBeforeUnmount(() => {
           v-model="tailSize"
           class="px-2 py-1.5 dd-rounded text-2xs font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text"
         >
-          <option v-for="option in TAIL_OPTIONS" :key="option.label" :value="option.value">{{ option.label }}</option>
+          <option v-for="option in tailOptions" :key="option.label" :value="option.value">{{ option.label }}</option>
         </select>
 
         <select

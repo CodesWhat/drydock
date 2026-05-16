@@ -266,7 +266,7 @@ async function persistRule(ruleId: string, update: NotificationRuleUpdate) {
     }
     return updatedRule;
   } catch (e: unknown) {
-    saveError.value = errorMessage(e, 'Failed to update notification rule');
+    saveError.value = errorMessage(e, t('notificationsView.saveError'));
     throw e;
   } finally {
     savingRuleId.value = null;

@@ -58,7 +58,7 @@ async function testTrigger(trigger: Record<string, unknown>) {
       triggerAgent: (trigger.agent as string | undefined) || undefined,
       container: {
         id: 'test',
-        name: 'Test Container',
+        name: t('triggersView.testContainerName'),
         image: { name: 'test/image', tag: { value: 'latest' } },
         result: { tag: 'latest' },
         updateKind: { kind: 'unknown', semverDiff: 'unknown' },
@@ -190,7 +190,7 @@ async function openDetail(trigger: Record<string, unknown>) {
     selectedTrigger.value = mapTrigger(detail, String(trigger.status));
   } catch {
     if (requestId !== detailRequestId) return;
-    detailError.value = 'Unable to load latest trigger details';
+    detailError.value = t('triggersView.detail.loadError');
   } finally {
     if (requestId === detailRequestId) {
       detailLoading.value = false;

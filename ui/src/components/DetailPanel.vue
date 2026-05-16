@@ -98,7 +98,7 @@ onUnmounted(() => globalThis.removeEventListener('keydown', handleKeydown));
                     ? 'dd-bg-elevated dd-text'
                     : 'dd-text-muted hover:dd-text hover:dd-bg-elevated'"
                   @click="$emit('update:size', s)">
-            {{ s === 'sm' ? 'S' : s === 'md' ? 'M' : 'L' }}
+            {{ t(`sharedComponents.detailPanel.size.${s}`) }}
           </AppButton>
         </div>
         <slot name="toolbar" />

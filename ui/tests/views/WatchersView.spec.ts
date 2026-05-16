@@ -401,4 +401,192 @@ describe('WatchersView', () => {
 
     expect(rows[0].containers).toBe(5);
   });
+
+  it('table cell-status badge shows translated watching/paused labels', async () => {
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'watcher-alpha',
+        name: 'Alpha Watcher',
+        type: 'docker',
+        configuration: { cron: '*/5 * * * *' },
+      },
+    ]);
+
+    // Stub renders cell-status with both the real (watching) row AND an injected paused row
+    const dualStatusTableStub = defineComponent({
+      props: ['columns', 'rows', 'rowKey', 'activeRow'],
+      emits: ['row-click'],
+      template: `
+        <div class="data-table" :data-row-count="rows?.length ?? 0">
+          <div v-for="row in rows" :key="row[rowKey || 'id']" class="data-table-row">
+            <button class="row-click-first" @click="$emit('row-click', row)">Open</button>
+            <slot name="cell-status" :row="row" />
+          </div>
+          <div class="data-table-row-paused">
+            <slot name="cell-status" :row="{ status: 'paused' }" />
+          </div>
+        </div>
+      `,
+    });
+
+    const wrapper = mountWithPlugins(WatchersView, {
+      global: {
+        stubs: { ...dataViewStubs, DataTable: dualStatusTableStub },
+      },
+    });
+    await flushPromises();
+
+    const badges = wrapper.findAll('span.badge');
+    expect(badges.some((b) => b.text().trim() === 'Watching')).toBe(true);
+    expect(badges.some((b) => b.text().trim() === 'Paused')).toBe(true);
+  });
+
+  it('card badge shows translated watching/paused labels', async () => {
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'watcher-alpha',
+        name: 'Alpha Watcher',
+        type: 'docker',
+        configuration: { cron: '*/5 * * * *' },
+      },
+    ]);
+
+    // Stub renders card slot with both a watching (real) and paused (injected) item
+    const dualStatusCardStub = defineComponent({
+      props: ['items', 'itemKey', 'selectedKey'],
+      emits: ['item-click'],
+      template: `
+        <div class="data-card-grid" :data-item-count="items?.length ?? 0">
+          <slot v-if="items?.[0]" name="card" :item="items[0]" />
+          <slot name="card" :item="{ status: 'paused', name: 'Paused', cron: '', containers: 0, lastRun: '—', nextRun: '—', config: {} }" />
+        </div>
+      `,
+    });
+
+    const wrapper = mountWithPlugins(WatchersView, {
+      global: {
+        stubs: {
+          ...dataViewStubs,
+          DataTable: richDataTableStub,
+          DataCardGrid: dualStatusCardStub,
+        },
+      },
+    });
+    await flushPromises();
+    await wrapper.find('.mode-cards').trigger('click');
+    await flushPromises();
+
+    const badges = wrapper.findAll('span.badge');
+    expect(badges.some((b) => b.text().trim() === 'Watching')).toBe(true);
+    expect(badges.some((b) => b.text().trim() === 'Paused')).toBe(true);
+  });
+
+  it('list accordion header badge shows translated watching/paused labels', async () => {
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'watcher-alpha',
+        name: 'Alpha Watcher',
+        type: 'docker',
+        configuration: { cron: '*/5 * * * *' },
+      },
+    ]);
+
+    // Stub renders header slot with both a watching (real) and paused (injected) item
+    const dualStatusListStub = defineComponent({
+      props: ['items', 'itemKey', 'selectedKey'],
+      emits: ['item-click'],
+      template: `
+        <div class="data-list-accordion" :data-item-count="items?.length ?? 0">
+          <template v-for="item in items" :key="item[itemKey || 'id']">
+            <slot name="header" :item="item" />
+          </template>
+          <slot name="header" :item="{ status: 'paused', name: 'Paused', cron: '', containers: 0, config: {} }" />
+        </div>
+      `,
+    });
+
+    const wrapper = mountWithPlugins(WatchersView, {
+      global: {
+        stubs: {
+          ...dataViewStubs,
+          DataTable: richDataTableStub,
+          DataListAccordion: dualStatusListStub,
+        },
+      },
+    });
+    await flushPromises();
+    await wrapper.find('.mode-list').trigger('click');
+    await flushPromises();
+
+    const badges = wrapper.findAll('span.badge');
+    expect(badges.some((b) => b.text().trim() === 'Watching')).toBe(true);
+    expect(badges.some((b) => b.text().trim() === 'Paused')).toBe(true);
+  });
+
+  it('detail panel header badge shows translated "Watching" when selectedWatcher is watching', async () => {
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'watcher-alpha',
+        name: 'Alpha Watcher',
+        type: 'docker',
+        configuration: { cron: '*/5 * * * *' },
+      },
+    ]);
+    mockGetWatcher.mockResolvedValue({
+      id: 'watcher-alpha',
+      name: 'Alpha Watcher',
+      type: 'docker',
+      configuration: { cron: '*/5 * * * *' },
+    });
+
+    const wrapper = await mountWatchersView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    const detailHeader = wrapper.find('.detail-header');
+    const badge = detailHeader.findAll('span.badge').find((b) => b.text().trim() === 'Watching');
+    expect(badge).toBeDefined();
+  });
+
+  it('detail panel header badge shows translated "Paused" when selectedWatcher is paused', async () => {
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'watcher-alpha',
+        name: 'Alpha Watcher',
+        type: 'docker',
+        configuration: { cron: '*/5 * * * *' },
+      },
+    ]);
+
+    // Stub emits the row click with status: 'paused' directly
+    const pausedClickStub = defineComponent({
+      props: ['columns', 'rows', 'rowKey', 'activeRow'],
+      emits: ['row-click'],
+      template: `
+        <div class="data-table" :data-row-count="rows?.length ?? 0">
+          <button class="row-click-first" @click="$emit('row-click', { ...rows[0], status: 'paused' })">Open</button>
+        </div>
+      `,
+    });
+
+    mockGetWatcher.mockResolvedValue({
+      id: 'watcher-alpha',
+      name: 'Alpha Watcher',
+      type: 'docker',
+      configuration: { cron: '*/5 * * * *' },
+    });
+
+    const wrapper = mountWithPlugins(WatchersView, {
+      global: {
+        stubs: { ...dataViewStubs, DataTable: pausedClickStub },
+      },
+    });
+    await flushPromises();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    const detailHeader = wrapper.find('.detail-header');
+    const badge = detailHeader.findAll('span.badge').find((b) => b.text().trim() === 'Paused');
+    expect(badge).toBeDefined();
+  });
 });

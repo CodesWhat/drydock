@@ -165,11 +165,11 @@ function isStaticTableRow() {
         <p class="dd-text-body dd-text-muted">
           {{ t('configView.general.webhookApi.description') }}
         </p>
-        <p v-if="!props.webhookEnabled" class="dd-text-body dd-text-muted">
-          {{ t('configView.general.webhookApi.disabledMessage') }} <code class="font-mono">DD_SERVER_WEBHOOK_ENABLED=true</code> and
-          configure at least one token (<code class="font-mono">DD_SERVER_WEBHOOK_TOKEN</code> or
-          <code class="font-mono">DD_SERVER_WEBHOOK_TOKENS_*</code>) to enable it.
-        </p>
+        <i18n-t v-if="!props.webhookEnabled" keypath="configView.general.webhookApi.disabledHint" tag="p" class="dd-text-body dd-text-muted">
+          <template #envEnabled><code class="font-mono">DD_SERVER_WEBHOOK_ENABLED=true</code></template>
+          <template #envToken><code class="font-mono">DD_SERVER_WEBHOOK_TOKEN</code></template>
+          <template #envTokens><code class="font-mono">DD_SERVER_WEBHOOK_TOKENS_*</code></template>
+        </i18n-t>
         <DataTable
           :columns="webhookColumns"
           :rows="props.webhookEndpoints"

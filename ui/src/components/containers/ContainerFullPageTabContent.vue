@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppBadge from '@/components/AppBadge.vue';
 import AppButton from '../AppButton.vue';
@@ -168,15 +168,17 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
   return getPrimaryHardBlocker(container.updateEligibility) !== undefined;
 }
 
-const updateKindLabels: Record<NonNullable<Container['updateKind']>, string> = {
-  major: 'Major',
-  minor: 'Minor',
-  patch: 'Patch',
-  digest: 'Digest',
-};
+const updateKindLabels = computed(
+  (): Record<NonNullable<Container['updateKind']>, string> => ({
+    major: t('containerComponents.listContent.major'),
+    minor: t('containerComponents.listContent.minor'),
+    patch: t('containerComponents.listContent.patch'),
+    digest: t('containerComponents.listContent.digest'),
+  }),
+);
 
 function getUpdateKindLabel(kind: Container['updateKind']) {
-  return kind ? updateKindLabels[kind] : '';
+  return kind ? updateKindLabels.value[kind] : '';
 }
 </script>
 
