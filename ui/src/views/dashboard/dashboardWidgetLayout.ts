@@ -64,7 +64,8 @@ export const WIDGET_CONSTRAINTS: Record<DashboardWidgetId, WidgetLayoutConstrain
   'stat-registries': { minW: 2, minH: 3, maxW: 6, maxH: 6, defaultW: 3, defaultH: 3 },
   'recent-updates': { minW: 4, minH: 3, maxW: 12, maxH: 16, defaultW: 8, defaultH: 10 },
   'security-overview': { minW: 3, minH: 3, maxW: 6, maxH: 16, defaultW: 4, defaultH: 10 },
-  'resource-usage': { minW: 3, minH: 3, maxW: 12, maxH: 20, defaultW: 4, defaultH: 14 },
+  // minH: 7 → 46*7-16 = 306px, keeping the per-container CPU/Memory lists visible (threshold: 180px)
+  'resource-usage': { minW: 3, minH: 7, maxW: 12, maxH: 20, defaultW: 4, defaultH: 14 },
   'host-status': { minW: 3, minH: 3, maxW: 12, maxH: 20, defaultW: 4, defaultH: 6 },
   'update-breakdown': { minW: 3, minH: 3, maxW: 12, maxH: 8, defaultW: 4, defaultH: 6 },
 };
