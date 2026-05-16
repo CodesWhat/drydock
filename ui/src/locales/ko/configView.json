@@ -122,6 +122,7 @@
     },
     "profile": {
       "loading": "프로필 불러오는 중",
+      "unknownUser": "Unknown User",
       "fields": {
         "username": "사용자 이름",
         "email": "이메일",
@@ -134,6 +135,10 @@
     "logs": {
       "loading": "로그 불러오는 중...",
       "emptyMessage": "현재 필터에 해당하는 로그가 없습니다.",
+      "status": {
+        "paused": "Paused",
+        "offline": "Offline"
+      },
       "toolbar": {
         "live": "실시간",
         "allLevels": "전체 레벨",

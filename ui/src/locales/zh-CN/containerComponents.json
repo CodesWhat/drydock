@@ -148,7 +148,14 @@
       "title": "容器日志",
       "download": "下载",
       "allLevels": "所有级别",
-      "downloadError": "无法下载日志"
+      "downloadError": "无法下载日志",
+      "tailCount": "Tail {count}",
+      "tailAll": "Tail All",
+      "statusPaused": "Paused",
+      "statusLive": "Live",
+      "statusOffline": "Offline",
+      "stdout": "stdout",
+      "stderr": "stderr"
     },
     "groupedViews": {
       "statusQueued": "排队中",
@@ -192,7 +199,13 @@
       "blockedTagWithCriticals": "已阻止：{tag}（{count} 个严重）",
       "blockedTagWithCriticalsCVEs": "已阻止：{tag}（{count} 个严重）",
       "manualUpdateOnly": "仅支持手动更新",
-      "manualUpdateOnlyWithMessage": "仅支持手动更新 — {message}"
+      "manualUpdateOnlyWithMessage": "仅支持手动更新 — {message}",
+      "updateBtnTooltipDefault": "Update",
+      "cancelButton": "Cancel",
+      "blockedButton": "Blocked",
+      "updateButton": "Update",
+      "moreButton": "More",
+      "cancelUpdateTooltip": "Cancel update"
     },
     "groupHeader": {
       "ungrouped": "未分组",
@@ -258,7 +271,7 @@
       "recheckTooltip": "重新检查更新",
       "columnsHeader": "列",
       "narrowViewportSuffix": "(窄视图)",
-      "autoHiddenBadgeTooltip": "因窗口宽度不足，自动隐藏了 ({count}) 列。请拉宽窗口，或隐藏其他列以腾出空间。",
+      "autoHiddenBadgeTooltip": "因窗口宽度不足，自动隐藏了 {count} 列。请拉宽窗口，或隐藏其他列以腾出空间。",
       "filterSearch": "搜索：{value}",
       "filterStatus": "状态：{value}",
       "filterBouncer": "Bouncer：{value}",
@@ -285,6 +298,7 @@
     },
     "updateDialog": {
       "title": "更新容器",
+      "thisContainer": "this container",
       "confirmTagChange": "更新 {name}？这将把镜像标签从 :{currentTag} 更改为 :{newTag}{kind}。",
       "confirmDigestChange": "更新 {name}？:{currentTag} 有更新的构建版本可用（摘要变更）。",
       "confirmLatest": "立即更新 {name}？这将应用最新发现的镜像。",
@@ -323,6 +337,7 @@
       "triggerFiltered": "触发器筛选",
       "agentMismatch": "代理不匹配",
       "noTrigger": "无触发器",
+      "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "解除条件："
     },
     "maturityBadge": {

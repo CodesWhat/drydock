@@ -71,6 +71,7 @@
   "notificationsView": {
     "loadingRules": "Caricamento regole notifiche...",
     "loadError": "Impossibile caricare le regole notifiche",
+    "saveError": "Failed to update notification rule",
     "filterPlaceholder": "Filtra per nome, descrizione o trigger...",
     "clear": "Cancella",
     "allNotificationTriggers": "Tutti i trigger notifiche",
@@ -127,6 +128,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Caricamento dati vulnerabilità...",
+    "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "Scansiona ora",
     "scanning": "Scansione...",
     "scanAllAriaLabel": "Scansiona tutti i container",
@@ -165,6 +167,15 @@
       "high": "Alta",
       "medium": "Media",
       "low": "Bassa"
+    },
+    "countLabel": {
+      "images": "images",
+      "scanned": "scanned"
+    },
+    "delta": {
+      "fixed": "{count} fixed",
+      "new": "{count} new",
+      "both": "{fixed} fixed, {new} new"
     },
     "deltaTooltips": {
       "fixedSingle": "L'aggiornamento risolve {count} vulnerabilità",
@@ -252,6 +263,7 @@
       "unknown": "Sconosciuto"
     },
     "detail": {
+      "loadError": "Unable to load latest registry details",
       "refreshing": "Aggiornamento dettagli registry...",
       "status": "Stato",
       "authentication": "Autenticazione",
@@ -301,6 +313,7 @@
     "filterPlaceholder": "Filtra per nome...",
     "clear": "Cancella",
     "emptyFiltered": "Nessun trigger corrisponde ai filtri",
+    "testContainerName": "Test Container",
     "columns": {
       "trigger": "Trigger",
       "type": "Tipo",
@@ -322,6 +335,7 @@
       "defaultError": "Test trigger non riuscito"
     },
     "detail": {
+      "loadError": "Unable to load latest trigger details",
       "status": "Stato",
       "refreshing": "Aggiornamento dettagli trigger...",
       "noConfig": "Nessuna proprieta di configurazione"
@@ -333,6 +347,7 @@
   "watchersView": {
     "loadingWatchers": "Caricamento watcher...",
     "loadError": "Impossibile caricare i watcher",
+    "soon": "soon",
     "filterPlaceholder": "Filtra per nome...",
     "clear": "Cancella",
     "emptyFiltered": "Nessun watcher corrisponde ai filtri",
@@ -355,9 +370,10 @@
       "containersWatched": "{count} container monitorati"
     },
     "badge": {
-      "maint": "Manut."
+      "maint": "Manut"
     },
     "detail": {
+      "loadError": "Unable to load latest watcher details",
       "cron": "Cron",
       "lastRun": "Ultima esecuzione",
       "containersWatched": "Container monitorati",

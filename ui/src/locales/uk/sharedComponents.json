@@ -15,7 +15,12 @@
       "filters": "Фільтри",
       "toggleFilters": "Показати/приховати фільтри",
       "viewMode": "Вигляд",
-      "viewModeLabel": "Вигляд {label}"
+      "viewModeLabel": "Вигляд {label}",
+      "viewModes": {
+        "table": "Table",
+        "cards": "Cards",
+        "list": "List"
+      }
     },
     "dataListAccordion": {
       "toggleDetails": "Показати/приховати деталі {name}",
@@ -28,7 +33,12 @@
     "detailPanel": {
       "openFullPage": "Відкрити на повній сторінці",
       "closePanel": "Закрити панель деталей",
-      "ariaLabel": "Панель деталей"
+      "ariaLabel": "Панель деталей",
+      "size": {
+        "sm": "S",
+        "md": "M",
+        "lg": "L"
+      }
     },
     "emptyState": {
       "clearFilters": "Очистити всі фільтри"

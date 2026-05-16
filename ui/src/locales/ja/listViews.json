@@ -71,6 +71,7 @@
   "notificationsView": {
     "loadingRules": "通知ルールを読み込み中...",
     "loadError": "通知ルールの読み込みに失敗しました",
+    "saveError": "Failed to update notification rule",
     "filterPlaceholder": "名前、説明、またはトリガーで絞り込む...",
     "clear": "クリア",
     "allNotificationTriggers": "全通知トリガー",
@@ -127,6 +128,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "脆弱性データを読み込み中...",
+    "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "今すぐスキャン",
     "scanning": "スキャン中...",
     "scanAllAriaLabel": "全コンテナをスキャン",
@@ -165,6 +167,15 @@
       "high": "高",
       "medium": "中",
       "low": "低"
+    },
+    "countLabel": {
+      "images": "images",
+      "scanned": "scanned"
+    },
+    "delta": {
+      "fixed": "{count} fixed",
+      "new": "{count} new",
+      "both": "{fixed} fixed, {new} new"
     },
     "deltaTooltips": {
       "fixedSingle": "更新により {count} 件の脆弱性が修正されます",
@@ -252,6 +263,7 @@
       "unknown": "不明"
     },
     "detail": {
+      "loadError": "Unable to load latest registry details",
       "refreshing": "レジストリの詳細を更新中...",
       "status": "ステータス",
       "authentication": "認証",
@@ -301,6 +313,7 @@
     "filterPlaceholder": "名前で絞り込む...",
     "clear": "クリア",
     "emptyFiltered": "フィルターに一致するトリガーがありません",
+    "testContainerName": "Test Container",
     "columns": {
       "trigger": "トリガー",
       "type": "種別",
@@ -322,6 +335,7 @@
       "defaultError": "トリガーテストが失敗しました"
     },
     "detail": {
+      "loadError": "Unable to load latest trigger details",
       "status": "ステータス",
       "refreshing": "トリガーの詳細を更新中...",
       "noConfig": "設定プロパティがありません"
@@ -333,6 +347,7 @@
   "watchersView": {
     "loadingWatchers": "ウォッチャーを読み込み中...",
     "loadError": "ウォッチャーの読み込みに失敗しました",
+    "soon": "soon",
     "filterPlaceholder": "名前で絞り込む...",
     "clear": "クリア",
     "emptyFiltered": "フィルターに一致するウォッチャーがありません",
@@ -358,6 +373,7 @@
       "maint": "メンテナンス"
     },
     "detail": {
+      "loadError": "Unable to load latest watcher details",
       "cron": "Cron",
       "lastRun": "前回実行",
       "containersWatched": "監視中のコンテナ",

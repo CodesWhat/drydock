@@ -3,6 +3,8 @@
     "heading": "Posta in uscita",
     "refresh": "Aggiorna",
     "loading": "Caricamento voci in uscita...",
+    "loadError": "Failed to load notification outbox",
+    "ofCount": "{count} of {total}",
     "tabs": {
       "dead-letter": "Dead-letter",
       "pending": "In attesa",
@@ -17,7 +19,9 @@
     },
     "actions": {
       "retry": "Riprova",
-      "discard": "Scarta"
+      "retryAriaLabel": "Retry outbox entry",
+      "discard": "Scarta",
+      "discardAriaLabel": "Discard outbox entry"
     },
     "status": {
       "dead-letter": "Dead-letter",

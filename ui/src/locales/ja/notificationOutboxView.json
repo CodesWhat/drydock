@@ -3,6 +3,8 @@
     "heading": "送信済み",
     "refresh": "更新",
     "loading": "アウトボックスのエントリを読み込み中…",
+    "loadError": "Failed to load notification outbox",
+    "ofCount": "{count} of {total}",
     "tabs": {
       "dead-letter": "デッドレター",
       "pending": "保留中",
@@ -17,7 +19,9 @@
     },
     "actions": {
       "retry": "再試行",
-      "discard": "破棄"
+      "retryAriaLabel": "Retry outbox entry",
+      "discard": "破棄",
+      "discardAriaLabel": "Discard outbox entry"
     },
     "status": {
       "dead-letter": "デッドレター",

@@ -71,6 +71,7 @@
   "notificationsView": {
     "loadingRules": "Bildirim kuralları yükleniyor...",
     "loadError": "Bildirim kuralları yüklenemedi",
+    "saveError": "Failed to update notification rule",
     "filterPlaceholder": "Ada, açıklamaya veya tetikleyiciye göre filtreleyin...",
     "clear": "Temizle",
     "allNotificationTriggers": "Tüm bildirim tetikleyicileri",
@@ -127,6 +128,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Güvenlik açığı verileri yükleniyor...",
+    "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "Şimdi tara",
     "scanning": "Taranıyor...",
     "scanAllAriaLabel": "Tüm kapsayıcıları tara",
@@ -165,6 +167,15 @@
       "high": "Yüksek",
       "medium": "Orta",
       "low": "Düşük"
+    },
+    "countLabel": {
+      "images": "images",
+      "scanned": "scanned"
+    },
+    "delta": {
+      "fixed": "{count} fixed",
+      "new": "{count} new",
+      "both": "{fixed} fixed, {new} new"
     },
     "deltaTooltips": {
       "fixedSingle": "Güncelleme {count} güvenlik açığını giderir",
@@ -252,6 +263,7 @@
       "unknown": "Bilinmiyor"
     },
     "detail": {
+      "loadError": "Unable to load latest registry details",
       "refreshing": "Kayıt defteri ayrıntıları yenileniyor...",
       "status": "Durum",
       "authentication": "Kimlik doğrulama",
@@ -301,6 +313,7 @@
     "filterPlaceholder": "Ada göre filtrele...",
     "clear": "Temizle",
     "emptyFiltered": "Filtrelerinizle eşleşen tetikleyici yok",
+    "testContainerName": "Test Container",
     "columns": {
       "trigger": "Tetikleyici",
       "type": "Tür",
@@ -322,6 +335,7 @@
       "defaultError": "Tetikleme testi başarısız oldu"
     },
     "detail": {
+      "loadError": "Unable to load latest trigger details",
       "status": "Durum",
       "refreshing": "Tetikleyici ayrıntıları yenileniyor...",
       "noConfig": "Yapılandırma özelliği yok"
@@ -333,6 +347,7 @@
   "watchersView": {
     "loadingWatchers": "İzleyiciler yükleniyor...",
     "loadError": "İzleyiciler yüklenemedi",
+    "soon": "soon",
     "filterPlaceholder": "Ada göre filtrele...",
     "clear": "Temizle",
     "emptyFiltered": "Filtrelerinizle eşleşen izleyici yok",
@@ -358,6 +373,7 @@
       "maint": "Bakım"
     },
     "detail": {
+      "loadError": "Unable to load latest watcher details",
       "cron": "Cron",
       "lastRun": "Son Çalıştırma",
       "containersWatched": "İzlenen Konteynerler",

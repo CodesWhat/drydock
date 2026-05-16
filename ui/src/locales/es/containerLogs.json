@@ -2,7 +2,7 @@
   "containerLogs": {
     "backTooltip": "Volver a contenedores",
     "title": "Registros del contenedor",
-    "loading": "Cargando contenedor...",
+    "loading": "Cargando contenedor…",
     "notFound": "Contenedor \"{name}\" no encontrado",
     "loadFailed": "No se pudo cargar la información del contenedor"
   }

@@ -71,6 +71,7 @@
   "notificationsView": {
     "loadingRules": "جارٍ تحميل قواعد الإشعارات...",
     "loadError": "فشل تحميل قواعد الإشعارات",
+    "saveError": "Failed to update notification rule",
     "filterPlaceholder": "تصفية حسب الاسم أو الوصف أو المشغّل...",
     "clear": "مسح",
     "allNotificationTriggers": "جميع مشغّلات الإشعارات",
@@ -127,6 +128,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "جارٍ تحميل بيانات الثغرات...",
+    "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "فحص الآن",
     "scanning": "جارٍ الفحص...",
     "scanAllAriaLabel": "فحص جميع الحاويات",
@@ -165,6 +167,15 @@
       "high": "عالية",
       "medium": "متوسطة",
       "low": "منخفضة"
+    },
+    "countLabel": {
+      "images": "images",
+      "scanned": "scanned"
+    },
+    "delta": {
+      "fixed": "{count} fixed",
+      "new": "{count} new",
+      "both": "{fixed} fixed, {new} new"
     },
     "deltaTooltips": {
       "fixedSingle": "التحديث يُصلح {count} ثغرة",
@@ -252,6 +263,7 @@
       "unknown": "غير معروف"
     },
     "detail": {
+      "loadError": "Unable to load latest registry details",
       "refreshing": "جارٍ تحديث تفاصيل السجل...",
       "status": "الحالة",
       "authentication": "المصادقة",
@@ -301,6 +313,7 @@
     "filterPlaceholder": "تصفية حسب الاسم...",
     "clear": "مسح",
     "emptyFiltered": "لا توجد مشغّلات تطابق عوامل التصفية",
+    "testContainerName": "Test Container",
     "columns": {
       "trigger": "المشغّل",
       "type": "النوع",
@@ -322,6 +335,7 @@
       "defaultError": "فشل اختبار المشغّل"
     },
     "detail": {
+      "loadError": "Unable to load latest trigger details",
       "status": "الحالة",
       "refreshing": "جارٍ تحديث تفاصيل المشغّل...",
       "noConfig": "لا توجد خصائص إعداد"
@@ -333,6 +347,7 @@
   "watchersView": {
     "loadingWatchers": "جارٍ تحميل المراقبين...",
     "loadError": "فشل تحميل المراقبين",
+    "soon": "soon",
     "filterPlaceholder": "تصفية حسب الاسم...",
     "clear": "مسح",
     "emptyFiltered": "لا يوجد مراقبون يطابقون عوامل التصفية",
@@ -358,6 +373,7 @@
       "maint": "صيانة"
     },
     "detail": {
+      "loadError": "Unable to load latest watcher details",
       "cron": "Cron",
       "lastRun": "آخر تشغيل",
       "containersWatched": "الحاويات تحت المراقبة",

@@ -15,7 +15,12 @@
       "filters": "필터",
       "toggleFilters": "필터 표시/숨기기",
       "viewMode": "보기 모드",
-      "viewModeLabel": "{label} 보기"
+      "viewModeLabel": "{label} 보기",
+      "viewModes": {
+        "table": "Table",
+        "cards": "Cards",
+        "list": "List"
+      }
     },
     "dataListAccordion": {
       "toggleDetails": "{name} 상세 정보 표시/숨기기",
@@ -28,7 +33,12 @@
     "detailPanel": {
       "openFullPage": "전체 페이지 보기 열기",
       "closePanel": "상세 패널 닫기",
-      "ariaLabel": "상세 패널"
+      "ariaLabel": "상세 패널",
+      "size": {
+        "sm": "S",
+        "md": "M",
+        "lg": "L"
+      }
     },
     "emptyState": {
       "clearFilters": "모든 필터 초기화"

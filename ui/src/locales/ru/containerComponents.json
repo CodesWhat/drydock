@@ -148,7 +148,14 @@
       "title": "Журналы контейнера",
       "download": "Скачать",
       "allLevels": "Все уровни",
-      "downloadError": "Не удалось скачать журналы"
+      "downloadError": "Не удалось скачать журналы",
+      "tailCount": "Tail {count}",
+      "tailAll": "Tail All",
+      "statusPaused": "Paused",
+      "statusLive": "Live",
+      "statusOffline": "Offline",
+      "stdout": "stdout",
+      "stderr": "stderr"
     },
     "groupedViews": {
       "statusQueued": "В очереди",
@@ -192,7 +199,13 @@
       "blockedTagWithCriticals": "Заблокировано: {tag} ({count} критическая CVE)",
       "blockedTagWithCriticalsCVEs": "Заблокировано: {tag} ({count} критических CVE)",
       "manualUpdateOnly": "Только ручное обновление",
-      "manualUpdateOnlyWithMessage": "Только ручное обновление — {message}"
+      "manualUpdateOnlyWithMessage": "Только ручное обновление — {message}",
+      "updateBtnTooltipDefault": "Update",
+      "cancelButton": "Cancel",
+      "blockedButton": "Blocked",
+      "updateButton": "Update",
+      "moreButton": "More",
+      "cancelUpdateTooltip": "Cancel update"
     },
     "groupHeader": {
       "ungrouped": "Без группы",
@@ -285,6 +298,7 @@
     },
     "updateDialog": {
       "title": "Обновить контейнер",
+      "thisContainer": "this container",
       "confirmTagChange": "Обновить {name}? Тег образа изменится с :{currentTag} на :{newTag}{kind}.",
       "confirmDigestChange": "Обновить {name}? Доступна новая сборка :{currentTag} (изменение дайджеста).",
       "confirmLatest": "Обновить {name} сейчас? Будет применён последний обнаруженный образ.",
@@ -323,6 +337,7 @@
       "triggerFiltered": "Триггер отфильтрован",
       "agentMismatch": "Несоответствие агента",
       "noTrigger": "Нет триггера",
+      "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Снимает:"
     },
     "maturityBadge": {

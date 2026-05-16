@@ -71,33 +71,11 @@
   "notificationsView": {
     "loadingRules": "Cargando reglas de notificación...",
     "loadError": "No se pudieron cargar las reglas de notificación",
+    "saveError": "Failed to update notification rule",
     "filterPlaceholder": "Filtrar por nombre, descripción o trigger...",
     "clear": "Limpiar",
     "allNotificationTriggers": "Todos los triggers de notificación",
     "noTriggers": "Sin triggers",
-    "columns": {
-      "on": "En",
-      "rule": "Regla",
-      "triggers": "Triggers"
-    },
-    "toggleAriaLabel": "Alternar regla de notificación",
-    "emptyFiltered": "Ninguna regla de notificación coincide con tus filtros",
-    "detail": {
-      "ruleStatusLabel": "Estado de la regla",
-      "ruleStatusAriaLabel": "Estado de la regla",
-      "enabledText": "Habilitada: las notificaciones pueden dispararse para este evento.",
-      "disabledText": "Deshabilitada: las notificaciones están suprimidas para este evento.",
-      "assignedTriggersLabel": "Triggers asignados",
-      "noTriggersConfigured": "No hay triggers configurados. Agrega triggers en la",
-      "triggersPageLink": "página Triggers",
-      "helpTextImplicitAll": "Déjalo vacío para enviar este evento a todos los triggers de notificación. Seleccionar cualquier trigger convierte esta regla en una allow-list.",
-      "helpTextExplicit": "Solo los triggers seleccionados recibirán este evento. Déjalo vacío para suprimir este evento para todos los triggers.",
-      "saving": "Guardando...",
-      "saveChanges": "Guardar cambios",
-      "reset": "Restablecer",
-      "enabled": "habilitada",
-      "disabled": "deshabilitada"
-    },
     "rules": {
       "update-available": {
         "name": "Actualización disponible",
@@ -123,10 +101,34 @@
         "name": "Agente reconectado",
         "description": "Cuando un agente remoto se vuelve a conectar tras perder la conexión"
       }
+    },
+    "columns": {
+      "on": "En",
+      "rule": "Regla",
+      "triggers": "Triggers"
+    },
+    "toggleAriaLabel": "Alternar regla de notificación",
+    "emptyFiltered": "Ninguna regla de notificación coincide con tus filtros",
+    "detail": {
+      "ruleStatusLabel": "Estado de la regla",
+      "ruleStatusAriaLabel": "Estado de la regla",
+      "enabledText": "Habilitada: las notificaciones pueden dispararse para este evento.",
+      "disabledText": "Deshabilitada: las notificaciones están suprimidas para este evento.",
+      "assignedTriggersLabel": "Triggers asignados",
+      "noTriggersConfigured": "No hay triggers configurados. Agrega triggers en la",
+      "triggersPageLink": "página Triggers",
+      "helpTextImplicitAll": "Déjalo vacío para enviar este evento a todos los triggers de notificación. Seleccionar cualquier trigger convierte esta regla en una allow-list.",
+      "helpTextExplicit": "Solo los triggers seleccionados recibirán este evento. Déjalo vacío para suprimir este evento para todos los triggers.",
+      "saving": "Guardando...",
+      "saveChanges": "Guardar cambios",
+      "reset": "Restablecer",
+      "enabled": "habilitada",
+      "disabled": "deshabilitada"
     }
   },
   "securityView": {
     "loadingVulnerabilityData": "Cargando datos de vulnerabilidades...",
+    "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "Escanear ahora",
     "scanning": "Escaneando...",
     "scanAllAriaLabel": "Escanear todos los contenedores",
@@ -165,6 +167,15 @@
       "high": "Alta",
       "medium": "Media",
       "low": "Baja"
+    },
+    "countLabel": {
+      "images": "images",
+      "scanned": "scanned"
+    },
+    "delta": {
+      "fixed": "{count} fixed",
+      "new": "{count} new",
+      "both": "{fixed} fixed, {new} new"
     },
     "deltaTooltips": {
       "fixedSingle": "La actualización corrige {count} vulnerabilidad",
@@ -246,16 +257,17 @@
       "auth": "Auth",
       "status": "Estado"
     },
-    "detail": {
-      "refreshing": "Actualizando detalles del registro...",
-      "status": "Estado",
-      "authentication": "Autenticación",
-      "url": "URL"
-    },
     "status": {
       "connected": "Conectado",
       "error": "Error",
       "unknown": "Desconocido"
+    },
+    "detail": {
+      "loadError": "Unable to load latest registry details",
+      "refreshing": "Actualizando detalles del registro...",
+      "status": "Estado",
+      "authentication": "Autenticación",
+      "url": "URL"
     }
   },
   "serversView": {
@@ -266,6 +278,10 @@
     "emptyFiltered": "Ningún host coincide con tus filtros",
     "justNow": "Ahora mismo",
     "never": "Nunca",
+    "status": {
+      "connected": "Conectado",
+      "disconnected": "Desconectado"
+    },
     "columns": {
       "host": "Host",
       "address": "Dirección",
@@ -289,10 +305,6 @@
       "images": "Imágenes",
       "lastSeen": "Última vez visto",
       "refresh": "Actualizar"
-    },
-    "status": {
-      "connected": "Conectado",
-      "disconnected": "Desconectado"
     }
   },
   "triggersView": {
@@ -301,6 +313,7 @@
     "filterPlaceholder": "Filtrar por nombre...",
     "clear": "Limpiar",
     "emptyFiltered": "Ningún trigger coincide con tus filtros",
+    "testContainerName": "Test Container",
     "columns": {
       "trigger": "Trigger",
       "type": "Tipo",
@@ -322,6 +335,7 @@
       "defaultError": "Prueba de trigger fallida"
     },
     "detail": {
+      "loadError": "Unable to load latest trigger details",
       "status": "Estado",
       "refreshing": "Actualizando detalles del trigger...",
       "noConfig": "Sin propiedades de configuración"
@@ -333,6 +347,7 @@
   "watchersView": {
     "loadingWatchers": "Cargando watchers...",
     "loadError": "No se pudieron cargar los watchers",
+    "soon": "soon",
     "filterPlaceholder": "Filtrar por nombre...",
     "clear": "Limpiar",
     "emptyFiltered": "Ningún watcher coincide con tus filtros",
@@ -355,9 +370,10 @@
       "containersWatched": "{count} contenedores vigilados"
     },
     "badge": {
-      "maint": "Mant."
+      "maint": "Mant"
     },
     "detail": {
+      "loadError": "Unable to load latest watcher details",
       "cron": "Cron",
       "lastRun": "Última ejecución",
       "containersWatched": "Contenedores vigilados",

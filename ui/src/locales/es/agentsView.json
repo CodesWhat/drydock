@@ -63,7 +63,8 @@
         "lastFetched": "Última carga: {time}",
         "entries": "{count} entradas",
         "statusLive": "En vivo",
-        "statusOffline": "Sin conexión"
+        "statusOffline": "Sin conexión",
+        "loadError": "Failed to load agent logs"
       },
       "fields": {
         "cpus": "CPU",

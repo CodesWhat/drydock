@@ -71,6 +71,7 @@
   "notificationsView": {
     "loadingRules": "Загрузка правил уведомлений...",
     "loadError": "Не удалось загрузить правила уведомлений",
+    "saveError": "Failed to update notification rule",
     "filterPlaceholder": "Фильтр по имени, описанию или триггеру...",
     "clear": "Очистить",
     "allNotificationTriggers": "Все триггеры уведомлений",
@@ -127,6 +128,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Загрузка данных об уязвимостях...",
+    "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "Сканировать сейчас",
     "scanning": "Сканирование...",
     "scanAllAriaLabel": "Сканировать все контейнеры",
@@ -165,6 +167,15 @@
       "high": "Высокая",
       "medium": "Средняя",
       "low": "Низкая"
+    },
+    "countLabel": {
+      "images": "images",
+      "scanned": "scanned"
+    },
+    "delta": {
+      "fixed": "{count} fixed",
+      "new": "{count} new",
+      "both": "{fixed} fixed, {new} new"
     },
     "deltaTooltips": {
       "fixedSingle": "Обновление устраняет {count} уязвимость",
@@ -252,6 +263,7 @@
       "unknown": "Неизвестно"
     },
     "detail": {
+      "loadError": "Unable to load latest registry details",
       "refreshing": "Обновление данных реестра...",
       "status": "Статус",
       "authentication": "Аутентификация",
@@ -301,6 +313,7 @@
     "filterPlaceholder": "Фильтр по имени...",
     "clear": "Очистить",
     "emptyFiltered": "Нет триггеров, соответствующих фильтрам",
+    "testContainerName": "Test Container",
     "columns": {
       "trigger": "Триггер",
       "type": "Тип",
@@ -322,6 +335,7 @@
       "defaultError": "Тест триггера не выполнен"
     },
     "detail": {
+      "loadError": "Unable to load latest trigger details",
       "status": "Статус",
       "refreshing": "Обновление данных триггера...",
       "noConfig": "Свойства конфигурации отсутствуют"
@@ -333,6 +347,7 @@
   "watchersView": {
     "loadingWatchers": "Загрузка наблюдателей...",
     "loadError": "Не удалось загрузить наблюдателей",
+    "soon": "soon",
     "filterPlaceholder": "Фильтр по имени...",
     "clear": "Очистить",
     "emptyFiltered": "Нет наблюдателей, соответствующих фильтрам",
@@ -358,6 +373,7 @@
       "maint": "Обслуживание"
     },
     "detail": {
+      "loadError": "Unable to load latest watcher details",
       "cron": "Cron",
       "lastRun": "Последний запуск",
       "containersWatched": "Наблюдаемые контейнеры",

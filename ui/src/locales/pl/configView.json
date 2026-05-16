@@ -122,6 +122,7 @@
     },
     "profile": {
       "loading": "Ładowanie profilu",
+      "unknownUser": "Unknown User",
       "fields": {
         "username": "Nazwa użytkownika",
         "email": "E-mail",
@@ -134,6 +135,10 @@
     "logs": {
       "loading": "Ładowanie dzienników...",
       "emptyMessage": "Nie znaleziono wpisów dziennika dla bieżących filtrów.",
+      "status": {
+        "paused": "Paused",
+        "offline": "Offline"
+      },
       "toolbar": {
         "live": "Na żywo",
         "allLevels": "Wszystkie poziomy",

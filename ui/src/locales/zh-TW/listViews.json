@@ -1,9 +1,9 @@
 {
   "auditView": {
-    "loadingAuditLog": "正在載入稽核日誌...",
+    "loadingAuditLog": "正在載入稽核日誌……",
     "loadError": "無法載入稽核日誌",
-    "filterPlaceholder": "按目標或事件篩選...",
-    "containerFilterPlaceholder": "容器名稱...",
+    "filterPlaceholder": "按目標或事件篩選……",
+    "containerFilterPlaceholder": "容器名稱……",
     "allEvents": "所有事件",
     "eventsSelected": "已選擇 {count} 個事件",
     "clear": "清除",
@@ -69,9 +69,10 @@
     }
   },
   "notificationsView": {
-    "loadingRules": "正在載入通知規則...",
+    "loadingRules": "正在載入通知規則……",
     "loadError": "無法載入通知規則",
-    "filterPlaceholder": "按名稱、描述或觸發器篩選...",
+    "saveError": "Failed to update notification rule",
+    "filterPlaceholder": "按名稱、描述或觸發器篩選……",
     "clear": "清除",
     "allNotificationTriggers": "所有通知觸發器",
     "noTriggers": "無觸發器",
@@ -118,7 +119,7 @@
       "triggersPageLink": "觸發器頁面",
       "helpTextImplicitAll": "留空將此事件發送到所有通知觸發器。選擇任何觸發器會將此規則轉為允許清單。",
       "helpTextExplicit": "只有選定的觸發器會接收此事件。留空會抑制此事件對所有觸發器的通知。",
-      "saving": "儲存中...",
+      "saving": "儲存中……",
       "saveChanges": "儲存變更",
       "reset": "重設",
       "enabled": "已啟用",
@@ -126,9 +127,10 @@
     }
   },
   "securityView": {
-    "loadingVulnerabilityData": "正在載入漏洞資料...",
+    "loadingVulnerabilityData": "正在載入漏洞資料……",
+    "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "立即掃描",
-    "scanning": "掃描中...",
+    "scanning": "掃描中……",
     "scanAllAriaLabel": "掃描所有容器",
     "scanAllContainers": "掃描所有容器的漏洞",
     "checkingScanner": "正在檢查掃描器可用性",
@@ -166,6 +168,15 @@
       "medium": "中危",
       "low": "低危"
     },
+    "countLabel": {
+      "images": "images",
+      "scanned": "scanned"
+    },
+    "delta": {
+      "fixed": "{count} fixed",
+      "new": "{count} new",
+      "both": "{fixed} fixed, {new} new"
+    },
     "deltaTooltips": {
       "fixedSingle": "更新可修復 {count} 個漏洞",
       "fixedMultiple": "更新可修復 {count} 個漏洞",
@@ -184,8 +195,8 @@
     },
     "sbom": {
       "label": "SBOM",
-      "loading": "正在載入 SBOM 文件...",
-      "loadingButton": "載入中...",
+      "loading": "正在載入 SBOM 文件……",
+      "loadingButton": "載入中……",
       "refresh": "重新整理",
       "hide": "隱藏",
       "view": "檢視",
@@ -227,9 +238,9 @@
     }
   },
   "registriesView": {
-    "loadingRegistries": "正在載入倉庫...",
+    "loadingRegistries": "正在載入倉庫……",
     "loadError": "無法載入倉庫",
-    "filterPlaceholder": "按名稱或類型篩選...",
+    "filterPlaceholder": "按名稱或類型篩選……",
     "clear": "清除",
     "emptyFiltered": "沒有倉庫匹配您的篩選條件",
     "columns": {
@@ -237,11 +248,6 @@
       "type": "類型",
       "status": "狀態",
       "url": "URL"
-    },
-    "status": {
-      "connected": "已連線",
-      "error": "錯誤",
-      "unknown": "未知"
     },
     "badge": {
       "private": "私有",
@@ -251,25 +257,31 @@
       "auth": "認證",
       "status": "狀態"
     },
+    "status": {
+      "connected": "已連線",
+      "error": "錯誤",
+      "unknown": "未知"
+    },
     "detail": {
-      "refreshing": "正在重新整理倉庫詳情...",
+      "loadError": "Unable to load latest registry details",
+      "refreshing": "正在重新整理倉庫詳情……",
       "status": "狀態",
       "authentication": "認證",
       "url": "URL"
     }
   },
   "serversView": {
-    "loadingServerData": "正在載入伺服器資料...",
+    "loadingServerData": "正在載入伺服器資料……",
     "loadError": "無法載入伺服器資料",
-    "filterPlaceholder": "按名稱或地址篩選...",
+    "filterPlaceholder": "按名稱或地址篩選……",
     "clear": "清除",
     "emptyFiltered": "沒有主機匹配您的篩選條件",
+    "justNow": "剛剛",
+    "never": "從未",
     "status": {
       "connected": "已連線",
       "disconnected": "已斷線"
     },
-    "justNow": "剛剛",
-    "never": "從未",
     "columns": {
       "host": "主機",
       "address": "地址",
@@ -296,11 +308,12 @@
     }
   },
   "triggersView": {
-    "loadingTriggers": "正在載入觸發器...",
+    "loadingTriggers": "正在載入觸發器……",
     "loadError": "無法載入觸發器",
-    "filterPlaceholder": "按名稱篩選...",
+    "filterPlaceholder": "按名稱篩選……",
     "clear": "清除",
     "emptyFiltered": "沒有觸發器匹配您的篩選條件",
+    "testContainerName": "Test Container",
     "columns": {
       "trigger": "觸發器",
       "type": "類型",
@@ -311,7 +324,7 @@
       "inactive": "不活躍"
     },
     "test": {
-      "testing": "測試中...",
+      "testing": "測試中……",
       "sent": "已發送！",
       "failed": "失敗",
       "test": "測試",
@@ -322,8 +335,9 @@
       "defaultError": "觸發器測試失敗"
     },
     "detail": {
+      "loadError": "Unable to load latest trigger details",
       "status": "狀態",
-      "refreshing": "正在重新整理觸發器詳情...",
+      "refreshing": "正在重新整理觸發器詳情……",
       "noConfig": "無配置屬性"
     },
     "list": {
@@ -331,9 +345,10 @@
     }
   },
   "watchersView": {
-    "loadingWatchers": "正在載入監視器...",
+    "loadingWatchers": "正在載入監視器……",
     "loadError": "無法載入監視器",
-    "filterPlaceholder": "按名稱篩選...",
+    "soon": "soon",
+    "filterPlaceholder": "按名稱篩選……",
     "clear": "清除",
     "emptyFiltered": "沒有監視器匹配您的篩選條件",
     "columns": {
@@ -358,13 +373,14 @@
       "maint": "維護"
     },
     "detail": {
+      "loadError": "Unable to load latest watcher details",
       "cron": "Cron",
       "lastRun": "上次執行",
       "containersWatched": "監視的容器",
       "schedule": "計劃",
       "nextRun": "下次執行",
       "viewContainers": "檢視容器",
-      "refreshing": "正在重新整理監視器詳情..."
+      "refreshing": "正在重新整理監視器詳情……"
     }
   }
 }

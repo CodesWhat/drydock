@@ -2,7 +2,7 @@
   "containerLogs": {
     "backTooltip": "返回容器列表",
     "title": "容器日誌",
-    "loading": "正在載入容器...",
+    "loading": "正在載入容器…",
     "notFound": "未找到容器 \"{name}\"",
     "loadFailed": "無法載入容器資訊"
   }

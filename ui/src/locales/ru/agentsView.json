@@ -63,7 +63,8 @@
         "lastFetched": "Последнее получение: {time}",
         "entries": "{count} записей",
         "statusLive": "В эфире",
-        "statusOffline": "Не в сети"
+        "statusOffline": "Не в сети",
+        "loadError": "Failed to load agent logs"
       },
       "fields": {
         "cpus": "CPU",

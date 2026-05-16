@@ -15,7 +15,12 @@
       "filters": "Filters",
       "toggleFilters": "Schakel tussen filters",
       "viewMode": "Bekijk modus",
-      "viewModeLabel": "{label} weergave"
+      "viewModeLabel": "{label} weergave",
+      "viewModes": {
+        "table": "Table",
+        "cards": "Cards",
+        "list": "List"
+      }
     },
     "dataListAccordion": {
       "toggleDetails": "Schakel {name} details in of uit",
@@ -28,7 +33,12 @@
     "detailPanel": {
       "openFullPage": "Volledige paginaweergave openen",
       "closePanel": "Sluit het detailpaneel",
-      "ariaLabel": "Detailpaneel"
+      "ariaLabel": "Detailpaneel",
+      "size": {
+        "sm": "S",
+        "md": "M",
+        "lg": "L"
+      }
     },
     "emptyState": {
       "clearFilters": "Wis alle filters"

@@ -148,7 +148,14 @@
       "title": "컨테이너 로그",
       "download": "다운로드",
       "allLevels": "전체 레벨",
-      "downloadError": "로그를 다운로드할 수 없습니다"
+      "downloadError": "로그를 다운로드할 수 없습니다",
+      "tailCount": "Tail {count}",
+      "tailAll": "Tail All",
+      "statusPaused": "Paused",
+      "statusLive": "Live",
+      "statusOffline": "Offline",
+      "stdout": "stdout",
+      "stderr": "stderr"
     },
     "groupedViews": {
       "statusQueued": "대기 중",
@@ -192,7 +199,13 @@
       "blockedTagWithCriticals": "차단됨: {tag} ({count}개 치명적 CVE)",
       "blockedTagWithCriticalsCVEs": "차단됨: {tag} ({count}개 치명적 CVE)",
       "manualUpdateOnly": "수동 업데이트만 가능",
-      "manualUpdateOnlyWithMessage": "수동 업데이트만 가능 — {message}"
+      "manualUpdateOnlyWithMessage": "수동 업데이트만 가능 — {message}",
+      "updateBtnTooltipDefault": "Update",
+      "cancelButton": "Cancel",
+      "blockedButton": "Blocked",
+      "updateButton": "Update",
+      "moreButton": "More",
+      "cancelUpdateTooltip": "Cancel update"
     },
     "groupHeader": {
       "ungrouped": "그룹 없음",
@@ -285,6 +298,7 @@
     },
     "updateDialog": {
       "title": "컨테이너 업데이트",
+      "thisContainer": "this container",
       "confirmTagChange": "{name}을(를) 업데이트하시겠습니까? 이미지 태그가 :{currentTag}에서 :{newTag}{kind}(으)로 변경됩니다.",
       "confirmDigestChange": "{name}을(를) 업데이트하시겠습니까? :{currentTag}의 최신 빌드가 사용 가능합니다 (다이제스트 변경).",
       "confirmLatest": "{name}을(를) 지금 업데이트하시겠습니까? 최신 발견된 이미지가 적용됩니다.",
@@ -323,6 +337,7 @@
       "triggerFiltered": "트리거 필터됨",
       "agentMismatch": "에이전트 불일치",
       "noTrigger": "트리거 없음",
+      "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "해제 조건:"
     },
     "maturityBadge": {

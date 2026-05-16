@@ -122,6 +122,7 @@
     },
     "profile": {
       "loading": "جارٍ تحميل الملف الشخصي",
+      "unknownUser": "Unknown User",
       "fields": {
         "username": "اسم المستخدم",
         "email": "البريد الإلكتروني",
@@ -134,6 +135,10 @@
     "logs": {
       "loading": "جارٍ تحميل السجلات...",
       "emptyMessage": "لا توجد إدخالات سجل للفلاتر الحالية.",
+      "status": {
+        "paused": "Paused",
+        "offline": "Offline"
+      },
       "toolbar": {
         "live": "مباشر",
         "allLevels": "جميع المستويات",

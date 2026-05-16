@@ -148,7 +148,14 @@
       "title": "Containerlogboeken",
       "download": "Downloaden",
       "allLevels": "Alle niveaus",
-      "downloadError": "Kan logboeken niet downloaden"
+      "downloadError": "Kan logboeken niet downloaden",
+      "tailCount": "Tail {count}",
+      "tailAll": "Tail All",
+      "statusPaused": "Paused",
+      "statusLive": "Live",
+      "statusOffline": "Offline",
+      "stdout": "stdout",
+      "stderr": "stderr"
     },
     "groupedViews": {
       "statusQueued": "In de wachtrij",
@@ -192,7 +199,13 @@
       "blockedTagWithCriticals": "Geblokkeerd: {tag} ({count} kritieke CVE)",
       "blockedTagWithCriticalsCVEs": "Geblokkeerd: {tag} ({count} kritieke CVE's)",
       "manualUpdateOnly": "Alleen handmatige update",
-      "manualUpdateOnlyWithMessage": "Alleen handmatige update — {message}"
+      "manualUpdateOnlyWithMessage": "Alleen handmatige update — {message}",
+      "updateBtnTooltipDefault": "Update",
+      "cancelButton": "Cancel",
+      "blockedButton": "Blocked",
+      "updateButton": "Update",
+      "moreButton": "More",
+      "cancelUpdateTooltip": "Cancel update"
     },
     "groupHeader": {
       "ungrouped": "Niet gegroepeerd",
@@ -285,6 +298,7 @@
     },
     "updateDialog": {
       "title": "Container bijwerken",
+      "thisContainer": "this container",
       "confirmTagChange": "{name} bijwerken? Hiermee wordt de imagetag gewijzigd van :{currentTag} naar :{newTag}{kind}.",
       "confirmDigestChange": "{name} bijwerken? Er is een nieuwere versie van :{currentTag} beschikbaar (digestwijziging).",
       "confirmLatest": "{name} nu bijwerken? Hiermee wordt de laatst gevonden image toegepast.",
@@ -323,6 +337,7 @@
       "triggerFiltered": "Trigger gefilterd",
       "agentMismatch": "Agent-mismatch",
       "noTrigger": "Geen trigger",
+      "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Liften:"
     },
     "maturityBadge": {

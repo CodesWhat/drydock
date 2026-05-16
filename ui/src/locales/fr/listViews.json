@@ -71,6 +71,7 @@
   "notificationsView": {
     "loadingRules": "Chargement des règles de notification...",
     "loadError": "Impossible de charger les règles de notification",
+    "saveError": "Failed to update notification rule",
     "filterPlaceholder": "Filtrer par nom, description ou trigger...",
     "clear": "Effacer",
     "allNotificationTriggers": "Tous les triggers de notification",
@@ -127,6 +128,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Chargement des données de vulnérabilité...",
+    "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "Scanner maintenant",
     "scanning": "Scan en cours...",
     "scanAllAriaLabel": "Scanner tous les conteneurs",
@@ -165,6 +167,15 @@
       "high": "Élevée",
       "medium": "Moyenne",
       "low": "Faible"
+    },
+    "countLabel": {
+      "images": "images",
+      "scanned": "scanned"
+    },
+    "delta": {
+      "fixed": "{count} fixed",
+      "new": "{count} new",
+      "both": "{fixed} fixed, {new} new"
     },
     "deltaTooltips": {
       "fixedSingle": "La mise à jour corrige {count} vulnérabilité",
@@ -252,6 +263,7 @@
       "unknown": "Inconnue"
     },
     "detail": {
+      "loadError": "Unable to load latest registry details",
       "refreshing": "Actualisation des détails de registry...",
       "status": "État",
       "authentication": "Authentification",
@@ -266,6 +278,10 @@
     "emptyFiltered": "Aucun hôte ne correspond à vos filtres",
     "justNow": "À l'instant",
     "never": "Jamais",
+    "status": {
+      "connected": "Connecté",
+      "disconnected": "Déconnecté"
+    },
     "columns": {
       "host": "Hôte",
       "address": "Adresse",
@@ -289,10 +305,6 @@
       "images": "Images",
       "lastSeen": "Dernière activité",
       "refresh": "Actualiser"
-    },
-    "status": {
-      "connected": "Connecté",
-      "disconnected": "Déconnecté"
     }
   },
   "triggersView": {
@@ -301,6 +313,7 @@
     "filterPlaceholder": "Filtrer par nom...",
     "clear": "Effacer",
     "emptyFiltered": "Aucun trigger ne correspond à vos filtres",
+    "testContainerName": "Test Container",
     "columns": {
       "trigger": "Trigger",
       "type": "Type",
@@ -322,6 +335,7 @@
       "defaultError": "Test du trigger échoué"
     },
     "detail": {
+      "loadError": "Unable to load latest trigger details",
       "status": "État",
       "refreshing": "Actualisation des détails du trigger...",
       "noConfig": "Aucune propriété de configuration"
@@ -333,6 +347,7 @@
   "watchersView": {
     "loadingWatchers": "Chargement des watchers...",
     "loadError": "Impossible de charger les watchers",
+    "soon": "soon",
     "filterPlaceholder": "Filtrer par nom...",
     "clear": "Effacer",
     "emptyFiltered": "Aucun watcher ne correspond à vos filtres",
@@ -355,9 +370,10 @@
       "containersWatched": "{count} conteneurs surveillés"
     },
     "badge": {
-      "maint": "Maint."
+      "maint": "Maint"
     },
     "detail": {
+      "loadError": "Unable to load latest watcher details",
       "cron": "Cron",
       "lastRun": "Dernière exécution",
       "containersWatched": "Conteneurs surveillés",

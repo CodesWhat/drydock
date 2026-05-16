@@ -63,7 +63,8 @@
         "lastFetched": "Son getirilen: {time}",
         "entries": "{count} girişleri",
         "statusLive": "Canlı",
-        "statusOffline": "Çevrimdışı"
+        "statusOffline": "Çevrimdışı",
+        "loadError": "Failed to load agent logs"
       },
       "fields": {
         "cpus": "CPU'lar",

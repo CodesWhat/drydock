@@ -1,8 +1,8 @@
 {
   "agentsView": {
     "list": {
-      "loading": "正在載入代理...",
-      "filterPlaceholder": "按名稱篩選...",
+      "loading": "正在載入代理……",
+      "filterPlaceholder": "按名稱篩選……",
       "clearFilter": "清除",
       "emptyFiltered": "沒有代理匹配您的篩選條件",
       "toggleColumns": "切換列",
@@ -55,7 +55,7 @@
         "tail100": "最近 100 條",
         "tail500": "最近 500 條",
         "tail1000": "最近 1000 條",
-        "componentPlaceholder": "按組件篩選...",
+        "componentPlaceholder": "按組件篩選……",
         "apply": "應用",
         "reset": "重設",
         "refresh": "重新整理",
@@ -63,7 +63,8 @@
         "lastFetched": "最後取得時間：{time}",
         "entries": "{count} 條記錄",
         "statusLive": "線上",
-        "statusOffline": "離線"
+        "statusOffline": "離線",
+        "loadError": "Failed to load agent logs"
       },
       "fields": {
         "cpus": "CPU",

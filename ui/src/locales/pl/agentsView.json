@@ -63,7 +63,8 @@
         "lastFetched": "Ostatnio pobrane: {time}",
         "entries": "{count} wpisy",
         "statusLive": "Na żywo",
-        "statusOffline": "Nieaktywny"
+        "statusOffline": "Nieaktywny",
+        "loadError": "Failed to load agent logs"
       },
       "fields": {
         "cpus": "Procesory",

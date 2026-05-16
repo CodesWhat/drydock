@@ -15,7 +15,12 @@
       "filters": "Filtri",
       "toggleFilters": "Attiva/disattiva filtri",
       "viewMode": "Modalità visualizzazione",
-      "viewModeLabel": "Vista {label}"
+      "viewModeLabel": "Vista {label}",
+      "viewModes": {
+        "table": "Table",
+        "cards": "Cards",
+        "list": "List"
+      }
     },
     "dataListAccordion": {
       "toggleDetails": "Attiva/disattiva dettagli {name}",
@@ -28,7 +33,12 @@
     "detailPanel": {
       "openFullPage": "Apri vista pagina completa",
       "closePanel": "Chiudi pannello dettagli",
-      "ariaLabel": "Pannello dettagli"
+      "ariaLabel": "Pannello dettagli",
+      "size": {
+        "sm": "S",
+        "md": "M",
+        "lg": "L"
+      }
     },
     "emptyState": {
       "clearFilters": "Cancella tutti i filtri"

@@ -3,6 +3,8 @@
     "heading": "발신함",
     "refresh": "새로 고침",
     "loading": "발신함 항목 불러오는 중…",
+    "loadError": "Failed to load notification outbox",
+    "ofCount": "{count} of {total}",
     "tabs": {
       "dead-letter": "배달 실패",
       "pending": "대기 중",
@@ -17,7 +19,9 @@
     },
     "actions": {
       "retry": "재시도",
-      "discard": "삭제"
+      "retryAriaLabel": "Retry outbox entry",
+      "discard": "삭제",
+      "discardAriaLabel": "Discard outbox entry"
     },
     "status": {
       "dead-letter": "배달 실패",

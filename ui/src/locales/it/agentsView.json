@@ -63,7 +63,8 @@
         "lastFetched": "Ultimo recupero: {time}",
         "entries": "{count} voci",
         "statusLive": "Live",
-        "statusOffline": "Offline"
+        "statusOffline": "Offline",
+        "loadError": "Failed to load agent logs"
       },
       "fields": {
         "cpus": "CPU",

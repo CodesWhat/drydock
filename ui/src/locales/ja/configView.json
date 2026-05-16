@@ -122,6 +122,7 @@
     },
     "profile": {
       "loading": "プロフィールを読み込み中",
+      "unknownUser": "Unknown User",
       "fields": {
         "username": "ユーザー名",
         "email": "メールアドレス",
@@ -134,6 +135,10 @@
     "logs": {
       "loading": "ログを読み込み中...",
       "emptyMessage": "現在のフィルターに一致するログエントリがありません。",
+      "status": {
+        "paused": "Paused",
+        "offline": "Offline"
+      },
       "toolbar": {
         "live": "ライブ",
         "allLevels": "全レベル",

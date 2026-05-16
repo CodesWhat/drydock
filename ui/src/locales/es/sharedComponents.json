@@ -15,7 +15,12 @@
       "filters": "Filtros",
       "toggleFilters": "Alternar filtros",
       "viewMode": "Modo de vista",
-      "viewModeLabel": "Vista {label}"
+      "viewModeLabel": "Vista {label}",
+      "viewModes": {
+        "table": "Table",
+        "cards": "Cards",
+        "list": "List"
+      }
     },
     "dataListAccordion": {
       "toggleDetails": "Alternar detalles de {name}",
@@ -28,7 +33,12 @@
     "detailPanel": {
       "openFullPage": "Abrir vista de página completa",
       "closePanel": "Cerrar panel de detalles",
-      "ariaLabel": "Panel de detalles"
+      "ariaLabel": "Panel de detalles",
+      "size": {
+        "sm": "S",
+        "md": "M",
+        "lg": "L"
+      }
     },
     "emptyState": {
       "clearFilters": "Limpiar todos los filtros"

@@ -122,6 +122,7 @@
     },
     "profile": {
       "loading": "Завантаження профілю",
+      "unknownUser": "Unknown User",
       "fields": {
         "username": "Ім'я користувача",
         "email": "Email",
@@ -134,6 +135,10 @@
     "logs": {
       "loading": "Завантаження журналів...",
       "emptyMessage": "Записи журналу не знайдено для поточних фільтрів.",
+      "status": {
+        "paused": "Paused",
+        "offline": "Offline"
+      },
       "toolbar": {
         "live": "В ефірі",
         "allLevels": "Всі рівні",

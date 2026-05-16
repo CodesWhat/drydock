@@ -71,6 +71,7 @@
   "notificationsView": {
     "loadingRules": "Ładowanie reguł powiadomień...",
     "loadError": "Nie udało się załadować reguł powiadomień",
+    "saveError": "Failed to update notification rule",
     "filterPlaceholder": "Filtruj według nazwy, opisu lub wyzwalacza...",
     "clear": "Wyczyść",
     "allNotificationTriggers": "Wszystkie wyzwalacze powiadomień",
@@ -127,6 +128,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Ładowanie danych o lukach w zabezpieczeniach...",
+    "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "Skanuj teraz",
     "scanning": "Skanowanie...",
     "scanAllAriaLabel": "Zeskanuj wszystkie kontenery",
@@ -165,6 +167,15 @@
       "high": "Wysoka",
       "medium": "Średni",
       "low": "Niski"
+    },
+    "countLabel": {
+      "images": "images",
+      "scanned": "scanned"
+    },
+    "delta": {
+      "fixed": "{count} fixed",
+      "new": "{count} new",
+      "both": "{fixed} fixed, {new} new"
     },
     "deltaTooltips": {
       "fixedSingle": "Aktualizacja naprawia {count} podatność",
@@ -252,6 +263,7 @@
       "unknown": "Nieznany"
     },
     "detail": {
+      "loadError": "Unable to load latest registry details",
       "refreshing": "Odświeżanie szczegółów rejestru...",
       "status": "Stan",
       "authentication": "Uwierzytelnianie",
@@ -301,6 +313,7 @@
     "filterPlaceholder": "Filtruj według nazwy...",
     "clear": "Wyczyść",
     "emptyFiltered": "Żadne wyzwalacze nie pasują do Twoich filtrów",
+    "testContainerName": "Test Container",
     "columns": {
       "trigger": "Wyzwalacz",
       "type": "Wpisz",
@@ -322,6 +335,7 @@
       "defaultError": "Test wyzwalacza nie powiódł się"
     },
     "detail": {
+      "loadError": "Unable to load latest trigger details",
       "status": "Stan",
       "refreshing": "Odświeżanie szczegółów wyzwalacza...",
       "noConfig": "Brak właściwości konfiguracyjnych"
@@ -333,6 +347,7 @@
   "watchersView": {
     "loadingWatchers": "Ładowanie obserwatorów...",
     "loadError": "Nie udało się załadować obserwatorów",
+    "soon": "soon",
     "filterPlaceholder": "Filtruj według nazwy...",
     "clear": "Wyczyść",
     "emptyFiltered": "Żaden obserwator nie pasuje do Twoich filtrów",
@@ -358,6 +373,7 @@
       "maint": "Konserwacja"
     },
     "detail": {
+      "loadError": "Unable to load latest watcher details",
       "cron": "Cron",
       "lastRun": "Ostatni bieg",
       "containersWatched": "Kontenery oglądane",

@@ -3,6 +3,8 @@
     "heading": "Bandeja de salida",
     "refresh": "Actualizar",
     "loading": "Cargando entradas de la bandeja de salida…",
+    "loadError": "Failed to load notification outbox",
+    "ofCount": "{count} of {total}",
     "tabs": {
       "dead-letter": "Cola de mensajes fallidos",
       "pending": "Pendiente",
@@ -17,7 +19,9 @@
     },
     "actions": {
       "retry": "Reintentar",
-      "discard": "Descartar"
+      "retryAriaLabel": "Retry outbox entry",
+      "discard": "Descartar",
+      "discardAriaLabel": "Discard outbox entry"
     },
     "status": {
       "dead-letter": "Cola de mensajes fallidos",
