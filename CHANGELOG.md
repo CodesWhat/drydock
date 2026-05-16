@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0-rc.23] — 2026-05-16
+
 ### Added
 
 - **Self-update now works when Drydock reaches the Docker daemon over a TCP host, not only through a bind-mounted `/var/run/docker.sock` (commit [`fc34ffb9`](https://github.com/CodesWhat/drydock/commit/fc34ffb9)).** The self-update helper container — the short-lived container that outlives Drydock to stop the old instance, health-check the replacement, and commit or roll back — was hardcoded to a bind-mounted Unix socket and aborted with `Self-update requires the Docker socket to be bind-mounted` whenever Drydock's watcher was configured with a TCP `host`. That is the normal setup when a Docker socket proxy (such as sockguard or `docker-socket-proxy`) mediates daemon access, so self-update was unavailable for those deployments even though every other container updated correctly. `resolveHelperDockerConnection` now inspects the watcher's Dockerode connection: a TCP host produces a TCP helper that is attached to Drydock's own Docker network (the container's `NetworkMode` is cloned so the helper can resolve the proxy by DNS) and receives `DD_SELF_UPDATE_DOCKER_HOST` / `DD_SELF_UPDATE_DOCKER_PORT` / `DD_SELF_UPDATE_DOCKER_PROTOCOL` instead of a socket bind mount; `runSelfUpdateController` builds a TCP Dockerode client from those variables and skips the socket-only API-version probe and redirect guard. The bind-mounted-socket path is unchanged. When self-update runs through a *filtering* socket proxy the Drydock container must carry the proxy's ownership label so the helper is permitted to stop and replace it — see `content/docs/current/configuration/self-update/index.mdx`.
