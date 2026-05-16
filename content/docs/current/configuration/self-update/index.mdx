@@ -59,7 +59,7 @@ When `DD_ACTION_DOCKER_{trigger_name}_DRYRUN=true`, the self-update is logged bu
 
 ## Behind a Docker socket proxy
 
-If Drydock's Docker watcher is configured with a TCP `host` — the usual setup when a Docker socket proxy such as [sockguard](https://github.com/buildkite/sockguard) or `docker-socket-proxy` mediates daemon access — self-update connects the helper container to the proxy over TCP instead of bind-mounting a socket. The helper is created on Drydock's own Docker network so it can resolve the proxy by name.
+If Drydock's Docker watcher is configured with a TCP `host` — the usual setup when a Docker socket proxy such as [sockguard](https://github.com/buildkite/sockguard) or `docker-socket-proxy` mediates daemon access — self-update connects the helper container to the proxy over TCP instead of bind-mounting a socket. The helper's network mode is cloned from Drydock's own container, so it shares the same Docker network and can resolve the proxy by its service name.
 
 <Callout type="warn">
 A *filtering* socket proxy must be configured to permit the self-update helper:
