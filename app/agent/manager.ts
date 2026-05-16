@@ -36,6 +36,7 @@ export function removeAgent(name: string): boolean {
   const initialCount = clients.length;
   for (let index = clients.length - 1; index >= 0; index -= 1) {
     if (clients[index].name === name) {
+      clients[index].stop();
       clients.splice(index, 1);
     }
   }

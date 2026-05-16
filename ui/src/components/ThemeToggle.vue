@@ -62,7 +62,7 @@ function iconColor(id: string) {
     class="flex items-center justify-center rounded-md transition-colors"
     :class="[activeIconColor(), 'hover:dd-bg-elevated']"
     :style="{ width: `${cellSize}px`, height: `${cellSize}px` }"
-    v-tooltip.top="t('appShell.themeToggle.variantLabel', { label: activeVariant.id.charAt(0).toUpperCase() + activeVariant.id.slice(1) })"
+    v-tooltip.top="t('appShell.themeToggle.variantLabel', { label: t(`appShell.themeToggle.variant.${activeVariant.id}`) })"
     :aria-label="t('appShell.themeToggle.mobileLabel', { id: activeVariant.id })"
     @click="cycle($event)"
   >
@@ -87,7 +87,7 @@ function iconColor(id: string) {
         class="flex-shrink-0 flex items-center justify-center rounded-md transition-colors"
         :class="[iconColor(v.id), 'hover:dd-bg-elevated']"
         :style="{ width: `${cellSize}px`, height: `${cellSize}px` }"
-        v-tooltip.top="t('appShell.themeToggle.variantLabel', { label: v.id.charAt(0).toUpperCase() + v.id.slice(1) })"
+        v-tooltip.top="t('appShell.themeToggle.variantLabel', { label: t(`appShell.themeToggle.variant.${v.id}`) })"
         :aria-label="t('appShell.themeToggle.switchTo', { id: v.id })"
         :aria-pressed="String(v.id === themeVariant)"
         @click="v.id === themeVariant ? (expanded = !expanded) : select(v.id, $event)"

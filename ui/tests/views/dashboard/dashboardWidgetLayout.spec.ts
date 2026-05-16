@@ -149,6 +149,17 @@ describe('dashboardWidgetLayout', () => {
         maxH: Number.POSITIVE_INFINITY,
       });
     });
+
+    test('resource-usage minH is at least 7 so per-container lists stay visible', () => {
+      expect(WIDGET_CONSTRAINTS['resource-usage'].minH).toBeGreaterThanOrEqual(7);
+    });
+
+    test('applyConstraints clamps a too-short resource-usage item up to minH', () => {
+      const result = applyConstraints([{ i: 'resource-usage', x: 0, y: 0, w: 4, h: 3 }]);
+      const minH = WIDGET_CONSTRAINTS['resource-usage'].minH;
+      expect(result[0].h).toBe(minH);
+      expect(result[0].h).toBeGreaterThanOrEqual(7);
+    });
   });
 
   describe('createDefaultLayoutForBreakpoint', () => {

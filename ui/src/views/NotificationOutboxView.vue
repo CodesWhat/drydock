@@ -113,7 +113,7 @@ async function loadEntries() {
     entries.value = response.data;
     counts.value = response.counts;
   } catch (e: unknown) {
-    error.value = errorMessage(e, 'Failed to load notification outbox');
+    error.value = errorMessage(e, t('notificationOutboxView.loadError'));
   } finally {
     loading.value = false;
   }
@@ -195,7 +195,7 @@ onMounted(() => {
     <div class="mb-3 flex items-center justify-between">
       <div class="flex items-center gap-2">
         <h2 class="text-base font-semibold dd-text">{{ t('appShell.layout.nav.outbox') }}</h2>
-        <span class="text-xs dd-text-muted">{{ entries.length }} of {{ statusToCount(status) }}</span>
+        <span class="text-xs dd-text-muted">{{ t('notificationOutboxView.ofCount', { count: entries.length, total: statusToCount(status) }) }}</span>
       </div>
       <AppButton size="xs" variant="text-muted" weight="medium" :disabled="loading" @click="loadEntries">
         <AppIcon name="refresh" :size="14" class="mr-1" /> {{ t('notificationOutboxView.refresh') }}
@@ -291,7 +291,7 @@ onMounted(() => {
             weight="bold"
             class="inline-flex min-w-[74px] items-center justify-center gap-1 whitespace-nowrap"
             :disabled="actingId === row.id"
-            aria-label="Retry outbox entry"
+            :aria-label="t('notificationOutboxView.actions.retryAriaLabel')"
             @click.stop="retryEntry(row)"
           >
             <AppIcon name="refresh" :size="12" />
@@ -303,7 +303,7 @@ onMounted(() => {
             weight="bold"
             class="inline-flex min-w-[82px] items-center justify-center gap-1 whitespace-nowrap"
             :disabled="actingId === row.id"
-            aria-label="Discard outbox entry"
+            :aria-label="t('notificationOutboxView.actions.discardAriaLabel')"
             @click.stop="discardEntry(row)"
           >
             <AppIcon name="trash" :size="12" />

@@ -57,6 +57,8 @@ function reasonIcon(reason: UpdateBlockerReason): string {
     case 'agent-mismatch':
     case 'no-update-trigger-configured':
       return 'mdi:cog-off';
+    case 'self-update-unavailable':
+      return 'mdi:docker';
     default:
       return 'mdi:alert-circle';
   }
@@ -90,6 +92,8 @@ function reasonLabel(reason: UpdateBlockerReason): string {
       return t('containerComponents.eligibilityBadges.agentMismatch');
     case 'no-update-trigger-configured':
       return t('containerComponents.eligibilityBadges.noTrigger');
+    case 'self-update-unavailable':
+      return t('containerComponents.eligibilityBadges.selfUpdateUnavailable');
     default:
       return reason;
   }

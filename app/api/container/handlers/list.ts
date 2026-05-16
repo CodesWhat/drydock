@@ -10,6 +10,7 @@ import {
   type UpdateEligibility,
   type UpdateEligibilityContext,
 } from '../../../model/update-eligibility.js';
+import { isSelfUpdateAvailable } from '../../../triggers/providers/docker/self-update-availability.js';
 import { sendErrorResponse } from '../../error-response.js';
 import { buildPaginationLinks } from '../../pagination-links.js';
 import type { ContainerListResponse, CrudHandlerContext } from '../crud-context.js';
@@ -238,7 +239,13 @@ export function attachUpdateEligibility(
   container: Container,
   eligibilityContext?: UpdateEligibilityContext,
 ): Container {
-  const ctx = eligibilityContext ?? buildEligibilityContext(context);
+  // isSelfUpdateAvailable is always resolved per-container regardless of whether
+  // a pre-built eligibilityContext was supplied, because it depends on the
+  // container's specific watcher configuration.
+  const ctx: UpdateEligibilityContext = {
+    ...(eligibilityContext ?? buildEligibilityContext(context)),
+    isSelfUpdateAvailable: isSelfUpdateAvailable(container),
+  };
   const updateEligibility: UpdateEligibility = computeUpdateEligibility(container, ctx);
   return createProjectionView(container, [['updateEligibility', updateEligibility]]);
 }

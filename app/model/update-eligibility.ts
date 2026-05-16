@@ -19,7 +19,8 @@ export type UpdateBlockerReason =
   | 'trigger-excluded'
   | 'trigger-not-included'
   | 'agent-mismatch'
-  | 'no-update-trigger-configured';
+  | 'no-update-trigger-configured'
+  | 'self-update-unavailable';
 
 /**
  * Severity controls how a blocker is enforced:
@@ -40,6 +41,7 @@ export const BLOCKER_SEVERITY: Record<UpdateBlockerReason, UpdateBlockerSeverity
   'last-update-rolled-back': 'hard',
   'agent-mismatch': 'hard',
   'no-update-trigger-configured': 'hard',
+  'self-update-unavailable': 'hard',
   snoozed: 'soft',
   'skip-tag': 'soft',
   'skip-digest': 'soft',
@@ -96,6 +98,16 @@ export interface UpdateEligibilityContext {
     container: Container,
   ) => { id: string; status: 'queued' | 'in-progress'; updatedAt?: string } | undefined;
   now?: number;
+  isSelfUpdateAvailable?: boolean;
+}
+
+/**
+ * Returns true when the container image name identifies the Drydock self-container.
+ * Matches `'drydock'` exactly or any image that ends with `'/drydock'`.
+ */
+export function isSelfContainerImage(imageName: string | undefined): boolean {
+  if (!imageName) return false;
+  return imageName === 'drydock' || imageName.endsWith('/drydock');
 }
 
 // Minimal interface for the trigger instance methods we need at runtime
@@ -177,6 +189,22 @@ export function computeUpdateEligibility(
   }
 
   const blockers: UpdateBlocker[] = [];
+
+  // 0. self-update-unavailable — fires only when the container is the Drydock self-container
+  // AND the caller has explicitly determined that self-update cannot run (isSelfUpdateAvailable
+  // === false). When the field is undefined we fail-open (do not block).
+  if (context.isSelfUpdateAvailable === false && isSelfContainerImage(container.image?.name)) {
+    blockers.push(
+      makeBlocker({
+        reason: 'self-update-unavailable',
+        message:
+          'Self-update cannot run in this deployment: the Docker socket is not bind-mounted and the watcher is not configured with a TCP Docker host.',
+        actionable: true,
+        actionHint:
+          'Bind-mount /var/run/docker.sock into the Drydock container, or point the watcher at a TCP Docker host.',
+      }),
+    );
+  }
 
   // 1. security-scan-blocked — fires when either the candidate update scan or the
   // current container's existing scan is blocked. The candidate scan reflects the

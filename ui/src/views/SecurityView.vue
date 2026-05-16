@@ -137,7 +137,7 @@ async function fetchSecurityRuntimeStatus() {
   try {
     runtimeStatus.value = await getSecurityRuntime();
   } catch (caught: unknown) {
-    runtimeError.value = errorMessage(caught, 'Failed to load security runtime status');
+    runtimeError.value = errorMessage(caught, t('securityView.runtimeLoadError'));
     runtimeStatus.value = null;
   } finally {
     runtimeLoading.value = false;
@@ -188,7 +188,11 @@ const displayFilteredCount = computed(() =>
 const displayTotalCount = computed(() =>
   activeSecFilterCount.value > 0 ? imageSummaries.value.length : totalContainerCount.value,
 );
-const displayCountLabel = computed(() => (activeSecFilterCount.value > 0 ? 'images' : 'scanned'));
+const displayCountLabel = computed(() =>
+  activeSecFilterCount.value > 0
+    ? t('securityView.countLabel.images')
+    : t('securityView.countLabel.scanned'),
+);
 
 const {
   detailOpen,
@@ -626,17 +630,17 @@ onUnmounted(() => {
             <AppBadge v-if="row.delta && row.delta.fixed > 0 && row.delta.new === 0"
                   tone="success" size="xs" class="px-1.5 py-0 shrink-0"
                   v-tooltip.top="row.delta.fixed === 1 ? t('securityView.deltaTooltips.fixedSingle', { count: row.delta.fixed }) : t('securityView.deltaTooltips.fixedMultiple', { count: row.delta.fixed })">
-              <AppIcon name="trending-down" :size="9" class="mr-0.5" />{{ row.delta.fixed }} fixed
+              <AppIcon name="trending-down" :size="9" class="mr-0.5" />{{ t('securityView.delta.fixed', { count: row.delta.fixed }) }}
             </AppBadge>
             <AppBadge v-else-if="row.delta && row.delta.new > 0 && row.delta.fixed === 0"
                   tone="warning" size="xs" class="px-1.5 py-0 shrink-0"
                   v-tooltip.top="row.delta.new === 1 ? t('securityView.deltaTooltips.newSingle', { count: row.delta.new }) : t('securityView.deltaTooltips.newMultiple', { count: row.delta.new })">
-              <AppIcon name="trending-up" :size="9" class="mr-0.5" />{{ row.delta.new }} new
+              <AppIcon name="trending-up" :size="9" class="mr-0.5" />{{ t('securityView.delta.new', { count: row.delta.new }) }}
             </AppBadge>
             <AppBadge v-else-if="row.delta && (row.delta.fixed > 0 || row.delta.new > 0)"
                   tone="caution" size="xs" class="px-1.5 py-0 shrink-0"
                   v-tooltip.top="t('securityView.deltaTooltips.both', { fixed: row.delta.fixed, new: row.delta.new })">
-              {{ row.delta.fixed }} fixed, {{ row.delta.new }} new
+              {{ t('securityView.delta.both', { fixed: row.delta.fixed, new: row.delta.new }) }}
             </AppBadge>
             <template v-if="row.hasUpdate">
               <AppButton
@@ -752,10 +756,10 @@ onUnmounted(() => {
                class="px-4 py-2 flex items-center gap-1.5"
                :style="{ borderTop: '1px solid var(--dd-border)' }">
             <AppBadge v-if="summary.delta.fixed > 0" tone="success" size="xs" class="px-1.5 py-0">
-              {{ summary.delta.fixed }} fixed
+              {{ t('securityView.delta.fixed', { count: summary.delta.fixed }) }}
             </AppBadge>
             <AppBadge v-if="summary.delta.new > 0" tone="warning" size="xs" class="px-1.5 py-0">
-              {{ summary.delta.new }} new
+              {{ t('securityView.delta.new', { count: summary.delta.new }) }}
             </AppBadge>
             <span class="text-3xs dd-text-muted ml-auto">{{ t('securityView.card.vsUpdate') }}</span>
           </div>
@@ -844,11 +848,11 @@ onUnmounted(() => {
             </AppBadge>
             <AppBadge v-if="summary.delta && summary.delta.fixed > 0 && summary.delta.new === 0"
                   tone="success" size="xs" class="px-1.5 py-0">
-              {{ summary.delta.fixed }} fixed
+              {{ t('securityView.delta.fixed', { count: summary.delta.fixed }) }}
             </AppBadge>
             <AppBadge v-else-if="summary.delta && summary.delta.new > 0"
                   tone="warning" size="xs" class="px-1.5 py-0">
-              {{ summary.delta.new }} new
+              {{ t('securityView.delta.new', { count: summary.delta.new }) }}
             </AppBadge>
           </div>
         </template>

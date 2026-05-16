@@ -115,7 +115,7 @@ async function openDetail(reg: Record<string, unknown>) {
     selectedRegistry.value = mapRegistry(detail, String(reg.status));
   } catch {
     if (requestId !== detailRequestId) return;
-    detailError.value = 'Unable to load latest registry details';
+    detailError.value = t('registriesView.detail.loadError');
   } finally {
     if (requestId === detailRequestId) {
       detailLoading.value = false;

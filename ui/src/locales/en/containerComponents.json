@@ -148,7 +148,14 @@
       "title": "Container Logs",
       "download": "Download",
       "allLevels": "All Levels",
-      "downloadError": "Unable to download logs"
+      "downloadError": "Unable to download logs",
+      "tailCount": "Tail {count}",
+      "tailAll": "Tail All",
+      "statusPaused": "Paused",
+      "statusLive": "Live",
+      "statusOffline": "Offline",
+      "stdout": "stdout",
+      "stderr": "stderr"
     },
     "groupedViews": {
       "statusQueued": "Queued",
@@ -192,7 +199,13 @@
       "blockedTagWithCriticals": "Blocked: {tag} ({count} critical CVE)",
       "blockedTagWithCriticalsCVEs": "Blocked: {tag} ({count} critical CVEs)",
       "manualUpdateOnly": "Manual update only",
-      "manualUpdateOnlyWithMessage": "Manual update only — {message}"
+      "manualUpdateOnlyWithMessage": "Manual update only — {message}",
+      "updateBtnTooltipDefault": "Update",
+      "cancelButton": "Cancel",
+      "blockedButton": "Blocked",
+      "updateButton": "Update",
+      "moreButton": "More",
+      "cancelUpdateTooltip": "Cancel update"
     },
     "groupHeader": {
       "ungrouped": "Ungrouped",
@@ -285,6 +298,7 @@
     },
     "updateDialog": {
       "title": "Update Container",
+      "thisContainer": "this container",
       "confirmTagChange": "Update {name}? This will change the image tag from :{currentTag} to :{newTag}{kind}.",
       "confirmDigestChange": "Update {name}? A newer build of :{currentTag} is available (digest change).",
       "confirmLatest": "Update {name} now? This will apply the latest discovered image.",
@@ -323,6 +337,7 @@
       "triggerFiltered": "Trigger filtered",
       "agentMismatch": "Agent mismatch",
       "noTrigger": "No trigger",
+      "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Lifts:"
     },
     "maturityBadge": {

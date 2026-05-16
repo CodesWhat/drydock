@@ -1275,6 +1275,82 @@ describe('AgentClient', () => {
 
       expect(reconnectDelays).toEqual([4_000]);
     });
+
+    test('should escalate backoff when stream error triggers reconnect before SSE_STABLE_CONNECTION_MS (#362 error path)', async () => {
+      // Mirror of the end-path regression test but using stream.emit('error') instead of 'end'.
+      axios.mockImplementation(() => Promise.resolve({ data: new EventEmitter() }));
+
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+
+      // Cycle 1: startSse → 200 → stream error immediately → scheduleReconnect (delay=1000)
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+      const r1 = await (axios.mock.results[0].value as Promise<{ data: EventEmitter }>);
+      r1.data.emit('error', new Error('connection reset'));
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      // Cycle 2: startSse → 200 → stream error immediately → scheduleReconnect (delay=2000)
+      await vi.advanceTimersByTimeAsync(0);
+      const r2 = await (axios.mock.results[1].value as Promise<{ data: EventEmitter }>);
+      r2.data.emit('error', new Error('connection reset'));
+      await vi.advanceTimersByTimeAsync(2_000);
+
+      // Cycle 3: startSse → 200 → stream error immediately → scheduleReconnect (delay=4000)
+      await vi.advanceTimersByTimeAsync(0);
+      const r3 = await (axios.mock.results[2].value as Promise<{ data: EventEmitter }>);
+      r3.data.emit('error', new Error('connection reset'));
+      await vi.advanceTimersByTimeAsync(4_000);
+
+      // Collect only reconnect delays (filter out the 30_000 stability-timer calls)
+      const reconnectDelays = setTimeoutSpy.mock.calls
+        .map(([, delay]) => delay)
+        .filter((delay): delay is number => typeof delay === 'number' && delay !== 30_000);
+
+      expect(reconnectDelays).toEqual([1_000, 2_000, 4_000]);
+    });
+  });
+
+  describe('stop', () => {
+    test('should clear an armed stableConnectionTimer', async () => {
+      const stream = new EventEmitter();
+      axios.mockResolvedValue({ data: stream });
+
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0); // stability timer is now armed
+
+      const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
+      const timerBefore = (client as any).stableConnectionTimer;
+      expect(timerBefore).not.toBeNull();
+
+      client.stop();
+
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(timerBefore);
+      expect((client as any).stableConnectionTimer).toBeNull();
+    });
+
+    test('should clear an armed reconnectTimer', () => {
+      const spy = vi.spyOn(client, 'startSse').mockImplementation(() => {});
+      client.scheduleReconnect(5_000); // arms reconnectTimer
+      const timerBefore = (client as any).reconnectTimer;
+      expect(timerBefore).not.toBeNull();
+
+      const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
+      client.stop();
+
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(timerBefore);
+      expect((client as any).reconnectTimer).toBeNull();
+      // Confirm the reconnect never fires after stop()
+      vi.advanceTimersByTime(10_000);
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    test('should be safe to call when both timers are already null', () => {
+      expect((client as any).stableConnectionTimer).toBeNull();
+      expect((client as any).reconnectTimer).toBeNull();
+      expect(() => client.stop()).not.toThrow();
+      expect((client as any).stableConnectionTimer).toBeNull();
+      expect((client as any).reconnectTimer).toBeNull();
+    });
   });
 
   describe('handleEvent', () => {

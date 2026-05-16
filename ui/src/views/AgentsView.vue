@@ -155,7 +155,12 @@ async function fetchAgents() {
             }
           : { total: 0, running: 0, stopped: 0 },
       images: Number.isFinite(a.images) ? Number(a.images) : undefined,
-      lastSeen: typeof a.lastSeen === 'string' ? a.lastSeen : a.connected ? undefined : 'Never',
+      lastSeen:
+        typeof a.lastSeen === 'string'
+          ? a.lastSeen
+          : a.connected
+            ? undefined
+            : t('agentsView.detail.fields.never'),
       version: typeof a.version === 'string' ? a.version : undefined,
       uptime:
         typeof a.uptime === 'string'
@@ -214,9 +219,9 @@ async function fetchAgentLogs(
       agentLogsLastFetched.value = new Date().toISOString();
     }
   } catch (e: unknown) {
-    void errorMessage(e, 'Failed to load agent logs');
+    void errorMessage(e, t('agentsView.detail.logs.loadError'));
     if (!options.silent) {
-      agentLogsError.value = 'Failed to load agent logs';
+      agentLogsError.value = t('agentsView.detail.logs.loadError');
     }
   } finally {
     if (!options.silent) {
@@ -514,7 +519,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
     fields.push({
       label: t('agentsView.detail.fields.lastSeen'),
       value: agent.lastSeen,
-      muted: agent.lastSeen === 'Never',
+      muted: agent.status === 'disconnected',
     });
   }
   return fields;

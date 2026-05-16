@@ -41,6 +41,7 @@ describe('BLOCKER_SEVERITY', () => {
     expect(BLOCKER_SEVERITY['last-update-rolled-back']).toBe('hard');
     expect(BLOCKER_SEVERITY['agent-mismatch']).toBe('hard');
     expect(BLOCKER_SEVERITY['no-update-trigger-configured']).toBe('hard');
+    expect(BLOCKER_SEVERITY['self-update-unavailable']).toBe('hard');
   });
 
   it('maps soft blockers correctly', () => {

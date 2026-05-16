@@ -127,6 +127,7 @@ function mountLayout(stubs: Record<string, unknown> = {}) {
         NotificationBell: true,
         ThemeToggle: true,
         AnnouncementBanner: false,
+        'i18n-t': false,
         ...stubs,
       },
     },

@@ -327,7 +327,7 @@ function updateBtnTooltip(c: {
       ? t('containerComponents.groupedViews.manualUpdateOnlyWithMessage', { message: soft.message })
       : t('containerComponents.groupedViews.manualUpdateOnly');
   }
-  return 'Update';
+  return t('containerComponents.groupedViews.updateBtnTooltipDefault');
 }
 
 function getGroupByKey(groupKey: string) {
@@ -833,15 +833,15 @@ onScopeDispose(() => {
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95'"
                       :disabled="isRowLocked(c)"
-                      :tooltip="tt('Stop')" @click.stop="confirmStop(c)" />
+                      :tooltip="tt(t('containerComponents.groupedViews.stopAction'))" @click.stop="confirmStop(c)" />
               <AppIconButton v-else icon="play" size="toolbar" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
                       :disabled="isRowLocked(c)"
-                      :tooltip="tt('Start')" @click.stop="startContainer(c)" />
+                      :tooltip="tt(t('containerComponents.groupedViews.startAction'))" @click.stop="startContainer(c)" />
               <AppIconButton v-if="canCancelUpdate(c)" icon="x" size="toolbar" variant="danger"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow] hover:dd-bg-hover hover:scale-110 active:scale-95"
-                      :tooltip="tt('Cancel update')" @click.stop="cancelUpdate(c)" />
+                      :tooltip="tt(t('containerComponents.groupedViews.cancelUpdateTooltip'))" @click.stop="cancelUpdate(c)" />
               <AppIconButton icon="more" size="toolbar" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="[
@@ -849,7 +849,7 @@ onScopeDispose(() => {
                         openActionsMenu === c.id && !isRowLocked(c) ? 'dd-bg-elevated dd-text' : '',
                       ]"
                       :disabled="isRowLocked(c)"
-                      :tooltip="tt('More')" @click.stop="toggleActionsMenu(c.id, $event)" />
+                      :tooltip="tt(t('containerComponents.groupedViews.moreButton'))" @click.stop="toggleActionsMenu(c.id, $event)" />
             </div>
           </template>
           <!-- Button-style actions (full) -->
@@ -870,7 +870,7 @@ onScopeDispose(() => {
                       weight="bold"
                       class="inline-flex items-center justify-center whitespace-nowrap"
                       @click.stop="cancelUpdate(c)">
-                <AppIcon name="x" :size="12" class="mr-1" /> Cancel
+                <AppIcon name="x" :size="12" class="mr-1" /> {{ t('containerComponents.groupedViews.cancelButton') }}
               </AppButton>
             <div v-if="c.newTag" class="inline-flex items-center gap-1">
               <!-- Blocked: muted split button (any hard eligibility blocker) -->
@@ -882,7 +882,7 @@ onScopeDispose(() => {
                         weight="bold"
                         class="inline-flex items-center justify-center flex-1 whitespace-nowrap cursor-not-allowed"
                         disabled>
-                  <AppIcon name="lock" :size="14" class="mr-1" /> Blocked
+                  <AppIcon name="lock" :size="14" class="mr-1" /> {{ t('containerComponents.groupedViews.blockedButton') }}
                 </AppButton>
                 <AppIconButton icon="chevron-down" size="toolbar" variant="muted-subtle"
                         class="transition-colors border-l dd-border-strong"
@@ -902,7 +902,7 @@ onScopeDispose(() => {
                         :class="isRowLocked(c) ? 'cursor-not-allowed' : ''"
                         :disabled="isRowLocked(c)"
                         @click.stop="confirmUpdate(c)">
-                  <AppIcon name="cloud-download" :size="14" class="mr-1" /> Update
+                  <AppIcon name="cloud-download" :size="14" class="mr-1" /> {{ t('containerComponents.groupedViews.updateButton') }}
                 </AppButton>
                 <AppIconButton icon="chevron-down" size="toolbar" variant="warning-subtle"
                         class="transition-colors border-l dd-border-warning"
@@ -922,7 +922,7 @@ onScopeDispose(() => {
                         :class="isRowLocked(c) ? 'cursor-not-allowed' : ''"
                         :disabled="isRowLocked(c)"
                         @click.stop="confirmUpdate(c)">
-                  <AppIcon name="cloud-download" :size="14" class="mr-1" /> Update
+                  <AppIcon name="cloud-download" :size="14" class="mr-1" /> {{ t('containerComponents.groupedViews.updateButton') }}
                 </AppButton>
                 <AppIconButton icon="chevron-down" size="toolbar" variant="success-subtle"
                         class="transition-colors border-l dd-border-success"
@@ -936,14 +936,14 @@ onScopeDispose(() => {
               <AppIconButton v-if="c.status === 'running'"
                       icon="stop" size="toolbar" variant="danger"
                       :disabled="isRowLocked(c)"
-                      :tooltip="tt('Stop')" @click.stop="confirmStop(c)" />
+                      :tooltip="tt(t('containerComponents.groupedViews.stopAction'))" @click.stop="confirmStop(c)" />
               <AppIconButton v-else
                       icon="play" size="toolbar" variant="success"
                       :disabled="isRowLocked(c)"
-                      :tooltip="tt('Start')" @click.stop="startContainer(c)" />
+                      :tooltip="tt(t('containerComponents.groupedViews.startAction'))" @click.stop="startContainer(c)" />
               <AppIconButton icon="restart" size="toolbar" variant="muted"
                       :disabled="isRowLocked(c)"
-                      :tooltip="tt('Restart')" @click.stop="confirmRestart(c)" />
+                      :tooltip="tt(t('containerComponents.groupedViews.restartAction'))" @click.stop="confirmRestart(c)" />
             </div>
             </div>
           </template>
@@ -1173,18 +1173,18 @@ onScopeDispose(() => {
                 <AppIconButton v-if="c.status === 'running'" icon="stop" size="xs" variant="muted"
                         :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-elevated'"
                         :disabled="isRowLocked(c)"
-                      :tooltip="tt('Stop')" @click.stop="confirmStop(c)" />
+                      :tooltip="tt(t('containerComponents.groupedViews.stopAction'))" @click.stop="confirmStop(c)" />
                 <AppIconButton v-else icon="play" size="xs" variant="muted"
                         :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-elevated'"
                         :disabled="isRowLocked(c)"
-                        :tooltip="tt('Start')" @click.stop="startContainer(c)" />
+                        :tooltip="tt(t('containerComponents.groupedViews.startAction'))" @click.stop="startContainer(c)" />
                 <AppIconButton icon="restart" size="xs" variant="muted"
                         :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text hover:dd-bg-elevated'"
                         :disabled="isRowLocked(c)"
-                        :tooltip="tt('Restart')" @click.stop="confirmRestart(c)" />
+                        :tooltip="tt(t('containerComponents.groupedViews.restartAction'))" @click.stop="confirmRestart(c)" />
                 <AppIconButton icon="security" size="xs" variant="muted"
                         class="hover:dd-text-secondary hover:dd-bg-elevated"
-                        :tooltip="tt('Scan')" @click.stop="scanContainer(c)" />
+                        :tooltip="tt(t('containerComponents.groupedViews.scanAction'))" @click.stop="scanContainer(c)" />
                 <AppIconButton v-if="updateBtnState(c) === 'hard'" icon="lock" size="xs" variant="muted"
                         class="opacity-60 cursor-not-allowed"
                         :disabled="true"

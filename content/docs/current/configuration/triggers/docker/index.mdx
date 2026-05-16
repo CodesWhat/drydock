@@ -121,12 +121,12 @@ Drydock can update itself. When it detects that its own container has an availab
 3. Pulls the new image while the current container is still running
 4. Renames the old container to `drydock-old-{timestamp}`
 5. Creates a new container with the original name and new image
-6. Spawns a temporary helper container (with the Docker socket) that stops the old container and starts the new one
+6. Spawns a temporary helper container — with its own Docker access (the bind-mounted socket, or a TCP connection on Drydock's network) — that stops the old container and starts the new one
 7. The UI auto-reconnects to the new instance
 
 If any step fails, Drydock falls back to the previous container automatically.
 
-<Callout type="warn">Self-update requires the Docker socket to be bind-mounted at `/var/run/docker.sock` and a Docker trigger to be enabled.</Callout>
+<Callout type="warn">Self-update requires Drydock to reach the Docker daemon — either a bind-mounted socket at `/var/run/docker.sock` or a TCP Docker host — and a Docker trigger to be enabled. See [Self-Update](/docs/configuration/self-update) for the socket-proxy case.</Callout>
 
 ## Infrastructure Update Mode
 

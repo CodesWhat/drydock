@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, onUpdated, ref, watch, watchEffect } from 'vue';
+import { onBeforeUnmount, onMounted, ref, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppStatusIndicator from '@/components/AppStatusIndicator.vue';
 import type { DashboardServerRow } from '../dashboardTypes';
@@ -26,9 +26,7 @@ function serverTone(status: DashboardServerRow['status']) {
 }
 
 const rootEl = ref<HTMLElement | null>(null);
-const scrollViewportEl = ref<HTMLElement | null>(null);
 const containerHeight = ref(999);
-const fullModeTailSpacerHeight = ref(0);
 // full = header + wide rows with vertical scroll
 // compact = no header, horizontal cards with horizontal scroll
 const mode = ref<'full' | 'compact'>('full');
@@ -39,7 +37,6 @@ const FULL_MODE_SCROLL_PADDING = 32;
 const FULL_MODE_HEADER_HEIGHT = 49;
 
 let observer: ResizeObserver | null = null;
-let tailSpacerAnimationFrame: number | null = null;
 
 function getFullModeContentHeight(rowCount: number): number {
   return (
@@ -49,66 +46,18 @@ function getFullModeContentHeight(rowCount: number): number {
   );
 }
 
-function cancelTailSpacerMeasurement() {
-  if (tailSpacerAnimationFrame !== null) {
-    cancelAnimationFrame(tailSpacerAnimationFrame);
-    tailSpacerAnimationFrame = null;
-  }
-}
-
-function scheduleTailSpacerMeasurement() {
-  cancelTailSpacerMeasurement();
-  tailSpacerAnimationFrame = requestAnimationFrame(() => {
-    tailSpacerAnimationFrame = null;
-
-    if (mode.value !== 'full') {
-      if (fullModeTailSpacerHeight.value !== 0) {
-        fullModeTailSpacerHeight.value = 0;
-      }
-      return;
-    }
-
-    const viewport = scrollViewportEl.value;
-    if (!viewport) return;
-
-    const rowEls = viewport.querySelectorAll<HTMLElement>('[data-host-row]');
-    const lastRow = rowEls[rowEls.length - 1];
-    if (!lastRow) {
-      if (fullModeTailSpacerHeight.value !== 0) {
-        fullModeTailSpacerHeight.value = 0;
-      }
-      return;
-    }
-
-    const spacerHeight = Math.max(
-      Math.ceil(viewport.clientHeight - lastRow.getBoundingClientRect().height),
-      0,
-    );
-    if (fullModeTailSpacerHeight.value !== spacerHeight) {
-      fullModeTailSpacerHeight.value = spacerHeight;
-    }
-  });
-}
-
 onMounted(() => {
   if (!rootEl.value) return;
   observer = new ResizeObserver((entries) => {
     for (const entry of entries) {
       containerHeight.value = entry.contentRect.height;
-      scheduleTailSpacerMeasurement();
     }
   });
   observer.observe(rootEl.value);
-  scheduleTailSpacerMeasurement();
 });
 
 onBeforeUnmount(() => {
   observer?.disconnect();
-  cancelTailSpacerMeasurement();
-});
-
-onUpdated(() => {
-  scheduleTailSpacerMeasurement();
 });
 
 watchEffect(() => {
@@ -116,14 +65,6 @@ watchEffect(() => {
   mode.value =
     viewportHeight >= getFullModeContentHeight(props.servers.length) ? 'full' : 'compact';
 });
-
-watch(
-  () => [mode.value, props.servers],
-  () => {
-    scheduleTailSpacerMeasurement();
-  },
-  { deep: true },
-);
 </script>
 
 <template>
@@ -146,13 +87,12 @@ watch(
     <!-- Full mode: wide rows, vertical scroll -->
     <div
       v-if="mode === 'full'"
-      ref="scrollViewportEl"
-      class="flex-1 min-h-0 overflow-y-auto overscroll-contain dd-scroll-stable snap-y snap-mandatory p-4 space-y-3">
+      class="flex-1 min-h-0 overflow-y-auto overscroll-contain dd-scroll-stable p-4 space-y-3">
       <div
         v-for="server in servers"
         :key="server.name"
         data-host-row
-        class="flex items-start gap-3 snap-start p-3 dd-rounded cursor-pointer transition-colors hover:dd-bg-elevated"
+        class="flex items-start gap-3 p-3 dd-rounded cursor-pointer transition-colors hover:dd-bg-elevated"
         :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
         @click="handleViewAll">
         <div class="flex-1 min-w-0">
@@ -167,12 +107,6 @@ watch(
           :tone="serverTone(server.status)"
           :label="server.statusLabel ?? server.status" />
       </div>
-      <div
-        v-if="fullModeTailSpacerHeight > 0"
-        data-test="host-status-tail-spacer"
-        aria-hidden="true"
-        class="pointer-events-none shrink-0"
-        :style="{ height: `${fullModeTailSpacerHeight}px` }" />
     </div>
 
     <!-- Compact mode: horizontal cards, horizontal scroll -->

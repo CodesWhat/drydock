@@ -222,6 +222,7 @@ describe('UpdateEligibilityBadges', () => {
       ['trigger-not-included', 'Trigger filtered'],
       ['agent-mismatch', 'Agent mismatch'],
       ['no-update-trigger-configured', 'No trigger'],
+      ['self-update-unavailable', 'Self-update unavailable'],
     ];
 
     for (const [reason, expectedLabel] of labelCases) {
@@ -257,6 +258,7 @@ describe('UpdateEligibilityBadges', () => {
       ['trigger-not-included', 'mdi:cog-off'],
       ['agent-mismatch', 'mdi:cog-off'],
       ['no-update-trigger-configured', 'mdi:cog-off'],
+      ['self-update-unavailable', 'mdi:docker'],
     ];
 
     for (const [reason, expectedIcon] of iconCases) {

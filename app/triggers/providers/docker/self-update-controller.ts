@@ -4,6 +4,7 @@ import { toPositiveInteger } from '../../../util/parse.js';
 import { sleep } from '../../../util/sleep.js';
 import { disableSocketRedirects } from '../../../watchers/providers/docker/disable-socket-redirects.js';
 import { probeSocketApiVersion } from '../../../watchers/providers/docker/socket-version-probe.js';
+import { validateTcpDockerHost } from './SelfUpdateTransitionShared.js';
 import {
   SELF_UPDATE_HEALTH_TIMEOUT_MS,
   SELF_UPDATE_POLL_INTERVAL_MS,
@@ -406,14 +407,29 @@ class SelfUpdateController {
 
 export async function runSelfUpdateController(): Promise<void> {
   const config = readConfigFromEnv();
-  const socketPath = '/var/run/docker.sock';
-  const apiVersion = await probeSocketApiVersion(socketPath);
-  const dockerOpts: Dockerode.DockerOptions = { socketPath };
-  if (apiVersion) {
-    dockerOpts.version = `v${apiVersion}`;
+  let dockerOpts: Dockerode.DockerOptions;
+  let useSocketRedirects = false;
+  const tcpHost = process.env.DD_SELF_UPDATE_DOCKER_HOST;
+  if (typeof tcpHost === 'string' && tcpHost.length > 0) {
+    validateTcpDockerHost(tcpHost);
+    const port = Number(process.env.DD_SELF_UPDATE_DOCKER_PORT) || 2375;
+    const protocol = (process.env.DD_SELF_UPDATE_DOCKER_PROTOCOL ||
+      'http') as Dockerode.DockerOptions['protocol'];
+    globalThis.console.log(`[self-update] connecting to Docker via TCP: ${tcpHost}:${port}`);
+    dockerOpts = { host: tcpHost, port, protocol };
+  } else {
+    const socketPath = '/var/run/docker.sock';
+    const apiVersion = await probeSocketApiVersion(socketPath);
+    dockerOpts = { socketPath };
+    if (apiVersion) {
+      dockerOpts.version = `v${apiVersion}`;
+    }
+    useSocketRedirects = true;
   }
   const docker = new Dockerode(dockerOpts);
-  disableSocketRedirects(docker);
+  if (useSocketRedirects) {
+    disableSocketRedirects(docker);
+  }
   const controller = new SelfUpdateController(config, docker);
   await controller.run();
 }

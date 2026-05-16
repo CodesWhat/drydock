@@ -169,7 +169,7 @@ const currentPageLabel = computed(() => {
       if (item.route === route.path) return item.label;
     }
   }
-  return hiddenPages[route.path]?.label ?? 'Dashboard';
+  return hiddenPages[route.path]?.label ?? t('appShell.layout.nav.dashboardFallback');
 });
 
 const currentPageIcon = computed(() => {
@@ -202,8 +202,8 @@ const staticSearchResults = computed<SearchResultItem[]>(() => {
   const settingsResults: SearchResultItem[] = [
     {
       id: 'settings:appearance',
-      title: 'Appearance Settings',
-      subtitle: 'Config · Appearance',
+      title: t('appShell.layout.search.settings.appearanceTitle'),
+      subtitle: t('appShell.layout.search.settings.appearanceSubtitle'),
       icon: 'config',
       route: ROUTES.CONFIG,
       query: { tab: 'appearance' },
@@ -212,8 +212,8 @@ const staticSearchResults = computed<SearchResultItem[]>(() => {
     },
     {
       id: 'settings:profile',
-      title: 'Profile Settings',
-      subtitle: 'Config · Profile',
+      title: t('appShell.layout.search.settings.profileTitle'),
+      subtitle: t('appShell.layout.search.settings.profileSubtitle'),
       icon: 'user',
       route: ROUTES.CONFIG,
       query: { tab: 'profile' },
@@ -337,33 +337,47 @@ interface ParsedSearchQuery {
   prefix?: SearchPrefix;
 }
 
-const SEARCH_SCOPE_OPTIONS: SearchScopeOption[] = [
-  { id: 'all', label: 'All', kinds: [] },
-  { id: 'pages', label: 'Pages', kinds: ['page', 'setting'] },
-  { id: 'containers', label: 'Containers', kinds: ['container'] },
-  { id: 'runtime', label: 'Runtime', kinds: ['agent', 'trigger', 'watcher'] },
+const SEARCH_SCOPE_OPTIONS = computed<SearchScopeOption[]>(() => [
+  { id: 'all', label: t('appShell.layout.search.scope.all'), kinds: [] },
+  { id: 'pages', label: t('appShell.layout.search.scope.pages'), kinds: ['page', 'setting'] },
+  { id: 'containers', label: t('appShell.layout.search.scope.containers'), kinds: ['container'] },
+  {
+    id: 'runtime',
+    label: t('appShell.layout.search.scope.runtime'),
+    kinds: ['agent', 'trigger', 'watcher'],
+  },
   {
     id: 'config',
-    label: 'Config',
+    label: t('appShell.layout.search.scope.config'),
     kinds: ['registry', 'auth', 'notification'],
   },
-];
+]);
 
-const SEARCH_GROUP_DEFINITIONS: SearchGroupDefinition[] = [
-  { id: 'navigation', label: 'Navigation', kinds: ['page', 'setting'] },
-  { id: 'containers', label: 'Containers', kinds: ['container'] },
-  { id: 'runtime', label: 'Runtime', kinds: ['agent', 'trigger', 'watcher'] },
+const SEARCH_GROUP_DEFINITIONS = computed<SearchGroupDefinition[]>(() => [
+  {
+    id: 'navigation',
+    label: t('appShell.layout.search.group.navigation'),
+    kinds: ['page', 'setting'],
+  },
+  { id: 'containers', label: t('appShell.layout.search.group.containers'), kinds: ['container'] },
+  {
+    id: 'runtime',
+    label: t('appShell.layout.search.group.runtime'),
+    kinds: ['agent', 'trigger', 'watcher'],
+  },
   {
     id: 'configuration',
-    label: 'Configuration',
+    label: t('appShell.layout.search.group.configuration'),
     kinds: ['registry', 'auth', 'notification'],
   },
-];
+]);
 
 const SEARCH_RECENT_STORAGE_KEY = 'dd-cmdk-recent';
 const SEARCH_RECENT_STORAGE_LEGACY_KEY = 'dd-cmdk-recent-v1';
 const SEARCH_RECENT_MAX_ITEMS = 8;
-const SEARCH_SCOPE_ORDER: SearchScope[] = SEARCH_SCOPE_OPTIONS.map((option) => option.id);
+const SEARCH_SCOPE_ORDER = computed<SearchScope[]>(() =>
+  SEARCH_SCOPE_OPTIONS.value.map((option) => option.id),
+);
 const EMPTY_QUERY_GROUP_LIMIT = 4;
 const searchScope = ref<SearchScope>('all');
 
@@ -436,7 +450,11 @@ const containerSearchResults = computed<SearchResultItem[]>(() =>
   searchContainers.value.map((container) => ({
     id: `container:${container.id}`,
     title: container.displayName,
-    subtitle: `Container · ${container.image} · ${container.status} · ${container.host}`,
+    subtitle: t('appShell.layout.search.containerSubtitle', {
+      image: container.image,
+      status: container.status,
+      host: container.host,
+    }),
     icon: 'containers',
     containerIcon: container.icon,
     route: ROUTES.CONTAINERS,
@@ -451,7 +469,7 @@ function isSearchResultInScope(result: SearchResultItem, scope: SearchScope): bo
   if (scope === 'all') {
     return true;
   }
-  const scopeOption = SEARCH_SCOPE_OPTIONS.find((option) => option.id === scope);
+  const scopeOption = SEARCH_SCOPE_OPTIONS.value.find((option) => option.id === scope);
   if (!scopeOption) {
     return true;
   }
@@ -495,12 +513,14 @@ function buildSearchIndexResults(resources: {
     const name = normalizeSearchValue(agent.name || agent.id || 'agent');
     const host = normalizeSearchValue(agent.host);
     const port = normalizeSearchValue(agent.port);
-    const hostLabel = host ? `${host}${port ? `:${port}` : ''}` : 'unknown host';
+    const hostLabel = host
+      ? `${host}${port ? `:${port}` : ''}`
+      : t('appShell.layout.search.unknownHost');
     const status = agent.connected ? 'connected' : 'disconnected';
     results.push({
       id: `agent:${name}`,
       title: name,
-      subtitle: `Agent · ${status} · ${hostLabel}`,
+      subtitle: t('appShell.layout.search.agentSubtitle', { status, host: hostLabel }),
       icon: 'agents',
       route: ROUTES.AGENTS,
       query: { q: name },
@@ -517,7 +537,7 @@ function buildSearchIndexResults(resources: {
     results.push({
       id: `trigger:${id}`,
       title: name,
-      subtitle: `Trigger · ${type}`,
+      subtitle: t('appShell.layout.search.triggerSubtitle', { type }),
       icon: 'triggers',
       route: ROUTES.TRIGGERS,
       query: { q: name },
@@ -534,7 +554,7 @@ function buildSearchIndexResults(resources: {
     results.push({
       id: `watcher:${id}`,
       title: name,
-      subtitle: `Watcher · ${type}`,
+      subtitle: t('appShell.layout.search.watcherSubtitle', { type }),
       icon: 'watchers',
       route: ROUTES.WATCHERS,
       query: { q: name },
@@ -551,7 +571,7 @@ function buildSearchIndexResults(resources: {
     results.push({
       id: `registry:${id}`,
       title: name,
-      subtitle: `Registry · ${type}`,
+      subtitle: t('appShell.layout.search.registrySubtitle', { type }),
       icon: 'registries',
       route: ROUTES.REGISTRIES,
       query: { q: name },
@@ -568,7 +588,7 @@ function buildSearchIndexResults(resources: {
     results.push({
       id: `auth:${id}`,
       title: name,
-      subtitle: `Auth · ${type}`,
+      subtitle: t('appShell.layout.search.authSubtitle', { type }),
       icon: 'auth',
       route: ROUTES.AUTH,
       query: { q: name },
@@ -586,7 +606,7 @@ function buildSearchIndexResults(resources: {
     results.push({
       id: `notification:${id}`,
       title: name,
-      subtitle: `Notification rule · ${id}`,
+      subtitle: t('appShell.layout.search.notificationSubtitle', { id }),
       icon: 'notifications',
       route: ROUTES.NOTIFICATIONS,
       query: { q: name },
@@ -941,7 +961,7 @@ const groupedSearchResults = computed<SearchResultGroup[]>(() => {
     if (recentItems.length > 0) {
       groups.push({
         id: 'recent',
-        label: 'Recent',
+        label: t('appShell.layout.search.recentGroup'),
         items: recentItems,
       });
     }
@@ -951,7 +971,7 @@ const groupedSearchResults = computed<SearchResultGroup[]>(() => {
 
   if (queryNormalized) {
     const limitedResults = baseResults.slice(0, 24);
-    SEARCH_GROUP_DEFINITIONS.forEach((groupDefinition) => {
+    SEARCH_GROUP_DEFINITIONS.value.forEach((groupDefinition) => {
       const groupItems = limitedResults.filter((result) =>
         groupDefinition.kinds.includes(result.kind),
       );
@@ -966,7 +986,7 @@ const groupedSearchResults = computed<SearchResultGroup[]>(() => {
     return groups;
   }
 
-  SEARCH_GROUP_DEFINITIONS.forEach((groupDefinition) => {
+  SEARCH_GROUP_DEFINITIONS.value.forEach((groupDefinition) => {
     const groupItems = baseResults
       .filter((result) => groupDefinition.kinds.includes(result.kind))
       .slice(0, EMPTY_QUERY_GROUP_LIMIT);
@@ -1047,11 +1067,11 @@ async function selectSearchResult(result: SearchResultItem | undefined) {
 }
 
 function cycleSearchScope(step = 1) {
-  const currentIndex = SEARCH_SCOPE_ORDER.indexOf(effectiveSearchScope.value);
+  const currentIndex = SEARCH_SCOPE_ORDER.value.indexOf(effectiveSearchScope.value);
   const startIndex = currentIndex >= 0 ? currentIndex : 0;
-  const totalScopes = SEARCH_SCOPE_ORDER.length;
+  const totalScopes = SEARCH_SCOPE_ORDER.value.length;
   const nextIndex = (startIndex + step + totalScopes) % totalScopes;
-  applySearchScope(SEARCH_SCOPE_ORDER[nextIndex]);
+  applySearchScope(SEARCH_SCOPE_ORDER.value[nextIndex]);
 }
 
 function handleSearchInputKeydown(event: KeyboardEvent) {
@@ -1574,9 +1594,9 @@ onUnmounted(() => {
                    :style="{ ...userMenuStyle, zIndex: 'var(--z-popover)', backgroundColor: 'var(--dd-bg-card)', border: '1px solid var(--dd-border-strong)', boxShadow: 'var(--dd-shadow-tooltip)' }">
                 <div
                   class="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider dd-text-muted max-w-[220px] truncate"
-                  v-tooltip.top="currentUser?.username || currentUser?.displayName || 'User'"
+                  v-tooltip.top="currentUser?.username || currentUser?.displayName || t('appShell.layout.topbar.userFallback')"
                      :style="{ borderBottom: '1px solid var(--dd-border)' }">
-                  {{ currentUser?.username || currentUser?.displayName || 'User' }}
+                  {{ currentUser?.username || currentUser?.displayName || t('appShell.layout.topbar.userFallback') }}
                 </div>
                 <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="showUserMenu = false; router.push({ path: ROUTES.CONFIG, query: { tab: 'profile' } })">
                   <AppIcon name="user" :size="11" class="dd-text-muted" />
@@ -1608,12 +1628,10 @@ onUnmounted(() => {
           :style="stackedBannerInlineStyle"
           @dismiss="dismissOidcHttpBannerForSession"
           @dismiss-permanent="dismissOidcHttpBannerPermanently">
-          One or more OIDC providers use an insecure
-          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">http://</code>
-          discovery URL. HTTP discovery is deprecated and will be removed in v1.6.0.
-          Upgrade your OIDC discovery URL to use HTTPS, or set
-          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_AUTH_OIDC_{name}_ALLOW_INSECURE_HTTP=true</code>
-          only for trusted internal issuers.
+          <i18n-t keypath="appShell.banners.oidcHttpBody" tag="span">
+            <template #httpCode><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">http://</code></template>
+            <template #envVar><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_AUTH_OIDC_{name}_ALLOW_INSECURE_HTTP=true</code></template>
+          </i18n-t>
         </AnnouncementBanner>
 
         <AnnouncementBanner
@@ -1626,8 +1644,9 @@ onUnmounted(() => {
           :style="stackedBannerInlineStyle"
           @dismiss="dismissLegacyHashBannerForSession"
           @dismiss-permanent="dismissLegacyHashBannerPermanently">
-          Your basic authentication uses a legacy password hash format. Legacy v1.3.9 formats are deprecated and will be removed in v1.6.0.
-          Re-hash your admin password with argon2id (see the migration guide for the one-liner).
+          <i18n-t keypath="appShell.banners.legacyHashBody" tag="span">
+            <template #argon><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">argon2id</code></template>
+          </i18n-t>
         </AnnouncementBanner>
 
         <AnnouncementBanner
@@ -1640,20 +1659,15 @@ onUnmounted(() => {
           :style="stackedBannerInlineStyle"
           @dismiss="legacyConfigDeprecationBanner.dismissForSession"
           @dismiss-permanent="legacyConfigDeprecationBanner.dismissPermanently">
-          Deprecated configuration aliases are in use. Rename
-          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">WUD_*</code>
-          env vars to
-          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_*</code>
-          and
-          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">wud.*</code>
-          Docker labels to
-          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">dd.*</code>.
-          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_TRIGGER_*</code>
-          variables should also migrate to
-          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_ACTION_*</code>
-          or
-          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_NOTIFICATION_*</code>
-          (see the migration guide for the full rename map).
+          <i18n-t keypath="appShell.banners.legacyConfigBody" tag="span">
+            <template #wudEnv><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">WUD_*</code></template>
+            <template #ddEnv><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_*</code></template>
+            <template #wudLabel><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">wud.*</code></template>
+            <template #ddLabel><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">dd.*</code></template>
+            <template #triggerEnv><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_TRIGGER_*</code></template>
+            <template #actionEnv><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_ACTION_*</code></template>
+            <template #notificationEnv><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_NOTIFICATION_*</code></template>
+          </i18n-t>
           <span v-if="legacyEnvKeysPreview" class="block mt-1 truncate">
             {{ t('appShell.banners.envKeysLabel', { count: legacyInputSummary?.env.total, keys: legacyEnvKeysPreview }) }}
           </span>
@@ -1672,11 +1686,10 @@ onUnmounted(() => {
           :style="stackedBannerInlineStyle"
           @dismiss="legacyApiPathDeprecationBanner.dismissForSession"
           @dismiss-permanent="legacyApiPathDeprecationBanner.dismissPermanently">
-          Unversioned API paths are deprecated. Update API clients to the
-          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/v1/*</code>
-          prefix. Unversioned
-          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/*</code>
-          aliases are removed in v1.6.0.
+          <i18n-t keypath="appShell.banners.legacyApiBody" tag="span">
+            <template #v1Prefix><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/v1/*</code></template>
+            <template #oldPrefix><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/*</code></template>
+          </i18n-t>
           <span v-if="legacyApiPathKeysPreview" class="block mt-1 truncate">
             {{ t('appShell.banners.apiPathsLabel', { count: legacyInputSummary?.api?.total, keys: legacyApiPathKeysPreview }) }}
           </span>
@@ -1692,14 +1705,10 @@ onUnmounted(() => {
           :style="stackedBannerInlineStyle"
           @dismiss="curlHealthcheckDeprecationBanner.dismissForSession"
           @dismiss-permanent="curlHealthcheckDeprecationBanner.dismissPermanently">
-          Your Drydock container uses a custom curl-based healthcheck override. curl remains
-          supported for backward compatibility in v1.5.x. v1.6.0 is the final warning release,
-          and curl will be removed from the image in v1.7.0. Remove the
-          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_DISABLE_WGET_HEALTHCHECK=true</code>
-          override; the image now uses wget and curl is no longer bundled. Prefer the built-in image
-          healthcheck or
-          <code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/bin/healthcheck</code>
-          for custom intervals.
+          <i18n-t keypath="appShell.banners.curlHealthcheckBody" tag="span">
+            <template #envVar><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_DISABLE_WGET_HEALTHCHECK=true</code></template>
+            <template #bin><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/bin/healthcheck</code></template>
+          </i18n-t>
           <span v-if="curlHealthcheckOverrideSummary?.commandPreview" class="block mt-1 truncate">
             {{ t('appShell.banners.healthcheckCommandLabel', { command: curlHealthcheckOverrideSummary.commandPreview }) }}
           </span>

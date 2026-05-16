@@ -29,9 +29,14 @@ const defaultViewModes = [
 
 const filterPanelId = `filter-panel-${Math.random().toString(36).slice(2, 10)}`;
 
+function viewModeName(id: string): string {
+  const key = `sharedComponents.dataFilterBar.viewModes.${id}`;
+  const translated = t(key);
+  return translated !== key ? translated : `${id.charAt(0).toUpperCase()}${id.slice(1)}`;
+}
+
 function viewModeLabel(id: string): string {
-  const label = `${id.charAt(0).toUpperCase()}${id.slice(1)}`;
-  return t('sharedComponents.dataFilterBar.viewModeLabel', { label });
+  return t('sharedComponents.dataFilterBar.viewModeLabel', { label: viewModeName(id) });
 }
 </script>
 

@@ -188,7 +188,10 @@ const profileData = ref<ProfileData>(emptyProfileData());
 const profileLoading = ref(true);
 const profileError = ref('');
 const profileDisplayName = computed(
-  () => profileData.value.displayName || profileData.value.username || 'Unknown User',
+  () =>
+    profileData.value.displayName ||
+    profileData.value.username ||
+    t('configView.profile.unknownUser'),
 );
 const profileInitials = computed(() => profileDisplayName.value.slice(0, 2).toUpperCase());
 

@@ -14,7 +14,7 @@ Drydock detects when its own container image has an update available, just like 
 
 ## Requirements
 
-- The Docker socket must be bind-mounted at `/var/run/docker.sock`
+- Drydock must be able to reach the Docker daemon — either by bind-mounting the socket at `/var/run/docker.sock` **or** by pointing the watcher at a TCP Docker host (`host` / `port` / `protocol`)
 - The Docker trigger must be enabled
 - Drydock must be able to create temporary helper containers
 
@@ -27,7 +27,7 @@ Drydock detects when its own container image has an update available, just like 
 3. **Pull new image** — The updated image is pulled while the current container is still running
 4. **Rename old container** — The current container is renamed to `drydock-old-{timestamp}` to free the original name
 5. **Create new container** — A new container is created with the original name and updated image (not started yet)
-6. **Helper container** — A temporary container is spawned with the Docker socket mounted. It:
+6. **Helper container** — A temporary container is spawned with its own access to the Docker daemon — the bind-mounted socket when Drydock uses one, otherwise a TCP connection on Drydock's network. It:
    - Stops the old container
    - Starts the new container
    - Deletes the old container on success
@@ -56,6 +56,17 @@ The ack timeout defaults to 3 seconds. If no browsers are connected, the update 
 ## Dry-run mode
 
 When `DD_ACTION_DOCKER_{trigger_name}_DRYRUN=true`, the self-update is logged but not executed. The new image is pulled ahead of time but no container replacement occurs.
+
+## Behind a Docker socket proxy
+
+If Drydock's Docker watcher is configured with a TCP `host` — the usual setup when a Docker socket proxy such as [sockguard](https://github.com/buildkite/sockguard) or `docker-socket-proxy` mediates daemon access — self-update connects the helper container to the proxy over TCP instead of bind-mounting a socket. The helper's network mode is cloned from Drydock's own container, so it shares the same Docker network and can resolve the proxy by its service name.
+
+<Callout type="warn">
+A *filtering* socket proxy must be configured to permit the self-update helper:
+
+- **Container ownership** — proxies that scope operations by an ownership label (for example sockguard's `com.sockguard.owner`) reject the helper's attempt to stop and replace the Drydock container unless the Drydock container itself carries that label. Add the label to the Drydock container so the helper is allowed to act on it.
+- **Finalize `exec`** — after the swap the helper runs `node dist/triggers/providers/docker/self-update-finalize-entrypoint.js` inside the new container via `docker exec`. A proxy with an exec allowlist must include that command. This step is non-fatal: if it is blocked the update still completes, but the operation will not report a clean terminal status.
+</Callout>
 
 ## Example
 

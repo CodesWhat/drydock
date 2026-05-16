@@ -11,6 +11,7 @@ import type {
   SelfUpdateCreatedContainer,
   SelfUpdateDockerApi,
   SelfUpdateExecutionContext,
+  SelfUpdateHelperContainerCreateOptions,
   SelfUpdateLogger,
 } from './self-update-types.js';
 
@@ -53,6 +54,10 @@ interface SelfUpdateTransitionDependencies {
   resolveHelperImage?: () => string | undefined;
 }
 
+type HelperDockerConnection =
+  | { mode: 'tcp'; host: string; port: number; protocol: string }
+  | { mode: 'socket'; socketPath: string };
+
 function findDockerSocketBind(spec: SelfUpdateContainerSpec | undefined): string | undefined {
   const binds = spec?.HostConfig?.Binds;
   if (!Array.isArray(binds)) return undefined;
@@ -63,6 +68,68 @@ function findDockerSocketBind(spec: SelfUpdateContainerSpec | undefined): string
     }
   }
   return undefined;
+}
+
+/**
+ * Validate that a Docker TCP host value is a bare hostname or IP address.
+ * Rejects values that contain a scheme prefix, path separator, `@`, or whitespace —
+ * anything that is not a plain host suitable for passing to Dockerode.
+ */
+function validateTcpDockerHost(host: string): void {
+  if (host.length === 0) {
+    throw new Error('Docker TCP host must not be empty');
+  }
+  if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//u.test(host)) {
+    throw new Error(`Docker TCP host must be a bare hostname or IP, not a URL (got: ${host})`);
+  }
+  if (host.includes('@')) {
+    throw new Error(
+      `Docker TCP host must be a bare hostname or IP, not a userinfo string (got: ${host})`,
+    );
+  }
+  if (/\s/u.test(host)) {
+    throw new Error(
+      `Docker TCP host must be a bare hostname or IP without whitespace (got: ${host})`,
+    );
+  }
+  if (host.includes('/') || host.includes('\\')) {
+    throw new Error(
+      `Docker TCP host must be a bare hostname or IP without path separators (got: ${host})`,
+    );
+  }
+}
+
+function resolveHelperDockerConnection(
+  dependencies: Pick<SelfUpdateTransitionDependencies, 'findDockerSocketBind'>,
+  dockerApi: SelfUpdateDockerApi,
+  currentContainerSpec: SelfUpdateContainerSpec | undefined,
+): HelperDockerConnection {
+  // Socket-bind-first: when the target container has the Docker socket bind-mounted,
+  // the helper MUST use that direct socket path. Using the TCP connection (which may
+  // run through a proxy) would sever the helper the moment that proxy is stopped and
+  // replaced — exactly the scenario in infrastructure update mode (dd.update.mode=infrastructure),
+  // where the socket proxy itself is the container being updated. TCP is only the
+  // fallback for deployments where Drydock reaches Docker purely over a remote TCP host
+  // and has no local socket bind.
+  const socketPath = dependencies.findDockerSocketBind(currentContainerSpec);
+  if (socketPath) {
+    return { mode: 'socket', socketPath };
+  }
+
+  const modemHost = dockerApi.modem?.host;
+  if (typeof modemHost === 'string' && modemHost.length > 0) {
+    validateTcpDockerHost(modemHost);
+    return {
+      mode: 'tcp',
+      host: modemHost,
+      port: Number(dockerApi.modem?.port) || 2375,
+      protocol: dockerApi.modem?.protocol || 'http',
+    };
+  }
+
+  throw new Error(
+    'Self-update requires the Docker socket to be bind-mounted (e.g. /var/run/docker.sock:/var/run/docker.sock), or the watcher must be configured with a TCP Docker host',
+  );
 }
 
 async function executeSelfUpdateTransition(
@@ -79,10 +146,10 @@ async function executeSelfUpdateTransition(
     return false;
   }
 
-  const socketPath = dependencies.findDockerSocketBind(currentContainerSpec);
-  if (!socketPath) {
-    throw new Error(
-      'Self-update requires the Docker socket to be bind-mounted (e.g. /var/run/docker.sock:/var/run/docker.sock)',
+  const connection = resolveHelperDockerConnection(dependencies, dockerApi, currentContainerSpec);
+  if (connection.mode === 'tcp') {
+    logContainer.info(
+      `Self-update helper will connect to Docker via TCP: ${connection.host}:${connection.port}`,
     );
   }
 
@@ -140,10 +207,46 @@ async function executeSelfUpdateTransition(
   }
 
   const oldContainerId = currentContainerSpec.Id;
-  const socketMount = `${socketPath}:/var/run/docker.sock`;
   const selfUpdateOperationId = operationId || dependencies.createOperationId();
   const finalizeUrl = dependencies.resolveFinalizeUrl();
   const finalizeSecret = dependencies.resolveFinalizeSecret();
+
+  const baseEnv = [
+    `DD_SELF_UPDATE_OP_ID=${selfUpdateOperationId}`,
+    `DD_SELF_UPDATE_OLD_CONTAINER_ID=${oldContainerId}`,
+    `DD_SELF_UPDATE_NEW_CONTAINER_ID=${newContainerId}`,
+    `DD_SELF_UPDATE_OLD_CONTAINER_NAME=${oldName}`,
+    `DD_SELF_UPDATE_FINALIZE_URL=${finalizeUrl}`,
+    `DD_SELF_UPDATE_FINALIZE_SECRET=${finalizeSecret}`,
+    `DD_SELF_UPDATE_START_TIMEOUT_MS=${SELF_UPDATE_START_TIMEOUT_MS}`,
+    `DD_SELF_UPDATE_HEALTH_TIMEOUT_MS=${SELF_UPDATE_HEALTH_TIMEOUT_MS}`,
+    `DD_SELF_UPDATE_POLL_INTERVAL_MS=${SELF_UPDATE_POLL_INTERVAL_MS}`,
+  ];
+
+  const tcpEnv =
+    connection.mode === 'tcp'
+      ? [
+          `DD_SELF_UPDATE_DOCKER_HOST=${connection.host}`,
+          `DD_SELF_UPDATE_DOCKER_PORT=${connection.port}`,
+          `DD_SELF_UPDATE_DOCKER_PROTOCOL=${connection.protocol}`,
+        ]
+      : [];
+
+  let hostConfig: SelfUpdateHelperContainerCreateOptions['HostConfig'];
+  if (connection.mode === 'socket') {
+    hostConfig = {
+      AutoRemove: true,
+      Binds: [`${connection.socketPath}:/var/run/docker.sock`],
+    };
+  } else {
+    const networkMode = currentContainerSpec.HostConfig?.NetworkMode;
+    hostConfig = {
+      AutoRemove: true,
+      ...(typeof networkMode === 'string' && networkMode.length > 0
+        ? { NetworkMode: networkMode }
+        : {}),
+    };
+  }
 
   logContainer.info('Spawning helper container for self-update transition');
   try {
@@ -151,25 +254,12 @@ async function executeSelfUpdateTransition(
       .createContainer({
         Image: dependencies.resolveHelperImage?.() ?? newImage,
         Cmd: ['node', 'dist/triggers/providers/docker/self-update-controller-entrypoint.js'],
-        Env: [
-          `DD_SELF_UPDATE_OP_ID=${selfUpdateOperationId}`,
-          `DD_SELF_UPDATE_OLD_CONTAINER_ID=${oldContainerId}`,
-          `DD_SELF_UPDATE_NEW_CONTAINER_ID=${newContainerId}`,
-          `DD_SELF_UPDATE_OLD_CONTAINER_NAME=${oldName}`,
-          `DD_SELF_UPDATE_FINALIZE_URL=${finalizeUrl}`,
-          `DD_SELF_UPDATE_FINALIZE_SECRET=${finalizeSecret}`,
-          `DD_SELF_UPDATE_START_TIMEOUT_MS=${SELF_UPDATE_START_TIMEOUT_MS}`,
-          `DD_SELF_UPDATE_HEALTH_TIMEOUT_MS=${SELF_UPDATE_HEALTH_TIMEOUT_MS}`,
-          `DD_SELF_UPDATE_POLL_INTERVAL_MS=${SELF_UPDATE_POLL_INTERVAL_MS}`,
-        ],
+        Env: [...baseEnv, ...tcpEnv],
         Labels: {
           'dd.self-update.helper': 'true',
           'dd.self-update.operation-id': selfUpdateOperationId,
         },
-        HostConfig: {
-          AutoRemove: true,
-          Binds: [socketMount],
-        },
+        HostConfig: hostConfig,
         name: `drydock-self-update-${Date.now()}`,
       })
       .then((helperContainer) => helperContainer.start());
@@ -190,4 +280,9 @@ async function executeSelfUpdateTransition(
   return true;
 }
 
-export { executeSelfUpdateTransition, findDockerSocketBind };
+export {
+  executeSelfUpdateTransition,
+  findDockerSocketBind,
+  resolveHelperDockerConnection,
+  validateTcpDockerHost,
+};

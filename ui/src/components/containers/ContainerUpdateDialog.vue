@@ -38,7 +38,8 @@ const hardBlocker = computed(() => getPrimaryHardBlocker(props.updateEligibility
 const updateBlocked = computed(() => hardBlocker.value !== undefined);
 
 const confirmMessage = computed(() => {
-  const name = props.containerName ?? props.containerId ?? 'this container';
+  const name =
+    props.containerName ?? props.containerId ?? t('containerComponents.updateDialog.thisContainer');
   if (props.currentTag && props.newTag) {
     const isTagChange = props.updateKind !== 'digest';
     if (isTagChange) {

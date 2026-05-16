@@ -9,13 +9,15 @@ import {
   getActiveOperationByContainerId,
   getActiveOperationByContainerName,
 } from '../store/update-operation.js';
+import { isSelfUpdateAvailable } from '../triggers/providers/docker/self-update-availability.js';
 
-function buildEligibilityContext(): UpdateEligibilityContext {
+function buildEligibilityContext(container: Container): UpdateEligibilityContext {
   return {
     triggers: registry.getState().trigger,
-    getActiveOperation: (container: Container) => {
-      const byId = getActiveOperationByContainerId(container.id);
-      const byName = byId ? undefined : getActiveOperationByContainerName(container.name);
+    isSelfUpdateAvailable: isSelfUpdateAvailable(container),
+    getActiveOperation: (c: Container) => {
+      const byId = getActiveOperationByContainerId(c.id);
+      const byName = byId ? undefined : getActiveOperationByContainerName(c.name);
       const isLegacyOperation = byName && typeof byName === 'object' && !('containerId' in byName);
       const matched = byId ?? (isLegacyOperation ? byName : undefined);
       if (!matched || typeof matched !== 'object') return undefined;
@@ -39,10 +41,8 @@ export function enrichContainerLifecyclePayloadWithEligibility(
     return payload;
   }
   try {
-    const eligibility = computeUpdateEligibility(
-      payload as unknown as Container,
-      buildEligibilityContext(),
-    );
+    const container = payload as unknown as Container;
+    const eligibility = computeUpdateEligibility(container, buildEligibilityContext(container));
     return { ...payload, updateEligibility: eligibility };
   } catch {
     return payload;

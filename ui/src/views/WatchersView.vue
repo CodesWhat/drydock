@@ -44,7 +44,7 @@ function timeUntil(isoString: string): string {
   if (Number.isNaN(then)) return isoString;
 
   const diffMs = then - Date.now();
-  if (diffMs <= 0) return 'soon';
+  if (diffMs <= 0) return t('watchersView.soon');
 
   const totalMinutes = Math.max(1, Math.ceil(diffMs / 60_000));
   const days = Math.floor(totalMinutes / (24 * 60));
@@ -189,7 +189,7 @@ async function openDetail(watcher: Record<string, unknown>) {
     selectedWatcher.value = mapWatcher(detail, String(watcher.status));
   } catch {
     if (requestId !== detailRequestId) return;
-    detailError.value = 'Unable to load latest watcher details';
+    detailError.value = t('watchersView.detail.loadError');
   } finally {
     if (requestId === detailRequestId) {
       detailLoading.value = false;
@@ -261,7 +261,7 @@ onMounted(async () => {
                  v-tooltip.top="row.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')"
                  :style="{ color: watcherStatusColor(row.status) }" />
         <AppBadge :tone="row.status === 'watching' ? 'success' : 'warning'" size="xs" class="max-md:!hidden">
-          {{ row.status }}
+          {{ row.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused') }}
         </AppBadge>
       </template>
       <template #cell-containers="{ row }">
@@ -303,7 +303,7 @@ onMounted(async () => {
                    v-tooltip.top="watcher.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')"
                    :style="{ color: watcherStatusColor(watcher.status) }" />
           <AppBadge :tone="watcher.status === 'watching' ? 'success' : 'warning'" size="xs" class="shrink-0 ml-2 max-md:!hidden">
-            {{ watcher.status }}
+            {{ watcher.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused') }}
           </AppBadge>
         </div>
         <div class="px-4 py-3">
@@ -345,7 +345,7 @@ onMounted(async () => {
                  v-tooltip.top="watcher.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')"
                  :style="{ color: watcherStatusColor(watcher.status) }" />
         <AppBadge :tone="watcher.status === 'watching' ? 'success' : 'warning'" size="xs" class="shrink-0 max-md:!hidden">
-          {{ watcher.status }}
+          {{ watcher.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused') }}
         </AppBadge>
         <AppBadge v-if="watcher.config.maintenanceWindow" tone="alt" size="xs" class="shrink-0">
           {{ t('watchersView.badge.maint') }}
@@ -382,7 +382,7 @@ onMounted(async () => {
           <div class="flex items-center gap-2.5 min-w-0">
             <span class="text-sm font-bold truncate dd-text">{{ selectedWatcher?.name }}</span>
             <AppBadge v-if="selectedWatcher" :tone="selectedWatcher.status === 'watching' ? 'success' : 'warning'" size="xs" class="shrink-0">
-              {{ selectedWatcher.status }}
+              {{ selectedWatcher.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused') }}
             </AppBadge>
           </div>
         </template>
