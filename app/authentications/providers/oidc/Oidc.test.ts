@@ -1854,3 +1854,120 @@ test('callback should record oidc error metrics when session login fails', async
   expect(mockRecordAuthLogin).toHaveBeenCalledWith('error', 'oidc');
   expect(mockObserveAuthLoginDuration).toHaveBeenCalledWith('error', 'oidc', expect.any(Number));
 });
+
+// --- sanitizeOidcErrorMessage redaction tests ---
+
+test('sanitizeOidcErrorMessage should redact a 10.x.x.x private IP with port in warn log', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  openidClientMock.discovery = vi
+    .fn()
+    .mockRejectedValue(new Error('connect ECONNREFUSED 10.0.0.5:2376'));
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+
+  const warnCall = (oidc.log.warn as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+  expect(warnCall).toContain('[internal-addr]');
+  expect(warnCall).not.toContain('10.0.0.5');
+});
+
+test('sanitizeOidcErrorMessage should redact a 172.16-31.x.x private IP in warn log', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  openidClientMock.discovery = vi
+    .fn()
+    .mockRejectedValue(new Error('connect ETIMEDOUT 172.20.10.1:443'));
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+
+  const warnCall = (oidc.log.warn as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+  expect(warnCall).toContain('[internal-addr]');
+  expect(warnCall).not.toContain('172.20.10.1');
+});
+
+test('sanitizeOidcErrorMessage should redact a 192.168.x.x private IP in warn log', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  openidClientMock.discovery = vi
+    .fn()
+    .mockRejectedValue(new Error('connect ECONNREFUSED 192.168.1.100:8080'));
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+
+  const warnCall = (oidc.log.warn as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+  expect(warnCall).toContain('[internal-addr]');
+  expect(warnCall).not.toContain('192.168.1.100');
+});
+
+test('sanitizeOidcErrorMessage should not redact a public IP in warn log', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  openidClientMock.discovery = vi
+    .fn()
+    .mockRejectedValue(new Error('connect ECONNREFUSED 8.8.8.8:53'));
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+
+  const warnCall = (oidc.log.warn as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+  expect(warnCall).toContain('8.8.8.8');
+  expect(warnCall).not.toContain('[internal-addr]');
+});
+
+test('sanitizeOidcErrorMessage should redact an absolute filesystem path in warn log', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  openidClientMock.discovery = vi
+    .fn()
+    .mockRejectedValue(new Error('error loading /etc/ssl/certs/ca-bundle.pem'));
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+
+  const warnCall = (oidc.log.warn as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+  expect(warnCall).toContain('[path]');
+  expect(warnCall).not.toContain('/etc/ssl/certs/ca-bundle.pem');
+});
+
+test('sanitizeOidcErrorMessage should still redact token params and Bearer tokens in warn log', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  openidClientMock.discovery = vi
+    .fn()
+    .mockRejectedValue(
+      new Error('request failed client_secret=topsecret Authorization: Bearer abc123.token'),
+    );
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+
+  const warnCall = (oidc.log.warn as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+  expect(warnCall).not.toContain('topsecret');
+  expect(warnCall).not.toContain('abc123.token');
+  expect(warnCall).toContain('[REDACTED]');
+  expect(warnCall).toContain('Bearer [REDACTED]');
+});
+
+// --- Fix 2: sensitive data inside a nested cause chain ---
+
+test('initAuthentication warn log should not expose secrets from a nested cause chain', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+
+  // Cause carries a URL with client_secret and a Bearer token in the message
+  const cause = new Error(
+    'HTTP 401 Unauthorized: https://idp.example.com/token?client_secret=s3cr3t&grant_type=client_credentials Authorization: Bearer supersecrettoken99',
+  );
+  const fetchError = Object.assign(new TypeError('fetch failed'), { cause });
+  openidClientMock.discovery = vi.fn().mockRejectedValue(fetchError);
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+
+  expect(oidc.log.warn).toHaveBeenCalledOnce();
+  const warnArg = (oidc.log.warn as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+
+  // Secrets must not appear
+  expect(warnArg).not.toContain('s3cr3t');
+  expect(warnArg).not.toContain('supersecrettoken99');
+
+  // Useful context must survive
+  expect(warnArg).toContain('fetch failed');
+  expect(warnArg).toContain('[REDACTED]');
+});

@@ -42,6 +42,13 @@ const SENSITIVE_OIDC_ASSIGNMENT_PATTERN = new RegExp(
 );
 const OIDC_URL_IN_TEXT_PATTERN = /https?:\/\/[^\s<>"')\]]+/gi;
 const OIDC_BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi;
+// RFC-1918 private IPv4 ranges with optional :port
+const OIDC_PRIVATE_IP_PATTERN =
+  /\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})(?::\d{1,5})?\b/g;
+// Absolute Unix filesystem paths: /seg1/seg2... (at least two segments).
+// Require preceding whitespace or start-of-string to avoid matching URL path
+// segments that remain after URL redaction.
+const OIDC_ABS_PATH_PATTERN = /(?<=^|\s)\/[^\s/]+(?:\/[^\s/]*)+/g;
 
 interface OidcAppLike {
   use: (path: string, middleware: unknown) => void;
@@ -146,7 +153,12 @@ function sanitizeOidcErrorMessage(error: unknown): string {
   const tokenRedactedMessage = urlRedactedMessage
     .replace(SENSITIVE_OIDC_ASSIGNMENT_PATTERN, '$1[REDACTED]')
     .replace(OIDC_BEARER_TOKEN_PATTERN, 'Bearer [REDACTED]');
-  return sanitizeLogParam(tokenRedactedMessage);
+  const ipRedactedMessage = tokenRedactedMessage.replace(
+    OIDC_PRIVATE_IP_PATTERN,
+    '[internal-addr]',
+  );
+  const pathRedactedMessage = ipRedactedMessage.replace(OIDC_ABS_PATH_PATTERN, '[path]');
+  return sanitizeLogParam(pathRedactedMessage);
 }
 
 function parseHttpUrl(value: unknown): URL | undefined {
