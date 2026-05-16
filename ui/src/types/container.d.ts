@@ -18,7 +18,8 @@ export type UpdateBlockerReason =
   | 'trigger-excluded'
   | 'trigger-not-included'
   | 'agent-mismatch'
-  | 'no-update-trigger-configured';
+  | 'no-update-trigger-configured'
+  | 'self-update-unavailable';
 
 /**
  * Severity controls how the UI gates the Update button:

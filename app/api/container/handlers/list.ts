@@ -10,6 +10,7 @@ import {
   type UpdateEligibility,
   type UpdateEligibilityContext,
 } from '../../../model/update-eligibility.js';
+import { isSelfUpdateAvailable } from '../../../triggers/providers/docker/self-update-availability.js';
 import { sendErrorResponse } from '../../error-response.js';
 import { buildPaginationLinks } from '../../pagination-links.js';
 import type { ContainerListResponse, CrudHandlerContext } from '../crud-context.js';
@@ -238,7 +239,12 @@ export function attachUpdateEligibility(
   container: Container,
   eligibilityContext?: UpdateEligibilityContext,
 ): Container {
-  const ctx = eligibilityContext ?? buildEligibilityContext(context);
+  const ctx = eligibilityContext
+    ? { ...eligibilityContext, isSelfUpdateAvailable: isSelfUpdateAvailable(container) }
+    : {
+        ...buildEligibilityContext(context),
+        isSelfUpdateAvailable: isSelfUpdateAvailable(container),
+      };
   const updateEligibility: UpdateEligibility = computeUpdateEligibility(container, ctx);
   return createProjectionView(container, [['updateEligibility', updateEligibility]]);
 }

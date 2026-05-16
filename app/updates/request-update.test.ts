@@ -8,14 +8,16 @@ const {
   mockMarkOperationTerminal,
   mockGetState,
   mockLogWarn,
+  mockStatSync,
 } = vi.hoisted(() => ({
   mockGetOperationById: vi.fn(),
   mockGetActiveOperationByContainerId: vi.fn(),
   mockGetActiveOperationByContainerName: vi.fn(),
   mockInsertOperation: vi.fn(),
   mockMarkOperationTerminal: vi.fn(),
-  mockGetState: vi.fn(() => ({ trigger: {} })),
+  mockGetState: vi.fn(() => ({ trigger: {}, watcher: {} })),
   mockLogWarn: vi.fn(),
+  mockStatSync: vi.fn(() => ({ isSocket: () => false })),
 }));
 
 vi.mock('../store/update-operation.js', () => ({
@@ -32,6 +34,12 @@ vi.mock('../registry/index.js', () => ({
 
 vi.mock('../log/index.js', () => ({
   default: { child: vi.fn(() => ({ info: vi.fn(), warn: mockLogWarn, debug: vi.fn() })) },
+}));
+
+vi.mock('node:fs', () => ({
+  default: {
+    statSync: mockStatSync,
+  },
 }));
 
 import {
@@ -82,7 +90,8 @@ describe('request-update', () => {
     mockGetOperationById.mockReturnValue(undefined);
     mockGetActiveOperationByContainerId.mockReturnValue(undefined);
     mockGetActiveOperationByContainerName.mockReturnValue(undefined);
-    mockGetState.mockReturnValue({ trigger: {} });
+    mockGetState.mockReturnValue({ trigger: {}, watcher: {} });
+    mockStatSync.mockReturnValue({ isSocket: () => false });
     mockInsertOperation.mockImplementation((operation) => ({
       id: operation.id || 'op-1',
       ...operation,
@@ -163,6 +172,32 @@ describe('request-update', () => {
     ).rejects.toMatchObject<Partial<UpdateRequestError>>({
       statusCode: 400,
       message: 'No update available for this container',
+    });
+  });
+
+  test('requestContainerUpdate rejects with 409 when getActiveOperationByContainerId returns a queued operation', async () => {
+    mockGetActiveOperationByContainerId.mockReturnValue({ id: 'op-existing', status: 'queued' });
+
+    await expect(
+      requestContainerUpdate(createContainer(), {
+        trigger: { type: 'docker', trigger: vi.fn() },
+      }),
+    ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+      statusCode: 409,
+      message: 'Container update already queued',
+    });
+  });
+
+  test('requestContainerUpdate rejects with 409 (in progress) when getActiveOperationByContainerId returns a running operation', async () => {
+    mockGetActiveOperationByContainerId.mockReturnValue({ id: 'op-running', status: 'running' });
+
+    await expect(
+      requestContainerUpdate(createContainer(), {
+        trigger: { type: 'docker', trigger: vi.fn() },
+      }),
+    ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+      statusCode: 409,
+      message: 'Container update already in progress',
     });
   });
 
@@ -427,6 +462,30 @@ describe('request-update', () => {
     });
   });
 
+  test('dispatchAccepted does not call markOperationTerminal when operation is already past queued (e.g. running)', async () => {
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockRejectedValue(new Error('late failure')),
+    };
+    // Return an operation with status 'running' — markAcceptedQueuedOperationFailed should
+    // short-circuit and NOT call markOperationTerminal
+    mockGetOperationById.mockImplementation((id: string) => ({
+      id,
+      status: 'running',
+      phase: 'running',
+    }));
+
+    const entry = {
+      container: createContainer(),
+      operationId: 'op-late',
+      trigger,
+    };
+    dispatchAccepted([entry]);
+    await flushAsyncWork();
+
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+  });
+
   test('dispatchAccepted swallows trigger rejection so it never escapes as an unhandled rejection', async () => {
     const trigger = {
       type: 'docker',
@@ -658,6 +717,79 @@ describe('request-update', () => {
         statusCode: 404,
         message: expect.stringContaining("Update trigger runs on agent 'edge-1'"),
       });
+    });
+
+    test('rejects with 409 when self-update-unavailable blocker fires (drydock self-container, socket absent)', async () => {
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn(),
+        agent: undefined,
+        configuration: { threshold: 'all' },
+        getId: () => 'docker.update',
+        isTriggerIncluded: () => true,
+        isTriggerExcluded: () => false,
+      };
+      // Provide a watcher with dockerApi in socket mode (no TCP host)
+      // and mock statSync to return non-socket → isSelfUpdateAvailable returns false
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.update': trigger },
+        watcher: {
+          local: {
+            dockerApi: {
+              modem: { host: '' },
+            },
+          },
+        },
+      });
+      mockStatSync.mockReturnValue({ isSocket: () => false });
+
+      // Drydock self-container with a real tag update
+      await expect(
+        enqueueContainerUpdate(
+          createContainerWithRawUpdate({
+            watcher: 'local',
+            image: { name: 'drydock', tag: { value: '1.5.0' } },
+            result: { tag: '1.6.0' },
+          }),
+        ),
+      ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+        statusCode: 409,
+        message: expect.stringContaining('Self-update cannot run in this deployment'),
+      });
+    });
+
+    test('allows update for self-container when self-update IS available (TCP mode)', async () => {
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+        agent: undefined,
+        configuration: { threshold: 'all' },
+        getId: () => 'docker.update',
+        isTriggerIncluded: () => true,
+        isTriggerExcluded: () => false,
+      };
+      // TCP watcher → isSelfUpdateAvailable returns true → no self-update-unavailable blocker
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.update': trigger },
+        watcher: {
+          local: {
+            dockerApi: {
+              modem: { host: '10.0.0.1' },
+            },
+          },
+        },
+      });
+
+      const accepted = await enqueueContainerUpdate(
+        createContainerWithRawUpdate({
+          watcher: 'local',
+          image: { name: 'drydock', tag: { value: '1.5.0' } },
+          result: { tag: '1.6.0' },
+        }),
+        { trigger: { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) } },
+      );
+      expect(accepted.operationId).toBeDefined();
+      expect(mockInsertOperation).toHaveBeenCalled();
     });
 
     test('allows manual update when only soft blockers (snooze) are present', async () => {

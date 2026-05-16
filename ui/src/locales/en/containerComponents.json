@@ -323,6 +323,7 @@
       "triggerFiltered": "Trigger filtered",
       "agentMismatch": "Agent mismatch",
       "noTrigger": "No trigger",
+      "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Lifts:"
     },
     "maturityBadge": {

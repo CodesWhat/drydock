@@ -14,6 +14,7 @@ import {
 } from '../model/update-eligibility.js';
 import * as registry from '../registry/index.js';
 import * as updateOperationStore from '../store/update-operation.js';
+import { isSelfUpdateAvailable } from '../triggers/providers/docker/self-update-availability.js';
 import { getErrorMessage } from '../util/error.js';
 import { hasUpdateConcurrencyCap } from './update-locks.js';
 
@@ -150,6 +151,7 @@ const HARD_BLOCKER_STATUS: Record<UpdateBlockerReason, number> = {
   'security-scan-blocked': 409,
   'last-update-rolled-back': 409,
   'active-operation': 409,
+  'self-update-unavailable': 409,
   snoozed: 409,
   'skip-tag': 409,
   'skip-digest': 409,
@@ -217,6 +219,7 @@ function prepareContainerUpdateRequest(
   const eligibility = computeUpdateEligibility(container, {
     triggers: registry.getState().trigger,
     getActiveOperation: () => undefined,
+    isSelfUpdateAvailable: isSelfUpdateAvailable(container),
   });
   const hardBlocker = getPrimaryHardBlocker(eligibility);
   if (hardBlocker && hardBlocker.reason !== 'no-update-available') {

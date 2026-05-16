@@ -6,6 +6,7 @@ import {
   getPrimaryHardBlocker,
   getSoftBlockers,
   hasHardBlocker,
+  isSelfContainerImage,
   type UpdateEligibilityContext,
 } from './update-eligibility.js';
 
@@ -1241,5 +1242,148 @@ describe('computeUpdateEligibility', () => {
       expect(getHardBlockers(result)).toEqual([]);
       expect(getSoftBlockers(result).map((b) => b.reason)).toEqual(['snoozed']);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isSelfContainerImage
+// ---------------------------------------------------------------------------
+
+describe('isSelfContainerImage', () => {
+  test('returns true for exact "drydock" image name', () => {
+    expect(isSelfContainerImage('drydock')).toBe(true);
+  });
+
+  test('returns true for image ending with "/drydock"', () => {
+    expect(isSelfContainerImage('ghcr.io/nicholaswilde/drydock')).toBe(true);
+    expect(isSelfContainerImage('foo/drydock')).toBe(true);
+    expect(isSelfContainerImage('registry.example.com/team/drydock')).toBe(true);
+  });
+
+  test('returns false for names that do not match', () => {
+    expect(isSelfContainerImage('nginx')).toBe(false);
+    expect(isSelfContainerImage('drydock-agent')).toBe(false);
+    expect(isSelfContainerImage('mydrydock')).toBe(false);
+    expect(isSelfContainerImage('foo/drydock-extra')).toBe(false);
+  });
+
+  test('returns false for undefined', () => {
+    expect(isSelfContainerImage(undefined)).toBe(false);
+  });
+
+  test('returns false for empty string', () => {
+    expect(isSelfContainerImage('')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// self-update-unavailable blocker
+// ---------------------------------------------------------------------------
+
+describe('computeUpdateEligibility — self-update-unavailable', () => {
+  // A self-container with a detected update
+  function makeSelfContainer(overrides: Partial<Container> = {}): Container {
+    return makeContainerWithTagUpdate({
+      image: {
+        id: 'img-drydock',
+        registry: { name: 'hub', url: 'https://registry-1.docker.io' },
+        name: 'drydock',
+        tag: { value: '1.5.0', semver: true },
+        digest: { watch: false },
+        architecture: 'amd64',
+        os: 'linux',
+      },
+      ...overrides,
+    });
+  }
+
+  test('fires when self-container and isSelfUpdateAvailable === false', () => {
+    const container = makeSelfContainer();
+    const result = computeUpdateEligibility(
+      container,
+      makeContext({ isSelfUpdateAvailable: false }),
+    );
+    expect(result.blockers.some((b) => b.reason === 'self-update-unavailable')).toBe(true);
+  });
+
+  test('blocker has severity "hard"', () => {
+    expect(BLOCKER_SEVERITY['self-update-unavailable']).toBe('hard');
+    const container = makeSelfContainer();
+    const result = computeUpdateEligibility(
+      container,
+      makeContext({ isSelfUpdateAvailable: false }),
+    );
+    const blocker = result.blockers.find((b) => b.reason === 'self-update-unavailable');
+    expect(blocker?.severity).toBe('hard');
+  });
+
+  test('blocker is actionable and has actionHint', () => {
+    const container = makeSelfContainer();
+    const result = computeUpdateEligibility(
+      container,
+      makeContext({ isSelfUpdateAvailable: false }),
+    );
+    const blocker = result.blockers.find((b) => b.reason === 'self-update-unavailable');
+    expect(blocker?.actionable).toBe(true);
+    expect(typeof blocker?.actionHint).toBe('string');
+    expect(blocker?.actionHint?.length).toBeGreaterThan(0);
+  });
+
+  test('does NOT fire when isSelfUpdateAvailable is undefined (fail-open)', () => {
+    const container = makeSelfContainer();
+    const result = computeUpdateEligibility(
+      container,
+      makeContext({ isSelfUpdateAvailable: undefined }),
+    );
+    expect(result.blockers.some((b) => b.reason === 'self-update-unavailable')).toBe(false);
+  });
+
+  test('does NOT fire when isSelfUpdateAvailable === true', () => {
+    const container = makeSelfContainer();
+    const result = computeUpdateEligibility(
+      container,
+      makeContext({ isSelfUpdateAvailable: true }),
+    );
+    expect(result.blockers.some((b) => b.reason === 'self-update-unavailable')).toBe(false);
+  });
+
+  test('does NOT fire when container is not a self-container (different image name)', () => {
+    const container = makeContainerWithTagUpdate(); // nginx image
+    const result = computeUpdateEligibility(
+      container,
+      makeContext({ isSelfUpdateAvailable: false }),
+    );
+    expect(result.blockers.some((b) => b.reason === 'self-update-unavailable')).toBe(false);
+  });
+
+  test('does NOT fire when isSelfUpdateAvailable is false but no update exists (short-circuit)', () => {
+    // No result → hasRawTagOrDigestUpdate returns false → short-circuits with no-update-available
+    const container = makeSelfContainer({ result: undefined });
+    const result = computeUpdateEligibility(
+      container,
+      makeContext({ isSelfUpdateAvailable: false }),
+    );
+    expect(result.blockers).toHaveLength(1);
+    expect(result.blockers[0].reason).toBe('no-update-available');
+    expect(result.blockers.some((b) => b.reason === 'self-update-unavailable')).toBe(false);
+  });
+
+  test('fires for scoped image ending with /drydock', () => {
+    const container = makeSelfContainer({
+      image: {
+        id: 'img-drydock',
+        registry: { name: 'ghcr', url: 'https://ghcr.io' },
+        name: 'nicholaswilde/drydock',
+        tag: { value: '1.5.0', semver: true },
+        digest: { watch: false },
+        architecture: 'amd64',
+        os: 'linux',
+      },
+    });
+    const result = computeUpdateEligibility(
+      container,
+      makeContext({ isSelfUpdateAvailable: false }),
+    );
+    expect(result.blockers.some((b) => b.reason === 'self-update-unavailable')).toBe(true);
   });
 });
