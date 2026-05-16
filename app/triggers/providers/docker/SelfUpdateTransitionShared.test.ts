@@ -275,7 +275,7 @@ describe('resolveHelperDockerConnection', () => {
     };
   }
 
-  test('returns tcp mode when modem.host is a non-empty string', () => {
+  test('returns tcp mode when modem.host is a non-empty string and no socket bind is present', () => {
     const deps = makeDeps();
     const result = resolveHelperDockerConnection(
       deps,
@@ -283,7 +283,25 @@ describe('resolveHelperDockerConnection', () => {
       undefined,
     );
     expect(result).toEqual({ mode: 'tcp', host: 'docker-host', port: 2376, protocol: 'https' });
-    expect(deps.findDockerSocketBind).not.toHaveBeenCalled();
+    // findDockerSocketBind is called first (socket-first precedence); it returns undefined
+    // here, so the code falls through to TCP.
+    expect(deps.findDockerSocketBind).toHaveBeenCalledWith(undefined);
+  });
+
+  test('infrastructure-update guard: socket bind takes precedence over modem.host', () => {
+    // When the target container has the Docker socket bind-mounted AND the watcher also
+    // has a TCP modem.host (e.g. Drydock talks to sockguard over TCP), the helper must
+    // use the direct socket path — not the TCP connection that runs through the proxy
+    // being replaced. This is the infrastructure update mode invariant.
+    const deps = makeDeps('/var/run/docker.sock');
+    const spec = createCurrentContainerSpec();
+    const result = resolveHelperDockerConnection(
+      deps,
+      { createContainer: vi.fn(), modem: { host: 'sockguard-host', port: 2375, protocol: 'http' } },
+      spec,
+    );
+    expect(result).toEqual({ mode: 'socket', socketPath: '/var/run/docker.sock' });
+    expect(deps.findDockerSocketBind).toHaveBeenCalledWith(spec);
   });
 
   test('defaults port to 2375 and protocol to http when not provided', () => {

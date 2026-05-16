@@ -75,6 +75,18 @@ function resolveHelperDockerConnection(
   dockerApi: SelfUpdateDockerApi,
   currentContainerSpec: SelfUpdateContainerSpec | undefined,
 ): HelperDockerConnection {
+  // Socket-bind-first: when the target container has the Docker socket bind-mounted,
+  // the helper MUST use that direct socket path. Using the TCP connection (which may
+  // run through a proxy) would sever the helper the moment that proxy is stopped and
+  // replaced — exactly the scenario in infrastructure update mode (dd.update.mode=infrastructure),
+  // where the socket proxy itself is the container being updated. TCP is only the
+  // fallback for deployments where Drydock reaches Docker purely over a remote TCP host
+  // and has no local socket bind.
+  const socketPath = dependencies.findDockerSocketBind(currentContainerSpec);
+  if (socketPath) {
+    return { mode: 'socket', socketPath };
+  }
+
   const modemHost = dockerApi.modem?.host;
   if (typeof modemHost === 'string' && modemHost.length > 0) {
     return {
@@ -85,13 +97,9 @@ function resolveHelperDockerConnection(
     };
   }
 
-  const socketPath = dependencies.findDockerSocketBind(currentContainerSpec);
-  if (!socketPath) {
-    throw new Error(
-      'Self-update requires the Docker socket to be bind-mounted (e.g. /var/run/docker.sock:/var/run/docker.sock), or the watcher must be configured with a TCP Docker host',
-    );
-  }
-  return { mode: 'socket', socketPath };
+  throw new Error(
+    'Self-update requires the Docker socket to be bind-mounted (e.g. /var/run/docker.sock:/var/run/docker.sock), or the watcher must be configured with a TCP Docker host',
+  );
 }
 
 async function executeSelfUpdateTransition(
