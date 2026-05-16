@@ -559,6 +559,14 @@ export class AgentClient {
     }
   }
 
+  stop() {
+    this.clearStableConnectionTimer();
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
   private getNextReconnectDelayMs(): number {
     const nextDelay = Math.min(
       INITIAL_SSE_RECONNECT_DELAY_MS * 2 ** this.reconnectAttempts,
