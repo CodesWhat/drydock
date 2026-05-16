@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { disableSocketRedirects } from '../../../watchers/providers/docker/disable-socket-redirects.js';
 import { probeSocketApiVersion } from '../../../watchers/providers/docker/socket-version-probe.js';
 import {
   runSelfUpdateController,
@@ -600,5 +601,46 @@ describe('self-update-controller orchestration', () => {
     expect(console.error).toHaveBeenCalledWith('[self-update] controller failed: entrypoint boom');
     expect(process.exitCode).toBe(1);
     process.exitCode = originalExitCode;
+  });
+
+  test('tcp branch: builds Dockerode with host/port/protocol and skips probe and socket redirect', async () => {
+    process.env.DD_SELF_UPDATE_DOCKER_HOST = 'docker-proxy';
+    process.env.DD_SELF_UPDATE_DOCKER_PORT = '2376';
+    process.env.DD_SELF_UPDATE_DOCKER_PROTOCOL = 'https';
+    const oldContainer = createOldContainer();
+    const newContainer = createNewContainer();
+    mockDocker(oldContainer, newContainer);
+
+    await runSelfUpdateController();
+
+    expect(mockDockerodeCtor).toHaveBeenCalledWith({
+      host: 'docker-proxy',
+      port: 2376,
+      protocol: 'https',
+    });
+    expect(probeSocketApiVersion).not.toHaveBeenCalled();
+    expect(vi.mocked(disableSocketRedirects)).not.toHaveBeenCalled();
+    expect(oldContainer.remove).toHaveBeenCalledWith({ force: true });
+
+    delete process.env.DD_SELF_UPDATE_DOCKER_HOST;
+    delete process.env.DD_SELF_UPDATE_DOCKER_PORT;
+    delete process.env.DD_SELF_UPDATE_DOCKER_PROTOCOL;
+  });
+
+  test('tcp branch: defaults port to 2375 and protocol to http when env vars absent', async () => {
+    process.env.DD_SELF_UPDATE_DOCKER_HOST = 'docker-proxy';
+    const oldContainer = createOldContainer();
+    const newContainer = createNewContainer();
+    mockDocker(oldContainer, newContainer);
+
+    await runSelfUpdateController();
+
+    expect(mockDockerodeCtor).toHaveBeenCalledWith({
+      host: 'docker-proxy',
+      port: 2375,
+      protocol: 'http',
+    });
+
+    delete process.env.DD_SELF_UPDATE_DOCKER_HOST;
   });
 });

@@ -23,6 +23,7 @@ export interface SelfUpdateContainerSpec {
   Image?: string;
   HostConfig?: {
     Binds?: string[];
+    NetworkMode?: string;
   };
 }
 
@@ -46,7 +47,8 @@ export interface SelfUpdateHelperContainerCreateOptions {
   Labels: Record<string, string>;
   HostConfig: {
     AutoRemove: boolean;
-    Binds: string[];
+    Binds?: string[];
+    NetworkMode?: string;
   };
   name: string;
 }
@@ -60,6 +62,12 @@ export interface SelfUpdateDockerApi {
         inspect?: () => Promise<{ Config?: Record<string, unknown> }>;
       }
     | undefined;
+  modem?: {
+    host?: string;
+    port?: number | string;
+    protocol?: string;
+    socketPath?: string;
+  };
 }
 
 export interface SelfUpdateExecutionContext {

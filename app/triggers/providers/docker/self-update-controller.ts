@@ -406,14 +406,29 @@ class SelfUpdateController {
 
 export async function runSelfUpdateController(): Promise<void> {
   const config = readConfigFromEnv();
-  const socketPath = '/var/run/docker.sock';
-  const apiVersion = await probeSocketApiVersion(socketPath);
-  const dockerOpts: Dockerode.DockerOptions = { socketPath };
-  if (apiVersion) {
-    dockerOpts.version = `v${apiVersion}`;
+  let dockerOpts: Dockerode.DockerOptions;
+  const tcpHost = process.env.DD_SELF_UPDATE_DOCKER_HOST;
+  if (typeof tcpHost === 'string' && tcpHost.length > 0) {
+    dockerOpts = {
+      host: tcpHost,
+      port: Number(process.env.DD_SELF_UPDATE_DOCKER_PORT) || 2375,
+      protocol: (process.env.DD_SELF_UPDATE_DOCKER_PROTOCOL ||
+        'http') as Dockerode.DockerOptions['protocol'],
+    };
+  } else {
+    const socketPath = '/var/run/docker.sock';
+    const apiVersion = await probeSocketApiVersion(socketPath);
+    dockerOpts = { socketPath };
+    if (apiVersion) {
+      dockerOpts.version = `v${apiVersion}`;
+    }
+    const docker = new Dockerode(dockerOpts);
+    disableSocketRedirects(docker);
+    const controller = new SelfUpdateController(config, docker);
+    await controller.run();
+    return;
   }
   const docker = new Dockerode(dockerOpts);
-  disableSocketRedirects(docker);
   const controller = new SelfUpdateController(config, docker);
   await controller.run();
 }

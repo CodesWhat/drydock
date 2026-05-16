@@ -2,7 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 
-import { executeSelfUpdateTransition, findDockerSocketBind } from './SelfUpdateTransitionShared.js';
+import {
+  executeSelfUpdateTransition,
+  findDockerSocketBind,
+  resolveHelperDockerConnection,
+} from './SelfUpdateTransitionShared.js';
 import {
   SELF_UPDATE_HEALTH_TIMEOUT_MS,
   SELF_UPDATE_POLL_INTERVAL_MS,
@@ -226,5 +230,208 @@ describe('SelfUpdateTransitionShared', () => {
     expect(context.currentContainer.rename).toHaveBeenCalledWith({
       name: expect.stringMatching(/^socket-proxy-old-\d+$/),
     });
+  });
+
+  test('rolls back when new container inspect fails', async () => {
+    const context = createContext();
+    context.newContainer.inspect.mockRejectedValue(new Error('inspect failed'));
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), log),
+    ).rejects.toThrow('inspect failed');
+
+    expect(context.newContainer.remove).toHaveBeenCalledWith({ force: true });
+    expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'drydock' });
+    expect(log.warn).toHaveBeenCalledWith(
+      'Failed to inspect new container, rolling back: inspect failed',
+    );
+  });
+
+  test('rolls back when new container inspect fails and remove also fails', async () => {
+    const context = createContext();
+    context.newContainer.inspect.mockRejectedValue(new Error('inspect failed'));
+    context.newContainer.remove.mockRejectedValue(new Error('remove also failed'));
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), log),
+    ).rejects.toThrow('inspect failed');
+
+    expect(context.currentContainer.rename).toHaveBeenNthCalledWith(2, { name: 'drydock' });
+  });
+});
+
+describe('resolveHelperDockerConnection', () => {
+  function makeDeps(socketPath?: string) {
+    return {
+      findDockerSocketBind: vi.fn().mockReturnValue(socketPath),
+    };
+  }
+
+  test('returns tcp mode when modem.host is a non-empty string', () => {
+    const deps = makeDeps();
+    const result = resolveHelperDockerConnection(
+      deps,
+      { createContainer: vi.fn(), modem: { host: 'docker-host', port: 2376, protocol: 'https' } },
+      undefined,
+    );
+    expect(result).toEqual({ mode: 'tcp', host: 'docker-host', port: 2376, protocol: 'https' });
+    expect(deps.findDockerSocketBind).not.toHaveBeenCalled();
+  });
+
+  test('defaults port to 2375 and protocol to http when not provided', () => {
+    const deps = makeDeps();
+    const result = resolveHelperDockerConnection(
+      deps,
+      { createContainer: vi.fn(), modem: { host: 'docker-host' } },
+      undefined,
+    );
+    expect(result).toEqual({ mode: 'tcp', host: 'docker-host', port: 2375, protocol: 'http' });
+  });
+
+  test('defaults port to 2375 when port is 0', () => {
+    const deps = makeDeps();
+    const result = resolveHelperDockerConnection(
+      deps,
+      { createContainer: vi.fn(), modem: { host: 'docker-host', port: 0 } },
+      undefined,
+    );
+    expect(result).toEqual({ mode: 'tcp', host: 'docker-host', port: 2375, protocol: 'http' });
+  });
+
+  test('returns socket mode when modem.host is absent and socket bind is found', () => {
+    const deps = makeDeps('/var/run/docker.sock');
+    const spec = createCurrentContainerSpec();
+    const result = resolveHelperDockerConnection(deps, { createContainer: vi.fn() }, spec);
+    expect(result).toEqual({ mode: 'socket', socketPath: '/var/run/docker.sock' });
+    expect(deps.findDockerSocketBind).toHaveBeenCalledWith(spec);
+  });
+
+  test('returns socket mode when modem.host is an empty string', () => {
+    const deps = makeDeps('/var/run/docker.sock');
+    const result = resolveHelperDockerConnection(
+      deps,
+      { createContainer: vi.fn(), modem: { host: '' } },
+      createCurrentContainerSpec(),
+    );
+    expect(result).toEqual({ mode: 'socket', socketPath: '/var/run/docker.sock' });
+  });
+
+  test('throws when no modem.host and no socket bind found', () => {
+    const deps = makeDeps(undefined);
+    expect(() =>
+      resolveHelperDockerConnection(deps, { createContainer: vi.fn() }, undefined),
+    ).toThrow(
+      'Self-update requires the Docker socket to be bind-mounted (e.g. /var/run/docker.sock:/var/run/docker.sock), or the watcher must be configured with a TCP Docker host',
+    );
+  });
+});
+
+describe('executeSelfUpdateTransition TCP mode', () => {
+  function createTcpContext(networkMode?: string) {
+    const currentContainer = {
+      rename: vi.fn().mockResolvedValue(undefined),
+    };
+    const newContainer = {
+      inspect: vi.fn().mockResolvedValue({ Id: 'new-container-id' }),
+      remove: vi.fn().mockResolvedValue(undefined),
+    };
+    const helperContainer = {
+      start: vi.fn().mockResolvedValue(undefined),
+    };
+    const dockerApi = {
+      createContainer: vi.fn().mockResolvedValue(helperContainer),
+      modem: { host: 'docker-proxy', port: 2375, protocol: 'http' },
+    };
+    const spec: Record<string, unknown> = {
+      Name: '/drydock',
+      Id: 'old-container-id',
+    };
+    if (networkMode !== undefined) {
+      spec.HostConfig = { NetworkMode: networkMode };
+    }
+    return {
+      dockerApi,
+      auth: { username: 'bot', password: 'token' },
+      newImage: 'ghcr.io/acme/drydock:2.0.0',
+      currentContainer,
+      currentContainerSpec: spec,
+      newContainer,
+      helperContainer,
+    };
+  }
+
+  function createTcpDependencies() {
+    return {
+      getConfiguration: () => ({ dryrun: false }),
+      findDockerSocketBind: vi.fn().mockReturnValue(undefined),
+      insertContainerImageBackup: vi.fn(),
+      pullImage: vi.fn().mockResolvedValue(undefined),
+      getCloneRuntimeConfigOptions: vi.fn().mockResolvedValue({ runtime: true }),
+      cloneContainer: vi.fn(() => ({ cloned: true })),
+      createContainer: vi.fn(),
+      createOperationId: vi.fn(() => 'tcp-op-id'),
+      resolveFinalizeUrl: vi.fn(() => 'http://127.0.0.1:3000/api/v1/internal/self-update/finalize'),
+      resolveFinalizeSecret: vi.fn(() => 'tcp-secret'),
+    };
+  }
+
+  test('tcp mode: helper HostConfig has no Binds and includes TCP env vars', async () => {
+    const context = createTcpContext('host');
+    const deps = createTcpDependencies();
+    deps.createContainer = vi.fn().mockResolvedValue(context.newContainer);
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await executeSelfUpdateTransition(deps, context as never, { name: 'drydock', image: {} }, log);
+
+    expect(context.dockerApi.createContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Env: expect.arrayContaining([
+          'DD_SELF_UPDATE_DOCKER_HOST=docker-proxy',
+          'DD_SELF_UPDATE_DOCKER_PORT=2375',
+          'DD_SELF_UPDATE_DOCKER_PROTOCOL=http',
+        ]),
+        HostConfig: {
+          AutoRemove: true,
+          NetworkMode: 'host',
+        },
+      }),
+    );
+    const call = context.dockerApi.createContainer.mock.calls[0][0];
+    expect(call.HostConfig.Binds).toBeUndefined();
+  });
+
+  test('tcp mode: helper HostConfig has no NetworkMode when spec has none', async () => {
+    const context = createTcpContext(undefined);
+    const deps = createTcpDependencies();
+    deps.createContainer = vi.fn().mockResolvedValue(context.newContainer);
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await executeSelfUpdateTransition(deps, context as never, { name: 'drydock', image: {} }, log);
+
+    const call = context.dockerApi.createContainer.mock.calls[0][0];
+    expect(call.HostConfig).toEqual({ AutoRemove: true });
+    expect(call.HostConfig.NetworkMode).toBeUndefined();
+    expect(call.HostConfig.Binds).toBeUndefined();
+  });
+
+  test('tcp mode: helper HostConfig has no NetworkMode when NetworkMode is empty string', async () => {
+    const context = createTcpContext('');
+    const deps = createTcpDependencies();
+    deps.createContainer = vi.fn().mockResolvedValue(context.newContainer);
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await executeSelfUpdateTransition(deps, context as never, { name: 'drydock', image: {} }, log);
+
+    const call = context.dockerApi.createContainer.mock.calls[0][0];
+    expect(call.HostConfig).toEqual({ AutoRemove: true });
+    expect(call.HostConfig.NetworkMode).toBeUndefined();
   });
 });
