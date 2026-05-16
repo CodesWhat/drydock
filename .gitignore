@@ -154,8 +154,10 @@ ui/public/fonts/
 .vercel/
 .source/
 
-# Changelog docs are generated from CHANGELOG.md by sync-docs.mjs
-# and committed to keep website/docs history in-repo.
+# Changelog docs page is generated from the root CHANGELOG.md by
+# apps/web/scripts/sync-docs.mjs. CHANGELOG.md is the single source of
+# truth; the generated page is not tracked so the two cannot drift.
+content/docs/current/changelog/index.mdx
 
 # Generated from content/docs/current for Turbopack compatibility
 # Canonical docs are versioned at content/docs/*
