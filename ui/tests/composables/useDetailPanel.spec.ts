@@ -10,6 +10,7 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
     icon: '',
     currentTag: 'latest',
     newTag: null,
+    isDigestPinned: false,
     status: 'running',
     registry: 'dockerhub',
     updateKind: null,

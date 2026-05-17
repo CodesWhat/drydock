@@ -325,6 +325,7 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
     icon: 'docker',
     currentTag: '1.0.0',
     newTag: null,
+    isDigestPinned: false,
     status: 'running',
     registry: 'dockerhub',
     updateKind: null,
@@ -1355,12 +1356,6 @@ describe('ContainersView — applyContainerPatch', () => {
             loadDetailSecurityData: vi.fn().mockResolvedValue(undefined),
             reconcileHoldsAgainstContainers,
             schedulePostTerminalReload: vi.fn(),
-            toast: {
-              error: vi.fn(),
-              success: vi.fn(),
-              warning: vi.fn(),
-            },
-            t: (key: string) => key,
           });
           expose({ containers, ...pipeline });
           return () => null;

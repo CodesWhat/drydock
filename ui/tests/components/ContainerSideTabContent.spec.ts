@@ -26,6 +26,7 @@ function createSelectedContainer(): Container {
     icon: 'docker',
     currentTag: 'latest',
     newTag: null,
+    isDigestPinned: false,
     status: 'running',
     registry: 'dockerhub',
     updateKind: null,

@@ -424,8 +424,8 @@ export function useDashboardData() {
       realtimeRefreshScheduler.schedule('full'),
     );
   }) as EventListener;
-  const visibilityChangeListener = ((event: Event) => {
-    maintenanceCountdownController.sync(event);
+  const visibilityChangeListener = ((_event: Event) => {
+    maintenanceCountdownController.sync();
     if (!isPageVisible()) {
       statsSummaryController?.pause();
     } else {
