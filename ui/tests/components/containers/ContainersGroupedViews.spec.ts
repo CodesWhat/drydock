@@ -2343,10 +2343,9 @@ describe('ContainersGroupedViews', () => {
       expect(occurrences).toBeLessThan(2);
     });
 
-    it('renders tag AND digest delta for a hybrid tag+digest update row (fix #342)', async () => {
-      // Hybrid scenario: image has a real tag (e.g. `v8.13.2`), digest changed.
-      // The version cell must show BOTH the unchanged tag (muted) AND the digest
-      // delta (formatShortDigest(current) → formatShortDigest(new)).
+    it('renders the human-readable tag for a hybrid tag+digest update row (fix #356, #370)', async () => {
+      // Hybrid scenario: image has a real tag, digest changed.
+      // The version cell must show the tag; the digest delta moves to the tooltip.
       const wrapper = mountDigestContainer({
         currentTag: '14-vectorchord0.4.3-pgvectors0.2.0',
         newTag: '14-vectorchord0.4.3-pgvectors0.2.0',
@@ -2355,13 +2354,13 @@ describe('ContainersGroupedViews', () => {
       const row = rowByName(wrapper, 'alpha');
       const text = row.text();
       expect(text).toContain('14-vectorchord0.4.3-pgvectors0.2.0');
-      expect(text).toContain('sha256:bcf6335aabbb…');
-      expect(text).toContain('sha256:deadbeefcafe…');
+      expect(text).not.toContain('sha256:bcf6335aabbb…');
+      expect(text).not.toContain('sha256:deadbeefcafe…');
     });
 
-    it('renders tag AND digest delta for a floating-tag + digest-watch update row (#356, updated #342)', async () => {
+    it('renders the human-readable tag for a floating-tag + digest-watch update row (#356)', async () => {
       // Brian's scenario: currentTag is a meaningful tag (`v8.13.2`), digest changed
-      // but tag did not. The version cell must show the tag AND the digest delta.
+      // but tag did not. The version cell must show the tag, NOT two sha256 strings.
       const wrapper = mountDigestContainer({
         currentTag: 'v8.13.2',
         newTag: 'v8.13.2',
@@ -2370,13 +2369,13 @@ describe('ContainersGroupedViews', () => {
       const row = rowByName(wrapper, 'alpha');
       const text = row.text();
       expect(text).toContain('v8.13.2');
-      expect(text).toContain('sha256:bcf6335aabbb…');
-      expect(text).toContain('sha256:deadbeefcafe…');
+      expect(text).not.toContain('sha256:bcf6335aabbb…');
+      expect(text).not.toContain('sha256:deadbeefcafe…');
     });
 
-    it('renders tag AND digest delta for a linuxserver-style transform tag (#356, updated #342)', async () => {
+    it('renders the human-readable tag for a linuxserver-style transform tag (#356)', async () => {
       // Reporter's transformed tag like `compose-X-version-9.0.1` — floating-tag
-      // alias with digest watch auto-enabled by `da1334a4`. Now shows digest delta too.
+      // alias with digest watch auto-enabled by `da1334a4`.
       const wrapper = mountDigestContainer({
         currentTag: 'compose-X-version-9.0.1',
         newTag: 'compose-X-version-9.0.1',
@@ -2385,8 +2384,7 @@ describe('ContainersGroupedViews', () => {
       const row = rowByName(wrapper, 'alpha');
       const text = row.text();
       expect(text).toContain('compose-X-version-9.0.1');
-      expect(text).toContain('sha256:bcf6335aabbb…');
-      expect(text).toContain('sha256:deadbeefcafe…');
+      expect(text).not.toContain('sha256:bcf6335aabbb…');
     });
 
     it('still renders currentTag → newTag for a tag update row', async () => {
@@ -2453,7 +2451,7 @@ describe('ContainersGroupedViews', () => {
       expect(row.text()).toContain('Rate limited');
     });
 
-    it('renders tag AND digest delta in the card body for a hybrid tag+digest update (fix #342)', async () => {
+    it('renders the human-readable tag in the card body for a hybrid tag+digest update (fix #356, #370)', async () => {
       const container = makeContainer({
         id: 'c-card-hybrid-digest',
         name: 'alpha',
@@ -2486,8 +2484,8 @@ describe('ContainersGroupedViews', () => {
       expect(card).toBeDefined();
       const text = card!.text();
       expect(text).toContain('14-vectorchord0.4.3-pgvectors0.2.0');
-      expect(text).toContain('sha256:bcf6335aabbb…');
-      expect(text).toContain('sha256:deadbeefcafe…');
+      expect(text).not.toContain('sha256:bcf6335aabbb…');
+      expect(text).not.toContain('sha256:deadbeefcafe…');
     });
 
     it('renders digest-pinned update in the card body (pure-digest, regression for #342 fix)', async () => {
@@ -2526,10 +2524,10 @@ describe('ContainersGroupedViews', () => {
       expect(text).toContain('sha256:deadbeefcafe…');
     });
 
-    it('renders currentTag + digest delta when BOTH tag and digest change simultaneously (hybrid both-halves)', async () => {
+    it('renders the human-readable currentTag for a hybrid both-halves-change row (fix #356, #370)', async () => {
       // Both tag and digest change: e.g. 1.2.3 → 1.2.4 AND sha256:aaa → sha256:bbb.
-      // updateKind is 'digest' so the component takes the hybrid digest branch.
-      // It renders currentTag (muted) plus the digest short-form delta.
+      // updateKind is 'digest' so the component takes the non-pinned digest branch.
+      // It renders currentTag; the digest delta moves to the tooltip.
       const wrapper = mountDigestContainer({
         currentTag: '1.2.3',
         newTag: '1.2.4',
@@ -2538,11 +2536,11 @@ describe('ContainersGroupedViews', () => {
       });
       const row = rowByName(wrapper, 'alpha');
       const text = row.text();
-      // currentTag is shown in the muted span
+      // currentTag is shown
       expect(text).toContain('1.2.3');
-      // digest delta is shown (both sides)
-      expect(text).toContain('sha256:bcf6335aabbb…');
-      expect(text).toContain('sha256:deadbeefcafe…');
+      // digest delta is NOT shown in cell text (it's in the tooltip)
+      expect(text).not.toContain('sha256:bcf6335aabbb…');
+      expect(text).not.toContain('sha256:deadbeefcafe…');
     });
 
     it('does NOT render two identical full digest strings for a hybrid both-halves-change row (regression)', async () => {
@@ -2593,6 +2591,137 @@ describe('ContainersGroupedViews', () => {
       expect(text).toContain('1.0.0');
       expect(text).toContain('1.1.0');
       expect(text).not.toContain('Rate limited');
+    });
+  });
+
+  /**
+   * REGRESSION GUARD — #356 / #370. DO NOT WEAKEN.
+   *
+   * The Containers list "Version" column must show the human-readable image
+   * TAG (never a raw `sha256:` digest) for containers that track a floating
+   * or specific tag with digest watch enabled (isDigestPinned === false),
+   * even when updateKind === 'digest'. The `sha256:… → sha256:…` digest pair
+   * is reserved for digest-PINNED containers (isDigestPinned === true).
+   *
+   * This bug regressed twice: fixed in #356 (rc.19), re-broken by the rc.20
+   * #342 follow-up (commit b40d3db8), reopened as #370. These are negative
+   * invariant assertions. If a change makes one of these fail, the change is
+   * reintroducing a known user-facing bug — fix the change, not the test.
+   */
+  describe('#356 / #370 regression guard — Version column never shows raw sha256 for non-digest-pinned containers', () => {
+    const digestLocal = 'sha256:bcf6335aabbb1234567890abcdef1234567890abcdef1234567890abcdef12';
+    const digestRemote = 'sha256:deadbeefcafe1234567890abcdef1234567890abcdef1234567890abcdef12';
+
+    function mountGuardContainer(
+      overrides: Partial<Container> = {},
+      viewMode: 'table' | 'cards' = 'table',
+    ) {
+      const container = makeContainer({
+        id: 'c-guard',
+        name: 'alpha',
+        updateKind: 'digest',
+        currentDigest: digestLocal,
+        newDigest: digestRemote,
+        isDigestPinned: false,
+        status: 'running',
+        bouncer: 'safe',
+        ...overrides,
+      });
+      const { context } = makeContext();
+      context.containerViewMode.value = viewMode;
+      context.filteredContainers.value = [container];
+      context.displayContainers.value = [container];
+      context.renderGroups.value = [
+        {
+          key: 'g',
+          name: viewMode === 'table' ? 'g' : null,
+          containers: [container],
+          containerCount: 1,
+          updatesAvailable: 1,
+          updatableCount: 1,
+        },
+      ];
+      mocked.context = context;
+      return { wrapper: mountSubject(), container };
+    }
+
+    it.each([
+      { label: 'floating tag `latest`', currentTag: 'latest', newTag: 'latest' },
+      { label: 'specific semver tag `v8.13.2`', currentTag: 'v8.13.2', newTag: 'v8.13.2' },
+      {
+        label: 'transform-style alias `compose-X-version-9.0.1`',
+        currentTag: 'compose-X-version-9.0.1',
+        newTag: 'compose-X-version-9.0.1',
+      },
+    ])('table view — $label shows human-readable tag, never sha256 (non-pinned digest)', async ({
+      currentTag,
+      newTag,
+    }) => {
+      const { wrapper } = mountGuardContainer({ currentTag, newTag }, 'table');
+      const text = rowByName(wrapper, 'alpha').text();
+      expect(text).toContain(currentTag);
+      expect(text).not.toContain('sha256:');
+    });
+
+    it('table view — hybrid both-halves change (1.2.3 → 1.2.4, digest also changes) shows currentTag, never sha256', async () => {
+      const { wrapper } = mountGuardContainer(
+        { currentTag: '1.2.3', newTag: '1.2.4', updateKind: 'digest', isDigestPinned: false },
+        'table',
+      );
+      const text = rowByName(wrapper, 'alpha').text();
+      expect(text).toContain('1.2.3');
+      expect(text).not.toContain('sha256:');
+    });
+
+    it.each([
+      { label: 'floating tag `latest`', currentTag: 'latest', newTag: 'latest' },
+      { label: 'specific tag `v8.13.2`', currentTag: 'v8.13.2', newTag: 'v8.13.2' },
+    ])('card view — $label shows human-readable tag, never sha256 (non-pinned digest)', async ({
+      currentTag,
+      newTag,
+    }) => {
+      const { wrapper } = mountGuardContainer({ currentTag, newTag }, 'cards');
+      const card = wrapper.findAll('.card-item-stub').find((c) => c.text().includes('alpha'));
+      expect(card).toBeDefined();
+      const text = card!.text();
+      expect(text).toContain(currentTag);
+      expect(text).not.toContain('sha256:');
+    });
+
+    it('counter-case — digest-PINNED container DOES show sha256 in table view (guard is correctly scoped)', async () => {
+      // This proves the invariant is specifically about non-pinned containers,
+      // not a universal sha256-suppression rule. If this assertion ever breaks,
+      // the digest-pinned rendering path is broken, not the guard.
+      const container = makeContainer({
+        id: 'c-pinned-counter',
+        name: 'alpha',
+        currentTag: digestLocal,
+        newTag: digestLocal,
+        updateKind: 'digest',
+        currentDigest: digestLocal,
+        newDigest: digestRemote,
+        isDigestPinned: true,
+        status: 'running',
+        bouncer: 'safe',
+      });
+      const { context } = makeContext();
+      context.containerViewMode.value = 'table';
+      context.filteredContainers.value = [container];
+      context.displayContainers.value = [container];
+      context.renderGroups.value = [
+        {
+          key: 'g',
+          name: 'g',
+          containers: [container],
+          containerCount: 1,
+          updatesAvailable: 1,
+          updatableCount: 1,
+        },
+      ];
+      mocked.context = context;
+      const wrapper = mountSubject();
+      const text = rowByName(wrapper, 'alpha').text();
+      expect(text).toContain('sha256:');
     });
   });
 });
