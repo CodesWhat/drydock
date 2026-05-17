@@ -233,9 +233,13 @@ jobs:
 
       - name: Aggregate shard scores
         run: |
+          # --allow-missing: a single crashed/flaky shard must not block the
+          # dashboard publish for a whole month. Partial data still publishes;
+          # the summary records how many shards were missing.
           node scripts/aggregate-stryker-score.mjs \
             --input artifacts/mutation \
             --expected-count 20 \
+            --allow-missing \
             --summary-out artifacts/aggregate/summary.json \
             --score-out artifacts/aggregate/mutation-score.json
 
