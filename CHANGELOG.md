@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **[#370](https://github.com/CodesWhat/drydock/issues/370) — Containers list "Version" column again shows the human-readable image tag for floating-tag + digest-watch containers, restoring the [#356](https://github.com/CodesWhat/drydock/issues/356) fix that rc.20 inadvertently reverted.** The rc.20 `#342` follow-up (commit `b40d3db8`) added a visible `sha256:… → sha256:…` digest pair to the Containers table "Version" cell and card body for all `updateKind === 'digest'` containers that are not digest-pinned. The intent was to surface the digest transition for hybrid containers where both the tag and the underlying image layer changed simultaneously; however, the change cast too wide a net: it also applied to floating-tag + digest-watch containers (e.g. `prom/prometheus:latest`, `linuxserver/plex` with a transform tag) — exactly the rows that [#356](https://github.com/CodesWhat/drydock/issues/356) fixed to show the human-readable tag instead of raw digest strings. The `updateKind === 'digest' && !isDigestPinned` branch of the table version cell and card body in `ui/src/components/containers/ContainersGroupedViews.vue` has been restored to the rc.19 behaviour: the version cell renders `c.currentTag` as a `CopyableTag` (with the full digest delta in the cell tooltip), and the card body shows only the update-state badge (with the digest delta in the badge tooltip). The digest transition remains visible through the adjacent "kind" column update-state indicator and the container detail panels. Digest-*pinned* containers (where `isDigestPinned` is true) are unaffected and continue to show the `sha256:… → sha256:…` pair directly in the cell.
+
 ## [1.5.0-rc.23] — 2026-05-16
 
 ### Added
