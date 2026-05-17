@@ -63,7 +63,8 @@
         "lastFetched": "Laatst opgehaald: {time}",
         "entries": "{count} vermeldingen",
         "statusLive": "Leef",
-        "statusOffline": "Offline"
+        "statusOffline": "Offline",
+        "loadError": "Failed to load agent logs"
       },
       "fields": {
         "cpus": "CPU's",

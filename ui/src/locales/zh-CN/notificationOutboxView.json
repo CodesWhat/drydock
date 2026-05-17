@@ -3,6 +3,8 @@
     "heading": "发件箱",
     "refresh": "刷新",
     "loading": "正在加载发件箱条目…",
+    "loadError": "Failed to load notification outbox",
+    "ofCount": "{count} of {total}",
     "tabs": {
       "dead-letter": "死信",
       "pending": "待发送",
@@ -17,7 +19,9 @@
     },
     "actions": {
       "retry": "重试",
-      "discard": "丢弃"
+      "retryAriaLabel": "Retry outbox entry",
+      "discard": "丢弃",
+      "discardAriaLabel": "Discard outbox entry"
     },
     "status": {
       "dead-letter": "死信",

@@ -15,7 +15,12 @@
       "filters": "筛选",
       "toggleFilters": "切换筛选",
       "viewMode": "视图模式",
-      "viewModeLabel": "{label} 视图"
+      "viewModeLabel": "{label} 视图",
+      "viewModes": {
+        "table": "Table",
+        "cards": "Cards",
+        "list": "List"
+      }
     },
     "dataListAccordion": {
       "toggleDetails": "切换 {name} 详情",
@@ -28,7 +33,12 @@
     "detailPanel": {
       "openFullPage": "打开全页视图",
       "closePanel": "关闭详情面板",
-      "ariaLabel": "详情面板"
+      "ariaLabel": "详情面板",
+      "size": {
+        "sm": "S",
+        "md": "M",
+        "lg": "L"
+      }
     },
     "emptyState": {
       "clearFilters": "清除所有筛选"

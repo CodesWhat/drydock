@@ -45,11 +45,17 @@
     "themeToggle": {
       "mobileLabel": "Motyw: {id} (dotknij, aby przełączać)",
       "switchTo": "Przełącz na motyw {id}",
-      "variantLabel": "{label}"
+      "variantLabel": "{label}",
+      "variant": {
+        "light": "Light",
+        "system": "System",
+        "dark": "Dark"
+      }
     },
     "layout": {
       "nav": {
         "dashboard": "Panel",
+        "dashboardFallback": "Dashboard",
         "containers": "Kontenery",
         "security": "Bezpieczeństwo",
         "audit": "Audyt",
@@ -80,7 +86,8 @@
         "closeMenu": "Zamknij menu",
         "userMenu": "Menu użytkownika",
         "profile": "Profil",
-        "signOut": "Wyloguj się"
+        "signOut": "Wyloguj się",
+        "userFallback": "User"
       },
       "about": {
         "title": "Drydock",
@@ -97,11 +104,39 @@
         "refreshing": "Odświeżanie indeksu wyszukiwania...",
         "noMatches": "Brak dopasowań dla „{query}”.",
         "hint": "Wpisz, aby przeszukać strony, kontenery, agentów, wyzwalacze, obserwatorów i ustawienia.",
-        "prefixScopeHint": "Zakres prefiksu aktywny; używać",
+        "prefixScopeHint": "Zakres prefiksu aktywny; używać ",
         "typeHint": "Wpisz",
-        "useTab": "zmienić zakres",
+        "useTab": " zmienić zakres",
         "moveHint": "ruszaj się",
-        "openHint": "otwarte"
+        "openHint": "otwarte",
+        "recentGroup": "Recent",
+        "unknownHost": "unknown host",
+        "containerSubtitle": "Container · {image} · {status} · {host}",
+        "agentSubtitle": "Agent · {status} · {host}",
+        "triggerSubtitle": "Trigger · {type}",
+        "watcherSubtitle": "Watcher · {type}",
+        "registrySubtitle": "Registry · {type}",
+        "authSubtitle": "Auth · {type}",
+        "notificationSubtitle": "Notification rule · {id}",
+        "scope": {
+          "all": "All",
+          "pages": "Pages",
+          "containers": "Containers",
+          "runtime": "Runtime",
+          "config": "Config"
+        },
+        "group": {
+          "navigation": "Navigation",
+          "containers": "Containers",
+          "runtime": "Runtime",
+          "configuration": "Configuration"
+        },
+        "settings": {
+          "appearanceTitle": "Appearance Settings",
+          "appearanceSubtitle": "Config · Appearance",
+          "profileTitle": "Profile Settings",
+          "profileSubtitle": "Config · Profile"
+        }
       },
       "connection": {
         "lostTitle": "Połączenie utracone",
@@ -127,7 +162,12 @@
       "envKeysLabel": "Klucze Env ({count}): {keys}",
       "labelKeysLabel": "Klucze etykiet ({count}): {keys}",
       "apiPathsLabel": "Ścieżki API ({count}): {keys}",
-      "healthcheckCommandLabel": "Komenda sprawdzania stanu: {command}"
+      "healthcheckCommandLabel": "Komenda sprawdzania stanu: {command}",
+      "oidcHttpBody": "One or more OIDC providers use an insecure {httpCode} discovery URL. HTTP discovery is deprecated and will be removed in v1.6.0. Upgrade your OIDC discovery URL to use HTTPS, or set {envVar} only for trusted internal issuers.",
+      "legacyHashBody": "Your basic authentication uses a legacy password hash format. Legacy v1.3.9 formats are deprecated and will be removed in v1.6.0. Re-hash your admin password with {argon} (see the migration guide for the one-liner).",
+      "legacyConfigBody": "Deprecated configuration aliases are in use. Rename {wudEnv} env vars to {ddEnv} and {wudLabel} Docker labels to {ddLabel}. {triggerEnv} variables should also migrate to {actionEnv} or {notificationEnv} (see the migration guide for the full rename map).",
+      "legacyApiBody": "Unversioned API paths are deprecated. Update API clients to the {v1Prefix} prefix. Unversioned {oldPrefix} aliases are removed in v1.6.0.",
+      "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains supported for backward compatibility in v1.5.x. v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Remove the {envVar} override; the image now uses wget and curl is no longer bundled. Prefer the built-in image healthcheck or {bin} for custom intervals."
     }
   }
 }

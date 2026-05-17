@@ -15,7 +15,12 @@
       "filters": "Bộ lọc",
       "toggleFilters": "Bật/tắt bộ lọc",
       "viewMode": "Chế độ xem",
-      "viewModeLabel": "Chế độ xem {label}"
+      "viewModeLabel": "Chế độ xem {label}",
+      "viewModes": {
+        "table": "Table",
+        "cards": "Cards",
+        "list": "List"
+      }
     },
     "dataListAccordion": {
       "toggleDetails": "Bật/tắt chi tiết {name}",
@@ -28,7 +33,12 @@
     "detailPanel": {
       "openFullPage": "Mở chế độ xem toàn trang",
       "closePanel": "Đóng bảng chi tiết",
-      "ariaLabel": "Bảng chi tiết"
+      "ariaLabel": "Bảng chi tiết",
+      "size": {
+        "sm": "S",
+        "md": "M",
+        "lg": "L"
+      }
     },
     "emptyState": {
       "clearFilters": "Xóa tất cả bộ lọc"

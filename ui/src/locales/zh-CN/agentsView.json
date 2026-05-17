@@ -63,7 +63,8 @@
         "lastFetched": "最后获取时间：{time}",
         "entries": "{count} 条记录",
         "statusLive": "在线",
-        "statusOffline": "离线"
+        "statusOffline": "离线",
+        "loadError": "Failed to load agent logs"
       },
       "fields": {
         "cpus": "CPU",

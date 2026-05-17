@@ -3,6 +3,8 @@
     "heading": "Hộp thư đi",
     "refresh": "Làm mới",
     "loading": "Đang tải mục hộp thư đi…",
+    "loadError": "Failed to load notification outbox",
+    "ofCount": "{count} of {total}",
     "tabs": {
       "dead-letter": "Dead-letter",
       "pending": "Đang chờ",
@@ -17,7 +19,9 @@
     },
     "actions": {
       "retry": "Thử lại",
-      "discard": "Bỏ qua"
+      "retryAriaLabel": "Retry outbox entry",
+      "discard": "Bỏ qua",
+      "discardAriaLabel": "Discard outbox entry"
     },
     "status": {
       "dead-letter": "Dead-letter",

@@ -36,7 +36,7 @@
       "tooltip": "通知",
       "header": "通知",
       "clear": "清除",
-      "loading": "載入中...",
+      "loading": "載入中……",
       "empty": "暫無通知",
       "markAllRead": "全部標記為已讀",
       "openAuditLog": "開啟稽核日誌",
@@ -45,11 +45,17 @@
     "themeToggle": {
       "mobileLabel": "主題：{id}（點選切換）",
       "switchTo": "切換到 {id} 主題",
-      "variantLabel": "{label}"
+      "variantLabel": "{label}",
+      "variant": {
+        "light": "Light",
+        "system": "System",
+        "dark": "Dark"
+      }
     },
     "layout": {
       "nav": {
         "dashboard": "儀表板",
+        "dashboardFallback": "Dashboard",
         "containers": "容器",
         "security": "安全",
         "audit": "稽核",
@@ -80,7 +86,8 @@
         "closeMenu": "關閉選單",
         "userMenu": "使用者選單",
         "profile": "個人資料",
-        "signOut": "登出"
+        "signOut": "登出",
+        "userFallback": "User"
       },
       "about": {
         "title": "Drydock",
@@ -92,22 +99,50 @@
       },
       "search": {
         "ariaLabel": "搜尋",
-        "placeholder": "跳轉到頁面、容器、代理、觸發器...",
+        "placeholder": "跳轉到頁面、容器、代理、觸發器……",
         "shown": "顯示 {count} 條",
-        "refreshing": "正在重新整理搜尋索引...",
+        "refreshing": "正在重新整理搜尋索引……",
         "noMatches": "沒有找到 \"{query}\" 的匹配項。",
         "hint": "輸入以搜尋頁面、容器、代理、觸發器、監視器和設定。",
-        "prefixScopeHint": "前置詞作用域已啟動",
+        "prefixScopeHint": "前置詞作用域已啟動 ",
         "typeHint": "輸入",
         "useTab": " 以更改作用域",
         "moveHint": "移動",
-        "openHint": "開啟"
+        "openHint": "開啟",
+        "recentGroup": "Recent",
+        "unknownHost": "unknown host",
+        "containerSubtitle": "Container · {image} · {status} · {host}",
+        "agentSubtitle": "Agent · {status} · {host}",
+        "triggerSubtitle": "Trigger · {type}",
+        "watcherSubtitle": "Watcher · {type}",
+        "registrySubtitle": "Registry · {type}",
+        "authSubtitle": "Auth · {type}",
+        "notificationSubtitle": "Notification rule · {id}",
+        "scope": {
+          "all": "All",
+          "pages": "Pages",
+          "containers": "Containers",
+          "runtime": "Runtime",
+          "config": "Config"
+        },
+        "group": {
+          "navigation": "Navigation",
+          "containers": "Containers",
+          "runtime": "Runtime",
+          "configuration": "Configuration"
+        },
+        "settings": {
+          "appearanceTitle": "Appearance Settings",
+          "appearanceSubtitle": "Config · Appearance",
+          "profileTitle": "Profile Settings",
+          "profileSubtitle": "Config · Profile"
+        }
       },
       "connection": {
         "lostTitle": "連線遺失",
         "applyingUpdateTitle": "正在應用更新",
-        "lostMessage": "伺服器無法存取。正在等待其重新上線...",
-        "restartingMessage": "Drydock 正在重新啟動{opId}。服務恢復後將重新連線...",
+        "lostMessage": "伺服器無法存取。正在等待其重新上線……",
+        "restartingMessage": "Drydock 正在重新啟動{opId}。服務恢復後將重新連線……",
         "reconnecting": "重新連線中",
         "restartingService": "重啟服務中"
       }
@@ -127,7 +162,12 @@
       "envKeysLabel": "環境變數金鑰 ({count}): {keys}",
       "labelKeysLabel": "標籤 ({count}): {keys}",
       "apiPathsLabel": "API 路徑 ({count}): {keys}",
-      "healthcheckCommandLabel": "健康檢查命令：{command}"
+      "healthcheckCommandLabel": "健康檢查命令：{command}",
+      "oidcHttpBody": "One or more OIDC providers use an insecure {httpCode} discovery URL. HTTP discovery is deprecated and will be removed in v1.6.0. Upgrade your OIDC discovery URL to use HTTPS, or set {envVar} only for trusted internal issuers.",
+      "legacyHashBody": "Your basic authentication uses a legacy password hash format. Legacy v1.3.9 formats are deprecated and will be removed in v1.6.0. Re-hash your admin password with {argon} (see the migration guide for the one-liner).",
+      "legacyConfigBody": "Deprecated configuration aliases are in use. Rename {wudEnv} env vars to {ddEnv} and {wudLabel} Docker labels to {ddLabel}. {triggerEnv} variables should also migrate to {actionEnv} or {notificationEnv} (see the migration guide for the full rename map).",
+      "legacyApiBody": "Unversioned API paths are deprecated. Update API clients to the {v1Prefix} prefix. Unversioned {oldPrefix} aliases are removed in v1.6.0.",
+      "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains supported for backward compatibility in v1.5.x. v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Remove the {envVar} override; the image now uses wget and curl is no longer bundled. Prefer the built-in image healthcheck or {bin} for custom intervals."
     }
   }
 }

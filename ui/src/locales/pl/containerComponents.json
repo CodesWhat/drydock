@@ -148,7 +148,14 @@
       "title": "Dzienniki kontenerów",
       "download": "Pobierz",
       "allLevels": "Wszystkie poziomy",
-      "downloadError": "Nie można pobrać logów"
+      "downloadError": "Nie można pobrać logów",
+      "tailCount": "Tail {count}",
+      "tailAll": "Tail All",
+      "statusPaused": "Paused",
+      "statusLive": "Live",
+      "statusOffline": "Offline",
+      "stdout": "stdout",
+      "stderr": "stderr"
     },
     "groupedViews": {
       "statusQueued": "W kolejce",
@@ -192,7 +199,13 @@
       "blockedTagWithCriticals": "Zablokowano: {tag} ({count} krytyczne CVE)",
       "blockedTagWithCriticalsCVEs": "Zablokowano: {tag} ({count} krytycznych CVE)",
       "manualUpdateOnly": "Tylko aktualizacja ręczna",
-      "manualUpdateOnlyWithMessage": "Tylko aktualizacja ręczna — {message}"
+      "manualUpdateOnlyWithMessage": "Tylko aktualizacja ręczna — {message}",
+      "updateBtnTooltipDefault": "Update",
+      "cancelButton": "Cancel",
+      "blockedButton": "Blocked",
+      "updateButton": "Update",
+      "moreButton": "More",
+      "cancelUpdateTooltip": "Cancel update"
     },
     "groupHeader": {
       "ungrouped": "Rozgrupowane",
@@ -285,6 +298,7 @@
     },
     "updateDialog": {
       "title": "Zaktualizuj kontener",
+      "thisContainer": "this container",
       "confirmTagChange": "Zaktualizować {name}? Spowoduje to zmianę znacznika obrazu z :{currentTag} na :{newTag}{kind}.",
       "confirmDigestChange": "Zaktualizować {name}? Dostępna jest nowsza wersja :{currentTag} (zmiana skrótu).",
       "confirmLatest": "Zaktualizować {name} teraz? Spowoduje to zastosowanie najnowszego odkrytego obrazu.",
@@ -323,6 +337,7 @@
       "triggerFiltered": "Wyzwalacz filtrowany",
       "agentMismatch": "Niedopasowanie agenta",
       "noTrigger": "Brak spustu",
+      "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Windy:"
     },
     "maturityBadge": {

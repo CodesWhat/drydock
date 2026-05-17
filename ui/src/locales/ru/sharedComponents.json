@@ -15,7 +15,12 @@
       "filters": "Фильтры",
       "toggleFilters": "Переключить фильтры",
       "viewMode": "Режим просмотра",
-      "viewModeLabel": "Вид {label}"
+      "viewModeLabel": "Вид {label}",
+      "viewModes": {
+        "table": "Table",
+        "cards": "Cards",
+        "list": "List"
+      }
     },
     "dataListAccordion": {
       "toggleDetails": "Переключить детали {name}",
@@ -28,7 +33,12 @@
     "detailPanel": {
       "openFullPage": "Открыть на полной странице",
       "closePanel": "Закрыть панель деталей",
-      "ariaLabel": "Панель деталей"
+      "ariaLabel": "Панель деталей",
+      "size": {
+        "sm": "S",
+        "md": "M",
+        "lg": "L"
+      }
     },
     "emptyState": {
       "clearFilters": "Очистить все фильтры"

@@ -63,7 +63,8 @@
         "lastFetched": "Lần tải cuối: {time}",
         "entries": "{count} mục",
         "statusLive": "Trực tiếp",
-        "statusOffline": "Ngoại tuyến"
+        "statusOffline": "Ngoại tuyến",
+        "loadError": "Failed to load agent logs"
       },
       "fields": {
         "cpus": "CPU",

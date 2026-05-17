@@ -148,18 +148,25 @@
       "title": "Container-Logs",
       "download": "Herunterladen",
       "allLevels": "Alle Level",
-      "downloadError": "Logs konnten nicht heruntergeladen werden"
+      "downloadError": "Logs konnten nicht heruntergeladen werden",
+      "tailCount": "Tail {count}",
+      "tailAll": "Tail All",
+      "statusPaused": "Paused",
+      "statusLive": "Live",
+      "statusOffline": "Offline",
+      "stdout": "stdout",
+      "stderr": "stderr"
     },
     "groupedViews": {
       "statusQueued": "In Warteschlange",
       "statusScanning": "Scan läuft",
       "statusUpdating": "Aktualisiert",
-      "statusPulling": "Pull läuft...",
-      "statusScanningPhase": "Scan läuft...",
-      "statusGeneratingSbom": "SBOM wird erstellt...",
-      "statusHealthChecking": "Healthcheck läuft...",
-      "statusFinalizing": "Wird abgeschlossen...",
-      "statusRollingBack": "Rollback läuft...",
+      "statusPulling": "Pull läuft…",
+      "statusScanningPhase": "Scan läuft…",
+      "statusGeneratingSbom": "SBOM wird erstellt…",
+      "statusHealthChecking": "Healthcheck läuft…",
+      "statusFinalizing": "Wird abgeschlossen…",
+      "statusRollingBack": "Rollback läuft…",
       "lastUpdateFailed": "Letztes Update fehlgeschlagen: {reason}",
       "stopAction": "Stoppen",
       "startAction": "Starten",
@@ -192,7 +199,13 @@
       "blockedTagWithCriticals": "Blockiert: {tag} ({count} kritische CVE)",
       "blockedTagWithCriticalsCVEs": "Blockiert: {tag} ({count} kritische CVEs)",
       "manualUpdateOnly": "Nur manuelles Update",
-      "manualUpdateOnlyWithMessage": "Nur manuelles Update — {message}"
+      "manualUpdateOnlyWithMessage": "Nur manuelles Update — {message}",
+      "updateBtnTooltipDefault": "Update",
+      "cancelButton": "Cancel",
+      "blockedButton": "Blocked",
+      "updateButton": "Update",
+      "moreButton": "More",
+      "cancelUpdateTooltip": "Cancel update"
     },
     "groupHeader": {
       "ungrouped": "Nicht gruppiert",
@@ -257,6 +270,8 @@
       "collapseAll": "Alle einklappen",
       "recheckTooltip": "Erneut auf Updates prüfen",
       "columnsHeader": "Spalten",
+      "narrowViewportSuffix": "(schmales Fenster)",
+      "autoHiddenBadgeTooltip": "{count} Spalten automatisch ausgeblendet, da das Fenster zu schmal ist. Fenster verbreitern oder andere Spalten ausblenden, um Platz zu schaffen.",
       "filterSearch": "Suche: {value}",
       "filterStatus": "Status: {value}",
       "filterBouncer": "Bouncer: {value}",
@@ -264,8 +279,6 @@
       "filterHost": "Host: {value}",
       "filterKind": "Typ: {value}",
       "filterHiddenPinned": "Ausgeblendet: Gepinnt",
-      "narrowViewportSuffix": "(schmales Fenster)",
-      "autoHiddenBadgeTooltip": "{count} Spalten automatisch ausgeblendet, da das Fenster zu schmal ist. Fenster verbreitern oder andere Spalten ausblenden, um Platz zu schaffen.",
       "filtersLabel": "Filter",
       "filteredContainers": "Auf {count} Container gefiltert | Auf {count} Container gefiltert",
       "clearContainerIdFilter": "Container-ID-Filter löschen"
@@ -285,6 +298,7 @@
     },
     "updateDialog": {
       "title": "Container aktualisieren",
+      "thisContainer": "this container",
       "confirmTagChange": "{name} aktualisieren? Der Image-Tag wird von :{currentTag} auf :{newTag}{kind} geändert.",
       "confirmDigestChange": "{name} aktualisieren? Ein neuerer Build von :{currentTag} ist verfügbar (Digest-Änderung).",
       "confirmLatest": "{name} jetzt aktualisieren? Das neueste erkannte Image wird angewendet.",
@@ -323,6 +337,7 @@
       "triggerFiltered": "Trigger gefiltert",
       "agentMismatch": "Agent-Mismatch",
       "noTrigger": "Kein Trigger",
+      "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Hebt auf:"
     },
     "maturityBadge": {

@@ -12,7 +12,7 @@
       "skipThisUpdate": "Bu Güncellemeyi Atla",
       "snooze1d": "1 gün ertele",
       "snooze7d": "7 gün ertele",
-      "snoozeUntil": "Şu tarihe kadar ertele:",
+      "snoozeUntil": "Şu tarihe kadar ertele",
       "unsnooze": "Ertelemeyi kaldır",
       "maturityGroup": "Vade",
       "allowNewMature": "Yeni + olgun olanlara izin ver",
@@ -148,7 +148,14 @@
       "title": "Konteyner Günlükleri",
       "download": "İndir",
       "allLevels": "Tüm Seviyeler",
-      "downloadError": "Günlükler indirilemiyor"
+      "downloadError": "Günlükler indirilemiyor",
+      "tailCount": "Tail {count}",
+      "tailAll": "Tail All",
+      "statusPaused": "Paused",
+      "statusLive": "Live",
+      "statusOffline": "Offline",
+      "stdout": "stdout",
+      "stderr": "stderr"
     },
     "groupedViews": {
       "statusQueued": "Sıraya alındı",
@@ -192,7 +199,13 @@
       "blockedTagWithCriticals": "Engellendi: {tag} ({count} kritik CVE)",
       "blockedTagWithCriticalsCVEs": "Engellendi: {tag} ({count} kritik CVE)",
       "manualUpdateOnly": "Yalnızca manuel güncelleme",
-      "manualUpdateOnlyWithMessage": "Yalnızca manuel güncelleme — {message}"
+      "manualUpdateOnlyWithMessage": "Yalnızca manuel güncelleme — {message}",
+      "updateBtnTooltipDefault": "Update",
+      "cancelButton": "Cancel",
+      "blockedButton": "Blocked",
+      "updateButton": "Update",
+      "moreButton": "More",
+      "cancelUpdateTooltip": "Cancel update"
     },
     "groupHeader": {
       "ungrouped": "Gruplandırılmamış",
@@ -285,6 +298,7 @@
     },
     "updateDialog": {
       "title": "Kapsayıcıyı Güncelle",
+      "thisContainer": "this container",
       "confirmTagChange": "{name} güncellensin mi? Bu, resim etiketini :{currentTag} yerine :{newTag}{kind} olarak değiştirecektir.",
       "confirmDigestChange": "{name} güncellensin mi? :{currentTag} dosyasının daha yeni bir yapısı mevcut (özet değişikliği).",
       "confirmLatest": "{name} şimdi güncellensin mi? Bu, en son bulunan imajı uygulayacaktır.",
@@ -323,6 +337,7 @@
       "triggerFiltered": "Tetik filtrelendi",
       "agentMismatch": "Temsilci uyumsuzluğu",
       "noTrigger": "Tetikleyici yok",
+      "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Asansörler:"
     },
     "maturityBadge": {

@@ -3,7 +3,7 @@
     "backTooltip": "Wracając do kontenerów",
     "title": "Dzienniki kontenerów",
     "loading": "Ładowanie kontenera…",
-    "notFound": "Nie znaleziono kontenera „{name}”.",
+    "notFound": "Nie znaleziono kontenera „{name}”",
     "loadFailed": "Nie udało się załadować informacji o kontenerze"
   }
 }

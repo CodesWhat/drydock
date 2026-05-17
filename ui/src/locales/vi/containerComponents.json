@@ -148,7 +148,14 @@
       "title": "Nhật ký Container",
       "download": "Tải xuống",
       "allLevels": "Tất cả mức độ",
-      "downloadError": "Không thể tải xuống nhật ký"
+      "downloadError": "Không thể tải xuống nhật ký",
+      "tailCount": "Tail {count}",
+      "tailAll": "Tail All",
+      "statusPaused": "Paused",
+      "statusLive": "Live",
+      "statusOffline": "Offline",
+      "stdout": "stdout",
+      "stderr": "stderr"
     },
     "groupedViews": {
       "statusQueued": "Đang chờ",
@@ -192,7 +199,13 @@
       "blockedTagWithCriticals": "Bị chặn: {tag} ({count} CVE nghiêm trọng)",
       "blockedTagWithCriticalsCVEs": "Bị chặn: {tag} ({count} CVE nghiêm trọng)",
       "manualUpdateOnly": "Chỉ cập nhật thủ công",
-      "manualUpdateOnlyWithMessage": "Chỉ cập nhật thủ công — {message}"
+      "manualUpdateOnlyWithMessage": "Chỉ cập nhật thủ công — {message}",
+      "updateBtnTooltipDefault": "Update",
+      "cancelButton": "Cancel",
+      "blockedButton": "Blocked",
+      "updateButton": "Update",
+      "moreButton": "More",
+      "cancelUpdateTooltip": "Cancel update"
     },
     "groupHeader": {
       "ungrouped": "Không phân nhóm",
@@ -285,6 +298,7 @@
     },
     "updateDialog": {
       "title": "Cập nhật Container",
+      "thisContainer": "this container",
       "confirmTagChange": "Cập nhật {name}? Thao tác này sẽ thay đổi tag image từ :{currentTag} thành :{newTag}{kind}.",
       "confirmDigestChange": "Cập nhật {name}? Bản build mới hơn của :{currentTag} có sẵn (digest thay đổi).",
       "confirmLatest": "Cập nhật {name} ngay bây giờ? Thao tác này sẽ áp dụng image mới nhất đã phát hiện.",
@@ -323,6 +337,7 @@
       "triggerFiltered": "Trigger bị lọc",
       "agentMismatch": "Agent không khớp",
       "noTrigger": "Không có trigger",
+      "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Lifts:"
     },
     "maturityBadge": {

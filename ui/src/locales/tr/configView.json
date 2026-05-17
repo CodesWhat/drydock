@@ -122,6 +122,7 @@
     },
     "profile": {
       "loading": "Profil yükleniyor",
+      "unknownUser": "Unknown User",
       "fields": {
         "username": "Kullanıcı adı",
         "email": "E-posta",
@@ -134,6 +135,10 @@
     "logs": {
       "loading": "Günlükler yükleniyor...",
       "emptyMessage": "Mevcut filtreler için günlük girişi bulunamadı.",
+      "status": {
+        "paused": "Paused",
+        "offline": "Offline"
+      },
       "toolbar": {
         "live": "Canlı",
         "allLevels": "Tüm Seviyeler",

@@ -15,7 +15,12 @@
       "filters": "Filtreler",
       "toggleFilters": "Filtreleri değiştir",
       "viewMode": "Görünüm modu",
-      "viewModeLabel": "{label} görünümü"
+      "viewModeLabel": "{label} görünümü",
+      "viewModes": {
+        "table": "Table",
+        "cards": "Cards",
+        "list": "List"
+      }
     },
     "dataListAccordion": {
       "toggleDetails": "{name} ayrıntılarını değiştir",
@@ -28,7 +33,12 @@
     "detailPanel": {
       "openFullPage": "Tam sayfa görünümünü aç",
       "closePanel": "Ayrıntılar panelini kapat",
-      "ariaLabel": "Ayrıntı paneli"
+      "ariaLabel": "Ayrıntı paneli",
+      "size": {
+        "sm": "S",
+        "md": "M",
+        "lg": "L"
+      }
     },
     "emptyState": {
       "clearFilters": "Tüm filtreleri temizle"

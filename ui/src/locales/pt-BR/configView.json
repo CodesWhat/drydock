@@ -122,6 +122,7 @@
     },
     "profile": {
       "loading": "Carregando perfil",
+      "unknownUser": "Unknown User",
       "fields": {
         "username": "Usuário",
         "email": "Email",
@@ -134,6 +135,10 @@
     "logs": {
       "loading": "Carregando logs...",
       "emptyMessage": "Nenhuma entrada de log encontrada para os filtros atuais.",
+      "status": {
+        "paused": "Paused",
+        "offline": "Offline"
+      },
       "toolbar": {
         "live": "Ao vivo",
         "allLevels": "Todos os níveis",

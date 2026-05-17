@@ -2,7 +2,7 @@
   "containerLogs": {
     "backTooltip": "Retour aux conteneurs",
     "title": "Logs du conteneur",
-    "loading": "Chargement du conteneur...",
+    "loading": "Chargement du conteneur…",
     "notFound": "Conteneur \"{name}\" introuvable",
     "loadFailed": "Impossible de charger les informations du conteneur"
   }

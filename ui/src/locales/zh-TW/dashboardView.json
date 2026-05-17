@@ -1,6 +1,6 @@
 {
   "dashboardView": {
-    "loading": "正在載入儀表板...",
+    "loading": "正在載入儀表板……",
     "loadFailed": "無法載入儀表板",
     "dragToReorder": "拖動以重新排序",
     "viewAll": "檢視全部 →",

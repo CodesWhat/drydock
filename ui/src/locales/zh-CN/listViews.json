@@ -71,6 +71,7 @@
   "notificationsView": {
     "loadingRules": "正在加载通知规则...",
     "loadError": "无法加载通知规则",
+    "saveError": "Failed to update notification rule",
     "filterPlaceholder": "按名称、描述或触发器筛选...",
     "clear": "清除",
     "allNotificationTriggers": "所有通知触发器",
@@ -127,6 +128,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "正在加载漏洞数据...",
+    "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "立即扫描",
     "scanning": "扫描中...",
     "scanAllAriaLabel": "扫描所有容器",
@@ -165,6 +167,15 @@
       "high": "高危",
       "medium": "中危",
       "low": "低危"
+    },
+    "countLabel": {
+      "images": "images",
+      "scanned": "scanned"
+    },
+    "delta": {
+      "fixed": "{count} fixed",
+      "new": "{count} new",
+      "both": "{fixed} fixed, {new} new"
     },
     "deltaTooltips": {
       "fixedSingle": "更新可修复 {count} 个漏洞",
@@ -252,6 +263,7 @@
       "unknown": "未知"
     },
     "detail": {
+      "loadError": "Unable to load latest registry details",
       "refreshing": "正在刷新仓库详情...",
       "status": "状态",
       "authentication": "认证",
@@ -301,6 +313,7 @@
     "filterPlaceholder": "按名称筛选...",
     "clear": "清除",
     "emptyFiltered": "没有触发器匹配您的筛选条件",
+    "testContainerName": "Test Container",
     "columns": {
       "trigger": "触发器",
       "type": "类型",
@@ -322,6 +335,7 @@
       "defaultError": "触发器测试失败"
     },
     "detail": {
+      "loadError": "Unable to load latest trigger details",
       "status": "状态",
       "refreshing": "正在刷新触发器详情...",
       "noConfig": "无配置属性"
@@ -333,6 +347,7 @@
   "watchersView": {
     "loadingWatchers": "正在加载监视器...",
     "loadError": "无法加载监视器",
+    "soon": "soon",
     "filterPlaceholder": "按名称筛选...",
     "clear": "清除",
     "emptyFiltered": "没有监视器匹配您的筛选条件",
@@ -358,6 +373,7 @@
       "maint": "维护"
     },
     "detail": {
+      "loadError": "Unable to load latest watcher details",
       "cron": "Cron",
       "lastRun": "上次运行",
       "containersWatched": "监视的容器",

@@ -63,7 +63,8 @@
         "lastFetched": "Última busca: {time}",
         "entries": "{count} entradas",
         "statusLive": "Ao vivo",
-        "statusOffline": "Offline"
+        "statusOffline": "Offline",
+        "loadError": "Failed to load agent logs"
       },
       "fields": {
         "cpus": "CPUs",

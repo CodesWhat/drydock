@@ -122,6 +122,7 @@
     },
     "profile": {
       "loading": "Đang tải hồ sơ",
+      "unknownUser": "Unknown User",
       "fields": {
         "username": "Tên đăng nhập",
         "email": "Email",
@@ -134,6 +135,10 @@
     "logs": {
       "loading": "Đang tải nhật ký...",
       "emptyMessage": "Không tìm thấy mục nhật ký nào với bộ lọc hiện tại.",
+      "status": {
+        "paused": "Paused",
+        "offline": "Offline"
+      },
       "toolbar": {
         "live": "Trực tiếp",
         "allLevels": "Tất cả mức độ",

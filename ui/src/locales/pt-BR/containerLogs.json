@@ -2,7 +2,7 @@
   "containerLogs": {
     "backTooltip": "Voltar para contêineres",
     "title": "Logs do contêiner",
-    "loading": "Carregando contêiner...",
+    "loading": "Carregando contêiner…",
     "notFound": "Contêiner \"{name}\" não encontrado",
     "loadFailed": "Falha ao carregar informações do contêiner"
   }

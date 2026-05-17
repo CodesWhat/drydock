@@ -2,7 +2,7 @@
   "containerLogs": {
     "backTooltip": "Zurück zu Containern",
     "title": "Container-Logs",
-    "loading": "Container wird geladen...",
+    "loading": "Container wird geladen…",
     "notFound": "Container \"{name}\" nicht gefunden",
     "loadFailed": "Containerinformationen konnten nicht geladen werden"
   }

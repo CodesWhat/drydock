@@ -148,7 +148,14 @@
       "title": "سجلات الحاوية",
       "download": "تنزيل",
       "allLevels": "جميع المستويات",
-      "downloadError": "تعذّر تنزيل السجلات"
+      "downloadError": "تعذّر تنزيل السجلات",
+      "tailCount": "Tail {count}",
+      "tailAll": "Tail All",
+      "statusPaused": "Paused",
+      "statusLive": "Live",
+      "statusOffline": "Offline",
+      "stdout": "stdout",
+      "stderr": "stderr"
     },
     "groupedViews": {
       "statusQueued": "في قائمة الانتظار",
@@ -192,7 +199,13 @@
       "blockedTagWithCriticals": "محظور: {tag} ({count} ثغرة حرجة CVE)",
       "blockedTagWithCriticalsCVEs": "محظور: {tag} ({count} ثغرات حرجة CVE)",
       "manualUpdateOnly": "التحديث اليدوي فقط",
-      "manualUpdateOnlyWithMessage": "التحديث اليدوي فقط — {message}"
+      "manualUpdateOnlyWithMessage": "التحديث اليدوي فقط — {message}",
+      "updateBtnTooltipDefault": "Update",
+      "cancelButton": "Cancel",
+      "blockedButton": "Blocked",
+      "updateButton": "Update",
+      "moreButton": "More",
+      "cancelUpdateTooltip": "Cancel update"
     },
     "groupHeader": {
       "ungrouped": "غير مجمّع",
@@ -285,6 +298,7 @@
     },
     "updateDialog": {
       "title": "تحديث الحاوية",
+      "thisContainer": "this container",
       "confirmTagChange": "تحديث {name}؟ سيغيّر ذلك تسمية الصورة من :{currentTag} إلى :{newTag}{kind}.",
       "confirmDigestChange": "تحديث {name}؟ يتوفر إصدار بناء أحدث من :{currentTag} (تغيير الملخص).",
       "confirmLatest": "تحديث {name} الآن؟ سيُطبَّق آخر صورة مكتشفة.",
@@ -323,6 +337,7 @@
       "triggerFiltered": "مُصفَّى بالمشغّل",
       "agentMismatch": "عدم تطابق الوكيل",
       "noTrigger": "لا يوجد مشغّل",
+      "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "يرفع القيد:"
     },
     "maturityBadge": {

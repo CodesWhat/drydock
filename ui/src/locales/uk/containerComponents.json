@@ -148,7 +148,14 @@
       "title": "Журнали контейнера",
       "download": "Завантажити",
       "allLevels": "Всі рівні",
-      "downloadError": "Не вдалося завантажити журнали"
+      "downloadError": "Не вдалося завантажити журнали",
+      "tailCount": "Tail {count}",
+      "tailAll": "Tail All",
+      "statusPaused": "Paused",
+      "statusLive": "Live",
+      "statusOffline": "Offline",
+      "stdout": "stdout",
+      "stderr": "stderr"
     },
     "groupedViews": {
       "statusQueued": "В черзі",
@@ -192,7 +199,13 @@
       "blockedTagWithCriticals": "Заблоковано: {tag} ({count} критична CVE)",
       "blockedTagWithCriticalsCVEs": "Заблоковано: {tag} ({count} критичних CVE)",
       "manualUpdateOnly": "Лише ручне оновлення",
-      "manualUpdateOnlyWithMessage": "Лише ручне оновлення — {message}"
+      "manualUpdateOnlyWithMessage": "Лише ручне оновлення — {message}",
+      "updateBtnTooltipDefault": "Update",
+      "cancelButton": "Cancel",
+      "blockedButton": "Blocked",
+      "updateButton": "Update",
+      "moreButton": "More",
+      "cancelUpdateTooltip": "Cancel update"
     },
     "groupHeader": {
       "ungrouped": "Без групи",
@@ -285,6 +298,7 @@
     },
     "updateDialog": {
       "title": "Оновити контейнер",
+      "thisContainer": "this container",
       "confirmTagChange": "Оновити {name}? Тег образу зміниться з :{currentTag} на :{newTag}{kind}.",
       "confirmDigestChange": "Оновити {name}? Доступна новіша збірка :{currentTag} (зміна дайджесту).",
       "confirmLatest": "Оновити {name} зараз? Буде застосовано останній виявлений образ.",
@@ -323,6 +337,7 @@
       "triggerFiltered": "Тригер відфільтровано",
       "agentMismatch": "Невідповідність агента",
       "noTrigger": "Немає тригера",
+      "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Знімає обмеження:"
     },
     "maturityBadge": {

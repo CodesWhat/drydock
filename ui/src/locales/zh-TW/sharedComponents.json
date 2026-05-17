@@ -15,7 +15,12 @@
       "filters": "篩選",
       "toggleFilters": "切換篩選",
       "viewMode": "檢視模式",
-      "viewModeLabel": "{label} 檢視"
+      "viewModeLabel": "{label} 檢視",
+      "viewModes": {
+        "table": "Table",
+        "cards": "Cards",
+        "list": "List"
+      }
     },
     "dataListAccordion": {
       "toggleDetails": "切換 {name} 詳情",
@@ -28,20 +33,25 @@
     "detailPanel": {
       "openFullPage": "開啟全頁檢視",
       "closePanel": "關閉詳情面板",
-      "ariaLabel": "詳情面板"
+      "ariaLabel": "詳情面板",
+      "size": {
+        "sm": "S",
+        "md": "M",
+        "lg": "L"
+      }
     },
     "emptyState": {
       "clearFilters": "清除所有篩選"
     },
     "logViewer": {
       "emptyMessage": "未找到日誌條目。",
-      "loadingMessage": "正在載入日誌..."
+      "loadingMessage": "正在載入日誌……"
     },
     "scanProgressBanner": {
-      "scanning": "正在掃描 {done}/{total} 個容器..."
+      "scanning": "正在掃描 {done}/{total} 個容器……"
     },
     "scanProgressText": {
-      "scanning": "正在掃描 {done}/{total}..."
+      "scanning": "正在掃描 {done}/{total}……"
     },
     "securityEmptyState": {
       "noDataTitle": "暫無漏洞資料",

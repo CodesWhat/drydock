@@ -71,6 +71,7 @@
   "notificationsView": {
     "loadingRules": "Carregando regras de notificação...",
     "loadError": "Falha ao carregar regras de notificação",
+    "saveError": "Failed to update notification rule",
     "filterPlaceholder": "Filtrar por nome, descrição ou trigger...",
     "clear": "Limpar",
     "allNotificationTriggers": "Todos os triggers de notificação",
@@ -127,6 +128,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Carregando dados de vulnerabilidade...",
+    "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "Escanear agora",
     "scanning": "Escaneando...",
     "scanAllAriaLabel": "Escanear todos os contêineres",
@@ -165,6 +167,15 @@
       "high": "Alta",
       "medium": "Média",
       "low": "Baixa"
+    },
+    "countLabel": {
+      "images": "images",
+      "scanned": "scanned"
+    },
+    "delta": {
+      "fixed": "{count} fixed",
+      "new": "{count} new",
+      "both": "{fixed} fixed, {new} new"
     },
     "deltaTooltips": {
       "fixedSingle": "A atualização corrige {count} vulnerabilidade",
@@ -246,16 +257,17 @@
       "auth": "Auth",
       "status": "Status"
     },
-    "detail": {
-      "refreshing": "Atualizando detalhes do registry...",
-      "status": "Status",
-      "authentication": "Autenticação",
-      "url": "URL"
-    },
     "status": {
       "connected": "Conectado",
       "error": "Erro",
       "unknown": "Desconhecido"
+    },
+    "detail": {
+      "loadError": "Unable to load latest registry details",
+      "refreshing": "Atualizando detalhes do registry...",
+      "status": "Status",
+      "authentication": "Autenticação",
+      "url": "URL"
     }
   },
   "serversView": {
@@ -266,6 +278,10 @@
     "emptyFiltered": "Nenhum host corresponde aos filtros",
     "justNow": "Agora",
     "never": "Nunca",
+    "status": {
+      "connected": "Conectado",
+      "disconnected": "Desconectado"
+    },
     "columns": {
       "host": "Host",
       "address": "Endereço",
@@ -289,10 +305,6 @@
       "images": "Imagens",
       "lastSeen": "Última atividade",
       "refresh": "Atualizar"
-    },
-    "status": {
-      "connected": "Conectado",
-      "disconnected": "Desconectado"
     }
   },
   "triggersView": {
@@ -301,6 +313,7 @@
     "filterPlaceholder": "Filtrar por nome...",
     "clear": "Limpar",
     "emptyFiltered": "Nenhum trigger corresponde aos filtros",
+    "testContainerName": "Test Container",
     "columns": {
       "trigger": "Trigger",
       "type": "Tipo",
@@ -322,6 +335,7 @@
       "defaultError": "Teste do trigger falhou"
     },
     "detail": {
+      "loadError": "Unable to load latest trigger details",
       "status": "Status",
       "refreshing": "Atualizando detalhes do trigger...",
       "noConfig": "Nenhuma propriedade de configuração"
@@ -333,6 +347,7 @@
   "watchersView": {
     "loadingWatchers": "Carregando watchers...",
     "loadError": "Falha ao carregar watchers",
+    "soon": "soon",
     "filterPlaceholder": "Filtrar por nome...",
     "clear": "Limpar",
     "emptyFiltered": "Nenhum watcher corresponde aos filtros",
@@ -355,9 +370,10 @@
       "containersWatched": "{count} contêineres monitorados"
     },
     "badge": {
-      "maint": "Manut."
+      "maint": "Manut"
     },
     "detail": {
+      "loadError": "Unable to load latest watcher details",
       "cron": "Cron",
       "lastRun": "Última execução",
       "containersWatched": "Contêineres monitorados",

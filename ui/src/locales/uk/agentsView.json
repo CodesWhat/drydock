@@ -63,7 +63,8 @@
         "lastFetched": "Останнє отримання: {time}",
         "entries": "{count} записів",
         "statusLive": "В ефірі",
-        "statusOffline": "Офлайн"
+        "statusOffline": "Офлайн",
+        "loadError": "Failed to load agent logs"
       },
       "fields": {
         "cpus": "CPU",

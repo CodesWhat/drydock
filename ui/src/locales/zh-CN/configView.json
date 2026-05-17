@@ -122,6 +122,7 @@
     },
     "profile": {
       "loading": "正在加载个人资料",
+      "unknownUser": "Unknown User",
       "fields": {
         "username": "用户名",
         "email": "邮箱",
@@ -134,6 +135,10 @@
     "logs": {
       "loading": "正在加载日志...",
       "emptyMessage": "当前筛选条件下没有日志条目。",
+      "status": {
+        "paused": "Paused",
+        "offline": "Offline"
+      },
       "toolbar": {
         "live": "实时",
         "allLevels": "所有级别",

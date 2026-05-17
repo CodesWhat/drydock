@@ -63,7 +63,8 @@
         "lastFetched": "마지막 조회: {time}",
         "entries": "{count}개 항목",
         "statusLive": "실시간",
-        "statusOffline": "오프라인"
+        "statusOffline": "오프라인",
+        "loadError": "Failed to load agent logs"
       },
       "fields": {
         "cpus": "CPU",

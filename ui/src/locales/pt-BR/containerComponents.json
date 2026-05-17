@@ -148,18 +148,25 @@
       "title": "Logs do contêiner",
       "download": "Baixar",
       "allLevels": "Todos os níveis",
-      "downloadError": "Não foi possível baixar os logs"
+      "downloadError": "Não foi possível baixar os logs",
+      "tailCount": "Tail {count}",
+      "tailAll": "Tail All",
+      "statusPaused": "Paused",
+      "statusLive": "Live",
+      "statusOffline": "Offline",
+      "stdout": "stdout",
+      "stderr": "stderr"
     },
     "groupedViews": {
       "statusQueued": "Na fila",
       "statusScanning": "Escaneando",
       "statusUpdating": "Atualizando",
-      "statusPulling": "Pull em andamento...",
-      "statusScanningPhase": "Escaneando...",
-      "statusGeneratingSbom": "Gerando SBOM...",
-      "statusHealthChecking": "Healthcheck...",
-      "statusFinalizing": "Finalizando...",
-      "statusRollingBack": "Fazendo rollback...",
+      "statusPulling": "Pull em andamento…",
+      "statusScanningPhase": "Escaneando…",
+      "statusGeneratingSbom": "Gerando SBOM…",
+      "statusHealthChecking": "Healthcheck…",
+      "statusFinalizing": "Finalizando…",
+      "statusRollingBack": "Fazendo rollback…",
       "lastUpdateFailed": "Última atualização falhou: {reason}",
       "stopAction": "Parar",
       "startAction": "Iniciar",
@@ -192,7 +199,13 @@
       "blockedTagWithCriticals": "Bloqueado: {tag} ({count} CVE crítico)",
       "blockedTagWithCriticalsCVEs": "Bloqueado: {tag} ({count} CVEs críticos)",
       "manualUpdateOnly": "Somente atualização manual",
-      "manualUpdateOnlyWithMessage": "Somente atualização manual — {message}"
+      "manualUpdateOnlyWithMessage": "Somente atualização manual — {message}",
+      "updateBtnTooltipDefault": "Update",
+      "cancelButton": "Cancel",
+      "blockedButton": "Blocked",
+      "updateButton": "Update",
+      "moreButton": "More",
+      "cancelUpdateTooltip": "Cancel update"
     },
     "groupHeader": {
       "ungrouped": "Sem grupo",
@@ -285,6 +298,7 @@
     },
     "updateDialog": {
       "title": "Atualizar contêiner",
+      "thisContainer": "this container",
       "confirmTagChange": "Atualizar {name}? Isso mudará a tag da imagem de :{currentTag} para :{newTag}{kind}.",
       "confirmDigestChange": "Atualizar {name}? Uma build mais recente de :{currentTag} está disponível (mudança de digest).",
       "confirmLatest": "Atualizar {name} agora? A imagem mais recente descoberta será aplicada.",
@@ -323,6 +337,7 @@
       "triggerFiltered": "Trigger filtrado",
       "agentMismatch": "Agent diferente",
       "noTrigger": "Sem trigger",
+      "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Libera:"
     },
     "maturityBadge": {

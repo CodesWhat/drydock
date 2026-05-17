@@ -148,18 +148,25 @@
       "title": "Registros del contenedor",
       "download": "Descargar",
       "allLevels": "Todos los niveles",
-      "downloadError": "No se pudieron descargar los registros"
+      "downloadError": "No se pudieron descargar los registros",
+      "tailCount": "Tail {count}",
+      "tailAll": "Tail All",
+      "statusPaused": "Paused",
+      "statusLive": "Live",
+      "statusOffline": "Offline",
+      "stdout": "stdout",
+      "stderr": "stderr"
     },
     "groupedViews": {
       "statusQueued": "En cola",
       "statusScanning": "Escaneando",
       "statusUpdating": "Actualizando",
-      "statusPulling": "Descargando...",
-      "statusScanningPhase": "Escaneando...",
-      "statusGeneratingSbom": "Generando SBOM...",
-      "statusHealthChecking": "Comprobando salud...",
-      "statusFinalizing": "Finalizando...",
-      "statusRollingBack": "Haciendo rollback...",
+      "statusPulling": "Descargando…",
+      "statusScanningPhase": "Escaneando…",
+      "statusGeneratingSbom": "Generando SBOM…",
+      "statusHealthChecking": "Comprobando salud…",
+      "statusFinalizing": "Finalizando…",
+      "statusRollingBack": "Haciendo rollback…",
       "lastUpdateFailed": "Última actualización fallida: {reason}",
       "stopAction": "Detener",
       "startAction": "Iniciar",
@@ -192,7 +199,13 @@
       "blockedTagWithCriticals": "Bloqueado: {tag} ({count} CVE crítico)",
       "blockedTagWithCriticalsCVEs": "Bloqueado: {tag} ({count} CVEs críticos)",
       "manualUpdateOnly": "Solo actualización manual",
-      "manualUpdateOnlyWithMessage": "Solo actualización manual — {message}"
+      "manualUpdateOnlyWithMessage": "Solo actualización manual — {message}",
+      "updateBtnTooltipDefault": "Update",
+      "cancelButton": "Cancel",
+      "blockedButton": "Blocked",
+      "updateButton": "Update",
+      "moreButton": "More",
+      "cancelUpdateTooltip": "Cancel update"
     },
     "groupHeader": {
       "ungrouped": "Sin agrupar",
@@ -285,6 +298,7 @@
     },
     "updateDialog": {
       "title": "Actualizar contenedor",
+      "thisContainer": "this container",
       "confirmTagChange": "¿Actualizar {name}? Esto cambiará el tag de imagen de :{currentTag} a :{newTag}{kind}.",
       "confirmDigestChange": "¿Actualizar {name}? Hay una build más reciente de :{currentTag} disponible (cambio de digest).",
       "confirmLatest": "¿Actualizar {name} ahora? Se aplicará la imagen más reciente detectada.",
@@ -323,6 +337,7 @@
       "triggerFiltered": "Trigger filtrado",
       "agentMismatch": "Agente distinto",
       "noTrigger": "Sin trigger",
+      "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "Levanta:"
     },
     "maturityBadge": {

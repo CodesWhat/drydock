@@ -15,7 +15,12 @@
       "filters": "フィルター",
       "toggleFilters": "フィルターの切替",
       "viewMode": "表示モード",
-      "viewModeLabel": "{label} 表示"
+      "viewModeLabel": "{label} 表示",
+      "viewModes": {
+        "table": "Table",
+        "cards": "Cards",
+        "list": "List"
+      }
     },
     "dataListAccordion": {
       "toggleDetails": "{name} の詳細を切替",
@@ -28,7 +33,12 @@
     "detailPanel": {
       "openFullPage": "フルページ表示を開く",
       "closePanel": "詳細パネルを閉じる",
-      "ariaLabel": "詳細パネル"
+      "ariaLabel": "詳細パネル",
+      "size": {
+        "sm": "S",
+        "md": "M",
+        "lg": "L"
+      }
     },
     "emptyState": {
       "clearFilters": "すべてのフィルターをクリア"

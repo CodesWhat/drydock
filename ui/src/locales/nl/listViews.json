@@ -71,6 +71,7 @@
   "notificationsView": {
     "loadingRules": "Meldingsregels laden...",
     "loadError": "Kan meldingsregels niet laden",
+    "saveError": "Failed to update notification rule",
     "filterPlaceholder": "Filter op naam, beschrijving of trigger...",
     "clear": "Wissen",
     "allNotificationTriggers": "Alle meldingen worden geactiveerd",
@@ -127,6 +128,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Kwetsbaarheidsgegevens laden...",
+    "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "Nu scannen",
     "scanning": "Scannen...",
     "scanAllAriaLabel": "Scan alle containers",
@@ -165,6 +167,15 @@
       "high": "Hoog",
       "medium": "Middelmatig",
       "low": "Laag"
+    },
+    "countLabel": {
+      "images": "images",
+      "scanned": "scanned"
+    },
+    "delta": {
+      "fixed": "{count} fixed",
+      "new": "{count} new",
+      "both": "{fixed} fixed, {new} new"
     },
     "deltaTooltips": {
       "fixedSingle": "Update verhelpt {count} kwetsbaarheid",
@@ -252,6 +263,7 @@
       "unknown": "Onbekend"
     },
     "detail": {
+      "loadError": "Unable to load latest registry details",
       "refreshing": "Registergegevens vernieuwen...",
       "status": "Status",
       "authentication": "Authenticatie",
@@ -301,6 +313,7 @@
     "filterPlaceholder": "Filter op naam...",
     "clear": "Wissen",
     "emptyFiltered": "Er zijn geen triggers die overeenkomen met uw filters",
+    "testContainerName": "Test Container",
     "columns": {
       "trigger": "Trigger",
       "type": "Typ",
@@ -322,6 +335,7 @@
       "defaultError": "Triggertest mislukt"
     },
     "detail": {
+      "loadError": "Unable to load latest trigger details",
       "status": "Status",
       "refreshing": "Triggerdetails vernieuwen...",
       "noConfig": "Geen configuratie-eigenschappen"
@@ -333,6 +347,7 @@
   "watchersView": {
     "loadingWatchers": "Kijkers laden...",
     "loadError": "Kan kijkers niet laden",
+    "soon": "soon",
     "filterPlaceholder": "Filter op naam...",
     "clear": "Wissen",
     "emptyFiltered": "Er zijn geen kijkers die overeenkomen met uw filters",
@@ -358,6 +373,7 @@
       "maint": "Onderhoud"
     },
     "detail": {
+      "loadError": "Unable to load latest watcher details",
       "cron": "Cron",
       "lastRun": "Laatste run",
       "containersWatched": "Containers in de gaten gehouden",

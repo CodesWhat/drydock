@@ -63,7 +63,8 @@
         "lastFetched": "最終取得：{time}",
         "entries": "{count} 件",
         "statusLive": "ライブ",
-        "statusOffline": "オフライン"
+        "statusOffline": "オフライン",
+        "loadError": "Failed to load agent logs"
       },
       "fields": {
         "cpus": "CPU",

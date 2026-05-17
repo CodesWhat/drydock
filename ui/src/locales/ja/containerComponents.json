@@ -148,7 +148,14 @@
       "title": "コンテナログ",
       "download": "ダウンロード",
       "allLevels": "全レベル",
-      "downloadError": "ログをダウンロードできません"
+      "downloadError": "ログをダウンロードできません",
+      "tailCount": "Tail {count}",
+      "tailAll": "Tail All",
+      "statusPaused": "Paused",
+      "statusLive": "Live",
+      "statusOffline": "Offline",
+      "stdout": "stdout",
+      "stderr": "stderr"
     },
     "groupedViews": {
       "statusQueued": "キュー済み",
@@ -192,7 +199,13 @@
       "blockedTagWithCriticals": "ブロック済み：{tag}（致命的 CVE {count} 件）",
       "blockedTagWithCriticalsCVEs": "ブロック済み：{tag}（致命的 CVE {count} 件）",
       "manualUpdateOnly": "手動更新のみ",
-      "manualUpdateOnlyWithMessage": "手動更新のみ — {message}"
+      "manualUpdateOnlyWithMessage": "手動更新のみ — {message}",
+      "updateBtnTooltipDefault": "Update",
+      "cancelButton": "Cancel",
+      "blockedButton": "Blocked",
+      "updateButton": "Update",
+      "moreButton": "More",
+      "cancelUpdateTooltip": "Cancel update"
     },
     "groupHeader": {
       "ungrouped": "グループなし",
@@ -285,6 +298,7 @@
     },
     "updateDialog": {
       "title": "コンテナを更新",
+      "thisContainer": "this container",
       "confirmTagChange": "{name} を更新しますか？イメージタグが :{currentTag} から :{newTag}{kind} に変更されます。",
       "confirmDigestChange": "{name} を更新しますか？:{currentTag} の新しいビルドが利用可能です（ダイジェスト変更）。",
       "confirmLatest": "{name} を今すぐ更新しますか？最新のイメージが適用されます。",
@@ -323,6 +337,7 @@
       "triggerFiltered": "トリガーフィルター",
       "agentMismatch": "エージェント不一致",
       "noTrigger": "トリガーなし",
+      "selfUpdateUnavailable": "Self-update unavailable",
       "liftsLabel": "解除条件："
     },
     "maturityBadge": {

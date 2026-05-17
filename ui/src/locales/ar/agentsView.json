@@ -63,7 +63,8 @@
         "lastFetched": "آخر جلب: {time}",
         "entries": "{count} إدخال",
         "statusLive": "مباشر",
-        "statusOffline": "غير متصل"
+        "statusOffline": "غير متصل",
+        "loadError": "Failed to load agent logs"
       },
       "fields": {
         "cpus": "المعالجات",

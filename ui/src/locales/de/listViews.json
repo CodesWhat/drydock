@@ -71,33 +71,11 @@
   "notificationsView": {
     "loadingRules": "Benachrichtigungsregeln werden geladen...",
     "loadError": "Benachrichtigungsregeln konnten nicht geladen werden",
+    "saveError": "Failed to update notification rule",
     "filterPlaceholder": "Nach Name, Beschreibung oder Trigger filtern...",
     "clear": "Löschen",
     "allNotificationTriggers": "Alle Benachrichtigungstrigger",
     "noTriggers": "Keine Trigger",
-    "columns": {
-      "on": "Bei",
-      "rule": "Regel",
-      "triggers": "Trigger"
-    },
-    "toggleAriaLabel": "Benachrichtigungsregel umschalten",
-    "emptyFiltered": "Keine Benachrichtigungsregeln passen zu deinen Filtern",
-    "detail": {
-      "ruleStatusLabel": "Regelstatus",
-      "ruleStatusAriaLabel": "Regelstatus",
-      "enabledText": "Aktiviert: Benachrichtigungen können für dieses Ereignis ausgelöst werden.",
-      "disabledText": "Deaktiviert: Benachrichtigungen werden für dieses Ereignis unterdrückt.",
-      "assignedTriggersLabel": "Zugewiesene Trigger",
-      "noTriggersConfigured": "Keine Trigger konfiguriert. Füge Trigger auf der",
-      "triggersPageLink": "Trigger-Seite",
-      "helpTextImplicitAll": "Leer lassen, um dieses Ereignis an alle Benachrichtigungstrigger zu senden. Jede Trigger-Auswahl macht diese Regel zu einer Allow-List.",
-      "helpTextExplicit": "Nur ausgewählte Trigger erhalten dieses Ereignis. Leer lassen, um dieses Ereignis für alle Trigger zu unterdrücken.",
-      "saving": "Speichert...",
-      "saveChanges": "Änderungen speichern",
-      "reset": "Zurücksetzen",
-      "enabled": "aktiviert",
-      "disabled": "deaktiviert"
-    },
     "rules": {
       "update-available": {
         "name": "Update verfügbar",
@@ -123,10 +101,34 @@
         "name": "Agent verbunden",
         "description": "Wenn ein Remote-Agent nach einem Verbindungsverlust wieder verbunden wird"
       }
+    },
+    "columns": {
+      "on": "Bei",
+      "rule": "Regel",
+      "triggers": "Trigger"
+    },
+    "toggleAriaLabel": "Benachrichtigungsregel umschalten",
+    "emptyFiltered": "Keine Benachrichtigungsregeln passen zu deinen Filtern",
+    "detail": {
+      "ruleStatusLabel": "Regelstatus",
+      "ruleStatusAriaLabel": "Regelstatus",
+      "enabledText": "Aktiviert: Benachrichtigungen können für dieses Ereignis ausgelöst werden.",
+      "disabledText": "Deaktiviert: Benachrichtigungen werden für dieses Ereignis unterdrückt.",
+      "assignedTriggersLabel": "Zugewiesene Trigger",
+      "noTriggersConfigured": "Keine Trigger konfiguriert. Füge Trigger auf der",
+      "triggersPageLink": "Trigger-Seite",
+      "helpTextImplicitAll": "Leer lassen, um dieses Ereignis an alle Benachrichtigungstrigger zu senden. Jede Trigger-Auswahl macht diese Regel zu einer Allow-List.",
+      "helpTextExplicit": "Nur ausgewählte Trigger erhalten dieses Ereignis. Leer lassen, um dieses Ereignis für alle Trigger zu unterdrücken.",
+      "saving": "Speichert...",
+      "saveChanges": "Änderungen speichern",
+      "reset": "Zurücksetzen",
+      "enabled": "aktiviert",
+      "disabled": "deaktiviert"
     }
   },
   "securityView": {
     "loadingVulnerabilityData": "Schwachstellendaten werden geladen...",
+    "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "Jetzt scannen",
     "scanning": "Scan läuft...",
     "scanAllAriaLabel": "Alle Container scannen",
@@ -165,6 +167,15 @@
       "high": "Hoch",
       "medium": "Mittel",
       "low": "Niedrig"
+    },
+    "countLabel": {
+      "images": "images",
+      "scanned": "scanned"
+    },
+    "delta": {
+      "fixed": "{count} fixed",
+      "new": "{count} new",
+      "both": "{fixed} fixed, {new} new"
     },
     "deltaTooltips": {
       "fixedSingle": "Update behebt {count} Schwachstelle",
@@ -252,6 +263,7 @@
       "unknown": "Unbekannt"
     },
     "detail": {
+      "loadError": "Unable to load latest registry details",
       "refreshing": "Registry-Details werden aktualisiert...",
       "status": "Status",
       "authentication": "Authentifizierung",
@@ -266,6 +278,10 @@
     "emptyFiltered": "Keine Hosts passen zu deinen Filtern",
     "justNow": "Gerade eben",
     "never": "Nie",
+    "status": {
+      "connected": "Verbunden",
+      "disconnected": "Getrennt"
+    },
     "columns": {
       "host": "Host",
       "address": "Adresse",
@@ -289,10 +305,6 @@
       "images": "Images",
       "lastSeen": "Zuletzt gesehen",
       "refresh": "Aktualisieren"
-    },
-    "status": {
-      "connected": "Verbunden",
-      "disconnected": "Getrennt"
     }
   },
   "triggersView": {
@@ -301,6 +313,7 @@
     "filterPlaceholder": "Nach Name filtern...",
     "clear": "Löschen",
     "emptyFiltered": "Keine Trigger passen zu deinen Filtern",
+    "testContainerName": "Test Container",
     "columns": {
       "trigger": "Trigger",
       "type": "Typ",
@@ -322,6 +335,7 @@
       "defaultError": "Trigger-Test fehlgeschlagen"
     },
     "detail": {
+      "loadError": "Unable to load latest trigger details",
       "status": "Status",
       "refreshing": "Trigger-Details werden aktualisiert...",
       "noConfig": "Keine Konfigurationseigenschaften"
@@ -333,6 +347,7 @@
   "watchersView": {
     "loadingWatchers": "Watcher werden geladen...",
     "loadError": "Watcher konnten nicht geladen werden",
+    "soon": "soon",
     "filterPlaceholder": "Nach Name filtern...",
     "clear": "Löschen",
     "emptyFiltered": "Keine Watcher passen zu deinen Filtern",
@@ -355,9 +370,10 @@
       "containersWatched": "{count} Container beobachtet"
     },
     "badge": {
-      "maint": "Wart."
+      "maint": "Wart"
     },
     "detail": {
+      "loadError": "Unable to load latest watcher details",
       "cron": "Cron",
       "lastRun": "Letzter Lauf",
       "containersWatched": "Beobachtete Container",

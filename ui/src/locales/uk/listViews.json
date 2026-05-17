@@ -71,6 +71,7 @@
   "notificationsView": {
     "loadingRules": "Завантаження правил сповіщень...",
     "loadError": "Не вдалося завантажити правила сповіщень",
+    "saveError": "Failed to update notification rule",
     "filterPlaceholder": "Фільтр за назвою, описом або тригером...",
     "clear": "Очистити",
     "allNotificationTriggers": "Всі тригери сповіщень",
@@ -127,6 +128,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Завантаження даних про вразливості...",
+    "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "Сканувати зараз",
     "scanning": "Сканування...",
     "scanAllAriaLabel": "Сканувати всі контейнери",
@@ -165,6 +167,15 @@
       "high": "Високий",
       "medium": "Середній",
       "low": "Низький"
+    },
+    "countLabel": {
+      "images": "images",
+      "scanned": "scanned"
+    },
+    "delta": {
+      "fixed": "{count} fixed",
+      "new": "{count} new",
+      "both": "{fixed} fixed, {new} new"
     },
     "deltaTooltips": {
       "fixedSingle": "Оновлення усуває {count} вразливість",
@@ -252,6 +263,7 @@
       "unknown": "Невідомо"
     },
     "detail": {
+      "loadError": "Unable to load latest registry details",
       "refreshing": "Оновлення даних реєстру...",
       "status": "Статус",
       "authentication": "Автентифікація",
@@ -301,6 +313,7 @@
     "filterPlaceholder": "Фільтр за назвою...",
     "clear": "Очистити",
     "emptyFiltered": "Жоден тригер не відповідає вашим фільтрам",
+    "testContainerName": "Test Container",
     "columns": {
       "trigger": "Тригер",
       "type": "Тип",
@@ -322,6 +335,7 @@
       "defaultError": "Тест тригера не вдався"
     },
     "detail": {
+      "loadError": "Unable to load latest trigger details",
       "status": "Статус",
       "refreshing": "Оновлення даних тригера...",
       "noConfig": "Немає властивостей конфігурації"
@@ -333,6 +347,7 @@
   "watchersView": {
     "loadingWatchers": "Завантаження спостерігачів...",
     "loadError": "Не вдалося завантажити спостерігачів",
+    "soon": "soon",
     "filterPlaceholder": "Фільтр за назвою...",
     "clear": "Очистити",
     "emptyFiltered": "Жоден спостерігач не відповідає вашим фільтрам",
@@ -358,6 +373,7 @@
       "maint": "Обслуговування"
     },
     "detail": {
+      "loadError": "Unable to load latest watcher details",
       "cron": "Cron",
       "lastRun": "Останній запуск",
       "containersWatched": "Контейнери під спостереженням",

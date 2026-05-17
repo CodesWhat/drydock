@@ -71,6 +71,7 @@
   "notificationsView": {
     "loadingRules": "Đang tải quy tắc thông báo...",
     "loadError": "Không thể tải quy tắc thông báo",
+    "saveError": "Failed to update notification rule",
     "filterPlaceholder": "Lọc theo tên, mô tả hoặc trigger...",
     "clear": "Xóa",
     "allNotificationTriggers": "Tất cả trigger thông báo",
@@ -127,6 +128,7 @@
   },
   "securityView": {
     "loadingVulnerabilityData": "Đang tải dữ liệu lỗ hổng...",
+    "runtimeLoadError": "Failed to load security runtime status",
     "scanNow": "Quét ngay",
     "scanning": "Đang quét...",
     "scanAllAriaLabel": "Quét tất cả container",
@@ -165,6 +167,15 @@
       "high": "Cao",
       "medium": "Trung bình",
       "low": "Thấp"
+    },
+    "countLabel": {
+      "images": "images",
+      "scanned": "scanned"
+    },
+    "delta": {
+      "fixed": "{count} fixed",
+      "new": "{count} new",
+      "both": "{fixed} fixed, {new} new"
     },
     "deltaTooltips": {
       "fixedSingle": "Cập nhật vá {count} lỗ hổng",
@@ -252,6 +263,7 @@
       "unknown": "Không xác định"
     },
     "detail": {
+      "loadError": "Unable to load latest registry details",
       "refreshing": "Đang làm mới thông tin registry...",
       "status": "Trạng thái",
       "authentication": "Xác thực",
@@ -301,6 +313,7 @@
     "filterPlaceholder": "Lọc theo tên...",
     "clear": "Xóa",
     "emptyFiltered": "Không có trigger nào khớp với bộ lọc của bạn",
+    "testContainerName": "Test Container",
     "columns": {
       "trigger": "Trigger",
       "type": "Loại",
@@ -322,6 +335,7 @@
       "defaultError": "Kiểm tra trigger thất bại"
     },
     "detail": {
+      "loadError": "Unable to load latest trigger details",
       "status": "Trạng thái",
       "refreshing": "Đang làm mới thông tin trigger...",
       "noConfig": "Không có thuộc tính cấu hình"
@@ -333,6 +347,7 @@
   "watchersView": {
     "loadingWatchers": "Đang tải watcher...",
     "loadError": "Không thể tải watcher",
+    "soon": "soon",
     "filterPlaceholder": "Lọc theo tên...",
     "clear": "Xóa",
     "emptyFiltered": "Không có watcher nào khớp với bộ lọc của bạn",
@@ -358,6 +373,7 @@
       "maint": "Bảo trì"
     },
     "detail": {
+      "loadError": "Unable to load latest watcher details",
       "cron": "Cron",
       "lastRun": "Lần chạy cuối",
       "containersWatched": "Container đang theo dõi",
