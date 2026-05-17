@@ -85,20 +85,26 @@ pre-push:
       priority: 5
       timeout: 2m
 
+    # ── UI typecheck: catches TypeScript errors that vite build misses ──
+    typecheck-ui:
+      run: npm run typecheck --prefix ui
+      priority: 6
+      timeout: 2m
+
     # ── Coverage: sharded app+ui parallel, 100% threshold ────────────
     # Runs tests with coverage. On failure, writes .coverage-gaps.json
     # with exact files + uncovered lines/branches (parsed from lcov.info).
     # Honors DD_COVERAGE_FAIL_FAST=1 for sequential first-failure mode.
     coverage:
       run: ./scripts/pre-push-coverage.sh
-      priority: 6
+      priority: 7
       timeout: 10m
 
     # ── Build: sharded app+ui parallel, no tests ─────────────────────
     # Tests already ran in the coverage step, so this is tsc/vite only.
     build:
       run: ./scripts/pre-push-build.sh
-      priority: 7
+      priority: 8
       timeout: 4m
 
     # ── Docker build (opt-in via DD_LOCAL_DOCKER=1) ───────────────────
@@ -107,7 +113,7 @@ pre-push:
       run: docker build --build-arg DD_VERSION=local -t drydock:local .
       skip:
         - run: '[ -z "$DD_LOCAL_DOCKER" ]'
-      priority: 8
+      priority: 9
       timeout: 10m
       fail_text: "Docker QA build failed — fix Dockerfile before push"
 
@@ -117,5 +123,5 @@ pre-push:
       run: zizmor .github/workflows/
       skip:
         - run: '! command -v zizmor >/dev/null 2>&1'
-      priority: 9
+      priority: 10
       timeout: 30s

@@ -20,6 +20,7 @@
     "lint:fix": "biome check --fix .",
     "lint": "biome check .",
     "test:security": "node ./node_modules/vitest/vitest.mjs run tests/security/*.spec.ts --maxWorkers=1 --fileParallelism=false",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:unit": "vitest run --coverage",
     "test:unit:watch": "vitest",
     "test:mutation": "stryker run",
