@@ -6,6 +6,7 @@ import {
   isSensitiveKey,
   redactContainerRuntimeEnv,
   redactContainersRuntimeEnv,
+  resolveContainerImageFullName,
 } from './shared.js';
 
 describe('api/container/shared', () => {
@@ -229,6 +230,76 @@ describe('api/container/shared', () => {
       expect(typeof (result as { resultChanged?: unknown }).resultChanged).toBe('function');
       const descriptor = Object.getOwnPropertyDescriptor(result, 'resultChanged');
       expect(descriptor?.enumerable).toBe(false);
+    });
+  });
+
+  describe('resolveContainerImageFullName', () => {
+    function makeContainer(
+      registryName: string,
+      registryUrl: string,
+      imageName: string,
+      tagValue: string,
+    ) {
+      return {
+        image: {
+          registry: { name: registryName, url: registryUrl },
+          name: imageName,
+          tag: { value: tagValue },
+        },
+      } as never;
+    }
+
+    test('normalizes a Docker Hub v2 API base URL in the fallback branch (issue #374 regression guard)', () => {
+      const container = makeContainer(
+        'hub',
+        'https://registry-1.docker.io/v2',
+        'dgtlmoon/sockpuppetbrowser',
+        '0.0.3',
+      );
+      const result = resolveContainerImageFullName(container, {});
+      expect(result).toBe('registry-1.docker.io/dgtlmoon/sockpuppetbrowser:0.0.3');
+      expect(result.startsWith('https://')).toBe(false);
+      expect(result).not.toContain('/v2/');
+    });
+
+    test('normalizes a ghcr.io v2 API base URL in the fallback branch', () => {
+      const container = makeContainer(
+        'ghcr',
+        'https://ghcr.io/v2',
+        'codeswhat/drydock',
+        '1.5.0-rc.22',
+      );
+      const result = resolveContainerImageFullName(container, {});
+      expect(result).toBe('ghcr.io/codeswhat/drydock:1.5.0-rc.22');
+    });
+
+    test('leaves a plain registry host unchanged in the fallback branch', () => {
+      const container = makeContainer('hub', 'fallback-registry', 'test/app', '1.2.3');
+      const result = resolveContainerImageFullName(container, {});
+      expect(result).toBe('fallback-registry/test/app:1.2.3');
+    });
+
+    test('uses an @ separator when the tag override is a digest', () => {
+      const container = makeContainer('ghcr', 'https://ghcr.io/v2', 'codeswhat/drydock', '1.0.0');
+      const result = resolveContainerImageFullName(container, {}, 'sha256:abc123');
+      expect(result).toBe('ghcr.io/codeswhat/drydock@sha256:abc123');
+    });
+
+    test("delegates to the registry component's getImageFullName when available", () => {
+      const container = makeContainer(
+        'hub',
+        'https://registry-1.docker.io/v2',
+        'library/nginx',
+        '1.25',
+      );
+      const registryState = {
+        hub: {
+          getImageFullName: (image: { name: string }, tag: string) =>
+            `resolved:${image.name}:${tag}`,
+        },
+      };
+      const result = resolveContainerImageFullName(container, registryState as never);
+      expect(result).toBe('resolved:library/nginx:1.25');
     });
   });
 });
