@@ -3013,7 +3013,7 @@ describe('Basic Authentication', () => {
 
     test('should return false for unsupported bcrypt hash (line 486:7)', async () => {
       // Kill line 486:7 ConditionalExpression — isUnsupportedPlainFallbackHash must gate false
-      // NOTE: Cannot use expect(result).toBe(false) inside done() because if the mutant returns true,
+      // Cannot use expect(result).toBe(false) inside done() because if the mutant returns true,
       // the assertion error is thrown inside .then() → caught by .catch() → done(null, false) called
       // again → test passes anyway. Instead verify the auth outcome via mockRecordAuthLogin.
       // With original (return false): passwordMatches=false → completeVerification('invalid')
