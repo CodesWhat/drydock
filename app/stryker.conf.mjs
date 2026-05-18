@@ -15,7 +15,11 @@ const config = {
   testRunner: 'vitest',
   checkers: ['typescript'],
   tsconfigFile: 'tsconfig.json',
-  coverageAnalysis: 'off',
+  // perTest: each mutant runs only the tests that cover it, instead of
+  // re-running the whole suite per mutant. Stryker's recommended default —
+  // same mutation score, far less wall-clock time. Coverage is collected
+  // via Stryker's own instrumentation, independent of the vitest provider.
+  coverageAnalysis: 'perTest',
   reporters: [
     'clear-text',
     'progress',
