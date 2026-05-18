@@ -124,8 +124,11 @@ jobs:
           - name: ui-shell-and-data
             package: ui
             incremental_file: reports/stryker-incremental-ui-shell-and-data.json
+            # src/boot/i18n.ts is excluded: it uses import.meta.glob(), a Vite
+            # compile-time macro whose argument must stay a literal. Stryker
+            # instrumentation breaks Vite's glob parser and aborts the dry run.
             mutate: >-
-              src/boot/**/*.ts,src/components/**/*.ts,src/composables/**/*.ts,src/i18n/**/*.ts,src/layouts/**/*.ts,src/preferences/**/*.ts,src/services/**/*.ts,src/stores/**/*.ts,src/theme/**/*.ts,src/types/**/*.ts,src/utils/**/*.ts,src/main.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
+              src/boot/**/*.ts,src/components/**/*.ts,src/composables/**/*.ts,src/i18n/**/*.ts,src/layouts/**/*.ts,src/preferences/**/*.ts,src/services/**/*.ts,src/stores/**/*.ts,src/theme/**/*.ts,src/types/**/*.ts,src/utils/**/*.ts,src/main.ts,!src/boot/i18n.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
           - name: ui-views-and-navigation
             package: ui
             incremental_file: reports/stryker-incremental-ui-views-and-navigation.json
@@ -161,8 +164,14 @@ jobs:
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7  # v5.0.4
         with:
           path: ${{ matrix.package }}/${{ matrix.incremental_file }}
-          key: stryker-incremental-${{ matrix.name }}-${{ github.ref_name }}
+          # Append the run number so every run writes a fresh cache entry
+          # (actions/cache never overwrites an existing key). Without this the
+          # incremental baseline froze at the first run and the speedup decayed
+          # as the project drifted from that stale snapshot. restore-keys still
+          # warm-restores the most recent prior baseline by prefix.
+          key: stryker-incremental-${{ matrix.name }}-${{ github.ref_name }}-${{ github.run_number }}
           restore-keys: |
+            stryker-incremental-${{ matrix.name }}-${{ github.ref_name }}-
             stryker-incremental-${{ matrix.name }}-
 
       - name: Run Stryker
