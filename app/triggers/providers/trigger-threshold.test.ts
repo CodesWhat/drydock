@@ -58,35 +58,50 @@ describe('trigger-threshold', () => {
   });
 
   // Kills mutants on hasKnownTagSemver (line 52):
-  // - updateKind === 'tag' && ... (LogicalOperator mutation to ||)
-  // - Boolean(semverDiff) (ConditionalExpression true)
-  // - semverDiff !== 'unknown' (ConditionalExpression true / StringLiteral "")
+  // - updateKind === 'tag' → true (ConditionalExpression)
+  // - updateKind === 'tag' || ... (LogicalOperator mutation to ||)
+  // - Boolean(semverDiff) → true (ConditionalExpression)
+  // - semverDiff !== 'unknown' → true (ConditionalExpression / StringLiteral "")
+  //
+  // Key: we need inputs where hasKnownTagSemver returns false normally but the mutant
+  // makes it return true, causing evaluateSemverThreshold to return a DIFFERENT value
+  // than the fall-through 'return true'.
 
-  test('isThresholdReached: digest updateKind with semver threshold falls through to return true', () => {
-    // digest updateKind with non-'unknown' semverDiff should NOT match hasKnownTagSemver
-    // because updateKind is not 'tag'. Result: falls through to return true.
+  test('isThresholdReached: digest with major semverDiff and minor threshold returns true (kills updateKind===tag mutation)', () => {
+    // Normal: hasKnownTagSemver('digest', 'major') → 'digest'==='tag' is false → false → return true
+    // Mutant (===tag → true): true && Boolean('major') && 'major'!=='unknown' → true
+    //   → evaluateSemverThreshold('minor', 'major') → 'major'!=='major' is false → false ≠ expected true
     expect(
-      isThresholdReached({ updateKind: { kind: 'digest', semverDiff: 'minor' } }, 'minor'),
+      isThresholdReached({ updateKind: { kind: 'digest', semverDiff: 'major' } }, 'minor'),
     ).toBe(true);
   });
 
-  test('isThresholdReached: tag with undefined semverDiff falls through to return true', () => {
-    // tag updateKind but semverDiff is undefined/falsy — Boolean(semverDiff) is false
-    // so hasKnownTagSemver returns false, falls through to return true
+  test('isThresholdReached: tag with undefined semverDiff and minor threshold returns true (kills Boolean(semverDiff) mutation)', () => {
+    // Normal: hasKnownTagSemver('tag', undefined) → Boolean(undefined) is false → false → return true
+    // Mutant (Boolean→true): true && true && undefined!=='unknown' → true (undefined!=='unknown' is true)
+    //   → evaluateSemverThreshold('minor', undefined) → undefined!=='major' is true → returns true (same!)
+    // Use 'major-only' threshold instead: evaluateSemverThreshold('major-only', undefined)
+    //   → undefined==='major' is false → returns false ≠ expected true
     expect(
-      isThresholdReached({ updateKind: { kind: 'tag', semverDiff: undefined } }, 'minor'),
+      isThresholdReached({ updateKind: { kind: 'tag', semverDiff: undefined } }, 'major-only'),
     ).toBe(true);
   });
 
-  test('isThresholdReached: tag with empty string semverDiff falls through to return true', () => {
-    // semverDiff = '' is falsy, Boolean('') === false, so not a known semver
-    expect(isThresholdReached({ updateKind: { kind: 'tag', semverDiff: '' } }, 'minor')).toBe(true);
+  test('isThresholdReached: tag with empty semverDiff and major-only threshold returns true (kills Boolean mutation)', () => {
+    // Normal: Boolean('') === false → hasKnownTagSemver returns false → return true
+    // Mutant (Boolean→true): true && true && ''!=='unknown' → true
+    //   → evaluateSemverThreshold('major-only', '') → ''==='major' is false → returns false ≠ true
+    expect(isThresholdReached({ updateKind: { kind: 'tag', semverDiff: '' } }, 'major-only')).toBe(
+      true,
+    );
   });
 
-  test('isThresholdReached: tag with semverDiff=unknown falls through to return true', () => {
-    // semverDiff === 'unknown' means hasKnownTagSemver is false, falls through to return true
+  test('isThresholdReached: tag with semverDiff=unknown and major-only threshold returns true (kills !==unknown mutation)', () => {
+    // Normal: semverDiff!=='unknown' is false → hasKnownTagSemver returns false → return true
+    // Mutant (!==unknown → true): true && Boolean('unknown') && true → true
+    //   → evaluateSemverThreshold('major-only', 'unknown') → 'unknown'==='major' is false → false ≠ true
     expect(
-      isThresholdReached({ updateKind: { kind: 'tag', semverDiff: 'unknown' } }, 'minor'),
+      isThresholdReached({ updateKind: { kind: 'tag', semverDiff: 'unknown' } }, 'major-only'),
     ).toBe(true);
   });
 
