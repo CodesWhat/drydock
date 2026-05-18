@@ -3144,26 +3144,30 @@ describe('AgentClient', () => {
     test('rejects empty string', () => {
       // Exercise via parseBatchUpdateCompletedPayload — batchId must be non-empty
       const internal = client as any;
-      expect(internal.parseBatchUpdateCompletedPayload({
-        batchId: '',
-        total: 1,
-        succeeded: 1,
-        failed: 0,
-        durationMs: 100,
-        items: [],
-      })).toBeUndefined();
+      expect(
+        internal.parseBatchUpdateCompletedPayload({
+          batchId: '',
+          total: 1,
+          succeeded: 1,
+          failed: 0,
+          durationMs: 100,
+          items: [],
+        }),
+      ).toBeUndefined();
     });
 
     test('rejects whitespace-only string', () => {
       const internal = client as any;
-      expect(internal.parseBatchUpdateCompletedPayload({
-        batchId: '   ',
-        total: 1,
-        succeeded: 1,
-        failed: 0,
-        durationMs: 100,
-        items: [],
-      })).toBeUndefined();
+      expect(
+        internal.parseBatchUpdateCompletedPayload({
+          batchId: '   ',
+          total: 1,
+          succeeded: 1,
+          failed: 0,
+          durationMs: 100,
+          items: [],
+        }),
+      ).toBeUndefined();
     });
 
     test('accepts and trims non-empty string', () => {
@@ -3183,14 +3187,16 @@ describe('AgentClient', () => {
 
     test('rejects non-string values', () => {
       const internal = client as any;
-      expect(internal.parseBatchUpdateCompletedPayload({
-        batchId: 123,
-        total: 1,
-        succeeded: 1,
-        failed: 0,
-        durationMs: 100,
-        items: [],
-      })).toBeUndefined();
+      expect(
+        internal.parseBatchUpdateCompletedPayload({
+          batchId: 123,
+          total: 1,
+          succeeded: 1,
+          failed: 0,
+          durationMs: 100,
+          items: [],
+        }),
+      ).toBeUndefined();
     });
   });
 
@@ -3238,9 +3244,7 @@ describe('AgentClient', () => {
       vi.spyOn(c, 'startSse').mockImplementation(() => {});
       await c.init();
       // log.info called with a string containing the agent name and base URL
-      expect(mockLogChild.info).toHaveBeenCalledWith(
-        expect.stringContaining('my-agent'),
-      );
+      expect(mockLogChild.info).toHaveBeenCalledWith(expect.stringContaining('my-agent'));
     });
 
     // Line 250-251: ObjectLiteral mutations for axiosOptions headers
@@ -3327,45 +3331,49 @@ describe('AgentClient', () => {
   describe('rejectSecretConfiguredOverHttp', () => {
     // Line 239: ConditionalExpression true — checks both protocol AND hasSecretConfigured
     test('does not reject when protocol is https even with a secret', () => {
-      expect(() =>
-        new AgentClient('secure', {
-          host: 'localhost',
-          port: 4000,
-          secret: 'my-secret',
-          certfile: '/cert.pem',
-        }),
+      expect(
+        () =>
+          new AgentClient('secure', {
+            host: 'localhost',
+            port: 4000,
+            secret: 'my-secret',
+            certfile: '/cert.pem',
+          }),
       ).not.toThrow();
     });
 
     test('does not reject when protocol is http but no secret is configured', () => {
-      expect(() =>
-        new AgentClient('no-secret', {
-          host: 'localhost',
-          port: 3000,
-          secret: '',
-        }),
+      expect(
+        () =>
+          new AgentClient('no-secret', {
+            host: 'localhost',
+            port: 3000,
+            secret: '',
+          }),
       ).not.toThrow();
     });
 
     test('does not reject when protocol is http and secret is only whitespace', () => {
-      expect(() =>
-        new AgentClient('whitespace-secret', {
-          host: 'localhost',
-          port: 3000,
-          secret: '   ',
-        }),
+      expect(
+        () =>
+          new AgentClient('whitespace-secret', {
+            host: 'localhost',
+            port: 3000,
+            secret: '   ',
+          }),
       ).not.toThrow();
     });
 
     // Line 239: MethodExpression on this.config.secret.trim()
     test('rejects http + non-empty secret (verifies trim check is active)', () => {
       // A secret with surrounding whitespace that is non-empty after trim
-      expect(() =>
-        new AgentClient('ws-secret', {
-          host: 'localhost',
-          port: 3000,
-          secret: '  abc  ',
-        }),
+      expect(
+        () =>
+          new AgentClient('ws-secret', {
+            host: 'localhost',
+            port: 3000,
+            secret: '  abc  ',
+          }),
       ).toThrow('Configure HTTPS');
     });
   });
@@ -3559,7 +3567,7 @@ describe('AgentClient', () => {
     });
 
     test('logs info message with base URL on init', async () => {
-      const spy = vi.spyOn(client, 'startSse').mockImplementation(() => {});
+      const _spy = vi.spyOn(client, 'startSse').mockImplementation(() => {});
       await client.init();
       expect(mockLogChild.info).toHaveBeenCalledWith(
         expect.stringContaining('https://localhost:3001'),
@@ -3624,6 +3632,27 @@ describe('AgentClient', () => {
       expect(mockLogChild.warn).toHaveBeenCalledWith(
         expect.stringContaining('Error parsing SSE data'),
       );
+    });
+
+    // Lines 602:9 ConditionalExpression / 602:26 StringLiteral / 602:37 BlockStatement
+    // These mutations remove or change the 'data: ' prefix guard, causing non-data lines to
+    // go through JSON.parse which fails and triggers log.warn. Verify no warn is emitted.
+    test('does NOT log warn for non-data lines (event:)', async () => {
+      const internal = client as any;
+      await internal.parseSseLine('event: dd:ack');
+      expect(mockLogChild.warn).not.toHaveBeenCalled();
+    });
+
+    test('does NOT log warn for non-data lines (id:)', async () => {
+      const internal = client as any;
+      await internal.parseSseLine('id: 123456');
+      expect(mockLogChild.warn).not.toHaveBeenCalled();
+    });
+
+    test('does NOT log warn for SSE comment lines', async () => {
+      const internal = client as any;
+      await internal.parseSseLine(': keep-alive');
+      expect(mockLogChild.warn).not.toHaveBeenCalled();
     });
   });
 
@@ -3827,6 +3856,24 @@ describe('AgentClient', () => {
       expect(result).not.toHaveProperty('containerId');
     });
 
+    // Line 831:11 ConditionalExpression — `phase !== undefined` → `true`
+    // Mutation adds { phase: undefined } to result. Check key is absent (not just value).
+    test('does not include phase key when payload has no phase field (direct key check)', () => {
+      const result = parseFailedPayload({ containerName: 'nginx', error: 'pull failed' });
+      expect(result).toBeDefined();
+      expect(Object.hasOwn(result, 'phase')).toBe(false);
+    });
+
+    test('does not include phase key when phase is undefined (explicit key check)', () => {
+      const result = parseFailedPayload({
+        containerName: 'nginx',
+        error: 'pull failed',
+        phase: undefined,
+      });
+      expect(result).toBeDefined();
+      expect(Object.hasOwn(result, 'phase')).toBe(false);
+    });
+
     // Line 836: MethodExpression remoteId — toAgentScopedId
     test('toAgentScopedId scopes an unscoped id', () => {
       expect((client as any).toAgentScopedId('op-1')).toBe('agent-test-agent-op-1');
@@ -3996,7 +4043,10 @@ describe('AgentClient', () => {
       });
       // Check via insertOperation (ensureAgentOperationForTerminal) which should always fire
       expect(updateOperationStore.insertOperation).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'agent-test-agent-remote-op-new-terminal-1', status: 'in-progress' }),
+        expect.objectContaining({
+          id: 'agent-test-agent-remote-op-new-terminal-1',
+          status: 'in-progress',
+        }),
       );
       expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledWith(
         'agent-test-agent-remote-op-new-terminal-1',
@@ -4157,68 +4207,162 @@ describe('AgentClient', () => {
     const parseBatch = (data: unknown) => (client as any).parseBatchUpdateCompletedPayload(data);
 
     test('returns undefined when batchId is missing', () => {
-      expect(parseBatch({ total: 1, succeeded: 1, failed: 0, durationMs: 100, items: [] })).toBeUndefined();
+      expect(
+        parseBatch({ total: 1, succeeded: 1, failed: 0, durationMs: 100, items: [] }),
+      ).toBeUndefined();
     });
 
     test('returns undefined when total is not finite', () => {
-      expect(parseBatch({ batchId: 'b1', total: NaN, succeeded: 1, failed: 0, durationMs: 100, items: [] })).toBeUndefined();
+      expect(
+        parseBatch({
+          batchId: 'b1',
+          total: NaN,
+          succeeded: 1,
+          failed: 0,
+          durationMs: 100,
+          items: [],
+        }),
+      ).toBeUndefined();
     });
 
     test('returns undefined when succeeded is not finite', () => {
-      expect(parseBatch({ batchId: 'b1', total: 1, succeeded: Infinity, failed: 0, durationMs: 100, items: [] })).toBeUndefined();
+      expect(
+        parseBatch({
+          batchId: 'b1',
+          total: 1,
+          succeeded: Infinity,
+          failed: 0,
+          durationMs: 100,
+          items: [],
+        }),
+      ).toBeUndefined();
     });
 
     test('returns undefined when failed is not finite', () => {
-      expect(parseBatch({ batchId: 'b1', total: 1, succeeded: 1, failed: NaN, durationMs: 100, items: [] })).toBeUndefined();
+      expect(
+        parseBatch({
+          batchId: 'b1',
+          total: 1,
+          succeeded: 1,
+          failed: NaN,
+          durationMs: 100,
+          items: [],
+        }),
+      ).toBeUndefined();
     });
 
     test('returns undefined when durationMs is not finite', () => {
-      expect(parseBatch({ batchId: 'b1', total: 1, succeeded: 1, failed: 0, durationMs: NaN, items: [] })).toBeUndefined();
+      expect(
+        parseBatch({
+          batchId: 'b1',
+          total: 1,
+          succeeded: 1,
+          failed: 0,
+          durationMs: NaN,
+          items: [],
+        }),
+      ).toBeUndefined();
     });
 
     test('returns undefined when items is not an array', () => {
-      expect(parseBatch({ batchId: 'b1', total: 1, succeeded: 1, failed: 0, durationMs: 100, items: 'not-array' })).toBeUndefined();
+      expect(
+        parseBatch({
+          batchId: 'b1',
+          total: 1,
+          succeeded: 1,
+          failed: 0,
+          durationMs: 100,
+          items: 'not-array',
+        }),
+      ).toBeUndefined();
     });
 
     // Line 1021: ConditionalExpression false — invalid item
     test('returns undefined when an item is null', () => {
-      expect(parseBatch({ batchId: 'b1', total: 1, succeeded: 1, failed: 0, durationMs: 100, items: [null] })).toBeUndefined();
+      expect(
+        parseBatch({
+          batchId: 'b1',
+          total: 1,
+          succeeded: 1,
+          failed: 0,
+          durationMs: 100,
+          items: [null],
+        }),
+      ).toBeUndefined();
     });
 
     // Line 1028: ConditionalExpression / LogicalOperator — !operationId && !containerName
     test('returns undefined when item operationId is missing', () => {
-      expect(parseBatch({
-        batchId: 'b1', total: 1, succeeded: 1, failed: 0, durationMs: 100,
-        items: [{ containerName: 'nginx', status: 'succeeded' }],
-      })).toBeUndefined();
+      expect(
+        parseBatch({
+          batchId: 'b1',
+          total: 1,
+          succeeded: 1,
+          failed: 0,
+          durationMs: 100,
+          items: [{ containerName: 'nginx', status: 'succeeded' }],
+        }),
+      ).toBeUndefined();
     });
 
     test('returns undefined when item containerName is missing', () => {
-      expect(parseBatch({
-        batchId: 'b1', total: 1, succeeded: 1, failed: 0, durationMs: 100,
-        items: [{ operationId: 'op-1', status: 'succeeded' }],
-      })).toBeUndefined();
+      expect(
+        parseBatch({
+          batchId: 'b1',
+          total: 1,
+          succeeded: 1,
+          failed: 0,
+          durationMs: 100,
+          items: [{ operationId: 'op-1', status: 'succeeded' }],
+        }),
+      ).toBeUndefined();
     });
 
     test('requires BOTH operationId AND containerName to be present', () => {
       // LogicalOperator: !operationId || !containerName vs !operationId && !containerName
       // If the mutant uses &&, then only BOTH missing would fail—but the test has operationId
       // missing (so it should return undefined regardless of containerName)
-      expect(parseBatch({
-        batchId: 'b1', total: 1, succeeded: 1, failed: 0, durationMs: 100,
-        items: [{ operationId: '', containerName: 'nginx', status: 'succeeded' }],
-      })).toBeUndefined();
+      expect(
+        parseBatch({
+          batchId: 'b1',
+          total: 1,
+          succeeded: 1,
+          failed: 0,
+          durationMs: 100,
+          items: [{ operationId: '', containerName: 'nginx', status: 'succeeded' }],
+        }),
+      ).toBeUndefined();
     });
 
     // Lines 1009: LogicalOperator mutant combinations
     test('all three conditions (batchId, total, succeeded) must be valid', () => {
       // Test each alone failing
       // batchId missing
-      expect(parseBatch({ total: 1, succeeded: 1, failed: 0, durationMs: 100, items: [] })).toBeUndefined();
+      expect(
+        parseBatch({ total: 1, succeeded: 1, failed: 0, durationMs: 100, items: [] }),
+      ).toBeUndefined();
       // total invalid
-      expect(parseBatch({ batchId: 'b1', total: NaN, succeeded: 1, failed: 0, durationMs: 100, items: [] })).toBeUndefined();
+      expect(
+        parseBatch({
+          batchId: 'b1',
+          total: NaN,
+          succeeded: 1,
+          failed: 0,
+          durationMs: 100,
+          items: [],
+        }),
+      ).toBeUndefined();
       // succeeded invalid
-      expect(parseBatch({ batchId: 'b1', total: 1, succeeded: NaN, failed: 0, durationMs: 100, items: [] })).toBeUndefined();
+      expect(
+        parseBatch({
+          batchId: 'b1',
+          total: 1,
+          succeeded: NaN,
+          failed: 0,
+          durationMs: 100,
+          items: [],
+        }),
+      ).toBeUndefined();
     });
 
     test('valid complete payload returns parsed result', () => {
@@ -4287,7 +4431,11 @@ describe('AgentClient', () => {
     });
 
     test('omits blockingCount when it is not finite', () => {
-      const result = parseAlert({ containerName: 'nginx', details: 'vuln', blockingCount: 'not-a-number' });
+      const result = parseAlert({
+        containerName: 'nginx',
+        details: 'vuln',
+        blockingCount: 'not-a-number',
+      });
       expect(result).not.toHaveProperty('blockingCount');
     });
 
@@ -4538,9 +4686,7 @@ describe('AgentClient', () => {
         },
       });
 
-      await expect(
-        client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update'),
-      ).rejects.toBeDefined();
+      await expect(client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update')).rejects.toBeDefined();
 
       expect(mockLogChild.error).toHaveBeenCalledWith(
         expect.stringContaining('remote error message (reason: no watcher)'),
@@ -4550,9 +4696,9 @@ describe('AgentClient', () => {
     test('falls back to generic error when no detailed message', async () => {
       axios.post.mockRejectedValue(new Error('connection refused'));
 
-      await expect(
-        client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update'),
-      ).rejects.toThrow('connection refused');
+      await expect(client.runRemoteTrigger({ id: 'c1' }, 'docker', 'update')).rejects.toThrow(
+        'connection refused',
+      );
 
       expect(mockLogChild.error).toHaveBeenCalledWith(
         expect.stringContaining('connection refused'),
@@ -4608,9 +4754,7 @@ describe('AgentClient', () => {
     // Line 1297: StringLiteral ``
     test('batch error log includes "Error running remote batch trigger" prefix', async () => {
       axios.post.mockRejectedValue(new Error('batch error'));
-      await expect(
-        client.runRemoteTriggerBatch([], 'docker', 'update'),
-      ).rejects.toBeDefined();
+      await expect(client.runRemoteTriggerBatch([], 'docker', 'update')).rejects.toBeDefined();
       expect(mockLogChild.error).toHaveBeenCalledWith(
         expect.stringContaining('Error running remote batch trigger'),
       );
@@ -4635,12 +4779,8 @@ describe('AgentClient', () => {
     // Line 1302: LogicalOperator detailedMessage && getErrorMessage(error)
     test('batch error log message is not empty for generic errors', async () => {
       axios.post.mockRejectedValue(new Error('network failure'));
-      await expect(
-        client.runRemoteTriggerBatch([], 'docker', 'update'),
-      ).rejects.toBeDefined();
-      expect(mockLogChild.error).toHaveBeenCalledWith(
-        expect.stringContaining('network failure'),
-      );
+      await expect(client.runRemoteTriggerBatch([], 'docker', 'update')).rejects.toBeDefined();
+      expect(mockLogChild.error).toHaveBeenCalledWith(expect.stringContaining('network failure'));
     });
   });
 
@@ -4730,9 +4870,7 @@ describe('AgentClient', () => {
     test('error log mentions fetching log entries from agent', async () => {
       axios.get.mockRejectedValue(new Error('network down'));
       await expect(client.getLogEntries()).rejects.toThrow('network down');
-      expect(mockLogChild.error).toHaveBeenCalledWith(
-        expect.stringContaining('log entries'),
-      );
+      expect(mockLogChild.error).toHaveBeenCalledWith(expect.stringContaining('log entries'));
     });
   });
 
@@ -4743,9 +4881,7 @@ describe('AgentClient', () => {
       await expect(
         client.getContainerLogs('c1', { tail: 100, since: 0, timestamps: false }),
       ).rejects.toThrow('container not found');
-      expect(mockLogChild.error).toHaveBeenCalledWith(
-        expect.stringContaining('container logs'),
-      );
+      expect(mockLogChild.error).toHaveBeenCalledWith(expect.stringContaining('container logs'));
     });
   });
 
@@ -4765,9 +4901,7 @@ describe('AgentClient', () => {
     test('error log mentions watcher fetch failure', async () => {
       axios.get.mockRejectedValue(new Error('watcher down'));
       await expect(client.getWatcher('docker', 'local')).rejects.toThrow('watcher down');
-      expect(mockLogChild.error).toHaveBeenCalledWith(
-        expect.stringContaining('watcher'),
-      );
+      expect(mockLogChild.error).toHaveBeenCalledWith(expect.stringContaining('watcher'));
     });
   });
 
@@ -4777,9 +4911,7 @@ describe('AgentClient', () => {
       await expect(
         client.watchContainer('docker', 'local', { id: 'c1', name: 'my-nginx' }),
       ).rejects.toThrow('watch failed');
-      expect(mockLogChild.error).toHaveBeenCalledWith(
-        expect.stringContaining('my-nginx'),
-      );
+      expect(mockLogChild.error).toHaveBeenCalledWith(expect.stringContaining('my-nginx'));
     });
   });
 
@@ -4787,9 +4919,7 @@ describe('AgentClient', () => {
     test('error log mentions watch on agent', async () => {
       axios.post.mockRejectedValue(new Error('watch error'));
       await expect(client.watch('docker', 'local')).rejects.toThrow('watch error');
-      expect(mockLogChild.error).toHaveBeenCalledWith(
-        expect.stringContaining('watch'),
-      );
+      expect(mockLogChild.error).toHaveBeenCalledWith(expect.stringContaining('watch'));
     });
   });
 
@@ -4837,17 +4967,13 @@ describe('AgentClient', () => {
     test('logs debug message with trigger type and name', async () => {
       axios.post.mockResolvedValue({ data: {} });
       await client.runRemoteTrigger({ id: 'c1', name: 'nginx' }, 'docker', 'update');
-      expect(mockLogChild.debug).toHaveBeenCalledWith(
-        expect.stringContaining('docker'),
-      );
+      expect(mockLogChild.debug).toHaveBeenCalledWith(expect.stringContaining('docker'));
     });
 
     test('debug log includes trigger name', async () => {
       axios.post.mockResolvedValue({ data: {} });
       await client.runRemoteTrigger({ id: 'c1', name: 'nginx' }, 'smtp', 'my-notify');
-      expect(mockLogChild.debug).toHaveBeenCalledWith(
-        expect.stringContaining('my-notify'),
-      );
+      expect(mockLogChild.debug).toHaveBeenCalledWith(expect.stringContaining('my-notify'));
     });
 
     test('debug log message is not empty', async () => {
@@ -4864,9 +4990,7 @@ describe('AgentClient', () => {
     test('logs debug message mentioning the container id', async () => {
       axios.delete.mockResolvedValue({ data: {} });
       await client.deleteContainer('my-container-id');
-      expect(mockLogChild.debug).toHaveBeenCalledWith(
-        expect.stringContaining('my-container-id'),
-      );
+      expect(mockLogChild.debug).toHaveBeenCalledWith(expect.stringContaining('my-container-id'));
     });
 
     test('deleteContainer debug log message is not empty', async () => {
@@ -4923,13 +5047,583 @@ describe('AgentClient', () => {
     });
 
     test('returns undefined when a key is not finite', () => {
-      expect(parseSummary({ unknown: NaN, low: 0, medium: 0, high: 0, critical: 0 })).toBeUndefined();
+      expect(
+        parseSummary({ unknown: NaN, low: 0, medium: 0, high: 0, critical: 0 }),
+      ).toBeUndefined();
     });
 
     test('returns parsed summary when all keys are valid', () => {
       expect(parseSummary({ unknown: 0, low: 1, medium: 2, high: 3, critical: 4 })).toEqual({
-        unknown: 0, low: 1, medium: 2, high: 3, critical: 4,
+        unknown: 0,
+        low: 1,
+        medium: 2,
+        high: 3,
+        critical: 4,
       });
+    });
+  });
+
+  // ─── Tests targeting surviving mutants not killed by earlier assertions ──────
+
+  describe('buildAgentOperationBase: key absence when undefined', () => {
+    // Line 880:11 ConditionalExpression true — newContainerId !== undefined → true
+    // Mutation would include { newContainerId: undefined } when not provided
+    // toEqual ignores undefined keys, so we need not.toHaveProperty
+    test('omits newContainerId key when payload has no newContainerId', () => {
+      const result = (client as any).buildAgentOperationBase({
+        operationId: 'op-1',
+        containerName: 'nginx',
+      });
+      expect(result).not.toHaveProperty('newContainerId');
+    });
+
+    test('omits newContainerId key when payload.newContainerId is explicitly undefined', () => {
+      const result = (client as any).buildAgentOperationBase({
+        operationId: 'op-1',
+        containerName: 'nginx',
+        newContainerId: undefined,
+      });
+      expect(result).not.toHaveProperty('newContainerId');
+    });
+
+    test('omits containerId key when payload.containerId is explicitly undefined', () => {
+      const result = (client as any).buildAgentOperationBase({
+        operationId: 'op-1',
+        containerName: 'nginx',
+        containerId: undefined,
+      });
+      expect(result).not.toHaveProperty('containerId');
+    });
+  });
+
+  describe('applyAgentUpdateOperationChanged: updateOperation key absence', () => {
+    // Lines 912:17, 913:17 ConditionalExpression true
+    // Mutation would include { containerId: undefined } or { newContainerId: undefined }
+    // expect.not.objectContaining won't catch undefined-valued keys (expect.anything() skips undefined)
+    // We need to directly inspect mock call args with not.toHaveProperty
+    test('updateOperation call omits containerId key when payload has no containerId', async () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValueOnce({
+        id: 'agent-test-agent-op-no-cid',
+        containerName: 'nginx',
+        status: 'queued',
+        phase: 'queued',
+      } as any);
+
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'op-no-cid',
+        containerName: 'nginx',
+        status: 'in-progress',
+      });
+
+      expect(updateOperationStore.updateOperation).toHaveBeenCalled();
+      const callArgs = vi.mocked(updateOperationStore.updateOperation).mock.calls[0][1];
+      expect(Object.hasOwn(callArgs, 'containerId')).toBe(false);
+    });
+
+    test('updateOperation call omits newContainerId key when payload has no newContainerId', async () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValueOnce({
+        id: 'agent-test-agent-op-no-ncid',
+        containerName: 'nginx',
+        status: 'in-progress',
+        phase: 'pulling',
+      } as any);
+
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'op-no-ncid',
+        containerName: 'nginx',
+        status: 'in-progress',
+      });
+
+      expect(updateOperationStore.updateOperation).toHaveBeenCalled();
+      const callArgs = vi.mocked(updateOperationStore.updateOperation).mock.calls[0][1];
+      expect(Object.hasOwn(callArgs, 'newContainerId')).toBe(false);
+    });
+  });
+
+  describe('markAgentOperationTerminal: key absence in markOperationTerminal', () => {
+    // Lines 955:11, 956:11 ConditionalExpression true
+    test('markOperationTerminal call omits containerId key when undefined', () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValue({
+        id: 'agent-test-agent-term-no-cid',
+        status: 'in-progress',
+      } as any);
+
+      (client as any).markAgentOperationTerminal({
+        operationId: 'term-no-cid',
+        containerName: 'nginx',
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+
+      expect(updateOperationStore.markOperationTerminal).toHaveBeenCalled();
+      const callArgs = vi.mocked(updateOperationStore.markOperationTerminal).mock.calls[0][1];
+      expect(Object.hasOwn(callArgs, 'containerId')).toBe(false);
+    });
+
+    test('markOperationTerminal call omits newContainerId key when undefined', () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValue({
+        id: 'agent-test-agent-term-no-ncid',
+        status: 'in-progress',
+      } as any);
+
+      (client as any).markAgentOperationTerminal({
+        operationId: 'term-no-ncid',
+        containerName: 'nginx',
+        status: 'succeeded',
+      });
+
+      expect(updateOperationStore.markOperationTerminal).toHaveBeenCalled();
+      const callArgs = vi.mocked(updateOperationStore.markOperationTerminal).mock.calls[0][1];
+      expect(Object.hasOwn(callArgs, 'newContainerId')).toBe(false);
+    });
+
+    test('markOperationTerminal call includes containerId when provided', () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValue({
+        id: 'agent-test-agent-term-with-cid',
+        status: 'in-progress',
+      } as any);
+
+      (client as any).markAgentOperationTerminal({
+        operationId: 'term-with-cid',
+        containerName: 'nginx',
+        status: 'succeeded',
+        containerId: 'container-123',
+      });
+
+      const callArgs = vi.mocked(updateOperationStore.markOperationTerminal).mock.calls[0][1];
+      expect(callArgs).toHaveProperty('containerId', 'container-123');
+    });
+  });
+
+  describe('maybeMarkAgentOperationSucceededFromAppliedPayload: containerId key absence', () => {
+    // Line 975:11 ConditionalExpression true
+    test('markOperationTerminal omits containerId key when container has no id', () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValue(null);
+      (client as any).maybeMarkAgentOperationSucceededFromAppliedPayload({
+        operationId: 'op-success-no-id',
+        containerName: 'nginx',
+        container: { name: 'nginx' }, // no id field
+      });
+
+      const callArgs = vi.mocked(updateOperationStore.markOperationTerminal).mock.calls[0][1];
+      expect(Object.hasOwn(callArgs, 'containerId')).toBe(false);
+    });
+
+    test('markOperationTerminal omits containerId key when container is absent', () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValue(null);
+      (client as any).maybeMarkAgentOperationSucceededFromAppliedPayload({
+        operationId: 'op-success-no-container',
+        containerName: 'nginx',
+      });
+
+      const callArgs = vi.mocked(updateOperationStore.markOperationTerminal).mock.calls[0][1];
+      expect(Object.hasOwn(callArgs, 'containerId')).toBe(false);
+    });
+  });
+
+  describe('maybeMarkAgentOperationFailedFromFailedPayload: containerId key absence', () => {
+    // Line 992:11 ConditionalExpression true
+    test('markOperationTerminal omits containerId key when payload has no containerId', () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValue(null);
+      (client as any).maybeMarkAgentOperationFailedFromFailedPayload({
+        operationId: 'op-fail-no-cid',
+        containerName: 'nginx',
+        error: 'pull failed',
+      });
+
+      const callArgs = vi.mocked(updateOperationStore.markOperationTerminal).mock.calls[0][1];
+      expect(Object.hasOwn(callArgs, 'containerId')).toBe(false);
+    });
+
+    test('markOperationTerminal includes containerId key when payload has containerId', () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValue(null);
+      (client as any).maybeMarkAgentOperationFailedFromFailedPayload({
+        operationId: 'op-fail-with-cid',
+        containerName: 'nginx',
+        error: 'pull failed',
+        containerId: 'container-456',
+      });
+
+      const callArgs = vi.mocked(updateOperationStore.markOperationTerminal).mock.calls[0][1];
+      expect(callArgs).toHaveProperty('containerId', 'container-456');
+    });
+  });
+
+  describe('parseUpdateFailedEventPayload: phase key absence', () => {
+    // Line 831:11 ConditionalExpression true — phase !== undefined → true
+    test('does not include phase key when payload has no phase field', async () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValue(null);
+      await client.handleEvent('dd:update-failed', {
+        containerName: 'nginx',
+        error: 'pull failed',
+        operationId: 'op-fail-no-phase',
+      });
+
+      const callArgs = vi.mocked(updateOperationStore.markOperationTerminal).mock.calls[0][1];
+      expect(Object.hasOwn(callArgs, 'phase')).toBe(false);
+    });
+
+    test('includes phase key when payload has a valid phase', async () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValue(null);
+      await client.handleEvent('dd:update-failed', {
+        containerName: 'nginx',
+        error: 'pull failed',
+        operationId: 'op-fail-with-phase',
+        phase: 'pulling',
+      });
+
+      const callArgs = vi.mocked(updateOperationStore.markOperationTerminal).mock.calls[0][1];
+      expect(callArgs).toHaveProperty('phase', 'pulling');
+    });
+  });
+
+  describe('pruneOldContainers: query argument and log message', () => {
+    // Line 291:44 ObjectLiteral {} — { agent: this.name } → {}
+    // Line 292:9 ConditionalExpression true — if (watcher) → if (true)
+    // Line 303:21 StringLiteral — prune log message
+    test('getContainers is called with agent name in query', () => {
+      storeContainer.getContainers.mockReturnValue([]);
+      (client as any).pruneOldContainers([]);
+      expect(storeContainer.getContainers).toHaveBeenCalledWith(
+        expect.objectContaining({ agent: 'test-agent' }),
+      );
+    });
+
+    test('getContainers query includes watcher when provided', () => {
+      storeContainer.getContainers.mockReturnValue([]);
+      (client as any).pruneOldContainers([], 'docker');
+      expect(storeContainer.getContainers).toHaveBeenCalledWith(
+        expect.objectContaining({ watcher: 'docker' }),
+      );
+    });
+
+    test('getContainers query does not include watcher when omitted', () => {
+      storeContainer.getContainers.mockReturnValue([]);
+      (client as any).pruneOldContainers([]);
+      const callArg = vi.mocked(storeContainer.getContainers).mock.calls[0][0];
+      // With ConditionalExpression true mutation, watcher: undefined would be present
+      expect(Object.hasOwn(callArg, 'watcher')).toBe(false);
+    });
+
+    test('logs prune info message with container name', () => {
+      storeContainer.getContainers.mockReturnValue([
+        { id: 'c2', name: 'old-nginx', agent: 'test-agent' },
+      ]);
+      (client as any).pruneOldContainers([]);
+      expect(mockLogChild.info).toHaveBeenCalledWith(expect.stringContaining('old-nginx'));
+      expect(mockLogChild.info).toHaveBeenCalledWith(expect.stringContaining('Pruning'));
+    });
+  });
+
+  describe('buildContainerReport: clearPendingFreshState on updateAvailable === false', () => {
+    // Line 430:16 ConditionalExpression true — updateAvailable === false → true
+    // Mutation would always call clearPendingFreshState regardless of updateAvailable value
+    test('does NOT clear pending fresh state when updateAvailable is undefined', () => {
+      const internal = client as any;
+      internal.pendingFreshStateAfterRemoteUpdate.add('c-test');
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockReturnValue({ id: 'c-test', updateAvailable: undefined });
+
+      // Container has updateAvailable=undefined (not false), id in pending
+      // shouldPreserveClearedUpdateAvailable: has('c-test') && undefined === true → false
+      // else if: undefined === false → false (original: don't clear)
+      // mutation: true → clear
+      internal.buildContainerReport({ id: 'c-test', updateAvailable: undefined, name: 'nginx' });
+      expect(internal.pendingFreshStateAfterRemoteUpdate.has('c-test')).toBe(true);
+    });
+
+    test('does NOT clear pending fresh state when updateAvailable is null', () => {
+      const internal = client as any;
+      internal.pendingFreshStateAfterRemoteUpdate.add('c-null');
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockReturnValue({ id: 'c-null', updateAvailable: null });
+
+      internal.buildContainerReport({ id: 'c-null', updateAvailable: null, name: 'nginx' });
+      expect(internal.pendingFreshStateAfterRemoteUpdate.has('c-null')).toBe(true);
+    });
+
+    test('clears pending fresh state when updateAvailable === false', () => {
+      const internal = client as any;
+      internal.pendingFreshStateAfterRemoteUpdate.add('c-false');
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockReturnValue({ id: 'c-false', updateAvailable: false });
+
+      internal.buildContainerReport({ id: 'c-false', updateAvailable: false, name: 'nginx' });
+      expect(internal.pendingFreshStateAfterRemoteUpdate.has('c-false')).toBe(false);
+    });
+  });
+
+  describe('parseSseLine: data prefix check', () => {
+    // Line 602:9 ConditionalExpression false / Line 602:26 StringLiteral / Line 602:37 BlockStatement
+    test('does not call handleEvent for non-data lines', async () => {
+      const handleEventSpy = vi.spyOn(client, 'handleEvent');
+      await (client as any).parseSseLine('event: dd:ack');
+      expect(handleEventSpy).not.toHaveBeenCalled();
+    });
+
+    test('does not call handleEvent for empty lines', async () => {
+      const handleEventSpy = vi.spyOn(client, 'handleEvent');
+      await (client as any).parseSseLine('');
+      expect(handleEventSpy).not.toHaveBeenCalled();
+    });
+
+    test('calls handleEvent for valid data lines', async () => {
+      const handleEventSpy = vi.spyOn(client, 'handleEvent').mockResolvedValue(undefined);
+      await (client as any).parseSseLine('data: {"type":"dd:ack","data":{}}');
+      expect(handleEventSpy).toHaveBeenCalledWith('dd:ack', {});
+    });
+
+    test('does not call handleEvent for "data:" prefix without space', async () => {
+      const handleEventSpy = vi.spyOn(client, 'handleEvent');
+      await (client as any).parseSseLine('data:{"type":"dd:ack","data":{}}');
+      expect(handleEventSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('handshake: log messages', () => {
+    // Line 504:19 StringLiteral — handshake info log
+    // Lines 521:21, 532:21 StringLiteral — warn logs for watcher/trigger fetch failures
+    test('logs non-empty info message on successful handshake', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] }) // containers
+        .mockResolvedValueOnce({ data: [] }) // watchers
+        .mockResolvedValueOnce({ data: [] }); // triggers
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handshake();
+
+      expect(mockLogChild.info).toHaveBeenCalledWith(expect.stringContaining('Handshake'));
+      const infoCalls = mockLogChild.info.mock.calls.map((c) => c[0]);
+      expect(infoCalls.some((m) => m !== '')).toBe(true);
+    });
+
+    test('logs non-empty warn message when watchers fetch fails', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] }) // containers
+        .mockRejectedValueOnce(new Error('watcher fetch error')) // watchers
+        .mockResolvedValueOnce({ data: [] }); // triggers
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handshake();
+
+      expect(mockLogChild.warn).toHaveBeenCalledWith(expect.stringContaining('watcher'));
+      const warnCalls = mockLogChild.warn.mock.calls.map((c) => c[0]);
+      expect(warnCalls.some((m) => m !== '')).toBe(true);
+    });
+
+    test('logs non-empty warn message when triggers fetch fails', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] }) // containers
+        .mockResolvedValueOnce({ data: [] }) // watchers
+        .mockRejectedValueOnce(new Error('trigger fetch error')); // triggers
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handshake();
+
+      expect(mockLogChild.warn).toHaveBeenCalledWith(expect.stringContaining('trigger'));
+    });
+  });
+
+  describe('registerAgentComponents: debug log message', () => {
+    // Line 484:22 StringLiteral — debug message in registerAgentComponents
+    test('logs non-empty debug message for each registered component', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] }) // containers
+        .mockResolvedValueOnce({
+          data: [{ type: 'docker', name: 'local', configuration: {} }],
+        }) // watchers
+        .mockResolvedValueOnce({ data: [] }); // triggers
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handshake();
+
+      const debugCalls = mockLogChild.debug.mock.calls.map((c) => c[0]);
+      const hasRegistrationLog = debugCalls.some(
+        (m) => typeof m === 'string' && m.length > 0 && m.includes('docker'),
+      );
+      expect(hasRegistrationLog).toBe(true);
+    });
+  });
+
+  describe('SSE stream handlers: log messages', () => {
+    // Line 655:22 StringLiteral — stream error log
+    // Line 659:21 StringLiteral — stream end warn log
+    test('logs non-empty error when stream emits error', async () => {
+      const stream = new EventEmitter();
+      axios.mockResolvedValue({ data: stream });
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0); // let axios promise resolve so stream handlers attach
+
+      stream.emit('error', new Error('connection reset'));
+      expect(mockLogChild.error).toHaveBeenCalledWith(
+        expect.stringContaining('SSE Connection failed'),
+      );
+      const errorCalls = mockLogChild.error.mock.calls.map((c) => c[0]);
+      expect(errorCalls.some((m) => m !== '')).toBe(true);
+    });
+
+    test('logs non-empty warn when stream ends', async () => {
+      const stream = new EventEmitter();
+      axios.mockResolvedValue({ data: stream });
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0); // let the promise resolve
+
+      stream.emit('end');
+      expect(mockLogChild.warn).toHaveBeenCalledWith(expect.stringContaining('SSE stream ended'));
+    });
+  });
+
+  describe('startSse: axios options and log', () => {
+    // Line 670:15 StringLiteral — 'get' method
+    // Line 686:24 StringLiteral — error log
+    test('calls axios with method "get"', async () => {
+      axios.mockResolvedValue({ data: new EventEmitter() });
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+
+      const axiosCallArg = (axios as any).mock.calls[0][0];
+      expect(axiosCallArg.method).toBe('get');
+      expect(axiosCallArg.method).not.toBe('');
+    });
+
+    test('logs non-empty error when startSse axios call fails', async () => {
+      axios.mockRejectedValue(new Error('connection refused'));
+      client.startSse();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(mockLogChild.error).toHaveBeenCalledWith(
+        expect.stringContaining('SSE Connection failed'),
+      );
+      const errorCalls = mockLogChild.error.mock.calls.map((c) => c[0]);
+      expect(errorCalls.some((m) => m !== '')).toBe(true);
+    });
+  });
+
+  describe('handleAckEvent: info log message', () => {
+    // Line 715:19 StringLiteral — ack info log
+    test('logs non-empty info message when ack is received', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handleEvent('dd:ack', { version: '1.5.0', os: 'linux' });
+
+      const infoCalls = mockLogChild.info.mock.calls.map((c) => c[0]);
+      const hasAckLog = infoCalls.some(
+        (m) =>
+          typeof m === 'string' &&
+          m.length > 0 &&
+          (m.includes('test-agent') || m.includes('connected')),
+      );
+      expect(hasAckLog).toBe(true);
+    });
+  });
+
+  describe('handleWatcherSnapshotEvent: optional chaining', () => {
+    // Lines 747:41, 748:36 OptionalChaining
+    // snapshotPayload.watcher?.configuration and snapshotPayload.watcher?.metadata
+    test('caches snapshot with undefined configuration/metadata when watcher has no config/metadata', async () => {
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' }, // no configuration or metadata
+        containers: [],
+      });
+
+      const cached = (client as any).watcherSnapshotCache.get('docker.local');
+      expect(cached).toBeDefined();
+      expect(cached?.configuration).toBeUndefined();
+      expect(cached?.metadata).toBeUndefined();
+    });
+
+    test('caches snapshot with configuration when watcher has configuration', async () => {
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: {
+          type: 'docker',
+          name: 'local',
+          configuration: { socket: '/var/run/docker.sock' },
+        },
+        containers: [],
+      });
+
+      const cached = (client as any).watcherSnapshotCache.get('docker.local');
+      expect(cached?.configuration).toEqual({ socket: '/var/run/docker.sock' });
+    });
+
+    test('caches snapshot with metadata when watcher has metadata', async () => {
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: {
+          type: 'docker',
+          name: 'local',
+          metadata: { host: 'docker-host' },
+        },
+        containers: [],
+      });
+
+      const cached = (client as any).watcherSnapshotCache.get('docker.local');
+      expect(cached?.metadata).toEqual({ host: 'docker-host' });
+    });
+  });
+
+  describe('clearPendingWatcherCycleReports: empty string key detection', () => {
+    // Lines 392:9 ConditionalExpression true, 392:44 ConditionalExpression true / EqualityOperator >= 0
+    // These survive because existing tests check map['local'] which isn't the empty key
+    // We need to test with an actual '' key to detect >= 0 vs > 0
+    test('does not delete a map entry with empty string key when called with empty string', () => {
+      // Set up a map entry with key '' (unusual but tests the >= 0 mutation)
+      (client as any).pendingWatcherCycleReports.set('', new Map([['c1', {}]]));
+      (client as any).clearPendingWatcherCycleReports('');
+      // Original: '' fails length > 0, so not deleted
+      // Mutation >= 0: '' passes length >= 0, so deleted
+      expect((client as any).pendingWatcherCycleReports.has('')).toBe(true);
+    });
+  });
+
+  describe('insertOperation key absence in applyAgentUpdateOperationChanged', () => {
+    // Lines 879:11, 880:11 ObjectLiteral/ConditionalExpression in buildAgentOperationBase
+    // The insertOperation path (new active operation) uses buildAgentOperationBase
+    test('insertOperation call omits containerId key when new active operation has no containerId', async () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValueOnce(undefined);
+
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'new-active-no-cid',
+        containerName: 'nginx',
+        status: 'queued',
+      });
+
+      expect(updateOperationStore.insertOperation).toHaveBeenCalled();
+      const callArgs = vi.mocked(updateOperationStore.insertOperation).mock.calls[0][0];
+      expect(Object.hasOwn(callArgs, 'containerId')).toBe(false);
+    });
+
+    test('insertOperation call omits newContainerId key when new active operation has no newContainerId', async () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValueOnce(undefined);
+
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'new-active-no-ncid',
+        containerName: 'nginx',
+        status: 'queued',
+      });
+
+      expect(updateOperationStore.insertOperation).toHaveBeenCalled();
+      const callArgs = vi.mocked(updateOperationStore.insertOperation).mock.calls[0][0];
+      expect(Object.hasOwn(callArgs, 'newContainerId')).toBe(false);
+    });
+  });
+
+  describe('clearPendingFreshState: empty-string key detection', () => {
+    // Line 316:44 ConditionalExpression true / EqualityOperator >= 0
+    // These survive because existing tests call clearPendingFreshState('') and check that
+    // some other key ('c1') is still present. The mutation deletes key '' (no-op since '' isn't in set).
+    // We need to set '' in the Set and verify it is NOT deleted (because length > 0 fails for '').
+    test('does not delete an empty-string entry from pendingFreshState', () => {
+      const internal = client as any;
+      // Add '' to the Set (edge case, but tests length > 0 vs >= 0)
+      internal.pendingFreshStateAfterRemoteUpdate.add('');
+      internal.clearPendingFreshState('');
+      // Original: '' fails length > 0, so '' is NOT deleted
+      // Mutation >= 0: '' passes length >= 0, so '' IS deleted → test fails
+      expect(internal.pendingFreshStateAfterRemoteUpdate.has('')).toBe(true);
     });
   });
 });
