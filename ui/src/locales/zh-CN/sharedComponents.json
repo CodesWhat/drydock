@@ -17,9 +17,9 @@
       "viewMode": "视图模式",
       "viewModeLabel": "{label} 视图",
       "viewModes": {
-        "table": "Table",
-        "cards": "Cards",
-        "list": "List"
+        "table": "表",
+        "cards": "卡片",
+        "list": "列表"
       }
     },
     "dataListAccordion": {
