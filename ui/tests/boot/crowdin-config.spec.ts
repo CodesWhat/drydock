@@ -61,7 +61,7 @@ describe('Crowdin locale export config', () => {
     const steps = sync.steps;
     expect(Array.isArray(steps)).toBe(true);
 
-    const crowdinStep = steps
+    const crowdinStep = (steps as unknown[])
       .map((step) => asRecord(step))
       .find((step) => String(step.uses ?? '').startsWith('crowdin/github-action@'));
     expect(crowdinStep).toBeTruthy();

@@ -121,7 +121,7 @@ describe('withRetry', () => {
   });
 
   test('uses Retry-After HTTP-date header for delay', async () => {
-    // 10 seconds in the future
+    // 10 seconds in the future — should produce ~10_000ms delay, not the backoff (100ms)
     const future = new Date(Date.now() + 10_000).toUTCString();
     const request = vi
       .fn()
@@ -132,14 +132,22 @@ describe('withRetry', () => {
 
     const promise = withRetry(request, {
       backoffBaseMs: 100,
+      backoffMaxMs: 60_000,
       logger: mockLogger,
       requestLabel: 'test-url',
     });
     await vi.runAllTimersAsync();
     await promise;
 
-    // Logger should have been called mentioning a delay > 0ms
-    expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringMatching(/\d+ms/));
+    // The delay should be derived from the HTTP-date header (~10_000ms),
+    // NOT from exponential backoff (100ms). Assert delay is well above backoff.
+    const call = mockLogger.debug.mock.calls[0][0] as string;
+    const match = call.match(/(\d+)ms/);
+    expect(match).not.toBeNull();
+    const delayMs = Number.parseInt(match![1], 10);
+    // Must be at least 5 seconds (parsed from header), never just 100ms backoff
+    expect(delayMs).toBeGreaterThan(5_000);
+    expect(delayMs).toBeLessThanOrEqual(60_000);
   });
 
   test('clamps negative Retry-After HTTP-date to 0', async () => {
@@ -365,6 +373,232 @@ describe('withRetry', () => {
 
     expect(result.data).toBe('ok');
     // Falls back to exponential backoff: 100 * 2^0 = 100ms
+    expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('100ms'));
+  });
+
+  // ── isAxiosError guard: non-Axios errors are rethrown immediately ──────────
+
+  test('non-Axios error with no response property is thrown immediately without retry', async () => {
+    // Kills: LogicalOperator && -> || mutant and ConditionalExpression true on isAxiosError
+    const nonAxiosErr = new Error('network failure');
+    // Explicitly has NO .response property
+    const request = vi.fn().mockRejectedValueOnce(nonAxiosErr);
+
+    await expect(withRetry(request)).rejects.toBe(nonAxiosErr);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  test('error with null response is treated as non-Axios and thrown immediately', async () => {
+    // Kills: ConditionalExpression true guards inside isAxiosError (lines 35,37,38)
+    const errWithNullResponse = new Error('null response') as Error & { response: null };
+    errWithNullResponse.response = null;
+    const request = vi.fn().mockRejectedValueOnce(errWithNullResponse);
+
+    await expect(withRetry(request)).rejects.toBe(errWithNullResponse);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  test('error with non-object response property is treated as non-Axios and thrown immediately', async () => {
+    // Kills: typeof response === 'object' checks (lines 37-38)
+    const errWithStringResponse = new Error('string response') as Error & { response: string };
+    (errWithStringResponse as any).response = 'not-an-object';
+    const request = vi.fn().mockRejectedValueOnce(errWithStringResponse);
+
+    await expect(withRetry(request)).rejects.toBe(errWithStringResponse);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  test('null error is thrown immediately without retry (not an object)', async () => {
+    // Kills: typeof err === 'object' && err !== null short-circuit mutations
+    const request = vi.fn().mockRejectedValueOnce(null);
+
+    await expect(withRetry(request)).rejects.toBeNull();
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  // ── parseRetryAfterMs: exact values tested ─────────────────────────────────
+
+  test('Retry-After integer header "30" gives exactly 30000ms delay', async () => {
+    // Kills: BlockStatement {} mutant at line 56:29 (the parseInt+*1000 path)
+    const mockLogger = { debug: vi.fn() };
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(makeAxiosError(429, { 'retry-after': '30' }))
+      .mockResolvedValueOnce({ status: 200, headers: {}, data: 'ok' });
+
+    const promise = withRetry(request, {
+      backoffBaseMs: 1000,
+      backoffMaxMs: 60_000,
+      logger: mockLogger,
+      requestLabel: 'test',
+    });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result.data).toBe('ok');
+    // 30 seconds = 30_000ms; capped at 60_000
+    expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('30000ms'));
+  });
+
+  test('Retry-After with leading/trailing whitespace is trimmed before parsing', async () => {
+    // Kills: [MethodExpression] headerValue (trim() removed) at line 47
+    const mockLogger = { debug: vi.fn() };
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(makeAxiosError(429, { 'retry-after': '  10  ' }))
+      .mockResolvedValueOnce({ status: 200, headers: {}, data: 'ok' });
+
+    const promise = withRetry(request, {
+      backoffBaseMs: 1000,
+      backoffMaxMs: 60_000,
+      logger: mockLogger,
+      requestLabel: 'test',
+    });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result.data).toBe('ok');
+    // "  10  ".trim() = "10" → 10s = 10000ms
+    expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('10000ms'));
+  });
+
+  test('Retry-After HTTP-date: returned delay is parsed - Date.now(), not parsed + Date.now()', async () => {
+    // Kills: ArithmeticOperator parsed + Date.now() mutant at line 59:26
+    // A date 20 seconds in the future should give ~20_000ms delay, not 2*timestamp + 20_000ms
+    // With fake timers, Date.now() returns a fixed fake time T.
+    // correct: parsed(T+20000) - T = 20000
+    // mutant:  parsed(T+20000) + T = 2T + 20000 → capped at backoffMaxMs = 60_000
+    // So correct gives 20_000ms, mutant gives 60_000ms. We assert delay < 60_000.
+    const future = new Date(Date.now() + 20_000).toUTCString();
+    const mockLogger = { debug: vi.fn() };
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(makeAxiosError(429, { 'retry-after': future }))
+      .mockResolvedValueOnce({ status: 200, headers: {}, data: 'ok' });
+
+    const promise = withRetry(request, {
+      backoffBaseMs: 100,
+      backoffMaxMs: 60_000,
+      logger: mockLogger,
+      requestLabel: 'test',
+    });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result.data).toBe('ok');
+    // With correct code: delay = 20_000ms (strictly less than backoffMaxMs = 60_000)
+    // With mutant (+): delay = 2*fakeTime + 20_000 → capped to 60_000ms
+    const call = mockLogger.debug.mock.calls[0][0] as string;
+    const match = call.match(/(\d+)ms/);
+    expect(match).not.toBeNull();
+    const delayMs = Number.parseInt(match![1], 10);
+    expect(delayMs).toBeGreaterThanOrEqual(15_000); // must be close to 20_000
+    expect(delayMs).toBeLessThan(60_000); // must NOT be capped at backoffMaxMs
+  });
+
+  // ── requestLabel default value ─────────────────────────────────────────────
+
+  test('log message uses "Retrying request" when requestLabel is empty (default)', async () => {
+    // Kills: StringLiteral "" mutants at lines 80:20 and 115:65
+    const mockLogger = { debug: vi.fn() };
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(makeAxiosError(429))
+      .mockResolvedValueOnce({ status: 200, headers: {}, data: 'ok' });
+
+    const promise = withRetry(request, {
+      backoffBaseMs: 10,
+      logger: mockLogger,
+      // No requestLabel — uses the default ''
+    });
+    await vi.runAllTimersAsync();
+    await promise;
+
+    // When requestLabel is '' the label should be 'Retrying request' not 'Retrying '
+    expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('Retrying request'));
+  });
+
+  test('log message uses "Retrying <label>" when requestLabel is provided', async () => {
+    // Counter-test: with a label, the message starts with "Retrying <label>"
+    const mockLogger = { debug: vi.fn() };
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(makeAxiosError(429))
+      .mockResolvedValueOnce({ status: 200, headers: {}, data: 'ok' });
+
+    const promise = withRetry(request, {
+      backoffBaseMs: 10,
+      logger: mockLogger,
+      requestLabel: 'my-registry GET /v2/img/tags/list',
+    });
+    await vi.runAllTimersAsync();
+    await promise;
+
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('Retrying my-registry GET /v2/img/tags/list'),
+    );
+    // Must NOT contain the fallback "Retrying request" substring
+    expect(mockLogger.debug).not.toHaveBeenCalledWith(expect.stringContaining('Retrying request'));
+  });
+
+  // ── attempt >= maxRetries exhaustion ──────────────────────────────────────
+
+  test('exhausts exactly maxRetries=1 (throws after 2 calls total)', async () => {
+    // Kills: EqualityOperator attempt > maxRetries mutant at line 104:11
+    // With maxRetries=1, attempt 0 retries, attempt 1 should throw (not retry again)
+    const request = vi.fn().mockRejectedValue(makeAxiosError(429, { 'retry-after': '0' }));
+
+    const promise = withRetry(request, { maxRetries: 1, backoffBaseMs: 10 });
+    const expectation = expect(promise).rejects.toThrow('status code 429');
+    await vi.runAllTimersAsync();
+    await expectation;
+
+    // 1 initial + 1 retry = 2 total (not 3)
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  test('attempt === maxRetries throws immediately without sleeping', async () => {
+    // When attempt equals maxRetries exactly, we should throw — not sleep again
+    const mockLogger = { debug: vi.fn() };
+    const request = vi.fn().mockRejectedValue(makeAxiosError(429));
+
+    const promise = withRetry(request, { maxRetries: 2, backoffBaseMs: 10, logger: mockLogger });
+    const expectation = expect(promise).rejects.toThrow('status code 429');
+    await vi.runAllTimersAsync();
+    await expectation;
+
+    // 1 initial + 2 retries = 3 total; only 2 debug logs (not 3)
+    expect(request).toHaveBeenCalledTimes(3);
+    expect(mockLogger.debug).toHaveBeenCalledTimes(2);
+  });
+
+  // ── optional chaining on headers ──────────────────────────────────────────
+
+  test('missing headers on err.response does not crash (optional chaining on headers)', async () => {
+    // Kills: [OptionalChaining] err.response.headers mutant at line 110:32
+    // Craft an error where response has no headers property
+    const errNoHeaders = new Error('Request failed with status code 429') as Error & {
+      response: { status: number };
+    };
+    errNoHeaders.response = { status: 429 };
+
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(errNoHeaders)
+      .mockResolvedValueOnce({ status: 200, headers: {}, data: 'ok' });
+
+    const mockLogger = { debug: vi.fn() };
+    const promise = withRetry(request, {
+      backoffBaseMs: 100,
+      logger: mockLogger,
+      requestLabel: 'test',
+    });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    // Should not throw — missing headers falls back to backoff
+    expect(result.data).toBe('ok');
+    // Backoff was used: 100 * 2^0 = 100ms
     expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('100ms'));
   });
 });

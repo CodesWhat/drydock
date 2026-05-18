@@ -209,3 +209,67 @@ test('getAuthCredentials should return undefined when no login/token/auth set in
   custom.configuration = {};
   expect(custom.getAuthCredentials()).toBe(undefined);
 });
+
+// ── Kill surviving mutants ───────────────────────────────────────────────────
+
+test('validatedConfiguration should accept empty string (allow empty string alternative)', async () => {
+  // Kills: StringLiteral "Stryker was here!" replacing '' in .allow('')
+  // If .allow('Stryker was here!') were used, validating '' would throw.
+  // The base validateConfiguration returns {} when value is falsy (e.g. ''),
+  // so we just assert it does NOT throw.
+  expect(() => custom.validateConfiguration('')).not.toThrow();
+});
+
+test('maskConfiguration should mask auth field specifically', async () => {
+  // Kills: StringLiteral "" replacing 'auth' in maskSensitiveFields(['password', 'auth'])
+  const registryWithAuth = new Custom();
+  registryWithAuth.configuration = {
+    url: 'https://registry.internal',
+    auth: 'dXNlcjpwYXNz',
+  };
+
+  const masked = registryWithAuth.maskConfiguration();
+  // auth must be masked — if 'auth' string were replaced with '' the field would be untouched
+  expect(masked.auth).toBe('[REDACTED]');
+});
+
+test('maskConfiguration should mask password field specifically', async () => {
+  // Kills: StringLiteral "" replacing 'password' in maskSensitiveFields(['password', 'auth'])
+  const registryWithPassword = new Custom();
+  registryWithPassword.configuration = {
+    url: 'https://registry.internal',
+    login: 'user',
+    password: 'my-secret',
+  };
+
+  const masked = registryWithPassword.maskConfiguration();
+  expect(masked.password).toBe('[REDACTED]');
+  // login should NOT be masked
+  expect(masked.login).toBe('user');
+});
+
+test('normalizeImage should spread registry fields onto a new object (not empty replace)', async () => {
+  // Kills: ObjectLiteral {} at line 41 — the ...image.registry spread
+  // If spread were replaced with {}, extra registry fields would be lost.
+  const freshRegistry = new Custom();
+  freshRegistry.configuration = {
+    login: TEST_LOGIN,
+    password: TEST_PASSWORD,
+    url: 'http://localhost:5000',
+  };
+
+  const image = {
+    name: 'test/image',
+    registry: {
+      url: 'localhost:5000/test/image',
+      extraField: 'preserved-value',
+    },
+  };
+
+  const normalized = freshRegistry.normalizeImage(image);
+
+  // Extra fields from image.registry must survive the spread
+  expect((normalized.registry as Record<string, unknown>)['extraField']).toBe('preserved-value');
+  // URL is still overwritten
+  expect(normalized.registry.url).toBe('http://localhost:5000/v2');
+});

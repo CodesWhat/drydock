@@ -449,6 +449,10 @@ jobs:
         run: npm test
         working-directory: app
 
+      - name: Typecheck ui
+        run: npm run typecheck
+        working-directory: ui
+
       - name: Run ui tests
         run: npm run test:unit
         working-directory: ui

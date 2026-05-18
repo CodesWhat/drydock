@@ -119,6 +119,7 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
     icon: 'docker',
     currentTag: '1.0.0',
     newTag: null,
+    isDigestPinned: false,
     status: 'running',
     registry: 'dockerhub',
     updateKind: null,
@@ -3866,7 +3867,7 @@ describe('useContainerActions', () => {
       const container = makeContainer({
         id: 'container-1',
         name: 'web',
-        updateOperation: { id: 'op-123', status: 'queued', phase: 'none', updatedAt: '' },
+        updateOperation: { id: 'op-123', status: 'queued', phase: 'queued', updatedAt: '' },
       });
       const { composable, loadContainers } = await mountActionsHarness({
         containers: [container],
@@ -3916,7 +3917,7 @@ describe('useContainerActions', () => {
       const container = makeContainer({
         id: 'container-1',
         name: 'web',
-        updateOperation: { id: 'op-123', status: 'queued', phase: 'none', updatedAt: '' },
+        updateOperation: { id: 'op-123', status: 'queued', phase: 'queued', updatedAt: '' },
       });
       const { composable } = await mountActionsHarness({ containers: [container] });
 
@@ -3936,7 +3937,7 @@ describe('useContainerActions', () => {
       const container = makeContainer({
         id: 'container-1',
         name: 'web',
-        updateOperation: { id: 'op-missing', status: 'queued', phase: 'none', updatedAt: '' },
+        updateOperation: { id: 'op-missing', status: 'queued', phase: 'queued', updatedAt: '' },
       });
       const { composable } = await mountActionsHarness({ containers: [container] });
 
@@ -3953,7 +3954,7 @@ describe('useContainerActions', () => {
       const container = makeContainer({
         id: 'container-1',
         name: 'web',
-        updateOperation: { id: 'op-123', status: 'queued', phase: 'none', updatedAt: '' },
+        updateOperation: { id: 'op-123', status: 'queued', phase: 'queued', updatedAt: '' },
       });
       const { composable } = await mountActionsHarness({ containers: [container] });
 

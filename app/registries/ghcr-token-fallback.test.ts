@@ -78,4 +78,16 @@ describe('registries/getGhcrTokenFallback', () => {
     });
     expect(getGhcrTokenFallback()).toBe('ghcr-token');
   });
+
+  it('returns undefined when ghcr instance has no configuration property at all', () => {
+    // Kills: [OptionalChaining] cfg.token at line 18 — if cfg?.token is mutated to cfg.token,
+    // this test throws TypeError instead of returning undefined.
+    mockGetState.mockReturnValue({
+      registry: {
+        'ghcr-main': { type: 'ghcr' },
+        // no 'configuration' property — cfg will be undefined
+      },
+    });
+    expect(getGhcrTokenFallback()).toBeUndefined();
+  });
 });

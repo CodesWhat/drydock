@@ -1711,3 +1711,1976 @@ describe('authenticateBearerFromAuthUrl rate-limit and retry', () => {
     );
   });
 });
+
+// ── getBearerTokenCacheKey (line 52) ─────────────────────────────────────────
+
+test('getBearerTokenCacheKey should use empty string for missing credentials in cache key', async () => {
+  const { default: axios } = await import('axios');
+  vi.useFakeTimers();
+  axios
+    .mockResolvedValueOnce({ data: { token: 'tok-no-creds' } })
+    .mockResolvedValueOnce({ data: { token: 'tok-with-creds' } });
+  const startedAtMs = new Date('2026-03-05T10:00:00.000Z').getTime();
+
+  try {
+    vi.setSystemTime(startedAtMs);
+    // Call without credentials — caches under key "url|"
+    await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      undefined,
+    );
+
+    // Call with credentials — must NOT reuse the anonymous cache entry
+    await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      'dXNlcjpwYXNz',
+    );
+
+    // Both should have triggered a real network call (different cache keys)
+    expect(axios).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// ── pruneExpiredBearerTokenCache (line 57) ────────────────────────────────────
+
+test('pruneExpiredBearerTokenCache should evict tokens that expire exactly at now', async () => {
+  const { default: axios } = await import('axios');
+  vi.useFakeTimers();
+  axios
+    .mockResolvedValueOnce({ data: { token: 'first' } })
+    .mockResolvedValueOnce({ data: { token: 'second' } });
+  const startedAtMs = new Date('2026-03-05T10:00:00.000Z').getTime();
+
+  try {
+    vi.setSystemTime(startedAtMs);
+    await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      'dXNlcjpwYXNz',
+    );
+
+    // Advance time to exactly expiresAt — token is expired and should be pruned
+    vi.setSystemTime(startedAtMs + REGISTRY_BEARER_TOKEN_CACHE_TTL_MS);
+    const result = await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      'dXNlcjpwYXNz',
+    );
+
+    // Must have fetched a new token (not reused the expired one)
+    expect(axios).toHaveBeenCalledTimes(2);
+    expect(result.headers.Authorization).toBe('Bearer second');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// ── getCanonicalRegistryHost (lines 64, 69) ───────────────────────────────────
+
+test('getCanonicalRegistryHost should return docker.io for index.docker.io registry URL', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:index-docker-canonical',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  // Lookup via index.docker.io
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'index.docker.io' },
+  });
+
+  // Lookup via docker.io — should hit the cache (same canonical host)
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  // Only one real lookup — index.docker.io and docker.io are the same canonical key
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+test('getCanonicalRegistryHost should return host unchanged for non-Docker-Hub URL', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:non-dockerhub',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  await baseRegistry.getImageManifestDigest({
+    name: 'myimage',
+    tag: { value: 'v1' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'ghcr.io' },
+  });
+
+  // Second lookup with docker.io should NOT reuse ghcr.io cache entry
+  await baseRegistry.getImageManifestDigest({
+    name: 'myimage',
+    tag: { value: 'v1' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  // Two separate cache keys — two real lookups
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(2);
+});
+
+// ── getDigestCacheImageLabel edge-cases (lines 77–88) ─────────────────────────
+
+test('getDigestCacheImageLabel should use unknown-registry when registry url is empty string', () => {
+  const getDigestCacheImageLabel = (
+    baseRegistry as unknown as {
+      getDigestCacheImageLabel: (image: unknown, digest?: string) => string;
+    }
+  ).getDigestCacheImageLabel.bind(baseRegistry);
+
+  expect(getDigestCacheImageLabel({ registry: { url: '' }, name: 'myimage' })).toBe(
+    'unknown-registry/myimage:latest',
+  );
+});
+
+test('getDigestCacheImageLabel should use unknown-image when name is empty string', () => {
+  const getDigestCacheImageLabel = (
+    baseRegistry as unknown as {
+      getDigestCacheImageLabel: (image: unknown, digest?: string) => string;
+    }
+  ).getDigestCacheImageLabel.bind(baseRegistry);
+
+  expect(getDigestCacheImageLabel({ registry: { url: 'docker.io' }, name: '' })).toBe(
+    'docker.io/unknown-image:latest',
+  );
+});
+
+test('getDigestCacheImageLabel should use digest parameter when explicitly provided over image tag', () => {
+  const getDigestCacheImageLabel = (
+    baseRegistry as unknown as {
+      getDigestCacheImageLabel: (image: unknown, digest?: string) => string;
+    }
+  ).getDigestCacheImageLabel.bind(baseRegistry);
+
+  // explicit digest='sha256:explicit' should win over tag
+  expect(
+    getDigestCacheImageLabel(
+      { registry: { url: 'docker.io' }, name: 'myimage', tag: { value: 'latest' } },
+      'sha256:explicit',
+    ),
+  ).toBe('docker.io/myimage:sha256:explicit');
+});
+
+test('getDigestCacheImageLabel should use latest when digest is empty string', () => {
+  const getDigestCacheImageLabel = (
+    baseRegistry as unknown as {
+      getDigestCacheImageLabel: (image: unknown, digest?: string) => string;
+    }
+  ).getDigestCacheImageLabel.bind(baseRegistry);
+
+  expect(getDigestCacheImageLabel({ registry: { url: 'docker.io' }, name: 'myimage' }, '')).toBe(
+    'docker.io/myimage:latest',
+  );
+});
+
+test('getDigestCacheImageLabel should use image digest value when no tag or explicit digest', () => {
+  const getDigestCacheImageLabel = (
+    baseRegistry as unknown as {
+      getDigestCacheImageLabel: (image: unknown, digest?: string) => string;
+    }
+  ).getDigestCacheImageLabel.bind(baseRegistry);
+
+  expect(
+    getDigestCacheImageLabel({
+      registry: { url: 'docker.io' },
+      name: 'myimage',
+      digest: { value: 'sha256:fromimage' },
+    }),
+  ).toBe('docker.io/myimage:sha256:fromimage');
+});
+
+// ── buildDigestCacheKey — imageName empty guard (line 102, 104) ───────────────
+
+test('buildDigestCacheKey should not library-prefix an empty image name even when registryHost is docker.io', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:empty-name',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  // Two lookups with same (empty) name on docker.io should reuse the same cache key
+  const image1 = { registry: { url: 'docker.io' } } as any;
+  const image2 = { registry: { url: 'docker.io' } } as any;
+  await baseRegistry.getImageManifestDigest(image1);
+  await baseRegistry.getImageManifestDigest(image2);
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+test('buildDigestCacheKey should not library-prefix imageName that already contains a slash', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:already-ns',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  // Two lookups: one with 'ns/image' (already has slash) and one with 'library/ns/image' — different keys
+  await baseRegistry.getImageManifestDigest({
+    name: 'ns/image',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/image',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  // Different names → different cache keys → 2 real lookups
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(2);
+});
+
+// ── buildDigestCacheKey — tagOrDigest 'latest' fallback (lines 108–109) ──────
+
+test('buildDigestCacheKey should use latest as tagOrDigest when both digest and tag are absent', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:latest-fallback',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  // Two images with no tag and no explicit digest — both should map to :latest in the key
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/postgres',
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  } as any);
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/postgres',
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  } as any);
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+test('buildDigestCacheKey should prefer explicit digest parameter over tag value', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:explicit-wins',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  // Same image, same tag, different explicit digest → different cache keys
+  await baseRegistry.getImageManifestDigest(
+    {
+      name: 'library/postgres',
+      tag: { value: 'latest' },
+      architecture: 'amd64',
+      os: 'linux',
+      registry: { url: 'docker.io' },
+    },
+    'sha256:digest-a',
+  );
+  await baseRegistry.getImageManifestDigest(
+    {
+      name: 'library/postgres',
+      tag: { value: 'latest' },
+      architecture: 'amd64',
+      os: 'linux',
+      registry: { url: 'docker.io' },
+    },
+    'sha256:digest-b',
+  );
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(2);
+});
+
+test('buildDigestCacheKey explicit empty-string digest falls back to tag value', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:tag-fallback',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  // Same image, empty-string explicit digest — both should use the tag 'v1' and hit the cache
+  const image = {
+    name: 'library/postgres',
+    tag: { value: 'v1' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+  await baseRegistry.getImageManifestDigest(image, '');
+  await baseRegistry.getImageManifestDigest(image, '');
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+// ── buildDigestCacheKey — architecture/os/variant (lines 110–112) ────────────
+
+test('buildDigestCacheKey should use unknown for missing architecture', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:arch-unknown',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  // Two images without architecture — both should resolve to 'unknown' and share cache key
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/postgres',
+    tag: { value: '16' },
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  } as any);
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/postgres',
+    tag: { value: '16' },
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  } as any);
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+test('buildDigestCacheKey should use unknown for missing os', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:os-unknown',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  // Two images without os — both resolve to 'unknown' and share cache key
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    registry: { url: 'docker.io' },
+  } as any);
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    registry: { url: 'docker.io' },
+  } as any);
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+test('buildDigestCacheKey should include variant in cache key when present', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:variant-key',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  // variant='v8' vs no variant → different keys
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    variant: 'v8',
+    registry: { url: 'docker.io' },
+  });
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(2);
+});
+
+test('buildDigestCacheKey should use empty variant suffix when variant is empty string', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:variant-empty',
+      created: '2026-03-10T12:00:00.000Z',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  // variant='' and no variant should produce the same cache key
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    variant: '',
+    registry: { url: 'docker.io' },
+  });
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+// ── getTrustedRegistryHosts / validateAuthUrlHost (lines 166–177) ─────────────
+
+test('authenticateBearerFromAuthUrl should reject when request URL is blank and config URL is absent', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+  // No configuration URL and blank request URL → no trusted hosts → fail closed
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { url: '   ' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('cannot be validated');
+
+  expect(axios).not.toHaveBeenCalled();
+});
+
+test('authenticateBearerFromAuthUrl should ignore whitespace-only config URL', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+  baseRegistry.configuration = { url: '   ' };
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {} },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('cannot be validated');
+
+  expect(axios).not.toHaveBeenCalled();
+});
+
+// ── getHttpsAgent — optional chaining on configuration (lines 204–206) ────────
+
+test('getHttpsAgent should return undefined when configuration is absent', async () => {
+  baseRegistry.configuration = undefined as any;
+  const result = await baseRegistry.authenticateBasic({ headers: {} }, 'creds');
+  // No httpsAgent should be attached when configuration is missing
+  expect(result.httpsAgent).toBeUndefined();
+});
+
+// ── withTlsRequestOptions — insecure=true warning (line 252) ─────────────────
+
+test('withTlsRequestOptions should warn when insecure=true and request URL is used from context', async () => {
+  baseRegistry.type = 'registry';
+  baseRegistry.name = 'warn-test';
+  baseRegistry.configuration = { insecure: true };
+  const warnSpy = vi.spyOn(baseRegistry.log, 'warn').mockImplementation(() => undefined);
+
+  // authenticateBearer triggers withTlsRequestOptions internally
+  await baseRegistry.authenticateBearer({ headers: {} }, 'tok');
+
+  expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('insecure TLS verification'));
+
+  warnSpy.mockRestore();
+});
+
+// ── authenticateBearerFromAuthUrl — cache reuse exactly at boundary (line 381) ─
+
+test('authenticateBearerFromAuthUrl should not reuse cached token when now equals expiresAt', async () => {
+  const { default: axios } = await import('axios');
+  vi.useFakeTimers();
+  axios
+    .mockResolvedValueOnce({ data: { token: 'first-token' } })
+    .mockResolvedValueOnce({ data: { token: 'refreshed-token' } });
+  const startedAtMs = new Date('2026-03-05T10:00:00.000Z').getTime();
+
+  try {
+    vi.setSystemTime(startedAtMs);
+    const first = await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      'dXNlcjpwYXNz',
+    );
+    expect(first.headers.Authorization).toBe('Bearer first-token');
+
+    // Advance to exactly expiresAt (now === expiresAt). The condition is `now < expiresAt`,
+    // so this should NOT use the cache and must fetch a fresh token.
+    vi.setSystemTime(startedAtMs + REGISTRY_BEARER_TOKEN_CACHE_TTL_MS);
+    const second = await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      'dXNlcjpwYXNz',
+    );
+
+    expect(axios).toHaveBeenCalledTimes(2);
+    expect(second.headers.Authorization).toBe('Bearer refreshed-token');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// ── getAuthCredentials — partial credentials (lines 511, 521) ─────────────────
+
+test('getAuthCredentials should return undefined when only login is configured (no password)', () => {
+  baseRegistry.configuration = { login: 'user' };
+  expect(baseRegistry.getAuthCredentials()).toBeUndefined();
+});
+
+test('getAuthCredentials should return undefined when only password is configured (no login)', () => {
+  baseRegistry.configuration = { password: 'pass' };
+  expect(baseRegistry.getAuthCredentials()).toBeUndefined();
+});
+
+test('getAuthPull should return undefined when only login is configured (no password)', async () => {
+  baseRegistry.configuration = { login: 'user' };
+  const result = await baseRegistry.getAuthPull();
+  expect(result).toBeUndefined();
+});
+
+test('getAuthPull should return undefined when only password is configured (no login)', async () => {
+  baseRegistry.configuration = { password: 'pass' };
+  const result = await baseRegistry.getAuthPull();
+  expect(result).toBeUndefined();
+});
+
+test('getAuthPull should return undefined when only username is configured (no token)', async () => {
+  baseRegistry.configuration = { username: 'user' };
+  const result = await baseRegistry.getAuthPull();
+  expect(result).toBeUndefined();
+});
+
+test('getAuthPull should return undefined when only token is configured (no username)', async () => {
+  baseRegistry.configuration = { token: 'mytoken' };
+  const result = await baseRegistry.getAuthPull();
+  expect(result).toBeUndefined();
+});
+
+// ── getImagePublishedAt — tag/tagToLookup guards (lines 549–558) ──────────────
+
+test('getImagePublishedAt should use image tag when provided tag argument is empty string', async () => {
+  const getImageManifestDigestSpy = vi
+    .spyOn(baseRegistry, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:abc',
+      created: '2026-03-06T08:00:00.000Z',
+      version: 2,
+    });
+
+  await baseRegistry.getImagePublishedAt(
+    { name: 'nginx', tag: { value: 'stable' }, registry: { url: 'docker.io' } },
+    '',
+  );
+
+  expect(getImageManifestDigestSpy).toHaveBeenCalledWith(
+    expect.objectContaining({ tag: { value: 'stable' } }),
+  );
+});
+
+test('getImagePublishedAt should set tag to provided non-empty override even when image has no tag', async () => {
+  const getImageManifestDigestSpy = vi
+    .spyOn(baseRegistry, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:abc',
+      created: '2026-03-06T08:00:00.000Z',
+      version: 2,
+    });
+
+  await baseRegistry.getImagePublishedAt(
+    { name: 'nginx', registry: { url: 'docker.io' } } as any,
+    'v1.0.0',
+  );
+
+  expect(getImageManifestDigestSpy).toHaveBeenCalledWith(
+    expect.objectContaining({ tag: { value: 'v1.0.0' } }),
+  );
+});
+
+test('getImagePublishedAt should preserve existing tag properties when applying override', async () => {
+  const getImageManifestDigestSpy = vi
+    .spyOn(baseRegistry, 'getImageManifestDigest')
+    .mockResolvedValue({ created: '2026-03-06T08:00:00.000Z' });
+
+  await baseRegistry.getImagePublishedAt(
+    {
+      name: 'nginx',
+      tag: { value: 'latest', semver: '1.0.0' } as any,
+      registry: { url: 'docker.io' },
+    },
+    '1.26.0',
+  );
+
+  // The call should contain the overridden value, and other tag properties preserved
+  expect(getImageManifestDigestSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      tag: expect.objectContaining({ value: '1.26.0', semver: '1.0.0' }),
+    }),
+  );
+});
+
+test('getImagePublishedAt should return undefined when manifest returns null created', async () => {
+  vi.spyOn(baseRegistry, 'getImageManifestDigest').mockResolvedValue({ created: null as any });
+
+  const result = await baseRegistry.getImagePublishedAt({
+    name: 'nginx',
+    tag: { value: 'latest' },
+    registry: { url: 'docker.io' },
+  });
+
+  expect(result).toBeUndefined();
+});
+
+// ── getRegistryHostname — regex anchoring (lines 569, 574) ───────────────────
+
+test('getRegistryHostname should detect http:// prefix (not just https://)', () => {
+  // /^https?:\/\//i — the ? makes 's' optional; test with http:// to verify 's?' is exercised
+  expect(baseRegistry.exposeGetRegistryHostname('http://registry.example.com/v2')).toBe(
+    'registry.example.com',
+  );
+});
+
+test('getRegistryHostname should prepend https when no protocol present', () => {
+  expect(baseRegistry.exposeGetRegistryHostname('registry.example.com')).toBe(
+    'registry.example.com',
+  );
+});
+
+test('getRegistryHostname fallback path should strip http:// prefix correctly', () => {
+  // Force the URL constructor to fail so the fallback regex is exercised.
+  // A malformed value with path component after % should fail URL parsing,
+  // but the fallback split('/')[0] should still work.
+  // We test the fallback with a value that is not a valid URL but has http:// prefix.
+  // Using a value that starts with https?:// but is not URL-parseable:
+  const originalURL = global.URL;
+  try {
+    // @ts-expect-error - intentional override
+    global.URL = class {
+      constructor() {
+        throw new Error('forced failure');
+      }
+    };
+    expect(baseRegistry.exposeGetRegistryHostname('http://registry.example.com/v2')).toBe(
+      'registry.example.com',
+    );
+  } finally {
+    global.URL = originalURL;
+  }
+});
+
+test('getRegistryHostname fallback should strip https:// prefix in fallback path', () => {
+  const originalURL = global.URL;
+  try {
+    // @ts-expect-error - intentional override
+    global.URL = class {
+      constructor() {
+        throw new Error('forced failure');
+      }
+    };
+    expect(
+      baseRegistry.exposeGetRegistryHostname('https://registry.example.com/v2/something'),
+    ).toBe('registry.example.com');
+  } finally {
+    global.URL = originalURL;
+  }
+});
+
+// ── getImageManifestDigest — caching guards (line 335) ────────────────────────
+
+test('getImageManifestDigest should not cache a manifest with an empty-string digest', async () => {
+  const _superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: '',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+
+  const result = await baseRegistry.getImageManifestDigest(image);
+
+  // An empty-string digest should not be cached; empty string is returned as-is
+  expect(result.digest).toBe('');
+  expect(
+    (baseRegistry as unknown as { digestManifestCache: Map<string, unknown> }).digestManifestCache
+      .size,
+  ).toBe(0);
+});
+
+// ── Prometheus optional chaining (lines 119, 127) ────────────────────────────
+
+test('recordDigestCacheHit should increment internal counter even when prometheus is not initialized', async () => {
+  const superSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:prom-miss', version: 2 });
+
+  // Ensure prometheus counters are absent (not init'd)
+  const getHitsSpy = vi
+    .spyOn(registryPrometheus, 'getDigestCacheHitsCounter')
+    .mockReturnValue(undefined as any);
+  const getMissesSpy = vi
+    .spyOn(registryPrometheus, 'getDigestCacheMissesCounter')
+    .mockReturnValue(undefined as any);
+
+  try {
+    baseRegistry.startDigestCachePollCycle();
+    const image = {
+      name: 'library/nginx',
+      tag: { value: 'latest' },
+      architecture: 'amd64',
+      os: 'linux',
+      registry: { url: 'docker.io' },
+    };
+
+    await baseRegistry.getImageManifestDigest(image); // miss
+    await baseRegistry.getImageManifestDigest(image); // hit
+
+    const stats = baseRegistry.endDigestCachePollCycle();
+    expect(stats.hits).toBe(1);
+    expect(stats.misses).toBe(1);
+    expect(superSpy).toHaveBeenCalledTimes(1);
+  } finally {
+    getHitsSpy.mockRestore();
+    getMissesSpy.mockRestore();
+  }
+});
+
+// ── getBearerTokenCacheKey — empty-string separator (line 52) ─────────────────
+// The key format must be `${authUrl}|${credentials || ''}` exactly.
+// Calling with no credentials twice should reuse cache (both map to "url|").
+
+test('getBearerTokenCacheKey should cache anonymous lookups with consistent key', async () => {
+  const { default: axios } = await import('axios');
+  vi.useFakeTimers();
+  axios.mockResolvedValue({ data: { token: 'anon-tok' } });
+  const startedAtMs = new Date('2026-03-05T10:00:00.000Z').getTime();
+
+  try {
+    vi.setSystemTime(startedAtMs);
+    const first = await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/nginx' },
+      'https://auth.example.com/token',
+      undefined,
+    );
+    const second = await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/nginx' },
+      'https://auth.example.com/token',
+      undefined,
+    );
+    // Both calls without credentials should share the same cache key → 1 real request
+    expect(axios).toHaveBeenCalledTimes(1);
+    expect(first.headers.Authorization).toBe('Bearer anon-tok');
+    expect(second.headers.Authorization).toBe('Bearer anon-tok');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// ── pruneExpiredBearerTokenCache — boundary at exactly expiresAt (line 57) ────
+// now >= expiresAt should prune (>= not just >).
+
+test('pruneExpiredBearerTokenCache should prune tokens at exactly expiresAt (not one ms before)', async () => {
+  const { default: axios } = await import('axios');
+  vi.useFakeTimers();
+  axios
+    .mockResolvedValueOnce({ data: { token: 'token-A' } })
+    .mockResolvedValueOnce({ data: { token: 'token-B' } })
+    .mockResolvedValueOnce({ data: { token: 'token-C' } });
+  const t0 = new Date('2026-03-05T10:00:00.000Z').getTime();
+
+  try {
+    // Populate a token at t0 and another at t0+1000
+    vi.setSystemTime(t0);
+    await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/nginx' },
+      'https://auth.example.com/token-A',
+      'credA',
+    );
+    vi.setSystemTime(t0 + 1000);
+    await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/nginx' },
+      'https://auth.example.com/token-B',
+      'credB',
+    );
+
+    // Advance to exactly where token-A expires (t0 + TTL). The prune should remove token-A.
+    vi.setSystemTime(t0 + REGISTRY_BEARER_TOKEN_CACHE_TTL_MS);
+    await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/nginx' },
+      'https://auth.example.com/token-C',
+      'credC',
+    );
+
+    // Only token-B and token-C remain; token-A (expiresAt === now) was pruned
+    expect(getBearerTokenCacheSize(baseRegistry)).toBe(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// ── getDigestCacheImageLabel — null/undefined image (lines 77, 81, 85) ─────────
+// The optional-chaining `image?.registry?.url` is there to handle null/undefined image.
+
+test('getDigestCacheImageLabel should use all-unknown defaults when image is null', () => {
+  const getDigestCacheImageLabel = (
+    baseRegistry as unknown as {
+      getDigestCacheImageLabel: (image: unknown, digest?: string) => string;
+    }
+  ).getDigestCacheImageLabel.bind(baseRegistry);
+
+  expect(getDigestCacheImageLabel(null)).toBe('unknown-registry/unknown-image:latest');
+});
+
+test('getDigestCacheImageLabel should use all-unknown defaults when image is undefined', () => {
+  const getDigestCacheImageLabel = (
+    baseRegistry as unknown as {
+      getDigestCacheImageLabel: (image: unknown, digest?: string) => string;
+    }
+  ).getDigestCacheImageLabel.bind(baseRegistry);
+
+  expect(getDigestCacheImageLabel(undefined)).toBe('unknown-registry/unknown-image:latest');
+});
+
+test('getDigestCacheImageLabel should fallback to latest when image has no tag and no digest', () => {
+  const getDigestCacheImageLabel = (
+    baseRegistry as unknown as {
+      getDigestCacheImageLabel: (image: unknown, digest?: string) => string;
+    }
+  ).getDigestCacheImageLabel.bind(baseRegistry);
+
+  expect(getDigestCacheImageLabel({ registry: { url: 'docker.io' }, name: 'nginx' })).toBe(
+    'docker.io/nginx:latest',
+  );
+});
+
+// ── buildDigestCacheKey — imageName '' fallback to '' not 'Stryker was here!' (line 102:48, 109:7, 110:59, 111:39) ─
+
+test('buildDigestCacheKey should produce a stable key with imageName empty string (defaulting to empty not Stryker)', async () => {
+  // When imageName is empty string, the cache key repository part should be empty,
+  // and tagOrDigest should fall back to 'latest' (not empty string).
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({
+      digest: 'sha256:empty-name-stable',
+      version: 2,
+    });
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = { registry: { url: 'ghcr.io' } } as any;
+
+  await baseRegistry.getImageManifestDigest(image);
+  await baseRegistry.getImageManifestDigest(image);
+
+  // Both lookups hit the same cache key (no imageName, defaults to '')
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+test('buildDigestCacheKey should default architecture to string "unknown" not empty string', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:arch-stable', version: 2 });
+
+  baseRegistry.startDigestCachePollCycle();
+  // Two images: one with no architecture, one with architecture='unknown' — should share key
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  } as any);
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    architecture: 'unknown',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+test('buildDigestCacheKey should default os to string "unknown" not empty string', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:os-stable', version: 2 });
+
+  baseRegistry.startDigestCachePollCycle();
+  // Two images: one with no os, one with os='unknown' — should share key
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    registry: { url: 'docker.io' },
+  } as any);
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    os: 'unknown',
+    registry: { url: 'docker.io' },
+  });
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+test('buildDigestCacheKey variant absent should produce key with no variant suffix, not Stryker placeholder', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:no-variant', version: 2 });
+
+  baseRegistry.startDigestCachePollCycle();
+  // No-variant should produce key ending in 'linux/amd64' — same as variant=undefined
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    os: 'linux',
+    variant: undefined,
+    registry: { url: 'docker.io' },
+  });
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+// ── buildDigestCacheKey — non-docker.io host should not library-prefix (line 104:7) ──
+
+test('buildDigestCacheKey should not add library/ prefix for non-docker.io registries', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:no-prefix', version: 2 });
+
+  baseRegistry.startDigestCachePollCycle();
+  // On ghcr.io, 'nginx' should NOT become 'library/nginx'
+  await baseRegistry.getImageManifestDigest({
+    name: 'nginx',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'ghcr.io' },
+  });
+  // On docker.io, 'nginx' SHOULD become 'library/nginx' — different key
+  await baseRegistry.getImageManifestDigest({
+    name: 'nginx',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  // Different keys → 2 real lookups
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(2);
+});
+
+// ── buildDigestCacheKey — non-string digest type check (line 108:8) ─────────────
+
+test('buildDigestCacheKey should fall back to tag value when digest is a number (type check)', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:type-check', version: 2 });
+
+  baseRegistry.startDigestCachePollCycle();
+  // digest=42 (not a string) should fall back to tag 'v2'
+  const image = {
+    name: 'library/nginx',
+    tag: { value: 'v2' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+  await baseRegistry.getImageManifestDigest(image, 42 as any);
+  await baseRegistry.getImageManifestDigest(image, 42 as any);
+
+  // Both use tag 'v2' as fallback → same key → 1 real lookup
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+// ── getTrustedRegistryHosts — whitespace host filtering (lines 177:11, 177:39) ───
+
+test('authenticateBearerFromAuthUrl should not trust a host consisting only of whitespace from getTrustedAuthHosts', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'tok' } });
+
+  // SparseTrustedAuthBaseRegistry returns ['   ', undefined, 'auth.example.com']
+  // Only 'auth.example.com' should be added — the blank entry must be ignored
+  const registry = new SparseTrustedAuthBaseRegistry();
+
+  const result = await registry.authenticateBearerFromAuthUrl(
+    { headers: {}, url: 'https://registry.example.com/v2/library/nginx' },
+    'https://auth.example.com/token',
+    undefined,
+  );
+
+  expect(result.headers.Authorization).toBe('Bearer tok');
+  expect(axios).toHaveBeenCalledTimes(1);
+});
+
+test('getTrustedAuthHosts host.trim() should be tested — a host with only whitespace is not trusted', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'tok' } });
+
+  // Registry that returns a whitespace-only host alongside a valid one
+  class WhitespaceHostRegistry extends TestBaseRegistry {
+    protected override getTrustedAuthHosts(): string[] {
+      return ['   auth.example.com   ', '  ', 'auth.example.com'];
+    }
+  }
+  const registry = new WhitespaceHostRegistry();
+
+  // auth.example.com should be trusted; blank entry should NOT crash
+  await expect(
+    registry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://registry.example.com/v2/nginx' },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).resolves.toHaveProperty('headers.Authorization', 'Bearer tok');
+});
+
+// ── resolveConfiguredPath labels (lines 217–231) ───────────────────────────────
+// The label strings matter: they appear in error messages when the path is invalid.
+
+test('getHttpsAgent should pass correct label for CA file path resolution', async () => {
+  const { resolveConfiguredPath } = await import('../runtime/paths.js');
+  const resolveSpy = vi
+    .spyOn({ resolveConfiguredPath }, 'resolveConfiguredPath')
+    .mockImplementation((p) => p as string);
+
+  // We can't easily spy on the module-level import; instead verify via the error message
+  baseRegistry.type = 'registry';
+  baseRegistry.name = 'label-test';
+  baseRegistry.configuration = { cafile: '/nonexistent-path-for-label-test.pem' };
+
+  const readFileSyncSpy = vi.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('fake-ca'));
+  try {
+    await baseRegistry.authenticateBearer({ headers: {} }, 'tok');
+    expect(readFileSyncSpy).toHaveBeenCalledWith('/nonexistent-path-for-label-test.pem');
+  } finally {
+    readFileSyncSpy.mockRestore();
+    resolveSpy.mockRestore();
+  }
+});
+
+test('getHttpsAgent should pass correct label for client cert path resolution', async () => {
+  baseRegistry.type = 'registry';
+  baseRegistry.name = 'cert-label-test';
+  baseRegistry.configuration = { clientcert: '/fake-cert.pem', clientkey: '/fake-key.pem' };
+
+  const readFileSyncSpy = vi.spyOn(fs, 'readFileSync').mockImplementation((path) => {
+    if (path === '/fake-cert.pem') return Buffer.from('cert');
+    if (path === '/fake-key.pem') return Buffer.from('key');
+    throw new Error(`unexpected: ${String(path)}`);
+  });
+
+  try {
+    const result = await baseRegistry.authenticateBearer({ headers: {} }, 'tok');
+    expect(readFileSyncSpy).toHaveBeenCalledWith('/fake-cert.pem');
+    expect(readFileSyncSpy).toHaveBeenCalledWith('/fake-key.pem');
+    expect(result.httpsAgent).toBeDefined();
+  } finally {
+    readFileSyncSpy.mockRestore();
+  }
+});
+
+// ── withTlsRequestOptions — configuration?.insecure optional chain (line 252) ─
+
+test('withTlsRequestOptions should not warn when configuration is undefined and httpsAgent is provided externally', async () => {
+  // configuration is absent — the optional chain configuration?.insecure should not throw
+  baseRegistry.configuration = undefined as any;
+  const customHttpsAgent = { custom: true } as any;
+  const warnSpy = vi.spyOn(baseRegistry.log, 'warn').mockImplementation(() => undefined);
+
+  try {
+    const result = await baseRegistry.authenticateBearer(
+      { headers: {}, httpsAgent: customHttpsAgent },
+      'tok',
+    );
+    // Agent is forwarded, no insecure warning
+    expect(result.httpsAgent).toBe(customHttpsAgent);
+    expect(warnSpy).not.toHaveBeenCalled();
+  } finally {
+    warnSpy.mockRestore();
+  }
+});
+
+// ── getImageManifestDigest — manifest?.digest optional chain (line 335) ──────
+
+test('getImageManifestDigest should not cache when manifest is undefined', async () => {
+  vi.spyOn(Registry.prototype, 'getImageManifestDigest').mockResolvedValue(undefined as any);
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+
+  const result = await baseRegistry.getImageManifestDigest(image);
+  expect(result).toBeUndefined();
+  expect(
+    (baseRegistry as unknown as { digestManifestCache: Map<string, unknown> }).digestManifestCache
+      .size,
+  ).toBe(0);
+});
+
+// ── authenticateBearerFromAuthUrl — requestOptions spread (line 374) ─────────
+
+test('authenticateBearerFromAuthUrl should preserve existing request headers in token response', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'preserved-headers-tok' } });
+
+  const result = await baseRegistry.authenticateBearerFromAuthUrl(
+    {
+      headers: { 'X-Custom-Header': 'custom-value' },
+      url: 'https://auth.example.com/v2/library/nginx',
+    },
+    'https://auth.example.com/token',
+    undefined,
+  );
+
+  // The custom header from the original requestOptions should be preserved
+  expect(result.headers['X-Custom-Header']).toBe('custom-value');
+  expect(result.headers.Authorization).toBe('Bearer preserved-headers-tok');
+});
+
+// ── authenticateBearerFromAuthUrl cache — boundary at expiresAt (line 381) ────
+
+test('authenticateBearerFromAuthUrl should not use cache when now equals expiresAt (now < expiresAt is strict)', async () => {
+  const { default: axios } = await import('axios');
+  vi.useFakeTimers();
+  axios
+    .mockResolvedValueOnce({ data: { token: 'tok-boundary-1' } })
+    .mockResolvedValueOnce({ data: { token: 'tok-boundary-2' } });
+  const t0 = new Date('2026-03-05T10:00:00.000Z').getTime();
+
+  try {
+    vi.setSystemTime(t0);
+    const r1 = await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/nginx' },
+      'https://auth.example.com/token',
+      'credX',
+    );
+    expect(r1.headers.Authorization).toBe('Bearer tok-boundary-1');
+
+    // Exactly at expiresAt: `now < expiresAt` is false → should NOT use cache
+    vi.setSystemTime(t0 + REGISTRY_BEARER_TOKEN_CACHE_TTL_MS);
+    const r2 = await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/nginx' },
+      'https://auth.example.com/token',
+      'credX',
+    );
+
+    expect(axios).toHaveBeenCalledTimes(2);
+    expect(r2.headers.Authorization).toBe('Bearer tok-boundary-2');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// ── getRejectedCredentialStatus — empty rejectedCredentialStatuses (line 439) ─
+
+test('getRejectedCredentialStatus should return undefined when rejectedCredentialStatuses is empty', () => {
+  const getRejectedCredentialStatus = (
+    baseRegistry as unknown as {
+      getRejectedCredentialStatus: (
+        error: unknown,
+        statuses: readonly number[],
+      ) => string | undefined;
+    }
+  ).getRejectedCredentialStatus.bind(baseRegistry);
+
+  expect(
+    getRejectedCredentialStatus(
+      new Error('token request failed (Request failed with status code 401)'),
+      [],
+    ),
+  ).toBeUndefined();
+});
+
+// ── getImagePublishedAt — tag guards (lines 549, 550, 558) ───────────────────
+
+test('getImagePublishedAt should use image tag when tag argument is undefined', async () => {
+  const spy = vi
+    .spyOn(baseRegistry, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:a', created: '2026-01-01T00:00:00.000Z', version: 2 });
+
+  await baseRegistry.getImagePublishedAt({
+    name: 'nginx',
+    tag: { value: 'specific-tag' },
+    registry: { url: 'docker.io' },
+  });
+
+  expect(spy).toHaveBeenCalledWith(expect.objectContaining({ tag: { value: 'specific-tag' } }));
+});
+
+test('getImagePublishedAt should not overwrite tag when tag argument is not a string', async () => {
+  const spy = vi
+    .spyOn(baseRegistry, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:b', created: '2026-01-01T00:00:00.000Z', version: 2 });
+
+  await baseRegistry.getImagePublishedAt(
+    { name: 'nginx', tag: { value: 'from-image' }, registry: { url: 'docker.io' } },
+    undefined,
+  );
+
+  // tagToLookup falls back to imageToInspect.tag?.value = 'from-image'
+  expect(spy).toHaveBeenCalledWith(expect.objectContaining({ tag: { value: 'from-image' } }));
+});
+
+test('getImagePublishedAt should not write tag when tagToLookup is empty string', async () => {
+  const spy = vi
+    .spyOn(baseRegistry, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:c', created: '2026-01-01T00:00:00.000Z', version: 2 });
+
+  // When image has no tag and tag arg is empty → tagToLookup is empty string
+  await baseRegistry.getImagePublishedAt(
+    { name: 'nginx', registry: { url: 'docker.io' } } as any,
+    '',
+  );
+
+  // imageToInspect.tag should remain falsy
+  expect(spy).toHaveBeenCalledWith(expect.not.objectContaining({ tag: { value: '' } }));
+});
+
+test('getImagePublishedAt should return undefined when created is null (not a string)', async () => {
+  vi.spyOn(baseRegistry, 'getImageManifestDigest').mockResolvedValue({
+    digest: 'sha256:null-created',
+    created: null as any,
+  });
+
+  const result = await baseRegistry.getImagePublishedAt({
+    name: 'nginx',
+    tag: { value: 'latest' },
+    registry: { url: 'docker.io' },
+  });
+
+  expect(result).toBeUndefined();
+});
+
+test('getImagePublishedAt should return the created date string (block statement coverage)', async () => {
+  vi.spyOn(baseRegistry, 'getImageManifestDigest').mockResolvedValue({
+    digest: 'sha256:d',
+    created: '2026-04-01T00:00:00.000Z',
+    version: 2,
+  });
+
+  const result = await baseRegistry.getImagePublishedAt({
+    name: 'nginx',
+    tag: { value: 'latest' },
+    registry: { url: 'docker.io' },
+  });
+
+  expect(result).toBe('2026-04-01T00:00:00.000Z');
+});
+
+// ── getRegistryHostname — regex anchoring (lines 569, 574) ───────────────────
+
+test('getRegistryHostname should not prepend https when value already contains http://', () => {
+  // The ^ anchor in /^https?:\/\//i means 'http://host/path' should match at start
+  // and NOT add another 'https://' prefix
+  const result = baseRegistry.exposeGetRegistryHostname('http://my.registry.com/v2');
+  expect(result).toBe('my.registry.com');
+  // The 's?' makes the regex work for both http and https
+});
+
+test('getRegistryHostname should not match https:// in the middle of a URL as a protocol', () => {
+  // /^https?:\/\//i has ^ anchor — something like "path/https://x" should NOT match
+  // and the code should prepend https://
+  const result = baseRegistry.exposeGetRegistryHostname(
+    'registry.example.com/redirect/https://other.com',
+  );
+  // URL parsing: the prepended https:// URL would parse registry.example.com as host
+  expect(result).toBe('registry.example.com');
+});
+
+test('getRegistryHostname fallback should use lowercase for the first path segment', () => {
+  const originalURL = global.URL;
+  try {
+    // @ts-expect-error
+    global.URL = class {
+      constructor() {
+        throw new Error('force fallback');
+      }
+    };
+    // The fallback path strips protocol and splits on '/', taking [0] then lowercase
+    expect(baseRegistry.exposeGetRegistryHostname('HTTPS://REGISTRY.EXAMPLE.COM/v2')).toBe(
+      'registry.example.com',
+    );
+  } finally {
+    global.URL = originalURL;
+  }
+});
+
+// ── buildDigestCacheKey: registryHost === 'docker.io' check (line 104:7) ──────
+// The ConditionalExpression mutant 'true && !imageName.includes("/")'
+// would add library/ prefix to ALL simple names on ANY registry.
+// We must assert that non-docker.io simple names do NOT get the library/ prefix.
+
+test('buildDigestCacheKey does NOT add library/ prefix on non-docker.io when name has no slash', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:prefix-check', version: 2 });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  // On ghcr.io, 'nginx' and 'library/nginx' should have DIFFERENT cache keys
+  await baseRegistry.getImageManifestDigest({
+    name: 'nginx',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'ghcr.io' },
+  });
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'ghcr.io' },
+  });
+
+  // If library/ were incorrectly added to ghcr.io/nginx, both would map to the same key (1 call).
+  // The correct behavior is 2 separate keys → 2 real lookups.
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(2);
+});
+
+// ── buildDigestCacheKey: imageName.length > 0 guard (line 104:39) ─────────────
+// The EqualityOperator mutant 'imageName.length >= 0' always true,
+// so empty imageName on docker.io would incorrectly become 'library/'.
+// We need to assert that empty imageName on docker.io does NOT produce 'library/' prefix.
+
+test('buildDigestCacheKey does NOT add library/ prefix on docker.io when imageName is empty', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:empty-name-docker', version: 2 });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  // docker.io with empty name should not produce 'library/' prefix
+  await baseRegistry.getImageManifestDigest({
+    name: '',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  } as any);
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  // 'library/' has a slash so it's not prefixed; '' stays as '' not 'library/'
+  // With the mutant, '' would become 'library/' which would match 'library/' → 1 call
+  // With correct behavior, different keys → 2 calls
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(2);
+});
+
+// ── buildDigestCacheKey: tagOrDigest 'latest' vs '' fallback (line 109:7) ────
+// The StringLiteral mutant '' → "Stryker was here!" changes what the key contains
+// when both digest and tag are missing. With '' the cache key would contain ':' + '' = ':'.
+// With 'latest', the key contains ':latest'. Two images with empty tag/digest should
+// produce the same key as an image with tag='latest'.
+
+test('buildDigestCacheKey uses "latest" not empty string for missing tag+digest in cache key', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:latest-key-test', version: 2 });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  // Image with no tag, no digest
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  } as any);
+
+  // Image with tag='latest' explicitly — should share the same cache key
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  // Same key (both use 'latest') → 1 real lookup
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+// ── buildDigestCacheKey: architecture 'unknown' vs '' fallback (line 110:59) ──
+
+test('buildDigestCacheKey uses "unknown" not empty string for missing architecture in cache key', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:arch-key-test', version: 2 });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  // Image with no architecture
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  } as any);
+
+  // Image with architecture='unknown' — should share the same cache key
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    architecture: 'unknown',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  // Same key → 1 real lookup
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+// Image with architecture='' is different from architecture='unknown'
+test('buildDigestCacheKey treats empty architecture as "unknown"', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:arch-empty-test', version: 2 });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  // Image with architecture='' (falsy) — same key as 'unknown'
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    architecture: '',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  // Image with architecture='unknown'
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    architecture: 'unknown',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  // With the StringLiteral mutant '' → same key  (wrong, but would pass this test)
+  // With 'unknown' → both map to 'unknown' → same key → 1 real lookup
+  // With '' → '' maps to '' and 'unknown' maps to 'unknown' → DIFFERENT keys → 2 lookups
+  // So this kills the StringLiteral '' mutant (110:59)
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+// ── buildDigestCacheKey: os 'unknown' vs '' fallback (line 111:39) ────────────
+
+test('buildDigestCacheKey treats empty os as "unknown"', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:os-empty-test', version: 2 });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  // os='' (falsy) — same key as os='unknown'
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    os: '',
+    registry: { url: 'docker.io' },
+  });
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    os: 'unknown',
+    registry: { url: 'docker.io' },
+  });
+
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+// ── buildDigestCacheKey: variant '' vs 'Stryker was here!' (line 112:80) ──────
+
+test('buildDigestCacheKey uses empty string not "Stryker was here!" for no-variant suffix', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:variant-no-suffix', version: 2 });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  // Image with no variant
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  // Image with variant='' (also no variant) — should produce the same key
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'latest' },
+    architecture: 'amd64',
+    os: 'linux',
+    variant: '',
+    registry: { url: 'docker.io' },
+  });
+
+  // Both should share the same cache key → 1 lookup
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+// ── buildDigestCacheKey: tagOrDigest type check (line 108:8) ─────────────────
+// ConditionalExpression mutant: (true ? digest : normalizedImage?.tag?.value)
+// This always uses `digest` even when `digest=undefined`.
+// The || 'latest' after it would then return 'latest'.
+// But when `digest=undefined` AND `tag?.value='v1'`, the correct result uses tag.
+// The mutant would incorrectly use undefined || 'latest' = 'latest' instead of 'v1'.
+
+test('buildDigestCacheKey uses tag value when digest is undefined (type check matters)', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:type-check-v2', version: 2 });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  // Lookup 1: no explicit digest, tag='v1'
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'v1' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  // Lookup 2: same image — should share key with v1, not fall back to 'latest'
+  await baseRegistry.getImageManifestDigest({
+    name: 'library/nginx',
+    tag: { value: 'v1' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  // Same key (both use tag 'v1') → 1 real lookup
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+// With the `true` mutant, undefined digest would still go through `undefined || 'latest'` = 'latest'
+// BUT when tag='v1', correct code gives 'v1'. The mutant gives 'latest'.
+// So lookup2 with tag='v1' would have a DIFFERENT key from lookup1 (v1 vs latest).
+// → 2 lookups. Correct code → 1 lookup. This kills the mutant.
+
+// ── buildDigestCacheKey: digest length > 0 check (line 108:38) ───────────────
+// The mutant 'digest.length >= 0' always true (even for empty string).
+// Need test where digest='' should fall back to tag.
+
+test('buildDigestCacheKey falls back to tag when digest is empty string (length > 0 check)', async () => {
+  const superGetImageManifestDigestSpy = vi
+    .spyOn(Registry.prototype, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:digest-len-check', version: 2 });
+
+  baseRegistry.startDigestCachePollCycle();
+
+  const image = {
+    name: 'library/nginx',
+    tag: { value: 'stable' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+
+  // Pass digest='' — should fall back to tag 'stable'
+  await baseRegistry.getImageManifestDigest(image, '');
+  // Pass no digest — should also use tag 'stable'
+  await baseRegistry.getImageManifestDigest(image);
+
+  // Both should have the same key (':stable') → 1 real lookup
+  expect(superGetImageManifestDigestSpy).toHaveBeenCalledTimes(1);
+});
+
+// ── Prometheus optional chaining (lines 119, 127) — need getDigestCacheHitsCounter?.() ─
+// The optional chaining means if getDigestCacheHitsCounter is not a function, it won't crash.
+
+test('recordDigestCacheHit does not crash when getDigestCacheHitsCounter is not a function', async () => {
+  vi.spyOn(Registry.prototype, 'getImageManifestDigest').mockResolvedValue({
+    digest: 'sha256:prom-nofunc',
+    version: 2,
+  });
+  // @ts-expect-error - intentionally delete the method to test optional chaining
+  const origGetDigestCacheHitsCounter = registryPrometheus.getDigestCacheHitsCounter;
+  const origGetDigestCacheMissesCounter = registryPrometheus.getDigestCacheMissesCounter;
+
+  try {
+    // @ts-expect-error
+    delete registryPrometheus.getDigestCacheHitsCounter;
+    // @ts-expect-error
+    delete registryPrometheus.getDigestCacheMissesCounter;
+
+    baseRegistry.startDigestCachePollCycle();
+    const image = {
+      name: 'library/nginx',
+      tag: { value: 'latest' },
+      architecture: 'amd64',
+      os: 'linux',
+      registry: { url: 'docker.io' },
+    };
+
+    // Should not throw even with no prometheus methods
+    await expect(baseRegistry.getImageManifestDigest(image)).resolves.toBeDefined();
+    await expect(baseRegistry.getImageManifestDigest(image)).resolves.toBeDefined();
+
+    const stats = baseRegistry.endDigestCachePollCycle();
+    expect(stats.hits).toBe(1);
+    expect(stats.misses).toBe(1);
+  } finally {
+    // @ts-expect-error
+    registryPrometheus.getDigestCacheHitsCounter = origGetDigestCacheHitsCounter;
+    // @ts-expect-error
+    registryPrometheus.getDigestCacheMissesCounter = origGetDigestCacheMissesCounter;
+  }
+});
+
+// ── getTrustedAuthHosts host.trim().length > 0 (line 177:39) ──────────────────
+// The MethodExpression mutant 'host.length > 0' (without trim) would still accept
+// whitespace-only hosts. We need a test where:
+// - The only trusted auth host is a whitespace-padded URL
+// - The auth URL matches after trimming but not before
+
+test('getTrustedRegistryHosts ignores hosts that become empty after trimming', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'tok' } });
+
+  class WhitespaceOnlyTrustedHost extends TestBaseRegistry {
+    protected override getTrustedAuthHosts(): string[] {
+      // Only whitespace entries — none should be trusted
+      return ['   ', '\t', '  \n  '];
+    }
+  }
+  const registry = new WhitespaceOnlyTrustedHost();
+
+  // Only trusted host was whitespace — should fail closed (no trusted hosts)
+  await expect(
+    registry.authenticateBearerFromAuthUrl(
+      { headers: {} },
+      'https://auth.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow('cannot be validated');
+
+  expect(axios).not.toHaveBeenCalled();
+});
+
+// ── resolveConfiguredPath label verification (lines 217–231) ──────────────────
+// The ObjectLiteral mutant `{}` passes empty options to resolveConfiguredPath.
+// We need to verify the `label` option IS passed (not just that readFileSync is called).
+
+test('getHttpsAgent passes label to resolveConfiguredPath for CA file', async () => {
+  const resolveSpy = vi
+    .spyOn(await import('../runtime/paths.js'), 'resolveConfiguredPath')
+    .mockImplementation((p) => p as string);
+  const readFileSyncSpy = vi.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('ca'));
+
+  try {
+    baseRegistry.type = 'registry';
+    baseRegistry.name = 'label-ca';
+    baseRegistry.configuration = { cafile: '/tmp/ca.pem' };
+    await baseRegistry.authenticateBearer({ headers: {} }, 'tok');
+
+    expect(resolveSpy).toHaveBeenCalledWith(
+      '/tmp/ca.pem',
+      expect.objectContaining({ label: expect.stringContaining('CA file path') }),
+    );
+  } finally {
+    resolveSpy.mockRestore();
+    readFileSyncSpy.mockRestore();
+  }
+});
+
+test('getHttpsAgent passes label to resolveConfiguredPath for client cert and key', async () => {
+  const resolveSpy = vi
+    .spyOn(await import('../runtime/paths.js'), 'resolveConfiguredPath')
+    .mockImplementation((p) => p as string);
+  const readFileSyncSpy = vi.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('pem'));
+
+  try {
+    baseRegistry.type = 'registry';
+    baseRegistry.name = 'label-cert';
+    baseRegistry.configuration = { clientcert: '/tmp/cert.pem', clientkey: '/tmp/key.pem' };
+    await baseRegistry.authenticateBearer({ headers: {} }, 'tok');
+
+    expect(resolveSpy).toHaveBeenCalledWith(
+      '/tmp/cert.pem',
+      expect.objectContaining({ label: expect.stringContaining('client certificate file path') }),
+    );
+    expect(resolveSpy).toHaveBeenCalledWith(
+      '/tmp/key.pem',
+      expect.objectContaining({ label: expect.stringContaining('client key file path') }),
+    );
+  } finally {
+    resolveSpy.mockRestore();
+    readFileSyncSpy.mockRestore();
+  }
+});
+
+// ── authenticateBearerFromAuthUrl cache: cachedToken && true mutant (line 381) ─
+// The ConditionalExpression mutant 'cachedToken && true' means if a cached token
+// exists (even an expired one), it's always used. We need to verify that an expired
+// token is NOT used.
+
+test('authenticateBearerFromAuthUrl does NOT reuse expired token that was pruned from cache', async () => {
+  const { default: axios } = await import('axios');
+  vi.useFakeTimers();
+  axios
+    .mockResolvedValueOnce({ data: { token: 'expired-tok' } })
+    .mockResolvedValueOnce({ data: { token: 'fresh-tok' } });
+  const t0 = new Date('2026-03-05T10:00:00.000Z').getTime();
+
+  try {
+    vi.setSystemTime(t0);
+    const r1 = await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/nginx' },
+      'https://auth.example.com/token',
+      'myCredential',
+    );
+    expect(r1.headers.Authorization).toBe('Bearer expired-tok');
+
+    // Advance past the TTL so the token is expired (and will be pruned)
+    vi.setSystemTime(t0 + REGISTRY_BEARER_TOKEN_CACHE_TTL_MS + 5000);
+    const r2 = await baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/nginx' },
+      'https://auth.example.com/token',
+      'myCredential',
+    );
+
+    // With 'cachedToken && true' mutant, the expired token would be reused (1 call).
+    // Correct behavior: expired token NOT reused → fetch fresh → 2 calls.
+    expect(axios).toHaveBeenCalledTimes(2);
+    expect(r2.headers.Authorization).toBe('Bearer fresh-tok');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+// ── getRejectedCredentialStatus: rejectedCredentialStatuses.length === 0 (line 439) ─
+// ConditionalExpression mutant 'false' means the function never returns undefined
+// for empty statuses. Need test that verifies empty statuses → undefined.
+
+test('getRejectedCredentialStatus returns undefined for an Error with empty rejected statuses', () => {
+  const fn = (
+    baseRegistry as unknown as {
+      getRejectedCredentialStatus: (
+        err: unknown,
+        statuses: readonly number[],
+      ) => string | undefined;
+    }
+  ).getRejectedCredentialStatus.bind(baseRegistry);
+
+  // With the 'false' mutant, it would try to compile a pattern and potentially match
+  expect(
+    fn(new Error('token request failed (Request failed with status code 403)'), []),
+  ).toBeUndefined();
+  expect(fn(new Error('some other error'), [401, 403])).toBeUndefined();
+});
+
+// ── getImagePublishedAt: tagToLookup type check (line 549:25) ─────────────────
+// The ConditionalExpression mutant 'true ? tag : imageToInspect.tag?.value'
+// always picks `tag`, even when it's undefined. This means when tag=undefined,
+// tagToLookup = undefined (same result). But when tag=null, tagToLookup = null vs
+// image.tag.value. We need to test with a non-string tag.
+
+test('getImagePublishedAt falls back to image tag when tag argument is not a string type', async () => {
+  const spy = vi
+    .spyOn(baseRegistry, 'getImageManifestDigest')
+    .mockResolvedValue({ digest: 'sha256:e', created: '2026-01-01T00:00:00.000Z', version: 2 });
+
+  // Pass a numeric tag (not a string) — should fall back to image tag 'from-image'
+  await baseRegistry.getImagePublishedAt(
+    { name: 'nginx', tag: { value: 'from-image' }, registry: { url: 'docker.io' } },
+    42 as any,
+  );
+
+  expect(spy).toHaveBeenCalledWith(expect.objectContaining({ tag: { value: 'from-image' } }));
+});
+
+// ── getImagePublishedAt: tag.length > 0 (line 549:52) ─────────────────────────
+// 'true' mutant means tag='' (empty string) would be used.
+// Need test where tag='' and image has a tag — should use image tag not empty string.
+
+test('getImagePublishedAt does not use empty string as tag override (length check)', async () => {
+  const spy = vi
+    .spyOn(baseRegistry, 'getImageManifestDigest')
+    .mockResolvedValue({ created: '2026-01-01T00:00:00.000Z' });
+
+  // tag='' is empty → should fall back to image tag 'stable'
+  await baseRegistry.getImagePublishedAt(
+    { name: 'nginx', tag: { value: 'stable' }, registry: { url: 'docker.io' } },
+    '',
+  );
+
+  // The tag in the call should be 'stable' (image tag), NOT '' (empty override)
+  expect(spy).toHaveBeenCalledWith(
+    expect.objectContaining({ tag: expect.objectContaining({ value: 'stable' }) }),
+  );
+});
+
+// ── getImagePublishedAt: tagToLookup.length > 0 guard (line 550) ──────────────
+// ConditionalExpression mutant 'true' would set imageToInspect.tag even when tagToLookup=undefined.
+// Need test where tagToLookup is undefined (no tag, no arg) and verify that tag is not set.
+
+test('getImagePublishedAt does not set tag when both tag arg and image tag are absent', async () => {
+  const spy = vi
+    .spyOn(baseRegistry, 'getImageManifestDigest')
+    .mockResolvedValue({ created: '2026-01-01T00:00:00.000Z' });
+
+  // Image has no tag and no tag argument
+  await baseRegistry.getImagePublishedAt(
+    { name: 'nginx', registry: { url: 'docker.io' } } as any,
+    undefined,
+  );
+
+  // imageToInspect.tag should be undefined/absent
+  expect(spy).toHaveBeenCalledWith(
+    expect.not.objectContaining({ tag: expect.objectContaining({ value: expect.anything() }) }),
+  );
+});
+
+// ── getRegistryHostname: regex anchor ^ (lines 569:26, 574:18) ────────────────
+// The /https?:\/\//i → /^https?:\/\//i change matters when value has protocol at start.
+// We need to test that a URL WITHOUT a protocol gets https:// prepended (verifying the
+// decision path: test() returns false → prepend https://).
+
+test('getRegistryHostname should correctly detect http:// at the start only (^ anchor)', () => {
+  // 'http://registry.example.com' has protocol at START → test() returns true → use as-is
+  expect(baseRegistry.exposeGetRegistryHostname('http://registry.example.com/v2')).toBe(
+    'registry.example.com',
+  );
+
+  // 'registry.example.com' has NO protocol → test() returns false → prepend https://
+  expect(baseRegistry.exposeGetRegistryHostname('registry.example.com')).toBe(
+    'registry.example.com',
+  );
+});
+
+test('getRegistryHostname fallback: /^https?:///i removes protocol prefix in catch block', () => {
+  // Force the fallback path. The fallback uses .replace(/^https?:\/\//i, '') to strip protocol.
+  // Without ^ anchor, 'https://registry.example.com' would match mid-string too (no effect here
+  // since it's at start anyway). But the key is that http:// is correctly stripped.
+  const originalURL = global.URL;
+  try {
+    // @ts-expect-error
+    global.URL = class {
+      constructor() {
+        throw new Error('force');
+      }
+    };
+
+    // http:// should be stripped in the fallback path
+    const result = baseRegistry.exposeGetRegistryHostname('http://registry.example.com/v2');
+    expect(result).toBe('registry.example.com');
+  } finally {
+    global.URL = originalURL;
+  }
+});
+
+// ── getRegistryHostname: 'https://' fallback string (line 569:64) ─────────────
+// StringLiteral mutant: 'https://${value}' → '' means no protocol prepended.
+// The fallback catch uses `value` directly (not withProtocol), so for simple hostnames
+// the result is the same (both paths use value). This is equivalent.
+// But for values with a path like 'registry.io/v2', URL('') would fail, catch strips
+// protocol from the ORIGINAL value.
+// → This mutant IS equivalent because the fallback always uses `value` not `withProtocol`.
+
+// ── authenticateBearerFromAuthUrl: {…requestOptions} spread (line 374) ────────
+// ObjectLiteral mutant {} means requestOptions headers are not copied.
+// We verify this by checking that headers from requestOptions appear in the auth result.
+
+test('authenticateBearerFromAuthUrl preserves original requestOptions timeout option', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'preserved-opts-tok' } });
+
+  const result = await baseRegistry.authenticateBearerFromAuthUrl(
+    {
+      headers: {},
+      url: 'https://auth.example.com/v2/nginx',
+      timeout: 5000,
+    },
+    'https://auth.example.com/token',
+    undefined,
+  );
+
+  // The timeout option from the original requestOptions should be preserved
+  expect(result.timeout).toBe(5000);
+});

@@ -235,7 +235,7 @@ async function getContainerLogs(containerId: string, tail: number = 100) {
   if (!response.ok) {
     throw new Error(`Failed to get logs for container ${containerId}: ${response.statusText}`);
   }
-  return readJsonResponse(response, 'Container logs API');
+  return readJsonResponse<{ logs: string }>(response, 'Container logs API');
 }
 
 async function getContainerUpdateOperations(
@@ -262,7 +262,7 @@ async function getContainerVulnerabilities(containerId: string) {
       `Failed to get vulnerabilities for container ${containerId}: ${response.statusText}`,
     );
   }
-  return readJsonResponse(response, 'Container vulnerabilities API');
+  return readJsonResponse<Record<string, unknown>>(response, 'Container vulnerabilities API');
 }
 
 async function getSecurityVulnerabilityOverview(): Promise<SecurityVulnerabilityOverview> {
@@ -285,7 +285,7 @@ async function getContainerSbom(containerId: string, format: string = 'spdx-json
   if (!response.ok) {
     throw new Error(`Failed to get SBOM for container ${containerId}: ${response.statusText}`);
   }
-  return readJsonResponse(response, 'Container SBOM API');
+  return readJsonResponse<Record<string, unknown>>(response, 'Container SBOM API');
 }
 
 async function updateContainerPolicy(

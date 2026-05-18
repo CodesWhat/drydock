@@ -120,6 +120,7 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
     icon: overrides.icon ?? 'docker',
     currentTag: overrides.currentTag ?? '1.0.0',
     newTag: overrides.newTag ?? null,
+    isDigestPinned: overrides.isDigestPinned ?? false,
     status: overrides.status ?? 'running',
     registry: overrides.registry ?? 'dockerhub',
     registryName: overrides.registryName ?? '',
