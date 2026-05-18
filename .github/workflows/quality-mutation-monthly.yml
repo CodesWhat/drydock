@@ -121,8 +121,9 @@ jobs:
             incremental_file: reports/stryker-incremental-app-ops-registries-remote.json
             mutate: >-
               registries/providers/acr/**/*.ts,registries/providers/alicr/**/*.ts,registries/providers/artifactory/**/*.ts,registries/providers/codeberg/**/*.ts,registries/providers/dhi/**/*.ts,registries/providers/docr/**/*.ts,registries/providers/ecr/**/*.ts,registries/providers/forgejo/**/*.ts,registries/providers/gar/**/*.ts,registries/providers/gcr/**/*.ts,registries/providers/ghcr/**/*.ts,registries/providers/gitea/**/*.ts,registries/providers/gitlab/**/*.ts,registries/providers/harbor/**/*.ts,registries/providers/hub/**/*.ts,registries/providers/ibmcr/**/*.ts,registries/providers/lscr/**/*.ts,registries/providers/mau/**/*.ts,registries/providers/nexus/**/*.ts,registries/providers/ocir/**/*.ts,registries/providers/quay/**/*.ts,registries/providers/trueforge/**/*.ts,stats/**/*.ts,prometheus/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
-          # The UI source is split into 6 slices sized to match the app slices
-          # (~2k mutants each). A single all-of-ui slice runs past the 6h job
+          # The UI source is split into 8 slices sized to match the app slices.
+          # ui-shell is itself split into stores / preferences / app — bundled,
+          # its high-fan-in Pinia stores and icons map ran past the 6h job
           # timeout. src/boot/i18n.ts is excluded everywhere it appears: it
           # uses import.meta.glob(), a Vite compile-time macro whose argument
           # must stay a literal — Stryker instrumentation breaks the glob
@@ -152,11 +153,21 @@ jobs:
             incremental_file: reports/stryker-incremental-ui-utils.json
             mutate: >-
               src/utils/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
-          - name: ui-shell
+          - name: ui-shell-stores
             package: ui
-            incremental_file: reports/stryker-incremental-ui-shell.json
+            incremental_file: reports/stryker-incremental-ui-shell-stores.json
             mutate: >-
-              src/stores/**/*.ts,src/preferences/**/*.ts,src/components/**/*.ts,src/boot/**/*.ts,src/layouts/**/*.ts,src/i18n/**/*.ts,src/main.ts,src/icons.ts,!src/boot/i18n.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
+              src/stores/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
+          - name: ui-shell-preferences
+            package: ui
+            incremental_file: reports/stryker-incremental-ui-shell-preferences.json
+            mutate: >-
+              src/preferences/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
+          - name: ui-shell-app
+            package: ui
+            incremental_file: reports/stryker-incremental-ui-shell-app.json
+            mutate: >-
+              src/components/**/*.ts,src/boot/**/*.ts,src/layouts/**/*.ts,src/i18n/**/*.ts,src/main.ts,src/icons.ts,!src/boot/i18n.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
 
     steps:
       - name: Harden Runner
@@ -270,7 +281,7 @@ jobs:
           # the summary records how many shards were missing.
           node scripts/aggregate-stryker-score.mjs \
             --input artifacts/mutation \
-            --expected-count 24 \
+            --expected-count 26 \
             --allow-missing \
             --summary-out artifacts/aggregate/summary.json \
             --score-out artifacts/aggregate/mutation-score.json
