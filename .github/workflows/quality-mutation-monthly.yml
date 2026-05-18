@@ -161,8 +161,14 @@ jobs:
         uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7  # v5.0.4
         with:
           path: ${{ matrix.package }}/${{ matrix.incremental_file }}
-          key: stryker-incremental-${{ matrix.name }}-${{ github.ref_name }}
+          # Append the run number so every run writes a fresh cache entry
+          # (actions/cache never overwrites an existing key). Without this the
+          # incremental baseline froze at the first run and the speedup decayed
+          # as the project drifted from that stale snapshot. restore-keys still
+          # warm-restores the most recent prior baseline by prefix.
+          key: stryker-incremental-${{ matrix.name }}-${{ github.ref_name }}-${{ github.run_number }}
           restore-keys: |
+            stryker-incremental-${{ matrix.name }}-${{ github.ref_name }}-
             stryker-incremental-${{ matrix.name }}-
 
       - name: Run Stryker
