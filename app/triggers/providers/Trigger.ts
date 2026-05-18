@@ -1890,14 +1890,15 @@ class Trigger<
     }));
 
     // Sort by severity descending: critical → high → medium → low → unknown
-    rows.sort(
-      (a, b) =>
-        b.critical - a.critical ||
-        b.high - a.high ||
-        b.medium - a.medium ||
-        b.low - a.low ||
-        b.unknown - a.unknown,
-    );
+    rows.sort((a, b) => {
+      const byCritical = b.critical - a.critical;
+      const byHigh = b.high - a.high;
+      const byMedium = b.medium - a.medium;
+      const byLow = b.low - a.low;
+      const byUnknown = b.unknown - a.unknown;
+      const byTopSeverity = byCritical || byHigh || byMedium;
+      return byTopSeverity || byLow || byUnknown;
+    });
 
     const alertCount = rows.length;
     const criticalCount = rows.reduce((s, r) => s + (r.critical > 0 ? 1 : 0), 0);
@@ -1910,14 +1911,15 @@ class Trigger<
       (s, r) => s + (r.critical === 0 && r.high === 0 && r.medium === 0 && r.low > 0 ? 1 : 0),
       0,
     );
-    const unknownCount = rows.reduce(
-      (s, r) =>
-        s +
-        (r.critical === 0 && r.high === 0 && r.medium === 0 && r.low === 0 && r.unknown > 0
-          ? 1
-          : 0),
-      0,
-    );
+    const unknownCount = rows.reduce((s, r) => {
+      const noCritical = r.critical === 0;
+      const noHigh = r.high === 0;
+      const noMedium = r.medium === 0;
+      const noLow = r.low === 0;
+      const hasUnknown = r.unknown > 0;
+      const noHigherSeverity = noCritical && noHigh && noMedium && noLow;
+      return s + (noHigherSeverity && hasUnknown ? 1 : 0);
+    }, 0);
 
     const now = new Date().toISOString();
     const secCtx: SecurityDigestContext = {

@@ -1005,14 +1005,12 @@ export class AgentClient {
 
     const payload = data as Record<string, unknown>;
     const batchId = toNonEmptyString(payload.batchId);
-    if (
-      !batchId ||
-      !Number.isFinite(payload.total) ||
-      !Number.isFinite(payload.succeeded) ||
-      !Number.isFinite(payload.failed) ||
-      !Number.isFinite(payload.durationMs) ||
-      !Array.isArray(payload.items)
-    ) {
+    const hasNumericFields =
+      Number.isFinite(payload.total) &&
+      Number.isFinite(payload.succeeded) &&
+      Number.isFinite(payload.failed) &&
+      Number.isFinite(payload.durationMs);
+    if (!batchId || !hasNumericFields || !Array.isArray(payload.items)) {
       return undefined;
     }
 
