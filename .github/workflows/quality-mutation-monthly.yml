@@ -124,8 +124,11 @@ jobs:
           - name: ui-shell-and-data
             package: ui
             incremental_file: reports/stryker-incremental-ui-shell-and-data.json
+            # src/boot/i18n.ts is excluded: it uses import.meta.glob(), a Vite
+            # compile-time macro whose argument must stay a literal. Stryker
+            # instrumentation breaks Vite's glob parser and aborts the dry run.
             mutate: >-
-              src/boot/**/*.ts,src/components/**/*.ts,src/composables/**/*.ts,src/i18n/**/*.ts,src/layouts/**/*.ts,src/preferences/**/*.ts,src/services/**/*.ts,src/stores/**/*.ts,src/theme/**/*.ts,src/types/**/*.ts,src/utils/**/*.ts,src/main.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
+              src/boot/**/*.ts,src/components/**/*.ts,src/composables/**/*.ts,src/i18n/**/*.ts,src/layouts/**/*.ts,src/preferences/**/*.ts,src/services/**/*.ts,src/stores/**/*.ts,src/theme/**/*.ts,src/types/**/*.ts,src/utils/**/*.ts,src/main.ts,!src/boot/i18n.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
           - name: ui-views-and-navigation
             package: ui
             incremental_file: reports/stryker-incremental-ui-views-and-navigation.json

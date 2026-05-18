@@ -2,7 +2,18 @@ const dashboardReporterEnabled = Boolean(process.env.STRYKER_DASHBOARD_API_KEY);
 
 /** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
 const config = {
-  mutate: ['src/**/*.ts', '!src/**/*.typecheck.ts', '!src/**/*.d.ts', '!dist/**', '!coverage/**'],
+  // src/boot/i18n.ts uses import.meta.glob(), a Vite compile-time macro whose
+  // argument must stay a string literal. Stryker instrumentation rewrites that
+  // literal into a mutant switch, which breaks Vite's glob parser and fails
+  // every test that imports the i18n bootstrap. Exclude it from mutation.
+  mutate: [
+    'src/**/*.ts',
+    '!src/boot/i18n.ts',
+    '!src/**/*.typecheck.ts',
+    '!src/**/*.d.ts',
+    '!dist/**',
+    '!coverage/**',
+  ],
   testRunner: 'vitest',
   checkers: ['typescript'],
   tsconfigFile: 'tsconfig.json',
