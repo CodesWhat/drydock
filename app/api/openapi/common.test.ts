@@ -679,9 +679,7 @@ describe('destructiveConfirmationHeaderParam', () => {
 
   test('description interpolates the action token', () => {
     const result = destructiveConfirmationHeaderParam('delete-all');
-    expect(result.description).toBe(
-      'Confirmation token for destructive action (delete-all)',
-    );
+    expect(result.description).toBe('Confirmation token for destructive action (delete-all)');
   });
 
   test('schema type is string with enum containing the token', () => {
