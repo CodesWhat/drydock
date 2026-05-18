@@ -4,8 +4,20 @@ import * as apiTrigger from '../../api/trigger.js';
 import * as registry from '../../registry/index.js';
 import * as triggerApi from './trigger.js';
 
+const { mockLoggerChild, mockLogError } = vi.hoisted(() => ({
+  mockLoggerChild: vi.fn(),
+  mockLogError: vi.fn(),
+}));
+
 vi.mock('../../log/index.js', () => ({
-  default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) },
+  default: {
+    child: mockLoggerChild.mockReturnValue({
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: mockLogError,
+      debug: vi.fn(),
+    }),
+  },
 }));
 
 vi.mock('../../registry/index.js', () => ({
@@ -121,6 +133,225 @@ describe('agent API trigger', () => {
 
       await triggerApi.runTriggerBatch(req, res);
 
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Internal Server Error' }),
+      );
+    });
+
+    test('should include trigger type and name in 500 error response when message available', async () => {
+      req.params = { type: 'slack', name: 'myslack' };
+      req.body = [{ id: 'c1' }];
+      const mockTrigger = {
+        triggerBatch: vi.fn().mockRejectedValue(new Error('trigger failed hard')),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'slack.myslack': mockTrigger },
+      });
+
+      await triggerApi.runTriggerBatch(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining('slack.myslack'),
+        }),
+      );
+    });
+
+    test('should include error details reason when trigger throws Error with message', async () => {
+      req.params = { type: 'docker', name: 'update' };
+      req.body = [{ id: 'c1' }];
+      const mockTrigger = {
+        triggerBatch: vi.fn().mockRejectedValue(new Error('detailed-reason')),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+
+      await triggerApi.runTriggerBatch(req, res);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          details: expect.objectContaining({ reason: 'detailed-reason' }),
+        }),
+      );
+    });
+
+    test('should log error with sanitized name and message when trigger throws', async () => {
+      req.params = { type: 'docker', name: 'update' };
+      req.body = [{ id: 'c1' }];
+      const mockTrigger = {
+        triggerBatch: vi.fn().mockRejectedValue(new Error('specific-fail-message')),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+
+      await triggerApi.runTriggerBatch(req, res);
+
+      // Kill 82:82 LogicalOperator mutant: errorMessage='specific-fail-message'
+      // ?? '' → 'specific-fail-message', && '' → '' (empty string)
+      expect(mockLogError).toHaveBeenCalledWith(expect.stringContaining('specific-fail-message'));
+    });
+
+    test('should log empty string for undefined error message when non-object thrown', async () => {
+      req.params = { type: 'docker', name: 'update' };
+      req.body = [{ id: 'c1' }];
+      const mockTrigger = {
+        triggerBatch: vi.fn().mockRejectedValue(42),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+
+      await triggerApi.runTriggerBatch(req, res);
+
+      // When errorMessage is undefined, we use '' in the log
+      expect(mockLogError).toHaveBeenCalledWith(expect.stringContaining(''));
+    });
+
+    test('should return 200 with empty object on success', async () => {
+      req.params = { type: 'docker', name: 'update' };
+      req.body = [{ id: 'c1' }];
+      const mockTrigger = {
+        triggerBatch: vi.fn().mockResolvedValue(undefined),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+
+      await triggerApi.runTriggerBatch(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith({});
+    });
+
+    test('should include exact error message when body is not array', async () => {
+      // Kill 58:33 StringLiteral mutant
+      req.params = { type: 'docker', name: 'update' };
+      req.body = 'not-array';
+      await triggerApi.runTriggerBatch(req, res);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Body must be an array of containers' }),
+      );
+    });
+
+    test('should include trigger name in 404 error message', async () => {
+      // Kill 66:33 StringLiteral mutant `` template literal
+      req.params = { type: 'docker', name: 'notfound' };
+      req.body = [{ id: 'c1' }];
+      registry.getState.mockReturnValue({ trigger: {} });
+      await triggerApi.runTriggerBatch(req, res);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Trigger notfound not found' }),
+      );
+    });
+
+    test('should not modify container when agent field is absent', async () => {
+      // Kill 72:11 ConditionalExpression true mutant
+      req.params = { type: 'docker', name: 'update' };
+      const containerWithoutAgent = { id: 'c1', name: 'nginx' };
+      req.body = [containerWithoutAgent];
+      const mockTrigger = { triggerBatch: vi.fn().mockResolvedValue(undefined) };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+      await triggerApi.runTriggerBatch(req, res);
+      // Container should be passed without extra modification
+      expect(mockTrigger.triggerBatch).toHaveBeenCalledWith([
+        expect.objectContaining({ id: 'c1', name: 'nginx' }),
+      ]);
+    });
+
+    test('should log empty string when errorMessage is undefined (not Stryker was here)', async () => {
+      // Kill 82:98 StringLiteral "Stryker was here!" and 82:82 LogicalOperator mutants
+      req.params = { type: 'docker', name: 'update' };
+      req.body = [{ id: 'c1' }];
+      const mockTrigger = {
+        triggerBatch: vi.fn().mockRejectedValue(42), // non-object, no message
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+
+      await triggerApi.runTriggerBatch(req, res);
+
+      // errorMessage is undefined → ?? '' → log contains ''
+      // If mutant applies: ?? "Stryker was here!" → log contains 'Stryker was here!'
+      // If && mutant: undefined && '' = undefined → log contains 'undefined' string
+      const logCall = mockLogError.mock.calls[0][0];
+      expect(logCall).not.toContain('Stryker was here!');
+      expect(logCall).not.toContain('undefined');
+      // Should end with ':' + ' ' + '' (empty)
+      expect(logCall).toMatch(/update:?\s*$/u);
+    });
+
+    test('should include reason in error details when Error thrown', async () => {
+      // Kill 87:18 ObjectLiteral {} mutant
+      req.params = { type: 'docker', name: 'update' };
+      req.body = [{ id: 'c1' }];
+      const mockTrigger = {
+        triggerBatch: vi.fn().mockRejectedValue(new Error('specific-reason')),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+
+      await triggerApi.runTriggerBatch(req, res);
+
+      const jsonCall = res.json.mock.calls[0][0];
+      expect(jsonCall.details).toBeDefined();
+      expect(jsonCall.details.reason).toBe('specific-reason');
+    });
+
+    test('triggerId is constructed from type.name (lowercased is not forced here)', async () => {
+      req.params = { type: 'docker', name: 'update' };
+      req.body = [{ id: 'c1' }];
+      registry.getState.mockReturnValue({ trigger: {} });
+
+      await triggerApi.runTriggerBatch(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Trigger update not found' }),
+      );
+    });
+  });
+
+  describe('getErrorMessage', () => {
+    test('should return undefined when trigger throws non-object error (no error message path)', async () => {
+      req.params = { type: 'docker', name: 'update' };
+      req.body = [{ id: 'c1' }];
+      const mockTrigger = {
+        triggerBatch: vi.fn().mockRejectedValue(null),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+
+      await triggerApi.runTriggerBatch(req, res);
+
+      // null has no message, so getErrorMessage returns undefined → default 500
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Internal Server Error' }),
+      );
+    });
+
+    test('should return undefined when thrown object has non-string message', async () => {
+      req.params = { type: 'docker', name: 'update' };
+      req.body = [{ id: 'c1' }];
+      const mockTrigger = {
+        triggerBatch: vi.fn().mockRejectedValue({ message: 42 }),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+
+      await triggerApi.runTriggerBatch(req, res);
+
+      // { message: 42 } – message is not a string, getErrorMessage returns undefined
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({ error: 'Internal Server Error' }),

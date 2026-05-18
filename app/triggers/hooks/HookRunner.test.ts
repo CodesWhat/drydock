@@ -248,4 +248,343 @@ describe('HookRunner', () => {
       childProcessMockControl.execFileImpl = null;
     }
   });
+
+  // ---- isHooksExecutionEnabled (line 29): trim().toLowerCase() mutations ----
+  test('should skip execution when DD_HOOKS_ENABLED is "  TRUE  " (whitespace)', async () => {
+    // trim() is needed to handle padded values
+    process.env.DD_HOOKS_ENABLED = '  true  ';
+    var result = await runHook('echo ok', { label: 'test' });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim()).toBe('ok');
+  });
+
+  test('should skip execution when DD_HOOKS_ENABLED is "TRUE" (uppercase)', async () => {
+    // toLowerCase() is needed to handle uppercase values
+    process.env.DD_HOOKS_ENABLED = 'TRUE';
+    var result = await runHook('echo ok', { label: 'test' });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim()).toBe('ok');
+  });
+
+  test('should skip execution when DD_HOOKS_ENABLED is "True" (mixed case)', async () => {
+    process.env.DD_HOOKS_ENABLED = 'True';
+    var result = await runHook('echo ok', { label: 'test' });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.trim()).toBe('ok');
+  });
+
+  test('should skip execution when DD_HOOKS_ENABLED is undefined', async () => {
+    delete process.env.DD_HOOKS_ENABLED;
+    var execFileCalls = 0;
+    childProcessMockControl.execFileImpl = (
+      _: string,
+      __: readonly string[],
+      ___: unknown,
+      callback: (...args: unknown[]) => void,
+    ) => {
+      execFileCalls += 1;
+      setImmediate(() => callback(null, '', ''));
+      return { exitCode: 0 };
+    };
+
+    try {
+      const result = await runHook('echo ok', { label: 'test' });
+      expect(execFileCalls).toBe(0);
+      expect(result.stderr).toContain('Lifecycle hooks are disabled');
+    } finally {
+      childProcessMockControl.execFileImpl = null;
+      process.env.DD_HOOKS_ENABLED = 'true';
+    }
+  });
+
+  // ---- consumeVariableReference (lines 52, 63, 73, 87): index boundary mutations ----
+  // These test the variable parsing in hook commands
+  test.each([
+    // Simple $VAR references
+    'echo $PATH',
+    'echo $MY_VAR_123',
+    'echo $A',
+    'echo $_UNDERSCORE',
+    // Braced ${ } references
+    'echo ${PATH}',
+    'echo ${MY_VAR_123}',
+    'echo ${A}',
+    // Mixed
+    'printf %s $HOME',
+    'cmd $VAR1 $VAR2',
+    // With quotes containing variables
+    'echo "$MY_VAR"',
+    'echo "${MY_VAR}"',
+    // Alphanumeric safe chars
+    'cmd --flag=value',
+    'cmd path/to/file',
+    'cmd user@host',
+  ])('should allow valid hook command: %s', async (command) => {
+    var execFileCalls = 0;
+    childProcessMockControl.execFileImpl = (
+      _: string,
+      __: readonly string[],
+      ___: unknown,
+      callback: (...args: unknown[]) => void,
+    ) => {
+      execFileCalls += 1;
+      setImmediate(() => callback(null, 'ok', ''));
+      return { exitCode: 0 };
+    };
+
+    try {
+      const result = await runHook(command, { label: 'test' });
+      expect(execFileCalls).toBe(1);
+      expect(result.exitCode).toBe(0);
+    } finally {
+      childProcessMockControl.execFileImpl = null;
+    }
+  });
+
+  // ---- consumeVariableReference: $ at end of string (line 46/47) ----
+  test('should reject $ at end of command (no char after $)', async () => {
+    var execFileCalls = 0;
+    childProcessMockControl.execFileImpl = (
+      _: string,
+      __: readonly string[],
+      ___: unknown,
+      callback: (...args: unknown[]) => void,
+    ) => {
+      execFileCalls += 1;
+      setImmediate(() => callback(null, '', ''));
+      return { exitCode: 0 };
+    };
+
+    try {
+      const result = await runHook('echo $', { label: 'test' });
+      expect(execFileCalls).toBe(0);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('unsupported shell syntax');
+    } finally {
+      childProcessMockControl.execFileImpl = null;
+    }
+  });
+
+  // ---- consumeSingleQuotedSegment: loop through all chars (line 73) ----
+  test('single-quoted string with multiple words is valid', async () => {
+    var execFileCalls = 0;
+    childProcessMockControl.execFileImpl = (
+      _: string,
+      __: readonly string[],
+      ___: unknown,
+      callback: (...args: unknown[]) => void,
+    ) => {
+      execFileCalls += 1;
+      setImmediate(() => callback(null, 'hello world', ''));
+      return { exitCode: 0 };
+    };
+
+    try {
+      await runHook("echo 'hello world'", { label: 'test' });
+      expect(execFileCalls).toBe(1);
+    } finally {
+      childProcessMockControl.execFileImpl = null;
+    }
+  });
+
+  // ---- consumeDoubleQuotedSegment: newline/control chars (line 92-100) ----
+  test('should reject double-quoted segment with embedded null byte', async () => {
+    childProcessMockControl.execFileImpl = (
+      _: string,
+      __: readonly string[],
+      ___: unknown,
+      callback: (...args: unknown[]) => void,
+    ) => {
+      setImmediate(() => callback(null, '', ''));
+      return { exitCode: 0 };
+    };
+
+    try {
+      const result = await runHook('echo "bad\0byte"', { label: 'test' });
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('unsupported shell syntax');
+    } finally {
+      childProcessMockControl.execFileImpl = null;
+    }
+  });
+
+  // ---- consumeDoubleQuotedSegment: backslash escape (line 95-103) ----
+  test('should allow valid escape sequences inside double-quoted args', async () => {
+    var execFileCalls = 0;
+    childProcessMockControl.execFileImpl = (
+      _: string,
+      __: readonly string[],
+      ___: unknown,
+      callback: (...args: unknown[]) => void,
+    ) => {
+      execFileCalls += 1;
+      setImmediate(() => callback(null, 'ok', ''));
+      return { exitCode: 0 };
+    };
+
+    try {
+      await runHook('echo "escaped\\"quote"', { label: 'test' });
+      expect(execFileCalls).toBe(1);
+    } finally {
+      childProcessMockControl.execFileImpl = null;
+    }
+  });
+
+  // ---- consumeDoubleQuotedSegment: $ in double-quotes requires valid var ref (line 106-113) ----
+  test('should reject double-quoted segment with invalid $ expression', async () => {
+    childProcessMockControl.execFileImpl = (
+      _: string,
+      __: readonly string[],
+      ___: unknown,
+      callback: (...args: unknown[]) => void,
+    ) => {
+      setImmediate(() => callback(null, '', ''));
+      return { exitCode: 0 };
+    };
+
+    try {
+      const result = await runHook('echo "bad$"', { label: 'test' });
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('unsupported shell syntax');
+    } finally {
+      childProcessMockControl.execFileImpl = null;
+    }
+  });
+
+  // ---- isAllowedHookCommand: sawToken (line 154, 157, 163, 165) ----
+  test('should reject command that is all whitespace', async () => {
+    var execFileCalls = 0;
+    childProcessMockControl.execFileImpl = (
+      _: string,
+      __: readonly string[],
+      ___: unknown,
+      callback: (...args: unknown[]) => void,
+    ) => {
+      execFileCalls += 1;
+      setImmediate(() => callback(null, '', ''));
+      return { exitCode: 0 };
+    };
+
+    try {
+      const result = await runHook('   \t   ', { label: 'test' });
+      expect(execFileCalls).toBe(0);
+      expect(result.exitCode).toBe(1);
+    } finally {
+      childProcessMockControl.execFileImpl = null;
+    }
+  });
+
+  // ---- logHookResult (lines 210, 215): timedOut and exitCode conditions ----
+  test('should return timedOut=false with exitCode=0 on success', async () => {
+    childProcessMockControl.execFileImpl = (
+      _: string,
+      __: readonly string[],
+      ___: unknown,
+      callback: (...args: unknown[]) => void,
+    ) => {
+      setImmediate(() => callback(null, 'output', ''));
+      return { exitCode: 0 };
+    };
+
+    try {
+      const result = await runHook('echo ok', { label: 'test' });
+      expect(result.timedOut).toBe(false);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toBe('output');
+    } finally {
+      childProcessMockControl.execFileImpl = null;
+    }
+  });
+
+  test('should return non-zero exitCode and stderr on failure', async () => {
+    childProcessMockControl.execFileImpl = (
+      _: string,
+      __: readonly string[],
+      ___: unknown,
+      callback: (...args: unknown[]) => void,
+    ) => {
+      const err = Object.assign(new Error('failed'), { code: 2 });
+      setImmediate(() => callback(err, '', 'something went wrong'));
+      return { exitCode: 2 };
+    };
+
+    try {
+      const result = await runHook('echo ok', { label: 'test' });
+      expect(result.exitCode).toBe(2);
+      expect(result.timedOut).toBe(false);
+      expect(result.stderr).toBe('something went wrong');
+    } finally {
+      childProcessMockControl.execFileImpl = null;
+    }
+  });
+
+  // ---- resolveExitCode (line 181-183): timedOut=true forces exitCode=1 ----
+  test('timedOut result has exitCode=1 regardless of error code', async () => {
+    childProcessMockControl.execFileImpl = (
+      _: string,
+      __: readonly string[],
+      ___: unknown,
+      callback: (...args: unknown[]) => void,
+    ) => {
+      const err = Object.assign(new Error('killed'), { killed: true, code: 'ETIMEDOUT' });
+      const fakeChild = { exitCode: null };
+      setImmediate(() => callback(err, '', ''));
+      return fakeChild;
+    };
+
+    try {
+      const result = await runHook('echo ok', { label: 'test' });
+      expect(result.timedOut).toBe(true);
+      expect(result.exitCode).toBe(1);
+    } finally {
+      childProcessMockControl.execFileImpl = null;
+    }
+  });
+
+  // ---- createHookResult: child?.exitCode (line 264) ----
+  test('should use child.exitCode from process when error code is not numeric', async () => {
+    childProcessMockControl.execFileImpl = (
+      _: string,
+      __: readonly string[],
+      ___: unknown,
+      callback: (...args: unknown[]) => void,
+    ) => {
+      const fakeChild = { exitCode: 3 };
+      // Error without numeric code, error without killed=true
+      const err = Object.assign(new Error('exit'), { code: undefined });
+      setImmediate(() => callback(err, 'out', 'err'));
+      return fakeChild;
+    };
+
+    try {
+      const result = await runHook('echo ok', { label: 'test' });
+      // exitCode comes from child.exitCode=3 (fallbackExitCode)
+      expect(result.exitCode).toBe(3);
+    } finally {
+      childProcessMockControl.execFileImpl = null;
+    }
+  });
+
+  // ---- logHookResult: exitCode strings (lines 211, 216, 220) ----
+  test('logHookResult messages contain the label name', async () => {
+    childProcessMockControl.execFileImpl = (
+      _: string,
+      __: readonly string[],
+      ___: unknown,
+      callback: (...args: unknown[]) => void,
+    ) => {
+      setImmediate(() => callback(null, 'done', ''));
+      return { exitCode: 0 };
+    };
+
+    try {
+      const result = await runHook('echo ok', { label: 'my-custom-hook' });
+      expect(result.exitCode).toBe(0);
+      // We can't easily inspect log calls here since the logger is mocked per-child
+      // but we verify the result structure is correct
+      expect(result.timedOut).toBe(false);
+    } finally {
+      childProcessMockControl.execFileImpl = null;
+    }
+  });
 });

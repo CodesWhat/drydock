@@ -252,4 +252,69 @@ describe('entrypoint', () => {
     );
     expect(harness.storeInit).toHaveBeenCalledWith({ memory: false });
   });
+
+  test('non-root with DD_RUN_AS_ROOT and DD_ALLOW_INSECURE_ROOT does not warn', async () => {
+    // Kills:
+    // - Line 29:65 ConditionalExpression: process.getuid() === 0 => true (would make non-root appear as root)
+    // - Line 40:7 ConditionalExpression: true && insecureRootAcknowledged (ignores runningAsRoot)
+    // - Line 40:7 LogicalOperator: runningAsRoot || runAsRootEnabled && insecureRootAcknowledged
+    const harness = await loadEntryPoint({
+      getuid: 1000, // not root
+      env: {
+        DD_RUN_AS_ROOT: 'true',
+        DD_ALLOW_INSECURE_ROOT: 'true',
+      },
+    });
+
+    await harness.imported;
+
+    // Non-root with these env vars should NOT warn (runningAsRoot is false)
+    expect(harness.logWarn).not.toHaveBeenCalled();
+    expect(harness.storeInit).toHaveBeenCalledWith({ memory: false });
+  });
+
+  test('non-root with DD_RUN_AS_ROOT and no acknowledgement does not throw', async () => {
+    // Kills Line 40:7 LogicalOperator: runningAsRoot && runAsRootEnabled || insecureRootAcknowledged
+    // With the mutant, insecureRootAcknowledged=false would still evaluate to false,
+    // but runAsRootEnabled=true + insecureRootAcknowledged=false on the FIRST check (line 34)
+    // would be different with mutant on line 34
+    // Also kills line 29:65 (getuid === 0 => true for non-root)
+    const harness = await loadEntryPoint({
+      getuid: 1000, // not root
+      env: {
+        DD_RUN_AS_ROOT: 'true',
+        DD_ALLOW_INSECURE_ROOT: 'false',
+      },
+    });
+
+    await harness.imported;
+
+    // Non-root should NOT throw even with DD_RUN_AS_ROOT=true
+    expect(harness.storeInit).toHaveBeenCalledWith({ memory: false });
+    expect(harness.logWarn).not.toHaveBeenCalled();
+  });
+
+  test('handles undefined trigger state in outbox worker delivery', async () => {
+    // Kills OptionalChaining line 82: triggers?.[entry.triggerId] => triggers[entry.triggerId]
+    // When triggers is undefined, optional chain returns undefined safely; without ?. it throws TypeError
+    // We need to avoid the default parameter substituting {} for undefined
+    const harness = await loadEntryPoint();
+
+    // Override registryGetState to return no trigger field (makes triggers undefined)
+    harness.registryGetState.mockReturnValue({} as ReturnType<typeof harness.registryGetState>);
+
+    await harness.imported;
+
+    const entry = {
+      id: 'entry-1',
+      triggerId: 'some-trigger',
+    } as NotificationOutboxEntry;
+
+    // With triggers === undefined:
+    // - triggers?.[id] safely returns undefined → throws "not registered"
+    // - triggers[id] throws TypeError (mutant)
+    await expect(harness.deliverOutboxEntry?.(entry)).rejects.toThrow(
+      'Trigger some-trigger not registered for outbox delivery',
+    );
+  });
 });

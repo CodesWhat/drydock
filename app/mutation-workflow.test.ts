@@ -90,15 +90,15 @@ function splitMutateEntry(entry: WorkflowMatrixEntry): string[] {
     .filter(Boolean);
 }
 
-test('mutation workflow runs monthly with 20 logical slices and aggregate count parity', () => {
+test('mutation workflow runs monthly with 24 logical slices and aggregate count parity', () => {
   const workflow = yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;
 
   expect(workflow.on?.schedule).toStrictEqual([{ cron: '15 6 1 * *' }]);
 
   const matrixEntries = workflow.jobs?.stryker?.strategy?.matrix?.include ?? [];
 
-  expect(matrixEntries).toHaveLength(20);
-  expect(new Set(matrixEntries.map((entry) => entry.name)).size).toBe(20);
+  expect(matrixEntries).toHaveLength(24);
+  expect(new Set(matrixEntries.map((entry) => entry.name)).size).toBe(24);
   expect(new Set(matrixEntries.map((entry) => entry.package))).toStrictEqual(
     new Set(['app', 'ui']),
   );
@@ -107,7 +107,7 @@ test('mutation workflow runs monthly with 20 logical slices and aggregate count 
     (step) => step.name === 'Aggregate shard scores',
   )?.run;
 
-  expect(aggregateRunScript).toContain('--expected-count 20');
+  expect(aggregateRunScript).toContain('--expected-count 24');
 });
 
 test('mutation workflow slices cover the app and ui Stryker targets without overlap', () => {

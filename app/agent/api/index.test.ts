@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-const { mockApp, mockServerConfig, mockHashToken, mockLog } = vi.hoisted(() => {
+const { mockApp, mockServerConfig, mockHashToken, mockLog, mockLoggerChild } = vi.hoisted(() => {
   const mockApp = {
     disable: vi.fn(),
     use: vi.fn(),
@@ -23,7 +23,8 @@ const { mockApp, mockServerConfig, mockHashToken, mockLog } = vi.hoisted(() => {
     error: vi.fn(),
     debug: vi.fn(),
   };
-  return { mockApp, mockServerConfig, mockHashToken, mockLog };
+  const mockLoggerChild = vi.fn();
+  return { mockApp, mockServerConfig, mockHashToken, mockLog, mockLoggerChild };
 });
 
 vi.mock('node:fs', () => ({
@@ -35,7 +36,7 @@ vi.mock('node:https', () => ({
 }));
 
 vi.mock('../../log/index.js', () => ({
-  default: { child: () => mockLog },
+  default: { child: mockLoggerChild.mockReturnValue(mockLog) },
 }));
 
 vi.mock('../../configuration/index.js', () => ({
@@ -109,6 +110,15 @@ describe('Agent API index', () => {
       expect(next).not.toHaveBeenCalled();
     });
 
+    test('should log warning with ip when no secret is cached', () => {
+      // Kill 74:14 StringLiteral mutant
+      const req = { headers: { 'x-dd-agent-secret': 'test' }, ip: '192.168.1.1' };
+      const res = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+      const next = vi.fn();
+      authenticate(req, res, next);
+      expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('192.168.1.1'));
+    });
+
     test('should return 401 when secret header is not a string', async () => {
       process.env.DD_AGENT_SECRET = 'correct-secret';
       await init();
@@ -122,11 +132,31 @@ describe('Agent API index', () => {
       expect(res.status).toHaveBeenCalledWith(401);
       expect(next).not.toHaveBeenCalled();
     });
+
+    test('should log warning with ip when secrets do not match', async () => {
+      // Kill 81:14 StringLiteral mutant
+      process.env.DD_AGENT_SECRET = 'correct-secret';
+      await init();
+
+      const req = { headers: { 'x-dd-agent-secret': 'wrong-secret' }, ip: '10.0.0.5' };
+      const res = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+      const next = vi.fn();
+
+      authenticate(req, res, next);
+
+      expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('10.0.0.5'));
+    });
   });
 
   describe('init', () => {
     test('should throw when no secret is configured', async () => {
       await expect(init()).rejects.toThrow('Agent mode requires');
+    });
+
+    test('should log specific message when no secret is configured', async () => {
+      await expect(init()).rejects.toThrow();
+      // Kill 109:7 StringLiteral mutant: log message should contain meaningful content
+      expect(mockLog.error).toHaveBeenCalledWith(expect.stringContaining('DD_AGENT_SECRET'));
     });
 
     test('should use DD_AGENT_SECRET env var', async () => {
@@ -147,6 +177,23 @@ describe('Agent API index', () => {
       fs.default.readFileSync.mockReturnValue('file-secret\n');
       await init();
       expect(mockApp.listen).toHaveBeenCalled();
+    });
+
+    test('should trim whitespace from file secret so authenticate works with trimmed value', async () => {
+      // Kill 99:22 MethodExpression mutant: .trim() removed
+      // If trim is missing, cachedSecret = 'file-secret\n' (with newline)
+      // hashToken('file-secret') !== hashToken('file-secret\n') → authenticate fails
+      process.env.DD_AGENT_SECRET_FILE = '/opt/drydock/test/secret';
+      const fs = await import('node:fs');
+      fs.default.readFileSync.mockReturnValue('file-secret\n');
+      await init();
+
+      const req = { headers: { 'x-dd-agent-secret': 'file-secret' }, ip: '127.0.0.1' };
+      const resObj = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+      const next = vi.fn();
+      authenticate(req, resObj, next);
+      expect(next).toHaveBeenCalled();
+      expect(resObj.status).not.toHaveBeenCalledWith(401);
     });
 
     test('should use WUD_AGENT_SECRET_FILE as fallback', async () => {
@@ -400,6 +447,227 @@ describe('Agent API index', () => {
         expect(res.status).toHaveBeenCalledWith(400);
         expect(res.json).toHaveBeenCalledWith({ error });
         expect(getEntries).not.toHaveBeenCalled();
+      });
+
+      test('should pass level=null to getEntries when no level query param (undefined, not null)', async () => {
+        const { getEntries } = await import('../../log/buffer.js');
+        getEntries.mockReturnValue([]);
+        const req = { query: {} };
+        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+        logEntriesHandler(req, res);
+        expect(getEntries).toHaveBeenCalledWith(
+          expect.objectContaining({ level: undefined, component: undefined }),
+        );
+      });
+
+      test.each([
+        'trace',
+        'debug',
+        'info',
+        'warn',
+        'error',
+        'fatal',
+      ])('should accept log level %s', async (level) => {
+        const { getEntries } = await import('../../log/buffer.js');
+        getEntries.mockReturnValue([]);
+        const req = { query: { level } };
+        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+        logEntriesHandler(req, res);
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(getEntries).toHaveBeenCalledWith(expect.objectContaining({ level }));
+      });
+
+      test('should normalize level to lowercase', async () => {
+        const { getEntries } = await import('../../log/buffer.js');
+        getEntries.mockReturnValue([]);
+        const req = { query: { level: 'INFO' } };
+        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+        logEntriesHandler(req, res);
+        expect(getEntries).toHaveBeenCalledWith(expect.objectContaining({ level: 'info' }));
+      });
+
+      test('should accept valid component with dots and hyphens', async () => {
+        const { getEntries } = await import('../../log/buffer.js');
+        getEntries.mockReturnValue([]);
+        const req = { query: { component: 'my-component.v1' } };
+        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+        logEntriesHandler(req, res);
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(getEntries).toHaveBeenCalledWith(
+          expect.objectContaining({ component: 'my-component.v1' }),
+        );
+      });
+
+      test('should reject component with special chars not in [a-zA-Z0-9._-]', async () => {
+        const { getEntries } = await import('../../log/buffer.js');
+        const req = { query: { component: 'comp/slash' } };
+        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+        logEntriesHandler(req, res);
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(getEntries).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('ALLOWED_LOG_LEVELS set', () => {
+      test('should reject level not in allowed set', async () => {
+        process.env.DD_AGENT_SECRET = 'secret';
+        await init();
+        const getCalls = mockApp.get.mock.calls;
+        const logRoute = getCalls.find(([path]) => path === '/api/log/entries');
+        const handler = logRoute[1];
+
+        const req = { query: { level: 'verbose' } };
+        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+        handler(req, res);
+        expect(res.status).toHaveBeenCalledWith(400);
+      });
+    });
+
+    describe('SAFE_LOG_COMPONENT_PATTERN regex', () => {
+      test('should reject empty string component', async () => {
+        process.env.DD_AGENT_SECRET = 'secret';
+        await init();
+        const getCalls = mockApp.get.mock.calls;
+        const logRoute = getCalls.find(([path]) => path === '/api/log/entries');
+        const handler = logRoute[1];
+
+        // Empty string doesn't match /^[a-zA-Z0-9._-]+$/
+        // It will match the typeof !== string check but empty fails regex
+        // Actually '' does match length requirement — empty string fails +
+        const req = { query: { component: '' } };
+        const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+        handler(req, res);
+        expect(res.status).toHaveBeenCalledWith(400);
+      });
+    });
+
+    describe('app configuration', () => {
+      test('should call app.disable with x-powered-by', async () => {
+        process.env.DD_AGENT_SECRET = 'secret';
+        await init();
+        expect(mockApp.disable).toHaveBeenCalledWith('x-powered-by');
+      });
+
+      test('should configure express.json with 256kb limit', async () => {
+        process.env.DD_AGENT_SECRET = 'secret';
+        const express = await import('express');
+        await init();
+        expect(express.default.json).toHaveBeenCalledWith({ limit: '256kb' });
+      });
+
+      test('should NOT apply cors when cors.enabled is false', async () => {
+        const cors = await import('cors');
+        process.env.DD_AGENT_SECRET = 'secret';
+        Object.assign(mockServerConfig, {
+          port: 3000,
+          tls: { enabled: false },
+          cors: { enabled: false },
+        });
+        await init();
+        // cors() should not have been called
+        expect(cors.default).not.toHaveBeenCalled();
+      });
+
+      test('should configure TLS with key and cert when TLS enabled', async () => {
+        process.env.DD_AGENT_SECRET = 'secret';
+        const fs = await import('node:fs');
+        const https = await import('node:https');
+        const keyBuffer = Buffer.from('tls-key');
+        const certBuffer = Buffer.from('tls-cert');
+        fs.default.readFileSync.mockReturnValueOnce(keyBuffer).mockReturnValueOnce(certBuffer);
+        Object.assign(mockServerConfig, {
+          port: 4443,
+          tls: { enabled: true, key: '/tls.key', cert: '/tls.cert' },
+          cors: { enabled: false },
+        });
+        await init();
+        expect(https.default.createServer).toHaveBeenCalledWith(
+          expect.objectContaining({ key: keyBuffer, cert: certBuffer }),
+          mockApp,
+        );
+      });
+    });
+
+    describe('HTTP server startup', () => {
+      test('should log HTTP listening message on startup', async () => {
+        process.env.DD_AGENT_SECRET = 'secret';
+        await init();
+        expect(mockLog.info).toHaveBeenCalledWith(expect.stringContaining('(HTTP)'));
+        expect(mockLog.info).toHaveBeenCalledWith(expect.stringContaining('3000'));
+      });
+
+      test('should log HTTPS listening message on TLS startup', async () => {
+        process.env.DD_AGENT_SECRET = 'secret';
+        Object.assign(mockServerConfig, {
+          port: 8443,
+          tls: { enabled: true, key: '/key.pem', cert: '/cert.pem' },
+          cors: { enabled: false },
+        });
+        const fs = await import('node:fs');
+        fs.default.readFileSync.mockReturnValue(Buffer.from('cert-data'));
+        await init();
+        expect(mockLog.info).toHaveBeenCalledWith(expect.stringContaining('(HTTPS)'));
+        expect(mockLog.info).toHaveBeenCalledWith(expect.stringContaining('8443'));
+      });
+    });
+
+    describe('cors configuration', () => {
+      test('should configure cors with origin and methods when enabled', async () => {
+        const cors = await import('cors');
+        process.env.DD_AGENT_SECRET = 'secret';
+        Object.assign(mockServerConfig, {
+          port: 3000,
+          tls: { enabled: false },
+          cors: { enabled: true, origin: 'https://example.com', methods: 'GET,POST' },
+        });
+        await init();
+        expect(cors.default).toHaveBeenCalledWith({
+          origin: 'https://example.com',
+          methods: 'GET,POST',
+        });
+      });
+    });
+
+    describe('getErrorMessageValue', () => {
+      test('should return undefined for non-Error thrown values', async () => {
+        process.env.DD_AGENT_SECRET_FILE = '/bad';
+        const fs = await import('node:fs');
+        // Throw a string (not an object)
+        fs.default.readFileSync.mockImplementation(() => {
+          throw 'string-error';
+        });
+        await expect(init()).rejects.toThrow('Error reading secret file: undefined');
+      });
+
+      test('should return message property when error is an object with message', async () => {
+        process.env.DD_AGENT_SECRET_FILE = '/bad';
+        const fs = await import('node:fs');
+        fs.default.readFileSync.mockImplementation(() => {
+          throw { message: 'my-message' };
+        });
+        await expect(init()).rejects.toThrow('Error reading secret file: my-message');
+      });
+    });
+
+    describe('route registration', () => {
+      test('should register all API routes after auth middleware', async () => {
+        process.env.DD_AGENT_SECRET = 'secret';
+        await init();
+
+        const getCalls = mockApp.get.mock.calls.map(([path]) => path);
+        const postCalls = mockApp.post.mock.calls.map(([path]) => path);
+        const deleteCalls = mockApp.delete.mock.calls.map(([path]) => path);
+
+        expect(getCalls).toContain('/api/containers');
+        expect(getCalls).toContain('/api/watchers');
+        expect(getCalls).toContain('/api/watchers/:type/:name');
+        expect(getCalls).toContain('/api/triggers');
+        expect(getCalls).toContain('/api/events');
+        expect(postCalls).toContain('/api/triggers/:type/:name');
+        expect(postCalls).toContain('/api/triggers/:type/:name/batch');
+        expect(postCalls).toContain('/api/watchers/:type/:name');
+        expect(postCalls).toContain('/api/watchers/:type/:name/container/:id');
+        expect(deleteCalls).toContain('/api/containers/:id');
       });
     });
   });
