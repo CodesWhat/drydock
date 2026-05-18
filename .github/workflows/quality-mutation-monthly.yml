@@ -121,19 +121,42 @@ jobs:
             incremental_file: reports/stryker-incremental-app-ops-registries-remote.json
             mutate: >-
               registries/providers/acr/**/*.ts,registries/providers/alicr/**/*.ts,registries/providers/artifactory/**/*.ts,registries/providers/codeberg/**/*.ts,registries/providers/dhi/**/*.ts,registries/providers/docr/**/*.ts,registries/providers/ecr/**/*.ts,registries/providers/forgejo/**/*.ts,registries/providers/gar/**/*.ts,registries/providers/gcr/**/*.ts,registries/providers/ghcr/**/*.ts,registries/providers/gitea/**/*.ts,registries/providers/gitlab/**/*.ts,registries/providers/harbor/**/*.ts,registries/providers/hub/**/*.ts,registries/providers/ibmcr/**/*.ts,registries/providers/lscr/**/*.ts,registries/providers/mau/**/*.ts,registries/providers/nexus/**/*.ts,registries/providers/ocir/**/*.ts,registries/providers/quay/**/*.ts,registries/providers/trueforge/**/*.ts,stats/**/*.ts,prometheus/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
-          - name: ui-shell-and-data
+          # The UI source is split into 6 slices sized to match the app slices
+          # (~2k mutants each). A single all-of-ui slice runs past the 6h job
+          # timeout. src/boot/i18n.ts is excluded everywhere it appears: it
+          # uses import.meta.glob(), a Vite compile-time macro whose argument
+          # must stay a literal — Stryker instrumentation breaks the glob
+          # parser and aborts the dry run.
+          - name: ui-views-containers
             package: ui
-            incremental_file: reports/stryker-incremental-ui-shell-and-data.json
-            # src/boot/i18n.ts is excluded: it uses import.meta.glob(), a Vite
-            # compile-time macro whose argument must stay a literal. Stryker
-            # instrumentation breaks Vite's glob parser and aborts the dry run.
+            incremental_file: reports/stryker-incremental-ui-views-containers.json
             mutate: >-
-              src/boot/**/*.ts,src/components/**/*.ts,src/composables/**/*.ts,src/i18n/**/*.ts,src/layouts/**/*.ts,src/preferences/**/*.ts,src/services/**/*.ts,src/stores/**/*.ts,src/theme/**/*.ts,src/types/**/*.ts,src/utils/**/*.ts,src/main.ts,!src/boot/i18n.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
-          - name: ui-views-and-navigation
+              src/views/containers/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
+          - name: ui-views-dashboard
             package: ui
-            incremental_file: reports/stryker-incremental-ui-views-and-navigation.json
+            incremental_file: reports/stryker-incremental-ui-views-dashboard.json
             mutate: >-
-              src/views/**/*.ts,src/directives/**/*.ts,src/router/**/*.ts,src/icons.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
+              src/views/dashboard/**/*.ts,src/views/security/**/*.ts,src/views/*.ts,src/directives/**/*.ts,src/router/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
+          - name: ui-composables
+            package: ui
+            incremental_file: reports/stryker-incremental-ui-composables.json
+            mutate: >-
+              src/composables/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
+          - name: ui-services
+            package: ui
+            incremental_file: reports/stryker-incremental-ui-services.json
+            mutate: >-
+              src/services/**/*.ts,src/types/**/*.ts,src/theme/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
+          - name: ui-utils
+            package: ui
+            incremental_file: reports/stryker-incremental-ui-utils.json
+            mutate: >-
+              src/utils/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
+          - name: ui-shell
+            package: ui
+            incremental_file: reports/stryker-incremental-ui-shell.json
+            mutate: >-
+              src/stores/**/*.ts,src/preferences/**/*.ts,src/components/**/*.ts,src/boot/**/*.ts,src/layouts/**/*.ts,src/i18n/**/*.ts,src/main.ts,src/icons.ts,!src/boot/i18n.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
 
     steps:
       - name: Harden Runner
@@ -247,7 +270,7 @@ jobs:
           # the summary records how many shards were missing.
           node scripts/aggregate-stryker-score.mjs \
             --input artifacts/mutation \
-            --expected-count 20 \
+            --expected-count 24 \
             --allow-missing \
             --summary-out artifacts/aggregate/summary.json \
             --score-out artifacts/aggregate/mutation-score.json

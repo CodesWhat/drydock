@@ -17,7 +17,12 @@ const config = {
   testRunner: 'vitest',
   checkers: ['typescript'],
   tsconfigFile: 'tsconfig.json',
-  coverageAnalysis: 'off',
+  // perTest: each mutant runs only the tests that cover it. 'off' (which
+  // re-runs the whole jsdom suite per mutant) made a single UI slice take
+  // ~8h and inflated the timeout rate. Stryker collects per-test coverage
+  // via its own instrumentation — independent of the vitest coverage
+  // provider — so this works inside the mutation sandbox.
+  coverageAnalysis: 'perTest',
   reporters: [
     'clear-text',
     'progress',
