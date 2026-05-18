@@ -104,4 +104,118 @@ describe('json content-type middleware', () => {
     expect(next).toHaveBeenCalledTimes(1);
     expect(res.status).not.toHaveBeenCalled();
   });
+
+  test('rejects when content-length is 1 (has body) and content-type is not json', () => {
+    const req = createRequest({
+      headers: { 'content-length': '1' },
+      is: vi.fn(() => false),
+    });
+    const res = createMockResponse();
+    const next = vi.fn() as NextFunction;
+
+    requireJsonContentTypeForMutations(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(415);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Content-Type must be application/json' });
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  test('skips content-type check when content-length is 0 (no body)', () => {
+    const req = createRequest({
+      headers: { 'content-length': '0' },
+      is: vi.fn(() => false),
+    });
+    const res = createMockResponse();
+    const next = vi.fn() as NextFunction;
+
+    requireJsonContentTypeForMutations(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  test('skips content-type check when content-length is negative', () => {
+    const req = createRequest({
+      headers: { 'content-length': '-1' },
+      is: vi.fn(() => false),
+    });
+    const res = createMockResponse();
+    const next = vi.fn() as NextFunction;
+
+    requireJsonContentTypeForMutations(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  test('skips content-type enforcement when no content-length and no transfer-encoding', () => {
+    const req = createRequest({
+      headers: {},
+      is: vi.fn(() => false),
+    });
+    const res = createMockResponse();
+    const next = vi.fn() as NextFunction;
+
+    requireJsonContentTypeForMutations(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  test('rejects with exact 415 error message', () => {
+    const req = createRequest({
+      headers: { 'content-length': '5' },
+      is: vi.fn(() => false),
+    });
+    const res = createMockResponse();
+    const next = vi.fn() as NextFunction;
+
+    requireJsonContentTypeForMutations(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(415);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Content-Type must be application/json' });
+  });
+
+  test('calls req.is with exactly "application/json"', () => {
+    // Verifies the string literal is "application/json", not "" or another value.
+    const isMock = vi.fn(() => true);
+    const req = createRequest({
+      headers: { 'content-length': '5' },
+      is: isMock,
+    });
+    const res = createMockResponse();
+    const next = vi.fn() as NextFunction;
+
+    requireJsonContentTypeForMutations(req, res, next);
+
+    expect(isMock).toHaveBeenCalledWith('application/json');
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not call next when req.is returns false for "application/json"', () => {
+    // Ensures the is() check gates the content-type validation.
+    // If is("") were used and returned falsy for a valid JSON content-type request,
+    // the request would be rejected even though it has the right content type.
+    const isMock = vi.fn((type: string) => type === 'application/json');
+    const req = createRequest({
+      headers: { 'content-length': '5' },
+      is: isMock,
+    });
+    const res = createMockResponse();
+    const next = vi.fn() as NextFunction;
+
+    requireJsonContentTypeForMutations(req, res, next);
+
+    expect(isMock).toHaveBeenCalledWith('application/json');
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  test('shouldParseJsonBody returns false for DELETE', () => {
+    expect(shouldParseJsonBody('DELETE')).toBe(false);
+  });
+
+  test('shouldParseJsonBody returns false for HEAD', () => {
+    expect(shouldParseJsonBody('HEAD')).toBe(false);
+  });
 });

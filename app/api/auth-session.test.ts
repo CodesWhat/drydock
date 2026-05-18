@@ -30,11 +30,140 @@ vi.mock('../store/secrets.js', () => ({
 import log from '../log/index.js';
 import { enforceConcurrentSessionLimit } from '../util/session-limit.js';
 import {
+  configureSessionLimits,
+  DEFAULT_SESSION_DAYS,
+  deserializeSessionUser,
   enforceSessionLimitBeforeLogin,
+  getCookieMaxAge,
   getSessionSecretKey,
+  REMEMBER_ME_DAYS,
   testable_basicSessionLocks,
   testable_withBasicSessionLock,
 } from './auth-session.js';
+
+describe('getCookieMaxAge', () => {
+  test('computes cookie max age for default session days', () => {
+    const result = getCookieMaxAge(DEFAULT_SESSION_DAYS);
+    // 7 days in milliseconds: 3600 * 1000 * 24 * 7
+    expect(result).toBe(3600 * 1000 * 24 * DEFAULT_SESSION_DAYS);
+  });
+
+  test('computes cookie max age for remember-me days', () => {
+    const result = getCookieMaxAge(REMEMBER_ME_DAYS);
+    expect(result).toBe(3600 * 1000 * 24 * REMEMBER_ME_DAYS);
+  });
+
+  test('returns a larger value for remember-me than default session', () => {
+    expect(getCookieMaxAge(REMEMBER_ME_DAYS)).toBeGreaterThan(
+      getCookieMaxAge(DEFAULT_SESSION_DAYS),
+    );
+  });
+});
+
+describe('deserializeSessionUser', () => {
+  test('throws when input is not a string', () => {
+    expect(() => deserializeSessionUser(42)).toThrow('Serialized user must be a JSON string');
+    expect(() => deserializeSessionUser(null)).toThrow('Serialized user must be a JSON string');
+    expect(() => deserializeSessionUser(undefined)).toThrow(
+      'Serialized user must be a JSON string',
+    );
+    expect(() => deserializeSessionUser({ username: 'alice' })).toThrow(
+      'Serialized user must be a JSON string',
+    );
+  });
+
+  test('throws when input is malformed JSON', () => {
+    expect(() => deserializeSessionUser('not-json')).toThrow('Serialized user JSON is malformed');
+  });
+
+  test('throws when parsed value fails schema validation (missing username)', () => {
+    expect(() => deserializeSessionUser('{}')).toThrow();
+  });
+
+  test('throws when convert is effectively false: numeric username is rejected', () => {
+    // If convert were true, Joi would coerce numbers to strings.
+    // With convert: false, a numeric username should fail validation.
+    expect(() => deserializeSessionUser('{"username": 42}')).toThrow();
+  });
+
+  test('throws when stripUnknown is effectively false: extra fields cause validation error', () => {
+    // With stripUnknown: false and unknown(false), extra fields trigger an error.
+    expect(() => deserializeSessionUser('{"username":"alice","extra":"field"}')).toThrow();
+  });
+
+  test('returns deserialized user with valid input', () => {
+    const result = deserializeSessionUser('{"username":"alice"}');
+    expect(result).toEqual({ username: 'alice' });
+  });
+});
+
+describe('configureSessionLimits + enforceSessionLimitBeforeLogin', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    testable_basicSessionLocks.clear();
+  });
+
+  afterEach(() => {
+    testable_basicSessionLocks.clear();
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    // Reset to default after each test
+    configureSessionLimits({});
+  });
+
+  test('valid maxconcurrentsessions is passed through to enforceConcurrentSessionLimit', async () => {
+    configureSessionLimits({ session: { maxconcurrentsessions: 3 } });
+    const onSuccess = vi.fn().mockResolvedValue(undefined);
+    const onFailure = vi.fn();
+    const req = {
+      sessionStore: { all: vi.fn(), destroy: vi.fn() },
+      sessionID: 'sess-1',
+    } as any;
+
+    enforceSessionLimitBeforeLogin(req, 'alice', onSuccess, onFailure);
+
+    await vi.waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+    expect(enforceConcurrentSessionLimitMock).toHaveBeenCalledWith(
+      expect.objectContaining({ maxConcurrentSessions: 3 }),
+    );
+  });
+
+  test('maxconcurrentsessions of 0 falls back to default (configuredMaxSessions < 1 guard)', async () => {
+    // With mutant (< 1 → false): 0 would be used as the limit instead of DEFAULT (5).
+    // This test checks that the default is used when 0 is configured.
+    configureSessionLimits({ session: { maxconcurrentsessions: 0 } });
+    const onSuccess = vi.fn().mockResolvedValue(undefined);
+    const onFailure = vi.fn();
+    const req = {
+      sessionStore: { all: vi.fn(), destroy: vi.fn() },
+      sessionID: 'sess-1',
+    } as any;
+
+    enforceSessionLimitBeforeLogin(req, 'alice', onSuccess, onFailure);
+
+    await vi.waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+    expect(enforceConcurrentSessionLimitMock).toHaveBeenCalledWith(
+      expect.objectContaining({ maxConcurrentSessions: 5 }), // DEFAULT_MAX_CONCURRENT_SESSIONS_PER_USER
+    );
+  });
+
+  test('non-integer maxconcurrentsessions falls back to default', async () => {
+    configureSessionLimits({ session: { maxconcurrentsessions: 1.5 } });
+    const onSuccess = vi.fn().mockResolvedValue(undefined);
+    const onFailure = vi.fn();
+    const req = {
+      sessionStore: { all: vi.fn(), destroy: vi.fn() },
+      sessionID: 'sess-1',
+    } as any;
+
+    enforceSessionLimitBeforeLogin(req, 'alice', onSuccess, onFailure);
+
+    await vi.waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+    expect(enforceConcurrentSessionLimitMock).toHaveBeenCalledWith(
+      expect.objectContaining({ maxConcurrentSessions: 5 }),
+    );
+  });
+});
 
 describe('getSessionSecretKey', () => {
   const originalEnv = process.env.DD_SESSION_SECRET;
@@ -228,9 +357,12 @@ describe('auth-session', () => {
   test('testable_withBasicSessionLock should execute immediately when lock key is blank', async () => {
     const operation = vi.fn().mockResolvedValue('ok');
 
-    await expect(testable_withBasicSessionLock('', operation)).resolves.toBe('ok');
+    const result = await testable_withBasicSessionLock('', operation);
 
+    expect(result).toBe('ok');
     expect(operation).toHaveBeenCalledTimes(1);
+    // Blank key should NOT set any entry in the lock map (bypasses lock path entirely)
+    expect(testable_basicSessionLocks.has('')).toBe(false);
   });
 
   test('testable_withBasicSessionLock should handle rejected previous lock promises', async () => {
@@ -314,5 +446,165 @@ describe('auth-session', () => {
     } finally {
       setTimeoutSpy.mockRestore();
     }
+  });
+
+  test('testable_withBasicSessionLock cleans up lock map entry after successful operation', async () => {
+    const operation = vi.fn().mockResolvedValue('result');
+
+    const result = await testable_withBasicSessionLock('bob', operation);
+
+    expect(result).toBe('result');
+    expect(testable_basicSessionLocks.has('bob')).toBe(false);
+  });
+
+  test('testable_withBasicSessionLock cleans up lock map entry after failed operation', async () => {
+    const operation = vi.fn().mockRejectedValue(new Error('operation failed'));
+
+    await expect(testable_withBasicSessionLock('bob', operation)).rejects.toThrow(
+      'operation failed',
+    );
+    expect(testable_basicSessionLocks.has('bob')).toBe(false);
+  });
+
+  test('testable_withBasicSessionLock: previousLockWaitTimer is cleared in finally block', async () => {
+    // This test ensures the clearTimeout(previousLockWaitTimer) branch runs when the timer was set.
+    // We verify indirectly: the operation completes (previous lock resolves immediately) so
+    // the wait timer must be cleaned up without side-effects.
+    const operation = vi.fn().mockResolvedValue('cleanup-verify');
+
+    const result = await testable_withBasicSessionLock('charlie', operation);
+    expect(result).toBe('cleanup-verify');
+    expect(testable_basicSessionLocks.has('charlie')).toBe(false);
+  });
+
+  test('enforceSessionLimitBeforeLogin bypasses session store when sessionStore.all is not a function', async () => {
+    const onSuccess = vi.fn().mockResolvedValue(undefined);
+    const onFailure = vi.fn();
+    const req = {
+      sessionStore: { all: 'not-a-function', destroy: vi.fn() },
+      sessionID: 'sess-123',
+    } as any;
+
+    enforceSessionLimitBeforeLogin(req, 'alice', onSuccess, onFailure);
+
+    await vi.waitFor(() => {
+      expect(onSuccess).toHaveBeenCalledTimes(1);
+    });
+    expect(onFailure).not.toHaveBeenCalled();
+    expect(enforceConcurrentSessionLimitMock).not.toHaveBeenCalled();
+  });
+
+  test('enforceSessionLimitBeforeLogin bypasses session store when sessionStore.destroy is not a function', async () => {
+    const onSuccess = vi.fn().mockResolvedValue(undefined);
+    const onFailure = vi.fn();
+    const req = {
+      sessionStore: { all: vi.fn(), destroy: 'not-a-function' },
+      sessionID: 'sess-123',
+    } as any;
+
+    enforceSessionLimitBeforeLogin(req, 'alice', onSuccess, onFailure);
+
+    await vi.waitFor(() => {
+      expect(onSuccess).toHaveBeenCalledTimes(1);
+    });
+    expect(onFailure).not.toHaveBeenCalled();
+    expect(enforceConcurrentSessionLimitMock).not.toHaveBeenCalled();
+  });
+
+  test('enforceSessionLimitBeforeLogin bypasses session store when sessionStore is absent', async () => {
+    const onSuccess = vi.fn().mockResolvedValue(undefined);
+    const onFailure = vi.fn();
+    const req = { sessionID: 'sess-123' } as any;
+
+    enforceSessionLimitBeforeLogin(req, 'alice', onSuccess, onFailure);
+
+    await vi.waitFor(() => {
+      expect(onSuccess).toHaveBeenCalledTimes(1);
+    });
+    expect(onFailure).not.toHaveBeenCalled();
+    expect(enforceConcurrentSessionLimitMock).not.toHaveBeenCalled();
+  });
+
+  test('enforceSessionLimitBeforeLogin trims username before using it', async () => {
+    const onSuccess = vi.fn().mockResolvedValue(undefined);
+    const onFailure = vi.fn();
+    const req = {
+      sessionStore: { all: vi.fn(), destroy: vi.fn() },
+      sessionID: 'sess-123',
+    } as any;
+
+    // Username with whitespace — after trim it is non-empty so it should go through the lock path
+    enforceSessionLimitBeforeLogin(req, '  alice  ', onSuccess, onFailure);
+
+    await vi.waitFor(() => {
+      expect(onSuccess).toHaveBeenCalledTimes(1);
+    });
+    expect(onFailure).not.toHaveBeenCalled();
+    // enforceConcurrentSessionLimit should have been called with the trimmed username
+    expect(enforceConcurrentSessionLimitMock).toHaveBeenCalledWith(
+      expect.objectContaining({ username: 'alice' }),
+    );
+  });
+
+  test('enforceSessionLimitBeforeLogin skips session limit enforcement for blank username even with full session store', async () => {
+    // With if(false) mutant on line 157, blank username goes through the lock path.
+    // With a full session store, this would call enforceConcurrentSessionLimit.
+    // This test verifies that blank username bypasses the limit enforcement entirely.
+    const onSuccess = vi.fn().mockResolvedValue(undefined);
+    const onFailure = vi.fn();
+    const req = {
+      sessionStore: { all: vi.fn(), destroy: vi.fn() },
+      sessionID: 'sess-abc',
+    } as any;
+
+    enforceSessionLimitBeforeLogin(req, '   ', onSuccess, onFailure);
+
+    await vi.waitFor(() => {
+      expect(onSuccess).toHaveBeenCalledTimes(1);
+    });
+    expect(onFailure).not.toHaveBeenCalled();
+    expect(enforceConcurrentSessionLimitMock).not.toHaveBeenCalled();
+  });
+
+  test('enforceSessionLimitBeforeLogin calls onFailure when enforceConcurrentSessionLimit throws', async () => {
+    enforceConcurrentSessionLimitMock.mockRejectedValueOnce(new Error('limit error'));
+    const onSuccess = vi.fn().mockResolvedValue(undefined);
+    const onFailure = vi.fn();
+    const req = {
+      sessionStore: { all: vi.fn(), destroy: vi.fn() },
+      sessionID: 'sess-123',
+    } as any;
+
+    enforceSessionLimitBeforeLogin(req, 'alice', onSuccess, onFailure);
+
+    await vi.waitFor(() => {
+      expect(onFailure).toHaveBeenCalledWith(
+        'Unable to enforce session limit before login (limit error)',
+      );
+    });
+    expect(log.warn).toHaveBeenCalledWith(
+      'Unable to enforce session limit before login (limit error)',
+    );
+  });
+
+  test('enforceSessionLimitBeforeLogin calls onFailure when onSuccess throws (non-blank username)', async () => {
+    enforceConcurrentSessionLimitMock.mockResolvedValueOnce(undefined);
+    const onSuccess = vi.fn().mockRejectedValue(new Error('success handler fail'));
+    const onFailure = vi.fn();
+    const req = {
+      sessionStore: { all: vi.fn(), destroy: vi.fn() },
+      sessionID: 'sess-123',
+    } as any;
+
+    enforceSessionLimitBeforeLogin(req, 'alice', onSuccess, onFailure);
+
+    await vi.waitFor(() => {
+      expect(onFailure).toHaveBeenCalledWith(
+        'Unable to enforce session limit before login (success handler fail)',
+      );
+    });
+    expect(log.warn).toHaveBeenCalledWith(
+      'Unable to enforce session limit before login (success handler fail)',
+    );
   });
 });

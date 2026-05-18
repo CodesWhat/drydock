@@ -115,4 +115,109 @@ describe('DigestBuffer', () => {
     expect(entries.size).toBe(0);
     expect(timestamps.size).toBe(0);
   });
+
+  // Kills line 78 mutant: EqualityOperator updatedAt <= oldestAllowedTimestamp
+  test('pruneStale: entry at exactly oldest-allowed boundary is NOT pruned', () => {
+    // oldestAllowedTimestamp = now - retentionMs = 2000 - 500 = 1500
+    // condition is: updatedAt < oldestAllowedTimestamp
+    // updatedAt === 1500 should NOT be pruned
+    const entries = new Map<string, string>([
+      ['boundary', 'keep'],
+      ['just-stale', 'remove'],
+    ]);
+    const timestamps = new Map([
+      ['boundary', 1_500],
+      ['just-stale', 1_499],
+    ]);
+    const log = { debug: vi.fn(), warn: vi.fn() };
+    const buffer = new DigestBuffer({
+      name: 'digest buffer',
+      entries,
+      timestamps,
+      retentionMs: 500,
+      maxEntries: 10,
+      log,
+    });
+
+    buffer.pruneStale(2_000);
+
+    expect(entries.has('boundary')).toBe(true);
+    expect(entries.has('just-stale')).toBe(false);
+    expect(log.debug).toHaveBeenCalledWith('Evicted stale digest buffer entry just-stale');
+    expect(log.debug).toHaveBeenCalledTimes(1);
+  });
+
+  // Kills line 87 mutants: ConditionalExpression false and EqualityOperator maxEntries < 0
+  test('enforceLimit: maxEntries=1 keeps exactly one entry (the newest)', () => {
+    const entries = new Map<string, string>([
+      ['a', 'first'],
+      ['b', 'second'],
+    ]);
+    const timestamps = new Map([
+      ['a', 1_000],
+      ['b', 2_000],
+    ]);
+    const log = { debug: vi.fn(), warn: vi.fn() };
+    const buffer = new DigestBuffer({
+      name: 'digest buffer',
+      entries,
+      timestamps,
+      retentionMs: 0,
+      maxEntries: 1,
+      log,
+    });
+
+    buffer.enforceLimit();
+
+    expect(entries.size).toBe(1);
+    expect(entries.has('b')).toBe(true);
+    expect(log.warn).toHaveBeenCalledWith(
+      'Evicted oldest digest buffer entry a after reaching the 1-entry limit',
+    );
+  });
+
+  test('enforceLimit: maxEntries=-1 clears all entries', () => {
+    // maxEntries <= 0 triggers a full clear — this kills the < 0 vs <= 0 mutant
+    const entries = new Map<string, string>([['x', 'value']]);
+    const timestamps = new Map([['x', 1_000]]);
+    const buffer = new DigestBuffer({
+      name: 'digest buffer',
+      entries,
+      timestamps,
+      retentionMs: 0,
+      maxEntries: -1,
+      log: { debug: vi.fn(), warn: vi.fn() },
+    });
+
+    buffer.enforceLimit();
+
+    expect(entries.size).toBe(0);
+    expect(timestamps.size).toBe(0);
+  });
+
+  // Kills line 87 BlockStatement {} mutant: if (maxEntries <= 0) { ... }
+  test('enforceLimit: maxEntries=2 does not evict when count equals limit', () => {
+    const entries = new Map<string, string>([
+      ['a', 'first'],
+      ['b', 'second'],
+    ]);
+    const timestamps = new Map([
+      ['a', 1_000],
+      ['b', 2_000],
+    ]);
+    const log = { debug: vi.fn(), warn: vi.fn() };
+    const buffer = new DigestBuffer({
+      name: 'digest buffer',
+      entries,
+      timestamps,
+      retentionMs: 0,
+      maxEntries: 2,
+      log,
+    });
+
+    buffer.enforceLimit();
+
+    expect(entries.size).toBe(2);
+    expect(log.warn).not.toHaveBeenCalled();
+  });
 });

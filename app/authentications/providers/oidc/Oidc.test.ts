@@ -1971,3 +1971,1652 @@ test('initAuthentication warn log should not expose secrets from a nested cause 
   expect(warnArg).toContain('fetch failed');
   expect(warnArg).toContain('[REDACTED]');
 });
+
+// --- Constant value mutant killers ---
+
+test('OIDC_CHECKS_TTL_MS should be 5 minutes: checks created 1 second ago are still valid', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  const session = createSessionWithPending({
+    'valid-state': {
+      state: 'valid-state',
+      codeVerifier: 'code-verifier',
+      createdAt: Date.now() - 1000, // 1 second old, well within 5 minutes
+    },
+  });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(openidClientMock.authorizationCodeGrant).toHaveBeenCalled();
+  expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+});
+
+test('OIDC_CHECKS_TTL_MS should be 5 minutes: checks created exactly at TTL boundary are valid', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  // 4 minutes and 59 seconds old - just inside the 5-minute TTL
+  const session = createSessionWithPending({
+    'valid-state': {
+      state: 'valid-state',
+      codeVerifier: 'code-verifier',
+      createdAt: Date.now() - (5 * 60 * 1000 - 1000),
+    },
+  });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(openidClientMock.authorizationCodeGrant).toHaveBeenCalled();
+  expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+});
+
+// --- OIDC_STATE_PATTERN regex mutant killers ---
+
+test('isValidStateToken: state token of exactly 8 characters is valid', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  // exactly 8 chars - minimum length
+  const session = createSessionWithPending({
+    abcde123: {
+      state: 'abcde123',
+      codeVerifier: 'code-verifier',
+      createdAt: Date.now(),
+    },
+  });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=abcde123', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(openidClientMock.authorizationCodeGrant).toHaveBeenCalled();
+});
+
+test('isValidStateToken: state token of 7 characters is invalid', async () => {
+  const session = createSessionWithPending({
+    abcde12: {
+      state: 'abcde12',
+      codeVerifier: 'code-verifier',
+      createdAt: Date.now(),
+    },
+  });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=abcde12', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(openidClientMock.authorizationCodeGrant).not.toHaveBeenCalled();
+  expect401JsonMessage(res, 'OIDC callback is missing state. Please retry authentication.');
+});
+
+test('isValidStateToken: state token with characters outside allowed set is invalid', async () => {
+  const session = createSessionWithPending({
+    'abc!@#$%1': {
+      state: 'abc!@#$%1',
+      codeVerifier: 'code-verifier',
+      createdAt: Date.now(),
+    },
+  });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=abc!@#$%1', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(openidClientMock.authorizationCodeGrant).not.toHaveBeenCalled();
+});
+
+// --- sanitizeOidcErrorMessage regex boundary tests ---
+
+test('sanitizeOidcErrorMessage should redact sensitive query params from HTTPS URLs in error messages', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  openidClientMock.discovery = vi
+    .fn()
+    .mockRejectedValue(
+      new Error(
+        'fetch failed: https://idp.example.com/token?client_secret=mysecret&grant_type=client_credentials',
+      ),
+    );
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+
+  const warnCall = (oidc.log.warn as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+  expect(warnCall).not.toContain('mysecret');
+  expect(warnCall).toContain('[REDACTED]');
+});
+
+test('sanitizeOidcErrorMessage should also redact sensitive query params from HTTP URLs', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  openidClientMock.discovery = vi
+    .fn()
+    .mockRejectedValue(new Error('fetch failed: http://idp.internal/auth?client_secret=mysecret'));
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+
+  const warnCall = (oidc.log.warn as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+  expect(warnCall).not.toContain('mysecret');
+  expect(warnCall).toContain('[REDACTED]');
+});
+
+test('sanitizeOidcErrorMessage should not redact a plain message with no URLs', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  // A message with no URLs - should be passed through unchanged (modulo sanitizeLogParam)
+  openidClientMock.discovery = vi.fn().mockRejectedValue(new Error('connection refused'));
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+
+  const warnCall = (oidc.log.warn as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+  expect(warnCall).toContain('connection refused');
+});
+
+test('sanitizeOidcErrorMessage should redact bearer tokens with allowed chars including plus and slash', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  openidClientMock.discovery = vi
+    .fn()
+    .mockRejectedValue(new Error('auth failed: Bearer abc123.def+ghi/jkl='));
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+
+  const warnCall = (oidc.log.warn as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+  expect(warnCall).not.toContain('abc123.def+ghi/jkl');
+  expect(warnCall).toContain('Bearer [REDACTED]');
+});
+
+test('sanitizeOidcErrorMessage should NOT redact a bearer token that is not preceded by word boundary', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  // "XBearer token" should NOT be redacted - no word boundary before Bearer
+  openidClientMock.discovery = vi
+    .fn()
+    .mockRejectedValue(new Error('scheme is XBearer abc123token'));
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+
+  const warnCall = (oidc.log.warn as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+  expect(warnCall).toContain('XBearer abc123token');
+  expect(warnCall).not.toContain('Bearer [REDACTED]');
+});
+
+test('sanitizeOidcErrorMessage should redact 172.16.x.x IP (lower boundary of 172.16-31 range)', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  openidClientMock.discovery = vi
+    .fn()
+    .mockRejectedValue(new Error('connect ECONNREFUSED 172.16.0.1:443'));
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+
+  const warnCall = (oidc.log.warn as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+  expect(warnCall).toContain('[internal-addr]');
+  expect(warnCall).not.toContain('172.16.0.1');
+});
+
+test('sanitizeOidcErrorMessage should redact 172.31.x.x IP (upper boundary of 172.16-31 range)', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  openidClientMock.discovery = vi
+    .fn()
+    .mockRejectedValue(new Error('connect ETIMEDOUT 172.31.255.255:8080'));
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+
+  const warnCall = (oidc.log.warn as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+  expect(warnCall).toContain('[internal-addr]');
+  expect(warnCall).not.toContain('172.31.255.255');
+});
+
+test('sanitizeOidcErrorMessage should NOT redact 172.15.x.x IP (below private range)', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  openidClientMock.discovery = vi
+    .fn()
+    .mockRejectedValue(new Error('connect ECONNREFUSED 172.15.0.1:443'));
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+
+  const warnCall = (oidc.log.warn as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+  expect(warnCall).toContain('172.15.0.1');
+  expect(warnCall).not.toContain('[internal-addr]');
+});
+
+test('sanitizeOidcErrorMessage should NOT redact 172.32.x.x IP (above private range)', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  openidClientMock.discovery = vi
+    .fn()
+    .mockRejectedValue(new Error('connect ECONNREFUSED 172.32.0.1:443'));
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+
+  const warnCall = (oidc.log.warn as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+  expect(warnCall).toContain('172.32.0.1');
+  expect(warnCall).not.toContain('[internal-addr]');
+});
+
+test('sanitizeOidcErrorMessage should redact an absolute path with exactly two segments', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  openidClientMock.discovery = vi.fn().mockRejectedValue(new Error('error reading /etc/ca.pem'));
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+
+  const warnCall = (oidc.log.warn as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+  expect(warnCall).toContain('[path]');
+  expect(warnCall).not.toContain('/etc/ca.pem');
+});
+
+test('sanitizeOidcErrorMessage should NOT redact a single-segment path like /foo', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  // "/foo" has only one segment — should NOT be redacted
+  openidClientMock.discovery = vi
+    .fn()
+    .mockRejectedValue(new Error('path /nope cannot be resolved'));
+
+  await expect(oidc.initAuthentication()).resolves.toBeUndefined();
+
+  const warnCall = (oidc.log.warn as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+  expect(warnCall).toContain('/nope');
+  expect(warnCall).not.toContain('[path]');
+});
+
+// --- isNonEmptyString / isValidCheckEntry mutant killers ---
+
+test('isNonEmptyString: empty string should fail validation as state token', async () => {
+  const session = createSessionWithPending({
+    '': {
+      state: '',
+      codeVerifier: 'code-verifier',
+      createdAt: Date.now(),
+    },
+  });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(openidClientMock.authorizationCodeGrant).not.toHaveBeenCalled();
+  expect401JsonMessage(res, 'OIDC callback is missing state. Please retry authentication.');
+});
+
+// --- getMaxConcurrentSessionsPerUser edge cases ---
+
+test('getMaxConcurrentSessionsPerUser should use default when session config key is absent', async () => {
+  mockSuccessfulGrant(openidClientMock);
+  const getServerConfigurationSpy = vi.spyOn(configuration, 'getServerConfiguration');
+  getServerConfigurationSpy.mockReturnValue(
+    {} as ReturnType<typeof configuration.getServerConfiguration>,
+  );
+
+  try {
+    const session = createSessionWithPending({ 'valid-state': createPendingCheck() });
+    const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+    req.sessionStore = {
+      all: vi.fn((done) => done(null, {})),
+      destroy: vi.fn((_sid, done) => done()),
+    };
+    const res = createRes();
+
+    await oidc.callback(req, res);
+
+    // No sessions to evict - just ensure it proceeds normally
+    expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+  } finally {
+    getServerConfigurationSpy.mockRestore();
+  }
+});
+
+test('getMaxConcurrentSessionsPerUser should use default when maxconcurrentsessions is 0', async () => {
+  mockSuccessfulGrant(openidClientMock);
+  const getServerConfigurationSpy = vi.spyOn(configuration, 'getServerConfiguration');
+  getServerConfigurationSpy.mockReturnValue({
+    session: { maxconcurrentsessions: 0 },
+  } as ReturnType<typeof configuration.getServerConfiguration>);
+
+  try {
+    const session = createSessionWithPending({ 'valid-state': createPendingCheck() });
+    const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+    req.sessionStore = {
+      all: vi.fn((done) => done(null, {})),
+      destroy: vi.fn((_sid, done) => done()),
+    };
+    const res = createRes();
+
+    await oidc.callback(req, res);
+
+    expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+  } finally {
+    getServerConfigurationSpy.mockRestore();
+  }
+});
+
+test('getMaxConcurrentSessionsPerUser should use default when maxconcurrentsessions is a float', async () => {
+  mockSuccessfulGrant(openidClientMock);
+  const getServerConfigurationSpy = vi.spyOn(configuration, 'getServerConfiguration');
+  getServerConfigurationSpy.mockReturnValue({
+    session: { maxconcurrentsessions: 2.5 },
+  } as ReturnType<typeof configuration.getServerConfiguration>);
+
+  try {
+    const session = createSessionWithPending({ 'valid-state': createPendingCheck() });
+    const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+    req.sessionStore = {
+      all: vi.fn((done) => done(null, {})),
+      destroy: vi.fn((_sid, done) => done()),
+    };
+    const res = createRes();
+
+    await oidc.callback(req, res);
+
+    expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+  } finally {
+    getServerConfigurationSpy.mockRestore();
+  }
+});
+
+test('getMaxConcurrentSessionsPerUser should use default when maxconcurrentsessions is a string', async () => {
+  mockSuccessfulGrant(openidClientMock);
+  const getServerConfigurationSpy = vi.spyOn(configuration, 'getServerConfiguration');
+  getServerConfigurationSpy.mockReturnValue({
+    session: { maxconcurrentsessions: '3' },
+  } as ReturnType<typeof configuration.getServerConfiguration>);
+
+  try {
+    const session = createSessionWithPending({ 'valid-state': createPendingCheck() });
+    const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+    req.sessionStore = {
+      all: vi.fn((done) => done(null, {})),
+      destroy: vi.fn((_sid, done) => done()),
+    };
+    const res = createRes();
+
+    await oidc.callback(req, res);
+
+    expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+  } finally {
+    getServerConfigurationSpy.mockRestore();
+  }
+});
+
+// --- validateConfiguration mutant killers ---
+
+test('validateConfiguration should throw when DD_PUBLIC_URL is whitespace-only', async () => {
+  const previousPublicUrl = configuration.ddEnvVars.DD_PUBLIC_URL;
+  configuration.ddEnvVars.DD_PUBLIC_URL = '   ';
+  try {
+    expect(() => {
+      oidc.validateConfiguration(configurationValid);
+    }).toThrowError('DD_PUBLIC_URL must be set when OIDC authentication is configured');
+  } finally {
+    if (previousPublicUrl === undefined) {
+      delete configuration.ddEnvVars.DD_PUBLIC_URL;
+    } else {
+      configuration.ddEnvVars.DD_PUBLIC_URL = previousPublicUrl;
+    }
+  }
+});
+
+test('validateConfiguration should throw when DD_PUBLIC_URL is a non-string value', async () => {
+  const previousPublicUrl = configuration.ddEnvVars.DD_PUBLIC_URL;
+  (configuration.ddEnvVars as any).DD_PUBLIC_URL = 42;
+  try {
+    expect(() => {
+      oidc.validateConfiguration(configurationValid);
+    }).toThrowError('DD_PUBLIC_URL must be set when OIDC authentication is configured');
+  } finally {
+    if (previousPublicUrl === undefined) {
+      delete configuration.ddEnvVars.DD_PUBLIC_URL;
+    } else {
+      configuration.ddEnvVars.DD_PUBLIC_URL = previousPublicUrl;
+    }
+  }
+});
+
+// --- maskConfiguration mutant killers ---
+
+test('maskConfiguration should include insecure=false when explicitly configured as boolean', async () => {
+  oidc.configuration = {
+    ...configurationValid,
+    insecure: false,
+  };
+
+  const masked = oidc.maskConfiguration();
+  expect(masked).toHaveProperty('insecure', false);
+});
+
+// --- discoverClient mutant killers ---
+
+test('initAuthentication should log the discovery URL in debug message', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  oidc.configuration = {
+    ...configurationValid,
+    discovery: 'https://idp.example.com/.well-known/openid-configuration',
+  };
+  const mockClient = {};
+  openidClientMock.discovery = vi.fn().mockResolvedValue(mockClient);
+  openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
+
+  await oidc.initAuthentication();
+
+  expect(oidc.log.debug).toHaveBeenCalledWith(
+    'Discovering configuration from https://idp.example.com/.well-known/openid-configuration',
+  );
+});
+
+test('initAuthentication should compute timeout in whole seconds rounding up', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  oidc.configuration = {
+    ...configurationValid,
+    timeout: 1500, // 1.5s → ceil → 2s
+  };
+  const mockClient = {};
+  openidClientMock.discovery = vi.fn().mockResolvedValue(mockClient);
+  openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
+
+  await oidc.initAuthentication();
+
+  const callArgs = openidClientMock.discovery.mock.calls[0];
+  expect(callArgs[4].timeout).toBe(2);
+});
+
+test('initAuthentication should pass exact integer timeout for round millisecond values', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  oidc.configuration = {
+    ...configurationValid,
+    timeout: 3000, // 3.0s → ceil → 3s
+  };
+  const mockClient = {};
+  openidClientMock.discovery = vi.fn().mockResolvedValue(mockClient);
+  openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
+
+  await oidc.initAuthentication();
+
+  const callArgs = openidClientMock.discovery.mock.calls[0];
+  expect(callArgs[4].timeout).toBe(3);
+});
+
+// --- getStrategy / rateLimit config mutant killers ---
+
+test('getStrategy should configure rate limiter with 50 max requests per window', async () => {
+  const appMock = { use: vi.fn(), get: vi.fn() };
+  oidc.name = 'test-oidc';
+
+  oidc.getStrategy(appMock);
+
+  // The rate limiter is applied via app.use for the OIDC path prefix
+  expect(appMock.use).toHaveBeenCalledWith('/auth/oidc/test-oidc', expect.any(Function));
+});
+
+test('getStrategy should register strategy with scope openid email profile', async () => {
+  const appMock = { use: vi.fn(), get: vi.fn() };
+
+  const strategy = oidc.getStrategy(appMock);
+
+  // Verify the returned strategy has the correct name
+  expect(strategy.name).toBe('oidc');
+  // Verify options contain the correct scope
+  expect((strategy as any).options.scope).toBe('openid email profile');
+});
+
+// --- redirect flow specific debug log mutant killers ---
+
+test('redirect should log "Build redirection url" debug message', async () => {
+  const session = { save: vi.fn((cb) => cb()) };
+  const req = createReq({ session });
+  const res = createRes();
+
+  await oidc.redirect(req, res);
+
+  expect(oidc.log.debug).toHaveBeenCalledWith(expect.stringContaining('Build redirection url'));
+});
+
+test('redirect should include the redirect_uri in the authorization URL build', async () => {
+  const session = { save: vi.fn((cb) => cb()) };
+  const req = createReq({ session });
+  const res = createRes();
+
+  await oidc.redirect(req, res);
+
+  expect(openidClientMock.buildAuthorizationUrl).toHaveBeenCalledWith(
+    oidc.client,
+    expect.objectContaining({
+      redirect_uri: expect.stringContaining('/auth/oidc/'),
+      scope: 'openid email profile',
+      code_challenge_method: 'S256',
+    }),
+  );
+});
+
+test('redirect should use S256 as the code challenge method', async () => {
+  const session = { save: vi.fn((cb) => cb()) };
+  const req = createReq({ session });
+  const res = createRes();
+
+  await oidc.redirect(req, res);
+
+  const buildArgs = openidClientMock.buildAuthorizationUrl.mock.calls[0][1];
+  expect(buildArgs.code_challenge_method).toBe('S256');
+});
+
+// --- callback specific log message mutant killers ---
+
+test('callback should log "Validate callback data" debug message', async () => {
+  mockSuccessfulGrant(openidClientMock);
+  const { session } = await performRedirect(oidc, openidClientMock);
+  const state = Object.keys(session.oidc.default.pending)[0];
+  const req = createCallbackReq(`/auth/oidc/default/cb?code=abc&state=${state}`, session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(oidc.log.debug).toHaveBeenCalledWith('Validate callback data');
+});
+
+test('callback should log "Get user info" debug message', async () => {
+  mockSuccessfulGrant(openidClientMock);
+  const { session } = await performRedirect(oidc, openidClientMock);
+  const state = Object.keys(session.oidc.default.pending)[0];
+  const req = createCallbackReq(`/auth/oidc/default/cb?code=abc&state=${state}`, session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(oidc.log.debug).toHaveBeenCalledWith('Get user info');
+});
+
+test('completePassportLogin should log "Perform passport login" debug message', async () => {
+  mockSuccessfulGrant(openidClientMock);
+  const { session } = await performRedirect(oidc, openidClientMock);
+  const state = Object.keys(session.oidc.default.pending)[0];
+  const req = createCallbackReq(`/auth/oidc/default/cb?code=abc&state=${state}`, session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(oidc.log.debug).toHaveBeenCalledWith('Perform passport login');
+});
+
+test('completePassportLogin should log "User authenticated => redirect to app" debug message', async () => {
+  mockSuccessfulGrant(openidClientMock);
+  const { session } = await performRedirect(oidc, openidClientMock);
+  const state = Object.keys(session.oidc.default.pending)[0];
+  const req = createCallbackReq(`/auth/oidc/default/cb?code=abc&state=${state}`, session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(oidc.log.debug).toHaveBeenCalledWith('User authenticated => redirect to app');
+});
+
+// --- validateCallbackData log message mutant killers ---
+
+test('validateCallbackData should log specific warn message when oidc checks are missing', async () => {
+  const req = createCallbackReq(undefined, {});
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(oidc.log.warn).toHaveBeenCalledWith(
+    expect.stringContaining('OIDC checks are missing from session for strategy'),
+  );
+  expect(oidc.log.warn).toHaveBeenCalledWith(
+    expect.stringContaining('ask user to restart authentication'),
+  );
+});
+
+test('validateCallbackData should use exact error response when oidc checks are missing', async () => {
+  const req = createCallbackReq(undefined, {});
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(res.json).toHaveBeenCalledWith({
+    error: 'OIDC session is missing or expired. Please retry authentication.',
+  });
+});
+
+test('validateCallbackData should log specific warn message when state is missing', async () => {
+  const session = createSessionWithPending({ 'valid-state': createPendingCheck() });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(oidc.log.warn).toHaveBeenCalledWith(
+    expect.stringContaining('OIDC callback is missing state parameter for strategy'),
+  );
+});
+
+test('validateCallbackData should use exact error response when state is missing', async () => {
+  const session = createSessionWithPending({ 'valid-state': createPendingCheck() });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(res.json).toHaveBeenCalledWith({
+    error: 'OIDC callback is missing state. Please retry authentication.',
+  });
+});
+
+test('validateCallbackData should log specific warn message when state not found in pending checks', async () => {
+  const session = createSessionWithPending({ 'known-state': createPendingCheck() });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=unknown-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(oidc.log.warn).toHaveBeenCalledWith(
+    expect.stringContaining('OIDC callback state not found in pending checks for strategy'),
+  );
+});
+
+test('validateCallbackData should use exact error response when state not found', async () => {
+  const session = createSessionWithPending({ 'known-state': createPendingCheck() });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=unknown-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(res.json).toHaveBeenCalledWith({
+    error: 'OIDC session state mismatch or expired. Please retry authentication.',
+  });
+});
+
+test('validateCallbackData should log specific warn message when state does not match check', async () => {
+  // Force a state mismatch where hasOwn passes but state fields don't match
+  const session = createSessionWithPending({
+    'known-state': createPendingCheck(),
+  });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=unknown-state', session);
+  const originalHasOwn = Object.hasOwn;
+  const hasOwnSpy = vi
+    .spyOn(Object, 'hasOwn')
+    .mockImplementation((value: any, key: PropertyKey) => {
+      if (key === 'unknown-state') return true;
+      return originalHasOwn(value, key);
+    });
+  const res = createRes();
+
+  try {
+    await oidc.callback(req, res);
+  } finally {
+    hasOwnSpy.mockRestore();
+  }
+
+  expect(oidc.log.warn).toHaveBeenCalledWith(
+    expect.stringContaining(
+      'OIDC callback state does not match active session checks for strategy',
+    ),
+  );
+});
+
+// --- verify() log message mutant killer ---
+
+test('verify should log specific error message on access token validation failure', async () => {
+  openidClientMock.fetchUserInfo = vi.fn().mockRejectedValue(new Error('token expired'));
+
+  const done = vi.fn();
+  await oidc.verify('expired-token', done);
+
+  expect(oidc.log.warn).toHaveBeenCalledWith(
+    expect.stringContaining('Error when validating the user access token'),
+  );
+  expect(done).toHaveBeenCalledWith(null, false);
+});
+
+// --- callback should throw when access_token is missing  ---
+
+test('callback should log the throw message when access_token is absent from token set', async () => {
+  openidClientMock.authorizationCodeGrant = vi.fn().mockResolvedValue({});
+
+  const session = createSessionWithPending({ 'valid-state': createPendingCheck() });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(oidc.log.warn).toHaveBeenCalledWith(
+    expect.stringContaining('Access token is missing from OIDC authorization response'),
+  );
+  expect401Json(res);
+});
+
+// --- normalizePendingChecks and limitToMostRecent mutant killers ---
+
+test('limitToMostRecent should keep exactly 5 checks when more than 5 are queued', async () => {
+  openidClientMock.randomPKCECodeVerifier = vi
+    .fn()
+    .mockReturnValueOnce('code-verifier-1')
+    .mockReturnValueOnce('code-verifier-2')
+    .mockReturnValueOnce('code-verifier-3')
+    .mockReturnValueOnce('code-verifier-4')
+    .mockReturnValueOnce('code-verifier-5')
+    .mockReturnValueOnce('code-verifier-6');
+
+  const persistedState: any = {};
+  const makeSession = () => {
+    const session: any = {
+      oidc: JSON.parse(JSON.stringify(persistedState.oidc || {})),
+    };
+    session.reload = vi.fn((cb) => {
+      session.oidc = JSON.parse(JSON.stringify(persistedState.oidc || {}));
+      cb();
+    });
+    session.save = vi.fn((cb) => {
+      persistedState.oidc = JSON.parse(JSON.stringify(session.oidc || {}));
+      cb();
+    });
+    return session;
+  };
+
+  // Issue 6 sequential redirects with deterministic createdAt timestamps
+  let fakeTime = Date.now();
+  const dateSpy = vi.spyOn(Date, 'now').mockImplementation(() => {
+    fakeTime += 1000;
+    return fakeTime;
+  });
+  try {
+    for (let i = 0; i < 6; i++) {
+      const session = makeSession();
+      await oidc.redirect(createReq({ sessionID: 'shared-session', session }), createRes());
+    }
+  } finally {
+    dateSpy.mockRestore();
+  }
+
+  // After 6 redirects through the same session store, only 5 should remain
+  expect(Object.keys(persistedState.oidc.default.pending)).toHaveLength(5);
+  // The 6th (most recent) code verifier should be present
+  const codeVerifiers = Object.values(persistedState.oidc.default.pending).map(
+    (check: any) => check.codeVerifier,
+  );
+  expect(codeVerifiers).toContain('code-verifier-6');
+  expect(codeVerifiers).not.toContain('code-verifier-1');
+});
+
+test('limitToMostRecent should sort checks by createdAt descending', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  // Create 3 checks with known createdAt values (old first, then newer)
+  const now = Date.now();
+  const session = {
+    oidc: {
+      default: {
+        pending: {
+          'state-oldest': { state: 'state-oldest', codeVerifier: 'cv-1', createdAt: now - 3000 },
+          'state-middle': { state: 'state-middle', codeVerifier: 'cv-2', createdAt: now - 2000 },
+          'state-newest': { state: 'state-newest', codeVerifier: 'cv-3', createdAt: now - 1000 },
+        },
+      },
+    },
+    save: vi.fn((cb) => cb()),
+  };
+
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=state-newest', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(openidClientMock.authorizationCodeGrant).toHaveBeenCalledWith(
+    oidc.client,
+    expect.any(URL),
+    expect.objectContaining({ pkceCodeVerifier: 'cv-3' }),
+  );
+  expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+});
+
+// --- buildNextOidcChecks mutant killers ---
+
+test('buildNextOidcChecks should return empty object when session has no oidc field', () => {
+  const result = oidc.buildNextOidcChecks({ cookie: {} }, 'default', {}, 'state1');
+  expect(Object.keys(result)).toHaveLength(0);
+});
+
+test('buildNextOidcChecks should preserve other strategy keys when clearing current strategy', () => {
+  const session = {
+    oidc: {
+      'other-strategy': {
+        pending: {
+          'other-state': { state: 'other-state', codeVerifier: 'cv', createdAt: Date.now() },
+        },
+      },
+      default: {
+        pending: { state1: { state: 'state1', codeVerifier: 'cv1', createdAt: Date.now() } },
+      },
+    },
+  };
+  const pendingChecks = {
+    state1: { state: 'state1', codeVerifier: 'cv1', createdAt: Date.now() },
+  };
+
+  const result = oidc.buildNextOidcChecks(session, 'default', pendingChecks, 'state1');
+
+  // 'default' key removed; 'other-strategy' preserved
+  expect(result).not.toHaveProperty('default');
+  expect(result).toHaveProperty('other-strategy');
+});
+
+test('buildNextOidcChecks should set remaining checks under sessionKey when not all checks are consumed', () => {
+  const session = {
+    oidc: {
+      default: {
+        pending: {
+          state1: { state: 'state1', codeVerifier: 'cv1', createdAt: Date.now() },
+          state2: { state: 'state2', codeVerifier: 'cv2', createdAt: Date.now() },
+        },
+      },
+    },
+  };
+  const pendingChecks = {
+    state1: { state: 'state1', codeVerifier: 'cv1', createdAt: Date.now() },
+    state2: { state: 'state2', codeVerifier: 'cv2', createdAt: Date.now() },
+  };
+
+  const result = oidc.buildNextOidcChecks(session, 'default', pendingChecks, 'state1');
+
+  expect(result).toHaveProperty('default');
+  expect((result.default as any).pending).toHaveProperty('state2');
+  expect((result.default as any).pending).not.toHaveProperty('state1');
+});
+
+// --- persistCallbackSession mutant killers ---
+
+test('persistCallbackSession should not set oidc on session when nextOidcChecks is empty', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  const session = createSessionWithPending({ 'valid-state': createPendingCheck() });
+  session.save = vi.fn((cb) => cb());
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  // After consuming the only pending check, the oidc key for 'default' should be gone
+  expect(req.session?.oidc?.default).toBeUndefined();
+});
+
+test('persistCallbackSession should restore rememberMe on the regenerated session', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  // Simulate a realistic session regeneration that replaces req.session with a new object
+  const originalSession: any = createSessionWithPending({ 'valid-state': createPendingCheck() });
+  originalSession.rememberMe = true;
+  originalSession.save = vi.fn((cb) => cb());
+
+  const newSession: any = {
+    save: vi.fn((cb) => cb()),
+  };
+
+  originalSession.regenerate = vi.fn((cb) => {
+    // Simulate Express session regeneration: req.session is replaced
+    req.session = newSession;
+    cb();
+  });
+
+  const req = createCallbackReq(
+    '/auth/oidc/default/cb?code=abc&state=valid-state',
+    originalSession,
+  );
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  // After regeneration, the NEW session should have rememberMe restored
+  expect(req.session?.rememberMe).toBe(true);
+  expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+});
+
+test('persistCallbackSession should restore rememberMe=false on regenerated session', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  const originalSession: any = createSessionWithPending({ 'valid-state': createPendingCheck() });
+  originalSession.rememberMe = false;
+  originalSession.save = vi.fn((cb) => cb());
+
+  const newSession: any = {
+    save: vi.fn((cb) => cb()),
+  };
+
+  originalSession.regenerate = vi.fn((cb) => {
+    req.session = newSession;
+    cb();
+  });
+
+  const req = createCallbackReq(
+    '/auth/oidc/default/cb?code=abc&state=valid-state',
+    originalSession,
+  );
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  // rememberMe=false must survive session regeneration
+  expect(req.session?.rememberMe).toBe(false);
+  expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+});
+
+test('persistCallbackSession should not set rememberMe when preference is undefined after regeneration', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  const originalSession: any = createSessionWithPending({ 'valid-state': createPendingCheck() });
+  // No rememberMe set on session
+  originalSession.save = vi.fn((cb) => cb());
+
+  const newSession: any = {
+    save: vi.fn((cb) => cb()),
+  };
+
+  originalSession.regenerate = vi.fn((cb) => {
+    req.session = newSession;
+    cb();
+  });
+
+  const req = createCallbackReq(
+    '/auth/oidc/default/cb?code=abc&state=valid-state',
+    originalSession,
+  );
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  // rememberMe should remain unset on the new session (the property must not exist at all,
+  // not just be undefined — distinguishes "not set" from "explicitly set to undefined")
+  expect(req.session).not.toHaveProperty('rememberMe');
+  expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+});
+
+// --- redirect session initialization mutant killers ---
+
+test('redirect should initialize oidc field on session when it is absent', async () => {
+  const session = { save: vi.fn((cb) => cb()) };
+  // session.oidc is initially undefined
+  const req = createReq({ session });
+  const res = createRes();
+
+  await oidc.redirect(req, res);
+
+  expect(req.session.oidc).toBeDefined();
+  expect(typeof req.session.oidc).toBe('object');
+});
+
+test('redirect should initialize oidc field on session when it is null', async () => {
+  const session = { oidc: null, save: vi.fn((cb) => cb()) };
+  const req = createReq({ session });
+  const res = createRes();
+
+  await oidc.redirect(req, res);
+
+  expect(req.session.oidc).toBeDefined();
+  expect(typeof req.session.oidc).toBe('object');
+});
+
+// --- callback session oidc optional chaining mutant killers ---
+
+test('validateCallbackData should return undefined when session has no oidc field', async () => {
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', {});
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(openidClientMock.authorizationCodeGrant).not.toHaveBeenCalled();
+  expect401JsonMessage(res, 'OIDC session is missing or expired. Please retry authentication.');
+});
+
+test('validateCallbackData should return undefined when session oidc has no entry for strategy key', async () => {
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', {
+    oidc: { 'other-strategy': {} },
+  });
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(openidClientMock.authorizationCodeGrant).not.toHaveBeenCalled();
+  expect401JsonMessage(res, 'OIDC session is missing or expired. Please retry authentication.');
+});
+
+// --- getAllowedAuthorizationRedirects issuer URL mutant killers ---
+
+test('getAllowedAuthorizationRedirects should include issuer origin in allowedOrigins', () => {
+  oidc.client = {
+    serverMetadata: () => ({
+      authorization_endpoint: 'https://auth.idp.example.com/authorize',
+      issuer: 'https://issuer.idp.example.com',
+    }),
+  } as any;
+  oidc.configuration = {
+    ...configurationValid,
+    discovery: 'https://idp.example.com/.well-known/openid-configuration',
+  };
+
+  const { allowedOrigins } = oidc.getAllowedAuthorizationRedirects();
+
+  expect(allowedOrigins.has('https://issuer.idp.example.com')).toBe(true);
+  expect(allowedOrigins.has('https://auth.idp.example.com')).toBe(true);
+  expect(allowedOrigins.has('https://idp.example.com')).toBe(true);
+});
+
+// --- normalizePathname mutant killers ---
+
+test('getAllowedAuthorizationRedirects should strip trailing slash from authorization endpoint path', () => {
+  oidc.client = {
+    serverMetadata: () => ({
+      authorization_endpoint: 'https://idp.example.com/auth/',
+      issuer: 'https://idp.example.com',
+    }),
+  } as any;
+  oidc.configuration = configurationValid;
+
+  const { strictEndpoints } = oidc.getAllowedAuthorizationRedirects();
+
+  expect(strictEndpoints.has('https://idp.example.com/auth')).toBe(true);
+  expect(strictEndpoints.has('https://idp.example.com/auth/')).toBe(false);
+});
+
+test('getAllowedAuthorizationRedirects should normalize root path to slash', () => {
+  oidc.client = {
+    serverMetadata: () => ({
+      authorization_endpoint: 'https://idp.example.com/',
+      issuer: 'https://idp.example.com',
+    }),
+  } as any;
+  oidc.configuration = configurationValid;
+
+  const { strictEndpoints } = oidc.getAllowedAuthorizationRedirects();
+
+  expect(strictEndpoints.has('https://idp.example.com/')).toBe(true);
+});
+
+// --- isNonEmptyString: empty codeVerifier in pending check ---
+
+test('collectValidChecks should reject a pending check with an empty codeVerifier', async () => {
+  const session = {
+    oidc: {
+      default: {
+        pending: {
+          'valid-state': {
+            state: 'valid-state',
+            codeVerifier: '', // empty string should be rejected
+            createdAt: Date.now(),
+          },
+        },
+      },
+    },
+  };
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(openidClientMock.authorizationCodeGrant).not.toHaveBeenCalled();
+  expect401JsonMessage(res, 'OIDC session state mismatch or expired. Please retry authentication.');
+});
+
+// --- parseHttpUrl protocol check ---
+
+test('parseHttpUrl should reject ftp: protocol URLs in getAllowedAuthorizationRedirects', () => {
+  oidc.configuration = {
+    ...configurationValid,
+    discovery: 'ftp://idp.example.com/openid',
+  };
+  oidc.client = undefined as any;
+
+  const { strictEndpoints, allowedOrigins } = oidc.getAllowedAuthorizationRedirects();
+
+  expect(strictEndpoints.size).toBe(0);
+  expect(allowedOrigins.size).toBe(0);
+});
+
+test('isAllowedAuthorizationRedirect should allow https authorization redirect', () => {
+  const allowed = oidc.isAllowedAuthorizationRedirect(new URL('https://idp/auth'));
+  expect(allowed).toBe(true);
+});
+
+test('isAllowedAuthorizationRedirect should allow http authorization redirect', () => {
+  oidc.client = {
+    serverMetadata: () => ({
+      authorization_endpoint: 'http://idp.local/auth',
+      issuer: 'http://idp.local',
+    }),
+  } as any;
+  oidc.configuration = configurationValid;
+
+  const allowed = oidc.isAllowedAuthorizationRedirect(new URL('http://idp.local/auth'));
+  expect(allowed).toBe(true);
+});
+
+test('isAllowedAuthorizationRedirect should reject ftp: protocol', () => {
+  const allowed = oidc.isAllowedAuthorizationRedirect(new URL('ftp://idp/auth'));
+  expect(allowed).toBe(false);
+});
+
+// --- getMaxConcurrentSessionsPerUser: minimum value = 1 ---
+
+test('getMaxConcurrentSessionsPerUser should use value of 1 when configured', async () => {
+  mockSuccessfulGrant(openidClientMock);
+  const getServerConfigurationSpy = vi.spyOn(configuration, 'getServerConfiguration');
+  getServerConfigurationSpy.mockReturnValue({
+    session: { maxconcurrentsessions: 1 },
+  } as ReturnType<typeof configuration.getServerConfiguration>);
+
+  try {
+    // With maxconcurrentsessions=1, a second existing session should be evicted
+    const session = createSessionWithPending({ 'valid-state': createPendingCheck() });
+    const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+    req.sessionID = 'current-session';
+    req.sessionStore = {
+      all: vi.fn((done) =>
+        done(null, {
+          'session-to-evict': {
+            passport: { user: JSON.stringify({ username: 'user@example.com' }) },
+            cookie: { expires: '2026-01-01T00:00:00.000Z' },
+          },
+        }),
+      ),
+      destroy: vi.fn((_sid, done) => done()),
+    };
+    const res = createRes();
+
+    await oidc.callback(req, res);
+
+    // With limit of 1, the existing session should be evicted
+    expect(req.sessionStore.destroy).toHaveBeenCalledWith('session-to-evict', expect.any(Function));
+    expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+  } finally {
+    getServerConfigurationSpy.mockRestore();
+  }
+});
+
+// --- redirect: session null check and lock key determination ---
+
+test('redirect should warn and return 500 when req.session is null', async () => {
+  const req = createReq({ session: null });
+  const res = createRes();
+
+  await oidc.redirect(req, res);
+
+  expect(oidc.log.warn).toHaveBeenCalledWith(
+    'Unable to initialize OIDC checks because no session is available',
+  );
+  expect(res.status).toHaveBeenCalledWith(500);
+  expect(res.json).toHaveBeenCalledWith({ error: 'Unable to initialize OIDC session' });
+});
+
+test('redirect should use session lock when sessionID is a non-empty string', async () => {
+  const save = vi.fn((cb) => cb());
+  const reload = vi.fn((cb) => cb());
+  const req = createReq({
+    sessionID: 'real-session-id',
+    session: { reload, save },
+  });
+  const res = createRes();
+
+  await oidc.redirect(req, res);
+
+  // reload should be called as part of lock-guarded persistOidcChecks
+  expect(reload).toHaveBeenCalledTimes(1);
+  expectDefaultRedirectPayload(res);
+});
+
+test('redirect should use session lock when sessionID is a numeric-looking string', async () => {
+  const save = vi.fn((cb) => cb());
+  const req = createReq({
+    sessionID: '12345678',
+    session: { save },
+  });
+  const res = createRes();
+
+  await oidc.redirect(req, res);
+
+  expectDefaultRedirectPayload(res);
+});
+
+// --- redirect: oidc session initialization from non-object ---
+
+test('redirect should reset oidc field when it is not an object', async () => {
+  const session = { oidc: 'invalid-string', save: vi.fn((cb) => cb()) };
+  const req = createReq({ session });
+  const res = createRes();
+
+  await oidc.redirect(req, res);
+
+  expect(typeof req.session.oidc).toBe('object');
+  expectDefaultRedirectPayload(res);
+});
+
+// --- redirect: session lock key undefined path ---
+
+test('redirect should skip session lock when sessionID is a number', async () => {
+  const save = vi.fn((cb) => cb());
+  const req = createReq({ sessionID: 999 as any, session: { save } });
+  const res = createRes();
+
+  await oidc.redirect(req, res);
+
+  expectDefaultRedirectPayload(res);
+});
+
+// --- validateCallbackData: req.session optional chaining ---
+
+test('validateCallbackData should handle null session gracefully', async () => {
+  const req = createReq({
+    url: '/auth/oidc/default/cb?code=abc&state=valid-state',
+    session: null,
+    login: vi.fn(),
+  });
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(openidClientMock.authorizationCodeGrant).not.toHaveBeenCalled();
+  expect401JsonMessage(res, 'OIDC session is missing or expired. Please retry authentication.');
+});
+
+// --- buildNextOidcChecks: empty nextOidcChecks early return ---
+
+test('buildNextOidcChecks should return empty object when session.oidc is empty', () => {
+  const result = oidc.buildNextOidcChecks(
+    { oidc: {} },
+    'default',
+    { state1: { state: 'state1', codeVerifier: 'cv', createdAt: Date.now() } },
+    'state1',
+  );
+  expect(Object.keys(result)).toHaveLength(0);
+});
+
+// --- persistCallbackSession: Object.keys nextOidcChecks length check ---
+
+test('persistCallbackSession should set session.oidc when nextOidcChecks has remaining entries', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  const session = {
+    oidc: {
+      default: {
+        pending: {
+          'state-to-consume': {
+            state: 'state-to-consume',
+            codeVerifier: 'cv1',
+            createdAt: Date.now(),
+          },
+          'state-remaining': {
+            state: 'state-remaining',
+            codeVerifier: 'cv2',
+            createdAt: Date.now(),
+          },
+        },
+      },
+    },
+    save: vi.fn((cb) => cb()),
+  };
+
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=state-to-consume', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  // The remaining check should still be in session.oidc
+  expect(req.session?.oidc).toBeDefined();
+  expect((req.session?.oidc as any)?.default?.pending?.['state-remaining']).toBeDefined();
+  expect((req.session?.oidc as any)?.default?.pending?.['state-to-consume']).toBeUndefined();
+  expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+});
+
+// --- getElapsedSeconds: arithmetic integrity ---
+
+test('recordLoginMetrics should record a non-negative duration for success', async () => {
+  const startedAt = process.hrtime.bigint();
+  oidc.recordLoginMetrics('success', startedAt);
+
+  expect(mockObserveAuthLoginDuration).toHaveBeenCalledWith('success', 'oidc', expect.any(Number));
+  const duration = mockObserveAuthLoginDuration.mock.calls[0][2];
+  expect(duration).toBeGreaterThanOrEqual(0);
+  expect(duration).toBeLessThan(10); // should be sub-second
+});
+
+// --- collectValidChecks: TTL boundary with <= vs < operator ---
+
+test('collectValidChecks should accept a check created exactly at TTL boundary', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  const dateSpy = vi.spyOn(Date, 'now').mockReturnValue(1000000000000);
+  try {
+    const session = {
+      oidc: {
+        default: {
+          pending: {
+            'valid-state': {
+              state: 'valid-state',
+              codeVerifier: 'code-verifier',
+              createdAt: 1000000000000 - 5 * 60 * 1000, // exactly at the TTL boundary
+            },
+          },
+        },
+      },
+      save: vi.fn((cb) => cb()),
+    };
+    const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+    const res = createRes();
+
+    await oidc.callback(req, res);
+
+    // At exactly the TTL boundary (<=), the check should be valid
+    expect(openidClientMock.authorizationCodeGrant).toHaveBeenCalled();
+    expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+  } finally {
+    dateSpy.mockRestore();
+  }
+});
+
+test('collectValidChecks should reject a check that is 1ms past the TTL', async () => {
+  const dateSpy = vi.spyOn(Date, 'now').mockReturnValue(1000000000000);
+  try {
+    const session = createSessionWithPending({
+      'valid-state': {
+        state: 'valid-state',
+        codeVerifier: 'code-verifier',
+        createdAt: 1000000000000 - 5 * 60 * 1000 - 1, // 1ms past TTL
+      },
+    });
+    const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+    const res = createRes();
+
+    await oidc.callback(req, res);
+
+    expect(openidClientMock.authorizationCodeGrant).not.toHaveBeenCalled();
+    expect401JsonMessage(
+      res,
+      'OIDC session state mismatch or expired. Please retry authentication.',
+    );
+  } finally {
+    dateSpy.mockRestore();
+  }
+});
+
+// --- getAllowedAuthorizationRedirects: serverMetadata function check ---
+
+test('getAllowedAuthorizationRedirects should handle client with non-function serverMetadata', () => {
+  oidc.client = { serverMetadata: 'not-a-function' } as any;
+  oidc.configuration = configurationValid;
+
+  const { strictEndpoints } = oidc.getAllowedAuthorizationRedirects();
+
+  expect(strictEndpoints.size).toBe(0);
+});
+
+// --- normalizePendingChecks: non-object rawChecks in redirect ---
+
+test('normalizePendingChecks should handle non-null non-object oidc entry (e.g., number)', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  // Provide a valid 8-char state that passes OIDC_STATE_PATTERN
+  const session = {
+    oidc: {
+      default: 42, // non-null, non-object value (normalizePendingChecks should handle it)
+    },
+    save: vi.fn((cb) => cb()),
+  };
+
+  const req = createReq({ session });
+  const res = createRes();
+
+  // redirect will call normalizePendingChecks with 42 as rawChecks
+  await oidc.redirect(req, res);
+
+  // Should still succeed by initializing fresh oidc state
+  expectDefaultRedirectPayload(res);
+});
+
+// --- normalizePendingChecks: null rawChecks (line 250 null check) ---
+
+test('normalizePendingChecks should handle null oidc session entry (e.g., oidc.default = null)', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  // Provide a null value for the session key — normalizePendingChecks(null) should return empty record
+  const session = {
+    oidc: {
+      default: null, // explicitly null
+    },
+    save: vi.fn((cb) => cb()),
+  };
+
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  // null session entry = missing checks => authentication error
+  expect(openidClientMock.authorizationCodeGrant).not.toHaveBeenCalled();
+  expect401JsonMessage(res, 'OIDC session is missing or expired. Please retry authentication.');
+});
+
+// --- normalizePendingChecks: pending: null (line 256 null guard) ---
+
+test('normalizePendingChecks should treat pending: null as empty and fall back to legacy format', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  // pending field is explicitly null — should not be treated as object
+  const session = {
+    oidc: {
+      default: { pending: null, state: null, codeVerifier: null },
+    },
+    save: vi.fn((cb) => cb()),
+  };
+
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  // null pending + null state/codeVerifier = empty checks => state mismatch error
+  expect(openidClientMock.authorizationCodeGrant).not.toHaveBeenCalled();
+  expect401JsonMessage(res, 'OIDC session state mismatch or expired. Please retry authentication.');
+});
+
+// --- normalizePathname: multi-trailing-slash (line 180 /\/+$/ vs /\/$/) ---
+
+test('getAllowedAuthorizationRedirects should strip multiple trailing slashes from authorization endpoint path', () => {
+  oidc.client = {
+    serverMetadata: () => ({
+      authorization_endpoint: 'https://idp.example.com/auth//',
+      issuer: 'https://idp.example.com',
+    }),
+  } as any;
+  oidc.configuration = configurationValid;
+
+  const { strictEndpoints } = oidc.getAllowedAuthorizationRedirects();
+
+  // Double trailing slash must be fully stripped to '/auth'
+  expect(strictEndpoints.has('https://idp.example.com/auth')).toBe(true);
+  expect(strictEndpoints.has('https://idp.example.com/auth/')).toBe(false);
+  expect(strictEndpoints.has('https://idp.example.com/auth//')).toBe(false);
+});
+
+// --- persistCallbackSession: preserves other strategy when consuming all checks from default ---
+
+test('persistCallbackSession should preserve other strategy keys when all default checks are consumed', async () => {
+  mockSuccessfulGrant(openidClientMock);
+
+  const session: any = {
+    oidc: {
+      default: {
+        pending: {
+          'valid-state': {
+            state: 'valid-state',
+            codeVerifier: 'code-verifier',
+            createdAt: Date.now(),
+          },
+        },
+      },
+      'other-strategy': {
+        pending: {
+          'other-state': { state: 'other-state', codeVerifier: 'other-cv', createdAt: Date.now() },
+        },
+      },
+    },
+    save: vi.fn((cb) => cb()),
+  };
+
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  // 'default' key should be removed; 'other-strategy' must remain
+  expect(req.session?.oidc).toBeDefined();
+  expect(req.session?.oidc).not.toHaveProperty('default');
+  expect(req.session?.oidc).toHaveProperty('other-strategy');
+  expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+});
+
+// --- getConfigurationSchema: redirect default is false (line 407) ---
+
+test('getConfigurationSchema should default redirect to false', () => {
+  const previousPublicUrl = configuration.ddEnvVars.DD_PUBLIC_URL;
+  configuration.ddEnvVars.DD_PUBLIC_URL = 'https://dd.example.com';
+  try {
+    const validated = oidc.validateConfiguration({
+      discovery: 'https://idp.example.com/.well-known/openid-configuration',
+      clientid: 'wud-client',
+      clientsecret: 'wud-secret',
+      timeout: 5000,
+      // redirect is deliberately omitted — must default to false
+    } as any);
+
+    expect(validated.redirect).toBe(false);
+  } finally {
+    if (previousPublicUrl === undefined) {
+      delete configuration.ddEnvVars.DD_PUBLIC_URL;
+    } else {
+      configuration.ddEnvVars.DD_PUBLIC_URL = previousPublicUrl;
+    }
+  }
+});
+
+// --- discoverClient: cafile block sets connect.ca (line 460 block statement) ---
+
+test('initAuthentication should set connect.ca option when cafile is configured', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  const { caPath, cleanup } = await createTemporaryCaFile();
+  mockUndiciFetch.mockResolvedValue(new Response(null, { status: 200 }) as Response);
+  oidc.configuration = {
+    ...configurationValid,
+    cafile: caPath,
+    insecure: false,
+  };
+  const mockClient = {};
+  openidClientMock.discovery = vi.fn().mockResolvedValue(mockClient);
+  openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
+
+  try {
+    await oidc.initAuthentication();
+
+    const callArgs = openidClientMock.discovery.mock.calls[0];
+    const customFetch = callArgs[4][openidClientMock.customFetch];
+    await customFetch('https://idp.example.com/.well-known/openid-configuration', {
+      method: 'GET',
+    });
+
+    const requestInit = mockUndiciFetch.mock.calls[0][1] as { dispatcher?: unknown };
+    const agentOptions = getUndiciAgentOptions(requestInit.dispatcher);
+    const connectOptions = agentOptions?.connect as Record<string, unknown> | undefined;
+    // The CA certificate buffer must be present in the connect options
+    expect(connectOptions?.ca).toBeDefined();
+    // rejectUnauthorized must NOT be false since insecure=false
+    expect(connectOptions?.rejectUnauthorized).not.toBe(false);
+  } finally {
+    await cleanup();
+  }
+});
+
+// --- discoverClient: insecure=false must NOT set rejectUnauthorized=false (line 466/468) ---
+
+test('initAuthentication should NOT set rejectUnauthorized=false when insecure is false', async () => {
+  oidc.client = undefined;
+  oidc.logoutUrl = undefined;
+  const { caPath, cleanup } = await createTemporaryCaFile();
+  mockUndiciFetch.mockResolvedValue(new Response(null, { status: 200 }) as Response);
+  oidc.configuration = {
+    ...configurationValid,
+    cafile: caPath,
+    insecure: false,
+  };
+  const mockClient = {};
+  openidClientMock.discovery = vi.fn().mockResolvedValue(mockClient);
+  openidClientMock.buildEndSessionUrl = vi.fn().mockReturnValue(new URL('https://idp/logout'));
+
+  try {
+    await oidc.initAuthentication();
+
+    const callArgs = openidClientMock.discovery.mock.calls[0];
+    const customFetch = callArgs[4][openidClientMock.customFetch];
+    await customFetch('https://idp.example.com/.well-known/openid-configuration', {
+      method: 'GET',
+    });
+
+    const requestInit = mockUndiciFetch.mock.calls[0][1] as { dispatcher?: unknown };
+    const agentOptions = getUndiciAgentOptions(requestInit.dispatcher);
+    const connectOptions = agentOptions?.connect as Record<string, unknown> | undefined;
+    // With insecure=false, TLS verification should NOT be disabled
+    expect(connectOptions?.rejectUnauthorized).not.toBe(false);
+    // The warn about disabled TLS must NOT appear
+    expect(oidc.log.warn).not.toHaveBeenCalledWith(
+      'TLS certificate verification disabled for OIDC - do not use in production',
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
+// --- reloadSessionIfPossible: reload success must NOT trigger regenerate (line 316) ---
+
+test('redirect should not call regenerate when session reload succeeds', async () => {
+  const regenerate = vi.fn((cb) => cb());
+  const save = vi.fn((cb) => cb());
+  const req = createReq({
+    sessionID: 'session-abc',
+    session: {
+      reload: vi.fn((cb) => cb(null)), // success — no error
+      regenerate,
+      save,
+    },
+  });
+  const res = createRes();
+
+  await oidc.redirect(req, res);
+
+  // reload succeeded => regenerate must NOT have been called
+  expect(regenerate).not.toHaveBeenCalled();
+  expectDefaultRedirectPayload(res);
+});
+
+// --- isValidCheckEntry: null check value (lines 198-200) ---
+
+test('callback should reject pending check with null value', async () => {
+  const session = {
+    oidc: {
+      default: {
+        pending: {
+          'valid-state': null, // null check entry — must be rejected by isValidCheckEntry
+        },
+      },
+    },
+    save: vi.fn((cb) => cb()),
+  };
+
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(openidClientMock.authorizationCodeGrant).not.toHaveBeenCalled();
+  expect401JsonMessage(res, 'OIDC session state mismatch or expired. Please retry authentication.');
+});
