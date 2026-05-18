@@ -47,17 +47,15 @@ function cloneLayout(layout: readonly WidgetLayoutItem[]): WidgetLayoutItem[] {
 }
 
 function layoutItemsEqual(left: WidgetLayoutItem, right: WidgetLayoutItem): boolean {
-  return (
-    left.i === right.i &&
-    left.x === right.x &&
-    left.y === right.y &&
-    left.w === right.w &&
-    left.h === right.h &&
+  const idMatch = left.i === right.i;
+  const positionMatch = left.x === right.x && left.y === right.y;
+  const sizeMatch = left.w === right.w && left.h === right.h;
+  const constraintsMatch =
     left.minW === right.minW &&
     left.minH === right.minH &&
     left.maxW === right.maxW &&
-    left.maxH === right.maxH
-  );
+    left.maxH === right.maxH;
+  return idMatch && positionMatch && sizeMatch && constraintsMatch;
 }
 
 function layoutsShallowEqual(
@@ -120,13 +118,13 @@ function stripLayout(layout: readonly WidgetLayoutItem[]): PersistedLayoutItem[]
 function isValidLayoutItem(value: unknown): value is WidgetLayoutItem {
   if (!value || typeof value !== 'object') return false;
   const item = value as Record<string, unknown>;
-  return (
-    isDashboardWidgetId(item.i) &&
+  const hasValidId = isDashboardWidgetId(item.i);
+  const hasNumericCoords =
     typeof item.x === 'number' &&
     typeof item.y === 'number' &&
     typeof item.w === 'number' &&
-    typeof item.h === 'number'
-  );
+    typeof item.h === 'number';
+  return hasValidId && hasNumericCoords;
 }
 
 function isLegacySingleColumnLayout(rawLayout: unknown): boolean {
