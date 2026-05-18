@@ -2753,11 +2753,6 @@ describe('Basic Authentication', () => {
   describe('verifyArgon2Password return paths (lines 396-406)', () => {
     test('should return false when parseArgon2Hash returns undefined (line 396:7)', () => {
       // Kill line 396:7 ConditionalExpression — !parsed must return false
-      basic.configuration = {
-        user: 'testuser',
-        hash: createArgon2Hash('password'),
-      };
-
       // Pass an argon2 hash as configuration but verify with non-argon2 hash as encodedHash
       // verifyPassword dispatches to verifyArgon2Password only if parseArgon2Hash succeeds
       // Test that a bad argon2 hash in configuration is handled
@@ -3018,7 +3013,7 @@ describe('Basic Authentication', () => {
 
     test('should return false for unsupported bcrypt hash (line 486:7)', async () => {
       // Kill line 486:7 ConditionalExpression — isUnsupportedPlainFallbackHash must gate false
-      // NOTE: Cannot use expect(result).toBe(false) inside done() because if the mutant returns true,
+      // Cannot use expect(result).toBe(false) inside done() because if the mutant returns true,
       // the assertion error is thrown inside .then() → caught by .catch() → done(null, false) called
       // again → test passes anyway. Instead verify the auth outcome via mockRecordAuthLogin.
       // With original (return false): passwordMatches=false → completeVerification('invalid')

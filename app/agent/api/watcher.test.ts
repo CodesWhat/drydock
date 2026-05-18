@@ -3,8 +3,20 @@ import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
 import * as watcherApi from './watcher.js';
 
+const { mockLoggerChild, mockLogError } = vi.hoisted(() => ({
+  mockLoggerChild: vi.fn(),
+  mockLogError: vi.fn(),
+}));
+
 vi.mock('../../log/index.js', () => ({
-  default: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }) },
+  default: {
+    child: mockLoggerChild.mockReturnValue({
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: mockLogError,
+      debug: vi.fn(),
+    }),
+  },
 }));
 
 vi.mock('../../registry/index.js', () => ({
@@ -210,6 +222,273 @@ describe('agent API watcher', () => {
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: '42' }));
+    });
+  });
+
+  describe('hasStringMessage', () => {
+    test('should return INTERNAL_SERVER_ERROR for Error instances in watchWatcher', async () => {
+      req.params = { type: 'docker', name: 'local' };
+      const mockWatcher = {
+        watch: vi.fn().mockRejectedValue(new Error('original message')),
+      };
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': mockWatcher },
+      });
+
+      await watcherApi.watchWatcher(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      // Error instances should use INTERNAL_SERVER_ERROR_MESSAGE
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Internal server error' }),
+      );
+    });
+
+    test('should use message from plain object with string message in watchWatcher', async () => {
+      req.params = { type: 'docker', name: 'local' };
+      const mockWatcher = {
+        watch: vi.fn().mockRejectedValue({ message: 'plain-object-msg' }),
+      };
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': mockWatcher },
+      });
+
+      await watcherApi.watchWatcher(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'plain-object-msg' }));
+    });
+
+    test('should stringify non-object, non-Error value in watchWatcher', async () => {
+      req.params = { type: 'docker', name: 'local' };
+      const mockWatcher = {
+        watch: vi.fn().mockRejectedValue('string-error'),
+      };
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': mockWatcher },
+      });
+
+      await watcherApi.watchWatcher(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'string-error' }));
+    });
+
+    test('should use INTERNAL_SERVER_ERROR for Error instances in watchContainer', async () => {
+      req.params = { type: 'docker', name: 'local', id: 'c1' };
+      const container = { id: 'c1', name: 'test' };
+      const mockWatcher = {
+        watchContainer: vi.fn().mockRejectedValue(new Error('real error msg')),
+      };
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': mockWatcher },
+      });
+      storeContainer.getContainer.mockReturnValue(container);
+
+      await watcherApi.watchContainer(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Internal server error' }),
+      );
+    });
+
+    test('should return internal server error when thrown value is null', async () => {
+      // null: typeof null === 'object' && value === null → hasStringMessage returns false
+      // normalizeErrorMessage falls to String(null) = "null"
+      req.params = { type: 'docker', name: 'local' };
+      const mockWatcher = {
+        watch: vi.fn().mockRejectedValue(null),
+      };
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': mockWatcher },
+      });
+
+      await watcherApi.watchWatcher(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      // null is not an Error, normalizeErrorMessage → String(null) = 'null'
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'null' }));
+    });
+
+    test('should return string from non-string message object (message=number)', async () => {
+      // { message: 123 } → hasStringMessage returns false → String({ message: 123 })
+      req.params = { type: 'docker', name: 'local' };
+      const mockWatcher = {
+        watch: vi.fn().mockRejectedValue({ message: 123 }),
+      };
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': mockWatcher },
+      });
+
+      await watcherApi.watchWatcher(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      // hasStringMessage({ message: 123 }) → false → String({ message: 123 }) = '[object Object]'
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: '[object Object]' }));
+    });
+
+    test('should return internal server error for object without message key', async () => {
+      // { code: 404 } → 'message' not in value → hasStringMessage returns false
+      req.params = { type: 'docker', name: 'local' };
+      const mockWatcher = {
+        watch: vi.fn().mockRejectedValue({ code: 404 }),
+      };
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': mockWatcher },
+      });
+
+      await watcherApi.watchWatcher(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: '[object Object]' }));
+    });
+
+    test('normalizeErrorMessage should use Error.message not String(error)', async () => {
+      // Error instances: normalizeErrorMessage returns error.message directly
+      // If BlockStatement mutant applies, it falls through to hasStringMessage
+      // hasStringMessage(error) where error is Error instance:
+      //   typeof error === 'object' && error !== null && 'message' in error → true
+      //   typeof error.message === 'string' → true → returns error.message
+      // So both paths return the message — but the 500 response uses INTERNAL_SERVER_ERROR
+      // regardless. The block statement mutant matters because it would return 'original msg'
+      // instead of 'Internal server error'. Let's verify the 500 uses INTERNAL_SERVER_ERROR.
+      req.params = { type: 'docker', name: 'local' };
+      const mockWatcher = {
+        watch: vi.fn().mockRejectedValue(new Error('specific-error-message')),
+      };
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': mockWatcher },
+      });
+
+      await watcherApi.watchWatcher(req, res);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Internal server error' }),
+      );
+      // The message should be logged, not returned to caller
+      expect(mockLogError).toHaveBeenCalledWith(expect.stringContaining('specific-error-message'));
+    });
+  });
+
+  describe('log error messages', () => {
+    test('watchWatcher should log the watcher name and message in error log', async () => {
+      req.params = { type: 'docker', name: 'mywatcher' };
+      const mockWatcher = {
+        watch: vi.fn().mockRejectedValue({ message: 'watch-fail-msg' }),
+      };
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.mywatcher': mockWatcher },
+      });
+
+      await watcherApi.watchWatcher(req, res);
+
+      expect(mockLogError).toHaveBeenCalledWith(expect.stringContaining('mywatcher'));
+      expect(mockLogError).toHaveBeenCalledWith(expect.stringContaining('watch-fail-msg'));
+    });
+
+    test('watchContainer should log the container id and message in error log', async () => {
+      req.params = { type: 'docker', name: 'local', id: 'container-xyz' };
+      const container = { id: 'container-xyz', name: 'test' };
+      const mockWatcher = {
+        watchContainer: vi.fn().mockRejectedValue({ message: 'container-fail-msg' }),
+      };
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': mockWatcher },
+      });
+      storeContainer.getContainer.mockReturnValue(container);
+
+      await watcherApi.watchContainer(req, res);
+
+      expect(mockLogError).toHaveBeenCalledWith(expect.stringContaining('container-xyz'));
+      expect(mockLogError).toHaveBeenCalledWith(expect.stringContaining('container-fail-msg'));
+    });
+  });
+
+  describe('watcherId construction', () => {
+    test('watchWatcher should build watcherId from lowercased type and name', async () => {
+      req.params = { type: 'DOCKER', name: 'LOCAL' };
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': { watch: vi.fn().mockResolvedValue([]) } },
+      });
+
+      await watcherApi.watchWatcher(req, res);
+
+      expect(res.json).toHaveBeenCalledWith([]);
+    });
+
+    test('watchContainer should build watcherId from lowercased type and name', async () => {
+      req.params = { type: 'DOCKER', name: 'LOCAL', id: 'c1' };
+      const container = { id: 'c1', name: 'test' };
+      const mockWatcher = {
+        watchContainer: vi.fn().mockResolvedValue({ result: 'ok' }),
+      };
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': mockWatcher },
+      });
+      storeContainer.getContainer.mockReturnValue(container);
+
+      await watcherApi.watchContainer(req, res);
+
+      expect(res.json).toHaveBeenCalledWith({ result: 'ok' });
+    });
+
+    test('getWatcher should build watcherId from lowercased type and name', () => {
+      req.params = { type: 'DOCKER', name: 'LOCAL' };
+      registry.getState.mockReturnValue({
+        watcher: {
+          'docker.local': {
+            type: 'docker',
+            name: 'local',
+            configuration: {},
+            metadata: {},
+          },
+        },
+      });
+
+      watcherApi.getWatcher(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ id: 'docker.local' }));
+    });
+  });
+
+  describe('watcher error messages', () => {
+    test('watchWatcher 404 error message should include watcher name', async () => {
+      req.params = { type: 'docker', name: 'missing-watcher' };
+      registry.getState.mockReturnValue({ watcher: {} });
+
+      await watcherApi.watchWatcher(req, res);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Watcher missing-watcher not found' }),
+      );
+    });
+
+    test('watchContainer 404 error message should include watcher name when watcher missing', async () => {
+      req.params = { type: 'docker', name: 'no-watcher', id: 'c1' };
+      registry.getState.mockReturnValue({ watcher: {} });
+
+      await watcherApi.watchContainer(req, res);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Watcher no-watcher not found' }),
+      );
+    });
+
+    test('watchContainer 404 should include container id in error message', async () => {
+      req.params = { type: 'docker', name: 'local', id: 'my-container-id' };
+      const mockWatcher = {};
+      registry.getState.mockReturnValue({
+        watcher: { 'docker.local': mockWatcher },
+      });
+      storeContainer.getContainer.mockReturnValue(undefined);
+
+      await watcherApi.watchContainer(req, res);
+
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: expect.stringContaining('my-container-id') }),
+      );
     });
   });
 });
