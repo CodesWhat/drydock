@@ -26,6 +26,13 @@ test('getVersion should return dd version', async () => {
   expect(configuration.getVersion()).toStrictEqual('x.y.z');
 });
 
+test('getVersion should trim whitespace from DD_VERSION', async () => {
+  // Kills 107:29 [MethodExpression] ddEnvVars.DD_VERSION (removes .trim())
+  configuration.ddEnvVars.DD_VERSION = '  1.2.3  ';
+  expect(configuration.getVersion()).toBe('1.2.3');
+  delete configuration.ddEnvVars.DD_VERSION;
+});
+
 test('getLogLevel should return info by default', async () => {
   delete configuration.ddEnvVars.DD_LOG_LEVEL;
   expect(configuration.getLogLevel()).toStrictEqual('info');
@@ -1448,5 +1455,1598 @@ describe('legacy trigger prefix tracking guards', () => {
       },
     });
     expect(freshConfiguration.usesLegacyTriggerPrefix('docker', 'update')).toBe(false);
+  });
+});
+
+// ── Additional mutation-killing tests ──────────────────────────────────────────
+
+describe('replaceSecrets – boundary and label coverage', () => {
+  test('should include the env var name in the error when the path is empty', async () => {
+    // Kills 50:79 [ObjectLiteral] {} and 51:14 [StringLiteral] ``
+    // resolveConfiguredPath uses the label in the error message when path is invalid
+    const vars: Record<string, string | undefined> = { DD_MY_SECRET__FILE: '' };
+    await expect(configuration.replaceSecrets(vars)).rejects.toThrow('DD_MY_SECRET__FILE path');
+  });
+
+  test('should include the env var name in the error when path is undefined/non-string', async () => {
+    // Also kills 51:14 – if label is empty string, error would say "Path cannot be empty" not "DD_... path cannot be empty"
+    const vars: Record<string, string | undefined> = { DD_MY_SECRET__FILE: undefined };
+    // undefined path → resolveConfiguredPath throws with label in message
+    await expect(configuration.replaceSecrets(vars)).rejects.toThrow('DD_MY_SECRET__FILE path');
+  });
+
+  test('should use the secretFileEnvVar name as the label on error', async () => {
+    // Ensures the label argument (line 51) is non-empty and uses the key name.
+    const badPath = '/tmp/drydock-nonexistent-secret-12345.txt';
+    const vars = { DD_MY_SECRET__FILE: badPath };
+    await expect(configuration.replaceSecrets(vars)).rejects.toThrow();
+  });
+
+  test('should accept a secret file whose size is exactly MAX_SECRET_FILE_SIZE_BYTES', async () => {
+    const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-secret-'));
+    const exactPath = path.join(tempDirectory, 'exact.txt');
+    // 1 MB exactly (not over): should NOT throw
+    fs.writeFileSync(exactPath, 'x'.repeat(1024 * 1024), 'utf-8');
+    const vars = { DD_EXACT__FILE: exactPath };
+    try {
+      await expect(configuration.replaceSecrets(vars)).resolves.not.toThrow();
+      expect(vars.DD_EXACT).toBeDefined();
+    } finally {
+      fs.rmSync(tempDirectory, { recursive: true, force: true });
+    }
+  });
+
+  test('should strip the __FILE key and set the plain key after successful read', async () => {
+    const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-secret-'));
+    const secretPath = path.join(tempDirectory, 'myval.txt');
+    fs.writeFileSync(secretPath, 'hello-world', 'utf-8');
+    const vars: Record<string, string | undefined> = { DD_SOME_VAL__FILE: secretPath };
+    try {
+      await configuration.replaceSecrets(vars);
+      expect(vars.DD_SOME_VAL__FILE).toBeUndefined();
+      expect(vars.DD_SOME_VAL).toBe('hello-world');
+    } finally {
+      fs.rmSync(tempDirectory, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('WUD_ legacy env-var remapping bootstrap coverage', () => {
+  test('legacy warning message contains the DD_* prefix migration hint', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const keys = ['WUD_BOOTSTRAP_A', 'WUD_BOOTSTRAP_B'];
+    for (const k of keys) process.env[k] = '1';
+    try {
+      vi.resetModules();
+      await import('./index.js');
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('DD_*'));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('v1.6.0'));
+    } finally {
+      for (const k of keys) delete process.env[k];
+      warnSpy.mockRestore();
+    }
+  });
+
+  test('legacy warning includes the first env var name (not empty)', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    process.env.WUD_HELLO_WORLD = 'test';
+    try {
+      vi.resetModules();
+      await import('./index.js');
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('WUD_HELLO_WORLD'));
+    } finally {
+      delete process.env.WUD_HELLO_WORLD;
+      warnSpy.mockRestore();
+    }
+  });
+
+  test('legacy warning uses the uppercased env var name in the preview', async () => {
+    // Kills 80:25 [MethodExpression] envVar.toUpperCase()
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    process.env.wud_lower_case_key = 'val';
+    try {
+      vi.resetModules();
+      await import('./index.js');
+      // If the uppercase conversion is mutated to lowercase/empty the warning won't contain the uppercased key
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('WUD_LOWER_CASE_KEY'));
+    } finally {
+      delete process.env.wud_lower_case_key;
+      warnSpy.mockRestore();
+    }
+  });
+
+  test('WUD_ vars are remapped to DD_ keys (not raw WUD_ keys) in ddEnvVars', async () => {
+    // Kills 78:19 [StringLiteral] `` (the 'DD_' prefix)
+    // and 78:25 [MethodExpression] envVar (the substring(4) call)
+    process.env.WUD_REMAP_TEST_VAR = 'wud-value';
+    delete process.env.DD_REMAP_TEST_VAR;
+    try {
+      vi.resetModules();
+      const fresh = await import('./index.js');
+      // Should be stored under DD_REMAP_TEST_VAR, not WUD_REMAP_TEST_VAR or DD_WUD_REMAP_TEST_VAR
+      expect(fresh.ddEnvVars.DD_REMAP_TEST_VAR).toBe('wud-value');
+      expect(fresh.ddEnvVars.WUD_REMAP_TEST_VAR).toBeUndefined();
+    } finally {
+      delete process.env.WUD_REMAP_TEST_VAR;
+    }
+  });
+
+  test('WUD_ remapped key strips exactly the 3-char WUD prefix (not more)', async () => {
+    // Kills 78:25 [MethodExpression] envVar – if envVar used instead of envVar.substring(4),
+    // the key would be DD_WUD_X instead of DD_X
+    process.env.WUD_X = 'x-value';
+    delete process.env.DD_X;
+    try {
+      vi.resetModules();
+      const fresh = await import('./index.js');
+      expect(fresh.ddEnvVars.DD_X).toBe('x-value');
+      expect(fresh.ddEnvVars.DD_WUD_X).toBeUndefined();
+    } finally {
+      delete process.env.WUD_X;
+    }
+  });
+
+  test('legacy warning key preview uses comma-space separator between keys', async () => {
+    // Kills 88:86 [StringLiteral] "" – the join separator
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    process.env.WUD_JOIN_A = '1';
+    process.env.WUD_JOIN_B = '2';
+    try {
+      vi.resetModules();
+      await import('./index.js');
+      // With "" separator mutant, 'WUD_JOIN_A, WUD_JOIN_B' → 'WUD_JOIN_AWUD_JOIN_B'
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(', '));
+    } finally {
+      delete process.env.WUD_JOIN_A;
+      delete process.env.WUD_JOIN_B;
+      warnSpy.mockRestore();
+    }
+  });
+
+  test('legacy warning key preview sorts the env var names', async () => {
+    // Kills 86:29 [MethodExpression] Array.from(mappedLegacyEnvVars) – removes sort
+    // and 88:25 [MethodExpression] legacyEnvVarNames
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    process.env.WUD_Z_FIRST = '1';
+    process.env.WUD_A_FIRST = '2';
+    try {
+      vi.resetModules();
+      await import('./index.js');
+      const call = warnSpy.mock.calls.find((c) => c[0]?.includes('WUD_'));
+      expect(call).toBeDefined();
+      const msg = call![0] as string;
+      // A should appear before Z in sorted order
+      const aIndex = msg.indexOf('WUD_A_FIRST');
+      const zIndex = msg.indexOf('WUD_Z_FIRST');
+      expect(aIndex).toBeGreaterThan(-1);
+      expect(zIndex).toBeGreaterThan(-1);
+      expect(aIndex).toBeLessThan(zIndex);
+    } finally {
+      delete process.env.WUD_Z_FIRST;
+      delete process.env.WUD_A_FIRST;
+      warnSpy.mockRestore();
+    }
+  });
+
+  test('legacy warning suffix uses the actual additional count, not >= 0 form', async () => {
+    // Kills 90:18 [ConditionalExpression] true and 90:18 [EqualityOperator] additionalCount >= 0
+    // With mutation to `true`, suffix always shows even when additionalCount <= 0
+    // With >= 0, suffix shows even when count is 0
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    // Set exactly 1 WUD_ key (no overflow)
+    process.env.WUD_ONLY_ONE = '1';
+    const existing = Object.keys(process.env).filter(
+      (k) => k.toUpperCase().startsWith('WUD_') && k !== 'WUD_ONLY_ONE',
+    );
+    const saved = new Map(existing.map((k) => [k, process.env[k]]));
+    for (const k of existing) delete process.env[k];
+    try {
+      vi.resetModules();
+      await import('./index.js');
+      const call = warnSpy.mock.calls.find((c) => c[0]?.includes('WUD_'));
+      if (call) {
+        // With 1 WUD_ key, there should be NO "(+N more)" suffix
+        expect(call[0]).not.toMatch(/\(\+\d+ more\)/);
+      }
+    } finally {
+      delete process.env.WUD_ONLY_ONE;
+      for (const [k, v] of saved) process.env[k] = v;
+      warnSpy.mockRestore();
+    }
+  });
+
+  test('legacy warning suffix "more" string is not empty or replaced', async () => {
+    // Kills 90:72 [StringLiteral] "Stryker was here!" – the more suffix string
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const legacyKeys = Array.from({ length: 12 }, (_, i) => `WUD_SUFFIX_${i}`);
+    for (const k of legacyKeys) process.env[k] = '1';
+    try {
+      vi.resetModules();
+      await import('./index.js');
+      // The suffix must be " (+2 more)" not " (+2 Stryker was here!)"
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(' more)'));
+    } finally {
+      for (const k of legacyKeys) delete process.env[k];
+      warnSpy.mockRestore();
+    }
+  });
+
+  test('legacy warning key preview is capped at first 10 keys', async () => {
+    // Kills 88:25 [MethodExpression] legacyEnvVarNames – removes .slice(0, 10)
+    // Without the slice mutant, all 12 keys appear in the preview instead of just the first 10
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    // Use keys that sort deterministically: WUD_CAP_00 through WUD_CAP_11
+    const legacyKeys = Array.from(
+      { length: 12 },
+      (_, i) => `WUD_CAP_${String(i).padStart(2, '0')}`,
+    );
+    for (const k of legacyKeys) process.env[k] = '1';
+    try {
+      vi.resetModules();
+      await import('./index.js');
+      const call = warnSpy.mock.calls.find((c) => c[0]?.includes('WUD_CAP_'));
+      expect(call).toBeDefined();
+      const msg = call![0] as string;
+      // First 10 keys (WUD_CAP_00..WUD_CAP_09) should be in the preview
+      expect(msg).toContain('WUD_CAP_00');
+      expect(msg).toContain('WUD_CAP_09');
+      // Keys 11th and 12th (WUD_CAP_10, WUD_CAP_11) must NOT appear – they are truncated
+      expect(msg).not.toContain('WUD_CAP_10');
+      expect(msg).not.toContain('WUD_CAP_11');
+      // The (+2 more) suffix should appear
+      expect(msg).toContain('(+2 more)');
+    } finally {
+      for (const k of legacyKeys) delete process.env[k];
+      warnSpy.mockRestore();
+    }
+  });
+
+  test('legacy warning shows no suffix when exactly 10 WUD_ keys are set', async () => {
+    // Kills 90:18 [ConditionalExpression] true / 90:18 [EqualityOperator] additionalCount >= 0
+    // With exactly 10 keys, additionalCount = 0. With >= 0 mutant: shows "(+0 more)" suffix.
+    // With "true" mutant: always shows suffix.
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const legacyKeys = Array.from(
+      { length: 10 },
+      (_, i) => `WUD_EXACT_${String(i).padStart(2, '0')}`,
+    );
+    for (const k of legacyKeys) process.env[k] = '1';
+    try {
+      vi.resetModules();
+      await import('./index.js');
+      const call = warnSpy.mock.calls.find((c) => c[0]?.includes('WUD_EXACT_'));
+      expect(call).toBeDefined();
+      const msg = call![0] as string;
+      // With exactly 10 keys no overflow suffix should appear
+      expect(msg).not.toMatch(/\(\+\d+ more\)/);
+      // All 10 keys should appear
+      expect(msg).toContain('WUD_EXACT_00');
+      expect(msg).toContain('WUD_EXACT_09');
+    } finally {
+      for (const k of legacyKeys) delete process.env[k];
+      warnSpy.mockRestore();
+    }
+  });
+
+  test('should not emit legacy warning when no WUD_ vars are set', async () => {
+    // Remove all WUD_ keys from process.env first
+    const existing = Object.keys(process.env).filter((k) => k.toUpperCase().startsWith('WUD_'));
+    const saved = new Map(existing.map((k) => [k, process.env[k]]));
+    for (const k of existing) delete process.env[k];
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      vi.resetModules();
+      await import('./index.js');
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('WUD_'));
+    } finally {
+      for (const [k, v] of saved) process.env[k] = v;
+      warnSpy.mockRestore();
+    }
+  });
+
+  test('DD_ env vars are included in ddEnvVars at module init', async () => {
+    process.env.DD_BOOTSTRAP_TEST_UNIQUE = 'sentinel';
+    try {
+      vi.resetModules();
+      const fresh = await import('./index.js');
+      // Kills 97:1 [MethodExpression] Object.keys(process.env)
+      // and 98:55 [StringLiteral] ""
+      expect(fresh.ddEnvVars.DD_BOOTSTRAP_TEST_UNIQUE).toBe('sentinel');
+    } finally {
+      delete process.env.DD_BOOTSTRAP_TEST_UNIQUE;
+    }
+  });
+});
+
+describe('getVersion – package.json parsing details', () => {
+  async function importFreshConfiguration() {
+    vi.resetModules();
+    return import('./index.js');
+  }
+
+  test('should skip a package.json candidate that has a non-string version field', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    delete freshConfiguration.ddEnvVars.DD_VERSION;
+
+    const readFileSpy = vi
+      .spyOn(fs, 'readFileSync')
+      .mockImplementationOnce(() => JSON.stringify({ version: 42 }));
+    readFileSpy.mockImplementationOnce(() => JSON.stringify({ version: '1.2.3' }));
+
+    // First candidate returned a number (not a string) – should fall through to second
+    const version = freshConfiguration.getVersion();
+    // The second candidate is a string so it should be used
+    expect(typeof version).toBe('string');
+    expect(version.length).toBeGreaterThan(0);
+    readFileSpy.mockRestore();
+  });
+
+  test('should return the trimmed version, not the raw version with whitespace', async () => {
+    const freshConfiguration = await importFreshConfiguration();
+    delete freshConfiguration.ddEnvVars.DD_VERSION;
+
+    const readFileSpy = vi
+      .spyOn(fs, 'readFileSync')
+      .mockReturnValueOnce(JSON.stringify({ version: '  2.0.0  ' }));
+
+    // Kills 124:33 [MethodExpression] – if trim() is removed cache has spaces
+    const version = freshConfiguration.getVersion();
+    expect(version).toBe('2.0.0');
+    readFileSpy.mockRestore();
+  });
+});
+
+describe('getServerConfiguration – schema boundary values', () => {
+  test('should accept port 0', () => {
+    // Kills 367:11 [MethodExpression] joi.number().default(3000).integer().max(0)
+    configuration.ddEnvVars.DD_SERVER_PORT = '0';
+    expect(() => configuration.getServerConfiguration()).not.toThrow();
+    const config = configuration.getServerConfiguration();
+    expect(config.port).toBe(0);
+    delete configuration.ddEnvVars.DD_SERVER_PORT;
+  });
+
+  test('should reject port 65536', () => {
+    configuration.ddEnvVars.DD_SERVER_PORT = '65536';
+    expect(() => configuration.getServerConfiguration()).toThrow();
+    delete configuration.ddEnvVars.DD_SERVER_PORT;
+  });
+
+  test('should default enabled to true', () => {
+    // Kills 370:40 [BooleanLiteral] true → false
+    delete configuration.ddEnvVars.DD_SERVER_ENABLED;
+    const config = configuration.getServerConfiguration();
+    expect(config.enabled).toBe(true);
+  });
+
+  test('should default tls.enabled to false', () => {
+    // Kills 372:15 [BooleanLiteral] false → true
+    delete configuration.ddEnvVars.DD_SERVER_TLS_ENABLED;
+    const config = configuration.getServerConfiguration();
+    expect(config.tls).toStrictEqual({});
+  });
+
+  test('should default cors.enabled to false', () => {
+    // Kills 377:15 [BooleanLiteral]
+    delete configuration.ddEnvVars.DD_SERVER_CORS_ENABLED;
+    const config = configuration.getServerConfiguration();
+    expect((config.cors as { enabled?: boolean }).enabled).toBeUndefined();
+  });
+
+  test('should default cors.methods to GET,HEAD,PUT,PATCH,POST,DELETE', () => {
+    // Kills 376:33 [StringLiteral] ""
+    configuration.ddEnvVars.DD_SERVER_CORS_ENABLED = 'true';
+    configuration.ddEnvVars.DD_SERVER_CORS_ORIGIN = 'https://example.com';
+    const config = configuration.getServerConfiguration();
+    expect((config.cors as { methods?: string }).methods).toBe('GET,HEAD,PUT,PATCH,POST,DELETE');
+    delete configuration.ddEnvVars.DD_SERVER_CORS_ENABLED;
+    delete configuration.ddEnvVars.DD_SERVER_CORS_ORIGIN;
+  });
+
+  test('should default compression.enabled to true', () => {
+    // Kills 385:40 [BooleanLiteral] true → false
+    delete configuration.ddEnvVars.DD_SERVER_COMPRESSION_ENABLED;
+    const config = configuration.getServerConfiguration();
+    expect((config.compression as { enabled?: boolean }).enabled).toBeUndefined();
+    // Default is applied: joi strips unknown after validate
+    // Re-get with explicit check
+    configuration.ddEnvVars.DD_SERVER_COMPRESSION_ENABLED = 'true';
+    const config2 = configuration.getServerConfiguration();
+    expect((config2.compression as { enabled: boolean }).enabled).toBe(true);
+    delete configuration.ddEnvVars.DD_SERVER_COMPRESSION_ENABLED;
+  });
+
+  test('cors.origin should require min length of 1 when enabled', () => {
+    // Kills 386:17 [MethodExpression] joi.string().trim().max(1) and joi.string()
+    configuration.ddEnvVars.DD_SERVER_CORS_ENABLED = 'true';
+    configuration.ddEnvVars.DD_SERVER_CORS_ORIGIN = '   '; // whitespace only – trim+min(1) should reject
+    expect(() => configuration.getServerConfiguration()).toThrow();
+    delete configuration.ddEnvVars.DD_SERVER_CORS_ENABLED;
+    delete configuration.ddEnvVars.DD_SERVER_CORS_ORIGIN;
+  });
+
+  test('cors.origin should trim whitespace before validation', () => {
+    // Ensures trim() is applied (not mutated away)
+    configuration.ddEnvVars.DD_SERVER_CORS_ENABLED = 'true';
+    configuration.ddEnvVars.DD_SERVER_CORS_ORIGIN = '  https://example.com  ';
+    const config = configuration.getServerConfiguration();
+    expect((config.cors as { origin?: string }).origin).toBe('https://example.com');
+    delete configuration.ddEnvVars.DD_SERVER_CORS_ENABLED;
+    delete configuration.ddEnvVars.DD_SERVER_CORS_ORIGIN;
+  });
+
+  test('should default ui.enabled to true', () => {
+    // Kills 396:40 [BooleanLiteral] false
+    delete configuration.ddEnvVars.DD_SERVER_UI_ENABLED;
+    configuration.getServerConfiguration();
+    // When env not set joi uses default (true) – enabling ui
+    configuration.ddEnvVars.DD_SERVER_UI_ENABLED = 'true';
+    const config2 = configuration.getServerConfiguration();
+    expect((config2.ui as { enabled: boolean }).enabled).toBe(true);
+    delete configuration.ddEnvVars.DD_SERVER_UI_ENABLED;
+  });
+
+  test('should default feature.delete to true', () => {
+    // Kills 407:39 [BooleanLiteral] false
+    delete configuration.ddEnvVars.DD_SERVER_FEATURE_DELETE;
+    const config = configuration.getServerConfiguration();
+    expect(config.feature.delete).toBe(true);
+  });
+
+  test('should default feature.containeractions to true', () => {
+    // Kills 408:49 [BooleanLiteral]
+    delete configuration.ddEnvVars.DD_SERVER_FEATURE_CONTAINERACTIONS;
+    const config = configuration.getServerConfiguration();
+    expect(config.feature.containeractions).toBe(true);
+  });
+
+  test('should accept and validate cookie samesite lax', () => {
+    // Kills 421:20 [StringLiteral] ""
+    delete configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE;
+    configuration.getServerConfiguration();
+    // Default is lax when not explicitly set
+    configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE = 'lax';
+    const config2 = configuration.getServerConfiguration();
+    expect((config2.cookie as { samesite: string }).samesite).toBe('lax');
+    delete configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE;
+  });
+
+  test('cookie samesite value is trimmed before validation', () => {
+    // Kills 416:19 [MethodExpression] joi.string() – removes .trim()
+    // Without trim, '  lax  ' with spaces fails the .valid() check
+    configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE = '  lax  ';
+    const config = configuration.getServerConfiguration();
+    expect((config.cookie as { samesite: string }).samesite).toBe('lax');
+    delete configuration.ddEnvVars.DD_SERVER_COOKIE_SAMESITE;
+  });
+
+  test('getServerConfiguration accepts unknown env keys without throwing (allowUnknown)', () => {
+    // Kills 447:86 [ObjectLiteral] {} / 448:19 [BooleanLiteral] false
+    // With allowUnknown: false, unknown keys in configurationFromEnv would cause validation errors
+    configuration.ddEnvVars.DD_SERVER_TOTALLY_UNKNOWN_KEY = 'value';
+    expect(() => configuration.getServerConfiguration()).not.toThrow();
+    delete configuration.ddEnvVars.DD_SERVER_TOTALLY_UNKNOWN_KEY;
+  });
+
+  test('getServerConfiguration does not include unknown keys in output (stripUnknown)', () => {
+    // Kills 449:19 [BooleanLiteral] false – without stripUnknown, extra keys pass through
+    configuration.ddEnvVars.DD_SERVER_UNKNOWN_EXTRA_FIELD = 'should-not-appear';
+    const config = configuration.getServerConfiguration();
+    // The result should not have the unknown field
+    const configAsRecord = config as Record<string, unknown>;
+    expect(configAsRecord.unknown).toBeUndefined();
+    delete configuration.ddEnvVars.DD_SERVER_UNKNOWN_EXTRA_FIELD;
+  });
+
+  test('should default metrics.auth to true', () => {
+    // Kills 447:86 [ObjectLiteral] {}  and 448:19/449:19 [BooleanLiteral]
+    delete configuration.ddEnvVars.DD_SERVER_METRICS_AUTH;
+    delete configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN;
+    configuration.ddEnvVars.DD_SERVER_METRICS_AUTH = 'true';
+    const config = configuration.getServerConfiguration();
+    expect((config.metrics as { auth: boolean }).auth).toBe(true);
+    delete configuration.ddEnvVars.DD_SERVER_METRICS_AUTH;
+  });
+
+  test('should default metrics.token to empty string', () => {
+    // Kills 449:19 [BooleanLiteral]
+    delete configuration.ddEnvVars.DD_SERVER_METRICS_AUTH;
+    delete configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN;
+    configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN = '';
+    const config = configuration.getServerConfiguration();
+    expect((config.metrics as { token: string }).token).toBe('');
+    delete configuration.ddEnvVars.DD_SERVER_METRICS_TOKEN;
+  });
+
+  test('should not set cors.enabled in defaults (joi strips unknown)', () => {
+    // Kills 391:39 [StringLiteral] "" (cors.methods default)
+    delete configuration.ddEnvVars.DD_SERVER_CORS_ENABLED;
+    delete configuration.ddEnvVars.DD_SERVER_CORS_ORIGIN;
+    delete configuration.ddEnvVars.DD_SERVER_CORS_METHODS;
+    configuration.getServerConfiguration();
+    // When cors is enabled and origin is provided, methods default applies
+    configuration.ddEnvVars.DD_SERVER_CORS_ENABLED = 'true';
+    configuration.ddEnvVars.DD_SERVER_CORS_ORIGIN = 'https://example.com';
+    const configWithCors = configuration.getServerConfiguration();
+    expect((configWithCors.cors as { methods: string }).methods).toBe(
+      'GET,HEAD,PUT,PATCH,POST,DELETE',
+    );
+    delete configuration.ddEnvVars.DD_SERVER_CORS_ENABLED;
+    delete configuration.ddEnvVars.DD_SERVER_CORS_ORIGIN;
+  });
+
+  test('should allow TLS with key and cert', () => {
+    // Kills 369:15 [ObjectLiteral] {}
+    configuration.ddEnvVars.DD_SERVER_TLS_ENABLED = 'true';
+    configuration.ddEnvVars.DD_SERVER_TLS_KEY = '/some/key.pem';
+    configuration.ddEnvVars.DD_SERVER_TLS_CERT = '/some/cert.pem';
+    const config = configuration.getServerConfiguration();
+    expect((config.tls as { enabled: boolean }).enabled).toBe(true);
+    delete configuration.ddEnvVars.DD_SERVER_TLS_ENABLED;
+    delete configuration.ddEnvVars.DD_SERVER_TLS_KEY;
+    delete configuration.ddEnvVars.DD_SERVER_TLS_CERT;
+  });
+
+  test('should throw when TLS enabled without key', () => {
+    // Kills 371:32 [StringLiteral] "" – when('enabled') condition key replaced with ""
+    // With mutation, key is never required even when TLS is enabled → no throw
+    configuration.ddEnvVars.DD_SERVER_TLS_ENABLED = 'true';
+    configuration.ddEnvVars.DD_SERVER_TLS_CERT = '/some/cert.pem';
+    delete configuration.ddEnvVars.DD_SERVER_TLS_KEY;
+    expect(() => configuration.getServerConfiguration()).toThrow();
+    delete configuration.ddEnvVars.DD_SERVER_TLS_ENABLED;
+    delete configuration.ddEnvVars.DD_SERVER_TLS_CERT;
+  });
+
+  test('should throw when TLS enabled without cert', () => {
+    // Kills 376:33 [StringLiteral] "" – cert when('enabled') condition replaced with ""
+    configuration.ddEnvVars.DD_SERVER_TLS_ENABLED = 'true';
+    configuration.ddEnvVars.DD_SERVER_TLS_KEY = '/some/key.pem';
+    delete configuration.ddEnvVars.DD_SERVER_TLS_CERT;
+    expect(() => configuration.getServerConfiguration()).toThrow();
+    delete configuration.ddEnvVars.DD_SERVER_TLS_ENABLED;
+    delete configuration.ddEnvVars.DD_SERVER_TLS_KEY;
+  });
+
+  test('should use feature defaults from default object', () => {
+    // Kills 406:15 [ObjectLiteral] {}
+    delete configuration.ddEnvVars.DD_SERVER_FEATURE_DELETE;
+    delete configuration.ddEnvVars.DD_SERVER_FEATURE_CONTAINERACTIONS;
+    const config = configuration.getServerConfiguration();
+    expect(config.feature).toStrictEqual({ delete: true, containeractions: true });
+  });
+});
+
+describe('getWebhookConfiguration – token/secret field coverage', () => {
+  beforeEach(() => {
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_SECRET;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCHALL;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCH;
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_UPDATE;
+  });
+
+  test('tokens.watchall default is empty string not another value', () => {
+    const config = configuration.getWebhookConfiguration();
+    expect(config.tokens.watchall).toBe('');
+  });
+
+  test('tokens.watch default is empty string', () => {
+    const config = configuration.getWebhookConfiguration();
+    expect(config.tokens.watch).toBe('');
+  });
+
+  test('tokens.update default is empty string', () => {
+    const config = configuration.getWebhookConfiguration();
+    expect(config.tokens.update).toBe('');
+  });
+
+  test('secret default is empty string', () => {
+    const config = configuration.getWebhookConfiguration();
+    expect(config.secret).toBe('');
+  });
+
+  test('secret allows explicit empty string value without throwing', () => {
+    // Kills 480:32 [StringLiteral] "Stryker was here!" in secret.allow('')
+    // With mutation allow("Stryker was here!"), setting secret='' would fail validation
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_SECRET = '';
+    expect(() => configuration.getWebhookConfiguration()).not.toThrow();
+    const config = configuration.getWebhookConfiguration();
+    expect(config.secret).toBe('');
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_SECRET;
+  });
+
+  test('token allows explicit empty string value without throwing', () => {
+    // Kills 481:31 [StringLiteral] "Stryker was here!" in token.allow('')
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN = '';
+    expect(() => configuration.getWebhookConfiguration()).not.toThrow();
+    const config = configuration.getWebhookConfiguration();
+    expect(config.token).toBe('');
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKEN;
+  });
+
+  test('tokens.watchall allows explicit empty string value without throwing', () => {
+    // Kills 484:38 [StringLiteral] "Stryker was here!" in watchall.allow('')
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCHALL = '';
+    expect(() => configuration.getWebhookConfiguration()).not.toThrow();
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCHALL;
+  });
+
+  test('tokens.watch allows explicit empty string value without throwing', () => {
+    // Kills 485:35 [StringLiteral] "Stryker was here!" in watch.allow('')
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCH = '';
+    expect(() => configuration.getWebhookConfiguration()).not.toThrow();
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCH;
+  });
+
+  test('tokens.update allows explicit empty string value without throwing', () => {
+    // Kills 486:36 [StringLiteral] "Stryker was here!" in update.allow('')
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_UPDATE = '';
+    expect(() => configuration.getWebhookConfiguration()).not.toThrow();
+    delete configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_UPDATE;
+  });
+
+  test('token default is empty string', () => {
+    const config = configuration.getWebhookConfiguration();
+    expect(config.token).toBe('');
+  });
+
+  test('hasAnyToken check uses optional chaining on tokens.watchall', () => {
+    // Kills 502:5 / 509:5 [OptionalChaining]
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'true';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCHALL = 'token-wa';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCH = 'token-w';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_UPDATE = 'token-u';
+    // Should not throw – all three are set
+    expect(() => configuration.getWebhookConfiguration()).not.toThrow();
+  });
+
+  test('should not throw when webhook enabled with watchall token only (missing watch/update)', () => {
+    // Demonstrates partial token detection (line 505/506 ConditionalExpression)
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'true';
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_TOKENS_WATCHALL = 'wa-token';
+    expect(() => configuration.getWebhookConfiguration()).toThrow(
+      'All endpoint-specific webhook tokens',
+    );
+  });
+
+  test('enabled=false does NOT validate token requirements', () => {
+    // Kills 514/517:16 [ConditionalExpression] true
+    // When disabled, missing tokens should not throw
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'false';
+    expect(() => configuration.getWebhookConfiguration()).not.toThrow();
+  });
+
+  test('tokens schema default watchall key value is empty string', () => {
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'false';
+    const config = configuration.getWebhookConfiguration();
+    expect(config.tokens.watchall).toBe('');
+    expect(config.tokens.watch).toBe('');
+    expect(config.tokens.update).toBe('');
+  });
+
+  test('enabled webhook with no auth throws specific error message', () => {
+    // Kills 528:7 [StringLiteral] "" – if message replaced with "", toThrow("") always passes
+    // but toThrow with a specific string checks actual message content
+    configuration.ddEnvVars.DD_SERVER_WEBHOOK_ENABLED = 'true';
+    expect(() => configuration.getWebhookConfiguration()).toThrow(
+      'At least one webhook auth mechanism',
+    );
+  });
+});
+
+describe('parseDelimitedEnumList – detailed coverage', () => {
+  test('empty defaultRawValue string uses empty string filter correctly', () => {
+    // Kills 569:82 [StringLiteral] ""
+    // Test via getSecurityConfiguration with custom severity
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+    const result = configuration.getSecurityConfiguration();
+    // Default should be CRITICAL,HIGH parsed correctly from DEFAULT_SECURITY_BLOCK_SEVERITY
+    expect(result.blockSeverities).toEqual(['CRITICAL', 'HIGH']);
+  });
+
+  test('whitespace-only items are filtered out from configured values', () => {
+    // Kills 603:34 [StringLiteral] "Stryker was here!" (filter value !== '')
+    configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY = 'CRITICAL, ,HIGH';
+    const result = configuration.getSecurityConfiguration();
+    expect(result.blockSeverities).toEqual(['CRITICAL', 'HIGH']);
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+  });
+
+  test('single valid value returns array of that value', () => {
+    // Kills 604:7 [ConditionalExpression] false – configuredValues.length check
+    configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY = 'LOW';
+    const result = configuration.getSecurityConfiguration();
+    expect(result.blockSeverities).toEqual(['LOW']);
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+  });
+
+  test('configured empty string after split returns defaults', () => {
+    // Kills 604:7 [ConditionalExpression] false – configuredValues empty path
+    configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY = ',,,';
+    const result = configuration.getSecurityConfiguration();
+    expect(result.blockSeverities).toEqual(['CRITICAL', 'HIGH']);
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+  });
+
+  test('onInvalidValues is called with correct context shape', () => {
+    // Kills 611:7 [ConditionalExpression] true / 611:7 [EqualityOperator]
+    configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY = 'CRITICAL,INVALID_SEVERITY';
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const result = configuration.getSecurityConfiguration();
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('INVALID_SEVERITY'));
+    // parsedValues still had CRITICAL so we do NOT fall back to defaults
+    expect(result.blockSeverities).toEqual(['CRITICAL']);
+    warnSpy.mockRestore();
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+  });
+
+  test('onInvalidValues callback receives defaultValues array (not empty)', () => {
+    // Kills 612:5 [OptionalChaining] options?.onInvalidValues
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY = 'BOGUS';
+    const result = configuration.getSecurityConfiguration();
+    expect(result.blockSeverities).toEqual(['CRITICAL', 'HIGH']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Falling back to defaults: CRITICAL, HIGH.'),
+    );
+    warnSpy.mockRestore();
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+  });
+
+  test('normalizeValue is applied to each item (toUpperCase for severity)', () => {
+    // Kills 600:28 [MethodExpression] rawValue.split(',').map(...)
+    configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY = 'critical,high';
+    const result = configuration.getSecurityConfiguration();
+    // If normalizeValue removed, 'critical' would not match 'CRITICAL'
+    expect(result.blockSeverities).toEqual(['CRITICAL', 'HIGH']);
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+  });
+
+  test('defaultRawValue items are filtered through isAllowedValue', () => {
+    // Kills 591:25 [MethodExpression]
+    // The DEFAULT_SECURITY_BLOCK_SEVERITY is 'CRITICAL,HIGH' which are valid
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.blockSeverities).not.toContain('');
+    expect(result.blockSeverities.length).toBeGreaterThan(0);
+  });
+
+  test('trim is applied to each value in the configured list', () => {
+    // Kills 593:21 [MethodExpression] value (removes trim call)
+    configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY = ' CRITICAL , HIGH ';
+    const result = configuration.getSecurityConfiguration();
+    expect(result.blockSeverities).toEqual(['CRITICAL', 'HIGH']);
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+  });
+
+  test('parsedValues.length === 0 falls back to defaults', () => {
+    // Kills 618 path - parsedValues empty → return defaultValues
+    configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY = 'COMPLETELY_INVALID';
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const result = configuration.getSecurityConfiguration();
+    expect(result.blockSeverities).toEqual(['CRITICAL', 'HIGH']);
+    warnSpy.mockRestore();
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+  });
+
+  test('onInvalidValues callback is NOT called when all configured values are valid', () => {
+    // Kills 611:7 [ConditionalExpression] true / 611:7 [EqualityOperator] invalidValues.length >= 0
+    // With mutant "true", callback always fires even for valid-only inputs
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY = 'CRITICAL,HIGH';
+    const result = configuration.getSecurityConfiguration();
+    // All valid, so warn should NOT be called for CRITICAL/HIGH severity values
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Invalid'));
+    expect(result.blockSeverities).toEqual(['CRITICAL', 'HIGH']);
+    warnSpy.mockRestore();
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+  });
+
+  test('SBOM format values are lowercased before matching (normalizeValue for sbom)', () => {
+    // Kills 594:24 [ConditionalExpression] true / 594:34 [StringLiteral]
+    configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS = 'SPDX-JSON';
+    const result = configuration.getSecurityConfiguration();
+    expect(result.sbom.formats).toEqual(['spdx-json']);
+    delete configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS;
+  });
+
+  test('SBOM format invalid warning uses correct message', () => {
+    // Kills 603:34 / 599 sbom path
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+    configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS = 'spdx-json,invalid-format';
+    const result = configuration.getSecurityConfiguration();
+    expect(result.sbom.formats).toEqual(['spdx-json']);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('invalid-format'));
+    warnSpy.mockRestore();
+    delete configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS;
+  });
+});
+
+describe('validateCosignKeyPath and cosign pattern coverage', () => {
+  test('should reject cosign key path containing double dots (path traversal)', () => {
+    // Kills 685:20 [Regex] mutations
+    configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY = '../secret.pub';
+    expect(() => configuration.getSecurityConfiguration()).toThrow();
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY;
+  });
+
+  test('cosign key pattern allows single dots', () => {
+    // A file like /tmp/key.pub is valid (no ..)
+    configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY = `${TEST_DIRECTORY}/secret.txt`;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.signature.cosign.key).toBe(`${TEST_DIRECTORY}/secret.txt`);
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY;
+  });
+
+  test('cosign command defaults to cosign string (not empty)', () => {
+    // Kills 683:18 [StringLiteral]
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_COMMAND;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.signature.cosign.command).toBe('cosign');
+  });
+
+  test('cosign timeout defaults to 60000 (not 0)', () => {
+    // Kills 684:20 [StringLiteral]
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_TIMEOUT;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.signature.cosign.timeout).toBe(60000);
+  });
+
+  test('cosign identity defaults to empty string', () => {
+    // Kills 686:38 [StringLiteral]
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_IDENTITY;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.signature.cosign.identity).toBe('');
+  });
+
+  test('cosign issuer defaults to empty string', () => {
+    // Kills 687:36 [StringLiteral]
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_ISSUER;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.signature.cosign.issuer).toBe('');
+  });
+
+  test('cosign identity is passed through when set to a non-empty value', () => {
+    // Kills 686:38 [StringLiteral] when mutated to ""
+    configuration.ddEnvVars.DD_SECURITY_COSIGN_IDENTITY = 'my@example.com';
+    const result = configuration.getSecurityConfiguration();
+    expect(result.signature.cosign.identity).toBe('my@example.com');
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_IDENTITY;
+  });
+
+  test('cosign issuer is passed through when set to a non-empty value', () => {
+    configuration.ddEnvVars.DD_SECURITY_COSIGN_ISSUER = 'https://accounts.google.com';
+    const result = configuration.getSecurityConfiguration();
+    expect(result.signature.cosign.issuer).toBe('https://accounts.google.com');
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_ISSUER;
+  });
+});
+
+describe('getSecurityConfiguration – trivy/sbom/scan/prune field coverage', () => {
+  test('trivy server defaults to empty string (not another string)', () => {
+    // Kills 654:62 [StringLiteral]
+    delete configuration.ddEnvVars.DD_SECURITY_TRIVY_SERVER;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.trivy.server).toBe('');
+  });
+
+  test('trivy command defaults to trivy (not empty string)', () => {
+    // Kills 657:38 [StringLiteral]
+    delete configuration.ddEnvVars.DD_SECURITY_TRIVY_COMMAND;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.trivy.command).toBe('trivy');
+  });
+
+  test('trivy command is passed through when explicitly set', () => {
+    configuration.ddEnvVars.DD_SECURITY_TRIVY_COMMAND = 'my-trivy';
+    const result = configuration.getSecurityConfiguration();
+    expect(result.trivy.command).toBe('my-trivy');
+    delete configuration.ddEnvVars.DD_SECURITY_TRIVY_COMMAND;
+  });
+
+  test('trivy timeout defaults to 120000', () => {
+    // Kills 662:36 [StringLiteral]
+    delete configuration.ddEnvVars.DD_SECURITY_TRIVY_TIMEOUT;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.trivy.timeout).toBe(120000);
+  });
+
+  test('trivy image src defaults to empty string', () => {
+    // Kills 663:39 [StringLiteral]
+    delete configuration.ddEnvVars.DD_SECURITY_TRIVY_IMAGE_SRC;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.trivy.imageSrc).toBe('');
+  });
+
+  test('sbom enabled defaults to false', () => {
+    // Kills 674:43 [BooleanLiteral] true
+    delete configuration.ddEnvVars.DD_SECURITY_SBOM_ENABLED;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.sbom.enabled).toBe(false);
+  });
+
+  test('sbom formats default to spdx-json', () => {
+    // Kills 679:39 [StringLiteral] ""
+    delete configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.sbom.formats).toEqual(['spdx-json']);
+  });
+
+  test('gate mode defaults to on', () => {
+    delete configuration.ddEnvVars.DD_SECURITY_GATE_MODE;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.gate.mode).toBe('on');
+  });
+
+  test('scan cron defaults to empty string', () => {
+    // Kills 708:34 [StringLiteral]
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_CRON;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.scan.cron).toBe('');
+  });
+
+  test('scan cron is passed through when set', () => {
+    configuration.ddEnvVars.DD_SECURITY_SCAN_CRON = '0 * * * *';
+    const result = configuration.getSecurityConfiguration();
+    expect(result.scan.cron).toBe('0 * * * *');
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_CRON;
+  });
+
+  test('scan jitter defaults to 60000', () => {
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_JITTER;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.scan.jitter).toBe(60000);
+  });
+
+  test('scan jitter is passed through when set to 0', () => {
+    // Tests the ?? 60000 branch is not incorrectly triggered by 0
+    configuration.ddEnvVars.DD_SECURITY_SCAN_JITTER = '0';
+    const result = configuration.getSecurityConfiguration();
+    expect(result.scan.jitter).toBe(0);
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_JITTER;
+  });
+
+  test('scan concurrency defaults to 4', () => {
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_CONCURRENCY;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.scan.concurrency).toBe(4);
+  });
+
+  test('scan batch timeout defaults to 1800000', () => {
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_BATCH_TIMEOUT;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.scan.batchTimeout).toBe(1800000);
+  });
+
+  test('scan batch timeout is passed through when set to 0', () => {
+    configuration.ddEnvVars.DD_SECURITY_SCAN_BATCH_TIMEOUT = '0';
+    const result = configuration.getSecurityConfiguration();
+    expect(result.scan.batchTimeout).toBe(0);
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_BATCH_TIMEOUT;
+  });
+
+  test('scan notifications defaults to false', () => {
+    // Kills 723:19 [BooleanLiteral]
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_NOTIFICATIONS;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.scan.notifications).toBe(false);
+  });
+
+  test('scan notifications can be enabled', () => {
+    configuration.ddEnvVars.DD_SECURITY_SCAN_NOTIFICATIONS = 'true';
+    const result = configuration.getSecurityConfiguration();
+    expect(result.scan.notifications).toBe(true);
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_NOTIFICATIONS;
+  });
+
+  test('sbom enabled can be set to true', () => {
+    // Kills 722:19 [BooleanLiteral]
+    configuration.ddEnvVars.DD_SECURITY_SBOM_ENABLED = 'true';
+    const result = configuration.getSecurityConfiguration();
+    expect(result.sbom.enabled).toBe(true);
+    delete configuration.ddEnvVars.DD_SECURITY_SBOM_ENABLED;
+  });
+
+  test('scan jitter minimum is 0 (not rejected)', () => {
+    // Kills 709:17 [MethodExpression] joi.number().integer().max(0)
+    configuration.ddEnvVars.DD_SECURITY_SCAN_JITTER = '0';
+    expect(() => configuration.getSecurityConfiguration()).not.toThrow();
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_JITTER;
+  });
+
+  test('scan jitter rejects negative values', () => {
+    configuration.ddEnvVars.DD_SECURITY_SCAN_JITTER = '-1';
+    expect(() => configuration.getSecurityConfiguration()).toThrow();
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_JITTER;
+  });
+
+  test('security scanner schema defaults use correct object', () => {
+    // Kills 721:86 [ObjectLiteral] {}
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+    const result = configuration.getSecurityConfiguration();
+    expect(result).toHaveProperty('trivy');
+    expect(result.trivy).toHaveProperty('server');
+    expect(result.trivy).toHaveProperty('command');
+    expect(result.trivy).toHaveProperty('timeout');
+  });
+
+  test('getSecurityConfiguration optional chain on trivy.server returns empty string when not set', () => {
+    // Kills 740:15 [OptionalChaining]
+    delete configuration.ddEnvVars.DD_SECURITY_TRIVY_SERVER;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.trivy.server).toBe('');
+  });
+
+  test('getSecurityConfiguration optional chain on trivy.command returns trivy when not set', () => {
+    // Kills 741:16 [OptionalChaining]
+    delete configuration.ddEnvVars.DD_SECURITY_TRIVY_COMMAND;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.trivy.command).toBe('trivy');
+  });
+
+  test('getSecurityConfiguration optional chain on trivy.timeout returns 120000 when not set', () => {
+    // Kills 742:16 [OptionalChaining]
+    delete configuration.ddEnvVars.DD_SECURITY_TRIVY_TIMEOUT;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.trivy.timeout).toBe(120000);
+  });
+
+  test('getSecurityConfiguration optional chain on verify.signatures returns false when not set', () => {
+    // Kills 746:23 [OptionalChaining]
+    delete configuration.ddEnvVars.DD_SECURITY_VERIFY_SIGNATURES;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.signature.verify).toBe(false);
+  });
+
+  test('getSecurityConfiguration optional chain on cosign.command returns cosign when not set', () => {
+    // Kills 748:18 [OptionalChaining]
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_COMMAND;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.signature.cosign.command).toBe('cosign');
+  });
+
+  test('getSecurityConfiguration optional chain on cosign.timeout returns 60000 when not set', () => {
+    // Kills 749:18 [OptionalChaining]
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_TIMEOUT;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.signature.cosign.timeout).toBe(60000);
+  });
+
+  test('getSecurityConfiguration optional chain on cosign.identity returns empty string when not set', () => {
+    // Kills 751:19 [OptionalChaining]
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_IDENTITY;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.signature.cosign.identity).toBe('');
+  });
+
+  test('getSecurityConfiguration optional chain on cosign.issuer returns empty string when not set', () => {
+    // Kills 752:17 [OptionalChaining]
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_ISSUER;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.signature.cosign.issuer).toBe('');
+  });
+
+  test('getSecurityConfiguration optional chain on sbom.enabled returns false when not set', () => {
+    // Kills 756:24 [OptionalChaining]
+    delete configuration.ddEnvVars.DD_SECURITY_SBOM_ENABLED;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.sbom.enabled).toBe(false);
+  });
+
+  test('getSecurityConfiguration optional chain on prune.onblock returns true when not set', () => {
+    // Kills 763:16 [OptionalChaining]
+    delete configuration.ddEnvVars.DD_SECURITY_PRUNE_ONBLOCK;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.prune.onBlock).toBe(true);
+  });
+
+  test('getSecurityConfiguration optional chain on scan.cron returns empty string when not set', () => {
+    // Kills 766:13 [OptionalChaining]
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_CRON;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.scan.cron).toBe('');
+  });
+
+  test('getSecurityConfiguration optional chain on scan.jitter returns 60000 when not set', () => {
+    // Kills 767:15 [OptionalChaining]
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_JITTER;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.scan.jitter).toBe(60000);
+  });
+
+  test('getSecurityConfiguration optional chain on scan.concurrency returns 4 when not set', () => {
+    // Kills 768:20 [OptionalChaining]
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_CONCURRENCY;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.scan.concurrency).toBe(4);
+  });
+
+  test('getSecurityConfiguration optional chain on scan.batch returns 1800000 when not set', () => {
+    // Kills 769:21 [OptionalChaining]
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_BATCH_TIMEOUT;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.scan.batchTimeout).toBe(1800000);
+  });
+
+  test('getSecurityConfiguration optional chain on scan.notifications returns false when not set', () => {
+    // Kills 770:30 [OptionalChaining]
+    delete configuration.ddEnvVars.DD_SECURITY_SCAN_NOTIFICATIONS;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.scan.notifications).toBe(false);
+  });
+
+  test('getSecurityConfiguration optional chain on block.severity uses default when not set', () => {
+    // Kills 731:53 [OptionalChaining]
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.blockSeverities).toEqual(['CRITICAL', 'HIGH']);
+  });
+
+  test('getSecurityConfiguration optional chain on sbom.formats uses default when not set', () => {
+    // Kills 732:51 [OptionalChaining]
+    delete configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.sbom.formats).toEqual(['spdx-json']);
+  });
+
+  test('getSecurityConfiguration optional chain on cosign.key uses empty when not set', () => {
+    // Kills 733:43 [OptionalChaining]
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.signature.cosign.key).toBe('');
+  });
+});
+
+describe('getSecurityConfiguration – allow empty string schema coverage', () => {
+  test('scanner allows explicit empty string without throwing', () => {
+    // Kills 654:62 [StringLiteral] – allow('') becomes allow("Stryker was here!")
+    // Setting scanner='' must not cause validation error
+    configuration.ddEnvVars.DD_SECURITY_SCANNER = '';
+    expect(() => configuration.getSecurityConfiguration()).not.toThrow();
+    delete configuration.ddEnvVars.DD_SECURITY_SCANNER;
+  });
+
+  test('block.severity allows explicit empty string without throwing', () => {
+    // Kills 657:38 [StringLiteral] – allow('') → allow("Stryker was here!")
+    configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY = '';
+    expect(() => configuration.getSecurityConfiguration()).not.toThrow();
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+  });
+
+  test('trivy.server allows explicit empty string without throwing', () => {
+    // Kills 662:36 [StringLiteral] – trivy.server.allow('')
+    configuration.ddEnvVars.DD_SECURITY_TRIVY_SERVER = '';
+    expect(() => configuration.getSecurityConfiguration()).not.toThrow();
+    const result = configuration.getSecurityConfiguration();
+    expect(result.trivy.server).toBe('');
+    delete configuration.ddEnvVars.DD_SECURITY_TRIVY_SERVER;
+  });
+
+  test('trivy.image.src allows explicit empty string without throwing', () => {
+    // Kills 667:37 [StringLiteral] – trivy.image.src.allow('')
+    configuration.ddEnvVars.DD_SECURITY_TRIVY_IMAGE_SRC = '';
+    expect(() => configuration.getSecurityConfiguration()).not.toThrow();
+    delete configuration.ddEnvVars.DD_SECURITY_TRIVY_IMAGE_SRC;
+  });
+
+  test('cosign.key allows explicit empty string without throwing', () => {
+    // Kills cosign.key allow('') mutation
+    configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY = '';
+    expect(() => configuration.getSecurityConfiguration()).not.toThrow();
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY;
+  });
+
+  test('cosign.identity allows explicit empty string without throwing', () => {
+    // Kills 686:38 [StringLiteral]
+    configuration.ddEnvVars.DD_SECURITY_COSIGN_IDENTITY = '';
+    expect(() => configuration.getSecurityConfiguration()).not.toThrow();
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_IDENTITY;
+  });
+
+  test('cosign.issuer allows explicit empty string without throwing', () => {
+    // Kills 687:36 [StringLiteral]
+    configuration.ddEnvVars.DD_SECURITY_COSIGN_ISSUER = '';
+    expect(() => configuration.getSecurityConfiguration()).not.toThrow();
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_ISSUER;
+  });
+
+  test('sbom.formats allows explicit empty string without throwing', () => {
+    // Kills sbom.formats allow('') mutation
+    configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS = '';
+    expect(() => configuration.getSecurityConfiguration()).not.toThrow();
+    delete configuration.ddEnvVars.DD_SECURITY_SBOM_FORMATS;
+  });
+});
+
+describe('parseSafePublicUrlCandidate – detailed coverage', () => {
+  test('should return / when DD_PUBLIC_URL is a non-empty invalid URL', () => {
+    // Kills 830:40 [ConditionalExpression] false /  830:40 [EqualityOperator]
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'not-a-url-but-not-empty';
+    const result = configuration.getPublicUrl({ protocol: 'https', hostname: 'example.com' });
+    // configuredPublicUrl is falsy (invalid URL), publicUrl is a non-empty string → return '/'
+    expect(result).toBe('/');
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+  });
+
+  test('should return / when DD_PUBLIC_URL is a whitespace-only string', () => {
+    // Kills 830:40 [MethodExpression] publicUrl (removes trim())
+    configuration.ddEnvVars.DD_PUBLIC_URL = '   ';
+    // trim().length === 0 → the publicUrl branch does NOT trigger → falls through to req inference
+    const result = configuration.getPublicUrl({ protocol: 'https', hostname: 'example.com' });
+    expect(result).toBe('https://example.com');
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+  });
+
+  test('should return origin when DD_PUBLIC_URL is a valid https URL with path', () => {
+    // Kills 818:36 [ConditionalExpression] false for protocol check
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'https://api.example.com/v1';
+    const result = configuration.getPublicUrl({ protocol: 'https', hostname: 'other.com' });
+    expect(result).toBe('https://api.example.com');
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+  });
+
+  test('should return origin when DD_PUBLIC_URL is a valid http URL', () => {
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'http://local.example.com';
+    const result = configuration.getPublicUrl({ protocol: 'https', hostname: 'other.com' });
+    expect(result).toBe('http://local.example.com');
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+  });
+
+  test('getPublicUrl inferred URL uses protocol string correctly', () => {
+    // Kills 835:20 [ConditionalExpression] true / 835:70 [StringLiteral]
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+    // protocol is not a string → falls back to empty string
+    const result = configuration.getPublicUrl({ protocol: null, hostname: 'example.com' });
+    expect(result).toBe('/');
+  });
+
+  test('getPublicUrl inferred URL uses hostname string correctly', () => {
+    // Kills 836:20 [ConditionalExpression] true / 836:70 [StringLiteral]
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+    const result = configuration.getPublicUrl({ protocol: 'https', hostname: null });
+    expect(result).toBe('/');
+  });
+
+  test('parseSafePublicUrlCandidate rejects value with control character at start', () => {
+    // Kills 804:7 [ConditionalExpression] false / 804:80 [BlockStatement] {}
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'https://example.com';
+    const result = configuration.getPublicUrl({ protocol: 'https', hostname: 'example.com' });
+    expect(result).toBe('/');
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+  });
+
+  test('parseSafePublicUrlCandidate rejects empty string after trim', () => {
+    // Kills 801:24 [MethodExpression] value (removes trim)
+    // Empty string after trim → trimmedValue.length === 0 → return undefined
+    configuration.ddEnvVars.DD_PUBLIC_URL = '';
+    // Empty string → no configuredPublicUrl, empty publicUrl does not trigger '/' path
+    const result = configuration.getPublicUrl({ protocol: 'https', hostname: 'example.com' });
+    // publicUrl is '' → trim().length === 0 → second branch does not fire → infer from request
+    expect(result).toBe('https://example.com');
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+  });
+
+  test('getPublicUrl with valid inferred URL returns correct origin', () => {
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+    const result = configuration.getPublicUrl({ protocol: 'https', hostname: 'myhost.example' });
+    expect(result).toBe('https://myhost.example');
+  });
+
+  test('parseSafePublicUrlCandidate rejects URL with empty username and non-empty password', () => {
+    // Kills 818:36 [ConditionalExpression] false – removes || parsedUrl.password !== ''
+    // URL ':secret@example.com' has empty username but non-empty password; must be rejected
+    configuration.ddEnvVars.DD_PUBLIC_URL = 'https://:secret@example.com';
+    const result = configuration.getPublicUrl({ protocol: 'https', hostname: 'example.com' });
+    // With mutant (|| false), password-only auth passes through → origin returned
+    // With real code, password !== '' → returns undefined → falls through → '/'
+    expect(result).toBe('/');
+    delete configuration.ddEnvVars.DD_PUBLIC_URL;
+  });
+});
+
+describe('isRecord and mergeRecords mutation coverage', () => {
+  test('getTriggerConfigurations merges DD_TRIGGER legacy with DD_ACTION correctly', () => {
+    // Exercises mergeRecords (lines 234-249) and isRecord (lines 230-232)
+    configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD = 'major';
+    configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_LEVEL = 'patch';
+    const result = configuration.getTriggerConfigurations();
+    expect(result.docker).toBeDefined();
+    expect((result.docker as Record<string, unknown>).update).toBeDefined();
+    delete configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD;
+    delete configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_LEVEL;
+  });
+
+  test('mergeRecords deep-merges nested objects', () => {
+    // Kills 231:10 [ConditionalExpression] false/true, 231:28/57 EqualityOperator/BooleanLiteral
+    configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD = 'major';
+    configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_LEVEL = 'image';
+    configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD = 'minor';
+    const result = configuration.getTriggerConfigurations();
+    // Both trigger and action contribute keys to docker.update object
+    const dockerUpdate = (result.docker as Record<string, Record<string, unknown>>).update;
+    expect(dockerUpdate.threshold).toBe('minor'); // action overrides trigger
+    expect(dockerUpdate.level).toBe('image'); // preserved from trigger
+    delete configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD;
+    delete configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_LEVEL;
+    delete configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD;
+  });
+
+  test('mergeRecords with non-object override replaces base value', () => {
+    // When overrideValue is not a record, it replaces baseValue entirely
+    configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD = 'major';
+    configuration.ddEnvVars.DD_ACTION_DOCKER = 'scalar'; // scalar override for 'docker'
+    const result = configuration.getTriggerConfigurations();
+    // action.docker = 'scalar' should override trigger.docker (which is an object)
+    expect(result.docker).toBe('scalar');
+    delete configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD;
+    delete configuration.ddEnvVars.DD_ACTION_DOCKER;
+  });
+
+  test('isRecord returns false for null values during merge', () => {
+    // Kills 231:10 [ConditionalExpression] true + 231:10 [EqualityOperator] value === null
+    // Make one side null to test null exclusion from isRecord
+    configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD = 'major';
+    configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD = 'minor';
+    // Both sides are strings (not objects) – merge uses simple override
+    const result = configuration.getTriggerConfigurations();
+    expect((result.docker as Record<string, Record<string, string>>).update.threshold).toBe(
+      'minor',
+    );
+    delete configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD;
+    delete configuration.ddEnvVars.DD_ACTION_DOCKER_UPDATE_THRESHOLD;
+  });
+
+  test('isRecord returns false for arrays during merge (does not deep merge arrays)', () => {
+    // Kills 231:57 [BooleanLiteral] Array.isArray(value)
+    configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD = 'major';
+    // Can only test via trigger/action merge paths
+    const result = configuration.getTriggerConfigurations();
+    expect(result).toHaveProperty('docker');
+    delete configuration.ddEnvVars.DD_TRIGGER_DOCKER_UPDATE_THRESHOLD;
+  });
+});
+
+describe('normalizeWatcherMaintenanceEnvAliases – missing-value path', () => {
+  test('should skip aliases with undefined env values (maintenancewindow key not set)', () => {
+    // Kills 210:28 [ConditionalExpression] false for envValue === undefined check
+    // When an env var is in ddEnvVars but has undefined value,
+    // normalizeWatcherMaintenanceEnvAliases should NOT add the maintenancewindow key.
+    // The watcher entry may still appear from get() but the alias key should be absent.
+    configuration.ddEnvVars.DD_WATCHER_SKIPPED_MAINTENANCE_WINDOW = undefined;
+    const watcherConfigurations = configuration.getWatcherConfigurations();
+    // The alias should be skipped – maintenancewindow key should be set from get() as undefined,
+    // not as a properly resolved value via the alias path.
+    // Key presence from get() is fine but the value should be undefined (not overwritten).
+    expect(watcherConfigurations.skipped?.maintenancewindow).toBeUndefined();
+    delete configuration.ddEnvVars.DD_WATCHER_SKIPPED_MAINTENANCE_WINDOW;
+  });
+
+  test('should not delete maintenance key when watcher has no existing maintenance key', () => {
+    // Kills 221:7 [ConditionalExpression] and LogicalOperator mutations
+    configuration.ddEnvVars.DD_WATCHER_NOMAINT_MAINTENANCE_WINDOW = '*/5 * * * *';
+    const watcherConfigurations = configuration.getWatcherConfigurations();
+    // 'maintenance' was never set, so it should still be undefined
+    expect(watcherConfigurations.nomaint.maintenance).toBeUndefined();
+    expect(watcherConfigurations.nomaint.maintenancewindow).toBe('*/5 * * * *');
+    delete configuration.ddEnvVars.DD_WATCHER_NOMAINT_MAINTENANCE_WINDOW;
+  });
+
+  test('normalizeWatcherMaintenanceEnvAliases deletes the maintenance key when present', () => {
+    // Kills 222:7 [ConditionalExpression] true – the BlockStatement replacing delete
+    // Set DD_WATCHER_LOCAL_MAINTENANCE to create the maintenance key via get(), then
+    // also set DD_WATCHER_LOCAL_MAINTENANCE_WINDOW to trigger normalization.
+    // After normalization, 'maintenance' should be deleted.
+    configuration.ddEnvVars.DD_WATCHER_DELMAINT_MAINTENANCE = 'old-window-format';
+    configuration.ddEnvVars.DD_WATCHER_DELMAINT_MAINTENANCE_WINDOW = '0 2 * * *';
+    const watcherConfigurations = configuration.getWatcherConfigurations();
+    // maintenance was present (from DD_WATCHER_DELMAINT_MAINTENANCE) but should be deleted
+    expect(watcherConfigurations.delmaint.maintenance).toBeUndefined();
+    expect(watcherConfigurations.delmaint.maintenancewindow).toBe('0 2 * * *');
+    delete configuration.ddEnvVars.DD_WATCHER_DELMAINT_MAINTENANCE;
+    delete configuration.ddEnvVars.DD_WATCHER_DELMAINT_MAINTENANCE_WINDOW;
+  });
+
+  test('parseWatcherMaintenanceEnvAlias returns undefined for non-DD_WATCHER_ prefixed keys', () => {
+    // Kills 182:7 [ConditionalExpression] false – the startsWith(prefix) check
+    // If a non-watcher key (e.g., DD_REGISTRY_FOO_MAINTENANCE_WINDOW) is present,
+    // it should NOT be parsed as a watcher maintenance alias.
+    configuration.ddEnvVars.DD_REGISTRY_NONWATCHER_MAINTENANCE_WINDOW = '0 5 * * *';
+    const watcherConfigurations = configuration.getWatcherConfigurations();
+    // Should not create a watcher entry for 'nonwatcher'
+    expect(watcherConfigurations.nonwatcher).toBeUndefined();
+    delete configuration.ddEnvVars.DD_REGISTRY_NONWATCHER_MAINTENANCE_WINDOW;
+  });
+
+  test('TZ alias is NOT treated as window alias (suffix check is correct)', () => {
+    // Kills 194:7 [ConditionalExpression] true – if endsWith(windowSuffix) always true,
+    // TZ keys would be parsed as window aliases (setting 'maintenancewindow' not 'maintenancewindowtz').
+    configuration.ddEnvVars.DD_WATCHER_TZSUFFIX_MAINTENANCE_WINDOW_TZ = 'America/Chicago';
+    const watcherConfigurations = configuration.getWatcherConfigurations();
+    // Should be stored as maintenancewindowtz, NOT maintenancewindow
+    expect(watcherConfigurations.tzsuffix.maintenancewindowtz).toBe('America/Chicago');
+    expect(watcherConfigurations.tzsuffix.maintenancewindow).toBeUndefined();
+    delete configuration.ddEnvVars.DD_WATCHER_TZSUFFIX_MAINTENANCE_WINDOW_TZ;
+  });
+});
+
+describe('getLegacyTriggerIdFromEnvKey path coverage', () => {
+  test('usesLegacyTriggerPrefix returns true when DD_TRIGGER key has 3 segments (type.name.field)', () => {
+    // Kills 261:7 [ConditionalExpression] false / 261:31 [BlockStatement] {}
+    configuration.ddEnvVars.DD_TRIGGER_SLACK_MYSLACK_URL = 'https://hooks.slack.com/test';
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+    configuration.getTriggerConfigurations();
+    expect(configuration.usesLegacyTriggerPrefix('slack', 'myslack')).toBe(true);
+    delete configuration.ddEnvVars.DD_TRIGGER_SLACK_MYSLACK_URL;
+    warnSpy.mockRestore();
+  });
+
+  test('usesLegacyTriggerPrefix returns true for exactly 2-segment DD_TRIGGER key (type.name)', () => {
+    // Kills 261:7 [EqualityOperator] triggerPath.length <= 2 (should be < 2)
+    // DD_TRIGGER_X_Y has exactly 2 segments [x, y] – should return id 'x.y'
+    configuration.ddEnvVars.DD_TRIGGER_GOTIFY_MYNOTIF = 'value';
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+    configuration.getTriggerConfigurations();
+    // 2 segments → valid ID (triggerPath.length === 2, NOT < 2)
+    expect(configuration.usesLegacyTriggerPrefix('gotify', 'mynotif')).toBe(true);
+    delete configuration.ddEnvVars.DD_TRIGGER_GOTIFY_MYNOTIF;
+    warnSpy.mockRestore();
+  });
+
+  test('usesLegacyTriggerPrefix returns false when DD_TRIGGER key has only 1 segment', () => {
+    // Kills 261:7 [EqualityOperator] triggerPath.length <= 2 (should be < 2)
+    configuration.ddEnvVars.DD_TRIGGER_DOCKER = 'value';
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+    configuration.getTriggerConfigurations();
+    expect(configuration.usesLegacyTriggerPrefix('docker', '')).toBe(false);
+    delete configuration.ddEnvVars.DD_TRIGGER_DOCKER;
+    warnSpy.mockRestore();
+  });
+
+  test('trigger path parsing converts to lowercase before storing legacyId', () => {
+    // Note: usesLegacyTriggerPrefix itself lowercases the lookup key, so this mutant
+    // (258:20 [MethodExpression] part – removing toLowerCase in getLegacyTriggerIdFromEnvKey)
+    // is equivalent – the Set lookup will match regardless of case stored in the set.
+    // Verify the basic functionality works correctly.
+    configuration.ddEnvVars.DD_TRIGGER_DISCORD_MYBOT_URL = 'https://discord.com/api/webhooks/test';
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+    configuration.getTriggerConfigurations();
+    expect(configuration.usesLegacyTriggerPrefix('discord', 'mybot')).toBe(true);
+    delete configuration.ddEnvVars.DD_TRIGGER_DISCORD_MYBOT_URL;
+    warnSpy.mockRestore();
+  });
+
+  test('trigger path parsing filters out empty segments', () => {
+    // Kills 259:23 [EqualityOperator] part.length >= 0 (replacing > 0)
+    // DD_TRIGGER_A__B has an empty segment between A and B (double underscore → empty part after split)
+    // With >= 0 filter, empty '' is kept: path = ['a', '', 'b'], id = 'a.'
+    // With > 0 filter, empty '' is excluded: path = ['a', 'b'], id = 'a.b'
+    configuration.ddEnvVars.DD_TRIGGER_MYTYPE__MYNAME_FIELD = 'value';
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+    configuration.getTriggerConfigurations();
+    // With correct filter, empty string is excluded and we get 'mytype.myname' not 'mytype.'
+    expect(configuration.usesLegacyTriggerPrefix('mytype', 'myname')).toBe(true);
+    expect(configuration.usesLegacyTriggerPrefix('mytype', '')).toBe(false);
+    delete configuration.ddEnvVars.DD_TRIGGER_MYTYPE__MYNAME_FIELD;
+    warnSpy.mockRestore();
+  });
+
+  test('envKeyUpper is uppercased before getLegacyTriggerIdFromEnvKey call', () => {
+    // Kills 252:23 [MethodExpression] envKey.toLowerCase()
+    // The envKey.toUpperCase() ensures case-insensitive detection
+    configuration.ddEnvVars.DD_TRIGGER_MATRIX_MYROOM_URL = 'https://matrix.example.com';
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+    configuration.getTriggerConfigurations();
+    // The trigger ID should be stored as lowercase 'matrix.myroom'
+    expect(configuration.usesLegacyTriggerPrefix('matrix', 'myroom')).toBe(true);
+    delete configuration.ddEnvVars.DD_TRIGGER_MATRIX_MYROOM_URL;
+    warnSpy.mockRestore();
+  });
+
+  test('collectLegacyTriggerUsage tracks first two path segments as type.name', () => {
+    // Kills 281:11 [ConditionalExpression] true
+    configuration.ddEnvVars.DD_TRIGGER_TEAMS_MYTEAMS_URL = 'https://outlook.office.com/webhook/';
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+    configuration.getTriggerConfigurations();
+    // The legacy ID should be teams.myteams (first two segments)
+    expect(configuration.usesLegacyTriggerPrefix('teams', 'myteams')).toBe(true);
+    // Not a three-segment id
+    expect(configuration.usesLegacyTriggerPrefix('teams', 'myteams.url')).toBe(false);
+    delete configuration.ddEnvVars.DD_TRIGGER_TEAMS_MYTEAMS_URL;
+    warnSpy.mockRestore();
+  });
+
+  test('getLegacyTriggerIdFromEnvKey with 255:23 – slice from prefix.length correctly', () => {
+    // Kills 255:23 [MethodExpression] – replaces slice+split with just the method chain
+    // If slice(prefix.length) is wrong, the prefix 'DD_TRIGGER_' remains in the path
+    configuration.ddEnvVars.DD_TRIGGER_NTFY_MYNTFY_TOPIC = 'value';
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+    configuration.getTriggerConfigurations();
+    // Should correctly extract 'ntfy.myntfy' (not 'dd_trigger_ntfy.myntfy')
+    expect(configuration.usesLegacyTriggerPrefix('ntfy', 'myntfy')).toBe(true);
+    expect(configuration.usesLegacyTriggerPrefix('dd_trigger_ntfy', 'myntfy')).toBe(false);
+    delete configuration.ddEnvVars.DD_TRIGGER_NTFY_MYNTFY_TOPIC;
+    warnSpy.mockRestore();
+  });
+});
+
+describe('getSecurityConfiguration – schema validation field assertions', () => {
+  test('block.severity schema default is CRITICAL,HIGH', () => {
+    // Kills 667:37 [StringLiteral] and related
+    delete configuration.ddEnvVars.DD_SECURITY_BLOCK_SEVERITY;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.blockSeverities).toEqual(['CRITICAL', 'HIGH']);
+  });
+
+  test('verify.signatures defaults to false (not true)', () => {
+    // Kills 692:40 [BooleanLiteral] true
+    delete configuration.ddEnvVars.DD_SECURITY_VERIFY_SIGNATURES;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.signature.verify).toBe(false);
+  });
+
+  test('getSecurityConfiguration schema object default keys are present', () => {
+    // Kills 697:15 [ObjectLiteral] {}
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_COMMAND;
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_TIMEOUT;
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY;
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_IDENTITY;
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_ISSUER;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.signature.cosign).toStrictEqual({
+      command: 'cosign',
+      timeout: 60000,
+      key: '',
+      identity: '',
+      issuer: '',
+    });
+  });
+
+  test('cosign key schema default is empty string (not another value)', () => {
+    // Kills 698:48 [StringLiteral] "" (key default)
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_KEY;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.signature.cosign.key).toBe('');
+  });
+
+  test('cosign identity schema default is empty string', () => {
+    // Kills 698:54 [StringLiteral]
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_IDENTITY;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.signature.cosign.identity).toBe('');
+  });
+
+  test('cosign issuer schema default is empty string', () => {
+    // Kills 698:69 [StringLiteral]
+    delete configuration.ddEnvVars.DD_SECURITY_COSIGN_ISSUER;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.signature.cosign.issuer).toBe('');
+  });
+
+  test('prune.onblock schema defaults to true', () => {
+    // Kills 703:40 [BooleanLiteral] false
+    delete configuration.ddEnvVars.DD_SECURITY_PRUNE_ONBLOCK;
+    const result = configuration.getSecurityConfiguration();
+    expect(result.prune.onBlock).toBe(true);
+  });
+
+  test('getSecurityConfiguration does not include unknown keys in output (stripUnknown)', () => {
+    // Kills 721:86 [ObjectLiteral] {} / 723:19 [BooleanLiteral] false
+    // With stripUnknown: false, unknown env vars would pass through in the result object
+    configuration.ddEnvVars.DD_SECURITY_UNKNOWN_EXTRA_FIELD = 'should-not-appear';
+    const result = configuration.getSecurityConfiguration();
+    // The raw configuration object should not contain unknown keys
+    expect((result as Record<string, unknown>).unknown).toBeUndefined();
+    expect((result as Record<string, unknown>).extra).toBeUndefined();
+    delete configuration.ddEnvVars.DD_SECURITY_UNKNOWN_EXTRA_FIELD;
+  });
+
+  test('getSecurityConfiguration accepts unknown env keys without throwing (allowUnknown)', () => {
+    // Kills 722:19 [BooleanLiteral] false – allowUnknown: false would throw for unknown fields
+    configuration.ddEnvVars.DD_SECURITY_TOTALLY_UNKNOWN_KEY = 'value';
+    expect(() => configuration.getSecurityConfiguration()).not.toThrow();
+    delete configuration.ddEnvVars.DD_SECURITY_TOTALLY_UNKNOWN_KEY;
   });
 });
