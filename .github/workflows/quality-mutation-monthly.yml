@@ -264,6 +264,10 @@ jobs:
           REPO_SLUG: ${{ github.repository }}
           REF_NAME: ${{ github.ref_name }}
         run: |
+          # Each attempt's exit code must come from curl directly. The previous
+          # `rc=$?` ran after the `if` compound command, which is always 0 when
+          # the condition is false — so a failed publish (e.g. HTTP 401) was
+          # silently reported as success. Exit explicitly per outcome instead.
           for attempt in 1 2 3; do
             if curl \
               --fail-with-body \
@@ -272,14 +276,16 @@ jobs:
               --header "Content-Type: application/json" \
               --data @artifacts/aggregate/mutation-score.json \
               "https://dashboard.stryker-mutator.io/api/reports/github.com/${REPO_SLUG}/${REF_NAME}"; then
-              break
+              echo "Published mutation score to Stryker dashboard."
+              exit 0
             fi
-            rc=$?
-            if [ "$attempt" -eq 3 ]; then
-              exit "$rc"
+            echo "::warning::Dashboard publish attempt ${attempt} failed."
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((5 * attempt))
             fi
-            sleep $((5*attempt))
           done
+          echo "::error::Failed to publish mutation score to Stryker dashboard after 3 attempts."
+          exit 1
 
       - name: Upload aggregate mutation summary
         if: always()
