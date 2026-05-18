@@ -64,7 +64,7 @@
         "entries": "{count} 条记录",
         "statusLive": "在线",
         "statusOffline": "离线",
-        "loadError": "Failed to load agent logs"
+        "loadError": "加载代理日志失败"
       },
       "fields": {
         "cpus": "CPU",
