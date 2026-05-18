@@ -6,7 +6,7 @@ const config = {
   testRunner: 'vitest',
   checkers: ['typescript'],
   tsconfigFile: 'tsconfig.json',
-  coverageAnalysis: 'perTest',
+  coverageAnalysis: 'off',
   reporters: [
     'clear-text',
     'progress',
@@ -30,7 +30,7 @@ const config = {
       }
     : {}),
   vitest: {
-    configFile: 'vitest.config.ts',
+    configFile: 'vitest.stryker.config.ts',
     related: false,
   },
   incremental: true,
