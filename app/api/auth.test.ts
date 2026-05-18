@@ -2536,4 +2536,906 @@ describe('Auth Router', () => {
       expect(res.json).toHaveBeenCalledWith({ error: 'Unable to clear session' });
     });
   });
+
+  // ── Mutant-killing tests ─────────────────────────────────────────────────
+
+  describe('LOGIN_SUCCESS_AUDIT_MESSAGE string literal', () => {
+    test('login success audit event uses correct "Login succeeded" message', async () => {
+      // Line 47: StringLiteral "" mutant
+      const handler = getRouteHandler('post', '/login');
+      const req = {
+        user: { username: 'john' },
+        session: { cookie: {}, regenerate: vi.fn((done) => done()) },
+        login: vi.fn((_user, done) => done()),
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(mockRecordAuditEvent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'auth-login',
+          status: 'success',
+          details: expect.stringContaining('Login succeeded'),
+        }),
+      );
+    });
+  });
+
+  describe('_resetLoginLockoutStateForTests', () => {
+    test('delegates to resetLoginLockoutStateForTests without throwing', () => {
+      // Line 63: BlockStatement {} mutant
+      expect(() => auth._resetLoginLockoutStateForTests()).not.toThrow();
+    });
+
+    test('actually resets lockout state so re-init loads from file again', () => {
+      // BlockStatement mutant: if empty body, second init would not load from file
+      lockoutStateFiles.set(
+        LOCKOUT_STATE_PATH,
+        JSON.stringify({
+          account: {},
+          ip: {},
+        }),
+      );
+
+      auth.init(createApp());
+      expect(mockFs.readFileSync).toHaveBeenCalledTimes(1);
+
+      auth._resetLoginLockoutStateForTests();
+
+      auth.init(createApp());
+      expect(mockFs.readFileSync).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('getRememberMePreference', () => {
+    test('uses req.body.remember=true when present', async () => {
+      // Line 91: req.body.remember === true — BooleanLiteral false mutant
+      const handler = getRouteHandler('post', '/login');
+      const req = {
+        body: { remember: true },
+        user: { username: 'john' },
+        session: { cookie: {}, regenerate: vi.fn((done) => done()) },
+        login: vi.fn((_user, done) => done()),
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(req.session.rememberMe).toBe(true);
+      expect(req.session.cookie.maxAge).toBe(3600 * 1000 * 24 * 30);
+    });
+
+    test('uses req.body.remember=false to disable remember-me', async () => {
+      // Line 91: req.body.remember === true — boolean false mutant
+      const handler = getRouteHandler('post', '/login');
+      const req: any = {
+        body: { remember: false },
+        user: { username: 'john' },
+        session: {
+          rememberMe: true,
+          cookie: { maxAge: 12345, expires: new Date() },
+          regenerate: vi.fn((done) => done()),
+        },
+        login: vi.fn((_user, done) => done()),
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(req.session.rememberMe).toBe(false);
+      expect(req.session.cookie.expires).toBe(false);
+    });
+
+    test('falls back to session.rememberMe when body.remember is not set', async () => {
+      // Line 92: req.session?.rememberMe === true — ConditionalExpression/BooleanLiteral mutants
+      const handler = getRouteHandler('post', '/login');
+      const req: any = {
+        user: { username: 'john' },
+        session: {
+          rememberMe: true,
+          cookie: {},
+          regenerate: vi.fn((done) => {
+            req.session.rememberMe = true; // survives regenerate
+            done();
+          }),
+        },
+        login: vi.fn((_user, done) => done()),
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(req.session.rememberMe).toBe(true);
+      expect(req.session.cookie.maxAge).toBe(3600 * 1000 * 24 * 30);
+    });
+
+    test('falls back to false when session.rememberMe is not set', async () => {
+      // Line 92: req.session?.rememberMe === true — mutant: !== true means always true
+      const handler = getRouteHandler('post', '/login');
+      const req: any = {
+        user: { username: 'john' },
+        session: {
+          cookie: {},
+          regenerate: vi.fn((done) => done()),
+        },
+        login: vi.fn((_user, done) => done()),
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(req.session.rememberMe).toBe(false);
+      // No remember-me → maxAge should NOT be set to 30-day value
+      expect(req.session.cookie.maxAge).not.toBe(3600 * 1000 * 24 * 30);
+    });
+  });
+
+  describe('getAuthenticatedUsername', () => {
+    test('returns trimmed username string when req.user.username is a string', async () => {
+      // Line 96: OptionalChaining and MethodExpression mutants
+      const handler = getRouteHandler('post', '/login');
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: {},
+        session: { maxconcurrentsessions: 1 },
+      });
+      const req: any = {
+        body: { remember: true },
+        user: { username: '  john  ' },
+        sessionID: 'test-sid',
+        session: { cookie: {}, regenerate: vi.fn((done) => done()) },
+        sessionStore: {
+          all: vi.fn((done) => done(null, {})),
+          destroy: vi.fn((_sid, done) => done()),
+        },
+        login: vi.fn((_user, done) => done()),
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      // With trimmed username 'john', session limit was enforced (all was called)
+      expect(req.sessionStore.all).toHaveBeenCalled();
+    });
+
+    test('returns empty string (skips session limit) when username is not a string', async () => {
+      // Line 96: typeof req.user?.username === 'string' check
+      const handler = getRouteHandler('post', '/login');
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: {},
+        session: { maxconcurrentsessions: 1 },
+      });
+      const req: any = {
+        body: { remember: true },
+        user: { username: 42 }, // not a string
+        session: { cookie: {}, regenerate: vi.fn((done) => done()) },
+        sessionStore: {
+          all: vi.fn((done) => done(null, {})),
+          destroy: vi.fn(),
+        },
+        login: vi.fn((_user, done) => done()),
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      // Non-string username → empty string → session limit skipped
+      expect(req.sessionStore.all).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+  });
+
+  describe('createLoginFinish (idempotency)', () => {
+    test('login resolve is called exactly once even if finish() is called multiple times', async () => {
+      // Line 102: ConditionalExpression false mutant — completed check removed
+      const handler = getRouteHandler('post', '/login');
+      const req: any = {
+        user: { username: 'john' },
+        session: {
+          cookie: {},
+          regenerate: vi.fn((done) => {
+            done();
+            done(); // call done twice
+          }),
+        },
+        login: vi.fn((_user, done) => done()),
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      // Despite double regenerate callback, status is set once
+      expect(res.status).toHaveBeenCalledTimes(1);
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+  });
+
+  describe('handleLoginError logWarning option', () => {
+    test('warns by default when logWarning is not specified', async () => {
+      // Line 123: options?.logWarning !== false — ConditionalExpression true mutant
+      const handler = getRouteHandler('post', '/login');
+      const req: any = {
+        user: { username: 'john' },
+        session: {
+          cookie: {},
+          regenerate: vi.fn((done) => done(new Error('regen failed default warn'))),
+        },
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('regen failed default warn'));
+    });
+
+    test('does not double-warn when logWarning is explicitly false (session limit path)', async () => {
+      // Line 123: BooleanLiteral true mutant for logWarning check
+      // enforceSessionLimitBeforeLogin logs once, then calls onFailure with { logWarning: false }
+      // to prevent auth.ts handleLoginError from logging again.
+      // A mutation to `true` (always warn) would cause double-logging.
+      const enforceSessionLimitSpy = vi
+        .spyOn(authSession, 'enforceSessionLimitBeforeLogin')
+        .mockImplementation((_req, _username, _proceed, onFailure) => {
+          // auth-session already logged; now call onFailure with the message
+          onFailure('session-limit-test-error');
+        });
+
+      try {
+        const handler = getRouteHandler('post', '/login');
+        mockGetServerConfiguration.mockReturnValue({
+          cookie: {},
+          session: { maxconcurrentsessions: 1 },
+        });
+        const req: any = {
+          body: { remember: true },
+          user: { username: 'john' },
+          session: { cookie: {}, regenerate: vi.fn((done) => done()) },
+          login: vi.fn(),
+        };
+        const res = createResponse();
+
+        await handler(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        // With logWarning: false, handleLoginError should NOT call log.warn
+        const warnCalls = (log.warn as ReturnType<typeof vi.fn>).mock.calls;
+        const doubleLogCalls = warnCalls.filter(
+          ([msg]) => typeof msg === 'string' && msg.includes('session-limit-test-error'),
+        );
+        expect(doubleLogCalls).toHaveLength(0);
+      } finally {
+        enforceSessionLimitSpy.mockRestore();
+      }
+    });
+
+    test('warns for 500 errors from req.login failure', async () => {
+      // Line 123: ConditionalExpression true mutant — warns for unqualified errors
+      const handler = getRouteHandler('post', '/login');
+      const req: any = {
+        user: { username: 'john' },
+        session: {
+          cookie: {},
+          regenerate: vi.fn((done) => done()),
+        },
+        login: vi.fn((_user, done) => done(new Error('login-write-failed'))),
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('login-write-failed'));
+    });
+  });
+
+  describe('enforceLoginSessionLimit', () => {
+    test('skips session limit when authenticatedUsername is empty', async () => {
+      // Line 170: authenticatedUsername.length === 0 ConditionalExpression false mutant
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: {},
+        session: { maxconcurrentsessions: 1 },
+      });
+      const handler = getRouteHandler('post', '/login');
+      const req: any = {
+        user: { username: '' },
+        session: { cookie: {}, regenerate: vi.fn((done) => done()) },
+        sessionStore: {
+          all: vi.fn((done) => done(null, {})),
+          destroy: vi.fn(),
+        },
+        login: vi.fn((_user, done) => done()),
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(req.sessionStore.all).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('enforces session limit when authenticatedUsername is non-empty', async () => {
+      // Line 170: ConditionalExpression false mutant — would always skip
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: {},
+        session: { maxconcurrentsessions: 1 },
+      });
+      const handler = getRouteHandler('post', '/login');
+      const req: any = {
+        body: { remember: true },
+        user: { username: 'alice' },
+        sessionID: 'new-session',
+        session: { cookie: {}, regenerate: vi.fn((done) => done()) },
+        sessionStore: {
+          all: vi.fn((done) =>
+            done(null, {
+              'existing-session': {
+                passport: { user: JSON.stringify({ username: 'alice' }) },
+                cookie: { expires: '2026-01-01T00:00:00.000Z' },
+              },
+            }),
+          ),
+          destroy: vi.fn((_sid, done) => done()),
+        },
+        login: vi.fn((_user, done) => done()),
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(req.sessionStore.all).toHaveBeenCalled();
+      expect(req.sessionStore.destroy).toHaveBeenCalledWith(
+        'existing-session',
+        expect.any(Function),
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+  });
+
+  describe('regenerateSessionForLogin', () => {
+    test('fails immediately when session is missing', async () => {
+      // Line 189: !req.session ConditionalExpression false mutant
+      const handler = getRouteHandler('post', '/login');
+      const req: any = {
+        user: { username: 'john' },
+        // No session property at all
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to establish session' });
+    });
+
+    test('fails immediately when session.regenerate is not a function', async () => {
+      // Line 189: typeof req.session.regenerate !== 'function' check
+      const handler = getRouteHandler('post', '/login');
+      const req: any = {
+        user: { username: 'john' },
+        session: { cookie: {}, regenerate: 'not-a-function' },
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to establish session' });
+    });
+
+    test('settle prevents double-callback firing on regenerate error', async () => {
+      // Line 196/199: settled check — ConditionalExpression false mutant
+      const handler = getRouteHandler('post', '/login');
+      const req: any = {
+        user: { username: 'john' },
+        session: {
+          cookie: {},
+          regenerate: vi.fn((done) => {
+            done(new Error('first error'));
+            done(new Error('second error should be ignored'));
+          }),
+        },
+      };
+      const res = createResponse();
+
+      await expect(handler(req, res)).resolves.toBeUndefined();
+
+      // Only one 500 response sent, not two
+      expect(res.status).toHaveBeenCalledTimes(1);
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(mockRecordAuditEvent).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('logout string literals and error messages', () => {
+    test('logout error message when logout fails includes correct context string', () => {
+      // Line 264: StringLiteral mutant
+      const handler = getRouteHandler('post', '/logout');
+      const req = {
+        logout: vi.fn((done) => done(new Error('req-logout-failed'))),
+        session: {
+          regenerate: vi.fn((done) => done()),
+        },
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to clear authentication state during logout'),
+      );
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('req-logout-failed'));
+    });
+
+    test('logout session-unavailable error message is specific', () => {
+      // Line 271: StringLiteral mutant
+      const handler = getRouteHandler('post', '/logout');
+      const req = {
+        logout: vi.fn((done) => done()),
+        // No session
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(log.warn).toHaveBeenCalledWith(
+        'Unable to regenerate session during logout (session unavailable)',
+      );
+    });
+
+    test('logout regenerate error message includes the cause', () => {
+      // Line 279: StringLiteral mutant
+      const handler = getRouteHandler('post', '/logout');
+      const req = {
+        logout: vi.fn((done) => done()),
+        session: {
+          regenerate: vi.fn((done) => done(new Error('regen-cause-error'))),
+        },
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('regen-cause-error'));
+      expect(log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to regenerate session during logout'),
+      );
+    });
+  });
+
+  describe('isTrustProxyEnabled', () => {
+    test('returns false for trustproxy=false (boolean)', () => {
+      // Line 329: ConditionalExpression true mutant would make it always throw on none
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'lax' },
+        trustproxy: false,
+      });
+      const app = createApp();
+      expect(() => auth.init(app)).not.toThrow();
+      const sessionConfig = (session as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sessionConfig.cookie.secure).toBe('auto'); // no TLS, no trustproxy
+    });
+
+    test('returns false for trustproxy=0 (number)', () => {
+      // Line 297: trustproxy > 0 — EqualityOperator mutant (>= 0 would be wrong)
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'lax' },
+        trustproxy: 0,
+      });
+      const app = createApp();
+      expect(() => auth.init(app)).not.toThrow();
+      const sessionConfig = (session as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sessionConfig.cookie.secure).toBe('auto');
+    });
+
+    test('returns true for trustproxy=1 (number)', () => {
+      // Line 297: trustproxy > 0 — positive value should enable trust proxy
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'none' },
+        tls: { enabled: false },
+        trustproxy: 1,
+      });
+      const app = createApp();
+      expect(() => auth.init(app)).not.toThrow(); // none + trustproxy=1 → no throw
+    });
+
+    test('returns false for string "0"', () => {
+      // Line 301: normalized !== "0" — StringLiteral mutant
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'none' },
+        tls: { enabled: false },
+        trustproxy: '0',
+      });
+      const app = createApp();
+      expect(() => auth.init(app)).toThrow(); // "0" → disabled → throws
+    });
+
+    test('returns false for string "false"', () => {
+      // Line 301: normalized !== "false" — StringLiteral mutant
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'none' },
+        tls: { enabled: false },
+        trustproxy: 'false',
+      });
+      const app = createApp();
+      expect(() => auth.init(app)).toThrow(); // "false" → disabled → throws
+    });
+
+    test('returns false for empty string', () => {
+      // Line 301: normalized !== "" — StringLiteral mutant
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'none' },
+        tls: { enabled: false },
+        trustproxy: '  ', // trims to empty string
+      });
+      const app = createApp();
+      expect(() => auth.init(app)).toThrow(); // empty after trim → disabled → throws
+    });
+
+    test('returns true for string "true"', () => {
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'none' },
+        tls: { enabled: false },
+        trustproxy: 'true',
+      });
+      const app = createApp();
+      expect(() => auth.init(app)).not.toThrow();
+    });
+
+    test('returns true for string "1"', () => {
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'none' },
+        tls: { enabled: false },
+        trustproxy: '1',
+      });
+      const app = createApp();
+      expect(() => auth.init(app)).not.toThrow();
+    });
+
+    test('normalizes trustproxy string with trim and toLower', () => {
+      // Line 300: MethodExpression mutant that drops trim/toLower
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'none' },
+        tls: { enabled: false },
+        trustproxy: '  FALSE  ', // should normalize to 'false' → disabled
+      });
+      const app = createApp();
+      expect(() => auth.init(app)).toThrow();
+    });
+  });
+
+  describe('init session cookie configuration', () => {
+    test('sessionCookieSameSite falls back to "lax" when cookie.samesite is absent', () => {
+      // Line 317: serverConfiguration.cookie?.samesite || 'lax' — StringLiteral mutant (OptionalChaining)
+      mockGetServerConfiguration.mockReturnValue({ cookie: {} });
+      const app = createApp();
+      auth.init(app);
+
+      const sessionConfig = (session as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sessionConfig.cookie.sameSite).toBe('lax');
+    });
+
+    test('sessionCookieSameSite uses provided value when set', () => {
+      // Line 317: optional chaining mutant — cookie?.samesite vs cookie.samesite
+      mockGetServerConfiguration.mockReturnValue({ cookie: { samesite: 'strict' } });
+      const app = createApp();
+      auth.init(app);
+
+      const sessionConfig = (session as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sessionConfig.cookie.sameSite).toBe('strict');
+    });
+
+    test('session resave is false', () => {
+      // Line 341: BooleanLiteral true mutant
+      const app = createApp();
+      auth.init(app);
+
+      const sessionConfig = (session as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sessionConfig.resave).toBe(false);
+    });
+
+    test('session saveUninitialized is false', () => {
+      // Line 342: BooleanLiteral true mutant
+      const app = createApp();
+      auth.init(app);
+
+      const sessionConfig = (session as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sessionConfig.saveUninitialized).toBe(false);
+    });
+
+    test('session cookie httpOnly is true', () => {
+      // Line 343: httpOnly - ensure it is true
+      const app = createApp();
+      auth.init(app);
+
+      const sessionConfig = (session as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sessionConfig.cookie.httpOnly).toBe(true);
+    });
+  });
+
+  describe('_resetStrategyIdsForTests', () => {
+    test('actually resets strategy ids so re-init registers again', () => {
+      // Line 63: BlockStatement {} — if empty, strategy would persist across resets
+      const app1 = createApp();
+      registry.getState.mockReturnValue({
+        authentication: {
+          'basic.default': {
+            getId: vi.fn(() => 'basic.default'),
+            getStrategy: vi.fn(() => ({})),
+            getStrategyDescription: vi.fn(() => ({ type: 'basic', name: 'default' })),
+          },
+        },
+      });
+      auth.init(app1);
+      expect(auth.getAllIds()).toContain('basic.default');
+
+      auth._resetStrategyIdsForTests();
+      expect(auth.getAllIds()).not.toContain('basic.default');
+    });
+  });
+
+  describe('getAuthenticatedUsername optional chaining and trim', () => {
+    test('returns empty string when req.user is undefined (optional chaining)', async () => {
+      // Line 96: OptionalChaining mutant req.user.username → crash if user is undefined
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: {},
+        session: { maxconcurrentsessions: 1 },
+      });
+      const handler = getRouteHandler('post', '/login');
+      const req: any = {
+        // No user property
+        session: { cookie: {}, regenerate: vi.fn((done) => done()) },
+        sessionStore: {
+          all: vi.fn((done) => done(null, {})),
+          destroy: vi.fn(),
+        },
+        login: vi.fn((_user, done) => done()),
+      };
+      const res = createResponse();
+
+      // Should not crash (optional chain protects against undefined user)
+      await expect(handler(req, res)).resolves.toBeUndefined();
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('returns trimmed username (MethodExpression trim matters)', async () => {
+      // Line 96: MethodExpression mutant drops .trim() → untrimmed username used for session limit
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: {},
+        session: { maxconcurrentsessions: 1 },
+      });
+      const handler = getRouteHandler('post', '/login');
+      const req: any = {
+        body: { remember: true },
+        user: { username: '  trimmed-user  ' },
+        sessionID: 'test-trim-sid',
+        session: { cookie: {}, regenerate: vi.fn((done) => done()) },
+        sessionStore: {
+          all: vi.fn((done) => done(null, {})),
+          destroy: vi.fn(),
+        },
+        login: vi.fn((_user, done) => done()),
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      // Session limit was enforced with a non-empty (trimmed) username
+      expect(req.sessionStore.all).toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('returns empty string when username trims to empty, skipping session limit', async () => {
+      // Line 96: length === 0 check — whitespace username → no session limit
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: {},
+        session: { maxconcurrentsessions: 1 },
+      });
+      const handler = getRouteHandler('post', '/login');
+      const req: any = {
+        user: { username: '   ' },
+        session: { cookie: {}, regenerate: vi.fn((done) => done()) },
+        sessionStore: {
+          all: vi.fn((done) => done(null, {})),
+          destroy: vi.fn(),
+        },
+        login: vi.fn((_user, done) => done()),
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      expect(req.sessionStore.all).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('createLoginFinish completed flag', () => {
+    test('completed flag is set to true to prevent double-resolution', async () => {
+      // Lines 102, 105: ConditionalExpression false, BooleanLiteral false mutants
+      const handler = getRouteHandler('post', '/login');
+      const _resolveCallCount = { n: 0 };
+      const req: any = {
+        user: { username: 'john' },
+        session: {
+          cookie: {},
+          regenerate: vi.fn((done) => {
+            done(); // first callback
+            done(); // duplicate callback — should be a no-op
+          }),
+        },
+        login: vi.fn((_user, done) => done()),
+      };
+      const res = createResponse();
+
+      await handler(req, res);
+
+      // Response was set exactly once despite double callback
+      expect(res.set).toHaveBeenCalledTimes(3); // Cache-Control + Pragma + Expires
+      expect(res.status).toHaveBeenCalledTimes(1);
+      expect(mockRecordAuditEvent).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('logout typeof session.regenerate !== function check', () => {
+    test('returns 500 when session.regenerate is not a function', () => {
+      // Line 270: ConditionalExpression false mutant — removes typeof check
+      const handler = getRouteHandler('post', '/logout');
+      const req: any = {
+        logout: vi.fn((done) => done()),
+        session: {
+          regenerate: 'not-a-function', // not a function
+        },
+      };
+      const res = createResponse();
+
+      handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unable to clear session' });
+      expect(log.warn).toHaveBeenCalledWith(
+        'Unable to regenerate session during logout (session unavailable)',
+      );
+    });
+  });
+
+  describe('isTrustProxyEnabled edge cases', () => {
+    test('returns true for trustproxy=true (boolean true)', () => {
+      // Line 297: ConditionalExpression true would short-circuit returning true
+      // But the test for false (293: ConditionalExpression) — true boolean hits line 293
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'none' },
+        tls: { enabled: false },
+        trustproxy: true,
+      });
+      const app = createApp();
+      expect(() => auth.init(app)).not.toThrow();
+    });
+
+    test('returns false for trustproxy=-1 (negative number)', () => {
+      // Line 297: EqualityOperator >= mutant — -1 >= 0 would be true (wrong)
+      // With correct > 0, -1 > 0 is false → not trusted
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'none' },
+        tls: { enabled: false },
+        trustproxy: -1,
+      });
+      const app = createApp();
+      expect(() => auth.init(app)).toThrow(); // -1 not trusted → throw on samesite=none
+    });
+
+    test('returns false for trustproxy=0 with samesite=none (kills >= 0 mutant)', () => {
+      // Line 297: EqualityOperator >= mutant — 0 >= 0 would be true (wrong)
+      // With correct > 0: 0 > 0 is false → not trusted → samesite=none + !https → throws
+      // With >= 0 mutant: 0 >= 0 is true → trusted → samesite=none + https → no throw!
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'none' },
+        tls: { enabled: false },
+        trustproxy: 0,
+      });
+      const app = createApp();
+      expect(() => auth.init(app)).toThrow(); // 0 is not positive → not trusted → throw
+    });
+  });
+
+  describe('sessionCookieSameSite optional chaining and warn', () => {
+    test('handles undefined serverConfiguration.cookie gracefully', () => {
+      // Line 317: OptionalChaining cookie?.samesite — if no optional chain, crashes
+      mockGetServerConfiguration.mockReturnValue({
+        // No cookie property at all
+      });
+      const app = createApp();
+      expect(() => auth.init(app)).not.toThrow();
+      const sessionConfig = (session as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(sessionConfig.cookie.sameSite).toBe('lax');
+    });
+
+    test('does NOT warn when sameSite is not none', () => {
+      // Line 329: ConditionalExpression true — always warns, even for non-none sameSite
+      mockGetServerConfiguration.mockReturnValue({ cookie: { samesite: 'lax' } });
+      const app = createApp();
+      auth.init(app);
+
+      const warnCalls = (log.warn as ReturnType<typeof vi.fn>).mock.calls;
+      const hasSameSiteWarn = warnCalls.some(
+        ([msg]) => typeof msg === 'string' && msg.includes('COOKIE_SAMESITE=none'),
+      );
+      expect(hasSameSiteWarn).toBe(false);
+    });
+
+    test('warns when sameSite is none', () => {
+      // Line 329: ensures warn IS called when none (verifies condition is not just always-false)
+      mockGetServerConfiguration.mockReturnValue({
+        cookie: { samesite: 'none' },
+        tls: { enabled: true },
+      });
+      const app = createApp();
+      auth.init(app);
+
+      expect(log.warn).toHaveBeenCalledWith(
+        'DD_SERVER_COOKIE_SAMESITE=none requires HTTPS; forcing secure session cookie',
+      );
+    });
+  });
+
+  describe('LokiStore path configuration', () => {
+    test('LokiStore path is built from store config (not empty string)', () => {
+      // Line 336: StringLiteral `` mutant — empty path would cause session store issues
+      const app = createApp();
+      auth.init(app);
+
+      expect(mockLokiStore).toHaveBeenCalledWith(
+        expect.objectContaining({
+          path: '/test/store/db.json',
+        }),
+      );
+    });
+  });
+
+  describe('rate limiter configuration', () => {
+    test('authLimiter uses 15-minute window (15 * 60 * 1000 ms)', () => {
+      // Line 377: ArithmeticOperator mutant — 15 * 60 / 1000 or 15 / 60
+      const app = createApp();
+      auth.init(app);
+
+      expect(mockRateLimit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          windowMs: 15 * 60 * 1000,
+        }),
+      );
+    });
+
+    test('authLimiter standardHeaders is true', () => {
+      // Line 379: BooleanLiteral false mutant
+      const app = createApp();
+      auth.init(app);
+
+      expect(mockRateLimit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          standardHeaders: true,
+        }),
+      );
+    });
+
+    test('authLimiter legacyHeaders is false', () => {
+      // Line 380: BooleanLiteral true mutant
+      const app = createApp();
+      auth.init(app);
+
+      expect(mockRateLimit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          legacyHeaders: false,
+        }),
+      );
+    });
+
+    test('authLimiter validate xForwardedForHeader is false', () => {
+      // Line 381: ObjectLiteral {} mutant, BooleanLiteral true mutant
+      const app = createApp();
+      auth.init(app);
+
+      expect(mockRateLimit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          validate: { xForwardedForHeader: false },
+        }),
+      );
+    });
+  });
 });
