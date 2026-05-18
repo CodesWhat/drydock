@@ -1142,7 +1142,7 @@ describe('runConfigMigrateCommandIfRequested', () => {
     expect(blankCount).toBeGreaterThanOrEqual(2);
     // Verify blank lines are in correct positions (after Usage line and after description)
     const usageIdx = collector.out.findIndex((l) => l.includes('Usage:'));
-    const optionsIdx = collector.out.findIndex((l) => l === 'Options:');
+    const optionsIdx = collector.out.indexOf('Options:');
     expect(collector.out[usageIdx + 1]).toBe(''); // blank line after Usage
     expect(collector.out[optionsIdx - 1]).toBe(''); // blank line before Options
   });

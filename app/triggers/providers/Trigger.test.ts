@@ -8717,9 +8717,7 @@ describe('canonicalizeReportName regex coverage', () => {
     };
     await trigger.handleContainerReport(report);
 
-    expect(triggerSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'myapp' }),
-    );
+    expect(triggerSpy).toHaveBeenCalledWith(expect.objectContaining({ name: 'myapp' }));
   });
 
   test('does NOT strip a 11-char prefix (must be exactly 12)', async () => {
@@ -8740,9 +8738,7 @@ describe('canonicalizeReportName regex coverage', () => {
     await trigger.handleContainerReport(report);
 
     // Name unchanged
-    expect(triggerSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'abc123def45_myapp' }),
-    );
+    expect(triggerSpy).toHaveBeenCalledWith(expect.objectContaining({ name: 'abc123def45_myapp' }));
   });
 
   test('does NOT strip a 13-char prefix (must be exactly 12)', async () => {
@@ -8784,9 +8780,7 @@ describe('canonicalizeReportName regex coverage', () => {
     };
     await trigger.handleContainerReport(report);
 
-    expect(triggerSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'myapp' }),
-    );
+    expect(triggerSpy).toHaveBeenCalledWith(expect.objectContaining({ name: 'myapp' }));
   });
 
   test('does NOT match non-hex characters in prefix', async () => {
@@ -8847,7 +8841,13 @@ describe('getRuntimeContextString and isBatchRuntimeContext coverage', () => {
     });
 
     const containers = [
-      { id: 'c1', name: 'app', watcher: 'local', updateAvailable: true, updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' } },
+      {
+        id: 'c1',
+        name: 'app',
+        watcher: 'local',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
     ] as any;
 
     const result = trigger.renderBatchTitle(containers, { title: 'My Custom Title', body: 'body' });
@@ -8861,7 +8861,13 @@ describe('getRuntimeContextString and isBatchRuntimeContext coverage', () => {
     });
 
     const containers = [
-      { id: 'c1', name: 'app', watcher: 'local', updateAvailable: true, updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' } },
+      {
+        id: 'c1',
+        name: 'app',
+        watcher: 'local',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
     ] as any;
 
     // null runtimeContext should not provide override
@@ -8877,7 +8883,13 @@ describe('getRuntimeContextString and isBatchRuntimeContext coverage', () => {
     });
 
     const containers = [
-      { id: 'c1', name: 'app', watcher: 'local', updateAvailable: true, updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' } },
+      {
+        id: 'c1',
+        name: 'app',
+        watcher: 'local',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
     ] as any;
 
     // primitive runtimeContext should not provide override
@@ -8903,7 +8915,13 @@ describe('getRuntimeContextString and isBatchRuntimeContext coverage', () => {
     });
 
     const containers = [
-      { id: 'c1', name: 'app', watcher: 'local', updateAvailable: true, updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' } },
+      {
+        id: 'c1',
+        name: 'app',
+        watcher: 'local',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
     ] as any;
 
     const result = trigger.renderBatchBody(containers, { title: 'title', body: 42 });
@@ -8957,7 +8975,7 @@ describe('truncateReleaseNotesBody via getTemplateContainer (renderSimpleBody)',
     // renderSimpleBody calls getTemplateContainer which calls truncateReleaseNotesBody
     // The body should be truncated to 500 chars + '...'
     const templateContainer = (trigger as any).getTemplateContainer(container);
-    expect(templateContainer.result.releaseNotes.body).toBe('a'.repeat(500) + '...');
+    expect(templateContainer.result.releaseNotes.body).toBe(`${'a'.repeat(500)}...`);
   });
 
   test('release notes body shorter than maxLength is returned as-is', async () => {
@@ -9056,7 +9074,9 @@ describe('splitAndTrimCommaSeparatedList coverage (via isTriggerIncludedOrExclud
 
 describe('doesReferenceMatchId coverage', () => {
   test('exact match returns true', () => {
-    expect(Trigger.doesReferenceMatchId('trigger.test.pushover', 'trigger.test.pushover')).toBe(true);
+    expect(Trigger.doesReferenceMatchId('trigger.test.pushover', 'trigger.test.pushover')).toBe(
+      true,
+    );
   });
 
   test('name-only reference matches last part of id', () => {
@@ -9084,7 +9104,9 @@ describe('doesReferenceMatchId coverage', () => {
 
   test('reference matching is case-insensitive', () => {
     expect(Trigger.doesReferenceMatchId('PUSHOVER', 'trigger.test.pushover')).toBe(true);
-    expect(Trigger.doesReferenceMatchId('TRIGGER.TEST.PUSHOVER', 'trigger.test.pushover')).toBe(true);
+    expect(Trigger.doesReferenceMatchId('TRIGGER.TEST.PUSHOVER', 'trigger.test.pushover')).toBe(
+      true,
+    );
   });
 
   test('triggerIdParts.length === 1 does not enter provider.name branch', () => {
@@ -9175,7 +9197,9 @@ describe('seedNotificationHistoryFromStore targeted mutant coverage', () => {
 
     // Debug log should mention '2 pre-existing update-available entries'
     expect(debugSpy).toHaveBeenCalledWith(
-      expect.stringMatching(/Seeded notification history with 2 pre-existing update-available entries/),
+      expect.stringMatching(
+        /Seeded notification history with 2 pre-existing update-available entries/,
+      ),
     );
   });
 
@@ -9196,7 +9220,9 @@ describe('seedNotificationHistoryFromStore targeted mutant coverage', () => {
     trigger.init();
 
     expect(debugSpy).toHaveBeenCalledWith(
-      expect.stringMatching(/Seeded notification history with 1 pre-existing update-available entry$/),
+      expect.stringMatching(
+        /Seeded notification history with 1 pre-existing update-available entry$/,
+      ),
     );
   });
 
@@ -9289,7 +9315,8 @@ describe('security digest severity bucket counting precision', () => {
       ...configurationValid,
       mode: 'simple',
       securitymode: 'digest',
-      securitydigesttitle: 'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
+      securitydigesttitle:
+        'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
     });
     trigger.init();
 
@@ -9311,7 +9338,7 @@ describe('security digest severity bucket counting precision', () => {
       completedAt: '2026-04-17T10:01:00.000Z',
     });
 
-    const ctx = (triggerBatchSpy.mock.calls[0]?.[1] as any);
+    const ctx = triggerBatchSpy.mock.calls[0]?.[1] as any;
     // criticalCount=1 (has critical), highCount=0 (also has critical so excluded)
     expect(ctx.title).toBe('c=1 h=0 m=0 l=0 u=0');
   });
@@ -9321,7 +9348,8 @@ describe('security digest severity bucket counting precision', () => {
       ...configurationValid,
       mode: 'simple',
       securitymode: 'digest',
-      securitydigesttitle: 'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
+      securitydigesttitle:
+        'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
     });
     trigger.init();
 
@@ -9342,7 +9370,7 @@ describe('security digest severity bucket counting precision', () => {
       completedAt: '2026-04-17T10:01:00.000Z',
     });
 
-    const ctx = (triggerBatchSpy.mock.calls[0]?.[1] as any);
+    const ctx = triggerBatchSpy.mock.calls[0]?.[1] as any;
     // highCount=1 (no critical, has high), mediumCount=0 (also has high)
     expect(ctx.title).toBe('c=0 h=1 m=0 l=0 u=0');
   });
@@ -9352,7 +9380,8 @@ describe('security digest severity bucket counting precision', () => {
       ...configurationValid,
       mode: 'simple',
       securitymode: 'digest',
-      securitydigesttitle: 'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
+      securitydigesttitle:
+        'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
     });
     trigger.init();
 
@@ -9373,7 +9402,7 @@ describe('security digest severity bucket counting precision', () => {
       completedAt: '2026-04-17T10:01:00.000Z',
     });
 
-    const ctx = (triggerBatchSpy.mock.calls[0]?.[1] as any);
+    const ctx = triggerBatchSpy.mock.calls[0]?.[1] as any;
     expect(ctx.title).toBe('c=0 h=0 m=1 l=0 u=0');
   });
 
@@ -9382,7 +9411,8 @@ describe('security digest severity bucket counting precision', () => {
       ...configurationValid,
       mode: 'simple',
       securitymode: 'digest',
-      securitydigesttitle: 'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
+      securitydigesttitle:
+        'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
     });
     trigger.init();
 
@@ -9403,7 +9433,7 @@ describe('security digest severity bucket counting precision', () => {
       completedAt: '2026-04-17T10:01:00.000Z',
     });
 
-    const ctx = (triggerBatchSpy.mock.calls[0]?.[1] as any);
+    const ctx = triggerBatchSpy.mock.calls[0]?.[1] as any;
     expect(ctx.title).toBe('c=0 h=0 m=1 l=0 u=0');
   });
 
@@ -9412,7 +9442,8 @@ describe('security digest severity bucket counting precision', () => {
       ...configurationValid,
       mode: 'simple',
       securitymode: 'digest',
-      securitydigesttitle: 'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
+      securitydigesttitle:
+        'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
     });
     trigger.init();
 
@@ -9433,7 +9464,7 @@ describe('security digest severity bucket counting precision', () => {
       completedAt: '2026-04-17T10:01:00.000Z',
     });
 
-    const ctx = (triggerBatchSpy.mock.calls[0]?.[1] as any);
+    const ctx = triggerBatchSpy.mock.calls[0]?.[1] as any;
     expect(ctx.title).toBe('c=0 h=0 m=0 l=1 u=0');
   });
 
@@ -9442,7 +9473,8 @@ describe('security digest severity bucket counting precision', () => {
       ...configurationValid,
       mode: 'simple',
       securitymode: 'digest',
-      securitydigesttitle: 'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
+      securitydigesttitle:
+        'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
     });
     trigger.init();
 
@@ -9463,7 +9495,7 @@ describe('security digest severity bucket counting precision', () => {
       completedAt: '2026-04-17T10:01:00.000Z',
     });
 
-    const ctx = (triggerBatchSpy.mock.calls[0]?.[1] as any);
+    const ctx = triggerBatchSpy.mock.calls[0]?.[1] as any;
     expect(ctx.title).toBe('c=0 h=0 m=0 l=0 u=1');
   });
 
@@ -9472,7 +9504,8 @@ describe('security digest severity bucket counting precision', () => {
       ...configurationValid,
       mode: 'simple',
       securitymode: 'digest',
-      securitydigesttitle: 'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
+      securitydigesttitle:
+        'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
     });
     trigger.init();
 
@@ -9494,7 +9527,7 @@ describe('security digest severity bucket counting precision', () => {
       completedAt: '2026-04-17T10:01:00.000Z',
     });
 
-    const ctx = (triggerBatchSpy.mock.calls[0]?.[1] as any);
+    const ctx = triggerBatchSpy.mock.calls[0]?.[1] as any;
     expect(ctx.title).toBe('c=0 h=0 m=0 l=0 u=0');
   });
 
@@ -9507,11 +9540,36 @@ describe('security digest severity bucket counting precision', () => {
     trigger.init();
 
     // Insert in reverse severity order
-    await trigger.handleSecurityAlertEvent({ containerName: 'unk', details: '', cycleId: 'c', summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 1 } });
-    await trigger.handleSecurityAlertEvent({ containerName: 'low', details: '', cycleId: 'c', summary: { critical: 0, high: 0, medium: 0, low: 1, unknown: 0 } });
-    await trigger.handleSecurityAlertEvent({ containerName: 'med', details: '', cycleId: 'c', summary: { critical: 0, high: 0, medium: 1, low: 0, unknown: 0 } });
-    await trigger.handleSecurityAlertEvent({ containerName: 'hi', details: '', cycleId: 'c', summary: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 } });
-    await trigger.handleSecurityAlertEvent({ containerName: 'crit', details: '', cycleId: 'c', summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 } });
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'unk',
+      details: '',
+      cycleId: 'c',
+      summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 1 },
+    });
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'low',
+      details: '',
+      cycleId: 'c',
+      summary: { critical: 0, high: 0, medium: 0, low: 1, unknown: 0 },
+    });
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'med',
+      details: '',
+      cycleId: 'c',
+      summary: { critical: 0, high: 0, medium: 1, low: 0, unknown: 0 },
+    });
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'hi',
+      details: '',
+      cycleId: 'c',
+      summary: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 },
+    });
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'crit',
+      details: '',
+      cycleId: 'c',
+      summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 },
+    });
 
     const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
 
@@ -9805,20 +9863,10 @@ describe('getNotificationEvent agent event handling', () => {
 
     const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
 
-    const container = {
-      id: 'c1',
-      name: 'my-agent',
-      watcher: 'agent',
-      updateAvailable: false,
-      updateKind: { kind: 'unknown', semverDiff: 'unknown' },
-      notificationEvent: {
-        kind: 'agent-disconnect',
-        agentName: 'my-agent',
-        reason: 'connection lost',
-      },
-    };
-
-    await trigger.handleAgentDisconnectedEvent({ agentName: 'my-agent', reason: 'connection lost' });
+    await trigger.handleAgentDisconnectedEvent({
+      agentName: 'my-agent',
+      reason: 'connection lost',
+    });
 
     expect(triggerSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -10142,9 +10190,7 @@ describe('warnIfDigestRoutingIsSuppressed coverage', () => {
       changed: true,
     } as any);
 
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('excludes this trigger'),
-    );
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('excludes this trigger'));
   });
 
   test('simple mode does NOT warn even if dispatch is disabled', async () => {
