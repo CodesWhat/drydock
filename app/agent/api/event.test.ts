@@ -4,16 +4,19 @@ import { sanitizeLogParam } from '../../log/sanitize.js';
 import * as storeContainer from '../../store/container.js';
 import * as eventApi from './event.js';
 
-const { mockLogInfo, mockLogWarn, mockLogError, mockLogDebug } = vi.hoisted(() => ({
-  mockLogInfo: vi.fn(),
-  mockLogWarn: vi.fn(),
-  mockLogError: vi.fn(),
-  mockLogDebug: vi.fn(),
-}));
+const { mockLogInfo, mockLogWarn, mockLogError, mockLogDebug, mockLoggerChild } = vi.hoisted(
+  () => ({
+    mockLogInfo: vi.fn(),
+    mockLogWarn: vi.fn(),
+    mockLogError: vi.fn(),
+    mockLogDebug: vi.fn(),
+    mockLoggerChild: vi.fn(),
+  }),
+);
 
 vi.mock('../../log/index.js', () => ({
   default: {
-    child: () => ({
+    child: mockLoggerChild.mockReturnValue({
       info: mockLogInfo,
       warn: mockLogWarn,
       error: mockLogError,
@@ -120,7 +123,7 @@ describe('agent API event', () => {
       expect(ackPayload).toContain('linux');
       expect(ackPayload).toContain('x64');
       expect(ackPayload).toContain('"cpus":8');
-      expect(ackPayload).toContain('"memoryGb":16');
+      expect(ackPayload).toContain('"memoryGb":16,');
       expect(ackPayload).toContain(
         '"containers":{"total":3,"running":2,"stopped":1,"updatesAvailable":0}',
       );
@@ -370,6 +373,24 @@ describe('agent API event', () => {
       expect(res.write).toHaveBeenCalled();
       const payload = res.write.mock.calls[0][0];
       expect(payload).toContain('dd:container-removed');
+      // Kill 314:42 ObjectLiteral {} mutant: verify 'id' key is present
+      const parsed = JSON.parse(payload.replace(/^data: /, ''));
+      expect(parsed.data).toEqual({ id: 'c1' });
+    });
+
+    test('container-removed handler should include only id, not other container fields', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const removedHandler = event.registerContainerRemoved.mock.calls[0][0];
+      removedHandler({ id: 'container-to-remove', name: 'nginx', watcher: 'local' });
+
+      const payload = res.write.mock.calls[0][0];
+      const parsed = JSON.parse(payload.replace(/^data: /, ''));
+      // Should only have id, not name or watcher
+      expect(parsed.data).toEqual({ id: 'container-to-remove' });
+      expect(parsed.data.name).toBeUndefined();
     });
 
     test('update-applied handler should send SSE to connected clients', () => {
@@ -757,6 +778,752 @@ describe('agent API event', () => {
       const payload = res.write.mock.calls[0][0];
       expect(payload).toContain('dd:watcher-snapshot');
       expect(payload).toContain('"data":"invalid-snapshot"');
+    });
+  });
+
+  describe('allocateSseClientId', () => {
+    test('should rollover to id=1 when starting from MAX_SAFE_INTEGER', () => {
+      eventApi._setNextSseClientIdForTests(Number.MAX_SAFE_INTEGER);
+
+      // Connect two clients: first gets id=1 (after rollover), second gets id=2
+      const req1 = { ip: '127.0.0.1', on: vi.fn() };
+      const res1 = { writeHead: vi.fn(), write: vi.fn() };
+      const req2 = { ip: '127.0.0.2', on: vi.fn() };
+      const res2 = { writeHead: vi.fn(), write: vi.fn() };
+
+      eventApi.subscribeEvents(req1, res1);
+      eventApi.subscribeEvents(req2, res2);
+
+      // Both clients connected; trigger event
+      eventApi.initEvents();
+      res1.write.mockClear();
+      res2.write.mockClear();
+      const addedHandler = event.registerContainerAdded.mock.calls[0][0];
+      addedHandler({ id: 'cx' });
+
+      expect(res1.write).toHaveBeenCalled();
+      expect(res2.write).toHaveBeenCalled();
+
+      // Close first client; only second should get events
+      const firstClose = req1.on.mock.calls[0][1];
+      firstClose();
+      res1.write.mockClear();
+      res2.write.mockClear();
+      addedHandler({ id: 'cy' });
+      expect(res1.write).not.toHaveBeenCalled();
+      expect(res2.write).toHaveBeenCalled();
+    });
+
+    test('should allocate id=1 (not MAX_SAFE_INTEGER+1) after rollover from MAX_SAFE_INTEGER', () => {
+      // Verify rollover: if BlockStatement mutant applies (nextSseClientId=0 skipped),
+      // then += 1 gives MAX_SAFE_INTEGER (no real change in JS). The filter
+      // c.id !== client.id won't work correctly for a second client with the same ID.
+      eventApi._setNextSseClientIdForTests(Number.MAX_SAFE_INTEGER);
+
+      // First client after rollover should get id=1
+      eventApi.subscribeEvents(req, res);
+
+      // Reset to make a second client with id=2
+      const req2 = { ip: '127.0.0.2', on: vi.fn() };
+      const res2 = { writeHead: vi.fn(), write: vi.fn() };
+      eventApi.subscribeEvents(req2, res2);
+
+      // If rollover worked: client1.id=1, client2.id=2 - distinct, so close #1 only removes #1
+      // If mutant (no rollover): both ids = MAX_SAFE_INTEGER → close #1 removes both
+      const close1 = req.on.mock.calls[0][1];
+      close1();
+
+      // trigger event; only res2 should fire
+      eventApi.initEvents();
+      res.write.mockClear();
+      res2.write.mockClear();
+      const addedHandler = event.registerContainerAdded.mock.calls[0][0];
+      addedHandler({ id: 'test' });
+      expect(res2.write).toHaveBeenCalled();
+      expect(res.write).not.toHaveBeenCalled();
+    });
+
+    test('should increment id by exactly 1 each connection from id=0', () => {
+      eventApi._setNextSseClientIdForTests(0);
+
+      const req1 = { ip: '127.0.0.1', on: vi.fn() };
+      const res1 = { writeHead: vi.fn(), write: vi.fn() };
+      const req2 = { ip: '127.0.0.2', on: vi.fn() };
+      const res2 = { writeHead: vi.fn(), write: vi.fn() };
+
+      eventApi.subscribeEvents(req1, res1);
+      eventApi.subscribeEvents(req2, res2);
+
+      // Two clients should have distinct IDs (1 and 2), confirmed by close handler filtering
+      res1.write.mockClear();
+      res2.write.mockClear();
+
+      const firstClose = req1.on.mock.calls[0][1];
+      firstClose();
+
+      // Trigger an event: only second client should receive it
+      eventApi.initEvents();
+      const addedHandler = event.registerContainerAdded.mock.calls[0][0];
+      addedHandler({ id: 'cx' });
+
+      expect(res1.write).not.toHaveBeenCalled();
+      expect(res2.write).toHaveBeenCalled();
+    });
+
+    test('should not rollover when at MAX_SAFE_INTEGER minus 1', () => {
+      // With the >= check: MAX_SAFE_INTEGER-1 < MAX_SAFE_INTEGER so no rollover
+      // With the > mutant: same — MAX_SAFE_INTEGER-1 < MAX_SAFE_INTEGER so no rollover
+      // These are distinguishable at exactly MAX_SAFE_INTEGER (above test)
+      eventApi._setNextSseClientIdForTests(Number.MAX_SAFE_INTEGER - 1);
+      eventApi.subscribeEvents(req, res);
+      expect(res.write).toHaveBeenCalled();
+      const ack = res.write.mock.calls[0][0];
+      expect(ack).toContain('dd:ack');
+    });
+  });
+
+  describe('toAgentRuntimeEnvEntries filter', () => {
+    test('should filter out entries with non-string key', () => {
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updatedHandler = event.registerContainerUpdated.mock.calls[0][0];
+      updatedHandler({
+        id: 'c1',
+        details: {
+          env: [
+            { key: 123, value: 'should-be-filtered' },
+            { key: 'VALID_KEY', value: 'valid-value' },
+          ],
+        },
+      });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).not.toContain('"key":123');
+      expect(payload).toContain('"VALID_KEY"');
+      expect(payload).toContain('"valid-value"');
+    });
+
+    test('should filter out entries with non-string value', () => {
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updatedHandler = event.registerContainerUpdated.mock.calls[0][0];
+      updatedHandler({
+        id: 'c1',
+        details: {
+          env: [
+            { key: 'BAD_VAL', value: 42 },
+            { key: 'GOOD', value: 'yes' },
+          ],
+        },
+      });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).not.toContain('"BAD_VAL"');
+      expect(payload).toContain('"GOOD"');
+      expect(payload).toContain('"yes"');
+    });
+
+    test('should filter out null entries', () => {
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updatedHandler = event.registerContainerUpdated.mock.calls[0][0];
+      updatedHandler({
+        id: 'c1',
+        details: {
+          env: [null, undefined, { key: 'KEPT', value: 'yes' }],
+        },
+      });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"KEPT"');
+      expect(payload).toContain('"yes"');
+    });
+
+    test('should filter out primitive (non-object) entries', () => {
+      // Tests the !!entry && typeof entry === 'object' condition
+      // A number like 42 is truthy but typeof 42 !== 'object', should be filtered
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updatedHandler = event.registerContainerUpdated.mock.calls[0][0];
+      updatedHandler({
+        id: 'c1',
+        details: {
+          env: [42, 'a-string', { key: 'KEPT', value: 'kept-val' }],
+        },
+      });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"KEPT"');
+      expect(payload).toContain('"kept-val"');
+      // The primitive entries should not appear as keys
+      expect(payload).not.toContain('"42"');
+    });
+
+    test('should return empty array when all entries are filtered out', () => {
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updatedHandler = event.registerContainerUpdated.mock.calls[0][0];
+      updatedHandler({
+        id: 'c1',
+        details: {
+          env: [null, { key: 123, value: 456 }],
+        },
+      });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"env":[]');
+    });
+  });
+
+  describe('sanitizeContainerDetailsForAgentSse', () => {
+    test('should return falsy details unchanged (null)', () => {
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updatedHandler = event.registerContainerUpdated.mock.calls[0][0];
+      updatedHandler({ id: 'c1', details: null });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"details":null');
+    });
+
+    test('should return string details unchanged', () => {
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updatedHandler = event.registerContainerUpdated.mock.calls[0][0];
+      updatedHandler({ id: 'c1', details: 'raw-string' });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"details":"raw-string"');
+    });
+
+    test('should return number details unchanged (non-object non-falsy)', () => {
+      // Tests the `typeof details !== 'object'` condition with a number
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const updatedHandler = event.registerContainerUpdated.mock.calls[0][0];
+      updatedHandler({ id: 'c1', details: 42 });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"details":42');
+    });
+  });
+
+  describe('sanitizeContainerLifecyclePayloadForAgentSse', () => {
+    test('should pass through payload without details key', () => {
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const addedHandler = event.registerContainerAdded.mock.calls[0][0];
+      addedHandler({ id: 'c1', name: 'no-details-key' });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"name":"no-details-key"');
+    });
+
+    test('should pass through null payload unchanged', () => {
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const addedHandler = event.registerContainerAdded.mock.calls[0][0];
+      addedHandler(null);
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"data":null');
+    });
+
+    test('should pass through number payload unchanged (non-object truthy)', () => {
+      // Tests the `typeof payload !== 'object'` condition with a number
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const addedHandler = event.registerContainerAdded.mock.calls[0][0];
+      addedHandler(42);
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"data":42');
+    });
+
+    test('should wrap sanitized details when details key is explicitly present', () => {
+      // Tests the !Object.hasOwn condition: when 'details' IS in payload, sanitize it
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const addedHandler = event.registerContainerAdded.mock.calls[0][0];
+      addedHandler({
+        id: 'c1',
+        details: {
+          env: [{ key: 'FOO', value: 'bar' }],
+        },
+      });
+
+      const payload = res.write.mock.calls[0][0];
+      // details should be sanitized (env entries preserved as RuntimeEnvEntry objects)
+      expect(payload).toContain('"key":"FOO"');
+      expect(payload).toContain('"value":"bar"');
+    });
+
+    test('should return sanitized payload when details key is present (BlockStatement kill)', () => {
+      // Kill BlockStatement mutant at 119:54: if hasOwn check fails to return payload,
+      // it proceeds to sanitize. Test that EXISTING details key does trigger sanitization.
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const addedHandler = event.registerContainerAdded.mock.calls[0][0];
+      // Payload with 'details' key containing array env
+      addedHandler({ id: 'c2', name: 'container', details: { env: [{ key: 'X', value: 'y' }] } });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"name":"container"');
+      expect(payload).toContain('"key":"X"');
+    });
+  });
+
+  describe('getAgentContainerSsePayload', () => {
+    test('should use raw store data when container id string present and raw found', () => {
+      const rawContainer = { id: 'c1', name: 'from-store', watcher: 'local' };
+      storeContainer.getContainerRaw.mockReturnValue(rawContainer);
+
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const addedHandler = event.registerContainerAdded.mock.calls[0][0];
+      addedHandler({ id: 'c1', name: 'event-version' });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"name":"from-store"');
+      expect(payload).not.toContain('"name":"event-version"');
+    });
+
+    test('should fall through to sanitize when container id is not a string', () => {
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const addedHandler = event.registerContainerAdded.mock.calls[0][0];
+      addedHandler({ id: 42, name: 'numeric-id' });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"name":"numeric-id"');
+      // getContainerRaw should not be called with non-string id
+      expect(storeContainer.getContainerRaw).not.toHaveBeenCalled();
+    });
+
+    test('should fall through when raw lookup returns undefined', () => {
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const addedHandler = event.registerContainerAdded.mock.calls[0][0];
+      addedHandler({ id: 'unknown', name: 'event-version' });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"name":"event-version"');
+    });
+
+    test('should pass through number payload without calling getContainerRaw', () => {
+      // Tests typeof payload === 'object' condition: a number is not an object,
+      // so getContainerRaw should not be called
+      storeContainer.getContainerRaw.mockReturnValue(undefined);
+
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const addedHandler = event.registerContainerAdded.mock.calls[0][0];
+      addedHandler(99);
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"data":99');
+      expect(storeContainer.getContainerRaw).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('sanitizeUpdateAppliedPayloadForAgentSse', () => {
+    test('should pass string payload through unchanged with exact string value', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const handler = event.registerContainerUpdateApplied.mock.calls[0][0];
+      handler('my_container');
+
+      const payload = res.write.mock.calls[0][0];
+      // Exact string should be the data value, not wrapped in an object
+      expect(payload).toContain('"data":"my_container"');
+      expect(payload).not.toContain('"containerId"');
+    });
+
+    test('should pass string payload through (not as object) to kill BlockStatement mutant', () => {
+      // Kill 195:36 BlockStatement: if block is empty, string falls through to
+      // the `!payload || typeof payload !== 'object'` check which is true for string,
+      // so it still returns. But then it loses the object shape check path.
+      // Actually we need to verify that after the first if, the function returns early.
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const handler = event.registerContainerUpdateApplied.mock.calls[0][0];
+      handler('the-container-name');
+
+      const payload = res.write.mock.calls[0][0];
+      const parsed = JSON.parse(payload.replace(/^data: /, ''));
+      // Should be the exact string, not an object with containerId etc.
+      expect(parsed.data).toBe('the-container-name');
+    });
+
+    test('should pass number payload through (non-object non-string)', () => {
+      // Tests 198:19 `typeof payload !== 'object' → false`
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const handler = event.registerContainerUpdateApplied.mock.calls[0][0];
+      handler(42);
+
+      const payload = res.write.mock.calls[0][0];
+      const parsed = JSON.parse(payload.replace(/^data: /, ''));
+      expect(parsed.data).toBe(42);
+    });
+
+    test('should use empty string when containerId is null', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const handler = event.registerContainerUpdateApplied.mock.calls[0][0];
+      handler({ containerName: 'nginx', containerId: null });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"containerId":""');
+    });
+
+    test('should use null when batchId is null', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const handler = event.registerContainerUpdateApplied.mock.calls[0][0];
+      handler({ containerName: 'nginx', batchId: null });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"batchId":null');
+    });
+
+    test('should preserve batchId when set', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const handler = event.registerContainerUpdateApplied.mock.calls[0][0];
+      handler({ containerName: 'nginx', batchId: 'batch-xyz' });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"batchId":"batch-xyz"');
+    });
+
+    test('should omit operationId when not set', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const handler = event.registerContainerUpdateApplied.mock.calls[0][0];
+      handler({ containerName: 'nginx' });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).not.toContain('"operationId"');
+    });
+  });
+
+  describe('sanitizeUpdateFailedPayloadForAgentSse', () => {
+    test('should use empty string phase when phase is null', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const handler = event.registerContainerUpdateFailed.mock.calls[0][0];
+      handler({ containerName: 'nginx', error: 'boom', phase: null });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"phase":""');
+    });
+
+    test('should use empty string containerId when containerId is null', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const handler = event.registerContainerUpdateFailed.mock.calls[0][0];
+      handler({ containerName: 'nginx', error: 'boom', containerId: null });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"containerId":""');
+    });
+
+    test('should include rollbackReason when non-empty', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const handler = event.registerContainerUpdateFailed.mock.calls[0][0];
+      handler({ containerName: 'nginx', error: 'boom', rollbackReason: 'health-check' });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"rollbackReason":"health-check"');
+    });
+
+    test('should omit rollbackReason when it is a non-string type', () => {
+      // Tests 224:9 `typeof payload.rollbackReason === 'string' → true`
+      // If mutant applies, non-string rollbackReason would still be included
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const handler = event.registerContainerUpdateFailed.mock.calls[0][0];
+      handler({ containerName: 'nginx', error: 'boom', rollbackReason: 42 });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).not.toContain('"rollbackReason"');
+    });
+  });
+
+  describe('sanitizeSecurityAlertPayloadForAgentSse', () => {
+    test('should pass through null payload unchanged', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const handler = event.registerSecurityAlert.mock.calls[0][0];
+      handler(null);
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"data":null');
+    });
+
+    test('should pass through string payload unchanged', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const handler = event.registerSecurityAlert.mock.calls[0][0];
+      handler('alert-string');
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"data":"alert-string"');
+    });
+
+    test('should include summary and status from object payload', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const handler = event.registerSecurityAlert.mock.calls[0][0];
+      handler({
+        containerName: 'nginx',
+        details: 'cve details',
+        status: 'warning',
+        summary: 'summary text',
+        blockingCount: 0,
+        cycleId: 'cycle-1',
+        extraField: 'should-be-stripped',
+      });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"summary":"summary text"');
+      expect(payload).toContain('"status":"warning"');
+      expect(payload).not.toContain('"extraField"');
+    });
+  });
+
+  describe('sanitizeSecurityScanCycleCompletePayloadForAgentSse', () => {
+    test('should pass through null payload unchanged', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const handler = event.registerSecurityScanCycleComplete.mock.calls[0][0];
+      handler(null);
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"data":null');
+    });
+
+    test('should pass through string payload unchanged', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const handler = event.registerSecurityScanCycleComplete.mock.calls[0][0];
+      handler('cycle-string');
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"data":"cycle-string"');
+    });
+
+    test('should strip extra fields and keep only expected keys', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const handler = event.registerSecurityScanCycleComplete.mock.calls[0][0];
+      handler({
+        cycleId: 'cycle-xyz',
+        scannedCount: 3,
+        alertCount: 1,
+        startedAt: '2026-04-17T22:30:00.000Z',
+        completedAt: '2026-04-17T22:30:10.000Z',
+        extraField: 'should-be-stripped',
+      });
+
+      const payload = res.write.mock.calls[0][0];
+      expect(payload).toContain('"cycleId":"cycle-xyz"');
+      expect(payload).toContain('"scannedCount":3');
+      expect(payload).toContain('"alertCount":1');
+      expect(payload).not.toContain('"extraField"');
+    });
+  });
+
+  describe('container summary cache', () => {
+    test('should recompute summary when cache expires', () => {
+      // First call - creates cache
+      eventApi.subscribeEvents(req, res);
+      expect(storeContainer.getContainers).toHaveBeenCalledTimes(1);
+
+      // Advance time beyond cache TTL (2000ms)
+      mockedNow += 5_000;
+      vi.spyOn(Date, 'now').mockReturnValue(mockedNow);
+
+      const req2 = { ip: '127.0.0.3', on: vi.fn() };
+      const res2 = { writeHead: vi.fn(), write: vi.fn() };
+      eventApi.subscribeEvents(req2, res2);
+
+      // Should recompute since cache is expired
+      expect(storeContainer.getContainers).toHaveBeenCalledTimes(2);
+    });
+
+    test('cache expiry uses strict greater-than (expiresAtMs > nowMs)', () => {
+      // Connect first client - cache set with expiresAtMs = mockedNow + 2000
+      eventApi.subscribeEvents(req, res);
+      expect(storeContainer.getContainers).toHaveBeenCalledTimes(1);
+
+      // Advance time to exactly expiresAtMs (cache should be considered expired - not >)
+      mockedNow += 2_000;
+      vi.spyOn(Date, 'now').mockReturnValue(mockedNow);
+
+      const req2 = { ip: '127.0.0.3', on: vi.fn() };
+      const res2 = { writeHead: vi.fn(), write: vi.fn() };
+      eventApi.subscribeEvents(req2, res2);
+
+      // expiresAtMs == nowMs means NOT > so recompute happens
+      expect(storeContainer.getContainers).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('memoryGb calculation', () => {
+    test('should compute memoryGb as totalmem divided by 1024^3 (exact value)', () => {
+      // totalmem mock returns 16 * 1024 * 1024 * 1024 = 16GB
+      // Exact assertion: 16.0 not 16384 or 16777216
+      eventApi.subscribeEvents(req, res);
+
+      const ack = res.write.mock.calls[0][0];
+      const parsed = JSON.parse(ack.replace(/^data: /, ''));
+      expect(parsed.data.memoryGb).toBe(16);
+    });
+
+    test('should compute memoryGb as exactly 16 not 16384 for 16GB machine', () => {
+      // Kill arithmetic mutants: / 1024 / 1024 * 1024 would give 16384
+      // / 1024 * 1024 would give 16*1024^3/1024 etc. - all much larger than 16
+      eventApi.subscribeEvents(req, res);
+
+      const ack = res.write.mock.calls[0][0];
+      const parsed = JSON.parse(ack.replace(/^data: /, ''));
+      expect(parsed.data.memoryGb).toBeGreaterThan(0);
+      expect(parsed.data.memoryGb).toBeLessThan(100); // Not thousands
+      expect(parsed.data.memoryGb).toBe(16);
+    });
+  });
+
+  describe('sseClients management', () => {
+    test('close handler should send event to sseClients.filter result', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+
+      // Trigger an event to all connected clients
+      eventApi.initEvents();
+      const addedHandler = event.registerContainerAdded.mock.calls[0][0];
+      addedHandler({ id: 'c1' });
+
+      // Client is present, should receive event
+      expect(res.write).toHaveBeenCalled();
+
+      res.write.mockClear();
+
+      // Disconnect the client
+      const closeHandler = req.on.mock.calls[0][1];
+      closeHandler();
+
+      addedHandler({ id: 'c2' });
+      // Client removed, should NOT receive event
+      expect(res.write).not.toHaveBeenCalled();
+    });
+
+    test('_resetAgentEventStateForTests should clear sseClients and reset state', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      // Connect a client
+      const addedHandler = event.registerContainerAdded.mock.calls[0][0];
+      addedHandler({ id: 'c1' });
+      expect(res.write).toHaveBeenCalled();
+      res.write.mockClear();
+
+      // Reset state
+      eventApi._resetAgentEventStateForTests();
+
+      // After reset, re-register and re-connect, old client should not get events
+      eventApi.initEvents();
+      const addedHandler2 = event.registerContainerAdded.mock.calls[1][0];
+      addedHandler2({ id: 'c2' });
+      expect(res.write).not.toHaveBeenCalled();
     });
   });
 });
