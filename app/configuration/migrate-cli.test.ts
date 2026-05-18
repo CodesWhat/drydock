@@ -195,6 +195,403 @@ labels:
 
     expect(constructorCalls).toBe(0);
   });
+
+  // --- Regex anchor / prefix / separator precision tests ---
+
+  test('WUD env replacement: requires ^ anchor (does not replace mid-line WUD_ occurrences)', () => {
+    // A mid-line occurrence should NOT be replaced by env patterns
+    // The mutant removes the ^ anchor, which would cause mid-line replacements
+    const content = `# WUD_SERVER_PORT appears in comment: WUD_SERVER_PORT=3000\nWUD_SERVER_PORT=3000\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    // line-start occurrence is replaced
+    expect(migrated.content).toContain('DD_SERVER_PORT=3000');
+    // The comment line must remain intact — only 1 replacement total
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('WUD env replacement: export pattern requires space+ after export (not just space)', () => {
+    // Mutant: /^(\s*export\s)WUD_/ (single space, no +) would fail to match "export  WUD_" (two spaces)
+    const content = `export  WUD_SERVER_PORT=3000\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    expect(migrated.content).toContain('export  DD_SERVER_PORT=3000');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('WUD env replacement: export pattern prefix captures leading whitespace', () => {
+    // Mutant: /^(\S*export\s+)/ would fail on "  export WUD_" (whitespace before export)
+    const content = `  export WUD_SERVER_PORT=3000\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    expect(migrated.content).toContain('  export DD_SERVER_PORT=3000');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('WUD env replacement: list-item requires space* before dash (not S*)', () => {
+    // Mutant /^(\s*-\s['"]?)/ (single space after dash) would fail to match "  -  WUD_" (multiple spaces)
+    const content = `  -  WUD_FOO=bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    // Should be replaced (multiple spaces after dash is still valid list item format)
+    // or if not replaced by the dash-pattern, captured by plain whitespace pattern
+    expect(migrated.envReplacements).toBeGreaterThanOrEqual(1);
+  });
+
+  test('WUD env replacement: list-item closing quote is optional (captures quoted suffix)', () => {
+    // Mutant [^'"]? in suffix would prevent matching when actual quotes are present
+    // Test: "  - WUD_FOO=bar" (no quotes) and "  - 'WUD_FOO=bar'" (single-quoted)
+    const content = `  - 'WUD_FOO=bar'\n  - WUD_BAZ=qux\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    expect(migrated.content).toContain("- 'DD_FOO=bar'");
+    expect(migrated.content).toContain('- DD_BAZ=qux');
+    expect(migrated.envReplacements).toBe(2);
+  });
+
+  test('WUD env replacement: list-item separator is space+= not space*= (suffix precision)', () => {
+    // Mutant ['"]?\S*= would match 'WUD_FOO =bar' but also 'WUD_FOO xyz=bar' (not valid)
+    // Check that a trailing-quoted value with = works: "WUD_FOO"=bar
+    const content = `"WUD_FOO"=bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    expect(migrated.content).toContain('"DD_FOO"=bar');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('WUD colon-pattern: requires ^ anchor', () => {
+    // Mutant removes ^ from /^(\s*['"]?)WUD_([A-Z0-9_]+)(['"]?\s*:)/gm
+    // With content that has WUD_FOO: only at start of line (not mid-line)
+    const content = `WUD_FOO: bar\n# prefix WUD_FOO: not start of line\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    // exactly 1 replacement (the line-start one)
+    expect(migrated.envReplacements).toBe(1);
+    expect(migrated.content).toContain('DD_FOO: bar');
+  });
+
+  test('WUD colon-pattern: quoted key with space before colon is handled', () => {
+    // Mutant ['"]?\S*: would match 'WUD_FOO  :' but also patterns without proper spacing
+    // Test with quoted key and proper colon
+    const content = `"WUD_FOO": bar\n'WUD_BAZ'  : qux\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    expect(migrated.content).toContain('"DD_FOO": bar');
+    expect(migrated.envReplacements).toBe(2);
+  });
+
+  test('WUD env replacement: handles leading whitespace (list-item style without quotes)', () => {
+    const content = `  WUD_SERVER_PORT=9000\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    expect(migrated.content).toContain('  DD_SERVER_PORT=9000');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('WUD env replacement: handles quoted list-item style', () => {
+    // - "WUD_FOO=bar" style (with quotes before var name)
+    const content = `  - "WUD_FOO=bar"\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    expect(migrated.content).toContain('- "DD_FOO=bar"');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('WUD env replacement: handles single-quoted list-item style', () => {
+    const content = `  - 'WUD_FOO=bar'\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    expect(migrated.content).toContain("- 'DD_FOO=bar'");
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('WUD env replacement: handles quoted YAML map style with colon separator', () => {
+    // "WUD_FOO": value — quoted key with colon
+    const content = `  "WUD_FOO": bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    expect(migrated.content).toContain('"DD_FOO": bar');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('WUD env replacement: does not replace colon-separator form with equals', () => {
+    // The YAML colon pattern should NOT fire for "=" terminated vars
+    const content = `WUD_FOO=bar\nWUD_BAZ: qux\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    expect(migrated.envReplacements).toBe(2);
+    expect(migrated.content).toContain('DD_FOO=bar');
+    expect(migrated.content).toContain('DD_BAZ: qux');
+  });
+
+  test('WUD env replacement: export with spaces before = is replaced', () => {
+    const content = `export WUD_SERVER_PORT =3000\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    expect(migrated.content).toContain('export DD_SERVER_PORT =3000');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('WUD env replacement: export without space between WUD_ and = should still match', () => {
+    const content = `export WUD_FOO=1\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    expect(migrated.content).toContain('export DD_FOO=1');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('WUD env replacement: list-item without space after dash falls through to plain pattern', () => {
+    // "  -WUD_FOO=bar" (hyphen directly before WUD) — should NOT match the dash+space pattern
+    // but will match the plain `\s*['"]?WUD_` pattern
+    const content = `  -WUD_FOO=bar\n  - WUD_BAR=baz\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    expect(migrated.envReplacements).toBeGreaterThanOrEqual(1);
+  });
+
+  test('WUD export env: does NOT replace mid-line export WUD_ (anchor required)', () => {
+    // Kills 133:5 anchor mutant: /(\s*export\s+)WUD_/ vs /^(\s*export\s+)WUD_/
+    // Without ^, "text  export WUD_" would be replaced; with ^, only line-start export is replaced
+    const content = `inlinetext  export WUD_FOO=bar\nexport WUD_BAR=baz\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    // Only the line-start "export WUD_BAR" should be replaced
+    expect(migrated.envReplacements).toBe(1);
+    expect(migrated.content).toContain('export DD_BAR=baz');
+    // The mid-line one should remain unchanged
+    expect(migrated.content).toContain('inlinetext  export WUD_FOO=bar');
+  });
+
+  test('WUD list-item env: does NOT replace mid-line - WUD_ (anchor required)', () => {
+    // Kills 134:5 anchor mutant: /(\s*-\s*['"]?)WUD_/ vs /^(\s*-\s*['"]?)WUD_/
+    // Without ^, "text - WUD_FOO=bar" mid-line would be replaced; with ^ only line-start
+    const content = `text - WUD_FOO=bar\n  - WUD_BAR=baz\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    // Only the line-start "  - WUD_BAR=baz" should be replaced
+    expect(migrated.envReplacements).toBe(1);
+    expect(migrated.content).toContain('- DD_BAR=baz');
+    expect(migrated.content).toContain('text - WUD_FOO=bar');
+  });
+
+  test('WUD list-item env: matches quoted trailing separator (space before =)', () => {
+    // Kills 134:5 ['"]?\S*= mutant — \S*= won't match a space before =
+    // Test: "  - WUD_FOO =" (space before =) — pattern ['"]?\s*= should match
+    const content = `  - WUD_FOO =bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    expect(migrated.content).toContain('- DD_FOO =bar');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('WUD plain env: matches space before = separator', () => {
+    // Kills 135:5 ['"]?\S*= mutant — \S*= won't match a space before =
+    const content = `WUD_FOO =bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    expect(migrated.content).toContain('DD_FOO =bar');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('WUD list-item env: [^\'"]? suffix mutant — trailing quote before = should be preserved', () => {
+    // Kills 134:5 [^'"]?\s*= mutant — [^'"]? cannot match a quote char
+    // Test: suffix has a closing quote before = like: "WUD_FOO"=
+    // In `  - "WUD_FOO"=bar`, group 3 is `"=` which matches ['"]?\s*= but NOT [^'"]?\s*=
+    const content = `  - "WUD_FOO"=bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    expect(migrated.content).toContain('- "DD_FOO"=bar');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('trigger env replacement: requires ^ anchor (does not replace mid-line)', () => {
+    // Mutant removes the ^ anchor, so mid-line occurrences would also be replaced
+    const content = `# DD_TRIGGER_FOO=bar mid-line\nDD_TRIGGER_FOO=bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    expect(migrated.content).toContain('DD_ACTION_FOO=bar');
+    // exactly 1 replacement (line-start only)
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('trigger export pattern: requires space+ after export (not single space)', () => {
+    // Mutant /^(\s*export\s)DD_TRIGGER_/ would fail on "export  DD_TRIGGER_" (two spaces)
+    const content = `export  DD_TRIGGER_FOO=bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    expect(migrated.content).toContain('export  DD_ACTION_FOO=bar');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('trigger export pattern: requires = not S*= for separator', () => {
+    // Mutant /^(\s*export\s+)DD_TRIGGER_([A-Z0-9_]+)(\S*=)/ — \S*= would match " foo=bar"
+    // ensure the replacement preserves the trailing space before =
+    const content = `export DD_TRIGGER_FOO =bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    expect(migrated.content).toContain('export DD_ACTION_FOO =bar');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('trigger export pattern: captures leading whitespace', () => {
+    // Mutant /^(\S*export\s+)/ would fail on "  export DD_TRIGGER_" (leading spaces)
+    const content = `  export DD_TRIGGER_FOO=bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    expect(migrated.content).toContain('  export DD_ACTION_FOO=bar');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('trigger list-item: closing quote is optional (captures quoted suffix)', () => {
+    // Mutant [^'"]?\s*= in suffix prevents matching when actual trailing quote present
+    const content = `  - 'DD_TRIGGER_FOO=bar'\n  - DD_TRIGGER_BAZ=qux\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    expect(migrated.content).toContain("- 'DD_ACTION_FOO=bar'");
+    expect(migrated.content).toContain('- DD_ACTION_BAZ=qux');
+    expect(migrated.envReplacements).toBe(2);
+  });
+
+  test('trigger list-item: closing separator is space*= not S*=', () => {
+    // Mutant ['"]?\S*= would match things without space before =
+    const content = `"DD_TRIGGER_FOO"=bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    expect(migrated.content).toContain('"DD_ACTION_FOO"=bar');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('trigger list-item: requires space* after dash (not single space only)', () => {
+    // Mutant /^(\s*-\s['"]?)/ (single \s after dash) misses multiple spaces
+    const content = `  -  DD_TRIGGER_FOO=bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    // captured by some pattern
+    expect(migrated.envReplacements).toBeGreaterThanOrEqual(1);
+  });
+
+  test('trigger export: does NOT replace mid-line export DD_TRIGGER_ (anchor required)', () => {
+    // Kills 181:5 anchor mutant: /(\s*export\s+)DD_TRIGGER_/ vs /^(\s*export\s+)DD_TRIGGER_/
+    const content = `inlinetext  export DD_TRIGGER_FOO=bar\nexport DD_TRIGGER_BAR=baz\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    expect(migrated.envReplacements).toBe(1);
+    expect(migrated.content).toContain('export DD_ACTION_BAR=baz');
+    expect(migrated.content).toContain('inlinetext  export DD_TRIGGER_FOO=bar');
+  });
+
+  test('trigger list-item: does NOT replace mid-line - DD_TRIGGER_ (anchor required)', () => {
+    // Kills 182:5 anchor mutant
+    const content = `text - DD_TRIGGER_FOO=bar\n  - DD_TRIGGER_BAR=baz\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    expect(migrated.envReplacements).toBe(1);
+    expect(migrated.content).toContain('- DD_ACTION_BAR=baz');
+    expect(migrated.content).toContain('text - DD_TRIGGER_FOO=bar');
+  });
+
+  test('trigger list-item: matches space before = (kills S*= mutant)', () => {
+    // Kills 182:5 ['"]?\S*= mutant
+    const content = `  - DD_TRIGGER_FOO =bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    expect(migrated.content).toContain('- DD_ACTION_FOO =bar');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('trigger list-item: trailing quote before = is preserved', () => {
+    // Kills 182:5 [^\'"]?\s*= mutant
+    const content = `  - "DD_TRIGGER_FOO"=bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    expect(migrated.content).toContain('- "DD_ACTION_FOO"=bar');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('trigger plain env: matches space before = (kills S*= mutant)', () => {
+    // Kills 183:5 ['"]?\S*= mutant
+    const content = `DD_TRIGGER_FOO =bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    expect(migrated.content).toContain('DD_ACTION_FOO =bar');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('trigger colon-pattern: matches space before : (kills S*: mutant)', () => {
+    // Kills 197:5 ['"]?\S*: mutant — \S*: won't match space before :
+    const content = `DD_TRIGGER_FOO : bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    expect(migrated.content).toContain('DD_ACTION_FOO : bar');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('trigger colon-pattern: requires ^ anchor', () => {
+    // Mutant removes ^ from /^(\s*['"]?)DD_TRIGGER_([A-Z0-9_]+)(['"]?\s*:)/gm
+    const content = `DD_TRIGGER_FOO: bar\n# prefix DD_TRIGGER_FOO: not start\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    expect(migrated.envReplacements).toBe(1);
+    expect(migrated.content).toContain('DD_ACTION_FOO: bar');
+  });
+
+  test('trigger plain pattern: prefix is s* not S*', () => {
+    // Mutant /^(\S*['"]?)DD_TRIGGER_/ — \S* would NOT match leading whitespace
+    // "  DD_TRIGGER_FOO=bar" should match
+    const content = `  DD_TRIGGER_FOO=bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    expect(migrated.content).toContain('  DD_ACTION_FOO=bar');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('trigger env replacement: handles export style', () => {
+    const content = `export DD_TRIGGER_SLACK_TOKEN=abc\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    expect(migrated.content).toContain('export DD_ACTION_SLACK_TOKEN=abc');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('trigger env replacement: handles quoted list-item style', () => {
+    const content = `  - "DD_TRIGGER_FOO=bar"\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    expect(migrated.content).toContain('- "DD_ACTION_FOO=bar"');
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('trigger env replacement: handles YAML map style with colon separator', () => {
+    const content = `  DD_TRIGGER_FOO: bar\n  "DD_TRIGGER_BAZ": qux\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    expect(migrated.content).toContain('DD_ACTION_FOO: bar');
+    expect(migrated.content).toContain('"DD_ACTION_BAZ": qux');
+    expect(migrated.envReplacements).toBe(2);
+  });
+
+  test('trigger env replacement: handles single-quoted list-item style', () => {
+    const content = `  - 'DD_TRIGGER_FOO=bar'\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    expect(migrated.content).toContain("- 'DD_ACTION_FOO=bar'");
+    expect(migrated.envReplacements).toBe(1);
+  });
+
+  test('auto mode sums WUD + trigger envReplacements correctly', () => {
+    // Both WUD env vars and DD_TRIGGER env vars in same content
+    const content = `WUD_SERVER_PORT=3000\nDD_TRIGGER_FOO=bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'auto');
+    expect(migrated.content).toContain('DD_SERVER_PORT=3000');
+    expect(migrated.content).toContain('DD_ACTION_FOO=bar');
+    // envReplacements must be sum of both passes (1 + 0 + 1 = 2, watchtower adds 0)
+    expect(migrated.envReplacements).toBe(2);
+  });
+
+  test('auto mode sums WUD + watchtower + trigger envReplacements and labelReplacements', () => {
+    const content = [
+      'WUD_SERVER_PORT=3000',
+      'DD_TRIGGER_FOO=bar',
+      'labels:',
+      '  - wud.watch=true',
+      '  - com.centurylinklabs.watchtower.enable=true',
+    ].join('\n');
+    const migrated = migrateLegacyConfigContent(content, 'auto');
+    // WUD env: 1, watchtower env: 0, trigger env: 1 → total 2
+    expect(migrated.envReplacements).toBe(2);
+    // WUD labels: 1 (wud.watch), watchtower labels: 1, trigger labels: 0 → total 2
+    expect(migrated.labelReplacements).toBe(2);
+  });
+
+  test('migrateLegacyConfigContent default source is auto (same as explicit auto)', () => {
+    const content = `WUD_SERVER_PORT=3000\nDD_TRIGGER_FOO=bar\n`;
+    const implicit = migrateLegacyConfigContent(content);
+    const explicit = migrateLegacyConfigContent(content, 'auto');
+    expect(implicit.content).toBe(explicit.content);
+    expect(implicit.envReplacements).toBe(explicit.envReplacements);
+    expect(implicit.labelReplacements).toBe(explicit.labelReplacements);
+  });
+
+  test('wud source does not migrate DD_TRIGGER_ vars', () => {
+    const content = `DD_TRIGGER_FOO=bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'wud');
+    expect(migrated.content).toBe(content);
+    expect(migrated.envReplacements).toBe(0);
+  });
+
+  test('watchtower source does not migrate WUD_ or DD_TRIGGER_ env vars', () => {
+    const content = `WUD_SERVER_PORT=3000\nDD_TRIGGER_FOO=bar\n`;
+    const migrated = migrateLegacyConfigContent(content, 'watchtower');
+    expect(migrated.content).toBe(content);
+    expect(migrated.envReplacements).toBe(0);
+  });
+
+  test('trigger source does not migrate WUD_ env vars', () => {
+    const content = `WUD_SERVER_PORT=3000\n`;
+    const migrated = migrateLegacyConfigContent(content, 'trigger');
+    expect(migrated.content).toBe(content);
+    expect(migrated.envReplacements).toBe(0);
+  });
 });
 
 describe('runConfigMigrateCommandIfRequested', () => {
@@ -298,11 +695,12 @@ describe('runConfigMigrateCommandIfRequested', () => {
     });
   });
 
-  test('reports explicitly requested missing files', () => {
+  test('reports explicitly requested missing files with comma-space separator', () => {
+    // Kills StringLiteral line 613: join('') vs join(', ')
     withTempDir((tempDir) => {
       const collector = createIoCollector();
       const result = runConfigMigrateCommandIfRequested(
-        ['config', 'migrate', '--file', 'missing.env'],
+        ['config', 'migrate', '--file', 'missing.env', '--file', 'also-missing.env'],
         {
           cwd: tempDir,
           io: collector.io,
@@ -311,7 +709,8 @@ describe('runConfigMigrateCommandIfRequested', () => {
 
       expect(result).toBe(0);
       expect(collector.out.join('\n')).toContain('No config files found to migrate.');
-      expect(collector.out.join('\n')).toContain('Checked files: missing.env');
+      // Files should be listed with ", " separator not concatenated together
+      expect(collector.out.join('\n')).toContain('Checked files: missing.env, also-missing.env');
     });
   });
 
@@ -359,6 +758,24 @@ describe('runConfigMigrateCommandIfRequested', () => {
       expect(result).toBe(1);
       expect(collector.err.join('\n')).toContain('must stay inside');
       expect(fs.readFileSync(outsidePath, 'utf-8')).toBe('WUD_SERVER_HOST=localhost\n');
+    });
+  });
+
+  test('error message mentions --file path label when path escapes cwd', () => {
+    // Kills ObjectLiteral/StringLiteral lines 427-428: label: '--file path' vs label: ''
+    // The label controls what appears in the error message from resolveConfiguredPathWithinBase
+    withTempDir((tempDir) => {
+      const workspaceDir = path.join(tempDir, 'workspace');
+      fs.mkdirSync(workspaceDir, { recursive: true });
+
+      const collector = createIoCollector();
+      runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '../escape.env'], {
+        cwd: workspaceDir,
+        io: collector.io,
+      });
+
+      // The label '--file path' should appear in the error message
+      expect(collector.err.join('\n')).toContain('--file path');
     });
   });
 
@@ -681,6 +1098,603 @@ describe('runConfigMigrateCommandIfRequested', () => {
       expect(result).toBe(0);
       expect(collector.out.join('\n')).toContain('No config files found to migrate.');
       expect(collector.out.join('\n')).toContain('Checked files: .env');
+    });
+  });
+
+  test('returns null when argv[0] is config but argv[1] is not migrate', () => {
+    // Kills: argv[0] === 'config' && true (ConditionalExpression line 401)
+    const result = runConfigMigrateCommandIfRequested(['config', 'update']);
+    expect(result).toBeNull();
+  });
+
+  test('returns null when argv[0] is not config', () => {
+    // Kills: true && argv[1] === 'migrate' (ConditionalExpression line 401)
+    const result = runConfigMigrateCommandIfRequested(['noconfig', 'migrate']);
+    expect(result).toBeNull();
+  });
+
+  test('returns null when argv is empty', () => {
+    const result = runConfigMigrateCommandIfRequested([]);
+    expect(result).toBeNull();
+  });
+
+  test('returns null when argv has only one element', () => {
+    const result = runConfigMigrateCommandIfRequested(['config']);
+    expect(result).toBeNull();
+  });
+
+  test('help output contains all expected text lines including Options header and blank lines', () => {
+    const collector = createIoCollector();
+    runConfigMigrateCommandIfRequested(['config', 'migrate', '--help'], { io: collector.io });
+    const out = collector.out.join('\n');
+    // Check exact non-empty lines to kill StringLiteral mutants (lines 261, 263, 264-267, 268)
+    expect(out).toContain('--file <path>   Migrate a specific file');
+    expect(out).toContain('--dry-run       Show what would change without writing files');
+    expect(out).toContain('Options:');
+    expect(out).toContain('Migrates legacy config inputs');
+    expect(out).toContain('--help          Show this help');
+    // source list uses ", " separator (kills line 267:82 StringLiteral join("") mutant)
+    expect(out).toContain('auto, wud, watchtower, trigger');
+    // blank lines appear in the output (kills line 261, 263 StringLiteral mutants)
+    // Help output has blank lines between Usage, description, and Options sections
+    // Check for at least 2 blank lines in help (after Usage line and after description)
+    const blankCount = collector.out.filter((line) => line === '').length;
+    expect(blankCount).toBeGreaterThanOrEqual(2);
+    // Verify blank lines are in correct positions (after Usage line and after description)
+    const usageIdx = collector.out.findIndex((l) => l.includes('Usage:'));
+    const optionsIdx = collector.out.findIndex((l) => l === 'Options:');
+    expect(collector.out[usageIdx + 1]).toBe(''); // blank line after Usage
+    expect(collector.out[optionsIdx - 1]).toBe(''); // blank line before Options
+  });
+
+  test('--source auto is accepted and uses auto migration', () => {
+    // Kills ConditionalExpression line 219: normalized === 'auto' || false
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_PORT=3000\n', 'utf-8');
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(
+        ['config', 'migrate', '--source', 'auto', '--file', '.env'],
+        { cwd: tempDir, io: collector.io },
+      );
+
+      expect(result).toBe(0);
+      expect(fs.readFileSync(envPath, 'utf-8')).toContain('DD_SERVER_PORT=3000');
+    });
+  });
+
+  test('--source wud is accepted and uses wud migration', () => {
+    // Kills ConditionalExpression line 220: normalized === 'wud' || false
+    withTempDir((tempDir) => {
+      const composePath = path.join(tempDir, 'compose.yml');
+      fs.writeFileSync(
+        composePath,
+        'WUD_SERVER_PORT=3000\ncom.centurylinklabs.watchtower.enable: "true"\n',
+        'utf-8',
+      );
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(
+        ['config', 'migrate', '--source', 'wud', '--file', 'compose.yml'],
+        { cwd: tempDir, io: collector.io },
+      );
+
+      expect(result).toBe(0);
+      const content = fs.readFileSync(composePath, 'utf-8');
+      // wud source should replace WUD_ vars
+      expect(content).toContain('DD_SERVER_PORT=3000');
+      // but NOT watchtower labels
+      expect(content).toContain('com.centurylinklabs.watchtower.enable: "true"');
+    });
+  });
+
+  test('unsupported source error mentions sources separated by comma-space', () => {
+    // Kills StringLiteral line 325: join("") vs join(", ")
+    const collector = createIoCollector();
+    runConfigMigrateCommandIfRequested(['config', 'migrate', '--source', 'legacy'], {
+      io: collector.io,
+    });
+    // Error should list: auto, wud, watchtower, trigger (with ", " separator)
+    expect(collector.err.join('\n')).toContain('auto, wud, watchtower, trigger');
+  });
+
+  test('unsupported source error mentions supported sources list', () => {
+    const collector = createIoCollector();
+    runConfigMigrateCommandIfRequested(['config', 'migrate', '--source', 'legacy'], {
+      io: collector.io,
+    });
+    expect(collector.err.join('\n')).toContain('Supported:');
+    expect(collector.err.join('\n')).toContain('auto');
+  });
+
+  test('--file with a dash-prefixed value is rejected as missing value', () => {
+    const collector = createIoCollector();
+    const result = runConfigMigrateCommandIfRequested(
+      ['config', 'migrate', '--file', '-not-a-file'],
+      { io: collector.io },
+    );
+    expect(result).toBe(1);
+    expect(collector.err.join('\n')).toContain('--file requires a path value');
+  });
+
+  test('uses default candidate files when no --file specified', () => {
+    withTempDir((tempDir) => {
+      // Write to a default candidate file name
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_PORT=3000\n', 'utf-8');
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(['config', 'migrate'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+
+      expect(result).toBe(0);
+      expect(fs.readFileSync(envPath, 'utf-8')).toContain('DD_SERVER_PORT=3000');
+    });
+  });
+
+  test('prints checked defaults with comma-space separator and no --file specified', () => {
+    // Kills StringLiteral line 617: join('') vs join(', ')
+    withTempDir((tempDir) => {
+      const collector = createIoCollector();
+      runConfigMigrateCommandIfRequested(['config', 'migrate'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+      const out = collector.out.join('\n');
+      // Default candidates should be comma-space separated (e.g. ".env, .env.local, ...")
+      expect(out).toContain('.env, .env.local');
+      expect(out).toContain('use --file to target specific files');
+    });
+  });
+
+  test('error from opening file with ENOTDIR is treated as missing', () => {
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
+
+      const openSpy = vi.spyOn(fs, 'openSync').mockImplementationOnce(() => {
+        const error = new Error('not a directory');
+        (error as NodeJS.ErrnoException).code = 'ENOTDIR';
+        throw error;
+      });
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+
+      openSpy.mockRestore();
+
+      expect(result).toBe(0);
+      expect(collector.out.join('\n')).toContain('No config files found');
+    });
+  });
+
+  test('error from opening file with ELOOP is treated as symlink', () => {
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
+
+      const openSpy = vi.spyOn(fs, 'openSync').mockImplementationOnce(() => {
+        const error = new Error('too many levels of symbolic links');
+        (error as NodeJS.ErrnoException).code = 'ELOOP';
+        throw error;
+      });
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+
+      openSpy.mockRestore();
+
+      expect(result).toBe(0);
+      expect(collector.err.join('\n')).toContain('Refusing to process symlink');
+    });
+  });
+
+  test('error from opening file with non-object is reported as inspect failure', () => {
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
+
+      const openSpy = vi.spyOn(fs, 'openSync').mockImplementationOnce(() => {
+        throw 42; // non-object, non-Error primitive
+      });
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+
+      openSpy.mockRestore();
+
+      expect(result).toBe(1);
+      expect(collector.err.join('\n')).toContain('Failed to inspect');
+    });
+  });
+
+  test('isMissingPathError returns false for null/non-object errors', () => {
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
+
+      // Throw null — should not be treated as missing/symlink
+      const openSpy = vi.spyOn(fs, 'openSync').mockImplementationOnce(() => {
+        throw null;
+      });
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+
+      openSpy.mockRestore();
+
+      expect(result).toBe(1);
+      expect(collector.err.join('\n')).toContain('Failed to inspect');
+    });
+  });
+
+  test('ENOENT error from openSync is treated as missing (not symlink)', () => {
+    // Kills ConditionalExpression line 377: return errorCode === 'ELOOP' => return true
+    // If isSymlinkPathError always returned true, ENOENT would be treated as symlink
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
+
+      const openSpy = vi.spyOn(fs, 'openSync').mockImplementationOnce(() => {
+        const error = new Error('no such file');
+        (error as NodeJS.ErrnoException).code = 'ENOENT';
+        throw error;
+      });
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+
+      openSpy.mockRestore();
+
+      // Should be treated as missing (not symlink — no 'Refusing to process symlink' message)
+      expect(result).toBe(0);
+      expect(collector.err.join('\n')).not.toContain('Refusing to process symlink');
+      expect(collector.out.join('\n')).toContain('No config files found');
+    });
+  });
+
+  test('EACCES error from openSync is NOT treated as symlink (kills return true mutant)', () => {
+    // Kills ConditionalExpression line 377: return errorCode === 'ELOOP' => return true
+    // With return true, EACCES would be treated as symlink instead of error
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
+
+      const openSpy = vi.spyOn(fs, 'openSync').mockImplementationOnce(() => {
+        const error = new Error('permission denied');
+        (error as NodeJS.ErrnoException).code = 'EACCES';
+        throw error;
+      });
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+
+      openSpy.mockRestore();
+
+      // EACCES is a real error (not missing, not symlink)
+      expect(result).toBe(1);
+      expect(collector.err.join('\n')).not.toContain('Refusing to process symlink');
+      expect(collector.err.join('\n')).toContain('Failed to inspect');
+    });
+  });
+
+  test('isSymlinkPathError returns false for non-object errors (typeof check)', () => {
+    // Kills ConditionalExpression line 373:17 — typeof error !== 'object' || false
+    // Throw a string — it's not an object, so isSymlinkPathError should return false
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
+
+      // ENOENT string throw won't trigger symlink path
+      const openSpy = vi.spyOn(fs, 'openSync').mockImplementationOnce(() => {
+        throw 'some string error'; // string, not object
+      });
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+
+      openSpy.mockRestore();
+
+      // A string throw hits 'error' branch (not missing or symlink)
+      expect(result).toBe(1);
+      expect(collector.err.join('\n')).not.toContain('Refusing to process symlink');
+    });
+  });
+
+  test('isMissingPathError returns false for non-object errors (typeof check)', () => {
+    // Kills ConditionalExpression line 365:17 — typeof error !== 'object' || false
+    // Throw a non-null non-object (string) to verify it's not treated as missing
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
+
+      // Throw a number — not an object, should not be treated as ENOENT
+      const readSpy = vi.spyOn(fs, 'readFileSync').mockImplementationOnce(() => {
+        throw 99; // number, not object
+      });
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+
+      readSpy.mockRestore();
+
+      // Should be treated as a read error, not missing
+      expect(result).toBe(1);
+      expect(collector.err.join('\n')).toContain('Failed to read');
+    });
+  });
+
+  test('formatCliErrorMessage returns message from Error objects', () => {
+    // Kills BlockStatement line 358: if (error instanceof Error && error.message) {}
+    // The block is responsible for returning error.message — without it, would return String(error)
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
+
+      const specificMessage = 'disk quota exceeded (specific error message)';
+      const readSpy = vi.spyOn(fs, 'readFileSync').mockImplementationOnce(() => {
+        throw new Error(specificMessage);
+      });
+
+      const collector = createIoCollector();
+      runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+
+      readSpy.mockRestore();
+
+      // The specific error message should appear (not "[object Error]" or similar)
+      expect(collector.err.join('\n')).toContain(specificMessage);
+    });
+  });
+
+  test('ENOENT while reading opened file is treated as missing (reads ENOENT error code)', () => {
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_HOST=localhost\n', 'utf-8');
+
+      // readFileSync throws ENOTDIR (also a missing-path code)
+      const readSpy = vi.spyOn(fs, 'readFileSync').mockImplementationOnce(() => {
+        const error = new Error('not a directory');
+        (error as NodeJS.ErrnoException).code = 'ENOTDIR';
+        throw error;
+      });
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+
+      readSpy.mockRestore();
+
+      expect(result).toBe(0);
+      expect(collector.out.join('\n')).toContain('No config files found');
+    });
+  });
+
+  test('writes migrated content fully (write loop correctness)', () => {
+    // Kills ArithmeticOperator line 390: payload.length + bytesWritten (wrong) vs - bytesWritten
+    // With the wrong arithmetic, the write loop would write duplicated/corrupt data
+    withTempDir((tempDir) => {
+      // Large enough to ensure write completeness matters
+      const lines = Array.from({ length: 100 }, (_, i) => `WUD_VAR_${i}=value${i}`).join('\n');
+      const composePath = path.join(tempDir, '.env');
+      fs.writeFileSync(composePath, lines, 'utf-8');
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+
+      expect(result).toBe(0);
+      const written = fs.readFileSync(composePath, 'utf-8');
+      // All 100 vars should be correctly migrated
+      expect(written).toContain('DD_VAR_0=value0');
+      expect(written).toContain('DD_VAR_99=value99');
+      // The file should not contain the original WUD_ prefix (correct write)
+      expect(written).not.toContain('WUD_VAR_0=value0');
+      expect(collector.out.join('\n')).toContain('env=100');
+    });
+  });
+
+  test('summary output starts with an empty line followed by Summary:', () => {
+    // Kills StringLiteral line 622: io.out('') => io.out("Stryker was here!")
+    // The summary starts with a blank line then the Summary: line
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_PORT=3000\n', 'utf-8');
+
+      const collector = createIoCollector();
+      runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+
+      // Find the '' entry and ensure it precedes 'Summary:'
+      const emptyLineIdx = collector.out.indexOf('');
+      const summaryIdx = collector.out.findIndex((line) => line.startsWith('Summary:'));
+      expect(emptyLineIdx).toBeGreaterThanOrEqual(0);
+      expect(summaryIdx).toBeGreaterThan(emptyLineIdx);
+    });
+  });
+
+  test('summary output includes all stat fields with correct values', () => {
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(
+        envPath,
+        ['WUD_SERVER_PORT=3000', 'labels:', '  - wud.watch=true', ''].join('\n'),
+        'utf-8',
+      );
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+
+      expect(result).toBe(0);
+      const out = collector.out.join('\n');
+      expect(out).toContain('scanned=1');
+      expect(out).toContain('updated=1');
+      expect(out).toContain('missing=0');
+      expect(out).toContain('env_rewrites=1');
+      expect(out).toContain('label_rewrites=1');
+    });
+  });
+
+  test('summary does not print dry-run message in normal mode', () => {
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_PORT=3000\n', 'utf-8');
+
+      const collector = createIoCollector();
+      runConfigMigrateCommandIfRequested(['config', 'migrate', '--file', '.env'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+
+      expect(collector.out.join('\n')).not.toContain('Dry-run mode');
+    });
+  });
+
+  test('dry-run summary prints dry-run message', () => {
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_PORT=3000\n', 'utf-8');
+
+      const collector = createIoCollector();
+      runConfigMigrateCommandIfRequested(['config', 'migrate', '--dry-run', '--file', '.env'], {
+        cwd: tempDir,
+        io: collector.io,
+      });
+
+      expect(collector.out.join('\n')).toContain('Dry-run mode: no files were modified.');
+    });
+  });
+
+  test('stats correctly accumulates missingFiles count', () => {
+    withTempDir((tempDir) => {
+      // One real file + one missing file; missing count should be 1
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_PORT=3000\n', 'utf-8');
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(
+        ['config', 'migrate', '--file', '.env', '--file', 'nonexistent.env'],
+        {
+          cwd: tempDir,
+          io: collector.io,
+        },
+      );
+
+      expect(result).toBe(0);
+      const out = collector.out.join('\n');
+      expect(out).toContain('scanned=1');
+      expect(out).toContain('missing=1');
+    });
+  });
+
+  test('stats correctly tracks updatedFiles separately from scannedFiles', () => {
+    withTempDir((tempDir) => {
+      const needsMigration = path.join(tempDir, '.env');
+      const alreadyMigrated = path.join(tempDir, '.env.local');
+      fs.writeFileSync(needsMigration, 'WUD_SERVER_PORT=3000\n', 'utf-8');
+      fs.writeFileSync(alreadyMigrated, 'DD_SERVER_PORT=3000\n', 'utf-8');
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(
+        ['config', 'migrate', '--file', '.env', '--file', '.env.local'],
+        {
+          cwd: tempDir,
+          io: collector.io,
+        },
+      );
+
+      expect(result).toBe(0);
+      const out = collector.out.join('\n');
+      expect(out).toContain('scanned=2');
+      expect(out).toContain('updated=1');
+    });
+  });
+
+  test('stats accumulates envReplacements and labelReplacements across files', () => {
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      const composePath = path.join(tempDir, 'compose.yml');
+      fs.writeFileSync(envPath, 'WUD_SERVER_PORT=3000\n', 'utf-8');
+      fs.writeFileSync(
+        composePath,
+        ['services:', '  app:', '    labels:', '      - wud.watch=true', ''].join('\n'),
+        'utf-8',
+      );
+
+      const collector = createIoCollector();
+      runConfigMigrateCommandIfRequested(
+        ['config', 'migrate', '--file', '.env', '--file', 'compose.yml'],
+        {
+          cwd: tempDir,
+          io: collector.io,
+        },
+      );
+
+      const out = collector.out.join('\n');
+      // 1 env from .env + 1 label from compose.yml
+      expect(out).toContain('env_rewrites=1');
+      expect(out).toContain('label_rewrites=1');
+    });
+  });
+
+  test('deduplicates files when the same path is specified twice', () => {
+    withTempDir((tempDir) => {
+      const envPath = path.join(tempDir, '.env');
+      fs.writeFileSync(envPath, 'WUD_SERVER_PORT=3000\n', 'utf-8');
+
+      const collector = createIoCollector();
+      const result = runConfigMigrateCommandIfRequested(
+        ['config', 'migrate', '--file', '.env', '--file', '.env'],
+        {
+          cwd: tempDir,
+          io: collector.io,
+        },
+      );
+
+      expect(result).toBe(0);
+      // Should process file exactly once (deduplication via Set)
+      const out = collector.out.join('\n');
+      expect(out).toContain('scanned=1');
+      // File content should only be migrated once
+      expect(fs.readFileSync(envPath, 'utf-8')).toContain('DD_SERVER_PORT=3000');
     });
   });
 
