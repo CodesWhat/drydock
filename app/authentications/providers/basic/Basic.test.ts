@@ -2753,11 +2753,6 @@ describe('Basic Authentication', () => {
   describe('verifyArgon2Password return paths (lines 396-406)', () => {
     test('should return false when parseArgon2Hash returns undefined (line 396:7)', () => {
       // Kill line 396:7 ConditionalExpression — !parsed must return false
-      basic.configuration = {
-        user: 'testuser',
-        hash: createArgon2Hash('password'),
-      };
-
       // Pass an argon2 hash as configuration but verify with non-argon2 hash as encodedHash
       // verifyPassword dispatches to verifyArgon2Password only if parseArgon2Hash succeeds
       // Test that a bad argon2 hash in configuration is handled
