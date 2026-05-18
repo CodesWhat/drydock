@@ -192,3 +192,71 @@ test('authenticate should fail when bearer token has extra authorization segment
   expect(warnSpy).not.toHaveBeenCalled();
   expect(oidcStrategy.fail).toHaveBeenCalledWith(401);
 });
+
+test('authenticate should log "Executing oidc strategy" debug message on every call', async () => {
+  const debugSpy = vi.spyOn(oidcStrategy.log, 'debug').mockImplementation(() => {});
+  oidcStrategy.authenticate({ isAuthenticated: () => true });
+  expect(debugSpy).toHaveBeenCalledWith('Executing oidc strategy');
+});
+
+test('authenticate should log "User is already authenticated" debug message when session is active', async () => {
+  const debugSpy = vi.spyOn(oidcStrategy.log, 'debug').mockImplementation(() => {});
+  oidcStrategy.authenticate({ isAuthenticated: () => true });
+  expect(debugSpy).toHaveBeenCalledWith('User is already authenticated');
+});
+
+test('authenticate should treat empty first element of authorization array as no token', async () => {
+  const debugSpy = vi.spyOn(oidcStrategy.log, 'debug').mockImplementation(() => {});
+  const warnSpy = vi.spyOn(oidcStrategy.log, 'warn').mockImplementation(() => {});
+  oidcStrategy.verify = vi.fn((token, cb) => cb(null, { token }));
+  oidcStrategy.authenticate({
+    isAuthenticated: () => false,
+    headers: {
+      authorization: [''],
+    },
+  });
+  expect(oidcStrategy.verify).not.toHaveBeenCalled();
+  expect(debugSpy).toHaveBeenCalledWith('No bearer token provided');
+  expect(warnSpy).not.toHaveBeenCalled();
+  expect(oidcStrategy.fail).toHaveBeenCalledWith(401);
+});
+
+test('authenticate should treat undefined authorization header as no token', async () => {
+  const debugSpy = vi.spyOn(oidcStrategy.log, 'debug').mockImplementation(() => {});
+  const warnSpy = vi.spyOn(oidcStrategy.log, 'warn').mockImplementation(() => {});
+  oidcStrategy.verify = vi.fn((token, cb) => cb(null, { token }));
+  oidcStrategy.authenticate({
+    isAuthenticated: () => false,
+    headers: { authorization: undefined },
+  });
+  expect(oidcStrategy.verify).not.toHaveBeenCalled();
+  expect(debugSpy).toHaveBeenCalledWith('No bearer token provided');
+  expect(warnSpy).not.toHaveBeenCalled();
+  expect(oidcStrategy.fail).toHaveBeenCalledWith(401);
+});
+
+test('authenticate should reject authorization header with non-Bearer prefix', async () => {
+  const debugSpy = vi.spyOn(oidcStrategy.log, 'debug').mockImplementation(() => {});
+  oidcStrategy.verify = vi.fn((token, cb) => cb(null, { token }));
+  oidcStrategy.authenticate({
+    isAuthenticated: () => false,
+    headers: {
+      authorization: 'XBearer valid-token',
+    },
+  });
+  expect(oidcStrategy.verify).not.toHaveBeenCalled();
+  expect(debugSpy).toHaveBeenCalledWith('No bearer token provided');
+  expect(oidcStrategy.fail).toHaveBeenCalledWith(401);
+});
+
+test('authenticate should accept bearer token with multiple spaces before token', async () => {
+  const user = { username: 'multi-space@example.com' };
+  oidcStrategy.verify = vi.fn((token, cb) => cb(null, user));
+  oidcStrategy.authenticate({
+    isAuthenticated: () => false,
+    headers: {
+      authorization: 'Bearer  double-space-token',
+    },
+  });
+  expect(oidcStrategy.verify).toHaveBeenCalledWith('double-space-token', expect.any(Function));
+});
