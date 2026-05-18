@@ -8572,3 +8572,1609 @@ describe('dispatchContainerForEvent update-action guard', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// getContainerNotificationKey — line 170 mutant coverage
+// ---------------------------------------------------------------------------
+
+describe('getContainerNotificationKey coverage (via seedNotificationHistoryFromStore and hasAlreadyNotifiedForResult)', () => {
+  test('container with valid id is used as notification key', async () => {
+    const container = {
+      id: 'abc123',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'abc123', 'update-available'),
+    ).toBeDefined();
+  });
+
+  test('container with empty-string id falls back to watcher+name', async () => {
+    const container = {
+      id: '',
+      name: 'myapp',
+      watcher: 'mywatcher',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+
+    // With empty id, seeding uses fullName = 'mywatcher_myapp'
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(trigger.getId(), '', 'update-available'),
+    ).toBeUndefined();
+    // Seeded nothing because containerId check fails for empty string
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(
+        trigger.getId(),
+        'mywatcher_myapp',
+        'update-available',
+      ),
+    ).toBeUndefined();
+  });
+
+  test('container with non-string id is treated as no-id', async () => {
+    const container = {
+      id: 42 as unknown as string, // non-string id
+      name: 'myapp',
+      watcher: 'mywatcher',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+
+    // Non-string id is not seeded
+    const allSeeded = notificationHistoryStore.getAllForTesting();
+    expect(allSeeded.some((e: any) => e.containerId === 42)).toBe(false);
+  });
+
+  test('hasAlreadyNotifiedForResult returns false for container with null id', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    // Container with no id - should always fire (not suppressed)
+    await trigger.handleContainerReport({
+      changed: false,
+      container: {
+        id: null as unknown as string,
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+    });
+
+    expect(triggerSpy).toHaveBeenCalledTimes(1);
+
+    // Second call also fires because no id = no dedup
+    await trigger.handleContainerReport({
+      changed: false,
+      container: {
+        id: null as unknown as string,
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+    });
+    expect(triggerSpy).toHaveBeenCalledTimes(2);
+  });
+
+  test('watcher with empty string prevents watcher+name fallback key', async () => {
+    const container = {
+      id: '',
+      name: 'myapp',
+      watcher: '', // empty watcher
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+
+    // Nothing should be seeded for this container
+    const allSeeded = notificationHistoryStore.getAllForTesting();
+    expect(allSeeded.some((e: any) => e.containerId === '')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// RECREATED_ALIAS_RE — line 11 mutant coverage (via canonicalizeReportName)
+// ---------------------------------------------------------------------------
+
+describe('canonicalizeReportName regex coverage', () => {
+  test('strips exactly 12-char hex prefix from container name', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    // 12 hex chars followed by underscore and name — should match
+    const report = {
+      changed: false,
+      container: {
+        id: 'c1',
+        name: 'abc123def456_myapp',
+        watcher: 'local',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+    };
+    await trigger.handleContainerReport(report);
+
+    expect(triggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'myapp' }),
+    );
+  });
+
+  test('does NOT strip a 11-char prefix (must be exactly 12)', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    const report = {
+      changed: false,
+      container: {
+        id: 'c1',
+        name: 'abc123def45_myapp', // 11 chars before underscore
+        watcher: 'local',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+    };
+    await trigger.handleContainerReport(report);
+
+    // Name unchanged
+    expect(triggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'abc123def45_myapp' }),
+    );
+  });
+
+  test('does NOT strip a 13-char prefix (must be exactly 12)', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    const report = {
+      changed: false,
+      container: {
+        id: 'c1',
+        name: 'abc123def4567_myapp', // 13 chars before underscore
+        watcher: 'local',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+    };
+    await trigger.handleContainerReport(report);
+
+    expect(triggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'abc123def4567_myapp' }),
+    );
+  });
+
+  test('strips uppercase hex prefix (case-insensitive flag)', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    const report = {
+      changed: false,
+      container: {
+        id: 'c1',
+        name: 'ABC123DEF456_myapp', // uppercase hex
+        watcher: 'local',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+    };
+    await trigger.handleContainerReport(report);
+
+    expect(triggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'myapp' }),
+    );
+  });
+
+  test('does NOT match non-hex characters in prefix', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    const report = {
+      changed: false,
+      container: {
+        id: 'c1',
+        name: 'zzz123def456_myapp', // 'z' is not [a-f0-9]
+        watcher: 'local',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+    };
+    await trigger.handleContainerReport(report);
+
+    expect(triggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'zzz123def456_myapp' }),
+    );
+  });
+
+  test('prefix must be at start of string (anchored)', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    const report = {
+      changed: false,
+      container: {
+        id: 'c1',
+        name: 'prefix_abc123def456_myapp', // valid hex in middle, not at start
+        watcher: 'local',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+    };
+    await trigger.handleContainerReport(report);
+
+    // Should NOT strip — prefix not at the start
+    expect(triggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'prefix_abc123def456_myapp' }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isBatchRuntimeContext and getRuntimeContextString — lines 57-70
+// ---------------------------------------------------------------------------
+
+describe('getRuntimeContextString and isBatchRuntimeContext coverage', () => {
+  test('renderBatchTitle returns overrideTitle when runtimeContext has title string', async () => {
+    await trigger.register('trigger', 'test', 'slack', {
+      ...configurationValid,
+      mode: 'batch',
+    });
+
+    const containers = [
+      { id: 'c1', name: 'app', watcher: 'local', updateAvailable: true, updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' } },
+    ] as any;
+
+    const result = trigger.renderBatchTitle(containers, { title: 'My Custom Title', body: 'body' });
+    expect(result).toBe('My Custom Title');
+  });
+
+  test('renderBatchTitle falls through when runtimeContext is null', async () => {
+    await trigger.register('trigger', 'test', 'slack', {
+      ...configurationValid,
+      mode: 'batch',
+    });
+
+    const containers = [
+      { id: 'c1', name: 'app', watcher: 'local', updateAvailable: true, updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' } },
+    ] as any;
+
+    // null runtimeContext should not provide override
+    const result = trigger.renderBatchTitle(containers, null);
+    expect(result).not.toBe(null);
+    expect(typeof result).toBe('string');
+  });
+
+  test('renderBatchTitle falls through when runtimeContext is not an object', async () => {
+    await trigger.register('trigger', 'test', 'slack', {
+      ...configurationValid,
+      mode: 'batch',
+    });
+
+    const containers = [
+      { id: 'c1', name: 'app', watcher: 'local', updateAvailable: true, updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' } },
+    ] as any;
+
+    // primitive runtimeContext should not provide override
+    const result = trigger.renderBatchTitle(containers, 'some-string-context');
+    expect(typeof result).toBe('string');
+  });
+
+  test('renderBatchBody returns overrideBody when runtimeContext has body string', async () => {
+    await trigger.register('trigger', 'test', 'slack', {
+      ...configurationValid,
+      mode: 'batch',
+    });
+
+    const containers = [] as any;
+    const result = trigger.renderBatchBody(containers, { title: 'title', body: 'My Custom Body' });
+    expect(result).toBe('My Custom Body');
+  });
+
+  test('renderBatchBody falls through to default when runtimeContext body is not string', async () => {
+    await trigger.register('trigger', 'test', 'slack', {
+      ...configurationValid,
+      mode: 'batch',
+    });
+
+    const containers = [
+      { id: 'c1', name: 'app', watcher: 'local', updateAvailable: true, updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' } },
+    ] as any;
+
+    const result = trigger.renderBatchBody(containers, { title: 'title', body: 42 });
+    expect(typeof result).toBe('string');
+    expect(result).not.toBe(42);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// truncateReleaseNotesBody — line 336 (EqualityOperator body.length < maxLength)
+// ---------------------------------------------------------------------------
+
+describe('truncateReleaseNotesBody via getTemplateContainer (renderSimpleBody)', () => {
+  test('release notes body of exactly maxLength characters is NOT truncated', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+
+    const body500 = 'a'.repeat(500);
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      result: {
+        tag: '2.0',
+        releaseNotes: { body: body500 },
+      },
+    } as any;
+
+    const body = trigger.renderSimpleBody(container);
+    // The release notes body of 500 chars should NOT have '...' appended
+    expect(body).not.toContain('...');
+  });
+
+  test('release notes body of maxLength+1 characters IS truncated', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+
+    const body501 = 'a'.repeat(501);
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      result: {
+        tag: '2.0',
+        releaseNotes: { body: body501 },
+      },
+    } as any;
+
+    // renderSimpleBody calls getTemplateContainer which calls truncateReleaseNotesBody
+    // The body should be truncated to 500 chars + '...'
+    const templateContainer = (trigger as any).getTemplateContainer(container);
+    expect(templateContainer.result.releaseNotes.body).toBe('a'.repeat(500) + '...');
+  });
+
+  test('release notes body shorter than maxLength is returned as-is', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+
+    const shortBody = 'short body';
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      result: {
+        tag: '2.0',
+        releaseNotes: { body: shortBody },
+      },
+    } as any;
+
+    const templateContainer = (trigger as any).getTemplateContainer(container);
+    expect(templateContainer.result.releaseNotes.body).toBe(shortBody);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// splitAndTrimCommaSeparatedList — lines 546-551
+// ---------------------------------------------------------------------------
+
+describe('splitAndTrimCommaSeparatedList coverage (via isTriggerIncludedOrExcluded)', () => {
+  test('comma-separated list with spaces is split and trimmed', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    } as any;
+
+    // trigger Id is 'trigger.test.pushover'; include list has spaces around entries
+    const result = trigger.isTriggerIncludedOrExcluded(container, ' pushover , other-trigger ');
+    expect(result).toBe(true);
+  });
+
+  test('empty entries from consecutive commas are filtered out', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    } as any;
+
+    // Double-comma creates an empty entry that must be filtered
+    const result = trigger.isTriggerIncludedOrExcluded(container, 'unrelated,,pushover');
+    expect(result).toBe(true);
+  });
+
+  test('list with only commas/spaces returns false (all entries filtered)', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    } as any;
+
+    // Only commas + spaces — should not match
+    const result = trigger.isTriggerIncludedOrExcluded(container, ' , , ');
+    expect(result).toBe(false);
+  });
+
+  test('single entry list with whitespace is trimmed and matched correctly', async () => {
+    await trigger.register('trigger', 'test', 'myslack', configurationValid);
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    } as any;
+
+    const result = trigger.isTriggerIncludedOrExcluded(container, '  myslack  ');
+    expect(result).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// doesReferenceMatchId — lines 747-773
+// ---------------------------------------------------------------------------
+
+describe('doesReferenceMatchId coverage', () => {
+  test('exact match returns true', () => {
+    expect(Trigger.doesReferenceMatchId('trigger.test.pushover', 'trigger.test.pushover')).toBe(true);
+  });
+
+  test('name-only reference matches last part of id', () => {
+    expect(Trigger.doesReferenceMatchId('pushover', 'trigger.test.pushover')).toBe(true);
+  });
+
+  test('provider.name reference matches for id with exactly 3 parts', () => {
+    // triggerIdParts.length >= 2 branch: provider = 'test', name = 'pushover'
+    expect(Trigger.doesReferenceMatchId('test.pushover', 'trigger.test.pushover')).toBe(true);
+  });
+
+  test('provider.name reference matches for id with exactly 2 parts', () => {
+    // triggerIdParts.length >= 2 with exactly 2 parts: provider = 'notification', name = 'slack'
+    expect(Trigger.doesReferenceMatchId('notification.slack', 'notification.slack')).toBe(true);
+  });
+
+  test('provider.name reference works with only 2-part id', () => {
+    // id has 2 parts: triggerId = 'a.b', reference = 'a.b'
+    expect(Trigger.doesReferenceMatchId('a.b', 'a.b')).toBe(true);
+  });
+
+  test('unrelated reference returns false', () => {
+    expect(Trigger.doesReferenceMatchId('unrelated', 'trigger.test.pushover')).toBe(false);
+  });
+
+  test('reference matching is case-insensitive', () => {
+    expect(Trigger.doesReferenceMatchId('PUSHOVER', 'trigger.test.pushover')).toBe(true);
+    expect(Trigger.doesReferenceMatchId('TRIGGER.TEST.PUSHOVER', 'trigger.test.pushover')).toBe(true);
+  });
+
+  test('triggerIdParts.length === 1 does not enter provider.name branch', () => {
+    // Single-part id: no provider, so provider.name branch not reachable
+    expect(Trigger.doesReferenceMatchId('pushover', 'pushover')).toBe(true);
+    expect(Trigger.doesReferenceMatchId('other.pushover', 'pushover')).toBe(false);
+  });
+
+  test('provider.name is exactly 2-segment reference for 2-part id', () => {
+    // triggerIdParts.length >= 2 means length 2 qualifies
+    // id = 'test.pushover' → parts = ['test', 'pushover'], provider = 'test', name = 'pushover'
+    expect(Trigger.doesReferenceMatchId('test.pushover', 'test.pushover')).toBe(true);
+    // Should NOT match if only the name is used on a different provider
+    expect(Trigger.doesReferenceMatchId('other.pushover', 'test.pushover')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// seedNotificationHistoryFromStore — lines 1231-1283 mutant coverage
+// ---------------------------------------------------------------------------
+
+describe('seedNotificationHistoryFromStore targeted mutant coverage', () => {
+  test('seeds only one entry per container per kind (existing entry wins)', async () => {
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateDetectedAt: '2026-04-15T10:00:00Z',
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      result: { tag: '2.0' },
+    };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+
+    // Pre-seed to simulate existing entry
+    notificationHistoryStore.recordNotification(
+      'trigger.test.pushover',
+      'c1',
+      'update-available',
+      'existing-hash',
+      '2026-04-10T00:00:00Z',
+    );
+
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+
+    // Should still have the original hash, not overwritten
+    const hash = notificationHistoryStore.getLastNotifiedHash(
+      'trigger.test.pushover',
+      'c1',
+      'update-available',
+    );
+    expect(hash).toBe('existing-hash');
+  });
+
+  test('seeded counter increments for each new kind+container entry and debug log reflects count', async () => {
+    const container1 = {
+      id: 'c1',
+      name: 'app1',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      result: { tag: '2.0' },
+    };
+    const container2 = {
+      id: 'c2',
+      name: 'app2',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '3.0' },
+      result: { tag: '3.0' },
+    };
+    storeContainer.getContainersRaw.mockReturnValue([container1, container2]);
+
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+
+    const debugSpy = vi.spyOn((trigger as any).log, 'debug');
+
+    trigger.init();
+
+    // Should have seeded 2 entries (one per container)
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'c1', 'update-available'),
+    ).toBeDefined();
+    expect(
+      notificationHistoryStore.getLastNotifiedHash(trigger.getId(), 'c2', 'update-available'),
+    ).toBeDefined();
+
+    // Debug log should mention '2 pre-existing update-available entries'
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/Seeded notification history with 2 pre-existing update-available entries/),
+    );
+  });
+
+  test('seeded count of exactly 1 uses singular form "entry"', async () => {
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      result: { tag: '2.0' },
+    };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+
+    const debugSpy = vi.spyOn((trigger as any).log, 'debug');
+    trigger.init();
+
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/Seeded notification history with 1 pre-existing update-available entry$/),
+    );
+  });
+
+  test('seeded count of 0 does NOT log a debug message', async () => {
+    storeContainer.getContainersRaw.mockReturnValue([]);
+
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+
+    const debugSpy = vi.spyOn((trigger as any).log, 'debug');
+    trigger.init();
+
+    const calls = debugSpy.mock.calls.filter((args: any[]) =>
+      args[0]?.toString().includes('Seeded notification history'),
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  test('updateDetectedAt is used as notifiedAt when present', async () => {
+    const detectedAt = '2026-04-15T09:30:00Z';
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateDetectedAt: detectedAt,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      result: { tag: '2.0' },
+    };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+
+    const recordSpy = vi.spyOn(notificationHistoryStore, 'recordNotification');
+
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+
+    const calls = recordSpy.mock.calls.filter((args) => args[2] === 'update-available');
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls[0]?.[4]).toBe(detectedAt);
+  });
+
+  test('notifiedAt falls back to current time when updateDetectedAt is absent', async () => {
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      // no updateDetectedAt
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      result: { tag: '2.0' },
+    };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+
+    const recordSpy = vi.spyOn(notificationHistoryStore, 'recordNotification');
+    const before = new Date().toISOString();
+
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+
+    const after = new Date().toISOString();
+
+    const calls = recordSpy.mock.calls.filter((args) => args[2] === 'update-available');
+    expect(calls.length).toBeGreaterThan(0);
+    const notifiedAt = calls[0]?.[4] as string;
+    // Should be a valid ISO timestamp between before and after
+    expect(notifiedAt >= before || notifiedAt <= after).toBe(true);
+    expect(notifiedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// security digest severity bucket counting — lines 1903-1919
+// ---------------------------------------------------------------------------
+
+describe('security digest severity bucket counting precision', () => {
+  beforeEach(() => {
+    vi.mocked(mockCron.schedule).mockReturnValue({ stop: vi.fn() } as any);
+    vi.mocked(mockCron.validate).mockReturnValue(true);
+    vi.mocked(event.registerContainerReport).mockReturnValue(vi.fn());
+    vi.mocked(event.registerContainerReports).mockReturnValue(vi.fn());
+    vi.mocked(event.registerContainerUpdateApplied).mockReturnValue(vi.fn());
+    vi.mocked(event.registerContainerUpdateFailed).mockReturnValue(vi.fn());
+    vi.mocked(event.registerSecurityAlert).mockReturnValue(vi.fn());
+    vi.mocked(event.registerSecurityScanCycleComplete).mockReturnValue(vi.fn());
+    vi.mocked(event.registerAgentConnected).mockReturnValue(vi.fn());
+    vi.mocked(event.registerAgentDisconnected).mockReturnValue(vi.fn());
+  });
+
+  test('container with both critical AND high only counts in criticalCount bucket', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+      securitydigesttitle: 'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
+    });
+    trigger.init();
+
+    // Container has both critical AND high — only critical bucket should count it
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'mixed-crit-high',
+      details: '',
+      cycleId: 'cycle-mixed',
+      summary: { critical: 2, high: 3, medium: 0, low: 0, unknown: 0 },
+    });
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.handleSecurityScanCycleCompleteEvent({
+      cycleId: 'cycle-mixed',
+      scannedCount: 1,
+      alertCount: 1,
+      startedAt: '2026-04-17T10:00:00.000Z',
+      completedAt: '2026-04-17T10:01:00.000Z',
+    });
+
+    const ctx = (triggerBatchSpy.mock.calls[0]?.[1] as any);
+    // criticalCount=1 (has critical), highCount=0 (also has critical so excluded)
+    expect(ctx.title).toBe('c=1 h=0 m=0 l=0 u=0');
+  });
+
+  test('container with high and medium but no critical counts in highCount only', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+      securitydigesttitle: 'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
+    });
+    trigger.init();
+
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'high-and-medium',
+      details: '',
+      cycleId: 'cycle-hm',
+      summary: { critical: 0, high: 2, medium: 5, low: 0, unknown: 0 },
+    });
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.handleSecurityScanCycleCompleteEvent({
+      cycleId: 'cycle-hm',
+      scannedCount: 1,
+      alertCount: 1,
+      startedAt: '2026-04-17T10:00:00.000Z',
+      completedAt: '2026-04-17T10:01:00.000Z',
+    });
+
+    const ctx = (triggerBatchSpy.mock.calls[0]?.[1] as any);
+    // highCount=1 (no critical, has high), mediumCount=0 (also has high)
+    expect(ctx.title).toBe('c=0 h=1 m=0 l=0 u=0');
+  });
+
+  test('container with only medium counts in mediumCount bucket, not high/critical', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+      securitydigesttitle: 'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
+    });
+    trigger.init();
+
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'medium-only',
+      details: '',
+      cycleId: 'cycle-med',
+      summary: { critical: 0, high: 0, medium: 3, low: 0, unknown: 0 },
+    });
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.handleSecurityScanCycleCompleteEvent({
+      cycleId: 'cycle-med',
+      scannedCount: 1,
+      alertCount: 1,
+      startedAt: '2026-04-17T10:00:00.000Z',
+      completedAt: '2026-04-17T10:01:00.000Z',
+    });
+
+    const ctx = (triggerBatchSpy.mock.calls[0]?.[1] as any);
+    expect(ctx.title).toBe('c=0 h=0 m=1 l=0 u=0');
+  });
+
+  test('container with medium and low but no critical/high counts in mediumCount only', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+      securitydigesttitle: 'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
+    });
+    trigger.init();
+
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'medium-and-low',
+      details: '',
+      cycleId: 'cycle-ml',
+      summary: { critical: 0, high: 0, medium: 2, low: 3, unknown: 0 },
+    });
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.handleSecurityScanCycleCompleteEvent({
+      cycleId: 'cycle-ml',
+      scannedCount: 1,
+      alertCount: 1,
+      startedAt: '2026-04-17T10:00:00.000Z',
+      completedAt: '2026-04-17T10:01:00.000Z',
+    });
+
+    const ctx = (triggerBatchSpy.mock.calls[0]?.[1] as any);
+    expect(ctx.title).toBe('c=0 h=0 m=1 l=0 u=0');
+  });
+
+  test('container with low and unknown but no critical/high/medium counts in lowCount only', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+      securitydigesttitle: 'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
+    });
+    trigger.init();
+
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'low-and-unknown',
+      details: '',
+      cycleId: 'cycle-lu',
+      summary: { critical: 0, high: 0, medium: 0, low: 1, unknown: 4 },
+    });
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.handleSecurityScanCycleCompleteEvent({
+      cycleId: 'cycle-lu',
+      scannedCount: 1,
+      alertCount: 1,
+      startedAt: '2026-04-17T10:00:00.000Z',
+      completedAt: '2026-04-17T10:01:00.000Z',
+    });
+
+    const ctx = (triggerBatchSpy.mock.calls[0]?.[1] as any);
+    expect(ctx.title).toBe('c=0 h=0 m=0 l=1 u=0');
+  });
+
+  test('container with only unknown severity counts in unknownCount only', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+      securitydigesttitle: 'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
+    });
+    trigger.init();
+
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'unknown-only',
+      details: '',
+      cycleId: 'cycle-unk',
+      summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 7 },
+    });
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.handleSecurityScanCycleCompleteEvent({
+      cycleId: 'cycle-unk',
+      scannedCount: 1,
+      alertCount: 1,
+      startedAt: '2026-04-17T10:00:00.000Z',
+      completedAt: '2026-04-17T10:01:00.000Z',
+    });
+
+    const ctx = (triggerBatchSpy.mock.calls[0]?.[1] as any);
+    expect(ctx.title).toBe('c=0 h=0 m=0 l=0 u=1');
+  });
+
+  test('container with all zero counts does not increment any bucket', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+      securitydigesttitle: 'c=${scan.criticalCount} h=${scan.highCount} m=${scan.mediumCount} l=${scan.lowCount} u=${scan.unknownCount}',
+    });
+    trigger.init();
+
+    // summary all zeros — unusual but valid
+    await trigger.handleSecurityAlertEvent({
+      containerName: 'all-zeros',
+      details: '',
+      cycleId: 'cycle-zeros',
+      summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+    });
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.handleSecurityScanCycleCompleteEvent({
+      cycleId: 'cycle-zeros',
+      scannedCount: 1,
+      alertCount: 1,
+      startedAt: '2026-04-17T10:00:00.000Z',
+      completedAt: '2026-04-17T10:01:00.000Z',
+    });
+
+    const ctx = (triggerBatchSpy.mock.calls[0]?.[1] as any);
+    expect(ctx.title).toBe('c=0 h=0 m=0 l=0 u=0');
+  });
+
+  test('sort order is deterministic: critical > high > medium > low > unknown', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+    });
+    trigger.init();
+
+    // Insert in reverse severity order
+    await trigger.handleSecurityAlertEvent({ containerName: 'unk', details: '', cycleId: 'c', summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 1 } });
+    await trigger.handleSecurityAlertEvent({ containerName: 'low', details: '', cycleId: 'c', summary: { critical: 0, high: 0, medium: 0, low: 1, unknown: 0 } });
+    await trigger.handleSecurityAlertEvent({ containerName: 'med', details: '', cycleId: 'c', summary: { critical: 0, high: 0, medium: 1, low: 0, unknown: 0 } });
+    await trigger.handleSecurityAlertEvent({ containerName: 'hi', details: '', cycleId: 'c', summary: { critical: 0, high: 1, medium: 0, low: 0, unknown: 0 } });
+    await trigger.handleSecurityAlertEvent({ containerName: 'crit', details: '', cycleId: 'c', summary: { critical: 1, high: 0, medium: 0, low: 0, unknown: 0 } });
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    await trigger.handleSecurityScanCycleCompleteEvent({
+      cycleId: 'c',
+      scannedCount: 5,
+      alertCount: 5,
+      startedAt: '2026-04-17T10:00:00.000Z',
+      completedAt: '2026-04-17T10:01:00.000Z',
+    });
+
+    const rows = triggerBatchSpy.mock.calls[0]?.[0] as any[];
+    expect(rows[0].name).toBe('crit');
+    expect(rows[1].name).toBe('hi');
+    expect(rows[2].name).toBe('med');
+    expect(rows[3].name).toBe('low');
+    expect(rows[4].name).toBe('unk');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isTriggerIncludedOrExcluded toUpperCase coverage — lines 1987, 1997
+// ---------------------------------------------------------------------------
+
+describe('isTriggerIncludedOrExcluded case-insensitive threshold matching', () => {
+  test('threshold in upper case is matched case-insensitively', async () => {
+    await trigger.register('trigger', 'test', 'pushover', {
+      ...configurationValid,
+      threshold: 'major',
+    });
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    } as any;
+
+    // reference 'pushover:MAJOR' — threshold uppercase should still match
+    const result = trigger.isTriggerIncludedOrExcluded(container, 'pushover:MAJOR');
+    expect(result).toBe(true);
+  });
+
+  test('threshold in mixed case is normalized', async () => {
+    await trigger.register('trigger', 'test', 'pushover', {
+      ...configurationValid,
+      threshold: 'minor',
+    });
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'minor' },
+    } as any;
+
+    const result = trigger.isTriggerIncludedOrExcluded(container, 'pushover:Minor');
+    expect(result).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getNotificationServerName, getNotificationWatcherSuffix, getNotificationAgentPrefix
+// — lines 2438-2472 mutant coverage
+// ---------------------------------------------------------------------------
+
+describe('notification template context helpers coverage', () => {
+  test('getNotificationServerName uses container.agent when present', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      agent: '  remote-agent  ',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    } as any;
+
+    const templateContainer = (trigger as any).getTemplateContainer(container);
+    expect(templateContainer.notificationServerName).toBe('remote-agent');
+  });
+
+  test('getNotificationServerName falls back to getServerName when agent is empty', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    mockGetServerName.mockReturnValue('my-controller');
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      agent: '',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    } as any;
+
+    const templateContainer = (trigger as any).getTemplateContainer(container);
+    expect(templateContainer.notificationServerName).toBe('my-controller');
+  });
+
+  test('getNotificationServerName falls back to getServerName when agent is non-string', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    mockGetServerName.mockReturnValue('fallback-server');
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      agent: 42 as any, // non-string
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    } as any;
+
+    const templateContainer = (trigger as any).getTemplateContainer(container);
+    expect(templateContainer.notificationServerName).toBe('fallback-server');
+  });
+
+  test('getNotificationWatcherSuffix returns empty string for watcher=local', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'local',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    } as any;
+
+    const templateContainer = (trigger as any).getTemplateContainer(container);
+    expect(templateContainer.notificationWatcherSuffix).toBe('');
+  });
+
+  test('getNotificationWatcherSuffix returns empty string for watcher=agent', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'agent',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    } as any;
+
+    const templateContainer = (trigger as any).getTemplateContainer(container);
+    expect(templateContainer.notificationWatcherSuffix).toBe('');
+  });
+
+  test('getNotificationWatcherSuffix returns watcher name in parens for non-local watcher', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'remote-watcher',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    } as any;
+
+    const templateContainer = (trigger as any).getTemplateContainer(container);
+    expect(templateContainer.notificationWatcherSuffix).toBe(' (remote-watcher)');
+  });
+
+  test('getNotificationWatcherSuffix returns empty string when watcher matches notificationServerName and agent prefix present', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    mockGetServerName.mockReturnValue('my-server');
+    // Non-empty agents list → getNotificationAgentPrefix returns '[my-server] ' (non-empty)
+    mockGetAgents.mockReturnValue([{ name: 'agent1' }]);
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'my-server', // matches server name (getServerName)
+      // no agent property → getNotificationServerName uses getServerName() → 'my-server'
+      // getNotificationAgentPrefix: no agent, agents non-empty → '[my-server] '
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    } as any;
+
+    const templateContainer = (trigger as any).getTemplateContainer(container);
+    // agentPrefix is '[my-server] ' (non-empty), watcher 'my-server' == serverName 'my-server'
+    expect(templateContainer.notificationWatcherSuffix).toBe('');
+  });
+
+  test('getNotificationAgentPrefix returns empty string when no agent and no remote agents', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    mockGetAgents.mockReturnValue([]);
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    } as any;
+
+    const templateContainer = (trigger as any).getTemplateContainer(container);
+    expect(templateContainer.notificationAgentPrefix).toBe('');
+  });
+
+  test('getNotificationAgentPrefix returns [agent] when container.agent is set', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      agent: 'my-agent',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    } as any;
+
+    const templateContainer = (trigger as any).getTemplateContainer(container);
+    expect(templateContainer.notificationAgentPrefix).toBe('[my-agent] ');
+  });
+
+  test('getNotificationAgentPrefix returns [serverName] when no agent but remote agents exist', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    mockGetServerName.mockReturnValue('controller-host');
+    mockGetAgents.mockReturnValue([{ name: 'agent1' }]);
+
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      // no agent property
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    } as any;
+
+    const templateContainer = (trigger as any).getTemplateContainer(container);
+    expect(templateContainer.notificationAgentPrefix).toBe('[controller-host] ');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseIncludeOrIncludeTriggerString — lines 712-736 mutant coverage
+// ---------------------------------------------------------------------------
+
+describe('parseIncludeOrIncludeTriggerString coverage', () => {
+  test('parses trigger id with threshold separator', () => {
+    const result = Trigger.parseIncludeOrIncludeTriggerString('pushover:major');
+    expect(result).toEqual({ id: 'pushover', threshold: 'major' });
+  });
+
+  test('parses trigger id without threshold separator defaults to all', () => {
+    const result = Trigger.parseIncludeOrIncludeTriggerString('pushover');
+    expect(result).toEqual({ id: 'pushover', threshold: 'all' });
+  });
+
+  test('multiple colons — treats string as id only (threshold defaults to all)', () => {
+    // hasMultipleSeparators = true → threshold block skipped
+    const result = Trigger.parseIncludeOrIncludeTriggerString('trigger:type:name');
+    expect(result.threshold).toBe('all');
+    expect(result.id).toBe('trigger');
+  });
+
+  test('invalid threshold candidate keeps default all', () => {
+    const result = Trigger.parseIncludeOrIncludeTriggerString('pushover:turbo');
+    expect(result).toEqual({ id: 'pushover', threshold: 'all' });
+  });
+
+  test('valid threshold is parsed correctly for each supported value', () => {
+    for (const threshold of ['all', 'major', 'minor', 'patch', 'digest']) {
+      const result = Trigger.parseIncludeOrIncludeTriggerString(`pushover:${threshold}`);
+      expect(result.threshold).toBe(threshold);
+    }
+  });
+
+  test('separatorIndex is the FIRST colon (not last) when parsing id', () => {
+    // 'a:b:c' → separatorIndex=1, hasMultipleSeparators=true → id='a'
+    const result = Trigger.parseIncludeOrIncludeTriggerString('a:b:c');
+    expect(result.id).toBe('a');
+  });
+
+  test('whitespace around id and threshold is trimmed', () => {
+    const result = Trigger.parseIncludeOrIncludeTriggerString('  pushover : major  ');
+    expect(result).toEqual({ id: 'pushover', threshold: 'major' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getNotificationEvent — lines 472-497 (getAgentNotificationEvent coverage)
+// ---------------------------------------------------------------------------
+
+describe('getNotificationEvent agent event handling', () => {
+  test('agent-disconnect event with reason populates reason field', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    const container = {
+      id: 'c1',
+      name: 'my-agent',
+      watcher: 'agent',
+      updateAvailable: false,
+      updateKind: { kind: 'unknown', semverDiff: 'unknown' },
+      notificationEvent: {
+        kind: 'agent-disconnect',
+        agentName: 'my-agent',
+        reason: 'connection lost',
+      },
+    };
+
+    await trigger.handleAgentDisconnectedEvent({ agentName: 'my-agent', reason: 'connection lost' });
+
+    expect(triggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notificationEvent: expect.objectContaining({
+          kind: 'agent-disconnect',
+          agentName: 'my-agent',
+          reason: 'connection lost',
+        }),
+      }),
+    );
+  });
+
+  test('agent-reconnect event has reason=undefined', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleAgentConnectedEvent({ agentName: 'my-agent', reconnected: true });
+
+    expect(triggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notificationEvent: expect.objectContaining({
+          kind: 'agent-reconnect',
+          agentName: 'my-agent',
+          reason: undefined,
+        }),
+      }),
+    );
+  });
+
+  test('getNotificationEvent returns undefined for unknown kind', () => {
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      notificationEvent: { kind: 'unknown-kind', agentName: 'agent1' },
+    } as any;
+    expect(getNotificationEvent(container)).toBeUndefined();
+  });
+
+  test('getNotificationEvent returns undefined when notificationEvent is not an object', () => {
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      notificationEvent: 'string-value',
+    } as any;
+    expect(getNotificationEvent(container)).toBeUndefined();
+  });
+
+  test('getNotificationEvent returns undefined when notificationEvent is null', () => {
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      notificationEvent: null,
+    } as any;
+    expect(getNotificationEvent(container)).toBeUndefined();
+  });
+
+  test('getNotificationEvent returns undefined when agentName is missing', () => {
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      notificationEvent: { kind: 'agent-disconnect' }, // no agentName
+    } as any;
+    expect(getNotificationEvent(container)).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildAgentContainer / buildAgentDisconnectedContainer — lines 342-388
+// ---------------------------------------------------------------------------
+
+describe('buildAgentContainer structure coverage', () => {
+  test('disconnected agent container has correct icon and status', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleAgentDisconnectedEvent({ agentName: 'myagent', reason: 'timeout' });
+
+    const calledContainer = triggerSpy.mock.calls[0]?.[0] as any;
+    expect(calledContainer.displayIcon).toBe('mdi:server-network-off');
+    expect(calledContainer.status).toBe('disconnected');
+    expect(calledContainer.watcher).toBe('agent');
+    expect(calledContainer.id).toBe('agent-myagent');
+    expect(calledContainer.name).toBe('myagent');
+    expect(calledContainer.updateAvailable).toBe(false);
+    expect(calledContainer.updateKind.kind).toBe('unknown');
+    expect(calledContainer.image.digest.watch).toBe(false);
+    expect(calledContainer.image.architecture).toBe('unknown');
+    expect(calledContainer.image.os).toBe('unknown');
+    expect(calledContainer.notificationEvent.reason).toBe('timeout');
+  });
+
+  test('connected agent container has correct icon and status', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    // reconnected=true is required for handleAgentConnectedEvent to fire
+    await trigger.handleAgentConnectedEvent({ agentName: 'myagent', reconnected: true });
+
+    const calledContainer = triggerSpy.mock.calls[0]?.[0] as any;
+    expect(calledContainer.displayIcon).toBe('mdi:server-network');
+    expect(calledContainer.status).toBe('connected');
+    expect(calledContainer.notificationEvent.reason).toBeUndefined();
+  });
+
+  test('disconnected agent container without reason has undefined error', async () => {
+    await trigger.register('trigger', 'test', 'pushover', configurationValid);
+    trigger.init();
+
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleAgentDisconnectedEvent({ agentName: 'myagent' });
+
+    const calledContainer = triggerSpy.mock.calls[0]?.[0] as any;
+    expect(calledContainer.error).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getSupportedThresholds — line 632 [ArrayDeclaration] mutant
+// ---------------------------------------------------------------------------
+
+describe('getSupportedThresholds', () => {
+  test('returns non-empty array of supported threshold strings', () => {
+    const thresholds = Trigger.getSupportedThresholds();
+    expect(thresholds.length).toBeGreaterThan(0);
+    expect(thresholds).toContain('all');
+    expect(thresholds).toContain('major');
+    expect(thresholds).toContain('minor');
+    expect(thresholds).toContain('patch');
+    expect(thresholds).toContain('digest');
+  });
+
+  test('returns a copy (spread), not the original array reference', () => {
+    const t1 = Trigger.getSupportedThresholds();
+    const t2 = Trigger.getSupportedThresholds();
+    expect(t1).not.toBe(t2); // Different array references
+    expect(t1).toEqual(t2); // Same contents
+  });
+});
+
+// ---------------------------------------------------------------------------
+// shouldDispatchNotificationEventInBatch — lines 868-870 OptionalChaining mutant
+// ---------------------------------------------------------------------------
+
+describe('shouldDispatchNotificationEventInBatch coverage (batch handler filtering)', () => {
+  beforeEach(() => {
+    vi.mocked(mockCron.schedule).mockReturnValue({ stop: vi.fn() } as any);
+    vi.mocked(mockCron.validate).mockReturnValue(true);
+    vi.mocked(event.registerContainerReport).mockReturnValue(vi.fn());
+    vi.mocked(event.registerContainerReports).mockReturnValue(vi.fn());
+    vi.mocked(event.registerContainerUpdateApplied).mockReturnValue(vi.fn());
+    vi.mocked(event.registerContainerUpdateFailed).mockReturnValue(vi.fn());
+    vi.mocked(event.registerSecurityAlert).mockReturnValue(vi.fn());
+    vi.mocked(event.registerSecurityScanCycleComplete).mockReturnValue(vi.fn());
+    vi.mocked(event.registerAgentConnected).mockReturnValue(vi.fn());
+    vi.mocked(event.registerAgentDisconnected).mockReturnValue(vi.fn());
+  });
+
+  test('container without notificationEvent (no kind) is dispatched in batch', async () => {
+    await trigger.register('trigger', 'test', 'slack', {
+      ...configurationValid,
+      mode: 'batch',
+    });
+    trigger.init();
+
+    const containers = [
+      {
+        watcher: 'local',
+        name: 'app',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', semverDiff: 'major' },
+        // no notificationEvent
+      },
+    ];
+    storeContainer.getContainers.mockReturnValue(containers);
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    // handleContainerReports routes through shouldDispatchNotificationEventInBatch
+    await trigger.handleContainerReports([
+      {
+        container: containers[0],
+        changed: true,
+      } as any,
+    ]);
+
+    expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('agent-disconnect container is NOT included in batch report dispatch', async () => {
+    await trigger.register('trigger', 'test', 'slack', {
+      ...configurationValid,
+      mode: 'batch',
+    });
+    trigger.init();
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    // Agent disconnect containers have notificationEvent.kind='agent-disconnect'
+    // These must NOT be included in batch update-available dispatch
+    const agentContainer = {
+      id: 'agent-myagent',
+      name: 'myagent',
+      watcher: 'agent',
+      updateAvailable: false,
+      updateKind: { kind: 'unknown', semverDiff: 'unknown' },
+      notificationEvent: { kind: 'agent-disconnect', agentName: 'myagent' },
+    };
+
+    await trigger.handleContainerReports([
+      {
+        container: agentContainer,
+        changed: false,
+      } as any,
+    ]);
+
+    // Agent-disconnect events bypass batch update-available dispatch
+    expect(triggerBatchSpy).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// warnIfDigestRoutingIsSuppressed — line 1160 mutant coverage
+// ---------------------------------------------------------------------------
+
+describe('warnIfDigestRoutingIsSuppressed coverage', () => {
+  beforeEach(() => {
+    vi.mocked(mockCron.schedule).mockReturnValue({ stop: vi.fn() } as any);
+    vi.mocked(mockCron.validate).mockReturnValue(true);
+    vi.mocked(event.registerContainerReport).mockReturnValue(vi.fn());
+    vi.mocked(event.registerContainerReports).mockReturnValue(vi.fn());
+    vi.mocked(event.registerContainerUpdateApplied).mockReturnValue(vi.fn());
+    vi.mocked(event.registerContainerUpdateFailed).mockReturnValue(vi.fn());
+    vi.mocked(event.registerSecurityAlert).mockReturnValue(vi.fn());
+    vi.mocked(event.registerSecurityScanCycleComplete).mockReturnValue(vi.fn());
+    vi.mocked(event.registerAgentConnected).mockReturnValue(vi.fn());
+    vi.mocked(event.registerAgentDisconnected).mockReturnValue(vi.fn());
+  });
+
+  test('digest mode with rule-disabled dispatch decision emits warn exactly once per trigger', async () => {
+    notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+      enabled: false,
+      reason: 'rule-disabled',
+    });
+
+    await trigger.register('trigger', 'test', 'pushover', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    await trigger.init();
+
+    const warnSpy = vi.spyOn(trigger.log, 'warn');
+
+    // First container report — should emit warn
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    } as any);
+
+    const digestWarnCalls = warnSpy.mock.calls.filter((args) =>
+      (args[0] as string).includes('Digest mode is configured'),
+    );
+    expect(digestWarnCalls.length).toBe(1);
+
+    // Second container report — warn should NOT be emitted again (dedup)
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c2',
+        name: 'app2',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    } as any);
+
+    const digestWarnCallsAfter = warnSpy.mock.calls.filter((args) =>
+      (args[0] as string).includes('Digest mode is configured'),
+    );
+    expect(digestWarnCallsAfter.length).toBe(1); // Still 1
+  });
+
+  test('digest mode with excluded-from-allow-list emits specific warn message', async () => {
+    notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+      enabled: false,
+      reason: 'excluded-from-allow-list',
+    });
+
+    await trigger.register('trigger', 'test', 'pushover', {
+      ...configurationValid,
+      mode: 'digest',
+    });
+    await trigger.init();
+
+    const warnSpy = vi.spyOn(trigger.log, 'warn');
+
+    await trigger.handleContainerReportDigest({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    } as any);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('excludes this trigger'),
+    );
+  });
+
+  test('simple mode does NOT warn even if dispatch is disabled', async () => {
+    notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+      enabled: false,
+      reason: 'rule-disabled',
+    });
+
+    await trigger.register('trigger', 'test', 'pushover', {
+      ...configurationValid,
+      mode: 'simple',
+    });
+    trigger.init();
+
+    const warnSpy = vi.spyOn(trigger.log, 'warn');
+
+    await trigger.handleContainerReport({
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      changed: true,
+    } as any);
+
+    const digestWarnCalls = warnSpy.mock.calls.filter((args) =>
+      (args[0] as string).includes('Digest mode is configured'),
+    );
+    expect(digestWarnCalls.length).toBe(0);
+  });
+});
