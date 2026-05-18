@@ -2,7 +2,6 @@ import {
   ArrowRight,
   BarChart3,
   Bell,
-  BookOpen,
   ChevronDown,
   Container,
   Eye,
@@ -13,18 +12,16 @@ import {
   Play,
   Radio,
   RotateCcw,
-  Terminal,
   Webhook,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { CtaButtons } from "@/components/cta-buttons";
 import { DemoSection } from "@/components/demo-section";
-import { GithubIcon } from "@/components/github-icon";
+import { DockerRunSnippet } from "@/components/docker-run-snippet";
 import { RoadmapTimeline } from "@/components/roadmap-timeline";
 import { SiteFooter } from "@/components/site-footer";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 
 type FeatureCategory = "core" | "security" | "integrations" | "operations";
 
@@ -489,24 +486,7 @@ export default function Home() {
                 </p>
 
                 {/* CTA Buttons */}
-                <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
-                  <Button size="lg" asChild>
-                    <a
-                      href="https://github.com/CodesWhat/drydock"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <GithubIcon className="h-4 w-4" />
-                      View on GitHub
-                    </a>
-                  </Button>
-                  <Button variant="outline" size="lg" asChild>
-                    <Link href="/docs">
-                      <BookOpen className="h-4 w-4" />
-                      Documentation
-                    </Link>
-                  </Button>
-                </div>
+                <CtaButtons />
 
                 {/* Distribution Badges */}
                 <div className="mt-10 flex flex-wrap items-center justify-center gap-2">
@@ -816,24 +796,7 @@ export default function Home() {
               </div>
 
               {/* Code Block */}
-              <Card className="mx-auto max-w-2xl border-neutral-200 bg-neutral-950 text-left dark:border-neutral-800">
-                <CardContent className="pt-6">
-                  <div className="mb-3 flex items-center gap-2 text-neutral-500">
-                    <Terminal className="h-4 w-4" />
-                    <span className="text-xs font-medium uppercase tracking-wider">Terminal</span>
-                  </div>
-                  <pre className="overflow-x-auto text-sm">
-                    <code className="text-neutral-300">
-                      <span className="text-neutral-500">$</span>{" "}
-                      <span className="text-[#C4FF00]">docker run</span> -d \{"\n"}
-                      {"  "}--name drydock \{"\n"}
-                      {"  "}-v /var/run/docker.sock:/var/run/docker.sock \{"\n"}
-                      {"  "}-p 3000:3000 \{"\n"}
-                      {"  "}codeswhat/drydock
-                    </code>
-                  </pre>
-                </CardContent>
-              </Card>
+              <DockerRunSnippet cardClassName="mx-auto max-w-2xl border-neutral-200 bg-neutral-950 text-left dark:border-neutral-800" />
             </div>
           </section>
 

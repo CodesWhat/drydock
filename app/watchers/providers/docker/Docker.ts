@@ -193,6 +193,25 @@ function allSettledWithDockerWatchConcurrency<T, R>(
   return Promise.allSettled(items.map((item, index) => limit(() => mapper(item, index))));
 }
 
+function filterAndSliceTimestampedHistory<T extends { timestamp: string }>(
+  history: T[],
+  sinceMs: number | undefined,
+  limit: number,
+): T[] {
+  const filtered = history.filter((entry) => {
+    if (sinceMs === undefined) {
+      return true;
+    }
+    const timestampMs = Date.parse(entry.timestamp);
+    return Number.isNaN(timestampMs) ? false : timestampMs >= sinceMs;
+  });
+
+  if (!Number.isFinite(limit) || limit <= 0) {
+    return filtered;
+  }
+  return filtered.slice(-Math.trunc(limit));
+}
+
 interface DockerEventsStream {
   on: (eventName: string, handler: (...args: unknown[]) => unknown) => unknown;
   removeAllListeners?: (eventName?: string) => unknown;
@@ -824,36 +843,14 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
 
   getRecentDockerEvents(options: { sinceMs?: number; limit?: number } = {}): DockerRecentEvent[] {
     const { sinceMs, limit = RECENT_DOCKER_EVENT_LIMIT } = options;
-    const filteredEvents = this.recentDockerEvents.filter((recentEvent) => {
-      if (sinceMs === undefined) {
-        return true;
-      }
-      const timestampMs = Date.parse(recentEvent.timestamp);
-      return Number.isNaN(timestampMs) ? false : timestampMs >= sinceMs;
-    });
-
-    if (!Number.isFinite(limit) || limit <= 0) {
-      return filteredEvents;
-    }
-    return filteredEvents.slice(-Math.trunc(limit));
+    return filterAndSliceTimestampedHistory(this.recentDockerEvents, sinceMs, limit);
   }
 
   getRecentAliasFilterDecisions(
     options: { sinceMs?: number; limit?: number } = {},
   ): AliasFilterDecision[] {
     const { sinceMs, limit = RECENT_ALIAS_FILTER_DECISION_LIMIT } = options;
-    const filteredDecisions = this.recentAliasFilterDecisions.filter((decision) => {
-      if (sinceMs === undefined) {
-        return true;
-      }
-      const timestampMs = Date.parse(decision.timestamp);
-      return Number.isNaN(timestampMs) ? false : timestampMs >= sinceMs;
-    });
-
-    if (!Number.isFinite(limit) || limit <= 0) {
-      return filteredDecisions;
-    }
-    return filteredDecisions.slice(-Math.trunc(limit));
+    return filterAndSliceTimestampedHistory(this.recentAliasFilterDecisions, sinceMs, limit);
   }
 
   async ensureRemoteAuthHeaders() {

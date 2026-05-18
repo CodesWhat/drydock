@@ -85,7 +85,7 @@ jobs:
             package: app
             incremental_file: reports/stryker-incremental-app-orch-trigger-runtime.json
             mutate: >-
-              triggers/providers/Trigger.ts,triggers/providers/trigger-*.ts,triggers/hooks/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+              triggers/providers/Trigger.ts,triggers/providers/trigger-*.ts,triggers/providers/exec-stream.ts,triggers/hooks/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
           - name: app-orch-trigger-notify-primary
             package: app
             incremental_file: reports/stryker-incremental-app-orch-trigger-notify-primary.json

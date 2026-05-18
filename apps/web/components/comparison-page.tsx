@@ -1,11 +1,11 @@
 import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, BookOpen, Check, Clock, Minus, Terminal, X } from "lucide-react";
+import { AlertTriangle, Check, Clock, Minus, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { GithubIcon } from "@/components/github-icon";
+import { CtaButtons } from "@/components/cta-buttons";
+import { DockerRunSnippet } from "@/components/docker-run-snippet";
 import { SiteFooter } from "@/components/site-footer";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 export type ComparisonRow = {
@@ -239,26 +239,12 @@ export function ComparisonPage({
                       <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
                         {migrationDescription}
                       </p>
-                      <Card className="border-neutral-200 bg-neutral-950 text-left dark:border-neutral-800">
-                        <CardContent className="pt-4 pb-4">
-                          <div className="mb-2 flex items-center gap-2 text-neutral-500">
-                            <Terminal className="h-3.5 w-3.5" />
-                            <span className="text-xs font-medium uppercase tracking-wider">
-                              Quick start
-                            </span>
-                          </div>
-                          <pre className="overflow-x-auto text-sm">
-                            <code className="text-neutral-300">
-                              <span className="text-neutral-500">$</span>{" "}
-                              <span className="text-[#C4FF00]">docker run</span> -d \{"\n"}
-                              {"  "}--name drydock \{"\n"}
-                              {"  "}-v /var/run/docker.sock:/var/run/docker.sock \{"\n"}
-                              {"  "}-p 3000:3000 \{"\n"}
-                              {"  "}codeswhat/drydock
-                            </code>
-                          </pre>
-                        </CardContent>
-                      </Card>
+                      <DockerRunSnippet
+                        contentClassName="pt-4 pb-4"
+                        iconClassName="h-3.5 w-3.5"
+                        headerClassName="mb-2 flex items-center gap-2 text-neutral-500"
+                        label="Quick start"
+                      />
                     </div>
                   </div>
                 </CardContent>
@@ -279,24 +265,7 @@ export function ComparisonPage({
                 </p>
               </div>
 
-              <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
-                <Button size="lg" asChild>
-                  <a
-                    href="https://github.com/CodesWhat/drydock"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <GithubIcon className="h-4 w-4" />
-                    View on GitHub
-                  </a>
-                </Button>
-                <Button variant="outline" size="lg" asChild>
-                  <Link href="/docs">
-                    <BookOpen className="h-4 w-4" />
-                    Documentation
-                  </Link>
-                </Button>
-              </div>
+              <CtaButtons />
             </div>
           </section>
 

@@ -173,26 +173,25 @@ function closeSource(state: StreamConnectionState): void {
   }
 }
 
-function createEventSource(
-  streamUrl: string,
-  handlers: ContainerStatsStreamEventHandlers,
-  onError: () => void,
-): EventSource {
-  const source = createManagedEventSource(streamUrl);
+interface BaseEventSourceConfig {
+  streamUrl: string;
+  onOpen: (() => void) | undefined;
+  onHeartbeat: (() => void) | undefined;
+  customEventName: string;
+  onCustomEvent: (event: Event) => void;
+  onError: () => void;
+}
+
+function createBaseEventSource(config: BaseEventSourceConfig): EventSource {
+  const source = createManagedEventSource(config.streamUrl);
   source.addEventListener('open', () => {
-    handlers.onOpen?.();
+    config.onOpen?.();
   });
   source.addEventListener('dd:heartbeat', () => {
-    handlers.onHeartbeat?.();
+    config.onHeartbeat?.();
   });
-  source.addEventListener('dd:container-stats', (event: Event) => {
-    const messageEvent = event as MessageEvent;
-    const snapshot = parseSnapshotEvent(messageEvent.data);
-    if (snapshot) {
-      handlers.onSnapshot?.(snapshot);
-    }
-  });
-  source.onerror = onError;
+  source.addEventListener(config.customEventName, config.onCustomEvent);
+  source.onerror = config.onError;
   return source;
 }
 
@@ -366,53 +365,46 @@ export async function getStatsSummary(): Promise<ContainerStatsSummarySnapshot> 
   return snapshot;
 }
 
-function createSummaryEventSource(
-  streamUrl: string,
-  handlers: StatsSummaryStreamHandlers,
-  onError: () => void,
-): EventSource {
-  const source = createManagedEventSource(streamUrl);
-  source.addEventListener('open', () => {
-    handlers.onOpen?.();
-  });
-  source.addEventListener('dd:heartbeat', () => {
-    handlers.onHeartbeat?.();
-  });
-  source.addEventListener('dd:stats-summary', (event: Event) => {
-    const messageEvent = event as MessageEvent;
-    const snapshot = parseSummarySnapshotEvent(messageEvent.data);
-    if (snapshot) {
-      handlers.onSummary?.(snapshot);
-    }
-  });
-  source.onerror = onError;
-  return source;
+interface StreamOptions {
+  streamUrl: string;
+  onOpen: (() => void) | undefined;
+  onHeartbeat: (() => void) | undefined;
+  onError: (() => void) | undefined;
+  customEventName: string;
+  onCustomEvent: (event: Event) => void;
+  reconnectDelayMs: number;
 }
 
-export function connectStatsSummaryStream(
-  handlers: StatsSummaryStreamHandlers = {},
-  options: StatsSummaryStreamOptions = {},
-): StatsSummaryStreamController {
-  const reconnectDelayMs = Math.max(1, options.reconnectDelayMs ?? DEFAULT_RECONNECT_DELAY_MS);
-  const streamUrl = '/api/v1/stats/summary/stream';
+function connectStream(opts: StreamOptions): {
+  pause(): void;
+  resume(): void;
+  disconnect(): void;
+  isPaused(): boolean;
+} {
   const state: StreamConnectionState = {
     paused: false,
     disconnected: false,
   };
 
   function handleError(): void {
-    handlers.onError?.();
+    opts.onError?.();
     if (state.paused || state.disconnected) {
       return;
     }
-
     closeSource(state);
-    scheduleReconnect(state, reconnectDelayMs, connect);
+    scheduleReconnect(state, opts.reconnectDelayMs, connect);
   }
 
   function connect(): void {
     closeSource(state);
-    state.eventSource = createSummaryEventSource(streamUrl, handlers, handleError);
+    state.eventSource = createBaseEventSource({
+      streamUrl: opts.streamUrl,
+      onOpen: opts.onOpen,
+      onHeartbeat: opts.onHeartbeat,
+      customEventName: opts.customEventName,
+      onCustomEvent: opts.onCustomEvent,
+      onError: handleError,
+    });
   }
 
   connect();
@@ -446,6 +438,27 @@ export function connectStatsSummaryStream(
       return state.paused;
     },
   };
+}
+
+export function connectStatsSummaryStream(
+  handlers: StatsSummaryStreamHandlers = {},
+  options: StatsSummaryStreamOptions = {},
+): StatsSummaryStreamController {
+  return connectStream({
+    streamUrl: '/api/v1/stats/summary/stream',
+    onOpen: handlers.onOpen,
+    onHeartbeat: handlers.onHeartbeat,
+    onError: handlers.onError,
+    customEventName: 'dd:stats-summary',
+    onCustomEvent: (event: Event) => {
+      const messageEvent = event as MessageEvent;
+      const snapshot = parseSummarySnapshotEvent(messageEvent.data);
+      if (snapshot) {
+        handlers.onSummary?.(snapshot);
+      }
+    },
+    reconnectDelayMs: Math.max(1, options.reconnectDelayMs ?? DEFAULT_RECONNECT_DELAY_MS),
+  });
 }
 
 export function connectContainerStatsStream(
@@ -453,57 +466,19 @@ export function connectContainerStatsStream(
   handlers: ContainerStatsStreamEventHandlers = {},
   options: ContainerStatsStreamOptions = {},
 ): ContainerStatsStreamController {
-  const reconnectDelayMs = Math.max(1, options.reconnectDelayMs ?? DEFAULT_RECONNECT_DELAY_MS);
-  const streamUrl = `/api/v1/containers/${encodeURIComponent(containerId)}/stats/stream`;
-  const state: StreamConnectionState = {
-    paused: false,
-    disconnected: false,
-  };
-
-  function handleError(): void {
-    handlers.onError?.();
-    if (state.paused || state.disconnected) {
-      return;
-    }
-
-    closeSource(state);
-    scheduleReconnect(state, reconnectDelayMs, connect);
-  }
-
-  function connect(): void {
-    closeSource(state);
-    state.eventSource = createEventSource(streamUrl, handlers, handleError);
-  }
-
-  connect();
-
-  return {
-    pause() {
-      if (state.paused || state.disconnected) {
-        return;
+  return connectStream({
+    streamUrl: `/api/v1/containers/${encodeURIComponent(containerId)}/stats/stream`,
+    onOpen: handlers.onOpen,
+    onHeartbeat: handlers.onHeartbeat,
+    onError: handlers.onError,
+    customEventName: 'dd:container-stats',
+    onCustomEvent: (event: Event) => {
+      const messageEvent = event as MessageEvent;
+      const snapshot = parseSnapshotEvent(messageEvent.data);
+      if (snapshot) {
+        handlers.onSnapshot?.(snapshot);
       }
-      state.paused = true;
-      clearReconnectTimer(state);
-      closeSource(state);
     },
-    resume() {
-      if (!state.paused || state.disconnected) {
-        return;
-      }
-      state.paused = false;
-      connect();
-    },
-    disconnect() {
-      if (state.disconnected) {
-        return;
-      }
-      state.disconnected = true;
-      state.paused = true;
-      clearReconnectTimer(state);
-      closeSource(state);
-    },
-    isPaused() {
-      return state.paused;
-    },
-  };
+    reconnectDelayMs: Math.max(1, options.reconnectDelayMs ?? DEFAULT_RECONNECT_DELAY_MS),
+  });
 }
