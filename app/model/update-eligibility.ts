@@ -442,9 +442,10 @@ export function computeUpdateEligibility(
       blockers.push(
         makeBlocker({
           reason: 'trigger-excluded',
-          message: `Trigger excluded by container label dd.trigger.exclude='${triggerExclude}'.`,
+          message: `Trigger excluded by container label dd.action.exclude='${triggerExclude}'.`,
           actionable: true,
-          actionHint: 'Adjust `dd.trigger.include` / `dd.trigger.exclude` labels on the container.',
+          actionHint:
+            'Adjust the `dd.action.include` / `dd.action.exclude` labels on the container.',
           details: {
             triggerExclude,
             triggerId: t.getId?.(),
@@ -455,9 +456,10 @@ export function computeUpdateEligibility(
       blockers.push(
         makeBlocker({
           reason: 'trigger-not-included',
-          message: `Trigger not matched by container label dd.trigger.include='${triggerInclude}'.`,
+          message: `Trigger not matched by container label dd.action.include='${triggerInclude}'.`,
           actionable: true,
-          actionHint: 'Adjust `dd.trigger.include` / `dd.trigger.exclude` labels on the container.',
+          actionHint:
+            'Adjust the `dd.action.include` / `dd.action.exclude` labels on the container.',
           details: {
             triggerInclude,
             triggerId: t.getId?.(),

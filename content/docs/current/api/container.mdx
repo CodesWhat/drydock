@@ -41,6 +41,7 @@ curl "http://drydock:3000/api/v1/containers?limit=25&offset=0"
 | `kind` | string | | Filter by update kind or watched state: `major`, `minor`, `patch`, `digest`, `watched`, `unwatched`, `all` |
 | `watcher` | string | | Filter by watcher name |
 | `maturity` | string | | Filter by update maturity: `hot`, `mature`, `established` |
+| `containerIds` | string | | Comma-separated list of container IDs to pre-filter results to a specific set. Used by the Security view Update action and dashboard row navigation. |
 
 ## Get container summary
 
@@ -368,6 +369,18 @@ Rate-limited to 30 requests per minute.
 
 Returns 200 with the updated container on success, 400 if security scanner is not configured, 404 if the container is not found, or 500 on scan failure.
 
+## Run bulk security scan
+
+This operation triggers a vulnerability scan on all watched containers server-side. Streams per-container progress over the SSE channel and emits a single `security-scan-cycle-complete` event when finished. Respects client-disconnect aborts.
+
+```bash
+curl -X POST http://drydock:3000/api/v1/containers/scan-all
+```
+
+Rate-limited to 1 request per 60 seconds per IP. Authenticated admins bypass the rate limit.
+
+Returns 202 Accepted when the bulk scan is started, or 429 if the rate limit is exceeded.
+
 ## Get SBOM for a container
 
 This operation returns the latest SBOM document for a container in the requested format.
@@ -375,6 +388,8 @@ This operation returns the latest SBOM document for a container in the requested
 ```bash
 curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/sbom?format=spdx-json
 ```
+
+Returns 200 with the SBOM document, 404 if the container is not found, or **503** (`"Security scanner is disabled or misconfigured"`) if the Trivy scanner is disabled or not configured. A `503` indicates the feature is intentionally off, not a generation failure.
 
 ## Download container logs
 
@@ -640,11 +655,63 @@ curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28
 
 Returns 200 with the operations array on success, or 404 if the container is not found.
 
+## Get a single update operation
+
+`GET /api/v1/update-operations/:id`
+
+Returns the current state of a single update or rollback operation by its ID. Use this as an SSE-miss fallback — if a UI client reconnects after losing the SSE stream and needs to reconcile operation state without replaying all events.
+
+```bash
+curl http://drydock:3000/api/v1/update-operations/ea7c33a4-c1e3-4f34-9b95-9662cc7a40d6
+
+{
+  "id": "ea7c33a4-c1e3-4f34-9b95-9662cc7a40d6",
+  "containerName": "homeassistant",
+  "status": "in-progress",
+  "phase": "new-started",
+  "createdAt": "2026-01-15T12:00:00.000Z",
+  "updatedAt": "2026-01-15T12:00:05.000Z",
+  "containerId": "31a61a8305ef...",
+  "fromVersion": "2024.11.3",
+  "toVersion": "2024.12.0"
+}
+```
+
+The response shape matches entries from the `GET /api/v1/containers/:id/update-operations` array.
+
+Returns 200 with the operation on success, 400 if no ID is provided, or 404 if the operation is not found.
+
+## Cancel an update operation
+
+`POST /api/v1/operations/:id/cancel`
+
+Requests cancellation of a queued or in-progress update operation.
+
+- **Queued operations** are terminated immediately. The operation is marked `failed` with reason `"Cancelled by operator"`. Returns `200 OK` with the updated operation.
+- **In-progress operations** have a cancellation flag set; the update lifecycle checks this flag at safe checkpoints and aborts cleanly when reached. Returns `202 Accepted` with the operation (still `in-progress` until the checkpoint is hit).
+- **Terminal operations** (`succeeded`, `failed`, `rolled-back`) cannot be cancelled. Returns `409 Conflict`.
+
+```bash
+curl -X POST http://drydock:3000/api/v1/operations/ea7c33a4-c1e3-4f34-9b95-9662cc7a40d6/cancel
+
+# Queued → 200: operation immediately marked failed
+# In-progress → 202: cancellation flag set, update will stop at next safe checkpoint
+# Terminal → 409: { "error": "Operation is not active", "status": "succeeded" }
+```
+
+Returns 200 (queued — immediately cancelled), 202 (in-progress — cancellation requested), 404 if not found, or 409 if already terminal.
+
 ## Get container stats
 
 `GET /api/v1/containers/stats`
 
 Returns CPU and memory usage stats for all monitored containers.
+
+### Query parameters
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `touch` | boolean | `true` | When `false`, returns cached snapshots without spinning up per-container Docker stats streams. Use `?touch=false` for read-only summary queries (dashboard) to avoid warming streams unnecessarily. |
 
 ### Response
 
@@ -680,6 +747,72 @@ Returns the latest stats snapshot and history for a single container.
 `GET /api/v1/containers/:id/stats/stream`
 
 Server-Sent Events stream for real-time container stats. Sends `dd:container-stats` events with the latest snapshot and `dd:heartbeat` events every 15 seconds.
+
+## Get fleet stats summary
+
+`GET /api/v1/stats/summary`
+
+Returns a fleet-wide CPU and memory snapshot aggregated across all locally-monitored containers. Updated on a configurable polling interval (default 10 s). Use this endpoint for read-only dashboard queries; unlike the per-container stats endpoints, it does not spin up Docker stats streams.
+
+```bash
+curl http://drydock:3000/api/v1/stats/summary
+
+{
+  "data": {
+    "timestamp": "2026-01-15T12:00:00.000Z",
+    "watchedCount": 8,
+    "avgCpuPercent": 12.4,
+    "totalMemoryUsageBytes": 2147483648,
+    "totalMemoryLimitBytes": 17179869184,
+    "totalMemoryPercent": 12.5,
+    "topCpu": [
+      { "id": "abc123", "name": "homeassistant", "cpuPercent": 28.1, "memoryUsageBytes": 524288000, "memoryLimitBytes": 2147483648, "memoryPercent": 24.4 }
+    ],
+    "topMemory": [
+      { "id": "abc123", "name": "homeassistant", "cpuPercent": 28.1, "memoryUsageBytes": 524288000, "memoryLimitBytes": 2147483648, "memoryPercent": 24.4 }
+    ]
+  }
+}
+```
+
+### Response fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `data.timestamp` | string | ISO 8601 timestamp of the last aggregation tick |
+| `data.watchedCount` | integer | Number of containers included in this snapshot |
+| `data.avgCpuPercent` | number | Average CPU usage percentage across all containers (0–100) |
+| `data.totalMemoryUsageBytes` | number | Sum of memory usage bytes across all containers |
+| `data.totalMemoryLimitBytes` | number | Sum of memory limits across all containers |
+| `data.totalMemoryPercent` | number | Fleet-wide memory usage as a percentage of total limits (0–100) |
+| `data.topCpu` | array | Top-5 containers by CPU%, sorted descending |
+| `data.topMemory` | array | Top-5 containers by memory%, sorted descending |
+| `data.topCpu[].id` | string | Container ID |
+| `data.topCpu[].name` | string | Container name |
+| `data.topCpu[].cpuPercent` | number | CPU usage percentage |
+| `data.topCpu[].memoryUsageBytes` | number | Memory usage in bytes |
+| `data.topCpu[].memoryLimitBytes` | number | Memory limit in bytes |
+| `data.topCpu[].memoryPercent` | number | Memory usage percentage |
+
+## Stream fleet stats summary (SSE)
+
+`GET /api/v1/stats/summary/stream`
+
+Server-Sent Events stream that pushes a new `dd:stats-summary` event whenever the aggregator completes a tick, plus `dd:heartbeat` events to keep the connection alive. The current snapshot is sent immediately on connect.
+
+The dashboard Resource Usage widget consumes this stream directly.
+
+### Event format
+
+```text
+event: dd:stats-summary
+data: { ...ContainerStatsSummary }
+
+event: dd:heartbeat
+data: {}
+```
+
+The `data` payload shape is identical to the `data` field from `GET /api/v1/stats/summary`.
 
 ## Get container release notes
 

@@ -47,6 +47,16 @@ When a hook runs, drydock injects environment variables describing the update:
 | `DD_UPDATE_FROM` | Current tag or digest | `1.2.3` |
 | `DD_UPDATE_TO` | New tag or digest | `1.3.0` |
 
+## Command validation
+
+Hook commands are validated against a restricted shell-safe grammar at configuration time. Commands containing any of the following are rejected at startup with a clear error:
+
+- Command substitution: `$(...)` or backticks (`` ` ``)
+- Output or input redirections: `>`, `>>`, `<`
+- Command chaining metacharacters: `;`, `&&`, `||`, `|`
+
+Simple positional arguments and environment variable references that do not use substitution are allowed. Use a wrapper script (mounted into the container) for complex logic.
+
 ## Execution details
 
 - Hooks run inside the drydock container using `/bin/sh -c` only when `DD_HOOKS_ENABLED=true`

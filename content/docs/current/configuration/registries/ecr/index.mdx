@@ -20,6 +20,10 @@ The `ecr` registry lets you configure [ECR](https://aws.amazon.com/ecr/) integra
 
 <Callout type="warn">The AmazonEC2ContainerRegistryReadOnly Policy (or higher) must be attached to the AWS IAM User.</Callout>
 
+<Callout type="info" title="Auth token caching">
+ECR authorization tokens are valid for 12 hours. drydock caches the token per instance and refreshes it within 5 minutes of expiry, eliminating redundant `GetAuthorizationToken` calls on every container watch cycle. The cache write is race-safe: if credentials rotate between two concurrent token fetches, the stale result is discarded rather than overwriting the fresh token.
+</Callout>
+
 ## Examples
 
 <Tabs items={["Docker Compose", "Docker"]}>

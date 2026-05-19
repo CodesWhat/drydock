@@ -33,7 +33,8 @@ services:
       - CONTAINERS=1
       - IMAGES=1
       - EVENTS=1
-      - POST=1        # required for update actions
+      - INFO=1         # required for server-name detection (DD_SERVER_NAME fallback)
+      - POST=1         # required for update actions
       - NETWORKS=1     # required for container recreation
     healthcheck:
       test: wget --spider http://localhost:2375/version || exit 1
@@ -357,6 +358,7 @@ services:
       - CONTAINERS=1
       - IMAGES=1
       - EVENTS=1
+      - INFO=1
       - POST=1
       - NETWORKS=1
     healthcheck:

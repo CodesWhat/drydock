@@ -408,6 +408,7 @@ services:
       - CONTAINERS=1
       - IMAGES=1
       - EVENTS=1
+      - INFO=1          # Required for daemon identity detection (notification prefixes)
       - POST=1
       - NETWORKS=1
     healthcheck:

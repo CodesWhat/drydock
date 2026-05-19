@@ -33,6 +33,8 @@ The `mqtt` trigger lets you send container update notifications to an MQTT broke
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration). but only supports the `simple` mode.</Callout>
 
+<Callout type="info">**Home Assistant entity stability:** When a watched container is recreated during an update, the MQTT HASS sensor (`binary_sensor`) is preserved without an intermediate unavailable/disappear state. Drydock sets a `replacementExpected` flag before stopping the old container so the entity remains visible in Home Assistant throughout the update.</Callout>
+
 <Callout type="info">You want to customize the name & icon of the Home-Assistant entity?
 [Use the `dd.display.name` and `dd.display.icon` labels](/docs/configuration/watchers/#labels).</Callout>
 

@@ -29,11 +29,14 @@ DD_SECURITY_SCANNER=trivy
 | `DD_SECURITY_TRIVY_SERVER` | ⚪ | Trivy server URL (enables client/server mode) | URL | empty (local CLI mode) |
 | `DD_SECURITY_TRIVY_COMMAND` | ⚪ | Trivy command path for local CLI mode (must not contain shell metacharacters or `..` path traversal) | executable path | `trivy` |
 | `DD_SECURITY_TRIVY_TIMEOUT` | ⚪ | Trivy command timeout in milliseconds | integer (`>=1000`) | `120000` |
+| `DD_SECURITY_TRIVY_IMAGE_SRC` | ⚪ | Override Trivy's image source order. Any value Trivy accepts (e.g. `remote`, `docker`, or comma-separated `remote,docker`). When unset, Trivy uses its default source order (`docker`, `containerd`, `podman`, `remote`) and falls back to a registry pull when the local daemon is unreachable. | string | empty (Trivy auto-detects) |
 | `DD_SECURITY_SCAN_CRON` | ⚪ | Cron expression for scheduled background security scans | cron expression | disabled |
 | `DD_SECURITY_SCAN_JITTER` | ⚪ | Random jitter delay (ms) before each scheduled scan starts | integer (`>=0`) | `60000` |
 | `DD_SECURITY_SCAN_CONCURRENCY` | ⚪ | Max digest scans processed in parallel during scheduled scans | integer (`>=1`) | `4` |
 | `DD_SECURITY_SCAN_BATCH_TIMEOUT` | ⚪ | Total scheduled scan batch timeout in milliseconds (`0` disables timeout) | integer (`>=0`) | `1800000` |
 | `DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES` | ⚪ | Max in-memory digest scan cache entries (LRU eviction -- least recently used entries are removed when the limit is reached) | integer (`>0`) | `500` |
+| `DD_SECURITY_SCAN_NOTIFICATIONS` | ⚪ | When `true`, findings from **scheduled** (cron) scans are routed through notification triggers. On-demand scans always notify. | `true` / `false` | `false` |
+| `DD_SECURITY_GATE_MODE` | ⚪ | Override the security gate globally. `off` disables the gate for all containers (audit row still fires). Per-container label `dd.security.gate=off` also works but only for that container. | `off` | empty (gate enabled) |
 | `DD_SECURITY_PRUNE_ONBLOCK` | ⚪ | Prune a pulled candidate image when Update Bouncer blocks it | `true` / `false` | `true` |
 
 ## Trivy modes
@@ -43,6 +46,8 @@ DD_SECURITY_SCANNER=trivy
 Use this mode when the `trivy` binary is available inside the drydock runtime.
 
 <Callout type="info">As of v1.3.0, the official drydock image includes both `trivy` and `cosign`. No custom image is needed for local CLI mode.</Callout>
+
+<Callout type="info">**No Docker socket required.** Trivy uses its default source order (`docker`, `containerd`, `podman`, `remote`) and falls back to a registry pull when no local daemon is available. You do not need to bind-mount `/var/run/docker.sock` for scanning. If you know your setup is socket-less and want to skip the probe steps, set `DD_SECURITY_TRIVY_IMAGE_SRC=remote`.</Callout>
 
 ```yaml
 services:
@@ -167,11 +172,15 @@ services:
 
 Set `DD_SECURITY_SCAN_CRON` to automatically scan all watched containers on a schedule. A random jitter delay (`DD_SECURITY_SCAN_JITTER`, default 60 seconds) is applied before each cycle to spread load. You can tune parallelism with `DD_SECURITY_SCAN_CONCURRENCY` (default `4`) and cap total batch runtime with `DD_SECURITY_SCAN_BATCH_TIMEOUT` (default `1800000`, set `0` to disable).
 
+By default, scheduled scans update the Security view and audit log but do **not** fire notification triggers. Set `DD_SECURITY_SCAN_NOTIFICATIONS=true` to opt in to cron-driven alerts. On-demand scans (UI, single-container API, or the bulk `POST /api/v1/containers/scan-all` endpoint) always emit notifications.
+
 Digest-level scan dedup caching uses an interval derived from the cron schedule:
 
 - drydock parses `DD_SECURITY_SCAN_CRON` and uses the **shortest upcoming gap** between scheduled runs as cache TTL.
 - For irregular schedules (for example `0 3,9 * * *`), cache TTL is based on the shortest gap (`6h` in this case), not a fixed daily fallback.
 - If interval derivation fails, drydock falls back to `24h`.
+
+Transient Trivy failures (daemon timeout, registry outage) no longer overwrite previously-stored scan results. The existing result is preserved for up to 7 days; error retries are floored at 15 minutes per digest regardless of cron frequency.
 
 ```yaml
 services:
@@ -183,16 +192,36 @@ services:
       - DD_SECURITY_SCAN_JITTER=60000      # up to 60s random delay
       - DD_SECURITY_SCAN_CONCURRENCY=4     # scan up to 4 digests in parallel
       - DD_SECURITY_SCAN_BATCH_TIMEOUT=1800000 # abort remaining digest queue after 30m
+      - DD_SECURITY_SCAN_NOTIFICATIONS=true    # opt in to cron-driven notifications
 ```
 
 ## On-demand scanning
 
-You can trigger a security scan for any individual container without waiting for the next watch cycle or scheduled scan.
+You can trigger a security scan without waiting for the next scheduled cycle.
 
-- **UI:** Click the shield button on a container row to start a scan.
-- **API:** `POST /api/v1/containers/:id/scan` runs vulnerability scanning, signature verification (if configured), and SBOM generation (if configured) on demand.
+- **Single container — UI:** Click the shield button on a container row.
+- **Single container — API:** `POST /api/v1/containers/:id/scan` runs vulnerability scanning, signature verification (if configured), and SBOM generation (if configured). Rate-limited to 30 requests per minute.
+- **All containers — UI:** Click **Scan All** in the Security view toolbar. Issues one server-side bulk scan — produces a single scan cycle rather than N per-container requests.
+- **All containers — API:** `POST /api/v1/containers/scan-all` scans all watched containers in one bulk operation. Rate-limited to 1 request per 60 seconds per IP (admin bypass available). Streams progress over SSE and respects client-disconnect aborts.
 
-The endpoint is rate-limited to 30 requests per minute. Real-time progress is broadcast via SSE events `dd:scan-started` and `dd:scan-completed` so the UI updates automatically.
+Real-time progress is broadcast via SSE events `dd:scan-started` and `dd:scan-completed`. Each scan cycle (cron, on-demand single, or bulk) carries a stable `cycleId` (UUID v7). When the cycle finishes, a `dd:security-scan-cycle-complete` event is emitted with `{ cycleId, scannedCount, alertCount, startedAt, completedAt }`.
+
+The `cycleId` is used by digest-mode notification triggers to group all findings from one scan cycle into a single summary notification instead of one per container.
+
+## Security view update button
+
+When a newer image is available for a container shown in the Security view, an inline **Update** button appears directly next to the vulnerability data. This lets you apply the update without leaving the security context.
+
+The update button respects eligibility blockers. If a `security-scan-blocked` blocker is active (either the running image scan or the candidate image scan returned blocked-severity vulnerabilities), the button is locked. Use the force-update path to override.
+
+## security-scan-blocked eligibility blocker
+
+The `security-scan-blocked` hard blocker is raised when:
+
+- The candidate update image scan (`container.security.updateScan`) has status `blocked`, **or**
+- The current running image scan (`container.security.scan`) has status `blocked`
+
+Either condition prevents a manual update and causes `POST /api/v1/containers/:id/update` to return `409`. Use the [force-update](/docs/configuration/actions/update-eligibility) path if you need to proceed anyway.
 
 ## Dual-slot scanning
 
@@ -248,6 +277,27 @@ SBOM documents can be downloaded from the Security detail panel or via the API:
 
 - **UI:** Open the Security detail panel → click **Download SBOM** (works regardless of whether the SBOM viewer toggle is active)
 - **API:** `GET /api/v1/containers/:id/sbom?format={format}` where `format` is `spdx-json` or `cyclonedx-json`
+
+<Callout type="info">When the security scanner is disabled or misconfigured, `GET /api/v1/containers/:id/sbom` returns `503 Service Unavailable` with the message `"Security scanner is not configured"`. This distinguishes "feature intentionally off" from a real server error.</Callout>
+
+## Security digest notifications
+
+On large inventories, a single scheduled scan can surface many vulnerable containers. By default each one would send a separate notification. Use `SECURITYMODE=digest` on a notification trigger to receive one summary per scan cycle instead of one per container.
+
+```yaml
+environment:
+  - DD_SECURITY_SCAN_CRON=0 3 * * *
+  - DD_SECURITY_SCAN_NOTIFICATIONS=true
+
+  - DD_NOTIFICATION_SMTP_ALERTS_FROM=drydock@example.com
+  - DD_NOTIFICATION_SMTP_ALERTS_TO=security@example.com
+  - DD_NOTIFICATION_SMTP_ALERTS_SECURITYMODE=digest
+  # Optional: customize digest subject/body
+  # - DD_NOTIFICATION_SMTP_ALERTS_SECURITYDIGESTTITLE=Security scan complete: $scanCount containers scanned
+  # - DD_NOTIFICATION_SMTP_ALERTS_SECURITYDIGESTBODY=Found $alertCount containers with alerts
+```
+
+The digest fires once per `cycleId`, grouped by severity. Cycles with zero findings never emit. The `SECURITYMODE` setting is independent of the update-notification `MODE` — a trigger can combine `MODE=batch` (update emails) with `SECURITYMODE=digest` (security emails) simultaneously.
 
 ## Full example (scanning + signatures + SBOM)
 

@@ -20,6 +20,8 @@ Drydock detects when its own container image has an update available, just like 
 
 <Callout type="warn">Lifecycle hooks (`dd.hook.pre` / `dd.hook.post`) are NOT executed during self-update.</Callout>
 
+<Callout type="info">When self-update cannot run (socket not bind-mounted and no TCP watcher configured), the per-container Update button is locked with a **Self-update unavailable** tooltip and `POST /api/v1/containers/:id/update` returns `409`.</Callout>
+
 ## Update sequence
 
 1. **Notify UI** — A `dd:self-update` SSE event is broadcast to all connected browsers, displaying an animated full-screen overlay. The server waits for at least one browser to acknowledge receipt before proceeding (see [SSE acknowledgment](#sse-acknowledgment) below)
@@ -27,7 +29,7 @@ Drydock detects when its own container image has an update available, just like 
 3. **Pull new image** — The updated image is pulled while the current container is still running
 4. **Rename old container** — The current container is renamed to `drydock-old-{timestamp}` to free the original name
 5. **Create new container** — A new container is created with the original name and updated image (not started yet)
-6. **Helper container** — A temporary container is spawned with its own access to the Docker daemon — the bind-mounted socket when Drydock uses one, otherwise a TCP connection on Drydock's network. It:
+6. **Helper container** — A temporary container is spawned with its own access to the Docker daemon. The helper's connection is resolved in this order: if the Drydock container has `/var/run/docker.sock` bind-mounted, the helper uses that direct socket path. Otherwise, if the watcher is configured with a TCP Docker host, the helper connects over TCP (receiving `DD_SELF_UPDATE_DOCKER_HOST` / `DD_SELF_UPDATE_DOCKER_PORT` / `DD_SELF_UPDATE_DOCKER_PROTOCOL`) and is attached to Drydock's Docker network so it can resolve the proxy by DNS. It:
    - Stops the old container
    - Starts the new container
    - Deletes the old container on success
@@ -57,16 +59,74 @@ The ack timeout defaults to 3 seconds. If no browsers are connected, the update 
 
 When `DD_ACTION_DOCKER_{trigger_name}_DRYRUN=true`, the self-update is logged but not executed. The new image is pulled ahead of time but no container replacement occurs.
 
-## Behind a Docker socket proxy
+## TCP deployments (socket proxy)
 
-If Drydock's Docker watcher is configured with a TCP `host` — the usual setup when a Docker socket proxy such as [sockguard](https://github.com/buildkite/sockguard) or `docker-socket-proxy` mediates daemon access — self-update connects the helper container to the proxy over TCP instead of bind-mounting a socket. The helper's network mode is cloned from Drydock's own container, so it shares the same Docker network and can resolve the proxy by its service name.
+Self-update works for both socket-mounted and TCP-based deployments.
+
+When Drydock reaches the Docker daemon through a TCP host (e.g. a socket proxy), the helper container is connected over TCP. Drydock automatically derives the connection parameters from the watcher's Dockerode configuration and injects them into the helper container as environment variables:
+
+| Env var (injected into helper) | Description |
+| --- | --- |
+| `DD_SELF_UPDATE_DOCKER_HOST` | TCP hostname or IP — derived from the watcher's configured host (bare hostname, no `http://` prefix) |
+| `DD_SELF_UPDATE_DOCKER_PORT` | TCP port — derived from the watcher's port (default `2375`) |
+| `DD_SELF_UPDATE_DOCKER_PROTOCOL` | Protocol — derived from the watcher's protocol (`http` or `https`) |
+
+These variables are injected by Drydock — you do not set them manually. The host value is validated before use: URL scheme prefixes, userinfo segments (`@`), whitespace, and path separators are rejected with a descriptive error.
+
+The helper's network mode is cloned from the Drydock container so it can resolve the proxy by its service name.
 
 <Callout type="warn">
-A *filtering* socket proxy must be configured to permit the self-update helper:
+A *filtering* socket proxy must be configured to permit the self-update helper.
 
 - **Container ownership** — proxies that scope operations by an ownership label (for example sockguard's `com.sockguard.owner`) reject the helper's attempt to stop and replace the Drydock container unless the Drydock container itself carries that label. Add the label to the Drydock container so the helper is allowed to act on it.
 - **Finalize `exec`** — after the swap the helper runs `node dist/triggers/providers/docker/self-update-finalize-entrypoint.js` inside the new container via `docker exec`. A proxy with an exec allowlist must include that command. This step is non-fatal: if it is blocked the update still completes, but the operation will not report a clean terminal status.
 </Callout>
+
+## Infrastructure update mode
+
+When the container being updated **is** the socket proxy itself, add the `dd.update.mode=infrastructure` label. This tells the self-update helper to use the bind-mounted socket from Drydock's container directly instead of routing through the proxy, preventing a situation where the helper loses its own connection because it killed the proxy mid-update.
+
+```yaml
+services:
+  drydock-socket-proxy:
+    image: lscr.io/linuxserver/socket-proxy:latest
+    labels:
+      - dd.watch=true
+      - dd.update.mode=infrastructure   # helper bypasses the proxy for the swap
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - CONTAINERS=1
+      - IMAGES=1
+      - EVENTS=1
+      - POST=1
+      - DELETE=1
+      - NETWORKS=1
+      - VOLUMES=1
+
+  drydock:
+    image: codeswhat/drydock:latest
+    environment:
+      - DD_WATCHER_LOCAL_HOST=drydock-socket-proxy
+      - DD_WATCHER_LOCAL_PORT=2375
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock   # required for infrastructure update
+      - drydock-data:/store
+```
+
+<Callout type="info">`dd.update.mode=infrastructure` is only needed for the socket proxy container (or another infrastructure container that Drydock routes through). Regular application containers do not need this label.</Callout>
+
+## Restart recovery
+
+If Drydock restarts while an update is in progress, the outcome depends on which phase was interrupted:
+
+| Phase at restart | Recovery action |
+| --- | --- |
+| `queued` | Resumed automatically after startup |
+| `pulling` | Reset to `queued` and resumed (pull is idempotent) |
+| `prepare`, `renamed`, `new-created`, `old-stopped`, `new-started`, `health-gate`, `rollback-*` | Marked `failed` — requires operator review |
+
+<Callout type="info">Self-update operations are not recovered automatically — a self-update interrupted mid-flight should be re-triggered manually once Drydock is running again.</Callout>
 
 ## Example
 

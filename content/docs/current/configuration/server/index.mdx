@@ -22,7 +22,7 @@ You can adjust the server configuration with the following environment variables
 | `DD_SERVER_TLS_KEY` | ⚪ | TLS server key (required when `DD_SERVER_TLS_ENABLED` is enabled) | File path to the key file | |
 | `DD_SERVER_TLS_CERT` | ⚪ | TLS server certificate (required when `DD_SERVER_TLS_ENABLED` is enabled) | File path to the cert file | |
 | `DD_SERVER_CORS_ENABLED` | ⚪ | Enable [CORS](https://developer.mozilla.org/fr/docs/Web/HTTP/CORS) Requests | `true`, `false` | `false` |
-| `DD_SERVER_CORS_ORIGIN` | ⚪ | Allowed CORS origin (prefer an explicit origin in production) | `*` or a single origin URL (for example `https://drydock.example.com`) | `*` |
+| `DD_SERVER_CORS_ORIGIN` | 🔴 (when CORS enabled) | Allowed CORS origin — **required** when `DD_SERVER_CORS_ENABLED=true`; startup will abort if CORS is enabled but this is unset | `*` or a single origin URL (for example `https://drydock.example.com`) | — |
 | `DD_SERVER_CORS_METHODS` | ⚪ | Supported CORS methods | Comma separated list of valid HTTP verbs | `GET,HEAD,PUT,PATCH,POST,DELETE` |
 | `DD_SERVER_COMPRESSION_ENABLED` | ⚪ | Enable gzip response compression (SSE responses are excluded automatically) | `true`, `false` | `true` |
 | `DD_SERVER_COMPRESSION_THRESHOLD` | ⚪ | Minimum response size in bytes before compression is applied | integer (`>=0`) | `1024` |
@@ -34,6 +34,7 @@ You can adjust the server configuration with the following environment variables
 | `DD_SERVER_COOKIE_SAMESITE` | ⚪ | Session cookie SameSite policy for auth flows (`none` requires HTTPS) | `strict`, `lax`, `none` | `lax` |
 | `DD_SERVER_SESSION_MAXCONCURRENTSESSIONS` | ⚪ | Maximum concurrent authenticated sessions per user (oldest sessions are revoked first at login when limit is reached) | integer (`>=1`) | `5` |
 | `DD_SERVER_RATELIMIT_IDENTITYKEYING` | ⚪ | Key authenticated-route rate limits by session/username instead of IP (prevents collisions for multiple users behind shared proxies) | `true`, `false` | `false` |
+| `DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES` | ⚪ | Maximum number of unique client identities held in the auth lockout state. Older entries are pruned when the cap is reached. | integer (`>0`) | `5000` |
 | `DD_RUN_AS_ROOT` | ⚪ | Request break-glass root mode (requires `DD_ALLOW_INSECURE_ROOT=true`) | `true`, `false` | `false` |
 | `DD_ALLOW_INSECURE_ROOT` | ⚪ | Explicit acknowledgment for break-glass root mode | `true`, `false` | `false` |
 
@@ -41,9 +42,9 @@ For log output configuration (`DD_LOG_LEVEL`, `DD_LOG_FORMAT`), see [Logs config
 
 ## CORS Security Guidance
 
-When `DD_SERVER_CORS_ENABLED=true` and `DD_SERVER_CORS_ORIGIN` is not set, drydock uses `*` (all origins). This is convenient for local testing, but broad for production. A startup warning is emitted when the wildcard is implicit. In a future release, an explicit `DD_SERVER_CORS_ORIGIN=*` will be required to intentionally allow all origins.
+`DD_SERVER_CORS_ORIGIN` is **required** when `DD_SERVER_CORS_ENABLED=true`. Drydock will abort at startup if CORS is enabled without an explicit origin. To intentionally allow all origins (local testing only), set `DD_SERVER_CORS_ORIGIN=*` explicitly.
 
-For production deployments, set an explicit trusted origin:
+For production deployments, set a specific trusted origin:
 
 - `DD_SERVER_CORS_ORIGIN=https://drydock.example.com`
 - `DD_SERVER_CORS_ORIGIN=https://ops.example.com`

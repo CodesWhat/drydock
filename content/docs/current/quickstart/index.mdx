@@ -43,6 +43,7 @@ services:
       - IMAGES=1
       - EVENTS=1
       - SERVICES=1
+      - INFO=1          # Required for daemon identity detection (notification prefixes)
       # Add POST=1 for container actions (start/stop/restart) or auto-updates
       # Add NETWORKS=1 if using the Docker trigger for auto-updates
     healthcheck:

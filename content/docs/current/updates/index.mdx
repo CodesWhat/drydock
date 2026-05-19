@@ -3,6 +3,19 @@ title: "Updates"
 description: "Release update notes and feature highlights, with direct links to current configuration and API docs."
 ---
 
+## Release Highlights — v1.5.0 (May 2026)
+
+- **Default watcher cron changed to every 6 hours** — The default `DD_WATCHER_{name}_CRON` value changed from `0 * * * *` (hourly) to `0 */6 * * *` (every 6 hours) to stay within anonymous Docker Hub and GHCR rate limits on larger inventories. Deployments that set `DD_WATCHER_{name}_CRON` explicitly are unaffected. To keep near-real-time detection, set `DD_WATCHER_LOCAL_CRON=0 * * * *`.
+  Docs: [Watchers configuration](/docs/configuration/watchers).
+- **17 UI locales** — The UI now ships with English plus 16 non-English locales: Simplified Chinese, Traditional Chinese, Italian, Spanish, German, French, Brazilian Portuguese, Dutch, Polish, Turkish, Japanese, Korean, Russian, Vietnamese, Ukrainian, and Arabic. Switch language in **Config > Appearance**.
+  Docs: [UI Customization — Language](/docs/configuration/ui#language--locale).
+- **`DD_LOG_FORMAT` default is now `text`** — The official Docker image defaults to human-readable log output. Set `DD_LOG_FORMAT=json` for structured output consumed by log aggregators.
+  Docs: [Logs](/docs/configuration/logs), [FAQ](/docs/faq#log-output-format-json-vs-pretty).
+- **Notification outbox** — Failed notification deliveries are persisted and retried with exponential backoff. A new **Notification outbox** page (under Settings) shows pending, delivered, and dead-letter entries with retry and discard actions.
+  Docs: [Triggers](/docs/configuration/triggers#notification-outbox).
+- **Diagnostic debug dump** — One-click export from **Config > Diagnostics** collects a redacted snapshot of recent events. `GET /api/v1/debug/dump?minutes=30`.
+  Docs: [Configuration > Diagnostics](/docs/configuration#diagnostics), [API](/docs/api/app#diagnostic-debug-dump).
+
 ## Release Highlights (March 2026)
 
 - **Shared data table sizing** — Tables now share one sizing model with stable columns, sticky actions, pointer/keyboard resize, double-click autosize, and persisted per-view widths. Containers also folds lower-priority metadata at narrow widths instead of compressing primary identifiers.

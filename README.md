@@ -98,6 +98,7 @@ services:
       - IMAGES=1
       - EVENTS=1
       - SERVICES=1
+      - INFO=1          # Required for daemon identity detection (notification prefixes)
       # Add POST=1 and NETWORKS=1 for container actions and auto-updates
     healthcheck:
       test: wget --spider http://localhost:2375/version || exit 1
@@ -150,7 +151,7 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
 - **Unified update-completion toasts** — All terminal "Updated / Update failed / Rolled back" toasts now fire from a single global handler mounted at `App.vue`, with toast emission gated on the matching container-state SSE event so the toast appears the moment the row's "Updating" badge clears. Closes a long-standing intermittent-drop bug where `ContainerUpdateDialog`, `useContainerSsePatchPipeline`, and the dashboard each fired (or didn't) based on which view happened to be mounted. Includes a Last-Event-ID query-param fallback so missed terminal events get replayed from the server-side ring buffer on SSE reconnect. ([#289](https://github.com/CodesWhat/drydock/issues/289), [#290](https://github.com/CodesWhat/drydock/issues/290), [#291](https://github.com/CodesWhat/drydock/issues/291))
-- **Chinese UI locales** — First non-English locale set: Simplified Chinese and Traditional Chinese, with 1,100+ translated strings across every view, contributed by [TianMiao](https://github.com/TianMiao) ([PR #331](https://github.com/CodesWhat/drydock/discussions/331), [PR #344](https://github.com/CodesWhat/drydock/pull/344)). Switch languages in Config > Appearance. The i18n framework is ready for additional locales, and Crowdin sync is configured for translation PRs.
+- **17 UI locales** — v1.5.0 ships with 17 locales: English, Simplified Chinese, Traditional Chinese, Italian, Spanish, German, French, Brazilian Portuguese, Dutch, Polish, Turkish, Japanese, Korean, Russian, Vietnamese, Ukrainian, and Arabic. Simplified and Traditional Chinese were contributed by [TianMiao](https://github.com/TianMiao) ([PR #331](https://github.com/CodesWhat/drydock/discussions/331), [PR #344](https://github.com/CodesWhat/drydock/pull/344)); the remaining 14 non-English locales were added in subsequent RCs. Switch language in **Config > Appearance**. Crowdin sync is configured for ongoing translation contributions.
 - **Multi-select audit log filter** — The event-type filter in the Audit Log view is now a checkbox dropdown so you can view any combination of event categories (e.g. `update-applied` + `update-failed`) in one query. The backend `?actions=` parameter was already there; the UI now exposes it. ([discussion #332](https://github.com/CodesWhat/drydock/discussions/332))
 - **Credential redaction expanded** — `update-failed` SSE error payloads now redact `x-registry-auth`, `*-token`, and `api-key` fields in addition to `Authorization` headers, so registry credentials and API keys no longer leak in operator-visible diagnostics.
 - **Update eligibility blockers** — Container rows now surface structured pre-flight blockers inline (maturity hold, security block, maintenance window, policy exclusion, pinned version) so you can see exactly why an update button is disabled without opening the detail panel.

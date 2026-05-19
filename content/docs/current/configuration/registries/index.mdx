@@ -46,3 +46,38 @@ Pick whatever label is meaningful for you — `PRIVATE`, `WORK`, `MYCO` all work
 
 <Callout type="info">By default, without any further configuration, drydock handles _out-of-the-box_ public images hosted on
 ALICR, Codeberg, DHI, DOCR, ECR (public.ecr.aws), GAR, GCR, GHCR, HUB, IBMCR, LSCR, MAU, OCIR, QUAY, TrueForge</Callout>
+
+## Registry routing
+
+When multiple instances of the same registry type are configured (one anonymous and one credentialed), drydock gives explicit priority to credentialed instances. The previous silent anonymous fallback on 401/403 is removed — an auth rejection now surfaces as an actionable "Check failed" badge in the UI instead of silently retrying as a public caller.
+
+<Callout type="warn" title="Credentialed instances take priority">
+If you configure both a credentialed and an anonymous instance of the same registry type, drydock will always route image lookups through the credentialed instance. To use anonymous access for specific images, register a separate anonymous instance with a distinct `{INSTANCE}` name and route those containers explicitly.
+</Callout>
+
+## Rate limiting and retry
+
+drydock applies a per-host token bucket to all outbound registry calls and automatically retries on 429 and 503 responses. Default rates:
+
+| Host | Rate | Burst |
+| --- | --- | --- |
+| `ghcr.io` | 2 req/s | 5 |
+| `registry-1.docker.io` (Docker Hub) | 1 req/s | 3 |
+| `api.github.com` | 1 req/s | 3 |
+| All other hosts | 5 req/s | 10 |
+
+On a 429 or 503 response, drydock honors the upstream `Retry-After` header (both seconds and HTTP-date forms) and falls back to exponential backoff (1 s → 2 s → 4 s, capped at 60 s), up to 3 retries per call.
+
+<Callout type="info">The rate limiter works alongside the watcher cron default of `0 */6 * * *` (every 6 hours). High-container-count deployments (40+ containers with many-page tag lists) benefit most from leaving the 6-hour default in place. See [Watcher cron and rate limits](/docs/configuration/watchers#variables) for guidance.</Callout>
+
+## TLS and insecure registries
+
+Registry instances configured with `INSECURE=true` (TLS certificate validation disabled) emit a **warn-level log on every request** as a reminder that certificate validation is off. This log fires for each outbound call, so it is visible in normal `docker logs drydock` output.
+
+Use `INSECURE=true` only for self-hosted registries on private networks where a valid TLS certificate cannot be provisioned. For production registries reachable over the internet, always use a valid certificate.
+
+## Registry lookup image (`dd.registry.lookup.image`)
+
+The `dd.registry.lookup.image` container label redirects tag and manifest queries to an alternative image reference (e.g. check Docker Hub's `library/nextcloud` for a container running from a private mirror). In v1.5.0, this substitution is applied only at query boundaries (`getTags`, `getImageManifestDigest`, `getImagePublishedAt`) and no longer overwrites the container's deploy identity (`image.name`, `image.registry.url`). This means compose-file rewrites and container recreates always use the original image, not the lookup target.
+
+Un-prefixed images (e.g. `nginx:1.0`) now default to `docker.io` for the registry URL.
