@@ -77,13 +77,10 @@ export function summariseUpdateError(error: string | undefined): string | undefi
   ) {
     return 'Registry authentication failed';
   }
-  if (
-    lower.includes('econnrefused') ||
-    lower.includes('enotfound') ||
-    lower.includes('etimedout') ||
-    lower.includes('socket hang up') ||
-    lower.includes('econnreset')
-  ) {
+  const isConnectionError =
+    lower.includes('econnrefused') || lower.includes('econnreset') || lower.includes('etimedout');
+  const isResolutionError = lower.includes('enotfound') || lower.includes('socket hang up');
+  if (isConnectionError || isResolutionError) {
     return 'Registry unreachable';
   }
   if (error === 'Cancelled by operator') {

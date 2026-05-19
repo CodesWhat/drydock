@@ -4,6 +4,7 @@ import { toPositiveInteger } from '../../../util/parse.js';
 import { sleep } from '../../../util/sleep.js';
 import { disableSocketRedirects } from '../../../watchers/providers/docker/disable-socket-redirects.js';
 import { probeSocketApiVersion } from '../../../watchers/providers/docker/socket-version-probe.js';
+import { waitForExecStream } from '../exec-stream.js';
 import { validateTcpDockerHost } from './SelfUpdateTransitionShared.js';
 import {
   SELF_UPDATE_HEALTH_TIMEOUT_MS,
@@ -252,26 +253,7 @@ class SelfUpdateController {
   }
 
   async waitForExecStream(execStream: ContainerExecStream): Promise<void> {
-    await new Promise((resolve, reject) => {
-      if (!execStream?.once) {
-        resolve(undefined);
-        return;
-      }
-      const onError = (error: unknown) => {
-        execStream.removeListener('end', onDone);
-        execStream.removeListener('close', onDone);
-        reject(error);
-      };
-      const onDone = () => {
-        execStream.removeListener('end', onDone);
-        execStream.removeListener('close', onDone);
-        execStream.removeListener('error', onError);
-        resolve(undefined);
-      };
-      execStream.once('end', onDone);
-      execStream.once('close', onDone);
-      execStream.once('error', onError);
-    });
+    await waitForExecStream(execStream);
   }
 
   buildFinalizeExecEnv(payload: SelfUpdateTerminalFinalizePayload): string[] {

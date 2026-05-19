@@ -146,17 +146,10 @@ function sortContainersByName(containers: Container[]): Container[] {
   return containersSorted;
 }
 
+const CONTAINER_SORT_MODE_SET: ReadonlySet<string> = new Set(CONTAINER_SORT_MODES);
+
 export function isContainerSortMode(value: string): value is ContainerSortMode {
-  return (
-    value === 'name' ||
-    value === '-name' ||
-    value === 'status' ||
-    value === '-status' ||
-    value === 'age' ||
-    value === '-age' ||
-    value === 'created' ||
-    value === '-created'
-  );
+  return CONTAINER_SORT_MODE_SET.has(value);
 }
 
 export function normalizeContainerSortMode(

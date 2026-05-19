@@ -149,14 +149,19 @@ async function runConcurrently<T>(
   await Promise.all(workers);
 }
 
+interface BulkScanOptions {
+  containers: Container[];
+  cycleId: string;
+  startedAt: string;
+  severity: SeverityFilter;
+  signal?: AbortSignal;
+}
+
 async function runBulkScan(
   deps: BulkSecurityHandlerDependencies,
-  containers: Container[],
-  cycleId: string,
-  startedAt: string,
-  severity: SeverityFilter,
-  signal?: AbortSignal,
+  options: BulkScanOptions,
 ): Promise<void> {
+  const { containers, cycleId, startedAt, severity, signal } = options;
   let alertCount = 0;
   let scannedCount = 0;
 
@@ -294,14 +299,13 @@ export function createBulkSecurityHandlers(deps: BulkSecurityHandlerDependencies
       res.status(202).json({ cycleId, scheduledCount: targetContainers.length });
 
       // Run async, don't let unhandled rejections crash the process
-      runBulkScan(
-        deps,
-        targetContainers,
+      runBulkScan(deps, {
+        containers: targetContainers,
         cycleId,
         startedAt,
         severity,
-        abortController.signal,
-      ).catch((err: unknown) => {
+        signal: abortController.signal,
+      }).catch((err: unknown) => {
         deps.log.error(`Bulk scan cycle ${cycleId} failed: ${deps.getErrorMessage(err)}`);
       });
     },

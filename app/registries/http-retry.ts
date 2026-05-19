@@ -30,13 +30,11 @@ export interface WithRetryOptions {
 function isAxiosError(err: unknown): err is {
   response: { status: number; headers?: Record<string, string | undefined> };
 } {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'response' in err &&
-    typeof (err as Record<string, unknown>).response === 'object' &&
-    (err as Record<string, unknown>).response !== null
-  );
+  const isNonNullObject = typeof err === 'object' && err !== null;
+  const hasResponseKey = isNonNullObject && 'response' in err;
+  const responseValue = hasResponseKey ? (err as Record<string, unknown>).response : undefined;
+  const hasValidResponse = typeof responseValue === 'object' && responseValue !== null;
+  return hasResponseKey && hasValidResponse;
 }
 
 function parseRetryAfterMs(headerValue: string | undefined): number | undefined {

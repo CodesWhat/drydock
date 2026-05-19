@@ -173,14 +173,11 @@ function getOrCreateState(
 }
 
 function isStateInactive(state: ContainerCollectionState): boolean {
-  return (
-    state.watchCount === 0 &&
-    !state.stream &&
-    !state.startPromise &&
-    !state.restTouchRelease &&
-    !state.restTouchTimeout &&
-    state.listeners.size === 0
-  );
+  const hasNoWatchers = state.watchCount === 0;
+  const hasNoActiveStream = !state.stream && !state.startPromise;
+  const hasNoRestTouch = !state.restTouchRelease && !state.restTouchTimeout;
+  const hasNoListeners = state.listeners.size === 0;
+  return hasNoWatchers && hasNoActiveStream && hasNoRestTouch && hasNoListeners;
 }
 
 function pruneContainerStateIfMissing(

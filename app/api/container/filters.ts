@@ -81,19 +81,21 @@ const CONTAINER_LIST_QUERY_SCHEMA = joi.object({
 
 export function removeContainerListControlParams(query: Request['query']): Request['query'] {
   const filteredQuery: Record<string, unknown> = {};
+  const CONTROL_PARAMS = new Set([
+    'includeVulnerabilities',
+    'excludeRollbackContainers',
+    'limit',
+    'offset',
+    'sort',
+    'order',
+    'maturity',
+    'status',
+    'kind',
+    'watcher',
+  ]);
   Object.entries(query || {}).forEach(([key, value]) => {
-    if (
-      key === 'includeVulnerabilities' ||
-      key === 'excludeRollbackContainers' ||
-      key === 'limit' ||
-      key === 'offset' ||
-      key === 'sort' ||
-      key === 'order' ||
-      key === 'maturity' ||
-      key === 'status' ||
-      key === 'kind' ||
-      key === 'watcher'
-    ) {
+    const isControlParam = CONTROL_PARAMS.has(key);
+    if (isControlParam) {
       return;
     }
     filteredQuery[key] = value;

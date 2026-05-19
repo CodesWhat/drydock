@@ -330,15 +330,19 @@ function projectContainerDisplayState<T extends Container>(container: T): T {
   }
 
   const { sortSnapshot } = held;
-  const needsSortFields =
-    sortSnapshot !== undefined &&
-    (sortSnapshot.status !== container.status ||
-      sortSnapshot.updateKind !== container.updateKind ||
-      sortSnapshot.newTag !== container.newTag ||
-      sortSnapshot.currentTag !== container.currentTag ||
-      sortSnapshot.image !== container.image ||
+  const hasSortSnapshot = sortSnapshot !== undefined;
+  const statusOrKindDiffers =
+    hasSortSnapshot &&
+    (sortSnapshot.status !== container.status || sortSnapshot.updateKind !== container.updateKind);
+  const tagsDiffer =
+    hasSortSnapshot &&
+    (sortSnapshot.newTag !== container.newTag || sortSnapshot.currentTag !== container.currentTag);
+  const imageOrTimingDiffers =
+    hasSortSnapshot &&
+    (sortSnapshot.image !== container.image ||
       sortSnapshot.imageCreated !== container.imageCreated ||
       sortSnapshot.updateDetectedAt !== container.updateDetectedAt);
+  const needsSortFields = statusOrKindDiffers || tagsDiffer || imageOrTimingDiffers;
 
   return {
     ...container,

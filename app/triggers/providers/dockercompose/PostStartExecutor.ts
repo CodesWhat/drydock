@@ -1,3 +1,5 @@
+import { waitForExecStream } from '../exec-stream.js';
+
 const POST_START_ENVIRONMENT_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 type PostStartExecutorLog = {
@@ -210,26 +212,7 @@ class PostStartExecutor {
   }
 
   async waitForPostStartHookExecStream(execStream: PostStartExecStream): Promise<void> {
-    await new Promise((resolve, reject) => {
-      if (!execStream?.once) {
-        resolve(undefined);
-        return;
-      }
-      const onError = (e: unknown) => {
-        execStream.removeListener('end', onDone);
-        execStream.removeListener('close', onDone);
-        reject(e);
-      };
-      const onDone = () => {
-        execStream.removeListener('end', onDone);
-        execStream.removeListener('close', onDone);
-        execStream.removeListener('error', onError);
-        resolve(undefined);
-      };
-      execStream.once('end', onDone);
-      execStream.once('close', onDone);
-      execStream.once('error', onError);
-    });
+    await waitForExecStream(execStream);
   }
 
   ensurePostStartHookExecSucceeded(

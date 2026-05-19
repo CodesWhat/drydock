@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { readFileSync } from 'node:fs';
+import { parseArgs } from './lib/parse-args.mjs';
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -71,23 +72,6 @@ export function extractChangelogEntry(changelog, version) {
       : startIndex + startMatch[0].length + nextHeadingOffset;
 
   return content.slice(startIndex, endIndex).trim();
-}
-
-function parseArgs(argv) {
-  const args = {};
-  for (let i = 0; i < argv.length; i += 1) {
-    const key = argv[i];
-    if (!key.startsWith('--')) {
-      continue;
-    }
-    const value = argv[i + 1];
-    if (value === undefined || value.startsWith('--')) {
-      throw new Error(`Missing value for argument: ${key}`);
-    }
-    args[key.slice(2)] = value;
-    i += 1;
-  }
-  return args;
 }
 
 function main() {

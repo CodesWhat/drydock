@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
+import { parseArgs } from './lib/parse-args.mjs';
 
 const PRODUCT_KEYS = ['openSource', 'code', 'container', 'iac'];
 export const DEFAULT_CONFIG_PATH = new URL('./snyk-quota-config.json', import.meta.url);
@@ -97,23 +98,6 @@ export function evaluateQuotaPlan({
     monthly,
     violations,
   };
-}
-
-function parseArgs(argv) {
-  const args = {};
-  for (let i = 0; i < argv.length; i += 1) {
-    const key = argv[i];
-    if (!key.startsWith('--')) {
-      continue;
-    }
-    const value = argv[i + 1];
-    if (value === undefined || value.startsWith('--')) {
-      throw new Error(`Missing value for argument: ${key}`);
-    }
-    args[key.slice(2)] = value;
-    i += 1;
-  }
-  return args;
 }
 
 function main() {

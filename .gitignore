@@ -141,6 +141,10 @@ output/
 .qlty/*
 !.qlty/qlty.toml
 
+# qlty smells scan artifacts
+.qlty-smells.sarif.json
+.qlty-smells-summary.md
+
 # SonarCloud scanner working directory
 .scannerwork/
 

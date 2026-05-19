@@ -669,7 +669,9 @@ function normalizeReleaseNotes(
   const url = asNonEmptyString(rn.url);
   const publishedAt = asNonEmptyString(rn.publishedAt);
   const provider = asNonEmptyString(rn.provider);
-  if (!title || !body || !url || !publishedAt || !provider) return null;
+  const hasContent = title && body && url;
+  const hasMetadata = publishedAt && provider;
+  if (!hasContent || !hasMetadata) return null;
   return { title, body, url, publishedAt, provider };
 }
 
