@@ -1791,6 +1791,36 @@ describe('AgentClient', () => {
       expect(updateOperationStore.markOperationTerminal).not.toHaveBeenCalled();
     });
 
+    test('should forward container snapshot on update-failed with agent decoration', async () => {
+      const containerSnapshot = {
+        id: 'c-fail',
+        name: 'local_nginx',
+        watcher: 'local',
+        displayName: 'nginx',
+        displayIcon: 'nginx',
+        status: 'stopped',
+        image: { id: 'img-1', name: 'nginx:1.25', registry: {} },
+        updateAvailable: false,
+        updateKind: 'unknown',
+      };
+      await client.handleEvent('dd:update-failed', {
+        containerId: 'c-fail',
+        containerName: 'local_nginx',
+        error: 'recreate failed',
+        container: containerSnapshot,
+      });
+
+      expect(event.emitContainerUpdateFailed).toHaveBeenCalledWith(
+        expect.objectContaining({
+          containerName: 'local_nginx',
+          container: expect.objectContaining({
+            id: 'c-fail',
+            agent: 'test-agent',
+          }),
+        }),
+      );
+    });
+
     test('should mark failed agent operations without optional fields', async () => {
       await client.handleEvent('dd:update-failed', {
         operationId: 'remote-fail-no-optionals',
@@ -3872,6 +3902,37 @@ describe('AgentClient', () => {
       });
       expect(result).toBeDefined();
       expect(Object.hasOwn(result, 'phase')).toBe(false);
+    });
+
+    test('includes container with agent decoration when data.container is a non-null object', () => {
+      const result = parseFailedPayload({
+        containerName: 'nginx',
+        error: 'pull failed',
+        container: { id: 'c1', name: 'nginx', watcher: 'local' },
+      });
+      expect(result).toBeDefined();
+      expect(result.container).toBeDefined();
+      expect(result.container).toMatchObject({ id: 'c1', name: 'nginx', agent: 'test-agent' });
+    });
+
+    test('omits container when data.container is null', () => {
+      const result = parseFailedPayload({
+        containerName: 'nginx',
+        error: 'pull failed',
+        container: null,
+      });
+      expect(result).toBeDefined();
+      expect(result.container).toBeUndefined();
+    });
+
+    test('omits container when data.container is not an object', () => {
+      const result = parseFailedPayload({
+        containerName: 'nginx',
+        error: 'pull failed',
+        container: 'not-an-object',
+      });
+      expect(result).toBeDefined();
+      expect(result.container).toBeUndefined();
     });
 
     // Line 836: MethodExpression remoteId — toAgentScopedId

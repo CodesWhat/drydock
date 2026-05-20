@@ -407,7 +407,7 @@ describe('agent API event', () => {
       expect(payload).toContain('"local_nginx"');
     });
 
-    test('update-applied handler should strip container object from object payloads', () => {
+    test('update-applied handler should forward container object on update-applied payloads', () => {
       eventApi.subscribeEvents(req, res);
       res.write.mockClear();
       eventApi.initEvents();
@@ -426,8 +426,8 @@ describe('agent API event', () => {
       const payload = res.write.mock.calls[0][0];
       expect(payload).toContain('dd:update-applied');
       expect(payload).toContain('"containerName":"local_nginx"');
-      expect(payload).not.toContain('"container"');
-      expect(payload).not.toContain('"name":"nginx"');
+      expect(payload).toContain('"container"');
+      expect(payload).toContain('"name":"nginx"');
     });
 
     test('update-applied handler should preserve operationId and batchId scalars', () => {
@@ -448,7 +448,7 @@ describe('agent API event', () => {
       expect(payload).toContain('"operationId":"op-abc"');
       expect(payload).toContain('"containerId":"c1"');
       expect(payload).toContain('"batchId":"batch-1"');
-      expect(payload).not.toContain('"container"');
+      expect(payload).toContain('"container"');
     });
 
     test('update-applied handler should omit operationId when empty string', () => {
@@ -494,7 +494,7 @@ describe('agent API event', () => {
       expect(payload).toContain('"error":"compose pull failed"');
     });
 
-    test('update-failed handler should strip container object and preserve scalar fields', () => {
+    test('update-failed handler should forward container object and preserve scalar fields', () => {
       eventApi.subscribeEvents(req, res);
       res.write.mockClear();
       eventApi.initEvents();
@@ -526,8 +526,8 @@ describe('agent API event', () => {
       expect(payload).toContain('"phase":"pulling"');
       expect(payload).toContain('"rollbackReason":"health check failed"');
       expect(payload).toContain('"error":"pull timed out"');
-      expect(payload).not.toContain('"container"');
-      expect(payload).not.toContain('"vulnerabilities"');
+      expect(payload).toContain('"container"');
+      expect(payload).toContain('"vulnerabilities"');
     });
 
     test('update-failed handler should omit operationId when empty string', () => {

@@ -14,6 +14,10 @@ vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
 
 vi.mock('../store/update-operation', () => ({
   getOperationById: mockGetOperationById,
+  toApiUpdateOperation: (op: Record<string, unknown>) => {
+    const { container: _container, ...rest } = op;
+    return rest;
+  },
 }));
 
 import * as updateOperationsRouter from './update-operations.js';
@@ -76,7 +80,11 @@ describe('Update Operations Router', () => {
       handler(req, res);
       expect(mockGetOperationById).toHaveBeenCalledWith('op-1');
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(operation);
+      expect(res.json).toHaveBeenCalledWith({
+        id: 'op-1',
+        status: 'succeeded',
+        containerName: 'nginx',
+      });
     });
 
     test('should trim whitespace from id before lookup', () => {
@@ -88,7 +96,29 @@ describe('Update Operations Router', () => {
       handler(req, res);
       expect(mockGetOperationById).toHaveBeenCalledWith('op-1');
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(operation);
+      expect(res.json).toHaveBeenCalledWith({
+        id: 'op-1',
+        status: 'failed',
+        containerName: 'redis',
+      });
+    });
+
+    test('should not include container field in response even when operation has one', () => {
+      const handler = getHandler('get', '/:id');
+      const operation = {
+        id: 'op-2',
+        status: 'succeeded',
+        containerName: 'nginx',
+        container: { id: 'c1', name: 'nginx', watcher: 'local', labels: { SECRET: 'val' } },
+      };
+      mockGetOperationById.mockReturnValue(operation);
+      const req = createMockRequest({ params: { id: 'op-2' } });
+      const res = createMockResponse();
+      handler(req, res);
+      expect(res.status).toHaveBeenCalledWith(200);
+      const jsonArg = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(jsonArg).not.toHaveProperty('container');
+      expect(jsonArg.id).toBe('op-2');
     });
   });
 });

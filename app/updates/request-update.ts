@@ -250,6 +250,7 @@ function createAcceptedContainerUpdateRequest(
       id: operationId,
       containerId: prepared.container.id,
       containerName: prepared.container.name,
+      container: prepared.container,
       status: 'queued',
       phase: 'queued',
       ...batchMetadata,

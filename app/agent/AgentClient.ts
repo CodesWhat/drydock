@@ -829,6 +829,17 @@ export class AgentClient {
         ? { containerId: toOptionalString(payload.containerId) }
         : {}),
       ...(phase !== undefined ? { phase } : {}),
+      // Forward the container snapshot so notification triggers on the controller
+      // can render messages even when the controller's container store hasn't caught
+      // up after a recreate (closes the same race as #385 for multi-agent deployments).
+      ...(payload.container && typeof payload.container === 'object'
+        ? {
+            container: {
+              ...(payload.container as Container),
+              agent: this.name,
+            },
+          }
+        : {}),
     };
   }
 

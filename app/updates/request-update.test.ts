@@ -122,6 +122,31 @@ describe('request-update', () => {
     );
   });
 
+  test('requestContainerUpdate persists container snapshot on the operation so update-applied can carry it (issue #385)', async () => {
+    // The container snapshot must be stored on the operation at enqueue time so
+    // that buildTerminalLifecycleEventBase can attach it to the update-applied /
+    // update-failed payload even after the old container is gone from the store
+    // (compose recreate race, ~8 s gap).
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockResolvedValue(undefined),
+    };
+    const container = createContainer({ id: 'c42', name: 'myapp' });
+
+    await requestContainerUpdate(container, { trigger });
+
+    expect(mockInsertOperation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        containerId: 'c42',
+        containerName: 'myapp',
+        container: expect.objectContaining({ id: 'c42', name: 'myapp' }),
+        status: 'queued',
+        phase: 'queued',
+      }),
+      expect.any(Object),
+    );
+  });
+
   test('requestContainerUpdate marks a still-queued accepted operation as failed when trigger execution throws early', async () => {
     const trigger = {
       type: 'docker',

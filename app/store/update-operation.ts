@@ -6,6 +6,7 @@ import {
   emitContainerUpdateFailed,
   emitUpdateOperationChanged,
 } from '../event/index.js';
+import type { Container } from '../model/container.js';
 import type {
   ActiveContainerUpdateOperationPhase,
   ActiveContainerUpdateOperationStatus,
@@ -54,6 +55,14 @@ interface UpdateOperationBase {
    * destructive action when true.
    */
   cancelRequested?: boolean;
+  /**
+   * Snapshot of the Container object at enqueue time. Persisted so that
+   * terminal lifecycle events (update-applied / update-failed) can attach the
+   * container to the event payload even when the store no longer has the row
+   * (e.g. after a compose recreate removes the old container before the new one
+   * is re-watched). See issue #385.
+   */
+  container?: Container;
   [key: string]: unknown;
 }
 
@@ -331,6 +340,7 @@ function buildTerminalLifecycleEventBase(operation: UpdateOperation, batchId?: s
     ...(operation.containerId ? { containerId: operation.containerId } : {}),
     containerName: operation.containerName,
     ...(batchId ? { batchId } : {}),
+    ...(operation.container ? { container: operation.container } : {}),
   };
 }
 
@@ -1078,4 +1088,17 @@ export function isOperationCancelRequested(id: string | undefined): boolean {
   }
   const operation = getOperationById(id);
   return Boolean(operation?.cancelRequested);
+}
+
+/**
+ * Strip internal-only fields (`container` snapshot) from an operation row
+ * before returning it from the REST API. The snapshot is persisted so terminal
+ * lifecycle events can carry the container even after a recreate; it MUST NOT
+ * be exposed to API consumers (it may contain secrets in details.env / labels).
+ */
+export function toApiUpdateOperation<T extends { container?: unknown }>(
+  op: T,
+): Omit<T, 'container'> {
+  const { container: _container, ...rest } = op;
+  return rest;
 }

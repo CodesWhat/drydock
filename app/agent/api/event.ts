@@ -199,6 +199,9 @@ function sanitizeUpdateAppliedPayloadForAgentSse(
     return payload;
   }
   const p = payload as event.ContainerUpdateAppliedEventPayload;
+  // container is included so notification triggers on the controller can render
+  // messages even when the controller's container store hasn't caught up after a
+  // recreate (closes the same race as #385 for multi-agent deployments).
   return {
     ...(typeof p.operationId === 'string' && p.operationId.length > 0
       ? { operationId: p.operationId }
@@ -206,12 +209,16 @@ function sanitizeUpdateAppliedPayloadForAgentSse(
     containerId: p.containerId ?? '',
     containerName: p.containerName,
     batchId: p.batchId ?? null,
+    ...(p.container && typeof p.container === 'object' ? { container: p.container } : {}),
   };
 }
 
 function sanitizeUpdateFailedPayloadForAgentSse(
   payload: event.ContainerUpdateFailedEventPayload,
 ): Record<string, unknown> {
+  // container is included so notification triggers on the controller can render
+  // messages even when the controller's container store hasn't caught up after a
+  // recreate (closes the same race as #385 for multi-agent deployments).
   return {
     ...(typeof payload.operationId === 'string' && payload.operationId.length > 0
       ? { operationId: payload.operationId }
@@ -223,6 +230,9 @@ function sanitizeUpdateFailedPayloadForAgentSse(
     batchId: payload.batchId ?? null,
     ...(typeof payload.rollbackReason === 'string' && payload.rollbackReason !== ''
       ? { rollbackReason: payload.rollbackReason }
+      : {}),
+    ...(payload.container && typeof payload.container === 'object'
+      ? { container: payload.container }
       : {}),
   };
 }

@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import * as event from '../../../event/index.js';
 import type { Container, ContainerReport } from '../../../model/container.js';
+import { toApiUpdateOperation } from '../../../store/update-operation.js';
 import { sendErrorResponse } from '../../error-response.js';
 import { buildPaginationLinks } from '../../pagination-links.js';
 import type {
@@ -133,7 +134,7 @@ export function createGetContainerUpdateOperationsHandler(context: CrudHandlerCo
     const idSet = new Set(byId.map((op) => op.id));
     // Include name-matched ops only when they are legacy (no containerId field) and not already in byId.
     const legacyByName = byName.filter((op) => !idSet.has(op.id) && !('containerId' in op));
-    const merged = [...byId, ...legacyByName];
+    const merged = [...byId, ...legacyByName].map(toApiUpdateOperation);
     const operations = merged.sort(
       (a, b) =>
         new Date(String((b.updatedAt ?? b.createdAt) || 0)).getTime() -
