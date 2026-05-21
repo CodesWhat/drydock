@@ -1829,6 +1829,8 @@ describe('ContainersView', () => {
 
       vm.groupByStack = true;
       vm.groupMembershipMap = { nginx: 'web-stack', redis: 'web-stack', postgres: 'db-stack' };
+      // db-stack has an assigned size of 1 — it is a genuine singleton and should flatten
+      vm.groupAssignedSizeMap = { 'web-stack': 2, 'db-stack': 1 };
       await flushPromises();
 
       const groups = vm.groupedContainers;
@@ -1852,6 +1854,8 @@ describe('ContainersView', () => {
 
       vm.groupByStack = true;
       vm.groupMembershipMap = { nginx: 'web-stack', redis: 'db-stack' };
+      // Both stacks are genuine singletons (assigned size 1)
+      vm.groupAssignedSizeMap = { 'web-stack': 1, 'db-stack': 1 };
       await flushPromises();
 
       const groups = vm.groupedContainers;
@@ -1859,6 +1863,57 @@ describe('ContainersView', () => {
       expect(groups).toHaveLength(1);
       expect(groups[0].key).toBe('__ungrouped__');
       expect(groups[0].containers).toHaveLength(2);
+    });
+
+    it('does not flatten a multi-container stack that transiently shows only 1 live container mid-update', async () => {
+      // Regression guard for GitHub Discussion #371: during a docker recreate a
+      // 2-container stack momentarily has only 1 live container. The flatten rule
+      // must check the API-assigned size, not the transient live count.
+      const containers = [
+        makeContainer({ id: 'c1', name: 'nginx' }),
+        makeContainer({ id: 'c2', name: 'redis' }),
+      ];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      vm.groupByStack = true;
+      // Only 1 live container in web-stack right now (mid-update), but the API
+      // assigned 2 containers to this stack.
+      vm.groupMembershipMap = { nginx: 'web-stack' };
+      vm.groupAssignedSizeMap = { 'web-stack': 2 };
+      await flushPromises();
+
+      const groups = vm.groupedContainers;
+      // web-stack must NOT be flattened — it should render as a named group
+      const webStack = groups.find((group: { key: string }) => group.key === 'web-stack');
+      expect(webStack).toBeDefined();
+      expect(webStack?.containers).toHaveLength(1);
+      // redis is ungrouped (not in groupMembershipMap)
+      const ungrouped = groups.find((group: { key: string }) => group.key === '__ungrouped__');
+      expect(ungrouped?.containers.map((c: { name: string }) => c.name)).toContain('redis');
+    });
+
+    it('does not flatten a stack when assigned size is undefined (key absent from groupAssignedSizeMap)', async () => {
+      // If the group key is present in groupMembershipMap but missing from
+      // groupAssignedSizeMap (e.g. transiently absent during a mid-update API
+      // reload), a 1-live-container stack must NOT be flattened — the strict
+      // === 1 check prevents undefined from matching.
+      const containers = [makeContainer({ id: 'c1', name: 'nginx' })];
+      const wrapper = await mountContainersView(containers);
+      const vm = wrapper.vm as any;
+
+      vm.groupByStack = true;
+      vm.groupMembershipMap = { nginx: 'web-stack' };
+      vm.groupAssignedSizeMap = {}; // web-stack not present → undefined
+      await flushPromises();
+
+      const groups = vm.groupedContainers;
+      // web-stack has assigned size undefined — must NOT be flattened
+      const webStack = groups.find((group: { key: string }) => group.key === 'web-stack');
+      expect(webStack).toBeDefined();
+      expect(webStack?.containers).toHaveLength(1);
+      const ungrouped = groups.find((group: { key: string }) => group.key === '__ungrouped__');
+      expect(ungrouped).toBeUndefined();
     });
 
     it('persists toggle state to preferences', async () => {
@@ -2536,10 +2591,14 @@ describe('ContainersView', () => {
       ]);
       await vm.loadGroups();
       expect(vm.groupMembershipMap).toEqual({ nginx: 'stack-a' });
+      // groupAssignedSizeMap is populated from the groups API response (only named groups)
+      expect(vm.groupAssignedSizeMap).toEqual({ 'stack-a': 1 });
 
       mockGetContainerGroups.mockRejectedValueOnce(new Error('network'));
       await vm.loadGroups();
       expect(vm.groupMembershipMap).toEqual({});
+      // groupAssignedSizeMap is reset to {} on error so stale sizes don't persist
+      expect(vm.groupAssignedSizeMap).toEqual({});
     });
 
     it('keeps same-named containers in their own groups when ids differ', async () => {

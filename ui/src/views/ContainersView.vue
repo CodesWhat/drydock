@@ -984,6 +984,7 @@ const sortedContainers = computed(() => {
 });
 
 const groupMembershipMap = ref<Record<string, string>>({});
+const groupAssignedSizeMap = ref<Record<string, number>>({});
 const collapsedGroups = ref(new Set<string>());
 
 watch(
@@ -1029,10 +1030,12 @@ async function loadGroups() {
   try {
     const groups: ContainerGroup[] = await getContainerGroups();
     const map: Record<string, string> = {};
+    const sizeMap: Record<string, number> = {};
     for (const group of groups) {
       if (!group.name) {
         continue;
       }
+      sizeMap[group.name] = group.containers.length;
       for (const container of group.containers) {
         // Index under id, name, AND displayName so a container recreated by an
         // update (which gets a new container ID) still resolves to the same
@@ -1051,10 +1054,12 @@ async function loadGroups() {
     }
     preserveTransientUpdateGroupMembership(map);
     groupMembershipMap.value = map;
+    groupAssignedSizeMap.value = sizeMap;
   } catch {
     const map: Record<string, string> = {};
     preserveTransientUpdateGroupMembership(map);
     groupMembershipMap.value = map;
+    groupAssignedSizeMap.value = {};
   }
 }
 
@@ -1120,9 +1125,17 @@ const groupedContainers = computed<RenderGroup[]>(() => {
     buckets[key].push(container);
   }
   // Flatten single-container stacks into the ungrouped bucket so they render
-  // without a collapsible group header (GitHub Discussion #179).
+  // without a collapsible group header (GitHub Discussion #179). Flattening is
+  // gated on the groups API's assigned member count so a multi-container stack
+  // mid-update (transiently showing only 1 live container) is not dissolved into
+  // ungrouped — if the assigned size is >1 or unknown, the group header is kept
+  // (GitHub Discussion #371).
   for (const key of Object.keys(buckets)) {
-    if (key !== '__ungrouped__' && buckets[key].length === 1) {
+    if (
+      key !== '__ungrouped__' &&
+      buckets[key].length === 1 &&
+      groupAssignedSizeMap.value[key] === 1
+    ) {
       if (!buckets.__ungrouped__) {
         buckets.__ungrouped__ = [];
       }
