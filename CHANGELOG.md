@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0-rc.25] — 2026-05-21
+
 ### Fixed
 
 - **[#371](https://github.com/CodesWhat/drydock/discussions/371) — Containers "Group By Stack" view no longer dissolves a multi-container stack into "Ungrouped" while its last container is mid-update.** The flatten rule in `groupedContainers` (`ui/src/views/ContainersView.vue`) previously keyed off the transient live container count (`buckets[key].length === 1`). During a docker recreate a 2-container stack momentarily shows only 1 live container (old removed, new not yet added), so the rule fired and dropped the stack header. The fix adds a `groupAssignedSizeMap` ref (populated by `loadGroups()` from the groups API response and reset to `{}` on error) that records each group's API-assigned member count. The flatten condition is now `buckets[key].length === 1 && groupAssignedSizeMap.value[key] === 1` — a strict equality check so stacks whose assigned size is > 1 or transiently absent from the API response are never flattened mid-update. Genuine single-container stacks (assigned size exactly 1) are still flattened as before (GitHub Discussion #179).
