@@ -382,6 +382,43 @@ describe('Docker Watcher', () => {
       expect(event.emitWatcherSnapshot).not.toHaveBeenCalled();
     });
 
+    test('should NOT emit watcher snapshot when per-container enrichment drops containers (issue #386)', async () => {
+      docker.log = createMockLog(['warn']);
+      docker.getContainers = vi.fn().mockImplementation(async (diagnostics) => {
+        if (diagnostics) {
+          diagnostics.enrichmentErrors = 2;
+        }
+        return [];
+      });
+
+      await docker.watch();
+
+      // A short or empty list caused by transient enrichment failures is just
+      // as dangerous as a full enumeration failure: the controller prunes every
+      // container not present in the snapshot, wiping the agent's view. Suppress
+      // the snapshot so the controller keeps its last-known state until the next
+      // fully clean cycle (per-container reports still emit above).
+      expect(event.emitWatcherSnapshot).not.toHaveBeenCalled();
+      expect(docker.log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Container enumeration degraded'),
+      );
+    });
+
+    test('should emit watcher snapshot when enrichment reports zero errors via diagnostics out-param', async () => {
+      docker.getContainers = vi.fn().mockImplementation(async (diagnostics) => {
+        if (diagnostics) {
+          diagnostics.enrichmentErrors = 0;
+        }
+        return [];
+      });
+
+      await docker.watch();
+
+      // Zero enrichment errors with the diagnostics out-param populated proves
+      // the `=== 0` branch: the snapshot is emitted normally.
+      expect(event.emitWatcherSnapshot).toHaveBeenCalledTimes(1);
+    });
+
     test('should set lastRunAt after watch completes', async () => {
       docker.getContainers = vi.fn().mockResolvedValue([]);
       expect(docker.lastRunAt).toBeUndefined();
@@ -724,6 +761,26 @@ describe('Docker Watcher', () => {
         expect.stringContaining('Failed to fetch image detail'),
       );
       expect(result).toHaveLength(0);
+    });
+
+    test('should write dropped-container count into diagnostics when enrichment throws (issue #386)', async () => {
+      mockDockerApi.listContainers.mockResolvedValue([
+        { Id: '1', Labels: { 'dd.watch': 'true' }, Names: ['/test1'] },
+        { Id: '2', Labels: { 'dd.watch': 'true' }, Names: ['/test2'] },
+      ]);
+      docker.addImageDetailsToContainer = vi
+        .fn()
+        .mockRejectedValue(new Error('Image inspect failed'));
+      await docker.register('watcher', 'docker', 'test', { watchbydefault: true });
+      docker.log = createMockLog(['warn', 'info', 'debug']);
+
+      const diagnostics = { enrichmentErrors: 0 };
+      const result = await docker.getContainers(diagnostics);
+
+      // Both containers failed enrichment — result is empty and diagnostics
+      // reflects the count so watch() can suppress the authoritative snapshot.
+      expect(result).toHaveLength(0);
+      expect(diagnostics.enrichmentErrors).toBe(2);
     });
 
     test('should fallback to stringified error when image detail fetch error has empty message', async () => {

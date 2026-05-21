@@ -1,5 +1,6 @@
 import { performance } from 'node:perf_hooks';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { registerContainerUpdateApplied, registerContainerUpdateFailed } from '../event/index.js';
 import * as updateOperation from './update-operation.js';
 
 function createDb(options?: { inactiveIds?: Set<string>; missingIds?: Set<string> }) {
@@ -835,6 +836,93 @@ describe('Update Operation Store', () => {
         lastError: 'new error',
       }),
     ).toEqual(terminal);
+  });
+
+  test('markOperationTerminal emits update-applied with stored container snapshot (issue #385)', async () => {
+    // When a compose recreate races the event handler the old container is gone
+    // from the store. The container snapshot persisted at enqueue time must be
+    // forwarded on the update-applied payload so notification triggers can still
+    // dispatch.
+    const containerSnapshot = {
+      id: 'ctr-1',
+      name: 'myapp',
+      watcher: 'local',
+      updateAvailable: false,
+    };
+    const inserted = updateOperation.insertOperation({
+      containerName: 'myapp',
+      containerId: 'ctr-1',
+      status: 'queued',
+      phase: 'queued',
+      container: containerSnapshot as any,
+    });
+
+    const capturedPayloads: unknown[] = [];
+    const unsubscribe = registerContainerUpdateApplied((payload) => {
+      capturedPayloads.push(payload);
+    });
+
+    try {
+      updateOperation.markOperationTerminal(inserted.id, { status: 'succeeded' });
+      // emitContainerUpdateApplied is async; flush the microtask queue.
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(capturedPayloads).toHaveLength(1);
+      expect(capturedPayloads[0]).toEqual(
+        expect.objectContaining({
+          containerName: 'myapp',
+          containerId: 'ctr-1',
+          operationId: inserted.id,
+          container: expect.objectContaining({ id: 'ctr-1', name: 'myapp' }),
+        }),
+      );
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  test('markOperationTerminal emits update-failed with stored container snapshot (issue #385)', async () => {
+    const containerSnapshot = {
+      id: 'ctr-2',
+      name: 'myapp',
+      watcher: 'local',
+      updateAvailable: false,
+    };
+    const inserted = updateOperation.insertOperation({
+      containerName: 'myapp',
+      containerId: 'ctr-2',
+      status: 'queued',
+      phase: 'queued',
+      container: containerSnapshot as any,
+    });
+
+    const capturedPayloads: unknown[] = [];
+    const unsubscribe = registerContainerUpdateFailed((payload) => {
+      capturedPayloads.push(payload);
+    });
+
+    try {
+      updateOperation.markOperationTerminal(inserted.id, {
+        status: 'failed',
+        lastError: 'compose recreate failed',
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(capturedPayloads).toHaveLength(1);
+      expect(capturedPayloads[0]).toEqual(
+        expect.objectContaining({
+          containerName: 'myapp',
+          containerId: 'ctr-2',
+          operationId: inserted.id,
+          error: 'compose recreate failed',
+          container: expect.objectContaining({ id: 'ctr-2', name: 'myapp' }),
+        }),
+      );
+    } finally {
+      unsubscribe();
+    }
   });
 
   test('getInProgressOperationByContainerName should return latest in-progress operation', () => {

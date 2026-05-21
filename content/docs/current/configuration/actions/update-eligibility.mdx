@@ -26,7 +26,7 @@ If a container has an available update but **no pill**, it is eligible and the n
 
 | Reason code | Pill label | Severity | Why it fires | How to clear it |
 | --- | --- | --- | --- | --- |
-| `security-scan-blocked` | **Security blocked** | Red | Update scan flagged the candidate image with critical/high vulnerabilities exceeding the configured threshold. | Lower the scan severity threshold, fix the vulnerability upstream, or use force-update to override for one cycle. |
+| `security-scan-blocked` | **Security blocked** | Red | The candidate image scan **or** the current container's existing scan detected critical/high vulnerabilities exceeding the configured threshold. Both the "what we'd pull" scan and the "what we're already running" scan are evaluated — either being blocked halts the update. | Lower the scan severity threshold, fix the vulnerability upstream, or use force-update to override for one cycle. |
 | `snoozed` | **Snoozed** | Amber | Container's update policy has `snoozeUntil` set to a future timestamp. | Clear the snooze from the container row's **Update policy** menu, or wait for the lift date shown in the tooltip. |
 | `skip-tag` | **Tag skipped** | Amber | The remote tag is in the container's `skipTags` list. | Remove the tag from the skip list in the **Update policy** menu. |
 | `skip-digest` | **Digest skipped** | Amber | The remote digest is in the container's `skipDigests` list. | Remove the digest from the skip list in the **Update policy** menu. |
@@ -88,9 +88,9 @@ The `updateEligibility` object is returned on every container in `GET /api/v1/co
   "blockers": [
     {
       "reason": "trigger-not-included",
-      "message": "Trigger not matched by container label dd.trigger.include='undefined'.",
+      "message": "Trigger not matched by container label dd.action.include='undefined'.",
       "actionable": true,
-      "actionHint": "Adjust `dd.trigger.include` / `dd.trigger.exclude` labels on the container.",
+      "actionHint": "Adjust the `dd.action.include` / `dd.action.exclude` labels on the container.",
       "details": {
         "triggerInclude": null,
         "triggerId": "dockercompose.mystack"

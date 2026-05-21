@@ -22,6 +22,8 @@ This trigger also supports the [common configuration variables](/docs/configurat
 
 <Callout type="warn">Security: `DD_ACTION_COMMAND_{trigger_name}_CMD` is executed as `{shell} -c {cmd}` with drydock process privileges. This is an intentional admin-only feature configured through environment variables (not API-exposed). Use only trusted command strings and validate any interpolated values.</Callout>
 
+<Callout type="info">Container-derived values injected as environment variables are automatically sanitized before being passed to the subprocess. The characters `` ` `` (backtick), `$`, `;`, `&`, `|`, `<`, `>`, `(`, and `)` are replaced with `_` in any string value sourced from container metadata (image name, tags, labels, etc.). This prevents shell injection through container-controlled strings. Static values configured directly in `CMD` are not modified.</Callout>
+
 ## Environment variables passed to the executed command
 
 ### In simple mode (execution per container to update)

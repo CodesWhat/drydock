@@ -20,6 +20,10 @@ vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
 vi.mock('../store/update-operation', () => ({
   getOperationById: mockGetOperationById,
   requestOperationCancellation: mockRequestOperationCancellation,
+  toApiUpdateOperation: (op: Record<string, unknown>) => {
+    const { container: _container, ...rest } = op;
+    return rest;
+  },
 }));
 
 vi.mock('../log/index.js', () => ({

@@ -70,6 +70,10 @@ vi.mock('../store/update-operation', () => ({
   getInProgressOperationByContainerId: vi.fn(() => undefined),
   getActiveOperationByContainerName: vi.fn(() => undefined),
   getActiveOperationByContainerId: vi.fn(() => undefined),
+  toApiUpdateOperation: (op: Record<string, unknown>) => {
+    const { container: _container, ...rest } = op;
+    return rest;
+  },
 }));
 
 vi.mock('../registry', () => ({

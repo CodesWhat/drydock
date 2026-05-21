@@ -1072,6 +1072,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     this.ensureLogger();
     let containers: Container[] = [];
     let containerEnumerationFailed = false;
+    const enumerationDiagnostics: { enrichmentErrors: number } = { enrichmentErrors: 0 };
     startDigestCachePollCycleForRegistries();
 
     // Dispatch event to notify start watching
@@ -1079,12 +1080,17 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
 
     // List images to watch
     try {
-      containers = await this.getContainers();
+      containers = await this.getContainers(enumerationDiagnostics);
     } catch (e: unknown) {
       this.log.warn(
         `Error when trying to get the list of the containers to watch (${getErrorMessage(e)})`,
       );
       containerEnumerationFailed = true;
+    }
+    if (enumerationDiagnostics.enrichmentErrors > 0) {
+      this.log.warn(
+        `Container enumeration degraded: ${enumerationDiagnostics.enrichmentErrors} container(s) could not be inspected this cycle; suppressing the watcher snapshot so the controller keeps its last-known state`,
+      );
     }
     try {
       if (this.isCronWatchInProgress) {
@@ -1119,12 +1125,15 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       }
       await event.emitContainerReports(containerReports);
       this.lastRunAt = new Date().toISOString();
-      // Skip the snapshot emit when container enumeration itself failed.
-      // The snapshot is authoritative — downstream prunes everything not in
-      // `containers` — so emitting an empty list after a transient docker /
-      // socket-proxy hiccup would wipe the controller's view of this agent
-      // (issue #362). Preserve last-known state until the next clean cycle.
-      if (!containerEnumerationFailed) {
+      // Skip the snapshot emit when container enumeration itself failed, or
+      // when per-container image-detail enrichment dropped one or more
+      // containers. The snapshot is authoritative — the controller prunes
+      // everything not in `containers` — so emitting a short or empty list
+      // after a transient docker / socket-proxy hiccup would wipe the
+      // controller's view of this agent (issues #362, #386). Per-container
+      // reports are still emitted above; only the authoritative prune is
+      // deferred until a fully clean cycle. Preserve last-known state.
+      if (!containerEnumerationFailed && enumerationDiagnostics.enrichmentErrors === 0) {
         await event.emitWatcherSnapshot({
           watcher: {
             type: this.type,
@@ -1174,7 +1183,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
    * Get all containers to watch.
    * @returns {Promise<unknown[]>}
    */
-  async getContainers(): Promise<Container[]> {
+  async getContainers(diagnostics?: { enrichmentErrors: number }): Promise<Container[]> {
     this.ensureLogger();
     await this.ensureRemoteAuthHeaders();
     let containersFromTheStore: Container[] = [];
@@ -1226,33 +1235,45 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     );
     this.recordAliasFilterDecisions(decisions);
 
-    const containersToReturn = (
-      await mapWithDockerWatchConcurrency(containersToWatch, (container) =>
-        this.addImageDetailsToContainer(container, {
-          includeTags: getLabel(container.Labels, ddTagInclude, wudTagInclude),
-          excludeTags: getLabel(container.Labels, ddTagExclude, wudTagExclude),
-          transformTags: getLabel(container.Labels, ddTagTransform, wudTagTransform),
-          tagFamily: getLabel(container.Labels, ddTagFamily),
-          linkTemplate: getLabel(container.Labels, ddLinkTemplate, wudLinkTemplate),
-          displayName: getLabel(container.Labels, ddDisplayName, wudDisplayName),
-          displayIcon: getLabel(container.Labels, ddDisplayIcon, wudDisplayIcon),
-          triggerInclude: getLabel(container.Labels, ddTriggerInclude, wudTriggerInclude),
-          triggerExclude: getLabel(container.Labels, ddTriggerExclude, wudTriggerExclude),
-          registryLookupImage: getLabel(
-            container.Labels,
-            ddRegistryLookupImage,
-            wudRegistryLookupImage,
-          ),
-          registryLookupUrl: getLabel(container.Labels, ddRegistryLookupUrl, wudRegistryLookupUrl),
-        }).catch((error: unknown) => {
-          const errorMessage = getErrorMessage(error);
-          this.log.warn(
-            `${container.Names?.[0]?.replace(/^\//, '') || container.Id?.substring(0, 12)}: Failed to fetch image detail (${errorMessage || `${error}`})`,
-          );
-          return error;
-        }),
-      )
-    ).filter((result): result is Container => !(result instanceof Error) && result != null);
+    const enrichmentResults = await mapWithDockerWatchConcurrency(containersToWatch, (container) =>
+      this.addImageDetailsToContainer(container, {
+        includeTags: getLabel(container.Labels, ddTagInclude, wudTagInclude),
+        excludeTags: getLabel(container.Labels, ddTagExclude, wudTagExclude),
+        transformTags: getLabel(container.Labels, ddTagTransform, wudTagTransform),
+        tagFamily: getLabel(container.Labels, ddTagFamily),
+        linkTemplate: getLabel(container.Labels, ddLinkTemplate, wudLinkTemplate),
+        displayName: getLabel(container.Labels, ddDisplayName, wudDisplayName),
+        displayIcon: getLabel(container.Labels, ddDisplayIcon, wudDisplayIcon),
+        triggerInclude: getLabel(container.Labels, ddTriggerInclude, wudTriggerInclude),
+        triggerExclude: getLabel(container.Labels, ddTriggerExclude, wudTriggerExclude),
+        registryLookupImage: getLabel(
+          container.Labels,
+          ddRegistryLookupImage,
+          wudRegistryLookupImage,
+        ),
+        registryLookupUrl: getLabel(container.Labels, ddRegistryLookupUrl, wudRegistryLookupUrl),
+      }).catch((error: unknown) => {
+        const errorMessage = getErrorMessage(error);
+        this.log.warn(
+          `${container.Names?.[0]?.replace(/^\//, '') || container.Id?.substring(0, 12)}: Failed to fetch image detail (${errorMessage || `${error}`})`,
+        );
+        return error;
+      }),
+    );
+    // A thrown enrichment failure (e.g. a transient docker / socket-proxy
+    // hiccup during image inspect) drops that container from the result set.
+    // Surface the count so `watch()` can suppress the authoritative watcher
+    // snapshot rather than prune the dropped containers off the controller
+    // (issue #386). `undefined` results are intentional skips (e.g. podman
+    // pod infra containers) and are not counted as errors.
+    if (diagnostics) {
+      diagnostics.enrichmentErrors = enrichmentResults.filter(
+        (result) => result instanceof Error,
+      ).length;
+    }
+    const containersToReturn = enrichmentResults.filter(
+      (result): result is Container => !(result instanceof Error) && result != null,
+    );
 
     // Prune old containers from the store
     try {

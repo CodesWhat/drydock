@@ -79,6 +79,12 @@ If a service uses flow-style mapping without an `image` key (for example `nginx:
 
 Before persisting a compose mutation, Drydock validates the candidate file by parsing the full compose chain in-process. Invalid candidate configs are not written.
 
+## Update Concurrency
+
+Services within the same compose stack are serialized by a **per-compose-project lock** — only one service in a given stack updates at a time. Services in different stacks (or bare containers) can update concurrently. This prevents `docker compose up` orchestration conflicts without restricting cross-stack parallelism.
+
+A global `DD_UPDATE_MAX_CONCURRENT` cap (default: unlimited) limits the total simultaneous update lifecycles across all stacks. See [Container Actions — Global Concurrency Cap](/docs/configuration/actions#global-concurrency-cap) for details.
+
 ## Reconciliation behavior
 
 Before lifecycle execution, Drydock checks the running container image against the compose-declared image for the target service.

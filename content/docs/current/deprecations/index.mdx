@@ -21,7 +21,7 @@ The unversioned `/api/*` path is a backward-compatible alias for `/api/v1/*`. Bo
 | **Detection** | Startup log warning; UI deprecation banner when legacy API paths are detected |
 | **Migration** | Replace `/api/` with `/api/v1/` in all integrations |
 
-### Implicit wildcard CORS origin
+### Implicit wildcard CORS origin {#implicit-wildcard-cors}
 
 When `DD_SERVER_CORS_ENABLED=true` and `DD_SERVER_CORS_ORIGIN` is not set, drydock defaults to `*` (all origins). This implicit wildcard is deprecated.
 
@@ -51,7 +51,7 @@ When `DD_SERVER_CORS_ENABLED=true` and `DD_SERVER_CORS_ORIGIN` is not set, drydo
 | **Detection** | Per-label log warning on container init; Prometheus counter `dd_legacy_input_total{source="label"}`; UI deprecation banner |
 | **Migration** | Rename all `wud.*` labels to `dd.*` in your compose files. Run `drydock config migrate --file /path/to/compose.yml` |
 
-### Legacy template variable aliases
+### Legacy template variable aliases {#legacy-template-variables}
 
 Simple template variables (`id`, `name`, `watcher`, `kind`, `semver`, `local`, `remote`, `link`) and batch variable `count` resolve to single container properties.
 
@@ -61,7 +61,7 @@ Simple template variables (`id`, `name`, `watcher`, `kind`, `semver`, `local`, `
 | **Detection** | Log warning when `${variable}` syntax is used in trigger templates |
 | **Migration** | Replace with `container.*` equivalents: `id` &rarr; `container.id`, `name` &rarr; `container.name`, `count` &rarr; `containers.length`, etc. See [Trigger templates](/docs/configuration/triggers#template-variables) |
 
-### `PUT /api/settings`
+### `PUT /api/settings` {#put-api-settings}
 
 The `PUT` method on `/api/settings` is a compatibility alias for `PATCH`. Responses include `Deprecation` and `Sunset` HTTP headers.
 
@@ -91,7 +91,7 @@ SHA-1, APR1/MD5 (Apache), crypt, and plain text password hashes from v1.3.9 are 
 | **Detection** | Startup log warning; UI deprecation banner |
 | **Migration** | Regenerate your password hash with argon2id. See [Basic authentication](/docs/configuration/authentications/basic) |
 
-### Kafka `clientId` configuration key
+### Kafka `clientId` configuration key {#kafka-clientid}
 
 The camelCase `clientId` key in Kafka trigger configuration is deprecated.
 
@@ -101,7 +101,7 @@ The camelCase `clientId` key in Kafka trigger configuration is deprecated.
 | **Detection** | Startup log warning |
 | **Migration** | Rename `clientId` to `clientid` (lowercase) in your Kafka trigger configuration |
 
-### `DD_WATCHER_*_WATCHDIGEST` environment variable
+### `DD_WATCHER_*_WATCHDIGEST` environment variable {#watchdigest}
 
 Per-watcher digest watching via environment variable is deprecated.
 
@@ -111,7 +111,7 @@ Per-watcher digest watching via environment variable is deprecated.
 | **Detection** | Startup log warning |
 | **Migration** | Use the `dd.watch.digest=true` label on individual containers instead |
 
-### `DD_WATCHER_*_WATCHATSTART` environment variable
+### `DD_WATCHER_*_WATCHATSTART` environment variable {#watchatstart}
 
 This variable is a no-op — watching at startup has been the default since v1.3.
 
@@ -121,7 +121,7 @@ This variable is a no-op — watching at startup has been the default since v1.3
 | **Detection** | Startup log warning |
 | **Migration** | Remove the variable from your configuration |
 
-### Registry `PUBLIC_TOKEN` configuration
+### Registry `PUBLIC_TOKEN` configuration {#registry-public-token}
 
 Token-based authentication for public registries has been replaced by password-based authentication for consistency.
 
@@ -153,7 +153,7 @@ The `DD_TRIGGER_*` prefix is being replaced by semantic prefixes that distinguis
 | **Detection** | Startup log warning; Prometheus counter `dd_legacy_input_total`; UI deprecation banner |
 | **Migration** | Rename `DD_TRIGGER_*` to `DD_ACTION_*` (for Docker/Compose/Command triggers) or `DD_NOTIFICATION_*` (for Slack/email/Pushover/etc.). Run `drydock config migrate --source trigger` to auto-rewrite. See [Triggers](/docs/configuration/triggers) |
 
-### `dd.trigger.include` / `dd.trigger.exclude` container labels
+### `dd.trigger.include` / `dd.trigger.exclude` container labels {#legacy-trigger-labels}
 
 These labels are being replaced by semantic equivalents.
 
@@ -162,6 +162,16 @@ These labels are being replaced by semantic equivalents.
 | **Deprecated since** | v1.5.0 |
 | **Detection** | Log warning during container initialization |
 | **Migration** | Replace `dd.trigger.include` with `dd.action.include` or `dd.notification.include`. Replace `dd.trigger.exclude` with `dd.action.exclude` or `dd.notification.exclude` |
+
+### Manual updates bypass `dd.action.include` / `dd.action.exclude` {#action-include-exclude-soft-blocker}
+
+In v1.5.x, the `trigger-not-included` and `trigger-excluded` eligibility reasons are **soft** blockers: the UI shows a *Trigger filtered* / *Trigger excluded* pill, but clicking the per-row Update button still queues the update after a confirmation step. In v1.7.0 these reasons become **hard** blockers and the Update button is locked when the labels filter out the action trigger.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.5.0 |
+| **Detection** | UI eligibility pill on container row; confirmation modal warning |
+| **Migration** | If you rely on manual updates bypassing an action trigger's include/exclude filter, either (a) remove the `dd.action.exclude` / `dd.trigger.exclude` label, (b) add the trigger to the container's `dd.action.include` / `dd.trigger.include` list, or (c) configure a separate action trigger that the labels permit. The eligibility pill on the row identifies the exact trigger / label combination in conflict |
 
 ## Detection summary
 

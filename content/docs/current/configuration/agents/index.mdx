@@ -51,6 +51,7 @@ services:
       - CONTAINERS=1
       - IMAGES=1
       - EVENTS=1
+      - INFO=1
       - POST=1
       - DELETE=1
       - NETWORKS=1
@@ -161,6 +162,7 @@ services:
       - CONTAINERS=1
       - IMAGES=1
       - EVENTS=1
+      - INFO=1
       - POST=1
       - DELETE=1
       - NETWORKS=1
@@ -185,6 +187,7 @@ services:
       - CONTAINERS=1
       - IMAGES=1
       - EVENTS=1
+      - INFO=1
       - POST=1
       - DELETE=1
       - NETWORKS=1
@@ -217,6 +220,16 @@ services:
 <Callout type="warn">**Do not configure notification triggers (Slack, SMTP, etc.) on agents.** Only `docker` and `dockercompose` triggers are supported in agent mode. Notification triggers must be configured on the controller.</Callout>
 
 <Callout type="info">**You do not need to define `DD_ACTION_DOCKER_*` on the controller for each agent.** During the handshake, the controller automatically discovers the agent's triggers and creates internal proxies. The controller only needs its own `DD_ACTION_DOCKER_*` for updating containers on its local host.</Callout>
+
+## Reliability notes
+
+### Transient enumeration failures
+
+When the Docker watcher on an agent fails to enumerate containers (e.g. a brief socket-proxy hiccup or Docker daemon restart), the agent suppresses the snapshot emission rather than broadcasting an empty container list. The controller preserves the last-known container state instead of wiping it. The next successful cron cycle restores the accurate state.
+
+### Container list payload
+
+The agent's `POST /update` endpoint receives only `{ id, name }` for each container rather than the full container object. This prevents HTTP 413 errors in large fleets where full payloads exceeded the agent's 256 KB body cap.
 
 ## Features in Agent Mode
 

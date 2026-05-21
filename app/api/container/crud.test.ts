@@ -2693,6 +2693,27 @@ describe('api/container/crud', () => {
       expect(harness.deps.updateOperationStore.getOperationsByContainerName).not.toHaveBeenCalled();
     });
 
+    test('strips container snapshot from operations before returning to API consumer', () => {
+      const harness = createHarness({
+        containers: [createContainer({ id: 'c1', name: 'edge-api' })],
+      });
+      harness.deps.updateOperationStore.getOperationsByContainerName.mockReturnValue([
+        {
+          id: 'op-1',
+          containerName: 'edge-api',
+          container: { id: 'c1', name: 'edge-api', labels: { SECRET_KEY: 'top-secret' } },
+        },
+      ]);
+      harness.deps.updateOperationStore.getOperationsByContainerId.mockReturnValue([]);
+
+      const res = callGetContainerUpdateOperations(harness.handlers, 'c1');
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      const jsonArg = (res.json as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(jsonArg.data[0]).not.toHaveProperty('container');
+      expect(jsonArg.data[0].id).toBe('op-1');
+    });
+
     test('returns operations matched by container id even when containerName differs', () => {
       const harness = createHarness({
         containers: [createContainer({ id: 'c1', name: 'pihole-1' })],

@@ -1,6 +1,6 @@
 import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
-import * as updateOperationStore from '../store/update-operation.js';
+import { getOperationById, toApiUpdateOperation } from '../store/update-operation.js';
 import { sendErrorResponse } from './error-response.js';
 
 const router = express.Router();
@@ -12,13 +12,13 @@ function getUpdateOperationById(req: Request, res: Response) {
     return;
   }
 
-  const operation = updateOperationStore.getOperationById(rawId.trim());
+  const operation = getOperationById(rawId.trim());
   if (!operation) {
     sendErrorResponse(res, 404, 'Update operation not found');
     return;
   }
 
-  res.status(200).json(operation);
+  res.status(200).json(toApiUpdateOperation(operation));
 }
 
 export function init() {

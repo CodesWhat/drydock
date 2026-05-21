@@ -3394,6 +3394,40 @@ test('handleContainerUpdateFailedEvent should fall back to store lookup when pay
   );
 });
 
+test('handleContainerUpdateAppliedEvent should dispatch using payload.container when the store lookup misses (issue #385)', async () => {
+  // The operation store now persists a container snapshot at enqueue time and
+  // buildTerminalLifecycleEventBase forwards it on the update-applied payload.
+  // This prevents notification triggers (Telegram, Pushover, etc.) from
+  // silently dropping the event during the ~8 s compose recreate gap when the
+  // old container has been removed but the new one hasn't been re-watched yet.
+  const payloadContainer = {
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: false,
+    updateKind: { kind: 'tag', semverDiff: 'minor' },
+  };
+  storeContainer.getContainers.mockReturnValue([]);
+  storeContainer.getContainersRaw.mockReturnValue([]);
+  trigger.configuration.mode = 'simple';
+  trigger.configuration.threshold = 'all';
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleContainerUpdateAppliedEvent({
+    containerName: 'local_container1',
+    operationId: 'op-385',
+    container: payloadContainer,
+  } as any);
+
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: 'container1',
+      notificationEvent: {
+        kind: 'update-applied',
+      },
+    }),
+  );
+});
+
 test('handleSecurityAlertEvent should dispatch using payload container when provided', async () => {
   const container = {
     watcher: 'local',

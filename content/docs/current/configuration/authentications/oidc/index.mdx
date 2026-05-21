@@ -38,7 +38,9 @@ The callback URL (to configure in the IDP) is built as `${DD_PUBLIC_URL}/auth/oi
 
 - If your IdP is on a different domain and callback fails with `OIDC session is missing or expired`, check `DD_SERVER_COOKIE_SAMESITE` (server config). Default is `lax` for OIDC compatibility; `strict` can break cross-site callbacks. Use `none` only for explicit cross-site/embed cases over HTTPS.
 - If your provider uses a private/self-signed CA, the quickest container-level workaround is `NODE_EXTRA_CA_CERTS=/path/to/ca.pem`. Drydock also supports OIDC-scoped TLS settings with `DD_AUTH_OIDC_{auth_name}_CAFILE` and `DD_AUTH_OIDC_{auth_name}_INSECURE`.
-- **Redirect URL validation** — Drydock validates all OIDC authorization redirect URLs against an allowlist derived from the configured callback URL origin. This prevents open redirect attacks through crafted callback parameters. No configuration is needed.
+- **Node 24 compatibility** — `DD_AUTH_OIDC_{auth_name}_CAFILE` and `DD_AUTH_OIDC_{auth_name}_INSECURE=true` both require a custom TLS dispatcher. Drydock uses `fetch` from userland `undici` when a custom dispatcher is needed to avoid a Node 24 / undici v7 vs v8 dispatcher mismatch that caused opaque `TypeError: fetch failed` errors in prior releases. No configuration is needed — the fix is automatic.
+- **Redirect URL validation** — Post-login redirects are validated against the backend's endpoint allowlist. OIDC flows cannot be hijacked into landing on arbitrary paths. No configuration is needed.
+- **OIDC error log redaction** — OIDC warn logs redact RFC-1918 IP addresses (`[internal-addr]`) and absolute filesystem paths (`[path]`) from error cause chains so private network addresses and CA certificate file paths do not appear in centralized log aggregators.
 - **OIDC logout URL resolution** — drydock first tries the provider discovery `end_session_endpoint`. If it is missing, you can set `DD_AUTH_OIDC_{auth_name}_LOGOUTURL` when your provider (or proxy) exposes a logout URL outside discovery metadata. If neither is available, `POST /auth/logout` only destroys the local drydock session.
 
 ## How to integrate with&nbsp;[Authelia](https://www.authelia.com)

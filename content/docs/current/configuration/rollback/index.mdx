@@ -24,9 +24,9 @@ The number of backups retained per container is configurable via a trigger envir
 
 ## Manual Rollback
 
-Rollback is available in two ways:
+Rollback is available in three ways:
 
-- **UI** -- on the container detail page, select a previous backup and click **Rollback**.
+- **UI** -- on the container detail page, select a previous backup and click **Rollback**. A shortcut is also available directly from the container's actions menu (the `...` menu on each row).
 - **API** -- send a `POST` request to `/api/v1/containers/:id/rollback`, where `:id` is the container ID.
 
 Rollback uses a stop-remove-recreate strategy: drydock stops the current container, removes it, and creates a new container with the original name using the backup image.
@@ -46,6 +46,14 @@ curl -X POST http://localhost:3000/api/v1/containers/my-container-id/rollback \
   -H "Content-Type: application/json" \
   -d '{"backupId": "abc123"}'
 ```
+
+## Health-gate SSE heartbeat
+
+During an update, drydock waits for the new container to pass its Docker `HEALTHCHECK`. While waiting, periodic heartbeat events keep the UI informed so real-time status stays accurate even when healthcheck intervals are long (e.g. 60 s).
+
+| Env var | Required | Description | Default |
+| --- | :---: | --- | --- |
+| `DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS` | ⚪ | Interval (ms) at which `phase: 'health-gate'` SSE events are re-emitted during the health-gate wait. Set to `0` to disable. Values below `1000` fail startup. | `10000` |
 
 ## Auto-Rollback on Health Failure
 

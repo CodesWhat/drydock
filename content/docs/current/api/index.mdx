@@ -87,6 +87,10 @@ If the header is missing or does not match the expected token, the API responds 
 | `/api/v1/containers/stats` | `GET` | Container CPU and memory usage stats (see [Container API](/docs/api/container)) |
 | `/api/v1/containers/:id/stats` | `GET` | Single container stats snapshot and history (see [Container API](/docs/api/container)) |
 | `/api/v1/containers/:id/stats/stream` | `GET` | SSE stream for real-time container stats (see [Container API](/docs/api/container)) |
+| `/api/v1/stats/summary` | `GET` | Fleet-aggregate CPU/memory snapshot (see [Container API](/docs/api/container#get-fleet-stats-summary)) |
+| `/api/v1/stats/summary/stream` | `GET` | SSE feed of fleet-aggregate stats — consumed by the dashboard Resource Usage widget (see [Container API](/docs/api/container#stream-fleet-stats-summary-sse)) |
+| `/api/v1/update-operations/:id` | `GET` | Single update/rollback operation by ID — SSE-miss fallback (see [Container API](/docs/api/container#get-a-single-update-operation)) |
+| `/api/v1/operations/:id/cancel` | `POST` | Cancel a queued or in-progress update operation (see [Container API](/docs/api/container#cancel-an-update-operation)) |
 | `/api/v1/containers/:id/release-notes` | `GET` | GitHub release notes for a container's available update (see [Container API](/docs/api/container)) |
 | `/api/v1/containers/backups` | `GET` | [All image backups](/docs/api/container#list-all-backups) (optionally filter by `containerName`) |
 | `/api/v1/icons/:source/:name` | `GET` | Proxy and cache registry icon images |
@@ -245,6 +249,12 @@ curl -N -H "Accept: text/event-stream" http://drydock:3000/api/v1/events/ui
 ```
 
 Connection limits: max 10 per IP, max 10 per session. Returns 429 when exceeded.
+
+### Reconnection and event replay
+
+Each SSE event carries an `id:` field (`<bootId>:<counter>`). On reconnect, browsers automatically send a `Last-Event-ID` header and the server replays any buffered events since that ID. For clients that cannot set custom headers (for example `EventSource` in some environments), pass the same value via the `?last-event-id=` query parameter instead — the server checks both and the header takes precedence.
+
+If the boot ID does not match the server's current boot (server restarted since the last connection), the server cannot replay events from before the restart. The client should treat a reconnect after a reboot as a full re-sync.
 
 ### Event types
 

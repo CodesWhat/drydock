@@ -1,6 +1,10 @@
 import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
-import { getOperationById, requestOperationCancellation } from '../store/update-operation.js';
+import {
+  getOperationById,
+  requestOperationCancellation,
+  toApiUpdateOperation,
+} from '../store/update-operation.js';
 import { sendErrorResponse } from './error-response.js';
 import { sanitizeApiError } from './helpers.js';
 
@@ -24,10 +28,10 @@ function cancelOperation(req: Request<{ id: string }>, res: Response) {
       return;
     }
     if (result.outcome === 'cancelled') {
-      res.status(200).json({ data: result.operation });
+      res.status(200).json({ data: toApiUpdateOperation(result.operation) });
       return;
     }
-    res.status(202).json({ data: result.operation });
+    res.status(202).json({ data: toApiUpdateOperation(result.operation) });
   } catch (e: unknown) {
     sendErrorResponse(res, 500, sanitizeApiError(e));
   }

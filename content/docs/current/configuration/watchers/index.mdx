@@ -54,6 +54,10 @@ As of **v1.5.0-rc.21** the default cron is `0 */6 * * *` (every 6 hours), matchi
 - When `MAINTENANCE_WINDOW` is configured and a check is skipped outside the allowed schedule, drydock queues one pending check and runs it automatically when the next maintenance window opens.
 - Legacy compatibility: `wud.*` labels are still accepted as fallback to `dd.*`. When a fallback is used, drydock emits a one-time warning for that key and increments `dd_legacy_input_total{source="label",key="<legacy_key>"}`. To rewrite configs in place, run `node dist/index.js config migrate --dry-run` then `node dist/index.js config migrate --file <path>`.
 - If watcher logger initialization fails, drydock automatically falls back to structured stderr JSON logs and increments `dd_watcher_logger_init_failures_total{type,name}`. Alert on non-zero increases to catch degraded logging early.
+- The watcher fan-out is capped at **10 concurrent `watchContainer` invocations** per cron cycle. On inventories with 40–200 containers this prevents a burst of simultaneous registry calls that would trigger rate limits despite the token bucket.
+- Hybrid `image:tag@sha256:digest` references (e.g. `docker.io/valkey/valkey:9@sha256:bcf6…`) are handled correctly: drydock preserves both the tag and the digest rather than falling back to digest-only mode, so the human-readable tag is displayed in the UI and the registry router resolves the provider cleanly.
+- Label-derived watcher fields (`tagFamily`, `includeTags`, `excludeTags`, `transformTags`, `triggerInclude`, `triggerExclude`) are **re-derived on Docker update events** (e.g. after `docker compose up -d`). Labels set on the recreated container take effect immediately without waiting for the next cron cycle.
+- Floating semver aliases (e.g. `3.3` and `3.3.0`, which both coerce to the same semver) are excluded from the greater-than check in candidate ranking, so aliases that resolve identically are never reported as upgrades.
 
 <Callout type="warn">
 **Before you start — important watcher caveats:**
@@ -592,7 +596,8 @@ services:
 | Topic | Status |
 | --- | --- |
 | Tested Podman version | `5.6.0` on Rocky Linux `9.7` (issue [#152](https://github.com/CodesWhat/drydock/issues/152)) |
-| API version handling | Drydock probes daemon compatibility and pins client API behavior for Podman/Docker socket endpoints |
+| API version negotiation | Drydock probes `/version` at startup and pins Dockerode to the reported API version, preventing `EAI_AGAIN` crashes caused by Podman returning HTTP 301 for unversioned API paths. |
+| Pod infra containers | Podman pod infrastructure containers (empty `Image` field) are automatically skipped — they are never added to the container store or compared against registry tags. |
 | CI coverage | No dedicated Podman CI matrix yet |
 | Rootless networking | Can differ from Docker bridge behavior; see [Podman FAQ](/docs/faq#podman-rootless-networking-limitations) |
 | SELinux (RHEL/Rocky/Fedora) | Socket mounts need `:Z` flag; see [SELinux FAQ](/docs/faq#selinux-blocks-podman-socket-access-permission-denied) |
@@ -744,6 +749,12 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 `dd.runtime.entrypoint.origin` and `dd.runtime.cmd.origin` are managed automatically by the Docker trigger during container updates. You only need to set them manually if drydock cannot detect the origin (shows `unknown`) and you want to explicitly pin or release a custom entrypoint/cmd.
 
 <Callout type="warn">`dd.inspect.tag.path` is optional and opt-in. Use it only when your image metadata tracks the running app version reliably; some images set unrelated values. Also note that legacy alias `dd.registry.lookup.url` is still accepted for compatibility, but prefer `dd.registry.lookup.image`.</Callout>
+
+<Callout type="warn" title="dd.tag.transform is validated at startup">`dd.tag.transform` regex patterns are validated at config time. A malformed or oversized regex pattern causes drydock to throw at startup with a descriptive error rather than silently producing broken tag transformations that could generate false positive update detections.</Callout>
+
+<Callout type="info">**Source project link** — When an `org.opencontainers.image.source` OCI label, `dd.source.repo` label, or GHCR-derived source URL is available for a container, drydock shows a clickable "View project" link in the detail panel and container card. Set `dd.source.repo=owner/repo` on a container to override or supply the source URL when the image does not carry `org.opencontainers.image.source`.</Callout>
+
+<Callout type="info">**Release notes inline popover** — The release-notes icon on each container row opens an inline popover showing both the current and available-version release notes side by side, with expand/collapse per panel. When only an external release URL is available (no structured notes), the popover contains a single row linking out to that URL. Release notes are fetched from GitHub via the release-notes provider using either a configured `DD_RELEASE_NOTES_GITHUB_TOKEN` or the GHCR token fallback (see [GHCR](/docs/configuration/registries/ghcr)). Use `dd.source.repo` to override the source repository when the image name does not map directly to a GitHub repo.</Callout>
 
 <Callout type="info">**`dd.action.include` / `dd.notification.include` (and their `.exclude` counterparts) control automatic trigger dispatch.** These labels filter which triggers fire automatically when an update is detected (e.g., route notifications to specific Slack channels or restrict which docker trigger auto-updates this container). They match against the trigger **name** (e.g., `alerts`) or **full ID** (e.g., `smtp.alerts`). Manual updates from the UI use [agent-based matching](/docs/configuration/agents) instead — the update is routed to the agent that discovered the container. The legacy `dd.trigger.include` / `dd.trigger.exclude` labels still work but are deprecated — see [Deprecation Schedule](/docs/deprecations#ddtriggerinclude--ddtriggerexclude-container-labels).</Callout>
 
@@ -1117,6 +1128,33 @@ The container model includes additional fields useful for understanding update s
 | --- | --- | --- |
 | `result.noUpdateReason` | `string` | When no update is available, explains why (e.g. tag filtering, no newer version found) |
 | `updateDetectedAt` | `string (ISO 8601)` | Timestamp of when an update was first detected for this container |
+| `image.tag.tagPrecision` | `'specific' \| 'floating'` | Whether the container's tag is a mutable version alias (`floating`, e.g. `latest`, `v3`, `1.4`) or a pinned release (`specific`, e.g. `1.4.5`). Computed automatically; used by digest-watch auto-enable logic and the Hide Pinned UI filter. |
+
+## Next-run visibility
+
+The Watchers and Agents views show when each watcher will next poll. The **Next Run** column displays a live relative countdown (e.g. "in 14m"). Hover over the countdown to see the absolute local timestamp (e.g. `Apr 18, 14:32:07`), making it easy to correlate the next poll with other scheduled work. The watcher API also exposes `nextRunAt` for programmatic consumers.
+
+## UI: floating-tag detection and Hide Pinned
+
+### Floating tag detection (`tagPrecision`)
+
+drydock classifies each container's tag as `specific` (pinned release, e.g. `1.4.5`) or `floating` (mutable alias, e.g. `latest`, `v3`, `16-alpine`) using the `tagPrecision` classifier. This has two practical effects:
+
+1. **Auto-digest watching** — Floating tags on non-Docker Hub registries have digest watching enabled automatically so in-place rebuilds are detected even when the tag name does not change.
+2. **Caution badge** — When a container has a floating tag without digest watching active, the container detail view shows a caution indicator.
+
+The `tagPrecision` field is computed from the tag name and any active `dd.tag.transform`. You do not need to configure it manually.
+
+### Version column display
+
+The Containers list Version column adapts based on `tagPrecision`:
+
+- **Floating-tag + digest-watch containers** (e.g. `prom/prometheus:latest`): shows the human-readable tag (not raw SHA). The digest transition is available in the cell tooltip and detail panels.
+- **Digest-pinned containers** (`image.tag.value` starts with `sha256:`): shows the `sha256:abc… → sha256:def…` pair directly in the cell.
+
+### Hide Pinned toggle
+
+The **Hide Pinned** filter in the Containers toolbar hides containers whose `tagPrecision` is `specific`. This is useful for decluttering the list when you have infrastructure containers (databases, proxies) pinned to specific versions and want to focus on containers with available updates. The preference is persisted across sessions.
 
 ## Docker Event Stream
 

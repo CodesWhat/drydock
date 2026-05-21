@@ -43,6 +43,21 @@ This trigger also supports the [common configuration variables](/docs/configurat
 
 <Callout type="warn">**Agent mode:** When using [distributed agents](/docs/configuration/agents), each agent needs its own Docker trigger configured (e.g., `DD_ACTION_DOCKER_LOCAL_PRUNE=true`). The `{trigger_name}` segment is required — `DD_ACTION_DOCKER_PRUNE=true` without a name is invalid and will not create a working trigger. The controller does **not** need Docker triggers for remote agents; agent triggers are discovered automatically during the handshake.</Callout>
 
+## Update Concurrency
+
+By default, drydock runs container updates concurrently. Two serialization layers apply automatically:
+
+- **Per-container lock** — prevents the same container from being updated twice in parallel.
+- **Per-compose-project lock** — serializes services within the same compose stack so `docker compose up` orchestration is safe (two unrelated containers can still update simultaneously).
+
+To limit the total number of simultaneous update lifecycles across your entire instance, set `DD_UPDATE_MAX_CONCURRENT`:
+
+| Env var | Default | Description |
+| --- | --- | --- |
+| `DD_UPDATE_MAX_CONCURRENT` | `0` (unlimited) | Max simultaneous update lifecycles across the entire controller instance. Self-update bypasses this cap. |
+
+See [Container Actions — Global Concurrency Cap](/docs/configuration/actions#global-concurrency-cap) for full semantics.
+
 ## Image Backup & Rollback
 
 Every time a container is updated, Drydock automatically backs up the previous image metadata. Backups are retained per container up to the `BACKUPCOUNT` limit (default: 3), with older backups pruned automatically.
@@ -99,6 +114,8 @@ Hooks execute via `/bin/sh -c` inside the Drydock container. The following envir
 | `DD_UPDATE_TO` | New tag or digest |
 
 A non-zero exit code or timeout is treated as failure. When `dd.hook.pre.abort` is `true` (the default), a failed pre-hook prevents the update from proceeding.
+
+<Callout type="warn">Hook commands are validated against a restricted shell-safe grammar at configuration time. Commands containing `$(...)`, backticks, redirections (`<`, `>`), or chaining metacharacters (`;`, `&`, `|`) are rejected with a clear error at startup. Allowed: a single command with arguments, single/double-quoted strings, and `$VAR` / `${VAR}` variable references.</Callout>
 
 <Callout type="warn">Hook labels are ignored unless `DD_HOOKS_ENABLED=true` is set on the Drydock container.</Callout>
 
