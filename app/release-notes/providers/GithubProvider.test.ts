@@ -702,4 +702,69 @@ describe('release-notes/providers/GithubProvider', () => {
 
     vi.useRealTimers();
   });
+
+  // -----------------------------------------------------------------------
+  // Clamp tests — verify MAX_SECONDARY_RATE_LIMIT_COOLDOWN_MS (1 h) is enforced
+  // -----------------------------------------------------------------------
+
+  test('getSecondaryRateLimitDelayMs clamps an absurdly large retry-after header to 1 hour', async () => {
+    vi.useFakeTimers();
+    const provider = new GithubProvider();
+
+    // retry-after: 999999 seconds (≈11.5 days) → raw = 999_999_000 ms, must be clamped to 3600 s
+    mockAxiosGet.mockRejectedValue({
+      response: {
+        status: 403,
+        headers: { 'retry-after': '999999' },
+      },
+    });
+
+    const promise = provider.fetchByTag('github.com/acme/service', '1.0.0');
+    await vi.runAllTimersAsync();
+    await promise;
+
+    // Cooldown duration reported in the warn message must not exceed 3600 s (1 hour cap)
+    expect(mockLogWarn).toHaveBeenCalledWith(expect.stringMatching(/cooldown active for (\d+)s/));
+    const warnCall = mockLogWarn.mock.calls[0][0] as string;
+    const match = /cooldown active for (\d+)s/.exec(warnCall);
+    expect(match).not.toBeNull();
+    const reportedSeconds = Number.parseInt(match![1], 10);
+    expect(reportedSeconds).toBeLessThanOrEqual(3600);
+    expect(reportedSeconds).toBeGreaterThan(0);
+
+    vi.useRealTimers();
+  });
+
+  test('getSecondaryRateLimitDelayMs clamps a far-future x-ratelimit-reset epoch to 1 hour', async () => {
+    vi.useFakeTimers();
+    const provider = new GithubProvider();
+
+    // x-ratelimit-reset: 100 years in the future → raw delay ≫ 1 hour, must be clamped to 3600 s.
+    // No retry-after header so getSecondaryRateLimitDelayMs uses the x-ratelimit-reset branch.
+    const farFutureEpoch = Math.floor((Date.now() + 100 * 365 * 24 * 3600 * 1000) / 1000);
+    mockAxiosGet.mockRejectedValue({
+      response: {
+        status: 403,
+        headers: {
+          'x-ratelimit-remaining': '0',
+          'x-ratelimit-reset': String(farFutureEpoch),
+        },
+      },
+    });
+
+    const promise = provider.fetchByTag('github.com/acme/service', '1.0.0');
+    await vi.runAllTimersAsync();
+    await promise;
+
+    // Cooldown duration reported in the warn message must not exceed 3600 s (1 hour cap)
+    expect(mockLogWarn).toHaveBeenCalledWith(expect.stringMatching(/cooldown active for (\d+)s/));
+    const warnCall = mockLogWarn.mock.calls[0][0] as string;
+    const match = /cooldown active for (\d+)s/.exec(warnCall);
+    expect(match).not.toBeNull();
+    const reportedSeconds = Number.parseInt(match![1], 10);
+    expect(reportedSeconds).toBeLessThanOrEqual(3600);
+    expect(reportedSeconds).toBeGreaterThan(0);
+
+    vi.useRealTimers();
+  });
 });

@@ -13,9 +13,18 @@ const log = logger.child({ component: 'release-notes.provider.github' });
 const DEFAULT_SECONDARY_RATE_LIMIT_COOLDOWN_MS = 60_000;
 
 /**
+ * Hard upper bound on any cooldown derived from GitHub response headers.
+ * Prevents a garbage or far-future header value from making the cooldown
+ * effectively permanent for the lifetime of the process.
+ */
+const MAX_SECONDARY_RATE_LIMIT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour hard cap
+
+/**
  * Module-level cooldown timestamp.  While Date.now() < rateLimitCooldownUntil,
  * all GitHub release-notes lookups are skipped to avoid hammering an already-
- * tripped secondary rate limit.  Reset to 0 when the cooldown expires.
+ * tripped secondary rate limit.  The timestamp becomes stale on its own; the
+ * Date.now() < rateLimitCooldownUntil comparison transparently bypasses an
+ * expired cooldown without any explicit reset.
  */
 let rateLimitCooldownUntil = 0;
 
@@ -113,22 +122,27 @@ function isSecondaryRateLimit403(error: unknown): boolean {
  *   1. `retry-after` header (seconds integer)
  *   2. `x-ratelimit-reset` header (Unix epoch seconds)
  *   3. DEFAULT_SECONDARY_RATE_LIMIT_COOLDOWN_MS fallback
+ *
+ * The raw value is clamped to [0, MAX_SECONDARY_RATE_LIMIT_COOLDOWN_MS] so
+ * that a garbage or far-future header value cannot produce an unbounded delay.
  */
 function getSecondaryRateLimitDelayMs(error: unknown): number {
+  let rawMs: number;
+
   const retryAfter = getErrorHeader(error, 'retry-after');
   if (typeof retryAfter === 'string' && /^\d+$/.test(retryAfter.trim())) {
-    return Number.parseInt(retryAfter.trim(), 10) * 1000;
-  }
-
-  const resetEpoch = getErrorHeader(error, 'x-ratelimit-reset');
-  if (typeof resetEpoch === 'string' && /^\d+$/.test(resetEpoch.trim())) {
-    const delayMs = Number.parseInt(resetEpoch.trim(), 10) * 1000 - Date.now();
-    if (delayMs > 0) {
-      return delayMs;
+    rawMs = Number.parseInt(retryAfter.trim(), 10) * 1000;
+  } else {
+    const resetEpoch = getErrorHeader(error, 'x-ratelimit-reset');
+    if (typeof resetEpoch === 'string' && /^\d+$/.test(resetEpoch.trim())) {
+      const delayMs = Number.parseInt(resetEpoch.trim(), 10) * 1000 - Date.now();
+      rawMs = delayMs > 0 ? delayMs : DEFAULT_SECONDARY_RATE_LIMIT_COOLDOWN_MS;
+    } else {
+      rawMs = DEFAULT_SECONDARY_RATE_LIMIT_COOLDOWN_MS;
     }
   }
 
-  return DEFAULT_SECONDARY_RATE_LIMIT_COOLDOWN_MS;
+  return Math.min(Math.max(0, rawMs), MAX_SECONDARY_RATE_LIMIT_COOLDOWN_MS);
 }
 
 class GithubProvider implements ReleaseNotesProviderClient {
@@ -147,7 +161,7 @@ class GithubProvider implements ReleaseNotesProviderClient {
     tag: string,
     token?: string,
   ): Promise<ReleaseNotes | undefined> {
-    // Part 2: burst cooldown — if a secondary rate-limit was tripped recently,
+    // Burst cooldown — if a secondary rate-limit was tripped recently,
     // skip the API call entirely rather than hammering an already-tripped limit.
     if (Date.now() < rateLimitCooldownUntil) {
       log.debug('GitHub release notes skipped — secondary rate-limit cooldown active');
@@ -192,7 +206,7 @@ class GithubProvider implements ReleaseNotesProviderClient {
             logger: log,
             requestLabel: `github-release-notes GET ${endpoint}`,
             retryableStatuses: [429, 503],
-            // Part 1: also retry secondary-rate-limit 403s
+            // Also retry secondary-rate-limit 403s
             retryPredicate: isSecondaryRateLimit403,
             // Honor GitHub's own retry hint for the per-attempt delay
             retryDelayMs: (err) =>
@@ -225,7 +239,7 @@ class GithubProvider implements ReleaseNotesProviderClient {
         if (statusCode === 404) {
           continue;
         }
-        // Part 2: after retries are exhausted on a secondary rate-limit 403,
+        // After retries are exhausted on a secondary rate-limit 403,
         // set the module-level cooldown to protect subsequent lookups in this window.
         if (isSecondaryRateLimit403(error)) {
           const cooldownMs = getSecondaryRateLimitDelayMs(error);
