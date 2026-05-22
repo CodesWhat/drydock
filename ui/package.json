@@ -65,9 +65,11 @@
   },
   "overrides": {
     "fast-uri": "3.1.2",
+    "js-cookie": "3.0.7",
     "minimatch": "10.2.4",
     "picomatch": "4.0.4",
     "postcss": "8.5.10",
+    "qs": "6.15.2",
     "yaml": "2.9.0"
   }
 }
