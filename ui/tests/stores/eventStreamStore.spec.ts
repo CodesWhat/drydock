@@ -186,6 +186,25 @@ describe('SSE event listener: dd:agent-stats-changed', () => {
     expect(bus.emit).toHaveBeenCalledWith('agent-status-changed');
   });
 
+  it('maps dd:agent-stats-changed to agent-status-changed when the event carries no lastEventId', () => {
+    const store = useEventStreamStore();
+    const bus = { emit: vi.fn() };
+    store.connect(bus);
+
+    const source = MockEventSource.instances[0];
+    expect(source).toBeDefined();
+
+    const registeredCall = source.addEventListener.mock.calls.find(
+      (call) => call[0] === 'dd:agent-stats-changed',
+    );
+    expect(registeredCall).toBeDefined();
+
+    const listener = registeredCall![1];
+    listener(undefined);
+
+    expect(bus.emit).toHaveBeenCalledWith('agent-status-changed');
+  });
+
   it('registers dd:agent-connected, dd:agent-disconnected, and dd:agent-stats-changed listeners', () => {
     const store = useEventStreamStore();
     store.connect();
