@@ -26,7 +26,8 @@
     },
     "registryError": {
       "generic": "خطأ في السجل",
-      "detail": "خطأ في السجل: {error}"
+      "detail": "خطأ في السجل: {error}",
+      "detailWithRegistry": "{registryHost} — {error}"
     },
     "columns": {
       "container": "الحاوية",
