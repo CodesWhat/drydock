@@ -745,4 +745,28 @@ describe('withRetry', () => {
     // No override, no header → exponential backoff: 200 * 2^0 = 200ms
     expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('200ms'));
   });
+
+  test('retryDelayMs: return value larger than backoffMaxMs is clamped to backoffMaxMs', async () => {
+    const mockLogger = { debug: vi.fn() };
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(makeAxiosError(429))
+      .mockResolvedValueOnce({ status: 200, headers: {}, data: 'ok' });
+
+    const promise = withRetry(request, {
+      retryableStatuses: [429, 503],
+      // Returns 120 s — well above the 5 s cap
+      retryDelayMs: () => 120_000,
+      backoffBaseMs: 1000,
+      backoffMaxMs: 5_000,
+      logger: mockLogger,
+      requestLabel: 'test',
+    });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result.data).toBe('ok');
+    // delay = Math.min(120_000, 5_000) = 5_000ms
+    expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('5000ms'));
+  });
 });
