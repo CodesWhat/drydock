@@ -601,4 +601,148 @@ describe('withRetry', () => {
     // Backoff was used: 100 * 2^0 = 100ms
     expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('100ms'));
   });
+
+  // ── retryPredicate option ─────────────────────────────────────────────────
+
+  test('retryPredicate: retries a status not in retryableStatuses when predicate returns true', async () => {
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(makeAxiosError(403, { 'retry-after': '0' }))
+      .mockResolvedValueOnce({ status: 200, headers: {}, data: 'ok' });
+
+    const mockLogger = { debug: vi.fn() };
+    const predicate = vi.fn().mockReturnValue(true);
+
+    const promise = withRetry(request, {
+      retryableStatuses: [429, 503],
+      retryPredicate: predicate,
+      backoffBaseMs: 10,
+      logger: mockLogger,
+      requestLabel: 'test',
+    });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result.data).toBe('ok');
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(predicate).toHaveBeenCalled();
+  });
+
+  test('retryPredicate: does NOT retry when predicate returns false for non-retryable status', async () => {
+    const request = vi.fn().mockRejectedValueOnce(makeAxiosError(403, {}));
+    const predicate = vi.fn().mockReturnValue(false);
+
+    await expect(
+      withRetry(request, {
+        retryableStatuses: [429, 503],
+        retryPredicate: predicate,
+        backoffBaseMs: 10,
+      }),
+    ).rejects.toThrow('status code 403');
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(predicate).toHaveBeenCalled();
+  });
+
+  test('retryPredicate is not called when status is already in retryableStatuses', async () => {
+    // 429 is in retryableStatuses — predicate should not be needed (status check short-circuits)
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(makeAxiosError(429))
+      .mockResolvedValueOnce({ status: 200, headers: {}, data: 'ok' });
+
+    const predicate = vi.fn().mockReturnValue(false);
+
+    const promise = withRetry(request, {
+      retryableStatuses: [429, 503],
+      retryPredicate: predicate,
+      backoffBaseMs: 10,
+    });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result.data).toBe('ok');
+    // Predicate was not called because retryableStatuses already matched
+    expect(predicate).not.toHaveBeenCalled();
+  });
+
+  test('retryPredicate omitted: behavior is unchanged for existing callers', async () => {
+    // Without retryPredicate, a 403 should still throw immediately
+    const request = vi.fn().mockRejectedValueOnce(makeAxiosError(403));
+
+    await expect(withRetry(request, { retryableStatuses: [429, 503] })).rejects.toThrow(
+      'status code 403',
+    );
+
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  // ── retryDelayMs option ───────────────────────────────────────────────────
+
+  test('retryDelayMs: overrides the delay when it returns a value', async () => {
+    const mockLogger = { debug: vi.fn() };
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(makeAxiosError(403, { 'retry-after': '0' }))
+      .mockResolvedValueOnce({ status: 200, headers: {}, data: 'ok' });
+
+    const promise = withRetry(request, {
+      retryableStatuses: [429, 503],
+      retryPredicate: () => true,
+      retryDelayMs: () => 5000,
+      backoffBaseMs: 100,
+      logger: mockLogger,
+      requestLabel: 'test',
+    });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result.data).toBe('ok');
+    // Custom delay 5000ms was used (not backoff 100ms, not retry-after 0ms)
+    expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('5000ms'));
+  });
+
+  test('retryDelayMs: falls back to Retry-After header when it returns undefined', async () => {
+    const mockLogger = { debug: vi.fn() };
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(makeAxiosError(429, { 'retry-after': '7' }))
+      .mockResolvedValueOnce({ status: 200, headers: {}, data: 'ok' });
+
+    const promise = withRetry(request, {
+      retryableStatuses: [429, 503],
+      retryDelayMs: () => undefined,
+      backoffBaseMs: 100,
+      logger: mockLogger,
+      requestLabel: 'test',
+    });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result.data).toBe('ok');
+    // retryDelayMs returned undefined → falls through to retry-after header: 7s = 7000ms
+    expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('7000ms'));
+  });
+
+  test('retryDelayMs: falls back to exponential backoff when it returns undefined and no header', async () => {
+    const mockLogger = { debug: vi.fn() };
+    const request = vi
+      .fn()
+      .mockRejectedValueOnce(makeAxiosError(429))
+      .mockResolvedValueOnce({ status: 200, headers: {}, data: 'ok' });
+
+    const promise = withRetry(request, {
+      retryableStatuses: [429, 503],
+      retryDelayMs: () => undefined,
+      backoffBaseMs: 200,
+      logger: mockLogger,
+      requestLabel: 'test',
+    });
+    await vi.runAllTimersAsync();
+    const result = await promise;
+
+    expect(result.data).toBe('ok');
+    // No override, no header → exponential backoff: 200 * 2^0 = 200ms
+    expect(mockLogger.debug).toHaveBeenCalledWith(expect.stringContaining('200ms'));
+  });
 });

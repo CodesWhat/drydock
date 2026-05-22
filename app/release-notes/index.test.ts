@@ -28,6 +28,7 @@ import {
   toContainerReleaseNotes,
   truncateReleaseNotesBody,
 } from './index.js';
+import { _resetGithubProviderCooldownForTests } from './providers/GithubProvider.js';
 
 describe('release-notes service', () => {
   beforeEach(() => {
@@ -38,6 +39,7 @@ describe('release-notes service', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    _resetGithubProviderCooldownForTests();
     delete ddEnvVars.DD_RELEASE_NOTES_GITHUB_TOKEN;
   });
 
@@ -596,23 +598,30 @@ describe('release-notes service', () => {
   });
 
   test('getFullReleaseNotesForContainer should return undefined when GitHub rate limit is hit', async () => {
-    mockAxiosGet.mockRejectedValueOnce({
+    vi.useFakeTimers();
+    // Reject every attempt (all tag variants + all retry attempts) so withRetry exhausts retries
+    mockAxiosGet.mockRejectedValue({
       response: {
         status: 403,
         headers: {
           'x-ratelimit-remaining': '0',
+          'retry-after': '0',
         },
       },
     });
 
-    const releaseNotes = await getFullReleaseNotesForContainer({
+    const promise = getFullReleaseNotesForContainer({
       sourceRepo: 'github.com/acme/service',
       result: {
         tag: '2.0.0',
       },
     } as any);
+    await vi.runAllTimersAsync();
+    const releaseNotes = await promise;
 
     expect(releaseNotes).toBeUndefined();
+    // withRetry fired multiple attempts before exhausting retries
+    expect(mockAxiosGet.mock.calls.length).toBeGreaterThan(1);
   });
 
   test('resolveSourceRepoForContainer finds source repo from imageLabels when container labels are absent', async () => {

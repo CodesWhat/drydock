@@ -6,6 +6,24 @@ import type { ReleaseNotes, ReleaseNotesProviderClient } from '../types.js';
 
 const log = logger.child({ component: 'release-notes.provider.github' });
 
+/**
+ * Default cooldown when GitHub does not supply a retry hint.
+ * 60 s is conservative but safe for bursts of ~25 containers.
+ */
+const DEFAULT_SECONDARY_RATE_LIMIT_COOLDOWN_MS = 60_000;
+
+/**
+ * Module-level cooldown timestamp.  While Date.now() < rateLimitCooldownUntil,
+ * all GitHub release-notes lookups are skipped to avoid hammering an already-
+ * tripped secondary rate limit.  Reset to 0 when the cooldown expires.
+ */
+let rateLimitCooldownUntil = 0;
+
+/** Exposed for tests only — reset module-level cooldown state. */
+export function _resetGithubProviderCooldownForTests() {
+  rateLimitCooldownUntil = 0;
+}
+
 type UnknownRecord = Record<string, unknown>;
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -67,6 +85,52 @@ function buildTagVariants(tag: string) {
   return [`v${tagNormalized}`, tagNormalized];
 }
 
+/**
+ * Returns true when an error is a GitHub secondary rate-limit 403.
+ *
+ * GitHub signals the secondary rate limit with a 403 that carries either:
+ *   - a `retry-after` header (seconds to wait), or
+ *   - `x-ratelimit-remaining: 0` (quota exhausted, often with `x-ratelimit-reset`).
+ *
+ * A plain 403 without those headers is a genuine auth failure and must NOT
+ * be retried.
+ */
+function isSecondaryRateLimit403(error: unknown): boolean {
+  if (getErrorStatusCode(error) !== 403) {
+    return false;
+  }
+  const retryAfter = getErrorHeader(error, 'retry-after');
+  if (typeof retryAfter === 'string' && retryAfter.trim() !== '') {
+    return true;
+  }
+  return `${getErrorHeader(error, 'x-ratelimit-remaining') ?? ''}` === '0';
+}
+
+/**
+ * Returns the delay hint from a secondary-rate-limit 403 in milliseconds.
+ *
+ * Priority:
+ *   1. `retry-after` header (seconds integer)
+ *   2. `x-ratelimit-reset` header (Unix epoch seconds)
+ *   3. DEFAULT_SECONDARY_RATE_LIMIT_COOLDOWN_MS fallback
+ */
+function getSecondaryRateLimitDelayMs(error: unknown): number {
+  const retryAfter = getErrorHeader(error, 'retry-after');
+  if (typeof retryAfter === 'string' && /^\d+$/.test(retryAfter.trim())) {
+    return Number.parseInt(retryAfter.trim(), 10) * 1000;
+  }
+
+  const resetEpoch = getErrorHeader(error, 'x-ratelimit-reset');
+  if (typeof resetEpoch === 'string' && /^\d+$/.test(resetEpoch.trim())) {
+    const delayMs = Number.parseInt(resetEpoch.trim(), 10) * 1000 - Date.now();
+    if (delayMs > 0) {
+      return delayMs;
+    }
+  }
+
+  return DEFAULT_SECONDARY_RATE_LIMIT_COOLDOWN_MS;
+}
+
 class GithubProvider implements ReleaseNotesProviderClient {
   id = 'github' as const;
 
@@ -83,6 +147,13 @@ class GithubProvider implements ReleaseNotesProviderClient {
     tag: string,
     token?: string,
   ): Promise<ReleaseNotes | undefined> {
+    // Part 2: burst cooldown — if a secondary rate-limit was tripped recently,
+    // skip the API call entirely rather than hammering an already-tripped limit.
+    if (Date.now() < rateLimitCooldownUntil) {
+      log.debug('GitHub release notes skipped — secondary rate-limit cooldown active');
+      return undefined;
+    }
+
     const repo = normalizeGithubRepo(sourceRepo);
     if (!repo) {
       return undefined;
@@ -121,6 +192,11 @@ class GithubProvider implements ReleaseNotesProviderClient {
             logger: log,
             requestLabel: `github-release-notes GET ${endpoint}`,
             retryableStatuses: [429, 503],
+            // Part 1: also retry secondary-rate-limit 403s
+            retryPredicate: isSecondaryRateLimit403,
+            // Honor GitHub's own retry hint for the per-attempt delay
+            retryDelayMs: (err) =>
+              isSecondaryRateLimit403(err) ? getSecondaryRateLimitDelayMs(err) : undefined,
           },
         );
         const data = envelope.data;
@@ -149,11 +225,14 @@ class GithubProvider implements ReleaseNotesProviderClient {
         if (statusCode === 404) {
           continue;
         }
-        if (
-          statusCode === 403 &&
-          `${getErrorHeader(error, 'x-ratelimit-remaining') ?? ''}` === '0'
-        ) {
-          log.warn('GitHub release notes lookup is rate-limited');
+        // Part 2: after retries are exhausted on a secondary rate-limit 403,
+        // set the module-level cooldown to protect subsequent lookups in this window.
+        if (isSecondaryRateLimit403(error)) {
+          const cooldownMs = getSecondaryRateLimitDelayMs(error);
+          rateLimitCooldownUntil = Date.now() + cooldownMs;
+          log.warn(
+            `GitHub release notes lookup is rate-limited (${effectiveToken !== undefined ? 'authenticated' : 'unauthenticated'}) — cooldown active for ${Math.ceil(cooldownMs / 1000)}s`,
+          );
           return undefined;
         }
         if (statusCode === 401 || statusCode === 403) {
