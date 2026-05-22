@@ -1438,6 +1438,7 @@ export class AgentClient {
 
       // Process the result (registry check, store update)
       await this.processAuthoritativeContainer(report.container);
+      this.scheduleStatsChanged();
       return report;
     } catch (error: unknown) {
       this.log.error(
