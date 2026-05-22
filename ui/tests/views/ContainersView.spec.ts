@@ -2831,6 +2831,68 @@ describe('ContainersView', () => {
       expect(vm.registryErrorHost(c)).toBeUndefined();
     });
 
+    it('registryErrorHost returns undefined when URL parses but yields an empty hostname', async () => {
+      const c = makeContainer({
+        id: 'c1',
+        name: 'nginx',
+        registryUrl: 'file:///path/to/thing',
+      } as any);
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const vm = wrapper.vm as any;
+      expect(vm.registryErrorHost(c)).toBeUndefined();
+    });
+
+    it('registryErrorTooltip falls back to detail format when URL parses but yields an empty hostname', async () => {
+      const c = makeContainer({
+        id: 'c1',
+        name: 'nginx',
+        registryError: 'Request failed with status code 429',
+        registryUrl: 'file:///path/to/thing',
+      } as any);
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const vm = wrapper.vm as any;
+      expect(vm.registryErrorTooltip(c)).toBe(
+        'Registry error: Request failed with status code 429',
+      );
+    });
+
+    it('registryErrorHost returns undefined when registryUrl is a non-string truthy value', async () => {
+      const c = makeContainer({
+        id: 'c1',
+        name: 'nginx',
+        registryUrl: 42 as unknown as string,
+      } as any);
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const vm = wrapper.vm as any;
+      expect(vm.registryErrorHost(c)).toBeUndefined();
+    });
+
+    it('registryErrorTooltip falls back to detail format when registryUrl is a non-string truthy value', async () => {
+      const c = makeContainer({
+        id: 'c1',
+        name: 'nginx',
+        registryError: 'Request failed with status code 429',
+        registryUrl: 42 as unknown as string,
+      } as any);
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const vm = wrapper.vm as any;
+      expect(vm.registryErrorTooltip(c)).toBe(
+        'Registry error: Request failed with status code 429',
+      );
+    });
+
     it('actions menu flips up when trigger is near the bottom of the viewport', async () => {
       const c = makeContainer({ id: 'c1', name: 'nginx' });
       const wrapper = await mountContainersView(
