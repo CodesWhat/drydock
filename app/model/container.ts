@@ -506,9 +506,16 @@ function hasRawUpdate(container: Container): boolean {
     return false;
   }
 
-  const localTag = transformTag(container.transformTags, container.image.tag.value);
-  const remoteTag = transformTag(container.transformTags, container.result.tag);
-  let tagOrCreatedUpdateAvailable = localTag !== remoteTag;
+  // Only compare tags when both sides are defined; undefined result.tag means
+  // the registry scan did not return a tag (e.g. after a 429 error), so it
+  // must not be treated as a tag change. This mirrors the guard in
+  // getRawTagUpdate() which returns unknown when result.tag is undefined.
+  let tagOrCreatedUpdateAvailable = false;
+  if (container.image.tag?.value !== undefined && container.result.tag !== undefined) {
+    const localTag = transformTag(container.transformTags, container.image.tag.value);
+    const remoteTag = transformTag(container.transformTags, container.result.tag);
+    tagOrCreatedUpdateAvailable = localTag !== remoteTag;
+  }
 
   // Fallback to image created date (especially for legacy v1 manifests)
   if (container.image.created !== undefined && container.result.created !== undefined) {

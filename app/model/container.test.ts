@@ -229,6 +229,53 @@ test('testable_hasRawUpdate should account for created-date and digest branches'
   ).toBe(true);
 });
 
+test('testable_hasRawUpdate should not report a tag update when result.tag is undefined', () => {
+  // Bug: when a 429/error leaves result.tag undefined, transformTag(undefined)
+  // produced undefined and localTag !== remoteTag was true → spurious update.
+  expect(
+    container.testable_hasRawUpdate({
+      image: {
+        tag: { value: '1.0.0', semver: true },
+        digest: { watch: false },
+      },
+      result: {
+        // tag intentionally absent — simulates partial result after registry error
+      },
+    }),
+  ).toBe(false);
+});
+
+test('testable_hasRawUpdate should still report a tag update when result.tag is defined and different', () => {
+  expect(
+    container.testable_hasRawUpdate({
+      image: {
+        tag: { value: '1.0.0', semver: true },
+        digest: { watch: false },
+      },
+      result: {
+        tag: '1.0.1',
+      },
+    }),
+  ).toBe(true);
+});
+
+test('testable_hasRawUpdate should report a digest update even when result.tag is undefined', () => {
+  // A container whose registry scan returned a digest but no tag should still
+  // trigger an update for the digest change; the tag guard must not suppress it.
+  expect(
+    container.testable_hasRawUpdate({
+      image: {
+        tag: { value: 'latest', semver: false },
+        digest: { watch: true, value: 'sha256:old' },
+      },
+      result: {
+        // tag absent — simulates partial registry result
+        digest: 'sha256:new',
+      },
+    }),
+  ).toBe(true);
+});
+
 test('testable_isUpdateSuppressed should handle snooze, skip-tags, and skip-digests directly', () => {
   const futureSnooze = new Date(Date.now() + daysToMs(1)).toISOString();
 
