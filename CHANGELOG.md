@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0-rc.26] — 2026-05-22
+
 ### Fixed
 
 - **Image reference construction — unanchored `/v2` strip could silently corrupt references when the image name contained a `/v2` path segment.** `Registry.getImageFullName` and the controller-mode fallback in `resolveContainerImageFullName` both applied `.replace(/\/v2/, '')` to the fully concatenated `registryUrl/imageName:tag` string. Because the regex was unanchored and non-global, if the image name contained a `/v2` segment (e.g. `library/v2/tool`) the strip would remove it from the image name rather than the registry URL — producing a silently wrong reference handed to Trivy. The fix extracts a shared pure helper `buildImageReference` (`app/registries/image-reference.ts`) that cleans the registry URL *before* concatenation using anchored regexes (`^https?:\/\/` and `/v2\/?$`) so the URL scheme and trailing `/v2` API path are removed without touching anything in the image name. Both `Registry.getImageFullName` and the fallback branch of `resolveContainerImageFullName` now delegate to this helper, eliminating the duplicate logic.
