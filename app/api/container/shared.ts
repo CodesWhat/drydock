@@ -1,4 +1,5 @@
 import type { Container, ContainerImage } from '../../model/container.js';
+import { buildImageReference } from '../../registries/image-reference.js';
 import { getErrorMessage } from '../../util/error.js';
 
 type RegistryAuth = { username?: string; password?: string };
@@ -133,15 +134,13 @@ export function resolveContainerImageFullName(
     return containerRegistry.getImageFullName(container.image, tag);
   }
   // No registry component is available — controller mode runs registries on
-  // the agents, not the controller. Mirror Registry.getImageFullName so
-  // scanners receive a plain image reference: registry.url is the v2 API base
+  // the agents, not the controller. Delegate to the shared buildImageReference
+  // helper (same logic as Registry.getImageFullName) so scanners receive a
+  // plain image reference: registry.url is the v2 API base
   // (e.g. "https://registry-1.docker.io/v2"), which Trivy would otherwise
   // treat as a literal host, producing "https://https/v2/" DNS failures.
   // See issue #374.
-  const separator = tag.includes(':') ? '@' : ':';
-  return `${container.image.registry.url}/${container.image.name}${separator}${tag}`
-    .replace(/https?:\/\//, '')
-    .replace(/\/v2/, '');
+  return buildImageReference(container.image.registry.url, container.image.name, tag);
 }
 
 export async function resolveContainerRegistryAuth(
