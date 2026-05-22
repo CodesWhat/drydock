@@ -187,6 +187,10 @@ export interface AgentDisconnectedEventPayload {
   reason?: string;
 }
 
+export interface AgentStatsChangedEventPayload {
+  agentName: string;
+}
+
 export interface WatcherSnapshotEventPayload {
   watcher: {
     type: string;
@@ -226,6 +230,10 @@ const agentConnectedHandlers = new Map<number, OrderedEventHandler<AgentConnecte
 const agentDisconnectedHandlers = new Map<
   number,
   OrderedEventHandler<AgentDisconnectedEventPayload>
+>();
+const agentStatsChangedHandlers = new Map<
+  number,
+  OrderedEventHandler<AgentStatsChangedEventPayload>
 >();
 const selfUpdateStartingHandlers = new Map<
   number,
@@ -514,6 +522,27 @@ export function registerAgentDisconnected(
 }
 
 /**
+ * Emit AgentStatsChanged event. Fired after every completed watcher snapshot
+ * so the UI agent-summary count stays current even when the handshake raced
+ * ahead of the agent's first watch cycle (closes #386).
+ * @param payload
+ */
+export async function emitAgentStatsChanged(payload: AgentStatsChangedEventPayload): Promise<void> {
+  await emitOrderedHandlers(agentStatsChangedHandlers, payload);
+}
+
+/**
+ * Register to AgentStatsChanged event.
+ * @param handler
+ */
+export function registerAgentStatsChanged(
+  handler: OrderedEventHandlerFn<AgentStatsChangedEventPayload>,
+  options: EventHandlerRegistrationOptions = {},
+): () => void {
+  return registerOrderedEventHandler(agentStatsChangedHandlers, handler, options);
+}
+
+/**
  * Legacy EventEmitter dispatch path.
  *
  * These lifecycle and watcher handlers are intentionally kept as-is for
@@ -673,6 +702,7 @@ export function clearAllListenersForTests(): void {
   securityScanCycleCompleteHandlers.clear();
   agentConnectedHandlers.clear();
   agentDisconnectedHandlers.clear();
+  agentStatsChangedHandlers.clear();
   selfUpdateStartingHandlers.clear();
   batchUpdateCompletedHandlers.clear();
   clearAuditSubscriptionCachesForTests();

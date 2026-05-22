@@ -13,6 +13,7 @@ import {
   getContainerUpdateAppliedEventContainerName,
   registerAgentConnected,
   registerAgentDisconnected,
+  registerAgentStatsChanged,
   registerBatchUpdateCompleted,
   registerContainerAdded,
   registerContainerRemoved,
@@ -51,6 +52,7 @@ const SSE_STALE_ENTRY_TTL_MS = 30 * 60 * 1000;
 const ALLOWED_CONTAINER_EVENT_NAMES = new Set<string>([
   'dd:agent-connected',
   'dd:agent-disconnected',
+  'dd:agent-stats-changed',
   'dd:container-added',
   'dd:container-removed',
   'dd:container-updated',
@@ -548,6 +550,11 @@ export function init(): express.Router {
   trackEventListenerDeregistration(
     registerAgentDisconnected((payload: unknown) => {
       broadcastContainerEvent('dd:agent-disconnected', payload);
+    }),
+  );
+  trackEventListenerDeregistration(
+    registerAgentStatsChanged((payload: unknown) => {
+      broadcastContainerEvent('dd:agent-stats-changed', payload);
     }),
   );
 

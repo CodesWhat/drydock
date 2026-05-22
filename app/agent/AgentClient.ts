@@ -14,6 +14,7 @@ import type {
 import {
   emitAgentConnected,
   emitAgentDisconnected,
+  emitAgentStatsChanged,
   emitBatchUpdateCompleted,
   emitContainerReport,
   emitContainerReports,
@@ -765,6 +766,10 @@ export class AgentClient {
     if (watcherName) {
       this.pruneOldContainers(containers, watcherName);
     }
+
+    void emitAgentStatsChanged({ agentName: this.name }).catch((error: unknown) => {
+      this.log.debug(`Failed to emit agent stats changed event (${getErrorMessage(error)})`);
+    });
   }
 
   private seedWatcherSnapshotCacheFromHandshake(descriptors: AgentComponentDescriptor[]): void {

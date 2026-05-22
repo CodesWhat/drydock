@@ -150,3 +150,51 @@ describe('doConnect SSE URL construction', () => {
     );
   });
 });
+
+describe('SSE event listener: dd:agent-stats-changed', () => {
+  let originalEventSource: typeof EventSource;
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    MockEventSource.instances = [];
+    originalEventSource = globalThis.EventSource;
+    globalThis.EventSource = MockEventSource as unknown as typeof EventSource;
+  });
+
+  afterEach(() => {
+    globalThis.EventSource = originalEventSource;
+  });
+
+  it('maps dd:agent-stats-changed to agent-status-changed bus event', () => {
+    const store = useEventStreamStore();
+    const bus = { emit: vi.fn() };
+    store.connect(bus);
+
+    const source = MockEventSource.instances[0];
+    expect(source).toBeDefined();
+
+    // Find the dd:agent-stats-changed listener registered via addEventListener
+    const registeredCall = source.addEventListener.mock.calls.find(
+      (call) => call[0] === 'dd:agent-stats-changed',
+    );
+    expect(registeredCall).toBeDefined();
+
+    const listener = registeredCall![1];
+    const fakeEvent = { lastEventId: 'boot:42' };
+    listener(fakeEvent);
+
+    expect(bus.emit).toHaveBeenCalledWith('agent-status-changed');
+  });
+
+  it('registers dd:agent-connected, dd:agent-disconnected, and dd:agent-stats-changed listeners', () => {
+    const store = useEventStreamStore();
+    store.connect();
+
+    const source = MockEventSource.instances[0];
+    const registeredEventNames = source.addEventListener.mock.calls.map((call) => call[0]);
+
+    expect(registeredEventNames).toContain('dd:agent-connected');
+    expect(registeredEventNames).toContain('dd:agent-disconnected');
+    expect(registeredEventNames).toContain('dd:agent-stats-changed');
+  });
+});
