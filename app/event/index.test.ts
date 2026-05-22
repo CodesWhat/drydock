@@ -376,6 +376,30 @@ test('deregistration of agent disconnected handler should work', async () => {
   expect(handler).not.toHaveBeenCalled();
 });
 
+test('emitAgentStatsChanged should call registered handlers with payload', async () => {
+  const handler = vi.fn();
+  const payload = { agentName: 'edge-a' };
+  event.registerAgentStatsChanged(handler, { order: 10 });
+  await event.emitAgentStatsChanged(payload);
+  expect(handler).toHaveBeenCalledWith(payload);
+});
+
+test('deregistration of agent stats changed handler should work', async () => {
+  const handler = vi.fn();
+  const deregister = event.registerAgentStatsChanged(handler, { order: 10 });
+  deregister();
+  await event.emitAgentStatsChanged({ agentName: 'edge-a' });
+  expect(handler).not.toHaveBeenCalled();
+});
+
+test('clearAllListenersForTests should clear agent-stats-changed handlers', async () => {
+  const handler = vi.fn();
+  event.registerAgentStatsChanged(handler, { order: 10 });
+  event.clearAllListenersForTests();
+  await event.emitAgentStatsChanged({ agentName: 'edge-a' });
+  expect(handler).not.toHaveBeenCalled();
+});
+
 test('clearAllListenersForTests should clear self-update-starting handlers', async () => {
   const handler = vi.fn();
   event.registerSelfUpdateStarting(handler, { order: 10 });

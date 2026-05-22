@@ -1886,6 +1886,16 @@ describe('getImageFullName', () => {
     // ftp:// should NOT be stripped — only http/https
     expect(result).toContain('ftp://');
   });
+
+  test('should NOT strip /v2 from the image name — only from the registry URL trailing segment', () => {
+    // Regression guard for the unanchored .replace(/\/v2/, '') bug: applying it
+    // to the concatenated string would strip /v2 from image names like
+    // "library/v2/tool", producing a silently wrong image reference.
+    const registryMocked = new Registry();
+    const image = { name: 'library/v2/tool', registry: { url: 'plain-registry.io' } };
+    const result = registryMocked.getImageFullName(image, '1.0');
+    expect(result).toBe('plain-registry.io/library/v2/tool:1.0');
+  });
 });
 
 // --- callRegistry tests ---

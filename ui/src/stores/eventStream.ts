@@ -323,6 +323,10 @@ export const useEventStreamStore = defineStore('eventStream', () => {
       emit('agent-status-changed', undefined, (event as MessageEvent)?.lastEventId || undefined);
     });
 
+    source.addEventListener('dd:agent-stats-changed', (event) => {
+      emit('agent-status-changed', undefined, (event as MessageEvent)?.lastEventId || undefined);
+    });
+
     source.addEventListener('dd:resync-required', (event: MessageEvent) => {
       emit(
         'resync-required',

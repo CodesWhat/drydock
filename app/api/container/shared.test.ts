@@ -301,5 +301,26 @@ describe('api/container/shared', () => {
       const result = resolveContainerImageFullName(container, registryState as never);
       expect(result).toBe('resolved:library/nginx:1.25');
     });
+
+    test('uses @ separator when tag.value is itself a digest and no tagOverride is given', () => {
+      // Exercises the tag.includes(':') ternary via the tagOverride || tag.value path
+      // when the stored tag value IS a digest.
+      const container = makeContainer(
+        'ghcr',
+        'https://ghcr.io/v2',
+        'codeswhat/drydock',
+        'sha256:deadbeef',
+      );
+      const result = resolveContainerImageFullName(container, {});
+      expect(result).toBe('ghcr.io/codeswhat/drydock@sha256:deadbeef');
+    });
+
+    test('preserves /v2 in the image name — does not strip it from concatenated string', () => {
+      // Regression guard for the unanchored .replace(/\/v2/, '') bug: if applied
+      // to the full concatenated string the /v2 in the image name would be removed.
+      const container = makeContainer('myreg', 'plain-registry.io', 'library/v2/tool', '1.0');
+      const result = resolveContainerImageFullName(container, {});
+      expect(result).toBe('plain-registry.io/library/v2/tool:1.0');
+    });
   });
 });

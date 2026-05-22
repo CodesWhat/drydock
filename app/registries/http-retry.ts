@@ -17,6 +17,18 @@ export interface WithRetryOptions {
   maxRetries?: number;
   /** HTTP status codes that are eligible for retry (default: [429, 503]). */
   retryableStatuses?: number[];
+  /**
+   * Optional additional predicate: if provided, an error that does NOT match
+   * `retryableStatuses` may still be retried when this returns true.
+   * Does not affect callers that omit it.
+   */
+  retryPredicate?: (err: unknown) => boolean;
+  /**
+   * Optional per-attempt delay override.  When provided, its return value
+   * (in ms) takes precedence over the Retry-After header and exponential
+   * backoff.  Return undefined to fall back to the default delay logic.
+   */
+  retryDelayMs?: (err: unknown) => number | undefined;
   /** Base delay in milliseconds for exponential backoff (default: 1000). */
   backoffBaseMs?: number;
   /** Maximum delay in milliseconds for exponential backoff (default: 60_000). */
@@ -72,6 +84,8 @@ export async function withRetry<T>(
   const {
     maxRetries = 3,
     retryableStatuses = [429, 503],
+    retryPredicate,
+    retryDelayMs,
     backoffBaseMs = 1000,
     backoffMaxMs = 60_000,
     logger,
@@ -93,8 +107,10 @@ export async function withRetry<T>(
       }
 
       const status = err.response.status;
+      const isRetryable =
+        retryableStatuses.includes(status) || (retryPredicate !== undefined && retryPredicate(err));
 
-      if (!retryableStatuses.includes(status)) {
+      if (!isRetryable) {
         // Not a retryable status — throw immediately
         throw err;
       }
@@ -104,11 +120,12 @@ export async function withRetry<T>(
         throw err;
       }
 
-      // Compute delay
+      // Compute delay: custom override → Retry-After header → exponential backoff
+      const customDelay = retryDelayMs?.(err);
       const retryAfterHeader = err.response.headers?.['retry-after'];
       const parsedDelay = parseRetryAfterMs(retryAfterHeader);
       const backoffDelay = Math.min(backoffBaseMs * 2 ** attempt, backoffMaxMs);
-      const delay = Math.min(parsedDelay ?? backoffDelay, backoffMaxMs);
+      const delay = Math.min(customDelay ?? parsedDelay ?? backoffDelay, backoffMaxMs);
 
       const label = requestLabel ? `Retrying ${requestLabel}` : 'Retrying request';
       logger?.debug(

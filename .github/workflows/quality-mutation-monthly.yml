@@ -115,7 +115,7 @@ jobs:
             package: app
             incremental_file: reports/stryker-incremental-app-ops-registries-core.json
             mutate: >-
-              registries/BaseRegistry.ts,registries/Registry.ts,registries/configuration.ts,registries/ghcr-token-fallback.ts,registries/http-retry.ts,registries/token-bucket.ts,registries/providers/custom/**/*.ts,registries/providers/shared/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
+              registries/BaseRegistry.ts,registries/Registry.ts,registries/configuration.ts,registries/ghcr-token-fallback.ts,registries/http-retry.ts,registries/image-reference.ts,registries/token-bucket.ts,registries/providers/custom/**/*.ts,registries/providers/shared/**/*.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!test/**,!dist/**,!coverage/**
           - name: app-ops-registries-remote
             package: app
             incremental_file: reports/stryker-incremental-app-ops-registries-remote.json

@@ -14,6 +14,7 @@ import type {
 import {
   emitAgentConnected,
   emitAgentDisconnected,
+  emitAgentStatsChanged,
   emitBatchUpdateCompleted,
   emitContainerReport,
   emitContainerReports,
@@ -126,6 +127,10 @@ const SECURITY_ALERT_SUMMARY_KEYS = ['unknown', 'low', 'medium', 'high', 'critic
 
 const INITIAL_SSE_RECONNECT_DELAY_MS = 1_000;
 const MAX_SSE_RECONNECT_DELAY_MS = 60_000;
+// Coalesce rapid container-event SSE broadcasts into a single emission so that
+// a burst (e.g. initial agent connect, mass container restart) does not produce
+// one broadcast per container.
+const AGENT_STATS_CHANGED_DEBOUNCE_MS = 250;
 // An SSE stream must stay open at least this long before it counts as a
 // healthy connection that resets the reconnect backoff. Resetting the backoff
 // on response-received alone lets a stream that returns HTTP 200 then ends
@@ -178,6 +183,7 @@ export class AgentClient {
   private readonly pendingFreshStateAfterRemoteUpdate: Set<string>;
   private readonly pendingWatcherCycleReports: Map<string, Map<string, ContainerReport>>;
   private readonly watcherSnapshotCache: Map<string, WatcherSnapshotCacheEntry>;
+  private statsChangedTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(name: string, config: AgentClientConfig) {
     this.name = name;
@@ -197,6 +203,7 @@ export class AgentClient {
     this.pendingFreshStateAfterRemoteUpdate = new Set();
     this.pendingWatcherCycleReports = new Map();
     this.watcherSnapshotCache = new Map();
+    this.statsChangedTimer = undefined;
   }
 
   getWatcherSnapshot(
@@ -565,6 +572,25 @@ export class AgentClient {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
+    clearTimeout(this.statsChangedTimer);
+    this.statsChangedTimer = undefined;
+  }
+
+  private scheduleStatsChanged(): void {
+    if (this.statsChangedTimer !== undefined) {
+      // A pending emit already covers this change; skip scheduling a duplicate.
+      return;
+    }
+    const timer = setTimeout(() => {
+      this.statsChangedTimer = undefined;
+      void emitAgentStatsChanged({ agentName: this.name }).catch((error: unknown) => {
+        this.log.debug(`Failed to emit agent stats changed event (${getErrorMessage(error)})`);
+      });
+    }, AGENT_STATS_CHANGED_DEBOUNCE_MS);
+    if (typeof timer.unref === 'function') {
+      timer.unref();
+    }
+    this.statsChangedTimer = timer;
   }
 
   private getNextReconnectDelayMs(): number {
@@ -721,6 +747,7 @@ export class AgentClient {
   private async handleContainerChangeEvent(data: unknown) {
     const containerReport = await this.processContainer(data as Container);
     this.rememberPendingWatcherCycleReport(containerReport);
+    this.scheduleStatsChanged();
   }
 
   private handleContainerRemovedEvent(data: unknown) {
@@ -728,6 +755,7 @@ export class AgentClient {
     this.clearPendingFreshState(removedContainerData.id);
     this.clearPendingWatcherCycleReportByContainerId(removedContainerData.id);
     storeContainer.deleteContainer(removedContainerData.id);
+    this.scheduleStatsChanged();
   }
 
   private async handleWatcherSnapshotEvent(data: unknown) {
@@ -765,6 +793,8 @@ export class AgentClient {
     if (watcherName) {
       this.pruneOldContainers(containers, watcherName);
     }
+
+    this.scheduleStatsChanged();
   }
 
   private seedWatcherSnapshotCacheFromHandshake(descriptors: AgentComponentDescriptor[]): void {
@@ -1389,6 +1419,7 @@ export class AgentClient {
       await this.processAuthoritativeContainers(reports.map((report) => report.container));
       const containers = reports.map((report) => report.container);
       this.pruneOldContainers(containers, watcherName);
+      this.scheduleStatsChanged();
       return reports;
     } catch (error: unknown) {
       this.log.error(`Error watching on agent: ${sanitizeLogParam(getErrorMessage(error))}`);
@@ -1407,6 +1438,7 @@ export class AgentClient {
 
       // Process the result (registry check, store update)
       await this.processAuthoritativeContainer(report.container);
+      this.scheduleStatsChanged();
       return report;
     } catch (error: unknown) {
       this.log.error(

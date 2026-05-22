@@ -30,6 +30,7 @@ vi.mock('../store/container.js', () => ({
 vi.mock('../event/index.js', () => ({
   emitAgentConnected: vi.fn().mockResolvedValue(undefined),
   emitAgentDisconnected: vi.fn().mockResolvedValue(undefined),
+  emitAgentStatsChanged: vi.fn().mockResolvedValue(undefined),
   emitBatchUpdateCompleted: vi.fn().mockResolvedValue(undefined),
   emitContainerReport: vi.fn(),
   emitContainerReports: vi.fn(),
@@ -1441,6 +1442,113 @@ describe('AgentClient', () => {
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c1');
     });
 
+    test('should emit emitAgentStatsChanged after dd:container-added', async () => {
+      vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
+      await client.handleEvent('dd:container-added', { id: 'c1', name: 'web', watcher: 'local' });
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
+    });
+
+    test('should emit emitAgentStatsChanged after dd:container-updated', async () => {
+      vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
+      await client.handleEvent('dd:container-updated', { id: 'c1', name: 'web', watcher: 'local' });
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
+    });
+
+    test('should log debug when emitAgentStatsChanged rejects on dd:container-added', async () => {
+      vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
+      vi.mocked(event.emitAgentStatsChanged).mockRejectedValueOnce(new Error('stats emit failed'));
+      await client.handleEvent('dd:container-added', { id: 'c1', name: 'web', watcher: 'local' });
+      await vi.runAllTimersAsync();
+      expect(mockLogChild.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to emit agent stats changed event'),
+      );
+    });
+
+    test('should emit emitAgentStatsChanged after dd:container-removed', async () => {
+      await client.handleEvent('dd:container-removed', { id: 'c1' });
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
+    });
+
+    test('should log debug when emitAgentStatsChanged rejects on dd:container-removed', async () => {
+      vi.mocked(event.emitAgentStatsChanged).mockRejectedValueOnce(new Error('stats emit failed'));
+      await client.handleEvent('dd:container-removed', { id: 'c1' });
+      await vi.runAllTimersAsync();
+      expect(mockLogChild.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to emit agent stats changed event'),
+      );
+    });
+
+    test('should coalesce multiple rapid container events into a single emitAgentStatsChanged', async () => {
+      vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
+      // Fire two container-added and one container-removed in rapid succession without advancing timers.
+      await client.handleEvent('dd:container-added', { id: 'c1', name: 'web', watcher: 'local' });
+      await client.handleEvent('dd:container-updated', { id: 'c2', name: 'db', watcher: 'local' });
+      await client.handleEvent('dd:container-removed', { id: 'c3' });
+      // All three called scheduleStatsChanged; only one timer should have been set.
+      expect(event.emitAgentStatsChanged).not.toHaveBeenCalled();
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledTimes(1);
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
+    });
+
+    test('should not emit emitAgentStatsChanged when stop() clears a pending timer', async () => {
+      vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
+      // Schedule an emit but do NOT advance timers yet.
+      await client.handleEvent('dd:container-added', { id: 'c1', name: 'web', watcher: 'local' });
+      expect(event.emitAgentStatsChanged).not.toHaveBeenCalled();
+      // Tear down — this should clear the pending timer.
+      client.stop();
+      expect((client as any).statsChangedTimer).toBeUndefined();
+      // Advancing timers now should fire nothing.
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).not.toHaveBeenCalled();
+    });
+
+    test('debounce re-arms after firing so a second event still emits (trailing emit)', async () => {
+      vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
+
+      // First event — schedules the debounce
+      await client.handleEvent('dd:container-added', { id: 'c1', name: 'web', watcher: 'local' });
+      expect(event.emitAgentStatsChanged).not.toHaveBeenCalled();
+
+      // Drain the debounce — first emit fires
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledTimes(1);
+
+      // Clear the mock so we can isolate the second emit
+      vi.mocked(event.emitAgentStatsChanged).mockClear();
+
+      // Second event — timer must re-arm (statsChangedTimer was cleared after first fire)
+      await client.handleEvent('dd:container-removed', { id: 'c2' });
+      // Debounce not yet fired
+      expect(event.emitAgentStatsChanged).not.toHaveBeenCalled();
+
+      // Drain again — second emit must fire
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledTimes(1);
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
+    });
+
+    test('scheduleStatsChanged tolerates timer handles without unref support', async () => {
+      vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
+
+      const setTimeoutSpy = vi
+        .spyOn(globalThis, 'setTimeout')
+        .mockReturnValue(0 as unknown as NodeJS.Timeout);
+
+      try {
+        await expect(
+          client.handleEvent('dd:container-added', { id: 'c1', name: 'web', watcher: 'local' }),
+        ).resolves.not.toThrow();
+        expect(setTimeoutSpy).toHaveBeenCalled();
+      } finally {
+        setTimeoutSpy.mockRestore();
+      }
+    });
+
     test('should ignore watcher-cycle cleanup for invalid container ids', () => {
       (client as any).pendingWatcherCycleReports.set(
         'watcher',
@@ -2523,6 +2631,89 @@ describe('AgentClient', () => {
       expect(processSpy).not.toHaveBeenCalled();
       expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
     });
+
+    test('should emit emitAgentStatsChanged with agent name after watcher snapshot is processed', async () => {
+      storeContainer.getContainers.mockReturnValue([]);
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => c);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [{ id: 'c1', name: 'web', watcher: 'local' }],
+      });
+
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
+    });
+
+    test('should emit emitAgentStatsChanged even for empty watcher snapshots', async () => {
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [],
+      });
+
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
+    });
+
+    test('should emit emitAgentStatsChanged even when the watcher name is missing', async () => {
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handleEvent('dd:watcher-snapshot', null);
+
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
+    });
+
+    test('should log debug when emitAgentStatsChanged rejects', async () => {
+      storeContainer.getContainers.mockReturnValue([]);
+      vi.mocked(event.emitAgentStatsChanged).mockRejectedValueOnce(new Error('stats emit failed'));
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [],
+      });
+
+      await vi.runAllTimersAsync();
+      expect(mockLogChild.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to emit agent stats changed event'),
+      );
+    });
+
+    test('handshake then watcher snapshot should emit emitAgentConnected once then emitAgentStatsChanged', async () => {
+      vi.mocked(axios.get).mockImplementation((url: string) => {
+        if (String(url).endsWith('/api/containers')) {
+          return Promise.resolve({ data: [] });
+        }
+        if (String(url).endsWith('/api/watchers')) {
+          return Promise.resolve({ data: [] });
+        }
+        if (String(url).endsWith('/api/triggers')) {
+          return Promise.resolve({ data: [] });
+        }
+        return Promise.resolve({ data: [] });
+      });
+
+      await client.handshake();
+
+      expect(event.emitAgentConnected).toHaveBeenCalledTimes(1);
+      expect(event.emitAgentStatsChanged).not.toHaveBeenCalled();
+
+      storeContainer.getContainers.mockReturnValue([]);
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => c);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [{ id: 'c1', name: 'web', watcher: 'local' }],
+      });
+
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
+      expect(event.emitAgentConnected).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('runRemoteTrigger', () => {
@@ -2774,6 +2965,40 @@ describe('AgentClient', () => {
       axios.post.mockRejectedValue(new Error('watch failed'));
       await expect(client.watch('docker', 'local')).rejects.toThrow('watch failed');
     });
+
+    test('should emit emitAgentStatsChanged after watch() completes', async () => {
+      const reports = [{ container: { id: 'c1' } }];
+      axios.post.mockResolvedValue({ data: reports });
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({ ...c, updateAvailable: false }));
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.watch('docker', 'local');
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
+    });
+
+    test('should not emit emitAgentStatsChanged when watch() throws', async () => {
+      axios.post.mockRejectedValue(new Error('watch failed'));
+      await expect(client.watch('docker', 'local')).rejects.toThrow('watch failed');
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).not.toHaveBeenCalled();
+    });
+
+    test('should log debug when emitAgentStatsChanged rejects in watch()', async () => {
+      const reports = [{ container: { id: 'c1' } }];
+      axios.post.mockResolvedValue({ data: reports });
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({ ...c, updateAvailable: false }));
+      storeContainer.getContainers.mockReturnValue([]);
+      vi.mocked(event.emitAgentStatsChanged).mockRejectedValueOnce(new Error('stats emit failed'));
+
+      await client.watch('docker', 'local');
+      await vi.runAllTimersAsync();
+      expect(mockLogChild.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to emit agent stats changed event'),
+      );
+    });
   });
 
   describe('getWatcher', () => {
@@ -2832,6 +3057,30 @@ describe('AgentClient', () => {
       await expect(
         client.watchContainer('docker', 'local', { id: 'c1', name: 'test' }),
       ).rejects.toThrow('watch failed');
+    });
+
+    test('should emit emitAgentStatsChanged after a successful watchContainer call', async () => {
+      const report = { container: { id: 'c1' } };
+      axios.post.mockResolvedValue({ data: report });
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({ ...c, updateAvailable: false }));
+
+      await client.watchContainer('docker', 'local', { id: 'c1', name: 'test' });
+      // Debounce must not have fired yet
+      expect(event.emitAgentStatsChanged).not.toHaveBeenCalled();
+      // Drain the debounce timer
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
+    });
+
+    test('should NOT emit emitAgentStatsChanged when watchContainer throws', async () => {
+      axios.post.mockRejectedValue(new Error('watch failed'));
+
+      await expect(
+        client.watchContainer('docker', 'local', { id: 'c1', name: 'test' }),
+      ).rejects.toThrow('watch failed');
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).not.toHaveBeenCalled();
     });
   });
 

@@ -7,6 +7,7 @@ import Component, { type ComponentConfiguration } from '../registry/Component.js
 import { getErrorMessage } from '../util/error.js';
 import { getRegistryRequestTimeoutMs } from './configuration.js';
 import { withRetry } from './http-retry.js';
+import { buildImageReference } from './image-reference.js';
 import { acquireToken, getBucketForUrl } from './token-bucket.js';
 
 interface RegistryManifest {
@@ -500,15 +501,7 @@ class Registry<
   }
 
   getImageFullName(image: ContainerImage, tagOrDigest: string) {
-    // digests are separated with @ whereas tags are separated with :
-    const tagOrDigestWithSeparator = tagOrDigest.includes(':')
-      ? `@${tagOrDigest}`
-      : `:${tagOrDigest}`;
-    let fullName = `${image.registry.url}/${image.name}${tagOrDigestWithSeparator}`;
-
-    fullName = fullName.replace(/https?:\/\//, '');
-    fullName = fullName.replace(/\/v2/, '');
-    return fullName;
+    return buildImageReference(image.registry.url, image.name, tagOrDigest);
   }
 
   /**

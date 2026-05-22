@@ -2385,6 +2385,7 @@ describe('ContainersGroupedViews', () => {
       const text = row.text();
       expect(text).toContain('compose-X-version-9.0.1');
       expect(text).not.toContain('sha256:bcf6335aabbb…');
+      expect(text).not.toContain('sha256:deadbeefcafe…');
     });
 
     it('still renders currentTag → newTag for a tag update row', async () => {
