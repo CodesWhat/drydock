@@ -1481,6 +1481,32 @@ describe('AgentClient', () => {
       );
     });
 
+    test('should coalesce multiple rapid container events into a single emitAgentStatsChanged', async () => {
+      vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
+      // Fire two container-added and one container-removed in rapid succession without advancing timers.
+      await client.handleEvent('dd:container-added', { id: 'c1', name: 'web', watcher: 'local' });
+      await client.handleEvent('dd:container-updated', { id: 'c2', name: 'db', watcher: 'local' });
+      await client.handleEvent('dd:container-removed', { id: 'c3' });
+      // All three called scheduleStatsChanged; only one timer should have been set.
+      expect(event.emitAgentStatsChanged).not.toHaveBeenCalled();
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledTimes(1);
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
+    });
+
+    test('should not emit emitAgentStatsChanged when stop() clears a pending timer', async () => {
+      vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
+      // Schedule an emit but do NOT advance timers yet.
+      await client.handleEvent('dd:container-added', { id: 'c1', name: 'web', watcher: 'local' });
+      expect(event.emitAgentStatsChanged).not.toHaveBeenCalled();
+      // Tear down — this should clear the pending timer.
+      client.stop();
+      expect((client as any).statsChangedTimer).toBeUndefined();
+      // Advancing timers now should fire nothing.
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).not.toHaveBeenCalled();
+    });
+
     test('should ignore watcher-cycle cleanup for invalid container ids', () => {
       (client as any).pendingWatcherCycleReports.set(
         'watcher',
