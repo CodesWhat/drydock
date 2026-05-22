@@ -722,6 +722,9 @@ export class AgentClient {
   private async handleContainerChangeEvent(data: unknown) {
     const containerReport = await this.processContainer(data as Container);
     this.rememberPendingWatcherCycleReport(containerReport);
+    void emitAgentStatsChanged({ agentName: this.name }).catch((error: unknown) => {
+      this.log.debug(`Failed to emit agent stats changed event (${getErrorMessage(error)})`);
+    });
   }
 
   private handleContainerRemovedEvent(data: unknown) {
@@ -729,6 +732,9 @@ export class AgentClient {
     this.clearPendingFreshState(removedContainerData.id);
     this.clearPendingWatcherCycleReportByContainerId(removedContainerData.id);
     storeContainer.deleteContainer(removedContainerData.id);
+    void emitAgentStatsChanged({ agentName: this.name }).catch((error: unknown) => {
+      this.log.debug(`Failed to emit agent stats changed event (${getErrorMessage(error)})`);
+    });
   }
 
   private async handleWatcherSnapshotEvent(data: unknown) {
@@ -1394,6 +1400,9 @@ export class AgentClient {
       await this.processAuthoritativeContainers(reports.map((report) => report.container));
       const containers = reports.map((report) => report.container);
       this.pruneOldContainers(containers, watcherName);
+      void emitAgentStatsChanged({ agentName: this.name }).catch((error: unknown) => {
+        this.log.debug(`Failed to emit agent stats changed event (${getErrorMessage(error)})`);
+      });
       return reports;
     } catch (error: unknown) {
       this.log.error(`Error watching on agent: ${sanitizeLogParam(getErrorMessage(error))}`);

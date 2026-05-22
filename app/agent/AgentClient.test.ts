@@ -1442,6 +1442,45 @@ describe('AgentClient', () => {
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c1');
     });
 
+    test('should emit emitAgentStatsChanged after dd:container-added', async () => {
+      vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
+      await client.handleEvent('dd:container-added', { id: 'c1', name: 'web', watcher: 'local' });
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
+    });
+
+    test('should emit emitAgentStatsChanged after dd:container-updated', async () => {
+      vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
+      await client.handleEvent('dd:container-updated', { id: 'c1', name: 'web', watcher: 'local' });
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
+    });
+
+    test('should log debug when emitAgentStatsChanged rejects on dd:container-added', async () => {
+      vi.spyOn(client, 'processContainer').mockResolvedValue(undefined);
+      vi.mocked(event.emitAgentStatsChanged).mockRejectedValueOnce(new Error('stats emit failed'));
+      await client.handleEvent('dd:container-added', { id: 'c1', name: 'web', watcher: 'local' });
+      await vi.runAllTimersAsync();
+      expect(mockLogChild.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to emit agent stats changed event'),
+      );
+    });
+
+    test('should emit emitAgentStatsChanged after dd:container-removed', async () => {
+      await client.handleEvent('dd:container-removed', { id: 'c1' });
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
+    });
+
+    test('should log debug when emitAgentStatsChanged rejects on dd:container-removed', async () => {
+      vi.mocked(event.emitAgentStatsChanged).mockRejectedValueOnce(new Error('stats emit failed'));
+      await client.handleEvent('dd:container-removed', { id: 'c1' });
+      await vi.runAllTimersAsync();
+      expect(mockLogChild.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to emit agent stats changed event'),
+      );
+    });
+
     test('should ignore watcher-cycle cleanup for invalid container ids', () => {
       (client as any).pendingWatcherCycleReports.set(
         'watcher',
@@ -2857,6 +2896,40 @@ describe('AgentClient', () => {
     test('should throw on failure', async () => {
       axios.post.mockRejectedValue(new Error('watch failed'));
       await expect(client.watch('docker', 'local')).rejects.toThrow('watch failed');
+    });
+
+    test('should emit emitAgentStatsChanged after watch() completes', async () => {
+      const reports = [{ container: { id: 'c1' } }];
+      axios.post.mockResolvedValue({ data: reports });
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({ ...c, updateAvailable: false }));
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.watch('docker', 'local');
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).toHaveBeenCalledWith({ agentName: 'test-agent' });
+    });
+
+    test('should not emit emitAgentStatsChanged when watch() throws', async () => {
+      axios.post.mockRejectedValue(new Error('watch failed'));
+      await expect(client.watch('docker', 'local')).rejects.toThrow('watch failed');
+      await vi.runAllTimersAsync();
+      expect(event.emitAgentStatsChanged).not.toHaveBeenCalled();
+    });
+
+    test('should log debug when emitAgentStatsChanged rejects in watch()', async () => {
+      const reports = [{ container: { id: 'c1' } }];
+      axios.post.mockResolvedValue({ data: reports });
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({ ...c, updateAvailable: false }));
+      storeContainer.getContainers.mockReturnValue([]);
+      vi.mocked(event.emitAgentStatsChanged).mockRejectedValueOnce(new Error('stats emit failed'));
+
+      await client.watch('docker', 'local');
+      await vi.runAllTimersAsync();
+      expect(mockLogChild.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to emit agent stats changed event'),
+      );
     });
   });
 
