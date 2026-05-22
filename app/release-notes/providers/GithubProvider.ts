@@ -242,7 +242,11 @@ class GithubProvider implements ReleaseNotesProviderClient {
         // After retries are exhausted on a secondary rate-limit 403,
         // set the module-level cooldown to protect subsequent lookups in this window.
         if (isSecondaryRateLimit403(error)) {
-          const cooldownMs = getSecondaryRateLimitDelayMs(error);
+          // Floor the burst cooldown at the default: a `retry-after: 0` hint yields a
+          // 0 ms delay, which would set an already-expired cooldown and disable
+          // burst protection for subsequent lookups.
+          const cooldownMs =
+            getSecondaryRateLimitDelayMs(error) || DEFAULT_SECONDARY_RATE_LIMIT_COOLDOWN_MS;
           rateLimitCooldownUntil = Date.now() + cooldownMs;
           log.warn(
             `GitHub release notes lookup is rate-limited (${effectiveToken !== undefined ? 'authenticated' : 'unauthenticated'}) — cooldown active for ${Math.ceil(cooldownMs / 1000)}s`,

@@ -475,6 +475,41 @@ describe('release-notes/providers/GithubProvider', () => {
     vi.useRealTimers();
   });
 
+  test('fetchByTag with retry-after: 0 sets a real 60 s cooldown that blocks the next call', async () => {
+    vi.useFakeTimers();
+    _resetGithubProviderCooldownForTests();
+    const provider = new GithubProvider();
+
+    // Exhaust retries with retry-after: '0' — per-attempt delay is 0ms (correct), but
+    // the burst cooldown must be floored at DEFAULT_SECONDARY_RATE_LIMIT_COOLDOWN_MS (60 s).
+    mockAxiosGet.mockRejectedValue({
+      response: { status: 403, headers: { 'retry-after': '0' } },
+    });
+
+    const firstPromise = provider.fetchByTag('github.com/acme/service', '2.0.0');
+    await vi.runAllTimersAsync();
+    await firstPromise;
+
+    // The first call should have been retried (axios called multiple times) and returned undefined
+    expect(mockAxiosGet).toHaveBeenCalled();
+
+    // Reset mock — the second call must NOT reach axios (cooldown blocks it)
+    mockAxiosGet.mockReset();
+    mockAxiosGet.mockResolvedValue({
+      data: { body: '', name: 'v2.0.0', html_url: '', published_at: '' },
+    });
+
+    // Advance less than 60 s — cooldown still active
+    vi.advanceTimersByTime(30_000);
+
+    const secondResult = await provider.fetchByTag('github.com/acme/service', '2.0.0');
+    expect(secondResult).toBeUndefined();
+    expect(mockAxiosGet).not.toHaveBeenCalled();
+    expect(mockLogDebug).toHaveBeenCalledWith(expect.stringContaining('cooldown active'));
+
+    vi.useRealTimers();
+  });
+
   test('fetchByTag resumes API calls after the cooldown period expires', async () => {
     vi.useFakeTimers();
     const provider = new GithubProvider();
