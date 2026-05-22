@@ -1351,9 +1351,29 @@ function hasRegistryError(container: Container): boolean {
   return typeof container.registryError === 'string' && container.registryError.trim().length > 0;
 }
 
+function registryErrorHost(container: Container): string | undefined {
+  const url = container.registryUrl;
+  if (!url || typeof url !== 'string') {
+    return undefined;
+  }
+  const normalizedUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(url) ? url : `https://${url}`;
+  try {
+    return new URL(normalizedUrl).hostname.toLowerCase() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function registryErrorTooltip(container: Container): string {
   if (!hasRegistryError(container)) {
     return t('containersView.registryError.generic');
+  }
+  const host = registryErrorHost(container);
+  if (host) {
+    return t('containersView.registryError.detailWithRegistry', {
+      registryHost: host,
+      error: container.registryError,
+    });
   }
   return t('containersView.registryError.detail', { error: container.registryError });
 }

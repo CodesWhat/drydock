@@ -2748,6 +2748,89 @@ describe('ContainersView', () => {
       }
     });
 
+    it('registryErrorTooltip uses enriched format when registry URL and error are both present', async () => {
+      const c = makeContainer({
+        id: 'c1',
+        name: 'nginx',
+        registryError: 'Request failed with status code 429',
+        registryUrl: 'https://ghcr.io/v2',
+      } as any);
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const vm = wrapper.vm as any;
+      expect(vm.registryErrorTooltip(c)).toBe('ghcr.io — Request failed with status code 429');
+    });
+
+    it('registryErrorTooltip falls back to detail format when registry URL is absent', async () => {
+      const c = makeContainer({
+        id: 'c1',
+        name: 'nginx',
+        registryError: 'Request failed with status code 429',
+      } as any);
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const vm = wrapper.vm as any;
+      expect(vm.registryErrorTooltip(c)).toBe(
+        'Registry error: Request failed with status code 429',
+      );
+    });
+
+    it('registryErrorHost returns hostname from a fully-qualified registry URL', async () => {
+      const c = makeContainer({
+        id: 'c1',
+        name: 'nginx',
+        registryUrl: 'https://registry-1.docker.io/v2',
+      } as any);
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const vm = wrapper.vm as any;
+      expect(vm.registryErrorHost(c)).toBe('registry-1.docker.io');
+    });
+
+    it('registryErrorHost returns hostname from a protocol-less registry URL', async () => {
+      const c = makeContainer({
+        id: 'c1',
+        name: 'nginx',
+        registryUrl: 'my.private.registry:5000/v2',
+      } as any);
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const vm = wrapper.vm as any;
+      expect(vm.registryErrorHost(c)).toBe('my.private.registry');
+    });
+
+    it('registryErrorHost returns undefined when registry URL is absent', async () => {
+      const c = makeContainer({ id: 'c1', name: 'nginx' });
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const vm = wrapper.vm as any;
+      expect(vm.registryErrorHost(c)).toBeUndefined();
+    });
+
+    it('registryErrorHost returns undefined for an unparseable URL string', async () => {
+      const c = makeContainer({
+        id: 'c1',
+        name: 'nginx',
+        registryUrl: ':::not-a-url:::',
+      } as any);
+      const wrapper = await mountContainersView(
+        [c],
+        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
+      );
+      const vm = wrapper.vm as any;
+      expect(vm.registryErrorHost(c)).toBeUndefined();
+    });
+
     it('actions menu flips up when trigger is near the bottom of the viewport', async () => {
       const c = makeContainer({ id: 'c1', name: 'nginx' });
       const wrapper = await mountContainersView(
