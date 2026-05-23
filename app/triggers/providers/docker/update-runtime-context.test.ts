@@ -64,4 +64,51 @@ describe('update-runtime-context', () => {
 
     expect(getRequestedOperationId({ id: 'container-a' }, cyclic)).toBeUndefined();
   });
+
+  test('reads operationIds from a Map without falling through Object.prototype (#289)', () => {
+    expect(
+      getRequestedOperationId(
+        { id: 'container-a' },
+        {
+          operationIds: new Map<string, string>([
+            ['container-a', '  mapped-op  '],
+            ['container-b', 'other-op'],
+          ]),
+        },
+      ),
+    ).toBe('mapped-op');
+
+    expect(
+      getRequestedOperationId({ id: 'missing' }, { operationIds: new Map([['container-a', 'x']]) }),
+    ).toBeUndefined();
+  });
+
+  test('ignores operationIds that are truthy but neither a Map nor an object (#289)', () => {
+    expect(
+      getRequestedOperationId(
+        { id: 'container-a' },
+        // String is truthy but not Map nor object — exercises the inner-ternary
+        // false branch added alongside Map support.
+        { operationIds: 'not-a-map' as unknown as Map<string, unknown> },
+      ),
+    ).toBeUndefined();
+  });
+
+  test('rejects __proto__/constructor lookups on a record-shaped operationIds map (#289)', () => {
+    // Even when a malicious record arrives with a polluted prototype-chain
+    // entry, the lookup must NOT traverse the prototype chain.
+    const poisoned = Object.create({
+      __proto__: 'evil-proto',
+      constructor: 'evil-ctor',
+    }) as Record<string, string>;
+    poisoned.legit = 'legit-op';
+
+    expect(
+      getRequestedOperationId({ id: '__proto__' }, { operationIds: poisoned }),
+    ).toBeUndefined();
+    expect(
+      getRequestedOperationId({ id: 'constructor' }, { operationIds: poisoned }),
+    ).toBeUndefined();
+    expect(getRequestedOperationId({ id: 'legit' }, { operationIds: poisoned })).toBe('legit-op');
+  });
 });

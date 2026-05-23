@@ -8,10 +8,6 @@ import * as registry from '../../registry/index.js';
 
 const log = logger.child({ component: 'agent-api-trigger' });
 
-// Prototype-pollution guard for container.id used as a property name when
-// building the per-container operationId map in the batch trigger handler.
-const FORBIDDEN_OPERATION_ID_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-
 interface TriggerRouteParams {
   type: string;
   name: string;
@@ -74,11 +70,10 @@ export async function runTriggerBatch(req: Request, res: Response) {
   try {
     // Extract per-container operationIds injected by the controller (fixes #289),
     // then strip them (and the agent field) from the container objects before
-    // forwarding so local triggers see a clean Container.  The map is a
-    // null-prototype object and the container.id key is validated against the
-    // reserved prototype-pollution names so a malicious request body cannot
-    // poison the runtime context (CodeQL js/remote-property-injection).
-    const operationIds: Record<string, string> = Object.create(null);
+    // forwarding so local triggers see a clean Container.  Use a Map so that
+    // container.id values from the request body cannot reach Object.prototype
+    // — CodeQL js/remote-property-injection.
+    const operationIds = new Map<string, string>();
     const sanitizedContainers = containers.map((container) => {
       if (container.agent) {
         delete container.agent;
@@ -86,16 +81,15 @@ export async function runTriggerBatch(req: Request, res: Response) {
       if (
         typeof container.id === 'string' &&
         container.id.length > 0 &&
-        !FORBIDDEN_OPERATION_ID_KEYS.has(container.id) &&
         typeof container.operationId === 'string' &&
         container.operationId.length > 0
       ) {
-        operationIds[container.id] = container.operationId;
+        operationIds.set(container.id, container.operationId);
         delete container.operationId;
       }
       return container;
     });
-    const runtimeContext = Object.keys(operationIds).length > 0 ? { operationIds } : undefined;
+    const runtimeContext = operationIds.size > 0 ? { operationIds } : undefined;
     await trigger.triggerBatch(sanitizedContainers, runtimeContext);
     res.status(200).json({});
   } catch (e: unknown) {

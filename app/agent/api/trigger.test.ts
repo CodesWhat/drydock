@@ -120,7 +120,10 @@ describe('agent API trigger', () => {
       });
       await triggerApi.runTriggerBatch(req, res);
       expect(mockTrigger.triggerBatch).toHaveBeenCalledWith([{ id: 'c1' }, { id: 'c2' }], {
-        operationIds: { c1: 'op-uuid-1', c2: 'op-uuid-2' },
+        operationIds: new Map([
+          ['c1', 'op-uuid-1'],
+          ['c2', 'op-uuid-2'],
+        ]),
       });
       expect(res.status).toHaveBeenCalledWith(200);
     });
@@ -154,12 +157,12 @@ describe('agent API trigger', () => {
       // c1 has empty-string operationId — skipped; only c2 contributes
       expect(mockTrigger.triggerBatch).toHaveBeenCalledWith(
         [{ id: 'c1', operationId: '' }, { id: 'c2' }],
-        { operationIds: { c2: 'op-uuid-2' } },
+        { operationIds: new Map([['c2', 'op-uuid-2']]) },
       );
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
-    test('should reject forbidden container.id keys to prevent prototype pollution (#289 / CodeQL js/remote-property-injection)', async () => {
+    test('should not pollute the prototype chain when container.id is __proto__/constructor/prototype (#289 / CodeQL js/remote-property-injection)', async () => {
       req.params = { type: 'docker', name: 'update' };
       req.body = [
         { id: '__proto__', operationId: 'op-evil-1' },
@@ -172,17 +175,20 @@ describe('agent API trigger', () => {
         trigger: { 'docker.update': mockTrigger },
       });
       await triggerApi.runTriggerBatch(req, res);
-      // Forbidden ids retain their operationId field (skipped, not extracted);
-      // only c-safe contributes to operationIds.
-      expect(mockTrigger.triggerBatch).toHaveBeenCalledWith(
-        [
-          { id: '__proto__', operationId: 'op-evil-1' },
-          { id: 'constructor', operationId: 'op-evil-2' },
-          { id: 'prototype', operationId: 'op-evil-3' },
-          { id: 'c-safe' },
-        ],
-        { operationIds: { 'c-safe': 'op-safe' } },
-      );
+      // All four entries are stored as Map keys (Maps have no prototype chain
+      // so these reserved names are inert), but the runtimeContext is a Map
+      // and Object.prototype remains untouched.
+      const call = mockTrigger.triggerBatch.mock.calls[0];
+      const operationIds = call[1].operationIds as Map<string, string>;
+      expect(operationIds).toBeInstanceOf(Map);
+      expect(operationIds.get('__proto__')).toBe('op-evil-1');
+      expect(operationIds.get('constructor')).toBe('op-evil-2');
+      expect(operationIds.get('prototype')).toBe('op-evil-3');
+      expect(operationIds.get('c-safe')).toBe('op-safe');
+      // Critical: prototype-pollution check.  After processing the malicious
+      // payload, an empty {} must not have inherited any of the values above.
+      expect(({} as Record<string, unknown>).constructor).toBe(Object);
+      expect((Object.prototype as Record<string, unknown>).polluted).toBeUndefined();
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
@@ -204,7 +210,7 @@ describe('agent API trigger', () => {
           { id: '', operationId: 'op-empty-id' },
           { id: 'c-good' },
         ],
-        { operationIds: { 'c-good': 'op-good' } },
+        { operationIds: new Map([['c-good', 'op-good']]) },
       );
       expect(res.status).toHaveBeenCalledWith(200);
     });
