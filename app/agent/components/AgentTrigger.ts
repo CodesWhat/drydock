@@ -9,20 +9,22 @@ import { getRequiredAgentClient } from './getRequiredAgentClient.js';
 class AgentTrigger extends Trigger {
   /**
    * Trigger method.
-   * Delegates to the agent.
+   * Delegates to the agent, threading runtimeContext so the controller's
+   * operationId survives the controller→agent boundary (fixes #289).
    */
-  async trigger(container: Container): Promise<unknown> {
+  async trigger(container: Container, runtimeContext?: unknown): Promise<unknown> {
     const client = getRequiredAgentClient(this.agent, 'AgentTrigger');
-    return client.runRemoteTrigger(container, this.type, this.name);
+    return client.runRemoteTrigger(container, this.type, this.name, runtimeContext);
   }
 
   /**
    * Trigger batch method.
-   * Delegates to the agent.
+   * Delegates to the agent, threading runtimeContext for per-container operationId
+   * resolution on the agent side (fixes #289).
    */
-  async triggerBatch(containers: Container[]): Promise<unknown> {
+  async triggerBatch(containers: Container[], runtimeContext?: unknown): Promise<unknown> {
     const client = getRequiredAgentClient(this.agent, 'AgentTrigger');
-    return client.runRemoteTriggerBatch(containers, this.type, this.name);
+    return client.runRemoteTriggerBatch(containers, this.type, this.name, runtimeContext);
   }
 
   /**

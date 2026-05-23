@@ -1919,13 +1919,19 @@ describe('AgentClient', () => {
     });
 
     test('existing-row race: dd:update-operation-changed inserted active row before dd:update-applied arrives with container', async () => {
-      vi.mocked(updateOperationStore.getOperationById).mockReturnValueOnce({
-        id: 'agent-test-agent-remote-op-race',
-        containerName: 'tautulli',
-        status: 'in-progress',
-        phase: 'pulling',
-        container: undefined,
-      } as any);
+      // Use mockImplementation so resolveAgentOperationId falls back to scoped id consistently.
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'agent-test-agent-remote-op-race') {
+          return {
+            id: 'agent-test-agent-remote-op-race',
+            containerName: 'tautulli',
+            status: 'in-progress',
+            phase: 'pulling',
+            container: undefined,
+          } as any;
+        }
+        return undefined;
+      });
 
       await client.handleEvent('dd:update-applied', {
         operationId: 'remote-op-race',
@@ -2115,12 +2121,19 @@ describe('AgentClient', () => {
     });
 
     test('should update an existing synthetic controller operation on active phase events', async () => {
-      vi.mocked(updateOperationStore.getOperationById).mockReturnValueOnce({
-        id: 'agent-test-agent-remote-op-existing',
-        containerName: 'local_nginx',
-        status: 'in-progress',
-        phase: 'pulling',
-      } as any);
+      // Use mockImplementation so resolveAgentOperationId finds no controller row (raw id),
+      // falls back to scoped, and the second lookup finds the existing scoped row.
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'agent-test-agent-remote-op-existing') {
+          return {
+            id: 'agent-test-agent-remote-op-existing',
+            containerName: 'local_nginx',
+            status: 'in-progress',
+            phase: 'pulling',
+          } as any;
+        }
+        return undefined;
+      });
 
       await client.handleEvent('dd:update-operation-changed', {
         operationId: 'remote-op-existing',
@@ -2145,12 +2158,17 @@ describe('AgentClient', () => {
     });
 
     test('should update active synthetic operations without optional fields', async () => {
-      vi.mocked(updateOperationStore.getOperationById).mockReturnValueOnce({
-        id: 'agent-test-agent-remote-op-existing-minimal',
-        containerName: 'local_nginx',
-        status: 'queued',
-        phase: 'queued',
-      } as any);
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'agent-test-agent-remote-op-existing-minimal') {
+          return {
+            id: 'agent-test-agent-remote-op-existing-minimal',
+            containerName: 'local_nginx',
+            status: 'queued',
+            phase: 'queued',
+          } as any;
+        }
+        return undefined;
+      });
 
       await client.handleEvent('dd:update-operation-changed', {
         operationId: 'remote-op-existing-minimal',
@@ -2176,12 +2194,17 @@ describe('AgentClient', () => {
     });
 
     test('should ignore active updates for already terminal synthetic operations', async () => {
-      vi.mocked(updateOperationStore.getOperationById).mockReturnValueOnce({
-        id: 'agent-test-agent-remote-op-already-terminal',
-        containerName: 'local_nginx',
-        status: 'failed',
-        phase: 'failed',
-      } as any);
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'agent-test-agent-remote-op-already-terminal') {
+          return {
+            id: 'agent-test-agent-remote-op-already-terminal',
+            containerName: 'local_nginx',
+            status: 'failed',
+            phase: 'failed',
+          } as any;
+        }
+        return undefined;
+      });
 
       await client.handleEvent('dd:update-operation-changed', {
         operationId: 'remote-op-already-terminal',
@@ -2196,12 +2219,17 @@ describe('AgentClient', () => {
     });
 
     test('should mark a synthetic controller operation terminal when an agent sends a terminal phase event', async () => {
-      vi.mocked(updateOperationStore.getOperationById).mockReturnValueOnce({
-        id: 'agent-test-agent-remote-op-terminal',
-        containerName: 'local_nginx',
-        status: 'in-progress',
-        phase: 'new-started',
-      } as any);
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'agent-test-agent-remote-op-terminal') {
+          return {
+            id: 'agent-test-agent-remote-op-terminal',
+            containerName: 'local_nginx',
+            status: 'in-progress',
+            phase: 'new-started',
+          } as any;
+        }
+        return undefined;
+      });
 
       await client.handleEvent('dd:update-operation-changed', {
         operationId: 'remote-op-terminal',
@@ -2260,12 +2288,20 @@ describe('AgentClient', () => {
     });
 
     test('should not re-mark an already terminal synthetic controller operation', async () => {
-      vi.mocked(updateOperationStore.getOperationById).mockReturnValue({
-        id: 'agent-test-agent-remote-op-terminal',
-        containerName: 'local_nginx',
-        status: 'succeeded',
-        phase: 'succeeded',
-      } as any);
+      // Use mockImplementation so the mock only returns a value for the scoped id,
+      // avoiding pollution of subsequent tests that now call getOperationById via
+      // resolveAgentOperationId (clearAllMocks doesn't reset mockReturnValue).
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'agent-test-agent-remote-op-terminal') {
+          return {
+            id: 'agent-test-agent-remote-op-terminal',
+            containerName: 'local_nginx',
+            status: 'succeeded',
+            phase: 'succeeded',
+          } as any;
+        }
+        return undefined;
+      });
 
       await client.handleEvent('dd:update-operation-changed', {
         operationId: 'remote-op-terminal',
@@ -2978,6 +3014,58 @@ describe('AgentClient', () => {
       expect(url).toContain(encodeURIComponent('../admin'));
       expect(url).toContain(encodeURIComponent('../../etc/passwd'));
     });
+
+    test('should include operationId in payload for update triggers when runtimeContext supplies it (#289)', async () => {
+      axios.post.mockResolvedValue({ data: {} });
+      const container = { id: 'c1', name: 'tautulli' };
+      const runtimeContext = { operationId: 'uuid-controller-1' };
+      await client.runRemoteTrigger(container, 'docker', 'update', runtimeContext);
+      const [, postedPayload] = axios.post.mock.calls[0];
+      expect(postedPayload).toStrictEqual({
+        id: 'c1',
+        name: 'tautulli',
+        operationId: 'uuid-controller-1',
+      });
+    });
+
+    test('should include operationId for dockercompose update triggers when runtimeContext supplies it', async () => {
+      axios.post.mockResolvedValue({ data: {} });
+      const container = { id: 'c2', name: 'web' };
+      const runtimeContext = { operationId: 'uuid-controller-2' };
+      await client.runRemoteTrigger(container, 'dockercompose', 'update', runtimeContext);
+      const [, postedPayload] = axios.post.mock.calls[0];
+      expect(postedPayload).toStrictEqual({
+        id: 'c2',
+        name: 'web',
+        operationId: 'uuid-controller-2',
+      });
+    });
+
+    test('should omit operationId for update triggers when runtimeContext has none', async () => {
+      axios.post.mockResolvedValue({ data: {} });
+      const container = { id: 'c1', name: 'nginx' };
+      await client.runRemoteTrigger(container, 'docker', 'update', {});
+      const [, postedPayload] = axios.post.mock.calls[0];
+      expect(postedPayload).toStrictEqual({ id: 'c1', name: 'nginx' });
+    });
+
+    test('should omit operationId for update triggers when no runtimeContext', async () => {
+      axios.post.mockResolvedValue({ data: {} });
+      const container = { id: 'c1', name: 'nginx' };
+      await client.runRemoteTrigger(container, 'docker', 'update');
+      const [, postedPayload] = axios.post.mock.calls[0];
+      expect(postedPayload).toStrictEqual({ id: 'c1', name: 'nginx' });
+    });
+
+    test('should not include operationId for notification trigger types', async () => {
+      axios.post.mockResolvedValue({ data: {} });
+      const container = { id: 'c3', name: 'api', status: 'running' };
+      const runtimeContext = { operationId: 'uuid-controller-1' };
+      await client.runRemoteTrigger(container, 'smtp', 'notify', runtimeContext);
+      const [, postedPayload] = axios.post.mock.calls[0];
+      // Full container is posted for notification triggers, no operationId injection
+      expect(postedPayload).toBe(container);
+    });
   });
 
   describe('runRemoteTriggerBatch', () => {
@@ -3027,6 +3115,51 @@ describe('AgentClient', () => {
       await expect(client.runRemoteTriggerBatch([], 'docker', 'update')).rejects.toThrow(
         'batch failed',
       );
+    });
+
+    test('should embed per-container operationIds from runtimeContext for update triggers (#289)', async () => {
+      axios.post.mockResolvedValue({ data: {} });
+      const containers = [
+        { id: 'c1', name: 'app1' },
+        { id: 'c2', name: 'app2' },
+      ];
+      const runtimeContext = { operationIds: { c1: 'uuid-ctrl-1', c2: 'uuid-ctrl-2' } };
+      await client.runRemoteTriggerBatch(containers, 'docker', 'update', runtimeContext);
+      const [, postedBody] = axios.post.mock.calls[0];
+      expect(postedBody).toEqual([
+        { id: 'c1', name: 'app1', operationId: 'uuid-ctrl-1' },
+        { id: 'c2', name: 'app2', operationId: 'uuid-ctrl-2' },
+      ]);
+    });
+
+    test('should post containers without operationId when runtimeContext has no match for a container', async () => {
+      axios.post.mockResolvedValue({ data: {} });
+      const containers = [
+        { id: 'c1', name: 'app1' },
+        { id: 'c2', name: 'app2' },
+      ];
+      const runtimeContext = { operationIds: { c1: 'uuid-ctrl-1' } };
+      await client.runRemoteTriggerBatch(containers, 'docker', 'update', runtimeContext);
+      const [, postedBody] = axios.post.mock.calls[0];
+      expect(postedBody[0]).toHaveProperty('operationId', 'uuid-ctrl-1');
+      expect(postedBody[1]).not.toHaveProperty('operationId');
+    });
+
+    test('should post containers as-is when no runtimeContext (update triggers)', async () => {
+      axios.post.mockResolvedValue({ data: {} });
+      const containers = [{ id: 'c1', name: 'app1' }];
+      await client.runRemoteTriggerBatch(containers, 'docker', 'update');
+      const [, postedBody] = axios.post.mock.calls[0];
+      expect(postedBody).toBe(containers);
+    });
+
+    test('should not embed operationIds for notification batch triggers', async () => {
+      axios.post.mockResolvedValue({ data: {} });
+      const containers = [{ id: 'c1', name: 'app1' }];
+      const runtimeContext = { operationIds: { c1: 'uuid-ctrl-1' } };
+      await client.runRemoteTriggerBatch(containers, 'slack', 'notify', runtimeContext);
+      const [, postedBody] = axios.post.mock.calls[0];
+      expect(postedBody).toBe(containers);
     });
   });
 
@@ -4208,7 +4341,11 @@ describe('AgentClient', () => {
       expect(parseFailedPayload({ containerName: 'nginx', error: null })).toBeUndefined();
     });
 
-    test('returns payload with agent-scoped operationId', () => {
+    test('returns payload with raw (unscoped) operationId and agent-scoped batchId', () => {
+      // parseUpdateFailedEventPayload now returns the raw operationId so that
+      // resolveAgentOperationId can decide whether to use the controller row
+      // or create an agent-scoped one (fixes #289). batchId is still scoped
+      // because it is always agent-generated.
       const result = parseFailedPayload({
         containerName: 'nginx',
         error: 'pull failed',
@@ -4217,7 +4354,7 @@ describe('AgentClient', () => {
       });
       expect(result).toBeDefined();
       expect(result.containerName).toBe('nginx');
-      expect(result.operationId).toBe('agent-test-agent-op-1');
+      expect(result.operationId).toBe('op-1');
       expect(result.batchId).toBe('agent-test-agent-batch-1');
     });
 
@@ -4448,6 +4585,181 @@ describe('AgentClient', () => {
     });
   });
 
+  describe('resolveAgentOperationId (#289)', () => {
+    test('returns raw id when a row exists at that id (controller-issued row)', () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValue({
+        id: 'uuid-controller-1',
+        status: 'queued',
+      } as any);
+      const result = (client as any).resolveAgentOperationId('uuid-controller-1');
+      expect(result).toBe('uuid-controller-1');
+      expect(updateOperationStore.getOperationById).toHaveBeenCalledWith('uuid-controller-1');
+    });
+
+    test('returns agent-scoped id when no row exists at the raw id (backwards compat)', () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValue(undefined);
+      const result = (client as any).resolveAgentOperationId('remote-op-abc');
+      expect(result).toBe('agent-test-agent-remote-op-abc');
+    });
+
+    test('does not double-scope already-scoped ids', () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValue(undefined);
+      const result = (client as any).resolveAgentOperationId('agent-test-agent-already-scoped');
+      expect(result).toBe('agent-test-agent-already-scoped');
+    });
+  });
+
+  describe('applyAgentUpdateOperationChanged — controller-issued row reuse (#289)', () => {
+    test('updates the controller-issued row when agent echoes back the controller operationId', () => {
+      // Simulate controller row existing at the raw id
+      const controllerRow = {
+        id: 'uuid-controller-1',
+        status: 'queued',
+        containerName: 'tautulli',
+      };
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'uuid-controller-1') return controllerRow as any;
+        return undefined;
+      });
+      (client as any).applyAgentUpdateOperationChanged({
+        operationId: 'uuid-controller-1',
+        containerName: 'tautulli',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+      // Should update the controller row, not insert a new agent-scoped one
+      expect(updateOperationStore.updateOperation).toHaveBeenCalledWith(
+        'uuid-controller-1',
+        expect.objectContaining({ status: 'in-progress', containerName: 'tautulli' }),
+      );
+      expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
+    });
+
+    test('marks the controller-issued row terminal when agent echoes back the controller operationId', () => {
+      const controllerRow = {
+        id: 'uuid-controller-1',
+        status: 'in-progress',
+        containerName: 'tautulli',
+      };
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'uuid-controller-1') return controllerRow as any;
+        return undefined;
+      });
+      (client as any).applyAgentUpdateOperationChanged({
+        operationId: 'uuid-controller-1',
+        containerName: 'tautulli',
+        status: 'succeeded',
+        phase: 'succeeded',
+      });
+      expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledWith(
+        'uuid-controller-1',
+        expect.objectContaining({ status: 'succeeded' }),
+      );
+    });
+
+    test('falls back to agent-scoped id and inserts new row when no controller row exists', () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValue(undefined);
+      (client as any).applyAgentUpdateOperationChanged({
+        operationId: 'remote-op-legacy',
+        containerName: 'nginx',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+      expect(updateOperationStore.insertOperation).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'agent-test-agent-remote-op-legacy' }),
+      );
+    });
+  });
+
+  describe('maybeMarkAgentOperationSucceededFromAppliedPayload — controller-issued row reuse (#289)', () => {
+    test('returns raw id when controller row exists and marks it succeeded', () => {
+      const controllerRow = {
+        id: 'uuid-controller-1',
+        status: 'in-progress',
+        containerName: 'tautulli',
+      };
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'uuid-controller-1') return controllerRow as any;
+        return undefined;
+      });
+      const result = (client as any).maybeMarkAgentOperationSucceededFromAppliedPayload({
+        operationId: 'uuid-controller-1',
+        containerName: 'tautulli',
+        container: { id: 'c1', name: 'tautulli' },
+      });
+      expect(result).toBe('uuid-controller-1');
+      expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledWith(
+        'uuid-controller-1',
+        expect.objectContaining({ status: 'succeeded', phase: 'succeeded' }),
+      );
+    });
+
+    test('returns agent-scoped id when no controller row exists (backwards compat)', () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValue(null);
+      const result = (client as any).maybeMarkAgentOperationSucceededFromAppliedPayload({
+        operationId: 'remote-op-legacy',
+        containerName: 'nginx',
+      });
+      expect(result).toBe('agent-test-agent-remote-op-legacy');
+    });
+  });
+
+  describe('maybeMarkAgentOperationFailedFromFailedPayload — controller-issued row reuse (#289)', () => {
+    test('marks the controller-issued row failed when agent echoes back the controller operationId', () => {
+      const controllerRow = {
+        id: 'uuid-controller-1',
+        status: 'in-progress',
+        containerName: 'tautulli',
+      };
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'uuid-controller-1') return controllerRow as any;
+        return undefined;
+      });
+      const result = (client as any).maybeMarkAgentOperationFailedFromFailedPayload({
+        operationId: 'uuid-controller-1',
+        containerName: 'tautulli',
+        error: 'pull failed',
+      });
+      expect(result).toBe(true);
+      expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledWith(
+        'uuid-controller-1',
+        expect.objectContaining({ status: 'failed', lastError: 'pull failed' }),
+      );
+    });
+  });
+
+  describe('parseUpdateFailedEventPayload — deferred scoping (#289)', () => {
+    const parseFailedPayload = (data: unknown) =>
+      (client as any).parseUpdateFailedEventPayload(data);
+
+    test('returns raw operationId without pre-scoping so resolveAgentOperationId can decide', () => {
+      const result = parseFailedPayload({
+        containerName: 'tautulli',
+        error: 'pull failed',
+        operationId: 'uuid-controller-1',
+      });
+      expect(result?.operationId).toBe('uuid-controller-1');
+    });
+
+    test('still scopes batchId', () => {
+      const result = parseFailedPayload({
+        containerName: 'tautulli',
+        error: 'pull failed',
+        operationId: 'uuid-op',
+        batchId: 'uuid-batch',
+      });
+      expect(result?.batchId).toBe('agent-test-agent-uuid-batch');
+    });
+
+    test('returns undefined operationId when absent', () => {
+      const result = parseFailedPayload({
+        containerName: 'tautulli',
+        error: 'pull failed',
+      });
+      expect(result?.operationId).toBeUndefined();
+    });
+  });
+
   describe('applyAgentUpdateOperationChanged — terminal status coverage', () => {
     // Lines 912-913: ConditionalExpression true for terminal path
     // Call applyAgentUpdateOperationChanged directly with typed payload to bypass parse
@@ -4511,11 +4823,18 @@ describe('AgentClient', () => {
     });
 
     test('includes phase in markOperationTerminal call', () => {
-      vi.mocked(updateOperationStore.getOperationById).mockReturnValue({
-        id: 'agent-test-agent-with-phase',
-        status: 'in-progress',
-        phase: 'pulling',
-      } as any);
+      // Return the existing row only for the scoped id so resolveAgentOperationId
+      // falls back to the scoped form (no controller row at the raw id).
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'agent-test-agent-with-phase') {
+          return {
+            id: 'agent-test-agent-with-phase',
+            status: 'in-progress',
+            phase: 'pulling',
+          } as any;
+        }
+        return undefined;
+      });
 
       (client as any).markAgentOperationTerminal({
         operationId: 'with-phase',
@@ -4531,10 +4850,14 @@ describe('AgentClient', () => {
     });
 
     test('includes lastError in markOperationTerminal call', () => {
-      vi.mocked(updateOperationStore.getOperationById).mockReturnValue({
-        id: 'agent-test-agent-with-error',
-        status: 'in-progress',
-      } as any);
+      // Return the existing row only for the scoped id so resolveAgentOperationId
+      // falls back to the scoped form (no controller row at the raw id).
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'agent-test-agent-with-error') {
+          return { id: 'agent-test-agent-with-error', status: 'in-progress' } as any;
+        }
+        return undefined;
+      });
 
       (client as any).markAgentOperationTerminal({
         operationId: 'with-error',
@@ -5522,12 +5845,17 @@ describe('AgentClient', () => {
     // expect.not.objectContaining won't catch undefined-valued keys (expect.anything() skips undefined)
     // We need to directly inspect mock call args with not.toHaveProperty
     test('updateOperation call omits containerId key when payload has no containerId', async () => {
-      vi.mocked(updateOperationStore.getOperationById).mockReturnValueOnce({
-        id: 'agent-test-agent-op-no-cid',
-        containerName: 'nginx',
-        status: 'queued',
-        phase: 'queued',
-      } as any);
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'agent-test-agent-op-no-cid') {
+          return {
+            id: 'agent-test-agent-op-no-cid',
+            containerName: 'nginx',
+            status: 'queued',
+            phase: 'queued',
+          } as any;
+        }
+        return undefined;
+      });
 
       await client.handleEvent('dd:update-operation-changed', {
         operationId: 'op-no-cid',
@@ -5541,12 +5869,17 @@ describe('AgentClient', () => {
     });
 
     test('updateOperation call omits newContainerId key when payload has no newContainerId', async () => {
-      vi.mocked(updateOperationStore.getOperationById).mockReturnValueOnce({
-        id: 'agent-test-agent-op-no-ncid',
-        containerName: 'nginx',
-        status: 'in-progress',
-        phase: 'pulling',
-      } as any);
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'agent-test-agent-op-no-ncid') {
+          return {
+            id: 'agent-test-agent-op-no-ncid',
+            containerName: 'nginx',
+            status: 'in-progress',
+            phase: 'pulling',
+          } as any;
+        }
+        return undefined;
+      });
 
       await client.handleEvent('dd:update-operation-changed', {
         operationId: 'op-no-ncid',

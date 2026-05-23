@@ -44,6 +44,7 @@ import * as registry from '../registry/index.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 import * as storeContainer from '../store/container.js';
 import * as updateOperationStore from '../store/update-operation.js';
+import { getRequestedOperationId } from '../triggers/providers/docker/update-runtime-context.js';
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
 
@@ -851,7 +852,10 @@ export class AgentClient {
       error: payload.error,
       ...(remoteOperationId
         ? {
-            operationId: this.toAgentScopedId(remoteOperationId),
+            // Do NOT pre-scope here — let maybeMarkAgentOperationFailedFromFailedPayload
+            // call resolveAgentOperationId so the controller-issued row is used when
+            // the agent echoes back the controller's operationId (fixes #289).
+            operationId: remoteOperationId,
             batchId: batchId ? this.toAgentScopedId(batchId) : undefined,
           }
         : {}),
@@ -877,6 +881,24 @@ export class AgentClient {
     const trimmed = remoteId.trim();
     const prefix = `agent-${this.name}-`;
     return trimmed.startsWith(prefix) ? trimmed : `${prefix}${trimmed}`;
+  }
+
+  /**
+   * Resolve the operation id to use when processing a lifecycle event from
+   * the agent.
+   *
+   * If the controller already has an operation row keyed by the raw (unscoped)
+   * id — meaning the agent echoed back a controller-issued operationId — use
+   * that id directly so the existing row is updated in place.  Otherwise fall
+   * back to the agent-scoped form for backwards compatibility with older agents
+   * that do not echo controller ids.  (Fixes #289.)
+   */
+  private resolveAgentOperationId(rawOperationId: string): string {
+    const existing = updateOperationStore.getOperationById(rawOperationId);
+    if (existing) {
+      return rawOperationId;
+    }
+    return this.toAgentScopedId(rawOperationId);
   }
 
   private parseAgentUpdateOperationChangedPayload(
@@ -915,7 +937,7 @@ export class AgentClient {
     container?: Record<string, unknown>;
   }) {
     return {
-      id: this.toAgentScopedId(payload.operationId),
+      id: this.resolveAgentOperationId(payload.operationId),
       kind: 'container-update' as const,
       containerName: payload.containerName,
       ...(payload.containerId !== undefined ? { containerId: payload.containerId } : {}),
@@ -931,7 +953,7 @@ export class AgentClient {
     newContainerId?: string;
     container?: Record<string, unknown>;
   }): string {
-    const operationId = this.toAgentScopedId(payload.operationId);
+    const operationId = this.resolveAgentOperationId(payload.operationId);
     const existing = updateOperationStore.getOperationById(operationId);
     if (!existing) {
       updateOperationStore.insertOperation({
@@ -950,7 +972,7 @@ export class AgentClient {
   }
 
   private applyAgentUpdateOperationChanged(payload: AgentUpdateOperationChangedPayload): void {
-    const operationId = this.toAgentScopedId(payload.operationId);
+    const operationId = this.resolveAgentOperationId(payload.operationId);
     const existing = updateOperationStore.getOperationById(operationId);
     const base = this.buildAgentOperationBase(payload);
 
@@ -1032,7 +1054,7 @@ export class AgentClient {
       phase: 'succeeded',
       ...(agentContainer !== undefined ? { container: agentContainer } : {}),
     });
-    return this.toAgentScopedId(remoteOperationId);
+    return this.resolveAgentOperationId(remoteOperationId);
   }
 
   private maybeMarkAgentOperationFailedFromFailedPayload(
@@ -1315,7 +1337,12 @@ export class AgentClient {
     return reason ? `${errorMessage} (reason: ${reason})` : errorMessage;
   }
 
-  async runRemoteTrigger(container: Container, triggerType: string, triggerName: string) {
+  async runRemoteTrigger(
+    container: Container,
+    triggerType: string,
+    triggerName: string,
+    runtimeContext?: unknown,
+  ) {
     try {
       // For update-trigger types (docker, dockercompose), the agent's handler
       // only dereferences container.id (to look up its own stored container)
@@ -1325,9 +1352,20 @@ export class AgentClient {
       // labels, causing HTTP 413. Post a minimal payload for update triggers;
       // notification triggers still need the full container for template
       // rendering. See #298.
-      const payload = REMOTE_UPDATE_TRIGGER_TYPES.has(triggerType)
-        ? { id: container.id, name: container.name }
-        : container;
+      //
+      // Thread the controller's operationId so the agent can reuse the
+      // existing row rather than creating a new one (fixes #289).
+      let payload: Record<string, unknown> | Container;
+      if (REMOTE_UPDATE_TRIGGER_TYPES.has(triggerType)) {
+        const operationId = getRequestedOperationId(container, runtimeContext);
+        payload = {
+          id: container.id,
+          name: container.name,
+          ...(operationId !== undefined ? { operationId } : {}),
+        };
+      } else {
+        payload = container;
+      }
       this.log.debug(
         `Running remote trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (payload=${sanitizeLogParam(JSON.stringify(payload), 500)})`,
       );
@@ -1347,11 +1385,27 @@ export class AgentClient {
     }
   }
 
-  async runRemoteTriggerBatch(containers: Container[], triggerType: string, triggerName: string) {
+  async runRemoteTriggerBatch(
+    containers: Container[],
+    triggerType: string,
+    triggerName: string,
+    runtimeContext?: unknown,
+  ) {
     try {
+      // For update-trigger types, attach per-container operationIds so the agent
+      // can reuse controller-issued rows rather than minting new ones (#289).
+      let body: unknown;
+      if (REMOTE_UPDATE_TRIGGER_TYPES.has(triggerType) && runtimeContext !== undefined) {
+        body = containers.map((container) => {
+          const operationId = getRequestedOperationId(container, runtimeContext);
+          return operationId !== undefined ? { ...container, operationId } : container;
+        });
+      } else {
+        body = containers;
+      }
       await axios.post(
         `${this.baseUrl}/api/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}/batch`,
-        containers,
+        body,
         this.axiosOptions,
       );
       if (REMOTE_UPDATE_TRIGGER_TYPES.has(triggerType)) {

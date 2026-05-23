@@ -186,6 +186,48 @@ describe('Trigger Router', () => {
       expect(res.json).toHaveBeenCalledWith({ operationId: expect.any(String) });
     });
 
+    test('should honor caller-supplied operationId in body (#289)', async () => {
+      const mockTrigger = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+      mockGetContainer.mockReturnValue({
+        id: 'c1',
+        name: 'nginx',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      });
+      const spy = vi.spyOn(requestUpdate, 'requestContainerUpdate');
+
+      const req = {
+        params: { type: 'docker', name: 'update' },
+        body: { id: 'c1', operationId: 'caller-op-uuid' },
+      };
+      const res = createMockResponse();
+
+      await runTrigger(req, res);
+      spy.mockRestore();
+
+      expect(res.status).toHaveBeenCalledWith(202);
+      // Response operationId should match what was provided
+      expect(res.json).toHaveBeenCalledWith({ operationId: 'caller-op-uuid' });
+    });
+
+    test('should reject body with empty-string operationId (#289)', async () => {
+      const req = {
+        params: { type: 'docker', name: 'update' },
+        body: { id: 'c1', operationId: '' },
+      };
+      const res = createMockResponse();
+
+      await runTrigger(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+    });
+
     test('should surface UpdateRequestError responses from accepted docker update triggers', async () => {
       const mockTrigger = {
         type: 'docker',

@@ -68,13 +68,26 @@ export async function runTriggerBatch(req: Request, res: Response) {
   }
 
   try {
+    // Extract per-container operationIds injected by the controller (fixes #289),
+    // then strip them (and the agent field) from the container objects before
+    // forwarding so local triggers see a clean Container.
+    const operationIds: Record<string, string> = {};
     const sanitizedContainers = containers.map((container) => {
       if (container.agent) {
         delete container.agent;
       }
+      if (
+        container.id &&
+        typeof container.operationId === 'string' &&
+        container.operationId.length > 0
+      ) {
+        operationIds[String(container.id)] = container.operationId;
+        delete container.operationId;
+      }
       return container;
     });
-    await trigger.triggerBatch(sanitizedContainers);
+    const runtimeContext = Object.keys(operationIds).length > 0 ? { operationIds } : undefined;
+    await trigger.triggerBatch(sanitizedContainers, runtimeContext);
     res.status(200).json({});
   } catch (e: unknown) {
     const errorMessage = getErrorMessage(e);

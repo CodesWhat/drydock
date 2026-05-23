@@ -101,7 +101,61 @@ describe('agent API trigger', () => {
         trigger: { 'docker.update': mockTrigger },
       });
       await triggerApi.runTriggerBatch(req, res);
-      expect(mockTrigger.triggerBatch).toHaveBeenCalledWith([{ id: 'c1' }, { id: 'c2' }]);
+      expect(mockTrigger.triggerBatch).toHaveBeenCalledWith(
+        [{ id: 'c1' }, { id: 'c2' }],
+        undefined,
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should extract operationId fields and pass as runtimeContext (#289)', async () => {
+      req.params = { type: 'docker', name: 'update' };
+      req.body = [
+        { id: 'c1', operationId: 'op-uuid-1', agent: 'remote' },
+        { id: 'c2', operationId: 'op-uuid-2' },
+      ];
+      const mockTrigger = { triggerBatch: vi.fn().mockResolvedValue(undefined) };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+      await triggerApi.runTriggerBatch(req, res);
+      expect(mockTrigger.triggerBatch).toHaveBeenCalledWith([{ id: 'c1' }, { id: 'c2' }], {
+        operationIds: { c1: 'op-uuid-1', c2: 'op-uuid-2' },
+      });
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should pass undefined runtimeContext when no container has operationId (#289)', async () => {
+      req.params = { type: 'docker', name: 'update' };
+      req.body = [{ id: 'c1' }, { id: 'c2' }];
+      const mockTrigger = { triggerBatch: vi.fn().mockResolvedValue(undefined) };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+      await triggerApi.runTriggerBatch(req, res);
+      expect(mockTrigger.triggerBatch).toHaveBeenCalledWith(
+        [{ id: 'c1' }, { id: 'c2' }],
+        undefined,
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should ignore empty-string operationId and not include in runtimeContext (#289)', async () => {
+      req.params = { type: 'docker', name: 'update' };
+      req.body = [
+        { id: 'c1', operationId: '' },
+        { id: 'c2', operationId: 'op-uuid-2' },
+      ];
+      const mockTrigger = { triggerBatch: vi.fn().mockResolvedValue(undefined) };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+      await triggerApi.runTriggerBatch(req, res);
+      // c1 has empty-string operationId — skipped; only c2 contributes
+      expect(mockTrigger.triggerBatch).toHaveBeenCalledWith(
+        [{ id: 'c1', operationId: '' }, { id: 'c2' }],
+        { operationIds: { c2: 'op-uuid-2' } },
+      );
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
@@ -258,10 +312,11 @@ describe('agent API trigger', () => {
         trigger: { 'docker.update': mockTrigger },
       });
       await triggerApi.runTriggerBatch(req, res);
-      // Container should be passed without extra modification
-      expect(mockTrigger.triggerBatch).toHaveBeenCalledWith([
-        expect.objectContaining({ id: 'c1', name: 'nginx' }),
-      ]);
+      // Container should be passed without extra modification; no operationIds so runtimeContext is undefined
+      expect(mockTrigger.triggerBatch).toHaveBeenCalledWith(
+        [expect.objectContaining({ id: 'c1', name: 'nginx' })],
+        undefined,
+      );
     });
 
     test('should log empty string when errorMessage is undefined (not Stryker was here)', async () => {
