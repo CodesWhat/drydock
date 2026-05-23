@@ -26,7 +26,8 @@
     },
     "registryError": {
       "generic": "仓库错误",
-      "detail": "仓库错误：{error}"
+      "detail": "仓库错误：{error}",
+      "detailWithRegistry": "{registryHost} — {error}"
     },
     "columns": {
       "container": "容器",

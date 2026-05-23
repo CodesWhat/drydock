@@ -26,7 +26,8 @@
     },
     "registryError": {
       "generic": "Registry-Fehler",
-      "detail": "Registry-Fehler: {error}"
+      "detail": "Registry-Fehler: {error}",
+      "detailWithRegistry": "{registryHost} — {error}"
     },
     "columns": {
       "container": "Container",

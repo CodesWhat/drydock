@@ -26,7 +26,8 @@
     },
     "registryError": {
       "generic": "레지스트리 오류",
-      "detail": "레지스트리 오류: {error}"
+      "detail": "레지스트리 오류: {error}",
+      "detailWithRegistry": "{registryHost} — {error}"
     },
     "columns": {
       "container": "컨테이너",

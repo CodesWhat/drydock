@@ -26,7 +26,8 @@
     },
     "registryError": {
       "generic": "Erro de registry",
-      "detail": "Erro de registry: {error}"
+      "detail": "Erro de registry: {error}",
+      "detailWithRegistry": "{registryHost} — {error}"
     },
     "columns": {
       "container": "Contêiner",
