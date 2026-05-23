@@ -26,6 +26,8 @@ import {
 const STREAM_ROUTE_PATTERN = /^\/api(?:\/v1)?\/log\/stream$/;
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const RATE_LIMIT_MAX = 1000;
+const WS_BUFFER_CAP_BYTES = 2 * 1024 * 1024; // 2 MB
+const WS_BUFFER_CLOSE_THRESHOLD = 3; // close after this many consecutive drops
 
 interface ParsedSystemLogStreamQuery {
   level?: string;
@@ -35,6 +37,7 @@ interface ParsedSystemLogStreamQuery {
 
 type WebSocketLike = Pick<WebSocket, 'close' | 'on' | 'send'> & {
   off?: (event: 'close' | 'error', listener: () => void) => void;
+  bufferedAmount?: number;
 };
 
 type WebSocketServerLike = {
@@ -142,11 +145,26 @@ function streamSystemLogsToWebSocket({
   const minLevel = getMinLevel(query.level);
 
   return new Promise<void>((resolve) => {
+    let consecutiveDrops = 0;
+
     const unsubscribe = subscribeToEntries((entry: LogEntry) => {
-      if (matchesFilter(entry, minLevel, query.component)) {
-        if (!trySendLogEntry(webSocket, entry)) {
+      if (!matchesFilter(entry, minLevel, query.component)) {
+        return;
+      }
+      if (
+        webSocket.bufferedAmount !== undefined &&
+        webSocket.bufferedAmount > WS_BUFFER_CAP_BYTES
+      ) {
+        consecutiveDrops += 1;
+        if (consecutiveDrops >= WS_BUFFER_CLOSE_THRESHOLD) {
+          webSocket.close(1008, 'Policy Violation: send buffer exceeded');
           cleanup();
         }
+        return;
+      }
+      consecutiveDrops = 0;
+      if (!trySendLogEntry(webSocket, entry)) {
+        cleanup();
       }
     });
 
