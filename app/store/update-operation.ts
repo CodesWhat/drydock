@@ -139,6 +139,7 @@ type MutableUpdateOperationFields = Pick<
   | 'lastError'
   | 'recoveredAt'
   | 'cancelRequested'
+  | 'container'
 >;
 
 interface InsertUpdateOperationInput

@@ -1798,6 +1798,12 @@ describe('AgentClient', () => {
           containerName: 'local_nginx',
           containerId: 'c1',
           status: 'in-progress',
+          container: expect.objectContaining({
+            id: 'c1',
+            name: 'nginx',
+            watcher: 'local',
+            agent: 'test-agent',
+          }),
         }),
       );
       expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledWith(
@@ -1805,6 +1811,7 @@ describe('AgentClient', () => {
         expect.objectContaining({
           status: 'succeeded',
           containerId: 'c1',
+          container: expect.objectContaining({ id: 'c1', agent: 'test-agent' }),
         }),
       );
     });
@@ -1857,6 +1864,109 @@ describe('AgentClient', () => {
       await client.handleEvent('dd:update-applied', '');
 
       expect(event.emitContainerUpdateApplied).not.toHaveBeenCalled();
+    });
+
+    test('regression #289: agent update-applied with operationId and container threads container into operation row', async () => {
+      await client.handleEvent('dd:update-applied', {
+        operationId: 'remote-op-reg289',
+        containerName: 'tautulli',
+        container: {
+          id: 'c1',
+          name: 'tautulli',
+          watcher: 'docker',
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'minor' },
+        },
+      });
+
+      expect(event.emitContainerUpdateApplied).not.toHaveBeenCalled();
+      expect(updateOperationStore.insertOperation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          container: expect.objectContaining({ agent: 'test-agent', id: 'c1' }),
+        }),
+      );
+      expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledWith(
+        'agent-test-agent-remote-op-reg289',
+        expect.objectContaining({
+          container: expect.objectContaining({ agent: 'test-agent', id: 'c1' }),
+        }),
+      );
+    });
+
+    test('agent update-applied stamps agent name on container regardless of inbound agent field', async () => {
+      await client.handleEvent('dd:update-applied', {
+        operationId: 'remote-op-stamp',
+        containerName: 'tautulli',
+        container: {
+          id: 'c2',
+          name: 'tautulli',
+          watcher: 'docker',
+          agent: 'some-other-agent',
+        },
+      });
+
+      expect(updateOperationStore.insertOperation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          container: expect.objectContaining({ id: 'c2', agent: 'test-agent' }),
+        }),
+      );
+      expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledWith(
+        'agent-test-agent-remote-op-stamp',
+        expect.objectContaining({
+          container: expect.objectContaining({ agent: 'test-agent' }),
+        }),
+      );
+    });
+
+    test('existing-row race: dd:update-operation-changed inserted active row before dd:update-applied arrives with container', async () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValueOnce({
+        id: 'agent-test-agent-remote-op-race',
+        containerName: 'tautulli',
+        status: 'in-progress',
+        phase: 'pulling',
+        container: undefined,
+      } as any);
+
+      await client.handleEvent('dd:update-applied', {
+        operationId: 'remote-op-race',
+        containerName: 'tautulli',
+        container: {
+          id: 'c3',
+          name: 'tautulli',
+          watcher: 'docker',
+          updateAvailable: false,
+        },
+      });
+
+      expect(updateOperationStore.updateOperation).toHaveBeenCalledWith(
+        'agent-test-agent-remote-op-race',
+        expect.objectContaining({ container: expect.objectContaining({ agent: 'test-agent' }) }),
+      );
+      expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
+    });
+
+    test('agent update-failed with operationId and container threads container into operation row', async () => {
+      await client.handleEvent('dd:update-failed', {
+        operationId: 'remote-fail-with-container',
+        containerName: 'tautulli',
+        error: 'pull failed',
+        phase: 'pull-failed',
+        container: {
+          id: 'c4',
+          name: 'tautulli',
+          watcher: 'docker',
+          updateAvailable: true,
+        },
+      });
+
+      expect(event.emitContainerUpdateFailed).not.toHaveBeenCalled();
+      expect(updateOperationStore.markOperationTerminal).toHaveBeenCalledWith(
+        'agent-test-agent-remote-fail-with-container',
+        expect.objectContaining({
+          status: 'failed',
+          container: expect.objectContaining({ agent: 'test-agent', id: 'c4' }),
+        }),
+      );
     });
 
     test('should terminalize agent update-failed payloads with operation ids through the store', async () => {

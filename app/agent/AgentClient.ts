@@ -912,6 +912,7 @@ export class AgentClient {
     containerName: string;
     containerId?: string;
     newContainerId?: string;
+    container?: Record<string, unknown>;
   }) {
     return {
       id: this.toAgentScopedId(payload.operationId),
@@ -919,6 +920,7 @@ export class AgentClient {
       containerName: payload.containerName,
       ...(payload.containerId !== undefined ? { containerId: payload.containerId } : {}),
       ...(payload.newContainerId !== undefined ? { newContainerId: payload.newContainerId } : {}),
+      ...(payload.container !== undefined ? { container: payload.container } : {}),
     };
   }
 
@@ -927,6 +929,7 @@ export class AgentClient {
     containerName: string;
     containerId?: string;
     newContainerId?: string;
+    container?: Record<string, unknown>;
   }): string {
     const operationId = this.toAgentScopedId(payload.operationId);
     const existing = updateOperationStore.getOperationById(operationId);
@@ -936,6 +939,12 @@ export class AgentClient {
         status: 'in-progress',
         phase: 'prepare',
       });
+    } else if (
+      payload.container !== undefined &&
+      !existing.container &&
+      isActiveContainerUpdateOperationStatus(existing.status)
+    ) {
+      updateOperationStore.updateOperation(operationId, { container: payload.container as never });
     }
     return operationId;
   }
@@ -984,6 +993,7 @@ export class AgentClient {
     newContainerId?: string;
     phase?: ContainerUpdateOperationPhase;
     lastError?: string;
+    container?: Record<string, unknown>;
   }): void {
     const operationId = this.ensureAgentOperationForTerminal(payload);
     const existing = updateOperationStore.getOperationById(operationId);
@@ -997,6 +1007,7 @@ export class AgentClient {
       ...(payload.newContainerId !== undefined ? { newContainerId: payload.newContainerId } : {}),
       ...(payload.phase ? { phase: payload.phase as never } : {}),
       ...(payload.lastError ? { lastError: payload.lastError } : {}),
+      ...(payload.container !== undefined ? { container: payload.container as never } : {}),
     });
   }
 
@@ -1009,12 +1020,17 @@ export class AgentClient {
     }
     const container = toOptionalRecord(payload.container);
     const containerId = toOptionalString(container?.id);
+    const agentContainer =
+      payload.container && typeof payload.container === 'object'
+        ? { ...payload.container, agent: this.name }
+        : undefined;
     this.markAgentOperationTerminal({
       operationId: remoteOperationId,
       containerName: payload.containerName,
       status: 'succeeded',
       ...(containerId !== undefined ? { containerId } : {}),
       phase: 'succeeded',
+      ...(agentContainer !== undefined ? { container: agentContainer } : {}),
     });
     return this.toAgentScopedId(remoteOperationId);
   }
@@ -1026,6 +1042,10 @@ export class AgentClient {
     if (!remoteOperationId) {
       return false;
     }
+    const agentContainer =
+      payload.container && typeof payload.container === 'object'
+        ? { ...payload.container, agent: this.name }
+        : undefined;
     this.markAgentOperationTerminal({
       operationId: remoteOperationId,
       containerName: payload.containerName,
@@ -1033,6 +1053,7 @@ export class AgentClient {
       ...(payload.containerId !== undefined ? { containerId: payload.containerId } : {}),
       ...(isContainerUpdateOperationPhase(payload.phase) ? { phase: payload.phase } : {}),
       lastError: payload.error,
+      ...(agentContainer !== undefined ? { container: agentContainer } : {}),
     });
     return true;
   }
