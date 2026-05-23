@@ -385,7 +385,7 @@ export function init(app: Application): void {
   });
   router.use(authLimiter);
 
-  const mutationJsonBodyParser = express.json();
+  const mutationJsonBodyParser = express.json({ limit: '64kb' });
   router.use(requireJsonContentTypeForMutations);
   router.use((req: Request, res: Response, next: NextFunction) => {
     if (shouldParseJsonBody(req.method)) {

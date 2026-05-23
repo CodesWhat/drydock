@@ -960,6 +960,73 @@ describe('SSE Router', () => {
     });
   });
 
+  describe('global connection limit', () => {
+    afterEach(() => {
+      delete process.env.DD_SSE_MAX_CLIENTS;
+    });
+
+    test('should reject connections when global limit is reached', () => {
+      process.env.DD_SSE_MAX_CLIENTS = '2';
+      const handler = getHandler();
+
+      // Fill up to the global limit using distinct IPs and sessions
+      connectSseClient(handler, '10.0.0.1');
+      connectSseClient(handler, '10.0.0.2');
+
+      // Third connection should be rejected regardless of IP/session
+      const rejectedRes = {
+        ...createSSEResponse(),
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      };
+      handler(createSSERequest('10.0.0.3'), rejectedRes);
+
+      expect(rejectedRes.status).toHaveBeenCalledWith(429);
+      expect(rejectedRes.json).toHaveBeenCalledWith({ error: 'Too many SSE connections' });
+      expect(mockLoggerWarn).toHaveBeenCalledWith(
+        expect.stringMatching(/^SSE global connection limit reached \(\d+\)$/),
+      );
+    });
+
+    test('should allow connections when global limit is not reached', () => {
+      process.env.DD_SSE_MAX_CLIENTS = '5';
+      const handler = getHandler();
+
+      connectSseClient(handler, '10.0.0.1');
+      connectSseClient(handler, '10.0.0.2');
+
+      const res = createSSEResponse();
+      handler(createSSERequest('10.0.0.3'), res);
+
+      expect(res.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
+    });
+
+    test('should use default global limit of 500 when DD_SSE_MAX_CLIENTS is not set', () => {
+      delete process.env.DD_SSE_MAX_CLIENTS;
+      expect(sseRouter._getMaxClientsGlobal()).toBe(500);
+    });
+
+    test('should use DD_SSE_MAX_CLIENTS when set to a valid integer', () => {
+      process.env.DD_SSE_MAX_CLIENTS = '100';
+      expect(sseRouter._getMaxClientsGlobal()).toBe(100);
+    });
+
+    test('should fall back to default 500 when DD_SSE_MAX_CLIENTS is not a valid integer', () => {
+      process.env.DD_SSE_MAX_CLIENTS = 'notanumber';
+      expect(sseRouter._getMaxClientsGlobal()).toBe(500);
+    });
+
+    test('should fall back to default 500 when DD_SSE_MAX_CLIENTS is zero', () => {
+      process.env.DD_SSE_MAX_CLIENTS = '0';
+      expect(sseRouter._getMaxClientsGlobal()).toBe(500);
+    });
+
+    test('should fall back to default 500 when DD_SSE_MAX_CLIENTS is negative', () => {
+      process.env.DD_SSE_MAX_CLIENTS = '-1';
+      expect(sseRouter._getMaxClientsGlobal()).toBe(500);
+    });
+  });
+
   describe('event IDs and buffering', () => {
     test('buffered event gets id: line with bootId prefix', () => {
       const res = createSSEResponse();
