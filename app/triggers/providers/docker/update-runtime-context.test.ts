@@ -94,21 +94,16 @@ describe('update-runtime-context', () => {
     ).toBeUndefined();
   });
 
-  test('rejects __proto__/constructor lookups on a record-shaped operationIds map (#289)', () => {
-    // Even when a malicious record arrives with a polluted prototype-chain
-    // entry, the lookup must NOT traverse the prototype chain.
-    const poisoned = Object.create({
-      __proto__: 'evil-proto',
-      constructor: 'evil-ctor',
-    }) as Record<string, string>;
+  test('Record-shaped operationIds lookup does not traverse the prototype chain (#289)', () => {
+    // Build a record whose prototype chain carries a "polluted" data property
+    // — a real prototype-pollution scenario.  The consumer must return
+    // undefined for keys that resolve only via the prototype chain (the
+    // Object.hasOwn guard), and continue to return values for own keys.
+    const prototypeWithPollution: Record<string, string> = { polluted: 'evil-via-proto' };
+    const poisoned = Object.create(prototypeWithPollution) as Record<string, string>;
     poisoned.legit = 'legit-op';
 
-    expect(
-      getRequestedOperationId({ id: '__proto__' }, { operationIds: poisoned }),
-    ).toBeUndefined();
-    expect(
-      getRequestedOperationId({ id: 'constructor' }, { operationIds: poisoned }),
-    ).toBeUndefined();
+    expect(getRequestedOperationId({ id: 'polluted' }, { operationIds: poisoned })).toBeUndefined();
     expect(getRequestedOperationId({ id: 'legit' }, { operationIds: poisoned })).toBe('legit-op');
   });
 });
