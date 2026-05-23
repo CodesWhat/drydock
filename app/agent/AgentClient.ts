@@ -185,6 +185,7 @@ export class AgentClient {
   private readonly pendingWatcherCycleReports: Map<string, Map<string, ContainerReport>>;
   private readonly watcherSnapshotCache: Map<string, WatcherSnapshotCacheEntry>;
   private statsChangedTimer: ReturnType<typeof setTimeout> | undefined;
+  private handshakeInProgress: Promise<void> | null = null;
 
   constructor(name: string, config: AgentClientConfig) {
     this.name = name;
@@ -502,6 +503,16 @@ export class AgentClient {
   }
 
   async handshake() {
+    if (this.handshakeInProgress) {
+      return this.handshakeInProgress;
+    }
+    this.handshakeInProgress = this._doHandshake().finally(() => {
+      this.handshakeInProgress = null;
+    });
+    return this.handshakeInProgress;
+  }
+
+  private async _doHandshake() {
     const wasConnected = this.isConnected;
     const reconnected = this.hasConnectedOnce;
     const response = await axios.get<Container[]>(
