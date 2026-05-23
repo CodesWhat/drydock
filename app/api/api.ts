@@ -80,9 +80,16 @@ export function init(): express.Router {
   router.use('/webhooks', webhooksRouter.init());
 
   // Public OpenAPI document for integrations and API clients.
+  // The document is static (built at module-load time), so we serialize it
+  // once and serve a cached buffer on every request instead of re-serializing
+  // the full document tree per call.
+  let cachedOpenApiJson: string | undefined;
   router.get('/openapi.json', async (_req: Request, res: Response) => {
-    const { openApiDocument } = await import('./openapi.js');
-    res.status(200).json(openApiDocument);
+    if (!cachedOpenApiJson) {
+      const { openApiDocument } = await import('./openapi.js');
+      cachedOpenApiJson = JSON.stringify(openApiDocument);
+    }
+    res.type('application/json').send(cachedOpenApiJson);
   });
 
   // Internal self-update finalize callback used by the surviving Drydock

@@ -226,12 +226,12 @@ describe('API Router', () => {
     expect(openapiRouteIndex).toBeLessThan(authIndex);
 
     const res = {
-      status: vi.fn().mockReturnThis(),
-      json: vi.fn(),
+      type: vi.fn().mockReturnThis(),
+      send: vi.fn(),
     };
     await openapiCall[1]({}, res);
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith(openApiDocument);
+    expect(res.type).toHaveBeenCalledWith('application/json');
+    expect(res.send).toHaveBeenCalledWith(JSON.stringify(openApiDocument));
   });
 
   test('should lazy-load openapi document module when openapi endpoint is requested', async () => {
@@ -251,13 +251,49 @@ describe('API Router', () => {
       expect(openApiModuleLoadSpy).not.toHaveBeenCalled();
 
       const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
+        type: vi.fn().mockReturnThis(),
+        send: vi.fn(),
       };
       await openapiCall[1]({}, res);
-      expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.json).toHaveBeenCalledWith(mockedOpenApiDocument);
+      expect(res.type).toHaveBeenCalledWith('application/json');
+      expect(res.send).toHaveBeenCalledWith(JSON.stringify(mockedOpenApiDocument));
       expect(openApiModuleLoadSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.doUnmock('./openapi.js');
+    }
+  });
+
+  test('should serve identical cached JSON string on repeated openapi.json requests', async () => {
+    vi.resetModules();
+    const openApiModuleLoadSpy = vi.fn();
+    const mockedOpenApiDocument = { openapi: '3.1.0', info: { title: 'Test' } };
+    vi.doMock('./openapi.js', () => {
+      openApiModuleLoadSpy();
+      return { openApiDocument: mockedOpenApiDocument };
+    });
+
+    try {
+      const isolatedApi = await import('./api.js');
+      const isolatedRouter = isolatedApi.init();
+      const openapiCall = isolatedRouter.get.mock.calls.find((c) => c[0] === '/openapi.json');
+      expect(openapiCall).toBeDefined();
+
+      const makeRes = () => ({ type: vi.fn().mockReturnThis(), send: vi.fn() });
+      const res1 = makeRes();
+      const res2 = makeRes();
+
+      await openapiCall[1]({}, res1);
+      await openapiCall[1]({}, res2);
+
+      // Module only loaded once (cache hit on second call)
+      expect(openApiModuleLoadSpy).toHaveBeenCalledTimes(1);
+
+      // Both responses receive the exact same serialized string
+      const body1 = res1.send.mock.calls[0][0] as string;
+      const body2 = res2.send.mock.calls[0][0] as string;
+      expect(typeof body1).toBe('string');
+      expect(body1).toBe(body2);
+      expect(body1.length).toBe(body2.length);
     } finally {
       vi.doUnmock('./openapi.js');
     }

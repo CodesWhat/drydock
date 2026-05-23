@@ -366,8 +366,14 @@ export const useEventStreamStore = defineStore('eventStream', () => {
     };
   }
 
-  function scheduleReconnect(delayMs = 5000): void {
+  function computeReconnectDelayMs(): number {
+    const cappedMs = Math.min(30000, 1000 * 2 ** consecutiveErrors);
+    return cappedMs * (0.5 + Math.random() / 2);
+  }
+
+  function scheduleReconnect(): void {
     clearReconnectTimer();
+    const delayMs = computeReconnectDelayMs();
     reconnectTimer = setTimeout(() => {
       reconnectTimer = undefined;
       doConnect();

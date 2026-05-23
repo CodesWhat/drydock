@@ -270,19 +270,19 @@ async function emitPerContainerSecurityAlerts(
   }
 
   const details = `critical=${summary.critical}, high=${summary.high}, medium=${summary.medium}, low=${summary.low}, unknown=${summary.unknown}`;
-  let emitted = 0;
-  for (const container of group) {
-    await emitSecurityAlert({
-      containerName: fullName(container),
-      details,
-      status: scanResult.status,
-      summary,
-      container,
-      cycleId,
-    });
-    emitted += 1;
-  }
-  return emitted;
+  const results = await Promise.allSettled(
+    group.map((container) =>
+      emitSecurityAlert({
+        containerName: fullName(container),
+        details,
+        status: scanResult.status,
+        summary,
+        container,
+        cycleId,
+      }),
+    ),
+  );
+  return results.filter((r) => r.status === 'fulfilled').length;
 }
 
 function isScheduledScannerEnabled(
