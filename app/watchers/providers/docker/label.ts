@@ -78,6 +78,7 @@ export const wudDisplayIcon = 'wud.display.icon';
  */
 export const ddActionInclude = 'dd.action.include';
 export const ddNotificationInclude = 'dd.notification.include';
+/** @deprecated Removed in v1.7.0 — use ddActionInclude or ddNotificationInclude */
 export const ddTriggerInclude = 'dd.trigger.include';
 export const wudTriggerInclude = 'wud.trigger.include';
 
@@ -86,6 +87,7 @@ export const wudTriggerInclude = 'wud.trigger.include';
  */
 export const ddActionExclude = 'dd.action.exclude';
 export const ddNotificationExclude = 'dd.notification.exclude';
+/** @deprecated Removed in v1.7.0 — use ddActionExclude or ddNotificationExclude */
 export const ddTriggerExclude = 'dd.trigger.exclude';
 export const wudTriggerExclude = 'wud.trigger.exclude';
 

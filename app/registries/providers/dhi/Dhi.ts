@@ -31,14 +31,7 @@ class Dhi extends Custom<DhiRegistryConfiguration> {
    * @returns {*}
    */
   maskConfiguration() {
-    return {
-      ...this.configuration,
-      url: this.configuration.url,
-      login: this.configuration.login,
-      password: Dhi.mask(this.configuration.password),
-      token: Dhi.mask(this.configuration.token),
-      auth: Dhi.mask(this.configuration.auth),
-    };
+    return this.maskSensitiveFields(['password', 'token', 'auth']);
   }
 
   /**

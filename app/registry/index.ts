@@ -99,7 +99,7 @@ const state: RegistryState = {
 const registrationWarnings: string[] = [];
 const authenticationRegistrationErrors: AuthenticationRegistrationError[] = [];
 
-export function getState() {
+export function getState(): Readonly<RegistryState> {
   return state;
 }
 
@@ -895,9 +895,9 @@ export async function init(options: RegistrationOptions = {}) {
     await registerAgents();
   }
 
-  // Gracefully exit when possible
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  // Gracefully exit when possible — use once() to prevent stacking if init re-runs
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
 }
 
 // The following exports are meant for testing only
