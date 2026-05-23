@@ -34,6 +34,7 @@ interface TriggerRequestBody extends Record<string, unknown> {
   id: string;
   agent?: string;
   updateKind?: TriggerUpdateKind;
+  operationId?: string;
 }
 
 interface ErrorResponsePayload {
@@ -45,6 +46,7 @@ const triggerRequestBodySchema = joi
   .object<TriggerRequestBody>({
     id: joi.string().trim().min(1).required(),
     agent: joi.string().trim().min(1),
+    operationId: joi.string().trim().min(1),
   })
   .unknown(true);
 
@@ -176,8 +178,10 @@ export async function runTrigger(req: Request<RunTriggerParams>, res: Response) 
         return;
       }
 
+      const operationId = validationResult.value.operationId;
       const accepted = await requestContainerUpdate(storedContainer, {
         trigger: triggerToRun as { type: string; trigger: typeof triggerToRun.trigger },
+        ...(operationId !== undefined ? { operationId } : {}),
       });
       log.info(
         `Accepted update trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} (container=${sanitizeLogParam(storedContainer.id)})`,
