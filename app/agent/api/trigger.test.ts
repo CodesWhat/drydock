@@ -159,6 +159,56 @@ describe('agent API trigger', () => {
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
+    test('should reject forbidden container.id keys to prevent prototype pollution (#289 / CodeQL js/remote-property-injection)', async () => {
+      req.params = { type: 'docker', name: 'update' };
+      req.body = [
+        { id: '__proto__', operationId: 'op-evil-1' },
+        { id: 'constructor', operationId: 'op-evil-2' },
+        { id: 'prototype', operationId: 'op-evil-3' },
+        { id: 'c-safe', operationId: 'op-safe' },
+      ];
+      const mockTrigger = { triggerBatch: vi.fn().mockResolvedValue(undefined) };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+      await triggerApi.runTriggerBatch(req, res);
+      // Forbidden ids retain their operationId field (skipped, not extracted);
+      // only c-safe contributes to operationIds.
+      expect(mockTrigger.triggerBatch).toHaveBeenCalledWith(
+        [
+          { id: '__proto__', operationId: 'op-evil-1' },
+          { id: 'constructor', operationId: 'op-evil-2' },
+          { id: 'prototype', operationId: 'op-evil-3' },
+          { id: 'c-safe' },
+        ],
+        { operationIds: { 'c-safe': 'op-safe' } },
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    test('should ignore non-string or empty container.id when building operationIds map (#289)', async () => {
+      req.params = { type: 'docker', name: 'update' };
+      req.body = [
+        { id: 42, operationId: 'op-numeric-id' },
+        { id: '', operationId: 'op-empty-id' },
+        { id: 'c-good', operationId: 'op-good' },
+      ];
+      const mockTrigger = { triggerBatch: vi.fn().mockResolvedValue(undefined) };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': mockTrigger },
+      });
+      await triggerApi.runTriggerBatch(req, res);
+      expect(mockTrigger.triggerBatch).toHaveBeenCalledWith(
+        [
+          { id: 42, operationId: 'op-numeric-id' },
+          { id: '', operationId: 'op-empty-id' },
+          { id: 'c-good' },
+        ],
+        { operationIds: { 'c-good': 'op-good' } },
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
     test('should return 500 when trigger throws', async () => {
       req.params = { type: 'docker', name: 'update' };
       req.body = [{ id: 'c1' }];
