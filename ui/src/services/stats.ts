@@ -1,4 +1,5 @@
 import { createManagedEventSource } from '@/stores/eventStream';
+import { readJsonResponse } from '../utils/api';
 
 export interface ContainerStatsSnapshot {
   containerId: string;
@@ -125,7 +126,7 @@ function parseHistory(rawHistory: unknown): ContainerStatsSnapshot[] {
 }
 
 async function parseJson(response: Response): Promise<unknown> {
-  return response.json();
+  return readJsonResponse(response);
 }
 
 export async function getContainerStats(containerId: string): Promise<ContainerStatsResponse> {
