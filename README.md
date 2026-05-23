@@ -145,8 +145,10 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 
 <hr>
 
+<h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
+
 <details>
-<summary><h2 align="center" id="recent-updates" style="display:inline-block">🆕 Recent Updates</h2></summary>
+<summary><strong>Latest release highlights</strong></summary>
 
 - **Unified update-completion toasts** — All terminal "Updated / Update failed / Rolled back" toasts now fire from a single global handler mounted at `App.vue`, with toast emission gated on the matching container-state SSE event so the toast appears the moment the row's "Updating" badge clears. Closes a long-standing intermittent-drop bug where `ContainerUpdateDialog`, `useContainerSsePatchPipeline`, and the dashboard each fired (or didn't) based on which view happened to be mounted. Includes a Last-Event-ID query-param fallback so missed terminal events get replayed from the server-side ring buffer on SSE reconnect. ([#289](https://github.com/CodesWhat/drydock/issues/289), [#290](https://github.com/CodesWhat/drydock/issues/290), [#291](https://github.com/CodesWhat/drydock/issues/291))
 - **17 UI locales** — v1.5.0 ships with 17 locales: English, Simplified Chinese, Traditional Chinese, Italian, Spanish, German, French, Brazilian Portuguese, Dutch, Polish, Turkish, Japanese, Korean, Russian, Vietnamese, Ukrainian, and Arabic. Simplified and Traditional Chinese were contributed by [TianMiao](https://github.com/TianMiao) ([PR #331](https://github.com/CodesWhat/drydock/discussions/331), [PR #344](https://github.com/CodesWhat/drydock/pull/344)); the remaining 14 non-English locales were added in subsequent RCs. Switch language in **Config > Appearance**. Crowdin sync is configured for ongoing translation contributions.
@@ -398,8 +400,10 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 
 <hr>
 
+<h2 align="center" id="roadmap">🗺️ Roadmap</h2>
+
 <details>
-<summary><h2 align="center" id="roadmap" style="display:inline-block">🗺️ Roadmap</h2></summary>
+<summary><strong>Version themes & highlights</strong></summary>
 
 High-level themes only — see [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 
