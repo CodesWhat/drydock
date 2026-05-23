@@ -112,6 +112,15 @@ class Command extends Trigger<CommandConfiguration> {
 
   /**
    * Run the command.
+   *
+   * Security note: the subprocess inherits the full drydock process environment
+   * via `...process.env`, including every `DD_*` variable (registry passwords,
+   * OIDC client secrets, agent tokens, etc.). This is intentional — user scripts
+   * need `PATH`, `HOME`, and other standard variables to function — but it means
+   * any command executed here can read all drydock credentials. Only point this
+   * trigger at trusted scripts. See docs/configuration/triggers/command for
+   * guidance. Filtering `process.env` to an allowlist is planned for v1.7.0.
+   *
    * @param {*} extraEnvVars
    */
   async runCommand(extraEnvVars: Record<string, unknown>) {
