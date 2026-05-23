@@ -12,6 +12,7 @@ import {
 import { authPaths } from './auth.js';
 import { componentReadPaths } from './component-read.js';
 import { containerPaths } from './containers.js';
+import { notificationOutboxPaths } from './notification-outbox.js';
 import { triggerPaths } from './triggers.js';
 
 type ErrorResponses = Record<number, ReturnType<typeof errorResponse>>;
@@ -490,6 +491,7 @@ export const openApiPaths = {
       },
     },
   },
+  ...notificationOutboxPaths,
   '/api/notifications/{id}': {
     patch: {
       tags: ['Notifications'],

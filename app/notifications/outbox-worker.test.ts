@@ -288,6 +288,53 @@ describe('OutboxWorker', () => {
     expect(mockMarkOutboxEntryDelivered).toHaveBeenCalledTimes(11);
   });
 
+  test('stop() prevents in-flight dispatch from marking entry delivered after stop', async () => {
+    let resolveDeliver!: () => void;
+    const inflightPromise = new Promise<void>((resolve) => {
+      resolveDeliver = resolve;
+    });
+    const deliver = vi.fn().mockReturnValueOnce(inflightPromise);
+
+    const entry = makeEntry({ id: 'late-entry' });
+    mockFindReadyForDelivery.mockReturnValue([entry]);
+
+    const w = new OutboxWorker({ deliver });
+    const drainPromise = w.drain();
+    await flushOutboxMicrotasks();
+
+    // Dispatch has started; now stop the worker before deliver resolves
+    w.stop();
+
+    // Deliver resolves after stop — should NOT call markOutboxEntryDelivered
+    resolveDeliver();
+    await drainPromise;
+
+    expect(mockMarkOutboxEntryDelivered).not.toHaveBeenCalled();
+  });
+
+  test('stop() prevents in-flight dispatch from marking entry attempted after stop', async () => {
+    let rejectDeliver!: (err: Error) => void;
+    const inflightPromise = new Promise<void>((_, reject) => {
+      rejectDeliver = reject;
+    });
+    const deliver = vi.fn().mockReturnValueOnce(inflightPromise);
+
+    const entry = makeEntry({ id: 'late-fail-entry' });
+    mockFindReadyForDelivery.mockReturnValue([entry]);
+
+    const w = new OutboxWorker({ deliver });
+    const drainPromise = w.drain();
+    await flushOutboxMicrotasks();
+
+    // Stop before the delivery rejection lands
+    w.stop();
+
+    rejectDeliver(new Error('network error'));
+    await drainPromise;
+
+    expect(mockMarkOutboxEntryAttempted).not.toHaveBeenCalled();
+  });
+
   test('stop() releases inflight ids so a restarted worker can retry a still-pending entry', async () => {
     let resolveDeliver!: () => void;
     const inflightPromise = new Promise<void>((resolve) => {
