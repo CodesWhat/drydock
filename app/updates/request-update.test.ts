@@ -336,6 +336,45 @@ describe('request-update', () => {
     });
   });
 
+  test('enqueueContainerUpdate uses provided operationId instead of generating a new one (#289)', async () => {
+    const trigger = { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) };
+    const accepted = await enqueueContainerUpdate(createContainer(), {
+      trigger,
+      operationId: 'controller-op-uuid',
+    });
+    expect(accepted.operationId).toBe('controller-op-uuid');
+    expect(mockInsertOperation).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'controller-op-uuid' }),
+      expect.any(Object),
+    );
+  });
+
+  test('enqueueContainerUpdates uses provided operationId for single-container batches (#289)', async () => {
+    const trigger = { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) };
+    const result = await enqueueContainerUpdates([createContainer({ id: 'c1', name: 'nginx' })], {
+      trigger,
+      operationId: 'controller-single-op',
+    });
+    expect(result.accepted).toHaveLength(1);
+    expect(result.accepted[0].operationId).toBe('controller-single-op');
+    expect(mockInsertOperation).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'controller-single-op' }),
+      expect.any(Object),
+    );
+  });
+
+  test('enqueueContainerUpdates ignores provided operationId for multi-container batches (#289)', async () => {
+    const trigger = { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) };
+    const result = await enqueueContainerUpdates(
+      [createContainer({ id: 'c1', name: 'nginx' }), createContainer({ id: 'c2', name: 'redis' })],
+      { trigger, operationId: 'should-not-be-used' },
+    );
+    expect(result.accepted).toHaveLength(2);
+    // Each container gets its own generated UUID — the provided operationId is ignored
+    expect(result.accepted[0].operationId).not.toBe('should-not-be-used');
+    expect(result.accepted[1].operationId).not.toBe('should-not-be-used');
+  });
+
   test('enqueueContainerUpdates rethrows unexpected trigger resolution failures', async () => {
     const evilTrigger = {
       get type() {

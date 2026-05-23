@@ -49,8 +49,28 @@ describe('AgentTrigger', () => {
       manager.getAgent.mockReturnValue(mockClient);
       const container = { id: 'c1' };
       const result = await trigger.trigger(container);
-      expect(mockClient.runRemoteTrigger).toHaveBeenCalledWith(container, 'docker', 'update');
+      expect(mockClient.runRemoteTrigger).toHaveBeenCalledWith(
+        container,
+        'docker',
+        'update',
+        undefined,
+      );
       expect(result).toBe('ok');
+    });
+
+    test('should forward runtimeContext to client.runRemoteTrigger', async () => {
+      trigger.agent = 'remote-agent';
+      const mockClient = { runRemoteTrigger: vi.fn().mockResolvedValue('ok') };
+      manager.getAgent.mockReturnValue(mockClient);
+      const container = { id: 'c1' };
+      const runtimeContext = { operationId: 'uuid-controller-1' };
+      await trigger.trigger(container, runtimeContext);
+      expect(mockClient.runRemoteTrigger).toHaveBeenCalledWith(
+        container,
+        'docker',
+        'update',
+        runtimeContext,
+      );
     });
   });
 
@@ -76,8 +96,28 @@ describe('AgentTrigger', () => {
       manager.getAgent.mockReturnValue(mockClient);
       const containers = [{ id: 'c1' }, { id: 'c2' }];
       const result = await trigger.triggerBatch(containers);
-      expect(mockClient.runRemoteTriggerBatch).toHaveBeenCalledWith(containers, 'docker', 'update');
+      expect(mockClient.runRemoteTriggerBatch).toHaveBeenCalledWith(
+        containers,
+        'docker',
+        'update',
+        undefined,
+      );
       expect(result).toBe('ok');
+    });
+
+    test('should forward runtimeContext to client.runRemoteTriggerBatch', async () => {
+      trigger.agent = 'remote-agent';
+      const mockClient = { runRemoteTriggerBatch: vi.fn().mockResolvedValue('ok') };
+      manager.getAgent.mockReturnValue(mockClient);
+      const containers = [{ id: 'c1' }, { id: 'c2' }];
+      const runtimeContext = { operationIds: { c1: 'uuid-1', c2: 'uuid-2' } };
+      await trigger.triggerBatch(containers, runtimeContext);
+      expect(mockClient.runRemoteTriggerBatch).toHaveBeenCalledWith(
+        containers,
+        'docker',
+        'update',
+        runtimeContext,
+      );
     });
   });
 

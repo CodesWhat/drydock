@@ -71,6 +71,7 @@ type PreparedContainerUpdateRequest = {
 interface EnqueueContainerUpdateOptions {
   trigger?: UpdateTriggerLike;
   triggerTypes?: UpdateTriggerType[];
+  operationId?: string;
 }
 
 export interface RequestContainerUpdateOptions extends EnqueueContainerUpdateOptions {}
@@ -235,8 +236,9 @@ function prepareContainerUpdateRequest(
 function createAcceptedContainerUpdateRequest(
   prepared: PreparedContainerUpdateRequest,
   batchMetadata?: UpdateQueueBatchMetadata,
+  providedOperationId?: string,
 ): AcceptedContainerUpdateRequest {
-  const operationId = crypto.randomUUID();
+  const operationId = providedOperationId ?? crypto.randomUUID();
 
   // Suppress the `queued` SSE when no global concurrency cap is configured:
   // every accepted update runs as soon as it is dispatched, so the UI would
@@ -285,7 +287,11 @@ export async function enqueueContainerUpdate(
   container: Container,
   options: EnqueueContainerUpdateOptions = {},
 ): Promise<AcceptedContainerUpdateRequest> {
-  return createAcceptedContainerUpdateRequest(prepareContainerUpdateRequest(container, options));
+  return createAcceptedContainerUpdateRequest(
+    prepareContainerUpdateRequest(container, options),
+    undefined,
+    options.operationId,
+  );
 }
 
 export async function enqueueContainerUpdates(
@@ -309,6 +315,10 @@ export async function enqueueContainerUpdates(
 
   const queueTotal = preparedAccepted.length;
   const batchId = queueTotal > 1 ? crypto.randomUUID() : undefined;
+  // Only honor the caller-supplied operationId for single-container batches.
+  // Multi-container batches generate one UUID per container to keep rows distinct.
+  const singleContainerOperationId =
+    queueTotal === 1 && options.operationId ? options.operationId : undefined;
   const accepted = preparedAccepted.map((prepared, index) =>
     createAcceptedContainerUpdateRequest(
       prepared,
@@ -319,6 +329,7 @@ export async function enqueueContainerUpdates(
             queueTotal,
           }
         : undefined,
+      singleContainerOperationId,
     ),
   );
 

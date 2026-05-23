@@ -1,6 +1,3 @@
-> [!IMPORTANT]
-> **Trivy Supply Chain Compromise (GHSA-69fq-xp46-6x23):** Drydock is **not affected**. We do not use the compromised GitHub Actions, the bundled Trivy binary is pinned to a safe version (v0.69.3), and all CI actions are SHA-pinned. No compromised code was ever pulled or shipped. [Full advisory &rarr;](https://getdrydock.com/security/trivy-supply-chain-march-2026)
-
 <div align="center">
 
 <picture>
@@ -148,7 +145,8 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 
 <hr>
 
-<h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
+<details>
+<summary><h2 align="center" id="recent-updates" style="display:inline-block">🆕 Recent Updates</h2></summary>
 
 - **Unified update-completion toasts** — All terminal "Updated / Update failed / Rolled back" toasts now fire from a single global handler mounted at `App.vue`, with toast emission gated on the matching container-state SSE event so the toast appears the moment the row's "Updating" badge clears. Closes a long-standing intermittent-drop bug where `ContainerUpdateDialog`, `useContainerSsePatchPipeline`, and the dashboard each fired (or didn't) based on which view happened to be mounted. Includes a Last-Event-ID query-param fallback so missed terminal events get replayed from the server-side ring buffer on SSE reconnect. ([#289](https://github.com/CodesWhat/drydock/issues/289), [#290](https://github.com/CodesWhat/drydock/issues/290), [#291](https://github.com/CodesWhat/drydock/issues/291))
 - **17 UI locales** — v1.5.0 ships with 17 locales: English, Simplified Chinese, Traditional Chinese, Italian, Spanish, German, French, Brazilian Portuguese, Dutch, Polish, Turkish, Japanese, Korean, Russian, Vietnamese, Ukrainian, and Arabic. Simplified and Traditional Chinese were contributed by [TianMiao](https://github.com/TianMiao) ([PR #331](https://github.com/CodesWhat/drydock/discussions/331), [PR #344](https://github.com/CodesWhat/drydock/pull/344)); the remaining 14 non-English locales were added in subsequent RCs. Switch language in **Config > Appearance**. Crowdin sync is configured for ongoing translation contributions.
@@ -177,6 +175,8 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 - **Combined batch+digest notifications** — `MODE=batch+digest` sends both immediate batch emails and scheduled digest summaries.
 - **Multi-host same-name container support** — Containers with identical names across different hosts no longer collide in the UI. Actions, logs, and detail panels route by container ID.
 - **Lazy OIDC discovery** — SSO provider startup failures no longer block the server. Discovery retries on first use.
+
+</details>
 
 <hr>
 
@@ -398,28 +398,29 @@ Drop-in replacement — swap the image, restart, done. All `WUD_*` env vars and 
 
 <hr>
 
-<h2 align="center" id="roadmap">🗺️ Roadmap</h2>
+<details>
+<summary><h2 align="center" id="roadmap" style="display:inline-block">🗺️ Roadmap</h2></summary>
+
+High-level themes only — see [CHANGELOG.md](CHANGELOG.md) for per-release detail.
 
 | Version | Theme | Highlights |
 | --- | --- | --- |
-| **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Bouncer, SBOM, 7 new registries, 4 new triggers, rollback fixes, GHCR auth, self-hosted TLS, re2js regex engine, compose trigger fixes, DB persistence on shutdown |
-| **v1.4.0** ✅ | UI Modernization & Hardening | Tailwind CSS 4 + custom component library, 6 themes, 7 icon libraries, font size preference, Cmd/K command palette, OpenAPI 3.1.0 endpoint, standardized API responses with pagination, compose-native YAML-preserving updates, rename-first rollback with health gates, self-update controller with SSE ack, fail-closed auth enforcement, OIDC redirect URL validation, tag-family semver, notification rules, container grouping by stack, audit history view, dual-slot security scanning, scheduled scans, WUD migration CLI, bundled offline icons, dashboard drag-reorder, gzip compression, API error sanitization, agent log validation, TLS path redaction, audit store indexing with 30-day retention, type-safe store modules, durable batch scans, recent-status API, advisory-only security scanning, compose trigger hardening (auto-detection, validation, reconciliation, digest pinning, batch mode, multi-file awareness), reactive server feature flags, identity-aware rate limiting, API hardening |
-| **v1.4.1** ✅ | Patch & Polish | Headless mode (API-only), maturity-based update policy (NEW/MATURE badges), `?groupByStack=true` URL param, agent handshake + SSE fix (#141), mangled hash detection + anonymous fallback + login error surfacing (#147), CSRF behind reverse proxies (#146), compose trigger affinity across remapped roots, CSP inline style elimination, connection-lost animation, LokiJS metadata stripping, timing side-channel fix, image hardening |
-| **v1.4.2** ✅ | Bug Fixes | Watcher container count fix (#155), container recreate alias filtering (#156), stale store data fix (#157), CI versioned-only images (#154), maturity badge sizing, dependency upgrades |
-| **v1.4.3** ✅ | DNS & Security | Configurable DNS result ordering for Alpine EAI_AGAIN fix (#161), Docker socket security guide, zizmor blocking in CI, scoped GitHub environments |
-| **v1.4.4** ✅ | UI Polish & Hardening | Alias dedup hardening with 30s transient window (#156), dashboard host-status for remote watchers (#155), tooltip viewport fix (#165), click-to-copy version tags (#164), Simple Icons dark mode inversion, theme switcher fix, search button polish, URL rebrand to getdrydock.com |
-| **v1.5.0** | Observability & User-Requested Features | Real-time WebSocket log viewer with ANSI colors + JSON syntax highlighting, dashboard customization (grid layout, drag, resize, widget visibility), container resource monitoring (CPU/memory stats + dashboard widget), diagnostic debug dump, registry webhook receiver, trigger env var aliases (`DD_ACTION_*`/`DD_NOTIFICATION_*`), digest notification mode, **security scan digest (#300) with bulk scan-all endpoint and per-cycle event contract**, design system components (WCAG touch targets, shared primitives), floating tag detection + auto digest watching, bearer token auth for `/metrics`, Podman API version negotiation, toast notifications for all container actions, UI standardization (margins, text sizes, deprecation banners), **shared DataTable sizing with sticky actions, keyboard/touch resize, autosize, persisted per-view widths, and responsive Containers column hiding**, source project shortcut link on containers (#295), next-check countdown + absolute tooltip on Watchers (#288), actionable deprecation banners with inline migration paths (#214), **update eligibility blockers surfaced per-container row**, SSE Last-Event-ID replay + resync, inline security-page update action (#299), expand/collapse all stacks toggle (#311), `GET /update-operations/:id` polling endpoint |
-| **v1.6.0** | Scanner Decoupling, Notifications & Release Intel | Backend-based scanner execution (docker/remote), Grype provider, scanner asset lifecycle, **scanner long-scan UX (heartbeat log every 30s during in-flight scans, default Trivy timeout 120s → 600s, "Scanning…" pill on container rows while gate is in flight)**, **registry 429 retry with `Retry-After` + exponential backoff ([#343](https://github.com/CodesWhat/drydock/issues/343))**, custom zero-dependency dashboard grid (replaces grid-layout-plus, #281), table-only workflow polish on top of the shared DataTable foundation (slide-in side panel, stable row/detail behavior, virtualization follow-up); notification templates, release notes in notifications, notification preferences UI, cross-device preference sync, software version column, bidirectional MQTT for HA, **declarative update policy (env + label + UI) with override tracking**, **UI table-only simplification (drop card + accordion view modes; standardize on table + slide-in side panel)**, **Update Status Panel slide-in redesign + Update mode global setting (notify/manual/auto)** ([#325](https://github.com/CodesWhat/drydock/discussions/325)), **store size investigation — SBOM off-heap storage + bounded audit dedup (dd.json bloat fix; root cause: inline SBOM documents on every container row × 2 formats × current+update images)** ([#321](https://github.com/CodesWhat/drydock/discussions/321)), **dry-run UX surfacing (WARN-level log + UI pill + audit action)** ([#321](https://github.com/CodesWhat/drydock/discussions/321)), **Preview Update typed error codes + deep-link guidance** ([#321](https://github.com/CodesWhat/drydock/discussions/321)), remove all deprecated compatibility aliases (see [DEPRECATIONS.md](DEPRECATIONS.md)), **compose-file matching robustness — match containers deployed alongside another stack manager (e.g. Portainer) on a normalized compose path instead of skipping on a mount-path mismatch ([#365](https://github.com/CodesWhat/drydock/issues/365))** |
-| **v1.7.0** | Smart Updates & UX | Dependency-aware ordering, clickable port links, image prune, static image monitoring, image maturity indicator, keyboard shortcuts, container uptime display, PWA support, debounced container discovery |
-| **v1.8.0** | Fleet Management & Live Config | YAML config, live UI config panels, volume browser, parallel updates, SQLite store migration + ID-based container identity, Crowdin integration (i18n framework shipped in v1.5; 17 locales bundled as of v1.5.0-rc.20) |
-| **v2.0.0** | Platform Expansion | Docker Swarm, Kubernetes watchers and triggers, basic GitOps |
-| **v2.1.0** | Advanced Deployment Patterns | Health check gates, canary deployments, durable self-update controller |
-| **v2.2.0** | Container Operations | Web terminal, file browser, image building, basic Podman support |
-| **v2.3.0** | Automation & Developer Experience | API keys, passkey auth, TOTP 2FA, TypeScript actions, CLI |
-| **v2.4.0** | Data Safety & Templates | Scheduled backups (S3, SFTP), compose templates, secret management |
-| **v3.0.0** | Advanced Platform | Network topology, GPU monitoring, full i18n translations + RTL |
-| **v3.1.0** | Enterprise Access & Compliance | RBAC, LDAP/AD, environment-scoped permissions, audit logging, Wolfi hardened image |
-| **v3.2.0** | Drydock Socket Proxy | Built-in companion proxy container (allowlist-filtered Docker API), rootless Docker & remote TLS security docs |
+| **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Bouncer, SBOM, 7 new registries, 4 new triggers, re2js regex engine |
+| **v1.4.x** ✅ | UI Modernization & Hardening | Tailwind 4 + custom components, 6 themes, Cmd/K palette, OpenAPI 3.1, compose-native YAML updates, dual-slot scanning, OIDC hardening |
+| **v1.5.0** | Observability & i18n | WebSocket log viewer, dashboard customization, resource monitoring, registry webhook receiver, security scan digest, 17 locales, SSE Last-Event-ID replay |
+| **v1.6.0** | Scanner Decoupling & Release Intel | Backend-based scanner + Grype, notification templates, declarative update policy, table-only UI, SBOM off-heap storage |
+| **v1.7.0** | Smart Updates & UX | Dependency-aware ordering, image prune, static image monitoring, keyboard shortcuts, PWA |
+| **v1.8.0** | Fleet Management & Live Config | YAML config, live UI config, volume browser, parallel updates, SQLite store migration |
+| **v2.0.0** | Platform Expansion | Docker Swarm, Kubernetes watchers/triggers, basic GitOps |
+| **v2.1.0** | Advanced Deployment | Health gates, canary, durable self-update |
+| **v2.2.0** | Container Operations | Web terminal, file browser, image building, Podman |
+| **v2.3.0** | Automation & DevX | API keys, passkey, TOTP, TypeScript actions, CLI |
+| **v2.4.0** | Data Safety & Templates | Scheduled backups, compose templates, secret management |
+| **v3.0.0** | Advanced Platform | Network topology, GPU monitoring, RTL i18n |
+| **v3.1.0** | Enterprise Access | RBAC, LDAP/AD, env-scoped permissions, Wolfi hardened image |
+| **v3.2.0** | Drydock Socket Proxy | Built-in allowlist-filtered companion proxy |
+
+</details>
 
 <hr>
 

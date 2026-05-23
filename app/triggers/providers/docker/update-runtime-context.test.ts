@@ -64,4 +64,46 @@ describe('update-runtime-context', () => {
 
     expect(getRequestedOperationId({ id: 'container-a' }, cyclic)).toBeUndefined();
   });
+
+  test('reads operationIds from a Map without falling through Object.prototype (#289)', () => {
+    expect(
+      getRequestedOperationId(
+        { id: 'container-a' },
+        {
+          operationIds: new Map<string, string>([
+            ['container-a', '  mapped-op  '],
+            ['container-b', 'other-op'],
+          ]),
+        },
+      ),
+    ).toBe('mapped-op');
+
+    expect(
+      getRequestedOperationId({ id: 'missing' }, { operationIds: new Map([['container-a', 'x']]) }),
+    ).toBeUndefined();
+  });
+
+  test('ignores operationIds that are truthy but neither a Map nor an object (#289)', () => {
+    expect(
+      getRequestedOperationId(
+        { id: 'container-a' },
+        // String is truthy but not Map nor object — exercises the inner-ternary
+        // false branch added alongside Map support.
+        { operationIds: 'not-a-map' as unknown as Map<string, unknown> },
+      ),
+    ).toBeUndefined();
+  });
+
+  test('Record-shaped operationIds lookup does not traverse the prototype chain (#289)', () => {
+    // Build a record whose prototype chain carries a "polluted" data property
+    // — a real prototype-pollution scenario.  The consumer must return
+    // undefined for keys that resolve only via the prototype chain (the
+    // Object.hasOwn guard), and continue to return values for own keys.
+    const prototypeWithPollution: Record<string, string> = { polluted: 'evil-via-proto' };
+    const poisoned = Object.create(prototypeWithPollution) as Record<string, string>;
+    poisoned.legit = 'legit-op';
+
+    expect(getRequestedOperationId({ id: 'polluted' }, { operationIds: poisoned })).toBeUndefined();
+    expect(getRequestedOperationId({ id: 'legit' }, { operationIds: poisoned })).toBe('legit-op');
+  });
 });

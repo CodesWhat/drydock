@@ -68,13 +68,29 @@ export async function runTriggerBatch(req: Request, res: Response) {
   }
 
   try {
+    // Extract per-container operationIds injected by the controller (fixes #289),
+    // then strip them (and the agent field) from the container objects before
+    // forwarding so local triggers see a clean Container.  Use a Map so that
+    // container.id values from the request body cannot reach Object.prototype
+    // — CodeQL js/remote-property-injection.
+    const operationIds = new Map<string, string>();
     const sanitizedContainers = containers.map((container) => {
       if (container.agent) {
         delete container.agent;
       }
+      if (
+        typeof container.id === 'string' &&
+        container.id.length > 0 &&
+        typeof container.operationId === 'string' &&
+        container.operationId.length > 0
+      ) {
+        operationIds.set(container.id, container.operationId);
+        delete container.operationId;
+      }
       return container;
     });
-    await trigger.triggerBatch(sanitizedContainers);
+    const runtimeContext = operationIds.size > 0 ? { operationIds } : undefined;
+    await trigger.triggerBatch(sanitizedContainers, runtimeContext);
     res.status(200).json({});
   } catch (e: unknown) {
     const errorMessage = getErrorMessage(e);
