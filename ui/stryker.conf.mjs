@@ -6,9 +6,14 @@ const config = {
   // argument must stay a string literal. Stryker instrumentation rewrites that
   // literal into a mutant switch, which breaks Vite's glob parser and fails
   // every test that imports the i18n bootstrap. Exclude it from mutation.
+  // src/icons.ts and src/i18n/locales.ts are pure-data files (icon lookup
+  // table and locale strings) whose string-literal mutants cause transitive
+  // jsdom hangs in Vue tests and provide no logic-quality signal.
   mutate: [
     'src/**/*.ts',
     '!src/boot/i18n.ts',
+    '!src/icons.ts',
+    '!src/i18n/locales.ts',
     '!src/**/*.typecheck.ts',
     '!src/**/*.d.ts',
     '!dist/**',
