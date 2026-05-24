@@ -149,7 +149,7 @@ async function runTrigger({
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(container),
   });
-  const json = await readJsonResponse(response);
+  const json = await readJsonResponse<{ error?: string } & Record<string, unknown>>(response);
   if (response.status !== 200) {
     throw new Error(json.error ? json.error : 'Unknown error');
   }
