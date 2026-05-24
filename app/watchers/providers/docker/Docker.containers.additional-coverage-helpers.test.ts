@@ -672,6 +672,7 @@ describe('Docker Watcher', () => {
       hStoreContainer.getContainers.mockImplementation((query?: { watcher?: string }) =>
         query?.watcher ? [] : [],
       );
+      hStoreContainer.getContainersRaw.mockReturnValue([]);
       hRegistry.getState.mockReturnValue({ watcher: {} } as any);
 
       await docker.getContainers();
@@ -712,44 +713,46 @@ describe('Docker Watcher', () => {
         '',
       );
       mockDockerApi.listContainers.mockResolvedValue([]);
+      const sameSourceFixtures = [
+        {
+          id: 'same-source',
+          watcher: 'docker-same-source',
+          agent: '',
+          name: 'service',
+        },
+        {
+          id: 'empty-watcher',
+          watcher: '',
+          agent: '',
+          name: 'service',
+        },
+        {
+          id: 'whitespace-watcher',
+          watcher: '   ',
+          agent: '',
+          name: 'service',
+        },
+        {
+          id: 'non-docker-watcher',
+          watcher: 'docker-queue',
+          agent: '',
+          name: 'service',
+        },
+        {
+          id: 'different-agent',
+          watcher: 'docker-same-source',
+          agent: 'remote-agent',
+          name: 'service',
+        },
+      ];
       hStoreContainer.getContainers.mockImplementation((query?: { watcher?: string }) => {
         if (query?.watcher) {
           return [];
         }
 
-        return [
-          {
-            id: 'same-source',
-            watcher: 'docker-same-source',
-            agent: '',
-            name: 'service',
-          },
-          {
-            id: 'empty-watcher',
-            watcher: '',
-            agent: '',
-            name: 'service',
-          },
-          {
-            id: 'whitespace-watcher',
-            watcher: '   ',
-            agent: '',
-            name: 'service',
-          },
-          {
-            id: 'non-docker-watcher',
-            watcher: 'docker-queue',
-            agent: '',
-            name: 'service',
-          },
-          {
-            id: 'different-agent',
-            watcher: 'docker-same-source',
-            agent: 'remote-agent',
-            name: 'service',
-          },
-        ] as any;
+        return sameSourceFixtures as any;
       });
+      hStoreContainer.getContainersRaw.mockReturnValue(sameSourceFixtures as any);
       hRegistry.getState.mockReturnValue({
         watcher: {
           'docker.docker-same-source': {
