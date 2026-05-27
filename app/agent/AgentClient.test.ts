@@ -875,6 +875,96 @@ describe('AgentClient', () => {
       expect(newIdReads).toBeLessThanOrEqual(80);
       expect(storeIdReads).toBeLessThanOrEqual(80);
     });
+
+    test('should NOT prune controller-side containers when handshake returns 0 (cold-start race #386)', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({ ...c, updateAvailable: false }));
+      storeContainer.getContainers.mockReturnValue([
+        { id: 'stale-1', name: 'web' },
+        { id: 'stale-2', name: 'db' },
+      ]);
+
+      await client.handshake();
+
+      // Last-known state must be preserved. The first watcher snapshot is
+      // the unambiguous signal for an empty agent (issue #386).
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+    });
+
+    test('should warn when handshake returns 0 after a prior successful connect (cold-start race #386)', async () => {
+      // First handshake — non-empty so we hit the prune branch and set
+      // hasConnectedOnce.
+      axios.get
+        .mockResolvedValueOnce({
+          data: [{ id: 'c1', name: 'web', watcher: 'local' }],
+        })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({
+        ...c,
+        updateAvailable: false,
+      }));
+      storeContainer.getContainers.mockReturnValue([]);
+      await client.handshake();
+
+      client.scheduleReconnect(1_000);
+      clearTimeout((client as any).reconnectTimer);
+      (client as any).reconnectTimer = null;
+
+      // Second handshake returns zero — should warn and skip prune.
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+      storeContainer.getContainers.mockReturnValue([{ id: 'c1', name: 'web' }]);
+
+      await client.handshake();
+
+      expect(client.log.warn).toHaveBeenCalledWith(
+        'Handshake returned 0 containers; preserving last-known state until the first watch cycle completes',
+      );
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+    });
+
+    test('should still prune normally when handshake returns at least one container', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [{ id: 'kept', name: 'kept' }] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({ ...c, updateAvailable: false }));
+      storeContainer.getContainers.mockReturnValue([
+        { id: 'kept', name: 'kept' },
+        { id: 'gone', name: 'gone' },
+      ]);
+
+      await client.handshake();
+
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('gone');
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('kept');
+    });
+
+    test('first-ever zero handshake should not warn (no last-known state yet)', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+
+      storeContainer.getContainers.mockReturnValue([]);
+      await client.handshake();
+
+      expect(client.log.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('preserving last-known state'),
+      );
+    });
   });
 
   describe('scheduleReconnect', () => {
