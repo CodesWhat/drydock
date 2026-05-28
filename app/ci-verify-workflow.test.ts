@@ -24,12 +24,33 @@ interface WorkflowDefinition {
   jobs?: Record<string, WorkflowJob>;
 }
 
+interface LefthookCommand {
+  priority?: number;
+  run?: string;
+}
+
+interface LefthookDefinition {
+  'pre-push'?: {
+    commands?: Record<string, LefthookCommand>;
+  };
+}
+
 const workflowPath = fileURLToPath(new URL('../.github/workflows/ci-verify.yml', import.meta.url));
+const lefthookPath = fileURLToPath(new URL('../lefthook.yml', import.meta.url));
 const processorPath = fileURLToPath(new URL('../test/load-test.processor.cjs', import.meta.url));
 const emojiPrefix = /^\p{Extended_Pictographic}/u;
 
 function loadWorkflow(): WorkflowDefinition {
   return yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;
+}
+
+function loadLefthook(): LefthookDefinition {
+  return yaml.parse(readFileSync(lefthookPath, 'utf8')) as LefthookDefinition;
+}
+
+function getTestJobStep(name: string): WorkflowJobStep | undefined {
+  const workflow = loadWorkflow();
+  return workflow.jobs?.test?.steps?.find((step) => step.name === name);
 }
 
 function getLoadTestStep(name: string): WorkflowJobStep | undefined {
@@ -48,6 +69,16 @@ test('ci-verify job names are emoji-prefixed for GitHub checks readability', () 
     .filter(({ name }) => !emojiPrefix.test(name));
 
   expect(jobsWithoutEmoji).toStrictEqual([]);
+});
+
+test('script node tests are wired into local and CI gates', () => {
+  expect(getTestJobStep('Run scripts tests')).toMatchObject({
+    run: 'node --test scripts/*.test.mjs',
+  });
+
+  expect(loadLefthook()['pre-push']?.commands?.['scripts-test']).toMatchObject({
+    run: 'node --test scripts/*.test.mjs',
+  });
 });
 
 test('load-test workflow wires advisory behavior and stress coverage', () => {
