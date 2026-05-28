@@ -35,8 +35,7 @@ jobs:
       contents: write      # git push tag, gh release create
       packages: write      # ghcr push
       id-token: write      # cosign keyless signing
-      attestations: write  # attest-build-provenance
-      artifact-metadata: write  # GitHub-native OCI attestation storage records
+      attestations: write  # attest-build-provenance + OCI attestation storage
       actions: read        # wait-for-successful-branch-ci queries workflow runs
 
     steps:
