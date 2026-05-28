@@ -14,6 +14,7 @@ DD_LOAD_TEST_RANDOM_PORT_MIN="${DD_LOAD_TEST_RANDOM_PORT_MIN:-20000}"
 DD_LOAD_TEST_RANDOM_PORT_MAX="${DD_LOAD_TEST_RANDOM_PORT_MAX:-60999}"
 ARTILLERY_VERSION="${ARTILLERY_VERSION:-2.0.30}"
 DD_LOAD_TEST_BUILD_CACHE="${DD_LOAD_TEST_BUILD_CACHE:-none}"
+DD_LOAD_TEST_BUILD_CACHE_SCOPE="${DD_LOAD_TEST_BUILD_CACHE_SCOPE:-drydock}"
 DD_LOAD_TEST_ARTIFACT_DIR="${DD_LOAD_TEST_ARTIFACT_DIR:-}"
 ARTILLERY_OUTPUT_FILE="${ARTILLERY_OUTPUT_FILE:-}"
 
@@ -106,13 +107,13 @@ echo "Using load test target: ${DD_LOAD_TEST_TARGET}"
 
 echo "Building drydock test image..."
 if [ "${DD_LOAD_TEST_BUILD_CACHE}" = "gha" ]; then
-	echo "Using buildx with GHA cache..."
+	echo "Using buildx with GHA cache scope: ${DD_LOAD_TEST_BUILD_CACHE_SCOPE}"
 	docker buildx build \
 		--load \
 		-t drydock:ci \
 		--build-arg DD_VERSION=ci \
-		--cache-from type=gha \
-		--cache-to type=gha,mode=max \
+		--cache-from "type=gha,scope=${DD_LOAD_TEST_BUILD_CACHE_SCOPE}" \
+		--cache-to "type=gha,mode=max,scope=${DD_LOAD_TEST_BUILD_CACHE_SCOPE},ignore-error=true" \
 		.
 else
 	docker build -t drydock:ci --build-arg DD_VERSION=ci .

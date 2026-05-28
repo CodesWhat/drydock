@@ -191,42 +191,6 @@ jobs:
 
           echo "Validated CHANGELOG entry for ${RELEASE_TAG}."
 
-      - name: Compute image tags
-        id: image_tags
-        env:
-          VERSION: ${{ steps.next.outputs.next_version }}
-          IS_PRERELEASE: ${{ steps.tag.outputs.is_prerelease }}
-          GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
-        run: |
-          set -euo pipefail
-
-          registries=("ghcr.io/${GHCR_REPO}" "docker.io/codeswhat/drydock" "quay.io/codeswhat/drydock")
-          suffixes=("${VERSION}")
-
-          if [ "${IS_PRERELEASE}" = "false" ]; then
-            major="${VERSION%%.*}"
-            rest="${VERSION#*.}"
-            minor="${rest%%.*}"
-            suffixes+=("${major}.${minor}" "${major}" "latest")
-          fi
-
-          tags=""
-          for registry in "${registries[@]}"; do
-            for suffix in "${suffixes[@]}"; do
-              if [ -z "${tags}" ]; then
-                tags="${registry}:${suffix}"
-              else
-                tags="${tags}"$'\n'"${registry}:${suffix}"
-              fi
-            done
-          done
-
-          {
-            echo "tags<<EOF"
-            echo "${tags}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
       - name: Set up QEMU
         uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3  # v4.1.0
 
@@ -298,17 +262,21 @@ jobs:
             done
           fi
 
-      - name: Docker metadata labels
+      - name: Docker metadata
         id: meta
         uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9  # v6.1.0
         with:
-          images: ghcr.io/${{ steps.target.outputs.repo_lower }}
-          # The tags input is required. We pass the full tag list to
-          # build-push-action via steps.image_tags; this single raw tag
-          # exists only to drive the OCI label values
-          # (org.opencontainers.image.version, .revision, etc.) correctly.
+          images: |
+            ghcr.io/${{ steps.target.outputs.repo_lower }}
+            docker.io/codeswhat/drydock
+            quay.io/codeswhat/drydock
+          flavor: |
+            latest=false
           tags: |
-            type=raw,value=${{ steps.next.outputs.next_version }}
+            type=semver,pattern={{version}},value=${{ steps.next.outputs.release_tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.next.outputs.release_tag }},enable=${{ steps.tag.outputs.is_prerelease == 'false' }}
+            type=semver,pattern={{major}},value=${{ steps.next.outputs.release_tag }},enable=${{ steps.tag.outputs.is_prerelease == 'false' }}
+            type=raw,value=latest,enable=${{ steps.tag.outputs.is_prerelease == 'false' }}
 
       - name: Build and push
         id: build
@@ -318,10 +286,11 @@ jobs:
           context: .
           push: true
           platforms: ${{ env.DOCKER_PLATFORMS }}
-          tags: ${{ steps.image_tags.outputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: DD_VERSION=${{ steps.next.outputs.next_version }}
           sbom: true
+          provenance: mode=min
           cache-from: type=gha,scope=drydock
           cache-to: type=gha,mode=max,scope=drydock,ignore-error=true
 
@@ -330,7 +299,7 @@ jobs:
         if: steps.build.outcome == 'failure'
         env:
           BUILD_DIGEST: ${{ steps.build.outputs.digest }}
-          TAGS: ${{ steps.image_tags.outputs.tags }}
+          TAGS: ${{ steps.meta.outputs.tags }}
           GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
         run: |
           set -euo pipefail
@@ -394,7 +363,7 @@ jobs:
         if: steps.digest.outputs.value
         env:
           DIGEST: ${{ steps.digest.outputs.value }}
-          TAGS: ${{ steps.image_tags.outputs.tags }}
+          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           set -euo pipefail
           images=()
@@ -407,7 +376,7 @@ jobs:
         if: steps.digest.outputs.value
         env:
           DIGEST: ${{ steps.digest.outputs.value }}
-          TAGS: ${{ steps.image_tags.outputs.tags }}
+          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           set -euo pipefail
           # OIDC identity pinned to release-cut.yml@refs/heads/main; the

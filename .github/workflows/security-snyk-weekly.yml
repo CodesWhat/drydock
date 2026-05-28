@@ -272,6 +272,7 @@ jobs:
           load: true
           tags: ${{ env.SNYK_CONTAINER_IMAGE }}
           build-args: DD_VERSION=snyk
+          provenance: mode=min
           cache-from: type=gha,scope=drydock
           cache-to: type=gha,mode=max,scope=drydock,ignore-error=true
 
