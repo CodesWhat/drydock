@@ -101,23 +101,10 @@ jobs:
           # the PR target diff (the correct behavior there).
           base: ${{ github.event_name == 'push' && github.event.before || '' }}
           # runtime=true when the changeset touches anything that can affect
-          # runtime behavior (backend, UI, e2e, test harness, Docker image,
-          # lockfiles, CI workflow, or scripts). Pure docs / changelog /
-          # policy-file changes leave runtime=false so the heavy e2e jobs
-          # (Cucumber + Playwright) short-circuit.
-          filters: |
-            runtime:
-              - 'app/**'
-              - 'ui/**'
-              - 'e2e/**'
-              - 'test/**'
-              - 'scripts/**'
-              - 'Dockerfile'
-              - 'Docker.entrypoint.sh'
-              - 'healthcheck.c'
-              - 'package.json'
-              - 'package-lock.json'
-              - '.github/workflows/ci-verify.yml'
+          # runtime behavior. Keep this shared with e2e-playwright.yml so both
+          # heavy E2E gates short-circuit symmetrically on pure docs/changelog
+          # edits.
+          filters: .github/filters/runtime.yml
 
   codeql:
     name: "🛡️ SAST: CodeQL"
