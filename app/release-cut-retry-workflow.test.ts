@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
 
 interface WorkflowStep {
+  env?: Record<string, string>;
   name?: string;
   uses?: string;
   run?: string;
@@ -48,4 +49,16 @@ test('release-cut has no hand-rolled fixed retry loops', () => {
     .map((step) => step.name);
 
   expect(handRolledRetrySteps).toStrictEqual([]);
+});
+
+test('release-cut generates the container SBOM with a pinned Trivy image', () => {
+  const sbomStep = getStep('Generate container SBOM');
+
+  expect(sbomStep?.env).toMatchObject({
+    TRIVY_IMAGE:
+      'aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c',
+  });
+  expect(sbomStep?.run).toContain('"${TRIVY_IMAGE}"');
+  expect(sbomStep?.run).not.toContain('--entrypoint trivy');
+  expect(sbomStep?.run).not.toContain('"${image_ref}" \\\n            image');
 });

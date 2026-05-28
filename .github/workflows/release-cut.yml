@@ -438,6 +438,7 @@ jobs:
           DIGEST: ${{ steps.digest.outputs.value }}
           GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+          TRIVY_IMAGE: aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c  # 0.69.3
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -445,10 +446,9 @@ jobs:
           sbom_path="dist/drydock-${RELEASE_TAG}.image.spdx.json"
 
           docker run --rm \
-            --entrypoint trivy \
             --volume "${PWD}/dist:/out" \
             --volume "${HOME}/.docker:/root/.docker:ro" \
-            "${image_ref}" \
+            "${TRIVY_IMAGE}" \
             image \
             --format spdx-json \
             --output "/out/$(basename "${sbom_path}")" \
