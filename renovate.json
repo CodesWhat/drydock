@@ -27,6 +27,7 @@
     },
     {
       "description": "Auto-merge patch updates",
+      "matchManagers": ["github-actions"],
       "matchUpdateTypes": ["patch"],
       "automerge": true,
       "automergeType": "pr",
