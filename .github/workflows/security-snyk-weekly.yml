@@ -85,6 +85,10 @@ jobs:
     name: "📦 Security: Snyk Open Source"
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
     environment: ci-security
     needs: [prepare, quota-plan]
     if: ${{ needs.quota-plan.result == 'success' && needs.prepare.outputs.has_token == 'true' && needs.prepare.outputs.is_default_branch == 'true' }}
@@ -113,10 +117,51 @@ jobs:
         continue-on-error: true
         run: |
           set -euo pipefail
-          ./scripts/snyk-deps-gate.sh --file=package-lock.json --package-manager=npm
-          ./scripts/snyk-deps-gate.sh --file=app/package-lock.json --package-manager=npm
-          ./scripts/snyk-deps-gate.sh --file=ui/package-lock.json --package-manager=npm
-          ./scripts/snyk-deps-gate.sh --file=e2e/package-lock.json --package-manager=npm
+          mkdir -p artifacts/snyk/open-source
+          ./scripts/snyk-deps-gate.sh \
+            --file=package-lock.json \
+            --package-manager=npm \
+            --sarif-file-output=artifacts/snyk/open-source/root.sarif
+          ./scripts/snyk-deps-gate.sh \
+            --file=app/package-lock.json \
+            --package-manager=npm \
+            --sarif-file-output=artifacts/snyk/open-source/app.sarif
+          ./scripts/snyk-deps-gate.sh \
+            --file=ui/package-lock.json \
+            --package-manager=npm \
+            --sarif-file-output=artifacts/snyk/open-source/ui.sarif
+          ./scripts/snyk-deps-gate.sh \
+            --file=e2e/package-lock.json \
+            --package-manager=npm \
+            --sarif-file-output=artifacts/snyk/open-source/e2e.sarif
+
+      - name: Upload root Open Source SARIF
+        if: ${{ always() && hashFiles('artifacts/snyk/open-source/root.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa  # v4.36.0
+        with:
+          sarif_file: artifacts/snyk/open-source/root.sarif
+          category: snyk-open-source-root
+
+      - name: Upload app Open Source SARIF
+        if: ${{ always() && hashFiles('artifacts/snyk/open-source/app.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa  # v4.36.0
+        with:
+          sarif_file: artifacts/snyk/open-source/app.sarif
+          category: snyk-open-source-app
+
+      - name: Upload UI Open Source SARIF
+        if: ${{ always() && hashFiles('artifacts/snyk/open-source/ui.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa  # v4.36.0
+        with:
+          sarif_file: artifacts/snyk/open-source/ui.sarif
+          category: snyk-open-source-ui
+
+      - name: Upload e2e Open Source SARIF
+        if: ${{ always() && hashFiles('artifacts/snyk/open-source/e2e.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa  # v4.36.0
+        with:
+          sarif_file: artifacts/snyk/open-source/e2e.sarif
+          category: snyk-open-source-e2e
 
       - name: Fail if any Snyk scan errored
         if: always()
@@ -132,6 +177,10 @@ jobs:
     name: "🧠 Security: Snyk Code"
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
     environment: ci-security
     needs: [prepare, quota-plan]
     if: ${{ needs.quota-plan.result == 'success' && needs.prepare.outputs.has_token == 'true' && needs.prepare.outputs.is_default_branch == 'true' }}
@@ -159,7 +208,17 @@ jobs:
       - name: Run Snyk Code scan
         id: snyk_code
         continue-on-error: true
-        run: ./scripts/snyk-code-gate.sh
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/snyk
+          ./scripts/snyk-code-gate.sh --sarif-file-output=artifacts/snyk/code.sarif
+
+      - name: Upload Code SARIF
+        if: ${{ always() && hashFiles('artifacts/snyk/code.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa  # v4.36.0
+        with:
+          sarif_file: artifacts/snyk/code.sarif
+          category: snyk-code
 
       - name: Fail if any Snyk scan errored
         if: always()
@@ -175,6 +234,10 @@ jobs:
     name: "🐳 Security: Snyk Container"
     runs-on: ubuntu-latest
     timeout-minutes: 30  # Includes Docker image build before scan
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
     environment: ci-security
     needs: [prepare, quota-plan]
     if: ${{ needs.quota-plan.result == 'success' && needs.prepare.outputs.has_token == 'true' && needs.prepare.outputs.is_default_branch == 'true' }}
@@ -215,7 +278,19 @@ jobs:
       - name: Run Snyk Container scan
         id: snyk_container
         continue-on-error: true
-        run: ./scripts/snyk-container-gate.sh "${SNYK_CONTAINER_IMAGE}" --file=Dockerfile
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/snyk
+          ./scripts/snyk-container-gate.sh "${SNYK_CONTAINER_IMAGE}" \
+            --file=Dockerfile \
+            --sarif-file-output=artifacts/snyk/container.sarif
+
+      - name: Upload Container SARIF
+        if: ${{ always() && hashFiles('artifacts/snyk/container.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa  # v4.36.0
+        with:
+          sarif_file: artifacts/snyk/container.sarif
+          category: snyk-container
 
       - name: Fail if any Snyk scan errored
         if: always()
@@ -231,6 +306,10 @@ jobs:
     name: "🏗️ Security: Snyk IaC"
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
     environment: ci-security
     needs: [prepare, quota-plan]
     if: ${{ needs.quota-plan.result == 'success' && needs.prepare.outputs.has_token == 'true' && needs.prepare.outputs.is_default_branch == 'true' }}
@@ -257,7 +336,17 @@ jobs:
       - name: Run Snyk IaC scan
         id: snyk_iac
         continue-on-error: true
-        run: ./scripts/snyk-iac-gate.sh .
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/snyk
+          ./scripts/snyk-iac-gate.sh . --sarif-file-output=artifacts/snyk/iac.sarif
+
+      - name: Upload IaC SARIF
+        if: ${{ always() && hashFiles('artifacts/snyk/iac.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa  # v4.36.0
+        with:
+          sarif_file: artifacts/snyk/iac.sarif
+          category: snyk-iac
 
       - name: Fail if any Snyk scan errored
         if: always()
