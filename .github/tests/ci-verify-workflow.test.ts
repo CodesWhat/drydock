@@ -104,14 +104,23 @@ test('workflow tests are wired outside the app coverage suite', () => {
   });
 });
 
-test('ci-verify skips Playwright browser downloads for non-Playwright e2e installs', () => {
+test('ci-verify skips Playwright browser downloads on load-test jobs but not cucumber', () => {
   const workflow = loadWorkflow();
 
-  expect(workflow.env?.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD).toBe('1');
+  // Workflow-level skip would break the cucumber job, which actually launches
+  // a browser via @playwright/test. Scope the skip to load-test jobs only.
+  expect(workflow.env?.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD).toBeUndefined();
 
-  for (const jobId of ['e2e', 'load-test-ci', 'load-test-behavior', 'load-test-stress']) {
+  for (const jobId of ['load-test-ci', 'load-test-behavior', 'load-test-stress']) {
+    expect(workflow.jobs?.[jobId]?.env?.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD).toBe('1');
     expect(getWorkflowStep(jobId, 'Install e2e dependencies')).toBeDefined();
   }
+
+  // Cucumber needs the browser, so it must not inherit the skip, and it gets
+  // a cache step so the postinstall fetch survives CDN throttling.
+  expect(workflow.jobs?.e2e?.env?.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD).toBeUndefined();
+  expect(getWorkflowStep('e2e', 'Cache Playwright browsers')).toBeDefined();
+  expect(getWorkflowStep('e2e', 'Install e2e dependencies')).toBeDefined();
 });
 
 test('DAST auth steps mask derived basic auth credentials', () => {

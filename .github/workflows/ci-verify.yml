@@ -38,14 +38,6 @@ concurrency:
 
 permissions: {}
 
-env:
-  # No job in this workflow runs Playwright — the browser test lives in
-  # its own workflow (e2e-playwright.yml). Skip the @playwright/test
-  # postinstall chromium download for every `npm ci` in e2e/, which was
-  # hanging the load-test and cucumber jobs at ~30 min on cdn.playwright.dev
-  # after the runner image rotation dropped the pre-baked browser cache.
-  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-
 jobs:
   zizmor:
     name: "🔐 Security: Actions"
@@ -1038,10 +1030,26 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
+      # Cache Playwright's browser binary directory across runs.
+      # `npm ci` in e2e/ triggers a 167 MiB @playwright/browser-chromium
+      # postinstall fetch from cdn.playwright.dev; the CDN has repeatedly
+      # throttled the download to ~30 min, which used to time the job out.
+      # Per-ref key mirrors the cache scoping in quality-mutation-monthly.yml
+      # so an untrusted PR can't poison main's chromium binary.
+      - name: Cache Playwright browsers
+        # zizmor: ignore[cache-poisoning]
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7  # v5.0.4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ github.ref_name }}-${{ hashFiles('e2e/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-${{ github.ref_name }}-
+            ${{ runner.os }}-playwright-
+
       - name: Install e2e dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
-          timeout_minutes: 5
+          timeout_minutes: 15
           max_attempts: 3
           retry_wait_seconds: 30
           command: cd e2e && npm ci
@@ -1079,6 +1087,11 @@ jobs:
     timeout-minutes: 30
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
     needs: [build]
+    # Load tests hit the API with Artillery; no browser needed. Skip the
+    # @playwright/test postinstall chromium download (167 MiB from
+    # cdn.playwright.dev, frequently throttled) for every `npm ci` in e2e/.
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     permissions:
       contents: read
 
@@ -1195,6 +1208,8 @@ jobs:
     timeout-minutes: 30
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
     needs: [build]
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     permissions:
       contents: read
 
@@ -1297,6 +1312,8 @@ jobs:
     timeout-minutes: 30
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
     needs: [build]
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     permissions:
       contents: read
 
