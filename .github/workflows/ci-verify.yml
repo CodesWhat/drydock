@@ -564,9 +564,12 @@ jobs:
       - name: Wait for QA health
         run: |
           set -euo pipefail
+          # /health flips true before auth strategies finish registering, so
+          # poll /auth/strategies too — that's the gate the scanners hit next.
           for _ in $(seq 1 60); do
-            if curl -sf http://localhost:3333/health >/dev/null 2>&1; then
-              echo "Drydock is healthy"
+            if curl -sf http://localhost:3333/health >/dev/null 2>&1 \
+               && curl -sf http://localhost:3333/auth/strategies | jq -e '.strategies | length > 0' >/dev/null 2>&1; then
+              echo "Drydock is healthy and auth is ready"
               exit 0
             fi
             sleep 2
