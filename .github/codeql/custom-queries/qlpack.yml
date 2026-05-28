@@ -1,4 +1,4 @@
 name: codeswhat/drydock-codeql-extensions
 version: 1.0.0
 dependencies:
-  codeql/javascript-all: "*"
+  codeql/javascript-all: "2.7.1"
