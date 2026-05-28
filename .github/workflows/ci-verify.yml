@@ -38,6 +38,14 @@ concurrency:
 
 permissions: {}
 
+env:
+  # No job in this workflow runs Playwright — the browser test lives in
+  # its own workflow (e2e-playwright.yml). Skip the @playwright/test
+  # postinstall chromium download for every `npm ci` in e2e/, which was
+  # hanging the load-test and cucumber jobs at ~30 min on cdn.playwright.dev
+  # after the runner image rotation dropped the pre-baked browser cache.
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
 jobs:
   zizmor:
     name: "🔐 Security: Actions"
@@ -1050,7 +1058,7 @@ jobs:
   load-test-ci:
     name: "⚡ Load Test: CI"
     runs-on: ubuntu-latest
-    timeout-minutes: 45  # Full enforced load/correctness gates plus advisory behavior/stress probes
+    timeout-minutes: 30
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
     needs: [build]
     permissions:
@@ -1088,41 +1096,11 @@ jobs:
           DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/ci
         run: ./scripts/run-load-test.sh
 
-      - name: Run Artillery behavior test
-        id: run-load-test-behavior
-        env:
-          ARTILLERY_FILE: ./test/test-behavior.yml
-          ARTILLERY_ENV: behavior
-          DD_LOAD_TEST_BUILD_CACHE: gha
-          DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/behavior
-        run: ./scripts/run-load-test.sh
-
-      - name: Run Artillery stress test (advisory)
-        id: run-load-test-stress
-        continue-on-error: true
-        env:
-          ARTILLERY_ENV: stress
-          DD_LOAD_TEST_BUILD_CACHE: gha
-          DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/stress
-        run: ./scripts/run-load-test.sh
-
       - name: Summarize load test metrics (ci)
         if: always()
         run: |
           report="$(find artifacts/load-test/ci -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
           ./scripts/summarize-load-test-report.sh "$report" "Load Test (CI)" "test/load-test-baselines/ci.json"
-
-      - name: Summarize load test metrics (behavior)
-        if: always()
-        run: |
-          report="$(find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          ./scripts/summarize-load-test-report.sh "$report" "Load Test (Behavior)" "test/load-test-baselines/behavior.json"
-
-      - name: Summarize load test metrics (stress)
-        if: always()
-        run: |
-          report="$(find artifacts/load-test/stress -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          ./scripts/summarize-load-test-report.sh "$report" "Load Test (Stress)"
 
       - name: Correctness check (ci, enforced)
         if: always()
@@ -1136,30 +1114,6 @@ jobs:
           report="$(find artifacts/load-test/ci -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
           ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (CI)"
 
-      - name: Correctness check (behavior, advisory)
-        if: always()
-        env:
-          DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'false'
-          DD_LOAD_TEST_MAX_5XX: '0'
-          DD_LOAD_TEST_MAX_VUSERS_FAILED: '0'
-          DD_LOAD_TEST_MIN_429: '0'
-          DD_LOAD_TEST_MAX_429: '0'
-        run: |
-          report="$(find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (Behavior)"
-
-      - name: Correctness check (stress, advisory)
-        if: always()
-        env:
-          DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'false'
-          DD_LOAD_TEST_MAX_5XX: '0'
-          DD_LOAD_TEST_MAX_VUSERS_FAILED: '0'
-          DD_LOAD_TEST_MIN_429: '0'
-          DD_LOAD_TEST_MAX_429: '0'
-        run: |
-          report="$(find artifacts/load-test/stress -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (Stress)"
-
       - name: Resolve committed load test baseline (ci)
         id: load-test-baseline-ci
         if: ${{ always() && steps.run-load-test-ci.conclusion == 'success' }}
@@ -1167,21 +1121,6 @@ jobs:
           set -euo pipefail
 
           baseline_report="test/load-test-baselines/ci.json"
-          if [ ! -f "${baseline_report}" ]; then
-            echo "::error::Committed baseline not found at ${baseline_report}."
-            exit 1
-          fi
-
-          echo "baseline_artifact_name=repo:${baseline_report}" >> "${GITHUB_OUTPUT}"
-          echo "baseline_report=${baseline_report}" >> "${GITHUB_OUTPUT}"
-
-      - name: Resolve committed load test baseline (behavior)
-        id: load-test-baseline-behavior
-        if: ${{ always() && steps.run-load-test-behavior.conclusion == 'success' }}
-        run: |
-          set -euo pipefail
-
-          baseline_report="test/load-test-baselines/behavior.json"
           if [ ! -f "${baseline_report}" ]; then
             echo "::error::Committed baseline not found at ${baseline_report}."
             exit 1
@@ -1223,6 +1162,90 @@ jobs:
 
           ./scripts/check-load-test-regression.sh "${current_report}" "${BASELINE_REPORT}"
 
+      - name: Upload load test artifact (ci)
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: load-test-ci-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/load-test/ci/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  load-test-behavior:
+    name: "⚡ Load Test: Behavior"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+    needs: [build]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+
+      - name: Install e2e dependencies
+        run: npm ci
+        working-directory: e2e
+
+      - name: Run Artillery behavior test
+        id: run-load-test-behavior
+        env:
+          ARTILLERY_FILE: ./test/test-behavior.yml
+          ARTILLERY_ENV: behavior
+          DD_LOAD_TEST_BUILD_CACHE: gha
+          DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/behavior
+        run: ./scripts/run-load-test.sh
+
+      - name: Summarize load test metrics (behavior)
+        if: always()
+        run: |
+          report="$(find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          ./scripts/summarize-load-test-report.sh "$report" "Load Test (Behavior)" "test/load-test-baselines/behavior.json"
+
+      - name: Correctness check (behavior, advisory)
+        if: always()
+        env:
+          DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'false'
+          DD_LOAD_TEST_MAX_5XX: '0'
+          DD_LOAD_TEST_MAX_VUSERS_FAILED: '0'
+          DD_LOAD_TEST_MIN_429: '0'
+          DD_LOAD_TEST_MAX_429: '0'
+        run: |
+          report="$(find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (Behavior)"
+
+      - name: Resolve committed load test baseline (behavior)
+        id: load-test-baseline-behavior
+        if: ${{ always() && steps.run-load-test-behavior.conclusion == 'success' }}
+        run: |
+          set -euo pipefail
+
+          baseline_report="test/load-test-baselines/behavior.json"
+          if [ ! -f "${baseline_report}" ]; then
+            echo "::error::Committed baseline not found at ${baseline_report}."
+            exit 1
+          fi
+
+          echo "baseline_artifact_name=repo:${baseline_report}" >> "${GITHUB_OUTPUT}"
+          echo "baseline_report=${baseline_report}" >> "${GITHUB_OUTPUT}"
+
       - name: Regression check against committed baseline (behavior, advisory)
         if: ${{ always() && steps.run-load-test-behavior.conclusion == 'success' }}
         env:
@@ -1241,15 +1264,6 @@ jobs:
           current_report="$(find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
           ./scripts/check-load-test-regression.sh "${current_report}" "${BASELINE_REPORT}"
 
-      - name: Upload load test artifact (ci)
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
-        with:
-          name: load-test-ci-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifacts/load-test/ci/*.json
-          if-no-files-found: warn
-          retention-days: 30
-
       - name: Upload load test artifact (behavior)
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
@@ -1258,6 +1272,66 @@ jobs:
           path: artifacts/load-test/behavior/*.json
           if-no-files-found: warn
           retention-days: 30
+
+  load-test-stress:
+    name: "⚡ Load Test: Stress (Advisory)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+    needs: [build]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+
+      - name: Install e2e dependencies
+        run: npm ci
+        working-directory: e2e
+
+      - name: Run Artillery stress test (advisory)
+        id: run-load-test-stress
+        continue-on-error: true
+        env:
+          ARTILLERY_ENV: stress
+          DD_LOAD_TEST_BUILD_CACHE: gha
+          DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/stress
+        run: ./scripts/run-load-test.sh
+
+      - name: Summarize load test metrics (stress)
+        if: always()
+        run: |
+          report="$(find artifacts/load-test/stress -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          ./scripts/summarize-load-test-report.sh "$report" "Load Test (Stress)"
+
+      - name: Correctness check (stress, advisory)
+        if: always()
+        env:
+          DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'false'
+          DD_LOAD_TEST_MAX_5XX: '0'
+          DD_LOAD_TEST_MAX_VUSERS_FAILED: '0'
+          DD_LOAD_TEST_MIN_429: '0'
+          DD_LOAD_TEST_MAX_429: '0'
+        run: |
+          report="$(find artifacts/load-test/stress -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (Stress)"
 
       - name: Upload load test artifact (stress)
         if: always()

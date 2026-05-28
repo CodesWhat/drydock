@@ -7,6 +7,8 @@ interface WorkflowJob {
   name?: string;
   steps?: WorkflowJobStep[];
   'timeout-minutes'?: number;
+  if?: string;
+  needs?: string[];
 }
 
 interface WorkflowJobStep {
@@ -21,6 +23,7 @@ interface WorkflowJobStep {
 }
 
 interface WorkflowDefinition {
+  env?: Record<string, string>;
   jobs?: Record<string, WorkflowJob>;
 }
 
@@ -53,9 +56,9 @@ function getTestJobStep(name: string): WorkflowJobStep | undefined {
   return workflow.jobs?.test?.steps?.find((step) => step.name === name);
 }
 
-function getLoadTestStep(name: string): WorkflowJobStep | undefined {
+function getWorkflowStep(jobId: string, name: string): WorkflowJobStep | undefined {
   const workflow = loadWorkflow();
-  return workflow.jobs?.['load-test-ci']?.steps?.find((step) => step.name === name);
+  return workflow.jobs?.[jobId]?.steps?.find((step) => step.name === name);
 }
 
 test('ci-verify job names are emoji-prefixed for GitHub checks readability', () => {
@@ -81,13 +84,50 @@ test('script node tests are wired into local and CI gates', () => {
   });
 });
 
-test('load-test workflow wires advisory behavior and stress coverage', () => {
+test('ci-verify skips Playwright browser downloads for non-Playwright e2e installs', () => {
   const workflow = loadWorkflow();
-  const loadTestJob = workflow.jobs?.['load-test-ci'];
 
-  expect(loadTestJob?.['timeout-minutes']).toBeGreaterThanOrEqual(45);
+  expect(workflow.env).toMatchObject({
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1',
+  });
 
-  expect(getLoadTestStep('Run Artillery behavior test')).toMatchObject({
+  for (const jobId of ['e2e', 'load-test-ci', 'load-test-behavior', 'load-test-stress']) {
+    expect(getWorkflowStep(jobId, 'Install e2e dependencies')).toBeDefined();
+  }
+});
+
+test('load-test workflow runs load profiles in parallel jobs', () => {
+  const workflow = loadWorkflow();
+  const pushOnlyCondition =
+    "github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))";
+
+  expect(workflow.jobs?.['load-test-ci']).toMatchObject({
+    name: '⚡ Load Test: CI',
+    if: pushOnlyCondition,
+    needs: ['build'],
+    'timeout-minutes': expect.any(Number),
+  });
+  expect(workflow.jobs?.['load-test-behavior']).toMatchObject({
+    name: '⚡ Load Test: Behavior',
+    if: pushOnlyCondition,
+    needs: ['build'],
+    'timeout-minutes': expect.any(Number),
+  });
+  expect(workflow.jobs?.['load-test-stress']).toMatchObject({
+    name: '⚡ Load Test: Stress (Advisory)',
+    if: pushOnlyCondition,
+    needs: ['build'],
+    'timeout-minutes': expect.any(Number),
+  });
+
+  for (const jobId of ['load-test-ci', 'load-test-behavior', 'load-test-stress']) {
+    expect(workflow.jobs?.[jobId]?.['timeout-minutes']).toBeLessThanOrEqual(30);
+  }
+
+  expect(getWorkflowStep('load-test-ci', 'Run Artillery behavior test')).toBeUndefined();
+  expect(getWorkflowStep('load-test-ci', 'Run Artillery stress test (advisory)')).toBeUndefined();
+
+  expect(getWorkflowStep('load-test-behavior', 'Run Artillery behavior test')).toMatchObject({
     id: 'run-load-test-behavior',
     env: {
       ARTILLERY_FILE: './test/test-behavior.yml',
@@ -96,20 +136,25 @@ test('load-test workflow wires advisory behavior and stress coverage', () => {
     },
   });
 
-  expect(getLoadTestStep('Run Artillery stress test (advisory)')).toMatchObject({
-    id: 'run-load-test-stress',
-    'continue-on-error': true,
-    env: {
-      ARTILLERY_ENV: 'stress',
-      DD_LOAD_TEST_ARTIFACT_DIR: 'artifacts/load-test/stress',
+  expect(getWorkflowStep('load-test-stress', 'Run Artillery stress test (advisory)')).toMatchObject(
+    {
+      id: 'run-load-test-stress',
+      'continue-on-error': true,
+      env: {
+        ARTILLERY_ENV: 'stress',
+        DD_LOAD_TEST_ARTIFACT_DIR: 'artifacts/load-test/stress',
+      },
     },
-  });
-
-  expect(getLoadTestStep('Summarize load test metrics (stress)')?.run).toContain(
-    'artifacts/load-test/stress',
   );
 
-  const behaviorBaselineStep = getLoadTestStep('Resolve committed load test baseline (behavior)');
+  expect(
+    getWorkflowStep('load-test-stress', 'Summarize load test metrics (stress)')?.run,
+  ).toContain('artifacts/load-test/stress');
+
+  const behaviorBaselineStep = getWorkflowStep(
+    'load-test-behavior',
+    'Resolve committed load test baseline (behavior)',
+  );
   expect(behaviorBaselineStep).toMatchObject({
     id: 'load-test-baseline-behavior',
     if: "${{ always() && steps.run-load-test-behavior.conclusion == 'success' }}",
@@ -117,7 +162,10 @@ test('load-test workflow wires advisory behavior and stress coverage', () => {
   expect(behaviorBaselineStep?.run).toContain('test/load-test-baselines/behavior.json');
 
   expect(
-    getLoadTestStep('Regression check against committed baseline (behavior, advisory)'),
+    getWorkflowStep(
+      'load-test-behavior',
+      'Regression check against committed baseline (behavior, advisory)',
+    ),
   ).toMatchObject({
     if: "${{ always() && steps.run-load-test-behavior.conclusion == 'success' }}",
     env: {
@@ -126,15 +174,17 @@ test('load-test workflow wires advisory behavior and stress coverage', () => {
     },
   });
 
-  expect(getLoadTestStep('Correctness check (stress, advisory)')).toMatchObject({
-    if: 'always()',
-    env: {
-      DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'false',
-      DD_LOAD_TEST_MAX_VUSERS_FAILED: '0',
+  expect(getWorkflowStep('load-test-stress', 'Correctness check (stress, advisory)')).toMatchObject(
+    {
+      if: 'always()',
+      env: {
+        DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'false',
+        DD_LOAD_TEST_MAX_VUSERS_FAILED: '0',
+      },
     },
-  });
+  );
 
-  expect(getLoadTestStep('Upload load test artifact (stress)')).toMatchObject({
+  expect(getWorkflowStep('load-test-stress', 'Upload load test artifact (stress)')).toMatchObject({
     uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
     with: {
       path: 'artifacts/load-test/stress/*.json',
