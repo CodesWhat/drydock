@@ -109,6 +109,23 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
+      - name: Verify Playwright image matches package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          package_version="$(node -p "require('./e2e/package.json').devDependencies['@playwright/test']")"
+          if [[ ! "$PLAYWRIGHT_IMAGE" =~ :v([0-9]+\.[0-9]+\.[0-9]+)-noble$ ]]; then
+            echo "::error title=Invalid Playwright image tag::Expected $PLAYWRIGHT_IMAGE to use :v<major>.<minor>.<patch>-noble."
+            exit 1
+          fi
+
+          image_version="${BASH_REMATCH[1]}"
+          if [[ "$package_version" != "$image_version" ]]; then
+            echo "::error title=Playwright version mismatch::PLAYWRIGHT_IMAGE uses $image_version, but e2e/package.json pins @playwright/test to $package_version."
+            exit 1
+          fi
+
       - name: Install ui dependencies
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08  # v3.0.2
         with:

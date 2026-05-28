@@ -20,11 +20,29 @@
       "groupSlug": "github-actions"
     },
     {
+      "description": "Keep Playwright's test runner and container image in one update PR",
+      "matchPackageNames": ["@playwright/test", "mcr.microsoft.com/playwright"],
+      "groupName": "playwright test runner and container",
+      "groupSlug": "playwright"
+    },
+    {
       "description": "Auto-merge patch updates",
       "matchUpdateTypes": ["patch"],
       "automerge": true,
       "automergeType": "pr",
       "platformAutomerge": true
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update the Playwright Docker image pinned in the E2E workflow",
+      "fileMatch": ["^\\.github/workflows/e2e-playwright\\.yml$"],
+      "matchStrings": [
+        "PLAYWRIGHT_IMAGE:\\s+(?<depName>mcr\\.microsoft\\.com/playwright):(?<currentValue>v\\d+\\.\\d+\\.\\d+-noble)"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-(?<compatibility>noble)$"
     }
   ]
 }
