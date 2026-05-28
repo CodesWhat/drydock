@@ -55,13 +55,13 @@
     "@tailwindcss/vite": "4.3.0",
     "@types/node": "25.7.0",
     "@vitejs/plugin-vue": "6.0.6",
-    "@vitest/coverage-v8": "4.1.6",
+    "@vitest/coverage-v8": "4.1.7",
     "@vue/test-utils": "2.4.10",
     "jsdom": "29.1.1",
     "knip": "6.13.1",
     "typescript": "6.0.3",
     "vite": "8.0.12",
-    "vitest": "4.1.6"
+    "vitest": "4.1.7"
   },
   "overrides": {
     "fast-uri": "3.1.2",
