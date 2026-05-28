@@ -1060,7 +1060,7 @@ jobs:
   load-test-ci:
     name: "⚡ Load Test: CI"
     runs-on: ubuntu-latest
-    timeout-minutes: 30  # Full enforced load/correctness gates on push
+    timeout-minutes: 45  # Full enforced load/correctness gates plus advisory behavior/stress probes
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
     needs: [build]
     permissions:
@@ -1099,6 +1099,7 @@ jobs:
         run: ./scripts/run-load-test.sh
 
       - name: Run Artillery behavior test
+        id: run-load-test-behavior
         env:
           ARTILLERY_FILE: ./test/test-behavior.yml
           ARTILLERY_ENV: behavior
@@ -1106,17 +1107,32 @@ jobs:
           DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/behavior
         run: ./scripts/run-load-test.sh
 
+      - name: Run Artillery stress test (advisory)
+        id: run-load-test-stress
+        continue-on-error: true
+        env:
+          ARTILLERY_ENV: stress
+          DD_LOAD_TEST_BUILD_CACHE: gha
+          DD_LOAD_TEST_ARTIFACT_DIR: artifacts/load-test/stress
+        run: ./scripts/run-load-test.sh
+
       - name: Summarize load test metrics (ci)
         if: always()
         run: |
           report="$(find artifacts/load-test/ci -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          ./scripts/summarize-load-test-report.sh "$report" "Load Test (CI)"
+          ./scripts/summarize-load-test-report.sh "$report" "Load Test (CI)" "test/load-test-baselines/ci.json"
 
       - name: Summarize load test metrics (behavior)
         if: always()
         run: |
           report="$(find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          ./scripts/summarize-load-test-report.sh "$report" "Load Test (Behavior)"
+          ./scripts/summarize-load-test-report.sh "$report" "Load Test (Behavior)" "test/load-test-baselines/behavior.json"
+
+      - name: Summarize load test metrics (stress)
+        if: always()
+        run: |
+          report="$(find artifacts/load-test/stress -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          ./scripts/summarize-load-test-report.sh "$report" "Load Test (Stress)"
 
       - name: Correctness check (ci, enforced)
         if: always()
@@ -1142,6 +1158,18 @@ jobs:
           report="$(find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
           ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (Behavior)"
 
+      - name: Correctness check (stress, advisory)
+        if: always()
+        env:
+          DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'false'
+          DD_LOAD_TEST_MAX_5XX: '0'
+          DD_LOAD_TEST_MAX_VUSERS_FAILED: '0'
+          DD_LOAD_TEST_MIN_429: '0'
+          DD_LOAD_TEST_MAX_429: '0'
+        run: |
+          report="$(find artifacts/load-test/stress -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          ./scripts/check-load-test-correctness.sh "$report" "Load Test Correctness (Stress)"
+
       - name: Resolve committed load test baseline (ci)
         id: load-test-baseline-ci
         if: ${{ always() && steps.run-load-test-ci.conclusion == 'success' }}
@@ -1149,6 +1177,21 @@ jobs:
           set -euo pipefail
 
           baseline_report="test/load-test-baselines/ci.json"
+          if [ ! -f "${baseline_report}" ]; then
+            echo "::error::Committed baseline not found at ${baseline_report}."
+            exit 1
+          fi
+
+          echo "baseline_artifact_name=repo:${baseline_report}" >> "${GITHUB_OUTPUT}"
+          echo "baseline_report=${baseline_report}" >> "${GITHUB_OUTPUT}"
+
+      - name: Resolve committed load test baseline (behavior)
+        id: load-test-baseline-behavior
+        if: ${{ always() && steps.run-load-test-behavior.conclusion == 'success' }}
+        run: |
+          set -euo pipefail
+
+          baseline_report="test/load-test-baselines/behavior.json"
           if [ ! -f "${baseline_report}" ]; then
             echo "::error::Committed baseline not found at ${baseline_report}."
             exit 1
@@ -1190,6 +1233,24 @@ jobs:
 
           ./scripts/check-load-test-regression.sh "${current_report}" "${BASELINE_REPORT}"
 
+      - name: Regression check against committed baseline (behavior, advisory)
+        if: ${{ always() && steps.run-load-test-behavior.conclusion == 'success' }}
+        env:
+          BASELINE_REPORT: ${{ steps.load-test-baseline-behavior.outputs.baseline_report }}
+          DD_LOAD_TEST_BASELINE_ARTIFACT_NAME: ${{ steps.load-test-baseline-behavior.outputs.baseline_artifact_name }}
+          DD_LOAD_TEST_MAX_P95_INCREASE_PCT: '30'
+          DD_LOAD_TEST_MAX_P99_INCREASE_PCT: '40'
+          DD_LOAD_TEST_MAX_RATE_DECREASE_PCT: '50'
+          DD_LOAD_TEST_MAX_P95_MS: '1500'
+          DD_LOAD_TEST_MAX_P99_MS: '3000'
+          DD_LOAD_TEST_MIN_REQUEST_RATE: '1'
+          DD_LOAD_TEST_REGRESSION_ENFORCE: 'false'
+        run: |
+          set -euo pipefail
+
+          current_report="$(find artifacts/load-test/behavior -maxdepth 1 -name '*.json' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          ./scripts/check-load-test-regression.sh "${current_report}" "${BASELINE_REPORT}"
+
       - name: Upload load test artifact (ci)
         if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
@@ -1205,5 +1266,14 @@ jobs:
         with:
           name: load-test-behavior-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/load-test/behavior/*.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload load test artifact (stress)
+        if: always()
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        with:
+          name: load-test-stress-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/load-test/stress/*.json
           if-no-files-found: warn
           retention-days: 30
