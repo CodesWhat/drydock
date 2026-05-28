@@ -1,0 +1,51 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+import yaml from 'yaml';
+
+interface WorkflowStep {
+  name?: string;
+  uses?: string;
+  run?: string;
+  with?: Record<string, string>;
+}
+
+interface WorkflowJob {
+  steps?: WorkflowStep[];
+}
+
+interface WorkflowDefinition {
+  jobs?: Record<string, WorkflowJob>;
+}
+
+const workflowPath = fileURLToPath(
+  new URL('../.github/workflows/release-cut.yml', import.meta.url),
+);
+const retryAction = 'nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60';
+
+function loadReleaseSteps(): WorkflowStep[] {
+  const workflow = yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;
+  return workflow.jobs?.release?.steps ?? [];
+}
+
+function getStep(name: string): WorkflowStep | undefined {
+  return loadReleaseSteps().find((step) => step.name === name);
+}
+
+test('release-cut uses the shared retry action for transient release operations', () => {
+  expect(getStep('Retry GHCR login')?.uses).toBe(retryAction);
+  expect(getStep('Retry Docker Hub login')?.uses).toBe(retryAction);
+  expect(getStep('Retry Quay.io login')?.uses).toBe(retryAction);
+  expect(getStep('Retry manifest publish on transient registry failure')?.uses).toBe(retryAction);
+  expect(getStep('Verify container image signatures')?.uses).toBe(retryAction);
+  expect(getStep('Sign release artifact')?.uses).toBe(retryAction);
+  expect(getStep('Create GitHub Release and upload signed assets')?.uses).toBe(retryAction);
+});
+
+test('release-cut has no hand-rolled fixed retry loops', () => {
+  const handRolledRetrySteps = loadReleaseSteps()
+    .filter((step) => step.run && /for (attempt|i) in 1 2 3/.test(step.run))
+    .map((step) => step.name);
+
+  expect(handRolledRetrySteps).toStrictEqual([]);
+});

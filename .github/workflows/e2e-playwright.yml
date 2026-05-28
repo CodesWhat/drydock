@@ -115,7 +115,7 @@ jobs:
           fi
 
       - name: Install ui dependencies
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08  # v3.0.2
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
           timeout_minutes: 5
           max_attempts: 3
@@ -144,7 +144,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=drydock,ignore-error=true
 
       - name: Pull Playwright container
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08  # v3.0.2
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
           timeout_minutes: 5
           max_attempts: 3

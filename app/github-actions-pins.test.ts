@@ -41,6 +41,7 @@ const expectedActionPins = new Map([
     'actions/upload-artifact',
     'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1',
   ],
+  ['nick-fields/retry', 'nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0'],
 ]);
 
 function collectYamlFiles(directory: string): string[] {
