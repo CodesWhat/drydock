@@ -610,6 +610,7 @@ jobs:
           trap 'rm -f "${cookie_jar}"' EXIT
 
           basic_auth="$(printf 'admin:password' | base64 | tr -d '\n')"
+          echo "::add-mask::${basic_auth}"
           curl -fsS \
             -c "${cookie_jar}" \
             -H "Authorization: Basic ${basic_auth}" \
@@ -785,6 +786,7 @@ jobs:
           trap 'rm -f "${cookie_jar}"' EXIT
 
           basic_auth="$(printf 'admin:password' | base64 | tr -d '\n')"
+          echo "::add-mask::${basic_auth}"
           curl -fsS \
             -c "${cookie_jar}" \
             -H "Authorization: Basic ${basic_auth}" \

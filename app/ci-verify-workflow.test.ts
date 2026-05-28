@@ -96,6 +96,18 @@ test('ci-verify skips Playwright browser downloads for non-Playwright e2e instal
   }
 });
 
+test('DAST auth steps mask derived basic auth credentials', () => {
+  for (const [jobId, stepName] of [
+    ['dast-zap-baseline', 'Create ZAP authenticated session'],
+    ['dast-nuclei', 'Create Nuclei authenticated session'],
+  ]) {
+    const run = getWorkflowStep(jobId, stepName)?.run;
+
+    expect(run).toContain('basic_auth="$(printf');
+    expect(run).toMatch(/basic_auth=.*\n\s*echo "::add-mask::\$\{basic_auth\}"/u);
+  }
+});
+
 test('load-test workflow runs load profiles in parallel jobs', () => {
   const workflow = loadWorkflow();
   const pushOnlyCondition =
