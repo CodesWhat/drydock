@@ -36,6 +36,7 @@ jobs:
       packages: write      # ghcr push
       id-token: write      # cosign keyless signing
       attestations: write  # attest-build-provenance
+      artifact-metadata: write  # GitHub-native OCI attestation storage records
       actions: read        # wait-for-successful-branch-ci queries workflow runs
 
     steps:
@@ -440,6 +441,59 @@ jobs:
             --source-digest "${TARGET_SHA}" \
             --bundle-from-oci >/dev/null
 
+      - name: Generate container SBOM
+        if: steps.digest.outputs.value
+        env:
+          DIGEST: ${{ steps.digest.outputs.value }}
+          GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          image_ref="ghcr.io/${GHCR_REPO}@${DIGEST}"
+          sbom_path="dist/drydock-${RELEASE_TAG}.image.spdx.json"
+
+          docker run --rm \
+            --entrypoint trivy \
+            --volume "${PWD}/dist:/out" \
+            --volume "${HOME}/.docker:/root/.docker:ro" \
+            "${image_ref}" \
+            image \
+            --format spdx-json \
+            --output "/out/$(basename "${sbom_path}")" \
+            --timeout 15m \
+            "${image_ref}"
+
+          jq -e '.spdxVersion == "SPDX-2.3" and (.packages | type == "array")' "${sbom_path}" >/dev/null
+
+      - name: Attest container SBOM
+        id: attest_container_sbom
+        if: steps.digest.outputs.value
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v4.1.0
+        with:
+          subject-name: ghcr.io/${{ steps.target.outputs.repo_lower }}
+          subject-digest: ${{ steps.digest.outputs.value }}
+          subject-version: ${{ steps.next.outputs.next_version }}
+          sbom-path: dist/drydock-${{ steps.next.outputs.release_tag }}.image.spdx.json
+          push-to-registry: true
+
+      - name: Verify container SBOM attestation
+        if: steps.digest.outputs.value
+        env:
+          DIGEST: ${{ steps.digest.outputs.value }}
+          GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          gh attestation verify "oci://ghcr.io/${GHCR_REPO}@${DIGEST}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/release-cut.yml" \
+            --source-ref refs/heads/main \
+            --source-digest "${TARGET_SHA}" \
+            --predicate-type https://spdx.dev/Document/v2.3 \
+            --bundle-from-oci >/dev/null
+
       - name: Build release artifact
         env:
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
@@ -649,6 +703,7 @@ jobs:
               "dist/drydock-${RELEASE_TAG}.tar.gz.sig" \
               "dist/drydock-${RELEASE_TAG}.tar.gz.intoto.jsonl" \
               "dist/drydock-${RELEASE_TAG}.tar.gz.pem" \
+              "dist/drydock-${RELEASE_TAG}.image.spdx.json" \
               --clobber; then
               break
             fi
