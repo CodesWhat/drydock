@@ -107,9 +107,7 @@ test('workflow tests are wired outside the app coverage suite', () => {
 test('ci-verify skips Playwright browser downloads for non-Playwright e2e installs', () => {
   const workflow = loadWorkflow();
 
-  expect(workflow.env).toMatchObject({
-    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1',
-  });
+  expect(workflow.env?.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD).toBe('1');
 
   for (const jobId of ['e2e', 'load-test-ci', 'load-test-behavior', 'load-test-stress']) {
     expect(getWorkflowStep(jobId, 'Install e2e dependencies')).toBeDefined();
