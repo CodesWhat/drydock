@@ -32,6 +32,11 @@ concurrency:
 
 permissions: {}
 
+env:
+  # Keep host-side npm installs from trying to download Chromium before the
+  # Playwright test step runs inside the official browser image.
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
 jobs:
   changes:
     name: "🔎 Changes: Path Filter"
