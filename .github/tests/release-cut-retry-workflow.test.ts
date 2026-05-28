@@ -19,9 +19,7 @@ interface WorkflowDefinition {
   jobs?: Record<string, WorkflowJob>;
 }
 
-const workflowPath = fileURLToPath(
-  new URL('../.github/workflows/release-cut.yml', import.meta.url),
-);
+const workflowPath = fileURLToPath(new URL('../workflows/release-cut.yml', import.meta.url));
 const retryAction = 'nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60';
 
 function loadReleaseSteps(): WorkflowStep[] {

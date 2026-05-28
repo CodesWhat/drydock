@@ -26,10 +26,8 @@ interface CrowdinConfig {
   }>;
 }
 
-const workflowPath = fileURLToPath(
-  new URL('../.github/workflows/i18n-crowdin.yml', import.meta.url),
-);
-const crowdinConfigPath = fileURLToPath(new URL('../crowdin.yml', import.meta.url));
+const workflowPath = fileURLToPath(new URL('../workflows/i18n-crowdin.yml', import.meta.url));
+const crowdinConfigPath = fileURLToPath(new URL('../../crowdin.yml', import.meta.url));
 const crowdinActionRef = 'crowdin/github-action@8868a33591d21088edfc398968173a3b98d51706';
 
 function loadCrowdinWorkflowStep(): WorkflowStep {

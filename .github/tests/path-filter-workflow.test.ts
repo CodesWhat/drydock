@@ -21,15 +21,11 @@ interface RuntimeFilterDefinition {
   runtime?: string[];
 }
 
-const ciVerifyWorkflowPath = fileURLToPath(
-  new URL('../.github/workflows/ci-verify.yml', import.meta.url),
-);
+const ciVerifyWorkflowPath = fileURLToPath(new URL('../workflows/ci-verify.yml', import.meta.url));
 const e2ePlaywrightWorkflowPath = fileURLToPath(
-  new URL('../.github/workflows/e2e-playwright.yml', import.meta.url),
+  new URL('../workflows/e2e-playwright.yml', import.meta.url),
 );
-const runtimeFiltersPath = fileURLToPath(
-  new URL('../.github/filters/runtime.yml', import.meta.url),
-);
+const runtimeFiltersPath = fileURLToPath(new URL('../filters/runtime.yml', import.meta.url));
 
 function loadWorkflow(path: string): WorkflowDefinition {
   return yaml.parse(readFileSync(path, 'utf8')) as WorkflowDefinition;

@@ -426,6 +426,14 @@ jobs:
           node-version: 24
           package-manager-cache: false
 
+      - name: Install repository dependencies
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: npm ci --ignore-scripts
+
       - name: Run scripts tests
         run: node --test scripts/*.test.mjs
 
@@ -436,6 +444,9 @@ jobs:
           max_attempts: 3
           retry_wait_seconds: 30
           command: cd app && npm ci
+
+      - name: Run workflow tests
+        run: npm run test:workflows
 
       - name: Install ui dependencies
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0

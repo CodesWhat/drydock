@@ -18,7 +18,7 @@ interface WorkflowDefinition {
   jobs?: Record<string, WorkflowJob>;
 }
 
-const workflowsDir = fileURLToPath(new URL('../.github/workflows', import.meta.url));
+const workflowsDir = fileURLToPath(new URL('../workflows', import.meta.url));
 const hardenRunnerRef = 'step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411';
 const hardenRunnerVersion = 'v2.19.4';
 

@@ -23,7 +23,7 @@ interface CompositeActionDocument {
   };
 }
 
-const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
 
 const expectedActionPins = new Map([
   ['actions/cache', 'actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7  # v5.0.4'],

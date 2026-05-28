@@ -19,9 +19,7 @@ interface WorkflowDefinition {
   jobs?: Record<string, WorkflowJob>;
 }
 
-const workflowPath = fileURLToPath(
-  new URL('../.github/workflows/e2e-playwright.yml', import.meta.url),
-);
+const workflowPath = fileURLToPath(new URL('../workflows/e2e-playwright.yml', import.meta.url));
 
 function loadWorkflow(): WorkflowDefinition {
   return yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;

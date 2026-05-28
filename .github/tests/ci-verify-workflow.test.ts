@@ -38,10 +38,11 @@ interface LefthookDefinition {
   };
 }
 
-const workflowPath = fileURLToPath(new URL('../.github/workflows/ci-verify.yml', import.meta.url));
-const lefthookPath = fileURLToPath(new URL('../lefthook.yml', import.meta.url));
-const processorPath = fileURLToPath(new URL('../test/load-test.processor.cjs', import.meta.url));
+const workflowPath = fileURLToPath(new URL('../workflows/ci-verify.yml', import.meta.url));
+const lefthookPath = fileURLToPath(new URL('../../lefthook.yml', import.meta.url));
+const processorPath = fileURLToPath(new URL('../../test/load-test.processor.cjs', import.meta.url));
 const emojiPrefix = /^\p{Extended_Pictographic}/u;
+const workflowTestsCommand = 'npm run test:workflows';
 
 function loadWorkflow(): WorkflowDefinition {
   return yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;
@@ -81,6 +82,23 @@ test('script node tests are wired into local and CI gates', () => {
 
   expect(loadLefthook()['pre-push']?.commands?.['scripts-test']).toMatchObject({
     run: 'node --test scripts/*.test.mjs',
+  });
+});
+
+test('workflow tests are wired outside the app coverage suite', () => {
+  expect(getTestJobStep('Install repository dependencies')).toMatchObject({
+    with: {
+      command: 'npm ci --ignore-scripts',
+    },
+  });
+
+  expect(getTestJobStep('Run workflow tests')).toMatchObject({
+    run: workflowTestsCommand,
+  });
+
+  expect(loadLefthook()['pre-push']?.commands?.['workflow-tests']).toMatchObject({
+    run: workflowTestsCommand,
+    priority: 7,
   });
 });
 
@@ -207,7 +225,7 @@ test('load-test workflow runs load profiles in parallel jobs', () => {
 
 test('load-test behavior profile has an advisory regression baseline', () => {
   const baseline = JSON.parse(
-    readFileSync(new URL('../test/load-test-baselines/behavior.json', import.meta.url), 'utf8'),
+    readFileSync(new URL('../../test/load-test-baselines/behavior.json', import.meta.url), 'utf8'),
   ) as {
     aggregate?: {
       summaries?: Record<string, { p95?: number; p99?: number }>;
