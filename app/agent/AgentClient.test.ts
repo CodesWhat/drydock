@@ -1562,7 +1562,7 @@ describe('AgentClient', () => {
 
       // All three calls should share the same in-flight promise —
       // _doHandshake was invoked only once.
-      const doHandshakeSpy = vi.mocked((client as never)['_doHandshake']);
+      const doHandshakeSpy = vi.mocked((client as never)._doHandshake);
       expect(doHandshakeSpy).toHaveBeenCalledTimes(1);
 
       // Settle the handshake so the test doesn't leak

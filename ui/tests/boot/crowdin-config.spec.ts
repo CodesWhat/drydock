@@ -54,27 +54,32 @@ describe('Crowdin locale export config', () => {
     expect(Object.values(localeMapping).sort()).toEqual(supportedTranslationLocales);
   });
 
-  it('downloads only the Crowdin languages exposed in the app locale picker', () => {
+  it('leaves the language scoping to crowdin.yml instead of duplicating it in the workflow', () => {
+    // crowdin.yml's languages_mapping is the single source of truth for which
+    // locales are exported. The workflow used to mirror the list as
+    // download_translations_args=--language=…; that duplication drifted away
+    // from crowdin.yml during the security hardening pass, so the workflow
+    // now relies on crowdin.yml alone. .github/tests/crowdin-workflow.test.ts
+    // owns the workflow-side assertion; this test just verifies the UI's
+    // expected mapping still aligns with the workspace config.
     const workflow = asRecord(readYaml('.github/workflows/i18n-crowdin.yml'));
     const jobs = asRecord(workflow.jobs);
     const sync = asRecord(jobs.sync);
-    const steps = sync.steps;
-    expect(Array.isArray(steps)).toBe(true);
+    const steps = sync.steps as unknown[];
 
-    const crowdinStep = (steps as unknown[])
+    const crowdinStep = steps
       .map((step) => asRecord(step))
       .find((step) => String(step.uses ?? '').startsWith('crowdin/github-action@'));
     expect(crowdinStep).toBeTruthy();
 
     const withConfig = asRecord(crowdinStep?.with);
-    const args = String(withConfig.download_translations_args ?? '');
-    const downloadedLanguages = Array.from(args.matchAll(/--language=(\S+)/g), (match) => match[1]);
-    const downloadedLocales = downloadedLanguages.map(
-      (language) =>
-        expectedCrowdinLocaleMapping[language as keyof typeof expectedCrowdinLocaleMapping],
-    );
+    expect(withConfig.download_translations_args).toBeUndefined();
 
-    expect(downloadedLanguages.sort()).toEqual(Object.keys(expectedCrowdinLocaleMapping).sort());
-    expect(downloadedLocales.sort()).toEqual(supportedTranslationLocales);
+    const fileSet = firstCrowdinFileSet();
+    const localeMapping = asRecord(asRecord(fileSet.languages_mapping).locale);
+    expect(Object.keys(localeMapping).sort()).toEqual(
+      Object.keys(expectedCrowdinLocaleMapping).sort(),
+    );
+    expect(Object.values(localeMapping).sort()).toEqual(supportedTranslationLocales);
   });
 });

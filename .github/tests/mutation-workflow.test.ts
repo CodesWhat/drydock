@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 import yaml from 'yaml';
 
-import uiStrykerConfig from '../ui/stryker.conf.mjs';
+import uiStrykerConfig from '../../ui/stryker.conf.mjs';
 
 interface WorkflowTrigger {
   schedule?: Array<{
@@ -20,9 +20,12 @@ interface WorkflowMatrixEntry {
 interface WorkflowJobStep {
   name?: string;
   run?: string;
+  uses?: string;
+  with?: Record<string, string>;
 }
 
 interface WorkflowJob {
+  env?: Record<string, string>;
   strategy?: {
     matrix?: {
       include?: WorkflowMatrixEntry[];
@@ -37,7 +40,7 @@ interface WorkflowDefinition {
 }
 
 const workflowPath = fileURLToPath(
-  new URL('../.github/workflows/quality-mutation-monthly.yml', import.meta.url),
+  new URL('../workflows/quality-mutation-monthly.yml', import.meta.url),
 );
 const expectedAppMutatePatterns = [
   'api/**/*.ts',
@@ -110,6 +113,46 @@ test('mutation workflow runs monthly with 27 logical slices and aggregate count 
   expect(aggregateRunScript).toContain('--expected-count 27');
 });
 
+test('mutation aggregate job verifies downloaded artifact layout before merging', () => {
+  const workflow = yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;
+  const aggregateSteps = workflow.jobs?.aggregate?.steps ?? [];
+
+  expect(aggregateSteps.find((step) => step.name === 'Download mutation artifacts')).toMatchObject({
+    uses: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c',
+    with: {
+      pattern: 'mutation-report-*',
+      path: 'artifacts/mutation',
+    },
+  });
+
+  const verifyStep = aggregateSteps.find((step) => step.name === 'Verify mutation artifact layout');
+  expect(verifyStep).toBeDefined();
+  expect(verifyStep?.run).toContain("find artifacts/mutation -type f -name 'mutation.json'");
+  expect(verifyStep?.run).toContain('mutation-report-*');
+  expect(verifyStep?.run).toContain('exit 1');
+});
+
+test('mutation shards publish distinct dashboard reports when configured', () => {
+  const workflow = yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;
+
+  expect(workflow.jobs?.stryker?.env).toMatchObject({
+    STRYKER_DASHBOARD_API_KEY: '${{ secrets.STRYKER_DASHBOARD_API_KEY }}',
+    STRYKER_DASHBOARD_MODULE: '${{ matrix.name }}',
+  });
+
+  const appStrykerConfig = readFileSync(
+    new URL('../../app/stryker.conf.mjs', import.meta.url),
+    'utf8',
+  );
+  const uiStrykerConfigSource = readFileSync(
+    new URL('../../ui/stryker.conf.mjs', import.meta.url),
+    'utf8',
+  );
+
+  expect(appStrykerConfig).toContain("process.env.STRYKER_DASHBOARD_MODULE || 'app'");
+  expect(uiStrykerConfigSource).toContain("process.env.STRYKER_DASHBOARD_MODULE || 'ui'");
+});
+
 test('mutation workflow slices cover the app and ui Stryker targets without overlap', () => {
   const workflow = yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;
   const matrixEntries = workflow.jobs?.stryker?.strategy?.matrix?.include ?? [];
@@ -117,12 +160,12 @@ test('mutation workflow slices cover the app and ui Stryker targets without over
   const appEntries = matrixEntries.filter((entry) => entry.package === 'app');
   const uiEntries = matrixEntries.filter((entry) => entry.package === 'ui');
 
-  const expectedAppFiles = expandMutatePatterns('.', expectedAppMutatePatterns);
-  const expectedUiFiles = expandMutatePatterns('../ui', uiStrykerConfig.mutate);
+  const expectedAppFiles = expandMutatePatterns('../../app', expectedAppMutatePatterns);
+  const expectedUiFiles = expandMutatePatterns('../../ui', uiStrykerConfig.mutate);
 
   const appCoverage = new Map<string, string[]>();
   for (const entry of appEntries) {
-    const files = expandMutatePatterns('.', splitMutateEntry(entry));
+    const files = expandMutatePatterns('../../app', splitMutateEntry(entry));
     for (const file of files) {
       const owners = appCoverage.get(file) ?? [];
       owners.push(entry.name ?? 'unknown');
@@ -132,7 +175,7 @@ test('mutation workflow slices cover the app and ui Stryker targets without over
 
   const uiCoverage = new Map<string, string[]>();
   for (const entry of uiEntries) {
-    const files = expandMutatePatterns('../ui', splitMutateEntry(entry));
+    const files = expandMutatePatterns('../../ui', splitMutateEntry(entry));
     for (const file of files) {
       const owners = uiCoverage.get(file) ?? [];
       owners.push(entry.name ?? 'unknown');

@@ -12,7 +12,7 @@ import {
 
 const mockT: TranslateFn = (key, params) => {
   if (!params) return key;
-  return key + ':' + JSON.stringify(params);
+  return `${key}:${JSON.stringify(params)}`;
 };
 
 describe('container-update utils', () => {

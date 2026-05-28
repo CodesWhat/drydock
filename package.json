@@ -1,13 +1,17 @@
 {
   "version": "1.5.0",
   "scripts": {
-    "prepare": "lefthook install"
+    "prepare": "lefthook install",
+    "test:workflows": "vitest run .github/tests --config .github/tests/vitest.config.mjs --maxWorkers=1 --fileParallelism=false"
   },
   "engines": {
     "node": ">=24.0.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.15",
-    "lefthook": "2.1.6"
+    "@biomejs/biome": "2.4.16",
+    "@types/node": "25.7.0",
+    "lefthook": "2.1.6",
+    "vitest": "4.1.7",
+    "yaml": "2.9.0"
   }
 }

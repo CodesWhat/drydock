@@ -32,6 +32,11 @@ concurrency:
 
 permissions: {}
 
+env:
+  # Keep host-side npm installs from trying to download Chromium before the
+  # Playwright test step runs inside the official browser image.
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
 jobs:
   changes:
     name: "🔎 Changes: Path Filter"
@@ -45,7 +50,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
         with:
           egress-policy: audit
 
@@ -60,21 +65,9 @@ jobs:
         uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d  # v4.0.1
         with:
           base: ${{ github.event_name == 'push' && github.event.before || '' }}
-          # Mirror ci-verify's runtime filter so the heavy E2E job
-          # short-circuits on pure docs / changelog edits.
-          filters: |
-            runtime:
-              - 'app/**'
-              - 'ui/**'
-              - 'e2e/**'
-              - 'test/**'
-              - 'scripts/**'
-              - 'Dockerfile'
-              - 'Docker.entrypoint.sh'
-              - 'healthcheck.c'
-              - 'package.json'
-              - 'package-lock.json'
-              - '.github/workflows/e2e-playwright.yml'
+          # Shared with ci-verify.yml so Cucumber and Playwright short-circuit
+          # symmetrically on pure docs/changelog edits.
+          filters: .github/filters/runtime.yml
 
   playwright:
     name: "🎭 E2E: Playwright"
@@ -90,11 +83,11 @@ jobs:
       # eliminates the cdn.playwright.dev runtime dependency that used to
       # cause cold-cache install failures whenever the GitHub Actions
       # runner image rotated and dropped its pre-baked browser.
-      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.58.2-noble
+      PLAYWRIGHT_IMAGE: mcr.microsoft.com/playwright:v1.60.0-noble
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
         with:
           egress-policy: audit
 
@@ -104,13 +97,30 @@ jobs:
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f  # v6.3.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
         with:
           node-version: 24
           package-manager-cache: false
 
+      - name: Verify Playwright image matches package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          package_version="$(node -p "require('./e2e/package.json').devDependencies['@playwright/test']")"
+          if [[ ! "$PLAYWRIGHT_IMAGE" =~ :v([0-9]+\.[0-9]+\.[0-9]+)-noble$ ]]; then
+            echo "::error title=Invalid Playwright image tag::Expected $PLAYWRIGHT_IMAGE to use :v<major>.<minor>.<patch>-noble."
+            exit 1
+          fi
+
+          image_version="${BASH_REMATCH[1]}"
+          if [[ "$package_version" != "$image_version" ]]; then
+            echo "::error title=Playwright version mismatch::PLAYWRIGHT_IMAGE uses $image_version, but e2e/package.json pins @playwright/test to $package_version."
+            exit 1
+          fi
+
       - name: Install ui dependencies
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08  # v3.0.2
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
           timeout_minutes: 5
           max_attempts: 3
@@ -122,23 +132,27 @@ jobs:
         working-directory: ui
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
 
       # Shares the `drydock` GHA cache scope with ci-verify's build job,
       # so the second workflow to run hits a warm cache.
       - name: Docker build (QA image)
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
         with:
           context: .
           push: false
           load: true
           tags: drydock:dev
           build-args: DD_VERSION=ci
+          # load: true uses the docker exporter, which can't accept the OCI
+          # manifest list produced by provenance attestations. Real
+          # attestations live on release-cut.yml's push step.
+          provenance: false
           cache-from: type=gha,scope=drydock
           cache-to: type=gha,mode=max,scope=drydock,ignore-error=true
 
       - name: Pull Playwright container
-        uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08  # v3.0.2
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
           timeout_minutes: 5
           max_attempts: 3
@@ -170,12 +184,16 @@ jobs:
       # PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 keeps the transitive
       # @playwright/browser-chromium postinstall from racing the same
       # download. --network host lets Playwright reach the QA stack on
-      # localhost:3333. --ipc=host avoids Chrome /dev/shm OOMs.
+      # localhost:3333. --ipc=host avoids Chrome /dev/shm OOMs, while
+      # --init avoids PID 1 signal/zombie-process edge cases.
       - name: Run Playwright tests
         run: |
           docker run --rm \
+            --init \
             --network host \
             --ipc=host \
+            --user 1001:1001 \
+            -e CI=true \
             -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
             -e HOME=/tmp \
             -v "${{ github.workspace }}:/work" \
@@ -184,19 +202,19 @@ jobs:
             sh -c "npm ci --no-audit --no-fund && npm run test:playwright"
 
       - name: Upload Playwright HTML report
-        if: failure()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: playwright-html-${{ github.run_id }}-${{ github.run_attempt }}
           path: e2e/playwright-report
           if-no-files-found: warn
           retention-days: 14
 
-      - name: Upload Playwright traces
-        if: failure()
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
+      - name: Upload Playwright test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: playwright-traces-${{ github.run_id }}-${{ github.run_attempt }}
+          name: playwright-results-${{ github.run_id }}-${{ github.run_attempt }}
           path: e2e/test-results
           if-no-files-found: warn
           retention-days: 14

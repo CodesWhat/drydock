@@ -17,6 +17,7 @@ export default defineConfig({
     browserName: 'chromium',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
+    video: isCI ? 'retain-on-failure' : 'off',
   },
 
   projects: [

@@ -269,7 +269,7 @@ test('normalizeImage should spread registry fields onto a new object (not empty 
   const normalized = freshRegistry.normalizeImage(image);
 
   // Extra fields from image.registry must survive the spread
-  expect((normalized.registry as Record<string, unknown>)['extraField']).toBe('preserved-value');
+  expect((normalized.registry as Record<string, unknown>).extraField).toBe('preserved-value');
   // URL is still overwritten
   expect(normalized.registry.url).toBe('http://localhost:5000/v2');
 });

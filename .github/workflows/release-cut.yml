@@ -35,12 +35,12 @@ jobs:
       contents: write      # git push tag, gh release create
       packages: write      # ghcr push
       id-token: write      # cosign keyless signing
-      attestations: write  # attest-build-provenance
+      attestations: write  # attest-build-provenance + OCI attestation storage
       actions: read        # wait-for-successful-branch-ci queries workflow runs
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
         with:
           egress-policy: audit
 
@@ -191,52 +191,16 @@ jobs:
 
           echo "Validated CHANGELOG entry for ${RELEASE_TAG}."
 
-      - name: Compute image tags
-        id: image_tags
-        env:
-          VERSION: ${{ steps.next.outputs.next_version }}
-          IS_PRERELEASE: ${{ steps.tag.outputs.is_prerelease }}
-          GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
-        run: |
-          set -euo pipefail
-
-          registries=("ghcr.io/${GHCR_REPO}" "docker.io/codeswhat/drydock" "quay.io/codeswhat/drydock")
-          suffixes=("${VERSION}")
-
-          if [ "${IS_PRERELEASE}" = "false" ]; then
-            major="${VERSION%%.*}"
-            rest="${VERSION#*.}"
-            minor="${rest%%.*}"
-            suffixes+=("${major}.${minor}" "${major}" "latest")
-          fi
-
-          tags=""
-          for registry in "${registries[@]}"; do
-            for suffix in "${suffixes[@]}"; do
-              if [ -z "${tags}" ]; then
-                tags="${registry}:${suffix}"
-              else
-                tags="${tags}"$'\n'"${registry}:${suffix}"
-              fi
-            done
-          done
-
-          {
-            echo "tags<<EOF"
-            echo "${tags}"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a  # v4.0.0
+        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3  # v4.1.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd  # v4.0.0
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
 
       - name: Log in to GHCR
         id: login_ghcr
         continue-on-error: true
-        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2  # v4.0.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -245,7 +209,7 @@ jobs:
       - name: Log in to Docker Hub
         id: login_dockerhub
         continue-on-error: true
-        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2  # v4.0.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -253,75 +217,83 @@ jobs:
       - name: Log in to Quay.io
         id: login_quay
         continue-on-error: true
-        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2  # v4.0.0
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
         with:
           registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
 
-      - name: Retry registry logins on failure
-        if: steps.login_ghcr.outcome == 'failure' || steps.login_dockerhub.outcome == 'failure' || steps.login_quay.outcome == 'failure'
+      - name: Retry GHCR login
+        if: steps.login_ghcr.outcome == 'failure'
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 2
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: |
+            set -euo pipefail
+            echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Retry Docker Hub login
+        if: steps.login_dockerhub.outcome == 'failure'
+        env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 2
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: |
+            set -euo pipefail
+            echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin
+
+      - name: Retry Quay.io login
+        if: steps.login_quay.outcome == 'failure'
+        env:
           QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
           QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
-          GHCR_OUTCOME: ${{ steps.login_ghcr.outcome }}
-          DOCKERHUB_OUTCOME: ${{ steps.login_dockerhub.outcome }}
-          QUAY_OUTCOME: ${{ steps.login_quay.outcome }}
-        run: |
-          set -euo pipefail
-          if [ "${GHCR_OUTCOME}" = "failure" ]; then
-            for i in 1 2 3; do
-              if echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin; then
-                break
-              fi
-              sleep $((5*i))
-            done
-          fi
-          if [ "${DOCKERHUB_OUTCOME}" = "failure" ]; then
-            for i in 1 2 3; do
-              if echo "${DOCKERHUB_TOKEN}" | docker login -u "${DOCKERHUB_USERNAME}" --password-stdin; then
-                break
-              fi
-              sleep $((5*i))
-            done
-          fi
-          if [ "${QUAY_OUTCOME}" = "failure" ]; then
-            for i in 1 2 3; do
-              if echo "${QUAY_PASSWORD}" | docker login quay.io -u "${QUAY_USERNAME}" --password-stdin; then
-                break
-              fi
-              sleep $((5*i))
-            done
-          fi
-
-      - name: Docker metadata labels
-        id: meta
-        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf  # v6.0.0
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
         with:
-          images: ghcr.io/${{ steps.target.outputs.repo_lower }}
-          # The tags input is required. We pass the full tag list to
-          # build-push-action via steps.image_tags; this single raw tag
-          # exists only to drive the OCI label values
-          # (org.opencontainers.image.version, .revision, etc.) correctly.
+          timeout_minutes: 2
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: |
+            set -euo pipefail
+            echo "${QUAY_PASSWORD}" | docker login quay.io -u "${QUAY_USERNAME}" --password-stdin
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9  # v6.1.0
+        with:
+          images: |
+            ghcr.io/${{ steps.target.outputs.repo_lower }}
+            docker.io/codeswhat/drydock
+            quay.io/codeswhat/drydock
+          flavor: |
+            latest=false
           tags: |
-            type=raw,value=${{ steps.next.outputs.next_version }}
+            type=semver,pattern={{version}},value=${{ steps.next.outputs.release_tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.next.outputs.release_tag }},enable=${{ steps.tag.outputs.is_prerelease == 'false' }}
+            type=semver,pattern={{major}},value=${{ steps.next.outputs.release_tag }},enable=${{ steps.tag.outputs.is_prerelease == 'false' }}
+            type=raw,value=latest,enable=${{ steps.tag.outputs.is_prerelease == 'false' }}
 
       - name: Build and push
         id: build
         continue-on-error: true  # allow manifest retry path on transient push failures
-        uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294  # v7.0.0
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
         with:
           context: .
           push: true
           platforms: ${{ env.DOCKER_PLATFORMS }}
-          tags: ${{ steps.image_tags.outputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: DD_VERSION=${{ steps.next.outputs.next_version }}
           sbom: true
+          provenance: mode=min
           cache-from: type=gha,scope=drydock
           cache-to: type=gha,mode=max,scope=drydock,ignore-error=true
 
@@ -330,53 +302,47 @@ jobs:
         if: steps.build.outcome == 'failure'
         env:
           BUILD_DIGEST: ${{ steps.build.outputs.digest }}
-          TAGS: ${{ steps.image_tags.outputs.tags }}
+          TAGS: ${{ steps.meta.outputs.tags }}
           GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
-        run: |
-          set -euo pipefail
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: |
+            set -euo pipefail
 
-          if [ -z "${BUILD_DIGEST:-}" ]; then
-            echo "::error::Build step failed before producing a digest; cannot retry manifest publish without a source digest."
-            exit 1
-          fi
-
-          source_candidates=(
-            "ghcr.io/${GHCR_REPO}@${BUILD_DIGEST}"
-            "docker.io/codeswhat/drydock@${BUILD_DIGEST}"
-            "quay.io/codeswhat/drydock@${BUILD_DIGEST}"
-          )
-
-          source_ref=""
-          for candidate in "${source_candidates[@]}"; do
-            if docker buildx imagetools inspect "${candidate}" >/dev/null 2>&1; then
-              source_ref="${candidate}"
-              break
+            if [ -z "${BUILD_DIGEST:-}" ]; then
+              echo "::error::Build step failed before producing a digest; cannot retry manifest publish without a source digest."
+              exit 1
             fi
-          done
 
-          if [ -z "${source_ref}" ]; then
-            echo "::error::No registry contains source manifest digest ${BUILD_DIGEST}; cannot perform manifest-only retry."
-            exit 1
-          fi
+            source_candidates=(
+              "ghcr.io/${GHCR_REPO}@${BUILD_DIGEST}"
+              "docker.io/codeswhat/drydock@${BUILD_DIGEST}"
+              "quay.io/codeswhat/drydock@${BUILD_DIGEST}"
+            )
 
-          while IFS= read -r tag; do
-            [ -z "${tag}" ] && continue
-            echo "Re-pushing manifest tag: ${tag} (source: ${source_ref})"
-            for attempt in 1 2 3; do
-              if docker buildx imagetools create --tag "${tag}" "${source_ref}" >/dev/null; then
+            source_ref=""
+            for candidate in "${source_candidates[@]}"; do
+              if docker buildx imagetools inspect "${candidate}" >/dev/null 2>&1; then
+                source_ref="${candidate}"
                 break
               fi
-
-              if [ "${attempt}" -eq 3 ]; then
-                echo "::error::Manifest publish retry failed for ${tag}"
-                exit 1
-              fi
-
-              sleep 5
             done
-          done <<< "${TAGS}"
 
-          echo "digest=${BUILD_DIGEST}" >> "$GITHUB_OUTPUT"
+            if [ -z "${source_ref}" ]; then
+              echo "::error::No registry contains source manifest digest ${BUILD_DIGEST}; cannot perform manifest-only retry."
+              exit 1
+            fi
+
+            while IFS= read -r tag; do
+              [ -z "${tag}" ] && continue
+              echo "Re-pushing manifest tag: ${tag} (source: ${source_ref})"
+              docker buildx imagetools create --tag "${tag}" "${source_ref}" >/dev/null
+            done <<< "${TAGS}"
+
+            echo "digest=${BUILD_DIGEST}" >> "$GITHUB_OUTPUT"
 
       - name: Resolve image digest
         id: digest
@@ -388,13 +354,13 @@ jobs:
 
       - name: Install cosign
         if: steps.build.outcome == 'success' || steps.manifest-retry.outcome == 'success'
-        uses: sigstore/cosign-installer@ba7bc0a3fef59531c69a25acd34668d6d3fe6f22  # v4.1.0
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
 
       - name: Sign container images
         if: steps.digest.outputs.value
         env:
           DIGEST: ${{ steps.digest.outputs.value }}
-          TAGS: ${{ steps.image_tags.outputs.tags }}
+          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           set -euo pipefail
           images=()
@@ -407,52 +373,116 @@ jobs:
         if: steps.digest.outputs.value
         env:
           DIGEST: ${{ steps.digest.outputs.value }}
-          TAGS: ${{ steps.image_tags.outputs.tags }}
-        run: |
-          set -euo pipefail
-          # OIDC identity pinned to release-cut.yml@refs/heads/main; the
-          # branch guard at the top of this job enforces the ref. See
-          # content/docs/current/guides/verifying-releases for the user-facing
-          # identity regex.
-          identity_regex="^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release-cut.yml@refs/heads/main$"
-          issuer="https://token.actions.githubusercontent.com"
+          TAGS: ${{ steps.meta.outputs.tags }}
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: |
+            set -euo pipefail
+            # OIDC identity pinned to release-cut.yml@refs/heads/main; the
+            # branch guard at the top of this job enforces the ref. See
+            # content/docs/current/guides/verifying-releases for the user-facing
+            # identity regex.
+            identity_regex="^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release-cut.yml@refs/heads/main$"
+            issuer="https://token.actions.githubusercontent.com"
 
-          images=()
-          while IFS= read -r tag; do
-            [ -n "${tag}" ] && images+=("${tag}@${DIGEST}")
-          done <<< "${TAGS}"
+            images=()
+            while IFS= read -r tag; do
+              [ -n "${tag}" ] && images+=("${tag}@${DIGEST}")
+            done <<< "${TAGS}"
 
-          if [ "${#images[@]}" -eq 0 ]; then
-            echo "::error::No images found to verify"
-            exit 1
-          fi
+            if [ "${#images[@]}" -eq 0 ]; then
+              echo "::error::No images found to verify"
+              exit 1
+            fi
 
-          for image in "${images[@]}"; do
-            echo "Verifying cosign signature for ${image}"
-            for attempt in 1 2 3; do
-              if cosign verify \
+            for image in "${images[@]}"; do
+              echo "Verifying cosign signature for ${image}"
+              cosign verify \
                 --certificate-identity-regexp "${identity_regex}" \
                 --certificate-oidc-issuer "${issuer}" \
-                "${image}" >/dev/null; then
-                break
-              fi
-
-              if [ "${attempt}" -eq 3 ]; then
-                echo "::error::Cosign verification failed for ${image}"
-                exit 1
-              fi
-
-              sleep 5
+                "${image}" >/dev/null
             done
-          done
 
       - name: Attest container build provenance
+        id: attest_container_image
         if: steps.digest.outputs.value
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32  # v4.1.0
         with:
           subject-name: ghcr.io/${{ steps.target.outputs.repo_lower }}
           subject-digest: ${{ steps.digest.outputs.value }}
           push-to-registry: true
+
+      - name: Verify container build provenance attestation
+        if: steps.digest.outputs.value
+        env:
+          DIGEST: ${{ steps.digest.outputs.value }}
+          GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          gh attestation verify "oci://ghcr.io/${GHCR_REPO}@${DIGEST}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/release-cut.yml" \
+            --source-ref refs/heads/main \
+            --source-digest "${TARGET_SHA}" \
+            --bundle-from-oci >/dev/null
+
+      - name: Generate container SBOM
+        if: steps.digest.outputs.value
+        env:
+          DIGEST: ${{ steps.digest.outputs.value }}
+          GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+          TRIVY_IMAGE: aquasec/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c  # 0.69.3
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          image_ref="ghcr.io/${GHCR_REPO}@${DIGEST}"
+          sbom_path="dist/drydock-${RELEASE_TAG}.image.spdx.json"
+
+          docker run --rm \
+            --volume "${PWD}/dist:/out" \
+            --volume "${HOME}/.docker:/root/.docker:ro" \
+            "${TRIVY_IMAGE}" \
+            image \
+            --format spdx-json \
+            --output "/out/$(basename "${sbom_path}")" \
+            --timeout 15m \
+            "${image_ref}"
+
+          jq -e '.spdxVersion == "SPDX-2.3" and (.packages | type == "array")' "${sbom_path}" >/dev/null
+
+      - name: Attest container SBOM
+        id: attest_container_sbom
+        if: steps.digest.outputs.value
+        uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26  # v4.1.0
+        with:
+          subject-name: ghcr.io/${{ steps.target.outputs.repo_lower }}
+          subject-digest: ${{ steps.digest.outputs.value }}
+          subject-version: ${{ steps.next.outputs.next_version }}
+          sbom-path: dist/drydock-${{ steps.next.outputs.release_tag }}.image.spdx.json
+          push-to-registry: true
+
+      - name: Verify container SBOM attestation
+        if: steps.digest.outputs.value
+        env:
+          DIGEST: ${{ steps.digest.outputs.value }}
+          GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          gh attestation verify "oci://ghcr.io/${GHCR_REPO}@${DIGEST}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/release-cut.yml" \
+            --source-ref refs/heads/main \
+            --source-digest "${TARGET_SHA}" \
+            --predicate-type https://spdx.dev/Document/v2.3 \
+            --bundle-from-oci >/dev/null
 
       - name: Build release artifact
         env:
@@ -468,52 +498,36 @@ jobs:
       - name: Sign release artifact
         env:
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
-        run: |
-          set -euo pipefail
-          artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
-          for attempt in 1 2 3; do
-            if cosign sign-blob --yes \
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: |
+            set -euo pipefail
+            artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
+            rm -f "${artifact}.bundle" "${artifact}.sig" "${artifact}.pem"
+            cosign sign-blob --yes \
               --bundle "${artifact}.bundle" \
-              --new-bundle-format=false \
-              --output-signature "${artifact}.sig" \
-              --output-certificate "${artifact}.pem" \
-              "${artifact}"; then
-              break
-            fi
-            if [ "${attempt}" -eq 3 ]; then
-              echo "::error::cosign sign-blob failed after 3 attempts"
-              exit 1
-            fi
-            sleep $((5*attempt))
-          done
+              "${artifact}"
 
-          # Cosign v3 may only emit bundle output in some keyless flows.
-          # Materialize legacy signature/cert files from the bundle when needed.
-          if [ ! -s "${artifact}.sig" ]; then
-            sig_b64="$(jq -r '.base64Signature // .messageSignature.signature // empty' "${artifact}.bundle")"
-            if [ -n "${sig_b64}" ]; then
-              printf '%s' "${sig_b64}" | base64 --decode > "${artifact}.sig"
-            fi
-          fi
+            sig_b64="$(jq -er '.base64Signature // .messageSignature.signature' "${artifact}.bundle")"
+            printf '%s' "${sig_b64}" | base64 --decode > "${artifact}.sig"
 
-          if [ ! -s "${artifact}.pem" ]; then
             cert_pem="$(jq -r '.cert // empty' "${artifact}.bundle")"
             if [ -n "${cert_pem}" ]; then
               printf '%s\n' "${cert_pem}" > "${artifact}.pem"
             else
-              cert_der_b64="$(jq -r '.verificationMaterial.certificate.rawBytes // empty' "${artifact}.bundle")"
-              if [ -n "${cert_der_b64}" ]; then
-                printf '%s' "${cert_der_b64}" | base64 --decode | openssl x509 -inform DER -out "${artifact}.pem"
-              fi
+              cert_der_b64="$(jq -er '.verificationMaterial.certificate.rawBytes' "${artifact}.bundle")"
+              printf '%s' "${cert_der_b64}" | base64 --decode | openssl x509 -inform DER -out "${artifact}.pem"
             fi
-          fi
 
-          if [ ! -s "${artifact}.sig" ] || [ ! -s "${artifact}.pem" ]; then
-            echo "::error::Expected signature outputs were not generated"
-            ls -la dist
-            jq 'keys' "${artifact}.bundle" || true
-            exit 1
-          fi
+            if [ ! -s "${artifact}.sig" ] || [ ! -s "${artifact}.pem" ]; then
+              echo "::error::Expected signature outputs were not generated"
+              ls -la dist
+              jq 'keys' "${artifact}.bundle" || true
+              exit 1
+            fi
 
       - name: Verify release artifact signature
         env:
@@ -525,8 +539,7 @@ jobs:
           issuer="https://token.actions.githubusercontent.com"
 
           cosign verify-blob \
-            --signature "${artifact}.sig" \
-            --certificate "${artifact}.pem" \
+            --bundle "${artifact}.bundle" \
             --certificate-identity-regexp "${identity_regex}" \
             --certificate-oidc-issuer "${issuer}" \
             "${artifact}" >/dev/null
@@ -545,6 +558,21 @@ jobs:
           set -euo pipefail
           artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
           cp "${BUNDLE_PATH}" "${artifact}.intoto.jsonl"
+
+      - name: Verify release artifact provenance attestation
+        env:
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
+          gh attestation verify "${artifact}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/release-cut.yml" \
+            --source-ref refs/heads/main \
+            --source-digest "${TARGET_SHA}" \
+            --bundle "${artifact}.intoto.jsonl" >/dev/null
 
       - name: Generate release notes from changelog
         id: release_notes
@@ -637,37 +665,31 @@ jobs:
           IS_PRERELEASE: ${{ steps.tag.outputs.is_prerelease }}
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
           RELEASE_NOTES_PATH: ${{ steps.release_notes.outputs.path }}
-        run: |
-          set -euo pipefail
-          prerelease_flag=""
-          if [ "${IS_PRERELEASE}" = "true" ]; then
-            prerelease_flag="--prerelease"
-          fi
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: |
+            set -euo pipefail
+            prerelease_args=()
+            if [ "${IS_PRERELEASE}" = "true" ]; then
+              prerelease_args=(--prerelease)
+            fi
 
-          for attempt in 1 2 3; do
-            if gh release view "${RELEASE_TAG}" >/dev/null 2>&1 || gh release create "${RELEASE_TAG}" --title "${RELEASE_TAG}" --notes-file "${RELEASE_NOTES_PATH}" ${prerelease_flag}; then :; else
-              if [ "${attempt}" -eq 3 ]; then exit 1; fi
-              sleep $((5*attempt))
-              continue
+            if ! gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+              gh release create "${RELEASE_TAG}" --title "${RELEASE_TAG}" --notes-file "${RELEASE_NOTES_PATH}" "${prerelease_args[@]}"
             fi
-            if gh release edit "${RELEASE_TAG}" --title "${RELEASE_TAG}" --notes-file "${RELEASE_NOTES_PATH}" ${prerelease_flag}; then :; else
-              if [ "${attempt}" -eq 3 ]; then exit 1; fi
-              sleep $((5*attempt))
-              continue
-            fi
-            if gh release upload "${RELEASE_TAG}" \
+            gh release edit "${RELEASE_TAG}" --title "${RELEASE_TAG}" --notes-file "${RELEASE_NOTES_PATH}" "${prerelease_args[@]}"
+            gh release upload "${RELEASE_TAG}" \
               "dist/drydock-${RELEASE_TAG}.tar.gz" \
               "dist/drydock-${RELEASE_TAG}.tar.gz.sha256" \
               "dist/drydock-${RELEASE_TAG}.tar.gz.bundle" \
               "dist/drydock-${RELEASE_TAG}.tar.gz.sig" \
               "dist/drydock-${RELEASE_TAG}.tar.gz.intoto.jsonl" \
               "dist/drydock-${RELEASE_TAG}.tar.gz.pem" \
-              --clobber; then
-              break
-            fi
-            if [ "${attempt}" -eq 3 ]; then exit 1; fi
-            sleep $((5*attempt))
-          done
+              "dist/drydock-${RELEASE_TAG}.image.spdx.json" \
+              --clobber
 
       - name: Release summary
         env:

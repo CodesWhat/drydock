@@ -8,7 +8,7 @@ Load-test scenarios live in `test/test.yml` and `test/test-behavior.yml` and run
 
 - `ci`: default CI profile for regression and correctness gates (arrivalRate 2-6 req/s, 40s duration)
 - `behavior`: feature-behavior profile for SSE reconnect, log routes, and write-path checks
-- `stress`: higher traffic profile for manual pressure testing
+- `stress`: higher traffic profile for advisory CI and manual pressure testing
 
 ### Local commands
 
@@ -50,7 +50,9 @@ npm run load:stress
 - The runner auto-selects a free random host port when `DD_LOAD_TEST_PORT` is not set.
 - In CI, the workflow enables Buildx + GHA cache to speed repeated image builds.
 - CI uploads Artillery JSON reports as workflow artifacts and posts a short p95/p99/request-rate summary in the job summary.
-- The push CI load-test job performs a regression check against the committed baseline at `test/load-test-baselines/ci.json`.
+- The push CI load-test job performs an enforced regression check against the committed baseline at `test/load-test-baselines/ci.json`.
+- The behavior profile has an advisory regression check against `test/load-test-baselines/behavior.json`.
+- The stress profile runs in push CI as an advisory signal with summary, correctness, and artifact upload steps.
 - Regression gate is enforced with both drift and absolute thresholds: `p95 <= +20%` and `<= 1200ms`, `p99 <= +25%` and `<= 2500ms`, `request_rate >= -15%` and `>= 10 req/s`.
 - You can run the same check locally with `./scripts/check-load-test-regression.sh <current.json> <baseline.json>`.
 - Correctness checks (5xx, failed VUs, and optional 429 bounds) are handled by `./scripts/check-load-test-correctness.sh <report.json> "<title>"`.

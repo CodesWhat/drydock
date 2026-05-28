@@ -1,4 +1,5 @@
 const dashboardReporterEnabled = Boolean(process.env.STRYKER_DASHBOARD_API_KEY);
+const dashboardModule = process.env.STRYKER_DASHBOARD_MODULE || 'app';
 
 /** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
 const config = {
@@ -37,7 +38,7 @@ const config = {
     ? {
         dashboard: {
           project: 'github.com/CodesWhat/drydock',
-          module: 'app',
+          module: dashboardModule,
           reportType: 'full',
         },
       }

@@ -4,9 +4,11 @@
 # Pre-push pipeline (piped = sequential, fail-fast):
 #   0. Clean tree gate — rejects untracked/uncommitted/stashed files
 #   1. Lint gate (~20s) — catches formatting/lint before burning CPU
-#   2. Coverage (sharded app+ui parallel) — tests run here, gap report on fail
-#   3. Build (sharded app+ui parallel) — tsc/vite only, no tests
-#   4. Zizmor (workflow security)
+#   2. Scripts tests — node:test coverage for repository maintenance scripts
+#   3. Workflow tests — CI/workflow invariants outside the app suite
+#   4. Coverage (sharded app+ui parallel) — tests run here, gap report on fail
+#   5. Build (sharded app+ui parallel) — tsc/vite only, no tests
+#   6. Zizmor (workflow security)
 #
 # E2E (Cucumber) and Playwright are intentionally NOT in pre-push. They run
 # in CI Verify (`.github/workflows/ci-verify.yml`) on the same commit a few
@@ -85,10 +87,22 @@ pre-push:
       priority: 5
       timeout: 2m
 
+    # ── Scripts tests: node:test coverage for maintenance scripts ─────
+    scripts-test:
+      run: node --test scripts/*.test.mjs
+      priority: 6
+      timeout: 30s
+
+    # ── Workflow tests: CI/workflow invariants outside app coverage ───
+    workflow-tests:
+      run: npm run test:workflows
+      priority: 7
+      timeout: 30s
+
     # ── UI typecheck: catches TypeScript errors that vite build misses ──
     typecheck-ui:
       run: npm run typecheck --prefix ui
-      priority: 6
+      priority: 8
       timeout: 2m
 
     # ── Coverage: sharded app+ui parallel, 100% threshold ────────────
@@ -97,14 +111,14 @@ pre-push:
     # Honors DD_COVERAGE_FAIL_FAST=1 for sequential first-failure mode.
     coverage:
       run: ./scripts/pre-push-coverage.sh
-      priority: 7
+      priority: 9
       timeout: 10m
 
     # ── Build: sharded app+ui parallel, no tests ─────────────────────
     # Tests already ran in the coverage step, so this is tsc/vite only.
     build:
       run: ./scripts/pre-push-build.sh
-      priority: 8
+      priority: 10
       timeout: 4m
 
     # ── Docker build (opt-in via DD_LOCAL_DOCKER=1) ───────────────────
@@ -113,7 +127,7 @@ pre-push:
       run: docker build --build-arg DD_VERSION=local -t drydock:local .
       skip:
         - run: '[ -z "$DD_LOCAL_DOCKER" ]'
-      priority: 9
+      priority: 11
       timeout: 10m
       fail_text: "Docker QA build failed — fix Dockerfile before push"
 
@@ -123,5 +137,5 @@ pre-push:
       run: zizmor .github/workflows/
       skip:
         - run: '! command -v zizmor >/dev/null 2>&1'
-      priority: 10
+      priority: 12
       timeout: 30s

@@ -1,0 +1,18 @@
+{
+  "meta": {
+    "source": "committed-baseline",
+    "description": "Reference behavior baseline for advisory regression checks. Matches behavior profile (arrivalRate 1-2 req/s, 30s duration).",
+    "updated_at": "2026-05-28"
+  },
+  "aggregate": {
+    "summaries": {
+      "http.response_time": {
+        "p95": 500.0,
+        "p99": 1000.0
+      }
+    },
+    "rates": {
+      "http.request_rate": 2.0
+    }
+  }
+}
