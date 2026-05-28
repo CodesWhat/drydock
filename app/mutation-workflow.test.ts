@@ -20,6 +20,8 @@ interface WorkflowMatrixEntry {
 interface WorkflowJobStep {
   name?: string;
   run?: string;
+  uses?: string;
+  with?: Record<string, string>;
 }
 
 interface WorkflowJob {
@@ -109,6 +111,25 @@ test('mutation workflow runs monthly with 27 logical slices and aggregate count 
   )?.run;
 
   expect(aggregateRunScript).toContain('--expected-count 27');
+});
+
+test('mutation aggregate job verifies downloaded artifact layout before merging', () => {
+  const workflow = yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;
+  const aggregateSteps = workflow.jobs?.aggregate?.steps ?? [];
+
+  expect(aggregateSteps.find((step) => step.name === 'Download mutation artifacts')).toMatchObject({
+    uses: 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c',
+    with: {
+      pattern: 'mutation-report-*',
+      path: 'artifacts/mutation',
+    },
+  });
+
+  const verifyStep = aggregateSteps.find((step) => step.name === 'Verify mutation artifact layout');
+  expect(verifyStep).toBeDefined();
+  expect(verifyStep?.run).toContain("find artifacts/mutation -type f -name 'mutation.json'");
+  expect(verifyStep?.run).toContain('mutation-report-*');
+  expect(verifyStep?.run).toContain('exit 1');
 });
 
 test('mutation shards publish distinct dashboard reports when configured', () => {

@@ -310,7 +310,31 @@ jobs:
       - name: Download mutation artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
         with:
+          pattern: mutation-report-*
           path: artifacts/mutation
+
+      - name: Verify mutation artifact layout
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t mutation_reports < <(find artifacts/mutation -type f -name 'mutation.json' | sort)
+          mapfile -t nested_mutation_reports < <(find artifacts/mutation -path 'artifacts/mutation/mutation-report-*/*' -type f -name 'mutation.json' | sort)
+
+          if [[ "${#mutation_reports[@]}" -eq 0 ]]; then
+            echo "::error::No mutation.json files found under artifacts/mutation after downloading mutation-report-* artifacts."
+            find artifacts/mutation -maxdepth 3 -print | sort || true
+            exit 1
+          fi
+
+          if [[ "${#nested_mutation_reports[@]}" -eq 0 ]]; then
+            echo "::error::Mutation reports were not found under the actions/download-artifact v8 per-artifact subdirectories."
+            find artifacts/mutation -maxdepth 3 -print | sort || true
+            exit 1
+          fi
+
+          printf 'Found %d mutation report(s):\n' "${#mutation_reports[@]}"
+          printf '%s\n' "${mutation_reports[@]}"
 
       - name: Aggregate shard scores
         run: |
