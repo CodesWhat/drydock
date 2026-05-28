@@ -171,12 +171,16 @@ jobs:
       # PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 keeps the transitive
       # @playwright/browser-chromium postinstall from racing the same
       # download. --network host lets Playwright reach the QA stack on
-      # localhost:3333. --ipc=host avoids Chrome /dev/shm OOMs.
+      # localhost:3333. --ipc=host avoids Chrome /dev/shm OOMs, while
+      # --init avoids PID 1 signal/zombie-process edge cases.
       - name: Run Playwright tests
         run: |
           docker run --rm \
+            --init \
             --network host \
             --ipc=host \
+            --user 1001:1001 \
+            -e CI=true \
             -e PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
             -e HOME=/tmp \
             -v "${{ github.workspace }}:/work" \
@@ -185,7 +189,7 @@ jobs:
             sh -c "npm ci --no-audit --no-fund && npm run test:playwright"
 
       - name: Upload Playwright HTML report
-        if: failure()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
         with:
           name: playwright-html-${{ github.run_id }}-${{ github.run_attempt }}
@@ -193,11 +197,11 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      - name: Upload Playwright traces
-        if: failure()
+      - name: Upload Playwright test results
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
         with:
-          name: playwright-traces-${{ github.run_id }}-${{ github.run_attempt }}
+          name: playwright-results-${{ github.run_id }}-${{ github.run_attempt }}
           path: e2e/test-results
           if-no-files-found: warn
           retention-days: 14
