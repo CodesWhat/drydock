@@ -3,10 +3,12 @@ run-name: >-
   ${{
     github.event_name == 'branch_protection_rule' && '🛡️ Security: OpenSSF Scorecard — Branch protection changed' ||
     github.event_name == 'schedule' && '🛡️ Security: OpenSSF Scorecard — Weekly schedule' ||
+    github.event_name == 'workflow_dispatch' && format('🛡️ Security: OpenSSF Scorecard — Manual by {0}', github.actor) ||
     format('🛡️ Security: OpenSSF Scorecard — {0}', github.ref_name)
   }}
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -16,13 +18,21 @@ on:
 
 permissions: read-all
 
+concurrency:
+  group: scorecard-${{ github.workflow }}
+  cancel-in-progress: true
+
 jobs:
   analysis:
     name: "🛡️ Security: Scorecard Analysis"
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
+      actions: read  # Allow SARIF upload metadata reads on private repos
+      checks: read  # Improve CI/SAST detection on private repos
       contents: read  # Checkout code
+      issues: read  # Improve maintainer/activity checks on private repos
+      pull-requests: read  # Improve commit/review checks on private repos
       security-events: write  # Upload SARIF results
       id-token: write  # Publish results to OpenSSF REST API
 
@@ -43,6 +53,7 @@ jobs:
         with:
           results_file: results.sarif
           results_format: sarif
+          repo_token: ${{ secrets.SCORECARD_TOKEN || github.token }}
           publish_results: true
 
       - name: Upload to code-scanning
