@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SNYK_CLI_VERSION: '1.1303.1'
+  SNYK_CLI_VERSION: '1.1305.0'
   SNYK_QUOTA_CONFIG_PATH: scripts/snyk-quota-config.json
   SNYK_CONTAINER_IMAGE: drydock:snyk
 
