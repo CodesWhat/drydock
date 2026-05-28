@@ -130,10 +130,38 @@ jobs:
           cache-from: type=gha,scope=drydock
           cache-to: type=gha,mode=max,scope=drydock,ignore-error=true
 
+      # Cache Playwright's browser binary directory across runs.
+      # The @playwright/browser-chromium devDep runs a 167-MiB postinstall
+      # download against cdn.playwright.dev during `npm ci`. CDN throttling
+      # has been making that 9-10 min per attempt and three jobs in a row
+      # blew past even a 10-min retry timeout. With a warm cache the
+      # postinstall short-circuits and npm ci finishes in seconds.
+      # Per-ref key matches the cache-scoping pattern in
+      # quality-mutation-monthly.yml: each branch (main, release/**, PR
+      # heads) gets its own cache namespace so an untrusted PR cannot
+      # poison main's chromium binary. restore-keys lets a fresh branch
+      # warm-start from any prior cache by lockfile-hash prefix.
+      # The workflow runs on push:main/PR/merge_group, which triggers
+      # zizmor's cache-poisoning audit on any actions/cache usage. The
+      # ref-scoped key (github.ref_name) gives each branch its own
+      # cache namespace so an untrusted PR cannot overwrite main's
+      # binary, and the cached payload is just the chromium binary
+      # (verified by its own integrity check at runtime). No runtime
+      # artifact is being published from this cache.
+      - name: Cache Playwright browsers
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684  # zizmor: ignore[cache-poisoning] v4.2.3
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ github.ref_name }}-${{ hashFiles('e2e/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-${{ github.ref_name }}-
+            ${{ runner.os }}-playwright-main-
+            ${{ runner.os }}-playwright-
+
       - name: Install e2e dependencies
         uses: nick-fields/retry@ce71cc2ab81d554ebbe88c79ab5975992d79ba08  # v3.0.2
         with:
-          timeout_minutes: 10  # @playwright/browser-chromium postinstall downloads ~167 MiB; 5 min was tight enough to flake on slow CDN moments
+          timeout_minutes: 15  # Cold-cache cushion: chromium download has been clocking 9-10 min per attempt under CDN throttling
           max_attempts: 3
           retry_wait_seconds: 30
           command: cd e2e && npm ci
