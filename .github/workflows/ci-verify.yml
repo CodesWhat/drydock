@@ -732,7 +732,9 @@ jobs:
       || github.event_name == 'schedule'
     needs: [build]
     permissions:
+      actions: read
       contents: read
+      security-events: write
 
     steps:
       - name: Harden Runner
@@ -772,6 +774,40 @@ jobs:
           docker compose -p drydock-nuclei -f test/qa-compose.yml ps
           exit 1
 
+      - name: Create Nuclei authenticated session
+        id: nuclei_auth
+        run: |
+          set -euo pipefail
+
+          cookie_jar="$(mktemp)"
+          trap 'rm -f "${cookie_jar}"' EXIT
+
+          basic_auth="$(printf 'admin:password' | base64 | tr -d '\n')"
+          curl -fsS \
+            -c "${cookie_jar}" \
+            -H "Authorization: Basic ${basic_auth}" \
+            -H 'Content-Type: application/json' \
+            --data '{"remember":false}' \
+            http://localhost:3333/auth/login >/dev/null
+
+          curl -fsS -b "${cookie_jar}" http://localhost:3333/auth/user >/dev/null
+
+          cookie_header="$(
+            awk '
+              /^#HttpOnly_/ { sub(/^#HttpOnly_/, "") }
+              /^#/ || NF < 7 { next }
+              { printf "%s%s=%s", sep, $6, $7; sep="; " }
+            ' "${cookie_jar}"
+          )"
+
+          if [ -z "${cookie_header}" ]; then
+            echo "::error::Authenticated Nuclei login did not produce a session cookie."
+            exit 1
+          fi
+
+          echo "::add-mask::${cookie_header}"
+          printf 'cookie_header=%s\n' "${cookie_header}" >> "${GITHUB_OUTPUT}"
+
       - name: Create Nuclei report directory
         run: mkdir -p artifacts/dast
 
@@ -781,7 +817,14 @@ jobs:
         uses: projectdiscovery/nuclei-action@32a91c0da7be14c07b0ade6c14fa0f6e78d97c9c  # v3.1.0
         with:
           version: v3.8.0
-          args: -u http://localhost:3333 -as -severity medium,high,critical -json-export artifacts/dast/nuclei-report.json -silent
+          args: >-
+            -u http://localhost:3333
+            -severity medium,high,critical
+            -type http
+            -H "Cookie: ${{ steps.nuclei_auth.outputs.cookie_header }}"
+            -json-export artifacts/dast/nuclei-report.json
+            -sarif-export artifacts/dast/nuclei-report.sarif
+            -silent
 
       - name: Enforce Nuclei severity gate (medium+)
         env:
@@ -822,12 +865,70 @@ jobs:
             exit 1
           fi
 
-      - name: Upload Nuclei JSON report
+      - name: Prepare Nuclei SARIF report
+        id: nuclei_sarif
+        if: always()
+        env:
+          SCAN_OUTCOME: ${{ steps.nuclei_scan.outcome }}
+        run: |
+          set -euo pipefail
+
+          sarif="artifacts/dast/nuclei-report.sarif"
+
+          if [ -s "${sarif}" ]; then
+            if jq -e '.version == "2.1.0" and (.runs | type == "array")' "${sarif}" >/dev/null; then
+              echo "upload=true" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+
+            echo "::warning::Nuclei SARIF output is not valid SARIF 2.1.0; skipping Code Scanning upload."
+            echo "upload=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          if [ "${SCAN_OUTCOME}" != "success" ]; then
+            echo "Nuclei did not produce SARIF because the scan failed."
+            echo "upload=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          cat > "${sarif}" <<'JSON'
+          {
+            "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+            "version": "2.1.0",
+            "runs": [
+              {
+                "tool": {
+                  "driver": {
+                    "name": "Nuclei",
+                    "informationUri": "https://github.com/projectdiscovery/nuclei",
+                    "semanticVersion": "3.8.0",
+                    "rules": []
+                  }
+                },
+                "results": []
+              }
+            ]
+          }
+          JSON
+
+          echo "upload=true" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload Nuclei SARIF to code scanning
+        if: always() && steps.nuclei_sarif.outputs.upload == 'true'
+        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa  # v4.36.0
+        with:
+          sarif_file: artifacts/dast/nuclei-report.sarif
+          category: nuclei
+
+      - name: Upload Nuclei reports
         if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f  # v7.0.0
         with:
-          name: nuclei-json-${{ github.run_id }}-${{ github.run_attempt }}
-          path: artifacts/dast/nuclei-report.json
+          name: nuclei-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            artifacts/dast/nuclei-report.json
+            artifacts/dast/nuclei-report.sarif
           if-no-files-found: warn
           retention-days: 30
 
@@ -837,7 +938,8 @@ jobs:
           set -uo pipefail
 
           report="artifacts/dast/nuclei-report.json"
-          artifact_name="nuclei-json-${{ github.run_id }}-${{ github.run_attempt }}"
+          sarif="artifacts/dast/nuclei-report.sarif"
+          artifact_name="nuclei-reports-${{ github.run_id }}-${{ github.run_attempt }}"
           artifact_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}#artifacts"
 
           critical=0
@@ -872,6 +974,13 @@ jobs:
             fi
             echo "- Findings: **${total}**"
             echo "- Severity breakdown: critical=${critical}, high=${high}, medium=${medium}, low=${low}, info=${info}"
+            echo "- Auth: Basic session cookie"
+            echo "- Templates: HTTP templates at medium+ severity"
+            if [ -s "${sarif}" ]; then
+              echo "- SARIF: \`${sarif}\`"
+            else
+              echo "- SARIF: not produced"
+            fi
             echo "- Artifact: [${artifact_name}](${artifact_url})"
           } >> "${GITHUB_STEP_SUMMARY}"
 
