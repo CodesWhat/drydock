@@ -416,12 +416,29 @@ jobs:
           done
 
       - name: Attest container build provenance
+        id: attest_container_image
         if: steps.digest.outputs.value
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32  # v4.1.0
         with:
           subject-name: ghcr.io/${{ steps.target.outputs.repo_lower }}
           subject-digest: ${{ steps.digest.outputs.value }}
           push-to-registry: true
+
+      - name: Verify container build provenance attestation
+        if: steps.digest.outputs.value
+        env:
+          DIGEST: ${{ steps.digest.outputs.value }}
+          GHCR_REPO: ${{ steps.target.outputs.repo_lower }}
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          gh attestation verify "oci://ghcr.io/${GHCR_REPO}@${DIGEST}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/release-cut.yml" \
+            --source-ref refs/heads/main \
+            --source-digest "${TARGET_SHA}" \
+            --bundle-from-oci >/dev/null
 
       - name: Build release artifact
         env:
@@ -443,9 +460,6 @@ jobs:
           for attempt in 1 2 3; do
             if cosign sign-blob --yes \
               --bundle "${artifact}.bundle" \
-              --new-bundle-format=false \
-              --output-signature "${artifact}.sig" \
-              --output-certificate "${artifact}.pem" \
               "${artifact}"; then
               break
             fi
@@ -456,25 +470,15 @@ jobs:
             sleep $((5*attempt))
           done
 
-          # Cosign v3 may only emit bundle output in some keyless flows.
-          # Materialize legacy signature/cert files from the bundle when needed.
-          if [ ! -s "${artifact}.sig" ]; then
-            sig_b64="$(jq -r '.base64Signature // .messageSignature.signature // empty' "${artifact}.bundle")"
-            if [ -n "${sig_b64}" ]; then
-              printf '%s' "${sig_b64}" | base64 --decode > "${artifact}.sig"
-            fi
-          fi
+          sig_b64="$(jq -er '.base64Signature // .messageSignature.signature' "${artifact}.bundle")"
+          printf '%s' "${sig_b64}" | base64 --decode > "${artifact}.sig"
 
-          if [ ! -s "${artifact}.pem" ]; then
-            cert_pem="$(jq -r '.cert // empty' "${artifact}.bundle")"
-            if [ -n "${cert_pem}" ]; then
-              printf '%s\n' "${cert_pem}" > "${artifact}.pem"
-            else
-              cert_der_b64="$(jq -r '.verificationMaterial.certificate.rawBytes // empty' "${artifact}.bundle")"
-              if [ -n "${cert_der_b64}" ]; then
-                printf '%s' "${cert_der_b64}" | base64 --decode | openssl x509 -inform DER -out "${artifact}.pem"
-              fi
-            fi
+          cert_pem="$(jq -r '.cert // empty' "${artifact}.bundle")"
+          if [ -n "${cert_pem}" ]; then
+            printf '%s\n' "${cert_pem}" > "${artifact}.pem"
+          else
+            cert_der_b64="$(jq -er '.verificationMaterial.certificate.rawBytes' "${artifact}.bundle")"
+            printf '%s' "${cert_der_b64}" | base64 --decode | openssl x509 -inform DER -out "${artifact}.pem"
           fi
 
           if [ ! -s "${artifact}.sig" ] || [ ! -s "${artifact}.pem" ]; then
@@ -494,8 +498,7 @@ jobs:
           issuer="https://token.actions.githubusercontent.com"
 
           cosign verify-blob \
-            --signature "${artifact}.sig" \
-            --certificate "${artifact}.pem" \
+            --bundle "${artifact}.bundle" \
             --certificate-identity-regexp "${identity_regex}" \
             --certificate-oidc-issuer "${issuer}" \
             "${artifact}" >/dev/null
@@ -514,6 +517,21 @@ jobs:
           set -euo pipefail
           artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
           cp "${BUNDLE_PATH}" "${artifact}.intoto.jsonl"
+
+      - name: Verify release artifact provenance attestation
+        env:
+          RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+          artifact="dist/drydock-${RELEASE_TAG}.tar.gz"
+          gh attestation verify "${artifact}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/release-cut.yml" \
+            --source-ref refs/heads/main \
+            --source-digest "${TARGET_SHA}" \
+            --bundle "${artifact}.intoto.jsonl" >/dev/null
 
       - name: Generate release notes from changelog
         id: release_notes
