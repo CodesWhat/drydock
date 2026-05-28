@@ -3,6 +3,8 @@ import { fileURLToPath } from 'node:url';
 
 import yaml from 'yaml';
 
+import { expectedActionUse } from './github-action-pins';
+
 interface WorkflowJob {
   name?: string;
   steps?: WorkflowJobStep[];
@@ -215,7 +217,7 @@ test('load-test workflow runs load profiles in parallel jobs', () => {
   );
 
   expect(getWorkflowStep('load-test-stress', 'Upload load test artifact (stress)')).toMatchObject({
-    uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
+    uses: expectedActionUse('actions/upload-artifact'),
     with: {
       path: 'artifacts/load-test/stress/*.json',
       'if-no-files-found': 'warn',
