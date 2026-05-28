@@ -788,6 +788,9 @@ describe('Docker Watcher', () => {
       storeContainer.getContainers.mockReturnValue([
         { id: 'old1', watcher: 'test', name: 'svc' } as any,
       ]);
+      storeContainer.getContainersRaw.mockReturnValue([
+        { id: 'old1', watcher: 'test', name: 'svc' } as any,
+      ]);
       storeContainer.deleteContainer.mockImplementation(() => {
         throw new Error('Delete failed');
       });
@@ -3977,6 +3980,7 @@ describe('Docker Watcher', () => {
       storeContainer.getContainers.mockImplementation((query?: { watcher?: string }) =>
         query?.watcher ? [] : [],
       );
+      storeContainer.getContainersRaw.mockReturnValue([]);
       registry.getState.mockReturnValue({ watcher: {} } as any);
 
       await docker.getContainers();
@@ -4017,44 +4021,46 @@ describe('Docker Watcher', () => {
         '',
       );
       mockDockerApi.listContainers.mockResolvedValue([]);
+      const sameSourceFixtures = [
+        {
+          id: 'same-source',
+          watcher: 'docker-same-source',
+          agent: '',
+          name: 'service',
+        },
+        {
+          id: 'empty-watcher',
+          watcher: '',
+          agent: '',
+          name: 'service',
+        },
+        {
+          id: 'whitespace-watcher',
+          watcher: '   ',
+          agent: '',
+          name: 'service',
+        },
+        {
+          id: 'non-docker-watcher',
+          watcher: 'docker-queue',
+          agent: '',
+          name: 'service',
+        },
+        {
+          id: 'different-agent',
+          watcher: 'docker-same-source',
+          agent: 'remote-agent',
+          name: 'service',
+        },
+      ];
       storeContainer.getContainers.mockImplementation((query?: { watcher?: string }) => {
         if (query?.watcher) {
           return [];
         }
 
-        return [
-          {
-            id: 'same-source',
-            watcher: 'docker-same-source',
-            agent: '',
-            name: 'service',
-          },
-          {
-            id: 'empty-watcher',
-            watcher: '',
-            agent: '',
-            name: 'service',
-          },
-          {
-            id: 'whitespace-watcher',
-            watcher: '   ',
-            agent: '',
-            name: 'service',
-          },
-          {
-            id: 'non-docker-watcher',
-            watcher: 'docker-queue',
-            agent: '',
-            name: 'service',
-          },
-          {
-            id: 'different-agent',
-            watcher: 'docker-same-source',
-            agent: 'remote-agent',
-            name: 'service',
-          },
-        ] as any;
+        return sameSourceFixtures as any;
       });
+      storeContainer.getContainersRaw.mockReturnValue(sameSourceFixtures as any);
       registry.getState.mockReturnValue({
         watcher: {
           'docker.docker-same-source': {

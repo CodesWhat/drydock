@@ -96,6 +96,7 @@ export class OutboxWorker {
   private readonly inflight = new Set<string>();
   private timer: ReturnType<typeof setInterval> | undefined;
   private drainsSincePurge = 0;
+  private stopped = false;
   private readonly options: ResolvedOptions;
 
   constructor(opts: OutboxWorkerOptions) {
@@ -117,6 +118,7 @@ export class OutboxWorker {
     if (this.timer) {
       return;
     }
+    this.stopped = false;
     this.timer = setInterval(() => {
       void this.drain();
     }, this.options.intervalMs);
@@ -124,6 +126,7 @@ export class OutboxWorker {
   }
 
   stop(): void {
+    this.stopped = true;
     if (this.timer) {
       clearInterval(this.timer);
       this.timer = undefined;
@@ -167,8 +170,14 @@ export class OutboxWorker {
   private async dispatch(entry: NotificationOutboxEntry): Promise<void> {
     try {
       await this.options.deliver(entry);
+      if (this.stopped) {
+        return;
+      }
       markOutboxEntryDelivered(entry.id);
     } catch (err: unknown) {
+      if (this.stopped) {
+        return;
+      }
       const errorMessage = err instanceof Error ? err.message : String(err);
       const nextAttempt = entry.attempts + 1;
       const nextAttemptAt = this.computeNextAttemptAt(nextAttempt);

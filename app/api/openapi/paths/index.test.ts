@@ -6,6 +6,7 @@ import {
   iconProviderPathParam,
   iconSlugPathParam,
   jsonResponse,
+  noContentResponse,
   notificationRuleIdPathParam,
   operationIdPathParam,
 } from '../common.js';
@@ -255,6 +256,85 @@ describe('openApiPaths', () => {
             400: errorResponse('Invalid notification rule update'),
             401: errorResponse('Authentication required'),
             404: errorResponse('Notification rule not found'),
+          },
+        },
+      });
+    });
+
+    test('/api/notifications/outbox GET path is fully specified', () => {
+      expect(openApiPaths['/api/notifications/outbox']).toStrictEqual({
+        get: {
+          tags: ['Notifications'],
+          summary: 'List notification outbox entries',
+          operationId: 'listNotificationOutboxEntries',
+          parameters: [
+            {
+              name: 'status',
+              in: 'query',
+              required: false,
+              description: 'Filter by entry status (defaults to dead-letter)',
+              schema: {
+                type: 'string',
+                enum: ['pending', 'delivered', 'dead-letter'],
+              },
+            },
+          ],
+          responses: {
+            200: jsonResponse('Notification outbox entries', {
+              $ref: '#/components/schemas/NotificationOutboxResult',
+            }),
+            400: errorResponse('Invalid status query parameter'),
+            401: errorResponse('Authentication required'),
+          },
+        },
+      });
+    });
+
+    test('/api/notifications/outbox/{id}/retry POST path is fully specified', () => {
+      const outboxEntryIdPathParam = {
+        name: 'id',
+        in: 'path',
+        required: true,
+        description: 'Outbox entry identifier',
+        schema: { type: 'string' },
+      };
+      expect(openApiPaths['/api/notifications/outbox/{id}/retry']).toStrictEqual({
+        post: {
+          tags: ['Notifications', 'Actions'],
+          summary: 'Retry a dead-letter outbox entry',
+          operationId: 'retryNotificationOutboxEntry',
+          parameters: [outboxEntryIdPathParam],
+          responses: {
+            200: jsonResponse('Requeued outbox entry', {
+              $ref: '#/components/schemas/NotificationOutboxEntry',
+            }),
+            401: errorResponse('Authentication required'),
+            404: errorResponse('Outbox entry not found or not in dead-letter status'),
+            500: errorResponse('Internal server error'),
+          },
+        },
+      });
+    });
+
+    test('/api/notifications/outbox/{id} DELETE path is fully specified', () => {
+      const outboxEntryIdPathParam = {
+        name: 'id',
+        in: 'path',
+        required: true,
+        description: 'Outbox entry identifier',
+        schema: { type: 'string' },
+      };
+      expect(openApiPaths['/api/notifications/outbox/{id}']).toStrictEqual({
+        delete: {
+          tags: ['Notifications', 'Actions'],
+          summary: 'Delete a notification outbox entry',
+          operationId: 'deleteNotificationOutboxEntry',
+          parameters: [outboxEntryIdPathParam],
+          responses: {
+            204: noContentResponse,
+            401: errorResponse('Authentication required'),
+            404: errorResponse('Outbox entry not found'),
+            500: errorResponse('Internal server error'),
           },
         },
       });

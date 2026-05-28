@@ -46,12 +46,13 @@ describe('vite build configuration', () => {
     );
   });
 
-  it('defines exactly three codeSplitting groups in priority order', () => {
+  it('defines exactly four codeSplitting groups in priority order', () => {
     const groups = getCodeSplittingGroups();
 
-    expect(groups).toHaveLength(3);
+    expect(groups).toHaveLength(4);
     expect(groups[0]?.name).toBe('framework');
-    expect(groups[1]?.name).toBe('icons');
-    expect(groups[2]?.name).toBe('vendor');
+    expect(groups[1]?.name).toBe('i18n');
+    expect(groups[2]?.name).toBe('icons');
+    expect(groups[3]?.name).toBe('vendor');
   });
 });

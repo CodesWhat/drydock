@@ -654,6 +654,159 @@ describe('api/log-stream', () => {
       expect(unsubscribeFn).toHaveBeenCalledTimes(1);
     });
 
+    test('drops live entries when bufferedAmount exceeds 2 MB cap', async () => {
+      const ws = new EventEmitter() as EventEmitter & {
+        send: ReturnType<typeof vi.fn>;
+        close: ReturnType<typeof vi.fn>;
+        bufferedAmount: number;
+      };
+      ws.send = vi.fn();
+      ws.close = vi.fn();
+      ws.bufferedAmount = 3 * 1024 * 1024; // 3 MB — above cap
+
+      let capturedListener: ((entry: any) => void) | undefined;
+      const unsubscribeFn = vi.fn();
+      const subscribeToEntries = vi.fn((listener: (entry: any) => void) => {
+        capturedListener = listener;
+        return unsubscribeFn;
+      });
+
+      const gateway = createSystemLogStreamGateway({
+        sessionMiddleware: authenticatingSessionMiddleware,
+        webSocketServer: {
+          handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
+            callback(ws),
+          ),
+        },
+        isRateLimited: vi.fn(() => false),
+        getBackfillEntries: vi.fn(() => []),
+        subscribeToEntries,
+      });
+
+      const upgradePromise = gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/log/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Two drops (below close threshold of 3) — not sent, not closed yet
+      capturedListener!(makeEntry({ msg: 'drop-1' }));
+      capturedListener!(makeEntry({ msg: 'drop-2' }));
+      expect(ws.send).not.toHaveBeenCalled();
+      expect(ws.close).not.toHaveBeenCalled();
+      expect(unsubscribeFn).not.toHaveBeenCalled();
+
+      // Third consecutive drop — should trigger close with 1008
+      capturedListener!(makeEntry({ msg: 'drop-3' }));
+      expect(ws.send).not.toHaveBeenCalled();
+      expect(ws.close).toHaveBeenCalledWith(1008, expect.stringContaining('Policy Violation'));
+      await upgradePromise;
+      expect(unsubscribeFn).toHaveBeenCalledTimes(1);
+    });
+
+    test('resets consecutive-drop counter when buffer drains below cap', async () => {
+      const ws = new EventEmitter() as EventEmitter & {
+        send: ReturnType<typeof vi.fn>;
+        close: ReturnType<typeof vi.fn>;
+        bufferedAmount: number;
+      };
+      ws.send = vi.fn();
+      ws.close = vi.fn();
+      ws.bufferedAmount = 3 * 1024 * 1024; // above cap initially
+
+      let capturedListener: ((entry: any) => void) | undefined;
+      const unsubscribeFn = vi.fn();
+      const subscribeToEntries = vi.fn((listener: (entry: any) => void) => {
+        capturedListener = listener;
+        return unsubscribeFn;
+      });
+
+      const gateway = createSystemLogStreamGateway({
+        sessionMiddleware: authenticatingSessionMiddleware,
+        webSocketServer: {
+          handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
+            callback(ws),
+          ),
+        },
+        isRateLimited: vi.fn(() => false),
+        getBackfillEntries: vi.fn(() => []),
+        subscribeToEntries,
+      });
+
+      const upgradePromise = gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/log/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Two drops accumulate
+      capturedListener!(makeEntry({ msg: 'drop-1' }));
+      capturedListener!(makeEntry({ msg: 'drop-2' }));
+      expect(ws.close).not.toHaveBeenCalled();
+
+      // Buffer drains — next entry is sent, counter resets
+      ws.bufferedAmount = 0;
+      capturedListener!(makeEntry({ msg: 'ok' }));
+      expect(ws.send).toHaveBeenCalledTimes(1);
+      expect(ws.close).not.toHaveBeenCalled();
+
+      // Two more drops from high buffer — should NOT close because counter was reset
+      ws.bufferedAmount = 3 * 1024 * 1024;
+      capturedListener!(makeEntry({ msg: 'drop-3' }));
+      capturedListener!(makeEntry({ msg: 'drop-4' }));
+      expect(ws.close).not.toHaveBeenCalled();
+
+      ws.emit('close');
+      await upgradePromise;
+      expect(unsubscribeFn).toHaveBeenCalledTimes(1);
+    });
+
+    test('does not apply bufferedAmount cap when property is absent', async () => {
+      const ws = new EventEmitter() as EventEmitter & {
+        send: ReturnType<typeof vi.fn>;
+        close: ReturnType<typeof vi.fn>;
+      };
+      ws.send = vi.fn();
+      ws.close = vi.fn();
+      // No bufferedAmount property — should send unconditionally
+
+      let capturedListener: ((entry: any) => void) | undefined;
+      const subscribeToEntries = vi.fn((listener: (entry: any) => void) => {
+        capturedListener = listener;
+        return vi.fn();
+      });
+
+      const gateway = createSystemLogStreamGateway({
+        sessionMiddleware: authenticatingSessionMiddleware,
+        webSocketServer: {
+          handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
+            callback(ws),
+          ),
+        },
+        isRateLimited: vi.fn(() => false),
+        getBackfillEntries: vi.fn(() => []),
+        subscribeToEntries,
+      });
+
+      const upgradePromise = gateway.handleUpgrade(
+        createUpgradeRequest('/api/v1/log/stream') as any,
+        createUpgradeSocket() as any,
+        Buffer.alloc(0),
+      );
+
+      await new Promise((resolve) => setImmediate(resolve));
+      capturedListener!(makeEntry({ msg: 'should-send' }));
+      expect(ws.send).toHaveBeenCalledTimes(1);
+      expect(ws.close).not.toHaveBeenCalled();
+
+      ws.emit('close');
+      await upgradePromise;
+    });
+
     test('applies default fixed-window rate limiter', async () => {
       const gateway = createSystemLogStreamGateway({
         sessionMiddleware: (_req: any, _res: unknown, next: (error?: unknown) => void) => next(),

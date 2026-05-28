@@ -1,4 +1,4 @@
-import { extractCollectionData } from '../utils/api';
+import { extractCollectionData, readJsonResponse } from '../utils/api';
 
 /**
  * Get registry provider icon (acr, ecr...).
@@ -83,7 +83,7 @@ async function getAllRegistries() {
   if (!response.ok) {
     throw new Error(`Failed to get registries: ${response.statusText}`);
   }
-  const payload = await response.json();
+  const payload = await readJsonResponse(response);
   return extractCollectionData(payload);
 }
 
@@ -103,7 +103,7 @@ async function getRegistry({ type, name, agent }: RegistryDetailPathOptions) {
   if (!response.ok) {
     throw new Error(`Failed to get registry: ${response.statusText}`);
   }
-  return response.json();
+  return readJsonResponse(response);
 }
 
 export { getAllRegistries, getRegistry, getRegistryProviderColor, getRegistryProviderIcon };

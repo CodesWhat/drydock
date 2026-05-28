@@ -1,4 +1,4 @@
-import { extractCollectionData } from '../utils/api';
+import { extractCollectionData, readJsonResponse } from '../utils/api';
 
 const BASE_URL = '/api/v1/agents';
 
@@ -15,6 +15,6 @@ export async function getAgents(): Promise<ApiAgent[]> {
   if (!response.ok) {
     throw new Error(`Failed to get agents: ${response.statusText}`);
   }
-  const payload = await response.json();
+  const payload = await readJsonResponse(response);
   return extractCollectionData<ApiAgent>(payload);
 }

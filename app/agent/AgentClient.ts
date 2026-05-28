@@ -185,6 +185,7 @@ export class AgentClient {
   private readonly pendingWatcherCycleReports: Map<string, Map<string, ContainerReport>>;
   private readonly watcherSnapshotCache: Map<string, WatcherSnapshotCacheEntry>;
   private statsChangedTimer: ReturnType<typeof setTimeout> | undefined;
+  private handshakeInProgress: Promise<void> | null = null;
 
   constructor(name: string, config: AgentClientConfig) {
     this.name = name;
@@ -502,6 +503,16 @@ export class AgentClient {
   }
 
   async handshake() {
+    if (this.handshakeInProgress) {
+      return this.handshakeInProgress;
+    }
+    this.handshakeInProgress = this._doHandshake().finally(() => {
+      this.handshakeInProgress = null;
+    });
+    return this.handshakeInProgress;
+  }
+
+  private async _doHandshake() {
     const wasConnected = this.isConnected;
     const reconnected = this.hasConnectedOnce;
     const response = await axios.get<Container[]>(
@@ -512,7 +523,21 @@ export class AgentClient {
     this.log.info(`Handshake successful. Received ${containers.length} containers.`);
 
     await this.processAuthoritativeContainers(containers);
-    this.pruneOldContainers(containers);
+    // A zero-container handshake is ambiguous: it could mean the agent has
+    // no running containers, or its in-memory store is fresh-empty after a
+    // restart while docker still has running containers. Defer the prune
+    // until the first authoritative watcher snapshot arrives — that path is
+    // unambiguous because the snapshot is only emitted after a successful
+    // enumeration with no enrichment errors (#362, #386 / d02080ae).
+    // Pruning here would wipe last-known state for an agent that's about to
+    // re-populate it in seconds via its first watch cycle.
+    if (containers.length > 0) {
+      this.pruneOldContainers(containers);
+    } else if (this.hasConnectedOnce) {
+      this.log.warn(
+        'Handshake returned 0 containers; preserving last-known state until the first watch cycle completes',
+      );
+    }
 
     // Unregister existing components for this agent
     await registry.deregisterAgentComponents(this.name);

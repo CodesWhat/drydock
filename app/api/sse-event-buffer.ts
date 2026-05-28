@@ -79,10 +79,22 @@ export class SseEventBuffer {
       }
     }
 
-    const events = this.ring.filter((e) => {
-      const p = parseEventId(e.id);
-      return p !== null && p.counter > parsed.counter;
-    });
+    // Binary-search for the first event whose counter > parsed.counter.
+    // The ring is in monotone-counter order (events are only ever appended
+    // after eviction, and the monotonic counter only increases), so a linear
+    // filter over up to 500 entries can be replaced with O(log n) bisection.
+    let lo = 0;
+    let hi = this.ring.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      const midParsed = parseEventId(this.ring[mid].id);
+      if (midParsed !== null && midParsed.counter <= parsed.counter) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    const events = this.ring.slice(lo);
 
     return { kind: 'replay', events };
   }

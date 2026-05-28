@@ -1199,7 +1199,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     }
     try {
       sameSourceContainersFromTheStore = getContainersFromSameDockerSource(this, [
-        ...storeContainer.getContainers(),
+        ...storeContainer.getContainersRaw(),
       ]);
     } catch (e: unknown) {
       this.log.warn(

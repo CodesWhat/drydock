@@ -116,7 +116,7 @@ describe('Store Module', () => {
     const Loki = (await import('lokijs')).default;
     expect(Loki).toHaveBeenCalledWith('/test/store/test.json', {
       autosave: true,
-      autosaveInterval: 60000,
+      autosaveInterval: 300000,
     });
 
     const app = await import('./app.js');

@@ -1689,6 +1689,91 @@ describe('runScheduledScans', () => {
       expect.objectContaining({ scope: 'scheduled', alertCount: 0 }),
     );
   });
+
+  test('should dispatch security alerts for all containers in a group concurrently', async () => {
+    // Three containers share the same digest (one scan → three alerts)
+    const container1 = createContainer({ id: 'c1', name: 'nginx' });
+    const container2 = createContainer({
+      id: 'c2',
+      name: 'nginx-replica',
+      image: { ...createContainer().image, digest: { watch: true, value: 'sha256:abc123' } },
+    });
+    const container3 = createContainer({
+      id: 'c3',
+      name: 'nginx-sidecar',
+      image: { ...createContainer().image, digest: { watch: true, value: 'sha256:abc123' } },
+    });
+    mockGetContainers.mockReturnValue([container1, container2, container3]);
+
+    // Track concurrency: record max in-flight count
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const resolvers: Array<() => void> = [];
+    mockEmitSecurityAlert.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          inFlight += 1;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          resolvers.push(() => {
+            inFlight -= 1;
+            resolve();
+          });
+        }),
+    );
+
+    mockScanImageWithDedup.mockResolvedValue({
+      scanResult: createScanResult({
+        summary: { unknown: 0, low: 0, medium: 0, high: 3, critical: 1 },
+      }),
+      fromCache: false,
+    });
+
+    const scanPromise = runScheduledScans();
+
+    // Wait until all three alerts are in-flight simultaneously
+    await vi.waitFor(() => {
+      expect(mockEmitSecurityAlert).toHaveBeenCalledTimes(3);
+    });
+
+    // All three should be in-flight at the same time (concurrent, not serial)
+    expect(maxInFlight).toBe(3);
+
+    resolvers.forEach((r) => r());
+    await scanPromise;
+
+    expect(mockEmitSecurityScanCycleComplete).toHaveBeenCalledWith(
+      expect.objectContaining({ alertCount: 3 }),
+    );
+  });
+
+  test('should count only fulfilled alerts when one alert rejects', async () => {
+    const container1 = createContainer({ id: 'c1', name: 'nginx' });
+    const container2 = createContainer({
+      id: 'c2',
+      name: 'nginx-replica',
+      image: { ...createContainer().image, digest: { watch: true, value: 'sha256:abc123' } },
+    });
+    mockGetContainers.mockReturnValue([container1, container2]);
+
+    mockEmitSecurityAlert
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('notification channel down'));
+
+    mockScanImageWithDedup.mockResolvedValue({
+      scanResult: createScanResult({
+        summary: { unknown: 0, low: 0, medium: 0, high: 2, critical: 0 },
+      }),
+      fromCache: false,
+    });
+
+    // Should not throw even though one alert rejects
+    await runScheduledScans();
+
+    expect(mockEmitSecurityAlert).toHaveBeenCalledTimes(2);
+    expect(mockEmitSecurityScanCycleComplete).toHaveBeenCalledWith(
+      expect.objectContaining({ alertCount: 1 }),
+    );
+  });
 });
 
 describe('shutdown', () => {

@@ -41,9 +41,19 @@ import { createSelfUpdateAckProtocol } from './sse-self-update-ack-protocol.js';
 const router = express.Router();
 let initialized = false;
 
-// Per-IP and per-session connection tracking to prevent connection exhaustion.
+// Per-IP, per-session, and global connection tracking to prevent connection exhaustion.
 const MAX_CONNECTIONS_PER_IP = 10;
 const MAX_CONNECTIONS_PER_SESSION = 10;
+function getMaxClientsGlobal(): number {
+  const raw = process.env.DD_SSE_MAX_CLIENTS;
+  if (raw !== undefined) {
+    const parsed = Number(raw);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return 500;
+}
 const connectionsPerIp = new Map<string, number>();
 const connectionsPerSession = new Map<string, number>();
 const DEFAULT_SELF_UPDATE_ACK_TIMEOUT_MS = 3000;
@@ -234,6 +244,13 @@ function eventsHandler(req: Request, res: Response): void {
   const sessionKey = getClientSessionKey(req);
   const currentIpCount = connectionsPerIp.get(ip) ?? 0;
   const currentSessionCount = connectionsPerSession.get(sessionKey) ?? 0;
+
+  const maxGlobal = getMaxClientsGlobal();
+  if (clients.size >= maxGlobal) {
+    logger.warn(`SSE global connection limit reached (${clients.size})`);
+    sendErrorResponse(res, 429, 'Too many SSE connections');
+    return;
+  }
 
   if (currentIpCount >= MAX_CONNECTIONS_PER_IP) {
     logger.warn(
@@ -614,6 +631,7 @@ export {
   clients as _clients,
   connectionsPerIp as _connectionsPerIp,
   connectionsPerSession as _connectionsPerSession,
+  getMaxClientsGlobal as _getMaxClientsGlobal,
   MAX_CONNECTIONS_PER_IP as _MAX_CONNECTIONS_PER_IP,
   MAX_CONNECTIONS_PER_SESSION as _MAX_CONNECTIONS_PER_SESSION,
   pendingSelfUpdateAcks as _pendingSelfUpdateAcks,

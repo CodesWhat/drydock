@@ -128,7 +128,10 @@ jobs:
           # everywhere it appears: it
           # uses import.meta.glob(), a Vite compile-time macro whose argument
           # must stay a literal — Stryker instrumentation breaks the glob
-          # parser and aborts the dry run.
+          # parser and aborts the dry run. src/icons.ts and src/i18n/locales.ts
+          # are also excluded: they are pure-data files whose string-literal
+          # mutants cause transitive jsdom hangs in Vue tests and provide no
+          # logic-quality signal.
           - name: ui-views-containers
             package: ui
             incremental_file: reports/stryker-incremental-ui-views-containers.json
@@ -173,7 +176,7 @@ jobs:
             package: ui
             incremental_file: reports/stryker-incremental-ui-shell-app.json
             mutate: >-
-              src/components/**/*.ts,src/boot/**/*.ts,src/layouts/**/*.ts,src/i18n/**/*.ts,src/main.ts,src/icons.ts,!src/boot/i18n.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
+              src/components/**/*.ts,src/boot/**/*.ts,src/layouts/**/*.ts,src/i18n/**/*.ts,src/main.ts,src/icons.ts,!src/boot/i18n.ts,!src/icons.ts,!src/i18n/locales.ts,!**/*.d.ts,!**/*.test.ts,!**/*.fuzz.test.ts,!**/*.typecheck.ts,!dist/**,!coverage/**
 
     steps:
       - name: Harden Runner
@@ -182,6 +185,19 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
+        id: checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        continue-on-error: true
+        with:
+          persist-credentials: false
+
+      - name: Wait before checkout retry
+        if: steps.checkout.outcome == 'failure'
+        shell: bash
+        run: sleep 30
+
+      - name: Checkout (retry)
+        if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           persist-credentials: false
@@ -265,6 +281,19 @@ jobs:
           egress-policy: audit
 
       - name: Checkout
+        id: checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        continue-on-error: true
+        with:
+          persist-credentials: false
+
+      - name: Wait before checkout retry
+        if: steps.checkout.outcome == 'failure'
+        shell: bash
+        run: sleep 30
+
+      - name: Checkout (retry)
+        if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
           persist-credentials: false

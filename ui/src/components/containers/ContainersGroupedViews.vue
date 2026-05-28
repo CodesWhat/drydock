@@ -76,8 +76,10 @@ const {
 const { t, te } = useI18n();
 const { batches, clearBatch, getBatch, incrementSucceeded, incrementFailed } = useUpdateBatches();
 
-const openActionsContainer = computed(
-  () => displayContainers.value.find((container) => container.id === openActionsMenu.value) ?? null,
+const openActionsContainer = computed(() =>
+  openActionsMenu.value
+    ? (displayContainers.value.find((container) => container.id === openActionsMenu.value) ?? null)
+    : null,
 );
 
 type DisplayContainer = (typeof displayContainers.value)[number];

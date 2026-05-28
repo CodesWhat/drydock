@@ -1,4 +1,4 @@
-import { extractCollectionData } from '../utils/api';
+import { extractCollectionData, readJsonResponse } from '../utils/api';
 
 interface TriggerDetailPathOptions {
   type: string;
@@ -111,7 +111,7 @@ async function getAllTriggers() {
   if (!response.ok) {
     throw new Error(`Failed to get triggers: ${response.statusText}`);
   }
-  const payload = await response.json();
+  const payload = await readJsonResponse(response);
   return extractCollectionData(payload);
 }
 
@@ -131,7 +131,7 @@ async function getTrigger({ type, name, agent }: TriggerDetailPathOptions) {
   if (!response.ok) {
     throw new Error(`Failed to get trigger: ${response.statusText}`);
   }
-  return response.json();
+  return readJsonResponse(response);
 }
 
 async function runTrigger({
@@ -149,7 +149,7 @@ async function runTrigger({
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(container),
   });
-  const json = await response.json();
+  const json = await readJsonResponse<{ error?: string } & Record<string, unknown>>(response);
   if (response.status !== 200) {
     throw new Error(json.error ? json.error : 'Unknown error');
   }

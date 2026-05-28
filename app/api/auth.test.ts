@@ -1244,6 +1244,13 @@ describe('Auth Router', () => {
       expect(app.use).toHaveBeenCalledWith('/auth', expect.anything());
     });
 
+    test('should register the json body parser with a 64kb limit', () => {
+      const app = createApp();
+      auth.init(app);
+
+      expect(mockExpressJson).toHaveBeenCalledWith({ limit: '64kb' });
+    });
+
     test('should register a mutation-only json parser on the auth router', () => {
       const app = createApp();
       auth.init(app);

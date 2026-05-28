@@ -772,6 +772,40 @@ describe('AgentClient', () => {
       await client.handshake();
       expect(client.isConnected).toBe(true);
     });
+
+    test('should deduplicate concurrent handshake calls — _doHandshake runs only once per in-flight window', async () => {
+      // Simulate a slow first handshake that stays pending
+      let resolveFirst!: () => void;
+      const firstCallPromise = new Promise<void>((resolve) => {
+        resolveFirst = resolve;
+      });
+      const doHandshakeSpy = vi
+        .spyOn(client as never, '_doHandshake')
+        .mockReturnValueOnce(firstCallPromise);
+
+      // Fire three concurrent handshake() calls while first is still in flight
+      const p1 = client.handshake();
+      const p2 = client.handshake();
+      const p3 = client.handshake();
+
+      // _doHandshake should only have been invoked once — the guard is working
+      expect(doHandshakeSpy).toHaveBeenCalledTimes(1);
+
+      // Settle the in-flight promise; all callers should resolve
+      resolveFirst();
+      await Promise.all([p1, p2, p3]);
+
+      // After the in-flight window closes, a new call triggers a fresh _doHandshake
+      let resolveSecond!: () => void;
+      const secondCallPromise = new Promise<void>((resolve) => {
+        resolveSecond = resolve;
+      });
+      doHandshakeSpy.mockReturnValueOnce(secondCallPromise);
+      const p4 = client.handshake();
+      expect(doHandshakeSpy).toHaveBeenCalledTimes(2);
+      resolveSecond();
+      await p4;
+    });
   });
 
   describe('pruneOldContainers (tested via handshake)', () => {
@@ -840,6 +874,96 @@ describe('AgentClient', () => {
       expect(storeContainer.deleteContainer).toHaveBeenCalledTimes(15);
       expect(newIdReads).toBeLessThanOrEqual(80);
       expect(storeIdReads).toBeLessThanOrEqual(80);
+    });
+
+    test('should NOT prune controller-side containers when handshake returns 0 (cold-start race #386)', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({ ...c, updateAvailable: false }));
+      storeContainer.getContainers.mockReturnValue([
+        { id: 'stale-1', name: 'web' },
+        { id: 'stale-2', name: 'db' },
+      ]);
+
+      await client.handshake();
+
+      // Last-known state must be preserved. The first watcher snapshot is
+      // the unambiguous signal for an empty agent (issue #386).
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+    });
+
+    test('should warn when handshake returns 0 after a prior successful connect (cold-start race #386)', async () => {
+      // First handshake — non-empty so we hit the prune branch and set
+      // hasConnectedOnce.
+      axios.get
+        .mockResolvedValueOnce({
+          data: [{ id: 'c1', name: 'web', watcher: 'local' }],
+        })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({
+        ...c,
+        updateAvailable: false,
+      }));
+      storeContainer.getContainers.mockReturnValue([]);
+      await client.handshake();
+
+      client.scheduleReconnect(1_000);
+      clearTimeout((client as any).reconnectTimer);
+      (client as any).reconnectTimer = null;
+
+      // Second handshake returns zero — should warn and skip prune.
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+      storeContainer.getContainers.mockReturnValue([{ id: 'c1', name: 'web' }]);
+
+      await client.handshake();
+
+      expect(client.log.warn).toHaveBeenCalledWith(
+        'Handshake returned 0 containers; preserving last-known state until the first watch cycle completes',
+      );
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+    });
+
+    test('should still prune normally when handshake returns at least one container', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [{ id: 'kept', name: 'kept' }] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({ ...c, updateAvailable: false }));
+      storeContainer.getContainers.mockReturnValue([
+        { id: 'kept', name: 'kept' },
+        { id: 'gone', name: 'gone' },
+      ]);
+
+      await client.handshake();
+
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('gone');
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('kept');
+    });
+
+    test('first-ever zero handshake should not warn (no last-known state yet)', async () => {
+      axios.get
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] })
+        .mockResolvedValueOnce({ data: [] });
+
+      storeContainer.getContainers.mockReturnValue([]);
+      await client.handshake();
+
+      expect(client.log.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('preserving last-known state'),
+      );
     });
   });
 
@@ -1421,6 +1545,29 @@ describe('AgentClient', () => {
       expect(client.log.error).toHaveBeenCalledWith(
         'Handshake failed after dd:ack: handshake failed',
       );
+    });
+
+    test('burst dd:ack events must not start a second handshake while the first is in flight', async () => {
+      // Use a slow _doHandshake so the first call stays in-flight
+      let resolveHandshake!: () => void;
+      const slowHandshake = new Promise<void>((resolve) => {
+        resolveHandshake = resolve;
+      });
+      vi.spyOn(client as never, '_doHandshake').mockReturnValueOnce(slowHandshake);
+
+      // Simulate a burst of three dd:ack events
+      void client.handleEvent('dd:ack', { version: '1.0' });
+      void client.handleEvent('dd:ack', { version: '1.0' });
+      void client.handleEvent('dd:ack', { version: '1.0' });
+
+      // All three calls should share the same in-flight promise —
+      // _doHandshake was invoked only once.
+      const doHandshakeSpy = vi.mocked((client as never)['_doHandshake']);
+      expect(doHandshakeSpy).toHaveBeenCalledTimes(1);
+
+      // Settle the handshake so the test doesn't leak
+      resolveHandshake();
+      await Promise.resolve();
     });
 
     test('should process container on dd:container-added', async () => {

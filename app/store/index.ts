@@ -94,7 +94,7 @@ export async function init(options: { memory?: boolean } = {}) {
 
   db = new Loki(storePath, {
     autosave: !isMemoryMode,
-    autosaveInterval: 60000,
+    autosaveInterval: 300000,
   });
 
   if (isMemoryMode) {

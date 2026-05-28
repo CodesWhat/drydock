@@ -1,4 +1,4 @@
-import { extractCollectionData } from '../utils/api';
+import { extractCollectionData, readJsonResponse } from '../utils/api';
 
 export interface NotificationRule {
   id: string;
@@ -18,7 +18,7 @@ async function getAllNotificationRules(): Promise<NotificationRule[]> {
   if (!response.ok) {
     throw new Error(`Failed to get notifications: ${response.statusText}`);
   }
-  const payload = await response.json();
+  const payload = await readJsonResponse(response);
   return extractCollectionData<NotificationRule>(payload);
 }
 
@@ -38,7 +38,7 @@ async function updateNotificationRule(
     throw new Error(err.error || `HTTP ${response.status}`);
   }
 
-  return response.json();
+  return readJsonResponse<NotificationRule>(response);
 }
 
 export { getAllNotificationRules, updateNotificationRule };

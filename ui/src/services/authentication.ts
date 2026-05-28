@@ -1,4 +1,4 @@
-import { extractCollectionData } from '../utils/api';
+import { extractCollectionData, readJsonResponse } from '../utils/api';
 
 interface AuthenticationDetailPathOptions {
   type: string;
@@ -37,7 +37,7 @@ async function getAllAuthentications() {
   if (!response.ok) {
     throw new Error(`Failed to get authentications: ${response.statusText}`);
   }
-  const payload = await response.json();
+  const payload = await readJsonResponse(response);
   return extractCollectionData(payload);
 }
 
@@ -57,7 +57,7 @@ async function getAuthentication({ type, name, agent }: AuthenticationDetailPath
   if (!response.ok) {
     throw new Error(`Failed to get authentication: ${response.statusText}`);
   }
-  return response.json();
+  return readJsonResponse(response);
 }
 
 export { getAllAuthentications, getAuthentication, getAuthProviderColor, getAuthProviderIcon };

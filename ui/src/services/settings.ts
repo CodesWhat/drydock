@@ -1,3 +1,5 @@
+import { readJsonResponse } from '../utils/api';
+
 interface Settings {
   internetlessMode: boolean;
 }
@@ -8,7 +10,7 @@ async function getSettings(): Promise<Settings> {
     const err = await response.json().catch(() => ({ error: 'Unknown error' }));
     throw new Error(err.error || `HTTP ${response.status}`);
   }
-  return response.json();
+  return readJsonResponse<Settings>(response);
 }
 
 async function updateSettings(settings: Partial<Settings>): Promise<Settings> {
@@ -22,7 +24,7 @@ async function updateSettings(settings: Partial<Settings>): Promise<Settings> {
     const err = await response.json().catch(() => ({ error: 'Unknown error' }));
     throw new Error(err.error || `HTTP ${response.status}`);
   }
-  return response.json();
+  return readJsonResponse<Settings>(response);
 }
 
 async function clearIconCache(): Promise<{ cleared: number }> {
@@ -34,7 +36,7 @@ async function clearIconCache(): Promise<{ cleared: number }> {
     const err = await response.json().catch(() => ({ error: 'Unknown error' }));
     throw new Error(err.error || `HTTP ${response.status}`);
   }
-  return response.json();
+  return readJsonResponse<{ cleared: number }>(response);
 }
 
 export { clearIconCache, getSettings, updateSettings };
