@@ -100,8 +100,16 @@ vi.mock('./prometheus', () => ({
   init: vi.fn(() => 'prometheus-router'),
 }));
 
+const mockSetAuthReadyFn = vi.hoisted(() => vi.fn());
+const mockGetAllIdsForIndex = vi.hoisted(() => vi.fn(() => []));
+
 vi.mock('./health', () => ({
   init: vi.fn(() => 'health-router'),
+  setAuthReadyFn: mockSetAuthReadyFn,
+}));
+
+vi.mock('./auth-strategies', () => ({
+  getAllIds: mockGetAllIdsForIndex,
 }));
 
 vi.mock('./container/log-stream', () => ({
@@ -599,6 +607,52 @@ describe('API Index', () => {
     await indexRouter.init();
 
     expect(mockApp.use).not.toHaveBeenCalledWith('json-middleware');
+  });
+
+  test('setAuthReadyFn should be wired before auth.init so /health gates on strategy registration', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    const freshAuth = await import('./auth.js');
+    const freshHealth = await import('./health.js');
+    await indexRouter.init();
+
+    // setAuthReadyFn must be called and must precede auth.init
+    expect(freshHealth.setAuthReadyFn).toHaveBeenCalledOnce();
+    const setAuthReadyFnCallOrder = freshHealth.setAuthReadyFn.mock.invocationCallOrder[0];
+    const authInitCallOrder = freshAuth.init.mock.invocationCallOrder[0];
+    expect(setAuthReadyFnCallOrder).toBeLessThan(authInitCallOrder);
+  });
+
+  test('the readiness fn passed to setAuthReadyFn should reflect getAllIds liveness', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+
+    vi.resetModules();
+    // Mock getAllIds to start empty
+    mockGetAllIdsForIndex.mockReturnValue([]);
+
+    const indexRouter = await import('./index.js');
+    const freshHealth = await import('./health.js');
+    await indexRouter.init();
+
+    const readinessFn = freshHealth.setAuthReadyFn.mock.calls[0][0];
+    // Empty strategies → not ready
+    expect(readinessFn()).toBe(false);
+
+    // Populated strategies → ready
+    mockGetAllIdsForIndex.mockReturnValue(['local']);
+    expect(readinessFn()).toBe(true);
   });
 
   test('should register helmet middleware before auth init', async () => {

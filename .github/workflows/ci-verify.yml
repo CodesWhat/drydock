@@ -523,7 +523,7 @@ jobs:
           retention-days: 1
 
   dast-zap-baseline:
-    name: "🕷️ DAST: ZAP + Nuclei (Advisory)"
+    name: "🕷️ DAST: ZAP + Nuclei"
     runs-on: ubuntu-latest
     timeout-minutes: 25  # Includes QA stack startup and scanner container runtime
     # Run on every merge to main (gates the next release-cut), on legacy
@@ -533,9 +533,6 @@ jobs:
       (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')))
       || github.event_name == 'schedule'
     needs: [build]
-    # Advisory while we debug a post-rc.28 401 race in the auth init path —
-    # findings still surface in SARIF + artifacts; release-cut isn't gated.
-    continue-on-error: true
     permissions:
       actions: read
       contents: read
@@ -567,12 +564,9 @@ jobs:
       - name: Wait for QA health
         run: |
           set -euo pipefail
-          # /health flips true before auth strategies finish registering, so
-          # poll /auth/strategies too — that's the gate the scanners hit next.
           for _ in $(seq 1 60); do
-            if curl -sf http://localhost:3333/health >/dev/null 2>&1 \
-               && curl -sf http://localhost:3333/auth/strategies | jq -e '.strategies | length > 0' >/dev/null 2>&1; then
-              echo "Drydock is healthy and auth is ready"
+            if curl -sf http://localhost:3333/health >/dev/null 2>&1; then
+              echo "Drydock is healthy"
               exit 0
             fi
             sleep 2
