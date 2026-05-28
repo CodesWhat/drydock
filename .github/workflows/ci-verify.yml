@@ -599,8 +599,46 @@ jobs:
           docker compose -p drydock-zap -f test/qa-compose.yml ps
           exit 1
 
+      - name: Create ZAP authenticated session
+        id: zap_auth
+        run: |
+          set -euo pipefail
+
+          cookie_jar="$(mktemp)"
+          trap 'rm -f "${cookie_jar}"' EXIT
+
+          basic_auth="$(printf 'admin:password' | base64 | tr -d '\n')"
+          curl -fsS \
+            -c "${cookie_jar}" \
+            -H "Authorization: Basic ${basic_auth}" \
+            -H 'Content-Type: application/json' \
+            --data '{"remember":false}' \
+            http://localhost:3333/auth/login >/dev/null
+
+          curl -fsS -b "${cookie_jar}" http://localhost:3333/auth/user >/dev/null
+
+          cookie_header="$(
+            awk '
+              /^#HttpOnly_/ { sub(/^#HttpOnly_/, "") }
+              /^#/ || NF < 7 { next }
+              { printf "%s%s=%s", sep, $6, $7; sep="; " }
+            ' "${cookie_jar}"
+          )"
+
+          if [ -z "${cookie_header}" ]; then
+            echo "::error::Authenticated ZAP login did not produce a session cookie."
+            exit 1
+          fi
+
+          echo "::add-mask::${cookie_header}"
+          printf 'cookie_header=%s\n' "${cookie_header}" >> "${GITHUB_OUTPUT}"
+
       - name: Run ZAP baseline scan
         uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25  # v0.15.0
+        env:
+          ZAP_AUTH_HEADER: Cookie
+          ZAP_AUTH_HEADER_VALUE: ${{ steps.zap_auth.outputs.cookie_header }}
+          ZAP_AUTH_HEADER_SITE: localhost:3333
         with:
           target: http://localhost:3333
           docker_name: ghcr.io/zaproxy/zaproxy@sha256:2ec1d5d5b44d55cfd02ba9b89cd26852f06d92b7fc0ce9f064b9463babc73074  # stable digest, 2026-05-28
@@ -639,6 +677,7 @@ jobs:
           report="report_json.json"
           artifact_name="zap-baseline-html-${{ github.run_id }}-${{ github.run_attempt }}"
           artifact_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}#artifacts"
+          auth_mode="Basic session cookie"
 
           high=0
           medium=0
@@ -670,6 +709,7 @@ jobs:
             fi
             echo "- Findings: **${total}**"
             echo "- Severity breakdown: high=${high}, medium=${medium}, low=${low}, info=${info}"
+            echo "- Auth: ${auth_mode}"
             echo "- Artifact: [${artifact_name}](${artifact_url})"
           } >> "${GITHUB_STEP_SUMMARY}"
 
