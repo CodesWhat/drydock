@@ -9,7 +9,7 @@ interface WorkflowStep {
   name?: string;
   uses?: string;
   run?: string;
-  with?: Record<string, string>;
+  with?: Record<string, unknown>;
 }
 
 interface WorkflowJob {
@@ -23,6 +23,15 @@ interface WorkflowDefinition {
 const workflowPath = fileURLToPath(new URL('../workflows/release-cut.yml', import.meta.url));
 const retryAction = 'nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60';
 const metadataAction = 'docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9';
+const transientRetryStepNames = [
+  'Retry GHCR login',
+  'Retry Docker Hub login',
+  'Retry Quay.io login',
+  'Retry manifest publish on transient registry failure',
+  'Verify container image signatures',
+  'Sign release artifact',
+  'Create GitHub Release and upload signed assets',
+];
 
 function loadReleaseSteps(): WorkflowStep[] {
   const workflow = yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;
@@ -40,14 +49,15 @@ function blockLines(value: string | undefined): string[] {
     .filter(Boolean);
 }
 
-test('release-cut uses the shared retry action for transient release operations', () => {
-  expect(getStep('Retry GHCR login')?.uses).toBe(retryAction);
-  expect(getStep('Retry Docker Hub login')?.uses).toBe(retryAction);
-  expect(getStep('Retry Quay.io login')?.uses).toBe(retryAction);
-  expect(getStep('Retry manifest publish on transient registry failure')?.uses).toBe(retryAction);
-  expect(getStep('Verify container image signatures')?.uses).toBe(retryAction);
-  expect(getStep('Sign release artifact')?.uses).toBe(retryAction);
-  expect(getStep('Create GitHub Release and upload signed assets')?.uses).toBe(retryAction);
+test('release-cut uses multi-attempt retry action steps for transient release operations', () => {
+  for (const stepName of transientRetryStepNames) {
+    const step = getStep(stepName);
+    const maxAttempts = Number(step?.with?.max_attempts);
+
+    expect(step?.uses).toBe(retryAction);
+    expect(Number.isInteger(maxAttempts)).toBe(true);
+    expect(maxAttempts).toBeGreaterThanOrEqual(2);
+  }
 });
 
 test('release-cut has no hand-rolled fixed retry loops', () => {
