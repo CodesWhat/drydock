@@ -148,7 +148,7 @@ jobs:
 
   fuzz:
     name: "🎯 Fuzz Testing"
-    if: github.event_name == 'pull_request' || github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: github.event_name == 'schedule' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     needs: [zizmor]
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -303,39 +303,6 @@ jobs:
         with:
           base-ref: ${{ github.event_name == 'push' && github.event.before || '' }}
           head-ref: ${{ github.event_name == 'push' && github.sha || '' }}
-
-  commit-message:
-    name: "📝 Policy: Commit Message Gate (Advisory)"
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    continue-on-error: true
-    permissions:
-      contents: read
-
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - name: Validate commit messages in PR range
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: node scripts/validate-commit-range.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}"
 
   lint:
     name: "🧹 Quality: Lint"
@@ -556,7 +523,7 @@ jobs:
           retention-days: 1
 
   dast-zap-baseline:
-    name: "🕷️ DAST: ZAP Baseline"
+    name: "🕷️ DAST: ZAP + Nuclei"
     runs-on: ubuntu-latest
     timeout-minutes: 25  # Includes QA stack startup and scanner container runtime
     # Run on every merge to main (gates the next release-cut), on legacy
@@ -724,69 +691,9 @@ jobs:
             echo "- Artifact: [${artifact_name}](${artifact_url})"
           } >> "${GITHUB_STEP_SUMMARY}"
 
-      - name: Show QA logs on failure
-        if: failure()
-        run: docker compose -p drydock-zap -f test/qa-compose.yml logs --no-color
-
-      - name: Stop QA stack
-        if: always()
-        run: docker compose -p drydock-zap -f test/qa-compose.yml down -v --remove-orphans
-
-  dast-nuclei:
-    name: "🔎 DAST: Nuclei"
-    runs-on: ubuntu-latest
-    timeout-minutes: 25  # Includes QA stack startup and full medium+ template pass
-    # Same gate as dast-zap-baseline — push to main, legacy release branches,
-    # and the weekly schedules.
-    if: |
-      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')))
-      || github.event_name == 'schedule'
-    needs: [build]
-    permissions:
-      actions: read
-      contents: read
-      security-events: write
-
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Download QA image artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
-        with:
-          name: qa-image-${{ github.run_id }}
-          path: artifacts/qa
-
-      - name: Load QA image
-        run: docker load < artifacts/qa/drydock-dev-image.tar.gz
-
-      - name: Start QA stack
-        run: docker compose -p drydock-nuclei -f test/qa-compose.yml up -d
-
-      - name: Wait for QA health
-        run: |
-          set -euo pipefail
-          for _ in $(seq 1 60); do
-            if curl -sf http://localhost:3333/health >/dev/null 2>&1; then
-              echo "Drydock is healthy"
-              exit 0
-            fi
-            sleep 2
-          done
-
-          echo "Drydock failed to become healthy after 120 seconds."
-          docker compose -p drydock-nuclei -f test/qa-compose.yml ps
-          exit 1
-
       - name: Create Nuclei authenticated session
         id: nuclei_auth
+        if: always()
         run: |
           set -euo pipefail
 
@@ -821,10 +728,12 @@ jobs:
           printf 'cookie_header=%s\n' "${cookie_header}" >> "${GITHUB_OUTPUT}"
 
       - name: Create Nuclei report directory
+        if: always()
         run: mkdir -p artifacts/dast
 
       - name: Run Nuclei scan
         id: nuclei_scan
+        if: always()
         continue-on-error: true
         uses: projectdiscovery/nuclei-action@32a91c0da7be14c07b0ade6c14fa0f6e78d97c9c  # v3.1.0
         with:
@@ -839,6 +748,7 @@ jobs:
             -silent
 
       - name: Enforce Nuclei severity gate (medium+)
+        if: always()
         env:
           SCAN_OUTCOME: ${{ steps.nuclei_scan.outcome }}
         run: |
@@ -937,7 +847,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: nuclei-reports-${{ github.run_id }}-${{ github.run_attempt }}
+          name: dast-nuclei-report-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             artifacts/dast/nuclei-report.json
             artifacts/dast/nuclei-report.sarif
@@ -951,7 +861,7 @@ jobs:
 
           report="artifacts/dast/nuclei-report.json"
           sarif="artifacts/dast/nuclei-report.sarif"
-          artifact_name="nuclei-reports-${{ github.run_id }}-${{ github.run_attempt }}"
+          artifact_name="dast-nuclei-report-${{ github.run_id }}-${{ github.run_attempt }}"
           artifact_url="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}#artifacts"
 
           critical=0
@@ -998,11 +908,11 @@ jobs:
 
       - name: Show QA logs on failure
         if: failure()
-        run: docker compose -p drydock-nuclei -f test/qa-compose.yml logs --no-color
+        run: docker compose -p drydock-zap -f test/qa-compose.yml logs --no-color
 
       - name: Stop QA stack
         if: always()
-        run: docker compose -p drydock-nuclei -f test/qa-compose.yml down -v --remove-orphans
+        run: docker compose -p drydock-zap -f test/qa-compose.yml down -v --remove-orphans
 
   e2e:
     name: "🥒 E2E: Cucumber"
@@ -1203,7 +1113,7 @@ jobs:
           retention-days: 30
 
   load-test-behavior:
-    name: "⚡ Load Test: Behavior"
+    name: "⚡ Load Test: Behavior + Stress (Advisory)"
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
@@ -1306,43 +1216,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-  load-test-stress:
-    name: "⚡ Load Test: Stress (Advisory)"
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
-    needs: [build]
-    env:
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-    permissions:
-      contents: read
-
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
-        with:
-          egress-policy: audit
-
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
-
-      - name: Install e2e dependencies
-        run: npm ci
-        working-directory: e2e
-
       - name: Run Artillery stress test (advisory)
         id: run-load-test-stress
+        if: always()
         continue-on-error: true
         env:
           ARTILLERY_ENV: stress

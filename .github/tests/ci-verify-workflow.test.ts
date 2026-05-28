@@ -111,7 +111,7 @@ test('ci-verify skips Playwright browser downloads on load-test jobs but not cuc
   // a browser via @playwright/test. Scope the skip to load-test jobs only.
   expect(workflow.env?.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD).toBeUndefined();
 
-  for (const jobId of ['load-test-ci', 'load-test-behavior', 'load-test-stress']) {
+  for (const jobId of ['load-test-ci', 'load-test-behavior']) {
     expect(workflow.jobs?.[jobId]?.env?.PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD).toBe('1');
     expect(getWorkflowStep(jobId, 'Install e2e dependencies')).toBeDefined();
   }
@@ -126,7 +126,7 @@ test('ci-verify skips Playwright browser downloads on load-test jobs but not cuc
 test('DAST auth steps mask derived basic auth credentials', () => {
   for (const [jobId, stepName] of [
     ['dast-zap-baseline', 'Create ZAP authenticated session'],
-    ['dast-nuclei', 'Create Nuclei authenticated session'],
+    ['dast-zap-baseline', 'Create Nuclei authenticated session'],
   ]) {
     const run = getWorkflowStep(jobId, stepName)?.run;
 
@@ -147,19 +147,13 @@ test('load-test workflow runs load profiles in parallel jobs', () => {
     'timeout-minutes': expect.any(Number),
   });
   expect(workflow.jobs?.['load-test-behavior']).toMatchObject({
-    name: '⚡ Load Test: Behavior',
-    if: pushOnlyCondition,
-    needs: ['build'],
-    'timeout-minutes': expect.any(Number),
-  });
-  expect(workflow.jobs?.['load-test-stress']).toMatchObject({
-    name: '⚡ Load Test: Stress (Advisory)',
+    name: '⚡ Load Test: Behavior + Stress (Advisory)',
     if: pushOnlyCondition,
     needs: ['build'],
     'timeout-minutes': expect.any(Number),
   });
 
-  for (const jobId of ['load-test-ci', 'load-test-behavior', 'load-test-stress']) {
+  for (const jobId of ['load-test-ci', 'load-test-behavior']) {
     expect(workflow.jobs?.[jobId]?.['timeout-minutes']).toBeLessThanOrEqual(30);
   }
 
@@ -175,19 +169,19 @@ test('load-test workflow runs load profiles in parallel jobs', () => {
     },
   });
 
-  expect(getWorkflowStep('load-test-stress', 'Run Artillery stress test (advisory)')).toMatchObject(
-    {
-      id: 'run-load-test-stress',
-      'continue-on-error': true,
-      env: {
-        ARTILLERY_ENV: 'stress',
-        DD_LOAD_TEST_ARTIFACT_DIR: 'artifacts/load-test/stress',
-      },
+  expect(
+    getWorkflowStep('load-test-behavior', 'Run Artillery stress test (advisory)'),
+  ).toMatchObject({
+    id: 'run-load-test-stress',
+    'continue-on-error': true,
+    env: {
+      ARTILLERY_ENV: 'stress',
+      DD_LOAD_TEST_ARTIFACT_DIR: 'artifacts/load-test/stress',
     },
-  );
+  });
 
   expect(
-    getWorkflowStep('load-test-stress', 'Summarize load test metrics (stress)')?.run,
+    getWorkflowStep('load-test-behavior', 'Summarize load test metrics (stress)')?.run,
   ).toContain('artifacts/load-test/stress');
 
   const behaviorBaselineStep = getWorkflowStep(
@@ -213,23 +207,25 @@ test('load-test workflow runs load profiles in parallel jobs', () => {
     },
   });
 
-  expect(getWorkflowStep('load-test-stress', 'Correctness check (stress, advisory)')).toMatchObject(
+  expect(
+    getWorkflowStep('load-test-behavior', 'Correctness check (stress, advisory)'),
+  ).toMatchObject({
+    if: 'always()',
+    env: {
+      DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'false',
+      DD_LOAD_TEST_MAX_VUSERS_FAILED: '0',
+    },
+  });
+
+  expect(getWorkflowStep('load-test-behavior', 'Upload load test artifact (stress)')).toMatchObject(
     {
-      if: 'always()',
-      env: {
-        DD_LOAD_TEST_CORRECTNESS_ENFORCE: 'false',
-        DD_LOAD_TEST_MAX_VUSERS_FAILED: '0',
+      uses: expectedActionUse('actions/upload-artifact'),
+      with: {
+        path: 'artifacts/load-test/stress/*.json',
+        'if-no-files-found': 'warn',
       },
     },
   );
-
-  expect(getWorkflowStep('load-test-stress', 'Upload load test artifact (stress)')).toMatchObject({
-    uses: expectedActionUse('actions/upload-artifact'),
-    with: {
-      path: 'artifacts/load-test/stress/*.json',
-      'if-no-files-found': 'warn',
-    },
-  });
 });
 
 test('load-test behavior profile has an advisory regression baseline', () => {
