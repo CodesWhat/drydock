@@ -23,6 +23,7 @@ interface WorkflowJobStep {
 }
 
 interface WorkflowJob {
+  env?: Record<string, string>;
   strategy?: {
     matrix?: {
       include?: WorkflowMatrixEntry[];
@@ -108,6 +109,24 @@ test('mutation workflow runs monthly with 27 logical slices and aggregate count 
   )?.run;
 
   expect(aggregateRunScript).toContain('--expected-count 27');
+});
+
+test('mutation shards publish distinct dashboard reports when configured', () => {
+  const workflow = yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;
+
+  expect(workflow.jobs?.stryker?.env).toMatchObject({
+    STRYKER_DASHBOARD_API_KEY: '${{ secrets.STRYKER_DASHBOARD_API_KEY }}',
+    STRYKER_DASHBOARD_MODULE: '${{ matrix.name }}',
+  });
+
+  const appStrykerConfig = readFileSync(new URL('./stryker.conf.mjs', import.meta.url), 'utf8');
+  const uiStrykerConfigSource = readFileSync(
+    new URL('../ui/stryker.conf.mjs', import.meta.url),
+    'utf8',
+  );
+
+  expect(appStrykerConfig).toContain("process.env.STRYKER_DASHBOARD_MODULE || 'app'");
+  expect(uiStrykerConfigSource).toContain("process.env.STRYKER_DASHBOARD_MODULE || 'ui'");
 });
 
 test('mutation workflow slices cover the app and ui Stryker targets without overlap', () => {

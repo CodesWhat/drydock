@@ -27,6 +27,9 @@ jobs:
     environment: mutation
     timeout-minutes: 360  # GitHub Actions maximum; mutation testing is expensive and advisory-only
     continue-on-error: true  # advisory by policy; review results, then file focused follow-up work
+    env:
+      STRYKER_DASHBOARD_API_KEY: ${{ secrets.STRYKER_DASHBOARD_API_KEY }}
+      STRYKER_DASHBOARD_MODULE: ${{ matrix.name }}
     strategy:
       fail-fast: false
       matrix:
