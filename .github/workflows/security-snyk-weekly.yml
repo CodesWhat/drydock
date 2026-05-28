@@ -32,6 +32,11 @@ jobs:
       has_token: ${{ steps.token.outputs.has_token }}
       is_default_branch: ${{ steps.token.outputs.is_default_branch }}
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
+        with:
+          egress-policy: audit
+
       - name: Check Snyk token availability
         id: token
         env:
@@ -58,7 +63,7 @@ jobs:
     needs: [prepare]
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
         with:
           egress-policy: audit
 
@@ -97,7 +102,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
         with:
           egress-policy: audit
 
@@ -190,7 +195,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
         with:
           egress-policy: audit
 
@@ -246,7 +251,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
         with:
           egress-policy: audit
 
@@ -319,7 +324,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@fa2e9d605c4eeb9fcad4c99c224cee0c6c7f3594  # v2.16.0
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
         with:
           egress-policy: audit
 
@@ -366,6 +371,11 @@ jobs:
     needs: [prepare, quota-plan]
     if: ${{ always() && (needs.quota-plan.result != 'success' || needs.prepare.outputs.has_token != 'true' || needs.prepare.outputs.is_default_branch != 'true') }}
     steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
+        with:
+          egress-policy: audit
+
       - name: Explain skip reason(s)
         env:
           HAS_TOKEN: ${{ needs.prepare.outputs.has_token }}
