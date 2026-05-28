@@ -104,7 +104,7 @@ test('load-test workflow wires advisory behavior and stress coverage', () => {
   });
 
   expect(getLoadTestStep('Upload load test artifact (stress)')).toMatchObject({
-    uses: 'actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f',
+    uses: 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a',
     with: {
       path: 'artifacts/load-test/stress/*.json',
       'if-no-files-found': 'warn',
