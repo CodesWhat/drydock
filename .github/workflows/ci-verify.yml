@@ -527,7 +527,10 @@ jobs:
           load: true
           tags: drydock:dev
           build-args: DD_VERSION=ci
-          provenance: mode=min
+          # load: true uses the docker exporter, which can't accept the OCI
+          # manifest list produced by provenance attestations. The release-cut
+          # workflow keeps provenance because it actually pushes to registries.
+          provenance: false
           cache-from: type=gha,scope=drydock
           cache-to: type=gha,mode=max,scope=drydock,ignore-error=true
 
@@ -541,7 +544,9 @@ jobs:
           push: false
           platforms: linux/amd64,linux/arm64
           build-args: DD_VERSION=ci-multiarch-smoke
-          provenance: mode=min
+          # Smoke build never lands in a registry, so attesting it adds noise
+          # without value. Real attestations live on release-cut.yml.
+          provenance: false
           cache-from: type=gha,scope=drydock
           cache-to: type=gha,mode=max,scope=drydock,ignore-error=true
 

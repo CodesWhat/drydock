@@ -18,25 +18,35 @@ function asArray(value) {
 }
 
 function decodeEntities(value) {
+  // Decode `&amp;` LAST so that inputs like `&amp;lt;` resolve to the literal
+  // `&lt;` instead of being double-decoded into `<`. Same reason every other
+  // entity is decoded before this — the `&` produced by `&amp;` must never
+  // re-enter the entity-decoder.
   return value
     .replaceAll('&nbsp;', ' ')
-    .replaceAll('&amp;', '&')
     .replaceAll('&lt;', '<')
     .replaceAll('&gt;', '>')
     .replaceAll('&quot;', '"')
-    .replaceAll('&#39;', "'");
+    .replaceAll('&#39;', "'")
+    .replaceAll('&amp;', '&');
 }
 
 export function stripMarkup(value) {
   if (value === undefined || value === null) {
     return '';
   }
-  return decodeEntities(String(value))
+  let stripped = decodeEntities(String(value))
     .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+    .replace(/<\/p>/gi, '\n');
+  // Loop until stable: a single pass of `<[^>]*>` can leave overlapping
+  // tags intact (e.g. `<<script>script>` collapses to `<script>` after one
+  // pass). CodeQL flags this as incomplete-multi-character-sanitization.
+  let previous;
+  do {
+    previous = stripped;
+    stripped = stripped.replace(/<[^>]*>/g, '');
+  } while (stripped !== previous);
+  return stripped.replace(/\n{3,}/g, '\n\n').trim();
 }
 
 function firstUrl(value) {

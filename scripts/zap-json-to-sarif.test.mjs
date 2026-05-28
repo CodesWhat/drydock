@@ -16,6 +16,15 @@ describe('zap-json-to-sarif', () => {
     assert.equal(stripMarkup(null), '');
   });
 
+  test('does not double-decode ampersand-encoded entities', () => {
+    // `&amp;lt;` must resolve to `&lt;`, not `<`. Otherwise an attacker who
+    // can influence ZAP otherinfo can smuggle markup past the strip pass.
+    assert.equal(
+      stripMarkup('&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;'),
+      '&lt;script&gt;alert(1)&lt;/script&gt;',
+    );
+  });
+
   test('converts ZAP alerts and instances to SARIF rules and results', () => {
     const sarif = convertZapJsonToSarif({
       site: [

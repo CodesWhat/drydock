@@ -277,7 +277,10 @@ jobs:
           load: true
           tags: ${{ env.SNYK_CONTAINER_IMAGE }}
           build-args: DD_VERSION=snyk
-          provenance: mode=min
+          # load: true uses the docker exporter, which can't accept the OCI
+          # manifest list produced by provenance attestations. Snyk just needs
+          # the local image; real attestations live on release-cut.yml.
+          provenance: false
           cache-from: type=gha,scope=drydock
           cache-to: type=gha,mode=max,scope=drydock,ignore-error=true
 
