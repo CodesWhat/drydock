@@ -74,7 +74,9 @@ function securitySeverity(riskCode) {
 }
 
 function ruleId(alert) {
-  return String(alert.alertRef || alert.pluginid || alert.name || alert.alert || 'unknown-zap-alert');
+  return String(
+    alert.alertRef || alert.pluginid || alert.name || alert.alert || 'unknown-zap-alert',
+  );
 }
 
 function buildRule(alert) {
@@ -100,7 +102,9 @@ function buildRule(alert) {
       text: stripMarkup(alert.desc),
     },
     help: {
-      text: stripMarkup([alert.solution, alert.otherinfo, alert.reference].filter(Boolean).join('\n\n')),
+      text: stripMarkup(
+        [alert.solution, alert.otherinfo, alert.reference].filter(Boolean).join('\n\n'),
+      ),
     },
     ...(firstUrl(alert.reference) ? { helpUri: firstUrl(alert.reference) } : {}),
     defaultConfiguration: {

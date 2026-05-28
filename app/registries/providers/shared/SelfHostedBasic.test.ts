@@ -492,9 +492,7 @@ test('normalizeImage should spread registry fields onto new object', async () =>
   const normalized = registry.normalizeImage(image);
 
   // The spread means extra fields from image.registry carry over
-  expect((normalized.registry as Record<string, unknown>)['extraField']).toBe(
-    'should-be-preserved',
-  );
+  expect((normalized.registry as Record<string, unknown>).extraField).toBe('should-be-preserved');
   // But the url is overwritten with the configured endpoint
   expect(normalized.registry.url).toBe('https://registry.acme.com/v2');
 });
