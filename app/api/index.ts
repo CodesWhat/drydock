@@ -14,6 +14,7 @@ import { ddEnvVars, getServerConfiguration } from '../configuration/index.js';
 import * as settingsStore from '../store/settings.js';
 import * as apiRouter from './api.js';
 import * as auth from './auth.js';
+import { getAllIds } from './auth-strategies.js';
 import { attachContainerLogStreamWebSocketServer } from './container/log-stream.js';
 import { sendErrorResponse } from './error-response.js';
 import * as healthRouter from './health.js';
@@ -117,6 +118,13 @@ function configurePermissionsPolicy(app) {
 }
 
 function registerRoutes(app) {
+  // Wire the health readiness gate before auth.init() so that /health
+  // returns 503 if somehow a request arrives before passport strategies
+  // are registered. getAllIds() is a live check: empty until
+  // registerStrategies() populates STRATEGY_IDS inside auth.init().
+  // This closes the gap where /health can flip 200 before login is ready
+  // (the DAST post-rc.28 401 race).
+  healthRouter.setAuthReadyFn(() => getAllIds().length > 0);
   auth.init(app);
   app.use('/health', healthRouter.init());
   app.use('/api/v1', apiRouter.init());

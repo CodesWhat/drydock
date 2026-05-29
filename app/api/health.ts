@@ -1,5 +1,5 @@
+import type { Request, Response } from 'express';
 import express from 'express';
-import healthcheck from 'express-healthcheck';
 import nocache from 'nocache';
 
 /**
@@ -8,12 +8,44 @@ import nocache from 'nocache';
  */
 const router = express.Router();
 
+type AuthReadyFn = () => boolean;
+
+let isAuthReady: AuthReadyFn = () => true;
+
+/**
+ * Set the auth readiness check.
+ * Called by api/index.ts after auth strategies have been registered so that
+ * /health will not report healthy until passport is fully wired up and login
+ * requests will be accepted.
+ */
+export function setAuthReadyFn(fn: AuthReadyFn): void {
+  isAuthReady = fn;
+}
+
+/**
+ * Reset auth ready function (for tests only).
+ */
+export function resetAuthReadyFnForTests(): void {
+  isAuthReady = () => true;
+}
+
+function healthHandler(_req: Request, res: Response): void {
+  if (!isAuthReady()) {
+    res.status(503).json({ status: 'starting', reason: 'auth strategies not yet registered' });
+    return;
+  }
+  res.status(200).json({ uptime: process.uptime() });
+}
+
 /**
  * Init Router.
  * @returns {*}
  */
 export function init() {
   router.use(nocache());
-  router.get('/', healthcheck());
+  // CodeQL flags the readiness gate (503 when auth not ready) as authorization,
+  // but this is a Docker/K8s liveness probe — rate-limiting it would break
+  // healthchecks. False positive; suppress with reasoning.
+  router.get('/', healthHandler); // lgtm[js/missing-rate-limiting]
   return router;
 }
