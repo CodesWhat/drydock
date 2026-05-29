@@ -141,8 +141,32 @@ function resultMessage(alert, instance) {
   return parts.join('\n\n');
 }
 
+/**
+ * Decompose a raw URI from ZAP into the SARIF artifactLocation shape that
+ * GitHub Code Scanning will accept.  Code Scanning rejects absolute http(s)
+ * URIs because they don't match the `file://` checkout scheme, so we strip
+ * the origin and store it in `originalUriBaseIds` at the run level instead.
+ *
+ * Returns `{ uri, uriBaseId? }` — callers must include the returned object as
+ * the `artifactLocation` and register the origin in `originalUriBaseIds`.
+ */
+function resolveArtifactLocation(rawUri) {
+  try {
+    const parsed = new URL(rawUri);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      // Relative path (without leading slash) + uriBaseId referencing the origin.
+      const relative = (parsed.pathname + parsed.search + parsed.hash).replace(/^\//, '');
+      return { uri: relative || '', uriBaseId: 'TARGET', origin: parsed.origin + '/' };
+    }
+  } catch {
+    // Not a URL — fall through and return as-is.
+  }
+  return { uri: rawUri };
+}
+
 function buildResult(alert, instance, siteName) {
-  const uri = instance.uri || instance.nodeName || siteName || 'zap-target';
+  const rawUri = instance.uri || instance.nodeName || siteName || 'zap-target';
+  const { uri, uriBaseId, origin } = resolveArtifactLocation(rawUri);
   const properties = {
     confidence: alert.confidence,
     risk: alert.riskdesc,
@@ -165,6 +189,7 @@ function buildResult(alert, instance, siteName) {
         physicalLocation: {
           artifactLocation: {
             uri,
+            ...(uriBaseId ? { uriBaseId } : {}),
           },
         },
       },
@@ -172,6 +197,8 @@ function buildResult(alert, instance, siteName) {
     properties: Object.fromEntries(
       Object.entries(properties).filter(([, value]) => value !== undefined && value !== ''),
     ),
+    // Carry the origin through so convertZapJsonToSarif can collect it.
+    _origin: origin,
   };
 }
 
@@ -197,6 +224,20 @@ export function convertZapJsonToSarif(zapReport) {
     }
   }
 
+  // Collect distinct http(s) origins from results so we can populate
+  // originalUriBaseIds.  SARIF spec §3.14.14 requires this for uriBaseId
+  // references to resolve — GitHub Code Scanning rejects bare http URIs.
+  const origins = [...new Set(results.map((r) => r._origin).filter(Boolean))];
+  const originalUriBaseIds =
+    origins.length > 0
+      ? Object.fromEntries(
+          origins.map((origin, i) => [`TARGET${i > 0 ? `_${i}` : ''}`, { uri: origin }]),
+        )
+      : undefined;
+
+  // Strip the internal _origin carrier before serialising.
+  const cleanResults = results.map(({ _origin: _unused, ...rest }) => rest);
+
   return {
     version: '2.1.0',
     $schema: SARIF_SCHEMA,
@@ -212,7 +253,8 @@ export function convertZapJsonToSarif(zapReport) {
         automationDetails: {
           id: 'zap-baseline',
         },
-        results,
+        ...(originalUriBaseIds ? { originalUriBaseIds } : {}),
+        results: cleanResults,
       },
     ],
   };
