@@ -12,6 +12,22 @@ vi.mock('nocache', () => ({ default: vi.fn() }));
 
 import * as healthRouter from './health.js';
 
+// Test the initial module state (before any resetAuthReadyFnForTests call)
+// to ensure the module-level default () => true initializer is covered.
+describe('Health Router — initial module state', () => {
+  test('healthHandler should return 200 by default (module initializer)', () => {
+    const req = {};
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+
+    const router = healthRouter.init();
+    const [, handler] = router.get.mock.calls[0];
+    handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ uptime: expect.any(Number) });
+  });
+});
+
 describe('Health Router', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
