@@ -76,7 +76,8 @@ describe('zap-json-to-sarif', () => {
     assert.equal(sarif.runs[0].results[0].ruleId, '10055-6');
     assert.equal(sarif.runs[0].results[0].level, 'warning');
     // http URIs must be relativised: origin goes into originalUriBaseIds, path into uri.
-    assert.equal(sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri, '');
+    // Root path must be '/' not '' — GHAS rejects empty artifactLocation.uri.
+    assert.equal(sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri, '/');
     assert.equal(
       sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uriBaseId,
       'TARGET',
@@ -135,10 +136,10 @@ describe('zap-json-to-sarif', () => {
     assert.equal(sarif.runs[0].tool.driver.rules.length, 1);
     assert.equal(sarif.runs[0].results.length, 1);
     assert.equal(sarif.runs[0].results[0].ruleId, 'singleton-alert');
-    // http URI → relative path + uriBaseId; origin hoisted to originalUriBaseIds.
+    // http URI → absolute-path-reference + uriBaseId; origin hoisted to originalUriBaseIds.
     assert.equal(
       sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri,
-      'singleton',
+      '/singleton',
     );
     assert.equal(
       sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uriBaseId,
@@ -191,12 +192,13 @@ describe('zap-json-to-sarif', () => {
       ],
     });
 
-    // http URIs are relativised; non-http fallbacks ('zap-target') pass through unchanged.
+    // http URIs become absolute-path-references (leading slash preserved);
+    // non-http fallbacks ('zap-target') pass through unchanged.
     assert.deepEqual(
       sarif.runs[0].results.map(
         (result) => result.locations[0].physicalLocation.artifactLocation.uri,
       ),
-      ['node', '', 'zap-target'],
+      ['/node', '/', 'zap-target'],
     );
     assert.deepEqual(
       sarif.runs[0].results.map(

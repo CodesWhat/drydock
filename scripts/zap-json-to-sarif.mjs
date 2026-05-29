@@ -154,9 +154,11 @@ function resolveArtifactLocation(rawUri) {
   try {
     const parsed = new URL(rawUri);
     if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      // Relative path (without leading slash) + uriBaseId referencing the origin.
-      const relative = (parsed.pathname + parsed.search + parsed.hash).replace(/^\//, '');
-      return { uri: relative || '', uriBaseId: 'TARGET', origin: parsed.origin + '/' };
+      // Keep the leading slash so the root path becomes '/' instead of ''.
+      // GHAS Code Scanning rejects empty artifactLocation.uri values
+      // (locationFromSarifResult: expected artifact location).
+      const path = parsed.pathname + parsed.search + parsed.hash;
+      return { uri: path, uriBaseId: 'TARGET', origin: parsed.origin + '/' };
     }
   } catch {
     // Not a URL — fall through and return as-is.
