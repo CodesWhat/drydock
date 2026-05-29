@@ -43,6 +43,9 @@ function healthHandler(_req: Request, res: Response): void {
  */
 export function init() {
   router.use(nocache());
-  router.get('/', healthHandler);
+  // CodeQL flags the readiness gate (503 when auth not ready) as authorization,
+  // but this is a Docker/K8s liveness probe — rate-limiting it would break
+  // healthchecks. False positive; suppress with reasoning.
+  router.get('/', healthHandler); // lgtm[js/missing-rate-limiting]
   return router;
 }
