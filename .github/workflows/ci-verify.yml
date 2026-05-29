@@ -584,7 +584,10 @@ jobs:
           cookie_jar="$(mktemp)"
           trap 'rm -f "${cookie_jar}"' EXIT
 
-          basic_auth="$(printf 'admin:password' | base64 | tr -d '\n')"
+          # qa-compose.yml DD_AUTH_BASIC_ADMIN_HASH verifies 'admin' (matches
+          # Playwright DD_PASSWORD default in e2e/playwright/helpers/test-helpers.ts).
+          # ci-compose.yml uses a different hash that verifies 'password'.
+          basic_auth="$(printf 'admin:admin' | base64 | tr -d '\n')"
           echo "::add-mask::${basic_auth}"
           curl -fsS \
             -c "${cookie_jar}" \
@@ -700,7 +703,10 @@ jobs:
           cookie_jar="$(mktemp)"
           trap 'rm -f "${cookie_jar}"' EXIT
 
-          basic_auth="$(printf 'admin:password' | base64 | tr -d '\n')"
+          # qa-compose.yml DD_AUTH_BASIC_ADMIN_HASH verifies 'admin' (matches
+          # Playwright DD_PASSWORD default in e2e/playwright/helpers/test-helpers.ts).
+          # ci-compose.yml uses a different hash that verifies 'password'.
+          basic_auth="$(printf 'admin:admin' | base64 | tr -d '\n')"
           echo "::add-mask::${basic_auth}"
           curl -fsS \
             -c "${cookie_jar}" \
