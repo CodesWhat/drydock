@@ -75,10 +75,15 @@ describe('zap-json-to-sarif', () => {
     assert.equal(sarif.runs[0].results.length, 2);
     assert.equal(sarif.runs[0].results[0].ruleId, '10055-6');
     assert.equal(sarif.runs[0].results[0].level, 'warning');
+    // http URIs must be relativised: origin goes into originalUriBaseIds, path into uri.
+    assert.equal(sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri, '');
     assert.equal(
-      sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri,
-      'http://localhost:3333/',
+      sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uriBaseId,
+      'TARGET',
     );
+    assert.deepEqual(sarif.runs[0].originalUriBaseIds, {
+      TARGET: { uri: 'http://localhost:3333/' },
+    });
     assert.match(sarif.runs[0].results[0].message.text, /Evidence:/);
   });
 
@@ -130,10 +135,18 @@ describe('zap-json-to-sarif', () => {
     assert.equal(sarif.runs[0].tool.driver.rules.length, 1);
     assert.equal(sarif.runs[0].results.length, 1);
     assert.equal(sarif.runs[0].results[0].ruleId, 'singleton-alert');
+    // http URI → relative path + uriBaseId; origin hoisted to originalUriBaseIds.
     assert.equal(
       sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uri,
-      'http://localhost:3333/singleton',
+      'singleton',
     );
+    assert.equal(
+      sarif.runs[0].results[0].locations[0].physicalLocation.artifactLocation.uriBaseId,
+      'TARGET',
+    );
+    assert.deepEqual(sarif.runs[0].originalUriBaseIds, {
+      TARGET: { uri: 'http://localhost:3333/' },
+    });
   });
 
   test('suppresses invalid CWE and WASC tags', () => {
@@ -178,11 +191,27 @@ describe('zap-json-to-sarif', () => {
       ],
     });
 
+    // http URIs are relativised; non-http fallbacks ('zap-target') pass through unchanged.
     assert.deepEqual(
       sarif.runs[0].results.map(
         (result) => result.locations[0].physicalLocation.artifactLocation.uri,
       ),
-      ['http://fallback.example/node', 'http://fallback.example', 'zap-target'],
+      ['node', '', 'zap-target'],
+    );
+    assert.deepEqual(
+      sarif.runs[0].results.map(
+        (result) => result.locations[0].physicalLocation.artifactLocation.uriBaseId,
+      ),
+      ['TARGET', 'TARGET', undefined],
+    );
+    // Both http results share the same origin so only one key is needed.
+    assert.deepEqual(sarif.runs[0].originalUriBaseIds, {
+      TARGET: { uri: 'http://fallback.example/' },
+    });
+    // The non-http result must not carry a uriBaseId at all.
+    assert.equal(
+      'uriBaseId' in sarif.runs[0].results[2].locations[0].physicalLocation.artifactLocation,
+      false,
     );
   });
 
