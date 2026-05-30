@@ -49,7 +49,7 @@ Container labels follow the same pattern: `dd.action.include` / `dd.action.exclu
 
 <Callout type="warn">**v1.5.x soft-blocker / v1.7.0 hard-blocker change-ahead:** In v1.5.x, `dd.action.include` / `dd.action.exclude` (and legacy `dd.trigger.include` / `dd.trigger.exclude`) are **soft blockers** — they suppress auto-updates but still allow manual updates (UI button, API). In v1.7.0 these labels will become **hard blockers** — containers with a non-matching include or an active exclude label will also reject manual-update requests. Migrate your labels to `dd.action.include` / `dd.action.exclude` before upgrading to v1.7.0.</Callout>
 
-See [Triggers](/docs/configuration/triggers) for full trigger configuration reference and the [migration CLI](/docs/configuration/triggers#migration) for automated prefix rewriting.
+See [Triggers](/docs/configuration/triggers) for full trigger configuration reference and the [migration CLI](/docs/configuration/triggers#environment-variable-prefixes) for automated prefix rewriting.
 
 ## Update action
 
