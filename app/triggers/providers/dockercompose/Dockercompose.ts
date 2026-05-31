@@ -78,6 +78,12 @@ interface DockerApiLike {
       }>;
     }>;
   };
+  getImage?: (imageRef: string) => {
+    inspect: () => Promise<{
+      Architecture?: string;
+      Os?: string;
+    }>;
+  };
 }
 
 type ContainersByComposeFileEntry = {
@@ -1917,6 +1923,105 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     await this.refreshComposeServiceWithDockerApi(composeFile, service, container, options);
   }
 
+  /**
+   * Map a Docker image Architecture string to the Node.js process.arch value
+   * used on this host. Returns undefined for unknown architectures (treated as
+   * compatible to avoid false-positive blocks on exotic platforms).
+   */
+  private static dockerArchToNodeArch(dockerArch: string): string | undefined {
+    const map: Record<string, string> = {
+      amd64: 'x64',
+      arm64: 'arm64',
+      arm: 'arm',
+      '386': 'ia32',
+      ppc64le: 'ppc64',
+      s390x: 's390x',
+      riscv64: 'riscv64',
+    };
+    return map[dockerArch.toLowerCase()];
+  }
+
+  /**
+   * Pre-flight guard: inspect the just-pulled image and verify its architecture
+   * matches the host before performing any destructive step. Throws a clear,
+   * actionable error on mismatch so the running container is left untouched.
+   *
+   * Skipped when dockerApi does not expose getImage (older mocks / proxies) —
+   * in that case we fall through to the existing stop/create sequence and let
+   * Docker surface its own error.
+   */
+  async verifyPulledImageCompatibility(
+    dockerApi: DockerApiLike,
+    newImage: string,
+    logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+  ): Promise<void> {
+    if (typeof dockerApi.getImage !== 'function') {
+      return;
+    }
+    let imageInspect: { Architecture?: string; Os?: string } | undefined;
+    try {
+      imageInspect = await dockerApi.getImage(newImage).inspect();
+    } catch {
+      // Image inspect failed — not a hard error; Docker will surface the real
+      // problem during container creation.
+      return;
+    }
+    if (!imageInspect?.Architecture) {
+      return;
+    }
+    const imageArch = imageInspect.Architecture;
+    const hostNodeArch = process.arch;
+    const mappedImageArch = Dockercompose.dockerArchToNodeArch(imageArch);
+    if (mappedImageArch === undefined) {
+      // Unknown architecture — treat as compatible to avoid false-positive blocks.
+      return;
+    }
+    if (mappedImageArch !== hostNodeArch) {
+      throw new Error(
+        `Cannot update to ${newImage}: image architecture "${imageArch}" is not compatible with host architecture "${hostNodeArch}". ` +
+          `The running container has been left untouched.`,
+      );
+    }
+    logContainer.info(
+      `Image ${newImage} architecture "${imageArch}" is compatible with host "${hostNodeArch}"`,
+    );
+  }
+
+  /**
+   * Rollback safety net: after the new container creation fails, attempt to
+   * restore the original container from the captured spec. Logs the outcome
+   * but does NOT swallow the original error — the caller re-throws it.
+   */
+  private async attemptRollbackRestoreOldContainer(
+    dockerApi: DockerApiLike,
+    originalContainerSpec,
+    originalImage: string,
+    container,
+    logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+  ): Promise<void> {
+    const containerName = container.name;
+    logContainer.warn(
+      `Recreate failed for ${containerName}; attempting to restore the original container from captured spec`,
+    );
+    try {
+      await super.recreateContainer(
+        dockerApi,
+        originalContainerSpec,
+        originalImage,
+        container,
+        logContainer,
+      );
+      logContainer.info(
+        `Original container ${containerName} restored successfully after failed update`,
+      );
+    } catch (rollbackError: unknown) {
+      logContainer.warn(
+        `Failed to restore original container ${containerName} after failed update ` +
+          `(${getErrorMessage(rollbackError)}). Manual intervention may be required.`,
+      );
+    }
+  }
+
   private ensureComposeRuntimeState(currentContainerSpec, composeFile, service): void {
     if (typeof currentContainerSpec?.State?.Running !== 'boolean') {
       throw new Error(
@@ -1992,6 +2097,22 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       );
     }
 
+    // (a) PRE-FLIGHT GUARD — verify the target image is usable on this host
+    // before performing any destructive step. On arch mismatch the old
+    // container is left running and we throw without touching it.
+    await this.verifyPulledImageCompatibility(dockerApi as DockerApiLike, newImage, logContainer);
+
+    // Capture the original container spec for rollback before we do anything
+    // destructive. The Config.Image field holds the old image reference.
+    const originalImage: string = currentContainerSpec?.Config?.Image ?? newImage;
+    const rollbackSpec = {
+      ...currentContainerSpec,
+      State: {
+        ...currentContainerSpec.State,
+        Running: currentContainerSpec.State.Running,
+      },
+    };
+
     const recreationContainerSpec = {
       ...currentContainerSpec,
       State: {
@@ -1999,6 +2120,10 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         Running: serviceShouldStart,
       },
     };
+
+    // (b) ROLLBACK SAFETY NET — if recreateContainer throws after we have
+    // already removed the old container, try to restore it from the captured
+    // spec before re-throwing so the service is not left with zero containers.
     // Intentionally bypass Dockercompose.stopAndRemoveContainer() no-op: this
     // internal Engine API refresh path must perform the real stop/remove.
     await super.stopAndRemoveContainer(
@@ -2007,13 +2132,24 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       container,
       logContainer,
     );
-    await super.recreateContainer(
-      dockerApi,
-      recreationContainerSpec,
-      newImage,
-      container,
-      logContainer,
-    );
+    try {
+      await super.recreateContainer(
+        dockerApi,
+        recreationContainerSpec,
+        newImage,
+        container,
+        logContainer,
+      );
+    } catch (recreateError: unknown) {
+      await this.attemptRollbackRestoreOldContainer(
+        dockerApi as DockerApiLike,
+        rollbackSpec,
+        originalImage,
+        container,
+        logContainer,
+      );
+      throw recreateError;
+    }
   }
 
   /**
