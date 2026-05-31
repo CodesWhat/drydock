@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > **Fork point:** upstream post-8.1.1 (2025-11-27)
 > **Upstream baseline:** WUD 8.1.1 + 65 merged PRs on `main` (Vue 3 migration, Alpine base image, Rocket.Chat trigger, threshold system, semver improvements, request→axios migration, and more)
 
-## [1.5.0] — 2026-05-30
+## [Unreleased]
 
 ### Added
 
@@ -177,6 +177,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Legacy `GET /api/v1/containers/stats` endpoint and `summarizeContainerResourceUsage` client-side rollup** removed; superseded by the new fleet-aggregate stats subsystem (`GET /api/v1/stats/summary`).
 
 ### Fixed
+
+- **[#391](https://github.com/CodesWhat/drydock/issues/391) — A failed Docker Compose update no longer destroys the running container.** `refreshComposeServiceWithDockerApi` previously removed the old container before recreating it, so any failure of the create step (e.g. the newly-pulled image is not available for the host platform) left the service with zero containers and no recovery. The update path now (1) performs a pre-flight check that the pulled image is architecture-compatible with the host and aborts *before* removing the old container if it is not, and (2) wraps the stop/remove → recreate sequence so that, if recreate still fails, the original container is restored from its captured spec and the original error is re-thrown. The running container is never lost on a failed update.
 
 - **[#402](https://github.com/CodesWhat/drydock/pull/402) — `/health` now returns `503` until passport authentication strategies are fully registered, closing a startup race where the port accepted connections before auth was ready (intermittent 401s on startup).** `registerRoutes()` in the auth subsystem now calls `setAuthReadyFn` before `auth.init()`, wiring the readiness gate before strategy registration begins. Deployments that hit intermittent 401 errors during the first seconds after container start should see the issue resolved.
 
@@ -1376,7 +1378,7 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[1.5.0]: https://github.com/CodesWhat/drydock/compare/v1.4.5...v1.5.0
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.28...HEAD
 [1.4.5]: https://github.com/CodesWhat/drydock/compare/v1.4.4...v1.4.5
 [1.4.4]: https://github.com/CodesWhat/drydock/compare/v1.4.3...v1.4.4
 [1.4.3]: https://github.com/CodesWhat/drydock/compare/v1.4.2...v1.4.3

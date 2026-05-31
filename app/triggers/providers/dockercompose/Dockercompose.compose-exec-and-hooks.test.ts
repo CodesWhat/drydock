@@ -308,6 +308,177 @@ describe('Dockercompose Trigger', () => {
     ).rejects.toThrow('create failed');
   });
 
+  // BUG #391: rollback safety net tests
+  // -----------------------------------------------------------------------
+
+  test('[#391] updateContainerWithCompose should attempt to restore old container when recreateContainer throws', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({ name: 'nginx' });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+
+    // First createContainer call fails (new image creation), second succeeds (rollback restore).
+    const createContainerSpy = vi
+      .spyOn(trigger, 'createContainer')
+      .mockRejectedValueOnce(new Error('No such image: nginx:1.1.0'))
+      .mockResolvedValueOnce({ start: vi.fn().mockResolvedValue(undefined) } as any);
+
+    await expect(
+      trigger.updateContainerWithCompose('/opt/drydock/test/stack.yml', 'nginx', container),
+    ).rejects.toThrow('No such image: nginx:1.1.0');
+
+    // createContainer is called twice: once for the new image, once for the rollback restore.
+    expect(createContainerSpy).toHaveBeenCalledTimes(2);
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('attempting to restore the original container from captured spec'),
+    );
+    expect(mockLog.info).toHaveBeenCalledWith(
+      expect.stringContaining('restored successfully after failed update'),
+    );
+  });
+
+  test('[#391] updateContainerWithCompose should rethrow original error even when rollback restore also fails', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({ name: 'nginx' });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+
+    // Both createContainer calls fail: new image and rollback restore.
+    vi.spyOn(trigger, 'createContainer')
+      .mockRejectedValueOnce(new Error('No such image: nginx:1.1.0'))
+      .mockRejectedValueOnce(new Error('restore failed'));
+
+    await expect(
+      trigger.updateContainerWithCompose('/opt/drydock/test/stack.yml', 'nginx', container),
+    ).rejects.toThrow('No such image: nginx:1.1.0');
+
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('attempting to restore the original container from captured spec'),
+    );
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Manual intervention may be required'),
+    );
+  });
+
+  test('[#391] updateContainerWithCompose should fall back to newImage when currentContainerSpec has no Config.Image', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({ name: 'nginx' });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+
+    // Provide a spec without Config.Image to cover the `?? newImage` fallback branch.
+    vi.spyOn(trigger, 'getCurrentContainer').mockResolvedValue(
+      makeDockerContainerHandle({ name: 'nginx' }),
+    );
+    vi.spyOn(trigger, 'inspectContainer').mockResolvedValue({
+      Id: 'container-id',
+      Name: '/nginx',
+      State: { Running: true },
+      HostConfig: { AutoRemove: false },
+      NetworkSettings: { Networks: {} },
+      Config: { Env: [], Labels: {} }, // no Image field
+    } as any);
+
+    const createContainerSpy = vi
+      .spyOn(trigger, 'createContainer')
+      .mockRejectedValueOnce(new Error('create failed'))
+      .mockResolvedValueOnce({ start: vi.fn().mockResolvedValue(undefined) } as any);
+
+    // Should still attempt rollback using newImage as fallback.
+    await expect(
+      trigger.updateContainerWithCompose('/opt/drydock/test/stack.yml', 'nginx', container),
+    ).rejects.toThrow('create failed');
+
+    expect(createContainerSpy).toHaveBeenCalledTimes(2);
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('attempting to restore the original container from captured spec'),
+    );
+  });
+
+  test('[#391] updateContainerWithCompose should NOT call stopAndRemoveContainer when pre-flight arch check fails', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({ name: 'nginx' });
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    const stopContainerSpy = vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    const removeContainerSpy = vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+
+    // Simulate an image with arm/v6 (arm) architecture on an amd64 host.
+    const incompatibleArch = process.arch === 'arm' ? 'amd64' : 'arm';
+    mockDockerApi.getImage.mockReturnValue({
+      inspect: vi.fn().mockResolvedValue({ Architecture: incompatibleArch, Os: 'linux' }),
+    });
+
+    await expect(
+      trigger.updateContainerWithCompose('/opt/drydock/test/stack.yml', 'nginx', container),
+    ).rejects.toThrow('is not compatible with host architecture');
+
+    expect(stopContainerSpy).not.toHaveBeenCalled();
+    expect(removeContainerSpy).not.toHaveBeenCalled();
+  });
+
+  test('[#391] verifyPulledImageCompatibility should skip check when dockerApi has no getImage', async () => {
+    const apiWithoutGetImage = { modem: { socketPath: '/var/run/docker.sock' } } as any;
+    // Should not throw — treat as compatible.
+    await expect(
+      trigger.verifyPulledImageCompatibility(apiWithoutGetImage, 'nginx:1.1.0', mockLog),
+    ).resolves.toBeUndefined();
+  });
+
+  test('[#391] verifyPulledImageCompatibility should skip check when image inspect throws', async () => {
+    const failingApi = {
+      modem: { socketPath: '/var/run/docker.sock' },
+      getImage: vi.fn().mockReturnValue({
+        inspect: vi.fn().mockRejectedValue(new Error('image not found')),
+      }),
+    } as any;
+    await expect(
+      trigger.verifyPulledImageCompatibility(failingApi, 'nginx:1.1.0', mockLog),
+    ).resolves.toBeUndefined();
+  });
+
+  test('[#391] verifyPulledImageCompatibility should skip check when image inspect returns no Architecture', async () => {
+    const apiNoArch = {
+      modem: { socketPath: '/var/run/docker.sock' },
+      getImage: vi.fn().mockReturnValue({
+        inspect: vi.fn().mockResolvedValue({ Os: 'linux' }),
+      }),
+    } as any;
+    await expect(
+      trigger.verifyPulledImageCompatibility(apiNoArch, 'nginx:1.1.0', mockLog),
+    ).resolves.toBeUndefined();
+  });
+
+  test('[#391] verifyPulledImageCompatibility should skip check for unknown/exotic architectures', async () => {
+    const apiExoticArch = {
+      modem: { socketPath: '/var/run/docker.sock' },
+      getImage: vi.fn().mockReturnValue({
+        inspect: vi.fn().mockResolvedValue({ Architecture: 'loongarch64', Os: 'linux' }),
+      }),
+    } as any;
+    // Should not throw for unknown architectures (treat as compatible).
+    await expect(
+      trigger.verifyPulledImageCompatibility(apiExoticArch, 'nginx:1.1.0', mockLog),
+    ).resolves.toBeUndefined();
+  });
+
+  test('[#391] verifyPulledImageCompatibility should log compatibility on successful check', async () => {
+    const hostCompatibleArch = process.arch === 'x64' ? 'amd64' : process.arch;
+    const compatibleApi = {
+      modem: { socketPath: '/var/run/docker.sock' },
+      getImage: vi.fn().mockReturnValue({
+        inspect: vi.fn().mockResolvedValue({ Architecture: hostCompatibleArch, Os: 'linux' }),
+      }),
+    } as any;
+    await trigger.verifyPulledImageCompatibility(compatibleApi, 'nginx:1.1.0', mockLog);
+
+    expect(mockLog.info).toHaveBeenCalledWith(
+      expect.stringContaining(`architecture "${hostCompatibleArch}" is compatible`),
+    );
+  });
+
   test('updateContainerWithCompose should throw when inspectContainer returns malformed runtime state', async () => {
     trigger.configuration.dryrun = false;
     const container = makeContainer({ name: 'nginx' });
