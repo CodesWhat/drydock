@@ -326,8 +326,13 @@ function getGithubToken() {
   return tokenTrimmed !== '' ? tokenTrimmed : undefined;
 }
 
-function getReleaseNotesCacheKey(providerId: string, sourceRepo: string, tag: string) {
-  return `${providerId}:${sourceRepo.toLowerCase()}@${tag.toLowerCase()}`;
+function getReleaseNotesCacheKey(
+  providerId: string,
+  sourceRepo: string,
+  tag: string,
+  trusted: boolean,
+) {
+  return `${providerId}:${sourceRepo.toLowerCase()}@${tag.toLowerCase()}#${trusted ? 'auth' : 'anon'}`;
 }
 
 async function getReleaseNotesForSourceRepo(sourceRepo: string, tag: string, trusted: boolean) {
@@ -338,7 +343,7 @@ async function getReleaseNotesForSourceRepo(sourceRepo: string, tag: string, tru
     return undefined;
   }
 
-  const cacheKey = getReleaseNotesCacheKey(provider.id, sourceRepo, tag);
+  const cacheKey = getReleaseNotesCacheKey(provider.id, sourceRepo, tag, trusted);
   const releaseNotesFromCache = getCacheValue(releaseNotesCache, cacheKey);
   if (releaseNotesFromCache.found) {
     return releaseNotesFromCache.value ?? undefined;

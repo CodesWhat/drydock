@@ -948,4 +948,139 @@ describe('release-notes service', () => {
       }),
     );
   });
+
+  // -----------------------------------------------------------------------
+  // Cache key trust segregation (security correctness — cache poisoning fix)
+  // -----------------------------------------------------------------------
+
+  test('cache-segregation: untrusted not-found null does not poison a subsequent trusted lookup', async () => {
+    const { getReleaseNotesForTag } = await import('./index.js');
+    ddEnvVars.DD_RELEASE_NOTES_GITHUB_TOKEN = 'ghp_operator_secret';
+
+    // First call: UNTRUSTED (container label) — GitHub returns 404 (no token sent)
+    mockAxiosGet
+      .mockRejectedValueOnce({ response: { status: 404 } }) // untrusted: v1.0.0 variant
+      .mockRejectedValueOnce({ response: { status: 404 } }); // untrusted: 1.0.0 variant
+
+    const untrustedResult = await getReleaseNotesForTag(
+      {
+        labels: { 'dd.source.repo': 'https://github.com/acme/private.git' },
+        image: { name: 'acme/image', registry: { url: 'registry.example.com' } },
+        result: { tag: '1.0.0' },
+      } as any,
+      '1.0.0',
+    );
+    expect(untrustedResult).toBeUndefined();
+
+    // Second call: TRUSTED (OCI image label, same repo+tag) — must invoke fetchByTag again
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        tag_name: 'v1.0.0',
+        name: 'Private Release',
+        body: 'notes',
+        html_url: 'https://github.com/acme/private/releases/tag/v1.0.0',
+        published_at: '2026-01-01T00:00:00.000Z',
+      },
+    });
+
+    const trustedResult = await getReleaseNotesForTag(
+      {
+        labels: {},
+        image: { name: 'acme/image', registry: { url: 'registry.example.com' } },
+        result: { tag: '1.0.0' },
+      } as any,
+      '1.0.0',
+      { 'org.opencontainers.image.source': 'https://github.com/acme/private' },
+    );
+
+    // The trusted call must NOT return the poisoned null — it must get real notes
+    expect(trustedResult).not.toBeUndefined();
+    expect(trustedResult?.title).toBe('Private Release');
+    // fetchByTag was called for the untrusted attempt (2 tag variants) + once for the trusted attempt
+    expect(mockAxiosGet).toHaveBeenCalledTimes(3);
+    // The trusted call must have sent the token
+    expect(mockAxiosGet).toHaveBeenLastCalledWith(
+      expect.stringContaining('api.github.com'),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer ghp_operator_secret',
+        }),
+      }),
+    );
+  });
+
+  test('cache-segregation: trusted cache entry is not served to an untrusted lookup', async () => {
+    const { getReleaseNotesForTag } = await import('./index.js');
+    ddEnvVars.DD_RELEASE_NOTES_GITHUB_TOKEN = 'ghp_operator_secret';
+
+    // First call: TRUSTED — caches a successful result
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        tag_name: 'v2.0.0',
+        name: 'Trusted Release',
+        body: 'notes',
+        html_url: 'https://github.com/acme/shared/releases/tag/v2.0.0',
+        published_at: '2026-01-01T00:00:00.000Z',
+      },
+    });
+
+    await getReleaseNotesForTag(
+      {
+        labels: {},
+        image: { name: 'acme/image', registry: { url: 'registry.example.com' } },
+        result: { tag: '2.0.0' },
+      } as any,
+      '2.0.0',
+      { 'org.opencontainers.image.source': 'https://github.com/acme/shared' },
+    );
+
+    // Second call: UNTRUSTED (container label, same repo+tag) — must not hit the trusted cache;
+    // it must make its own network call (which returns 404)
+    mockAxiosGet
+      .mockRejectedValueOnce({ response: { status: 404 } })
+      .mockRejectedValueOnce({ response: { status: 404 } });
+
+    const untrustedResult = await getReleaseNotesForTag(
+      {
+        labels: { 'dd.source.repo': 'https://github.com/acme/shared.git' },
+        image: { name: 'acme/image', registry: { url: 'registry.example.com' } },
+        result: { tag: '2.0.0' },
+      } as any,
+      '2.0.0',
+    );
+
+    // Untrusted lookup must NOT receive the trusted cached value
+    expect(untrustedResult).toBeUndefined();
+    // Total calls: 1 (trusted fetch) + 2 (untrusted fetch, two tag variants)
+    expect(mockAxiosGet).toHaveBeenCalledTimes(3);
+  });
+
+  test('cache-segregation: same-trust repeated calls still hit the cache (no regression)', async () => {
+    const { getReleaseNotesForTag } = await import('./index.js');
+
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        tag_name: 'v3.0.0',
+        name: 'Cached Release',
+        body: 'notes',
+        html_url: 'https://github.com/acme/cached/releases/tag/v3.0.0',
+        published_at: '2026-01-01T00:00:00.000Z',
+      },
+    });
+
+    const container = {
+      labels: {},
+      image: { name: 'acme/image', registry: { url: 'registry.example.com' } },
+      result: { tag: '3.0.0' },
+    } as any;
+    const imageLabels = { 'org.opencontainers.image.source': 'https://github.com/acme/cached' };
+
+    const first = await getReleaseNotesForTag(container, '3.0.0', imageLabels);
+    const second = await getReleaseNotesForTag(container, '3.0.0', imageLabels);
+
+    expect(first?.title).toBe('Cached Release');
+    expect(second?.title).toBe('Cached Release');
+    // fetchByTag must only have been called once — second call served from cache
+    expect(mockAxiosGet).toHaveBeenCalledTimes(1);
+  });
 });
