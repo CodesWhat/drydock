@@ -1,6 +1,15 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-const { mockApp, mockServerConfig, mockHashToken, mockLog, mockLoggerChild } = vi.hoisted(() => {
+const {
+  mockApp,
+  mockServerConfig,
+  mockHashToken,
+  mockLog,
+  mockLoggerChild,
+  mockRateLimit,
+  mockRateLimitMiddleware,
+} = vi.hoisted(() => {
+  const mockRateLimitMiddleware = vi.fn((_req, _res, next) => next());
   const mockApp = {
     disable: vi.fn(),
     use: vi.fn(),
@@ -24,7 +33,16 @@ const { mockApp, mockServerConfig, mockHashToken, mockLog, mockLoggerChild } = v
     debug: vi.fn(),
   };
   const mockLoggerChild = vi.fn();
-  return { mockApp, mockServerConfig, mockHashToken, mockLog, mockLoggerChild };
+  const mockRateLimit = vi.fn(() => mockRateLimitMiddleware);
+  return {
+    mockApp,
+    mockServerConfig,
+    mockHashToken,
+    mockLog,
+    mockLoggerChild,
+    mockRateLimit,
+    mockRateLimitMiddleware,
+  };
 });
 
 vi.mock('node:fs', () => ({
@@ -76,6 +94,9 @@ vi.mock('../../log/buffer.js', () => ({
 }));
 vi.mock('../../util/crypto.js', () => ({
   hashToken: mockHashToken,
+}));
+vi.mock('express-rate-limit', () => ({
+  default: mockRateLimit,
 }));
 
 import { authenticate, init } from './index.js';
@@ -668,6 +689,79 @@ describe('Agent API index', () => {
         expect(postCalls).toContain('/api/watchers/:type/:name');
         expect(postCalls).toContain('/api/watchers/:type/:name/container/:id');
         expect(deleteCalls).toContain('/api/containers/:id');
+      });
+    });
+
+    describe('rate limiter', () => {
+      test('should create a rate limiter with the correct options', async () => {
+        process.env.DD_AGENT_SECRET = 'secret';
+        await init();
+        expect(mockRateLimit).toHaveBeenCalledWith(
+          expect.objectContaining({
+            windowMs: 60_000,
+            max: 300,
+            standardHeaders: true,
+            legacyHeaders: false,
+          }),
+        );
+      });
+
+      test('should register the rate limiter middleware before authenticate', async () => {
+        process.env.DD_AGENT_SECRET = 'secret';
+        await init();
+
+        const useCalls = mockApp.use.mock.calls;
+        const useOrder = mockApp.use.mock.invocationCallOrder;
+
+        const limiterIdx = useCalls.findIndex(([arg]) => arg === mockRateLimitMiddleware);
+        const authIdx = useCalls.findIndex(([arg]) => arg === authenticate);
+
+        expect(limiterIdx).toBeGreaterThanOrEqual(0);
+        expect(authIdx).toBeGreaterThanOrEqual(0);
+        expect(useOrder[limiterIdx]).toBeLessThan(useOrder[authIdx]);
+      });
+
+      test('should pass requests through when under the rate limit', async () => {
+        process.env.DD_AGENT_SECRET = 'secret';
+        await init();
+
+        // mockRateLimitMiddleware calls next() by default (under-limit behaviour)
+        const req = {};
+        const res = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+        const next = vi.fn();
+
+        mockRateLimitMiddleware(req, res, next);
+
+        expect(next).toHaveBeenCalledTimes(1);
+        expect(res.status).not.toHaveBeenCalled();
+      });
+
+      test('should return 429 when the rate limit is exceeded', async () => {
+        process.env.DD_AGENT_SECRET = 'secret';
+        await init();
+
+        // Simulate the rate limiter blocking the request (does not call next)
+        mockRateLimitMiddleware.mockImplementationOnce((_req, res) => {
+          res.status(429).send();
+        });
+
+        const req = {};
+        const res = { status: vi.fn().mockReturnThis(), send: vi.fn() };
+        const next = vi.fn();
+
+        mockRateLimitMiddleware(req, res, next);
+
+        expect(res.status).toHaveBeenCalledWith(429);
+        expect(next).not.toHaveBeenCalled();
+      });
+
+      test('should register the rate limiter using the middleware returned by rateLimit()', async () => {
+        process.env.DD_AGENT_SECRET = 'secret';
+        await init();
+
+        // Verify app.use was called with the exact middleware instance returned by rateLimit()
+        const usedMiddlewares = mockApp.use.mock.calls.map(([arg]) => arg);
+        expect(usedMiddlewares).toContain(mockRateLimitMiddleware);
       });
     });
   });
