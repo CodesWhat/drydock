@@ -8403,6 +8403,62 @@ describe('security digest templates (6.7)', () => {
     });
     expect((callArgs?.[1] as any).title).toContain('1 container with findings');
   });
+
+  test('renderSecurityDigestTemplate does not execute arbitrary code via process.env', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+      securitydigestbody: '${process.env.HOME}',
+    });
+    trigger.init();
+
+    const ctx = {
+      kind: 'security' as const,
+      containers: [],
+      scannedCount: 1,
+      alertCount: 0,
+      criticalCount: 0,
+      highCount: 0,
+      mediumCount: 0,
+      lowCount: 0,
+      unknownCount: 0,
+      startedAt: '2026-04-17T10:00:00.000Z',
+      completedAt: '2026-04-17T10:01:00.000Z',
+      cycleId: 'cycle-001',
+    };
+
+    const body = (trigger as any).formatDigestBody('security-alert-digest', ctx);
+    expect(body).toBe('');
+  });
+
+  test('renderSecurityDigestTemplate does not execute JS expressions like array map', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+      securitydigestbody: '${scan.containers.map(c => c.name).join(",")}',
+    });
+    trigger.init();
+
+    const ctx = {
+      kind: 'security' as const,
+      containers: [{ name: 'app', critical: 1, high: 0, medium: 0, low: 0, unknown: 0 }],
+      scannedCount: 1,
+      alertCount: 1,
+      criticalCount: 1,
+      highCount: 0,
+      mediumCount: 0,
+      lowCount: 0,
+      unknownCount: 0,
+      startedAt: '2026-04-17T10:00:00.000Z',
+      completedAt: '2026-04-17T10:01:00.000Z',
+      cycleId: 'cycle-001',
+    };
+
+    const body = (trigger as any).formatDigestBody('security-alert-digest', ctx);
+    expect(body).toBe('');
+  });
 });
 
 // ---------------------------------------------------------------------------

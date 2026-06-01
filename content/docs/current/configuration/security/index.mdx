@@ -293,11 +293,23 @@ environment:
   - DD_NOTIFICATION_SMTP_ALERTS_TO=security@example.com
   - DD_NOTIFICATION_SMTP_ALERTS_SECURITYMODE=digest
   # Optional: customize digest subject/body
-  # - DD_NOTIFICATION_SMTP_ALERTS_SECURITYDIGESTTITLE=Security scan complete: $scanCount containers scanned
-  # - DD_NOTIFICATION_SMTP_ALERTS_SECURITYDIGESTBODY=Found $alertCount containers with alerts
+  # - DD_NOTIFICATION_SMTP_ALERTS_SECURITYDIGESTTITLE=Security scan complete: ${scan.alertCount} ${scan.containerNoun} with findings
+  # - DD_NOTIFICATION_SMTP_ALERTS_SECURITYDIGESTBODY=Found ${scan.alertCount} of ${scan.scannedCount} containers with alerts
 ```
 
 The digest fires once per `cycleId`, grouped by severity. Cycles with zero findings never emit. The `SECURITYMODE` setting is independent of the update-notification `MODE` — a trigger can combine `MODE=batch` (update emails) with `SECURITYMODE=digest` (security emails) simultaneously.
+
+Digest templates use the same safe `${…}` interpolation as every other trigger template — they are **not** evaluated as JavaScript, so arbitrary expressions (arrow functions, array methods, arithmetic) resolve to an empty string rather than running code. The following `scan.*` variables are available:
+
+| Variable | Description |
+|---|---|
+| `scan.alertCount` | Containers with at least one finding |
+| `scan.scannedCount` | Containers scanned in the cycle |
+| `scan.containerNoun` | `container` when `alertCount` is 1, otherwise `containers` |
+| `scan.criticalCount` / `scan.highCount` / `scan.mediumCount` / `scan.lowCount` / `scan.unknownCount` | Container counts whose top severity is that level |
+| `scan.criticalList` / `scan.highList` | Pre-formatted, newline-joined `- name: …` lists for the critical and high tiers |
+| `scan.startedAt` / `scan.completedAt` | Cycle start/finish ISO timestamps |
+| `scan.cycleId` | The cycle's UUID v7 |
 
 ## Full example (scanning + signatures + SBOM)
 

@@ -28,7 +28,7 @@ import {
 import { BatchDispatcher } from './trigger-batch-dispatcher.js';
 import { OneShotKeyTracker, RecentSignatureSuppressor } from './trigger-deduplicator.js';
 import { DigestBuffer } from './trigger-digest-buffer.js';
-import { renderBatch, renderSimple } from './trigger-expression-parser.js';
+import { renderBatch, renderSimple, renderTemplate } from './trigger-expression-parser.js';
 import {
   isThresholdReached as isThresholdReachedHelper,
   parseThresholdWithDigestBehavior as parseThresholdWithDigestBehaviorHelper,
@@ -320,15 +320,15 @@ type SecurityDigestContext = {
 
 type DigestContext = UpdateDigestContext | SecurityDigestContext;
 
-const DEFAULT_SECURITY_DIGEST_TITLE_TEMPLATE = `Security scan complete: \${scan.alertCount} container\${scan.alertCount === 1 ? '' : 's'} with findings`;
+const DEFAULT_SECURITY_DIGEST_TITLE_TEMPLATE = `Security scan complete: \${scan.alertCount} \${scan.containerNoun} with findings`;
 
 const DEFAULT_SECURITY_DIGEST_BODY_TEMPLATE = `Security scan complete: \${scan.alertCount} of \${scan.scannedCount} containers have findings.
 
 CRITICAL (\${scan.criticalCount}):
-\${scan.containers.filter(c => c.critical > 0).map(c => '- ' + c.name + ': critical=' + c.critical + ', high=' + c.high).join('\\n')}
+\${scan.criticalList}
 
 HIGH (\${scan.highCount}):
-\${scan.containers.filter(c => c.critical === 0 && c.high > 0).map(c => '- ' + c.name + ': high=' + c.high + ', medium=' + c.medium).join('\\n')}
+\${scan.highList}
 
 Scan ran from \${scan.startedAt} to \${scan.completedAt}.`;
 
@@ -1758,14 +1758,17 @@ class Trigger<
       completedAt: ctx.completedAt,
       cycleId: ctx.cycleId,
       containers: ctx.containers,
+      containerNoun: ctx.alertCount === 1 ? 'container' : 'containers',
+      criticalList: ctx.containers
+        .filter((c) => c.critical > 0)
+        .map((c) => `- ${c.name}: critical=${c.critical}, high=${c.high}`)
+        .join('\n'),
+      highList: ctx.containers
+        .filter((c) => c.critical === 0 && c.high > 0)
+        .map((c) => `- ${c.name}: high=${c.high}, medium=${c.medium}`)
+        .join('\n'),
     };
-    try {
-      // Template variables use ${...} syntax — evaluate as a template literal body.
-      const renderFn = new Function('scan', `return \`${template}\`;`);
-      return renderFn(scan) as string;
-    } catch {
-      return template;
-    }
+    return renderTemplate(template, { scan });
   }
 
   /**
