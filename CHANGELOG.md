@@ -370,6 +370,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+_The following entries are hardening from a 2026-06-01 multi-agent security review (no critical/high findings)._
+
+- **Registry token-fetch requests now honor operator TLS settings ([commit `dfbbd159`](https://github.com/CodesWhat/drydock/commit/dfbbd159)).** GAR, GitLab, Mau, DHI and public-ECR built their own token-fetch request and called `axios()` directly, bypassing `withTlsRequestOptions()` — so the credential exchange ignored the configured `cafile` / `insecure` / client-cert and validated against the system trust store. The shared TLS helper is now applied to those token fetches (`Ecr` was realigned to extend `BaseRegistry`).
+
+- **CSRF same-origin enforcement extended to authenticated `/auth` mutations ([commit `d1611f88`](https://github.com/CodesWhat/drydock/commit/d1611f88)).** The `/auth` router sat outside the middleware chain that runs `requireSameOriginForMutations`, leaving bodyless `POST /auth/logout` and `POST /auth/remember` without same-origin protection (exploitable under `DD_SERVER_COOKIE_SAMESITE=none`).
+
+- **OIDC username falls back to the `sub` claim before `unknown` ([commit `8e00dfd3`](https://github.com/CodesWhat/drydock/commit/8e00dfd3)).** Identities without an `email` claim previously collapsed to a single `unknown` username sharing one session-eviction bucket.
+
+- **schemaVersion-1 manifest parsing guarded ([commit `fee0bbcc`](https://github.com/CodesWhat/drydock/commit/fee0bbcc)).** A malformed/missing `v1Compatibility` from a registry threw an unhandled error that silently dropped the container from the watch cycle; it is now fully optional-chained and wrapped with a descriptive error.
+
+- **Diagnostic debug dump redacts plural `*_TOKENS_*` env vars ([commit `238727f5`](https://github.com/CodesWhat/drydock/commit/238727f5)).** The redaction set matched `token` but not `tokens`, so `DD_SERVER_WEBHOOK_TOKENS_*` values printed in plaintext.
+
+- **Agent HTTP server is rate-limited before authentication ([commit `8cddaeab`](https://github.com/CodesWhat/drydock/commit/8cddaeab)).** The shared-secret-gated agent endpoints had no throttle on repeated failed attempts; a 60s/300 limiter now sits ahead of the auth middleware (`/health` exempt; the long-lived SSE stream counts once on open).
+
+- **Basic-auth string comparison no longer leaks length via timing ([commit `6ff55463`](https://github.com/CodesWhat/drydock/commit/6ff55463)).** `timingSafeEqualString` early-exited on length mismatch; both operands are now hashed to a fixed-length sha256 digest before `timingSafeEqual`, matching `verifyShaPassword`.
+
+- **Quay pagination tokens percent-encoded ([commit `a19e0102`](https://github.com/CodesWhat/drydock/commit/a19e0102)).** `next_page`/`last` values parsed from the registry `Link` header were appended to the request URL unencoded, allowing query-parameter injection from a malicious/buggy registry response.
+
+- **Startup warning when falling back to a store-persisted session secret ([commit `9431c1d2`](https://github.com/CodesWhat/drydock/commit/9431c1d2)).** When `DD_SESSION_SECRET` is unset, a one-time warning now recommends setting it explicitly and keeping the store directory non-world-readable.
+
+- **Startup warning when `trust proxy` is set to boolean `true` ([commit `71eac008`](https://github.com/CodesWhat/drydock/commit/71eac008)).** `DD_SERVER_TRUSTPROXY=true` trusts all `X-Forwarded-For` hops, letting clients spoof `req.ip` and evade per-IP login lockout; the warning steers operators to a hop count (`=1`).
+
 - **TCP Docker host is validated before the self-update controller passes it to Dockerode (commit [`441b4358`](https://github.com/CodesWhat/drydock/commit/441b4358)).** `validateTcpDockerHost` rejects values that contain a URL scheme prefix, a userinfo segment, whitespace, or path separators, throwing a descriptive error before any network connection is attempted.
 
 - **Proxied SVG icons sanitized before caching ([commit `54d93a3b`](https://github.com/CodesWhat/drydock/commit/54d93a3b)).** SVG payloads fetched from upstream icon CDNs are run through an allowlist-based sanitizer before being written to the icon cache.
@@ -447,6 +469,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Patch/minor dependency bumps** — Updated all patch/minor dependencies and upgraded knip to v6.
 
 - **Vulnerable transitive dependency patches** — nodemailer 8.0.3→8.0.4, picomatch→4.0.4, brace-expansion→5.0.5, smol-toml→1.6.1, yaml→2.8.3, next 16.2.1→16.2.2 (CVE-2025-59472), lodash 4.17.23→4.18.1 (CVE-2026-2950, CVE-2026-4800).
+
+- **Pinned `pinia` and `vue-i18n` to exact versions ([commit `fd0b02a5`](https://github.com/CodesWhat/drydock/commit/fd0b02a5)).** Both were the only `^`-ranged UI dependencies; pinned to the locked `3.0.4` / `11.4.2` to match the exact-pinning discipline used everywhere else.
 
 ### Documentation
 
