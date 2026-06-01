@@ -947,7 +947,7 @@ class Oidc extends Authentication<OidcConfiguration> {
       openidClient.skipSubjectCheck,
     );
     return {
-      username: userInfo.email || 'unknown',
+      username: userInfo.email || userInfo.sub || 'unknown',
     };
   }
 }

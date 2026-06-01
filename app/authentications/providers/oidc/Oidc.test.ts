@@ -574,8 +574,17 @@ test('verify should return false on invalid token', async () => {
 });
 
 test.each([
-  ['email present', { email: 'user@example.com' }, { username: 'user@example.com' }],
-  ['email missing', {}, { username: 'unknown' }],
+  [
+    'email present',
+    { email: 'user@example.com', sub: 'sub-123' },
+    { username: 'user@example.com' },
+  ],
+  [
+    'email absent, sub present',
+    { sub: 'sub-abc-service-account' },
+    { username: 'sub-abc-service-account' },
+  ],
+  ['email and sub both absent', {}, { username: 'unknown' }],
 ])('getUserFromAccessToken should return correct user when %s', async (_label, mockUserInfo, expected) => {
   openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue(mockUserInfo);
 
