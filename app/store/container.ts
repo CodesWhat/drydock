@@ -132,9 +132,27 @@ function hasUnsafeQueryPathSegment(queryPath: string) {
     .some((pathSegment) => pathSegment.length > 0 && UNSAFE_QUERY_PATH_SEGMENTS.has(pathSegment));
 }
 
+/**
+ * Returns true if the value is a safe primitive for exact-match store filters.
+ * Rejects non-null objects and arrays, which is how LokiJS operator objects
+ * (e.g. `{$regex: '...'}`, `{$ne: null}`) arrive from untrusted query params.
+ * null and undefined are allowed because they represent explicit absence/equality
+ * comparisons that LokiJS handles as literal value matches.
+ */
+function isSafeContainerQueryValue(value: unknown): boolean {
+  if (value === null || value === undefined) {
+    return true;
+  }
+  const type = typeof value;
+  return type === 'string' || type === 'number' || type === 'boolean';
+}
+
 function getSafeContainerQueryEntries(query: Record<string, unknown> = {}) {
   return Object.keys(query)
-    .filter((queryKey) => !hasUnsafeQueryPathSegment(queryKey))
+    .filter(
+      (queryKey) =>
+        !hasUnsafeQueryPathSegment(queryKey) && isSafeContainerQueryValue(query[queryKey]),
+    )
     .sort()
     .map((queryKey) => [queryKey, query[queryKey]] as [string, unknown]);
 }

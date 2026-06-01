@@ -2999,3 +2999,190 @@ test('deleteContainer with a normal container name DOES emit emitContainerRemove
   container.deleteContainer('normal-to-delete');
   expect(spyRemoved).toHaveBeenCalledTimes(1);
 });
+
+// ─── Operator-injection / ReDoS guard (I-4) ──────────────────────────────────
+
+describe('getSafeContainerQueryEntries / operator injection guard', () => {
+  test('drops entry whose value is an operator object ($regex)', () => {
+    const collection = createFilterableCollection([
+      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
+    ]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+
+    // A $regex operator object must not reach LokiJS
+    container.getContainers({ watcher: { $regex: '.*' } } as Record<string, unknown>);
+    // No filter was applied — collection.find was called with an empty filter (only the
+    // operator-bearing entry was dropped). The important guarantee is that the
+    // operator object was NOT forwarded to LokiJS, so re2js's ReDoS guarantee holds.
+    expect(collection.find).toHaveBeenCalledWith({});
+  });
+
+  test('drops entry whose value is an operator object ($ne)', () => {
+    const collection = createFilterableCollection([
+      { data: createContainerFixture({ id: 'c1', status: 'running' }) },
+    ]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+
+    container.getContainers({ status: { $ne: null } } as Record<string, unknown>);
+    expect(collection.find).toHaveBeenCalledWith({});
+  });
+
+  test('drops entry whose value is an array', () => {
+    const collection = createFilterableCollection([
+      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
+    ]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+
+    container.getContainers({ watcher: ['docker', 'podman'] } as Record<string, unknown>);
+    expect(collection.find).toHaveBeenCalledWith({});
+  });
+
+  test('operator-object entry does NOT appear in cache key', () => {
+    const collection = createFilterableCollection([
+      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
+    ]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+
+    // First call with operator value
+    container.getContainers({ watcher: { $regex: 'dock.*' } } as Record<string, unknown>);
+    const cacheAfterOperator = container._getContainersQueryCacheForTests();
+    // Cache key must be the same as an empty-query call (no watcher entry serialised)
+    const emptyQueryKey = JSON.stringify([]);
+    expect(cacheAfterOperator.has(emptyQueryKey)).toBe(true);
+  });
+
+  test('string value passes through and filters correctly', () => {
+    const collection = createFilterableCollection([
+      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
+      { data: createContainerFixture({ id: 'c2', watcher: 'podman' }) },
+    ]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+
+    const result = container.getContainers({ watcher: 'docker' });
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('c1');
+    expect(collection.find).toHaveBeenCalledWith({ 'data.watcher': 'docker' });
+  });
+
+  test('boolean value passes through and filters correctly', () => {
+    const collection = createFilterableCollection([
+      { data: createContainerFixture({ id: 'c1', updateAvailable: true }) },
+      { data: createContainerFixture({ id: 'c2', updateAvailable: false }) },
+    ]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+
+    const result = container.getContainers({ updateAvailable: true });
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('c1');
+    expect(collection.find).toHaveBeenCalledWith({ 'data.updateAvailable': true });
+  });
+
+  test('number value passes through', () => {
+    const collection = createFilterableCollection([
+      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
+    ]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+
+    container.getContainers({ someNumericField: 42 } as Record<string, unknown>);
+    expect(collection.find).toHaveBeenCalledWith({ 'data.someNumericField': 42 });
+  });
+
+  test('null value passes through (literal null match)', () => {
+    const collection = createFilterableCollection([
+      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
+    ]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+
+    container.getContainers({ someField: null } as Record<string, unknown>);
+    expect(collection.find).toHaveBeenCalledWith({ 'data.someField': null });
+  });
+
+  test('undefined value passes through (literal undefined match)', () => {
+    const collection = createFilterableCollection([
+      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
+    ]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+
+    container.getContainers({ someField: undefined } as Record<string, unknown>);
+    expect(collection.find).toHaveBeenCalledWith({ 'data.someField': undefined });
+  });
+
+  test('proto-pollution key guard still drops __proto__ keys', () => {
+    const collection = createFilterableCollection([
+      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
+    ]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+
+    // Build a query that contains a key named '__proto__' via defineProperty so
+    // we don't accidentally mutate Object.prototype.
+    const query: Record<string, unknown> = { watcher: 'docker' };
+    Object.defineProperty(query, '__proto__', { value: 'bad', enumerable: true });
+    container.getContainers(query);
+    // Only the safe 'watcher' key should appear in the filter
+    expect(collection.find).toHaveBeenCalledWith({ 'data.watcher': 'docker' });
+  });
+
+  test('proto-pollution key guard still drops prototype and constructor keys', () => {
+    const collection = createFilterableCollection([
+      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
+    ]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+
+    container.getContainers({
+      'foo.prototype.bar': 'x',
+      'baz.constructor.qux': 'y',
+      watcher: 'docker',
+    } as Record<string, unknown>);
+    expect(collection.find).toHaveBeenCalledWith({ 'data.watcher': 'docker' });
+  });
+
+  test('getContainersRaw with operator value does not forward the operator', () => {
+    const collection = createFilterableCollection([
+      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
+    ]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+
+    container.getContainersRaw({ watcher: { $regex: 'dock.*' } } as Record<string, unknown>);
+    expect(collection.find).toHaveBeenCalledWith({});
+  });
+
+  test('getContainerCount with operator value counts all (operator neutralised)', () => {
+    const collection = createFilterableCollection([
+      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
+      { data: createContainerFixture({ id: 'c2', watcher: 'podman' }) },
+    ]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+
+    // Operator is dropped → filter is empty → all containers returned
+    const count = container.getContainerCount({ watcher: { $regex: '.*' } } as Record<
+      string,
+      unknown
+    >);
+    expect(count).toBe(2);
+    expect(collection.find).toHaveBeenCalledWith({});
+  });
+
+  test('getContainersForStats with operator value does not forward the operator', () => {
+    const collection = createFilterableCollection([
+      { data: createContainerFixture({ id: 'c1', watcher: 'docker' }) },
+    ]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+
+    container.getContainersForStats({ watcher: { $ne: 'docker' } } as Record<string, unknown>);
+    expect(collection.find).toHaveBeenCalledWith({});
+  });
+});
