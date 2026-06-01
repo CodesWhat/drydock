@@ -5,6 +5,7 @@ const SENSITIVE_KEY_TOKENS = new Set([
   'passwd',
   'secret',
   'token',
+  'tokens',
   'credential',
   'credentials',
   'hash',

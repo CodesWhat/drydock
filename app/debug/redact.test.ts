@@ -197,6 +197,26 @@ describe('debug/redact', () => {
     expect(redacted).toEqual({ '---': 'keep-me', ___: 42 });
   });
 
+  test('redacts plural tokens keys (DD_SERVER_WEBHOOK_TOKENS_* and camelCase webhookTokens)', () => {
+    const source = {
+      DD_SERVER_WEBHOOK_TOKENS_WATCHALL: 'super-secret-webhook-token',
+      DD_SERVER_WEBHOOK_TOKENS_OTHER: 'another-secret',
+      webhookTokens: 'camel-tokens-value',
+      DD_SERVER_PORT: '3000',
+      token: 'singular-still-redacted',
+    };
+
+    const redacted = redactDebugDump(source);
+
+    expect(redacted).toEqual({
+      DD_SERVER_WEBHOOK_TOKENS_WATCHALL: REDACTED_VALUE,
+      DD_SERVER_WEBHOOK_TOKENS_OTHER: REDACTED_VALUE,
+      webhookTokens: REDACTED_VALUE,
+      DD_SERVER_PORT: '3000',
+      token: REDACTED_VALUE,
+    });
+  });
+
   test('keeps empty and null sensitive values unchanged', () => {
     const source = {
       secret: '',
