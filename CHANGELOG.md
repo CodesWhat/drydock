@@ -372,6 +372,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _The following entries are hardening from a 2026-06-01 multi-agent security review (no critical/high findings)._
 
+- **OIDC UserInfo response is bound to the id_token subject on login ([commit `661c21b9`](https://github.com/CodesWhat/drydock/commit/661c21b9)).** The authorization-code login path called `fetchUserInfo` with `skipSubjectCheck`, omitting the OIDC Core 5.3.2 check that the UserInfo `sub` matches the token `sub`. The validated id_token subject is now enforced; the bearer-token path (no id_token, no reliable expected subject) is unchanged.
+
+- **CSRF same-origin check no longer trusts forged `X-Forwarded-Host` ([commit `a132318e`](https://github.com/CodesWhat/drydock/commit/a132318e)).** `getExpectedOrigin` read `X-Forwarded-Host`/`-Proto` unconditionally, so a client could forge them to satisfy the mutation same-origin check even with `trust proxy` disabled. The forwarded host is now honored only when Express `trust proxy` is enabled, the protocol derives from the already-gated `req.protocol`, and the `Host` port is preserved for non-standard-port deployments.
+
+- **GitHub release-notes token withheld for untrusted source repos ([commit `7186195c`](https://github.com/CodesWhat/drydock/commit/7186195c)).** A `dd.source.repo` container label (settable by anyone who controls the container) could redirect the operator's release-notes token — including the GHCR PAT fallback — to an arbitrary GitHub repo. Source-repo resolution now carries provenance, and no token is attached when the repo originates from that per-deployment label; image-label, OCI-label, GHCR-path and Docker Hub sources remain trusted.
+
+- **Playwright E2E image pinned by digest ([commit `8234ef33`](https://github.com/CodesWhat/drydock/commit/8234ef33)).** `mcr.microsoft.com/playwright:v1.60.0-noble` is now pinned by its `sha256` digest so a mutated/republished tag cannot silently change the image the E2E job pulls and runs.
+
 - **Registry token-fetch requests now honor operator TLS settings ([commit `dfbbd159`](https://github.com/CodesWhat/drydock/commit/dfbbd159)).** GAR, GitLab, Mau, DHI and public-ECR built their own token-fetch request and called `axios()` directly, bypassing `withTlsRequestOptions()` — so the credential exchange ignored the configured `cafile` / `insecure` / client-cert and validated against the system trust store. The shared TLS helper is now applied to those token fetches (`Ecr` was realigned to extend `BaseRegistry`).
 
 - **CSRF same-origin enforcement extended to authenticated `/auth` mutations ([commit `d1611f88`](https://github.com/CodesWhat/drydock/commit/d1611f88)).** The `/auth` router sat outside the middleware chain that runs `requireSameOriginForMutations`, leaving bodyless `POST /auth/logout` and `POST /auth/remember` without same-origin protection (exploitable under `DD_SERVER_COOKIE_SAMESITE=none`).
