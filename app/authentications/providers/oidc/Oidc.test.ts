@@ -592,6 +592,42 @@ test.each([
   expect(user).toEqual(expected);
 });
 
+test('getUserFromAccessToken should pass skipSubjectCheck when no expectedSubject is provided (bearer path)', async () => {
+  openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue({ email: 'user@example.com' });
+
+  await oidc.getUserFromAccessToken('bearer-token');
+
+  expect(openidClientMock.fetchUserInfo).toHaveBeenCalledWith(
+    oidc.client,
+    'bearer-token',
+    openidClientMock.skipSubjectCheck,
+  );
+});
+
+test('getUserFromAccessToken should pass expectedSubject when provided (login path)', async () => {
+  openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue({ email: 'user@example.com' });
+
+  await oidc.getUserFromAccessToken('access-token', 'expected-sub-123');
+
+  expect(openidClientMock.fetchUserInfo).toHaveBeenCalledWith(
+    oidc.client,
+    'access-token',
+    'expected-sub-123',
+  );
+});
+
+test('getUserFromAccessToken should fall back to skipSubjectCheck when expectedSubject is an empty string', async () => {
+  openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue({ email: 'user@example.com' });
+
+  await oidc.getUserFromAccessToken('access-token', '');
+
+  expect(openidClientMock.fetchUserInfo).toHaveBeenCalledWith(
+    oidc.client,
+    'access-token',
+    openidClientMock.skipSubjectCheck,
+  );
+});
+
 test('redirect should persist oidc checks in session before responding', async () => {
   const save = vi.fn((cb) => cb());
   const req = createReq({ session: { save } });
@@ -1444,6 +1480,94 @@ test('callback should return 401 when access_token is missing', async () => {
   await oidc.callback(req, res);
 
   expect401Json(res);
+});
+
+test('callback should pass id_token sub as expectedSubject to fetchUserInfo', async () => {
+  openidClientMock.authorizationCodeGrant = vi.fn().mockResolvedValue({
+    access_token: 'access-token',
+    claims: () => ({ sub: 'verified-sub-from-idtoken' }),
+  });
+  openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue({ email: 'user@example.com' });
+
+  const session = createSessionWithPending({
+    'valid-state': createPendingCheck(),
+  });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(openidClientMock.fetchUserInfo).toHaveBeenCalledWith(
+    oidc.client,
+    'access-token',
+    'verified-sub-from-idtoken',
+  );
+  expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+});
+
+test('callback should return 401 when fetchUserInfo rejects due to sub mismatch', async () => {
+  openidClientMock.authorizationCodeGrant = vi.fn().mockResolvedValue({
+    access_token: 'access-token',
+    claims: () => ({ sub: 'expected-sub' }),
+  });
+  openidClientMock.fetchUserInfo = vi
+    .fn()
+    .mockRejectedValue(new Error('sub mismatch: expected expected-sub, got attacker-sub'));
+
+  const session = createSessionWithPending({
+    'valid-state': createPendingCheck(),
+  });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect401Json(res);
+});
+
+test('callback should fall back to skipSubjectCheck when token set has no claims() method', async () => {
+  openidClientMock.authorizationCodeGrant = vi.fn().mockResolvedValue({
+    access_token: 'access-token',
+  });
+  openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue({ email: 'user@example.com' });
+
+  const session = createSessionWithPending({
+    'valid-state': createPendingCheck(),
+  });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(openidClientMock.fetchUserInfo).toHaveBeenCalledWith(
+    oidc.client,
+    'access-token',
+    openidClientMock.skipSubjectCheck,
+  );
+  expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
+});
+
+test('callback should fall back to skipSubjectCheck when claims() returns undefined', async () => {
+  openidClientMock.authorizationCodeGrant = vi.fn().mockResolvedValue({
+    access_token: 'access-token',
+    claims: () => undefined,
+  });
+  openidClientMock.fetchUserInfo = vi.fn().mockResolvedValue({ email: 'user@example.com' });
+
+  const session = createSessionWithPending({
+    'valid-state': createPendingCheck(),
+  });
+  const req = createCallbackReq('/auth/oidc/default/cb?code=abc&state=valid-state', session);
+  const res = createRes();
+
+  await oidc.callback(req, res);
+
+  expect(openidClientMock.fetchUserInfo).toHaveBeenCalledWith(
+    oidc.client,
+    'access-token',
+    openidClientMock.skipSubjectCheck,
+  );
+  expect(res.redirect).toHaveBeenCalledWith('https://dd.example.com');
 });
 
 test('initAuthentication should discover and configure client', async () => {
