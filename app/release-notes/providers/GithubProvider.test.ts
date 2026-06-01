@@ -802,4 +802,87 @@ describe('release-notes/providers/GithubProvider', () => {
 
     vi.useRealTimers();
   });
+
+  // -----------------------------------------------------------------------
+  // L-4 security fix: allowToken option gates token and GHCR fallback
+  // -----------------------------------------------------------------------
+
+  test('fetchByTag with allowToken:false does not attach an explicit token', async () => {
+    const provider = new GithubProvider();
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        body: 'body',
+        name: 'v1.0.0',
+        html_url: 'https://github.com/acme/service/releases/tag/v1.0.0',
+        published_at: '2024-01-01T00:00:00Z',
+      },
+    });
+
+    await provider.fetchByTag('github.com/acme/service', '1.0.0', 'explicit-token', {
+      allowToken: false,
+    });
+
+    expect(mockAxiosGet).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.not.objectContaining({
+          Authorization: expect.any(String),
+        }),
+      }),
+    );
+  });
+
+  test('fetchByTag with allowToken:false does not attach the GHCR token fallback', async () => {
+    const provider = new GithubProvider();
+    mockGetGhcrTokenFallback.mockReturnValueOnce('ghcr-pat-token');
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        body: 'body',
+        name: 'v1.0.0',
+        html_url: 'https://github.com/acme/service/releases/tag/v1.0.0',
+        published_at: '2024-01-01T00:00:00Z',
+      },
+    });
+
+    await provider.fetchByTag('github.com/acme/service', '1.0.0', undefined, {
+      allowToken: false,
+    });
+
+    expect(mockAxiosGet).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.not.objectContaining({
+          Authorization: expect.any(String),
+        }),
+      }),
+    );
+    // getGhcrTokenFallback must NOT have been called
+    expect(mockGetGhcrTokenFallback).not.toHaveBeenCalled();
+  });
+
+  test('fetchByTag with allowToken:true (default) still attaches the GHCR fallback', async () => {
+    const provider = new GithubProvider();
+    mockGetGhcrTokenFallback.mockReturnValueOnce('ghcr-pat-token');
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        body: 'body',
+        name: 'v1.0.0',
+        html_url: 'https://github.com/acme/service/releases/tag/v1.0.0',
+        published_at: '2024-01-01T00:00:00Z',
+      },
+    });
+
+    await provider.fetchByTag('github.com/acme/service', '1.0.0', undefined, {
+      allowToken: true,
+    });
+
+    expect(mockAxiosGet).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer ghcr-pat-token',
+        }),
+      }),
+    );
+  });
 });

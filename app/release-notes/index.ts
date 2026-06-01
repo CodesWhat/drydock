@@ -6,6 +6,8 @@ import { getErrorMessage } from '../util/error.js';
 import GithubProvider from './providers/GithubProvider.js';
 import type { ReleaseNotes, ReleaseNotesProviderClient } from './types.js';
 
+export type SourceRepoResolution = { sourceRepo: string; trusted: boolean } | undefined;
+
 const log = logger.child({ component: 'release-notes' });
 
 const DD_SOURCE_REPO_LABEL = 'dd.source.repo';
@@ -215,48 +217,76 @@ export function detectSourceRepoFromImageMetadata(options: {
   imageLabels?: Record<string, string>;
   imageRegistryDomain?: string;
   imagePath?: string;
-}) {
-  const manualOverride =
-    normalizeSourceRepo(options.containerLabels?.[DD_SOURCE_REPO_LABEL]) ||
-    normalizeSourceRepo(options.imageLabels?.[DD_SOURCE_REPO_LABEL]);
-  if (manualOverride) {
-    return manualOverride;
+}): SourceRepoResolution {
+  // Container label is a per-deployment, operator-set value that an attacker who
+  // controls the container can spoof — classify as UNTRUSTED.
+  const containerLabelOverride = normalizeSourceRepo(
+    options.containerLabels?.[DD_SOURCE_REPO_LABEL],
+  );
+  if (containerLabelOverride) {
+    return { sourceRepo: containerLabelOverride, trusted: false };
+  }
+
+  // OCI image label baked into the image at build time — classify as TRUSTED.
+  const imageLabelOverride = normalizeSourceRepo(options.imageLabels?.[DD_SOURCE_REPO_LABEL]);
+  if (imageLabelOverride) {
+    return { sourceRepo: imageLabelOverride, trusted: true };
   }
 
   const sourceLabel = normalizeSourceRepo(options.imageLabels?.[OCI_SOURCE_REPO_LABEL]);
   if (sourceLabel) {
-    return sourceLabel;
+    return { sourceRepo: sourceLabel, trusted: true };
   }
 
   const urlLabel = normalizeSourceRepo(options.imageLabels?.[OCI_URL_REPO_LABEL]);
   if (urlLabel) {
-    return urlLabel;
+    return { sourceRepo: urlLabel, trusted: true };
   }
 
-  return deriveSourceRepoFromGhcrImage(options.imageRegistryDomain, options.imagePath);
+  const ghcrDerived = deriveSourceRepoFromGhcrImage(options.imageRegistryDomain, options.imagePath);
+  if (ghcrDerived) {
+    return { sourceRepo: ghcrDerived, trusted: true };
+  }
+
+  return undefined;
 }
 
 export async function resolveSourceRepoForContainer(
   container: Container,
   imageLabels?: Record<string, string>,
-) {
-  const sourceRepoFromContainer = normalizeSourceRepo(container.sourceRepo);
-  if (sourceRepoFromContainer) {
-    return sourceRepoFromContainer;
-  }
-
-  const sourceRepoFromLabelsOrGhcr = detectSourceRepoFromImageMetadata({
+): Promise<SourceRepoResolution> {
+  // Always attempt to re-resolve from labels/image metadata so we get accurate provenance
+  // (trusted vs. untrusted). container.sourceRepo may have been cached from a prior cycle
+  // and could originate from an untrusted container label.
+  const resolution = detectSourceRepoFromImageMetadata({
     containerLabels: container.labels,
     imageLabels,
     imageRegistryDomain: getImageRegistryHostname(container.image),
     imagePath: container.image?.name,
   });
-  if (sourceRepoFromLabelsOrGhcr) {
-    return sourceRepoFromLabelsOrGhcr;
+  if (resolution) {
+    return resolution;
   }
 
+  // Fall back to a pre-resolved container.sourceRepo for non-Docker-Hub images where
+  // the labels/image path above yielded nothing. This covers containers persisted before
+  // labels were populated and test/programmatic callers that supply only sourceRepo.
+  // We treat this as trusted because the untrusted container-label case is always resolved
+  // by detectSourceRepoFromImageMetadata above when container.labels are present.
   if (!isDockerHubImage(container.image)) {
+    const cached = normalizeSourceRepo(container.sourceRepo);
+    if (cached) {
+      return { sourceRepo: cached, trusted: true };
+    }
     return undefined;
+  }
+
+  // For Docker Hub images, check if container.sourceRepo is already available (e.g.
+  // pre-populated by orchestration from a prior Docker Hub metadata lookup) before
+  // making a network request.
+  const cachedSourceRepo = normalizeSourceRepo(container.sourceRepo);
+  if (cachedSourceRepo) {
+    return { sourceRepo: cachedSourceRepo, trusted: true };
   }
 
   const imageName = container.image?.name;
@@ -273,7 +303,8 @@ export async function resolveSourceRepoForContainer(
   const cacheKey = getSourceRepoCacheKey(imageName, tag);
   const sourceRepoFromCache = getCacheValue(sourceRepoCache, cacheKey);
   if (sourceRepoFromCache.found) {
-    return sourceRepoFromCache.value ?? undefined;
+    const cachedValue = sourceRepoFromCache.value;
+    return cachedValue ? { sourceRepo: cachedValue, trusted: true } : undefined;
   }
 
   const sourceRepo = await lookupSourceRepoFromDockerHubTagMetadata(imageName, tag);
@@ -283,7 +314,7 @@ export async function resolveSourceRepoForContainer(
     sourceRepo || null,
     sourceRepo ? SOURCE_REPO_CACHE_TTL_MS : SOURCE_REPO_CACHE_NOT_FOUND_TTL_MS,
   );
-  return sourceRepo;
+  return sourceRepo ? { sourceRepo, trusted: true } : undefined;
 }
 
 function getGithubToken() {
@@ -299,7 +330,7 @@ function getReleaseNotesCacheKey(providerId: string, sourceRepo: string, tag: st
   return `${providerId}:${sourceRepo.toLowerCase()}@${tag.toLowerCase()}`;
 }
 
-async function getReleaseNotesForSourceRepo(sourceRepo: string, tag: string) {
+async function getReleaseNotesForSourceRepo(sourceRepo: string, tag: string, trusted: boolean) {
   const provider = providers.find((releaseNotesProvider) =>
     releaseNotesProvider.supports(sourceRepo),
   );
@@ -313,7 +344,9 @@ async function getReleaseNotesForSourceRepo(sourceRepo: string, tag: string) {
     return releaseNotesFromCache.value ?? undefined;
   }
 
-  const releaseNotes = await provider.fetchByTag(sourceRepo, tag, getGithubToken());
+  const releaseNotes = await provider.fetchByTag(sourceRepo, tag, getGithubToken(), {
+    allowToken: trusted,
+  });
   setCacheValue(
     releaseNotesCache,
     cacheKey,
@@ -332,11 +365,11 @@ export async function getReleaseNotesForTag(
     return undefined;
   }
 
-  const sourceRepo = await resolveSourceRepoForContainer(container, imageLabels);
-  if (!sourceRepo) {
+  const resolution = await resolveSourceRepoForContainer(container, imageLabels);
+  if (!resolution) {
     return undefined;
   }
-  return getReleaseNotesForSourceRepo(sourceRepo, tag);
+  return getReleaseNotesForSourceRepo(resolution.sourceRepo, tag, resolution.trusted);
 }
 
 export async function getFullReleaseNotesForContainer(container: Container) {

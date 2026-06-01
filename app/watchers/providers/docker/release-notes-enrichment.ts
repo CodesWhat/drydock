@@ -16,9 +16,9 @@ export async function enrichContainerWithReleaseNotes(
   imageLabels?: Record<string, string>,
 ) {
   try {
-    const sourceRepo = await resolveSourceRepoForContainer(containerWithResult, imageLabels);
-    if (sourceRepo) {
-      containerWithResult.sourceRepo = sourceRepo;
+    const resolution = await resolveSourceRepoForContainer(containerWithResult, imageLabels);
+    if (resolution) {
+      containerWithResult.sourceRepo = resolution.sourceRepo;
     }
 
     const currentTag = containerWithResult.image?.tag?.value;

@@ -2,7 +2,7 @@ import axios from 'axios';
 import logger from '../../log/index.js';
 import { getGhcrTokenFallback } from '../../registries/ghcr-token-fallback.js';
 import { withRetry } from '../../registries/http-retry.js';
-import type { ReleaseNotes, ReleaseNotesProviderClient } from '../types.js';
+import type { FetchByTagOptions, ReleaseNotes, ReleaseNotesProviderClient } from '../types.js';
 
 const log = logger.child({ component: 'release-notes.provider.github' });
 
@@ -160,6 +160,7 @@ class GithubProvider implements ReleaseNotesProviderClient {
     sourceRepo: string,
     tag: string,
     token?: string,
+    options?: FetchByTagOptions,
   ): Promise<ReleaseNotes | undefined> {
     // Burst cooldown — if a secondary rate-limit was tripped recently,
     // skip the API call entirely rather than hammering an already-tripped limit.
@@ -178,9 +179,15 @@ class GithubProvider implements ReleaseNotesProviderClient {
       return undefined;
     }
 
+    // allowToken defaults to true so existing call sites without the option are unchanged.
+    // When false (untrusted container-label source), suppress both the explicit token and
+    // the GHCR PAT fallback so the operator's credentials are never sent to an
+    // attacker-controlled repo.
+    const allowToken = options?.allowToken !== false;
+
     // Use explicitly provided token, then fall back to any configured GHCR PAT
     // (GitHub PATs work for both ghcr.io and api.github.com).
-    const effectiveToken = token ?? getGhcrTokenFallback();
+    const effectiveToken = allowToken ? (token ?? getGhcrTokenFallback()) : undefined;
 
     for (const tagVariant of tagVariants) {
       const endpoint = `https://api.github.com/repos/${repo.owner}/${repo.repo}/releases/tags/${encodeURIComponent(
