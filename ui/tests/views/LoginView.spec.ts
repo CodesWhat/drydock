@@ -219,6 +219,48 @@ describe('LoginView', () => {
     });
   });
 
+  describe('password reveal toggle', () => {
+    it('password input defaults to type="password" and toggle button exists', async () => {
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+      expect(wrapper.find('input#password').attributes('type')).toBe('password');
+      const toggleBtn = wrapper.find('button[type="button"][aria-label="Show password"]');
+      expect(toggleBtn.exists()).toBe(true);
+    });
+
+    it('toggle button has type="button" so it cannot submit the form', async () => {
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+      const toggleBtn = wrapper.find('button[aria-label="Show password"]');
+      expect(toggleBtn.attributes('type')).toBe('button');
+    });
+
+    it('clicking toggle reveals password and updates icon and aria-label', async () => {
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+      const toggleBtn = wrapper.find('button[type="button"][aria-label="Show password"]');
+      await toggleBtn.trigger('click');
+
+      expect(wrapper.find('input#password').attributes('type')).toBe('text');
+      expect(wrapper.find('button[type="button"][aria-label="Hide password"]').exists()).toBe(true);
+      expect(wrapper.find('.app-icon-stub[data-icon="eye-slash"]').exists()).toBe(true);
+    });
+
+    it('clicking toggle again hides password and restores icon and aria-label', async () => {
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+      const toggleBtn = wrapper.find('button[type="button"][aria-label="Show password"]');
+      await toggleBtn.trigger('click');
+      await wrapper.find('button[type="button"][aria-label="Hide password"]').trigger('click');
+
+      expect(wrapper.find('input#password').attributes('type')).toBe('password');
+      expect(wrapper.find('button[type="button"][aria-label="Show password"]').exists()).toBe(true);
+      expect(wrapper.find('.app-icon-stub[data-icon="eye"]').exists()).toBe(true);
+    });
+
+    it('shows eye icon when password is hidden', async () => {
+      const wrapper = await mountLogin([{ type: 'basic', name: 'basic' }]);
+      expect(wrapper.find('.app-icon-stub[data-icon="eye"]').exists()).toBe(true);
+      expect(wrapper.find('.app-icon-stub[data-icon="eye-slash"]').exists()).toBe(false);
+    });
+  });
+
   describe('OIDC strategies', () => {
     it('shows OIDC buttons when OIDC strategies exist', async () => {
       const wrapper = await mountLogin([

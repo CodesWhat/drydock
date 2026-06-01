@@ -99,6 +99,7 @@ const loading = ref(true);
 const error = ref('');
 const username = ref('');
 const password = ref('');
+const showPassword = ref(false);
 const submitting = ref(false);
 const rememberMe = ref(false);
 
@@ -328,17 +329,28 @@ onUnmounted(() => {
             <label class="block text-2xs-plus font-medium uppercase tracking-wider mb-2.5 dd-text-muted">
               {{ t('loginView.password.label') }}
             </label>
-            <input
-              v-model="password"
-              id="password"
-              name="password"
-              type="password"
-              autocomplete="current-password"
-              required
-              class="w-full px-3 py-2.5 text-sm dd-rounded dd-text dd-placeholder outline-none transition-colors"
-              style="background-color: var(--dd-bg-inset);"
-              :placeholder="t('loginView.password.placeholder')"
-            />
+            <div class="relative">
+              <input
+                v-model="password"
+                id="password"
+                name="password"
+                :type="showPassword ? 'text' : 'password'"
+                autocomplete="current-password"
+                required
+                class="w-full px-3 py-2.5 pr-10 text-sm dd-rounded dd-text dd-placeholder outline-none transition-colors"
+                style="background-color: var(--dd-bg-inset);"
+                :placeholder="t('loginView.password.placeholder')"
+              />
+              <button
+                type="button"
+                tabindex="-1"
+                :aria-label="showPassword ? t('loginView.password.hide') : t('loginView.password.show')"
+                class="absolute right-3 top-1/2 -translate-y-1/2 dd-text-muted"
+                @click="showPassword = !showPassword"
+              >
+                <AppIcon :name="showPassword ? 'eye-slash' : 'eye'" :size="16" />
+              </button>
+            </div>
           </div>
 
           <AppButton size="none" variant="plain" weight="none"
