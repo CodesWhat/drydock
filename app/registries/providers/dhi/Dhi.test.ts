@@ -161,4 +161,35 @@ describe('DHI Registry', () => {
       auth: '[REDACTED]',
     });
   });
+
+  test('should pass httpsAgent to axios when insecure=true', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: { token: 'auth-token' } });
+
+    dhi.configuration = {
+      url: 'https://dhi.io',
+      insecure: true,
+    };
+    dhi.getAuthCredentials = vi.fn().mockReturnValue(null);
+
+    await dhi.authenticate({ name: 'python' }, { headers: {} });
+
+    expect(axios).toHaveBeenCalledWith(expect.objectContaining({ httpsAgent: expect.anything() }));
+    const calledConfig = (axios as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(calledConfig.httpsAgent.options.rejectUnauthorized).toBe(false);
+  });
+
+  test('should NOT attach httpsAgent when no TLS config is set', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: { token: 'auth-token' } });
+
+    dhi.getAuthCredentials = vi.fn().mockReturnValue(null);
+
+    await dhi.authenticate({ name: 'python' }, { headers: {} });
+
+    const calledConfig = (axios as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(calledConfig.httpsAgent).toBeUndefined();
+    expect(calledConfig.method).toBe('GET');
+    expect(calledConfig.url).toContain('https://dhi.io/token');
+  });
 });

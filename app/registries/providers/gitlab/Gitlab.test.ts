@@ -193,3 +193,32 @@ test('getAuthPull should return pam', async () => {
     password: gitlab.configuration.token,
   });
 });
+
+test('authenticate should pass httpsAgent to axios when insecure=true', async () => {
+  axios.mockImplementation(() => ({ data: { token: 'token' } }));
+
+  const gitlabInsecure = new Gitlab();
+  gitlabInsecure.configuration = {
+    url: 'https://registry.gitlab.com',
+    authurl: 'https://gitlab.com',
+    token: TEST_TOKEN,
+    insecure: true,
+  };
+
+  await gitlabInsecure.authenticate({ name: 'group/project' }, { headers: {} });
+
+  expect(axios).toHaveBeenCalledWith(expect.objectContaining({ httpsAgent: expect.anything() }));
+  const calledConfig = (axios as ReturnType<typeof vi.fn>).mock.calls[0][0];
+  expect(calledConfig.httpsAgent.options.rejectUnauthorized).toBe(false);
+});
+
+test('authenticate should NOT attach httpsAgent when no TLS config is set', async () => {
+  axios.mockImplementation(() => ({ data: { token: 'token' } }));
+
+  await gitlab.authenticate({ name: 'group/project' }, { headers: {} });
+
+  const calledConfig = (axios as ReturnType<typeof vi.fn>).mock.calls[0][0];
+  expect(calledConfig.httpsAgent).toBeUndefined();
+  expect(calledConfig.method).toBe('GET');
+  expect(calledConfig.headers.Authorization).toContain('Basic ');
+});

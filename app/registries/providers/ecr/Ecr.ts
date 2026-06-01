@@ -1,7 +1,7 @@
 import { ECRClient, GetAuthorizationTokenCommand } from '@aws-sdk/client-ecr';
 import axios from 'axios';
 import { requireAuthString, withAuthorizationHeader } from '../../../security/auth.js';
-import Registry from '../../Registry.js';
+import BaseRegistry, { type BaseRegistryConfiguration } from '../../BaseRegistry.js';
 
 const ECR_PUBLIC_GALLERY_HOSTNAME = 'public.ecr.aws';
 const PRIVATE_ECR_AUTH_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
@@ -26,7 +26,7 @@ function getRegistryHost(registryUrl: string | undefined): string {
 /**
  * Elastic Container Registry integration.
  */
-interface EcrRegistryConfiguration {
+interface EcrRegistryConfiguration extends BaseRegistryConfiguration {
   accesskeyid?: string;
   secretaccesskey?: string;
   region?: string;
@@ -43,7 +43,7 @@ interface EcrAuthTokenFetchEntry {
   promise: Promise<string | undefined>;
 }
 
-class Ecr extends Registry<EcrRegistryConfiguration> {
+class Ecr extends BaseRegistry<EcrRegistryConfiguration> {
   private privateEcrAuthTokenCache?: EcrAuthTokenCacheEntry;
 
   private privateEcrAuthTokenFetch?: EcrAuthTokenFetchEntry;
@@ -195,13 +195,15 @@ class Ecr extends Registry<EcrRegistryConfiguration> {
 
       // Public ECR gallery
     } else if (getRegistryHost(image?.registry?.url) === ECR_PUBLIC_GALLERY_HOSTNAME) {
-      const response = await axios({
-        method: 'GET',
-        url: 'https://public.ecr.aws/token/',
-        headers: {
-          Accept: 'application/json',
-        },
-      });
+      const response = await axios(
+        this.withTlsRequestOptions({
+          method: 'GET',
+          url: 'https://public.ecr.aws/token/',
+          headers: {
+            Accept: 'application/json',
+          },
+        }),
+      );
       return withAuthorizationHeader(
         requestOptionsWithAuth,
         'Bearer',

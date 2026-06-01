@@ -259,3 +259,49 @@ test('authenticate should throw a URL error when registry URL is missing', async
     ),
   ).rejects.toThrow('Invalid URL');
 });
+
+test('authenticate should pass httpsAgent to axios when insecure=true', async () => {
+  const { default: axios } = await import('axios');
+
+  const garInsecure = new Gar();
+  garInsecure.configuration = {
+    clientemail: TEST_CLIENT_EMAIL,
+    privatekey: TEST_PRIVATE_KEY,
+    insecure: true,
+  };
+
+  await garInsecure.authenticate(
+    {
+      name: 'project/repository/image',
+      registry: { url: 'us-central1-docker.pkg.dev' },
+    },
+    { headers: {} },
+  );
+
+  expect(axios).toHaveBeenCalledWith(expect.objectContaining({ httpsAgent: expect.anything() }));
+  const calledConfig = (axios as ReturnType<typeof vi.fn>).mock.calls[0][0];
+  expect(calledConfig.httpsAgent.options.rejectUnauthorized).toBe(false);
+});
+
+test('authenticate should NOT attach httpsAgent when no TLS config is set', async () => {
+  const { default: axios } = await import('axios');
+
+  const garDefault = new Gar();
+  garDefault.configuration = {
+    clientemail: TEST_CLIENT_EMAIL,
+    privatekey: TEST_PRIVATE_KEY,
+  };
+
+  await garDefault.authenticate(
+    {
+      name: 'project/repository/image',
+      registry: { url: 'us-central1-docker.pkg.dev' },
+    },
+    { headers: {} },
+  );
+
+  const calledConfig = (axios as ReturnType<typeof vi.fn>).mock.calls[0][0];
+  expect(calledConfig.httpsAgent).toBeUndefined();
+  expect(calledConfig.method).toBe('GET');
+  expect(calledConfig.url).toContain('https://us-central1-docker.pkg.dev/v2/token');
+});
