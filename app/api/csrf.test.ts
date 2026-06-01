@@ -1,11 +1,32 @@
 import { describe, expect, test, vi } from 'vitest';
 import { requireSameOriginForMutations } from './csrf.js';
 
-function createReq({ method = 'GET', protocol = 'http', headers = {} } = {}) {
+/**
+ * Build a minimal mock Express Request.
+ *
+ * `protocol` should mirror what Express would expose after its own trust-proxy
+ * resolution (i.e. already incorporates X-Forwarded-Proto when trust proxy is
+ * enabled — just like the real Express `req.protocol` property).
+ *
+ * `trustProxy` maps to the value returned by `req.app.get('trust proxy')`.
+ * falsy (default) → trust proxy disabled; truthy → trust proxy enabled.
+ */
+function createReq({
+  method = 'GET',
+  protocol = 'http',
+  headers = {},
+  trustProxy = false,
+}: {
+  method?: unknown;
+  protocol?: string;
+  headers?: Record<string, string | undefined>;
+  trustProxy?: unknown;
+} = {}) {
   return {
     method,
     protocol,
-    get: vi.fn((name) => headers[String(name).toLowerCase()]),
+    app: { get: vi.fn((key: string) => (key === 'trust proxy' ? trustProxy : undefined)) },
+    get: vi.fn((name: string) => headers[String(name).toLowerCase()]),
   };
 }
 
@@ -233,15 +254,17 @@ describe('CSRF middleware', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'CSRF validation failed' });
   });
 
-  test('should allow unsafe methods when forwarded proto indicates https behind reverse proxy', () => {
+  test('should allow unsafe methods when forwarded proto indicates https behind reverse proxy (trust proxy ON)', () => {
+    // Express sets req.protocol to 'https' when trust proxy is on and
+    // X-Forwarded-Proto is 'https'; the middleware reads req.protocol directly.
     const req = createReq({
       method: 'POST',
-      protocol: 'http',
+      protocol: 'https', // what Express resolves from X-Forwarded-Proto when trust proxy is on
+      trustProxy: true,
       headers: {
         cookie: 'connect.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
-        'x-forwarded-proto': 'https',
       },
     });
     const res = createRes();
@@ -253,15 +276,15 @@ describe('CSRF middleware', () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 
-  test('should accept x-forwarded-proto with trailing colon (https:)', () => {
+  test('should accept protocol with trailing colon (https:) via req.protocol normalisation', () => {
+    // parseProtocol strips the trailing colon so 'https:' is treated as 'https'.
     const req = createReq({
       method: 'POST',
-      protocol: 'http',
+      protocol: 'https:', // unlikely but parseProtocol handles it
       headers: {
         cookie: 'connect.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
-        'x-forwarded-proto': 'https:',
       },
     });
     const res = createRes();
@@ -273,17 +296,17 @@ describe('CSRF middleware', () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 
-  test('should normalize x-forwarded-proto to lowercase before comparison', () => {
-    // Tests that parseProtocol lowercases the value.
-    // If toLowerCase() were removed, 'HTTPS' would not equal 'https' and the request would be rejected.
+  test('should normalize protocol to lowercase before comparison', () => {
+    // parseProtocol lowercases req.protocol so 'HTTPS' is treated as 'https'.
+    // If toLowerCase() were removed, 'HTTPS' would not equal 'https' and the
+    // request would be rejected.
     const req = createReq({
       method: 'POST',
-      protocol: 'http',
+      protocol: 'HTTPS',
       headers: {
         cookie: 'connect.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
-        'x-forwarded-proto': 'HTTPS',
       },
     });
     const res = createRes();
@@ -295,15 +318,15 @@ describe('CSRF middleware', () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 
-  test('should accept x-forwarded-proto with trailing colon (http:)', () => {
+  test('should accept protocol with trailing colon (http:) via req.protocol normalisation', () => {
+    // parseProtocol strips a trailing colon from req.protocol.
     const req = createReq({
       method: 'POST',
-      protocol: 'https',
+      protocol: 'http:',
       headers: {
         cookie: 'connect.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'http://drydock.example.com',
-        'x-forwarded-proto': 'http:',
       },
     });
     const res = createRes();
@@ -315,15 +338,16 @@ describe('CSRF middleware', () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 
-  test('should reject when x-forwarded-proto is an unsupported scheme', () => {
+  test('should reject when req.protocol is an unsupported scheme', () => {
+    // parseProtocol returns undefined for anything other than http/https,
+    // so expectedOrigin becomes undefined and the request is rejected.
     const req = createReq({
       method: 'POST',
-      protocol: 'http',
+      protocol: 'ftp',
       headers: {
         cookie: 'connect.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'ftp://drydock.example.com',
-        'x-forwarded-proto': 'ftp',
       },
     });
     const res = createRes();
@@ -336,16 +360,18 @@ describe('CSRF middleware', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'CSRF validation failed' });
   });
 
-  test('should allow unsafe methods when forwarded host/proto match browser origin', () => {
+  test('should allow unsafe methods when forwarded host/proto match browser origin (trust proxy ON)', () => {
+    // With trust proxy enabled, X-Forwarded-Host is used for the expected origin.
+    // Express also sets req.protocol to 'https' from X-Forwarded-Proto.
     const req = createReq({
       method: 'POST',
-      protocol: 'http',
+      protocol: 'https', // Express-resolved from X-Forwarded-Proto
+      trustProxy: true,
       headers: {
         cookie: 'connect.sid=s%3Atest',
         host: 'drydock:3000',
         origin: 'https://drydock.example.com',
         'x-forwarded-host': 'drydock.example.com',
-        'x-forwarded-proto': 'https',
       },
     });
     const res = createRes();
@@ -357,16 +383,17 @@ describe('CSRF middleware', () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 
-  test('should ignore empty forwarded values and fall back to request protocol and host', () => {
+  test('should ignore empty X-Forwarded-Host and fall back to Host header (trust proxy ON)', () => {
+    // Even with trust proxy enabled, an all-empty X-Forwarded-Host falls back to Host.
     const req = createReq({
       method: 'POST',
       protocol: 'https',
+      trustProxy: true,
       headers: {
         cookie: 'connect.sid=s%3Atest',
         host: 'drydock.example.com',
         origin: 'https://drydock.example.com',
         'x-forwarded-host': ' , , ',
-        'x-forwarded-proto': ' , ',
       },
     });
     const res = createRes();
@@ -378,52 +405,12 @@ describe('CSRF middleware', () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 
-  test('should use first value from comma-separated x-forwarded-proto', () => {
-    const req = createReq({
-      method: 'POST',
-      protocol: 'http',
-      headers: {
-        cookie: 'connect.sid=s%3Atest',
-        host: 'drydock.example.com',
-        origin: 'https://drydock.example.com',
-        'x-forwarded-proto': 'https, http',
-      },
-    });
-    const res = createRes();
-    const next = vi.fn();
-
-    requireSameOriginForMutations(req, res, next);
-
-    expect(next).toHaveBeenCalled();
-    expect(res.status).not.toHaveBeenCalled();
-  });
-
-  test('should skip leading empty entries and use first non-empty value in x-forwarded-proto', () => {
-    // Tests that candidate.length > 0 check skips empty strings, not >= 0.
-    // If >= 0 were used, the empty string from ", https" would be taken as the protocol.
-    const req = createReq({
-      method: 'POST',
-      protocol: 'http',
-      headers: {
-        cookie: 'connect.sid=s%3Atest',
-        host: 'drydock.example.com',
-        origin: 'https://drydock.example.com',
-        'x-forwarded-proto': ', https',
-      },
-    });
-    const res = createRes();
-    const next = vi.fn();
-
-    requireSameOriginForMutations(req, res, next);
-
-    expect(next).toHaveBeenCalled();
-    expect(res.status).not.toHaveBeenCalled();
-  });
-
-  test('should use first value from comma-separated x-forwarded-host', () => {
+  test('should use first value from comma-separated x-forwarded-host (trust proxy ON)', () => {
+    // getFirstForwardedValue picks the first non-empty entry from a comma-separated list.
     const req = createReq({
       method: 'POST',
       protocol: 'https',
+      trustProxy: true,
       headers: {
         cookie: 'connect.sid=s%3Atest',
         host: 'internal-host',
@@ -439,6 +426,150 @@ describe('CSRF middleware', () => {
     expect(next).toHaveBeenCalled();
     expect(res.status).not.toHaveBeenCalled();
   });
+
+  test('should skip leading empty entries and use first non-empty value in x-forwarded-host (trust proxy ON)', () => {
+    // Tests that candidate.length > 0 skips empty strings so ", drydock.example.com"
+    // correctly resolves to "drydock.example.com".
+    const req = createReq({
+      method: 'POST',
+      protocol: 'https',
+      trustProxy: true,
+      headers: {
+        cookie: 'connect.sid=s%3Atest',
+        host: 'internal-host',
+        origin: 'https://drydock.example.com',
+        'x-forwarded-host': ', drydock.example.com',
+      },
+    });
+    const res = createRes();
+    const next = vi.fn();
+
+    requireSameOriginForMutations(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  // ─── Trust proxy gating ────────────────────────────────────────────────────
+
+  test('trust proxy OFF: forged X-Forwarded-Host is ignored — expected origin uses Host header', () => {
+    // Without trust proxy, X-Forwarded-Host must not influence the expected origin.
+    // A client setting X-Forwarded-Host to their own domain must not bypass the check.
+    const req = createReq({
+      method: 'POST',
+      protocol: 'https',
+      trustProxy: false,
+      headers: {
+        cookie: 'connect.sid=s%3Atest',
+        host: 'drydock.example.com',
+        origin: 'https://drydock.example.com',
+        // forged header — should be ignored
+        'x-forwarded-host': 'attacker.example.com',
+      },
+    });
+    const res = createRes();
+    const next = vi.fn();
+
+    requireSameOriginForMutations(req, res, next);
+
+    // Host header matches origin → allowed
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  test('trust proxy OFF: forged X-Forwarded-Host cross-origin mutation is rejected (403)', () => {
+    // If the forged XFH were trusted, origin 'https://attacker.example.com'
+    // would match expectedOrigin and the request would pass — a real CSRF bypass.
+    // With trust proxy off, expectedOrigin comes from Host so it stays 'https://drydock.example.com',
+    // and the attacker origin is rejected.
+    const req = createReq({
+      method: 'POST',
+      protocol: 'https',
+      trustProxy: false,
+      headers: {
+        cookie: 'connect.sid=s%3Atest',
+        host: 'drydock.example.com',
+        origin: 'https://attacker.example.com',
+        // forged header
+        'x-forwarded-host': 'attacker.example.com',
+      },
+    });
+    const res = createRes();
+    const next = vi.fn();
+
+    requireSameOriginForMutations(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ error: 'CSRF validation failed' });
+  });
+
+  test('trust proxy ON: X-Forwarded-Host including port is honoured for expected origin', () => {
+    // With trust proxy on, a legitimate reverse proxy may set X-Forwarded-Host with a port.
+    // The port must be preserved so the origin comparison succeeds.
+    const req = createReq({
+      method: 'POST',
+      protocol: 'https', // Express-resolved
+      trustProxy: true,
+      headers: {
+        cookie: 'connect.sid=s%3Atest',
+        host: 'internal:8080',
+        origin: 'https://drydock.example.com:8443',
+        'x-forwarded-host': 'drydock.example.com:8443',
+      },
+    });
+    const res = createRes();
+    const next = vi.fn();
+
+    requireSameOriginForMutations(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  test('non-standard port in Host header is preserved — origin with same port passes', () => {
+    // req.get('host') includes the port; it must not be stripped, otherwise
+    // a request to drydock.example.com:9000 would fail to match the browser Origin.
+    const req = createReq({
+      method: 'POST',
+      protocol: 'https',
+      headers: {
+        cookie: 'connect.sid=s%3Atest',
+        host: 'drydock.example.com:9000',
+        origin: 'https://drydock.example.com:9000',
+      },
+    });
+    const res = createRes();
+    const next = vi.fn();
+
+    requireSameOriginForMutations(req, res, next);
+
+    expect(next).toHaveBeenCalled();
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  test('non-standard port in Host header — origin without port is rejected (port mismatch)', () => {
+    // Confirms the port-preservation path: 'drydock.example.com:9000' ≠ 'drydock.example.com'.
+    const req = createReq({
+      method: 'POST',
+      protocol: 'https',
+      headers: {
+        cookie: 'connect.sid=s%3Atest',
+        host: 'drydock.example.com:9000',
+        origin: 'https://drydock.example.com',
+      },
+    });
+    const res = createRes();
+    const next = vi.fn();
+
+    requireSameOriginForMutations(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ error: 'CSRF validation failed' });
+  });
+
+  // ─── End trust proxy gating ────────────────────────────────────────────────
 
   test('should allow unsafe methods when referer matches request host', () => {
     const req = createReq({

@@ -41,14 +41,19 @@ function parseProtocol(value: unknown): string | undefined {
 }
 
 function getExpectedOrigin(req: Request): string | undefined {
-  const protocol =
-    parseProtocol(getFirstForwardedValue(req.get('x-forwarded-proto'))) ??
-    parseProtocol(req.protocol);
+  // req.protocol is already trust-proxy-gated by Express: it reads X-Forwarded-Proto
+  // only when "trust proxy" is enabled, so we do not need to read that header directly.
+  const protocol = parseProtocol(req.protocol);
   if (!protocol) {
     return undefined;
   }
 
-  const host = getFirstForwardedValue(req.get('x-forwarded-host')) ?? req.get('host');
+  // Only honour X-Forwarded-Host when Express trust proxy is enabled; otherwise a
+  // client could forge the header to make the expected origin match an attacker origin.
+  const trustProxyEnabled = Boolean(req.app?.get('trust proxy'));
+  const host =
+    (trustProxyEnabled ? getFirstForwardedValue(req.get('x-forwarded-host')) : undefined) ??
+    req.get('host');
   if (typeof host !== 'string' || host.trim() === '') {
     return undefined;
   }
