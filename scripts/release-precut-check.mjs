@@ -6,6 +6,10 @@ import { fileURLToPath } from 'node:url';
 const releaseTagRegex =
   /^v?(?<major>(?:0|[1-9]\d*))\.(?<minor>(?:0|[1-9]\d*))\.(?<patch>(?:0|[1-9]\d*))(?:-(?<prerelease>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/u;
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
+}
+
 export function versionSeries(tag) {
   const value = String(tag ?? '').trim();
   const match = value.match(releaseTagRegex);
@@ -24,7 +28,7 @@ export function isPrerelease(tag) {
 export function parsePendingReplies(markdown, tag) {
   const series = versionSeries(tag);
   const [major, minor] = series.split('.');
-  const seriesRegex = new RegExp(`v?${major}\\.${minor}(?![0-9])`, 'u');
+  const seriesRegex = new RegExp(`v?${escapeRegExp(major)}\\.${escapeRegExp(minor)}(?![0-9])`, 'u');
 
   const seen = new Set();
   const results = [];

@@ -3123,10 +3123,9 @@ describe('getSafeContainerQueryEntries / operator injection guard', () => {
     const db = { getCollection: () => collection, addCollection: () => null };
     container.createCollections(db);
 
-    // Build a query that contains a key named '__proto__' via defineProperty so
-    // we don't accidentally mutate Object.prototype.
-    const query: Record<string, unknown> = { watcher: 'docker' };
-    Object.defineProperty(query, '__proto__', { value: 'bad', enumerable: true });
+    // JSON.parse creates an own enumerable '__proto__' data property without
+    // mutating Object.prototype (it bypasses the __proto__ setter).
+    const query = JSON.parse('{"watcher":"docker","__proto__":"bad"}') as Record<string, unknown>;
     container.getContainers(query);
     // Only the safe 'watcher' key should appear in the filter
     expect(collection.find).toHaveBeenCalledWith({ 'data.watcher': 'docker' });

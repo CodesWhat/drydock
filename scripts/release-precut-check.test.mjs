@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -13,6 +13,7 @@ import {
 } from './release-precut-check.mjs';
 
 const scriptPath = fileURLToPath(new URL('./release-precut-check.mjs', import.meta.url));
+const tmpDir = mkdtempSync(join(tmpdir(), 'drydock-precut-test-'));
 
 // ---------------------------------------------------------------------------
 // versionSeries
@@ -162,7 +163,7 @@ const TRACKER_ALL_CLEAR = `
 `.trim();
 
 test('cli exits 1 and reports pending discussion when tracker has unchecked reply (GA tag)', () => {
-  const trackerPath = join(tmpdir(), `drydock-precut-test-${process.pid}.md`);
+  const trackerPath = join(tmpDir, 'pending-ga.md');
   writeFileSync(trackerPath, TRACKER_WITH_PENDING, 'utf8');
 
   const result = spawnSync(process.execPath, [scriptPath, '--tracker', trackerPath, 'v1.6.0'], {
@@ -175,7 +176,7 @@ test('cli exits 1 and reports pending discussion when tracker has unchecked repl
 });
 
 test('cli exits 0 when --force is set even with pending replies', () => {
-  const trackerPath = join(tmpdir(), `drydock-precut-test-force-${process.pid}.md`);
+  const trackerPath = join(tmpDir, 'pending-force.md');
   writeFileSync(trackerPath, TRACKER_WITH_PENDING, 'utf8');
 
   const result = spawnSync(
@@ -191,7 +192,7 @@ test('cli exits 0 when --force is set even with pending replies', () => {
 });
 
 test('cli exits 0 with warning when tracker file does not exist', () => {
-  const trackerPath = join(tmpdir(), `drydock-precut-test-missing-${process.pid}.md`);
+  const trackerPath = join(tmpDir, 'missing.md');
 
   const result = spawnSync(process.execPath, [scriptPath, '--tracker', trackerPath, 'v1.6.0'], {
     cwd: process.cwd(),
@@ -203,7 +204,7 @@ test('cli exits 0 with warning when tracker file does not exist', () => {
 });
 
 test('cli exits 0 for prerelease tags with pending replies (informational only)', () => {
-  const trackerPath = join(tmpdir(), `drydock-precut-test-rc-${process.pid}.md`);
+  const trackerPath = join(tmpDir, 'pending-rc.md');
   writeFileSync(trackerPath, TRACKER_WITH_PENDING, 'utf8');
 
   const result = spawnSync(
@@ -219,7 +220,7 @@ test('cli exits 0 for prerelease tags with pending replies (informational only)'
 });
 
 test('cli exits 1 for prerelease tags with --strict and pending replies', () => {
-  const trackerPath = join(tmpdir(), `drydock-precut-test-rc-strict-${process.pid}.md`);
+  const trackerPath = join(tmpDir, 'pending-rc-strict.md');
   writeFileSync(trackerPath, TRACKER_WITH_PENDING, 'utf8');
 
   const result = spawnSync(
@@ -235,7 +236,7 @@ test('cli exits 1 for prerelease tags with --strict and pending replies', () => 
 });
 
 test('cli exits 0 and prints success when tracker has no pending replies', () => {
-  const trackerPath = join(tmpdir(), `drydock-precut-test-clear-${process.pid}.md`);
+  const trackerPath = join(tmpDir, 'clear.md');
   writeFileSync(trackerPath, TRACKER_ALL_CLEAR, 'utf8');
 
   const result = spawnSync(process.execPath, [scriptPath, '--tracker', trackerPath, 'v1.6.0'], {
