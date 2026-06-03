@@ -488,6 +488,10 @@ _The following entries are hardening from a 2026-06-01 multi-agent security revi
 
 - **Pinned `pinia` and `vue-i18n` to exact versions ([commit `fd0b02a5`](https://github.com/CodesWhat/drydock/commit/fd0b02a5)).** Both were the only `^`-ranged UI dependencies; pinned to the locked `3.0.4` / `11.4.2` to match the exact-pinning discipline used everywhere else.
 
+- **re2js 1.2.3 → 2.8.3 (major).** Upgraded the ReDoS-safe RE2 regex engine behind `safeRegExp()` (tag include/exclude/transform) across the `1.x → 2.x` boundary. The only 2.0.0 breaking change — native-ECMAScript `replaceAll`/`replaceFirst` replacement semantics — is not exercised by drydock; the compiled `compile`/`matcher`/`find`/`group` surface is unchanged and Node ≥24 satisfies re2js 2.x's Node ≥18 floor. All 298 tag/regex tests pass unchanged.
+
+- **Runtime/security dependency bumps** — helmet 8.1.0→8.2.0, undici 8.2.0→8.3.0, ws 8.20.1→8.21.0, axios 1.16.0→1.16.1 (dependency + override), express-rate-limit 8.5.1→8.5.2, nodemailer 8.0.7→8.0.10, semver 7.8.0→7.8.1.
+
 ### Documentation
 
 - **v1.5.0 deprecation sweep.** Migrated every documentation example and test fixture off the v1.5.0-deprecated `DD_TRIGGER_*` / `dd.trigger.*` prefixes onto canonical `DD_NOTIFICATION_*` + `dd.notification.*` (messaging providers) and `DD_ACTION_*` + `dd.action.*` (update executors). Touched 29 files in `content/docs/current/**`, the in-repo README roadmap, CONTRIBUTING, and all QA/CI/demo compose fixtures.
