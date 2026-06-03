@@ -16,9 +16,12 @@ ENV DD_LOG_FORMAT=text
 HEALTHCHECK --interval=30s --timeout=5s CMD ["sh", "-c", "if [ -n \"$DD_SERVER_ENABLED\" ] && [ \"$DD_SERVER_ENABLED\" != 'true' ]; then exit 0; fi; /bin/healthcheck ${DD_SERVER_PORT:-3000}"]
 
 # Install system packages, trivy, and cosign.
-# hadolint ignore=DL3018: curl is intentionally unpinned because Alpine's
+# hadolint ignore=DL3018: curl and trivy are intentionally unpinned. Alpine's
 # per-arch mirrors rotate -rN releases at different times; pinning to one
-# version breaks multi-arch builds during the sync window (see rc.21).
+# version breaks multi-arch builds during the sync window (see rc.21). trivy
+# additionally ships only from the fast-moving edge/testing repo, which drops
+# old -rN builds outright (trivy=0.70.0-r1 vanished and broke rc.30), so it is
+# pinned to the package name only.
 # hadolint ignore=DL3018
 RUN apk add --no-cache \
     bash=5.3.3-r1 \
@@ -30,7 +33,7 @@ RUN apk add --no-cache \
     tini=0.19.0-r3 \
     tzdata=2026b-r0 \
     && apk add --no-cache cosign=2.6.3-r1 \
-    && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing trivy=0.70.0-r1 \
+    && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing trivy \
     && apk upgrade --no-cache zlib \
     && mkdir /store && chown node:node /store
 
