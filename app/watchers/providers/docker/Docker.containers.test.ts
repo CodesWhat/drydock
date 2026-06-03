@@ -385,7 +385,10 @@ describe('Docker Watcher', () => {
       docker.log = mockLog;
       docker.findNewVersion = vi.fn().mockResolvedValue({ tag: '2.0.0' });
       docker.mapContainerToContainerReport = vi.fn().mockReturnValue({ container, changed: false });
-      mockResolveSourceRepoForContainer.mockResolvedValue('github.com/acme/service');
+      mockResolveSourceRepoForContainer.mockResolvedValue({
+        sourceRepo: 'github.com/acme/service',
+        trusted: true,
+      });
       mockGetReleaseNotesForTag.mockResolvedValue({
         title: 'v2.0.0',
         body: 'Release body',
@@ -434,7 +437,10 @@ describe('Docker Watcher', () => {
       docker.log = mockLog;
       docker.findNewVersion = vi.fn().mockResolvedValue({ tag: '2.0.0' });
       docker.mapContainerToContainerReport = vi.fn().mockReturnValue({ container, changed: false });
-      mockResolveSourceRepoForContainer.mockResolvedValue('github.com/acme/service');
+      mockResolveSourceRepoForContainer.mockResolvedValue({
+        sourceRepo: 'github.com/acme/service',
+        trusted: true,
+      });
       mockGetReleaseNotesForTag.mockRejectedValue(new Error('rate limited'));
 
       await docker.watchContainer(container as any);

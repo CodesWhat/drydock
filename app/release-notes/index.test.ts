@@ -216,6 +216,29 @@ describe('release-notes service', () => {
     expect(mockAxiosGet).not.toHaveBeenCalled();
   });
 
+  test('resolveSourceRepoForContainer should return cached sourceRepo for non-Docker-Hub images when detectSourceRepoFromImageMetadata yields nothing', async () => {
+    // index.ts line 279: non-Docker-Hub image (quay.io) with no label-based resolution and no
+    // GHCR derivation, but with a pre-cached container.sourceRepo → returns { sourceRepo, trusted: true }
+    const resolution = await resolveSourceRepoForContainer({
+      image: {
+        name: 'acme/widget',
+        tag: {
+          value: '1.0.0',
+        },
+        registry: {
+          url: 'quay.io',
+        },
+      },
+      // No OCI/dd labels and quay.io registry → detectSourceRepoFromImageMetadata returns undefined
+      labels: {},
+      // Pre-cached sourceRepo populated from a prior resolution cycle
+      sourceRepo: 'github.com/acme/widget',
+    } as any);
+
+    expect(resolution).toEqual({ sourceRepo: 'github.com/acme/widget', trusted: true });
+    expect(mockAxiosGet).not.toHaveBeenCalled();
+  });
+
   test('resolveSourceRepoForContainer should return undefined for non-Docker-Hub images', async () => {
     const resolution = await resolveSourceRepoForContainer({
       image: {

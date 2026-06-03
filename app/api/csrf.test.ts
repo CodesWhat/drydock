@@ -868,6 +868,33 @@ describe('CSRF middleware', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'CSRF validation failed' });
   });
 
+  test('should reject when req.protocol is not a string (parseProtocol line 32 returns undefined)', () => {
+    // parseProtocol: `if (typeof value !== 'string') return undefined`
+    // Passing a non-string protocol makes getExpectedOrigin return undefined,
+    // causing the CSRF check to reject with 403.
+    const req = {
+      method: 'POST',
+      protocol: undefined as unknown as string,
+      app: { get: vi.fn(() => false) },
+      get: vi.fn((name: string) => {
+        const headers: Record<string, string> = {
+          cookie: 'connect.sid=s%3Atest',
+          host: 'drydock.example.com',
+          origin: 'https://drydock.example.com',
+        };
+        return headers[String(name).toLowerCase()];
+      }),
+    };
+    const res = createRes();
+    const next = vi.fn();
+
+    requireSameOriginForMutations(req as any, res as any, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ error: 'CSRF validation failed' });
+  });
+
   test('should reject when both expectedOrigin and requestOrigin are undefined (no host, no origin)', () => {
     // Both undefined: !expectedOrigin (true) || !requestOrigin (true) fires,
     // whereas the mutant "false || requestOrigin !== expectedOrigin" evaluates

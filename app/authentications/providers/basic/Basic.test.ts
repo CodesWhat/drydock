@@ -986,6 +986,56 @@ describe('Basic Authentication', () => {
       expect(mockRecordAuthLogin).not.toHaveBeenCalledWith('success', 'basic');
     });
 
+    test('should return false when verifyPlainPassword catch fires (normalizeHash throws on 7th call)', async () => {
+      // verifyPlainPassword lines 458-459: the catch block fires when normalizeHash(encodedHash)
+      // throws inside verifyPlainPassword's try block.
+      //
+      // Flow: verifyPassword calls normalizeHash(fakeHash) once → fakeHashResult.
+      // Then each of the 6 parse/check functions calls normalizeHash(fakeHashResult) (1 each).
+      // On the 7th call (inside verifyPlainPassword), fakeHashResult.trim() throws, which is caught
+      // by verifyPlainPassword's own catch → returns false.
+      let trimCallCount = 0;
+      const fakeHashResult = {
+        trim() {
+          trimCallCount += 1;
+          if (trimCallCount === 7) {
+            throw new Error('simulated normalizeHash failure');
+          }
+          // Return a minimal string that passes all parse checks as "not this type"
+          return 'x';
+        },
+        // Needed so parseArgon2Hash/looksLikeArgon2Hash etc. don't throw when they receive
+        // fakeHashResult as rawHash and call additional string methods on it before normalizeHash.
+        // In practice all those functions start by calling normalizeHash(rawHash) first.
+        split: () => ['x'],
+        startsWith: () => false,
+        get length() {
+          return 1;
+        },
+      } as unknown as string;
+
+      const fakeHash = {
+        trim() {
+          return fakeHashResult;
+        },
+      } as unknown as string;
+
+      mockRecordAuthLogin.mockClear();
+      basic.configuration = {
+        user: 'testuser',
+        hash: fakeHash,
+      };
+
+      await new Promise<void>((resolve) => {
+        basic.authenticate('testuser', 'testuser', (_err, _result) => {
+          resolve();
+        });
+      });
+      // Verify the authentication rejected (the catch returned false → 'invalid' outcome)
+      expect(mockRecordAuthLogin).toHaveBeenCalledWith('invalid', 'basic');
+      expect(mockRecordAuthLogin).not.toHaveBeenCalledWith('success', 'basic');
+    });
+
     test('should reject bcrypt-style hash in configuration schema', async () => {
       expect(() =>
         basic.validateConfiguration({

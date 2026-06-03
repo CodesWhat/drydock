@@ -698,6 +698,21 @@ describe('ContainerRuntimeConfigManager', () => {
       await expect(manager.getDefaultRuntime(undefined, createLog())).resolves.toBeUndefined();
     });
 
+    test('returns undefined when dockerApi.info() resolves to a non-record value', async () => {
+      // ContainerRuntimeConfigManager.ts line 543: `if (!isRecord(info)) { return undefined; }`
+      const manager = createManager();
+
+      await expect(
+        manager.getDefaultRuntime({ info: vi.fn().mockResolvedValue(null) }, createLog()),
+      ).resolves.toBeUndefined();
+      await expect(
+        manager.getDefaultRuntime({ info: vi.fn().mockResolvedValue('string-value') }, createLog()),
+      ).resolves.toBeUndefined();
+      await expect(
+        manager.getDefaultRuntime({ info: vi.fn().mockResolvedValue(42) }, createLog()),
+      ).resolves.toBeUndefined();
+    });
+
     test('returns undefined when DefaultRuntime is absent or empty', async () => {
       const manager = createManager();
 
@@ -721,6 +736,15 @@ describe('ContainerRuntimeConfigManager', () => {
       expect(log.debug).toHaveBeenCalledWith(
         expect.stringContaining('Unable to read daemon DefaultRuntime'),
       );
+    });
+
+    test('returns undefined and logs the raw value when info() rejects with a non-Error (?? e fallback)', async () => {
+      const manager = createManager();
+      const log = createLog();
+      const dockerApi = { info: vi.fn().mockRejectedValue('raw daemon failure') };
+
+      await expect(manager.getDefaultRuntime(dockerApi, log)).resolves.toBeUndefined();
+      expect(log.debug).toHaveBeenCalledWith(expect.stringContaining('raw daemon failure'));
     });
   });
 
