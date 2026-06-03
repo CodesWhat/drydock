@@ -374,7 +374,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-_The following entries are hardening from a 2026-06-01 multi-agent security review (no critical/high findings)._
+*The following entries are hardening from a 2026-06-01 multi-agent security review (no critical/high findings).*
 
 - **OIDC UserInfo response is bound to the id_token subject on login ([commit `661c21b9`](https://github.com/CodesWhat/drydock/commit/661c21b9)).** The authorization-code login path called `fetchUserInfo` with `skipSubjectCheck`, omitting the OIDC Core 5.3.2 check that the UserInfo `sub` matches the token `sub`. The validated id_token subject is now enforced; the bearer-token path (no id_token, no reliable expected subject) is unchanged.
 
