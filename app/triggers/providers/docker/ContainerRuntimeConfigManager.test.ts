@@ -664,6 +664,66 @@ describe('ContainerRuntimeConfigManager', () => {
     );
   });
 
+  test('getCloneRuntimeConfigOptions should include the daemon default runtime', async () => {
+    const manager = createManager();
+    const log = createLog();
+    vi.spyOn(manager, 'inspectImageConfig')
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined);
+    const dockerApi = { info: vi.fn().mockResolvedValue({ DefaultRuntime: 'runc' }) };
+
+    const options = await manager.getCloneRuntimeConfigOptions(
+      dockerApi,
+      { Config: { Image: 'registry/source:1.0.0' } },
+      'registry/target:2.0.0',
+      log,
+    );
+
+    expect(dockerApi.info).toHaveBeenCalledTimes(1);
+    expect(options.defaultRuntime).toBe('runc');
+  });
+
+  describe('getDefaultRuntime', () => {
+    test('returns the daemon DefaultRuntime reported by info()', async () => {
+      const manager = createManager();
+      const dockerApi = { info: vi.fn().mockResolvedValue({ DefaultRuntime: 'runc' }) };
+
+      await expect(manager.getDefaultRuntime(dockerApi, createLog())).resolves.toBe('runc');
+    });
+
+    test('returns undefined when dockerApi exposes no info()', async () => {
+      const manager = createManager();
+
+      await expect(manager.getDefaultRuntime({}, createLog())).resolves.toBeUndefined();
+      await expect(manager.getDefaultRuntime(undefined, createLog())).resolves.toBeUndefined();
+    });
+
+    test('returns undefined when DefaultRuntime is absent or empty', async () => {
+      const manager = createManager();
+
+      await expect(
+        manager.getDefaultRuntime({ info: vi.fn().mockResolvedValue({}) }, createLog()),
+      ).resolves.toBeUndefined();
+      await expect(
+        manager.getDefaultRuntime(
+          { info: vi.fn().mockResolvedValue({ DefaultRuntime: '' }) },
+          createLog(),
+        ),
+      ).resolves.toBeUndefined();
+    });
+
+    test('returns undefined and logs a debug line when info() rejects', async () => {
+      const manager = createManager();
+      const log = createLog();
+      const dockerApi = { info: vi.fn().mockRejectedValue(new Error('daemon unreachable')) };
+
+      await expect(manager.getDefaultRuntime(dockerApi, log)).resolves.toBeUndefined();
+      expect(log.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to read daemon DefaultRuntime'),
+      );
+    });
+  });
+
   test('isRuntimeConfigCompatibilityError should detect runtime command failures', () => {
     const manager = createManager();
 

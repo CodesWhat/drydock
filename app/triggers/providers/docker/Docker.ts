@@ -862,8 +862,13 @@ class Docker<
    * @returns {*}
    */
   cloneContainer(currentContainer, newImage, runtimeOptionsOrLogContainer = {}) {
-    const { sourceImageConfig, targetImageConfig, runtimeFieldOrigins, logContainer } =
-      this.runtimeConfigManager.buildCloneRuntimeConfigOptions(runtimeOptionsOrLogContainer);
+    const {
+      sourceImageConfig,
+      targetImageConfig,
+      runtimeFieldOrigins,
+      defaultRuntime,
+      logContainer,
+    } = this.runtimeConfigManager.buildCloneRuntimeConfigOptions(runtimeOptionsOrLogContainer);
     const containerName = currentContainer.Name.replace('/', '');
     const currentContainerNetworks = currentContainer.NetworkSettings?.Networks || {};
     const endpointsConfig = Object.entries(currentContainerNetworks).reduce(
@@ -913,6 +918,23 @@ class Docker<
     if (containerClone.HostConfig?.NetworkMode?.startsWith('container:')) {
       delete containerClone.Hostname;
       delete containerClone.ExposedPorts;
+    }
+
+    // Drop HostConfig.Runtime when it merely restates the daemon default. The
+    // inspect spec is copied verbatim, and most daemons report an explicit
+    // Runtime ("runc") that a hardened socket proxy enforcing a runtime
+    // allowlist will reject at POST /containers/create. Omitting it lets the
+    // daemon apply its own default, while an explicitly-selected non-default
+    // runtime (nvidia, kata, sysbox-runc, …) is preserved. Clone the HostConfig
+    // before editing so the source inspect spec (reused for rollback) is left
+    // untouched.
+    const hostConfig = containerClone.HostConfig as
+      | (Record<string, unknown> & { Runtime?: unknown })
+      | undefined;
+    if (defaultRuntime !== undefined && hostConfig && hostConfig.Runtime === defaultRuntime) {
+      const hostConfigWithoutRuntime = { ...hostConfig };
+      delete hostConfigWithoutRuntime.Runtime;
+      containerClone.HostConfig = hostConfigWithoutRuntime as { NetworkMode?: string };
     }
 
     return containerClone;
