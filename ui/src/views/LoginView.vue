@@ -7,6 +7,7 @@ import whaleLogo from '../assets/whale-logo.png?inline';
 import { getOidcRedirection, getStrategies, loginBasic, setRememberMe } from '../services/auth';
 import { useTheme } from '../theme/useTheme';
 import { errorMessage } from '../utils/error';
+import AppIconButton from '../components/AppIconButton.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -341,15 +342,15 @@ onUnmounted(() => {
                 style="background-color: var(--dd-bg-inset);"
                 :placeholder="t('loginView.password.placeholder')"
               />
-              <button
-                type="button"
-                tabindex="-1"
+              <AppIconButton
+                :icon="showPassword ? 'eye-slash' : 'eye'"
+                size="xs"
+                variant="muted"
                 :aria-label="showPassword ? t('loginView.password.hide') : t('loginView.password.show')"
-                class="absolute right-3 top-1/2 -translate-y-1/2 dd-text-muted"
+                tabindex="-1"
+                class="absolute right-3 top-1/2 -translate-y-1/2"
                 @click="showPassword = !showPassword"
-              >
-                <AppIcon :name="showPassword ? 'eye-slash' : 'eye'" :size="16" />
-              </button>
+              />
             </div>
           </div>
 
