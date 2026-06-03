@@ -893,6 +893,101 @@ describe('stats/aggregator', () => {
     }).not.toThrow();
   });
 
+  // #386 — agent-container contamination fix
+  test('#386: agent container (agent set) is excluded from controller local-watcher stats', async () => {
+    // The agent container has watcher:'local', agent:'ml' → watcherId resolves to 'ml.docker.local',
+    // which is NOT present in the watchers map → isDockerStatsWatcherApi returns false → excluded.
+    const fetchSnapshot = vi.fn();
+
+    let tickCallback: (() => void) | undefined;
+    const setIntervalFn = vi.fn((cb: () => void) => {
+      tickCallback = cb;
+      return 1 as unknown as ReturnType<typeof globalThis.setInterval>;
+    });
+    const clearIntervalFn = vi.fn();
+
+    const agentContainer = {
+      id: 'agent-c1',
+      name: 'remote-web',
+      watcher: 'local',
+      agent: 'ml',
+    };
+
+    const aggregator = createContainerStatsAggregator({
+      getContainers: () => [agentContainer] as Container[],
+      getWatchers: () => ({
+        // Only the controller's local watcher is present; 'ml.docker.local' is absent.
+        'docker.local': {
+          dockerApi: { getContainer: vi.fn(() => ({ stats: vi.fn() })) },
+        },
+      }),
+      intervalSeconds: 10,
+      now: () => Date.now(),
+      setIntervalFn: setIntervalFn as unknown as typeof globalThis.setInterval,
+      clearIntervalFn: clearIntervalFn as unknown as typeof globalThis.clearInterval,
+      fetchSnapshot,
+    });
+
+    aggregator.start();
+    tickCallback?.();
+    await drainMicrotasks();
+
+    // fetchSnapshot must never be called — the agent container must not be queried locally
+    expect(fetchSnapshot).not.toHaveBeenCalled();
+    expect(aggregator.getCurrent().watchedCount).toBe(0);
+
+    aggregator.stop();
+  });
+
+  test('#386: local container (agent undefined) still resolves to docker.local watcher', async () => {
+    // Local container has watcher:'local', agent:undefined → watcherId = 'docker.local' (unchanged).
+    const fetchSnapshot = vi.fn<
+      [unknown, string],
+      Promise<ReturnType<typeof makePayload> | null>
+    >();
+    fetchSnapshot.mockResolvedValueOnce(makePayload(100, 1000, 512, 2048));
+
+    let tickCallback: (() => void) | undefined;
+    const setIntervalFn = vi.fn((cb: () => void) => {
+      tickCallback = cb;
+      return 1 as unknown as ReturnType<typeof globalThis.setInterval>;
+    });
+    const clearIntervalFn = vi.fn();
+
+    const localContainer = { id: 'lc1', name: 'web', watcher: 'local' }; // agent is absent
+
+    const aggregator = createContainerStatsAggregator({
+      getContainers: () => [localContainer] as Container[],
+      getWatchers: () => ({
+        'docker.local': {
+          dockerApi: { getContainer: vi.fn(() => ({ stats: vi.fn() })) },
+        },
+      }),
+      intervalSeconds: 10,
+      now: () => Date.now(),
+      setIntervalFn: setIntervalFn as unknown as typeof globalThis.setInterval,
+      clearIntervalFn: clearIntervalFn as unknown as typeof globalThis.clearInterval,
+      fetchSnapshot: fetchSnapshot as unknown as (
+        w: unknown,
+        name: string,
+      ) => Promise<ReturnType<typeof makePayload> | null>,
+    });
+
+    aggregator.start();
+    tickCallback?.();
+    await drainMicrotasks();
+
+    // fetchSnapshot called for the local container — it was correctly routed to docker.local
+    expect(fetchSnapshot).toHaveBeenCalledTimes(1);
+    expect(fetchSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ dockerApi: expect.any(Object) }),
+      'web',
+    );
+    expect(aggregator.getCurrent().watchedCount).toBe(1);
+
+    aggregator.stop();
+  });
+
   test('runTick handles rejection from getContainers gracefully via tick error path', async () => {
     let tickCallback: (() => void) | undefined;
     const setIntervalFn = vi.fn((cb: () => void) => {

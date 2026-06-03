@@ -341,10 +341,24 @@ class Docker<
           } as typeof containerCurrent);
         }
       },
-      scheduleDeferredReconciliation: (containerName, _operationId, delayMs) => {
+      scheduleDeferredReconciliation: (containerName, operationId, delayMs) => {
         setTimeout(async () => {
           try {
-            const container = storeContainer.getContainers().find((c) => c.name === containerName);
+            // Resolve by operation ID first — avoids cross-agent name collision
+            // when both agents share the same default watcher name ('local') (#386).
+            const operationContainerId =
+              updateOperationStore.getOperationById(operationId)?.containerId;
+            const container =
+              (operationContainerId
+                ? storeContainer.getContainer(operationContainerId)
+                : undefined) ??
+              storeContainer
+                .getContainers()
+                .find(
+                  (c) =>
+                    c.name === containerName &&
+                    (c.agent ?? undefined) === (this.agent ?? undefined),
+                );
             if (!container) {
               return;
             }

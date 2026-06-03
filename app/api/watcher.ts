@@ -102,17 +102,20 @@ function resolveWatcherItem(
 export function getWatchers(req: Request, res: Response): void {
   const watchers = registry.getState().watcher || {};
   const watcherEntries = Object.entries(watchers);
+  // #386: key by registry id (e.g. "docker.local", "ml.docker.local") so that
+  // two watchers both named "local" but owned by different agents get distinct buckets.
   const statsByWatcher = buildContainerStatsByKey(
     storeContainer.getContainersForStats({}),
-    watcherEntries.map(([, watcher]) => watcher.name),
-    (container) => (typeof container.watcher === 'string' ? container.watcher : undefined),
+    watcherEntries.map(([id]) => id),
+    (container) => {
+      if (typeof container.watcher !== 'string') return undefined;
+      const agentPrefix =
+        typeof container.agent === 'string' && container.agent !== '' ? `${container.agent}.` : '';
+      return `${agentPrefix}docker.${container.watcher}`;
+    },
   );
   const items = watcherEntries.map(([id, watcher]) =>
-    resolveWatcherItem(
-      id,
-      watcher,
-      statsByWatcher.get(watcher.name) ?? createEmptyContainerStatsBucket(),
-    ),
+    resolveWatcherItem(id, watcher, statsByWatcher.get(id) ?? createEmptyContainerStatsBucket()),
   );
   const allItems = sortWatcherItems(items);
   const pagination = normalizeLimitOffsetPagination(req.query, {
@@ -138,15 +141,21 @@ export function getWatcher(req: Request<WatcherRouteParams>, res: Response): voi
     return;
   }
 
+  // #386: key by registry id so the agent prefix is part of the bucket key.
   const statsByWatcher = buildContainerStatsByKey(
     storeContainer.getContainersForStats({}),
-    [watcher.name],
-    (container) => (typeof container.watcher === 'string' ? container.watcher : undefined),
+    [watcherId],
+    (container) => {
+      if (typeof container.watcher !== 'string') return undefined;
+      const agentPrefix =
+        typeof container.agent === 'string' && container.agent !== '' ? `${container.agent}.` : '';
+      return `${agentPrefix}docker.${container.watcher}`;
+    },
   );
   const item = resolveWatcherItem(
     watcherId,
     watcher,
-    statsByWatcher.get(watcher.name) ?? createEmptyContainerStatsBucket(),
+    statsByWatcher.get(watcherId) ?? createEmptyContainerStatsBucket(),
   );
   res.status(200).json(item);
 }

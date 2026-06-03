@@ -3573,6 +3573,119 @@ describe('scheduleDeferredReconciliation', () => {
     docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = originalReconcile;
     vi.useRealTimers();
   });
+
+  // #386 — agent-scoping tests
+  test('resolves container by operation containerId when operationId is valid', async () => {
+    vi.useFakeTimers();
+    const storeContainer = await import('../../../store/container.js');
+
+    // Use watcher: 'test' so getWatcher() can resolve via the mock registry (docker.test)
+    const resolvedByIdContainer = {
+      id: 'ctr-abc',
+      name: 'web',
+      watcher: 'test',
+      agent: undefined,
+      image: { name: 'nginx', tag: { value: '1.0.0' } },
+    };
+
+    // Operation resolves to containerId 'ctr-abc'
+    mockGetOperationById.mockReturnValue({ containerId: 'ctr-abc' });
+    (storeContainer.getContainer as any).mockReturnValue(resolvedByIdContainer);
+
+    const reconcileSpy = vi.fn().mockResolvedValue(undefined);
+    const originalReconcile =
+      docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation;
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = reconcileSpy;
+
+    const callback = (docker as any).containerUpdateExecutor.scheduleDeferredReconciliation;
+    callback('web', 'op-by-id', 1_000);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    // Container was fetched by ID, not by name search
+    expect(storeContainer.getContainer).toHaveBeenCalledWith('ctr-abc');
+    expect(reconcileSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      resolvedByIdContainer,
+      expect.anything(),
+    );
+
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = originalReconcile;
+    mockGetOperationById.mockReset();
+    vi.useRealTimers();
+  });
+
+  test('fallback agent-scoped name search does not pick a cross-agent container', async () => {
+    vi.useFakeTimers();
+    const storeContainer = await import('../../../store/container.js');
+
+    // No operation row found → falls through to name fallback
+    mockGetOperationById.mockReturnValue(undefined);
+    (storeContainer.getContainer as any).mockReturnValue(undefined);
+
+    // Cross-agent row has agent='ml'; local row has agent=undefined.
+    // Use watcher: 'test' so getWatcher() resolves via the mock registry.
+    const crossAgentContainer = { name: 'web', watcher: 'test', agent: 'ml' };
+    const localContainer = {
+      id: 'ctr-local',
+      name: 'web',
+      watcher: 'test',
+      agent: undefined,
+      image: { name: 'nginx', tag: { value: '1.0.0' } },
+    };
+    (storeContainer.getContainers as any).mockReturnValue([crossAgentContainer, localContainer]);
+
+    const reconcileSpy = vi.fn().mockResolvedValue(undefined);
+    const originalReconcile =
+      docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation;
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = reconcileSpy;
+
+    const callback = (docker as any).containerUpdateExecutor.scheduleDeferredReconciliation;
+    callback('web', 'op-missing', 1_000);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    // Must pick the local container, not the cross-agent one
+    expect(reconcileSpy).toHaveBeenCalledWith(expect.anything(), localContainer, expect.anything());
+    expect(reconcileSpy).not.toHaveBeenCalledWith(
+      expect.anything(),
+      crossAgentContainer,
+      expect.anything(),
+    );
+
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = originalReconcile;
+    mockGetOperationById.mockReset();
+    vi.useRealTimers();
+  });
+
+  test('fallback returns early when no container matches the agent-scoped name search', async () => {
+    vi.useFakeTimers();
+    const storeContainer = await import('../../../store/container.js');
+
+    // No operation row, only cross-agent row in store (agent='ml' does not match docker.agent=undefined)
+    mockGetOperationById.mockReturnValue(undefined);
+    (storeContainer.getContainer as any).mockReturnValue(undefined);
+    (storeContainer.getContainers as any).mockReturnValue([
+      { name: 'web', watcher: 'test', agent: 'ml' },
+    ]);
+
+    const reconcileSpy = vi.fn().mockResolvedValue(undefined);
+    const originalReconcile =
+      docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation;
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = reconcileSpy;
+
+    const callback = (docker as any).containerUpdateExecutor.scheduleDeferredReconciliation;
+    callback('web', 'op-no-match', 1_000);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    // No matching container — reconcile must not be called
+    expect(reconcileSpy).not.toHaveBeenCalled();
+
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = originalReconcile;
+    mockGetOperationById.mockReset();
+    vi.useRealTimers();
+  });
 });
 
 describe('findDockerSocketBind', () => {

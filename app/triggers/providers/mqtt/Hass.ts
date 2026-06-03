@@ -37,7 +37,16 @@ interface HassConfiguration {
   hass: {
     prefix: string;
     discovery: boolean;
+    agenttopicsegment?: boolean;
   };
+}
+
+// #386 — replicated from Docker.ts (not exported there)
+function normalizeAgentValue(agent: unknown): string | undefined {
+  if (typeof agent !== 'string') {
+    return undefined;
+  }
+  return agent === '' ? undefined : agent;
 }
 
 interface HassLogger {
@@ -225,10 +234,16 @@ class Hass {
   private getContainerStateTopicFromName({
     watcherName,
     containerName,
+    agentName,
   }: {
     watcherName: string;
     containerName: string;
+    agentName?: string;
   }) {
+    // #386 — insert agent segment only when flag is on and agent is non-empty
+    if (this.configuration.hass.agenttopicsegment && agentName) {
+      return `${this.configuration.topic}/agent/${agentName}/${watcherName}/${containerName}`;
+    }
     return `${this.configuration.topic}/${watcherName}/${containerName}`;
   }
 
@@ -236,7 +251,7 @@ class Hass {
     container,
     currentStateTopic,
   }: {
-    container: { id?: unknown; name?: unknown; watcher?: unknown };
+    container: { id?: unknown; name?: unknown; watcher?: unknown; agent?: unknown };
     currentStateTopic: string;
   }) {
     const staleStateTopics = new Set<string>();
@@ -244,6 +259,9 @@ class Hass {
     if (watcherName === '') {
       return [];
     }
+
+    // #386 — pass agent so stale topics use the same namespace as the current one
+    const agentName = normalizeAgentValue(container?.agent);
 
     const containerId = this.getContainerId(container);
     if (containerId) {
@@ -257,6 +275,7 @@ class Hass {
       const staleStateTopic = this.getContainerStateTopicFromName({
         watcherName,
         containerName: staleContainerName,
+        agentName,
       });
       if (staleStateTopic !== currentStateTopic) {
         staleStateTopics.add(staleStateTopic);
@@ -269,9 +288,11 @@ class Hass {
   private getActiveContainerStateTopicsForWatcher({
     watcherName,
     excludingContainerId,
+    agentValue,
   }: {
     watcherName: string;
     excludingContainerId?: string;
+    agentValue?: string | undefined;
   }) {
     if (watcherName === '') {
       return new Set<string>();
@@ -284,6 +305,13 @@ class Hass {
           .filter(
             (storedContainer) => this.getContainerId(storedContainer) !== excludingContainerId,
           )
+          // #386 — when flag is on, only match containers belonging to the same agent
+          .filter((storedContainer) => {
+            if (!this.configuration.hass.agenttopicsegment) {
+              return true;
+            }
+            return normalizeAgentValue(storedContainer.agent) === normalizeAgentValue(agentValue);
+          })
           .map((storedContainer) => this.getContainerStateTopic({ container: storedContainer })),
       );
     } catch {
@@ -294,15 +322,24 @@ class Hass {
   private getTrackedContainerStateTopicsForWatcher({
     watcherName,
     excludingContainerId,
+    agentValue,
   }: {
     watcherName: string;
     excludingContainerId?: string;
+    agentValue?: string | undefined;
   }): Set<string> {
     if (watcherName === '') {
       return new Set<string>();
     }
 
-    const watcherTopicPrefix = `${this.configuration.topic}/${watcherName}/`;
+    // #386 — when flag is on and agent is non-empty, the tracked topics use agent/<name>/<watcher>/
+    const agentName = this.configuration.hass.agenttopicsegment
+      ? normalizeAgentValue(agentValue)
+      : undefined;
+    const watcherTopicPrefix = agentName
+      ? `${this.configuration.topic}/agent/${agentName}/${watcherName}/`
+      : `${this.configuration.topic}/${watcherName}/`;
+
     return new Set<string>(
       Array.from(this.containerStateTopicById.entries())
         .filter(([containerId]) => containerId !== excludingContainerId)
@@ -431,13 +468,17 @@ class Hass {
       const watcherName = typeof container?.watcher === 'string' ? container.watcher : '';
       const excludingContainerId = this.getContainerId(container);
       const replacementExpected = container?.replacementExpected === true;
+      // #386 — forward agent so cleanup is scoped to the same agent namespace
+      const agentValue = normalizeAgentValue(container?.agent);
       const activeFromStore = this.getActiveContainerStateTopicsForWatcher({
         watcherName,
         excludingContainerId,
+        agentValue,
       });
       const trackedLocally = this.getTrackedContainerStateTopicsForWatcher({
         watcherName,
         excludingContainerId,
+        agentValue,
       });
       const activeStateTopics = new Set<string>();
       for (const topic of activeFromStore) activeStateTopics.add(topic);
@@ -472,6 +513,13 @@ class Hass {
   }
 
   async updateContainerSensors(container) {
+    // #386 — compute the watcher-sensor topic prefix (with or without agent segment)
+    const containerAgentName = normalizeAgentValue(container?.agent);
+    const watcherSensorPrefix =
+      this.configuration.hass.agenttopicsegment && containerAgentName
+        ? `${this.configuration.topic}/agent/${containerAgentName}/${container.watcher}`
+        : `${this.configuration.topic}/${container.watcher}`;
+
     // Sensor topics and kinds
     const totalCountSensor = {
       kind: 'sensor',
@@ -487,15 +535,15 @@ class Hass {
     };
     const watcherTotalCountSensor = {
       kind: 'sensor',
-      topic: `${this.configuration.topic}/${container.watcher}/total_count`,
+      topic: `${watcherSensorPrefix}/total_count`,
     };
     const watcherUpdateCountSensor = {
       kind: 'sensor',
-      topic: `${this.configuration.topic}/${container.watcher}/update_count`,
+      topic: `${watcherSensorPrefix}/update_count`,
     };
     const watcherUpdateStatusSensor = {
       kind: 'binary_sensor',
-      topic: `${this.configuration.topic}/${container.watcher}/update_status`,
+      topic: `${watcherSensorPrefix}/update_status`,
     };
 
     // Discovery topics
@@ -578,14 +626,25 @@ class Hass {
       updateAvailable: true,
     });
 
-    // Count all containers belonging to the current watcher
-    const watcherTotalCount = containerStore.getContainerCount({
-      watcher: container.watcher,
-    });
-    const watcherUpdateCount = containerStore.getContainerCount({
-      watcher: container.watcher,
-      updateAvailable: true,
-    });
+    // Count all containers belonging to the current watcher (scoped by agent when flag is on)
+    let watcherTotalCount: number;
+    let watcherUpdateCount: number;
+    if (this.configuration.hass.agenttopicsegment && containerAgentName) {
+      // #386 — filter by agent to avoid cross-agent contamination on shared watcher names
+      const watcherContainers = containerStore
+        .getContainers({ watcher: container.watcher })
+        .filter((c) => normalizeAgentValue(c.agent) === containerAgentName);
+      watcherTotalCount = watcherContainers.length;
+      watcherUpdateCount = watcherContainers.filter((c) => c.updateAvailable).length;
+    } else {
+      watcherTotalCount = containerStore.getContainerCount({
+        watcher: container.watcher,
+      });
+      watcherUpdateCount = containerStore.getContainerCount({
+        watcher: container.watcher,
+        updateAvailable: true,
+      });
+    }
 
     // Publish sensors
     await this.updateSensor({
@@ -735,6 +794,7 @@ class Hass {
     return this.getContainerStateTopicFromName({
       watcherName: container.watcher,
       containerName: getSanitizedCanonicalContainerName(container),
+      agentName: normalizeAgentValue(container?.agent),
     });
   }
 

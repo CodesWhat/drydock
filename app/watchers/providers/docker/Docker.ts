@@ -900,7 +900,15 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       return;
     }
     const containers = storeContainer.getContainers({ watcher: this.name });
-    const matched = containers.find((c) => `${c.watcher}_${c.name}` === containerName);
+    const currentWatcherAgent = normalizeAgentValue(this.agent);
+    // Only match containers owned by THIS watcher's agent — remote-agent rows
+    // share the same default watcher name ('local') and would otherwise produce
+    // a cross-agent match leaving a stale "update available" badge (#386).
+    const matched = containers.find(
+      (c) =>
+        `${c.watcher}_${c.name}` === containerName &&
+        normalizeAgentValue(c.agent) === currentWatcherAgent,
+    );
     if (!matched) {
       return;
     }

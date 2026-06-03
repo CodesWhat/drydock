@@ -1961,6 +1961,70 @@ test('insertContainer should not overwrite explicit security state with cache', 
   expect(result.security).toEqual(explicitSecurity);
 });
 
+// #386: security-state cache must not cross-contaminate between controller-local and agent containers
+test('insertContainer local container (no agent) should still consume cached security state', async () => {
+  const collection = {
+    findOne: () => {},
+    insert: () => {},
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const securityData = {
+    scan: {
+      scanner: 'trivy',
+      image: 'registry/image:1.2.3',
+      scannedAt: new Date().toISOString(),
+      status: 'passed',
+      blockSeverities: [],
+      blockingCount: 0,
+      summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
+      vulnerabilities: [],
+    },
+  };
+  container.createCollections(db);
+  container.cacheSecurityState('local', 'nginx', securityData);
+  const result = container.insertContainer(
+    createContainerFixture({ watcher: 'local', name: 'nginx', agent: undefined }),
+  );
+  expect(result.security).toEqual(securityData);
+  expect(container.getCachedSecurityState('local', 'nginx')).toBeUndefined();
+});
+
+test('insertContainer agent container should NOT consume or clear cached security state for same watcher+name', async () => {
+  const collection = {
+    findOne: () => {},
+    insert: () => {},
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const securityData = {
+    scan: {
+      scanner: 'trivy',
+      image: 'registry/image:1.2.3',
+      scannedAt: new Date().toISOString(),
+      status: 'passed',
+      blockSeverities: [],
+      blockingCount: 0,
+      summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 0 },
+      vulnerabilities: [],
+    },
+  };
+  container.createCollections(db);
+  container.cacheSecurityState('local', 'nginx', securityData);
+  const result = container.insertContainer(
+    createContainerFixture({ watcher: 'local', name: 'nginx', agent: 'ml' }),
+  );
+  // agent container must NOT receive the controller's cached security state
+  expect(result.security).toBeUndefined();
+  // controller's local cache entry must remain intact
+  expect(container.getCachedSecurityState('local', 'nginx')).toEqual(securityData);
+  container.clearCachedSecurityState('local', 'nginx');
+});
+
 test('getCachedSecurityState should expire entries after cache TTL', async () => {
   vi.useFakeTimers();
   try {

@@ -708,10 +708,16 @@ export function createCollections(db) {
  * @param container
  */
 export function insertContainer(container) {
-  const cachedSecurity = getCachedSecurityState(container.watcher, container.name);
-  if (cachedSecurity && !container.security) {
-    container.security = cachedSecurity;
-    clearCachedSecurityState(container.watcher, container.name);
+  // #386: skip the security-state cache entirely for remote-agent containers;
+  // the cache is only written by the controller's local Docker trigger and is
+  // meaningless (and cross-contaminating) for containers owned by an agent.
+  const isLocalContainer = !(typeof container.agent === 'string' && container.agent !== '');
+  if (isLocalContainer) {
+    const cachedSecurity = getCachedSecurityState(container.watcher, container.name);
+    if (cachedSecurity && !container.security) {
+      container.security = cachedSecurity;
+      clearCachedSecurityState(container.watcher, container.name);
+    }
   }
   const containerToSave = validateContainer(container);
   containerToSave.updateDetectedAt = getUpdateDetectedAt(undefined, containerToSave);

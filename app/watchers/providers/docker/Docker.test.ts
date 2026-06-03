@@ -801,6 +801,48 @@ describe('Docker Watcher', () => {
       const registeredCallback = event.registerContainerUpdateApplied.mock.calls[0][0];
       await expect(registeredCallback('test_myapp')).resolves.toBeUndefined();
     });
+
+    // #386 — agent-scoping tests
+    test('callback does not select a same-named remote-agent row when this.agent is undefined', async () => {
+      // controller watcher: agent=undefined; remote-agent row also has watcher='test'
+      await docker.register('watcher', 'docker', 'test', {});
+      await docker.init();
+
+      // The remote row has agent='ml'; the local row has no agent.
+      const remoteAgentContainer = { name: 'myapp', watcher: 'test', agent: 'ml' };
+      const localContainer = { name: 'myapp', watcher: 'test', agent: undefined };
+      storeContainer.getContainers.mockReturnValue([remoteAgentContainer, localContainer]);
+      event.getContainerUpdateAppliedEventContainerName.mockReturnValue('test_myapp');
+
+      docker.watchContainer = vi.fn().mockResolvedValue({});
+
+      const registeredCallback = event.registerContainerUpdateApplied.mock.calls[0][0];
+      await registeredCallback('test_myapp');
+
+      // Must be called with the local (agent=undefined) container, NOT the remote one.
+      expect(docker.watchContainer).toHaveBeenCalledWith(localContainer, { emitBatchEvent: false });
+      expect(docker.watchContainer).not.toHaveBeenCalledWith(
+        remoteAgentContainer,
+        expect.anything(),
+      );
+    });
+
+    test('callback does not call watchContainer when only a remote-agent row matches the name', async () => {
+      // controller watcher: agent=undefined; store only has the remote row
+      await docker.register('watcher', 'docker', 'test', {});
+      await docker.init();
+
+      const remoteAgentContainer = { name: 'myapp', watcher: 'test', agent: 'ml' };
+      storeContainer.getContainers.mockReturnValue([remoteAgentContainer]);
+      event.getContainerUpdateAppliedEventContainerName.mockReturnValue('test_myapp');
+
+      docker.watchContainer = vi.fn().mockResolvedValue({});
+
+      const registeredCallback = event.registerContainerUpdateApplied.mock.calls[0][0];
+      await registeredCallback('test_myapp');
+
+      expect(docker.watchContainer).not.toHaveBeenCalled();
+    });
   });
 
   describe('OIDC Remote Auth', () => {

@@ -29,6 +29,7 @@ const configurationValid = {
   exclude: '',
   hass: {
     discovery: false,
+    agenttopicsegment: false,
     enabled: false,
     prefix: 'homeassistant',
     attributes: 'short',
@@ -118,6 +119,7 @@ test('validateConfiguration should default hass.discovery to true when hass.enab
     enabled: true,
     prefix: 'homeassistant',
     discovery: true,
+    agenttopicsegment: false,
     attributes: 'short',
     filter: {
       include: '',

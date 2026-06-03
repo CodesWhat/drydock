@@ -1153,3 +1153,401 @@ test('deregister should invoke event unregister callbacks', async () => {
   expect(unregisterWatcherStart).toHaveBeenCalledTimes(1);
   expect(unregisterWatcherStop).toHaveBeenCalledTimes(1);
 });
+
+// ── #386: agenttopicsegment flag ─────────────────────────────────────────────
+
+describe('agenttopicsegment flag', () => {
+  let hassAgent: InstanceType<typeof Hass>;
+  let mqttClientAgentMock: { publish: ReturnType<typeof vi.fn> };
+
+  function makeHass(agenttopicsegment: boolean) {
+    return new Hass({
+      client: mqttClientAgentMock,
+      configuration: {
+        topic: 'topic',
+        hass: {
+          discovery: true,
+          prefix: 'homeassistant',
+          agenttopicsegment,
+        },
+      },
+      log,
+    });
+  }
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mqttClientAgentMock = { publish: vi.fn(() => {}) };
+    hassAgent = makeHass(true);
+  });
+
+  // ── Topic construction ──────────────────────────────────────────────────────
+
+  describe('topic construction', () => {
+    test('flag OFF — agent container topic is unchanged (no agent segment)', () => {
+      const hassOff = makeHass(false);
+      const topic = hassOff.getContainerStateTopic({
+        container: { name: 'nginx', watcher: 'local', agent: 'ml' },
+      });
+      expect(topic).toBe('topic/local/nginx');
+    });
+
+    test('flag ON — agent container topic includes agent/<name> segment', () => {
+      const topic = hassAgent.getContainerStateTopic({
+        container: { name: 'nginx', watcher: 'local', agent: 'ml' },
+      });
+      expect(topic).toBe('topic/agent/ml/local/nginx');
+    });
+
+    test('flag ON — no-agent container topic is UNCHANGED', () => {
+      const topic = hassAgent.getContainerStateTopic({
+        container: { name: 'nginx', watcher: 'local', agent: undefined },
+      });
+      expect(topic).toBe('topic/local/nginx');
+    });
+
+    test('flag ON — empty-string agent is treated as no-agent (topic unchanged)', () => {
+      const topic = hassAgent.getContainerStateTopic({
+        container: { name: 'nginx', watcher: 'local', agent: '' },
+      });
+      expect(topic).toBe('topic/local/nginx');
+    });
+
+    test('flag ON — two different agents on same watcher+container produce distinct topics', () => {
+      const topicMl = hassAgent.getContainerStateTopic({
+        container: { name: 'nginx', watcher: 'local', agent: 'ml' },
+      });
+      const topicEdge = hassAgent.getContainerStateTopic({
+        container: { name: 'nginx', watcher: 'local', agent: 'edge' },
+      });
+      expect(topicMl).toBe('topic/agent/ml/local/nginx');
+      expect(topicEdge).toBe('topic/agent/edge/local/nginx');
+      expect(topicMl).not.toBe(topicEdge);
+    });
+
+    test('flag ON — addContainerSensor publishes discovery with agent topic', async () => {
+      vi.spyOn(hassAgent, 'updateContainerSensors').mockResolvedValue(undefined);
+      await hassAgent.addContainerSensor({
+        id: 'ctr-ml-1',
+        name: 'nginx',
+        watcher: 'local',
+        agent: 'ml',
+        displayIcon: 'mdi:docker',
+      });
+      const discoveryCall = mqttClientAgentMock.publish.mock.calls.find(([topic]) =>
+        topic.startsWith('homeassistant/update/'),
+      );
+      expect(discoveryCall).toBeDefined();
+      expect(discoveryCall[0]).toBe('homeassistant/update/topic_agent_ml_local_nginx/config');
+      const payload = JSON.parse(discoveryCall[1]);
+      expect(payload.state_topic).toBe('topic/agent/ml/local/nginx');
+    });
+
+    test('flag ON — addContainerSensor for no-agent container uses legacy topic', async () => {
+      vi.spyOn(hassAgent, 'updateContainerSensors').mockResolvedValue(undefined);
+      await hassAgent.addContainerSensor({
+        id: 'ctr-local-1',
+        name: 'nginx',
+        watcher: 'local',
+        agent: undefined,
+        displayIcon: 'mdi:docker',
+      });
+      const discoveryCall = mqttClientAgentMock.publish.mock.calls.find(([topic]) =>
+        topic.startsWith('homeassistant/update/'),
+      );
+      expect(discoveryCall).toBeDefined();
+      expect(discoveryCall[0]).toBe('homeassistant/update/topic_local_nginx/config');
+      const payload = JSON.parse(discoveryCall[1]);
+      expect(payload.state_topic).toBe('topic/local/nginx');
+    });
+  });
+
+  // ── Watcher sensor topic construction ──────────────────────────────────────
+
+  describe('watcher sensor topics', () => {
+    test('flag OFF — watcher sensor topics are unchanged even when container has agent', async () => {
+      const hassOff = makeHass(false);
+      vi.spyOn(containerStore, 'getContainerCount').mockReturnValue(0);
+      await hassOff.updateContainerSensors({
+        name: 'nginx',
+        watcher: 'local',
+        agent: 'ml',
+      });
+      // Should use the legacy unscoped watcher prefix
+      const sensorTopicCalls = mqttClientAgentMock.publish.mock.calls.map(([topic]) => topic);
+      expect(sensorTopicCalls).toContain('topic/local/total_count');
+      expect(sensorTopicCalls).not.toContain(expect.stringContaining('agent/ml'));
+    });
+
+    test('flag ON — watcher sensor topics include agent segment for agent container', async () => {
+      vi.spyOn(containerStore, 'getContainerCount').mockReturnValue(0);
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([]);
+      await hassAgent.updateContainerSensors({
+        name: 'nginx',
+        watcher: 'local',
+        agent: 'ml',
+      });
+      const sensorTopicCalls = mqttClientAgentMock.publish.mock.calls.map(([topic]) => topic);
+      expect(sensorTopicCalls).toContain('topic/agent/ml/local/total_count');
+      expect(sensorTopicCalls).toContain('topic/agent/ml/local/update_count');
+      expect(sensorTopicCalls).toContain('topic/agent/ml/local/update_status');
+    });
+
+    test('flag ON — watcher sensor topics are unchanged for no-agent container', async () => {
+      vi.spyOn(containerStore, 'getContainerCount').mockReturnValue(0);
+      await hassAgent.updateContainerSensors({
+        name: 'nginx',
+        watcher: 'local',
+        agent: undefined,
+      });
+      const sensorTopicCalls = mqttClientAgentMock.publish.mock.calls.map(([topic]) => topic);
+      expect(sensorTopicCalls).toContain('topic/local/total_count');
+      expect(sensorTopicCalls).not.toContain('topic/agent/undefined/local/total_count');
+    });
+  });
+
+  // ── Watcher count scoping ──────────────────────────────────────────────────
+
+  describe('watcher count scoping', () => {
+    test('flag OFF — watcher counts sum across all agents (legacy behavior)', async () => {
+      const getContainerCountSpy = vi.spyOn(containerStore, 'getContainerCount').mockReturnValue(3);
+      vi.spyOn(containerStore, 'getContainers');
+      const hassOff = makeHass(false);
+      await hassOff.updateContainerSensors({
+        name: 'nginx',
+        watcher: 'local',
+        agent: 'ml',
+      });
+      // Should use getContainerCount, NOT getContainers for watcher scoping
+      expect(getContainerCountSpy).toHaveBeenCalledWith({ watcher: 'local' });
+      expect(getContainerCountSpy).toHaveBeenCalledWith({
+        watcher: 'local',
+        updateAvailable: true,
+      });
+      // In flag-off mode, counts come from getContainerCount only
+      const countCalls = getContainerCountSpy.mock.calls;
+      expect(
+        countCalls.some((c) => JSON.stringify(c[0]) === JSON.stringify({ watcher: 'local' })),
+      ).toBe(true);
+    });
+
+    test('flag ON — watcher counts are scoped to agent via getContainers filter', async () => {
+      const mlContainer = { id: 'c1', watcher: 'local', agent: 'ml', updateAvailable: false };
+      const mlContainerUpdate = { id: 'c2', watcher: 'local', agent: 'ml', updateAvailable: true };
+      const otherAgentContainer = {
+        id: 'c3',
+        watcher: 'local',
+        agent: 'edge',
+        updateAvailable: true,
+      };
+      vi.spyOn(containerStore, 'getContainerCount').mockReturnValue(0);
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([
+        mlContainer,
+        mlContainerUpdate,
+        otherAgentContainer,
+      ] as any);
+
+      let capturedWatcherTotalCountValue: string | undefined;
+      let capturedWatcherUpdateCountValue: string | undefined;
+      mqttClientAgentMock.publish.mockImplementation((topic: string, value: string) => {
+        if (topic === 'topic/agent/ml/local/total_count') capturedWatcherTotalCountValue = value;
+        if (topic === 'topic/agent/ml/local/update_count') capturedWatcherUpdateCountValue = value;
+      });
+
+      await hassAgent.updateContainerSensors({
+        name: 'nginx',
+        watcher: 'local',
+        agent: 'ml',
+      });
+
+      // Only ml-agent containers should be counted (2 total, 1 with update)
+      expect(capturedWatcherTotalCountValue).toBe('2');
+      expect(capturedWatcherUpdateCountValue).toBe('1');
+    });
+
+    test('flag ON — no-agent container counts use getContainerCount (unchanged path)', async () => {
+      const getContainerCountSpy = vi.spyOn(containerStore, 'getContainerCount').mockReturnValue(5);
+      const getContainersSpy = vi.spyOn(containerStore, 'getContainers');
+
+      await hassAgent.updateContainerSensors({
+        name: 'nginx',
+        watcher: 'local',
+        agent: undefined,
+      });
+
+      // For no-agent container (flag on but agent is undefined), must fall back to getContainerCount
+      expect(getContainerCountSpy).toHaveBeenCalledWith({ watcher: 'local' });
+      // getContainers should NOT be called for watcher count computation
+      const watcherCountCalls = getContainersSpy.mock.calls.filter(
+        ([q]) => q && (q as { watcher?: string }).watcher === 'local',
+      );
+      expect(watcherCountCalls.length).toBe(0);
+    });
+  });
+
+  // ── Discovery cleanup scoping ───────────────────────────────────────────────
+
+  describe('discovery cleanup scoping', () => {
+    test('flag ON — removing agent-A container does NOT suppress agent-B same-name container', async () => {
+      vi.spyOn(hassAgent, 'updateContainerSensors').mockResolvedValue(undefined);
+
+      // Track agent-A and agent-B containers with same watcher+name
+      await hassAgent.addContainerSensor({
+        id: 'agent-a-ctr',
+        name: 'nginx',
+        watcher: 'local',
+        agent: 'ml',
+        displayIcon: 'mdi:docker',
+      });
+      await hassAgent.addContainerSensor({
+        id: 'agent-b-ctr',
+        name: 'nginx',
+        watcher: 'local',
+        agent: 'edge',
+        displayIcon: 'mdi:docker',
+      });
+
+      mqttClientAgentMock.publish.mockClear();
+
+      // Store returns agent-B's container (agent-A is being removed)
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([
+        { id: 'agent-b-ctr', name: 'nginx', watcher: 'local', agent: 'edge' },
+      ] as any);
+
+      // Remove agent-A's container
+      await hassAgent.removeContainerSensor({
+        id: 'agent-a-ctr',
+        name: 'nginx',
+        watcher: 'local',
+        agent: 'ml',
+        displayIcon: 'mdi:docker',
+      });
+
+      // agent-A's discovery topic should be removed
+      expect(mqttClientAgentMock.publish).toHaveBeenCalledWith(
+        'homeassistant/update/topic_agent_ml_local_nginx/config',
+        '',
+        { retain: true },
+      );
+
+      // agent-B's discovery topic should NOT be removed
+      expect(mqttClientAgentMock.publish).not.toHaveBeenCalledWith(
+        'homeassistant/update/topic_agent_edge_local_nginx/config',
+        '',
+        { retain: true },
+      );
+    });
+
+    test('flag ON — removing agent container is suppressed by same-agent same-name active container', async () => {
+      vi.spyOn(hassAgent, 'updateContainerSensors').mockResolvedValue(undefined);
+
+      // Add old and new containers for same agent
+      await hassAgent.addContainerSensor({
+        id: 'old-ml-ctr',
+        name: 'nginx',
+        watcher: 'local',
+        agent: 'ml',
+        displayIcon: 'mdi:docker',
+      });
+      await hassAgent.addContainerSensor({
+        id: 'new-ml-ctr',
+        name: 'nginx',
+        watcher: 'local',
+        agent: 'ml',
+        displayIcon: 'mdi:docker',
+      });
+
+      mqttClientAgentMock.publish.mockClear();
+
+      // Store returns the new container (same agent)
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([
+        { id: 'new-ml-ctr', name: 'nginx', watcher: 'local', agent: 'ml' },
+      ] as any);
+
+      // Remove old container
+      await hassAgent.removeContainerSensor({
+        id: 'old-ml-ctr',
+        name: 'nginx',
+        watcher: 'local',
+        agent: 'ml',
+        displayIcon: 'mdi:docker',
+      });
+
+      // Discovery topic should NOT be removed because same-agent new container is still active
+      expect(mqttClientAgentMock.publish).not.toHaveBeenCalledWith(
+        'homeassistant/update/topic_agent_ml_local_nginx/config',
+        '',
+        { retain: true },
+      );
+    });
+
+    test('flag ON — tracked topic prefix is agent-scoped (no leak from different agent tracked topics)', async () => {
+      vi.spyOn(hassAgent, 'updateContainerSensors').mockResolvedValue(undefined);
+
+      // Add agent-B's container (tracked in map)
+      await hassAgent.addContainerSensor({
+        id: 'agent-b-tracked',
+        name: 'nginx',
+        watcher: 'local',
+        agent: 'edge',
+        displayIcon: 'mdi:docker',
+      });
+
+      mqttClientAgentMock.publish.mockClear();
+
+      // Store returns empty (no active containers)
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([] as any);
+
+      // Remove agent-A's container (not tracked, just store-looked-up)
+      await hassAgent.removeContainerSensor({
+        id: 'agent-a-only',
+        name: 'nginx',
+        watcher: 'local',
+        agent: 'ml',
+        displayIcon: 'mdi:docker',
+      });
+
+      // agent-B's tracked topic (edge) should NOT suppress removal of agent-A's topic (ml)
+      expect(mqttClientAgentMock.publish).toHaveBeenCalledWith(
+        'homeassistant/update/topic_agent_ml_local_nginx/config',
+        '',
+        { retain: true },
+      );
+    });
+
+    test('flag OFF — cross-agent store entries are NOT filtered (legacy behavior)', async () => {
+      const hassOff = makeHass(false);
+      vi.spyOn(hassOff, 'updateContainerSensors').mockResolvedValue(undefined);
+
+      await hassOff.addContainerSensor({
+        id: 'old-ctr',
+        name: 'nginx',
+        watcher: 'local',
+        agent: 'ml',
+        displayIcon: 'mdi:docker',
+      });
+
+      mqttClientAgentMock.publish.mockClear();
+
+      // Store returns a container with a DIFFERENT agent but same watcher+name
+      vi.spyOn(containerStore, 'getContainers').mockReturnValue([
+        { id: 'other-agent-ctr', name: 'nginx', watcher: 'local', agent: 'edge' },
+      ] as any);
+
+      await hassOff.removeContainerSensor({
+        id: 'old-ctr',
+        name: 'nginx',
+        watcher: 'local',
+        agent: 'ml',
+        displayIcon: 'mdi:docker',
+      });
+
+      // Without scoping, the other-agent container is treated as blocking removal
+      expect(mqttClientAgentMock.publish).not.toHaveBeenCalledWith(
+        'homeassistant/update/topic_local_nginx/config',
+        '',
+        { retain: true },
+      );
+    });
+  });
+});
