@@ -1189,9 +1189,19 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     let containersFromTheStore: Container[] = [];
     let sameSourceContainersFromTheStore: Container[] = [];
     try {
-      containersFromTheStore = storeContainer.getContainers({
-        watcher: this.name,
-      });
+      const currentWatcherAgent = normalizeAgentValue(this.agent);
+      containersFromTheStore = storeContainer
+        .getContainers({
+          watcher: this.name,
+        })
+        // Only prune containers owned by THIS watcher's agent. Remote agent
+        // containers are stored under the same default watcher name ('local')
+        // as the controller's own watcher, so an unscoped query would let the
+        // controller's local prune delete every agent's containers each cycle
+        // (#386).
+        .filter(
+          (storedContainer) => normalizeAgentValue(storedContainer.agent) === currentWatcherAgent,
+        );
     } catch (e: unknown) {
       this.log.warn(
         `Error when trying to get the existing containers from the store (${getErrorMessage(e)})`,
