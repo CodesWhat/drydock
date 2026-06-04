@@ -1355,6 +1355,23 @@ class Trigger<
     if (!containerReport.container.updateAvailable) {
       return false;
     }
+
+    // Mirror the simple-path guard (#408): suppress the spurious
+    // "update available" that arrives between
+    // handleContainerUpdateAppliedEvent (which clears history and re-opens the
+    // `once` gate) and the watcher's next scan that sets updateAvailable=false.
+    // Without this guard a concurrent digest report still carrying
+    // updateAvailable=true passes the `once` check and re-buffers the container
+    // for a spurious digest notification.
+    const key =
+      getContainerNotificationKey(containerReport.container) || fullName(containerReport.container);
+    if (this.recentlyAppliedContainerKeys.has(key)) {
+      this.log.debug(
+        `Suppressing digest buffer for ${key}: update just applied, waiting for watcher confirmation`,
+      );
+      return false;
+    }
+
     if (!this.configuration.once) {
       return true;
     }
@@ -1739,6 +1756,15 @@ class Trigger<
     if (!container.updateAvailable) {
       if (this.digestBufferStore.delete(containerName)) {
         this.log.debug(`Evicted ${containerName} from digest buffer (update no longer available)`);
+      }
+      // Mirror the simple-path suppression-lift (#408): watcher confirmed the
+      // post-update state, so lift the recently-applied guard so future real
+      // updates can notify again via the digest path.
+      if (this.recentlyAppliedContainerKeys.has(containerName)) {
+        this.recentlyAppliedContainerKeys.delete(containerName);
+        this.log.debug(
+          `Cleared ${containerName} from recently-applied suppression set (digest update confirmed)`,
+        );
       }
       return;
     }

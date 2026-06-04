@@ -10502,3 +10502,124 @@ describe('bug #408 (latent): lifecycle notifications bypass threshold so update-
     );
   });
 });
+
+describe('bug #408 (digest path): spurious digest buffer after update-applied', () => {
+  // Container with a stable id so notification history keys are deterministic.
+  const container = {
+    id: 'c-nginx-digest',
+    watcher: 'local',
+    name: 'nginx',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+  };
+
+  beforeEach(() => {
+    trigger.type = 'slack';
+    trigger.name = 'notify';
+    trigger.configuration = { ...configurationValid, once: true, threshold: 'all', mode: 'digest' };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+    storeContainer.getContainers.mockReturnValue([container]);
+  });
+
+  test(
+    'spurious digest race: container is NOT re-buffered after update-applied ' +
+      'while the watcher still reports updateAvailable=true',
+    async () => {
+      await trigger.register('trigger', 'local', 'slack', {
+        ...configurationValid,
+        once: true,
+        threshold: 'all',
+        mode: 'digest',
+      });
+      trigger.init();
+
+      const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+      // 1. First report: container shows updateAvailable=true → gets buffered.
+      await trigger.handleContainerReportDigest({ container, changed: true } as any);
+      expect(trigger.digestBuffer.size).toBe(1);
+
+      // 2. Update applied: clears notification history (re-opens the once gate)
+      //    and adds the key to recentlyAppliedContainerKeys.
+      await trigger.handleContainerUpdateAppliedEvent({
+        containerName: 'local_nginx',
+        container,
+      } as any);
+
+      // Watcher has evicted the container from the digest buffer on applied.
+      // Reset the buffer manually to simulate the eviction having happened but
+      // the watcher's next scan not yet having set updateAvailable=false.
+      trigger.digestBuffer.clear();
+
+      // 3. Spurious digest report: watcher still shows updateAvailable=true
+      //    (it hasn't caught up yet). Must NOT re-buffer the container.
+      await trigger.handleContainerReportDigest({ container, changed: false } as any);
+      expect(trigger.digestBuffer.size).toBe(0);
+
+      // Flush to confirm nothing is dispatched.
+      await trigger.flushDigestBuffer();
+      expect(triggerBatchSpy).not.toHaveBeenCalled();
+
+      triggerBatchSpy.mockRestore();
+    },
+  );
+
+  test(
+    'digest suppression lifts after watcher confirms updateAvailable=false, ' +
+      'then a new real update re-buffers correctly',
+    async () => {
+      await trigger.register('trigger', 'local', 'slack', {
+        ...configurationValid,
+        once: true,
+        threshold: 'all',
+        mode: 'digest',
+      });
+      trigger.init();
+
+      const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+      // 1. First report → buffered.
+      await trigger.handleContainerReportDigest({ container, changed: true } as any);
+      expect(trigger.digestBuffer.size).toBe(1);
+
+      // 2. Update applied → clears history, adds to recentlyApplied.
+      await trigger.handleContainerUpdateAppliedEvent({
+        containerName: 'local_nginx',
+        container,
+      } as any);
+      trigger.digestBuffer.clear();
+
+      // 3. Spurious scan still showing updateAvailable=true → suppressed.
+      await trigger.handleContainerReportDigest({ container, changed: false } as any);
+      expect(trigger.digestBuffer.size).toBe(0);
+
+      // 4. Watcher confirms update succeeded (updateAvailable=false) → key must
+      //    be removed from recentlyAppliedContainerKeys.
+      const containerUpdated = { ...container, updateAvailable: false };
+      await trigger.handleContainerReportDigest({
+        container: containerUpdated,
+        changed: true,
+      } as any);
+      // The recentlyApplied key should now be gone.
+      expect((trigger as any).recentlyAppliedContainerKeys.size).toBe(0);
+
+      // 5. New real update available (different remoteValue) → must be buffered.
+      const containerNewUpdate = {
+        ...container,
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '3.0', semverDiff: 'major' },
+      };
+      await trigger.handleContainerReportDigest({
+        container: containerNewUpdate,
+        changed: true,
+      } as any);
+      expect(trigger.digestBuffer.size).toBe(1);
+
+      // And the flush dispatches.
+      await trigger.flushDigestBuffer();
+      expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
+
+      triggerBatchSpy.mockRestore();
+    },
+  );
+});
