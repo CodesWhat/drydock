@@ -1442,6 +1442,20 @@ class Trigger<
     if (!this.shouldDispatchUpdateAvailableContainer(containerReport.container)) {
       return false;
     }
+    // Mirror the simple/digest guard (#408): suppress the spurious
+    // "update available" that fires between handleContainerUpdateAppliedEvent
+    // (which clears history and re-opens the `once` gate) and the watcher's next
+    // scan that sets updateAvailable=false. Without this guard a concurrent batch
+    // report still carrying updateAvailable=true re-notifies right after a
+    // successful update.
+    const key =
+      getContainerNotificationKey(containerReport.container) || fullName(containerReport.container);
+    if (this.recentlyAppliedContainerKeys.has(key)) {
+      this.log.debug(
+        `Suppressing batch update-available for ${key}: update just applied, waiting for watcher confirmation`,
+      );
+      return false;
+    }
     if (!this.configuration.once) {
       return true;
     }
@@ -1666,6 +1680,23 @@ class Trigger<
     // Strip Docker recreate alias prefixes before any trigger processing
     for (const report of containerReports) {
       Trigger.canonicalizeReportName(report);
+    }
+
+    // Mirror the simple/digest suppression-lift (#408): a watcher report
+    // confirming updateAvailable=false means the post-update state has landed,
+    // so lift the recently-applied guard. Pure batch mode registers no simple or
+    // digest handler, so without this the suppression key would never clear and
+    // the container's update-available notifications would be muted permanently.
+    for (const report of containerReports) {
+      if (!report.container.updateAvailable) {
+        const key = getContainerNotificationKey(report.container) || fullName(report.container);
+        if (this.recentlyAppliedContainerKeys.has(key)) {
+          this.recentlyAppliedContainerKeys.delete(key);
+          this.log.debug(
+            `Cleared ${key} from recently-applied suppression set (batch update confirmed)`,
+          );
+        }
+      }
     }
 
     // Filter on containers with update available and passing trigger threshold

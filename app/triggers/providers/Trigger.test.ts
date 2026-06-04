@@ -10624,6 +10624,164 @@ describe('bug #408 (digest path): spurious digest buffer after update-applied', 
   );
 });
 
+describe('bug #408 (batch path): spurious batch update-available after update-applied', () => {
+  // Pure batch trigger — mode='batch' registers ONLY handleContainerReports,
+  // so the simple and digest handlers are absent. Both the suppress check AND
+  // the lift in handleContainerReports must be present; without the lift the
+  // suppression would never clear and the container would be permanently muted.
+  const container = {
+    id: 'c-nginx-batch',
+    watcher: 'local',
+    name: 'nginx-batch',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+  };
+
+  beforeEach(() => {
+    trigger.type = 'slack';
+    trigger.name = 'notify-batch';
+    trigger.configuration = {
+      ...configurationValid,
+      once: true,
+      threshold: 'all',
+      mode: 'batch',
+    };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+    storeContainer.getContainers.mockReturnValue([container]);
+  });
+
+  test(
+    'batch spurious race: container is NOT dispatched after update-applied ' +
+      'while the watcher still reports updateAvailable=true',
+    async () => {
+      const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+      // 1. First batch report: container shows updateAvailable=true → dispatched.
+      await trigger.handleContainerReports([{ container, changed: true } as any]);
+      expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
+
+      // 2. Update applied: clears notification history, adds key to
+      //    recentlyAppliedContainerKeys.
+      await trigger.handleContainerUpdateAppliedEvent({
+        containerName: 'local_nginx-batch',
+        container,
+      } as any);
+
+      const callsAfterApply = triggerBatchSpy.mock.calls.length;
+
+      // 3. Spurious batch report: watcher hasn't set updateAvailable=false yet.
+      //    Must NOT dispatch again.
+      await trigger.handleContainerReports([{ container, changed: false } as any]);
+
+      expect(triggerBatchSpy).toHaveBeenCalledTimes(callsAfterApply);
+
+      // Key is still in the suppression set — the lift has not happened yet.
+      expect((trigger as any).recentlyAppliedContainerKeys.size).toBeGreaterThan(0);
+
+      triggerBatchSpy.mockRestore();
+    },
+  );
+
+  test('batch suppression lift: key is cleared when watcher confirms updateAvailable=false', async () => {
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    // 1. First batch report → dispatched.
+    await trigger.handleContainerReports([{ container, changed: true } as any]);
+
+    // 2. Update applied → key added to recentlyApplied.
+    await trigger.handleContainerUpdateAppliedEvent({
+      containerName: 'local_nginx-batch',
+      container,
+    } as any);
+
+    // 3. Spurious scan still showing updateAvailable=true → suppressed.
+    await trigger.handleContainerReports([{ container, changed: false } as any]);
+    expect((trigger as any).recentlyAppliedContainerKeys.size).toBeGreaterThan(0);
+
+    // 4. Watcher confirms update succeeded (updateAvailable=false) → key must
+    //    be removed from recentlyAppliedContainerKeys by handleContainerReports.
+    const containerUpdated = { ...container, updateAvailable: false };
+    await trigger.handleContainerReports([{ container: containerUpdated, changed: true } as any]);
+    expect((trigger as any).recentlyAppliedContainerKeys.size).toBe(0);
+
+    triggerBatchSpy.mockRestore();
+  });
+
+  test(
+    'batch re-notify after lift: a subsequent updateAvailable=true report dispatches again ' +
+      '(suppression is temporary, not permanent)',
+    async () => {
+      const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+      // 1. First batch report → dispatched.
+      await trigger.handleContainerReports([{ container, changed: true } as any]);
+      expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
+
+      // 2. Update applied → adds key.
+      await trigger.handleContainerUpdateAppliedEvent({
+        containerName: 'local_nginx-batch',
+        container,
+      } as any);
+
+      // 3. Spurious scan → suppressed.
+      await trigger.handleContainerReports([{ container, changed: false } as any]);
+
+      // 4. Watcher confirms updateAvailable=false → lift.
+      const containerUpdated = { ...container, updateAvailable: false };
+      await trigger.handleContainerReports([{ container: containerUpdated, changed: true } as any]);
+      expect((trigger as any).recentlyAppliedContainerKeys.size).toBe(0);
+
+      const callsAfterLift = triggerBatchSpy.mock.calls.length;
+
+      // 5. Genuine new update (different remoteValue) → must dispatch.
+      const containerNewUpdate = {
+        ...container,
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '3.0', semverDiff: 'major' },
+      };
+      await trigger.handleContainerReports([
+        { container: containerNewUpdate, changed: true } as any,
+      ]);
+
+      expect(triggerBatchSpy).toHaveBeenCalledTimes(callsAfterLift + 1);
+
+      triggerBatchSpy.mockRestore();
+    },
+  );
+
+  test('batch suppress works with once=false: spurious re-fire is still blocked after update-applied', async () => {
+    trigger.configuration = {
+      ...configurationValid,
+      once: false,
+      threshold: 'all',
+      mode: 'batch',
+    };
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    // 1. First batch report → dispatched (once=false).
+    await trigger.handleContainerReports([{ container, changed: true } as any]);
+    expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
+
+    // 2. Update applied → key added.
+    await trigger.handleContainerUpdateAppliedEvent({
+      containerName: 'local_nginx-batch',
+      container,
+    } as any);
+
+    const callsAfterApply = triggerBatchSpy.mock.calls.length;
+
+    // 3. Spurious scan with once=false — without the guard this would fire
+    //    again because hasAlreadyNotifiedForResult is never consulted.
+    await trigger.handleContainerReports([{ container, changed: false } as any]);
+
+    // Must NOT fire again — recentlyApplied guard is the only blocker here.
+    expect(triggerBatchSpy).toHaveBeenCalledTimes(callsAfterApply);
+
+    triggerBatchSpy.mockRestore();
+  });
+});
+
 // ── Bug #408 additional regression tests: once=false mode ─────────────────────
 describe('bug #408: suppression-key lifecycle in once=false mode', () => {
   // The recentlyAppliedContainerKeys guard must work regardless of the `once`
