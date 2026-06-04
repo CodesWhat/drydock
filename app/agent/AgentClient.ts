@@ -1139,7 +1139,7 @@ export class AgentClient {
         return undefined;
       }
       items.push({
-        operationId: this.toAgentScopedId(operationId),
+        operationId: this.resolveAgentOperationId(operationId),
         containerId: toOptionalString(itemPayload.containerId) ?? '',
         containerName,
         status: itemPayload.status,

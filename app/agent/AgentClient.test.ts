@@ -5280,6 +5280,37 @@ describe('AgentClient', () => {
       expect(result.items[0].containerId).toBe('');
       expect(result.items[1].containerId).toBe('c2');
     });
+
+    test('uses raw operationId when a controller row already exists at that id', () => {
+      // Simulate a controller-issued operationId that has a row in the store.
+      // resolveAgentOperationId returns the raw id; toAgentScopedId would
+      // incorrectly prepend agent-test-agent- and double-scope it.
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'uuid-controller-issued')
+          return { id: 'uuid-controller-issued', status: 'queued' } as any;
+        return undefined;
+      });
+
+      const result = parseBatch({
+        batchId: 'remote-batch-ctrl',
+        total: 1,
+        succeeded: 1,
+        failed: 0,
+        durationMs: 300,
+        items: [
+          {
+            operationId: 'uuid-controller-issued',
+            containerName: 'nginx',
+            status: 'succeeded',
+          },
+        ],
+        timestamp: '2026-06-03T00:00:00.000Z',
+      });
+
+      expect(result).not.toBeUndefined();
+      // Raw id must be preserved — NOT 'agent-test-agent-uuid-controller-issued'
+      expect(result.items[0].operationId).toBe('uuid-controller-issued');
+    });
   });
 
   describe('parseSecurityAlertEventPayload', () => {
