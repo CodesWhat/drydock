@@ -5,6 +5,7 @@ import { MS_PER_DAY } from '../model/maturity-policy.js';
 const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
 const mockGetContainers = vi.hoisted(() => vi.fn());
 const mockGetContainersRaw = vi.hoisted(() => vi.fn());
+const mockGetContainerRaw = vi.hoisted(() => vi.fn());
 const mockUpdateContainer = vi.hoisted(() => vi.fn());
 const mockScanImageWithDedup = vi.hoisted(() => vi.fn());
 const mockClearDigestScanCache = vi.hoisted(() => vi.fn());
@@ -66,6 +67,7 @@ vi.mock('../api/sse.js', () => ({
 vi.mock('../store/container.js', () => ({
   getContainers: (...args: unknown[]) => mockGetContainers(...args),
   getContainersRaw: (...args: unknown[]) => mockGetContainersRaw(...args),
+  getContainerRaw: (...args: unknown[]) => mockGetContainerRaw(...args),
   cloneContainer: (container: unknown) => structuredClone(container),
   updateContainer: (...args: unknown[]) => mockUpdateContainer(...args),
 }));
@@ -92,6 +94,20 @@ import {
   runScheduledScans,
   shutdown,
 } from './scheduler.js';
+
+// A lightweight in-memory store keyed by container id, used to back the
+// default mockGetContainerRaw implementation without calling any other mock
+// (which would disturb call-count assertions on mockGetContainers /
+// mockGetContainersRaw in tests that check the scheduler uses the raw list API).
+const testContainerById = new Map<string, unknown>();
+
+function setMockContainersRaw(containers: Array<{ id: string }>) {
+  testContainerById.clear();
+  for (const c of containers) {
+    testContainerById.set(c.id, c);
+  }
+  mockGetContainersRaw.mockReturnValue(containers);
+}
 
 function createEnabledConfiguration() {
   return {
@@ -151,8 +167,22 @@ function createScanResult(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  testContainerById.clear();
   _resetForTesting();
-  mockGetContainersRaw.mockImplementation((...args: unknown[]) => mockGetContainers(...args));
+  mockGetContainersRaw.mockImplementation((...args: unknown[]) => {
+    const result = mockGetContainers(...args) as Array<{ id: string }> | undefined;
+    // Keep testContainerById in sync so mockGetContainerRaw can do id lookups
+    // without calling any other mock (which would disturb call-count assertions
+    // in tests that verify the scheduler uses only the raw list APIs).
+    if (result) {
+      testContainerById.clear();
+      for (const c of result) {
+        testContainerById.set(c.id, c);
+      }
+    }
+    return result;
+  });
+  mockGetContainerRaw.mockImplementation((id: string) => testContainerById.get(id));
   mockGetState.mockReturnValue({ registry: {} });
   mockResolveContainerImageFullName.mockReturnValue('docker.io/library/nginx:1.25');
   mockResolveContainerRegistryAuth.mockResolvedValue(undefined);
@@ -348,7 +378,7 @@ describe('runScheduledScans', () => {
 
   test('should read containers from raw store API for scheduled scans', async () => {
     const container = createContainer();
-    mockGetContainersRaw.mockReturnValue([container]);
+    setMockContainersRaw([container]);
     mockScanImageWithDedup.mockResolvedValue({ scanResult: createScanResult(), fromCache: false });
 
     await runScheduledScans();
@@ -1773,6 +1803,79 @@ describe('runScheduledScans', () => {
     expect(mockEmitSecurityScanCycleComplete).toHaveBeenCalledWith(
       expect.objectContaining({ alertCount: 1 }),
     );
+  });
+
+  test('should skip write-back and not create a zombie record when the container is gone by write-back time', async () => {
+    // The container is in the snapshot at batch-prep time but has been removed
+    // (or recreated under a new id) before write-back completes. The fixed
+    // write-back must call getContainerRaw and skip updateContainer entirely
+    // when it returns undefined — otherwise a ghost record is created in the
+    // store for a container id that no longer exists.
+    const snapshotContainer = createContainer({ id: 'c1' });
+    mockGetContainers.mockReturnValue([snapshotContainer]);
+    // Container is gone by the time write-back runs
+    mockGetContainerRaw.mockReturnValue(undefined);
+    const scanResult = createScanResult();
+    mockScanImageWithDedup.mockResolvedValue({ scanResult, fromCache: false });
+
+    await runScheduledScans();
+
+    // broadcastScanCompleted still fires (we still tell the UI the scan finished)
+    expect(mockBroadcastScanCompleted).toHaveBeenCalledWith('c1', 'passed');
+    // But no zombie write must be issued for the gone container
+    expect(mockUpdateContainer).not.toHaveBeenCalled();
+  });
+
+  test('should merge security field onto the CURRENT store record, not the stale snapshot, to avoid re-raising cleared update-state', async () => {
+    // The snapshot captured at batch-prep time has updateAvailable:true and a
+    // stale result tag. By write-back time the container was updated (same id,
+    // same name) and the current store record has updateAvailable:false with a
+    // newer tag. The fixed write-back must spread the CURRENT record and only
+    // overlay security, so the update-state stays cleared.
+    const staleSnapshotContainer = createContainer({
+      id: 'c1',
+      updateAvailable: true,
+      result: { tag: '1.24', digest: 'sha256:old' },
+      image: {
+        id: 'sha256:abc',
+        registry: { name: 'hub', url: 'docker.io' },
+        name: 'library/nginx',
+        tag: { value: '1.24', semver: true },
+        digest: { watch: true, value: 'sha256:abc123' },
+        architecture: 'amd64',
+        os: 'linux',
+      },
+    });
+    const currentStoreRecord = createContainer({
+      id: 'c1',
+      updateAvailable: false,
+      result: undefined,
+      image: {
+        id: 'sha256:abc',
+        registry: { name: 'hub', url: 'docker.io' },
+        name: 'library/nginx',
+        tag: { value: '1.25', semver: true },
+        digest: { watch: true, value: 'sha256:abc123' },
+        architecture: 'amd64',
+        os: 'linux',
+      },
+    });
+    mockGetContainers.mockReturnValue([staleSnapshotContainer]);
+    // Current store record reflects the already-updated container
+    mockGetContainerRaw.mockReturnValue(currentStoreRecord);
+    const scanResult = createScanResult();
+    mockScanImageWithDedup.mockResolvedValue({ scanResult, fromCache: false });
+
+    await runScheduledScans();
+
+    expect(mockUpdateContainer).toHaveBeenCalledTimes(1);
+    const written = mockUpdateContainer.mock.calls[0][0];
+    // Must NOT re-raise the stale update-available flag
+    expect(written.updateAvailable).toBe(false);
+    // Must NOT revert the tag to the stale snapshot value
+    expect(written.image.tag.value).toBe('1.25');
+    // Must still carry the new scan result
+    expect(written.security).toEqual(expect.objectContaining({ scan: scanResult }));
   });
 });
 
