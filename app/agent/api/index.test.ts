@@ -8,8 +8,10 @@ const {
   mockLoggerChild,
   mockRateLimit,
   mockRateLimitMiddleware,
+  mockGetState,
 } = vi.hoisted(() => {
   const mockRateLimitMiddleware = vi.fn((_req, _res, next) => next());
+  const mockGetState = vi.fn(() => ({ watcher: { 'docker.local': {} } }));
   const mockApp = {
     disable: vi.fn(),
     use: vi.fn(),
@@ -42,6 +44,7 @@ const {
     mockLoggerChild,
     mockRateLimit,
     mockRateLimitMiddleware,
+    mockGetState,
   };
 });
 
@@ -99,6 +102,10 @@ vi.mock('express-rate-limit', () => ({
   default: mockRateLimit,
 }));
 
+vi.mock('../../registry/index.js', () => ({
+  getState: mockGetState,
+}));
+
 import { authenticate, init } from './index.js';
 
 describe('Agent API index', () => {
@@ -110,6 +117,7 @@ describe('Agent API index', () => {
     delete process.env.DD_AGENT_SECRET_FILE;
     delete process.env.WUD_AGENT_SECRET_FILE;
     vi.clearAllMocks();
+    mockGetState.mockReturnValue({ watcher: { 'docker.local': {} } });
     Object.assign(mockServerConfig, {
       port: 3000,
       tls: { enabled: false },
@@ -303,19 +311,40 @@ describe('Agent API index', () => {
       expect(getCallOrder[healthGetIdx]).toBeLessThan(useCallOrder[authUseIndex]);
     });
 
-    test('health handler should return uptime payload', async () => {
+    test('health handler should return uptime payload when watchers are registered', async () => {
       process.env.DD_AGENT_SECRET = 'secret';
+      mockGetState.mockReturnValue({ watcher: { 'docker.local': {} } });
       await init();
 
       const getCalls = mockApp.get.mock.calls;
       const healthCall = getCalls.find(([path]) => path === '/health');
       const handler = healthCall?.[1];
-      const res = { json: vi.fn() };
+      const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
 
       handler({}, res);
 
+      expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         uptime: expect.any(Number),
+      });
+    });
+
+    test('health handler should return 503 when zero watchers are registered', async () => {
+      process.env.DD_AGENT_SECRET = 'secret';
+      mockGetState.mockReturnValue({ watcher: {} });
+      await init();
+
+      const getCalls = mockApp.get.mock.calls;
+      const healthCall = getCalls.find(([path]) => path === '/health');
+      const handler = healthCall?.[1];
+      const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+
+      handler({}, res);
+
+      expect(res.status).toHaveBeenCalledWith(503);
+      expect(res.json).toHaveBeenCalledWith({
+        status: 'unhealthy',
+        reason: 'no watchers registered',
       });
     });
 
