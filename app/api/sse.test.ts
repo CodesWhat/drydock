@@ -900,6 +900,30 @@ describe('SSE Router', () => {
       expect(sseRouter._connectionsPerIp.has('192.168.2.5')).toBe(false);
     });
 
+    test('should decrement per-IP counter exactly once when both req.close and req.aborted fire on the same connection (#386)', () => {
+      // Regression: double-teardown (req.close + req.aborted) must only decrement
+      // the per-IP connection counter once, not twice (which would underflow / go negative).
+      const handler = getHandler();
+      const ip = '10.10.10.10';
+      const req = createSSERequest(ip);
+      const res = createSSEResponse();
+
+      handler(req, res);
+      expect(sseRouter._connectionsPerIp.get(ip)).toBe(1);
+
+      // Fire close — first teardown path (one-shot listener consumes itself)
+      req._listeners.close();
+      // Counter must be decremented to 0 / removed after the first event
+      expect(sseRouter._connectionsPerIp.has(ip)).toBe(false);
+
+      // Fire aborted — second teardown path on the same connection.
+      // Because listeners are registered with `once`, the handler no longer exists
+      // and the counter must NOT underflow (go below 0 or be re-decremented).
+      expect(() => req._listeners.aborted?.()).not.toThrow();
+      // Counter must remain absent (not underflow to a negative number)
+      expect(sseRouter._connectionsPerIp.has(ip)).toBe(false);
+    });
+
     test('should remove client from set when registry entry is already gone', () => {
       const handler = getHandler();
       const req = createSSERequest('198.51.100.9');

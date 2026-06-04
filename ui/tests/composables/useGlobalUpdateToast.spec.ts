@@ -898,6 +898,36 @@ describe('useGlobalUpdateToast', () => {
       wrapper.unmount();
     });
 
+    it('tracks same-name sibling containers independently by container id so one agent update does not suppress the other (#290)', async () => {
+      // Regression: two containers with identical display names but different ids
+      // (e.g. the same service on two agents) must each produce their own toast.
+      const { wrapper, toast } = mountGlobalToast();
+      const before = toast.toasts.value.length;
+
+      // Agent-A fires first
+      dispatch('dd:sse-update-applied', {
+        containerId: 'c-agent-a',
+        containerName: 'nginx',
+        operationId: 'op-agent-a',
+        batchId: null,
+      });
+      // Agent-B fires second — same display name, different id and operationId
+      dispatch('dd:sse-update-applied', {
+        containerId: 'c-agent-b',
+        containerName: 'nginx',
+        operationId: 'op-agent-b',
+        batchId: null,
+      });
+      await settle();
+
+      // Both toasts must fire — the second must not be suppressed by the first
+      const newToasts = toast.toasts.value.slice(before);
+      expect(newToasts).toHaveLength(2);
+      expect(newToasts.every((t) => t.title === 'Updated: nginx')).toBe(true);
+
+      wrapper.unmount();
+    });
+
     it('does not clobber anonymous (no operationId) pending toasts across different containers', async () => {
       // Two concurrent in-flight updates with no operationId — each gets a
       // distinct synthetic key. A settle event for one container must fire
