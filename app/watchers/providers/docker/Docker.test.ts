@@ -843,6 +843,42 @@ describe('Docker Watcher', () => {
 
       expect(docker.watchContainer).not.toHaveBeenCalled();
     });
+
+    // Regression: stale-scan-overwrites-cleared-update-state (#265 regression)
+    // markPendingFreshStateAfterManualUpdate was deleted from the call-site in rc.17,
+    // making the preserveClearedUpdateState guard permanently dead. The fix re-wires
+    // the epoch-marking into maybeFastResyncAfterUpdate so in-flight stale scans are
+    // suppressed when an update fires.
+    test('callback marks pending fresh state before triggering resync so stale in-flight scans are suppressed', async () => {
+      await docker.register('watcher', 'docker', 'test', {});
+      await docker.init();
+
+      const matchedContainer = { name: 'myapp', watcher: 'test' };
+      storeContainer.getContainers.mockReturnValue([matchedContainer]);
+      event.getContainerUpdateAppliedEventContainerName.mockReturnValue('test_myapp');
+
+      docker.watchContainer = vi.fn().mockResolvedValue({});
+
+      const registeredCallback = event.registerContainerUpdateApplied.mock.calls[0][0];
+      await registeredCallback('test_myapp');
+
+      // The epoch-marking call must happen BEFORE watchContainer so any in-flight
+      // scan that started before this point carries a watchStartedAtMs <= clearedAtMs
+      // and is suppressed by the guard in container-processing.ts.
+      expect(storeContainer.markPendingFreshStateAfterManualUpdate).toHaveBeenCalledWith(
+        matchedContainer,
+        expect.any(Number),
+      );
+      // The resync scan must still be triggered.
+      expect(docker.watchContainer).toHaveBeenCalledWith(matchedContainer, {
+        emitBatchEvent: false,
+      });
+      // markPendingFreshStateAfterManualUpdate must be called before watchContainer.
+      const markOrder =
+        storeContainer.markPendingFreshStateAfterManualUpdate.mock.invocationCallOrder[0];
+      const watchOrder = docker.watchContainer.mock.invocationCallOrder[0];
+      expect(markOrder).toBeLessThan(watchOrder);
+    });
   });
 
   describe('OIDC Remote Auth', () => {

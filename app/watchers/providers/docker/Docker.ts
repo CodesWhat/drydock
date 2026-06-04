@@ -912,6 +912,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     if (!matched) {
       return;
     }
+    // Mark the epoch BEFORE starting the resync scan so that any cron scan
+    // already in-flight (watchStartedAtMs <= clearedAtMs) is suppressed by
+    // the preserveClearedUpdateState guard in container-processing.ts and
+    // cannot re-raise a spurious updateAvailable=true badge (#265 regression).
+    storeContainer.markPendingFreshStateAfterManualUpdate(matched, Date.now());
     await this.watchContainer(matched, { emitBatchEvent: false });
   }
 
