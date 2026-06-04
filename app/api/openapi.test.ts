@@ -364,7 +364,7 @@ describe('OpenAPI document', () => {
         id: { type: 'string' },
         status: {
           type: 'string',
-          enum: ['queued', 'in-progress', 'succeeded', 'failed', 'rolled-back'],
+          enum: ['queued', 'in-progress', 'succeeded', 'failed', 'rolled-back', 'expired'],
         },
         phase: { type: 'string' },
         containerName: { type: 'string' },

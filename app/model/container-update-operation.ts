@@ -8,6 +8,7 @@ export const CONTAINER_UPDATE_OPERATION_STATUSES = [
   'succeeded',
   'rolled-back',
   'failed',
+  'expired',
 ] as const;
 
 export type ContainerUpdateOperationStatus = (typeof CONTAINER_UPDATE_OPERATION_STATUSES)[number];
@@ -21,6 +22,7 @@ export const TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES = [
   'succeeded',
   'rolled-back',
   'failed',
+  'expired',
 ] as const;
 
 export type TerminalContainerUpdateOperationStatus =
@@ -51,6 +53,7 @@ export const CONTAINER_UPDATE_OPERATION_PHASES = [
   'rolled-back',
   'rollback-deferred',
   'rollback-failed',
+  'expired',
 ] as const;
 
 export type ContainerUpdateOperationPhase = (typeof CONTAINER_UPDATE_OPERATION_PHASES)[number];
@@ -111,10 +114,20 @@ export const FAILED_CONTAINER_UPDATE_OPERATION_PHASES = [
 export type FailedContainerUpdateOperationPhase =
   (typeof FAILED_CONTAINER_UPDATE_OPERATION_PHASES)[number];
 
+// Non-notifying terminal phase used when the active-TTL sweep or startup-orphan
+// reconciliation terminalises a stuck operation. It is deliberately NOT a member
+// of FAILED_* so that no "update failed" lifecycle event is emitted (see
+// emitTerminalLifecycleEvent in app/store/update-operation.ts). See issue #410.
+export const EXPIRED_CONTAINER_UPDATE_OPERATION_PHASES = ['expired'] as const;
+
+export type ExpiredContainerUpdateOperationPhase =
+  (typeof EXPIRED_CONTAINER_UPDATE_OPERATION_PHASES)[number];
+
 export type TerminalContainerUpdateOperationPhase =
   | SucceededContainerUpdateOperationPhase
   | RolledBackContainerUpdateOperationPhase
-  | FailedContainerUpdateOperationPhase;
+  | FailedContainerUpdateOperationPhase
+  | ExpiredContainerUpdateOperationPhase;
 
 export type TerminalContainerUpdateOperationPhaseForStatus<
   TStatus extends TerminalContainerUpdateOperationStatus,
@@ -122,12 +135,15 @@ export type TerminalContainerUpdateOperationPhaseForStatus<
   ? SucceededContainerUpdateOperationPhase
   : TStatus extends 'rolled-back'
     ? RolledBackContainerUpdateOperationPhase
-    : FailedContainerUpdateOperationPhase;
+    : TStatus extends 'expired'
+      ? ExpiredContainerUpdateOperationPhase
+      : FailedContainerUpdateOperationPhase;
 
 const DEFAULT_TERMINAL_PHASE_BY_STATUS = {
   succeeded: 'succeeded',
   'rolled-back': 'rolled-back',
   failed: 'failed',
+  expired: 'expired',
 } as const satisfies {
   [TStatus in TerminalContainerUpdateOperationStatus]: TerminalContainerUpdateOperationPhaseForStatus<TStatus>;
 };
@@ -234,13 +250,23 @@ export function isFailedContainerUpdateOperationPhase(
   );
 }
 
+export function isExpiredContainerUpdateOperationPhase(
+  value: unknown,
+): value is ExpiredContainerUpdateOperationPhase {
+  return (
+    typeof value === 'string' &&
+    (EXPIRED_CONTAINER_UPDATE_OPERATION_PHASES as readonly string[]).includes(value)
+  );
+}
+
 export function isTerminalContainerUpdateOperationPhase(
   value: unknown,
 ): value is TerminalContainerUpdateOperationPhase {
   return (
     isSucceededContainerUpdateOperationPhase(value) ||
     isRolledBackContainerUpdateOperationPhase(value) ||
-    isFailedContainerUpdateOperationPhase(value)
+    isFailedContainerUpdateOperationPhase(value) ||
+    isExpiredContainerUpdateOperationPhase(value)
   );
 }
 
@@ -271,6 +297,8 @@ export function isTerminalContainerUpdateOperationPhaseForStatus<
       return isRolledBackContainerUpdateOperationPhase(phase);
     case 'failed':
       return isFailedContainerUpdateOperationPhase(phase);
+    case 'expired':
+      return isExpiredContainerUpdateOperationPhase(phase);
     default:
       return assertNever(status);
   }
@@ -288,6 +316,8 @@ export function getDefaultTerminalContainerUpdateOperationPhase<
       ] as TerminalContainerUpdateOperationPhaseForStatus<TStatus>;
     case 'failed':
       return DEFAULT_TERMINAL_PHASE_BY_STATUS.failed as TerminalContainerUpdateOperationPhaseForStatus<TStatus>;
+    case 'expired':
+      return DEFAULT_TERMINAL_PHASE_BY_STATUS.expired as TerminalContainerUpdateOperationPhaseForStatus<TStatus>;
     default:
       return assertNever(status);
   }

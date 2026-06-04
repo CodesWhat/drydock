@@ -195,8 +195,8 @@ describe('Update Operation Store', () => {
       expect(fresh.getOperationById('started-stale-op-1')).toEqual(
         expect.objectContaining({
           id: 'started-stale-op-1',
-          status: 'failed',
-          phase: 'failed',
+          status: 'expired',
+          phase: 'expired',
           completedAt: '2026-02-23T01:00:00.000Z',
           lastError: expect.stringContaining('process restart'),
         }),
@@ -205,8 +205,8 @@ describe('Update Operation Store', () => {
       expect(fresh.getOperationById('health-stale-op-1')).toEqual(
         expect.objectContaining({
           id: 'health-stale-op-1',
-          status: 'failed',
-          phase: 'failed',
+          status: 'expired',
+          phase: 'expired',
           completedAt: '2026-02-23T01:00:00.000Z',
           lastError: expect.stringContaining('process restart'),
         }),
@@ -215,8 +215,8 @@ describe('Update Operation Store', () => {
       expect(fresh.getOperationById('deferred-stale-op-1')).toEqual(
         expect.objectContaining({
           id: 'deferred-stale-op-1',
-          status: 'failed',
-          phase: 'failed',
+          status: 'expired',
+          phase: 'expired',
           completedAt: '2026-02-23T01:00:00.000Z',
           lastError: expect.stringContaining('process restart'),
         }),
@@ -322,10 +322,10 @@ describe('Update Operation Store', () => {
       fresh.createCollections(createDocumentBackedDb(documents) as any);
 
       expect(fresh.getOperationById('self-update-queued')).toEqual(
-        expect.objectContaining({ status: 'failed', phase: 'failed' }),
+        expect.objectContaining({ status: 'expired', phase: 'expired' }),
       );
       expect(fresh.getOperationById('self-update-pulling')).toEqual(
-        expect.objectContaining({ status: 'failed', phase: 'failed' }),
+        expect.objectContaining({ status: 'expired', phase: 'expired' }),
       );
     } finally {
       vi.useRealTimers();
@@ -1256,8 +1256,8 @@ describe('Update Operation Store', () => {
       expect(fresh.getOperationById(queued.id)).toEqual(
         expect.objectContaining({
           id: queued.id,
-          status: 'failed',
-          phase: 'failed',
+          status: 'expired',
+          phase: 'expired',
           completedAt: '2026-02-23T00:01:01.000Z',
           batchId: undefined,
           queuePosition: undefined,
@@ -1388,7 +1388,7 @@ describe('Update Operation Store', () => {
       vi.setSystemTime(new Date('2026-02-23T00:01:01.000Z'));
       expect(fresh.getActiveOperationByContainerName('web')).toBeUndefined();
       expect(fresh.getOperationById(queued.id)?.lastError).toContain(
-        'previous failure; Marked failed after exceeding active update TTL',
+        'previous failure; Marked expired after exceeding active update TTL',
       );
     } finally {
       vi.useRealTimers();
@@ -1530,8 +1530,8 @@ describe('Update Operation Store', () => {
       expect(fresh.getOperationById(operation.id)).toEqual(
         expect.objectContaining({
           id: operation.id,
-          status: 'failed',
-          phase: 'failed',
+          status: 'expired',
+          phase: 'expired',
           completedAt: '2026-02-23T00:01:01.000Z',
           lastError: expect.stringContaining('active update TTL'),
         }),

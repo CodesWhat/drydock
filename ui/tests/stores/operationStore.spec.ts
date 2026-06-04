@@ -399,6 +399,61 @@ describe('useOperationStore', () => {
       });
       expect(operations.byId['op-unknown']?.status).toBe('in-progress');
     });
+
+    it('accepts expired as a terminal status overriding an active in-progress operation', () => {
+      const operations = useOperationStore();
+
+      // Start with an active in-progress operation — it should be indexed.
+      operations.applyOperationChanged({
+        operationId: 'op-expired-from-active',
+        containerId: 'c-exp',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+      expect(operations.byId['op-expired-from-active']?.status).toBe('in-progress');
+      expect(operations.getOperationByContainerId('c-exp')?.operationId).toBe(
+        'op-expired-from-active',
+      );
+
+      // Arriving expired event: terminal rank (3) >= active rank (2), so it is accepted.
+      operations.applyOperationChanged({
+        operationId: 'op-expired-from-active',
+        containerId: 'c-exp',
+        containerName: 'web',
+        status: 'expired',
+      });
+
+      // Status transitions to expired.
+      expect(operations.byId['op-expired-from-active']?.status).toBe('expired');
+      // expired is NOT in ACTIVE_STATUSES, so the container index must be cleared.
+      expect(operations.getOperationByContainerId('c-exp')).toBeUndefined();
+    });
+
+    it('preserves first terminal status when expired arrives after succeeded (succeeded → expired rejected)', () => {
+      const operations = useOperationStore();
+
+      // First terminal: succeeded (rank 3).
+      operations.applyUpdateApplied({
+        operationId: 'op-succeeded-then-expired',
+        containerId: 'c-ste',
+        containerName: 'web',
+        batchId: null,
+        timestamp: '2026-05-01T12:00:00.000Z',
+      });
+      expect(operations.byId['op-succeeded-then-expired']?.status).toBe('succeeded');
+
+      // Spurious expired event (same rank as succeeded, same-rank rule preserves first terminal).
+      operations.applyOperationChanged({
+        operationId: 'op-succeeded-then-expired',
+        containerId: 'c-ste',
+        containerName: 'web',
+        status: 'expired',
+      });
+
+      // Status must remain succeeded — first terminal wins.
+      expect(operations.byId['op-succeeded-then-expired']?.status).toBe('succeeded');
+    });
   });
 
   it('supports display batch replacement and new-container operation lookup', () => {

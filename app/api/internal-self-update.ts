@@ -168,7 +168,8 @@ function isAlreadyTerminalOperation(operation: { status: string }): boolean {
   return (
     operation.status === 'succeeded' ||
     operation.status === 'rolled-back' ||
-    operation.status === 'failed'
+    operation.status === 'failed' ||
+    operation.status === 'expired'
   );
 }
 

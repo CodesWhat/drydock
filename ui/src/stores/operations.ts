@@ -57,6 +57,7 @@ const STATUS_RANK: Record<OperationStatus, number> = {
   succeeded: 3,
   failed: 3,
   'rolled-back': 3,
+  expired: 3,
 };
 
 function statusRank(status: OperationStatus): number {

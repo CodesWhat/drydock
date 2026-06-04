@@ -662,7 +662,12 @@ export function applyUpdateOperationSseToHold(
   if (
     terminalStatus === 'succeeded' ||
     terminalStatus === 'failed' ||
-    terminalStatus === 'rolled-back'
+    terminalStatus === 'rolled-back' ||
+    // `expired` is terminal too: release the hold so the "Updating" badge clears.
+    // The terminal-event consumers only attach a failure reason for `failed` /
+    // `rolled-back`, so an expired op clears silently with no failure styling and
+    // no toast (the backend emits no update-failed event for it). See issue #410.
+    terminalStatus === 'expired'
   ) {
     const toastName =
       (typeof container?.name === 'string' && container.name.length > 0

@@ -15,7 +15,7 @@ If you want the state to persist after the container removal, you need to mount 
 | `DD_STORE_FILE` | ⚪ | Database filename | filename | `dd.json` |
 | `DD_UPDATE_OPERATION_MAX_ENTRIES` | ⚪ | Max update/rollback operation records to retain (oldest pruned when exceeded) | integer (`>0`) | `500` |
 | `DD_UPDATE_OPERATION_RETENTION_DAYS` | ⚪ | Days to retain update operation records before pruning | integer (`>0`) | `30` |
-| `DD_UPDATE_OPERATION_ACTIVE_TTL_MS` | ⚪ | Maximum age (ms) an operation may remain in an `active` status (`queued` or `in-progress`) before it is expired to `failed`. Applied at startup and during housekeeping to clear stuck operations left behind by an unclean shutdown. | integer (`>0`) | `1800000` (30 min) |
+| `DD_UPDATE_OPERATION_ACTIVE_TTL_MS` | ⚪ | Maximum age (ms) an operation may remain in an `active` status (`queued` or `in-progress`) before it is terminalised to the non-notifying `expired` status. Applied at startup and during housekeeping to clear stuck operations left behind by an unclean shutdown; unlike `failed`, an `expired` operation emits no "update failed" notification. | integer (`>0`) | `1800000` (30 min) |
 
 ## Examples
 

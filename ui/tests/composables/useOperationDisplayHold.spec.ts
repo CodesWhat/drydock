@@ -1222,6 +1222,21 @@ describe('useOperationDisplayHold', () => {
       expect(parsed?.lastError).toBeUndefined();
       expect(parsed?.rollbackReason).toBeUndefined();
     });
+
+    it('accepts status:expired as a valid recognised operation status', async () => {
+      const mod = await loadModule();
+      const parsed = mod.parseUpdateOperationSsePayload({
+        operationId: 'op-exp',
+        containerId: 'c-exp',
+        containerName: 'nginx',
+        status: 'expired',
+      });
+      expect(parsed).toBeDefined();
+      expect(parsed?.status).toBe('expired');
+      expect(parsed?.operationId).toBe('op-exp');
+      expect(parsed?.containerId).toBe('c-exp');
+      expect(parsed?.containerName).toBe('nginx');
+    });
   });
 
   describe('applyUpdateOperationSseToHold', () => {
@@ -1550,6 +1565,51 @@ describe('useOperationDisplayHold', () => {
         operationId: 'op-untracked',
       });
       expect(composable.findMatchingOperationIds({ operationId: 'op-untracked' })).toHaveLength(0);
+    });
+
+    it('treats expired as terminal: fires onTerminalEvent with status:expired, schedules hold release, and clears the hold', async () => {
+      const mod = await loadModule();
+      const composable = mod.useOperationDisplayHold();
+      const container = makeContainer({ id: 'c-exp', name: 'expiry-web' });
+
+      // Seed an active hold so the expired event is "tracked".
+      composable.holdOperationDisplay({
+        operationId: 'op-expired',
+        operation: makeOperation({ id: 'op-expired' }),
+        containerId: 'c-exp',
+        containerName: 'expiry-web',
+      });
+
+      const onTerminalEvent = vi.fn();
+      const result = mod.applyUpdateOperationSseToHold({
+        parsed: {
+          operationId: 'op-expired',
+          containerId: 'c-exp',
+          containerName: 'expiry-web',
+          status: 'expired',
+        },
+        resolveContainer: () => container,
+        onTerminalEvent,
+      });
+
+      // applyUpdateOperationSseToHold must report terminal:true and releaseScheduled:true.
+      expect(result).toEqual({ terminal: true, releaseScheduled: true });
+
+      // onTerminalEvent fires immediately with status:'expired'.
+      expect(onTerminalEvent).toHaveBeenCalledOnce();
+      expect(onTerminalEvent).toHaveBeenCalledWith({
+        container,
+        status: 'expired',
+        name: 'expiry-web',
+        operationId: 'op-expired',
+      });
+
+      // Hold is still in the settle window (row not yet cleared).
+      expect(composable.findMatchingOperationIds({ operationId: 'op-expired' })).toHaveLength(1);
+
+      // After the settle timer the hold is released.
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(composable.findMatchingOperationIds({ operationId: 'op-expired' })).toHaveLength(0);
     });
 
     it('uses the resolved container name over the payload name when both exist', async () => {
