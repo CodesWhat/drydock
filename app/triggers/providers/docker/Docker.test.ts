@@ -3439,6 +3439,53 @@ describe('resolveHelperImage for infrastructure updates', () => {
     });
     expect(resolved).toBe('ghcr.io/codeswhat/drydock:1.5.0');
   });
+
+  // Regression: registry.url ending with a trailing slash (e.g. "https://ghcr.io/v2/") produced
+  // a double-slash reference like "ghcr.io//codeswhat/drydock:1.5.0" that Docker rejected at
+  // POST /containers/create. The fix delegates to buildImageReference which anchors /v2/? at
+  // the END of the URL before concatenation.
+  test('normalizes registry URL with trailing slash after v2 — no double slash in result', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    (storeContainer.getContainers as any).mockReturnValueOnce([
+      {
+        name: 'drydock',
+        image: {
+          name: 'codeswhat/drydock',
+          tag: { value: '1.5.0' },
+          registry: { url: 'https://ghcr.io/v2/' },
+        },
+      },
+    ]);
+
+    const resolved = (docker as any).selfUpdateOrchestrator.resolveHelperImage?.({
+      image: { name: 'linuxserver/socket-proxy' },
+      labels: { 'dd.update.mode': 'infrastructure' },
+    });
+    expect(resolved).not.toContain('//');
+    expect(resolved).toBe('ghcr.io/codeswhat/drydock:1.5.0');
+  });
+
+  // Regression: the common case (registry.url without trailing slash) must be unchanged
+  // after the buildImageReference swap.
+  test('common case — registry URL without trailing slash still resolves correctly', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    (storeContainer.getContainers as any).mockReturnValueOnce([
+      {
+        name: 'drydock',
+        image: {
+          name: 'codeswhat/drydock',
+          tag: { value: '1.5.0' },
+          registry: { url: 'https://ghcr.io/v2' },
+        },
+      },
+    ]);
+
+    const resolved = (docker as any).selfUpdateOrchestrator.resolveHelperImage?.({
+      image: { name: 'linuxserver/socket-proxy' },
+      labels: { 'dd.update.mode': 'infrastructure' },
+    });
+    expect(resolved).toBe('ghcr.io/codeswhat/drydock:1.5.0');
+  });
 });
 
 describe('scheduleDeferredReconciliation', () => {

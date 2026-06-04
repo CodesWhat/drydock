@@ -13,6 +13,7 @@ import {
 import { fullName } from '../../../model/container.js';
 import { getAuditCounter } from '../../../prometheus/audit.js';
 import { getRollbackCounter } from '../../../prometheus/rollback.js';
+import { buildImageReference } from '../../../registries/image-reference.js';
 import { getState } from '../../../registry/index.js';
 import { getTrivyDatabaseStatus } from '../../../security/runtime.js';
 import {
@@ -296,16 +297,15 @@ class Docker<
         if (!name || !tag?.value) {
           return undefined;
         }
-        // registry.url is the v2 API base (e.g. "https://ghcr.io/v2"). Docker's
-        // POST /containers/create rejects that form with HTTP 400 — strip the
-        // scheme and "/v2" segment to match Registry.getImageFullName so the
-        // helper spawn uses the same reference shape as the pull path.
+        // registry.url is the v2 API base (e.g. "https://ghcr.io/v2" or
+        // "https://ghcr.io/v2/"). Docker's POST /containers/create rejects
+        // that form with HTTP 400.  Delegate to buildImageReference which
+        // strips the scheme and the trailing /v2[/] segment before
+        // concatenation, matching Registry.getImageFullName exactly.
         if (!registry?.url) {
           return `${name}:${tag.value}`;
         }
-        return `${registry.url}/${name}:${tag.value}`
-          .replace(/https?:\/\//, '')
-          .replace(/\/v2\//, '/');
+        return buildImageReference(registry.url, name, tag.value);
       },
     });
     this.containerUpdateExecutor = new ContainerUpdateExecutor({
