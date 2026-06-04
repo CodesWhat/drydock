@@ -242,13 +242,55 @@ async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Respo
     return;
   }
 
+  const callerOperationId = validationResult.value.operationId;
+
   try {
-    await agentClient.runRemoteTrigger(containerToTrigger, triggerType, triggerName);
+    if (UPDATE_TRIGGER_TYPES.has(triggerType.toLowerCase())) {
+      const storedContainer = storeContainer.getContainer(containerToTrigger.id);
+      if (!storedContainer) {
+        sendErrorResponse(res, 404, 'Container not found');
+        return;
+      }
+
+      const triggerToRun = registry.getState().trigger[`${triggerType}.${triggerName}`];
+      const accepted = await requestContainerUpdate(storedContainer, {
+        ...(triggerToRun
+          ? { trigger: triggerToRun as { type: string; trigger: typeof triggerToRun.trigger } }
+          : {}),
+        ...(callerOperationId !== undefined ? { operationId: callerOperationId } : {}),
+      });
+      const runtimeContext = { operationId: accepted.operationId };
+      await agentClient.runRemoteTrigger(
+        containerToTrigger,
+        triggerType,
+        triggerName,
+        runtimeContext,
+      );
+      log.info(
+        `Remote update trigger executed with success (agent=${sanitizeLogParam(agentName)}, type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}, container=${sanitizeLogParam(containerToTrigger.id)}, operationId=${sanitizeLogParam(accepted.operationId)})`,
+      );
+      res.status(202).json({ operationId: accepted.operationId });
+      return;
+    }
+
+    const runtimeContext =
+      callerOperationId !== undefined ? { operationId: callerOperationId } : undefined;
+    await agentClient.runRemoteTrigger(
+      containerToTrigger,
+      triggerType,
+      triggerName,
+      runtimeContext,
+    );
     log.info(
       `Remote trigger executed with success (agent=${sanitizeLogParam(agentName)}, type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}, container=${sanitizeLogParam(containerToTrigger.id)})`,
     );
     res.status(200).json({});
   } catch (e) {
+    if (e instanceof UpdateRequestError) {
+      sendErrorResponse(res, e.statusCode, e.message);
+      return;
+    }
+
     const errorMessage = getErrorMessage(e);
     log.warn(
       `Error when running remote trigger ${sanitizeLogParam(triggerType)}.${sanitizeLogParam(triggerName)} on agent ${sanitizeLogParam(agentName)} (${sanitizeLogParam(errorMessage)})`,
