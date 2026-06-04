@@ -40,8 +40,16 @@ curl "http://drydock:3000/api/v1/containers?limit=25&offset=0"
 | `status` | string | | Filter by update/runtime status: `update-available`, `up-to-date`, `running`, `stopped`, `exited`, `paused`, `restarting`, `dead`, `created` |
 | `kind` | string | | Filter by update kind or watched state: `major`, `minor`, `patch`, `digest`, `watched`, `unwatched`, `all` |
 | `watcher` | string | | Filter by watcher name |
-| `maturity` | string | | Filter by update maturity: `hot`, `mature`, `established` |
+| `maturity` | string | | Filter by update maturity: `hot`, `mature`, `established`. The `hot`/`mature` boundary is controlled by `DD_UI_MATURITY_THRESHOLD_DAYS` (default 7 days); updates older than 30 days are always `established`. |
 | `containerIds` | string | | Comma-separated list of container IDs to pre-filter results to a specific set. Used by the Security view Update action and dashboard row navigation. |
+
+### Maturity filter configuration
+
+The `hot`/`mature` age boundary used by the `maturity` query parameter is set server-side:
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_UI_MATURITY_THRESHOLD_DAYS` | ⚪ | Age threshold (days) that separates `hot` updates from `mature` updates. Updates younger than this value are classified `hot`; updates at or older than this value (up to 30 days) are classified `mature`; updates older than 30 days are always `established`. | integer (`>0`) | `7` |
 
 ## Get container summary
 

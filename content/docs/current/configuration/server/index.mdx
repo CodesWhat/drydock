@@ -200,6 +200,8 @@ These variables control the icon proxy cache used to serve container icons. Defa
 | `DD_ICON_CACHE_TTL_MS` | ⚪ | TTL for cached icon files on disk | integer (ms) | `2592000000` (30 days) |
 | `DD_ICON_CACHE_MAX_FILES` | ⚪ | Maximum number of icon files in cache | integer (`>0`) | `5000` |
 | `DD_ICON_CACHE_MAX_BYTES` | ⚪ | Maximum total size of icon cache in bytes | integer (`>0`) | `104857600` (100 MB) |
+| `DD_STATS_INTERVAL` | ⚪ | Stats aggregator poll cycle in seconds — how often the fleet-stats snapshot is refreshed | integer (`>0`) | `10` |
+| `DD_STATS_HISTORY_SIZE` | ⚪ | Number of historical fleet-stat snapshots retained per container (older snapshots are evicted when the cap is exceeded) | integer (`>0`) | `60` |
 
 ### Secrets from files
 
