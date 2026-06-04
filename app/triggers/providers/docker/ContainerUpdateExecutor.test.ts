@@ -1822,4 +1822,123 @@ describe('ContainerUpdateExecutor', () => {
       );
     });
   });
+
+  describe('FIX 1 — container snapshot included in fresh-insert operation rows', () => {
+    test('fresh-insert operation (no requestedOperationId) carries container snapshot so terminal event has container', async () => {
+      // No pre-existing operation — resolveOrCreateOperation does a fresh insertOperation.
+      // After pull fails, markOperationTerminal is called; the inserted row must carry
+      // the container snapshot so buildTerminalLifecycleEventBase can attach it.
+      mockGetOperationById.mockReturnValue(undefined);
+      const capturedInsertArgs: unknown[] = [];
+      mockInsertOperation.mockImplementation((fields: unknown) => {
+        capturedInsertArgs.push(fields);
+        return { id: 'op-fresh' };
+      });
+
+      const container = createContainer();
+      const pullError = new Error('manifest unknown');
+      const executor = createExecutor({
+        pullImage: vi.fn().mockRejectedValue(pullError),
+      });
+
+      await expect(executor.execute(createContext(), container, createLog())).rejects.toThrow(
+        'manifest unknown',
+      );
+
+      // The fields passed to insertOperation must include the container snapshot.
+      expect(capturedInsertArgs[0]).toEqual(
+        expect.objectContaining({
+          container: expect.objectContaining({ id: 'container-id', name: 'web' }),
+        }),
+      );
+    });
+
+    test('fresh-insert with explicit requestedOperationId not yet in store carries container snapshot', async () => {
+      // requestedOperationId is provided but getOperationById returns undefined →
+      // resolveOrCreateOperation falls into the second fresh-insert branch.
+      mockGetOperationById.mockReturnValue(undefined);
+      const capturedInsertArgs: unknown[] = [];
+      mockInsertOperation.mockImplementation((fields: unknown) => {
+        capturedInsertArgs.push(fields);
+        return { id: 'op-agent-fresh' };
+      });
+
+      const container = createContainer();
+      const pullError = new Error('pull failed on agent');
+      const executor = createExecutor({
+        pullImage: vi.fn().mockRejectedValue(pullError),
+      });
+
+      await expect(
+        executor.execute(createContext(), container, createLog(), {
+          operationId: 'op-agent-fresh',
+        }),
+      ).rejects.toThrow('pull failed on agent');
+
+      // Both insert calls (if any) must have container; we care about the one with the id.
+      const insertWithId = capturedInsertArgs.find(
+        (a) => (a as { id?: unknown }).id === 'op-agent-fresh',
+      );
+      expect(insertWithId).toEqual(
+        expect.objectContaining({
+          container: expect.objectContaining({ id: 'container-id', name: 'web' }),
+        }),
+      );
+    });
+  });
+
+  describe('FIX 2 — post-pull tail errors mark operation terminal', () => {
+    test('operation is marked terminal (failed) when getCloneRuntimeConfigOptions throws after pull', async () => {
+      const context = createContext({
+        currentContainerSpec: createCurrentContainerSpec({
+          State: { Running: false },
+          HostConfig: { AutoRemove: false },
+        }),
+      });
+      const runtimeConfigError = new Error('runtime config exploded');
+      const executor = createExecutor({
+        getCloneRuntimeConfigOptions: vi.fn().mockRejectedValue(runtimeConfigError),
+      });
+
+      await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+        'runtime config exploded',
+      );
+
+      // Operation must be marked terminal — not left in-progress.
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        'op-1',
+        expect.objectContaining({
+          status: 'failed',
+          phase: 'failed',
+          lastError: 'runtime config exploded',
+        }),
+      );
+    });
+
+    test('operation is marked terminal (failed) when currentContainer.rename throws in post-pull tail', async () => {
+      const context = createContext({
+        currentContainerSpec: createCurrentContainerSpec({
+          State: { Running: false },
+          HostConfig: { AutoRemove: false },
+        }),
+      });
+      // rename throws after getCloneRuntimeConfigOptions succeeds.
+      context.currentContainer.rename = vi.fn().mockRejectedValue(new Error('rename exploded'));
+
+      const executor = createExecutor();
+
+      await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+        'rename exploded',
+      );
+
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        'op-1',
+        expect.objectContaining({
+          status: 'failed',
+          phase: 'failed',
+          lastError: 'rename exploded',
+        }),
+      );
+    });
+  });
 });

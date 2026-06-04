@@ -107,6 +107,7 @@ type ContainerUpdateOperationStartFields = {
   targetImage: string;
   status: 'in-progress';
   phase: 'pulling';
+  container: import('../../../model/container.js').Container;
 };
 
 type ContainerUpdateAttemptState = {
@@ -656,6 +657,7 @@ class ContainerUpdateExecutor {
       targetImage: newImage,
       status: 'in-progress' as const,
       phase: 'pulling' as const,
+      container: container as unknown as import('../../../model/container.js').Container,
     };
 
     // If an operation was pre-created by the API handler, always reuse that row
@@ -708,18 +710,28 @@ class ContainerUpdateExecutor {
       return undefined;
     }
 
-    const cloneRuntimeConfigOptions = await this.getCloneRuntimeConfigOptions(
-      dockerApi,
-      currentContainerSpec,
-      newImage,
-      logContainer,
-    );
+    let cloneRuntimeConfigOptions: unknown;
+    try {
+      cloneRuntimeConfigOptions = await this.getCloneRuntimeConfigOptions(
+        dockerApi,
+        currentContainerSpec,
+        newImage,
+        logContainer,
+      );
 
-    updateOperationStore.updateOperation(operation.id, { phase: 'prepare' });
+      updateOperationStore.updateOperation(operation.id, { phase: 'prepare' });
 
-    logContainer.info(`Rename container ${oldName} to ${tempName}`);
-    await currentContainer.rename({ name: tempName });
-    updateOperationStore.updateOperation(operation.id, { phase: 'renamed' });
+      logContainer.info(`Rename container ${oldName} to ${tempName}`);
+      await currentContainer.rename({ name: tempName });
+      updateOperationStore.updateOperation(operation.id, { phase: 'renamed' });
+    } catch (tailError: unknown) {
+      updateOperationStore.markOperationTerminal(operation.id, {
+        status: 'failed',
+        phase: 'failed',
+        lastError: getErrorMessage(tailError),
+      });
+      throw tailError;
+    }
 
     return {
       dockerApi,
