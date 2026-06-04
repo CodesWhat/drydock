@@ -11,6 +11,7 @@ const {
   mockGetActiveOperationByContainerName,
   mockGetActiveOperationByContainerId,
   mockIsOperationCancelRequested,
+  mockGetRecentTerminalSucceededOperationByContainerName,
   MockOperationCancelledError,
   mockStartHealthGateHeartbeat,
   mockCancelHeartbeat,
@@ -37,6 +38,7 @@ const {
     mockGetActiveOperationByContainerName: vi.fn(),
     mockGetActiveOperationByContainerId: vi.fn(),
     mockIsOperationCancelRequested: vi.fn(() => false),
+    mockGetRecentTerminalSucceededOperationByContainerName: vi.fn(() => undefined),
     MockOperationCancelledError,
     mockStartHealthGateHeartbeat,
     mockCancelHeartbeat,
@@ -54,6 +56,8 @@ vi.mock('../../../store/update-operation.js', () => ({
   getActiveOperationByContainerName: mockGetActiveOperationByContainerName,
   getActiveOperationByContainerId: mockGetActiveOperationByContainerId,
   isOperationCancelRequested: mockIsOperationCancelRequested,
+  getRecentTerminalSucceededOperationByContainerName:
+    mockGetRecentTerminalSucceededOperationByContainerName,
   OperationCancelledError: MockOperationCancelledError,
 }));
 
@@ -1937,6 +1941,79 @@ describe('ContainerUpdateExecutor', () => {
           status: 'failed',
           phase: 'failed',
           lastError: 'rename exploded',
+        }),
+      );
+    });
+
+    test('operation is marked terminal (expired) when rename throws a Docker 404 and a recent success exists for the container name (issue #410)', async () => {
+      const context = createContext({
+        currentContainerSpec: createCurrentContainerSpec({
+          State: { Running: false },
+          HostConfig: { AutoRemove: false },
+        }),
+      });
+
+      // Docker 404 "no such container" during rename
+      const docker404 = Object.assign(new Error('No such container: web'), { statusCode: 404 });
+      context.currentContainer.rename = vi.fn().mockRejectedValue(docker404);
+
+      // The executor's isContainerNotFoundError should recognise this
+      const executor = createExecutor({
+        isContainerNotFoundError: vi.fn((err) => err?.statusCode === 404),
+      });
+
+      // A recent succeeded op for "web" exists
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+        id: 'prev-op',
+        containerName: 'web',
+        status: 'succeeded',
+      });
+
+      await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+        'No such container: web',
+      );
+
+      // Should be expired, not failed — no ghost notification
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        'op-1',
+        expect.objectContaining({
+          status: 'expired',
+          phase: 'expired',
+        }),
+      );
+      expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith(
+        'op-1',
+        expect.objectContaining({ status: 'failed' }),
+      );
+    });
+
+    test('operation is still marked failed when rename throws a Docker 404 but no recent success exists', async () => {
+      const context = createContext({
+        currentContainerSpec: createCurrentContainerSpec({
+          State: { Running: false },
+          HostConfig: { AutoRemove: false },
+        }),
+      });
+
+      const docker404 = Object.assign(new Error('No such container: web'), { statusCode: 404 });
+      context.currentContainer.rename = vi.fn().mockRejectedValue(docker404);
+
+      const executor = createExecutor({
+        isContainerNotFoundError: vi.fn((err) => err?.statusCode === 404),
+      });
+
+      // No recent success
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+
+      await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+        'No such container: web',
+      );
+
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        'op-1',
+        expect.objectContaining({
+          status: 'failed',
+          phase: 'failed',
         }),
       );
     });

@@ -108,6 +108,9 @@ const mockGetInProgressOperationByContainerId = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerName = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerId = vi.hoisted(() => vi.fn());
 const mockIsOperationCancelRequested = vi.hoisted(() => vi.fn(() => false));
+const mockGetRecentTerminalSucceededOperationByContainerName = vi.hoisted(() =>
+  vi.fn(() => undefined),
+);
 const MockOperationCancelledError = vi.hoisted(
   () =>
     class MockOperationCancelledError extends Error {
@@ -133,6 +136,8 @@ vi.mock('../../../store/update-operation.js', () => ({
     mockGetActiveOperationByContainerName(...args),
   getActiveOperationByContainerId: (...args: any[]) => mockGetActiveOperationByContainerId(...args),
   isOperationCancelRequested: (...args: any[]) => mockIsOperationCancelRequested(...args),
+  getRecentTerminalSucceededOperationByContainerName: (...args: any[]) =>
+    mockGetRecentTerminalSucceededOperationByContainerName(...args),
   OperationCancelledError: MockOperationCancelledError,
 }));
 
@@ -4308,6 +4313,228 @@ describe('extracted lifecycle delegation', () => {
     } finally {
       docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
     }
+  });
+
+  // Issue #410 Part C — outer-catch reclassification tests
+  describe('runContainerUpdateLifecycle outer-catch expired reclassification (issue #410)', () => {
+    test('marks operation expired (not failed) when lifecycle throws "no longer exists" AND a recent success exists', async () => {
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const noLongerExistsError = new Error(
+        'Unable to refresh compose service web from /app/docker-compose.yml because container web no longer exists',
+      );
+      const run = vi.fn().mockRejectedValue(noLongerExistsError);
+      docker.updateLifecycleExecutor = { run };
+      const container = createTriggerContainer({ name: 'web' });
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-compose-vanish-1',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+      // A recent succeeded op for the same container name
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+        id: 'prev-op',
+        containerName: 'web',
+        status: 'succeeded',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, { operationId: 'op-compose-vanish-1' }),
+        ).rejects.toThrow('no longer exists');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+          'op-compose-vanish-1',
+          expect.objectContaining({ status: 'expired' }),
+        );
+        expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith(
+          'op-compose-vanish-1',
+          expect.objectContaining({ status: 'failed' }),
+        );
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      }
+    });
+
+    test('marks operation expired when lifecycle throws a Docker 404 AND a recent success exists', async () => {
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const docker404Error = Object.assign(new Error('No such container: web'), {
+        statusCode: 404,
+      });
+      const run = vi.fn().mockRejectedValue(docker404Error);
+      docker.updateLifecycleExecutor = { run };
+      const container = createTriggerContainer({ name: 'web' });
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-404-outer-1',
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+      });
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+        id: 'prev-op',
+        containerName: 'web',
+        status: 'succeeded',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, { operationId: 'op-404-outer-1' }),
+        ).rejects.toThrow('No such container');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+          'op-404-outer-1',
+          expect.objectContaining({ status: 'expired' }),
+        );
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      }
+    });
+
+    test('marks operation expired when lifecycle throws a 409 conflict AND a recent success exists', async () => {
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const conflict409Error = Object.assign(new Error('Container update already in progress'), {
+        response: { status: 409 },
+      });
+      const run = vi.fn().mockRejectedValue(conflict409Error);
+      docker.updateLifecycleExecutor = { run };
+      const container = createTriggerContainer({ name: 'web' });
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-409-outer-1',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+        id: 'prev-op',
+        containerName: 'web',
+        status: 'succeeded',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, { operationId: 'op-409-outer-1' }),
+        ).rejects.toThrow('already in progress');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+          'op-409-outer-1',
+          expect.objectContaining({ status: 'expired' }),
+        );
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      }
+    });
+
+    test('marks operation failed when lifecycle throws "no longer exists" but NO recent success', async () => {
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const noLongerExistsError = new Error(
+        'Unable to refresh compose service web because container web no longer exists',
+      );
+      const run = vi.fn().mockRejectedValue(noLongerExistsError);
+      docker.updateLifecycleExecutor = { run };
+      const container = createTriggerContainer({ name: 'web' });
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-compose-genuine-fail-1',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+      // No recent success — genuine failure
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, {
+            operationId: 'op-compose-genuine-fail-1',
+          }),
+        ).rejects.toThrow('no longer exists');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+          'op-compose-genuine-fail-1',
+          expect.objectContaining({ status: 'failed' }),
+        );
+        expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith(
+          'op-compose-genuine-fail-1',
+          expect.objectContaining({ status: 'expired' }),
+        );
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+      }
+    });
+
+    test('marks operation failed for a genuine error (pull failure) even when a recent success exists', async () => {
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const pullError = new Error('pull denied: repository does not exist or may require auth');
+      const run = vi.fn().mockRejectedValue(pullError);
+      docker.updateLifecycleExecutor = { run };
+      const container = createTriggerContainer({ name: 'web' });
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-pull-fail-outer-1',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+      // Recent success present but this is not a duplicate-style error
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+        id: 'prev-op',
+        containerName: 'web',
+        status: 'succeeded',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, { operationId: 'op-pull-fail-outer-1' }),
+        ).rejects.toThrow('pull denied');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+          'op-pull-fail-outer-1',
+          expect.objectContaining({ status: 'failed' }),
+        );
+        expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith(
+          'op-pull-fail-outer-1',
+          expect.objectContaining({ status: 'expired' }),
+        );
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      }
+    });
+
+    test('does not re-terminalize an op already marked expired by an inner handler (e.g. ContainerUpdateExecutor rename catch)', async () => {
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const docker404Error = Object.assign(new Error('No such container: web'), {
+        statusCode: 404,
+      });
+      const run = vi.fn().mockRejectedValue(docker404Error);
+      docker.updateLifecycleExecutor = { run };
+      const container = createTriggerContainer({ name: 'web' });
+
+      // The inner rename-catch already set status to 'expired'
+      mockGetOperationById.mockReturnValue({
+        id: 'op-inner-expired-1',
+        containerName: 'web',
+        status: 'expired',
+        phase: 'expired',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, { operationId: 'op-inner-expired-1' }),
+        ).rejects.toThrow('No such container');
+
+        // The outer wrapper MUST NOT call markOperationTerminal again
+        expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+      }
+    });
   });
 
   test('getRollbackConfig should delegate to rollbackMonitor', () => {

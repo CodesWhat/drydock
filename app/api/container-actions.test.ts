@@ -828,7 +828,12 @@ describe('Container Actions Router', () => {
       });
     });
 
-    test('should ignore name-based operations that already include a container id', async () => {
+    test('should block a name-based operation whose container id is stale (post-recreate)', async () => {
+      // Issue #410 Part A: after a container is recreated its id changes, so the
+      // in-flight op's containerId no longer matches the live container. The by-id
+      // lookup misses and the by-name fallback must still block the duplicate
+      // request. Even when the recreated container reports no update available,
+      // the active-operation gate fires before the updateAvailable check.
       const container = {
         id: 'c1',
         name: 'nginx',
@@ -840,8 +845,8 @@ describe('Container Actions Router', () => {
       (
         updateOperationStore.getActiveOperationByContainerName as ReturnType<typeof vi.fn>
       ).mockReturnValue({
-        id: 'op-current-shape',
-        containerId: 'c1',
+        id: 'op-stale-id',
+        containerId: 'c0-pre-recreate',
         containerName: 'nginx',
         status: 'queued',
         phase: 'queued',
@@ -853,10 +858,13 @@ describe('Container Actions Router', () => {
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(400);
+      expect(updateOperationStore.getActiveOperationByContainerId).toHaveBeenCalledWith('c1');
+      expect(updateOperationStore.getActiveOperationByContainerName).toHaveBeenCalledWith('nginx');
+      expect(res.status).toHaveBeenCalledWith(409);
       expect(res.json).toHaveBeenCalledWith({
-        error: 'No update available for this container',
+        error: 'Container update already queued',
       });
+      expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
     });
 
     test('should return 404 when no docker trigger found', async () => {

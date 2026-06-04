@@ -725,11 +725,30 @@ class ContainerUpdateExecutor {
       await currentContainer.rename({ name: tempName });
       updateOperationStore.updateOperation(operation.id, { phase: 'renamed' });
     } catch (tailError: unknown) {
-      updateOperationStore.markOperationTerminal(operation.id, {
-        status: 'failed',
-        phase: 'failed',
-        lastError: getErrorMessage(tailError),
-      });
+      // Issue #410 Part B (Docker-native path): if the rename fails with a
+      // Docker 404 "no such container" AND there is a recent succeeded op for the
+      // same container name, the container was already recreated by a concurrent
+      // update — reclassify to `expired` so no false "update failed" fires.
+      const recentSuccess =
+        this.isContainerNotFoundError(tailError) &&
+        updateOperationStore.getRecentTerminalSucceededOperationByContainerName(
+          container.name,
+          15 * 60 * 1000,
+        );
+
+      if (recentSuccess) {
+        updateOperationStore.markOperationTerminal(operation.id, {
+          status: 'expired',
+          phase: 'expired',
+          lastError: getErrorMessage(tailError),
+        });
+      } else {
+        updateOperationStore.markOperationTerminal(operation.id, {
+          status: 'failed',
+          phase: 'failed',
+          lastError: getErrorMessage(tailError),
+        });
+      }
       throw tailError;
     }
 

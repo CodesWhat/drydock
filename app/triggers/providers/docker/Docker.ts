@@ -28,6 +28,7 @@ import * as backupStore from '../../../store/backup.js';
 import * as storeContainer from '../../../store/container.js';
 import { cacheSecurityState } from '../../../store/container.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
+import { classifyDuplicateOpTerminalStatus } from '../../../updates/duplicate-op-classification.js';
 import { buildContainerLockKey, withContainerUpdateLocks } from '../../../updates/update-locks.js';
 import { getErrorMessage } from '../../../util/error.js';
 import { runHook } from '../../hooks/HookRunner.js';
@@ -1497,11 +1498,24 @@ class Docker<
             throw error;
           }
 
-          updateOperationStore.markOperationTerminal(operation.id, {
-            status: 'failed',
-            phase: 'failed',
-            lastError: getErrorMessage(error),
-          });
+          // Issue #410 Part C (outer catch): if the error looks like a benign
+          // duplicate-update vanish (Docker 404, HTTP 409, compose "no longer
+          // exists") AND a recent succeeded op exists for the same container
+          // name, the update already happened — reclassify to `expired` (silent)
+          // instead of `failed` (emits update-failed notification).
+          if (classifyDuplicateOpTerminalStatus(error, operation.containerName) === 'expired') {
+            updateOperationStore.markOperationTerminal(operation.id, {
+              status: 'expired',
+              phase: 'expired',
+              lastError: getErrorMessage(error),
+            });
+          } else {
+            updateOperationStore.markOperationTerminal(operation.id, {
+              status: 'failed',
+              phase: 'failed',
+              lastError: getErrorMessage(error),
+            });
+          }
 
           throw error;
         }

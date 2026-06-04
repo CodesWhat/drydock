@@ -1013,6 +1013,38 @@ export function getOperationsByContainerName(containerName: string): UpdateOpera
 }
 
 /**
+ * Return the most recent terminal `succeeded` operation for a container name
+ * that completed within the given `sinceMs` window (milliseconds before now).
+ *
+ * Used by the duplicate-update dedup logic (issue #410) to distinguish between
+ * a genuine execution failure and a stale-container 404/409 that arrived after
+ * Docker Compose or an agent already recreated the container successfully.
+ */
+export function getRecentTerminalSucceededOperationByContainerName(
+  containerName: string,
+  sinceMs: number,
+): SucceededUpdateOperation | undefined {
+  if (!updateOperationCollection) {
+    return undefined;
+  }
+
+  const cutoffMs = Date.now() - sinceMs;
+
+  const candidates = updateOperationCollection
+    .find({ 'data.containerName': containerName, 'data.status': 'succeeded' })
+    .map((item) => item.data)
+    .filter(
+      (op): op is SucceededUpdateOperation =>
+        op.status === 'succeeded' &&
+        typeof op.completedAt === 'string' &&
+        Date.parse(op.completedAt) >= cutoffMs,
+    )
+    .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
+
+  return candidates.at(0);
+}
+
+/**
  * Return all operations for a container ID (matches both containerId and newContainerId),
  * deduped by operation id, sorted by timestamp descending.
  */
