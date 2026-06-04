@@ -265,3 +265,15 @@ test('authenticate should NOT attach httpsAgent when no TLS config is set', asyn
   expect(calledConfig.method).toBe('GET');
   expect(calledConfig.headers.Authorization).toContain('Basic ');
 });
+
+test('authenticate should percent-encode special characters in image name within scope parameter', async () => {
+  axios.mockImplementation(() => ({ data: { token: 'token' } }));
+
+  await mau.authenticate({ name: 'team/image&evil=1' }, { headers: {} });
+
+  const calledConfig = (axios as ReturnType<typeof vi.fn>).mock.calls[0][0];
+  expect(calledConfig.url).toContain(
+    `scope=${encodeURIComponent('repository:team/image&evil=1:pull')}`,
+  );
+  expect(calledConfig.url).not.toContain('&evil=1');
+});

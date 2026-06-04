@@ -67,9 +67,10 @@ class Mau extends Gitlab<MauRegistryConfiguration> {
    * @returns {Promise<*>}
    */
   async authenticate(image, requestOptions) {
+    const scope = encodeURIComponent(`repository:${image.name}:pull`);
     const request: AxiosRequestConfig & { headers: Record<string, string> } = {
       method: 'GET',
-      url: `${this.configuration.authurl}/jwt/auth?service=container_registry&scope=repository:${image.name}:pull`,
+      url: `${this.configuration.authurl}/jwt/auth?service=container_registry&scope=${scope}`,
       headers: {
         Accept: 'application/json',
       },
