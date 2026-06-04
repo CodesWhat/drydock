@@ -10623,3 +10623,209 @@ describe('bug #408 (digest path): spurious digest buffer after update-applied', 
     },
   );
 });
+
+// ── Bug #408 additional regression tests: once=false mode ─────────────────────
+describe('bug #408: suppression-key lifecycle in once=false mode', () => {
+  // The recentlyAppliedContainerKeys guard must work regardless of the `once`
+  // setting. With `once: false`, the `hasAlreadyNotifiedForResult` gate is
+  // not checked at all, so the ONLY thing preventing the spurious re-fire
+  // is the recentlyAppliedContainerKeys suppression.
+  const container = {
+    id: 'c-nginx-nonce',
+    watcher: 'local',
+    name: 'nginx-nonce',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+  };
+
+  beforeEach(() => {
+    trigger.type = 'slack';
+    trigger.name = 'notify-nonce';
+    // once: false → hasAlreadyNotifiedForResult is never consulted;
+    // without the recentlyApplied guard, every report would fire.
+    trigger.configuration = { ...configurationValid, once: false, threshold: 'all' };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+    storeContainer.getContainers.mockReturnValue([container]);
+  });
+
+  test('spurious notification is suppressed after update-applied even when once=false', async () => {
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    // 1. First scan fires notification (once=false allows repeat, but first is fine).
+    await trigger.handleContainerReport({ container, changed: true } as any);
+    expect(triggerSpy).toHaveBeenCalledTimes(1);
+
+    // 2. Update-applied: adds key to recentlyAppliedContainerKeys.
+    await trigger.handleContainerUpdateAppliedEvent({
+      containerName: 'local_nginx-nonce',
+      container,
+    } as any);
+
+    // update-applied itself calls trigger once for the applied notification.
+    const callsAfterApply = triggerSpy.mock.calls.length;
+
+    // 3. Spurious scan: watcher still shows updateAvailable=true.
+    //    With once=false and NO suppression this would fire again.
+    //    With the fix it must NOT fire.
+    await trigger.handleContainerReport({ container, changed: false } as any);
+
+    // No new trigger call beyond the update-applied notification.
+    expect(triggerSpy).toHaveBeenCalledTimes(callsAfterApply);
+  });
+
+  test('suppression key is cleared when watcher confirms updateAvailable=false, and genuine next update fires', async () => {
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    // 1. First update-available.
+    await trigger.handleContainerReport({ container, changed: true } as any);
+
+    // 2. Update applied — suppression key added.
+    await trigger.handleContainerUpdateAppliedEvent({
+      containerName: 'local_nginx-nonce',
+      container,
+    } as any);
+
+    // 3. Spurious scan — suppressed.
+    await trigger.handleContainerReport({ container, changed: false } as any);
+
+    // 4. Watcher confirms updateAvailable=false — clears suppression key.
+    const containerUpdated = { ...container, updateAvailable: false };
+    await trigger.handleContainerReport({ container: containerUpdated, changed: true } as any);
+    expect((trigger as any).recentlyAppliedContainerKeys.size).toBe(0);
+
+    const callsBeforeNewUpdate = triggerSpy.mock.calls.length;
+
+    // 5. Genuine new update (different remoteValue) — must fire with once=false.
+    const containerNewUpdate = {
+      ...container,
+      updateAvailable: true,
+      updateKind: {
+        kind: 'tag',
+        localValue: '2.0',
+        remoteValue: '3.0',
+        semverDiff: 'major',
+      },
+    };
+    await trigger.handleContainerReport({
+      container: containerNewUpdate,
+      changed: true,
+    } as any);
+
+    expect(triggerSpy).toHaveBeenCalledTimes(callsBeforeNewUpdate + 1);
+    const updateAvailableCalls = triggerSpy.mock.calls.filter(
+      (args) => !(args[0] as any)?.notificationEvent,
+    );
+    expect(updateAvailableCalls).toHaveLength(2);
+  });
+});
+
+// ── Bug #290 regression tests: stale-store container on update-failed/applied ─
+describe('bug #290: update-failed uses payload.container over stale store record', () => {
+  // The scenario: a container is renamed/recreated after the update starts.
+  // The live store now has a DIFFERENT record at the same business key (wrong id,
+  // different name). Without the fix, handleContainerUpdateFailedEvent would use
+  // the store's stale record and dispatch the failure notification against the
+  // wrong container identity. With the fix, payload.container wins.
+
+  beforeEach(() => {
+    trigger.type = 'slack';
+    trigger.name = 'notify-290';
+    trigger.configuration = {
+      ...configurationValid,
+      once: false,
+      threshold: 'all',
+      mode: 'simple',
+    };
+  });
+
+  test('failure notification uses payload.container identity, not the renamed/stale store record', async () => {
+    // The correct pre-update container snapshot that was in-scope when the
+    // update started. This is what payload.container carries.
+    const payloadContainer = {
+      id: 'c-original-id',
+      watcher: 'local',
+      name: 'web',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+    };
+
+    // A stale/renamed container that the live store now returns. It has a
+    // different id and name — this simulates the container having been
+    // renamed or recreated between the update attempt and the failure event.
+    const staleStoreContainer = {
+      id: 'c-stale-id',
+      watcher: 'local',
+      name: 'web-renamed',
+      updateAvailable: false,
+      updateKind: { kind: 'unknown', semverDiff: 'unknown' },
+    };
+
+    storeContainer.getContainersRaw.mockReturnValue([staleStoreContainer]);
+    storeContainer.getContainers.mockReturnValue([staleStoreContainer]);
+
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleContainerUpdateFailedEvent({
+      containerName: 'local_web',
+      error: 'pull failed',
+      container: payloadContainer,
+    } as any);
+
+    // Must use the original (payload) container identity, not the stale one.
+    expect(triggerSpy).toHaveBeenCalledTimes(1);
+    expect(triggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'c-original-id',
+        name: 'web',
+        notificationEvent: {
+          kind: 'update-failed',
+          error: 'pull failed',
+        },
+      }),
+    );
+    // Confirm the stale record's identity was NOT used.
+    expect(triggerSpy).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'c-stale-id' }));
+  });
+
+  test('update-applied notification uses payload.container identity, not the renamed/stale store record', async () => {
+    // The correct pre-update container snapshot.
+    const payloadContainer = {
+      id: 'c-applied-original',
+      watcher: 'local',
+      name: 'api',
+      updateAvailable: false,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'minor' },
+    };
+
+    // Live store has a stale/different record.
+    const staleStoreContainer = {
+      id: 'c-applied-stale',
+      watcher: 'local',
+      name: 'api-v2',
+      updateAvailable: false,
+      updateKind: { kind: 'unknown', semverDiff: 'unknown' },
+    };
+
+    storeContainer.getContainersRaw.mockReturnValue([staleStoreContainer]);
+    storeContainer.getContainers.mockReturnValue([staleStoreContainer]);
+
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleContainerUpdateAppliedEvent({
+      containerName: 'local_api',
+      container: payloadContainer,
+    } as any);
+
+    // Must use the original (payload) container identity.
+    expect(triggerSpy).toHaveBeenCalledTimes(1);
+    expect(triggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'c-applied-original',
+        name: 'api',
+        notificationEvent: { kind: 'update-applied' },
+      }),
+    );
+    // Stale record must NOT be used.
+    expect(triggerSpy).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'c-applied-stale' }));
+  });
+});

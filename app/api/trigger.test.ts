@@ -1,3 +1,4 @@
+import * as updateOperationStore from '../store/update-operation.js';
 import { createMockResponse } from '../test/helpers.js';
 import * as requestUpdate from '../updates/request-update.js';
 
@@ -969,6 +970,69 @@ describe('Trigger Router', () => {
       expect(res.status).toHaveBeenCalledWith(409);
       expect(res.json).toHaveBeenCalledWith({ error: 'update in progress' });
       expect(mockAgentClient.runRemoteTrigger).not.toHaveBeenCalled();
+    });
+
+    // Regression tests for issue #410 — false "update failed" after successful auto-update,
+    // focused on the requestContainerUpdate → agentClient.runRemoteTrigger ordering.
+
+    test('#410 GUARD: agent-mismatch hard blocker causes runRemoteTrigger to fail fast (404) and prevents any operation row from being enqueued', async () => {
+      // Controller has an unscoped docker trigger (no agent property).
+      // Container is agent-managed (agent: 'remote-agent').
+      // computeUpdateEligibility detects agent-mismatch → UpdateRequestError(404)
+      // is thrown BEFORE createAcceptedContainerUpdateRequest is called.
+      const unscopedControllerTrigger = {
+        type: 'docker',
+        // Deliberately no `agent` field — represents a controller-side trigger
+        trigger: vi.fn().mockResolvedValue(undefined),
+        isTriggerIncluded: vi.fn().mockReturnValue(true),
+        isTriggerExcluded: vi.fn().mockReturnValue(false),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'docker.update': unscopedControllerTrigger },
+      });
+
+      // Agent-managed container with a raw tag update so hasRawTagOrDigestUpdate returns true
+      // (required for the agent-mismatch check to be reached inside computeUpdateEligibility).
+      const agentManagedContainer = {
+        id: 'c1',
+        name: 'nginx',
+        agent: 'remote-agent',
+        updateAvailable: true,
+        image: { name: 'nginx', tag: { value: 'v1.0' } },
+        result: { tag: 'v2.0' },
+      };
+      mockGetContainer.mockReturnValue(agentManagedContainer);
+
+      const mockAgentClient = {
+        runRemoteTrigger: vi.fn().mockResolvedValue(undefined),
+      };
+      agent.getAgent.mockReturnValue(mockAgentClient);
+
+      // Spy on insertOperation to confirm no row is enqueued on the mismatch path.
+      const insertSpy = vi.spyOn(updateOperationStore, 'insertOperation');
+
+      const handler = getRemoteTriggerHandler();
+      const req = {
+        params: { agent: 'remote-agent', type: 'docker', name: 'update' },
+        body: { id: 'c1' },
+      };
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      // Must fail fast with 404 (agent-mismatch mapped to HTTP 404 in HARD_BLOCKER_STATUS)
+      expect(res.status).toHaveBeenCalledWith(404);
+
+      // The agent's runRemoteTrigger must never be invoked because requestContainerUpdate
+      // throws before we reach the agentClient call.
+      expect(mockAgentClient.runRemoteTrigger).not.toHaveBeenCalled();
+
+      // No operation row must have been inserted — the race described in #410 is unreachable
+      // on this path because the throw occurs inside prepareContainerUpdateRequest, before
+      // createAcceptedContainerUpdateRequest can call insertOperation.
+      expect(insertSpy).not.toHaveBeenCalled();
+
+      insertSpy.mockRestore();
     });
   });
 });
