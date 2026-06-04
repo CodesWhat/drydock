@@ -230,19 +230,6 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/stats': {
-    get: {
-      tags: ['Containers'],
-      summary: 'Get latest resource metric snapshot for all containers',
-      operationId: 'getAllContainerStats',
-      responses: {
-        200: jsonResponse('Container resource metrics summary', {
-          $ref: '#/components/schemas/ContainerStatsSummaryResponse',
-        }),
-        401: errorResponse('Authentication required'),
-      },
-    },
-  },
   '/api/containers/recent-status': {
     get: {
       tags: ['Containers'],

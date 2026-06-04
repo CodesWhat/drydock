@@ -13,7 +13,16 @@ import { authPaths } from './auth.js';
 import { componentReadPaths } from './component-read.js';
 import { containerPaths } from './containers.js';
 import { notificationOutboxPaths } from './notification-outbox.js';
+import { statsPaths } from './stats.js';
 import { triggerPaths } from './triggers.js';
+
+const updateOperationIdPathParam = {
+  name: 'id',
+  in: 'path',
+  required: true,
+  description: 'Update operation identifier',
+  schema: { type: 'string' },
+} as const;
 
 type ErrorResponses = Record<number, ReturnType<typeof errorResponse>>;
 
@@ -290,6 +299,56 @@ export const openApiPaths = {
     },
   },
   ...containerPaths,
+  ...statsPaths,
+  '/api/operations/{id}/cancel': {
+    post: {
+      tags: ['Containers', 'Actions'],
+      summary: 'Request cancellation of an active update operation',
+      operationId: 'cancelUpdateOperation',
+      parameters: [updateOperationIdPathParam],
+      responses: {
+        200: jsonResponse('Operation cancelled immediately', {
+          type: 'object',
+          properties: {
+            data: { $ref: '#/components/schemas/UpdateOperation' },
+          },
+          required: ['data'],
+          additionalProperties: false,
+        }),
+        202: jsonResponse(
+          'Cancellation requested; operation will abort at the next safe checkpoint',
+          {
+            type: 'object',
+            properties: {
+              data: { $ref: '#/components/schemas/UpdateOperation' },
+            },
+            required: ['data'],
+            additionalProperties: false,
+          },
+        ),
+        401: errorResponse('Authentication required'),
+        404: errorResponse('Operation not found'),
+        409: errorResponse('Operation is not active'),
+        500: errorResponse('Internal server error'),
+      },
+    },
+  },
+  '/api/update-operations/{id}': {
+    get: {
+      tags: ['Containers'],
+      summary: 'Get a single update operation by id',
+      operationId: 'getUpdateOperationById',
+      parameters: [updateOperationIdPathParam],
+      responses: {
+        200: jsonResponse('Update operation', {
+          $ref: '#/components/schemas/UpdateOperation',
+        }),
+        400: errorResponse('Operation id is required'),
+        401: errorResponse('Authentication required'),
+        404: errorResponse('Update operation not found'),
+      },
+    },
+  },
   ...triggerPaths,
   ...componentReadPaths,
   '/api/agents': {

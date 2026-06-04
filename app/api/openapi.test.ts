@@ -284,4 +284,116 @@ describe('OpenAPI document', () => {
     expect(openApiPaths['/api/containers']).toBe(containerPaths['/api/containers']);
     expect(openApiPaths['/api/triggers']).toBe(triggerPaths['/api/triggers']);
   });
+
+  test('should not contain the removed ghost path /api/containers/stats', () => {
+    expect(
+      (openApiDocument.paths as Record<string, unknown>)['/api/containers/stats'],
+    ).toBeUndefined();
+  });
+
+  test('should not define the removed ContainerStatsSummaryItem and ContainerStatsSummaryResponse schemas', () => {
+    expect(
+      (openApiDocument.components.schemas as Record<string, unknown>)['ContainerStatsSummaryItem'],
+    ).toBeUndefined();
+    expect(
+      (openApiDocument.components.schemas as Record<string, unknown>)[
+        'ContainerStatsSummaryResponse'
+      ],
+    ).toBeUndefined();
+  });
+
+  test('should define FleetStatsSummaryRow schema with all required numeric fields', () => {
+    expect(openApiDocument.components.schemas.FleetStatsSummaryRow).toMatchObject({
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        name: { type: 'string' },
+        cpuPercent: { type: 'number', minimum: 0 },
+        memoryUsageBytes: { type: 'number', minimum: 0 },
+        memoryLimitBytes: { type: 'number', minimum: 0 },
+        memoryPercent: { type: 'number', minimum: 0 },
+      },
+      required: [
+        'id',
+        'name',
+        'cpuPercent',
+        'memoryUsageBytes',
+        'memoryLimitBytes',
+        'memoryPercent',
+      ],
+      additionalProperties: false,
+    });
+  });
+
+  test('should define FleetStatsSummary schema with topCpu and topMemory arrays', () => {
+    expect(openApiDocument.components.schemas.FleetStatsSummary).toMatchObject({
+      type: 'object',
+      properties: {
+        timestamp: { type: 'string', format: 'date-time' },
+        watchedCount: { type: 'integer', minimum: 0 },
+        avgCpuPercent: { type: 'number', minimum: 0 },
+        totalMemoryUsageBytes: { type: 'number', minimum: 0 },
+        totalMemoryLimitBytes: { type: 'number', minimum: 0 },
+        totalMemoryPercent: { type: 'number', minimum: 0 },
+        topCpu: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/FleetStatsSummaryRow' },
+        },
+        topMemory: {
+          type: 'array',
+          items: { $ref: '#/components/schemas/FleetStatsSummaryRow' },
+        },
+      },
+      required: [
+        'timestamp',
+        'watchedCount',
+        'avgCpuPercent',
+        'totalMemoryUsageBytes',
+        'totalMemoryLimitBytes',
+        'totalMemoryPercent',
+        'topCpu',
+        'topMemory',
+      ],
+    });
+  });
+
+  test('should define UpdateOperation schema with status enum and required base fields', () => {
+    expect(openApiDocument.components.schemas.UpdateOperation).toMatchObject({
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        status: {
+          type: 'string',
+          enum: ['queued', 'in-progress', 'succeeded', 'failed', 'rolled-back'],
+        },
+        phase: { type: 'string' },
+        containerName: { type: 'string' },
+        createdAt: { type: 'string', format: 'date-time' },
+        updatedAt: { type: 'string', format: 'date-time' },
+      },
+      required: ['id', 'status', 'phase', 'containerName', 'createdAt', 'updatedAt'],
+    });
+  });
+
+  test('should document /api/stats/summary and /api/stats/summary/stream paths', () => {
+    expect(openApiDocument.paths['/api/stats/summary']?.get).toBeDefined();
+    expect(openApiDocument.paths['/api/stats/summary']?.get?.operationId).toBe(
+      'getFleetStatsSummary',
+    );
+    expect(openApiDocument.paths['/api/stats/summary/stream']?.get).toBeDefined();
+    expect(openApiDocument.paths['/api/stats/summary/stream']?.get?.operationId).toBe(
+      'streamFleetStatsSummary',
+    );
+  });
+
+  test('should document /api/operations/{id}/cancel and /api/update-operations/{id} paths', () => {
+    expect(openApiDocument.paths['/api/operations/{id}/cancel']?.post).toBeDefined();
+    expect(openApiDocument.paths['/api/operations/{id}/cancel']?.post?.operationId).toBe(
+      'cancelUpdateOperation',
+    );
+    expect(openApiDocument.paths['/api/update-operations/{id}']?.get).toBeDefined();
+    expect(openApiDocument.paths['/api/update-operations/{id}']?.get?.operationId).toBe(
+      'getUpdateOperationById',
+    );
+  });
 });
