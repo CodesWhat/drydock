@@ -907,7 +907,7 @@ describe('stats/collector', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(harness.stats).toHaveBeenCalledTimes(1);
 
-    // Error triggers cleanup + restart — listeners are removed before new stream starts
+    // Error triggers cleanup + schedules restart after base delay (1000ms)
     harness.stream.emit('error', new Error('stream-error'));
     expect(mockCollectorLogger.warn).toHaveBeenCalledWith(
       'Docker stats stream error for c1 (stream-error)',
@@ -915,21 +915,198 @@ describe('stats/collector', () => {
     expect(harness.stream.removeAllListeners).toHaveBeenCalledTimes(1);
     expect(harness.stream.destroy).toHaveBeenCalledTimes(1);
 
-    // Let restart's startStream resolve (re-attaches listeners to same mock stream)
-    await vi.advanceTimersByTimeAsync(0);
+    // Reconnect fires after the 1000ms base delay
+    await vi.advanceTimersByTimeAsync(1_000);
+    await Promise.resolve();
     expect(harness.stats).toHaveBeenCalledTimes(2);
 
-    // close triggers another restart (new listeners were attached on restart)
+    // close triggers another restart; delay now doubled to 2000ms
     harness.stream.emit('close');
-    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await Promise.resolve();
     expect(harness.stats).toHaveBeenCalledTimes(3);
 
-    // end triggers another restart
+    // end triggers another restart; delay now doubled to 4000ms
     harness.stream.emit('end');
-    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(4_000);
+    await Promise.resolve();
     expect(harness.stats).toHaveBeenCalledTimes(4);
 
     release();
+  });
+
+  test('reconnect does not fire before base delay and does fire at base delay', async () => {
+    const harness = createHarness();
+    const release = harness.collector.watch('c1');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(harness.stats).toHaveBeenCalledTimes(1);
+
+    harness.stream.emit('close');
+
+    // 999ms — reconnect should NOT have fired yet
+    await vi.advanceTimersByTimeAsync(999);
+    expect(harness.stats).toHaveBeenCalledTimes(1);
+
+    // Final 1ms to reach base delay — reconnect should fire now
+    await vi.advanceTimersByTimeAsync(1);
+    await Promise.resolve();
+    expect(harness.stats).toHaveBeenCalledTimes(2);
+
+    release();
+  });
+
+  test('consecutive failures back off exponentially and cap at 60000ms', async () => {
+    const harness = createHarness();
+    const release = harness.collector.watch('c1');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(harness.stats).toHaveBeenCalledTimes(1);
+
+    // 1st failure: delay = 1000ms (base)
+    harness.stream.emit('close');
+    await vi.advanceTimersByTimeAsync(999);
+    expect(harness.stats).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await Promise.resolve();
+    expect(harness.stats).toHaveBeenCalledTimes(2);
+
+    // 2nd failure: delay should be 2000ms
+    harness.stream.emit('close');
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(harness.stats).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    await Promise.resolve();
+    expect(harness.stats).toHaveBeenCalledTimes(3);
+
+    // 3rd failure: delay should be 4000ms
+    harness.stream.emit('close');
+    await vi.advanceTimersByTimeAsync(3_999);
+    expect(harness.stats).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(1);
+    await Promise.resolve();
+    expect(harness.stats).toHaveBeenCalledTimes(4);
+
+    // Drive failures until cap (1s→2s→4s→8s→16s→32s→60s cap)
+    // Current delay after 3 failures = 8000ms (next doubling from 4000)
+    // Advance through enough cycles to hit the 60s cap
+    for (const expectedDelay of [8_000, 16_000, 32_000]) {
+      harness.stream.emit('close');
+      await vi.advanceTimersByTimeAsync(expectedDelay - 1);
+      const countBefore = harness.stats.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(1);
+      await Promise.resolve();
+      expect(harness.stats.mock.calls.length).toBe(countBefore + 1);
+    }
+
+    // After the 32s failure (retryDelayMs was set to min(32000*2,60000)=60000)
+    // Next reconnect must fire at 60s, not at 64s
+    harness.stream.emit('close');
+    const countAt59 = harness.stats.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(harness.stats.mock.calls.length).toBe(countAt59); // not yet
+    await vi.advanceTimersByTimeAsync(1);
+    await Promise.resolve();
+    expect(harness.stats.mock.calls.length).toBe(countAt59 + 1); // fires at cap
+
+    // One more failure — still capped at 60s
+    harness.stream.emit('close');
+    const countAt60Cap = harness.stats.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(harness.stats.mock.calls.length).toBe(countAt60Cap);
+    await vi.advanceTimersByTimeAsync(1);
+    await Promise.resolve();
+    expect(harness.stats.mock.calls.length).toBe(countAt60Cap + 1);
+
+    release();
+  });
+
+  test('backoff resets to base delay after stream delivers healthy data', async () => {
+    const harness = createHarness();
+    const release = harness.collector.watch('c1');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(harness.stats).toHaveBeenCalledTimes(1);
+
+    // 1st failure: delay = 1000ms → retryDelayMs is now set to 2000ms
+    harness.stream.emit('close');
+    await vi.advanceTimersByTimeAsync(1_000);
+    await Promise.resolve();
+    expect(harness.stats).toHaveBeenCalledTimes(2);
+
+    // Stream delivers data — this should reset retryDelayMs
+    harness.emitStats(100, 1000);
+
+    // 2nd failure after healthy data: delay should be 1000ms again (reset), not 2000ms
+    harness.stream.emit('close');
+    // Confirm it does NOT fire at 999ms
+    await vi.advanceTimersByTimeAsync(999);
+    expect(harness.stats).toHaveBeenCalledTimes(2);
+    // Fires at 1000ms (base, not doubled 2000ms)
+    await vi.advanceTimersByTimeAsync(1);
+    await Promise.resolve();
+    expect(harness.stats).toHaveBeenCalledTimes(3);
+
+    release();
+  });
+
+  test('burst of close/error/end on dead stream results in exactly one reconnect', async () => {
+    const harness = createHarness();
+    const release = harness.collector.watch('c1');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(harness.stats).toHaveBeenCalledTimes(1);
+
+    // Emit three lifecycle events in rapid succession before timer fires
+    harness.stream.emit('close');
+    harness.stream.emit('error', new Error('burst-error'));
+    harness.stream.emit('end');
+
+    // Exactly one timer should be pending — firing it opens exactly one new stream
+    await vi.advanceTimersByTimeAsync(1_000);
+    await Promise.resolve();
+    expect(harness.stats).toHaveBeenCalledTimes(2);
+
+    release();
+  });
+
+  test('stopCollection clears pending retry so no reconnect fires after last watcher releases', async () => {
+    const harness = createHarness();
+    const release = harness.collector.watch('c1');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(harness.stats).toHaveBeenCalledTimes(1);
+
+    // Trigger failure — schedules reconnect after 1000ms
+    harness.stream.emit('close');
+    expect(harness.stats).toHaveBeenCalledTimes(1);
+
+    // Release the watcher before the timer fires — stopCollection should cancel it
+    release();
+
+    // Advance well past the base delay — no new stream should open
+    await vi.advanceTimersByTimeAsync(5_000);
+    await Promise.resolve();
+    expect(harness.stats).toHaveBeenCalledTimes(1);
+  });
+
+  test('watch while retry is pending does not open a second stream immediately', async () => {
+    const harness = createHarness();
+    const release1 = harness.collector.watch('c1');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(harness.stats).toHaveBeenCalledTimes(1);
+
+    // Stream fails — retry timer scheduled
+    harness.stream.emit('close');
+    expect(harness.stats).toHaveBeenCalledTimes(1);
+
+    // A second watch() while retry is pending should NOT open a new stream yet
+    const release2 = harness.collector.watch('c1');
+    await Promise.resolve();
+    expect(harness.stats).toHaveBeenCalledTimes(1);
+
+    // Only after the timer fires does the stream re-open
+    await vi.advanceTimersByTimeAsync(1_000);
+    await Promise.resolve();
+    expect(harness.stats).toHaveBeenCalledTimes(2);
+
+    release1();
+    release2();
   });
 
   test('removes listeners from old stream before restarting on error', async () => {
@@ -1355,5 +1532,84 @@ describe('stats/collector', () => {
 
     releaseOne();
     releaseTwo();
+  });
+
+  test('restartCollection skips reconnect when watchCount is zero (stream lacking cleanup hooks)', async () => {
+    // Use a stream without removeAllListeners so detachStream cannot silence
+    // the stream's listeners. If the stream fires a lifecycle event after the
+    // last watcher has released, restartCollection must bail out at the
+    // watchCount === 0 guard rather than scheduling a reconnect.
+    const stream = createStreamWithoutCleanupHooks();
+    const stats = vi.fn(async () => stream);
+    const collector = createContainerStatsCollector({
+      getContainerById: () => ({ id: 'c1', name: 'web', watcher: 'local' }) as any,
+      getWatchers: () => ({
+        'docker.local': {
+          dockerApi: {
+            getContainer: () => ({ stats }),
+          },
+        },
+      }),
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+    });
+
+    const release = collector.watch('c1');
+    await Promise.resolve();
+    expect(stats).toHaveBeenCalledTimes(1);
+
+    // Release the watcher — watchCount drops to 0. Because the stream has no
+    // removeAllListeners, the close listener is still registered on the stream.
+    release();
+
+    // Stream fires close after the watcher has gone — restartCollection is
+    // called but watchCount === 0 so it must return without scheduling a retry.
+    stream.emit('close');
+
+    // Advance well past any reconnect delay — no new stream should be opened.
+    await vi.advanceTimersByTimeAsync(5_000);
+    await Promise.resolve();
+    expect(stats).toHaveBeenCalledTimes(1);
+  });
+
+  test('restartCollection skips stacked timer when retryTimer is already set (stream lacking cleanup hooks)', async () => {
+    // Use a stream without removeAllListeners so that after the first lifecycle
+    // event detaches state.stream (but cannot silence the JS emitter), a second
+    // event still reaches the registered listener and must hit the retryTimer
+    // guard at line 349 rather than scheduling a second concurrent timer.
+    const stream = createStreamWithoutCleanupHooks();
+    const stats = vi.fn(async () => stream);
+    const collector = createContainerStatsCollector({
+      getContainerById: () => ({ id: 'c1', name: 'web', watcher: 'local' }) as any,
+      getWatchers: () => ({
+        'docker.local': {
+          dockerApi: {
+            getContainer: () => ({ stats }),
+          },
+        },
+      }),
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+    });
+
+    const release = collector.watch('c1');
+    await Promise.resolve();
+    expect(stats).toHaveBeenCalledTimes(1);
+
+    // First close: detaches state.stream and schedules a retry timer.
+    stream.emit('close');
+
+    // Second close: detachStream is a no-op (state.stream already undefined);
+    // watchCount is still 1; retryTimer is now set — must hit guard and return.
+    stream.emit('close');
+
+    // Only ONE timer should be pending, so exactly one reconnect fires.
+    await vi.advanceTimersByTimeAsync(1_000);
+    await Promise.resolve();
+    expect(stats).toHaveBeenCalledTimes(2);
+
+    release();
   });
 });
