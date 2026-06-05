@@ -127,6 +127,32 @@ services:
       - DD_UPDATE_HEALTH_GATE_HEARTBEAT_MS=5000
 ```
 
+## Post-start liveness check
+
+After Docker's `start()` call returns, the new container has been launched but may still exit immediately (bad command, broken entrypoint, missing dependency). For images without a configured `HEALTHCHECK`, the existing health gate is skipped — meaning an immediate exit-on-launch was being silently treated as a successful update. The post-start liveness check closes this gap: drydock sleeps a brief grace period after start, then re-inspects the container. If the container is no longer running, the update is treated as a failure and the existing rollback machinery takes over.
+
+| Env var | Required | Description | Default |
+| --- | :---: | --- | --- |
+| `DD_UPDATE_POST_START_LIVENESS_GRACE_MS` | ⚪ | Grace period (ms) to wait after container start before re-inspecting for an immediate exit. Set to `0` to disable the check entirely. | `2000` (2 s) |
+
+**Semantics:**
+
+- Absent or empty → use the 2 s default.
+- `0` → disable the post-start liveness check entirely (the update proceeds as before without the re-inspect).
+- Positive integer ≥ 100 → wait this many milliseconds, then re-inspect.
+- Values between 1 and 99 (inclusive) → drydock fails fast at startup with a descriptive error (minimum enforced to prevent accidental near-zero values that would be indistinguishable from `0`).
+
+The check is conservative: inspect failures are warned-and-tolerated (Drydock cannot prove the container died) and the check only converts a "definitively exited" state into a failure. Containers that pass the grace window continue to the health gate as normal.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      # Extend grace period to 5 seconds for slow-starting containers.
+      - DD_UPDATE_POST_START_LIVENESS_GRACE_MS=5000
+```
+
 ## Why isn't my container auto-updating?
 
 Drydock evaluates each container against a stack of policy and trigger gates and reports the result as a pill on the row (and as `updateEligibility` on the API payload). When auto-update doesn't fire on a container with an available update, the pill identifies the active blocker — `Below threshold`, `Trigger filtered`, `No trigger`, `Agent mismatch`, `Snoozed`, etc. See [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the full reason reference and how to clear each gate.

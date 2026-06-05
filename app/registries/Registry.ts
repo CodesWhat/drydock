@@ -106,7 +106,12 @@ function filterManifestByPlatform(
 
 /** Handle schemaVersion 1 manifests (legacy). */
 function handleSchemaV1(response: RegistryManifestResponse): RegistryManifest {
-  const v1Compat = JSON.parse(response.history?.[0].v1Compatibility);
+  let v1Compat: { config?: { Image?: string }; created?: string };
+  try {
+    v1Compat = JSON.parse(response.history?.[0]?.v1Compatibility);
+  } catch {
+    throw new Error('Failed to parse schemaVersion 1 manifest v1Compatibility');
+  }
   return {
     digest: v1Compat.config ? v1Compat.config.Image : undefined,
     created: v1Compat.created,

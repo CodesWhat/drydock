@@ -13,6 +13,7 @@ import {
 import { fullName } from '../../../model/container.js';
 import { getAuditCounter } from '../../../prometheus/audit.js';
 import { getRollbackCounter } from '../../../prometheus/rollback.js';
+import { buildImageReference } from '../../../registries/image-reference.js';
 import { getState } from '../../../registry/index.js';
 import { getTrivyDatabaseStatus } from '../../../security/runtime.js';
 import {
@@ -27,6 +28,7 @@ import * as backupStore from '../../../store/backup.js';
 import * as storeContainer from '../../../store/container.js';
 import { cacheSecurityState } from '../../../store/container.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
+import { classifyDuplicateOpTerminalStatus } from '../../../updates/duplicate-op-classification.js';
 import { buildContainerLockKey, withContainerUpdateLocks } from '../../../updates/update-locks.js';
 import { getErrorMessage } from '../../../util/error.js';
 import { runHook } from '../../hooks/HookRunner.js';
@@ -296,16 +298,15 @@ class Docker<
         if (!name || !tag?.value) {
           return undefined;
         }
-        // registry.url is the v2 API base (e.g. "https://ghcr.io/v2"). Docker's
-        // POST /containers/create rejects that form with HTTP 400 — strip the
-        // scheme and "/v2" segment to match Registry.getImageFullName so the
-        // helper spawn uses the same reference shape as the pull path.
+        // registry.url is the v2 API base (e.g. "https://ghcr.io/v2" or
+        // "https://ghcr.io/v2/"). Docker's POST /containers/create rejects
+        // that form with HTTP 400.  Delegate to buildImageReference which
+        // strips the scheme and the trailing /v2[/] segment before
+        // concatenation, matching Registry.getImageFullName exactly.
         if (!registry?.url) {
           return `${name}:${tag.value}`;
         }
-        return `${registry.url}/${name}:${tag.value}`
-          .replace(/https?:\/\//, '')
-          .replace(/\/v2\//, '/');
+        return buildImageReference(registry.url, name, tag.value);
       },
     });
     this.containerUpdateExecutor = new ContainerUpdateExecutor({
@@ -341,10 +342,24 @@ class Docker<
           } as typeof containerCurrent);
         }
       },
-      scheduleDeferredReconciliation: (containerName, _operationId, delayMs) => {
+      scheduleDeferredReconciliation: (containerName, operationId, delayMs) => {
         setTimeout(async () => {
           try {
-            const container = storeContainer.getContainers().find((c) => c.name === containerName);
+            // Resolve by operation ID first — avoids cross-agent name collision
+            // when both agents share the same default watcher name ('local') (#386).
+            const operationContainerId =
+              updateOperationStore.getOperationById(operationId)?.containerId;
+            const container =
+              (operationContainerId
+                ? storeContainer.getContainer(operationContainerId)
+                : undefined) ??
+              storeContainer
+                .getContainers()
+                .find(
+                  (c) =>
+                    c.name === containerName &&
+                    (c.agent ?? undefined) === (this.agent ?? undefined),
+                );
             if (!container) {
               return;
             }
@@ -862,8 +877,13 @@ class Docker<
    * @returns {*}
    */
   cloneContainer(currentContainer, newImage, runtimeOptionsOrLogContainer = {}) {
-    const { sourceImageConfig, targetImageConfig, runtimeFieldOrigins, logContainer } =
-      this.runtimeConfigManager.buildCloneRuntimeConfigOptions(runtimeOptionsOrLogContainer);
+    const {
+      sourceImageConfig,
+      targetImageConfig,
+      runtimeFieldOrigins,
+      defaultRuntime,
+      logContainer,
+    } = this.runtimeConfigManager.buildCloneRuntimeConfigOptions(runtimeOptionsOrLogContainer);
     const containerName = currentContainer.Name.replace('/', '');
     const currentContainerNetworks = currentContainer.NetworkSettings?.Networks || {};
     const endpointsConfig = Object.entries(currentContainerNetworks).reduce(
@@ -913,6 +933,23 @@ class Docker<
     if (containerClone.HostConfig?.NetworkMode?.startsWith('container:')) {
       delete containerClone.Hostname;
       delete containerClone.ExposedPorts;
+    }
+
+    // Drop HostConfig.Runtime when it merely restates the daemon default. The
+    // inspect spec is copied verbatim, and most daemons report an explicit
+    // Runtime ("runc") that a hardened socket proxy enforcing a runtime
+    // allowlist will reject at POST /containers/create. Omitting it lets the
+    // daemon apply its own default, while an explicitly-selected non-default
+    // runtime (nvidia, kata, sysbox-runc, …) is preserved. Clone the HostConfig
+    // before editing so the source inspect spec (reused for rollback) is left
+    // untouched.
+    const hostConfig = containerClone.HostConfig as
+      | (Record<string, unknown> & { Runtime?: unknown })
+      | undefined;
+    if (defaultRuntime !== undefined && hostConfig && hostConfig.Runtime === defaultRuntime) {
+      const hostConfigWithoutRuntime = { ...hostConfig };
+      delete hostConfigWithoutRuntime.Runtime;
+      containerClone.HostConfig = hostConfigWithoutRuntime as { NetworkMode?: string };
     }
 
     return containerClone;
@@ -1461,11 +1498,24 @@ class Docker<
             throw error;
           }
 
-          updateOperationStore.markOperationTerminal(operation.id, {
-            status: 'failed',
-            phase: 'failed',
-            lastError: getErrorMessage(error),
-          });
+          // Issue #410 Part C (outer catch): if the error looks like a benign
+          // duplicate-update vanish (Docker 404, HTTP 409, compose "no longer
+          // exists") AND a recent succeeded op exists for the same container
+          // name, the update already happened — reclassify to `expired` (silent)
+          // instead of `failed` (emits update-failed notification).
+          if (classifyDuplicateOpTerminalStatus(error, operation.containerName) === 'expired') {
+            updateOperationStore.markOperationTerminal(operation.id, {
+              status: 'expired',
+              phase: 'expired',
+              lastError: getErrorMessage(error),
+            });
+          } else {
+            updateOperationStore.markOperationTerminal(operation.id, {
+              status: 'failed',
+              phase: 'failed',
+              lastError: getErrorMessage(error),
+            });
+          }
 
           throw error;
         }

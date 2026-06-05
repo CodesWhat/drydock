@@ -1,5 +1,6 @@
 import logger from '../log/index.js';
 import type { Container } from '../model/container.js';
+import { getDockerWatcherRegistryId } from '../watchers/providers/docker/container-init.js';
 import type { DockerContainerStats } from './calculation.js';
 import { calculateContainerStatsSnapshot } from './calculation.js';
 import { getStatsIntervalSeconds } from './config.js';
@@ -141,7 +142,7 @@ async function runTick(runtime: AggregatorRuntime): Promise<void> {
 
     const targets: Array<{ container: Container; watcher: DockerStatsWatcherApi }> = [];
     for (const container of containers) {
-      const watcherId = `docker.${container.watcher}`;
+      const watcherId = getDockerWatcherRegistryId(container.watcher, container.agent ?? undefined); // #386
       const watcher = watchers[watcherId];
       if (isDockerStatsWatcherApi(watcher)) {
         targets.push({ container, watcher });

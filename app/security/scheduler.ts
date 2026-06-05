@@ -208,24 +208,44 @@ async function scanDigestGroup(options: {
       logScheduler.info(`Digest ${digest.slice(0, 12)} unchanged, using cached scan`);
     }
 
-    // Update all containers sharing this digest. Preserve the previously
-    // stored scan record when the new result is an error (transient Trivy
-    // failure, registry timeout, daemon hiccup) AND the previous scan is
-    // still within the preservation window; otherwise an empty
-    // status:'error' record from `mapToErrorResult` would silently wipe
+    // Update all containers sharing this digest. Read the CURRENT store
+    // record at write-back time rather than spreading the stale snapshot
+    // captured at batch-prep. The scan can take minutes, so by the time we
+    // write back the container may have been updated (clearing updateAvailable,
+    // advancing image.tag.value) or even fully recreated under a new id.
+    //
+    // - If the current record is gone (container removed or recreated with a
+    //   new id) skip the write entirely — spreading the snapshot would create
+    //   a zombie store record for an id that no longer exists.
+    // - Otherwise merge ONLY the security field onto the current record so
+    //   that update-state fields (result, image.tag.value, updateAvailable,
+    //   updateKind, updateDetectedAt) are never silently reverted to their
+    //   stale snapshot values.
+    //
+    // Preserve the previously-stored scan record when the new result is an
+    // error (transient Trivy failure, registry timeout, daemon hiccup) AND
+    // the previous scan is still within the preservation window; otherwise an
+    // empty status:'error' record from `mapToErrorResult` would silently wipe
     // useful passed/blocked history every time the scheduler runs into a
     // hiccup — see issue #357. After MAX_PRESERVED_SCAN_AGE_MS the stale
     // record is overwritten so a container cannot be stuck as 'passed'
     // indefinitely when Trivy errors persist for weeks.
     for (const container of group) {
-      const previousScan = container.security?.scan;
+      const current = storeContainer.getContainerRaw(container.id);
+      if (!current) {
+        // Container is gone (removed or recreated with a new id) — skip to
+        // avoid creating a ghost/zombie record in the store.
+        broadcastScanCompleted(container.id, scanResult.status);
+        continue;
+      }
+      const previousScan = current.security?.scan;
       const keepPrevious =
         scanResult.status === 'error' && previousScan && isWithinPreservationWindow(previousScan);
       const scan = keepPrevious ? previousScan : scanResult;
       const containerToStore = {
-        ...container,
+        ...current,
         security: {
-          ...(container.security || {}),
+          ...(current.security || {}),
           scan,
         },
       };

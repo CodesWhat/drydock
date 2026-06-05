@@ -329,7 +329,7 @@ async function refreshStoredContainerImageFields(
             imageLabels: currentImage.Config?.Labels,
             imageRegistryDomain: resolvedImageState.parsedImage.domain,
             imagePath: resolvedImageState.parsedImage.path,
-          }),
+          })?.sourceRepo,
         } as Container);
 
         containerInStore.image = refreshedContainer.image;
@@ -361,14 +361,14 @@ async function refreshStoredContainerImageFields(
     // before release-notes support shipped pick up their OCI image labels on
     // the next watch tick — not only when the image id/digest changes.
     if (!containerInStore.sourceRepo) {
-      const backfilledSourceRepo = detectSourceRepoFromImageMetadata({
+      const backfilledResolution = detectSourceRepoFromImageMetadata({
         containerLabels: container.Labels || {},
         imageLabels: currentImage.Config?.Labels,
         imageRegistryDomain: containerInStore.image.registry?.url,
         imagePath: containerInStore.image.name,
       });
-      if (backfilledSourceRepo) {
-        containerInStore.sourceRepo = backfilledSourceRepo;
+      if (backfilledResolution) {
+        containerInStore.sourceRepo = backfilledResolution.sourceRepo;
       }
     }
   } catch {
@@ -742,7 +742,7 @@ export async function addImageDetailsToContainerOrchestration(
       imageLabels: image.Config?.Labels,
       imageRegistryDomain: parsedImage.domain,
       imagePath: parsedImage.path,
-    }),
+    })?.sourceRepo,
     details: runtimeDetails,
     result: {
       tag: tagName,

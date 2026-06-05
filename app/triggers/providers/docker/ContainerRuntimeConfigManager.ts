@@ -31,6 +31,7 @@ type RuntimeConfigOptions = {
   sourceImageConfig?: RuntimeConfigObject;
   targetImageConfig?: RuntimeConfigObject;
   runtimeFieldOrigins?: RuntimeFieldOrigins;
+  defaultRuntime?: string;
   logContainer?: RuntimeConfigLogger;
 };
 
@@ -121,6 +122,7 @@ function isRuntimeConfigOptions(
     Object.hasOwn(runtimeOptionsOrLogContainer, 'sourceImageConfig') ||
     Object.hasOwn(runtimeOptionsOrLogContainer, 'targetImageConfig') ||
     Object.hasOwn(runtimeOptionsOrLogContainer, 'runtimeFieldOrigins') ||
+    Object.hasOwn(runtimeOptionsOrLogContainer, 'defaultRuntime') ||
     Object.hasOwn(runtimeOptionsOrLogContainer, 'logContainer')
   );
 }
@@ -527,6 +529,33 @@ class ContainerRuntimeConfigManager {
     }
   }
 
+  async getDefaultRuntime(
+    dockerApi: { info?: () => Promise<unknown> } | undefined,
+    logContainer: RuntimeConfigLogger | undefined,
+  ): Promise<string | undefined> {
+    if (typeof dockerApi?.info !== 'function') {
+      return undefined;
+    }
+
+    try {
+      const info = await dockerApi.info();
+      if (!isRecord(info)) {
+        return undefined;
+      }
+      const defaultRuntime = (info as { DefaultRuntime?: unknown }).DefaultRuntime;
+      return typeof defaultRuntime === 'string' && defaultRuntime.length > 0
+        ? defaultRuntime
+        : undefined;
+    } catch (e: unknown) {
+      logContainer?.debug?.(
+        `Unable to read daemon DefaultRuntime for runtime normalization (${String(
+          (e as Error)?.message ?? e,
+        )})`,
+      );
+      return undefined;
+    }
+  }
+
   async getCloneRuntimeConfigOptions(
     dockerApi:
       | {
@@ -535,6 +564,7 @@ class ContainerRuntimeConfigManager {
                 inspect?: () => Promise<{ Config?: RuntimeConfigObject }>;
               }
             | undefined;
+          info?: () => Promise<unknown>;
         }
       | undefined,
     currentContainerSpec: { Config?: { Image?: string }; Image?: string } | undefined,
@@ -542,15 +572,17 @@ class ContainerRuntimeConfigManager {
     logContainer: RuntimeConfigLogger | undefined,
   ): Promise<RuntimeConfigOptions> {
     const sourceImageRef = currentContainerSpec?.Config?.Image ?? currentContainerSpec?.Image;
-    const [sourceImageConfig, targetImageConfig] = await Promise.all([
+    const [sourceImageConfig, targetImageConfig, defaultRuntime] = await Promise.all([
       this.inspectImageConfig(dockerApi, sourceImageRef, logContainer),
       this.inspectImageConfig(dockerApi, newImage, logContainer),
+      this.getDefaultRuntime(dockerApi, logContainer),
     ]);
 
     return {
       sourceImageConfig,
       targetImageConfig,
       runtimeFieldOrigins: this.getRuntimeFieldOrigins(currentContainerSpec?.Config),
+      defaultRuntime,
       logContainer,
     };
   }

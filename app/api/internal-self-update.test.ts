@@ -344,6 +344,37 @@ describe('internal-self-update', () => {
     );
   });
 
+  test('ignores already-expired operations without rewriting them', () => {
+    mockGetOperationById.mockReturnValue({
+      id: 'op-123',
+      status: 'expired',
+      phase: 'expired',
+      kind: 'self-update',
+    });
+
+    const handler = createFinalizeSelfUpdateHandler();
+    const req = createFinalizeRequest({
+      body: {
+        operationId: 'op-123',
+        status: 'failed',
+        phase: 'failed',
+      },
+    });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(202);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'ignored',
+        operationId: 'op-123',
+        reason: 'already-terminal',
+      }),
+    );
+  });
+
   test('rejects finalize requests for non-self-update operations', () => {
     mockGetOperationById.mockReturnValue({
       id: 'op-123',

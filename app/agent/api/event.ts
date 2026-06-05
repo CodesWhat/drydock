@@ -49,6 +49,10 @@ interface RuntimeEnvEntry {
 let sseClients: SseClient[] = [];
 let nextSseClientId = 0;
 let containerSummaryCache: ContainerSummaryCache | undefined;
+// Cache of the latest sanitized watcher snapshot per watcher (keyed by "type:name").
+// Replayed to each new SSE client on connect so the controller never misses the
+// authoritative container list emitted mid-cron while disconnected (#386).
+let lastWatcherSnapshotByWatcher = new Map<string, unknown>();
 
 function allocateSseClientId(): number {
   if (nextSseClientId >= Number.MAX_SAFE_INTEGER) {
@@ -157,6 +161,25 @@ function sanitizeWatcherSnapshotPayloadForAgentSse(payload: unknown): unknown {
     watcher: snapshotPayload.watcher,
     containers,
   };
+}
+
+/**
+ * Store the sanitized watcher snapshot in the per-watcher cache.
+ * If the payload lacks a usable watcher key (missing type or name), it is skipped.
+ */
+function cacheWatcherSnapshot(sanitized: unknown): void {
+  if (!sanitized || typeof sanitized !== 'object') {
+    return;
+  }
+  const s = sanitized as { watcher?: unknown };
+  if (!s.watcher || typeof s.watcher !== 'object') {
+    return;
+  }
+  const w = s.watcher as { type?: unknown; name?: unknown };
+  if (typeof w.type !== 'string' || !w.type || typeof w.name !== 'string' || !w.name) {
+    return;
+  }
+  lastWatcherSnapshotByWatcher.set(`${w.type}:${w.name}`, sanitized);
 }
 
 function sanitizeSecurityAlertPayloadForAgentSse(payload: unknown): unknown {
@@ -304,6 +327,16 @@ export function subscribeEvents(req: Request, res: Response) {
   };
   client.res.write(`data: ${JSON.stringify(ackMessage)}\n\n`);
 
+  // Replay the latest snapshot for each known watcher to this new client only (#386).
+  // A snapshot emitted while the controller SSE was disconnected would otherwise be
+  // lost until the next 6 h cron. Write directly to client.res — not sendSseEvent —
+  // to avoid broadcasting to already-connected clients.
+  for (const snapshot of lastWatcherSnapshotByWatcher.values()) {
+    client.res.write(
+      `data: ${JSON.stringify({ type: 'dd:watcher-snapshot', data: snapshot })}\n\n`,
+    );
+  }
+
   req.on('close', () => {
     log.info(`Controller drydock with ip ${sanitizeLogParam(req.ip)} disconnected.`);
     sseClients = sseClients.filter((c) => c.id !== client.id);
@@ -323,9 +356,11 @@ export function initEvents() {
   event.registerContainerRemoved((container: event.ContainerLifecycleEventPayload) =>
     sendSseEvent('dd:container-removed', { id: container.id }),
   );
-  event.registerWatcherSnapshot((payload: event.WatcherSnapshotEventPayload) =>
-    sendSseEvent('dd:watcher-snapshot', sanitizeWatcherSnapshotPayloadForAgentSse(payload)),
-  );
+  event.registerWatcherSnapshot((payload: event.WatcherSnapshotEventPayload) => {
+    const sanitized = sanitizeWatcherSnapshotPayloadForAgentSse(payload);
+    cacheWatcherSnapshot(sanitized);
+    sendSseEvent('dd:watcher-snapshot', sanitized);
+  });
   event.registerContainerUpdateApplied((payload: event.ContainerUpdateAppliedEvent) =>
     sendSseEvent('dd:update-applied', sanitizeUpdateAppliedPayloadForAgentSse(payload)),
   );
@@ -357,4 +392,5 @@ export function _resetAgentEventStateForTests(): void {
   sseClients = [];
   nextSseClientId = 0;
   containerSummaryCache = undefined;
+  lastWatcherSnapshotByWatcher = new Map();
 }

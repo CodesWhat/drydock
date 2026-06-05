@@ -103,9 +103,9 @@ class Quay extends BaseRegistry<QuayRegistryConfiguration> {
       const nextPageRegex = link.match(/^.*next_page=(.*)$/);
       const lastRegex = link.match(/^.*last=(.*)>;.*$/);
       if (nextPageRegex) {
-        nextOrLast = `&next_page=${nextPageRegex[1]}`;
+        nextOrLast = `&next_page=${encodeURIComponent(nextPageRegex[1])}`;
       } else if (lastRegex) {
-        nextOrLast = `&last=${lastRegex[1]}`;
+        nextOrLast = `&last=${encodeURIComponent(lastRegex[1])}`;
       }
     }
     return this.callRegistry<RegistryTagsList>({

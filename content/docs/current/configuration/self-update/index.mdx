@@ -128,10 +128,16 @@ If Drydock restarts while an update is in progress, the outcome depends on which
 
 <Callout type="info">Self-update operations are not recovered automatically — a self-update interrupted mid-flight should be re-triggered manually once Drydock is running again.</Callout>
 
+### Boot-time recovery concurrency
+
+| Env var | Required | Description | Default |
+| --- | :---: | --- | --- |
+| `DD_UPDATE_RECOVERY_BOOT_CONCURRENCY` | ⚪ | Maximum number of queued update operations that are resumed in parallel when Drydock starts. Increasing this value speeds up recovery when many containers have pending updates after a crash. Must be a positive integer (`≥ 1`); a value of `0` or a non-integer causes a startup error. | `4` |
+
 ## Example
 
-<Tabs items={["Docker Compose"]}>
-<Tab value="Docker Compose">
+<Tabs items={["Docker Compose (socket)", "Docker Compose (TCP)"]}>
+<Tab value="Docker Compose (socket)">
 
 ```yaml
 services:
@@ -151,6 +157,33 @@ services:
 volumes:
   drydock-data:
 ```
+
+</Tab>
+<Tab value="Docker Compose (TCP)">
+
+Plain TCP deployment — Drydock connects to the Docker daemon over TCP (no bind-mounted socket required). On self-update, Drydock automatically attaches a TCP helper container to its own Docker network so the helper can reach the daemon by hostname.
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock:latest
+    container_name: drydock
+    labels:
+      - dd.watch=true
+    environment:
+      - DD_WATCHER_LOCAL_HOST=my-docker-host
+      - DD_WATCHER_LOCAL_PORT=2375
+      - DD_ACTION_DOCKER_LOCAL_PRUNE=true
+    volumes:
+      - drydock-data:/store
+    ports:
+      - "3000:3000"
+
+volumes:
+  drydock-data:
+```
+
+<Callout type="info">On a TCP deployment, Drydock does **not** need the Docker socket bind-mounted for regular container updates. During self-update it spawns a helper container on its own Docker network; the helper receives the TCP connection parameters automatically (`DD_SELF_UPDATE_DOCKER_HOST` / `DD_SELF_UPDATE_DOCKER_PORT` / `DD_SELF_UPDATE_DOCKER_PROTOCOL`) and uses them to perform the container swap.</Callout>
 
 </Tab>
 </Tabs>

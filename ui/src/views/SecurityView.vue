@@ -472,10 +472,15 @@ const tableColumns = computed(() => {
   ];
 });
 
+function handleSseReconnected() {
+  void fetchContainers();
+  handleSseScanCompleted();
+}
+
 const sseScanCompletedListener = handleSseScanCompleted as EventListener;
-const sseConnectedListener = handleSseScanCompleted as EventListener;
+const sseConnectedListener = handleSseReconnected as EventListener;
 const sseContainerChangedListener = handleSseContainerChanged as EventListener;
-const sseResyncRequiredListener = handleSseScanCompleted as EventListener;
+const sseResyncRequiredListener = handleSseReconnected as EventListener;
 
 onMounted(() => {
   void fetchSecurityRuntimeStatus();

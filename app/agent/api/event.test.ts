@@ -781,6 +781,172 @@ describe('agent API event', () => {
     });
   });
 
+  describe('watcher snapshot replay on connect (#386)', () => {
+    test('new client receives cached snapshot immediately after ack when one exists', () => {
+      // Connect a client so the broadcast from initEvents has somewhere to go
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+
+      eventApi.initEvents();
+
+      // Emit a snapshot — this caches it and broadcasts to the existing client
+      const snapshotHandler = event.registerWatcherSnapshot.mock.calls[0][0];
+      snapshotHandler({
+        watcher: { type: 'docker', name: 'local' },
+        containers: [{ id: 'c1' }],
+      });
+      res.write.mockClear();
+
+      // A NEW client connects after the snapshot was emitted
+      const newReq = { ip: '10.0.0.2', on: vi.fn() };
+      const newRes = { writeHead: vi.fn(), write: vi.fn() };
+      eventApi.subscribeEvents(newReq, newRes);
+
+      // Should have received: ack (call 0) + snapshot replay (call 1)
+      expect(newRes.write).toHaveBeenCalledTimes(2);
+      const replayCall = newRes.write.mock.calls[1][0];
+      expect(replayCall).toContain('dd:watcher-snapshot');
+      expect(replayCall).toContain('"type":"docker"');
+      expect(replayCall).toContain('"name":"local"');
+    });
+
+    test('already-connected clients do NOT receive a second snapshot when a new client connects', () => {
+      // Connect an existing client and emit a snapshot to it
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const snapshotHandler = event.registerWatcherSnapshot.mock.calls[0][0];
+      snapshotHandler({
+        watcher: { type: 'docker', name: 'local' },
+        containers: [{ id: 'c1' }],
+      });
+      // existing client received the broadcast — record how many writes happened
+      const writesBeforeNewConnect = res.write.mock.calls.length;
+
+      // A second client connects — triggers the replay loop for the new client only
+      const newReq = { ip: '10.0.0.3', on: vi.fn() };
+      const newRes = { writeHead: vi.fn(), write: vi.fn() };
+      eventApi.subscribeEvents(newReq, newRes);
+
+      // The original client should have received NO additional writes
+      expect(res.write).toHaveBeenCalledTimes(writesBeforeNewConnect);
+    });
+
+    test('client that subscribes before any snapshot is emitted receives only the ack', () => {
+      // No snapshot emitted yet
+      const newReq = { ip: '10.0.0.4', on: vi.fn() };
+      const newRes = { writeHead: vi.fn(), write: vi.fn() };
+      eventApi.subscribeEvents(newReq, newRes);
+
+      // Only the ack should be written
+      expect(newRes.write).toHaveBeenCalledTimes(1);
+      const ackCall = newRes.write.mock.calls[0][0];
+      expect(ackCall).toContain('dd:ack');
+      expect(ackCall).not.toContain('dd:watcher-snapshot');
+    });
+
+    test('only the latest snapshot per watcher is replayed when multiple snapshots are emitted', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const snapshotHandler = event.registerWatcherSnapshot.mock.calls[0][0];
+
+      // Emit snapshot A
+      snapshotHandler({
+        watcher: { type: 'docker', name: 'local' },
+        containers: [{ id: 'old-container' }],
+      });
+
+      // Emit snapshot B for the same watcher (overwrites A)
+      snapshotHandler({
+        watcher: { type: 'docker', name: 'local' },
+        containers: [{ id: 'new-container' }],
+      });
+
+      // A new client connects
+      const newReq = { ip: '10.0.0.5', on: vi.fn() };
+      const newRes = { writeHead: vi.fn(), write: vi.fn() };
+      eventApi.subscribeEvents(newReq, newRes);
+
+      // Should receive ack + exactly one snapshot replay (snapshot B)
+      expect(newRes.write).toHaveBeenCalledTimes(2);
+      const replayCall = newRes.write.mock.calls[1][0];
+      expect(replayCall).toContain('new-container');
+      expect(replayCall).not.toContain('old-container');
+    });
+
+    test('snapshot with missing watcher name is not cached; subsequent client gets ack only', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const snapshotHandler = event.registerWatcherSnapshot.mock.calls[0][0];
+
+      // Emit a snapshot whose sanitized form has a watcher missing the name field
+      // sanitizeWatcherSnapshotPayloadForAgentSse passes watcher through as-is,
+      // so a watcher without 'name' will produce a sanitized payload without name.
+      snapshotHandler({
+        watcher: { type: 'docker' }, // no name
+        containers: [],
+      });
+
+      // A new client connects — cache should be empty, so only ack
+      const newReq = { ip: '10.0.0.6', on: vi.fn() };
+      const newRes = { writeHead: vi.fn(), write: vi.fn() };
+      eventApi.subscribeEvents(newReq, newRes);
+
+      expect(newRes.write).toHaveBeenCalledTimes(1);
+      expect(newRes.write.mock.calls[0][0]).toContain('dd:ack');
+    });
+
+    test('snapshot with missing watcher field is not cached; subsequent client gets ack only', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const snapshotHandler = event.registerWatcherSnapshot.mock.calls[0][0];
+
+      // Emit a snapshot with NO watcher field at all; sanitizer produces
+      // { watcher: undefined, containers: [] } — cacheWatcherSnapshot hits the
+      // `!s.watcher` branch (line 176) and skips caching.
+      snapshotHandler({ containers: [{ id: 'c1' }] });
+
+      // A new client connects — cache is empty, so only the ack should be written
+      const newReq = { ip: '10.0.0.8', on: vi.fn() };
+      const newRes = { writeHead: vi.fn(), write: vi.fn() };
+      eventApi.subscribeEvents(newReq, newRes);
+
+      expect(newRes.write).toHaveBeenCalledTimes(1);
+      expect(newRes.write.mock.calls[0][0]).toContain('dd:ack');
+      expect(newRes.write.mock.calls[0][0]).not.toContain('dd:watcher-snapshot');
+    });
+
+    test('_resetAgentEventStateForTests clears snapshot cache; post-reset client gets ack only', () => {
+      eventApi.subscribeEvents(req, res);
+      res.write.mockClear();
+      eventApi.initEvents();
+
+      const snapshotHandler = event.registerWatcherSnapshot.mock.calls[0][0];
+      snapshotHandler({
+        watcher: { type: 'docker', name: 'local' },
+        containers: [{ id: 'c1' }],
+      });
+
+      // Reset clears the cache
+      eventApi._resetAgentEventStateForTests();
+
+      // A new client should receive only the ack (no replay)
+      const newReq = { ip: '10.0.0.7', on: vi.fn() };
+      const newRes = { writeHead: vi.fn(), write: vi.fn() };
+      eventApi.subscribeEvents(newReq, newRes);
+
+      expect(newRes.write).toHaveBeenCalledTimes(1);
+      expect(newRes.write.mock.calls[0][0]).toContain('dd:ack');
+    });
+  });
+
   describe('allocateSseClientId', () => {
     test('should rollover to id=1 when starting from MAX_SAFE_INTEGER', () => {
       eventApi._setNextSseClientIdForTests(Number.MAX_SAFE_INTEGER);

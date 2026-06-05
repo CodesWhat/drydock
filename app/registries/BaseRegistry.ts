@@ -244,7 +244,7 @@ class BaseRegistry<
     return this.httpsAgent;
   }
 
-  private withTlsRequestOptions(requestOptions: RegistryRequestOptions): RegistryRequestOptions {
+  protected withTlsRequestOptions(requestOptions: RegistryRequestOptions): RegistryRequestOptions {
     const httpsAgent = requestOptions.httpsAgent || this.getHttpsAgent();
     if (!httpsAgent) {
       return requestOptions;

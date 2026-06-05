@@ -40,8 +40,16 @@ curl "http://drydock:3000/api/v1/containers?limit=25&offset=0"
 | `status` | string | | Filter by update/runtime status: `update-available`, `up-to-date`, `running`, `stopped`, `exited`, `paused`, `restarting`, `dead`, `created` |
 | `kind` | string | | Filter by update kind or watched state: `major`, `minor`, `patch`, `digest`, `watched`, `unwatched`, `all` |
 | `watcher` | string | | Filter by watcher name |
-| `maturity` | string | | Filter by update maturity: `hot`, `mature`, `established` |
+| `maturity` | string | | Filter by update maturity: `hot`, `mature`, `established`. The `hot`/`mature` boundary is controlled by `DD_UI_MATURITY_THRESHOLD_DAYS` (default 7 days); updates older than 30 days are always `established`. |
 | `containerIds` | string | | Comma-separated list of container IDs to pre-filter results to a specific set. Used by the Security view Update action and dashboard row navigation. |
+
+### Maturity filter configuration
+
+The `hot`/`mature` age boundary used by the `maturity` query parameter is set server-side:
+
+| Env var | Required | Description | Supported values | Default value when missing |
+| --- | :---: | --- | --- | --- |
+| `DD_UI_MATURITY_THRESHOLD_DAYS` | ⚪ | Age threshold (days) that separates `hot` updates from `mature` updates. Updates younger than this value are classified `hot`; updates at or older than this value (up to 30 days) are classified `mature`; updates older than 30 days are always `established`. | integer (`>0`) | `7` |
 
 ## Get container summary
 
@@ -641,8 +649,8 @@ curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28
 | --- | --- | --- |
 | `id` | string | Unique operation ID |
 | `containerName` | string | Container name |
-| `status` | string | `in-progress`, `succeeded`, `rolled-back`, or `failed` |
-| `phase` | string | Current phase: `prepare`, `renamed`, `new-created`, `old-stopped`, `new-started`, `health-gate`, `health-gate-passed`, `succeeded`, `rollback-started`, `rolled-back`, `rollback-failed` |
+| `status` | string | `queued`, `in-progress`, `succeeded`, `rolled-back`, `failed`, or `expired` (a stuck operation terminalised by the active-TTL sweep; non-notifying) |
+| `phase` | string | Current phase: `prepare`, `renamed`, `new-created`, `old-stopped`, `new-started`, `health-gate`, `health-gate-passed`, `succeeded`, `rollback-started`, `rolled-back`, `rollback-failed`, `expired` |
 | `createdAt` | string | ISO 8601 timestamp when the operation started |
 | `updatedAt` | string | ISO 8601 timestamp of the last phase transition |
 | `containerId` | string | Container ID |
@@ -689,7 +697,7 @@ Requests cancellation of a queued or in-progress update operation.
 
 - **Queued operations** are terminated immediately. The operation is marked `failed` with reason `"Cancelled by operator"`. Returns `200 OK` with the updated operation.
 - **In-progress operations** have a cancellation flag set; the update lifecycle checks this flag at safe checkpoints and aborts cleanly when reached. Returns `202 Accepted` with the operation (still `in-progress` until the checkpoint is hit).
-- **Terminal operations** (`succeeded`, `failed`, `rolled-back`) cannot be cancelled. Returns `409 Conflict`.
+- **Terminal operations** (`succeeded`, `failed`, `rolled-back`, `expired`) cannot be cancelled. Returns `409 Conflict`.
 
 ```bash
 curl -X POST http://drydock:3000/api/v1/operations/ea7c33a4-c1e3-4f34-9b95-9662cc7a40d6/cancel

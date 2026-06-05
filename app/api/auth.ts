@@ -32,6 +32,7 @@ import {
   resetStrategyIdsForTests,
 } from './auth-strategies.js';
 import type { AuthRequest, SessionUser, UserWithUsername } from './auth-types.js';
+import { requireSameOriginForMutations } from './csrf.js';
 import { sendErrorResponse } from './error-response.js';
 import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
 import {
@@ -409,6 +410,7 @@ export function init(app: Application): void {
 
   // Routes to protect after this line
   router.use(requireAuthentication);
+  router.use(requireSameOriginForMutations);
 
   // Store remember-me preference for authenticated sessions
   router.post('/remember', setRememberMe);

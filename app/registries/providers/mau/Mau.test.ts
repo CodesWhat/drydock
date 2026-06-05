@@ -236,3 +236,44 @@ test('init should convert string configuration to object defaults', async () => 
     authurl: 'https://dock.mau.dev',
   });
 });
+
+test('authenticate should pass httpsAgent to axios when insecure=true', async () => {
+  axios.mockImplementation(() => ({ data: { token: 'token' } }));
+
+  const mauInsecure = new Mau();
+  mauInsecure.configuration = {
+    url: 'https://dock.mau.dev',
+    authurl: 'https://dock.mau.dev',
+    token: TEST_TOKEN,
+    insecure: true,
+  };
+
+  await mauInsecure.authenticate({ name: 'team/image' }, { headers: {} });
+
+  expect(axios).toHaveBeenCalledWith(expect.objectContaining({ httpsAgent: expect.anything() }));
+  const calledConfig = (axios as ReturnType<typeof vi.fn>).mock.calls[0][0];
+  expect(calledConfig.httpsAgent.options.rejectUnauthorized).toBe(false);
+});
+
+test('authenticate should NOT attach httpsAgent when no TLS config is set', async () => {
+  axios.mockImplementation(() => ({ data: { token: 'token' } }));
+
+  await mau.authenticate({ name: 'team/image' }, { headers: {} });
+
+  const calledConfig = (axios as ReturnType<typeof vi.fn>).mock.calls[0][0];
+  expect(calledConfig.httpsAgent).toBeUndefined();
+  expect(calledConfig.method).toBe('GET');
+  expect(calledConfig.headers.Authorization).toContain('Basic ');
+});
+
+test('authenticate should percent-encode special characters in image name within scope parameter', async () => {
+  axios.mockImplementation(() => ({ data: { token: 'token' } }));
+
+  await mau.authenticate({ name: 'team/image&evil=1' }, { headers: {} });
+
+  const calledConfig = (axios as ReturnType<typeof vi.fn>).mock.calls[0][0];
+  expect(calledConfig.url).toContain(
+    `scope=${encodeURIComponent('repository:team/image&evil=1:pull')}`,
+  );
+  expect(calledConfig.url).not.toContain('&evil=1');
+});

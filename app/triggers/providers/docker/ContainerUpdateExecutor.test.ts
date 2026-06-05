@@ -11,6 +11,7 @@ const {
   mockGetActiveOperationByContainerName,
   mockGetActiveOperationByContainerId,
   mockIsOperationCancelRequested,
+  mockGetRecentTerminalSucceededOperationByContainerName,
   MockOperationCancelledError,
   mockStartHealthGateHeartbeat,
   mockCancelHeartbeat,
@@ -37,6 +38,7 @@ const {
     mockGetActiveOperationByContainerName: vi.fn(),
     mockGetActiveOperationByContainerId: vi.fn(),
     mockIsOperationCancelRequested: vi.fn(() => false),
+    mockGetRecentTerminalSucceededOperationByContainerName: vi.fn(() => undefined),
     MockOperationCancelledError,
     mockStartHealthGateHeartbeat,
     mockCancelHeartbeat,
@@ -54,6 +56,8 @@ vi.mock('../../../store/update-operation.js', () => ({
   getActiveOperationByContainerName: mockGetActiveOperationByContainerName,
   getActiveOperationByContainerId: mockGetActiveOperationByContainerId,
   isOperationCancelRequested: mockIsOperationCancelRequested,
+  getRecentTerminalSucceededOperationByContainerName:
+    mockGetRecentTerminalSucceededOperationByContainerName,
   OperationCancelledError: MockOperationCancelledError,
 }));
 
@@ -1818,6 +1822,198 @@ describe('ContainerUpdateExecutor', () => {
         expect.objectContaining({
           reason: 'start_new_failed',
           lastError: 'container exited with code 1',
+        }),
+      );
+    });
+  });
+
+  describe('FIX 1 — container snapshot included in fresh-insert operation rows', () => {
+    test('fresh-insert operation (no requestedOperationId) carries container snapshot so terminal event has container', async () => {
+      // No pre-existing operation — resolveOrCreateOperation does a fresh insertOperation.
+      // After pull fails, markOperationTerminal is called; the inserted row must carry
+      // the container snapshot so buildTerminalLifecycleEventBase can attach it.
+      mockGetOperationById.mockReturnValue(undefined);
+      const capturedInsertArgs: unknown[] = [];
+      mockInsertOperation.mockImplementation((fields: unknown) => {
+        capturedInsertArgs.push(fields);
+        return { id: 'op-fresh' };
+      });
+
+      const container = createContainer();
+      const pullError = new Error('manifest unknown');
+      const executor = createExecutor({
+        pullImage: vi.fn().mockRejectedValue(pullError),
+      });
+
+      await expect(executor.execute(createContext(), container, createLog())).rejects.toThrow(
+        'manifest unknown',
+      );
+
+      // The fields passed to insertOperation must include the container snapshot.
+      expect(capturedInsertArgs[0]).toEqual(
+        expect.objectContaining({
+          container: expect.objectContaining({ id: 'container-id', name: 'web' }),
+        }),
+      );
+    });
+
+    test('fresh-insert with explicit requestedOperationId not yet in store carries container snapshot', async () => {
+      // requestedOperationId is provided but getOperationById returns undefined →
+      // resolveOrCreateOperation falls into the second fresh-insert branch.
+      mockGetOperationById.mockReturnValue(undefined);
+      const capturedInsertArgs: unknown[] = [];
+      mockInsertOperation.mockImplementation((fields: unknown) => {
+        capturedInsertArgs.push(fields);
+        return { id: 'op-agent-fresh' };
+      });
+
+      const container = createContainer();
+      const pullError = new Error('pull failed on agent');
+      const executor = createExecutor({
+        pullImage: vi.fn().mockRejectedValue(pullError),
+      });
+
+      await expect(
+        executor.execute(createContext(), container, createLog(), {
+          operationId: 'op-agent-fresh',
+        }),
+      ).rejects.toThrow('pull failed on agent');
+
+      // Both insert calls (if any) must have container; we care about the one with the id.
+      const insertWithId = capturedInsertArgs.find(
+        (a) => (a as { id?: unknown }).id === 'op-agent-fresh',
+      );
+      expect(insertWithId).toEqual(
+        expect.objectContaining({
+          container: expect.objectContaining({ id: 'container-id', name: 'web' }),
+        }),
+      );
+    });
+  });
+
+  describe('FIX 2 — post-pull tail errors mark operation terminal', () => {
+    test('operation is marked terminal (failed) when getCloneRuntimeConfigOptions throws after pull', async () => {
+      const context = createContext({
+        currentContainerSpec: createCurrentContainerSpec({
+          State: { Running: false },
+          HostConfig: { AutoRemove: false },
+        }),
+      });
+      const runtimeConfigError = new Error('runtime config exploded');
+      const executor = createExecutor({
+        getCloneRuntimeConfigOptions: vi.fn().mockRejectedValue(runtimeConfigError),
+      });
+
+      await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+        'runtime config exploded',
+      );
+
+      // Operation must be marked terminal — not left in-progress.
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        'op-1',
+        expect.objectContaining({
+          status: 'failed',
+          phase: 'failed',
+          lastError: 'runtime config exploded',
+        }),
+      );
+    });
+
+    test('operation is marked terminal (failed) when currentContainer.rename throws in post-pull tail', async () => {
+      const context = createContext({
+        currentContainerSpec: createCurrentContainerSpec({
+          State: { Running: false },
+          HostConfig: { AutoRemove: false },
+        }),
+      });
+      // rename throws after getCloneRuntimeConfigOptions succeeds.
+      context.currentContainer.rename = vi.fn().mockRejectedValue(new Error('rename exploded'));
+
+      const executor = createExecutor();
+
+      await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+        'rename exploded',
+      );
+
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        'op-1',
+        expect.objectContaining({
+          status: 'failed',
+          phase: 'failed',
+          lastError: 'rename exploded',
+        }),
+      );
+    });
+
+    test('operation is marked terminal (expired) when rename throws a Docker 404 and a recent success exists for the container name (issue #410)', async () => {
+      const context = createContext({
+        currentContainerSpec: createCurrentContainerSpec({
+          State: { Running: false },
+          HostConfig: { AutoRemove: false },
+        }),
+      });
+
+      // Docker 404 "no such container" during rename
+      const docker404 = Object.assign(new Error('No such container: web'), { statusCode: 404 });
+      context.currentContainer.rename = vi.fn().mockRejectedValue(docker404);
+
+      // The executor's isContainerNotFoundError should recognise this
+      const executor = createExecutor({
+        isContainerNotFoundError: vi.fn((err) => err?.statusCode === 404),
+      });
+
+      // A recent succeeded op for "web" exists
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+        id: 'prev-op',
+        containerName: 'web',
+        status: 'succeeded',
+      });
+
+      await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+        'No such container: web',
+      );
+
+      // Should be expired, not failed — no ghost notification
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        'op-1',
+        expect.objectContaining({
+          status: 'expired',
+          phase: 'expired',
+        }),
+      );
+      expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith(
+        'op-1',
+        expect.objectContaining({ status: 'failed' }),
+      );
+    });
+
+    test('operation is still marked failed when rename throws a Docker 404 but no recent success exists', async () => {
+      const context = createContext({
+        currentContainerSpec: createCurrentContainerSpec({
+          State: { Running: false },
+          HostConfig: { AutoRemove: false },
+        }),
+      });
+
+      const docker404 = Object.assign(new Error('No such container: web'), { statusCode: 404 });
+      context.currentContainer.rename = vi.fn().mockRejectedValue(docker404);
+
+      const executor = createExecutor({
+        isContainerNotFoundError: vi.fn((err) => err?.statusCode === 404),
+      });
+
+      // No recent success
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+
+      await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+        'No such container: web',
+      );
+
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        'op-1',
+        expect.objectContaining({
+          status: 'failed',
+          phase: 'failed',
         }),
       );
     });

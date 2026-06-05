@@ -5,6 +5,14 @@ run-name: "🏷️ Release: Cut — manual by ${{ github.actor }}"
 # multi-registry push, cosign signing, SLSA attestation, artifact sign) runs
 # BEFORE the git tag is pushed. The tag is a receipt that the release
 # succeeded end-to-end — if you see the tag, the image exists.
+#
+# BEFORE DISPATCHING (local pre-cut step — cannot run in CI):
+#   npm run release:precheck <tag>     # e.g. npm run release:precheck v1.6.0
+# Surfaces open Discussions still owed a "shipped in <version>" reply, read from
+# .planning/roadmap/current-tracker.md (gitignored — invisible to this runner,
+# which is why it is a local gate, not a job here). Exits non-zero on a GA tag
+# with pending replies; --force to bypass. Post the replies + tick the boxes,
+# then dispatch this workflow.
 
 on:
   workflow_dispatch:

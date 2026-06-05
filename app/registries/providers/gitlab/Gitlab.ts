@@ -69,7 +69,7 @@ class Gitlab<
         Authorization: `Basic ${Gitlab.base64Encode('', this.configuration.token)}`,
       },
     };
-    const response = await axios(request);
+    const response = await axios(this.withTlsRequestOptions(request));
     return withAuthorizationHeader(
       requestOptions,
       'Bearer',

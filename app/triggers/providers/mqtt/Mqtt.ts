@@ -44,6 +44,7 @@ interface MqttConfiguration extends TriggerConfiguration {
     enabled: boolean;
     prefix: string;
     discovery: boolean;
+    agenttopicsegment: boolean;
     attributes: HassAttributePreset;
     filter: {
       include: string;
@@ -87,6 +88,7 @@ class Mqtt extends Trigger<MqttConfiguration> {
       enabled: false,
       prefix: hassDefaultPrefix,
       discovery: false,
+      agenttopicsegment: false,
       attributes: 'short',
       filter: {
         include: '',
@@ -142,6 +144,7 @@ class Mqtt extends Trigger<MqttConfiguration> {
           enabled: this.joi.boolean().default(false),
           prefix: this.joi.string().default(hassDefaultPrefix),
           discovery: this.joi.boolean().default((parent) => !!parent?.enabled),
+          agenttopicsegment: this.joi.boolean().default(false),
           attributes: this.joi
             .string()
             .valid(...HASS_ATTRIBUTE_PRESET_VALUES)
@@ -160,6 +163,7 @@ class Mqtt extends Trigger<MqttConfiguration> {
           enabled: false,
           prefix: hassDefaultPrefix,
           discovery: false,
+          agenttopicsegment: false,
           attributes: 'short',
           filter: {
             include: '',

@@ -339,5 +339,74 @@ describe('openApiPaths', () => {
         },
       });
     });
+
+    test('/api/operations/{id}/cancel POST path is fully specified', () => {
+      const updateOperationIdPathParam = {
+        name: 'id',
+        in: 'path',
+        required: true,
+        description: 'Update operation identifier',
+        schema: { type: 'string' },
+      };
+      expect(openApiPaths['/api/operations/{id}/cancel']).toStrictEqual({
+        post: {
+          tags: ['Containers', 'Actions'],
+          summary: 'Request cancellation of an active update operation',
+          operationId: 'cancelUpdateOperation',
+          parameters: [updateOperationIdPathParam],
+          responses: {
+            200: jsonResponse('Operation cancelled immediately', {
+              type: 'object',
+              properties: {
+                data: { $ref: '#/components/schemas/UpdateOperation' },
+              },
+              required: ['data'],
+              additionalProperties: false,
+            }),
+            202: jsonResponse(
+              'Cancellation requested; operation will abort at the next safe checkpoint',
+              {
+                type: 'object',
+                properties: {
+                  data: { $ref: '#/components/schemas/UpdateOperation' },
+                },
+                required: ['data'],
+                additionalProperties: false,
+              },
+            ),
+            401: errorResponse('Authentication required'),
+            404: errorResponse('Operation not found'),
+            409: errorResponse('Operation is not active'),
+            500: errorResponse('Internal server error'),
+          },
+        },
+      });
+    });
+
+    test('/api/update-operations/{id} GET path is fully specified', () => {
+      const updateOperationIdPathParam = {
+        name: 'id',
+        in: 'path',
+        required: true,
+        description: 'Update operation identifier',
+        schema: { type: 'string' },
+      };
+      expect(openApiPaths['/api/update-operations/{id}']).toStrictEqual({
+        get: {
+          tags: ['Containers'],
+          summary: 'Get a single update operation by id',
+          operationId: 'getUpdateOperationById',
+          parameters: [updateOperationIdPathParam],
+          responses: {
+            200: jsonResponse('Update operation', {
+              $ref: '#/components/schemas/UpdateOperation',
+            }),
+            400: errorResponse('Operation id is required'),
+            401: errorResponse('Authentication required'),
+            404: errorResponse('Update operation not found'),
+          },
+        },
+      });
+    });
   });
 });

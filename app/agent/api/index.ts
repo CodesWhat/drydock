@@ -3,12 +3,14 @@ import fs from 'node:fs';
 import https from 'node:https';
 import cors from 'cors';
 import express, { type NextFunction, type Request, type Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import { sendErrorResponse } from '../../api/error-response.js';
 import { getServerConfiguration } from '../../configuration/index.js';
 import { getEntries } from '../../log/buffer.js';
 import { toDisplayLogEntry } from '../../log/display-timestamp.js';
 import logger from '../../log/index.js';
 import { sanitizeLogParam } from '../../log/sanitize.js';
+import { getState } from '../../registry/index.js';
 import { hashToken } from '../../util/crypto.js';
 import * as containerApi from './container.js';
 import * as eventApi from './event.js';
@@ -130,8 +132,35 @@ export async function init() {
   // Init Event Listeners
   eventApi.initEvents();
 
-  // Health endpoint (unauthenticated, before auth middleware)
-  app.get('/health', (_req, res) => res.json({ uptime: process.uptime() }));
+  // Rate limiter — registered before auth middleware so unauthenticated floods are
+  // throttled at the gate. windowMs=60_000/max=300 permits ~5 req/s sustained, which
+  // is well above normal agent↔controller polling cadence (watchers, containers,
+  // triggers) while still providing meaningful brute-force protection.
+  // The SSE endpoint (/api/events) opens a single long-lived connection per controller
+  // session; it only hits the limiter once on the initial GET that establishes the
+  // stream — subsequent server-push writes are not HTTP requests and do not count.
+  const agentLimiter = rateLimit({
+    windowMs: 60_000,
+    max: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  // Health endpoint (unauthenticated, before auth middleware).
+  // Returns 503 when zero watchers are registered (e.g. Docker socket unreachable
+  // at startup, TLS misconfiguration) so that orchestrators do not route traffic
+  // to an agent that watches nothing.  Mirrors the main API's health gate pattern.
+  app.get('/health', (_req, res) => {
+    if (Object.keys(getState().watcher).length === 0) {
+      res.status(503).json({ status: 'unhealthy', reason: 'no watchers registered' });
+      return;
+    }
+    res.status(200).json({ uptime: process.uptime() });
+  });
+
+  // Rate limiter applied to every route registered after this point (the authenticated
+  // routes). /health is registered above and intentionally stays unthrottled for probes.
+  app.use(agentLimiter);
 
   // Auth Middleware
   app.use(authenticate);

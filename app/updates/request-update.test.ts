@@ -4,6 +4,7 @@ const {
   mockGetOperationById,
   mockGetActiveOperationByContainerId,
   mockGetActiveOperationByContainerName,
+  mockGetRecentTerminalSucceededOperationByContainerName,
   mockInsertOperation,
   mockMarkOperationTerminal,
   mockGetState,
@@ -13,6 +14,7 @@ const {
   mockGetOperationById: vi.fn(),
   mockGetActiveOperationByContainerId: vi.fn(),
   mockGetActiveOperationByContainerName: vi.fn(),
+  mockGetRecentTerminalSucceededOperationByContainerName: vi.fn(() => undefined),
   mockInsertOperation: vi.fn(),
   mockMarkOperationTerminal: vi.fn(),
   mockGetState: vi.fn(() => ({ trigger: {}, watcher: {} })),
@@ -24,6 +26,8 @@ vi.mock('../store/update-operation.js', () => ({
   getOperationById: mockGetOperationById,
   getActiveOperationByContainerId: mockGetActiveOperationByContainerId,
   getActiveOperationByContainerName: mockGetActiveOperationByContainerName,
+  getRecentTerminalSucceededOperationByContainerName:
+    mockGetRecentTerminalSucceededOperationByContainerName,
   insertOperation: mockInsertOperation,
   markOperationTerminal: mockMarkOperationTerminal,
 }));
@@ -1011,5 +1015,212 @@ describe('request-update', () => {
     expect(result.rejected).toHaveLength(1);
     expect(result.rejected[0].container.name).toBe('redis');
     expect(result.rejected[0].statusCode).toBe(400);
+  });
+
+  describe('getActiveUpdateOperationForContainer name-based dedup (issue #410 Part A)', () => {
+    test('blocks duplicate enqueue when a modern (containerId-carrying) op exists for the same container name', async () => {
+      // A modern op (has containerId) is active for container "nginx".
+      // The NEW container has a different Docker ID (recreated), so by-id lookup misses.
+      // The by-name lookup SHOULD block the enqueue.
+      mockGetActiveOperationByContainerId.mockReturnValue(undefined); // new ID not found
+      mockGetActiveOperationByContainerName.mockReturnValue({
+        id: 'op-existing',
+        status: 'in-progress',
+        containerId: 'old-container-id', // modern op: has containerId
+      });
+
+      await expect(
+        requestContainerUpdate(createContainer({ id: 'new-container-id', name: 'nginx' }), {
+          trigger: { type: 'docker', trigger: vi.fn() },
+        }),
+      ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+        statusCode: 409,
+        message: 'Container update already in progress',
+      });
+    });
+
+    test('allows fresh enqueue when the previously active op is terminal (succeeded)', async () => {
+      // After Op1 completes successfully (terminal), Op2 for the same name should be allowed.
+      mockGetActiveOperationByContainerId.mockReturnValue(undefined);
+      mockGetActiveOperationByContainerName.mockReturnValue(undefined); // no active op
+
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+      };
+      const accepted = await requestContainerUpdate(createContainer({ name: 'nginx' }), {
+        trigger,
+      });
+      expect(accepted.operationId).toBeDefined();
+      expect(mockInsertOperation).toHaveBeenCalled();
+    });
+  });
+
+  describe('markAcceptedQueuedOperationFailed reclassification (issue #410 Part B)', () => {
+    test('reclassifies a Docker 404 (container-not-found) to expired when a recent success exists for the same name', async () => {
+      // The trigger throws with a Docker 404 error shape
+      const docker404Error = Object.assign(new Error('No such container: nginx'), {
+        statusCode: 404,
+      });
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockRejectedValue(docker404Error),
+      };
+
+      // Operation is in queued state when we check
+      mockGetOperationById.mockImplementation((id: string) => ({
+        id,
+        containerName: 'nginx',
+        status: 'queued',
+        phase: 'queued',
+      }));
+
+      // A recent succeeded op for the same container name exists
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+        id: 'prev-op',
+        containerName: 'nginx',
+        status: 'succeeded',
+      });
+
+      const accepted = await requestContainerUpdate(createContainer({ name: 'nginx' }), {
+        trigger,
+      });
+      await flushAsyncWork();
+
+      // Should be marked expired, not failed
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        accepted.operationId,
+        expect.objectContaining({ status: 'expired' }),
+      );
+      expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith(
+        accepted.operationId,
+        expect.objectContaining({ status: 'failed' }),
+      );
+    });
+
+    test('keeps failed status for Docker 404 when no recent success exists', async () => {
+      const docker404Error = Object.assign(new Error('No such container: nginx'), {
+        statusCode: 404,
+      });
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockRejectedValue(docker404Error),
+      };
+
+      mockGetOperationById.mockImplementation((id: string) => ({
+        id,
+        containerName: 'nginx',
+        status: 'queued',
+        phase: 'queued',
+      }));
+
+      // No recent success
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+
+      const accepted = await requestContainerUpdate(createContainer({ name: 'nginx' }), {
+        trigger,
+      });
+      await flushAsyncWork();
+
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        accepted.operationId,
+        expect.objectContaining({ status: 'failed' }),
+      );
+    });
+
+    test('reclassifies a 409 conflict error to expired when a recent success exists', async () => {
+      // An agent 409 conflict (active-op on the agent side) with a prior success
+      const conflict409Error = Object.assign(new Error('Container update already in progress'), {
+        response: { status: 409 },
+      });
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockRejectedValue(conflict409Error),
+      };
+
+      mockGetOperationById.mockImplementation((id: string) => ({
+        id,
+        containerName: 'nginx',
+        status: 'queued',
+        phase: 'queued',
+      }));
+
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+        id: 'prev-op',
+        containerName: 'nginx',
+        status: 'succeeded',
+      });
+
+      const accepted = await requestContainerUpdate(createContainer({ name: 'nginx' }), {
+        trigger,
+      });
+      await flushAsyncWork();
+
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        accepted.operationId,
+        expect.objectContaining({ status: 'expired' }),
+      );
+    });
+
+    test('keeps failed status for 409 conflict error when no recent success exists', async () => {
+      const conflict409Error = Object.assign(new Error('Container update already in progress'), {
+        response: { status: 409 },
+      });
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockRejectedValue(conflict409Error),
+      };
+
+      mockGetOperationById.mockImplementation((id: string) => ({
+        id,
+        containerName: 'nginx',
+        status: 'queued',
+        phase: 'queued',
+      }));
+
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+
+      const accepted = await requestContainerUpdate(createContainer({ name: 'nginx' }), {
+        trigger,
+      });
+      await flushAsyncWork();
+
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        accepted.operationId,
+        expect.objectContaining({ status: 'failed' }),
+      );
+    });
+
+    test('does not reclassify unrelated errors (e.g. pull failure) to expired', async () => {
+      const pullError = new Error('pull denied');
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockRejectedValue(pullError),
+      };
+
+      mockGetOperationById.mockImplementation((id: string) => ({
+        id,
+        containerName: 'nginx',
+        status: 'queued',
+        phase: 'queued',
+      }));
+
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+        id: 'prev-op',
+        containerName: 'nginx',
+        status: 'succeeded',
+      });
+
+      const accepted = await requestContainerUpdate(createContainer({ name: 'nginx' }), {
+        trigger,
+      });
+      await flushAsyncWork();
+
+      // A plain pull failure is NOT a container-not-found or 409 error, so stays failed
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        accepted.operationId,
+        expect.objectContaining({ status: 'failed' }),
+      );
+    });
   });
 });

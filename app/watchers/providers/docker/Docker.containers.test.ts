@@ -385,7 +385,10 @@ describe('Docker Watcher', () => {
       docker.log = mockLog;
       docker.findNewVersion = vi.fn().mockResolvedValue({ tag: '2.0.0' });
       docker.mapContainerToContainerReport = vi.fn().mockReturnValue({ container, changed: false });
-      mockResolveSourceRepoForContainer.mockResolvedValue('github.com/acme/service');
+      mockResolveSourceRepoForContainer.mockResolvedValue({
+        sourceRepo: 'github.com/acme/service',
+        trusted: true,
+      });
       mockGetReleaseNotesForTag.mockResolvedValue({
         title: 'v2.0.0',
         body: 'Release body',
@@ -434,7 +437,10 @@ describe('Docker Watcher', () => {
       docker.log = mockLog;
       docker.findNewVersion = vi.fn().mockResolvedValue({ tag: '2.0.0' });
       docker.mapContainerToContainerReport = vi.fn().mockReturnValue({ container, changed: false });
-      mockResolveSourceRepoForContainer.mockResolvedValue('github.com/acme/service');
+      mockResolveSourceRepoForContainer.mockResolvedValue({
+        sourceRepo: 'github.com/acme/service',
+        trusted: true,
+      });
       mockGetReleaseNotesForTag.mockRejectedValue(new Error('rate limited'));
 
       await docker.watchContainer(container as any);
@@ -4089,6 +4095,89 @@ describe('Docker Watcher', () => {
       await docker.getContainers();
 
       expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Agent-scoped prune filter (#386)', () => {
+    test('controller-local watcher does not prune remote-agent containers sharing the same watcher name', async () => {
+      // Register WITHOUT an agent argument so this.agent === undefined (controller local watcher).
+      await docker.register('watcher', 'docker', 'local', {});
+      mockDockerApi.listContainers.mockResolvedValue([]);
+      // Inspect throws for any id — the "local" container would be pruned if it gets into the
+      // candidate set; the "ml" container MUST NOT enter the candidate set at all.
+      mockDockerApi.getContainer.mockReturnValue({
+        inspect: vi.fn().mockRejectedValue(new Error('no such container')),
+      });
+
+      const localRow = {
+        id: 'local-container-1',
+        watcher: 'local',
+        agent: undefined,
+        name: 'svc-local',
+      };
+      const mlRow = { id: 'ml-container-1', watcher: 'local', agent: 'ml', name: 'svc-ml' };
+
+      storeContainer.getContainers.mockReturnValue([localRow, mlRow] as any);
+      storeContainer.getContainersRaw.mockReturnValue([localRow, mlRow] as any);
+      registry.getState.mockReturnValue({ watcher: {} } as any);
+
+      await docker.getContainers();
+
+      // The remote-agent 'ml' container must never be deleted.
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('ml-container-1');
+    });
+
+    test('controller-local watcher does prune its own containers whose IDs are missing from Docker', async () => {
+      await docker.register('watcher', 'docker', 'local', {});
+      mockDockerApi.listContainers.mockResolvedValue([]);
+      mockDockerApi.getContainer.mockReturnValue({
+        inspect: vi.fn().mockRejectedValue(new Error('no such container')),
+      });
+
+      const localRow = {
+        id: 'local-container-2',
+        watcher: 'local',
+        agent: undefined,
+        name: 'svc-local',
+      };
+      const mlRow = { id: 'ml-container-2', watcher: 'local', agent: 'ml', name: 'svc-ml' };
+
+      storeContainer.getContainers.mockReturnValue([localRow, mlRow] as any);
+      storeContainer.getContainersRaw.mockReturnValue([localRow, mlRow] as any);
+      registry.getState.mockReturnValue({ watcher: {} } as any);
+
+      await docker.getContainers();
+
+      // The local (undefined-agent) row is legitimately stale and should be pruned.
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('local-container-2');
+    });
+
+    test('agent-owned watcher only considers its own rows as prune candidates', async () => {
+      // Register WITH agent 'ml' — this simulates the ml agent's own local Docker watcher.
+      await docker.register('watcher', 'docker', 'local', {}, 'ml');
+      mockDockerApi.listContainers.mockResolvedValue([]);
+      mockDockerApi.getContainer.mockReturnValue({
+        inspect: vi.fn().mockRejectedValue(new Error('no such container')),
+      });
+
+      const mlRow = { id: 'ml-container-3', watcher: 'local', agent: 'ml', name: 'svc-ml' };
+      const localRow = {
+        id: 'local-container-3',
+        watcher: 'local',
+        agent: undefined,
+        name: 'svc-local',
+      };
+
+      storeContainer.getContainers.mockReturnValue([mlRow, localRow] as any);
+      storeContainer.getContainersRaw.mockReturnValue([mlRow, localRow] as any);
+      registry.getState.mockReturnValue({ watcher: {} } as any);
+
+      await docker.getContainers();
+
+      // The cross-agent (undefined-agent) row must never be deleted by the 'ml' watcher.
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('local-container-3');
+      // The ml watcher's own stale row is a valid candidate and gets pruned.
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('ml-container-3');
     });
   });
 

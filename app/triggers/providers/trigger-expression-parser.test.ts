@@ -3,7 +3,7 @@ vi.mock('../../log/index.js', () => ({
   default: { child: () => ({ warn: mockLogWarn, info: vi.fn(), debug: vi.fn(), error: vi.fn() }) },
 }));
 
-import { renderBatch, renderSimple } from './trigger-expression-parser.js';
+import { renderBatch, renderSimple, renderTemplate } from './trigger-expression-parser.js';
 
 const baseContainer = {
   id: 'c1',
@@ -713,6 +713,73 @@ describe('trigger-expression-parser', () => {
   test('evalLogicalAnd: returns right value when left is truthy', () => {
     const output = renderSimple('${"a" && "b"}', baseContainer as any);
     expect(output).toBe('b');
+  });
+});
+
+describe('splitTopLevelArgs — I-5 fix: method args split on quoted commas correctly', () => {
+  test('replace with comma as first arg: only replaces first match', () => {
+    // container.tag = "a,b,c"; rawArgs of replace(",", ";") is '",", ";"'
+    // naive split on ',' gives 3 broken args; splitTopLevelArgs gives correct 2
+    // String.replace with string arg replaces only the first occurrence
+    const output = renderSimple('${container.tag.replace(",", ";")}', {
+      ...baseContainer,
+      tag: 'a,b,c',
+    } as any);
+    expect(output).toBe('a;b,c');
+  });
+
+  test('split on quoted comma arg returns array from string with commas', () => {
+    // rawArgs of split(",") is '","' — one quoted arg; naive split gives ['"', '"'] (wrong)
+    const output = renderSimple('${container.tag.split(",")}', {
+      ...baseContainer,
+      tag: 'a,b,c',
+    } as any);
+    expect(output).toBe('["a","b","c"]');
+  });
+
+  test('padEnd with quoted comma fill character preserves both args', () => {
+    // padEnd(3, ",") — rawArgs is '3, ","'; naive split gives 3 broken args
+    const output = renderSimple('${container.x.padEnd(3, ",")}', {
+      ...baseContainer,
+      x: 'z',
+    } as any);
+    expect(output).toBe('z,,');
+  });
+
+  test('no-arg method call still works after splitTopLevelArgs change', () => {
+    // rawArgs.trim() === '' guard must be preserved
+    expect(renderSimple('${container.name.toUpperCase()}', baseContainer as any)).toBe('DEMO');
+  });
+
+  test('method arg with single-quoted comma is preserved', () => {
+    // replace with single-quoted comma: rawArgs is "',', '-'" — two args
+    const output = renderSimple("${container.tag.replace(',', '-')}", {
+      ...baseContainer,
+      tag: 'a,b',
+    } as any);
+    expect(output).toBe('a-b');
+  });
+});
+
+describe('renderTemplate — TASK 2 export', () => {
+  test('interpolates a scan.x style var against a nested context', () => {
+    const vars = { scan: { registry: 'ghcr.io', tag: 'v2.0.1' } };
+    expect(renderTemplate('Registry: ${scan.registry} tag: ${scan.tag}', vars)).toBe(
+      'Registry: ghcr.io tag: v2.0.1',
+    );
+  });
+
+  test('unknown/unsupported expression resolves to empty string', () => {
+    const vars = { scan: { tag: 'v1' } };
+    expect(renderTemplate('${scan.doesNotExist}', vars)).toBe('');
+  });
+
+  test('returns empty string for undefined template', () => {
+    expect(renderTemplate(undefined, {})).toBe('');
+  });
+
+  test('plain string with no expressions is returned as-is', () => {
+    expect(renderTemplate('hello world', {})).toBe('hello world');
   });
 });
 

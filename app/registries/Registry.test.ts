@@ -745,13 +745,38 @@ describe('getImageManifestDigest', () => {
     );
   });
 
-  test('should handle malformed JSON in schemaVersion 1 v1Compatibility', async () => {
+  test('should throw descriptive error for schemaVersion 1 with malformed (non-JSON) v1Compatibility', async () => {
     const registryMocked = createMockedRegistry();
     registryMocked.callRegistry = () => ({
       schemaVersion: 1,
-      history: [{ v1Compatibility: 'not valid json' }],
+      history: [{ v1Compatibility: 'not valid json {{{' }],
     });
-    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toThrow();
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toThrow(
+      'Failed to parse schemaVersion 1 manifest v1Compatibility',
+    );
+  });
+
+  test('should throw descriptive error for schemaVersion 1 with missing history array', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = () => ({
+      schemaVersion: 1,
+      // history is absent — history?.[0]?.v1Compatibility is undefined, JSON.parse(undefined) throws
+    });
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toThrow(
+      'Failed to parse schemaVersion 1 manifest v1Compatibility',
+    );
+  });
+
+  test('should throw descriptive error for schemaVersion 1 with missing v1Compatibility field', async () => {
+    const registryMocked = createMockedRegistry();
+    registryMocked.callRegistry = () => ({
+      schemaVersion: 1,
+      history: [{}],
+      // v1Compatibility is absent — JSON.parse(undefined) throws
+    });
+    await expect(registryMocked.getImageManifestDigest(imageInput())).rejects.toThrow(
+      'Failed to parse schemaVersion 1 manifest v1Compatibility',
+    );
   });
 
   test('should gracefully handle blob fetch error for legacy manifest config', async () => {

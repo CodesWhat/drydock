@@ -322,14 +322,8 @@ function parseCryptHash(rawHash: string): ParsedCryptHash | undefined {
 }
 
 function timingSafeEqualString(left: string, right: string): boolean {
-  const leftBuffer = Buffer.from(left, 'utf8');
-  const rightBuffer = Buffer.from(right, 'utf8');
-  if (leftBuffer.length !== rightBuffer.length) {
-    return false;
-  }
-
   try {
-    return timingSafeEqual(leftBuffer, rightBuffer);
+    return timingSafeEqual(hashValue(left), hashValue(right));
   } catch (error: unknown) {
     void normalizeErrorMessage(error);
     return false;

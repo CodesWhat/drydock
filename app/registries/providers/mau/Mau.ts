@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { type AxiosRequestConfig } from 'axios';
 import { withAuthorizationHeader } from '../../../security/auth.js';
 import Gitlab, { type GitlabRegistryConfiguration } from '../gitlab/Gitlab.js';
 
@@ -67,13 +67,10 @@ class Mau extends Gitlab<MauRegistryConfiguration> {
    * @returns {Promise<*>}
    */
   async authenticate(image, requestOptions) {
-    const request: {
-      method: string;
-      url: string;
-      headers: Record<string, string>;
-    } = {
+    const scope = encodeURIComponent(`repository:${image.name}:pull`);
+    const request: AxiosRequestConfig & { headers: Record<string, string> } = {
       method: 'GET',
-      url: `${this.configuration.authurl}/jwt/auth?service=container_registry&scope=repository:${image.name}:pull`,
+      url: `${this.configuration.authurl}/jwt/auth?service=container_registry&scope=${scope}`,
       headers: {
         Accept: 'application/json',
       },
@@ -83,7 +80,7 @@ class Mau extends Gitlab<MauRegistryConfiguration> {
       request.headers.Authorization = `Basic ${Mau.base64Encode('', this.configuration.token)}`;
     }
 
-    const response = await axios(request);
+    const response = await axios(this.withTlsRequestOptions(request));
     return withAuthorizationHeader(
       requestOptions,
       'Bearer',

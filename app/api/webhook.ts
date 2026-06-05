@@ -12,6 +12,7 @@ import { requestContainerUpdate, UpdateRequestError } from '../updates/request-u
 import { getErrorMessage } from '../util/error.js';
 import { ddWebhookEnabled, wudWebhookEnabled } from '../watchers/providers/docker/label.js';
 import { recordAuditEvent } from './audit-events.js';
+import { resolveWatcherIdForContainer } from './container/handlers/common.js';
 import { sendErrorResponse } from './error-response.js';
 
 const log = logger.child({ component: 'webhook' });
@@ -118,12 +119,40 @@ function authenticateToken(req: Request, res: Response, next: NextFunction) {
 }
 
 /**
- * Find a container by name from the store.
+ * Find a container by name from the store, with optional agent/watcher disambiguation. // #386
+ * Returns { container } on unambiguous match, { candidates } when multiple match (409 caller),
+ * or undefined when no match (404 caller).
  */
-function findContainerByName(containerName: string) {
-  const containers = storeContainer.getContainers({});
-  return containers.find((c) => c.name === containerName);
+function findContainerByName(
+  containerName: string,
+  filters: { agent?: string; watcher?: string } = {},
+):
+  | { container: ReturnType<typeof storeContainer.getContainers>[number]; candidates?: undefined }
+  | { container?: undefined; candidates: ReturnType<typeof storeContainer.getContainers> }
+  | undefined {
+  const allByName = storeContainer.getContainers({}).filter((c) => c.name === containerName);
+
+  // Apply optional disambiguation filters // #386
+  const candidates =
+    filters.agent !== undefined || filters.watcher !== undefined
+      ? allByName.filter(
+          (c) =>
+            (filters.agent === undefined || c.agent === filters.agent) &&
+            (filters.watcher === undefined || c.watcher === filters.watcher),
+        )
+      : allByName;
+
+  if (candidates.length === 0) {
+    return undefined;
+  }
+  if (candidates.length === 1) {
+    return { container: candidates[0] };
+  }
+  // Multiple matches — caller must return 409 // #386
+  return { candidates };
 }
+
+type StoreContainer = ReturnType<typeof storeContainer.getContainers>[number];
 
 type ContainerWebhookErrorContext = {
   auditAction: 'webhook-watch-container' | 'webhook-update';
@@ -138,9 +167,7 @@ const CONTAINER_WEBHOOK_DISABLED_ERROR = 'Webhooks are disabled for this contain
  * Check whether webhooks are enabled for the given container.
  * Returns true unless the container has dd.webhook.enabled (or wud.webhook.enabled) set to 'false'.
  */
-function isWebhookEnabledForContainer(
-  container: NonNullable<ReturnType<typeof findContainerByName>>,
-): boolean {
+function isWebhookEnabledForContainer(container: StoreContainer): boolean {
   const labels = container.labels;
   if (!labels) return true;
   const value = labels[ddWebhookEnabled] ?? labels[wudWebhookEnabled];
@@ -150,7 +177,7 @@ function isWebhookEnabledForContainer(
 
 function handleContainerActionError(
   error: unknown,
-  container: NonNullable<ReturnType<typeof findContainerByName>>,
+  container: StoreContainer,
   containerName: string,
   res: Response,
   context: ContainerWebhookErrorContext,
@@ -220,22 +247,51 @@ async function watchAll(req: Request, res: Response) {
 async function watchContainer(req: Request, res: Response) {
   const containerName = req.params.containerName as string;
   const safeContainerName = sanitizeLogParam(containerName);
-  const container = findContainerByName(containerName);
 
-  if (!container) {
+  // #386: disambiguate across agents/watchers via optional query params
+  const agentFilter = typeof req.query.agent === 'string' ? req.query.agent : undefined;
+  const watcherFilter = typeof req.query.watcher === 'string' ? req.query.watcher : undefined;
+  const found = findContainerByName(containerName, { agent: agentFilter, watcher: watcherFilter });
+
+  if (!found) {
     sendErrorResponse(res, 404, CONTAINER_NOT_FOUND_ERROR);
     return;
   }
+
+  if (found.candidates) {
+    // #386: ambiguous name across agents/watchers — require disambiguation
+    const pairs = found.candidates
+      .map((c) => `agent=${c.agent ?? '(none)'},watcher=${c.watcher}`)
+      .join('; ');
+    sendErrorResponse(
+      res,
+      409,
+      `Ambiguous container name: matches multiple sources (${pairs}). Add ?agent= and/or ?watcher= to disambiguate.`,
+    );
+    return;
+  }
+
+  const container = found.container;
 
   if (!isWebhookEnabledForContainer(container)) {
     sendErrorResponse(res, 403, CONTAINER_WEBHOOK_DISABLED_ERROR);
     return;
   }
 
-  const watchers = registry.getState().watcher;
+  // #386: dispatch to the owning watcher only, mirroring actions.ts
+  const watcherId = resolveWatcherIdForContainer(container);
+  const watcher = registry.getState().watcher[watcherId];
+  if (!watcher) {
+    sendErrorResponse(
+      res,
+      500,
+      `No provider found for container ${safeContainerName} and provider ${watcherId}`,
+    );
+    return;
+  }
 
   try {
-    await Promise.all(Object.values(watchers).map((watcher) => watcher.watchContainer(container)));
+    await watcher.watchContainer(container);
 
     recordAuditEvent({
       action: 'webhook-watch-container',
@@ -263,12 +319,31 @@ async function watchContainer(req: Request, res: Response) {
 async function updateContainer(req: Request, res: Response) {
   const containerName = req.params.containerName as string;
   const safeContainerName = sanitizeLogParam(containerName);
-  const container = findContainerByName(containerName);
 
-  if (!container) {
+  // #386: disambiguate across agents/watchers via optional query params
+  const agentFilter = typeof req.query.agent === 'string' ? req.query.agent : undefined;
+  const watcherFilter = typeof req.query.watcher === 'string' ? req.query.watcher : undefined;
+  const found = findContainerByName(containerName, { agent: agentFilter, watcher: watcherFilter });
+
+  if (!found) {
     sendErrorResponse(res, 404, CONTAINER_NOT_FOUND_ERROR);
     return;
   }
+
+  if (found.candidates) {
+    // #386: ambiguous name across agents/watchers — require disambiguation
+    const pairs = found.candidates
+      .map((c) => `agent=${c.agent ?? '(none)'},watcher=${c.watcher}`)
+      .join('; ');
+    sendErrorResponse(
+      res,
+      409,
+      `Ambiguous container name: matches multiple sources (${pairs}). Add ?agent= and/or ?watcher= to disambiguate.`,
+    );
+    return;
+  }
+
+  const container = found.container;
 
   if (!isWebhookEnabledForContainer(container)) {
     sendErrorResponse(res, 403, CONTAINER_WEBHOOK_DISABLED_ERROR);

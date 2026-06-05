@@ -164,7 +164,7 @@ function evalMethodCall(trimmed: string, vars: TemplateVars): unknown {
     return '';
   }
   const args: unknown[] =
-    rawArgs.trim() === '' ? [] : rawArgs.split(',').map((a: string) => safeEvalExpr(a, vars));
+    rawArgs.trim() === '' ? [] : splitTopLevelArgs(rawArgs).map((a) => safeEvalExpr(a, vars));
   return methodFn.apply(target, args);
 }
 
@@ -316,6 +316,26 @@ function findTopLevelOperator(str: string, predicate: (str: string, i: number) =
   return -1;
 }
 
+/**
+ * Split a raw argument string on top-level commas only — commas that are not
+ * inside quoted strings or nested parentheses — by reusing findTopLevelOperator.
+ * Returns the list of raw argument substrings without trimming or evaluating them.
+ */
+function splitTopLevelArgs(rawArgs: string): string[] {
+  const segments: string[] = [];
+  let rest = rawArgs;
+  while (true) {
+    const idx = findTopLevelOperator(rest, isOperator(','));
+    if (idx === -1) {
+      segments.push(rest);
+      break;
+    }
+    segments.push(rest.slice(0, idx));
+    rest = rest.slice(idx + 1);
+  }
+  return segments;
+}
+
 function safeInterpolate(template: string | undefined, vars: TemplateVars): string {
   if (template == null) {
     return '';
@@ -376,5 +396,9 @@ export function renderBatch(template: string, containers: Container[]): string {
     // Deprecated var for backward compatibility
     count: containers.length,
   };
+  return safeInterpolate(template, vars);
+}
+
+export function renderTemplate(template: string | undefined, vars: TemplateVars): string {
   return safeInterpolate(template, vars);
 }

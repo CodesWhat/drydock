@@ -884,4 +884,58 @@ describe('useContainerSsePatchPipeline terminal lifecycle handling', () => {
 
     wrapper.unmount();
   });
+
+  it('expired terminal SSE clears container.updateOperation but does NOT set lastUpdateFailureReason', async () => {
+    // Mirrors the failed/succeeded pipeline tests but for the expired status.
+    // expired is a non-notifying terminal: the "Updating" badge must clear
+    // (updateOperation → undefined) with no red failure banner and no toast.
+    const activeOperation = makeOperation({ id: 'op-exp-pipeline' });
+    const containers = ref([
+      makeContainer({
+        id: 'c1',
+        name: 'nginx',
+        updateOperation: activeOperation,
+        lastUpdateFailureReason: undefined,
+        lastUpdateFailureAt: undefined,
+      } as Partial<Container>),
+    ]);
+    const hold = useOperationDisplayHold();
+    hold.holdOperationDisplay({
+      operationId: activeOperation.id,
+      operation: activeOperation,
+      containerId: 'c1',
+      containerName: 'nginx',
+    });
+    const { wrapper, schedulePostTerminalReload } = mountPipeline({ containers });
+
+    globalThis.dispatchEvent(
+      new CustomEvent('dd:sse-update-operation-changed', {
+        detail: {
+          operationId: activeOperation.id,
+          containerId: 'c1',
+          containerName: 'nginx',
+          status: 'expired',
+        },
+      }),
+    );
+    await flushPromises();
+
+    // updateOperation cleared immediately on the terminal event.
+    expect(containers.value[0]!.updateOperation).toBeUndefined();
+
+    // No failure reason — expired is non-notifying.
+    expect((containers.value[0] as Container).lastUpdateFailureReason).toBeUndefined();
+    expect((containers.value[0] as Container).lastUpdateFailureAt).toBeUndefined();
+
+    // schedulePostTerminalReload fires (resync the list).
+    expect(schedulePostTerminalReload).toHaveBeenCalledTimes(1);
+
+    // Hold is still in the settle window; clears after the settle timer.
+    expect(hold.heldOperations.value.has(activeOperation.id)).toBe(true);
+    await vi.advanceTimersByTimeAsync(OPERATION_DISPLAY_HOLD_MS);
+    await flushPromises();
+    expect(hold.heldOperations.value.has(activeOperation.id)).toBe(false);
+
+    wrapper.unmount();
+  });
 });

@@ -12,6 +12,14 @@ import { RingBuffer } from './ring-buffer.js';
 const log = logger.child({ component: 'stats.collector' });
 const MIN_REST_TOUCH_TTL_MS = 15_000;
 const REST_TOUCH_TTL_MULTIPLIER = 3;
+// Capped exponential backoff for stats-stream reconnects. A container whose
+// Docker stats stream closes immediately on open (exited container, daemon
+// error, malformed stream) would otherwise reconnect in a tight loop bounded
+// only by a single microtask tick — spinning CPU and flooding logs, once per
+// such container. The delay doubles per consecutive failure and resets once a
+// stream delivers data (proving it is healthy again).
+const STREAM_RESTART_BASE_DELAY_MS = 1_000;
+const STREAM_RESTART_MAX_DELAY_MS = 60_000;
 
 interface DockerStatsStream {
   on: (event: string, listener: (payload?: unknown) => void) => unknown;
@@ -35,6 +43,10 @@ interface ContainerCollectionState {
   watchCount: number;
   stream?: DockerStatsStream;
   startPromise?: Promise<void>;
+  /** Pending backoff timer for the next stream-reconnect attempt. */
+  retryTimer?: ReturnType<typeof globalThis.setTimeout>;
+  /** Current reconnect backoff delay (ms); doubles per failure, resets on healthy data. */
+  retryDelayMs?: number;
   restTouchRelease?: () => void;
   restTouchTimeout?: ReturnType<typeof globalThis.setTimeout>;
   lastSampleAtMs?: number;
@@ -220,7 +232,12 @@ function sweepDeletedInactiveStates(runtime: CollectorRuntime): void {
   }
 }
 
-function stopCollection(state: ContainerCollectionState): void {
+function stopCollection(runtime: CollectorRuntime, state: ContainerCollectionState): void {
+  if (state.retryTimer !== undefined) {
+    runtime.clearTimeoutFn(state.retryTimer);
+    state.retryTimer = undefined;
+  }
+  state.retryDelayMs = undefined;
   detachStream(state);
 }
 
@@ -268,6 +285,9 @@ function handleStatsChunk(
   state: ContainerCollectionState,
   chunk: unknown,
 ): void {
+  // Receiving a chunk proves the stream is healthy — reset the reconnect
+  // backoff so a later transient drop starts again from the base delay.
+  state.retryDelayMs = undefined;
   for (const payload of parseStatsChunk(chunk)) {
     processStatsPayload(runtime, containerId, state, payload);
   }
@@ -295,7 +315,9 @@ function resolveStatsTarget(
 }
 
 function shouldStartCollection(state: ContainerCollectionState): boolean {
-  return state.watchCount > 0 && !state.stream && !state.startPromise;
+  return (
+    state.watchCount > 0 && !state.stream && !state.startPromise && state.retryTimer === undefined
+  );
 }
 
 function detachStream(state: ContainerCollectionState): void {
@@ -313,7 +335,23 @@ function restartCollection(
   state: ContainerCollectionState,
 ): void {
   detachStream(state);
-  void startCollection(runtime, containerId, state);
+
+  // No watchers left → nothing to reconnect to.
+  if (state.watchCount === 0) {
+    return;
+  }
+  // A reconnect is already scheduled; don't stack timers (a burst of
+  // close/end/error events on the same dead stream must not multiply retries).
+  if (state.retryTimer !== undefined) {
+    return;
+  }
+
+  const delayMs = state.retryDelayMs ?? STREAM_RESTART_BASE_DELAY_MS;
+  state.retryDelayMs = Math.min(delayMs * 2, STREAM_RESTART_MAX_DELAY_MS);
+  state.retryTimer = runtime.setTimeoutFn(() => {
+    state.retryTimer = undefined;
+    void startCollection(runtime, containerId, state);
+  }, delayMs);
 }
 
 function attachStreamListeners(
@@ -407,7 +445,7 @@ function createWatchRelease(
     released = true;
     state.watchCount = Math.max(0, state.watchCount - 1);
     if (state.watchCount === 0) {
-      stopCollection(state);
+      stopCollection(runtime, state);
     }
     pruneContainerStateIfMissing(runtime, containerId, state);
   };

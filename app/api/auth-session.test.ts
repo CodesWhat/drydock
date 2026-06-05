@@ -254,6 +254,42 @@ describe('getSessionSecretKey', () => {
     expect(secret).toBe('env-wins');
     expect(mockGetStoredSessionSecret).not.toHaveBeenCalled();
   });
+
+  test('no warn is emitted when DD_SESSION_SECRET is set', () => {
+    process.env.DD_SESSION_SECRET = 'explicit-secret';
+
+    getSessionSecretKey();
+
+    expect(mockLog.warn).not.toHaveBeenCalled();
+  });
+
+  test('warn is emitted exactly once when DD_SESSION_SECRET is unset and stored secret exists', () => {
+    delete process.env.DD_SESSION_SECRET;
+    mockGetStoredSessionSecret.mockReturnValue('persisted-secret');
+
+    const secret = getSessionSecretKey();
+
+    expect(secret).toBe('persisted-secret');
+    expect(mockLog.warn).toHaveBeenCalledTimes(1);
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('DD_SESSION_SECRET is not set'),
+    );
+    expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('/store/dd.json'));
+  });
+
+  test('warn is emitted exactly once when DD_SESSION_SECRET is unset and no stored secret exists', () => {
+    delete process.env.DD_SESSION_SECRET;
+    mockGetStoredSessionSecret.mockReturnValue(null);
+
+    const secret = getSessionSecretKey();
+
+    expect(secret).toMatch(/^[0-9a-f]{128}$/);
+    expect(mockLog.warn).toHaveBeenCalledTimes(1);
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('DD_SESSION_SECRET is not set'),
+    );
+    expect(mockSetStoredSessionSecret).toHaveBeenCalledWith(secret);
+  });
 });
 
 describe('auth-session', () => {

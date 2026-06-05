@@ -187,6 +187,33 @@ describe('update operation lifecycle events', () => {
     expect(mockEmitContainerUpdateFailed).not.toHaveBeenCalled();
   });
 
+  test('markOperationTerminal emits no lifecycle events when terminalised as expired (issue #410)', async () => {
+    // The TTL-sweep and startup-orphan paths set status:'expired'. This must
+    // never emit update-applied or update-failed — emitting update-failed would
+    // surface a false "update failed" notification for an operation that merely
+    // got stuck or was orphaned across a restart.
+    const inserted = updateOperation.insertOperation({
+      id: 'op-expired',
+      containerId: 'container-expired',
+      containerName: 'web',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+
+    updateOperation.markOperationTerminal(inserted.id, {
+      status: 'expired',
+      lastError: 'Marked expired after exceeding active update TTL (1800000ms) while in progress',
+    });
+    await flushAsyncLifecycleEvents();
+
+    expect(mockEmitContainerUpdateApplied).not.toHaveBeenCalled();
+    expect(mockEmitContainerUpdateFailed).not.toHaveBeenCalled();
+    // The operation-changed SSE must still fire (UI needs to know the row changed).
+    expect(mockEmitUpdateOperationChanged).toHaveBeenCalledWith(
+      expect.objectContaining({ operationId: 'op-expired', status: 'expired' }),
+    );
+  });
+
   test('emitUpdateOperationChanged includes lastError and rollbackReason in the SSE payload', async () => {
     const inserted = updateOperation.insertOperation({
       id: 'op-sse-payload',

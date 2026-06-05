@@ -468,6 +468,73 @@ test('cloneContainer should handle missing NetworkSettings by using empty endpoi
   expect(clone.NetworkingConfig).toEqual({ EndpointsConfig: {} });
 });
 
+test('cloneContainer should drop HostConfig.Runtime when it equals the daemon default runtime', () => {
+  const clone = docker.cloneContainer(
+    {
+      Name: '/svc',
+      Id: 'abc123',
+      HostConfig: { NetworkMode: 'bridge', Runtime: 'runc' },
+      Config: { configA: 'a' },
+      NetworkSettings: { Networks: {} },
+    },
+    'test/test:2.0.0',
+    { defaultRuntime: 'runc' },
+  );
+
+  expect(clone.HostConfig.Runtime).toBeUndefined();
+  expect(clone.HostConfig.NetworkMode).toBe('bridge');
+});
+
+test('cloneContainer should preserve an explicitly-selected non-default HostConfig.Runtime', () => {
+  const clone = docker.cloneContainer(
+    {
+      Name: '/svc',
+      Id: 'abc123',
+      HostConfig: { Runtime: 'nvidia' },
+      Config: { configA: 'a' },
+      NetworkSettings: { Networks: {} },
+    },
+    'test/test:2.0.0',
+    { defaultRuntime: 'runc' },
+  );
+
+  expect(clone.HostConfig.Runtime).toBe('nvidia');
+});
+
+test('cloneContainer should preserve HostConfig.Runtime when the daemon default is unknown', () => {
+  const clone = docker.cloneContainer(
+    {
+      Name: '/svc',
+      Id: 'abc123',
+      HostConfig: { Runtime: 'runc' },
+      Config: { configA: 'a' },
+      NetworkSettings: { Networks: {} },
+    },
+    'test/test:2.0.0',
+    {},
+  );
+
+  expect(clone.HostConfig.Runtime).toBe('runc');
+});
+
+test('cloneContainer should not mutate the source HostConfig when dropping Runtime', () => {
+  const sourceHostConfig = { NetworkMode: 'bridge', Runtime: 'runc' };
+  const clone = docker.cloneContainer(
+    {
+      Name: '/svc',
+      Id: 'abc123',
+      HostConfig: sourceHostConfig,
+      Config: { configA: 'a' },
+      NetworkSettings: { Networks: {} },
+    },
+    'test/test:2.0.0',
+    { defaultRuntime: 'runc' },
+  );
+
+  expect(clone.HostConfig.Runtime).toBeUndefined();
+  expect(sourceHostConfig.Runtime).toBe('runc');
+});
+
 test('cloneContainer should drop stale Entrypoint and Cmd inherited from source image defaults', () => {
   const logContainer = createMockLog('info');
   const clone = docker.cloneContainer(

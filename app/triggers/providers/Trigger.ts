@@ -28,7 +28,7 @@ import {
 import { BatchDispatcher } from './trigger-batch-dispatcher.js';
 import { OneShotKeyTracker, RecentSignatureSuppressor } from './trigger-deduplicator.js';
 import { DigestBuffer } from './trigger-digest-buffer.js';
-import { renderBatch, renderSimple } from './trigger-expression-parser.js';
+import { renderBatch, renderSimple, renderTemplate } from './trigger-expression-parser.js';
 import {
   isThresholdReached as isThresholdReachedHelper,
   parseThresholdWithDigestBehavior as parseThresholdWithDigestBehaviorHelper,
@@ -320,15 +320,15 @@ type SecurityDigestContext = {
 
 type DigestContext = UpdateDigestContext | SecurityDigestContext;
 
-const DEFAULT_SECURITY_DIGEST_TITLE_TEMPLATE = `Security scan complete: \${scan.alertCount} container\${scan.alertCount === 1 ? '' : 's'} with findings`;
+const DEFAULT_SECURITY_DIGEST_TITLE_TEMPLATE = `Security scan complete: \${scan.alertCount} \${scan.containerNoun} with findings`;
 
 const DEFAULT_SECURITY_DIGEST_BODY_TEMPLATE = `Security scan complete: \${scan.alertCount} of \${scan.scannedCount} containers have findings.
 
 CRITICAL (\${scan.criticalCount}):
-\${scan.containers.filter(c => c.critical > 0).map(c => '- ' + c.name + ': critical=' + c.critical + ', high=' + c.high).join('\\n')}
+\${scan.criticalList}
 
 HIGH (\${scan.highCount}):
-\${scan.containers.filter(c => c.critical === 0 && c.high > 0).map(c => '- ' + c.name + ': high=' + c.high + ', medium=' + c.medium).join('\\n')}
+\${scan.highList}
 
 Scan ran from \${scan.startedAt} to \${scan.completedAt}.`;
 
@@ -568,6 +568,21 @@ class Trigger<
   private unregisterAgentDisconnected?: () => void;
   private unregisterContainerUpdateAppliedForResolution?: () => void;
   private readonly notificationResults: Map<string, unknown> = new Map();
+  /**
+   * Keys of containers whose update was just applied but whose watcher report
+   * hasn't yet confirmed `updateAvailable=false`. This guards against the race
+   * where `handleContainerUpdateAppliedEvent` clears notification history (so
+   * the `once` gate re-opens) while the container still reports
+   * `updateAvailable=true` in the next scan — which would fire a spurious
+   * "update available" notification (#408).
+   *
+   * Key derivation matches the rest of the class: `getContainerNotificationKey`
+   * (container.id when present, else `watcher.name` fullName).
+   *
+   * Cleared per-key when a container report arrives with `updateAvailable=false`
+   * (confirmed post-update state), so future real updates still notify.
+   */
+  private readonly recentlyAppliedContainerKeys: Set<string> = new Set();
   private readonly autoTriggerErrorSeenAt: Map<string, number> = new Map();
   private readonly notificationRuleWarningsSeen: Set<string> = new Set();
   private readonly autoUpdateBlockedSeen: Set<string> = new Set();
@@ -1021,6 +1036,15 @@ class Trigger<
       );
     }
 
+    // Guard against the spurious-notification race (#408): clearing history
+    // re-opens the `once` gate, but the watcher's next scan may still report
+    // `updateAvailable=true` for the already-updated container before the
+    // watcher sets it to false. Track this key so
+    // `shouldHandleSimpleContainerReport` suppresses the spurious notification
+    // until the watcher confirms `updateAvailable=false`.
+    this.recentlyAppliedContainerKeys.add(notificationKey);
+    this.log.debug(`Added ${notificationKey} to recently-applied suppression set`);
+
     const notificationContainer = container
       ? withNotificationEvent(container, { kind: 'update-applied' })
       : undefined;
@@ -1030,9 +1054,14 @@ class Trigger<
     // receive lifecycle notifications unless they explicitly opted out via the rule's
     // allow-list. Issue #317 — strict defaults silently dropped Pushover update-applied toasts
     // for any user who hadn't yet built an allow-list.
+    // skipThreshold: true — the threshold is meaningful only for "update available" decisions
+    // (should we notify about this pending update?). update-applied reports what already happened,
+    // so gating it on semver threshold would silently drop lifecycle notifications for containers
+    // whose updateKind.kind is 'unknown' (e.g. digest-only updates) when threshold='major'.
     await this.dispatchContainerForEvent('update-applied', notificationContainer, {
       allowAllWhenNoTriggers: true,
       defaultWhenRuleMissing: true,
+      skipThreshold: true,
     });
   }
 
@@ -1051,9 +1080,12 @@ class Trigger<
         })
       : undefined;
 
+    // skipThreshold: true — same rationale as update-applied; the failure already happened,
+    // so suppressing the notification based on semver threshold is not meaningful.
     await this.dispatchContainerForEvent('update-failed', notificationContainer, {
       allowAllWhenNoTriggers: true,
       defaultWhenRuleMissing: true,
+      skipThreshold: true,
     });
   }
 
@@ -1284,13 +1316,36 @@ class Trigger<
   }
 
   private shouldHandleSimpleContainerReport(containerReport: ContainerReport) {
-    if (!containerReport.container.updateAvailable) {
+    const { container } = containerReport;
+
+    if (!container.updateAvailable) {
+      // Watcher confirmed post-update state: lift the recently-applied
+      // suppression so future real updates can notify again.
+      const key = getContainerNotificationKey(container) || fullName(container);
+      if (this.recentlyAppliedContainerKeys.has(key)) {
+        this.recentlyAppliedContainerKeys.delete(key);
+        this.log.debug(`Cleared ${key} from recently-applied suppression set (update confirmed)`);
+      }
       return false;
     }
+
+    // Suppress the spurious "update available" that fires between
+    // handleContainerUpdateAppliedEvent (which clears history and re-opens the
+    // `once` gate) and the watcher's next scan that sets updateAvailable=false.
+    // Without this guard, a concurrent report still carrying updateAvailable=true
+    // passes the `once` check and fires a duplicate notification (#408).
+    const key = getContainerNotificationKey(container) || fullName(container);
+    if (this.recentlyAppliedContainerKeys.has(key)) {
+      this.log.debug(
+        `Suppressing update-available for ${key}: update just applied, waiting for watcher confirmation`,
+      );
+      return false;
+    }
+
     if (!this.configuration.once) {
       return true;
     }
-    return !this.hasAlreadyNotifiedForResult(containerReport.container, 'update-available');
+    return !this.hasAlreadyNotifiedForResult(container, 'update-available');
   }
 
   private shouldHandleDigestContainerReport(
@@ -1300,6 +1355,23 @@ class Trigger<
     if (!containerReport.container.updateAvailable) {
       return false;
     }
+
+    // Mirror the simple-path guard (#408): suppress the spurious
+    // "update available" that arrives between
+    // handleContainerUpdateAppliedEvent (which clears history and re-opens the
+    // `once` gate) and the watcher's next scan that sets updateAvailable=false.
+    // Without this guard a concurrent digest report still carrying
+    // updateAvailable=true passes the `once` check and re-buffers the container
+    // for a spurious digest notification.
+    const key =
+      getContainerNotificationKey(containerReport.container) || fullName(containerReport.container);
+    if (this.recentlyAppliedContainerKeys.has(key)) {
+      this.log.debug(
+        `Suppressing digest buffer for ${key}: update just applied, waiting for watcher confirmation`,
+      );
+      return false;
+    }
+
     if (!this.configuration.once) {
       return true;
     }
@@ -1368,6 +1440,20 @@ class Trigger<
 
   private shouldHandleBatchContainerReport(containerReport: ContainerReport) {
     if (!this.shouldDispatchUpdateAvailableContainer(containerReport.container)) {
+      return false;
+    }
+    // Mirror the simple/digest guard (#408): suppress the spurious
+    // "update available" that fires between handleContainerUpdateAppliedEvent
+    // (which clears history and re-opens the `once` gate) and the watcher's next
+    // scan that sets updateAvailable=false. Without this guard a concurrent batch
+    // report still carrying updateAvailable=true re-notifies right after a
+    // successful update.
+    const key =
+      getContainerNotificationKey(containerReport.container) || fullName(containerReport.container);
+    if (this.recentlyAppliedContainerKeys.has(key)) {
+      this.log.debug(
+        `Suppressing batch update-available for ${key}: update just applied, waiting for watcher confirmation`,
+      );
       return false;
     }
     if (!this.configuration.once) {
@@ -1596,6 +1682,23 @@ class Trigger<
       Trigger.canonicalizeReportName(report);
     }
 
+    // Mirror the simple/digest suppression-lift (#408): a watcher report
+    // confirming updateAvailable=false means the post-update state has landed,
+    // so lift the recently-applied guard. Pure batch mode registers no simple or
+    // digest handler, so without this the suppression key would never clear and
+    // the container's update-available notifications would be muted permanently.
+    for (const report of containerReports) {
+      if (!report.container.updateAvailable) {
+        const key = getContainerNotificationKey(report.container) || fullName(report.container);
+        if (this.recentlyAppliedContainerKeys.has(key)) {
+          this.recentlyAppliedContainerKeys.delete(key);
+          this.log.debug(
+            `Cleared ${key} from recently-applied suppression set (batch update confirmed)`,
+          );
+        }
+      }
+    }
+
     // Filter on containers with update available and passing trigger threshold
     const containersToSendByBusinessId = new Map<string, Container>();
     for (const container of this.getBatchRetryContainers(containerReports)) {
@@ -1685,6 +1788,15 @@ class Trigger<
       if (this.digestBufferStore.delete(containerName)) {
         this.log.debug(`Evicted ${containerName} from digest buffer (update no longer available)`);
       }
+      // Mirror the simple-path suppression-lift (#408): watcher confirmed the
+      // post-update state, so lift the recently-applied guard so future real
+      // updates can notify again via the digest path.
+      if (this.recentlyAppliedContainerKeys.has(containerName)) {
+        this.recentlyAppliedContainerKeys.delete(containerName);
+        this.log.debug(
+          `Cleared ${containerName} from recently-applied suppression set (digest update confirmed)`,
+        );
+      }
       return;
     }
 
@@ -1758,14 +1870,17 @@ class Trigger<
       completedAt: ctx.completedAt,
       cycleId: ctx.cycleId,
       containers: ctx.containers,
+      containerNoun: ctx.alertCount === 1 ? 'container' : 'containers',
+      criticalList: ctx.containers
+        .filter((c) => c.critical > 0)
+        .map((c) => `- ${c.name}: critical=${c.critical}, high=${c.high}`)
+        .join('\n'),
+      highList: ctx.containers
+        .filter((c) => c.critical === 0 && c.high > 0)
+        .map((c) => `- ${c.name}: high=${c.high}, medium=${c.medium}`)
+        .join('\n'),
     };
-    try {
-      // Template variables use ${...} syntax — evaluate as a template literal body.
-      const renderFn = new Function('scan', `return \`${template}\`;`);
-      return renderFn(scan) as string;
-    } catch {
-      return template;
-    }
+    return renderTemplate(template, { scan });
   }
 
   /**

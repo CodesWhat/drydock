@@ -24,7 +24,7 @@ Three prefixes are supported for trigger configuration:
 
 | Prefix | Status | Example |
 | --- | --- | --- |
-| `DD_ACTION_*` | **Current** | `DD_ACTION_SLACK_MYSLACK_URL=https://...` |
+| `DD_ACTION_*` | **Current** | `DD_ACTION_DOCKER_MYSERVER_SOCKETPATH=/var/run/docker.sock` |
 | `DD_NOTIFICATION_*` | **Current** | `DD_NOTIFICATION_SMTP_GMAIL_HOST=smtp.gmail.com` |
 | `DD_TRIGGER_*` | **Deprecated** (removal in v1.7.0) | `DD_TRIGGER_SLACK_MYSLACK_URL=https://...` |
 
@@ -33,6 +33,40 @@ All three prefixes are interchangeable -- they configure the same triggers. Use 
 When the same trigger property is set under multiple prefixes, the merge priority is `DD_NOTIFICATION_*` > `DD_ACTION_*` > `DD_TRIGGER_*` (highest wins).
 
 <Callout type="info">A built-in migration CLI can rewrite your config files from `DD_TRIGGER_*` to `DD_ACTION_*` automatically: `drydock config migrate --source trigger`. Use `--dry-run` to preview changes before applying. Note that the CLI always emits `DD_ACTION_*` for every trigger type — if you use messaging providers (Slack, SMTP, Discord, ntfy, and others), you may prefer to rename those to `DD_NOTIFICATION_*` manually to match the canonical prefix for your provider category.</Callout>
+
+### Migrating trigger prefixes
+
+The following example shows a typical before/after migration for a Docker + Slack setup.
+
+**Before** (deprecated `DD_TRIGGER_*` form):
+
+```bash
+# .env — legacy form (deprecated in v1.5.0, removed in v1.7.0)
+DD_TRIGGER_DOCKER_LOCAL_SOCKETPATH=/var/run/docker.sock
+DD_TRIGGER_SLACK_MYSLACK_URL=https://hooks.slack.com/services/T000/B000/xxxx
+DD_TRIGGER_SMTP_GMAIL_HOST=smtp.gmail.com
+DD_TRIGGER_SMTP_GMAIL_PORT=465
+```
+
+Run the migration (add `--dry-run` to preview without writing):
+
+```bash
+drydock config migrate --source trigger
+```
+
+**After** (canonical prefixes):
+
+```bash
+# .env — canonical form
+# Update-action triggers use DD_ACTION_*
+DD_ACTION_DOCKER_LOCAL_SOCKETPATH=/var/run/docker.sock
+# Messaging/notification triggers use DD_NOTIFICATION_*
+DD_NOTIFICATION_SLACK_MYSLACK_URL=https://hooks.slack.com/services/T000/B000/xxxx
+DD_NOTIFICATION_SMTP_GMAIL_HOST=smtp.gmail.com
+DD_NOTIFICATION_SMTP_GMAIL_PORT=465
+```
+
+<Callout type="info">The CLI writes `DD_ACTION_*` for all trigger types. For messaging providers (Slack, SMTP, Discord, ntfy, etc.) you may want to rename those to `DD_NOTIFICATION_*` to match the canonical prefix for your provider category — both are accepted, but `DD_NOTIFICATION_*` communicates intent more clearly.</Callout>
 
 ## Available triggers
 
@@ -73,10 +107,11 @@ All implemented triggers, in addition to their specific configuration, also supp
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_MODE` | ⚪ | Trigger for each container update, trigger once with all available updates as a list, or accumulate updates and send on a schedule | `simple`, `batch`, `digest`, `batch+digest` | `simple` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_DIGESTCRON` | ⚪ | Cron schedule for digest mode flush (only used when `MODE=digest` or `MODE=batch+digest`) | Cron expression | `0 8 * * *` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SECURITYMODE` | ⚪ | How `security-alert` events are delivered: one notification per container (`simple`), all alerts in a cycle batched on completion (`batch`), or one digest per scan cycle (`digest`) | `simple`, `batch`, `digest`, `batch+digest` | `simple` |
-| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SECURITYDIGESTTITLE` | ⚪ | The template to use to render the title of the security digest (only used when `SECURITYMODE=digest` or `SECURITYMODE=batch+digest`) | String template with `scan.*` vars | `Security scan complete: ${scan.alertCount} container${scan.alertCount === 1 ? '' : 's'} with findings` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SECURITYDIGESTTITLE` | ⚪ | The template to use to render the title of the security digest (only used when `SECURITYMODE=digest` or `SECURITYMODE=batch+digest`) | String template with `scan.*` vars | `Security scan complete: ${scan.alertCount} ${scan.containerNoun} with findings` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SECURITYDIGESTBODY` | ⚪ | The template to use to render the body of the security digest | String template with `scan.*` vars | Severity-grouped list (critical → high → medium → low) |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_ONCE` | ⚪ | Run trigger once (do not repeat previous results) | `true`, `false` | `true` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_ORDER` | ⚪ | Trigger execution order (lower runs first) | Number | `100` |
+| `DD_EVENT_HANDLER_TIMEOUT_MS` | ⚪ | Per-handler execution cap in milliseconds. If a single notification handler (e.g. an SMTP transport stalling on retry) runs longer than this value, it is abandoned and the emit chain continues. Prevents one slow provider from stalling the entire update lifecycle. Applies globally — not per-trigger-name. If the value is absent, zero, or non-numeric it falls back to the default silently. | Positive integer (milliseconds) | `30000` (30 s) |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SIMPLEBODY` | ⚪ | The template to use to render the body of the notification | JS string template with vars `container` | `Container ${container.name} running with ${container.updateKind.kind} ${container.updateKind.localValue} can be updated to ${container.updateKind.kind} ${container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SIMPLETITLE` | ⚪ | The template to use to render the title of the notification (simple mode) | JS string template with vars `${containers}` | `New ${container.updateKind.kind} found for container ${container.name}` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_THRESHOLD` | ⚪ | The threshold to reach to run the trigger | `all`, `major`, `major-only`, `minor`, `minor-only`, `patch`, `digest`, and `*-no-digest` variants (`major-no-digest`, `major-only-no-digest`, `minor-no-digest`, `minor-only-no-digest`, `patch-no-digest`) | `all` |

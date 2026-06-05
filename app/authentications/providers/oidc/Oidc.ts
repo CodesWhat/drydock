@@ -741,7 +741,8 @@ class Oidc extends Authentication<OidcConfiguration> {
         rememberMePreference,
       );
       this.log.debug('Get user info');
-      const user = await this.getUserFromAccessToken(tokenSet.access_token);
+      const expectedSub = tokenSet.claims?.()?.sub;
+      const user = await this.getUserFromAccessToken(tokenSet.access_token, expectedSub);
 
       await enforceConcurrentSessionLimit({
         username: user.username,
@@ -938,16 +939,23 @@ class Oidc extends Authentication<OidcConfiguration> {
     observeAuthLoginDuration(outcome, 'oidc', getElapsedSeconds(startedAt));
   }
 
-  async getUserFromAccessToken(accessToken: string): Promise<OidcAuthenticatedUser> {
+  async getUserFromAccessToken(
+    accessToken: string,
+    expectedSubject?: string,
+  ): Promise<OidcAuthenticatedUser> {
     const openidClient = await this.getOpenIdClient();
     await this.ensureClientInitialized();
+    const subjectCheck =
+      expectedSubject !== undefined && expectedSubject !== ''
+        ? expectedSubject
+        : openidClient.skipSubjectCheck;
     const userInfo = await openidClient.fetchUserInfo(
       this.getInitializedClient(),
       accessToken,
-      openidClient.skipSubjectCheck,
+      subjectCheck,
     );
     return {
-      username: userInfo.email || 'unknown',
+      username: userInfo.email || userInfo.sub || 'unknown',
     };
   }
 }

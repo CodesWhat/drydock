@@ -43,8 +43,8 @@ describe('release-notes service', () => {
     delete ddEnvVars.DD_RELEASE_NOTES_GITHUB_TOKEN;
   });
 
-  test('detectSourceRepoFromImageMetadata should prefer manual override label', () => {
-    const sourceRepo = detectSourceRepoFromImageMetadata({
+  test('detectSourceRepoFromImageMetadata should prefer container label but mark it untrusted', () => {
+    const resolution = detectSourceRepoFromImageMetadata({
       containerLabels: {
         'dd.source.repo': 'github.com/acme/manual',
       },
@@ -55,17 +55,27 @@ describe('release-notes service', () => {
       imagePath: 'acme/service',
     });
 
-    expect(sourceRepo).toBe('github.com/acme/manual');
+    expect(resolution).toEqual({ sourceRepo: 'github.com/acme/manual', trusted: false });
   });
 
-  test('detectSourceRepoFromImageMetadata should parse OCI labels and ghcr fallbacks', () => {
+  test('detectSourceRepoFromImageMetadata should mark image label (dd.source.repo) as trusted', () => {
+    const resolution = detectSourceRepoFromImageMetadata({
+      imageLabels: {
+        'dd.source.repo': 'github.com/acme/from-image-label',
+      },
+    });
+
+    expect(resolution).toEqual({ sourceRepo: 'github.com/acme/from-image-label', trusted: true });
+  });
+
+  test('detectSourceRepoFromImageMetadata should parse OCI labels and ghcr fallbacks as trusted', () => {
     expect(
       detectSourceRepoFromImageMetadata({
         imageLabels: {
           'org.opencontainers.image.source': 'https://github.com/acme/service.git',
         },
       }),
-    ).toBe('github.com/acme/service');
+    ).toEqual({ sourceRepo: 'github.com/acme/service', trusted: true });
 
     expect(
       detectSourceRepoFromImageMetadata({
@@ -73,17 +83,18 @@ describe('release-notes service', () => {
           'org.opencontainers.image.url': 'https://github.com/acme/url-only',
         },
       }),
-    ).toBe('github.com/acme/url-only');
+    ).toEqual({ sourceRepo: 'github.com/acme/url-only', trusted: true });
 
     expect(
       detectSourceRepoFromImageMetadata({
         imageRegistryDomain: 'ghcr.io',
         imagePath: 'acme/service',
       }),
-    ).toBe('github.com/acme/service');
+    ).toEqual({ sourceRepo: 'github.com/acme/service', trusted: true });
   });
 
   test('detectSourceRepoFromImageMetadata should handle malformed values and ssh syntax', () => {
+    // Blank container label falls through to image label (OCI source) — trusted
     expect(
       detectSourceRepoFromImageMetadata({
         containerLabels: {
@@ -93,7 +104,7 @@ describe('release-notes service', () => {
           'org.opencontainers.image.source': 'git@github.com:acme/from-ssh.git',
         },
       }),
-    ).toBe('github.com/acme/from-ssh');
+    ).toEqual({ sourceRepo: 'github.com/acme/from-ssh', trusted: true });
 
     expect(
       detectSourceRepoFromImageMetadata({
@@ -151,8 +162,8 @@ describe('release-notes service', () => {
     const first = await resolveSourceRepoForContainer(container as any);
     const second = await resolveSourceRepoForContainer(container as any);
 
-    expect(first).toBe('github.com/nginx/nginx');
-    expect(second).toBe('github.com/nginx/nginx');
+    expect(first).toEqual({ sourceRepo: 'github.com/nginx/nginx', trusted: true });
+    expect(second).toEqual({ sourceRepo: 'github.com/nginx/nginx', trusted: true });
     expect(mockAxiosGet).toHaveBeenCalledTimes(1);
     expect(mockAxiosGet).toHaveBeenCalledWith(
       'https://hub.docker.com/v2/repositories/library/nginx/tags/1.0.0',
@@ -171,7 +182,7 @@ describe('release-notes service', () => {
       },
     });
 
-    const sourceRepo = await resolveSourceRepoForContainer({
+    const resolution = await resolveSourceRepoForContainer({
       image: {
         name: 'library/nginx',
         tag: {
@@ -184,12 +195,12 @@ describe('release-notes service', () => {
       labels: {},
     } as any);
 
-    expect(sourceRepo).toBe('github.com/library/nginx');
+    expect(resolution).toEqual({ sourceRepo: 'github.com/library/nginx', trusted: true });
     expect(mockAxiosGet).toHaveBeenCalledTimes(1);
   });
 
-  test('resolveSourceRepoForContainer should short-circuit when metadata labels resolve source', async () => {
-    const sourceRepo = await resolveSourceRepoForContainer({
+  test('resolveSourceRepoForContainer should return untrusted when source comes from container label', async () => {
+    const resolution = await resolveSourceRepoForContainer({
       image: {
         name: 'acme/service',
         registry: {
@@ -201,12 +212,35 @@ describe('release-notes service', () => {
       },
     } as any);
 
-    expect(sourceRepo).toBe('github.com/acme/from-label');
+    expect(resolution).toEqual({ sourceRepo: 'github.com/acme/from-label', trusted: false });
+    expect(mockAxiosGet).not.toHaveBeenCalled();
+  });
+
+  test('resolveSourceRepoForContainer should return cached sourceRepo for non-Docker-Hub images when detectSourceRepoFromImageMetadata yields nothing', async () => {
+    // index.ts line 279: non-Docker-Hub image (quay.io) with no label-based resolution and no
+    // GHCR derivation, but with a pre-cached container.sourceRepo → returns { sourceRepo, trusted: true }
+    const resolution = await resolveSourceRepoForContainer({
+      image: {
+        name: 'acme/widget',
+        tag: {
+          value: '1.0.0',
+        },
+        registry: {
+          url: 'quay.io',
+        },
+      },
+      // No OCI/dd labels and quay.io registry → detectSourceRepoFromImageMetadata returns undefined
+      labels: {},
+      // Pre-cached sourceRepo populated from a prior resolution cycle
+      sourceRepo: 'github.com/acme/widget',
+    } as any);
+
+    expect(resolution).toEqual({ sourceRepo: 'github.com/acme/widget', trusted: true });
     expect(mockAxiosGet).not.toHaveBeenCalled();
   });
 
   test('resolveSourceRepoForContainer should return undefined for non-Docker-Hub images', async () => {
-    const sourceRepo = await resolveSourceRepoForContainer({
+    const resolution = await resolveSourceRepoForContainer({
       image: {
         name: 'acme/service',
         tag: {
@@ -219,7 +253,7 @@ describe('release-notes service', () => {
       labels: {},
     } as any);
 
-    expect(sourceRepo).toBeUndefined();
+    expect(resolution).toBeUndefined();
     expect(mockAxiosGet).not.toHaveBeenCalled();
   });
 
@@ -263,7 +297,7 @@ describe('release-notes service', () => {
       },
     });
 
-    const sourceRepo = await resolveSourceRepoForContainer({
+    const resolution = await resolveSourceRepoForContainer({
       image: {
         name: 'acme/service',
         tag: {
@@ -276,7 +310,10 @@ describe('release-notes service', () => {
       labels: {},
     } as any);
 
-    expect(sourceRepo).toBe('github.com/acme/repository-fallback');
+    expect(resolution).toEqual({
+      sourceRepo: 'github.com/acme/repository-fallback',
+      trusted: true,
+    });
     expect(mockAxiosGet).toHaveBeenCalledTimes(2);
     expect(mockAxiosGet).toHaveBeenNthCalledWith(
       2,
@@ -378,8 +415,8 @@ describe('release-notes service', () => {
     vi.setSystemTime(new Date('2026-01-01T07:00:00.000Z'));
     const second = await resolveSourceRepoForContainer(container as any);
 
-    expect(first).toBe('github.com/library/nginx');
-    expect(second).toBe('github.com/library/nginx');
+    expect(first).toEqual({ sourceRepo: 'github.com/library/nginx', trusted: true });
+    expect(second).toEqual({ sourceRepo: 'github.com/library/nginx', trusted: true });
     expect(mockAxiosGet).toHaveBeenCalledTimes(2);
   });
 
@@ -625,7 +662,7 @@ describe('release-notes service', () => {
   });
 
   test('resolveSourceRepoForContainer finds source repo from imageLabels when container labels are absent', async () => {
-    const sourceRepo = await resolveSourceRepoForContainer(
+    const resolution = await resolveSourceRepoForContainer(
       {
         image: {
           name: 'acme/service',
@@ -640,7 +677,7 @@ describe('release-notes service', () => {
       },
     );
 
-    expect(sourceRepo).toBe('github.com/acme/from-image-labels');
+    expect(resolution).toEqual({ sourceRepo: 'github.com/acme/from-image-labels', trusted: true });
     expect(mockAxiosGet).not.toHaveBeenCalled();
   });
 
@@ -780,5 +817,293 @@ describe('release-notes service', () => {
 
   test('truncateReleaseNotesBody should treat non-string bodies as empty', () => {
     expect(truncateReleaseNotesBody(42 as any, 10)).toBe('');
+  });
+
+  // -----------------------------------------------------------------------
+  // L-4 security fix: container label (dd.source.repo) must not receive a token
+  // -----------------------------------------------------------------------
+
+  test('L-4: source repo from container label (dd.source.repo) causes no Authorization header to be sent', async () => {
+    // Simulate an attacker-controlled container label pointing to an arbitrary GitHub repo
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        tag_name: 'v1.0.0',
+        name: 'Attacker Release',
+        body: 'body',
+        html_url: 'https://github.com/attacker/evil/releases/tag/v1.0.0',
+        published_at: '2026-01-01T00:00:00.000Z',
+      },
+    });
+
+    // Provide an explicit GitHub token to make the suppression visible
+    ddEnvVars.DD_RELEASE_NOTES_GITHUB_TOKEN = 'ghp_operator_secret';
+
+    await getFullReleaseNotesForContainer({
+      labels: {
+        'dd.source.repo': 'https://github.com/attacker/evil.git',
+      },
+      image: {
+        name: 'attacker/image',
+        registry: { url: 'registry.example.com' },
+      },
+      result: { tag: '1.0.0' },
+    } as any);
+
+    // The request must have been made without any Authorization header
+    expect(mockAxiosGet).toHaveBeenCalledWith(
+      expect.stringContaining('api.github.com'),
+      expect.objectContaining({
+        headers: expect.not.objectContaining({
+          Authorization: expect.any(String),
+        }),
+      }),
+    );
+  });
+
+  test('L-4: source repo from GHCR image path (trusted) still sends the token', async () => {
+    ddEnvVars.DD_RELEASE_NOTES_GITHUB_TOKEN = 'ghp_operator_secret';
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        tag_name: 'v2.0.0',
+        name: 'Trusted Release',
+        body: 'body',
+        html_url: 'https://github.com/acme/service/releases/tag/v2.0.0',
+        published_at: '2026-01-01T00:00:00.000Z',
+      },
+    });
+
+    await getFullReleaseNotesForContainer({
+      labels: {},
+      image: {
+        name: 'acme/service',
+        registry: { url: 'https://ghcr.io' },
+        tag: { value: '2.0.0' },
+      },
+      result: { tag: '2.0.0' },
+    } as any);
+
+    // Token must be sent for GHCR-derived (trusted) source repos
+    expect(mockAxiosGet).toHaveBeenCalledWith(
+      expect.stringContaining('api.github.com'),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer ghp_operator_secret',
+        }),
+      }),
+    );
+  });
+
+  test('L-4: source repo from OCI image label (trusted) still sends the token', async () => {
+    ddEnvVars.DD_RELEASE_NOTES_GITHUB_TOKEN = 'ghp_operator_secret';
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        tag_name: 'v3.0.0',
+        name: 'OCI Label Release',
+        body: 'body',
+        html_url: 'https://github.com/acme/oci/releases/tag/v3.0.0',
+        published_at: '2026-01-01T00:00:00.000Z',
+      },
+    });
+
+    // OCI label is in imageLabels (baked into the image), not containerLabels
+    const { getReleaseNotesForTag } = await import('./index.js');
+    await getReleaseNotesForTag(
+      {
+        labels: {},
+        image: {
+          name: 'acme/oci',
+          registry: { url: 'registry.example.com' },
+        },
+        result: { tag: '3.0.0' },
+      } as any,
+      '3.0.0',
+      {
+        'org.opencontainers.image.source': 'https://github.com/acme/oci',
+      },
+    );
+
+    expect(mockAxiosGet).toHaveBeenCalledWith(
+      expect.stringContaining('api.github.com'),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer ghp_operator_secret',
+        }),
+      }),
+    );
+  });
+
+  test('L-4: GHCR token fallback is suppressed for untrusted container-label source repos', async () => {
+    // No explicit GitHub token configured, but GHCR fallback exists
+    delete ddEnvVars.DD_RELEASE_NOTES_GITHUB_TOKEN;
+
+    // The GithubProvider mock is not in use here — this test drives through the real
+    // GithubProvider (via index.ts) with mockAxiosGet intercepting the HTTP call
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        tag_name: 'v1.0.0',
+        name: 'Release',
+        body: 'body',
+        html_url: 'https://github.com/attacker/evil/releases/tag/v1.0.0',
+        published_at: '2026-01-01T00:00:00.000Z',
+      },
+    });
+
+    // Even if a GHCR PAT is configured (mocked at the GithubProvider level via
+    // getGhcrTokenFallback), the token must not be attached when source is untrusted.
+    // We verify this by asserting no Authorization header is present.
+    await getFullReleaseNotesForContainer({
+      labels: {
+        'dd.source.repo': 'https://github.com/attacker/evil.git',
+      },
+      image: {
+        name: 'attacker/image',
+        registry: { url: 'registry.example.com' },
+      },
+      result: { tag: '1.0.0' },
+    } as any);
+
+    expect(mockAxiosGet).toHaveBeenCalledWith(
+      expect.stringContaining('api.github.com'),
+      expect.objectContaining({
+        headers: expect.not.objectContaining({
+          Authorization: expect.any(String),
+        }),
+      }),
+    );
+  });
+
+  // -----------------------------------------------------------------------
+  // Cache key trust segregation (security correctness — cache poisoning fix)
+  // -----------------------------------------------------------------------
+
+  test('cache-segregation: untrusted not-found null does not poison a subsequent trusted lookup', async () => {
+    const { getReleaseNotesForTag } = await import('./index.js');
+    ddEnvVars.DD_RELEASE_NOTES_GITHUB_TOKEN = 'ghp_operator_secret';
+
+    // First call: UNTRUSTED (container label) — GitHub returns 404 (no token sent)
+    mockAxiosGet
+      .mockRejectedValueOnce({ response: { status: 404 } }) // untrusted: v1.0.0 variant
+      .mockRejectedValueOnce({ response: { status: 404 } }); // untrusted: 1.0.0 variant
+
+    const untrustedResult = await getReleaseNotesForTag(
+      {
+        labels: { 'dd.source.repo': 'https://github.com/acme/private.git' },
+        image: { name: 'acme/image', registry: { url: 'registry.example.com' } },
+        result: { tag: '1.0.0' },
+      } as any,
+      '1.0.0',
+    );
+    expect(untrustedResult).toBeUndefined();
+
+    // Second call: TRUSTED (OCI image label, same repo+tag) — must invoke fetchByTag again
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        tag_name: 'v1.0.0',
+        name: 'Private Release',
+        body: 'notes',
+        html_url: 'https://github.com/acme/private/releases/tag/v1.0.0',
+        published_at: '2026-01-01T00:00:00.000Z',
+      },
+    });
+
+    const trustedResult = await getReleaseNotesForTag(
+      {
+        labels: {},
+        image: { name: 'acme/image', registry: { url: 'registry.example.com' } },
+        result: { tag: '1.0.0' },
+      } as any,
+      '1.0.0',
+      { 'org.opencontainers.image.source': 'https://github.com/acme/private' },
+    );
+
+    // The trusted call must NOT return the poisoned null — it must get real notes
+    expect(trustedResult).not.toBeUndefined();
+    expect(trustedResult?.title).toBe('Private Release');
+    // fetchByTag was called for the untrusted attempt (2 tag variants) + once for the trusted attempt
+    expect(mockAxiosGet).toHaveBeenCalledTimes(3);
+    // The trusted call must have sent the token
+    expect(mockAxiosGet).toHaveBeenLastCalledWith(
+      expect.stringContaining('api.github.com'),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer ghp_operator_secret',
+        }),
+      }),
+    );
+  });
+
+  test('cache-segregation: trusted cache entry is not served to an untrusted lookup', async () => {
+    const { getReleaseNotesForTag } = await import('./index.js');
+    ddEnvVars.DD_RELEASE_NOTES_GITHUB_TOKEN = 'ghp_operator_secret';
+
+    // First call: TRUSTED — caches a successful result
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        tag_name: 'v2.0.0',
+        name: 'Trusted Release',
+        body: 'notes',
+        html_url: 'https://github.com/acme/shared/releases/tag/v2.0.0',
+        published_at: '2026-01-01T00:00:00.000Z',
+      },
+    });
+
+    await getReleaseNotesForTag(
+      {
+        labels: {},
+        image: { name: 'acme/image', registry: { url: 'registry.example.com' } },
+        result: { tag: '2.0.0' },
+      } as any,
+      '2.0.0',
+      { 'org.opencontainers.image.source': 'https://github.com/acme/shared' },
+    );
+
+    // Second call: UNTRUSTED (container label, same repo+tag) — must not hit the trusted cache;
+    // it must make its own network call (which returns 404)
+    mockAxiosGet
+      .mockRejectedValueOnce({ response: { status: 404 } })
+      .mockRejectedValueOnce({ response: { status: 404 } });
+
+    const untrustedResult = await getReleaseNotesForTag(
+      {
+        labels: { 'dd.source.repo': 'https://github.com/acme/shared.git' },
+        image: { name: 'acme/image', registry: { url: 'registry.example.com' } },
+        result: { tag: '2.0.0' },
+      } as any,
+      '2.0.0',
+    );
+
+    // Untrusted lookup must NOT receive the trusted cached value
+    expect(untrustedResult).toBeUndefined();
+    // Total calls: 1 (trusted fetch) + 2 (untrusted fetch, two tag variants)
+    expect(mockAxiosGet).toHaveBeenCalledTimes(3);
+  });
+
+  test('cache-segregation: same-trust repeated calls still hit the cache (no regression)', async () => {
+    const { getReleaseNotesForTag } = await import('./index.js');
+
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        tag_name: 'v3.0.0',
+        name: 'Cached Release',
+        body: 'notes',
+        html_url: 'https://github.com/acme/cached/releases/tag/v3.0.0',
+        published_at: '2026-01-01T00:00:00.000Z',
+      },
+    });
+
+    const container = {
+      labels: {},
+      image: { name: 'acme/image', registry: { url: 'registry.example.com' } },
+      result: { tag: '3.0.0' },
+    } as any;
+    const imageLabels = { 'org.opencontainers.image.source': 'https://github.com/acme/cached' };
+
+    const first = await getReleaseNotesForTag(container, '3.0.0', imageLabels);
+    const second = await getReleaseNotesForTag(container, '3.0.0', imageLabels);
+
+    expect(first?.title).toBe('Cached Release');
+    expect(second?.title).toBe('Cached Release');
+    // fetchByTag must only have been called once — second call served from cache
+    expect(mockAxiosGet).toHaveBeenCalledTimes(1);
   });
 });

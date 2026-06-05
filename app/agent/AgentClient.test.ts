@@ -5280,6 +5280,37 @@ describe('AgentClient', () => {
       expect(result.items[0].containerId).toBe('');
       expect(result.items[1].containerId).toBe('c2');
     });
+
+    test('uses raw operationId when a controller row already exists at that id', () => {
+      // Simulate a controller-issued operationId that has a row in the store.
+      // resolveAgentOperationId returns the raw id; toAgentScopedId would
+      // incorrectly prepend agent-test-agent- and double-scope it.
+      vi.mocked(updateOperationStore.getOperationById).mockImplementation((id) => {
+        if (id === 'uuid-controller-issued')
+          return { id: 'uuid-controller-issued', status: 'queued' } as any;
+        return undefined;
+      });
+
+      const result = parseBatch({
+        batchId: 'remote-batch-ctrl',
+        total: 1,
+        succeeded: 1,
+        failed: 0,
+        durationMs: 300,
+        items: [
+          {
+            operationId: 'uuid-controller-issued',
+            containerName: 'nginx',
+            status: 'succeeded',
+          },
+        ],
+        timestamp: '2026-06-03T00:00:00.000Z',
+      });
+
+      expect(result).not.toBeUndefined();
+      // Raw id must be preserved — NOT 'agent-test-agent-uuid-controller-issued'
+      expect(result.items[0].operationId).toBe('uuid-controller-issued');
+    });
   });
 
   describe('parseSecurityAlertEventPayload', () => {
@@ -6524,6 +6555,240 @@ describe('AgentClient', () => {
       // Original: '' fails length > 0, so '' is NOT deleted
       // Mutation >= 0: '' passes length >= 0, so '' IS deleted → test fails
       expect(internal.pendingFreshStateAfterRemoteUpdate.has('')).toBe(true);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Regression tests for #386 — snapshot-replay convergence
+  //
+  // The agent-side fix (event.ts) caches the latest dd:watcher-snapshot per
+  // watcher and replays it to each new SSE client right after dd:ack. From the
+  // controller side (AgentClient) the invariant is: once the replayed snapshot
+  // arrives, the controller store must contain the agent's containers with
+  // correct agent scoping, regardless of the ack/snapshot arrival ordering.
+  // ─────────────────────────────────────────────────────────────────────────────
+  describe('snapshot-replay convergence (#386)', () => {
+    // Helper: perform a full handshake that returns 0 containers (the cold-start
+    // race that motivated #386) so that pruneOldContainers is skipped.
+    async function doZeroContainerHandshake() {
+      axios.get
+        .mockResolvedValueOnce({ data: [] }) // /api/containers
+        .mockResolvedValueOnce({ data: [{ type: 'docker', name: 'local', configuration: {} }] }) // /api/watchers
+        .mockResolvedValueOnce({ data: [] }); // /api/triggers
+      storeContainer.getContainers.mockReturnValue([]);
+      await client.handshake();
+    }
+
+    test('CORE: replayed snapshot after dd:ack populates the store with agent-scoped containers', async () => {
+      // Simulate the normal reconnect sequence:
+      //   1. Controller connects → receives dd:ack → handshake fetches 0 containers
+      //   2. Agent immediately replays cached dd:watcher-snapshot with the real container list
+      //
+      // After this sequence the controller store must hold the container from the snapshot
+      // tagged with the correct agent name — this is the fundamental #386 invariant.
+      await doZeroContainerHandshake();
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({ ...c }));
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [{ id: 'c1', name: 'web', watcher: 'local' }],
+      });
+
+      // The container must be inserted with agent = 'test-agent'.
+      expect(storeContainer.insertContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1', agent: 'test-agent' }),
+      );
+      // And reported via emitContainerReports.
+      expect(event.emitContainerReports).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            container: expect.objectContaining({ id: 'c1', agent: 'test-agent' }),
+          }),
+        ]),
+      );
+    });
+
+    test('CORE: replayed snapshot for multiple containers all carry agent scoping', async () => {
+      await doZeroContainerHandshake();
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({ ...c }));
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [
+          { id: 'c1', name: 'web', watcher: 'local' },
+          { id: 'c2', name: 'db', watcher: 'local' },
+          { id: 'c3', name: 'cache', watcher: 'local' },
+        ],
+      });
+
+      const calls = vi.mocked(storeContainer.insertContainer).mock.calls;
+      for (const [inserted] of calls) {
+        expect(inserted).toMatchObject({ agent: 'test-agent' });
+      }
+      expect(calls).toHaveLength(3);
+    });
+
+    test('RACE order A (snapshot before ack completes): containers must not be zero after ack', async () => {
+      // Ordering that can occur when the agent sends the snapshot before the
+      // controller handshake finishes:
+      //   1. dd:ack fires → handshake starts (slow)
+      //   2. dd:watcher-snapshot fires and is processed immediately (SSE is sequential)
+      //   3. handshake returns 0 → prune is skipped (zero-container guard)
+      //
+      // The resulting state must have the container from the snapshot in the store,
+      // not zero.  This tests the zero-container prune guard from #386.
+
+      // Set up a slow handshake so snapshot can "arrive first" in logical terms.
+      let resolveHandshake!: () => void;
+      const slowHandshake = new Promise<void>((resolve) => {
+        resolveHandshake = resolve;
+      });
+      vi.spyOn(client as never, '_doHandshake').mockReturnValueOnce(slowHandshake);
+
+      // dd:ack fires; handshake starts but does not complete yet.
+      void client.handleEvent('dd:ack', { version: '1.0' });
+
+      // While handshake is still in flight, the snapshot arrives.
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({ ...c }));
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [{ id: 'c1', name: 'web', watcher: 'local' }],
+      });
+
+      // Snapshot processed; container is in store.
+      expect(storeContainer.insertContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1', agent: 'test-agent' }),
+      );
+
+      // Now let the handshake resolve (0 containers, so prune is skipped).
+      resolveHandshake();
+      await Promise.resolve();
+
+      // Container must NOT have been pruned — the zero-container guard applies.
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('c1');
+    });
+
+    test('RACE order B (snapshot arrives after ack+handshake): containers converge after snapshot', async () => {
+      // Normal chronological order:
+      //   1. dd:ack fires → handshake completes (0 containers → prune skipped)
+      //   2. Agent sends replayed dd:watcher-snapshot with real containers
+      //
+      // After both steps the store must contain the container from the snapshot.
+      await doZeroContainerHandshake();
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({ ...c }));
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [{ id: 'c1', name: 'web', watcher: 'local' }],
+      });
+
+      // Container from the replayed snapshot must be present with agent scoping.
+      expect(storeContainer.insertContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1', agent: 'test-agent' }),
+      );
+      expect(storeContainer.deleteContainer).not.toHaveBeenCalled();
+    });
+
+    test('RACE: snapshot before ack must update the watcher snapshot cache', async () => {
+      // Even when a snapshot fires before the handshake completes the cache must
+      // be populated so a subsequent getWatcherSnapshot call returns the entry.
+      let resolveHandshake!: () => void;
+      const slowHandshake = new Promise<void>((resolve) => {
+        resolveHandshake = resolve;
+      });
+      vi.spyOn(client as never, '_doHandshake').mockReturnValueOnce(slowHandshake);
+
+      void client.handleEvent('dd:ack', { version: '1.0' });
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => ({ ...c }));
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: {
+          type: 'docker',
+          name: 'local',
+          configuration: { socket: '/var/run/docker.sock' },
+        },
+        containers: [],
+      });
+
+      // Cache must already be populated before handshake finishes.
+      expect(client.getWatcherSnapshot('docker', 'local')).toEqual(
+        expect.objectContaining({ type: 'docker', name: 'local' }),
+      );
+
+      resolveHandshake();
+      await Promise.resolve();
+    });
+
+    test('RACE: two snapshots in a row — only the latest containers are in the store after the second snapshot prunes the first', async () => {
+      // Verifies that the watcher-scoped prune in handleWatcherSnapshotEvent
+      // correctly removes containers from the first snapshot that are absent
+      // in the second snapshot — the controller must not hold stale entries.
+      await doZeroContainerHandshake();
+
+      const containerStore: Array<{ id: string; name: string; watcher: string; agent: string }> =
+        [];
+
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((c) => {
+        const entry = { ...c };
+        containerStore.push(entry);
+        return entry;
+      });
+      storeContainer.getContainers.mockImplementation((query = {}) =>
+        containerStore.filter(
+          (c) =>
+            (!query.agent || c.agent === query.agent) &&
+            (!query.watcher || c.watcher === query.watcher),
+        ),
+      );
+      storeContainer.deleteContainer.mockImplementation((id: string) => {
+        const idx = containerStore.findIndex((c) => c.id === id);
+        if (idx !== -1) containerStore.splice(idx, 1);
+      });
+
+      // First snapshot: c1 + c2
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [
+          { id: 'c1', name: 'web', watcher: 'local' },
+          { id: 'c2', name: 'db', watcher: 'local' },
+        ],
+      });
+      expect(containerStore.map((c) => c.id).sort()).toEqual(['c1', 'c2']);
+
+      // Second snapshot: only c1 (c2 was stopped/removed on the agent)
+      storeContainer.getContainer.mockImplementation((id: string) =>
+        containerStore.find((c) => c.id === id),
+      );
+      storeContainer.updateContainer.mockImplementation((c) => {
+        const idx = containerStore.findIndex((stored) => stored.id === c.id);
+        if (idx !== -1) Object.assign(containerStore[idx], c);
+        return c;
+      });
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [{ id: 'c1', name: 'web', watcher: 'local' }],
+      });
+
+      // c2 must have been pruned; c1 must remain.
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2');
+      expect(containerStore.map((c) => c.id)).toEqual(['c1']);
     });
   });
 });

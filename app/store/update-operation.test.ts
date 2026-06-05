@@ -195,8 +195,8 @@ describe('Update Operation Store', () => {
       expect(fresh.getOperationById('started-stale-op-1')).toEqual(
         expect.objectContaining({
           id: 'started-stale-op-1',
-          status: 'failed',
-          phase: 'failed',
+          status: 'expired',
+          phase: 'expired',
           completedAt: '2026-02-23T01:00:00.000Z',
           lastError: expect.stringContaining('process restart'),
         }),
@@ -205,8 +205,8 @@ describe('Update Operation Store', () => {
       expect(fresh.getOperationById('health-stale-op-1')).toEqual(
         expect.objectContaining({
           id: 'health-stale-op-1',
-          status: 'failed',
-          phase: 'failed',
+          status: 'expired',
+          phase: 'expired',
           completedAt: '2026-02-23T01:00:00.000Z',
           lastError: expect.stringContaining('process restart'),
         }),
@@ -215,8 +215,8 @@ describe('Update Operation Store', () => {
       expect(fresh.getOperationById('deferred-stale-op-1')).toEqual(
         expect.objectContaining({
           id: 'deferred-stale-op-1',
-          status: 'failed',
-          phase: 'failed',
+          status: 'expired',
+          phase: 'expired',
           completedAt: '2026-02-23T01:00:00.000Z',
           lastError: expect.stringContaining('process restart'),
         }),
@@ -322,10 +322,10 @@ describe('Update Operation Store', () => {
       fresh.createCollections(createDocumentBackedDb(documents) as any);
 
       expect(fresh.getOperationById('self-update-queued')).toEqual(
-        expect.objectContaining({ status: 'failed', phase: 'failed' }),
+        expect.objectContaining({ status: 'expired', phase: 'expired' }),
       );
       expect(fresh.getOperationById('self-update-pulling')).toEqual(
-        expect.objectContaining({ status: 'failed', phase: 'failed' }),
+        expect.objectContaining({ status: 'expired', phase: 'expired' }),
       );
     } finally {
       vi.useRealTimers();
@@ -1256,8 +1256,8 @@ describe('Update Operation Store', () => {
       expect(fresh.getOperationById(queued.id)).toEqual(
         expect.objectContaining({
           id: queued.id,
-          status: 'failed',
-          phase: 'failed',
+          status: 'expired',
+          phase: 'expired',
           completedAt: '2026-02-23T00:01:01.000Z',
           batchId: undefined,
           queuePosition: undefined,
@@ -1388,7 +1388,7 @@ describe('Update Operation Store', () => {
       vi.setSystemTime(new Date('2026-02-23T00:01:01.000Z'));
       expect(fresh.getActiveOperationByContainerName('web')).toBeUndefined();
       expect(fresh.getOperationById(queued.id)?.lastError).toContain(
-        'previous failure; Marked failed after exceeding active update TTL',
+        'previous failure; Marked expired after exceeding active update TTL',
       );
     } finally {
       vi.useRealTimers();
@@ -1530,8 +1530,8 @@ describe('Update Operation Store', () => {
       expect(fresh.getOperationById(operation.id)).toEqual(
         expect.objectContaining({
           id: operation.id,
-          status: 'failed',
-          phase: 'failed',
+          status: 'expired',
+          phase: 'expired',
           completedAt: '2026-02-23T00:01:01.000Z',
           lastError: expect.stringContaining('active update TTL'),
         }),
@@ -2379,6 +2379,139 @@ describe('Update Operation Store', () => {
       updateOperation.requestOperationCancellation(op.id);
 
       expect(updateOperation.isOperationCancelRequested(op.id)).toBe(true);
+    });
+  });
+
+  describe('getRecentTerminalSucceededOperationByContainerName (issue #410 dedup helper)', () => {
+    test('returns a succeeded terminal op within the time window', () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
+        const op = updateOperation.insertOperation({
+          containerName: 'nginx',
+          status: 'in-progress',
+          phase: 'pulling',
+        });
+        updateOperation.markOperationTerminal(op.id, { status: 'succeeded' });
+
+        vi.setSystemTime(new Date('2026-06-04T12:05:00.000Z'));
+        const windowMs = 15 * 60 * 1000; // 15 min
+        const result = updateOperation.getRecentTerminalSucceededOperationByContainerName(
+          'nginx',
+          windowMs,
+        );
+        expect(result).toBeDefined();
+        expect(result?.status).toBe('succeeded');
+        expect(result?.containerName).toBe('nginx');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('returns the most recent of multiple succeeded ops within the window', () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
+        const older = updateOperation.insertOperation({
+          containerName: 'nginx',
+          status: 'in-progress',
+          phase: 'pulling',
+        });
+        updateOperation.markOperationTerminal(older.id, { status: 'succeeded' });
+
+        vi.setSystemTime(new Date('2026-06-04T12:03:00.000Z'));
+        const newer = updateOperation.insertOperation({
+          containerName: 'nginx',
+          status: 'in-progress',
+          phase: 'pulling',
+        });
+        updateOperation.markOperationTerminal(newer.id, { status: 'succeeded' });
+
+        vi.setSystemTime(new Date('2026-06-04T12:05:00.000Z'));
+        const result = updateOperation.getRecentTerminalSucceededOperationByContainerName(
+          'nginx',
+          15 * 60 * 1000,
+        );
+        expect(result?.id).toBe(newer.id);
+        expect(result?.status).toBe('succeeded');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('returns undefined when the succeeded op is outside the window', () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
+        const op = updateOperation.insertOperation({
+          containerName: 'nginx',
+          status: 'in-progress',
+          phase: 'pulling',
+        });
+        updateOperation.markOperationTerminal(op.id, { status: 'succeeded' });
+
+        vi.setSystemTime(new Date('2026-06-04T12:20:00.000Z'));
+        const windowMs = 15 * 60 * 1000; // 15 min, but 20 min elapsed
+        const result = updateOperation.getRecentTerminalSucceededOperationByContainerName(
+          'nginx',
+          windowMs,
+        );
+        expect(result).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('ignores failed/rolled-back ops even within the window', () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
+        const failed = updateOperation.insertOperation({
+          containerName: 'nginx',
+          status: 'in-progress',
+          phase: 'pulling',
+        });
+        updateOperation.markOperationTerminal(failed.id, { status: 'failed' });
+
+        vi.setSystemTime(new Date('2026-06-04T12:05:00.000Z'));
+        const result = updateOperation.getRecentTerminalSucceededOperationByContainerName(
+          'nginx',
+          15 * 60 * 1000,
+        );
+        expect(result).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('returns undefined for a different container name', () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
+        const op = updateOperation.insertOperation({
+          containerName: 'redis',
+          status: 'in-progress',
+          phase: 'pulling',
+        });
+        updateOperation.markOperationTerminal(op.id, { status: 'succeeded' });
+
+        vi.setSystemTime(new Date('2026-06-04T12:05:00.000Z'));
+        const result = updateOperation.getRecentTerminalSucceededOperationByContainerName(
+          'nginx',
+          15 * 60 * 1000,
+        );
+        expect(result).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('returns undefined when collection is uninitialized', async () => {
+      vi.resetModules();
+      const fresh = await import('./update-operation.js');
+      expect(
+        fresh.getRecentTerminalSucceededOperationByContainerName('nginx', 15 * 60 * 1000),
+      ).toBeUndefined();
     });
   });
 });

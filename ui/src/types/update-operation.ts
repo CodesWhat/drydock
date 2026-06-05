@@ -16,6 +16,7 @@ export const CONTAINER_UPDATE_OPERATION_STATUSES = [
   'succeeded',
   'rolled-back',
   'failed',
+  'expired',
 ] as const;
 
 export type ContainerUpdateOperationStatus = (typeof CONTAINER_UPDATE_OPERATION_STATUSES)[number];
@@ -25,10 +26,15 @@ export const ACTIVE_CONTAINER_UPDATE_OPERATION_STATUSES = ['queued', 'in-progres
 export type ActiveContainerUpdateOperationStatus =
   (typeof ACTIVE_CONTAINER_UPDATE_OPERATION_STATUSES)[number];
 
+// `expired` is a non-notifying terminal status: the controller's active-TTL
+// sweep / startup-orphan reconciliation terminalises a stuck operation without
+// emitting an update-failed event, so the UI clears the "Updating" badge with no
+// failure styling and no toast. See issue #410.
 export const TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES = [
   'succeeded',
   'rolled-back',
   'failed',
+  'expired',
 ] as const;
 
 export type TerminalContainerUpdateOperationStatus =
@@ -59,6 +65,7 @@ export const CONTAINER_UPDATE_OPERATION_PHASES = [
   'rolled-back',
   'rollback-deferred',
   'rollback-failed',
+  'expired',
 ] as const;
 
 export type ContainerUpdateOperationPhase = (typeof CONTAINER_UPDATE_OPERATION_PHASES)[number];

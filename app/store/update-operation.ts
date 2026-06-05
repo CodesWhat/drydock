@@ -13,6 +13,7 @@ import type {
   ContainerUpdateOperationKind,
   ContainerUpdateOperationPhase,
   ContainerUpdateOperationStatus,
+  ExpiredContainerUpdateOperationPhase,
   FailedContainerUpdateOperationPhase,
   InProgressContainerUpdateOperationPhase,
   RolledBackContainerUpdateOperationPhase,
@@ -111,12 +112,30 @@ interface FailedUpdateOperation extends UpdateOperationBase {
   queueTotal?: undefined;
 }
 
+/**
+ * Terminal state for an operation the controller could neither complete nor
+ * confirm: the active-TTL sweep or startup-orphan reconciliation found it stuck
+ * (orphaned `queued`/`in-progress` rows, or a remote update whose agent never
+ * reported back). Unlike `failed`, it emits NO `update-failed` lifecycle event,
+ * so a stuck or merely-slow operation can never surface a false "update failed"
+ * notification. See issue #410.
+ */
+interface ExpiredUpdateOperation extends UpdateOperationBase {
+  status: 'expired';
+  phase: ExpiredContainerUpdateOperationPhase;
+  completedAt: string;
+  batchId?: undefined;
+  queuePosition?: undefined;
+  queueTotal?: undefined;
+}
+
 type UpdateOperation =
   | QueuedUpdateOperation
   | InProgressUpdateOperation
   | SucceededUpdateOperation
   | RolledBackUpdateOperation
-  | FailedUpdateOperation;
+  | FailedUpdateOperation
+  | ExpiredUpdateOperation;
 
 type ActiveUpdateOperation = QueuedUpdateOperation | InProgressUpdateOperation;
 
@@ -198,6 +217,10 @@ type TerminalUpdateOperationPatch =
   | (TerminalUpdateOperationPatchBase & {
       status: 'failed';
       phase?: FailedContainerUpdateOperationPhase;
+    })
+  | (TerminalUpdateOperationPatchBase & {
+      status: 'expired';
+      phase?: ExpiredContainerUpdateOperationPhase;
     });
 
 interface UpdateOperationCollectionDocument {
@@ -297,11 +320,11 @@ function isStaleActiveOperation(operation: UpdateOperation, nowMs = Date.now()):
 }
 
 function getRuntimeExpiredActiveOperationMessage(operation: UpdateOperation): string {
-  return `Marked failed after exceeding active update TTL (${UPDATE_OPERATION_ACTIVE_TTL_MS}ms) while ${operation.status === 'queued' ? 'queued' : 'in progress'}`;
+  return `Marked expired after exceeding active update TTL (${UPDATE_OPERATION_ACTIVE_TTL_MS}ms) while ${operation.status === 'queued' ? 'queued' : 'in progress'}`;
 }
 
 function getStartupOrphanedActiveOperationMessage(operation: UpdateOperation): string {
-  return `Marked failed after orphaned active operation was found during process restart while ${operation.status === 'queued' ? 'queued' : 'in progress'}`;
+  return `Marked expired after orphaned active operation was found during process restart while ${operation.status === 'queued' ? 'queued' : 'in progress'}`;
 }
 
 function emitOperationChangedEvent(operation: UpdateOperation): void {
@@ -371,6 +394,12 @@ function emitTerminalLifecycleEvent(operation: UpdateOperation, batchId?: string
           ? { rollbackReason: operation.rollbackReason }
           : {}),
       });
+      return;
+    case 'expired':
+      // Intentionally silent: an expired (TTL-swept / startup-orphaned) operation
+      // never completed nor was confirmed failed, so emitting `update-failed`
+      // here would surface a false "update failed" notification. See issue #410.
+      return;
   }
 }
 
@@ -384,7 +413,7 @@ function expireActiveOperationWithMessage(
   }
 
   return markOperationTerminal(existing.id, {
-    status: 'failed',
+    status: 'expired',
     lastError: existing.lastError ? `${existing.lastError}; ${message}` : message,
   });
 }
@@ -981,6 +1010,38 @@ export function getOperationsByContainerName(containerName: string): UpdateOpera
     .find({ 'data.containerName': containerName })
     .map((item) => item.data)
     .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
+}
+
+/**
+ * Return the most recent terminal `succeeded` operation for a container name
+ * that completed within the given `sinceMs` window (milliseconds before now).
+ *
+ * Used by the duplicate-update dedup logic (issue #410) to distinguish between
+ * a genuine execution failure and a stale-container 404/409 that arrived after
+ * Docker Compose or an agent already recreated the container successfully.
+ */
+export function getRecentTerminalSucceededOperationByContainerName(
+  containerName: string,
+  sinceMs: number,
+): SucceededUpdateOperation | undefined {
+  if (!updateOperationCollection) {
+    return undefined;
+  }
+
+  const cutoffMs = Date.now() - sinceMs;
+
+  const candidates = updateOperationCollection
+    .find({ 'data.containerName': containerName, 'data.status': 'succeeded' })
+    .map((item) => item.data)
+    .filter(
+      (op): op is SucceededUpdateOperation =>
+        op.status === 'succeeded' &&
+        typeof op.completedAt === 'string' &&
+        Date.parse(op.completedAt) >= cutoffMs,
+    )
+    .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
+
+  return candidates.at(0);
 }
 
 /**

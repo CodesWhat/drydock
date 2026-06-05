@@ -64,7 +64,7 @@ class Dhi extends Custom<DhiRegistryConfiguration> {
       axiosConfig.headers.Authorization = `Basic ${credentials}`;
     }
 
-    const response = await axios(axiosConfig);
+    const response = await axios(this.withTlsRequestOptions(axiosConfig));
     return withAuthorizationHeader(
       requestOptions,
       'Bearer',

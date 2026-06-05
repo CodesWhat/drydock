@@ -48,6 +48,12 @@ export function getSessionSecretKey(): string {
     return envSecret;
   }
 
+  log.warn(
+    'DD_SESSION_SECRET is not set. Using an auto-generated secret persisted in the store ' +
+      '(/store/dd.json). For production deployments, set DD_SESSION_SECRET explicitly and ' +
+      'ensure the store directory is not world-readable.',
+  );
+
   const storedSecret = getStoredSessionSecret();
   if (storedSecret) {
     log.info('Using persisted session secret from store');

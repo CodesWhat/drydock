@@ -16,6 +16,10 @@ import * as registry from '../registry/index.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import { isSelfUpdateAvailable } from '../triggers/providers/docker/self-update-availability.js';
 import { getErrorMessage } from '../util/error.js';
+import {
+  classifyDuplicateOpTerminalStatus,
+  isDuplicateStyleError,
+} from './duplicate-op-classification.js';
 import { hasUpdateConcurrencyCap } from './update-locks.js';
 
 interface UpdateQueueBatchMetadata {
@@ -134,10 +138,11 @@ function getActiveUpdateOperationForContainer(container: Container) {
     return byId;
   }
 
-  const byName = updateOperationStore.getActiveOperationByContainerName(container.name);
-  const isLegacyOperation =
-    byName && typeof byName === 'object' && !('containerId' in (byName as Record<string, unknown>));
-  return isLegacyOperation ? byName : undefined;
+  // Fall back to name-based lookup. The legacy `isLegacyOperation` guard that
+  // required the op to lack a `containerId` field was dead code: all modern ops
+  // have `containerId`, so the guard always returned `undefined` and never
+  // blocked a duplicate-by-name. Fixed as part of issue #410 Part A.
+  return updateOperationStore.getActiveOperationByContainerName(container.name);
 }
 
 // Complete map covers every UpdateBlockerReason so callers never hit a missing
@@ -169,6 +174,23 @@ function statusCodeForHardBlocker(blocker: UpdateBlocker): number {
 function markAcceptedQueuedOperationFailed(operationId: string, error: unknown) {
   const operation = updateOperationStore.getOperationById(operationId);
   if (operation?.status !== 'queued') {
+    return;
+  }
+
+  // Issue #410 Part B: if this failure looks like a stale-container 404/409 or
+  // a compose "no longer exists" AND there is a recent succeeded op for the same
+  // container name, the duplicate update already succeeded — reclassify to
+  // `expired` so no false "update failed" notification fires.
+  if (
+    isDuplicateStyleError(error) &&
+    operation.containerName &&
+    classifyDuplicateOpTerminalStatus(error, operation.containerName) === 'expired'
+  ) {
+    updateOperationStore.markOperationTerminal(operationId, {
+      status: 'expired',
+      phase: 'expired',
+      lastError: getErrorMessage(error),
+    });
     return;
   }
 

@@ -955,6 +955,44 @@ describe('useDashboardComputed recent updates', () => {
     });
   });
 
+  it('does not bleed identity-keyed operation status from one same-name sibling onto the other (#291)', () => {
+    // Regression: two containers sharing a display name but homed on different
+    // agents must each resolve their own identity-keyed status. The status
+    // applied to one container must NOT project onto the sibling.
+    const agentANginx = makeBaseContainer({
+      id: 'nginx-agent-a',
+      identityKey: 'edge-a::docker-prod::nginx',
+      name: 'nginx',
+      newTag: '1.27.0',
+      updateDetectedAt: '2026-03-04T09:00:00.000Z',
+    });
+    const agentBNginx = makeBaseContainer({
+      id: 'nginx-agent-b',
+      identityKey: 'edge-b::docker-prod::nginx',
+      name: 'nginx',
+      newTag: '1.27.0',
+      updateDetectedAt: '2026-03-04T08:00:00.000Z',
+    });
+
+    const state = createState({
+      containers: [agentANginx, agentBNginx],
+      recentStatusByContainer: {
+        // Name-keyed fallback should not be used when identity keys are present
+        nginx: 'failed',
+      },
+      recentStatusByIdentity: {
+        'edge-a::docker-prod::nginx': 'updated',
+        // edge-b has no entry — should fall back to pending, not inherit agent-a's status
+      },
+    });
+
+    const rows = state.recentUpdates.value;
+    // Agent-A nginx: identity-keyed → 'updated'
+    expect(rows.find((row) => row.id === 'nginx-agent-a')).toMatchObject({ status: 'updated' });
+    // Agent-B nginx: no identity entry, duplicate name → 'pending' (not agent-a's 'updated')
+    expect(rows.find((row) => row.id === 'nginx-agent-b')).toMatchObject({ status: 'pending' });
+  });
+
   it('prefers identity-keyed recent status when duplicate container names exist', () => {
     const localApi = makeBaseContainer({
       id: 'local-api',

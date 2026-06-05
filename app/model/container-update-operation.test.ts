@@ -8,6 +8,8 @@ import {
   isContainerUpdateOperationKind,
   isContainerUpdateOperationPhase,
   isContainerUpdateOperationStatus,
+  isExpiredContainerUpdateOperationPhase,
+  isTerminalContainerUpdateOperationPhase,
   isTerminalContainerUpdateOperationPhaseForStatus,
   isTerminalContainerUpdateOperationStatus,
   resolveTerminalContainerUpdateOperationPhase,
@@ -88,5 +90,43 @@ describe('container update operation guards', () => {
     expect(() => getDefaultTerminalContainerUpdateOperationPhase('invalid' as never)).toThrow(
       'Unexpected container update operation state',
     );
+  });
+
+  test('isExpiredContainerUpdateOperationPhase identifies expired phases', () => {
+    expect(isExpiredContainerUpdateOperationPhase('expired')).toBe(true);
+    expect(isExpiredContainerUpdateOperationPhase('failed')).toBe(false);
+    expect(isExpiredContainerUpdateOperationPhase('queued')).toBe(false);
+    expect(isExpiredContainerUpdateOperationPhase(123)).toBe(false);
+    expect(isExpiredContainerUpdateOperationPhase(undefined)).toBe(false);
+  });
+
+  test('isTerminalContainerUpdateOperationPhase accepts expired', () => {
+    expect(isTerminalContainerUpdateOperationPhase('expired')).toBe(true);
+  });
+
+  test('isTerminalContainerUpdateOperationPhaseForStatus handles expired status', () => {
+    expect(isTerminalContainerUpdateOperationPhaseForStatus('expired', 'expired')).toBe(true);
+    expect(isTerminalContainerUpdateOperationPhaseForStatus('expired', 'failed')).toBe(false);
+  });
+
+  test('getDefaultTerminalContainerUpdateOperationPhase returns expired for expired status', () => {
+    expect(getDefaultTerminalContainerUpdateOperationPhase('expired')).toBe('expired');
+  });
+
+  test('resolveTerminalContainerUpdateOperationPhase handles expired status', () => {
+    expect(resolveTerminalContainerUpdateOperationPhase('expired', undefined)).toBe('expired');
+    expect(resolveTerminalContainerUpdateOperationPhase('expired', 'expired')).toBe('expired');
+  });
+
+  test('CONTAINER_UPDATE_OPERATION_PHASES includes expired', () => {
+    expect((CONTAINER_UPDATE_OPERATION_PHASES as readonly string[]).includes('expired')).toBe(true);
+  });
+
+  test('isContainerUpdateOperationStatus accepts expired', () => {
+    expect(isContainerUpdateOperationStatus('expired')).toBe(true);
+  });
+
+  test('isTerminalContainerUpdateOperationStatus accepts expired', () => {
+    expect(isTerminalContainerUpdateOperationStatus('expired')).toBe(true);
   });
 });

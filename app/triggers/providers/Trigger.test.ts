@@ -3271,16 +3271,23 @@ test('handleContainerUpdateFailedEvent should run batch trigger when configured 
   }
 });
 
-test('handleContainerUpdateFailedEvent should skip when threshold is not reached', async () => {
+test('handleContainerUpdateFailedEvent fires even when threshold is not reached (lifecycle bypasses threshold)', async () => {
+  // update-failed is a lifecycle event — it reports what already happened.
+  // The threshold is meaningful only for "update available" decisions, not
+  // for "the update failed". So update-failed must bypass the threshold gate
+  // (skipThreshold: true) and always dispatch when the trigger rule allows it.
   const container = {
     watcher: 'local',
     name: 'container1',
     updateAvailable: true,
     updateKind: { kind: 'tag', semverDiff: 'major' },
   };
+  trigger.type = 'slack';
+  trigger.name = 'notify';
   trigger.configuration.mode = 'simple';
   trigger.configuration.threshold = 'minor';
   storeContainer.getContainers.mockReturnValue([container]);
+  storeContainer.getContainersRaw.mockReturnValue([container]);
   const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
 
   await trigger.handleContainerUpdateFailedEvent({
@@ -3288,7 +3295,12 @@ test('handleContainerUpdateFailedEvent should skip when threshold is not reached
     error: 'boom',
   });
 
-  expect(triggerSpy).not.toHaveBeenCalled();
+  expect(triggerSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      name: 'container1',
+      notificationEvent: { kind: 'update-failed', error: 'boom' },
+    }),
+  );
 });
 
 test('handleContainerUpdateFailedEvent should skip when mustTrigger returns false', async () => {
@@ -3582,6 +3594,32 @@ test('handleSecurityAlertEvent should not trigger when neither payload container
     containerName: 'local_nonexistent',
     details: 'high=1',
     container: undefined,
+  });
+
+  expect(triggerSpy).not.toHaveBeenCalled();
+});
+
+test('handleSecurityAlertEvent should skip when threshold is not reached (covers dispatchContainerForEvent threshold gate)', async () => {
+  // security-alert is the only lifecycle call that does NOT set skipThreshold,
+  // so it exercises the lines 923-924 threshold-not-reached guard inside
+  // dispatchContainerForEvent. Use a non-slack type so the update-action guard
+  // doesn't intercept, and a threshold where the container's updateKind won't pass.
+  const container = {
+    watcher: 'local',
+    name: 'container1',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', semverDiff: 'minor' },
+  };
+  trigger.type = 'slack';
+  trigger.name = 'notify';
+  trigger.configuration.threshold = 'major-only';
+  storeContainer.getContainers.mockReturnValue([container]);
+  const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleSecurityAlertEvent({
+    containerName: 'local_container1',
+    details: 'vuln=1',
+    container,
   });
 
   expect(triggerSpy).not.toHaveBeenCalled();
@@ -8403,6 +8441,62 @@ describe('security digest templates (6.7)', () => {
     });
     expect((callArgs?.[1] as any).title).toContain('1 container with findings');
   });
+
+  test('renderSecurityDigestTemplate does not execute arbitrary code via process.env', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+      securitydigestbody: '${process.env.HOME}',
+    });
+    trigger.init();
+
+    const ctx = {
+      kind: 'security' as const,
+      containers: [],
+      scannedCount: 1,
+      alertCount: 0,
+      criticalCount: 0,
+      highCount: 0,
+      mediumCount: 0,
+      lowCount: 0,
+      unknownCount: 0,
+      startedAt: '2026-04-17T10:00:00.000Z',
+      completedAt: '2026-04-17T10:01:00.000Z',
+      cycleId: 'cycle-001',
+    };
+
+    const body = (trigger as any).formatDigestBody('security-alert-digest', ctx);
+    expect(body).toBe('');
+  });
+
+  test('renderSecurityDigestTemplate does not execute JS expressions like array map', async () => {
+    await trigger.register('trigger', 'test', 'smtp', {
+      ...configurationValid,
+      mode: 'simple',
+      securitymode: 'digest',
+      securitydigestbody: '${scan.containers.map(c => c.name).join(",")}',
+    });
+    trigger.init();
+
+    const ctx = {
+      kind: 'security' as const,
+      containers: [{ name: 'app', critical: 1, high: 0, medium: 0, low: 0, unknown: 0 }],
+      scannedCount: 1,
+      alertCount: 1,
+      criticalCount: 1,
+      highCount: 0,
+      mediumCount: 0,
+      lowCount: 0,
+      unknownCount: 0,
+      startedAt: '2026-04-17T10:00:00.000Z',
+      completedAt: '2026-04-17T10:01:00.000Z',
+      cycleId: 'cycle-001',
+    };
+
+    const body = (trigger as any).formatDigestBody('security-alert-digest', ctx);
+    expect(body).toBe('');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -10256,5 +10350,640 @@ describe('warnIfDigestRoutingIsSuppressed coverage', () => {
       (args[0] as string).includes('Digest mode is configured'),
     );
     expect(digestWarnCalls.length).toBe(0);
+  });
+});
+
+// ── Bug #408 regression tests ─────────────────────────────────────────────────
+// Write these BEFORE the fix so they fail first and confirm root-cause.
+
+describe('bug #408: spurious update-available after update-applied', () => {
+  // Container used across sub-tests — id is required so notification history
+  // uses a stable key and hasAlreadyNotifiedForResult works correctly.
+  const container = {
+    id: 'c-nginx',
+    watcher: 'local',
+    name: 'nginx',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+  };
+
+  beforeEach(() => {
+    // Use a notification trigger type (slack) so update-action guard doesn't
+    // intercept lifecycle dispatch.
+    trigger.type = 'slack';
+    trigger.name = 'notify';
+    trigger.configuration = { ...configurationValid, once: true, threshold: 'all' };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+    storeContainer.getContainers.mockReturnValue([container]);
+  });
+
+  test(
+    'spurious notification race: update-available is NOT re-fired after update-applied ' +
+      'while the container still shows updateAvailable=true (Fix 1)',
+    async () => {
+      const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+      // 1. First scan: container shows updateAvailable=true → should fire once.
+      await trigger.handleContainerReport({ container, changed: true } as any);
+      expect(triggerSpy).toHaveBeenCalledTimes(1);
+
+      // 2. Update applied: clears history, records applied notification.
+      await trigger.handleContainerUpdateAppliedEvent({
+        containerName: 'local_nginx',
+        container,
+      } as any);
+
+      // 3. Spurious scan: watcher hasn't set updateAvailable=false yet, same
+      //    container still reports true — must NOT fire update-available again.
+      await trigger.handleContainerReport({ container, changed: false } as any);
+
+      expect(triggerSpy).toHaveBeenCalledTimes(
+        1 + 1, // original update-available + update-applied trigger
+      );
+      // Specifically: trigger was called for update-available exactly once.
+      const updateAvailableCalls = triggerSpy.mock.calls.filter(
+        (args) => !(args[0] as any)?.notificationEvent,
+      );
+      expect(updateAvailableCalls).toHaveLength(1);
+    },
+  );
+
+  test('suppression lifts after watcher confirms updateAvailable=false, then a new real update fires (Fix 1)', async () => {
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    // 1. First update-available.
+    await trigger.handleContainerReport({ container, changed: true } as any);
+    expect(triggerSpy).toHaveBeenCalledTimes(1);
+
+    // 2. Update applied.
+    await trigger.handleContainerUpdateAppliedEvent({
+      containerName: 'local_nginx',
+      container,
+    } as any);
+
+    // 3. Spurious scan (still updateAvailable=true) — suppressed.
+    await trigger.handleContainerReport({ container, changed: false } as any);
+
+    // 4. Watcher confirms update succeeded: updateAvailable=false.
+    const containerUpdated = { ...container, updateAvailable: false };
+    await trigger.handleContainerReport({ container: containerUpdated, changed: true } as any);
+
+    // 5. New real update available (different tag).
+    const containerNewUpdate = {
+      ...container,
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '3.0', semverDiff: 'major' },
+    };
+    await trigger.handleContainerReport({ container: containerNewUpdate, changed: true } as any);
+
+    // The second update-available (step 5) MUST fire.
+    const updateAvailableCalls = triggerSpy.mock.calls.filter(
+      (args) => !(args[0] as any)?.notificationEvent,
+    );
+    expect(updateAvailableCalls).toHaveLength(2);
+  });
+});
+
+describe('bug #408 (latent): lifecycle notifications bypass threshold so update-applied/failed are not silently dropped for unknown updateKind', () => {
+  test('update-applied fires even when threshold=major and updateKind.kind=unknown (Fix 2)', async () => {
+    const unknownKindContainer = {
+      id: 'c-digest',
+      watcher: 'local',
+      name: 'my-app',
+      updateAvailable: true,
+      updateKind: { kind: 'unknown', semverDiff: 'unknown' },
+    };
+    trigger.type = 'slack';
+    trigger.name = 'notify';
+    trigger.configuration = { ...configurationValid, threshold: 'major', once: false };
+    storeContainer.getContainersRaw.mockReturnValue([unknownKindContainer]);
+    storeContainer.getContainers.mockReturnValue([unknownKindContainer]);
+
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleContainerUpdateAppliedEvent({
+      containerName: 'local_my-app',
+      container: unknownKindContainer,
+    } as any);
+
+    // update-applied MUST be dispatched regardless of threshold.
+    expect(triggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ notificationEvent: { kind: 'update-applied' } }),
+    );
+  });
+
+  test('update-failed fires even when threshold=major and updateKind.kind=unknown (Fix 2)', async () => {
+    const unknownKindContainer = {
+      id: 'c-digest2',
+      watcher: 'local',
+      name: 'my-app2',
+      updateAvailable: true,
+      updateKind: { kind: 'unknown', semverDiff: 'unknown' },
+    };
+    trigger.type = 'slack';
+    trigger.name = 'notify';
+    trigger.configuration = { ...configurationValid, threshold: 'major', once: false };
+    storeContainer.getContainersRaw.mockReturnValue([unknownKindContainer]);
+    storeContainer.getContainers.mockReturnValue([unknownKindContainer]);
+
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleContainerUpdateFailedEvent({
+      containerName: 'local_my-app2',
+      container: unknownKindContainer,
+      error: 'pull failed',
+    });
+
+    // update-failed MUST be dispatched regardless of threshold.
+    expect(triggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notificationEvent: { kind: 'update-failed', error: 'pull failed' },
+      }),
+    );
+  });
+});
+
+describe('bug #408 (digest path): spurious digest buffer after update-applied', () => {
+  // Container with a stable id so notification history keys are deterministic.
+  const container = {
+    id: 'c-nginx-digest',
+    watcher: 'local',
+    name: 'nginx',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+  };
+
+  beforeEach(() => {
+    trigger.type = 'slack';
+    trigger.name = 'notify';
+    trigger.configuration = { ...configurationValid, once: true, threshold: 'all', mode: 'digest' };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+    storeContainer.getContainers.mockReturnValue([container]);
+  });
+
+  test(
+    'spurious digest race: container is NOT re-buffered after update-applied ' +
+      'while the watcher still reports updateAvailable=true',
+    async () => {
+      await trigger.register('trigger', 'local', 'slack', {
+        ...configurationValid,
+        once: true,
+        threshold: 'all',
+        mode: 'digest',
+      });
+      trigger.init();
+
+      const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+      // 1. First report: container shows updateAvailable=true → gets buffered.
+      await trigger.handleContainerReportDigest({ container, changed: true } as any);
+      expect(trigger.digestBuffer.size).toBe(1);
+
+      // 2. Update applied: clears notification history (re-opens the once gate)
+      //    and adds the key to recentlyAppliedContainerKeys.
+      await trigger.handleContainerUpdateAppliedEvent({
+        containerName: 'local_nginx',
+        container,
+      } as any);
+
+      // Watcher has evicted the container from the digest buffer on applied.
+      // Reset the buffer manually to simulate the eviction having happened but
+      // the watcher's next scan not yet having set updateAvailable=false.
+      trigger.digestBuffer.clear();
+
+      // 3. Spurious digest report: watcher still shows updateAvailable=true
+      //    (it hasn't caught up yet). Must NOT re-buffer the container.
+      await trigger.handleContainerReportDigest({ container, changed: false } as any);
+      expect(trigger.digestBuffer.size).toBe(0);
+
+      // Flush to confirm nothing is dispatched.
+      await trigger.flushDigestBuffer();
+      expect(triggerBatchSpy).not.toHaveBeenCalled();
+
+      triggerBatchSpy.mockRestore();
+    },
+  );
+
+  test(
+    'digest suppression lifts after watcher confirms updateAvailable=false, ' +
+      'then a new real update re-buffers correctly',
+    async () => {
+      await trigger.register('trigger', 'local', 'slack', {
+        ...configurationValid,
+        once: true,
+        threshold: 'all',
+        mode: 'digest',
+      });
+      trigger.init();
+
+      const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+      // 1. First report → buffered.
+      await trigger.handleContainerReportDigest({ container, changed: true } as any);
+      expect(trigger.digestBuffer.size).toBe(1);
+
+      // 2. Update applied → clears history, adds to recentlyApplied.
+      await trigger.handleContainerUpdateAppliedEvent({
+        containerName: 'local_nginx',
+        container,
+      } as any);
+      trigger.digestBuffer.clear();
+
+      // 3. Spurious scan still showing updateAvailable=true → suppressed.
+      await trigger.handleContainerReportDigest({ container, changed: false } as any);
+      expect(trigger.digestBuffer.size).toBe(0);
+
+      // 4. Watcher confirms update succeeded (updateAvailable=false) → key must
+      //    be removed from recentlyAppliedContainerKeys.
+      const containerUpdated = { ...container, updateAvailable: false };
+      await trigger.handleContainerReportDigest({
+        container: containerUpdated,
+        changed: true,
+      } as any);
+      // The recentlyApplied key should now be gone.
+      expect((trigger as any).recentlyAppliedContainerKeys.size).toBe(0);
+
+      // 5. New real update available (different remoteValue) → must be buffered.
+      const containerNewUpdate = {
+        ...container,
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '3.0', semverDiff: 'major' },
+      };
+      await trigger.handleContainerReportDigest({
+        container: containerNewUpdate,
+        changed: true,
+      } as any);
+      expect(trigger.digestBuffer.size).toBe(1);
+
+      // And the flush dispatches.
+      await trigger.flushDigestBuffer();
+      expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
+
+      triggerBatchSpy.mockRestore();
+    },
+  );
+});
+
+describe('bug #408 (batch path): spurious batch update-available after update-applied', () => {
+  // Pure batch trigger — mode='batch' registers ONLY handleContainerReports,
+  // so the simple and digest handlers are absent. Both the suppress check AND
+  // the lift in handleContainerReports must be present; without the lift the
+  // suppression would never clear and the container would be permanently muted.
+  const container = {
+    id: 'c-nginx-batch',
+    watcher: 'local',
+    name: 'nginx-batch',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+  };
+
+  beforeEach(() => {
+    trigger.type = 'slack';
+    trigger.name = 'notify-batch';
+    trigger.configuration = {
+      ...configurationValid,
+      once: true,
+      threshold: 'all',
+      mode: 'batch',
+    };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+    storeContainer.getContainers.mockReturnValue([container]);
+  });
+
+  test(
+    'batch spurious race: container is NOT dispatched after update-applied ' +
+      'while the watcher still reports updateAvailable=true',
+    async () => {
+      const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+      // 1. First batch report: container shows updateAvailable=true → dispatched.
+      await trigger.handleContainerReports([{ container, changed: true } as any]);
+      expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
+
+      // 2. Update applied: clears notification history, adds key to
+      //    recentlyAppliedContainerKeys.
+      await trigger.handleContainerUpdateAppliedEvent({
+        containerName: 'local_nginx-batch',
+        container,
+      } as any);
+
+      const callsAfterApply = triggerBatchSpy.mock.calls.length;
+
+      // 3. Spurious batch report: watcher hasn't set updateAvailable=false yet.
+      //    Must NOT dispatch again.
+      await trigger.handleContainerReports([{ container, changed: false } as any]);
+
+      expect(triggerBatchSpy).toHaveBeenCalledTimes(callsAfterApply);
+
+      // Key is still in the suppression set — the lift has not happened yet.
+      expect((trigger as any).recentlyAppliedContainerKeys.size).toBeGreaterThan(0);
+
+      triggerBatchSpy.mockRestore();
+    },
+  );
+
+  test('batch suppression lift: key is cleared when watcher confirms updateAvailable=false', async () => {
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    // 1. First batch report → dispatched.
+    await trigger.handleContainerReports([{ container, changed: true } as any]);
+
+    // 2. Update applied → key added to recentlyApplied.
+    await trigger.handleContainerUpdateAppliedEvent({
+      containerName: 'local_nginx-batch',
+      container,
+    } as any);
+
+    // 3. Spurious scan still showing updateAvailable=true → suppressed.
+    await trigger.handleContainerReports([{ container, changed: false } as any]);
+    expect((trigger as any).recentlyAppliedContainerKeys.size).toBeGreaterThan(0);
+
+    // 4. Watcher confirms update succeeded (updateAvailable=false) → key must
+    //    be removed from recentlyAppliedContainerKeys by handleContainerReports.
+    const containerUpdated = { ...container, updateAvailable: false };
+    await trigger.handleContainerReports([{ container: containerUpdated, changed: true } as any]);
+    expect((trigger as any).recentlyAppliedContainerKeys.size).toBe(0);
+
+    triggerBatchSpy.mockRestore();
+  });
+
+  test(
+    'batch re-notify after lift: a subsequent updateAvailable=true report dispatches again ' +
+      '(suppression is temporary, not permanent)',
+    async () => {
+      const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+      // 1. First batch report → dispatched.
+      await trigger.handleContainerReports([{ container, changed: true } as any]);
+      expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
+
+      // 2. Update applied → adds key.
+      await trigger.handleContainerUpdateAppliedEvent({
+        containerName: 'local_nginx-batch',
+        container,
+      } as any);
+
+      // 3. Spurious scan → suppressed.
+      await trigger.handleContainerReports([{ container, changed: false } as any]);
+
+      // 4. Watcher confirms updateAvailable=false → lift.
+      const containerUpdated = { ...container, updateAvailable: false };
+      await trigger.handleContainerReports([{ container: containerUpdated, changed: true } as any]);
+      expect((trigger as any).recentlyAppliedContainerKeys.size).toBe(0);
+
+      const callsAfterLift = triggerBatchSpy.mock.calls.length;
+
+      // 5. Genuine new update (different remoteValue) → must dispatch.
+      const containerNewUpdate = {
+        ...container,
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '3.0', semverDiff: 'major' },
+      };
+      await trigger.handleContainerReports([
+        { container: containerNewUpdate, changed: true } as any,
+      ]);
+
+      expect(triggerBatchSpy).toHaveBeenCalledTimes(callsAfterLift + 1);
+
+      triggerBatchSpy.mockRestore();
+    },
+  );
+
+  test('batch suppress works with once=false: spurious re-fire is still blocked after update-applied', async () => {
+    trigger.configuration = {
+      ...configurationValid,
+      once: false,
+      threshold: 'all',
+      mode: 'batch',
+    };
+
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    // 1. First batch report → dispatched (once=false).
+    await trigger.handleContainerReports([{ container, changed: true } as any]);
+    expect(triggerBatchSpy).toHaveBeenCalledTimes(1);
+
+    // 2. Update applied → key added.
+    await trigger.handleContainerUpdateAppliedEvent({
+      containerName: 'local_nginx-batch',
+      container,
+    } as any);
+
+    const callsAfterApply = triggerBatchSpy.mock.calls.length;
+
+    // 3. Spurious scan with once=false — without the guard this would fire
+    //    again because hasAlreadyNotifiedForResult is never consulted.
+    await trigger.handleContainerReports([{ container, changed: false } as any]);
+
+    // Must NOT fire again — recentlyApplied guard is the only blocker here.
+    expect(triggerBatchSpy).toHaveBeenCalledTimes(callsAfterApply);
+
+    triggerBatchSpy.mockRestore();
+  });
+});
+
+// ── Bug #408 additional regression tests: once=false mode ─────────────────────
+describe('bug #408: suppression-key lifecycle in once=false mode', () => {
+  // The recentlyAppliedContainerKeys guard must work regardless of the `once`
+  // setting. With `once: false`, the `hasAlreadyNotifiedForResult` gate is
+  // not checked at all, so the ONLY thing preventing the spurious re-fire
+  // is the recentlyAppliedContainerKeys suppression.
+  const container = {
+    id: 'c-nginx-nonce',
+    watcher: 'local',
+    name: 'nginx-nonce',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+  };
+
+  beforeEach(() => {
+    trigger.type = 'slack';
+    trigger.name = 'notify-nonce';
+    // once: false → hasAlreadyNotifiedForResult is never consulted;
+    // without the recentlyApplied guard, every report would fire.
+    trigger.configuration = { ...configurationValid, once: false, threshold: 'all' };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+    storeContainer.getContainers.mockReturnValue([container]);
+  });
+
+  test('spurious notification is suppressed after update-applied even when once=false', async () => {
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    // 1. First scan fires notification (once=false allows repeat, but first is fine).
+    await trigger.handleContainerReport({ container, changed: true } as any);
+    expect(triggerSpy).toHaveBeenCalledTimes(1);
+
+    // 2. Update-applied: adds key to recentlyAppliedContainerKeys.
+    await trigger.handleContainerUpdateAppliedEvent({
+      containerName: 'local_nginx-nonce',
+      container,
+    } as any);
+
+    // update-applied itself calls trigger once for the applied notification.
+    const callsAfterApply = triggerSpy.mock.calls.length;
+
+    // 3. Spurious scan: watcher still shows updateAvailable=true.
+    //    With once=false and NO suppression this would fire again.
+    //    With the fix it must NOT fire.
+    await trigger.handleContainerReport({ container, changed: false } as any);
+
+    // No new trigger call beyond the update-applied notification.
+    expect(triggerSpy).toHaveBeenCalledTimes(callsAfterApply);
+  });
+
+  test('suppression key is cleared when watcher confirms updateAvailable=false, and genuine next update fires', async () => {
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    // 1. First update-available.
+    await trigger.handleContainerReport({ container, changed: true } as any);
+
+    // 2. Update applied — suppression key added.
+    await trigger.handleContainerUpdateAppliedEvent({
+      containerName: 'local_nginx-nonce',
+      container,
+    } as any);
+
+    // 3. Spurious scan — suppressed.
+    await trigger.handleContainerReport({ container, changed: false } as any);
+
+    // 4. Watcher confirms updateAvailable=false — clears suppression key.
+    const containerUpdated = { ...container, updateAvailable: false };
+    await trigger.handleContainerReport({ container: containerUpdated, changed: true } as any);
+    expect((trigger as any).recentlyAppliedContainerKeys.size).toBe(0);
+
+    const callsBeforeNewUpdate = triggerSpy.mock.calls.length;
+
+    // 5. Genuine new update (different remoteValue) — must fire with once=false.
+    const containerNewUpdate = {
+      ...container,
+      updateAvailable: true,
+      updateKind: {
+        kind: 'tag',
+        localValue: '2.0',
+        remoteValue: '3.0',
+        semverDiff: 'major',
+      },
+    };
+    await trigger.handleContainerReport({
+      container: containerNewUpdate,
+      changed: true,
+    } as any);
+
+    expect(triggerSpy).toHaveBeenCalledTimes(callsBeforeNewUpdate + 1);
+    const updateAvailableCalls = triggerSpy.mock.calls.filter(
+      (args) => !(args[0] as any)?.notificationEvent,
+    );
+    expect(updateAvailableCalls).toHaveLength(2);
+  });
+});
+
+// ── Bug #290 regression tests: stale-store container on update-failed/applied ─
+describe('bug #290: update-failed uses payload.container over stale store record', () => {
+  // The scenario: a container is renamed/recreated after the update starts.
+  // The live store now has a DIFFERENT record at the same business key (wrong id,
+  // different name). Without the fix, handleContainerUpdateFailedEvent would use
+  // the store's stale record and dispatch the failure notification against the
+  // wrong container identity. With the fix, payload.container wins.
+
+  beforeEach(() => {
+    trigger.type = 'slack';
+    trigger.name = 'notify-290';
+    trigger.configuration = {
+      ...configurationValid,
+      once: false,
+      threshold: 'all',
+      mode: 'simple',
+    };
+  });
+
+  test('failure notification uses payload.container identity, not the renamed/stale store record', async () => {
+    // The correct pre-update container snapshot that was in-scope when the
+    // update started. This is what payload.container carries.
+    const payloadContainer = {
+      id: 'c-original-id',
+      watcher: 'local',
+      name: 'web',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+    };
+
+    // A stale/renamed container that the live store now returns. It has a
+    // different id and name — this simulates the container having been
+    // renamed or recreated between the update attempt and the failure event.
+    const staleStoreContainer = {
+      id: 'c-stale-id',
+      watcher: 'local',
+      name: 'web-renamed',
+      updateAvailable: false,
+      updateKind: { kind: 'unknown', semverDiff: 'unknown' },
+    };
+
+    storeContainer.getContainersRaw.mockReturnValue([staleStoreContainer]);
+    storeContainer.getContainers.mockReturnValue([staleStoreContainer]);
+
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleContainerUpdateFailedEvent({
+      containerName: 'local_web',
+      error: 'pull failed',
+      container: payloadContainer,
+    } as any);
+
+    // Must use the original (payload) container identity, not the stale one.
+    expect(triggerSpy).toHaveBeenCalledTimes(1);
+    expect(triggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'c-original-id',
+        name: 'web',
+        notificationEvent: {
+          kind: 'update-failed',
+          error: 'pull failed',
+        },
+      }),
+    );
+    // Confirm the stale record's identity was NOT used.
+    expect(triggerSpy).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'c-stale-id' }));
+  });
+
+  test('update-applied notification uses payload.container identity, not the renamed/stale store record', async () => {
+    // The correct pre-update container snapshot.
+    const payloadContainer = {
+      id: 'c-applied-original',
+      watcher: 'local',
+      name: 'api',
+      updateAvailable: false,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'minor' },
+    };
+
+    // Live store has a stale/different record.
+    const staleStoreContainer = {
+      id: 'c-applied-stale',
+      watcher: 'local',
+      name: 'api-v2',
+      updateAvailable: false,
+      updateKind: { kind: 'unknown', semverDiff: 'unknown' },
+    };
+
+    storeContainer.getContainersRaw.mockReturnValue([staleStoreContainer]);
+    storeContainer.getContainers.mockReturnValue([staleStoreContainer]);
+
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleContainerUpdateAppliedEvent({
+      containerName: 'local_api',
+      container: payloadContainer,
+    } as any);
+
+    // Must use the original (payload) container identity.
+    expect(triggerSpy).toHaveBeenCalledTimes(1);
+    expect(triggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'c-applied-original',
+        name: 'api',
+        notificationEvent: { kind: 'update-applied' },
+      }),
+    );
+    // Stale record must NOT be used.
+    expect(triggerSpy).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'c-applied-stale' }));
   });
 });

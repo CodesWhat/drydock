@@ -760,6 +760,63 @@ describe('API Index', () => {
     expect(mockApp.set).toHaveBeenCalledWith('trust proxy', true);
   });
 
+  test('should warn when trustproxy is boolean true (XFF spoofing risk)', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      trustproxy: true,
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('trust proxy is set to boolean true'),
+    );
+    expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('DD_SERVER_TRUSTPROXY=1'));
+  });
+
+  test('should not warn when trustproxy is a hop count number', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      trustproxy: 1,
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const trustProxyWarning = mockLog.warn.mock.calls.find((args) =>
+      args[0]?.includes?.('trust proxy is set to boolean true'),
+    );
+    expect(trustProxyWarning).toBeUndefined();
+  });
+
+  test('should not warn when trustproxy is false', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      trustproxy: false,
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const trustProxyWarning = mockLog.warn.mock.calls.find((args) =>
+      args[0]?.includes?.('trust proxy is set to boolean true'),
+    );
+    expect(trustProxyWarning).toBeUndefined();
+  });
+
   test('should set json replacer', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,

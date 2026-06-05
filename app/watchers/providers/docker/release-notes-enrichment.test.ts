@@ -85,7 +85,10 @@ describe('release-notes-enrichment', () => {
   });
 
   test('sets sourceRepo from resolveSourceRepoForContainer regardless of update availability', async () => {
-    mockResolveSourceRepoForContainer.mockResolvedValue('github.com/acme/service');
+    mockResolveSourceRepoForContainer.mockResolvedValue({
+      sourceRepo: 'github.com/acme/service',
+      trusted: true,
+    });
     mockGetReleaseNotesForTag.mockResolvedValue(undefined);
 
     const container = createContainer({ updateAvailable: false });
@@ -112,7 +115,10 @@ describe('release-notes-enrichment', () => {
 
   test('sets currentReleaseNotes then returns early when result is missing', async () => {
     const currentNotes = makeNotes('1.0.0');
-    mockResolveSourceRepoForContainer.mockResolvedValue('github.com/acme/service');
+    mockResolveSourceRepoForContainer.mockResolvedValue({
+      sourceRepo: 'github.com/acme/service',
+      trusted: true,
+    });
     mockGetReleaseNotesForTag.mockResolvedValue(currentNotes);
 
     const container = createContainer({ result: undefined });

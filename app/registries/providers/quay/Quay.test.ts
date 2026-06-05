@@ -279,3 +279,34 @@ test('getTagsPage should handle link with no matching pattern', async () => {
     resolveWithFullResponse: true,
   });
 });
+
+test('getTagsPage should percent-encode next_page tokens containing URL metacharacters', async () => {
+  const quayInstance = new Quay();
+  quayInstance.configuration = {};
+  quayInstance.callRegistry = vi.fn().mockResolvedValue({ data: { tags: [] } });
+  await quayInstance.getTagsPage(
+    { name: 'test/image', registry: { url: 'https://quay.io/v2' } },
+    'sometag',
+    '/v2/test/image/tags/list?next_page=foo%26bar%3Dbaz&scope=repository:victim/private:pull',
+  );
+  const calledUrl = quayInstance.callRegistry.mock.calls[0][0].url;
+  expect(calledUrl).not.toContain('&scope=');
+  expect(calledUrl).toContain('next_page=');
+});
+
+test('getTagsPage should percent-encode last tokens containing URL metacharacters', async () => {
+  const quayInstance = new Quay();
+  quayInstance.configuration = {};
+  quayInstance.callRegistry = vi.fn().mockResolvedValue({ data: { tags: [] } });
+  const maliciousLast = '&scope=repository:victim/private:pull';
+  await quayInstance.getTagsPage(
+    { name: 'test/image', registry: { url: 'https://quay.io/v2' } },
+    'sometag',
+    `</v2/test/image/tags/list?last=${maliciousLast}>; rel="next"`,
+  );
+  const calledUrl = quayInstance.callRegistry.mock.calls[0][0].url;
+  // The injected & must be encoded; no raw extra query param should appear
+  expect(calledUrl).not.toMatch(/&scope=/);
+  expect(calledUrl).toContain('last=');
+  expect(calledUrl).toContain('%26');
+});

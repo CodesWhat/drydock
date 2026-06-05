@@ -635,3 +635,35 @@ test('match should return true for public ECR gallery', async () => {
     }),
   ).toBeTruthy();
 });
+
+test('authenticate public ECR gallery should pass httpsAgent to axios when insecure=true', async () => {
+  mockAxios.mockResolvedValueOnce({ data: { token: 'public-token-insecure' } });
+
+  const ecrPublicInsecure = new Ecr();
+  ecrPublicInsecure.configuration = { insecure: true };
+
+  await ecrPublicInsecure.authenticate(
+    { registry: { url: 'https://public.ecr.aws/v2' } },
+    { headers: {} },
+  );
+
+  expect(mockAxios).toHaveBeenCalledWith(
+    expect.objectContaining({ httpsAgent: expect.anything() }),
+  );
+  const calledConfig = mockAxios.mock.calls[0][0];
+  expect(calledConfig.httpsAgent.options.rejectUnauthorized).toBe(false);
+});
+
+test('authenticate public ECR gallery should NOT attach httpsAgent when no TLS config is set', async () => {
+  mockAxios.mockResolvedValueOnce({ data: { token: 'public-token-123' } });
+
+  const ecrPublic = new Ecr();
+  ecrPublic.configuration = {};
+
+  await ecrPublic.authenticate({ registry: { url: 'https://public.ecr.aws/v2' } }, { headers: {} });
+
+  const calledConfig = mockAxios.mock.calls[0][0];
+  expect(calledConfig.httpsAgent).toBeUndefined();
+  expect(calledConfig.method).toBe('GET');
+  expect(calledConfig.url).toBe('https://public.ecr.aws/token/');
+});

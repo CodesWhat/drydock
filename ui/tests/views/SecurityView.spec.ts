@@ -384,6 +384,56 @@ describe('SecurityView', () => {
       }
     });
 
+    it('refetches containers AND vulnerabilities when the SSE connection is re-established', async () => {
+      vi.useFakeTimers();
+      try {
+        mockContainers([makeContainer()]);
+        const w = factory();
+        await vi.waitFor(() => {
+          expect(mockGetAllContainers).toHaveBeenCalledOnce();
+        });
+        await flushPromises();
+        const containerCallsBeforeReconnect = mockGetAllContainers.mock.calls.length;
+
+        globalThis.dispatchEvent(new CustomEvent('dd:sse-connected'));
+        vi.advanceTimersByTime(800);
+        await flushPromises();
+
+        expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(
+          containerCallsBeforeReconnect,
+        );
+        w.unmount();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('refetches containers AND vulnerabilities when resync-required SSE event fires', async () => {
+      vi.useFakeTimers();
+      try {
+        mockContainers([makeContainer()]);
+        const w = factory();
+        await vi.waitFor(() => {
+          expect(mockGetAllContainers).toHaveBeenCalledOnce();
+        });
+        await flushPromises();
+        const containerCallsBeforeResync = mockGetAllContainers.mock.calls.length;
+        const vulnCallsBeforeResync = mockGetSecurityVulnerabilityOverview.mock.calls.length;
+
+        globalThis.dispatchEvent(new CustomEvent('dd:sse-resync-required'));
+        vi.advanceTimersByTime(800);
+        await flushPromises();
+
+        expect(mockGetAllContainers.mock.calls.length).toBeGreaterThan(containerCallsBeforeResync);
+        expect(mockGetSecurityVulnerabilityOverview.mock.calls.length).toBeGreaterThan(
+          vulnCallsBeforeResync,
+        );
+        w.unmount();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('refetches container update state when a container change SSE event arrives', async () => {
       vi.useFakeTimers();
       try {

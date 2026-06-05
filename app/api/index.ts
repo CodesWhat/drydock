@@ -195,6 +195,13 @@ function createApp() {
 
   // Trust proxy (helpful to resolve public facing hostname & protocol)
   if (configuration.trustproxy !== false) {
+    if (configuration.trustproxy === true) {
+      log.warn(
+        'trust proxy is set to boolean true, which trusts ALL X-Forwarded-For hops. ' +
+          'Clients can spoof req.ip and evade per-IP login lockout. ' +
+          'Operators behind a single proxy should set DD_SERVER_TRUSTPROXY=1 (the exact hop count) instead.',
+      );
+    }
     app.set('trust proxy', configuration.trustproxy);
   }
 

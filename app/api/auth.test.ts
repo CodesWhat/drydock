@@ -115,6 +115,7 @@ import log from '../log/index.js';
 import * as registry from '../registry/index.js';
 import * as auth from './auth.js';
 import * as authSession from './auth-session.js';
+import { requireSameOriginForMutations } from './csrf.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
 const lockoutStateFiles = new Map<string, string>();
@@ -1261,8 +1262,7 @@ describe('Auth Router', () => {
         (c) => c[0] === auth.requireAuthentication,
       );
       const mutationMiddlewares = mockRouter.use.mock.calls.filter(
-        (c, index) =>
-          index > 0 && typeof c[0] === 'function' && c[0] !== auth.requireAuthentication,
+        (c, index) => index > 0 && index < authMiddlewareIndex && typeof c[0] === 'function',
       );
 
       expect(authMiddlewareIndex).toBeGreaterThan(0);
@@ -1295,9 +1295,11 @@ describe('Auth Router', () => {
       const app = createApp();
       auth.init(app);
 
+      const authMiddlewareIndex = mockRouter.use.mock.calls.findIndex(
+        (c) => c[0] === auth.requireAuthentication,
+      );
       const mutationMiddlewares = mockRouter.use.mock.calls.filter(
-        (c, index) =>
-          index > 0 && typeof c[0] === 'function' && c[0] !== auth.requireAuthentication,
+        (c, index) => index > 0 && index < authMiddlewareIndex && typeof c[0] === 'function',
       );
       expect(mutationMiddlewares).toHaveLength(2);
 
@@ -3443,6 +3445,234 @@ describe('Auth Router', () => {
           validate: { xForwardedForHeader: false },
         }),
       );
+    });
+  });
+
+  describe('CSRF same-origin protection on authenticated routes', () => {
+    function getSameOriginMiddleware() {
+      const app = createApp();
+      auth.init(app);
+      // requireSameOriginForMutations is registered immediately after requireAuthentication
+      const authMiddlewareIndex = mockRouter.use.mock.calls.findIndex(
+        (c) => c[0] === auth.requireAuthentication,
+      );
+      // The very next router.use call after requireAuthentication is requireSameOriginForMutations
+      const csrfCall = mockRouter.use.mock.calls[authMiddlewareIndex + 1];
+      return csrfCall?.[0];
+    }
+
+    test('registers requireSameOriginForMutations immediately after requireAuthentication', () => {
+      const app = createApp();
+      auth.init(app);
+
+      const authMiddlewareIndex = mockRouter.use.mock.calls.findIndex(
+        (c) => c[0] === auth.requireAuthentication,
+      );
+      expect(authMiddlewareIndex).toBeGreaterThanOrEqual(0);
+
+      const csrfCall = mockRouter.use.mock.calls[authMiddlewareIndex + 1];
+      expect(csrfCall).toBeDefined();
+      expect(csrfCall[0]).toBe(requireSameOriginForMutations);
+    });
+
+    test('registers requireSameOriginForMutations after requireAuthentication (order)', () => {
+      const app = createApp();
+      auth.init(app);
+
+      const authOrder =
+        mockRouter.use.mock.invocationCallOrder[
+          mockRouter.use.mock.calls.findIndex((c) => c[0] === auth.requireAuthentication)
+        ];
+      const csrfOrder =
+        mockRouter.use.mock.invocationCallOrder[
+          mockRouter.use.mock.calls.findIndex((c) => c[0] === requireSameOriginForMutations)
+        ];
+
+      expect(csrfOrder).toBeGreaterThan(authOrder);
+    });
+
+    test('POST /auth/logout with sec-fetch-site: cross-site returns 403', () => {
+      const csrfMiddleware = getSameOriginMiddleware();
+      expect(csrfMiddleware).toBe(requireSameOriginForMutations);
+
+      const req = {
+        method: 'POST',
+        get: vi.fn((header: string) => {
+          if (header === 'cookie') return 'connect.sid=abc';
+          if (header === 'sec-fetch-site') return 'cross-site';
+          return undefined;
+        }),
+      };
+      const res = createResponse();
+      const next = vi.fn();
+
+      csrfMiddleware(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({ error: 'CSRF validation failed' });
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    test('POST /auth/logout with mismatched Origin returns 403', () => {
+      const csrfMiddleware = getSameOriginMiddleware();
+
+      const req = {
+        method: 'POST',
+        get: vi.fn((header: string) => {
+          if (header === 'cookie') return 'connect.sid=abc';
+          if (header === 'sec-fetch-site') return undefined;
+          if (header === 'origin') return 'https://attacker.example.com';
+          if (header === 'x-forwarded-proto') return undefined;
+          if (header === 'x-forwarded-host') return undefined;
+          if (header === 'host') return 'drydock.example.com';
+          return undefined;
+        }),
+        protocol: 'https',
+      };
+      const res = createResponse();
+      const next = vi.fn();
+
+      csrfMiddleware(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({ error: 'CSRF validation failed' });
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    test('POST /auth/logout with matching Origin passes through', () => {
+      const csrfMiddleware = getSameOriginMiddleware();
+
+      const req = {
+        method: 'POST',
+        get: vi.fn((header: string) => {
+          if (header === 'cookie') return 'connect.sid=abc';
+          if (header === 'sec-fetch-site') return undefined;
+          if (header === 'origin') return 'https://drydock.example.com';
+          if (header === 'x-forwarded-proto') return undefined;
+          if (header === 'x-forwarded-host') return undefined;
+          if (header === 'host') return 'drydock.example.com';
+          return undefined;
+        }),
+        protocol: 'https',
+      };
+      const res = createResponse();
+      const next = vi.fn();
+
+      csrfMiddleware(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    test('POST /auth/logout with sec-fetch-site: same-origin passes through', () => {
+      const csrfMiddleware = getSameOriginMiddleware();
+
+      const req = {
+        method: 'POST',
+        get: vi.fn((header: string) => {
+          if (header === 'cookie') return 'connect.sid=abc';
+          if (header === 'sec-fetch-site') return 'same-origin';
+          if (header === 'origin') return 'https://drydock.example.com';
+          if (header === 'x-forwarded-proto') return undefined;
+          if (header === 'x-forwarded-host') return undefined;
+          if (header === 'host') return 'drydock.example.com';
+          return undefined;
+        }),
+        protocol: 'https',
+      };
+      const res = createResponse();
+      const next = vi.fn();
+
+      csrfMiddleware(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    test('POST /auth/remember with sec-fetch-site: cross-site returns 403', () => {
+      const csrfMiddleware = getSameOriginMiddleware();
+
+      const req = {
+        method: 'POST',
+        get: vi.fn((header: string) => {
+          if (header === 'cookie') return 'connect.sid=abc';
+          if (header === 'sec-fetch-site') return 'cross-site';
+          return undefined;
+        }),
+      };
+      const res = createResponse();
+      const next = vi.fn();
+
+      csrfMiddleware(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({ error: 'CSRF validation failed' });
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    test('POST /auth/remember with matching Origin passes through', () => {
+      const csrfMiddleware = getSameOriginMiddleware();
+
+      const req = {
+        method: 'POST',
+        get: vi.fn((header: string) => {
+          if (header === 'cookie') return 'connect.sid=abc';
+          if (header === 'sec-fetch-site') return undefined;
+          if (header === 'origin') return 'http://drydock.local';
+          if (header === 'x-forwarded-proto') return undefined;
+          if (header === 'x-forwarded-host') return undefined;
+          if (header === 'host') return 'drydock.local';
+          return undefined;
+        }),
+        protocol: 'http',
+      };
+      const res = createResponse();
+      const next = vi.fn();
+
+      csrfMiddleware(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    test('GET /auth/user (safe method) is not blocked even with cross-site sec-fetch-site', () => {
+      const csrfMiddleware = getSameOriginMiddleware();
+
+      const req = {
+        method: 'GET',
+        get: vi.fn((header: string) => {
+          if (header === 'cookie') return 'connect.sid=abc';
+          if (header === 'sec-fetch-site') return 'cross-site';
+          return undefined;
+        }),
+      };
+      const res = createResponse();
+      const next = vi.fn();
+
+      csrfMiddleware(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    test('POST without a session cookie is not blocked (no session = no CSRF risk)', () => {
+      const csrfMiddleware = getSameOriginMiddleware();
+
+      const req = {
+        method: 'POST',
+        get: vi.fn((header: string) => {
+          if (header === 'cookie') return '';
+          if (header === 'sec-fetch-site') return 'cross-site';
+          return undefined;
+        }),
+      };
+      const res = createResponse();
+      const next = vi.fn();
+
+      csrfMiddleware(req, res, next);
+
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(res.status).not.toHaveBeenCalled();
     });
   });
 });

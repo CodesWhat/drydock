@@ -108,6 +108,9 @@ const mockGetInProgressOperationByContainerId = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerName = vi.hoisted(() => vi.fn());
 const mockGetActiveOperationByContainerId = vi.hoisted(() => vi.fn());
 const mockIsOperationCancelRequested = vi.hoisted(() => vi.fn(() => false));
+const mockGetRecentTerminalSucceededOperationByContainerName = vi.hoisted(() =>
+  vi.fn(() => undefined),
+);
 const MockOperationCancelledError = vi.hoisted(
   () =>
     class MockOperationCancelledError extends Error {
@@ -133,6 +136,8 @@ vi.mock('../../../store/update-operation.js', () => ({
     mockGetActiveOperationByContainerName(...args),
   getActiveOperationByContainerId: (...args: any[]) => mockGetActiveOperationByContainerId(...args),
   isOperationCancelRequested: (...args: any[]) => mockIsOperationCancelRequested(...args),
+  getRecentTerminalSucceededOperationByContainerName: (...args: any[]) =>
+    mockGetRecentTerminalSucceededOperationByContainerName(...args),
   OperationCancelledError: MockOperationCancelledError,
 }));
 
@@ -3439,6 +3444,53 @@ describe('resolveHelperImage for infrastructure updates', () => {
     });
     expect(resolved).toBe('ghcr.io/codeswhat/drydock:1.5.0');
   });
+
+  // Regression: registry.url ending with a trailing slash (e.g. "https://ghcr.io/v2/") produced
+  // a double-slash reference like "ghcr.io//codeswhat/drydock:1.5.0" that Docker rejected at
+  // POST /containers/create. The fix delegates to buildImageReference which anchors /v2/? at
+  // the END of the URL before concatenation.
+  test('normalizes registry URL with trailing slash after v2 — no double slash in result', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    (storeContainer.getContainers as any).mockReturnValueOnce([
+      {
+        name: 'drydock',
+        image: {
+          name: 'codeswhat/drydock',
+          tag: { value: '1.5.0' },
+          registry: { url: 'https://ghcr.io/v2/' },
+        },
+      },
+    ]);
+
+    const resolved = (docker as any).selfUpdateOrchestrator.resolveHelperImage?.({
+      image: { name: 'linuxserver/socket-proxy' },
+      labels: { 'dd.update.mode': 'infrastructure' },
+    });
+    expect(resolved).not.toContain('//');
+    expect(resolved).toBe('ghcr.io/codeswhat/drydock:1.5.0');
+  });
+
+  // Regression: the common case (registry.url without trailing slash) must be unchanged
+  // after the buildImageReference swap.
+  test('common case — registry URL without trailing slash still resolves correctly', async () => {
+    const storeContainer = await import('../../../store/container.js');
+    (storeContainer.getContainers as any).mockReturnValueOnce([
+      {
+        name: 'drydock',
+        image: {
+          name: 'codeswhat/drydock',
+          tag: { value: '1.5.0' },
+          registry: { url: 'https://ghcr.io/v2' },
+        },
+      },
+    ]);
+
+    const resolved = (docker as any).selfUpdateOrchestrator.resolveHelperImage?.({
+      image: { name: 'linuxserver/socket-proxy' },
+      labels: { 'dd.update.mode': 'infrastructure' },
+    });
+    expect(resolved).toBe('ghcr.io/codeswhat/drydock:1.5.0');
+  });
 });
 
 describe('scheduleDeferredReconciliation', () => {
@@ -3571,6 +3623,119 @@ describe('scheduleDeferredReconciliation', () => {
 
     docker.log = originalLog;
     docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = originalReconcile;
+    vi.useRealTimers();
+  });
+
+  // #386 — agent-scoping tests
+  test('resolves container by operation containerId when operationId is valid', async () => {
+    vi.useFakeTimers();
+    const storeContainer = await import('../../../store/container.js');
+
+    // Use watcher: 'test' so getWatcher() can resolve via the mock registry (docker.test)
+    const resolvedByIdContainer = {
+      id: 'ctr-abc',
+      name: 'web',
+      watcher: 'test',
+      agent: undefined,
+      image: { name: 'nginx', tag: { value: '1.0.0' } },
+    };
+
+    // Operation resolves to containerId 'ctr-abc'
+    mockGetOperationById.mockReturnValue({ containerId: 'ctr-abc' });
+    (storeContainer.getContainer as any).mockReturnValue(resolvedByIdContainer);
+
+    const reconcileSpy = vi.fn().mockResolvedValue(undefined);
+    const originalReconcile =
+      docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation;
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = reconcileSpy;
+
+    const callback = (docker as any).containerUpdateExecutor.scheduleDeferredReconciliation;
+    callback('web', 'op-by-id', 1_000);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    // Container was fetched by ID, not by name search
+    expect(storeContainer.getContainer).toHaveBeenCalledWith('ctr-abc');
+    expect(reconcileSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      resolvedByIdContainer,
+      expect.anything(),
+    );
+
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = originalReconcile;
+    mockGetOperationById.mockReset();
+    vi.useRealTimers();
+  });
+
+  test('fallback agent-scoped name search does not pick a cross-agent container', async () => {
+    vi.useFakeTimers();
+    const storeContainer = await import('../../../store/container.js');
+
+    // No operation row found → falls through to name fallback
+    mockGetOperationById.mockReturnValue(undefined);
+    (storeContainer.getContainer as any).mockReturnValue(undefined);
+
+    // Cross-agent row has agent='ml'; local row has agent=undefined.
+    // Use watcher: 'test' so getWatcher() resolves via the mock registry.
+    const crossAgentContainer = { name: 'web', watcher: 'test', agent: 'ml' };
+    const localContainer = {
+      id: 'ctr-local',
+      name: 'web',
+      watcher: 'test',
+      agent: undefined,
+      image: { name: 'nginx', tag: { value: '1.0.0' } },
+    };
+    (storeContainer.getContainers as any).mockReturnValue([crossAgentContainer, localContainer]);
+
+    const reconcileSpy = vi.fn().mockResolvedValue(undefined);
+    const originalReconcile =
+      docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation;
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = reconcileSpy;
+
+    const callback = (docker as any).containerUpdateExecutor.scheduleDeferredReconciliation;
+    callback('web', 'op-missing', 1_000);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    // Must pick the local container, not the cross-agent one
+    expect(reconcileSpy).toHaveBeenCalledWith(expect.anything(), localContainer, expect.anything());
+    expect(reconcileSpy).not.toHaveBeenCalledWith(
+      expect.anything(),
+      crossAgentContainer,
+      expect.anything(),
+    );
+
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = originalReconcile;
+    mockGetOperationById.mockReset();
+    vi.useRealTimers();
+  });
+
+  test('fallback returns early when no container matches the agent-scoped name search', async () => {
+    vi.useFakeTimers();
+    const storeContainer = await import('../../../store/container.js');
+
+    // No operation row, only cross-agent row in store (agent='ml' does not match docker.agent=undefined)
+    mockGetOperationById.mockReturnValue(undefined);
+    (storeContainer.getContainer as any).mockReturnValue(undefined);
+    (storeContainer.getContainers as any).mockReturnValue([
+      { name: 'web', watcher: 'test', agent: 'ml' },
+    ]);
+
+    const reconcileSpy = vi.fn().mockResolvedValue(undefined);
+    const originalReconcile =
+      docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation;
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = reconcileSpy;
+
+    const callback = (docker as any).containerUpdateExecutor.scheduleDeferredReconciliation;
+    callback('web', 'op-no-match', 1_000);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    // No matching container — reconcile must not be called
+    expect(reconcileSpy).not.toHaveBeenCalled();
+
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = originalReconcile;
+    mockGetOperationById.mockReset();
     vi.useRealTimers();
   });
 });
@@ -4148,6 +4313,228 @@ describe('extracted lifecycle delegation', () => {
     } finally {
       docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
     }
+  });
+
+  // Issue #410 Part C — outer-catch reclassification tests
+  describe('runContainerUpdateLifecycle outer-catch expired reclassification (issue #410)', () => {
+    test('marks operation expired (not failed) when lifecycle throws "no longer exists" AND a recent success exists', async () => {
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const noLongerExistsError = new Error(
+        'Unable to refresh compose service web from /app/docker-compose.yml because container web no longer exists',
+      );
+      const run = vi.fn().mockRejectedValue(noLongerExistsError);
+      docker.updateLifecycleExecutor = { run };
+      const container = createTriggerContainer({ name: 'web' });
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-compose-vanish-1',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+      // A recent succeeded op for the same container name
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+        id: 'prev-op',
+        containerName: 'web',
+        status: 'succeeded',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, { operationId: 'op-compose-vanish-1' }),
+        ).rejects.toThrow('no longer exists');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+          'op-compose-vanish-1',
+          expect.objectContaining({ status: 'expired' }),
+        );
+        expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith(
+          'op-compose-vanish-1',
+          expect.objectContaining({ status: 'failed' }),
+        );
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      }
+    });
+
+    test('marks operation expired when lifecycle throws a Docker 404 AND a recent success exists', async () => {
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const docker404Error = Object.assign(new Error('No such container: web'), {
+        statusCode: 404,
+      });
+      const run = vi.fn().mockRejectedValue(docker404Error);
+      docker.updateLifecycleExecutor = { run };
+      const container = createTriggerContainer({ name: 'web' });
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-404-outer-1',
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+      });
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+        id: 'prev-op',
+        containerName: 'web',
+        status: 'succeeded',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, { operationId: 'op-404-outer-1' }),
+        ).rejects.toThrow('No such container');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+          'op-404-outer-1',
+          expect.objectContaining({ status: 'expired' }),
+        );
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      }
+    });
+
+    test('marks operation expired when lifecycle throws a 409 conflict AND a recent success exists', async () => {
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const conflict409Error = Object.assign(new Error('Container update already in progress'), {
+        response: { status: 409 },
+      });
+      const run = vi.fn().mockRejectedValue(conflict409Error);
+      docker.updateLifecycleExecutor = { run };
+      const container = createTriggerContainer({ name: 'web' });
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-409-outer-1',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+        id: 'prev-op',
+        containerName: 'web',
+        status: 'succeeded',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, { operationId: 'op-409-outer-1' }),
+        ).rejects.toThrow('already in progress');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+          'op-409-outer-1',
+          expect.objectContaining({ status: 'expired' }),
+        );
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      }
+    });
+
+    test('marks operation failed when lifecycle throws "no longer exists" but NO recent success', async () => {
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const noLongerExistsError = new Error(
+        'Unable to refresh compose service web because container web no longer exists',
+      );
+      const run = vi.fn().mockRejectedValue(noLongerExistsError);
+      docker.updateLifecycleExecutor = { run };
+      const container = createTriggerContainer({ name: 'web' });
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-compose-genuine-fail-1',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+      // No recent success — genuine failure
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, {
+            operationId: 'op-compose-genuine-fail-1',
+          }),
+        ).rejects.toThrow('no longer exists');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+          'op-compose-genuine-fail-1',
+          expect.objectContaining({ status: 'failed' }),
+        );
+        expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith(
+          'op-compose-genuine-fail-1',
+          expect.objectContaining({ status: 'expired' }),
+        );
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+      }
+    });
+
+    test('marks operation failed for a genuine error (pull failure) even when a recent success exists', async () => {
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const pullError = new Error('pull denied: repository does not exist or may require auth');
+      const run = vi.fn().mockRejectedValue(pullError);
+      docker.updateLifecycleExecutor = { run };
+      const container = createTriggerContainer({ name: 'web' });
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-pull-fail-outer-1',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+      // Recent success present but this is not a duplicate-style error
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+        id: 'prev-op',
+        containerName: 'web',
+        status: 'succeeded',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, { operationId: 'op-pull-fail-outer-1' }),
+        ).rejects.toThrow('pull denied');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+          'op-pull-fail-outer-1',
+          expect.objectContaining({ status: 'failed' }),
+        );
+        expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith(
+          'op-pull-fail-outer-1',
+          expect.objectContaining({ status: 'expired' }),
+        );
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      }
+    });
+
+    test('does not re-terminalize an op already marked expired by an inner handler (e.g. ContainerUpdateExecutor rename catch)', async () => {
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const docker404Error = Object.assign(new Error('No such container: web'), {
+        statusCode: 404,
+      });
+      const run = vi.fn().mockRejectedValue(docker404Error);
+      docker.updateLifecycleExecutor = { run };
+      const container = createTriggerContainer({ name: 'web' });
+
+      // The inner rename-catch already set status to 'expired'
+      mockGetOperationById.mockReturnValue({
+        id: 'op-inner-expired-1',
+        containerName: 'web',
+        status: 'expired',
+        phase: 'expired',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, { operationId: 'op-inner-expired-1' }),
+        ).rejects.toThrow('No such container');
+
+        // The outer wrapper MUST NOT call markOperationTerminal again
+        expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+      }
+    });
   });
 
   test('getRollbackConfig should delegate to rollbackMonitor', () => {

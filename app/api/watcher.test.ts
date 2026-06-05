@@ -146,16 +146,14 @@ describe('Watcher Router', () => {
     });
   });
 
-  test('getWatchers should fall back to empty stats when watcher names change after preallocation', async () => {
-    let nameReads = 0;
+  test('getWatchers should fall back to empty stats when no containers match the watcher registry id', async () => {
+    // Stats are keyed by registry id (e.g. "edge.docker.remote") not watcher.name.
+    // getContainersForStats returns [] by default, so stats bucket is empty.
     registry.getState.mockReturnValue({
       watcher: {
         'edge.docker.remote': {
           type: 'docker',
-          get name() {
-            nameReads += 1;
-            return nameReads === 1 ? 'indexed-remote' : 'remote';
-          },
+          name: 'remote',
           agent: 'edge',
           configuration: { cron: '0 * * * *' },
           maskConfiguration: vi.fn(() => ({ cron: '0 * * * *' })),
@@ -231,16 +229,14 @@ describe('Watcher Router', () => {
     });
   });
 
-  test('getWatcher should fall back to empty stats when watcher names change after preallocation', async () => {
-    let nameReads = 0;
+  test('getWatcher should fall back to empty stats when containers have non-string watcher fields', async () => {
+    // Stats are keyed by registry id ("docker.primary"). Containers with non-string
+    // watcher fields are skipped by the getKey function, so the bucket stays empty.
     registry.getState.mockReturnValue({
       watcher: {
         'docker.primary': {
           type: 'docker',
-          get name() {
-            nameReads += 1;
-            return nameReads === 1 ? 'indexed-primary' : 'primary';
-          },
+          name: 'primary',
           configuration: { cron: '0 * * * *' },
           maskConfiguration: vi.fn(() => ({ cron: '0 * * * *' })),
           getMetadata: vi.fn(() => ({})),
@@ -777,6 +773,121 @@ describe('Watcher Router', () => {
       configuration: { cron: '0 * * * *' },
       agent: undefined,
       metadata: { ...EMPTY_WATCHER_STATS },
+    });
+  });
+
+  // #386 — cross-agent container contamination
+  test('getWatchers should isolate stats per watcher when controller and agent share the name "local"', async () => {
+    registry.getState.mockReturnValue({
+      watcher: {
+        'docker.local': {
+          type: 'docker',
+          name: 'local',
+          configuration: { cron: '0 * * * *' },
+          maskConfiguration: vi.fn(() => ({ cron: '0 * * * *' })),
+          getMetadata: vi.fn(() => ({})),
+        },
+        'ml.docker.local': {
+          type: 'docker',
+          name: 'local',
+          agent: 'ml',
+          configuration: { cron: '0 * * * *' },
+          maskConfiguration: vi.fn(() => ({ cron: '0 * * * *' })),
+          getMetadata: vi.fn(() => ({})),
+        },
+      },
+    });
+    agentManager.getAgent.mockReturnValue(undefined);
+    storeContainer.getContainersForStats.mockReturnValue([
+      // controller-local containers: no agent field
+      {
+        id: 'c1',
+        watcher: 'local',
+        status: 'running',
+        updateAvailable: false,
+        image: { id: 'img-a' },
+      },
+      {
+        id: 'c2',
+        watcher: 'local',
+        status: 'exited',
+        updateAvailable: true,
+        image: { id: 'img-b' },
+      },
+      // agent "ml" containers: agent = 'ml'
+      {
+        id: 'c3',
+        watcher: 'local',
+        agent: 'ml',
+        status: 'running',
+        updateAvailable: true,
+        image: { id: 'img-c' },
+      },
+    ]);
+
+    const res = createMockResponse();
+    await watcherRouter.getWatchers({ query: {} }, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    const payload = res.json.mock.calls[0][0];
+    const controller = payload.data.find((item) => item.id === 'docker.local');
+    const mlAgent = payload.data.find((item) => item.id === 'ml.docker.local');
+
+    // Controller watcher sees only its own 2 containers, not the agent's
+    expect(controller.metadata).toEqual({
+      containers: { total: 2, running: 1, stopped: 1, updatesAvailable: 1 },
+      images: 2,
+    });
+    // ml agent watcher sees only its own 1 container, not the controller's
+    expect(mlAgent.metadata).toEqual({
+      containers: { total: 1, running: 1, stopped: 0, updatesAvailable: 1 },
+      images: 1,
+    });
+  });
+
+  test('getWatcher should isolate stats for an agent-owned watcher vs a controller watcher with the same name', async () => {
+    registry.getState.mockReturnValue({
+      watcher: {
+        'ml.docker.local': {
+          type: 'docker',
+          name: 'local',
+          agent: 'ml',
+          configuration: { cron: '0 * * * *' },
+          maskConfiguration: vi.fn(() => ({ cron: '0 * * * *' })),
+          getMetadata: vi.fn(() => ({})),
+        },
+      },
+    });
+    agentManager.getAgent.mockReturnValue(undefined);
+    storeContainer.getContainersForStats.mockReturnValue([
+      // This container belongs to the controller watcher "local" (no agent)
+      {
+        id: 'c1',
+        watcher: 'local',
+        status: 'running',
+        updateAvailable: false,
+        image: { id: 'img-a' },
+      },
+      // This container belongs to the ml agent watcher "local"
+      {
+        id: 'c2',
+        watcher: 'local',
+        agent: 'ml',
+        status: 'running',
+        updateAvailable: true,
+        image: { id: 'img-b' },
+      },
+    ]);
+
+    const res = createMockResponse();
+    await watcherRouter.getWatcher({ params: { type: 'docker', name: 'local', agent: 'ml' } }, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    const payload = res.json.mock.calls[0][0];
+    // The ml agent watcher sees only c2, not c1 (which has no agent prefix)
+    expect(payload.metadata).toEqual({
+      containers: { total: 1, running: 1, stopped: 0, updatesAvailable: 1 },
+      images: 1,
     });
   });
 

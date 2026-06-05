@@ -7,6 +7,7 @@ import whaleLogo from '../assets/whale-logo.png?inline';
 import { getOidcRedirection, getStrategies, loginBasic, setRememberMe } from '../services/auth';
 import { useTheme } from '../theme/useTheme';
 import { errorMessage } from '../utils/error';
+import AppIconButton from '../components/AppIconButton.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -99,6 +100,7 @@ const loading = ref(true);
 const error = ref('');
 const username = ref('');
 const password = ref('');
+const showPassword = ref(false);
 const submitting = ref(false);
 const rememberMe = ref(false);
 
@@ -328,17 +330,28 @@ onUnmounted(() => {
             <label class="block text-2xs-plus font-medium uppercase tracking-wider mb-2.5 dd-text-muted">
               {{ t('loginView.password.label') }}
             </label>
-            <input
-              v-model="password"
-              id="password"
-              name="password"
-              type="password"
-              autocomplete="current-password"
-              required
-              class="w-full px-3 py-2.5 text-sm dd-rounded dd-text dd-placeholder outline-none transition-colors"
-              style="background-color: var(--dd-bg-inset);"
-              :placeholder="t('loginView.password.placeholder')"
-            />
+            <div class="relative">
+              <input
+                v-model="password"
+                id="password"
+                name="password"
+                :type="showPassword ? 'text' : 'password'"
+                autocomplete="current-password"
+                required
+                class="w-full px-3 py-2.5 pr-10 text-sm dd-rounded dd-text dd-placeholder outline-none transition-colors"
+                style="background-color: var(--dd-bg-inset);"
+                :placeholder="t('loginView.password.placeholder')"
+              />
+              <AppIconButton
+                :icon="showPassword ? 'eye-slash' : 'eye'"
+                size="xs"
+                variant="muted"
+                :aria-label="showPassword ? t('loginView.password.hide') : t('loginView.password.show')"
+                tabindex="-1"
+                class="absolute right-3 top-1/2 -translate-y-1/2"
+                @click="showPassword = !showPassword"
+              />
+            </div>
           </div>
 
           <AppButton size="none" variant="plain" weight="none"
