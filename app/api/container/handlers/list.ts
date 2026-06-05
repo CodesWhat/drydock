@@ -187,13 +187,14 @@ export function attachInProgressUpdateOperation(
   container: Container,
 ): Container {
   const byId = context.updateOperationStore.getActiveOperationByContainerId(container.id);
-  // Name-based fallback only for legacy operations that predate the containerId field.
+  // Scoped by agent+watcher so cross-agent same-named ops don't pollute list responses (issue #411).
   const byName = byId
     ? undefined
-    : context.updateOperationStore.getActiveOperationByContainerName(container.name);
-  const isLegacyOperation =
-    byName && typeof byName === 'object' && !('containerId' in (byName as Record<string, unknown>));
-  const matched = byId ?? (isLegacyOperation ? byName : undefined);
+    : context.updateOperationStore.getActiveOperationByContainerName(container.name, {
+        agent: container.agent,
+        watcher: container.watcher,
+      });
+  const matched = byId ?? byName;
   const operation = sanitizeActiveUpdateOperation(matched);
 
   if (!operation) {
@@ -208,14 +209,14 @@ function buildEligibilityContext(context: CrudHandlerContext): UpdateEligibility
     triggers: context.getTriggers ? context.getTriggers() : undefined,
     getActiveOperation: (container: Container) => {
       const byId = context.updateOperationStore.getActiveOperationByContainerId(container.id);
+      // Scoped by agent+watcher so cross-agent same-named ops don't affect eligibility (issue #411).
       const byName = byId
         ? undefined
-        : context.updateOperationStore.getActiveOperationByContainerName(container.name);
-      const isLegacyOp =
-        byName &&
-        typeof byName === 'object' &&
-        !('containerId' in (byName as Record<string, unknown>));
-      const matched = byId ?? (isLegacyOp ? byName : undefined);
+        : context.updateOperationStore.getActiveOperationByContainerName(container.name, {
+            agent: container.agent,
+            watcher: container.watcher,
+          });
+      const matched = byId ?? byName;
       if (!matched || typeof matched !== 'object') {
         return undefined;
       }

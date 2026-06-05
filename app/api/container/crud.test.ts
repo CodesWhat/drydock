@@ -2411,7 +2411,7 @@ describe('api/container/crud', () => {
 
       expect(
         harness.deps.updateOperationStore.getActiveOperationByContainerName,
-      ).toHaveBeenCalledWith('edge-api');
+      ).toHaveBeenCalledWith('edge-api', { agent: undefined, watcher: 'local' });
       expect(listRes.json).toHaveBeenCalledWith(
         expect.objectContaining({
           data: [

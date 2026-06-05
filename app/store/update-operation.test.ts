@@ -2514,4 +2514,148 @@ describe('Update Operation Store', () => {
       ).toBeUndefined();
     });
   });
+
+  describe('getActiveOperationByContainerName identity scoping (issue #411)', () => {
+    test('same agent+watcher returns the operation', () => {
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+        container: { id: 'c1', name: 'web', watcher: 'local', agent: 'agent-A' } as any,
+      });
+
+      const result = updateOperation.getActiveOperationByContainerName('web', {
+        agent: 'agent-A',
+        watcher: 'local',
+      });
+      expect(result).toBeDefined();
+      expect(result?.containerName).toBe('web');
+    });
+
+    test('different agent, snapshot present → returns undefined', () => {
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+        container: { id: 'c-b', name: 'web', watcher: 'local', agent: 'agent-B' } as any,
+      });
+
+      const result = updateOperation.getActiveOperationByContainerName('web', {
+        agent: 'agent-A',
+        watcher: 'local',
+      });
+      expect(result).toBeUndefined();
+    });
+
+    test('different watcher, snapshot present → returns undefined', () => {
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+        container: { id: 'c2', name: 'web', watcher: 'watcher-2' } as any,
+      });
+
+      const result = updateOperation.getActiveOperationByContainerName('web', {
+        agent: undefined,
+        watcher: 'watcher-1',
+      });
+      expect(result).toBeUndefined();
+    });
+
+    test('legacy op (no container snapshot) is returned even when identity filter is passed', () => {
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+        // no container snapshot — legacy row
+      });
+
+      const result = updateOperation.getActiveOperationByContainerName('web', {
+        agent: 'agent-A',
+        watcher: 'local',
+      });
+      expect(result).toBeDefined();
+      expect(result?.containerName).toBe('web');
+    });
+
+    test('identity without a watcher skips the filter and returns the operation', () => {
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+        container: { id: 'c-no-watcher', name: 'web', watcher: 'local', agent: 'agent-B' } as any,
+      });
+
+      const result = updateOperation.getActiveOperationByContainerName('web', {
+        agent: 'agent-A',
+        watcher: undefined,
+      });
+      expect(result).toBeDefined();
+      expect(result?.containerName).toBe('web');
+    });
+  });
+
+  describe('getInProgressOperationByContainerName identity scoping (issue #411)', () => {
+    test('same agent+watcher returns the operation', () => {
+      updateOperation.insertOperation({
+        containerName: 'api',
+        status: 'in-progress',
+        phase: 'pulling',
+        container: { id: 'c3', name: 'api', watcher: 'local', agent: 'agent-A' } as any,
+      });
+
+      const result = updateOperation.getInProgressOperationByContainerName('api', {
+        agent: 'agent-A',
+        watcher: 'local',
+      });
+      expect(result).toBeDefined();
+      expect(result?.containerName).toBe('api');
+    });
+
+    test('different agent, snapshot present → returns undefined', () => {
+      updateOperation.insertOperation({
+        containerName: 'api',
+        status: 'in-progress',
+        phase: 'pulling',
+        container: { id: 'c-b2', name: 'api', watcher: 'local', agent: 'agent-B' } as any,
+      });
+
+      const result = updateOperation.getInProgressOperationByContainerName('api', {
+        agent: 'agent-A',
+        watcher: 'local',
+      });
+      expect(result).toBeUndefined();
+    });
+
+    test('different watcher, snapshot present → returns undefined', () => {
+      updateOperation.insertOperation({
+        containerName: 'api',
+        status: 'in-progress',
+        phase: 'pulling',
+        container: { id: 'c4', name: 'api', watcher: 'watcher-2' } as any,
+      });
+
+      const result = updateOperation.getInProgressOperationByContainerName('api', {
+        agent: undefined,
+        watcher: 'watcher-1',
+      });
+      expect(result).toBeUndefined();
+    });
+
+    test('legacy op (no container snapshot) is returned even when identity filter is passed', () => {
+      updateOperation.insertOperation({
+        containerName: 'api',
+        status: 'in-progress',
+        phase: 'pulling',
+        // no container snapshot — legacy row
+      });
+
+      const result = updateOperation.getInProgressOperationByContainerName('api', {
+        agent: 'agent-A',
+        watcher: 'local',
+      });
+      expect(result).toBeDefined();
+      expect(result?.containerName).toBe('api');
+    });
+  });
 });

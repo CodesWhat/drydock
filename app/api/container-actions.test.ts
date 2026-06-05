@@ -821,7 +821,10 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(updateOperationStore.getActiveOperationByContainerId).toHaveBeenCalledWith('c1');
-      expect(updateOperationStore.getActiveOperationByContainerName).toHaveBeenCalledWith('nginx');
+      expect(updateOperationStore.getActiveOperationByContainerName).toHaveBeenCalledWith('nginx', {
+        agent: undefined,
+        watcher: undefined,
+      });
       expect(res.status).toHaveBeenCalledWith(409);
       expect(res.json).toHaveBeenCalledWith({
         error: 'Container update already queued',
@@ -859,7 +862,10 @@ describe('Container Actions Router', () => {
       await handler(req, res);
 
       expect(updateOperationStore.getActiveOperationByContainerId).toHaveBeenCalledWith('c1');
-      expect(updateOperationStore.getActiveOperationByContainerName).toHaveBeenCalledWith('nginx');
+      expect(updateOperationStore.getActiveOperationByContainerName).toHaveBeenCalledWith('nginx', {
+        agent: undefined,
+        watcher: undefined,
+      });
       expect(res.status).toHaveBeenCalledWith(409);
       expect(res.json).toHaveBeenCalledWith({
         error: 'Container update already queued',

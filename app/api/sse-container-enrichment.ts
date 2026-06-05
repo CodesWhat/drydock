@@ -17,9 +17,11 @@ function buildEligibilityContext(container: Container): UpdateEligibilityContext
     isSelfUpdateAvailable: isSelfUpdateAvailable(container),
     getActiveOperation: (c: Container) => {
       const byId = getActiveOperationByContainerId(c.id);
-      const byName = byId ? undefined : getActiveOperationByContainerName(c.name);
-      const isLegacyOperation = byName && typeof byName === 'object' && !('containerId' in byName);
-      const matched = byId ?? (isLegacyOperation ? byName : undefined);
+      // Scoped by agent+watcher so cross-agent same-named ops don't pollute enrichment (issue #411).
+      const byName = byId
+        ? undefined
+        : getActiveOperationByContainerName(c.name, { agent: c.agent, watcher: c.watcher });
+      const matched = byId ?? byName;
       if (!matched || typeof matched !== 'object') return undefined;
       const m = matched as Record<string, unknown>;
       const id = typeof m.id === 'string' ? m.id : undefined;
