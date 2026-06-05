@@ -302,9 +302,21 @@ describe('attachInProgressUpdateOperation', () => {
     expect(context.updateOperationStore.getActiveOperationByContainerName).not.toHaveBeenCalled();
   });
 
-  test('does not attach name-matched operation that belongs to a different container ID (#256)', () => {
-    const containerA = createContainer({ id: 'host1-abc', name: 'portainer_agent' });
-    const containerB = createContainer({ id: 'host2-def', name: 'portainer_agent' });
+  test('does not attach name-matched operation that belongs to a different agent+watcher (#411)', () => {
+    // After #411: cross-agent filtering is done inside getActiveOperationByContainerName via
+    // the identity parameter. The scoped call returns undefined for containerB's agent+watcher.
+    const containerA = createContainer({
+      id: 'host1-abc',
+      name: 'portainer_agent',
+      agent: 'agent-A',
+      watcher: 'local',
+    });
+    const containerB = createContainer({
+      id: 'host2-def',
+      name: 'portainer_agent',
+      agent: 'agent-B',
+      watcher: 'local',
+    });
     const operationForA = {
       id: 'op-1',
       containerId: 'host1-abc',
@@ -317,9 +329,12 @@ describe('attachInProgressUpdateOperation', () => {
     (
       context.updateOperationStore.getActiveOperationByContainerId as ReturnType<typeof vi.fn>
     ).mockImplementation((id: string) => (id === 'host1-abc' ? operationForA : undefined));
+    // Scoped call: returns the op for agent-A, undefined for agent-B
     (
       context.updateOperationStore.getActiveOperationByContainerName as ReturnType<typeof vi.fn>
-    ).mockReturnValue(operationForA);
+    ).mockImplementation((_name: string, identity?: { agent?: string; watcher?: string }) =>
+      identity?.agent === 'agent-A' ? operationForA : undefined,
+    );
 
     const resultA = attachInProgressUpdateOperation(context, containerA);
     const resultB = attachInProgressUpdateOperation(context, containerB);
@@ -348,6 +363,59 @@ describe('attachInProgressUpdateOperation', () => {
     const result = attachInProgressUpdateOperation(context, container);
 
     expect(result.updateOperation?.id).toBe('op-legacy');
+  });
+});
+
+describe('attachInProgressUpdateOperation cross-agent scoping (issue #411)', () => {
+  test('op from agent-B is not attached to agent-A container when scoped call returns undefined', () => {
+    // The scoped getActiveOperationByContainerName returns undefined for agent-A's request
+    // because the in-store op belongs to agent-B.
+    const container = createContainer({
+      id: 'c-a1',
+      name: 'drydock-agent',
+      agent: 'agent-A',
+      watcher: 'local',
+    });
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      updateOperationStore: {
+        ...createMockContext().updateOperationStore,
+        getActiveOperationByContainerId: vi.fn().mockReturnValue(undefined),
+        getActiveOperationByContainerName: vi.fn().mockReturnValue(undefined), // scoped → no match
+      },
+    };
+
+    const result = attachInProgressUpdateOperation(context, container);
+
+    expect(result).toBe(container);
+    expect((result as any).updateOperation).toBeUndefined();
+  });
+
+  test('op from same agent+watcher is attached', () => {
+    const container = createContainer({
+      id: 'c-a1',
+      name: 'drydock-agent',
+      agent: 'agent-A',
+      watcher: 'local',
+    });
+    const op = {
+      id: 'op-a1',
+      status: 'in-progress',
+      phase: 'pulling',
+      updatedAt: '2026-05-01T00:00:00Z',
+    };
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      updateOperationStore: {
+        ...createMockContext().updateOperationStore,
+        getActiveOperationByContainerId: vi.fn().mockReturnValue(undefined),
+        getActiveOperationByContainerName: vi.fn().mockReturnValue(op), // scoped → match
+      },
+    };
+
+    const result = attachInProgressUpdateOperation(context, container);
+
+    expect((result as any).updateOperation?.id).toBe('op-a1');
   });
 });
 
@@ -1177,16 +1245,21 @@ describe('attachUpdateEligibility / buildEligibilityContext', () => {
     expect(blocker.details.operationId).toBe('op-1');
   });
 
-  test('returns undefined when byId is missing and byName is a non-legacy op (has containerId)', () => {
-    // byId=undefined, byName has containerId → isLegacyOp=false → matched=undefined → line 221 fires
+  test('byId=undefined and scoped byName returns an op → active-operation blocker is attached', () => {
+    // After #411: identity scoping is done inside the store function, not via post-call guard.
+    // If byName returns a result, it belongs to the same agent+watcher, so it should be used.
     const context: CrudHandlerContext = {
       ...createMockContext(),
       updateOperationStore: {
         ...createMockContext().updateOperationStore,
         getActiveOperationByContainerId: vi.fn().mockReturnValue(undefined),
-        getActiveOperationByContainerName: vi
-          .fn()
-          .mockReturnValue({ id: 'op-1', status: 'in-progress', containerId: 'c1' }),
+        getActiveOperationByContainerName: vi.fn().mockReturnValue({
+          id: 'op-1',
+          status: 'in-progress',
+          phase: 'pulling',
+          updatedAt: '2026-05-01T00:00:00Z',
+          containerId: 'c1',
+        }),
       },
     };
     const container = createContainerWithUpdate();
@@ -1194,7 +1267,7 @@ describe('attachUpdateEligibility / buildEligibilityContext', () => {
     expect((result as any).updateEligibility).toBeDefined();
     expect(
       (result as any).updateEligibility.blockers.find((b: any) => b.reason === 'active-operation'),
-    ).toBeUndefined();
+    ).toBeDefined();
   });
 
   test('returns undefined from getActiveOperation when matched has no valid id', () => {
@@ -1252,6 +1325,66 @@ describe('attachUpdateEligibility / buildEligibilityContext', () => {
     );
     expect(activeOpBlocker).toBeDefined();
     expect(activeOpBlocker.details.status).toBe('in-progress');
+  });
+});
+
+describe('buildEligibilityContext cross-agent scoping (issue #411)', () => {
+  function createContainerWithUpdate(overrides: Partial<Container> = {}): Container {
+    return createContainer({
+      result: { tag: '1.1.0' },
+      updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '1.1.0', semverDiff: 'minor' },
+      ...overrides,
+    });
+  }
+
+  test('cross-agent: scoped byName returns undefined → isUpdateInProgress is false', () => {
+    const container = createContainerWithUpdate({
+      id: 'c-a1',
+      name: 'drydock-agent',
+      agent: 'agent-A',
+      watcher: 'local',
+    });
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      updateOperationStore: {
+        ...createMockContext().updateOperationStore,
+        getActiveOperationByContainerId: vi.fn().mockReturnValue(undefined),
+        getActiveOperationByContainerName: vi.fn().mockReturnValue(undefined), // agent-B op filtered out
+      },
+    };
+
+    const result = attachUpdateEligibility(context, container);
+
+    expect(
+      (result as any).updateEligibility.blockers.find((b: any) => b.reason === 'active-operation'),
+    ).toBeUndefined();
+  });
+
+  test('same-agent: scoped byName returns op → isUpdateInProgress is true', () => {
+    const container = createContainerWithUpdate({
+      id: 'c-a1',
+      name: 'drydock-agent',
+      agent: 'agent-A',
+      watcher: 'local',
+    });
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      updateOperationStore: {
+        ...createMockContext().updateOperationStore,
+        getActiveOperationByContainerId: vi.fn().mockReturnValue(undefined),
+        getActiveOperationByContainerName: vi.fn().mockReturnValue({
+          id: 'op-a1',
+          status: 'in-progress',
+          updatedAt: '2026-05-01T00:00:00Z',
+        }),
+      },
+    };
+
+    const result = attachUpdateEligibility(context, container);
+
+    expect(
+      (result as any).updateEligibility.blockers.find((b: any) => b.reason === 'active-operation'),
+    ).toBeDefined();
   });
 });
 

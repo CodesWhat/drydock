@@ -153,16 +153,31 @@ describe('enrichContainerLifecyclePayloadWithEligibility', () => {
 
     test('byName operation with another container id is ignored', () => {
       mockGetActiveOperationByContainerId.mockReturnValueOnce(undefined);
-      mockGetActiveOperationByContainerName.mockReturnValueOnce({
-        id: 'op-other-host',
-        containerId: 'other-host-container-id',
-        status: 'queued',
-        updatedAt: '2026-04-26T00:00:00Z',
-      });
+      // The scoped call now returns undefined for cross-agent ops.
+      mockGetActiveOperationByContainerName.mockReturnValueOnce(undefined);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const result = enrichContainerLifecyclePayloadWithEligibility(updatePayload()) as any;
 
+      expect(
+        result.updateEligibility.blockers.some(
+          (b: { reason: string }) => b.reason === 'active-operation',
+        ),
+      ).toBe(false);
+    });
+
+    test('byName operation from a different agent is not used for enrichment', () => {
+      // The scoped getActiveOperationByContainerName returns undefined because the
+      // op belongs to agent-B while the payload container belongs to agent-A.
+      // Use updatePayload() (no watcher) so isSelfUpdateAvailable does not throw.
+      mockGetActiveOperationByContainerId.mockReturnValueOnce(undefined);
+      mockGetActiveOperationByContainerName.mockReturnValueOnce(undefined);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = enrichContainerLifecyclePayloadWithEligibility(updatePayload()) as any;
+
+      // No active-operation blocker because the scoped byName call returned undefined.
+      expect(result.updateEligibility).toBeDefined();
       expect(
         result.updateEligibility.blockers.some(
           (b: { reason: string }) => b.reason === 'active-operation',

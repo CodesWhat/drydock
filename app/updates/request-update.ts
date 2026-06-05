@@ -138,11 +138,12 @@ function getActiveUpdateOperationForContainer(container: Container) {
     return byId;
   }
 
-  // Fall back to name-based lookup. The legacy `isLegacyOperation` guard that
-  // required the op to lack a `containerId` field was dead code: all modern ops
-  // have `containerId`, so the guard always returned `undefined` and never
-  // blocked a duplicate-by-name. Fixed as part of issue #410 Part A.
-  return updateOperationStore.getActiveOperationByContainerName(container.name);
+  // Fall back to name-based lookup scoped by agent+watcher so that identically-named
+  // containers on different agents do not produce a false 409 (issue #411).
+  return updateOperationStore.getActiveOperationByContainerName(container.name, {
+    agent: container.agent,
+    watcher: container.watcher,
+  });
 }
 
 // Complete map covers every UpdateBlockerReason so callers never hit a missing

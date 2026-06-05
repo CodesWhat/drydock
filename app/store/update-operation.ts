@@ -874,10 +874,48 @@ export function markOperationTerminal(
 }
 
 /**
+ * Optional agent+watcher identity filter for name-based operation lookups.
+ * When supplied, operations carrying a container snapshot are matched only
+ * when both `agent` and `watcher` agree with the snapshot values. Operations
+ * that lack a snapshot (legacy rows pre-#385) are accepted unconditionally as
+ * a backward-compatible fallback.
+ */
+export interface ContainerIdentityFilter {
+  agent?: string;
+  watcher?: string;
+}
+
+function matchesIdentityFilter(
+  op: { container?: { agent?: string; watcher?: string } },
+  identity: ContainerIdentityFilter,
+): boolean {
+  // No watcher supplied — skip the filter rather than reject valid ops.
+  if (!identity.watcher) {
+    return true;
+  }
+
+  // Legacy row without a container snapshot: accept as backward-compat fallback.
+  if (!op.container) {
+    return true;
+  }
+
+  // Modern row: both agent and watcher must match.
+  return (
+    (op.container.agent ?? '') === (identity.agent ?? '') &&
+    op.container.watcher === identity.watcher
+  );
+}
+
+/**
  * Return the latest in-progress operation for a container name.
+ *
+ * When `identity` is supplied the result is additionally filtered so that
+ * operations belonging to a different agent+watcher are not returned — fixing
+ * the false-409 multi-agent collision described in issue #411.
  */
 export function getInProgressOperationByContainerName(
   containerName: string,
+  identity?: ContainerIdentityFilter,
 ): InProgressUpdateOperation | undefined {
   if (!updateOperationCollection) {
     return undefined;
@@ -890,6 +928,11 @@ export function getInProgressOperationByContainerName(
     })
     .map((item) => item.data)
     .filter(isInProgressUpdateOperation)
+    .filter(
+      (op) =>
+        !identity ||
+        matchesIdentityFilter(op as { container?: { agent?: string; watcher?: string } }, identity),
+    )
     .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
 
   return operations.at(0);
@@ -934,9 +977,14 @@ export function getInProgressOperationByContainerId(
 
 /**
  * Return the latest active (in-progress OR queued) operation for a container name.
+ *
+ * When `identity` is supplied the result is additionally filtered so that
+ * operations belonging to a different agent+watcher are not returned — fixing
+ * the false-409 multi-agent collision described in issue #411.
  */
 export function getActiveOperationByContainerName(
   containerName: string,
+  identity?: ContainerIdentityFilter,
 ): ActiveUpdateOperation | undefined {
   if (!updateOperationCollection) {
     return undefined;
@@ -946,6 +994,11 @@ export function getActiveOperationByContainerName(
     .find({ 'data.containerName': containerName })
     .map((item) => getFreshActiveOperation(item.data))
     .filter((item): item is ActiveUpdateOperation => Boolean(item))
+    .filter(
+      (op) =>
+        !identity ||
+        matchesIdentityFilter(op as { container?: { agent?: string; watcher?: string } }, identity),
+    )
     .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
 
   return operations.at(0);

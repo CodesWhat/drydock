@@ -1021,18 +1021,22 @@ describe('request-update', () => {
     test('blocks duplicate enqueue when a modern (containerId-carrying) op exists for the same container name', async () => {
       // A modern op (has containerId) is active for container "nginx".
       // The NEW container has a different Docker ID (recreated), so by-id lookup misses.
-      // The by-name lookup SHOULD block the enqueue.
+      // The by-name lookup SHOULD block the enqueue because agent+watcher match.
       mockGetActiveOperationByContainerId.mockReturnValue(undefined); // new ID not found
       mockGetActiveOperationByContainerName.mockReturnValue({
         id: 'op-existing',
         status: 'in-progress',
         containerId: 'old-container-id', // modern op: has containerId
+        container: { agent: undefined, watcher: 'local' },
       });
 
       await expect(
-        requestContainerUpdate(createContainer({ id: 'new-container-id', name: 'nginx' }), {
-          trigger: { type: 'docker', trigger: vi.fn() },
-        }),
+        requestContainerUpdate(
+          createContainer({ id: 'new-container-id', name: 'nginx', watcher: 'local' }),
+          {
+            trigger: { type: 'docker', trigger: vi.fn() },
+          },
+        ),
       ).rejects.toMatchObject<Partial<UpdateRequestError>>({
         statusCode: 409,
         message: 'Container update already in progress',
@@ -1053,6 +1057,66 @@ describe('request-update', () => {
       });
       expect(accepted.operationId).toBeDefined();
       expect(mockInsertOperation).toHaveBeenCalled();
+    });
+
+    test('cross-agent non-collision: agent-A does not get 409 when agent-B has active op for same name', async () => {
+      // agent-B has an in-progress op for "drydock-agent", agent-A should NOT be blocked.
+      mockGetActiveOperationByContainerId.mockReturnValue(undefined);
+      mockGetActiveOperationByContainerName.mockReturnValue(undefined); // scoped call returns undefined
+
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+      };
+      const accepted = await requestContainerUpdate(
+        createContainer({
+          id: 'c-agent-a',
+          name: 'drydock-agent',
+          agent: 'agent-A',
+          watcher: 'local',
+        }),
+        { trigger },
+      );
+      expect(accepted.operationId).toBeDefined();
+      expect(mockInsertOperation).toHaveBeenCalled();
+    });
+
+    test('cross-watcher non-collision: different watcher does not block enqueue', async () => {
+      // watcher-2 has an op for "web", watcher-1 should not be blocked.
+      mockGetActiveOperationByContainerId.mockReturnValue(undefined);
+      mockGetActiveOperationByContainerName.mockReturnValue(undefined); // scoped call returns undefined
+
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+      };
+      const accepted = await requestContainerUpdate(
+        createContainer({ id: 'c-w1', name: 'web', watcher: 'watcher-1' }),
+        { trigger },
+      );
+      expect(accepted.operationId).toBeDefined();
+      expect(mockInsertOperation).toHaveBeenCalled();
+    });
+
+    test('legacy op (no container snapshot) still blocks enqueue', async () => {
+      // Legacy row without a container snapshot — backward-compatible block.
+      mockGetActiveOperationByContainerId.mockReturnValue(undefined);
+      mockGetActiveOperationByContainerName.mockReturnValue({
+        id: 'op-legacy',
+        status: 'queued',
+        // no container snapshot
+      });
+
+      await expect(
+        requestContainerUpdate(
+          createContainer({ id: 'c-new', name: 'nginx', agent: 'agent-A', watcher: 'local' }),
+          {
+            trigger: { type: 'docker', trigger: vi.fn() },
+          },
+        ),
+      ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+        statusCode: 409,
+      });
     });
   });
 

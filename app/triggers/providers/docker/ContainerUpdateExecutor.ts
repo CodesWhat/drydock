@@ -379,7 +379,10 @@ class ContainerUpdateExecutor {
     );
     const pendingByContainerName =
       pendingByContainerId ??
-      updateOperationStore.getInProgressOperationByContainerName(container.name);
+      updateOperationStore.getInProgressOperationByContainerName(container.name, {
+        agent: typeof container.agent === 'string' ? container.agent : undefined,
+        watcher: typeof container.watcher === 'string' ? container.watcher : undefined,
+      });
     const pending =
       container.id &&
       pendingByContainerName?.containerId &&

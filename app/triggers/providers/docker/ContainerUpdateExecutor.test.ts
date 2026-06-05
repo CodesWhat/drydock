@@ -311,6 +311,30 @@ describe('ContainerUpdateExecutor', () => {
     expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
   });
 
+  test('reconcile ignores same-name in-progress operations from a different agent (issue #411)', async () => {
+    // The scoped getInProgressOperationByContainerName returns undefined because the
+    // op belongs to agent-B while the current container belongs to agent-A.
+    mockGetInProgressOperationByContainerId.mockReturnValue(undefined);
+    mockGetInProgressOperationByContainerName.mockReturnValue(undefined); // scoped call filtered out agent-B op
+    const executor = createExecutor();
+    const log = createLog();
+
+    await executor.reconcileInProgressContainerUpdateOperation(
+      {},
+      createContainer({
+        id: 'c-agent-a',
+        name: 'docker-socket-proxy',
+        agent: 'agent-A',
+        watcher: 'local',
+      }),
+      log,
+    );
+
+    // No reconciliation warning should be emitted
+    expect(log.warn).not.toHaveBeenCalled();
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+  });
+
   test('reconcile marks success when both active and temp containers exist', async () => {
     const pending = {
       id: 'op-1',

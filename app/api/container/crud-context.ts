@@ -30,9 +30,15 @@ export interface UpdateOperationStoreApi {
   listActiveOperations?: () => unknown[];
   getOperationsByContainerName: (containerName: string) => unknown[];
   getOperationsByContainerId: (containerId: string) => unknown[];
-  getInProgressOperationByContainerName: (containerName: string) => unknown | undefined;
+  getInProgressOperationByContainerName: (
+    containerName: string,
+    identity?: { agent?: string; watcher?: string },
+  ) => unknown | undefined;
   getInProgressOperationByContainerId: (containerId: string) => unknown | undefined;
-  getActiveOperationByContainerName: (containerName: string) => unknown | undefined;
+  getActiveOperationByContainerName: (
+    containerName: string,
+    identity?: { agent?: string; watcher?: string },
+  ) => unknown | undefined;
   getActiveOperationByContainerId: (containerId: string) => unknown | undefined;
 }
 
