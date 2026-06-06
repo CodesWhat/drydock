@@ -246,5 +246,60 @@ describe('Group Router', () => {
       expect(total).toBe(1);
       expect(groups[0].name).toBe('wud-group');
     });
+
+    test('should auto-detect com.docker.stack.namespace (Swarm stack) as group', () => {
+      mockGetContainers.mockReturnValue([
+        makeContainer('c1', 'portainer_agent', { 'com.docker.stack.namespace': 'portainer' }),
+        makeContainer('c2', 'portainer_portainer', { 'com.docker.stack.namespace': 'portainer' }),
+      ]);
+
+      const handler = getHandler('get', '/groups');
+      const req = createMockRequest();
+      const res = createMockResponse();
+      handler(req, res);
+
+      const { data: groups, total } = getGroupsPayload(res);
+      expect(groups).toHaveLength(1);
+      expect(total).toBe(1);
+      expect(groups[0].name).toBe('portainer');
+      expect(groups[0].containerCount).toBe(2);
+    });
+
+    test('should prefer com.docker.compose.project over com.docker.stack.namespace', () => {
+      mockGetContainers.mockReturnValue([
+        makeContainer('c1', 'web', {
+          'com.docker.compose.project': 'compose-proj',
+          'com.docker.stack.namespace': 'swarm-ns',
+        }),
+      ]);
+
+      const handler = getHandler('get', '/groups');
+      const req = createMockRequest();
+      const res = createMockResponse();
+      handler(req, res);
+
+      const { data: groups, total } = getGroupsPayload(res);
+      expect(total).toBe(1);
+      expect(groups[0].name).toBe('compose-proj');
+    });
+
+    test('should group Swarm-deployed portainer_agent tasks by stack namespace', () => {
+      mockGetContainers.mockReturnValue([
+        makeContainer('c1', 'portainer_agent', { 'com.docker.stack.namespace': 'portainer' }),
+        makeContainer('c2', 'portainer_portainer', { 'com.docker.stack.namespace': 'portainer' }),
+      ]);
+
+      const handler = getHandler('get', '/groups');
+      const req = createMockRequest();
+      const res = createMockResponse();
+      handler(req, res);
+
+      const { data: groups, total } = getGroupsPayload(res);
+      expect(groups).toHaveLength(1);
+      expect(total).toBe(1);
+      const swarmGroup = groups.find((g) => g.name === 'portainer');
+      expect(swarmGroup).toBeDefined();
+      expect(swarmGroup.containerCount).toBe(2);
+    });
   });
 });
