@@ -80,6 +80,11 @@ name = "hadolint"
 [[plugin]]
 name = "markdownlint"
 mode = "comment"
+# Pinned so the markdownlint ruleset is identical locally and in CI. Left
+# unpinned, qlty resolves whatever markdownlint the installed CLI defaults to,
+# which drifts between a developer's qlty and CI's (latest) qlty — a doc that
+# passed `qlty check --all` locally then failed the CI lint gate on MD032.
+version = "0.46.0"
 
 [[plugin]]
 name = "osv-scanner"
