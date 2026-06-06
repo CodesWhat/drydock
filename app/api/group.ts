@@ -7,7 +7,10 @@ const router = express.Router();
 /**
  * GET /groups — return containers grouped by stack / group label.
  *
- * Priority: dd.group > wud.group > com.docker.compose.project > null (ungrouped)
+ * Priority: dd.group > wud.group > com.docker.compose.project > com.docker.stack.namespace > null (ungrouped)
+ *
+ * com.docker.stack.namespace is the Docker Swarm equivalent of com.docker.compose.project
+ * and is carried by services deployed via `docker stack deploy`.
  */
 function getGroups(req: Request, res: Response) {
   const containers = storeContainer.getContainers();
@@ -26,6 +29,7 @@ function getGroups(req: Request, res: Response) {
       container.labels?.['dd.group'] ??
       container.labels?.['wud.group'] ??
       container.labels?.['com.docker.compose.project'] ??
+      container.labels?.['com.docker.stack.namespace'] ??
       null;
 
     const key = groupName ?? '__ungrouped__';

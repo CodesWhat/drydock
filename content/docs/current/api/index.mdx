@@ -329,7 +329,7 @@ Returns 200 with the updated settings, or 400 if the body is invalid. `PUT /api/
 
 ## Container groups
 
-Returns containers grouped by stack or group label. Group priority: `dd.group` > `wud.group` > `com.docker.compose.project` > ungrouped.
+Returns containers grouped by stack or group label. Group priority: `dd.group` > `wud.group` > `com.docker.compose.project` > `com.docker.stack.namespace` > ungrouped.
 
 ```bash
 curl http://drydock:3000/api/v1/containers/groups
