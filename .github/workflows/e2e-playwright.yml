@@ -18,9 +18,12 @@ run-name: >-
 
 on:
   push:
+    # Only `main` — release/** branches reach main via a PR (covered by
+    # `pull_request` below). Triggering on `push: release/**` produced a
+    # duplicate run that the concurrency group cancelled, and the cancelled
+    # run blocked the PR's required-status rollup on every release cut.
     branches:
       - main
-      - 'release/**'
   pull_request:
     branches: [main]
   merge_group:

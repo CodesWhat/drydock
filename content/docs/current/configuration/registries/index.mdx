@@ -76,6 +76,17 @@ Registry instances configured with `INSECURE=true` (TLS certificate validation d
 
 Use `INSECURE=true` only for self-hosted registries on private networks where a valid TLS certificate cannot be provisioned. For production registries reachable over the internet, always use a valid certificate.
 
+## Automatic Bearer token exchange
+
+When a registry responds to a tag-list or manifest request with `401 Unauthorized` and a `WWW-Authenticate: Bearer realm=…,service=…,scope=…` challenge, drydock automatically performs the standard Docker Registry v2 token-auth flow: it fetches a token from the realm endpoint (anonymously for public images, or with the configured credentials for private ones) and retries the request once.
+
+This covers registries that do not require a pre-authenticated session, including:
+
+- Public images on **Codeberg** (`codeberg.org`) and other Forgejo/Gitea instances
+- **Chainguard** (`cgr.dev`) and other registries that always challenge before serving tag lists
+
+The realm host is validated against the registry's own configured host before any credentials are sent — the exchange is silently skipped if the challenge points to an untrusted host, and the original 401 is returned instead. Providers that already perform proactive Bearer auth (GHCR, Docker Hub, Quay) are unaffected.
+
 ## Registry lookup image (`dd.registry.lookup.image`)
 
 The `dd.registry.lookup.image` container label redirects tag and manifest queries to an alternative image reference (e.g. check Docker Hub's `library/nextcloud` for a container running from a private mirror). In v1.5.0, this substitution is applied only at query boundaries (`getTags`, `getImageManifestDigest`, `getImagePublishedAt`) and no longer overwrites the container's deploy identity (`image.name`, `image.registry.url`). This means compose-file rewrites and container recreates always use the original image, not the lookup target.

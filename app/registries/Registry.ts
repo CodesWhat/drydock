@@ -10,6 +10,8 @@ import { withRetry } from './http-retry.js';
 import { buildImageReference } from './image-reference.js';
 import { acquireToken, getBucketForUrl } from './token-bucket.js';
 
+type RegistryRequestOptions = AxiosRequestConfig;
+
 interface RegistryManifest {
   digest?: string;
   version?: number;
@@ -168,6 +170,28 @@ class Registry<
     requestOptions: AxiosRequestConfig,
   ): Promise<AxiosRequestConfig> {
     return requestOptions;
+  }
+
+  /**
+   * Hook called by callRegistry when a 401 response carries a
+   * `WWW-Authenticate: Bearer` challenge.  The default implementation is a
+   * no-op that returns `undefined`, meaning no retry is attempted and the
+   * original 401 is rethrown.
+   *
+   * BaseRegistry overrides this to perform the spec-compliant token exchange.
+   *
+   * @param _requestOptions  The axios options used for the original request.
+   * @param _wwwAuthenticate The raw `WWW-Authenticate` header value.
+   * @param _image           The container image being looked up.
+   * @returns Augmented request options to use for the retry, or `undefined`
+   *   to skip the retry and rethrow the original error.
+   */
+  protected async resolveBearerChallengeOptions(
+    _requestOptions: RegistryRequestOptions,
+    _wwwAuthenticate: string | undefined,
+    _image: ContainerImage,
+  ): Promise<RegistryRequestOptions | undefined> {
+    return undefined;
   }
 
   /**
@@ -472,13 +496,12 @@ class Registry<
       httpsAgent: axiosOptionsWithAuth.httpsAgent ?? DEFAULT_HTTPS_KEEP_ALIVE_AGENT,
     };
 
-    try {
-      // Rate-limit ourselves before hitting the registry
+    /** Execute a single registry request and return the envelope. */
+    const executeRequest = async (requestOptions: RegistryRequestOptions) => {
       await acquireToken(getBucketForUrl(url));
-
-      const envelope = await withRetry<T>(
+      return withRetry<T>(
         () =>
-          axios<T>(axiosOptionsWithConnectionReuse).then((r) => ({
+          axios<T>(requestOptions).then((r) => ({
             status: r.status,
             headers: r.headers as Record<string, string | undefined>,
             data: r.data,
@@ -488,6 +511,12 @@ class Registry<
           requestLabel: this.buildRequestLabel(url, method),
         },
       );
+    };
+
+    let alreadyRetried = false;
+
+    try {
+      const envelope = await executeRequest(axiosOptionsWithConnectionReuse);
 
       const end = Date.now();
       getSummaryTags()?.observe({ type: this.type, name: this.name }, (end - start) / 1000);
@@ -499,6 +528,44 @@ class Registry<
           } as unknown as AxiosResponse<T>)
         : envelope.data;
     } catch (error) {
+      // On a 401 with a Bearer challenge, attempt a token exchange and retry once.
+      if (
+        !alreadyRetried &&
+        error != null &&
+        typeof error === 'object' &&
+        (error as { response?: { status?: number } }).response?.status === 401
+      ) {
+        const wwwAuth: string | undefined = (
+          error as { response?: { headers?: Record<string, string | undefined> } }
+        ).response?.headers?.['www-authenticate'];
+
+        const retryOptions = await this.resolveBearerChallengeOptions(
+          axiosOptionsWithConnectionReuse,
+          wwwAuth,
+          image,
+        );
+
+        if (retryOptions !== undefined) {
+          alreadyRetried = true;
+          try {
+            const retryEnvelope = await executeRequest(retryOptions);
+            const end = Date.now();
+            getSummaryTags()?.observe({ type: this.type, name: this.name }, (end - start) / 1000);
+            return resolveWithFullResponse
+              ? ({
+                  status: retryEnvelope.status,
+                  headers: retryEnvelope.headers,
+                  data: retryEnvelope.data,
+                } as unknown as AxiosResponse<T>)
+              : retryEnvelope.data;
+          } catch (retryError) {
+            const end = Date.now();
+            getSummaryTags()?.observe({ type: this.type, name: this.name }, (end - start) / 1000);
+            throw retryError;
+          }
+        }
+      }
+
       const end = Date.now();
       getSummaryTags()?.observe({ type: this.type, name: this.name }, (end - start) / 1000);
       throw error;
