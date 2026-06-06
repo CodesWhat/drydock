@@ -12,6 +12,7 @@ import { REGISTRY_BEARER_TOKEN_CACHE_TTL_MS } from './configuration.js';
 import { withRetry } from './http-retry.js';
 import Registry from './Registry.js';
 import { acquireToken, getBucketForUrl } from './token-bucket.js';
+import { parseBearerChallenge } from './www-authenticate.js';
 
 export interface BaseRegistryConfiguration {
   url?: string;
@@ -183,6 +184,27 @@ class BaseRegistry<
   }
 
   private validateAuthUrlHost(authUrl: string, requestOptions: RegistryRequestOptions): void {
+    let requestScheme: string;
+    try {
+      requestScheme = new URL(requestOptions?.url ?? '').protocol;
+    } catch {
+      requestScheme = 'https:';
+    }
+
+    let authScheme: string;
+    try {
+      authScheme = new URL(authUrl).protocol;
+    } catch {
+      authScheme = '';
+    }
+
+    if (requestScheme === 'https:' && authScheme !== 'https:') {
+      failClosedAuth(
+        `Unable to authenticate registry ${this.getId()}: token endpoint ${authUrl} uses plaintext HTTP while the registry is served over HTTPS; refusing to send credentials over an unencrypted connection`,
+      );
+      return;
+    }
+
     const authHost = this.getRegistryHostname(authUrl);
     const trustedHosts = this.getTrustedRegistryHosts(requestOptions);
 
@@ -498,6 +520,61 @@ class BaseRegistry<
       throw new Error(
         `Authentication failed for registry ${this.getId()} (HTTP ${rejectedStatus}): ${providerLabel} credentials were rejected. Check the configured token/login/password and their scopes.`,
       );
+    }
+  }
+
+  /**
+   * On a 401 response carrying a `WWW-Authenticate: Bearer` challenge,
+   * parse the challenge, validate the realm host against the trusted registry
+   * hosts, fetch a token (anonymously or with configured credentials), and
+   * return augmented request options for the retry.
+   *
+   * Returns `undefined` if the challenge is not parseable, the realm host is
+   * untrusted, or the token fetch fails — so callRegistry rethrows the original
+   * 401 unchanged.  This is purely additive: providers that already perform
+   * proactive Bearer auth before the first request are unaffected.
+   */
+  protected override async resolveBearerChallengeOptions(
+    requestOptions: RegistryRequestOptions,
+    wwwAuthenticate: string | undefined,
+    _image: ContainerImage,
+  ): Promise<RegistryRequestOptions | undefined> {
+    try {
+      const challenge = parseBearerChallenge(
+        typeof wwwAuthenticate === 'string' ? wwwAuthenticate : undefined,
+      );
+      if (!challenge) {
+        return undefined;
+      }
+
+      // Build the auth URL from realm + optional service/scope query params.
+      let authUrl: string;
+      try {
+        const u = new URL(challenge.realm);
+        if (challenge.service) {
+          u.searchParams.set('service', challenge.service);
+        }
+        if (challenge.scope) {
+          u.searchParams.set('scope', challenge.scope);
+        }
+        authUrl = u.toString();
+      } catch {
+        this.log.debug(
+          `Bearer challenge for ${this.getId()}: realm URL is malformed ("${challenge.realm}"), falling back to original error`,
+        );
+        return undefined;
+      }
+
+      return await this.authenticateBearerFromAuthUrl(
+        requestOptions,
+        authUrl,
+        this.getAuthCredentials(),
+      );
+    } catch (err: unknown) {
+      this.log.debug(
+        `Bearer challenge token exchange for ${this.getId()} failed (${getErrorMessage(err)}), falling back to original error`,
+      );
+      return undefined;
     }
   }
 

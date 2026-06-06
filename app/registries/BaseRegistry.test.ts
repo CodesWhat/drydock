@@ -286,6 +286,76 @@ test('authenticateBearerFromAuthUrl should reject token endpoint host that does 
   expect(axios).not.toHaveBeenCalled();
 });
 
+test('validateAuthUrlHost should reject http authUrl when request is https (scheme-downgrade attack)', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://registry.example.com/v2/library/nginx/manifests/latest' },
+      'http://registry.example.com/token',
+      'dXNlcjpwYXNz',
+    ),
+  ).rejects.toThrow(
+    'token endpoint http://registry.example.com/token uses plaintext HTTP while the registry is served over HTTPS; refusing to send credentials over an unencrypted connection',
+  );
+
+  // Must NOT have made any network call — the scheme guard fires before the token fetch
+  expect(axios).not.toHaveBeenCalled();
+});
+
+test('validateAuthUrlHost should allow http authUrl when request is also http (plain insecure registry)', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+  baseRegistry.configuration = { url: 'http://registry.local/v2' };
+
+  const result = await baseRegistry.authenticateBearerFromAuthUrl(
+    { headers: {}, url: 'http://registry.local/v2/library/nginx/manifests/latest' },
+    'http://registry.local/token',
+    undefined,
+  );
+
+  // http→http should pass the scheme check (insecure self-hosted registries are unaffected)
+  expect(result.headers.Authorization).toBe('Bearer abc123');
+  expect(axios).toHaveBeenCalledTimes(1);
+});
+
+test('validateAuthUrlHost should default to https: scheme when requestOptions.url is missing (fail-safe)', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+
+  // No url on requestOptions — defaults to https: which means http authUrl is rejected
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {} },
+      'http://registry.example.com/token',
+      undefined,
+    ),
+  ).rejects.toThrow(
+    'token endpoint http://registry.example.com/token uses plaintext HTTP while the registry is served over HTTPS; refusing to send credentials over an unencrypted connection',
+  );
+
+  expect(axios).not.toHaveBeenCalled();
+});
+
+test('validateAuthUrlHost should default to empty authScheme when authUrl is malformed (fail-safe rejects under https)', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+
+  // Malformed authUrl — authScheme defaults to '' which !== 'https:' so rejected when request is https
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://registry.example.com/v2/library/nginx/manifests/latest' },
+      'not-a-url',
+      undefined,
+    ),
+  ).rejects.toThrow(
+    'token endpoint not-a-url uses plaintext HTTP while the registry is served over HTTPS; refusing to send credentials over an unencrypted connection',
+  );
+
+  expect(axios).not.toHaveBeenCalled();
+});
+
 test('authenticateBearerFromAuthUrl should trust host from configured registry url when request url is absent', async () => {
   const { default: axios } = await import('axios');
   axios.mockResolvedValue({ data: { token: 'abc123' } });
@@ -3683,4 +3753,143 @@ test('authenticateBearerFromAuthUrl preserves original requestOptions timeout op
 
   // The timeout option from the original requestOptions should be preserved
   expect(result.timeout).toBe(5000);
+});
+
+// --- resolveBearerChallengeOptions tests ---
+
+describe('resolveBearerChallengeOptions', () => {
+  const requestOptionsWithUrl = {
+    url: 'https://registry.example.com/v2/library/nginx/tags/list',
+    headers: { Accept: 'application/json' },
+  };
+  const image = {
+    name: 'library/nginx',
+    registry: { url: 'https://registry.example.com/v2' },
+  };
+
+  test('should perform anonymous token exchange and return options with Bearer header', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: { token: 'anon-token-xyz' } });
+    baseRegistry.configuration = {};
+
+    const result = await (baseRegistry as any).resolveBearerChallengeOptions(
+      requestOptionsWithUrl,
+      'Bearer realm="https://registry.example.com/token",service="registry.example.com",scope="repository:library/nginx:pull"',
+      image,
+    );
+
+    expect(result).toBeDefined();
+    expect(result.headers.Authorization).toBe('Bearer anon-token-xyz');
+    // Token request should include service and scope as query params
+    const calledUrl: string = axios.mock.calls[0][0].url;
+    expect(calledUrl).toContain('service=registry.example.com');
+    expect(calledUrl).toContain('scope=repository');
+    expect(axios.mock.calls[0][0].headers.Authorization).toBeUndefined();
+  });
+
+  test('should perform credentialed token exchange and return options with Bearer header', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: { token: 'cred-token-abc' } });
+    baseRegistry.configuration = { login: 'user', password: 'pass' };
+
+    const result = await (baseRegistry as any).resolveBearerChallengeOptions(
+      requestOptionsWithUrl,
+      'Bearer realm="https://registry.example.com/token",service="registry.example.com"',
+      image,
+    );
+
+    expect(result).toBeDefined();
+    expect(result.headers.Authorization).toBe('Bearer cred-token-abc');
+    // Token request should use Basic credentials
+    expect(axios.mock.calls[0][0].headers.Authorization).toMatch(/^Basic /);
+  });
+
+  test('should return undefined for non-Bearer WWW-Authenticate header', async () => {
+    const { default: axios } = await import('axios');
+    baseRegistry.configuration = {};
+
+    const result = await (baseRegistry as any).resolveBearerChallengeOptions(
+      requestOptionsWithUrl,
+      'Basic realm="registry.example.com"',
+      image,
+    );
+
+    expect(result).toBeUndefined();
+    expect(axios).not.toHaveBeenCalled();
+  });
+
+  test('should return undefined for undefined WWW-Authenticate header', async () => {
+    const { default: axios } = await import('axios');
+    baseRegistry.configuration = {};
+
+    const result = await (baseRegistry as any).resolveBearerChallengeOptions(
+      requestOptionsWithUrl,
+      undefined,
+      image,
+    );
+
+    expect(result).toBeUndefined();
+    expect(axios).not.toHaveBeenCalled();
+  });
+
+  test('should return undefined when realm host is different from request host (untrusted)', async () => {
+    const { default: axios } = await import('axios');
+    baseRegistry.configuration = {};
+
+    // Realm host (attacker.internal) does not match request host (registry.example.com)
+    const result = await (baseRegistry as any).resolveBearerChallengeOptions(
+      requestOptionsWithUrl,
+      'Bearer realm="https://attacker.internal/token",service="registry.example.com"',
+      image,
+    );
+
+    expect(result).toBeUndefined();
+    // Axios must NOT have been called — the security guard prevented the exchange
+    expect(axios).not.toHaveBeenCalled();
+  });
+
+  test('should return undefined when token fetch fails', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockRejectedValue(new Error('network timeout'));
+    baseRegistry.configuration = {};
+
+    const result = await (baseRegistry as any).resolveBearerChallengeOptions(
+      requestOptionsWithUrl,
+      'Bearer realm="https://registry.example.com/token"',
+      image,
+    );
+
+    expect(result).toBeUndefined();
+  });
+
+  test('should return undefined for malformed realm URL', async () => {
+    const { default: axios } = await import('axios');
+    baseRegistry.configuration = {};
+
+    const result = await (baseRegistry as any).resolveBearerChallengeOptions(
+      requestOptionsWithUrl,
+      'Bearer realm="not a valid url %%$$"',
+      image,
+    );
+
+    expect(result).toBeUndefined();
+    expect(axios).not.toHaveBeenCalled();
+  });
+
+  test('should log debug message when falling back on any failure', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockRejectedValue(new Error('some-fetch-error'));
+    baseRegistry.configuration = {};
+    const debugSpy = vi.fn();
+    baseRegistry.log = { debug: debugSpy, warn: vi.fn(), info: vi.fn(), error: vi.fn() } as any;
+
+    const result = await (baseRegistry as any).resolveBearerChallengeOptions(
+      requestOptionsWithUrl,
+      'Bearer realm="https://registry.example.com/token"',
+      image,
+    );
+
+    expect(result).toBeUndefined();
+    expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('falling back'));
+  });
 });

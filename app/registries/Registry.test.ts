@@ -2381,4 +2381,275 @@ describe('callRegistry', () => {
       }),
     );
   });
+
+  // --- Bearer challenge retry tests ---
+
+  describe('Bearer challenge retry (resolveBearerChallengeOptions hook)', () => {
+    test('should retry once when first request returns 401 with Bearer challenge and hook returns options', async () => {
+      const { default: axios } = await import('axios');
+      const { acquireToken } = await import('./token-bucket.js');
+      vi.clearAllMocks();
+
+      // First call: 401 with a www-authenticate Bearer header
+      const err401 = new Error('Request failed with status code 401');
+      (err401 as any).response = {
+        status: 401,
+        headers: {
+          'www-authenticate':
+            'Bearer realm="https://registry.example.com/token",service="registry.example.com"',
+        },
+      };
+
+      // Second call (retry): success
+      axios.mockRejectedValueOnce(err401).mockResolvedValueOnce({
+        data: { tags: ['v1'] },
+        headers: {},
+        status: 200,
+      });
+
+      const registryMocked = createMockedRegistry();
+      // Override resolveBearerChallengeOptions to return augmented options (simulating BaseRegistry)
+      const retryOptions = { url: 'url', method: 'get', headers: { Authorization: 'Bearer tok' } };
+      vi.spyOn(registryMocked as any, 'resolveBearerChallengeOptions').mockResolvedValue(
+        retryOptions,
+      );
+
+      const result = await registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' });
+
+      expect(result).toEqual({ tags: ['v1'] });
+      // axios called twice: original + retry
+      expect(axios).toHaveBeenCalledTimes(2);
+      // acquireToken called twice: once for each request
+      expect(acquireToken).toHaveBeenCalledTimes(2);
+    });
+
+    test('should return full AxiosResponse-shaped object on retry success when resolveWithFullResponse is true', async () => {
+      const { default: axios } = await import('axios');
+      const { acquireToken } = await import('./token-bucket.js');
+      vi.clearAllMocks();
+
+      // First call: 401 with a www-authenticate Bearer header
+      const err401 = new Error('Request failed with status code 401');
+      (err401 as any).response = {
+        status: 401,
+        headers: {
+          'www-authenticate':
+            'Bearer realm="https://registry.example.com/token",service="registry.example.com"',
+        },
+      };
+
+      // Second call (retry): success
+      axios.mockRejectedValueOnce(err401).mockResolvedValueOnce({
+        data: { tags: ['v2'] },
+        headers: { 'content-type': 'application/json' },
+        status: 200,
+      });
+
+      const registryMocked = createMockedRegistry();
+      const retryOptions = { url: 'url', method: 'get', headers: { Authorization: 'Bearer tok' } };
+      vi.spyOn(registryMocked as any, 'resolveBearerChallengeOptions').mockResolvedValue(
+        retryOptions,
+      );
+
+      const result = await registryMocked.callRegistry({
+        image: {},
+        url: 'url',
+        method: 'get',
+        resolveWithFullResponse: true,
+      });
+
+      // Should return the full response envelope, not just data
+      expect(result).toEqual({
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+        data: { tags: ['v2'] },
+      });
+      expect(axios).toHaveBeenCalledTimes(2);
+      expect(acquireToken).toHaveBeenCalledTimes(2);
+    });
+
+    test('should rethrow original 401 when hook returns undefined (no retry)', async () => {
+      const { default: axios } = await import('axios');
+      vi.clearAllMocks();
+
+      const err401 = new Error('Request failed with status code 401');
+      (err401 as any).response = {
+        status: 401,
+        headers: { 'www-authenticate': 'Bearer realm="https://registry.example.com/token"' },
+      };
+      axios.mockRejectedValue(err401);
+
+      const registryMocked = createMockedRegistry();
+      // Base Registry.resolveBearerChallengeOptions returns undefined by default
+      // (no override needed — it is the default no-op)
+
+      await expect(
+        registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+      ).rejects.toThrow('Request failed with status code 401');
+
+      // axios called exactly once — no retry
+      expect(axios).toHaveBeenCalledTimes(1);
+    });
+
+    test('should not loop when retry also returns 401 (alreadyRetried guard)', async () => {
+      const { default: axios } = await import('axios');
+      vi.clearAllMocks();
+
+      // Both requests return 401
+      const err401a = new Error('Request failed with status code 401 (first)');
+      (err401a as any).response = {
+        status: 401,
+        headers: {
+          'www-authenticate': 'Bearer realm="https://registry.example.com/token"',
+        },
+      };
+      const err401b = new Error('Request failed with status code 401 (retry)');
+      (err401b as any).response = {
+        status: 401,
+        headers: {
+          'www-authenticate': 'Bearer realm="https://registry.example.com/token"',
+        },
+      };
+
+      axios.mockRejectedValueOnce(err401a).mockRejectedValueOnce(err401b);
+
+      const registryMocked = createMockedRegistry();
+      const retryOptions = { url: 'url', method: 'get', headers: { Authorization: 'Bearer tok' } };
+      vi.spyOn(registryMocked as any, 'resolveBearerChallengeOptions').mockResolvedValue(
+        retryOptions,
+      );
+
+      // Should reject with the RETRY error (the second 401), not loop
+      await expect(
+        registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+      ).rejects.toThrow('Request failed with status code 401 (retry)');
+
+      // axios called exactly twice (original + one retry), not more
+      expect(axios).toHaveBeenCalledTimes(2);
+    });
+
+    test('should rethrow non-401 error immediately without calling hook', async () => {
+      const { default: axios } = await import('axios');
+      vi.clearAllMocks();
+
+      const err500 = new Error('Request failed with status code 500');
+      (err500 as any).response = { status: 500 };
+      axios.mockRejectedValue(err500);
+
+      const registryMocked = createMockedRegistry();
+      const hookSpy = vi.spyOn(registryMocked as any, 'resolveBearerChallengeOptions');
+
+      await expect(
+        registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+      ).rejects.toThrow('Request failed with status code 500');
+
+      // Hook must NOT have been called for non-401 errors
+      expect(hookSpy).not.toHaveBeenCalled();
+      expect(axios).toHaveBeenCalledTimes(1);
+    });
+
+    test('should rethrow non-Error rejection without calling hook', async () => {
+      const { default: axios } = await import('axios');
+      vi.clearAllMocks();
+
+      axios.mockRejectedValue('plain-string-error');
+
+      const registryMocked = createMockedRegistry();
+      const hookSpy = vi.spyOn(registryMocked as any, 'resolveBearerChallengeOptions');
+
+      await expect(
+        registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+      ).rejects.toBe('plain-string-error');
+
+      expect(hookSpy).not.toHaveBeenCalled();
+    });
+
+    test('should rethrow 401 without www-authenticate header when hook returns undefined', async () => {
+      const { default: axios } = await import('axios');
+      vi.clearAllMocks();
+
+      const err401 = new Error('Request failed with status code 401');
+      (err401 as any).response = { status: 401, headers: {} };
+      axios.mockRejectedValue(err401);
+
+      const registryMocked = createMockedRegistry();
+      // hook returns undefined (default)
+      await expect(
+        registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+      ).rejects.toThrow('Request failed with status code 401');
+
+      expect(axios).toHaveBeenCalledTimes(1);
+    });
+
+    test('resolveBearerChallengeOptions default implementation returns undefined', async () => {
+      const registryMocked = createMockedRegistry();
+      const result = await (registryMocked as any).resolveBearerChallengeOptions(
+        { url: 'url' },
+        'Bearer realm="https://auth.example.com/token"',
+        {},
+      );
+      expect(result).toBeUndefined();
+    });
+
+    test('should observe metrics on retry success path', async () => {
+      const { default: axios } = await import('axios');
+      observeSpy.mockClear();
+      vi.clearAllMocks();
+      observeSpy.mockClear();
+
+      const err401 = new Error('Request failed with status code 401');
+      (err401 as any).response = {
+        status: 401,
+        headers: { 'www-authenticate': 'Bearer realm="https://registry.example.com/token"' },
+      };
+      axios.mockRejectedValueOnce(err401).mockResolvedValueOnce({
+        data: { payload: 'ok' },
+        headers: {},
+        status: 200,
+      });
+
+      const registryMocked = createMockedRegistry();
+      registryMocked.type = 'hub';
+      registryMocked.name = 'test';
+      const retryOptions = { url: 'url', method: 'get', headers: { Authorization: 'Bearer tok' } };
+      vi.spyOn(registryMocked as any, 'resolveBearerChallengeOptions').mockResolvedValue(
+        retryOptions,
+      );
+
+      await registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' });
+
+      // Metrics observed exactly once (on retry success)
+      expect(observeSpy).toHaveBeenCalledTimes(1);
+      expect(observeSpy).toHaveBeenCalledWith({ type: 'hub', name: 'test' }, expect.any(Number));
+    });
+
+    test('should observe metrics on retry failure path', async () => {
+      const { default: axios } = await import('axios');
+      observeSpy.mockClear();
+
+      const err401 = new Error('Request failed with status code 401');
+      (err401 as any).response = {
+        status: 401,
+        headers: { 'www-authenticate': 'Bearer realm="https://registry.example.com/token"' },
+      };
+      const err401b = new Error('still 401');
+      (err401b as any).response = { status: 401 };
+      axios.mockRejectedValueOnce(err401).mockRejectedValueOnce(err401b);
+
+      const registryMocked = createMockedRegistry();
+      registryMocked.type = 'hub';
+      registryMocked.name = 'test';
+      const retryOptions = { url: 'url', method: 'get', headers: { Authorization: 'Bearer tok' } };
+      vi.spyOn(registryMocked as any, 'resolveBearerChallengeOptions').mockResolvedValue(
+        retryOptions,
+      );
+
+      await expect(
+        registryMocked.callRegistry({ image: {}, url: 'url', method: 'get' }),
+      ).rejects.toThrow('still 401');
+
+      // Metrics observed exactly once (on retry error path)
+      expect(observeSpy).toHaveBeenCalledTimes(1);
+    });
+  });
 });
