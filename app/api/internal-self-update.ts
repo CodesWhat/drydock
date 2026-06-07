@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import type { Request, Response } from 'express';
 import express from 'express';
 import {
+  type ExpiredContainerUpdateOperationPhase,
   type FailedContainerUpdateOperationPhase,
   isTerminalContainerUpdateOperationPhaseForStatus,
   isTerminalContainerUpdateOperationStatus,
@@ -144,6 +145,13 @@ function applyFinalizeTerminalPatch(body: FinalizeSelfUpdateRequest): void {
       updateOperationStore.markOperationTerminal(body.operationId, {
         status: 'failed',
         ...(body.phase ? { phase: body.phase as FailedContainerUpdateOperationPhase } : {}),
+        ...lastErrorPatch,
+      });
+      return;
+    case 'expired':
+      updateOperationStore.markOperationTerminal(body.operationId, {
+        status: 'expired',
+        ...(body.phase ? { phase: body.phase as ExpiredContainerUpdateOperationPhase } : {}),
         ...lastErrorPatch,
       });
       return;

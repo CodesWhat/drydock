@@ -301,6 +301,73 @@ describe('update-operation batch completion', () => {
     expect(failedItem.status).toBe('failed');
   });
 
+  test('omits expired operations from batch completion counts and items', () => {
+    const documents: any[] = [];
+    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
+
+    const batchId = 'batch-success-expired';
+
+    const op1 = updateOperation.insertOperation({
+      containerName: 'nginx',
+      containerId: 'c-1',
+      status: 'in-progress',
+      phase: 'prepare',
+      batchId,
+    } as any);
+
+    const op2 = updateOperation.insertOperation({
+      containerName: 'redis',
+      containerId: 'c-2',
+      status: 'in-progress',
+      phase: 'prepare',
+      batchId,
+    } as any);
+
+    updateOperation.markOperationTerminal(op1.id, { status: 'succeeded' });
+    updateOperation.markOperationTerminal(op2.id, { status: 'expired' });
+
+    expect(mockEmitBatchUpdateCompleted).toHaveBeenCalledTimes(1);
+
+    const [payload] = mockEmitBatchUpdateCompleted.mock.calls[0];
+    expect(payload.total).toBe(1);
+    expect(payload.succeeded).toBe(1);
+    expect(payload.failed).toBe(0);
+    expect(payload.items).toEqual([
+      expect.objectContaining({
+        operationId: op1.id,
+        status: 'succeeded',
+      }),
+    ]);
+  });
+
+  test('does not emit batch-update-completed when every batch operation expires silently', () => {
+    const documents: any[] = [];
+    updateOperation.createCollections(createDocumentBackedDb(documents) as any);
+
+    const batchId = 'batch-all-expired';
+
+    const op1 = updateOperation.insertOperation({
+      containerName: 'nginx',
+      containerId: 'c-1',
+      status: 'in-progress',
+      phase: 'prepare',
+      batchId,
+    } as any);
+
+    const op2 = updateOperation.insertOperation({
+      containerName: 'redis',
+      containerId: 'c-2',
+      status: 'in-progress',
+      phase: 'prepare',
+      batchId,
+    } as any);
+
+    updateOperation.markOperationTerminal(op1.id, { status: 'expired' });
+    updateOperation.markOperationTerminal(op2.id, { status: 'expired' });
+
+    expect(mockEmitBatchUpdateCompleted).not.toHaveBeenCalled();
+  });
+
   test('durationMs in batch payload is a non-negative number', () => {
     const documents: any[] = [];
     updateOperation.createCollections(createDocumentBackedDb(documents) as any);

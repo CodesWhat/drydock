@@ -43,6 +43,8 @@ interface UpdateOperationBase {
   oldContainerWasRunning?: boolean;
   oldContainerStopped?: boolean;
   newContainerId?: string;
+  agent?: string;
+  watcher?: string;
   fromVersion?: string;
   toVersion?: string;
   targetImage?: string;
@@ -138,6 +140,7 @@ type UpdateOperation =
   | ExpiredUpdateOperation;
 
 type ActiveUpdateOperation = QueuedUpdateOperation | InProgressUpdateOperation;
+type BatchCompletionItemStatus = 'succeeded' | 'failed';
 
 type MutableUpdateOperationFields = Pick<
   UpdateOperationBase,
@@ -151,6 +154,8 @@ type MutableUpdateOperationFields = Pick<
   | 'oldContainerWasRunning'
   | 'oldContainerStopped'
   | 'newContainerId'
+  | 'agent'
+  | 'watcher'
   | 'fromVersion'
   | 'toVersion'
   | 'targetImage'
@@ -401,6 +406,18 @@ function emitTerminalLifecycleEvent(operation: UpdateOperation, batchId?: string
       // here would surface a false "update failed" notification. See issue #410.
       return;
   }
+}
+
+function getBatchCompletionItemStatus(
+  status: ContainerUpdateOperationStatus,
+): BatchCompletionItemStatus | undefined {
+  if (status === 'succeeded') {
+    return 'succeeded';
+  }
+  if (status === 'failed' || status === 'rolled-back') {
+    return 'failed';
+  }
+  return undefined;
 }
 
 function expireActiveOperationWithMessage(
@@ -823,7 +840,7 @@ export function markOperationTerminal(
           operationId: string;
           containerId: string;
           containerName: string;
-          status: 'succeeded' | 'failed';
+          status: BatchCompletionItemStatus;
         }> = [];
 
         for (const memberId of memberIds) {
@@ -832,6 +849,10 @@ export function markOperationTerminal(
           const op =
             memberId === id ? (updated ?? getOperationById(memberId)) : getOperationById(memberId);
           if (!op) {
+            continue;
+          }
+          const opStatus = getBatchCompletionItemStatus(op.status);
+          if (!opStatus) {
             continue;
           }
           const createdAtMs = Date.parse(op.createdAt);
@@ -844,8 +865,6 @@ export function markOperationTerminal(
               : 0;
           totalDurationMs += opDuration;
 
-          const opStatus: 'succeeded' | 'failed' =
-            op.status === 'succeeded' ? 'succeeded' : 'failed';
           items.push({
             operationId: op.id,
             containerId: typeof op.containerId === 'string' ? op.containerId : '',
@@ -857,15 +876,17 @@ export function markOperationTerminal(
         const succeededCount = items.filter((i) => i.status === 'succeeded').length;
         const failedCount = items.filter((i) => i.status === 'failed').length;
 
-        void emitBatchUpdateCompleted({
-          batchId: preBatchId,
-          total: items.length,
-          succeeded: succeededCount,
-          failed: failedCount,
-          durationMs: totalDurationMs,
-          items,
-          timestamp: new Date().toISOString(),
-        });
+        if (items.length > 0) {
+          void emitBatchUpdateCompleted({
+            batchId: preBatchId,
+            total: items.length,
+            succeeded: succeededCount,
+            failed: failedCount,
+            durationMs: totalDurationMs,
+            items,
+            timestamp: new Date().toISOString(),
+          });
+        }
       }
     }
   }
@@ -885,8 +906,30 @@ export interface ContainerIdentityFilter {
   watcher?: string;
 }
 
+type OperationIdentitySource = {
+  agent?: string;
+  watcher?: string;
+  container?: { agent?: string; watcher?: string };
+};
+
+function getOperationIdentity(op: OperationIdentitySource): {
+  modern: boolean;
+  agent?: string;
+  watcher?: string;
+} {
+  if (op.container || typeof op.agent === 'string' || typeof op.watcher === 'string') {
+    return {
+      modern: true,
+      agent: typeof op.container?.agent === 'string' ? op.container.agent : op.agent,
+      watcher: typeof op.container?.watcher === 'string' ? op.container.watcher : op.watcher,
+    };
+  }
+
+  return { modern: false };
+}
+
 function matchesIdentityFilter(
-  op: { container?: { agent?: string; watcher?: string } },
+  op: OperationIdentitySource,
   identity: ContainerIdentityFilter,
 ): boolean {
   // No watcher supplied — skip the filter rather than reject valid ops.
@@ -894,15 +937,36 @@ function matchesIdentityFilter(
     return true;
   }
 
-  // Legacy row without a container snapshot: accept as backward-compat fallback.
-  if (!op.container) {
+  const operationIdentity = getOperationIdentity(op);
+
+  // Legacy row without any persisted identity: accept as backward-compat fallback.
+  if (!operationIdentity.modern) {
     return true;
   }
 
   // Modern row: both agent and watcher must match.
   return (
-    (op.container.agent ?? '') === (identity.agent ?? '') &&
-    op.container.watcher === identity.watcher
+    (operationIdentity.agent ?? '') === (identity.agent ?? '') &&
+    operationIdentity.watcher === identity.watcher
+  );
+}
+
+function matchesStrictIdentityFilter(
+  op: OperationIdentitySource,
+  identity: ContainerIdentityFilter,
+): boolean {
+  if (!identity.watcher) {
+    return true;
+  }
+
+  const operationIdentity = getOperationIdentity(op);
+  if (!operationIdentity.modern) {
+    return false;
+  }
+
+  return (
+    (operationIdentity.agent ?? '') === (identity.agent ?? '') &&
+    operationIdentity.watcher === identity.watcher
   );
 }
 
@@ -1076,6 +1140,7 @@ export function getOperationsByContainerName(containerName: string): UpdateOpera
 export function getRecentTerminalSucceededOperationByContainerName(
   containerName: string,
   sinceMs: number,
+  identity?: ContainerIdentityFilter,
 ): SucceededUpdateOperation | undefined {
   if (!updateOperationCollection) {
     return undefined;
@@ -1091,6 +1156,14 @@ export function getRecentTerminalSucceededOperationByContainerName(
         op.status === 'succeeded' &&
         typeof op.completedAt === 'string' &&
         Date.parse(op.completedAt) >= cutoffMs,
+    )
+    .filter(
+      (op) =>
+        !identity ||
+        matchesStrictIdentityFilter(
+          op as { container?: { agent?: string; watcher?: string } },
+          identity,
+        ),
     )
     .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
 

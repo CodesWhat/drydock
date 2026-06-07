@@ -288,6 +288,22 @@ describe('Agent API index', () => {
       expect(mockApp.use).toHaveBeenCalled();
     });
 
+    test('should register rate limiter before JSON parsing for authenticated API routes', async () => {
+      process.env.DD_AGENT_SECRET = 'secret';
+      await init();
+
+      const useOrder = mockApp.use.mock.calls.map(([middleware]) => middleware);
+      const limiterIndex = useOrder.indexOf(mockRateLimitMiddleware);
+      const jsonParserIndex = useOrder.indexOf('json-middleware');
+      const authIndex = useOrder.indexOf(authenticate);
+
+      expect(limiterIndex).toBeGreaterThanOrEqual(0);
+      expect(jsonParserIndex).toBeGreaterThanOrEqual(0);
+      expect(authIndex).toBeGreaterThanOrEqual(0);
+      expect(limiterIndex).toBeLessThan(jsonParserIndex);
+      expect(limiterIndex).toBeLessThan(authIndex);
+    });
+
     test('should register container logs route', async () => {
       process.env.DD_AGENT_SECRET = 'secret';
       await init();

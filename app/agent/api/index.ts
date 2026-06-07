@@ -119,7 +119,6 @@ export async function init() {
   const app = express();
   app.disable('x-powered-by');
 
-  app.use(express.json({ limit: '256kb' }));
   if (configuration.cors.enabled) {
     app.use(
       cors({
@@ -161,6 +160,8 @@ export async function init() {
   // Rate limiter applied to every route registered after this point (the authenticated
   // routes). /health is registered above and intentionally stays unthrottled for probes.
   app.use(agentLimiter);
+
+  app.use(express.json({ limit: '256kb' }));
 
   // Auth Middleware
   app.use(authenticate);
