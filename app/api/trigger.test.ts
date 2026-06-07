@@ -782,10 +782,17 @@ describe('Trigger Router', () => {
       const res = createMockResponse();
 
       await handler(req, res);
+      await flushAcceptedUpdateWork();
 
       // Response must be 202 with an operationId (not 200 {})
       expect(res.status).toHaveBeenCalledWith(202);
       expect(res.json).toHaveBeenCalledWith({ operationId: expect.any(String) });
+
+      // The update must dispatch exactly once — on the agent — and never locally
+      // on the controller. requestContainerUpdate would also have run the local
+      // trigger, racing two attempts on the same operationId (bogus 409/500).
+      expect(mockTrigger.trigger).not.toHaveBeenCalled();
+      expect(mockAgentClient.runRemoteTrigger).toHaveBeenCalledTimes(1);
 
       // runRemoteTrigger must receive a runtimeContext containing the operationId
       const operationId = (res.json.mock.calls[0][0] as { operationId: string }).operationId;
@@ -815,8 +822,6 @@ describe('Trigger Router', () => {
         image: { name: 'nginx' },
         updateAvailable: true,
       });
-      const spy = vi.spyOn(requestUpdate, 'requestContainerUpdate');
-
       const handler = getRemoteTriggerHandler();
       const req = {
         params: { agent: 'my-agent', type: 'docker', name: 'update' },
@@ -825,11 +830,14 @@ describe('Trigger Router', () => {
       const res = createMockResponse();
 
       await handler(req, res);
-      spy.mockRestore();
+      await flushAcceptedUpdateWork();
 
       // Caller-supplied operationId must be honored in the response
       expect(res.status).toHaveBeenCalledWith(202);
       expect(res.json).toHaveBeenCalledWith({ operationId: 'caller-remote-op-uuid' });
+
+      // Single dispatch on the agent only — no local controller dispatch.
+      expect(mockTrigger.trigger).not.toHaveBeenCalled();
 
       // And forwarded to runRemoteTrigger as runtimeContext
       expect(mockAgentClient.runRemoteTrigger).toHaveBeenCalledWith(
@@ -910,9 +918,9 @@ describe('Trigger Router', () => {
         updateAvailable: true,
       });
       const spy = vi
-        .spyOn(requestUpdate, 'requestContainerUpdate')
+        .spyOn(requestUpdate, 'enqueueContainerUpdate')
         .mockResolvedValueOnce({ operationId: 'op-no-trigger' } as Awaited<
-          ReturnType<typeof requestUpdate.requestContainerUpdate>
+          ReturnType<typeof requestUpdate.enqueueContainerUpdate>
         >);
 
       const handler = getRemoteTriggerHandler();
@@ -925,7 +933,7 @@ describe('Trigger Router', () => {
       await handler(req, res);
 
       // Still creates a controller-side queued row and returns 202, but
-      // requestContainerUpdate is called WITHOUT a `trigger` field.
+      // enqueueContainerUpdate is called WITHOUT a `trigger` field.
       expect(res.status).toHaveBeenCalledWith(202);
       expect(res.json).toHaveBeenCalledWith({ operationId: 'op-no-trigger' });
       expect(spy).toHaveBeenCalledWith(
@@ -935,7 +943,7 @@ describe('Trigger Router', () => {
       spy.mockRestore();
     });
 
-    test('should surface UpdateRequestError from requestContainerUpdate for remote update triggers', async () => {
+    test('should surface UpdateRequestError from enqueueContainerUpdate for remote update triggers', async () => {
       const mockAgentClient = {
         runRemoteTrigger: vi.fn().mockResolvedValue(undefined),
       };
@@ -954,7 +962,7 @@ describe('Trigger Router', () => {
         updateAvailable: true,
       });
       const spy = vi
-        .spyOn(requestUpdate, 'requestContainerUpdate')
+        .spyOn(requestUpdate, 'enqueueContainerUpdate')
         .mockRejectedValueOnce(new requestUpdate.UpdateRequestError(409, 'update in progress'));
 
       const handler = getRemoteTriggerHandler();
@@ -973,7 +981,7 @@ describe('Trigger Router', () => {
     });
 
     // Regression tests for issue #410 — false "update failed" after successful auto-update,
-    // focused on the requestContainerUpdate → agentClient.runRemoteTrigger ordering.
+    // focused on the enqueueContainerUpdate → agentClient.runRemoteTrigger ordering.
 
     test('#410 GUARD: agent-mismatch hard blocker causes runRemoteTrigger to fail fast (404) and prevents any operation row from being enqueued', async () => {
       // Controller has an unscoped docker trigger (no agent property).
@@ -1023,7 +1031,7 @@ describe('Trigger Router', () => {
       // Must fail fast with 404 (agent-mismatch mapped to HTTP 404 in HARD_BLOCKER_STATUS)
       expect(res.status).toHaveBeenCalledWith(404);
 
-      // The agent's runRemoteTrigger must never be invoked because requestContainerUpdate
+      // The agent's runRemoteTrigger must never be invoked because enqueueContainerUpdate
       // throws before we reach the agentClient call.
       expect(mockAgentClient.runRemoteTrigger).not.toHaveBeenCalled();
 

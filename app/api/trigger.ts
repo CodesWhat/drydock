@@ -7,7 +7,11 @@ import type { Container } from '../model/container.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import Trigger from '../triggers/providers/Trigger.js';
-import { requestContainerUpdate, UpdateRequestError } from '../updates/request-update.js';
+import {
+  enqueueContainerUpdate,
+  requestContainerUpdate,
+  UpdateRequestError,
+} from '../updates/request-update.js';
 import { getErrorMessage } from '../util/error.js';
 import * as component from './component.js';
 import { sendErrorResponse } from './error-response.js';
@@ -253,7 +257,13 @@ async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Respo
       }
 
       const triggerToRun = registry.getState().trigger[`${triggerType}.${triggerName}`];
-      const accepted = await requestContainerUpdate(storedContainer, {
+      // Enqueue (not dispatch) the controller-side operation row so its
+      // operationId can be threaded to the agent, which transitions the row via
+      // its lifecycle events. The update itself runs exactly once on the agent
+      // through runRemoteTrigger below. Using requestContainerUpdate here would
+      // also dispatch the update locally on the controller, racing two attempts
+      // on the same operationId and surfacing bogus 409/500s.
+      const accepted = await enqueueContainerUpdate(storedContainer, {
         ...(triggerToRun
           ? { trigger: triggerToRun as { type: string; trigger: typeof triggerToRun.trigger } }
           : {}),
