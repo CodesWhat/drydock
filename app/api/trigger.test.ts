@@ -976,7 +976,7 @@ describe('Trigger Router', () => {
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
-    test('should return 404 before enqueue when the agent-qualified update trigger is not registered', async () => {
+    test('should return 404 before dispatch when the agent-qualified update trigger is not registered', async () => {
       const mockAgentClient = {
         runRemoteTrigger: vi.fn().mockResolvedValue(undefined),
       };
@@ -989,7 +989,6 @@ describe('Trigger Router', () => {
         image: { name: 'nginx' },
         updateAvailable: true,
       });
-      const enqueueSpy = vi.spyOn(requestUpdate, 'enqueueContainerUpdate');
       const requestSpy = vi.spyOn(requestUpdate, 'requestContainerUpdate');
 
       const handler = getRemoteTriggerHandler();
@@ -1006,11 +1005,9 @@ describe('Trigger Router', () => {
         error: 'Remote update trigger my-agent.docker.update not found',
       });
       expect(requestSpy).not.toHaveBeenCalled();
-      expect(enqueueSpy).not.toHaveBeenCalled();
       expect(mockAgentClient.runRemoteTrigger).not.toHaveBeenCalled();
 
       requestSpy.mockRestore();
-      enqueueSpy.mockRestore();
     });
 
     test('should surface UpdateRequestError from requestContainerUpdate for remote update triggers', async () => {
@@ -1087,7 +1084,6 @@ describe('Trigger Router', () => {
       };
       agent.getAgent.mockReturnValue(mockAgentClient);
 
-      const enqueueSpy = vi.spyOn(requestUpdate, 'enqueueContainerUpdate');
       const requestSpy = vi.spyOn(requestUpdate, 'requestContainerUpdate');
 
       const handler = getRemoteTriggerHandler();
@@ -1104,12 +1100,10 @@ describe('Trigger Router', () => {
         error: 'Route agent agent-a does not own container agent-b.c1',
       });
       expect(requestSpy).not.toHaveBeenCalled();
-      expect(enqueueSpy).not.toHaveBeenCalled();
       expect(remoteAgentTrigger.trigger).not.toHaveBeenCalled();
       expect(mockAgentClient.runRemoteTrigger).not.toHaveBeenCalled();
 
       requestSpy.mockRestore();
-      enqueueSpy.mockRestore();
     });
   });
 });
