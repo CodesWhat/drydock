@@ -1306,6 +1306,73 @@ describe('agenttopicsegment flag', () => {
     });
   });
 
+  // ── Watcher running sensor topic construction ──────────────────────────────
+
+  describe('watcher running sensor topics', () => {
+    test('flag ON — agent watcher running topic includes agent segment', async () => {
+      await hassAgent.updateWatcherSensors({
+        watcher: { name: 'local', agent: 'ml' },
+        isRunning: true,
+      });
+
+      expect(mqttClientAgentMock.publish).toHaveBeenCalledWith(
+        'homeassistant/binary_sensor/topic_agent_ml_local_running/config',
+        expect.stringContaining('"state_topic":"topic/agent/ml/local/running"'),
+        { retain: true },
+      );
+      expect(mqttClientAgentMock.publish).toHaveBeenCalledWith(
+        'topic/agent/ml/local/running',
+        'true',
+        { retain: true },
+      );
+    });
+
+    test('flag OFF — agent watcher running topic preserves legacy layout', async () => {
+      const hassOff = makeHass(false);
+
+      await hassOff.updateWatcherSensors({
+        watcher: { name: 'local', agent: 'ml' },
+        isRunning: true,
+      });
+
+      expect(mqttClientAgentMock.publish).toHaveBeenCalledWith(
+        'homeassistant/binary_sensor/topic_local_running/config',
+        expect.stringContaining('"state_topic":"topic/local/running"'),
+        { retain: true },
+      );
+      expect(mqttClientAgentMock.publish).toHaveBeenCalledWith('topic/local/running', 'true', {
+        retain: true,
+      });
+    });
+
+    test('flag ON — same watcher name across agents publishes distinct running discovery identifiers', async () => {
+      await hassAgent.updateWatcherSensors({
+        watcher: { name: 'local', agent: 'ml' },
+        isRunning: true,
+      });
+      await hassAgent.updateWatcherSensors({
+        watcher: { name: 'local', agent: 'edge' },
+        isRunning: true,
+      });
+
+      const discoveryPayloads = mqttClientAgentMock.publish.mock.calls
+        .filter(([topic]) => topic.startsWith('homeassistant/binary_sensor/'))
+        .map(([topic, payload]) => ({
+          topic,
+          payload: JSON.parse(payload),
+        }));
+
+      expect(discoveryPayloads.map(({ topic }) => topic)).toEqual([
+        'homeassistant/binary_sensor/topic_agent_ml_local_running/config',
+        'homeassistant/binary_sensor/topic_agent_edge_local_running/config',
+      ]);
+      expect(discoveryPayloads.map(({ payload }) => payload.unique_id)).toEqual([
+        'topic_agent_ml_local_running',
+        'topic_agent_edge_local_running',
+      ]);
+    });
+  });
+
   // ── Watcher count scoping ──────────────────────────────────────────────────
 
   describe('watcher count scoping', () => {
@@ -1365,9 +1432,23 @@ describe('agenttopicsegment flag', () => {
       expect(capturedWatcherUpdateCountValue).toBe('1');
     });
 
-    test('flag ON — no-agent container counts use getContainerCount (unchanged path)', async () => {
-      const getContainerCountSpy = vi.spyOn(containerStore, 'getContainerCount').mockReturnValue(5);
-      const getContainersSpy = vi.spyOn(containerStore, 'getContainers');
+    test('flag ON — no-agent watcher counts exclude remote-agent containers', async () => {
+      vi.spyOn(containerStore, 'getContainerCount').mockReturnValue(0);
+      const getContainersSpy = vi.spyOn(containerStore, 'getContainers').mockReturnValue([
+        { id: 'c1', watcher: 'local', agent: undefined, updateAvailable: false },
+        { id: 'c2', watcher: 'local', agent: undefined, updateAvailable: true },
+        { id: 'c3', watcher: 'local', agent: 'edge', updateAvailable: true },
+      ] as any);
+      let capturedWatcherTotalCountValue: string | undefined;
+      let capturedWatcherUpdateCountValue: string | undefined;
+      mqttClientAgentMock.publish.mockImplementation((topic: string, value: string) => {
+        if (topic === 'topic/local/total_count') {
+          capturedWatcherTotalCountValue = value;
+        }
+        if (topic === 'topic/local/update_count') {
+          capturedWatcherUpdateCountValue = value;
+        }
+      });
 
       await hassAgent.updateContainerSensors({
         name: 'nginx',
@@ -1375,13 +1456,9 @@ describe('agenttopicsegment flag', () => {
         agent: undefined,
       });
 
-      // For no-agent container (flag on but agent is undefined), must fall back to getContainerCount
-      expect(getContainerCountSpy).toHaveBeenCalledWith({ watcher: 'local' });
-      // getContainers should NOT be called for watcher count computation
-      const watcherCountCalls = getContainersSpy.mock.calls.filter(
-        ([q]) => q && (q as { watcher?: string }).watcher === 'local',
-      );
-      expect(watcherCountCalls.length).toBe(0);
+      expect(getContainersSpy).toHaveBeenCalledWith({ watcher: 'local' });
+      expect(capturedWatcherTotalCountValue).toBe('2');
+      expect(capturedWatcherUpdateCountValue).toBe('1');
     });
   });
 

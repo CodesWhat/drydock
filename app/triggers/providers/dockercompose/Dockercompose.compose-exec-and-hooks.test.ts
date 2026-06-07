@@ -338,6 +338,96 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('updateContainerWithCompose should remove a created replacement candidate before rollback restore when start fails', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({ name: 'nginx' });
+    const failedCandidate = {
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+    };
+    const restoredContainer = {
+      start: vi.fn().mockResolvedValue(undefined),
+    };
+
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const createContainerSpy = vi
+      .spyOn(trigger, 'createContainer')
+      .mockResolvedValueOnce(failedCandidate as any)
+      .mockResolvedValueOnce(restoredContainer as any);
+    vi.spyOn(trigger, 'startContainer')
+      .mockRejectedValueOnce(new Error('start failed'))
+      .mockResolvedValueOnce(undefined);
+
+    let thrownError: any;
+    try {
+      await trigger.updateContainerWithCompose('/opt/drydock/test/stack.yml', 'nginx', container);
+    } catch (error) {
+      thrownError = error;
+    }
+
+    expect(thrownError).toBeInstanceOf(Error);
+    expect(thrownError.message).toBe('start failed');
+    expect(thrownError.composeRollbackOutcome).toEqual({
+      status: 'rolled-back',
+      phase: 'rolled-back',
+      rollbackReason: 'compose_runtime_refresh_failed',
+      lastError: 'start failed',
+    });
+    expect(failedCandidate.remove).toHaveBeenCalledWith({ force: true });
+    expect(failedCandidate.remove.mock.invocationCallOrder[0]).toBeLessThan(
+      createContainerSpy.mock.invocationCallOrder[1],
+    );
+  });
+
+  test('updateContainerWithCompose should remove a network-attach replacement candidate before rollback restore', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({ id: 'old-id', name: 'nginx' });
+    const currentContainer = makeDockerContainerHandle({ id: 'old-id', name: 'nginx' });
+    const failedCandidate = {
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+    };
+    const restoredContainer = {
+      start: vi.fn().mockResolvedValue(undefined),
+    };
+    const connect = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('network attach failed'))
+      .mockResolvedValueOnce(undefined);
+
+    mockDockerApi.getContainer.mockReturnValueOnce(currentContainer);
+    mockDockerApi.getNetwork.mockReturnValue({ connect });
+    mockDockerApi.createContainer
+      .mockResolvedValueOnce(failedCandidate as any)
+      .mockResolvedValueOnce(restoredContainer as any);
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'inspectContainer').mockResolvedValue({
+      Id: 'old-id',
+      Name: '/nginx',
+      Config: { Image: 'nginx:1.0.0', Env: [], Labels: {} },
+      HostConfig: { AutoRemove: false, NetworkMode: 'bridge' },
+      NetworkSettings: {
+        Networks: {
+          bridge: { Aliases: ['old-id'] },
+          sidecar: { Aliases: ['old-id'] },
+        },
+      },
+      State: { Running: true },
+    } as any);
+    vi.spyOn(trigger, 'startContainer').mockResolvedValue(undefined);
+
+    await expect(
+      trigger.updateContainerWithCompose('/opt/drydock/test/stack.yml', 'nginx', container),
+    ).rejects.toThrow('network attach failed');
+
+    expect(failedCandidate.remove).toHaveBeenCalledWith({ force: true });
+    expect(failedCandidate.remove.mock.invocationCallOrder[0]).toBeLessThan(
+      mockDockerApi.createContainer.mock.invocationCallOrder[1],
+    );
+  });
+
   test('[#391] updateContainerWithCompose should rethrow original error even when rollback restore also fails', async () => {
     trigger.configuration.dryrun = false;
     const container = makeContainer({ name: 'nginx' });
@@ -413,7 +503,7 @@ describe('Dockercompose Trigger', () => {
 
     await expect(
       trigger.updateContainerWithCompose('/opt/drydock/test/stack.yml', 'nginx', container),
-    ).rejects.toThrow('is not compatible with host architecture');
+    ).rejects.toThrow('is not compatible with Docker daemon architecture');
 
     expect(stopContainerSpy).not.toHaveBeenCalled();
     expect(removeContainerSpy).not.toHaveBeenCalled();
@@ -464,10 +554,28 @@ describe('Dockercompose Trigger', () => {
     ).resolves.toBeUndefined();
   });
 
+  test('verifyPulledImageCompatibility compares against the Docker daemon architecture for remote watchers', async () => {
+    const remoteDockerArch = process.arch === 'x64' ? 'arm64' : 'amd64';
+    const remoteDaemonArch = remoteDockerArch === 'amd64' ? 'x86_64' : remoteDockerArch;
+    const remoteApi = {
+      modem: { socketPath: '/var/run/docker.sock' },
+      info: vi.fn().mockResolvedValue({ Architecture: remoteDaemonArch }),
+      getImage: vi.fn().mockReturnValue({
+        inspect: vi.fn().mockResolvedValue({ Architecture: remoteDockerArch, Os: 'linux' }),
+      }),
+    } as any;
+
+    await expect(
+      trigger.verifyPulledImageCompatibility(remoteApi, 'nginx:1.1.0', mockLog),
+    ).resolves.toBeUndefined();
+  });
+
   test('[#391] verifyPulledImageCompatibility should log compatibility on successful check', async () => {
     const hostCompatibleArch = process.arch === 'x64' ? 'amd64' : process.arch;
+    const hostDaemonArch = hostCompatibleArch === 'amd64' ? 'x86_64' : hostCompatibleArch;
     const compatibleApi = {
       modem: { socketPath: '/var/run/docker.sock' },
+      info: vi.fn().mockResolvedValue({ Architecture: hostDaemonArch }),
       getImage: vi.fn().mockReturnValue({
         inspect: vi.fn().mockResolvedValue({ Architecture: hostCompatibleArch, Os: 'linux' }),
       }),
@@ -613,6 +721,248 @@ describe('Dockercompose Trigger', () => {
     );
     expect(pullImageSpy).not.toHaveBeenCalled();
     expect(createContainerSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('recreateContainer should restore original compose text when runtime refresh fails and rollback succeeds', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({
+      name: 'nginx',
+      labels: {
+        'dd.compose.file': '/opt/drydock/test/stack.yml',
+        'com.docker.compose.service': 'nginx',
+      },
+    });
+    const composeFileContent = [
+      'services:',
+      '  nginx:',
+      '    # existing comment',
+      '    image: nginx:1.1.0 # old image',
+      '',
+    ].join('\n');
+    const failedCandidate = {
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+    };
+    const restoredContainer = {
+      start: vi.fn().mockResolvedValue(undefined),
+    };
+
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+    );
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    const createContainerSpy = vi
+      .spyOn(trigger, 'createContainer')
+      .mockResolvedValueOnce(failedCandidate as any)
+      .mockResolvedValueOnce(restoredContainer as any);
+    vi.spyOn(trigger, 'startContainer')
+      .mockRejectedValueOnce(new Error('runtime refresh failed'))
+      .mockResolvedValueOnce(undefined);
+
+    let thrownError: any;
+    try {
+      await trigger.recreateContainer(
+        mockDockerApi,
+        {
+          State: { Running: true },
+          Config: { Image: 'nginx:1.1.0' },
+        },
+        'nginx:1.0.0',
+        container,
+        mockLog,
+      );
+    } catch (error) {
+      thrownError = error;
+    }
+
+    expect(thrownError).toBeInstanceOf(Error);
+    expect(thrownError.message).toBe('runtime refresh failed');
+    expect(thrownError.composeRollbackOutcome).toEqual({
+      status: 'rolled-back',
+      phase: 'rolled-back',
+      rollbackReason: 'compose_runtime_refresh_failed',
+      lastError: 'runtime refresh failed',
+    });
+    expect(createContainerSpy).toHaveBeenCalledTimes(2);
+    expect(writeComposeFileSpy.mock.calls).toEqual([
+      ['/opt/drydock/test/stack.yml', expect.stringContaining('nginx:1.0.0')],
+      ['/opt/drydock/test/stack.yml', composeFileContent],
+    ]);
+  });
+
+  test('recreateContainer should report rollback-failed when compose text restore fails', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({
+      name: 'nginx',
+      labels: {
+        'dd.compose.file': '/opt/drydock/test/stack.yml',
+        'com.docker.compose.service': 'nginx',
+      },
+    });
+    const composeFileContent = [
+      'services:',
+      '  nginx:',
+      '    # existing comment',
+      '    image: nginx:1.1.0 # old image',
+      '',
+    ].join('\n');
+    const failedCandidate = {
+      stop: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue(undefined),
+    };
+    const restoredContainer = {
+      start: vi.fn().mockResolvedValue(undefined),
+    };
+
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(
+      makeCompose({ nginx: { image: 'nginx:1.1.0' } }),
+    );
+    vi.spyOn(trigger, 'writeComposeFile')
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('compose restore write failed'));
+    vi.spyOn(trigger, 'pullImage').mockResolvedValue();
+    vi.spyOn(trigger, 'stopContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'removeContainer').mockResolvedValue();
+    vi.spyOn(trigger, 'createContainer')
+      .mockResolvedValueOnce(failedCandidate as any)
+      .mockResolvedValueOnce(restoredContainer as any);
+    vi.spyOn(trigger, 'startContainer')
+      .mockRejectedValueOnce(new Error('runtime refresh failed'))
+      .mockResolvedValueOnce(undefined);
+
+    let thrownError: any;
+    try {
+      await trigger.recreateContainer(
+        mockDockerApi,
+        {
+          State: { Running: true },
+          Config: { Image: 'nginx:1.1.0' },
+        },
+        'nginx:1.0.0',
+        container,
+        mockLog,
+      );
+    } catch (error) {
+      thrownError = error;
+    }
+
+    expect(thrownError).toBeInstanceOf(Error);
+    expect(thrownError.message).toBe('runtime refresh failed');
+    expect(thrownError.composeRollbackOutcome).toEqual({
+      status: 'rollback-failed',
+      phase: 'rollback-failed',
+      rollbackReason: 'compose_runtime_refresh_failed',
+      lastError: 'runtime refresh failed',
+    });
+  });
+
+  test('processComposeFile should restore the original compose image when runtime refresh fails', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({ name: 'nginx', updateAvailable: true });
+    const composeFileContent = ['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n');
+    const compose = makeCompose({ nginx: { image: 'nginx:1.0.0' } });
+
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(compose);
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockRejectedValue(
+      new Error('runtime refresh failed'),
+    );
+
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
+    ).rejects.toThrow('runtime refresh failed');
+
+    expect(writeComposeFileSpy).toHaveBeenCalledTimes(2);
+    expect(writeComposeFileSpy.mock.calls[0]).toEqual([
+      '/opt/drydock/test/stack.yml',
+      expect.stringContaining('nginx:1.1.0'),
+    ]);
+    expect(writeComposeFileSpy.mock.calls[1]).toEqual([
+      '/opt/drydock/test/stack.yml',
+      composeFileContent,
+    ]);
+  });
+
+  test('processComposeFile should not restore the whole compose file after an earlier service succeeds', async () => {
+    trigger.configuration.dryrun = false;
+    const containers = [
+      makeContainer({ name: 'nginx', updateAvailable: true }),
+      makeContainer({
+        name: 'redis',
+        imageName: 'redis',
+        tagValue: '7.0.0',
+        remoteValue: '7.2.0',
+        updateAvailable: true,
+      }),
+    ];
+    const composeFileContent = [
+      'services:',
+      '  nginx:',
+      '    image: nginx:1.0.0',
+      '  redis:',
+      '    image: redis:7.0.0',
+      '',
+    ].join('\n');
+    const compose = makeCompose({
+      nginx: { image: 'nginx:1.0.0' },
+      redis: { image: 'redis:7.0.0' },
+    });
+
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(compose);
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'runContainerUpdateLifecycle')
+      .mockResolvedValueOnce(true)
+      .mockRejectedValueOnce(new Error('redis runtime refresh failed'));
+
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', containers),
+    ).rejects.toThrow('redis runtime refresh failed');
+
+    expect(writeComposeFileSpy).toHaveBeenCalledTimes(2);
+    expect(writeComposeFileSpy.mock.calls[0]).toEqual([
+      '/opt/drydock/test/stack.yml',
+      expect.stringContaining('redis:7.2.0'),
+    ]);
+    const partiallyRestoredComposeText = writeComposeFileSpy.mock.calls[1][1] as string;
+    expect(partiallyRestoredComposeText).toContain('nginx:1.1.0');
+    expect(partiallyRestoredComposeText).toContain('redis:7.0.0');
+    expect(partiallyRestoredComposeText).not.toContain('redis:7.2.0');
+    expect(trigger.log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('preserving completed services (nginx)'),
+    );
+  });
+
+  test('processComposeFile should preserve a service refreshed before post-start hook failure', async () => {
+    trigger.configuration.dryrun = false;
+    const container = makeContainer({ name: 'nginx', updateAvailable: true });
+    const composeFileContent = ['services:', '  nginx:', '    image: nginx:1.0.0', ''].join('\n');
+    const compose = makeCompose({ nginx: { image: 'nginx:1.0.0' } });
+
+    vi.spyOn(trigger, 'getComposeFile').mockResolvedValue(Buffer.from(composeFileContent));
+    vi.spyOn(trigger, 'getComposeFileAsObject').mockResolvedValue(compose);
+    const writeComposeFileSpy = vi.spyOn(trigger, 'writeComposeFile').mockResolvedValue();
+    vi.spyOn(trigger, 'runContainerUpdateLifecycle').mockImplementation(
+      async (_container, composeContext) => {
+        expect(typeof composeContext.onRuntimeUpdateApplied).toBe('function');
+        composeContext.onRuntimeUpdateApplied();
+        throw new Error('post-start hook failed');
+      },
+    );
+
+    await expect(
+      trigger.processComposeFile('/opt/drydock/test/stack.yml', [container]),
+    ).rejects.toThrow('post-start hook failed');
+
+    const finalComposeText = writeComposeFileSpy.mock.calls.at(-1)?.[1] as string;
+    expect(finalComposeText).toContain('nginx:1.1.0');
+    expect(finalComposeText).not.toBe(composeFileContent);
   });
 
   test('executeSelfUpdate should delegate to parent self-update transition with hydrated runtime context', async () => {

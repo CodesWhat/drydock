@@ -239,6 +239,9 @@ export function setupDockercomposeTestContext({
     getNetwork: vi.fn().mockReturnValue({
       connect: vi.fn().mockResolvedValue(undefined),
     }),
+    info: vi.fn().mockResolvedValue({
+      Architecture: process.arch === 'x64' ? 'x86_64' : process.arch,
+    }),
     // Default: image inspect returns the host-compatible architecture so the
     // pre-flight guard does not interfere with tests that do not need it.
     getImage: vi.fn().mockReturnValue({

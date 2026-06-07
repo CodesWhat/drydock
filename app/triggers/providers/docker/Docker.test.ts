@@ -4430,6 +4430,115 @@ describe('extracted lifecycle delegation', () => {
       }
     });
 
+    test('marks operation rolled-back when compose reports a successful rollback outcome', async () => {
+      const storeContainer = await import('../../../store/container.js');
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const composeRollbackError = Object.assign(
+        new Error('compose refresh failed after replacement start'),
+        {
+          composeRollbackOutcome: {
+            status: 'rolled-back',
+            phase: 'rolled-back',
+            rollbackReason: 'compose_runtime_refresh_failed',
+            lastError: 'compose refresh failed after replacement start',
+          },
+        },
+      );
+      const run = vi.fn().mockRejectedValue(composeRollbackError);
+      docker.updateLifecycleExecutor = { run };
+      const container = createTriggerContainer({
+        id: 'compose-container-id',
+        name: 'web',
+        result: { digest: 'sha256:bad-target' },
+      });
+      (storeContainer.getContainer as ReturnType<typeof vi.fn>).mockReturnValueOnce(container);
+      (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mockClear();
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-compose-rollback-1',
+        containerId: 'compose-container-id',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, {
+            operationId: 'op-compose-rollback-1',
+          }),
+        ).rejects.toThrow('compose refresh failed');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-compose-rollback-1', {
+          status: 'rolled-back',
+          phase: 'rolled-back',
+          rollbackReason: 'compose_runtime_refresh_failed',
+          lastError: 'compose refresh failed after replacement start',
+        });
+        expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith(
+          'op-compose-rollback-1',
+          expect.objectContaining({ status: 'failed' }),
+        );
+        expect(storeContainer.updateContainer).toHaveBeenCalledTimes(1);
+        const saved = (storeContainer.updateContainer as ReturnType<typeof vi.fn>).mock.calls[0][0];
+        expect(saved.updateRollback).toMatchObject({
+          targetDigest: 'sha256:bad-target',
+          reason: 'compose_runtime_refresh_failed',
+          lastError: 'compose refresh failed after replacement start',
+        });
+        expect(saved.updateRollback.recordedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+      }
+    });
+
+    test('keeps duplicate-style failure failed when only another agent has a recent success', async () => {
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const docker404Error = Object.assign(new Error('No such container: web'), {
+        statusCode: 404,
+      });
+      const run = vi.fn().mockRejectedValue(docker404Error);
+      docker.updateLifecycleExecutor = { run };
+      const container = createTriggerContainer({ name: 'web', agent: 'agent-B', watcher: 'local' });
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-404-agent-b-1',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+        container: { id: 'c-agent-b', name: 'web', agent: 'agent-B', watcher: 'local' },
+      });
+      mockGetRecentTerminalSucceededOperationByContainerName.mockImplementation(
+        (_containerName, _windowMs, identity) =>
+          identity?.agent === 'agent-B'
+            ? undefined
+            : { id: 'prev-agent-a', containerName: 'web', status: 'succeeded' },
+      );
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, { operationId: 'op-404-agent-b-1' }),
+        ).rejects.toThrow('No such container');
+
+        expect(mockGetRecentTerminalSucceededOperationByContainerName).toHaveBeenCalledWith(
+          'web',
+          expect.any(Number),
+          { agent: 'agent-B', watcher: 'local' },
+        );
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+          'op-404-agent-b-1',
+          expect.objectContaining({ status: 'failed' }),
+        );
+        expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith(
+          'op-404-agent-b-1',
+          expect.objectContaining({ status: 'expired' }),
+        );
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      }
+    });
+
     test('marks operation failed when lifecycle throws "no longer exists" but NO recent success', async () => {
       const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
       const noLongerExistsError = new Error(

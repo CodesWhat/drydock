@@ -55,6 +55,9 @@ interface DockerApiLike {
   modem: {
     socketPath: string;
   };
+  info?: () => Promise<{
+    Architecture?: unknown;
+  }>;
   getContainer: (containerName: string) => {
     inspect: () => Promise<{
       State?: {
@@ -139,6 +142,7 @@ type ComposeUpdateLifecycleContext = {
   serviceDefinition?: unknown;
   composeFiles?: string[];
   composeFileOnceApplied?: boolean;
+  onRuntimeUpdateApplied?: () => void;
   skipPull?: boolean;
   runtimeContext?: ComposeRuntimeContext;
 };
@@ -158,6 +162,18 @@ type ComposeRuntimeRefreshOptions = {
   runtimeContext?: ComposeRuntimeContext;
 };
 
+type ComposeRollbackOutcome = {
+  status: 'rolled-back' | 'rollback-failed';
+  phase: 'rolled-back' | 'rollback-failed';
+  rollbackReason: 'compose_runtime_refresh_failed';
+  lastError: string;
+};
+
+type ComposeRollbackError = Error & {
+  composeRollbackOutcome?: ComposeRollbackOutcome;
+  composeCreatedContainerCandidate?: unknown;
+};
+
 function hasDefinedComposeRuntimeContextValue(runtimeContext: ComposeRuntimeContext): boolean {
   return Object.values(runtimeContext).some((value) => value !== undefined);
 }
@@ -165,6 +181,26 @@ function hasDefinedComposeRuntimeContextValue(runtimeContext: ComposeRuntimeCont
 type ValidateComposeConfigurationOptions = {
   composeFiles?: string[];
   parsedComposeFileObject?: unknown;
+};
+
+type MutateComposeFileOptions = ValidateComposeConfigurationOptions & {
+  captureSnapshot?: boolean;
+};
+
+type ComposeFileMutationSnapshot = {
+  filePath: string;
+  originalText: string;
+};
+
+type ComposeRuntimeUpdateCompletion = {
+  service: string;
+  containerName?: string;
+};
+
+type RestoreComposeFileMutationOptions = {
+  composeFileChain?: string[];
+  composeByFile?: Map<string, unknown>;
+  mappingsToPreserve?: unknown[];
 };
 
 type ComposeFileWithServices = {
@@ -1075,11 +1111,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
   }
 
-  async mutateComposeFile(
-    file,
-    updateComposeText,
-    options: ValidateComposeConfigurationOptions = {},
-  ) {
+  async mutateComposeFile(file, updateComposeText, options: MutateComposeFileOptions = {}) {
     return this.withComposeFileLock(file, async (filePath) => {
       const composeFileText = (await this.getComposeFile(filePath)).toString();
       const composeFileStat = await fs.stat(filePath);
@@ -1108,6 +1140,12 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         );
       }
       await this.writeComposeFile(filePath, updatedComposeFileText);
+      if (options.captureSnapshot) {
+        return {
+          filePath,
+          originalText: composeFileText,
+        };
+      }
       return true;
     });
   }
@@ -1260,6 +1298,9 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       container,
       composeUpdateOptions,
     );
+    if (!this.configuration.dryrun) {
+      requiredComposeCtx.onRuntimeUpdateApplied?.();
+    }
 
     // Invoke the post-pull security gate (scan + SBOM) after compose pulls the
     // new image. API-requested compose updates carry a queued operation id in
@@ -1668,7 +1709,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     composeUpdates,
     composeFileChain,
     composeByFile,
-  ) {
+  ): Promise<ComposeFileMutationSnapshot | undefined> {
     // Backup docker-compose file
     if (this.configuration.backup) {
       const backupFile = `${writableComposeFile}.back`;
@@ -1681,7 +1722,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       composeByFile.get(writableComposeFile),
       serviceImageUpdates,
     );
-    await this.mutateComposeFile(
+    const mutationResult = await this.mutateComposeFile(
       writableComposeFile,
       (composeFileText, composeFileMetadata) =>
         updateComposeServiceImagesInText(
@@ -1696,8 +1737,14 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       {
         composeFiles: composeFileChain,
         parsedComposeFileObject,
+        captureSnapshot: true,
       },
     );
+    return isPlainObject(mutationResult) &&
+      typeof mutationResult.filePath === 'string' &&
+      typeof mutationResult.originalText === 'string'
+      ? (mutationResult as ComposeFileMutationSnapshot)
+      : undefined;
   }
 
   async maybeApplyComposeFileMutations(
@@ -1705,16 +1752,16 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     composeByFile,
     composeFileChainSummary,
     mappingsNeedingComposeUpdate,
-  ): Promise<void> {
+  ): Promise<ComposeFileMutationSnapshot[]> {
     if (mappingsNeedingComposeUpdate.length === 0) {
-      return;
+      return [];
     }
 
     if (this.configuration.dryrun) {
       this.log.info(
         `Do not replace existing docker-compose file ${composeFileChainSummary} (dry-run mode enabled)`,
       );
-      return;
+      return [];
     }
 
     const composeUpdatesByWritableFile = await this.groupComposeUpdatesByWritableFile(
@@ -1723,13 +1770,65 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       composeByFile,
     );
 
+    const mutationSnapshots: ComposeFileMutationSnapshot[] = [];
     for (const [writableComposeFile, composeUpdates] of composeUpdatesByWritableFile.entries()) {
-      await this.applyComposeFileMutationsByWritableFile(
+      const mutationSnapshot = await this.applyComposeFileMutationsByWritableFile(
         writableComposeFile,
         composeUpdates,
         composeFileChain,
         composeByFile,
       );
+      if (mutationSnapshot) {
+        mutationSnapshots.push(mutationSnapshot);
+      }
+    }
+    return mutationSnapshots;
+  }
+
+  async restoreComposeFileMutations(
+    mutationSnapshots: ComposeFileMutationSnapshot[],
+    options: RestoreComposeFileMutationOptions = {},
+  ): Promise<void> {
+    const preservedUpdatesByWritableFile =
+      options.mappingsToPreserve && options.mappingsToPreserve.length > 0
+        ? await this.groupComposeUpdatesByWritableFile(
+            options.composeFileChain ?? mutationSnapshots.map((snapshot) => snapshot.filePath),
+            options.mappingsToPreserve,
+            options.composeByFile,
+          )
+        : new Map<string, unknown[]>();
+    const restoreErrors: string[] = [];
+
+    for (const mutationSnapshot of [...mutationSnapshots].reverse()) {
+      try {
+        await this.withComposeFileLock(mutationSnapshot.filePath, async (filePath) => {
+          const preservedUpdates = preservedUpdatesByWritableFile.get(filePath) ?? [];
+          const restoreText =
+            preservedUpdates.length > 0
+              ? updateComposeServiceImagesInText(
+                  mutationSnapshot.originalText,
+                  this.buildComposeServiceImageUpdates(preservedUpdates),
+                  this.getCachedComposeDocument(
+                    filePath,
+                    Date.now(),
+                    mutationSnapshot.originalText,
+                  ),
+                )
+              : mutationSnapshot.originalText;
+          await this.writeComposeFile(filePath, restoreText);
+          return true;
+        });
+      } catch (restoreError: unknown) {
+        restoreErrors.push(`${mutationSnapshot.filePath}: ${getErrorMessage(restoreError)}`);
+        this.log.warn(
+          `Failed to restore compose file ${mutationSnapshot.filePath} after failed runtime refresh ` +
+            `(${getErrorMessage(restoreError)}). Manual intervention may be required.`,
+        );
+      }
+    }
+
+    if (restoreErrors.length > 0) {
+      throw new Error(`Failed to restore compose file mutations (${restoreErrors.join('; ')})`);
     }
   }
 
@@ -1739,6 +1838,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     compose,
     mappingsNeedingRuntimeUpdate,
     runtimeContext?: unknown,
+    completedRuntimeUpdates: ComposeRuntimeUpdateCompletion[] = [],
   ): Promise<void> {
     const requestedRuntimeContext =
       runtimeContext && typeof runtimeContext === 'object'
@@ -1757,7 +1857,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       const composeFileOnceApplied =
         composeFileOnceEnabled && composeFileOnceHandledServices.has(service);
       const composeFileOnceRuntimeContext = composeFileOnceRuntimeContextByService.get(service);
-      const composeContext = {
+      const composeContext: ComposeUpdateLifecycleContext = {
         composeFile,
         composeFiles: composeFileChain,
         service,
@@ -1775,7 +1875,20 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
               }
             : undefined,
       };
+      let runtimeUpdateRecorded = false;
+      const recordRuntimeUpdate = () => {
+        if (runtimeUpdateRecorded) {
+          return;
+        }
+        runtimeUpdateRecorded = true;
+        completedRuntimeUpdates.push({
+          service,
+          ...(typeof container?.name === 'string' ? { containerName: container.name } : {}),
+        });
+      };
+      composeContext.onRuntimeUpdateApplied = recordRuntimeUpdate;
       await this.runContainerUpdateLifecycle(container, composeContext);
+      recordRuntimeUpdate();
       if (composeFileOnceEnabled && !composeFileOnceApplied) {
         composeFileOnceHandledServices.add(service);
       }
@@ -1817,19 +1930,56 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       return false;
     }
 
-    await this.maybeApplyComposeFileMutations(
+    const mutationSnapshots = await this.maybeApplyComposeFileMutations(
       composeFileChain,
       composeByFile,
       composeFileChainSummary,
       mappingsNeedingComposeUpdate,
     );
-    await this.runRuntimeUpdatesForComposeMappings(
-      composeFile,
-      composeFileChain,
-      compose,
-      mappingsNeedingRuntimeUpdate,
-      runtimeContext,
-    );
+    const completedRuntimeUpdates: ComposeRuntimeUpdateCompletion[] = [];
+    try {
+      await this.runRuntimeUpdatesForComposeMappings(
+        composeFile,
+        composeFileChain,
+        compose,
+        mappingsNeedingRuntimeUpdate,
+        runtimeContext,
+        completedRuntimeUpdates,
+      );
+    } catch (runtimeError: unknown) {
+      if (completedRuntimeUpdates.length === 0) {
+        try {
+          await this.restoreComposeFileMutations(mutationSnapshots);
+        } catch {
+          // restoreComposeFileMutations already logged the restore failure. Keep the
+          // original runtime error as the operation error surfaced to callers.
+        }
+      } else {
+        const completedServices = completedRuntimeUpdates
+          .map((update) => update.containerName || update.service)
+          .join(', ');
+        const completedServiceNames = new Set(
+          completedRuntimeUpdates.map((update) => update.service),
+        );
+        try {
+          await this.restoreComposeFileMutations(mutationSnapshots, {
+            composeFileChain,
+            composeByFile,
+            mappingsToPreserve: mappingsNeedingComposeUpdate.filter(({ service }) =>
+              completedServiceNames.has(service),
+            ),
+          });
+        } catch {
+          // restoreComposeFileMutations already logged the restore failure. Keep the
+          // original runtime error as the operation error surfaced to callers.
+        }
+        this.log.warn(
+          `Restored compose file mutations for ${composeFileChainSummary} after failed runtime refresh while ` +
+            `preserving completed services (${completedServices}). Manual intervention may be required.`,
+        );
+      }
+      throw runtimeError;
+    }
     return true;
   }
 
@@ -1923,30 +2073,136 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     await this.refreshComposeServiceWithDockerApi(composeFile, service, container, options);
   }
 
+  async createContainer(dockerApi, containerToCreate, containerName, logContainer) {
+    logContainer.info(`Create container ${containerName}`);
+    let newContainer: unknown;
+    try {
+      let containerToCreatePayload = containerToCreate;
+      const endpointsConfig = containerToCreate.NetworkingConfig?.EndpointsConfig || {};
+      const endpointNetworkNames = Object.keys(endpointsConfig);
+      const additionalNetworkNames: string[] = [];
+
+      if (endpointNetworkNames.length > 1) {
+        const primaryNetworkName = this.runtimeConfigManager.getPrimaryNetworkName(
+          containerToCreate,
+          endpointNetworkNames,
+        );
+
+        containerToCreatePayload = {
+          ...containerToCreate,
+          NetworkingConfig: {
+            EndpointsConfig: {
+              [primaryNetworkName]: endpointsConfig[primaryNetworkName],
+            },
+          },
+        };
+        additionalNetworkNames.push(
+          ...endpointNetworkNames.filter((networkName) => networkName !== primaryNetworkName),
+        );
+      }
+
+      newContainer = await dockerApi.createContainer(containerToCreatePayload);
+
+      for (const networkName of additionalNetworkNames) {
+        logContainer.info(`Connect container ${containerName} to network ${networkName}`);
+        const network = dockerApi.getNetwork(networkName);
+        await network.connect({
+          Container: containerName,
+          EndpointConfig: endpointsConfig[networkName],
+        });
+        logContainer.info(
+          `Container ${containerName} connected to network ${networkName} with success`,
+        );
+      }
+
+      logContainer.info(`Container ${containerName} recreated on new image with success`);
+      return newContainer;
+    } catch (error: unknown) {
+      Dockercompose.attachComposeCreatedContainerCandidate(error, newContainer);
+      logContainer.warn(
+        `Error when creating container ${containerName} (${getErrorMessage(error)})`,
+      );
+      throw error;
+    }
+  }
+
   /**
-   * Map a Docker image Architecture string to the Node.js process.arch value
-   * used on this host. Returns undefined for unknown architectures (treated as
+   * Normalize Docker image and daemon Architecture strings to Docker platform
+   * architecture names. Returns undefined for unknown architectures (treated as
    * compatible to avoid false-positive blocks on exotic platforms).
    */
-  private static dockerArchToNodeArch(dockerArch: string): string | undefined {
+  private static normalizeDockerArchitecture(architecture: string): string | undefined {
     const map: Record<string, string> = {
-      amd64: 'x64',
+      amd64: 'amd64',
+      x86_64: 'amd64',
+      x64: 'amd64',
+      aarch64: 'arm64',
       arm64: 'arm64',
       arm: 'arm',
-      '386': 'ia32',
-      ppc64le: 'ppc64',
+      armv6: 'arm',
+      armv7: 'arm',
+      armhf: 'arm',
+      '386': '386',
+      i386: '386',
+      i686: '386',
+      ia32: '386',
+      ppc64le: 'ppc64le',
+      ppc64: 'ppc64',
       s390x: 's390x',
       riscv64: 'riscv64',
     };
-    return map[dockerArch.toLowerCase()];
+    return map[architecture.toLowerCase()];
+  }
+
+  private static async getDockerDaemonArchitecture(
+    dockerApi: DockerApiLike,
+  ): Promise<string | undefined> {
+    if (typeof dockerApi.info !== 'function') {
+      return undefined;
+    }
+    try {
+      const info = await dockerApi.info();
+      return typeof info?.Architecture === 'string' && info.Architecture.trim() !== ''
+        ? info.Architecture.trim()
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private static attachComposeCreatedContainerCandidate(
+    error: unknown,
+    candidateContainer: unknown,
+  ): void {
+    if (!candidateContainer || !error || typeof error !== 'object') {
+      return;
+    }
+    (error as ComposeRollbackError).composeCreatedContainerCandidate = candidateContainer;
+  }
+
+  private static getComposeCreatedContainerCandidate(error: unknown): unknown {
+    if (!error || typeof error !== 'object') {
+      return undefined;
+    }
+    return (error as ComposeRollbackError).composeCreatedContainerCandidate;
+  }
+
+  private static attachComposeRollbackOutcome(
+    error: unknown,
+    rollbackOutcome: ComposeRollbackOutcome,
+  ): void {
+    if (!error || typeof error !== 'object') {
+      return;
+    }
+    (error as ComposeRollbackError).composeRollbackOutcome = rollbackOutcome;
   }
 
   /**
    * Pre-flight guard: inspect the just-pulled image and verify its architecture
-   * matches the host before performing any destructive step. Throws a clear,
+   * matches the Docker daemon before performing any destructive step. Throws a clear,
    * actionable error on mismatch so the running container is left untouched.
    *
-   * Skipped when dockerApi does not expose getImage (older mocks / proxies) —
+   * Skipped when dockerApi does not expose getImage/info (older mocks / proxies) —
    * in that case we fall through to the existing stop/create sequence and let
    * Docker surface its own error.
    */
@@ -1970,20 +2226,24 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       return;
     }
     const imageArch = imageInspect.Architecture;
-    const hostNodeArch = process.arch;
-    const mappedImageArch = Dockercompose.dockerArchToNodeArch(imageArch);
-    if (mappedImageArch === undefined) {
+    const daemonArch = await Dockercompose.getDockerDaemonArchitecture(dockerApi);
+    if (!daemonArch) {
+      return;
+    }
+    const normalizedImageArch = Dockercompose.normalizeDockerArchitecture(imageArch);
+    const normalizedDaemonArch = Dockercompose.normalizeDockerArchitecture(daemonArch);
+    if (normalizedImageArch === undefined || normalizedDaemonArch === undefined) {
       // Unknown architecture — treat as compatible to avoid false-positive blocks.
       return;
     }
-    if (mappedImageArch !== hostNodeArch) {
+    if (normalizedImageArch !== normalizedDaemonArch) {
       throw new Error(
-        `Cannot update to ${newImage}: image architecture "${imageArch}" is not compatible with host architecture "${hostNodeArch}". ` +
+        `Cannot update to ${newImage}: image architecture "${imageArch}" is not compatible with Docker daemon architecture "${daemonArch}". ` +
           `The running container has been left untouched.`,
       );
     }
     logContainer.info(
-      `Image ${newImage} architecture "${imageArch}" is compatible with host "${hostNodeArch}"`,
+      `Image ${newImage} architecture "${imageArch}" is compatible with Docker daemon "${daemonArch}"`,
     );
   }
 
@@ -1998,8 +2258,10 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     originalImage: string,
     container,
     logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
-  ): Promise<void> {
+    updateError: unknown,
+  ): Promise<ComposeRollbackOutcome> {
     const containerName = container.name;
+    const lastError = getErrorMessage(updateError);
     logContainer.warn(
       `Recreate failed for ${containerName}; attempting to restore the original container from captured spec`,
     );
@@ -2014,11 +2276,59 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       logContainer.info(
         `Original container ${containerName} restored successfully after failed update`,
       );
+      return {
+        status: 'rolled-back',
+        phase: 'rolled-back',
+        rollbackReason: 'compose_runtime_refresh_failed',
+        lastError,
+      };
     } catch (rollbackError: unknown) {
       logContainer.warn(
         `Failed to restore original container ${containerName} after failed update ` +
           `(${getErrorMessage(rollbackError)}). Manual intervention may be required.`,
       );
+      return {
+        status: 'rollback-failed',
+        phase: 'rollback-failed',
+        rollbackReason: 'compose_runtime_refresh_failed',
+        lastError,
+      };
+    }
+  }
+
+  private async cleanupFailedReplacementCandidate(
+    candidateContainer: unknown,
+    containerName: string,
+    logContainer: { warn: (msg: string) => void },
+  ): Promise<void> {
+    if (!candidateContainer || typeof candidateContainer !== 'object') {
+      return;
+    }
+    const candidate = candidateContainer as {
+      stop?: () => Promise<unknown>;
+      remove?: (options?: unknown) => Promise<unknown>;
+    };
+    if (typeof candidate.stop === 'function') {
+      try {
+        await candidate.stop();
+      } catch (stopError: unknown) {
+        logContainer.warn(
+          `Unable to stop failed replacement container ${containerName} during rollback (${getErrorMessage(
+            stopError,
+          )})`,
+        );
+      }
+    }
+    if (typeof candidate.remove === 'function') {
+      try {
+        await candidate.remove({ force: true });
+      } catch (removeError: unknown) {
+        logContainer.warn(
+          `Unable to remove failed replacement container ${containerName} during rollback (${getErrorMessage(
+            removeError,
+          )})`,
+        );
+      }
     }
   }
 
@@ -2027,6 +2337,41 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       throw new Error(
         `Unable to refresh compose service ${service} from ${composeFile} because Docker inspection data is missing runtime state`,
       );
+    }
+  }
+
+  private async recreateReplacementContainerWithCleanup(
+    dockerApi,
+    currentContainerSpec,
+    newImage,
+    container,
+    logContainer: { info: (msg: string) => void; warn: (msg: string) => void },
+  ): Promise<void> {
+    const containerToCreateInspect = this.cloneContainer(
+      currentContainerSpec,
+      newImage,
+      logContainer,
+    );
+    let newContainer: unknown;
+
+    try {
+      newContainer = await this.createContainer(
+        dockerApi,
+        containerToCreateInspect,
+        container.name,
+        logContainer,
+      );
+
+      if (currentContainerSpec.State.Running) {
+        await this.startContainer(newContainer, container.name, logContainer);
+      }
+    } catch (recreateError: unknown) {
+      await this.cleanupFailedReplacementCandidate(
+        newContainer || Dockercompose.getComposeCreatedContainerCandidate(recreateError),
+        container.name,
+        logContainer,
+      );
+      throw recreateError;
     }
   }
 
@@ -2133,7 +2478,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       logContainer,
     );
     try {
-      await super.recreateContainer(
+      await this.recreateReplacementContainerWithCleanup(
         dockerApi,
         recreationContainerSpec,
         newImage,
@@ -2141,13 +2486,15 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         logContainer,
       );
     } catch (recreateError: unknown) {
-      await this.attemptRollbackRestoreOldContainer(
+      const rollbackOutcome = await this.attemptRollbackRestoreOldContainer(
         dockerApi as DockerApiLike,
         rollbackSpec,
         originalImage,
         container,
         logContainer,
+        recreateError,
       );
+      Dockercompose.attachComposeRollbackOutcome(recreateError, rollbackOutcome);
       throw recreateError;
     }
   }
@@ -2179,7 +2526,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       currentImage,
     );
 
-    await this.mutateComposeFile(
+    const mutationResult = await this.mutateComposeFile(
       composeFile,
       (composeFileText, composeFileMetadata) =>
         updateComposeServiceImageInText(
@@ -2194,8 +2541,15 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         ),
       {
         composeFiles,
+        captureSnapshot: true,
       },
     );
+    const mutationSnapshots =
+      isPlainObject(mutationResult) &&
+      typeof mutationResult.filePath === 'string' &&
+      typeof mutationResult.originalText === 'string'
+        ? [mutationResult as ComposeFileMutationSnapshot]
+        : [];
 
     const composeUpdateOptions = {
       shouldStart: currentContainerSpec?.State?.Running === true,
@@ -2206,12 +2560,26 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
       composeUpdateOptions.composeFiles = composeFiles;
     }
 
-    await this.refreshComposeServiceWithDockerApi(
-      composeFile,
-      service,
-      container,
-      composeUpdateOptions,
-    );
+    try {
+      await this.refreshComposeServiceWithDockerApi(
+        composeFile,
+        service,
+        container,
+        composeUpdateOptions,
+      );
+    } catch (runtimeError: unknown) {
+      try {
+        await this.restoreComposeFileMutations(mutationSnapshots);
+      } catch {
+        Dockercompose.attachComposeRollbackOutcome(runtimeError, {
+          status: 'rollback-failed',
+          phase: 'rollback-failed',
+          rollbackReason: 'compose_runtime_refresh_failed',
+          lastError: getErrorMessage(runtimeError),
+        });
+      }
+      throw runtimeError;
+    }
   }
 
   async runServicePostStartHooks(container, serviceKey, service) {
