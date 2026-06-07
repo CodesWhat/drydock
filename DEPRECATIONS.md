@@ -263,7 +263,7 @@ These behaviors were removed immediately rather than going through a grace perio
 | --- | --- |
 | **Deprecated in** | v1.5.0-rc.30 |
 | **Removed in** | v1.5.0-rc.30 (immediate — security fix, no grace period) |
-| **Affects** | TLS-terminating reverse-proxy deployments (Synology DSM, Traefik, Nginx, Caddy, HAProxy, …) without `DD_SERVER_TRUSTPROXY` |
+| **Affects** | TLS-terminating reverse-proxy deployments (Traefik, Nginx, NGINX Proxy Manager, Caddy, HAProxy, Synology DSM, …) without `DD_SERVER_TRUSTPROXY` |
 
 Before rc.30, `getExpectedOrigin()` honored `X-Forwarded-Proto` / `X-Forwarded-Host` unconditionally when validating the same-origin (CSRF) check on state-changing requests. A client could forge those headers to satisfy the check even with `trust proxy` disabled ([`a132318e`](https://github.com/CodesWhat/drydock/commit/a132318e)). rc.30 stopped trusting them unless Express `trust proxy` is enabled. Because the forgeable behavior was the vulnerability, it could not be kept alive behind a deprecation window.
 

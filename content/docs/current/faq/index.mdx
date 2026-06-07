@@ -184,7 +184,7 @@ services:
 This tells drydock to read the `X-Forwarded-Proto` header from your proxy, so it correctly sees `https` as the protocol.
 
 <Callout type="info">
-Most reverse proxies (Traefik, Nginx, Caddy) set `X-Forwarded-Proto` automatically. If yours does not, add the header explicitly in your proxy configuration — for example, in Nginx: `proxy_set_header X-Forwarded-Proto $scheme;`
+Most reverse proxies (Traefik, Nginx, NGINX Proxy Manager, Caddy) set `X-Forwarded-Proto` automatically. If yours does not, add the header explicitly in your proxy configuration — for example, in Nginx: `proxy_set_header X-Forwarded-Proto $scheme;`
 </Callout>
 
 **Traefik example (complete):**
@@ -214,6 +214,19 @@ location / {
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Forwarded-Host $http_host;
 }
+```
+
+**NGINX Proxy Manager:**
+
+NGINX Proxy Manager forwards `X-Forwarded-Proto` and rewrites the `Host` header to your external hostname by default, so no custom proxy headers are required — just set the env var and recreate the container:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    environment:
+      - DD_SERVER_TRUSTPROXY=1
+      # ... other DD_ variables ...
 ```
 
 See [Server configuration](/docs/configuration/server#reverse-proxy-trust-proxy) for additional trust-proxy options.
