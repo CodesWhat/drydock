@@ -271,12 +271,12 @@ export async function resolveSourceRepoForContainer(
   // Fall back to a pre-resolved container.sourceRepo for non-Docker-Hub images where
   // the labels/image path above yielded nothing. This covers containers persisted before
   // labels were populated and test/programmatic callers that supply only sourceRepo.
-  // We treat this as trusted because the untrusted container-label case is always resolved
-  // by detectSourceRepoFromImageMetadata above when container.labels are present.
+  // Treat this as untrusted because sourceRepo does not persist provenance; it may have
+  // originated from a container-level dd.source.repo label in an earlier enrichment cycle.
   if (!isDockerHubImage(container.image)) {
     const cached = normalizeSourceRepo(container.sourceRepo);
     if (cached) {
-      return { sourceRepo: cached, trusted: true };
+      return { sourceRepo: cached, trusted: false };
     }
     return undefined;
   }
@@ -286,7 +286,7 @@ export async function resolveSourceRepoForContainer(
   // making a network request.
   const cachedSourceRepo = normalizeSourceRepo(container.sourceRepo);
   if (cachedSourceRepo) {
-    return { sourceRepo: cachedSourceRepo, trusted: true };
+    return { sourceRepo: cachedSourceRepo, trusted: false };
   }
 
   const imageName = container.image?.name;

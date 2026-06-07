@@ -216,9 +216,10 @@ describe('release-notes service', () => {
     expect(mockAxiosGet).not.toHaveBeenCalled();
   });
 
-  test('resolveSourceRepoForContainer should return cached sourceRepo for non-Docker-Hub images when detectSourceRepoFromImageMetadata yields nothing', async () => {
-    // index.ts line 279: non-Docker-Hub image (quay.io) with no label-based resolution and no
-    // GHCR derivation, but with a pre-cached container.sourceRepo → returns { sourceRepo, trusted: true }
+  test('resolveSourceRepoForContainer should return cached sourceRepo as untrusted when provenance is unavailable', async () => {
+    // non-Docker-Hub image (quay.io) with no label-based resolution and no GHCR derivation,
+    // but with a pre-cached container.sourceRepo. The sourceRepo value does not carry
+    // provenance, so it must not be treated as authenticated/trusted.
     const resolution = await resolveSourceRepoForContainer({
       image: {
         name: 'acme/widget',
@@ -235,7 +236,7 @@ describe('release-notes service', () => {
       sourceRepo: 'github.com/acme/widget',
     } as any);
 
-    expect(resolution).toEqual({ sourceRepo: 'github.com/acme/widget', trusted: true });
+    expect(resolution).toEqual({ sourceRepo: 'github.com/acme/widget', trusted: false });
     expect(mockAxiosGet).not.toHaveBeenCalled();
   });
 
@@ -505,7 +506,7 @@ describe('release-notes service', () => {
     });
   });
 
-  test('getFullReleaseNotesForContainer should include optional GitHub auth token', async () => {
+  test('getFullReleaseNotesForContainer should include optional GitHub auth token for trusted source repos', async () => {
     ddEnvVars.DD_RELEASE_NOTES_GITHUB_TOKEN = 'ghp_test';
     mockAxiosGet.mockResolvedValueOnce({
       data: {
@@ -518,7 +519,12 @@ describe('release-notes service', () => {
     });
 
     await getFullReleaseNotesForContainer({
-      sourceRepo: 'github.com/acme/service',
+      image: {
+        name: 'acme/service',
+        registry: {
+          url: 'https://ghcr.io',
+        },
+      },
       result: {
         tag: '2.0.0',
       },
@@ -850,6 +856,38 @@ describe('release-notes service', () => {
     } as any);
 
     // The request must have been made without any Authorization header
+    expect(mockAxiosGet).toHaveBeenCalledWith(
+      expect.stringContaining('api.github.com'),
+      expect.objectContaining({
+        headers: expect.not.objectContaining({
+          Authorization: expect.any(String),
+        }),
+      }),
+    );
+  });
+
+  test('L-4: cached sourceRepo without provenance causes no Authorization header to be sent', async () => {
+    ddEnvVars.DD_RELEASE_NOTES_GITHUB_TOKEN = 'ghp_operator_secret';
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        tag_name: 'v1.0.0',
+        name: 'Cached Release',
+        body: 'body',
+        html_url: 'https://github.com/attacker/evil/releases/tag/v1.0.0',
+        published_at: '2026-01-01T00:00:00.000Z',
+      },
+    });
+
+    await getFullReleaseNotesForContainer({
+      sourceRepo: 'https://github.com/attacker/evil.git',
+      image: {
+        name: 'attacker/image',
+        registry: { url: 'registry.example.com' },
+      },
+      labels: {},
+      result: { tag: '1.0.0' },
+    } as any);
+
     expect(mockAxiosGet).toHaveBeenCalledWith(
       expect.stringContaining('api.github.com'),
       expect.objectContaining({
