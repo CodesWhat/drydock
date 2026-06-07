@@ -32,6 +32,21 @@ The webhook API lets external systems trigger container watches and updates. Thi
 | `POST` | `/api/v1/webhook/update/:containerName` | Trigger an update on a specific container |
 | `POST` | `/api/v1/webhooks/registry` | Receive signed registry push events and trigger targeted checks |
 
+## Duplicate container names
+
+The per-container webhook endpoints resolve `:containerName` by name. In multi-agent deployments, the same container name can exist on multiple agents or watchers. When a name is ambiguous, drydock returns **409 Conflict** and includes the matching `agent`/`watcher` pairs in the error message.
+
+Add query parameters to disambiguate:
+
+- `?agent=<agentName>` targets containers owned by a remote agent.
+- `?agent=__local__` targets controller-local containers without an agent.
+- `?watcher=<watcherName>` narrows the match to a watcher.
+
+```bash
+curl -X POST "https://drydock.example.com/api/v1/webhook/update/myapp?agent=edge-1&watcher=local" \
+  -H "Authorization: Bearer your-token-here"
+```
+
 ## Authentication
 
 All webhook requests require a Bearer token in the `Authorization` header:
@@ -96,6 +111,18 @@ curl -X POST https://drydock.example.com/api/v1/webhook/watch/myapp \
 ```bash
 curl -X POST https://drydock.example.com/api/v1/webhook/update/myapp \
   -H "Authorization: Bearer your-token-here"
+```
+
+Successful update requests return **202 Accepted** with the queued operation id:
+
+```json
+{
+  "message": "Update accepted for container myapp",
+  "operationId": "018f...",
+  "result": {
+    "container": "myapp"
+  }
+}
 ```
 
 ### Registry push webhook (signed)

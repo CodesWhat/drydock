@@ -156,6 +156,25 @@ describe('stats/aggregator', () => {
     aggregator.stop();
   });
 
+  test('start() unreferences timer handles when supported', () => {
+    const timerHandle = { unref: vi.fn() };
+    const setIntervalFn = vi.fn(
+      () => timerHandle as unknown as ReturnType<typeof globalThis.setInterval>,
+    );
+    const aggregator = createContainerStatsAggregator({
+      getContainers: () => [],
+      getWatchers: () => ({}),
+      intervalSeconds: 10,
+      setIntervalFn: setIntervalFn as unknown as typeof globalThis.setInterval,
+      clearIntervalFn: vi.fn() as unknown as typeof globalThis.clearInterval,
+    });
+
+    aggregator.start();
+
+    expect(timerHandle.unref).toHaveBeenCalledOnce();
+    aggregator.stop();
+  });
+
   test('start() is idempotent — calling twice does not stack timers', () => {
     const { aggregator, setIntervalFn } = createHarness();
     aggregator.start();

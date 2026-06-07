@@ -4,6 +4,13 @@ import * as storeContainer from '../store/container.js';
 
 const router = express.Router();
 
+type Group = {
+  name: string | null;
+  containers: { id: string; name: string; displayName: string; updateAvailable: boolean }[];
+  containerCount: number;
+  updatesAvailable: number;
+};
+
 /**
  * GET /groups — return containers grouped by stack / group label.
  *
@@ -14,15 +21,7 @@ const router = express.Router();
  */
 function getGroups(req: Request, res: Response) {
   const containers = storeContainer.getContainers();
-  const groups: Record<
-    string,
-    {
-      name: string | null;
-      containers: { id: string; name: string; displayName: string; updateAvailable: boolean }[];
-      containerCount: number;
-      updatesAvailable: number;
-    }
-  > = {};
+  const groups = new Map<string, Group>();
 
   for (const container of containers) {
     const groupName =
@@ -34,16 +33,17 @@ function getGroups(req: Request, res: Response) {
 
     const key = groupName ?? '__ungrouped__';
 
-    if (!groups[key]) {
-      groups[key] = {
+    let group = groups.get(key);
+    if (!group) {
+      group = {
         name: groupName,
         containers: [],
         containerCount: 0,
         updatesAvailable: 0,
       };
+      groups.set(key, group);
     }
 
-    const group = groups[key];
     group.containers.push({
       id: container.id,
       name: container.name,
@@ -56,7 +56,7 @@ function getGroups(req: Request, res: Response) {
     }
   }
 
-  const data = Object.values(groups);
+  const data = Array.from(groups.values());
   res.status(200).json({
     data,
     total: data.length,

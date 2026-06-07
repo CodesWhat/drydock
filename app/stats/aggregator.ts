@@ -238,6 +238,13 @@ async function runTick(runtime: AggregatorRuntime): Promise<void> {
   }
 }
 
+function unrefTimer(timer: ReturnType<typeof globalThis.setInterval>): void {
+  const maybeUnref = (timer as { unref?: unknown }).unref;
+  if (typeof maybeUnref === 'function') {
+    maybeUnref.call(timer);
+  }
+}
+
 export function createContainerStatsAggregator(
   deps: ContainerStatsAggregatorDependencies,
 ): ContainerStatsAggregator {
@@ -269,6 +276,7 @@ export function createContainerStatsAggregator(
           log.warn({ err }, 'Stats aggregator tick failed');
         });
       }, runtime.intervalMs);
+      unrefTimer(runtime.timer);
     },
 
     stop() {

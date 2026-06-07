@@ -24,6 +24,23 @@ const updateOperationIdPathParam = {
   schema: { type: 'string' },
 } as const;
 
+const webhookAgentQueryParam = {
+  name: 'agent',
+  in: 'query',
+  required: false,
+  description:
+    'Agent name used to disambiguate duplicate container names; use __local__ for controller-local containers without an agent',
+  schema: { type: 'string' },
+} as const;
+
+const webhookWatcherQueryParam = {
+  name: 'watcher',
+  in: 'query',
+  required: false,
+  description: 'Watcher name used to disambiguate duplicate container names',
+  schema: { type: 'string' },
+} as const;
+
 type ErrorResponses = Record<number, ReturnType<typeof errorResponse>>;
 
 function createWebhookContainerActionPost({
@@ -41,8 +58,26 @@ function createWebhookContainerActionPost({
     401: errorResponse('Missing or invalid webhook authorization header'),
     403: errorResponse('Webhooks are disabled for container'),
     404: errorResponse(notFoundMessage),
+    409: errorResponse(
+      operationId === 'webhookUpdateContainer'
+        ? 'Ambiguous container name or update cannot be queued'
+        : 'Ambiguous container name',
+    ),
     500: errorResponse('Webhook execution failed'),
   };
+
+  const successResponses =
+    operationId === 'webhookUpdateContainer'
+      ? {
+          202: jsonResponse('Container update accepted', {
+            $ref: '#/components/schemas/WebhookContainerUpdateAcceptedResponse',
+          }),
+        }
+      : {
+          200: jsonResponse(successDescription, {
+            $ref: '#/components/schemas/WebhookContainerActionResponse',
+          }),
+        };
 
   return {
     post: {
@@ -50,11 +85,9 @@ function createWebhookContainerActionPost({
       summary,
       operationId,
       security: [{ webhookBearerAuth: [] }],
-      parameters: [containerNamePathParam],
+      parameters: [containerNamePathParam, webhookAgentQueryParam, webhookWatcherQueryParam],
       responses: {
-        200: jsonResponse(successDescription, {
-          $ref: '#/components/schemas/WebhookContainerActionResponse',
-        }),
+        ...successResponses,
         ...errorResponses,
       },
     },
@@ -71,6 +104,15 @@ export const openApiPaths = {
       responses: {
         200: jsonResponse('Health check response', {
           $ref: '#/components/schemas/HealthResponse',
+        }),
+        503: jsonResponse('Service is starting', {
+          type: 'object',
+          required: ['status', 'reason'],
+          properties: {
+            status: { type: 'string', enum: ['starting'] },
+            reason: { type: 'string' },
+          },
+          additionalProperties: false,
         }),
       },
     },

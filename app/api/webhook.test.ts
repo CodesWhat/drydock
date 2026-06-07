@@ -1038,6 +1038,38 @@ describe('Webhook Router', () => {
       expect(mockWatchContainer).toHaveBeenCalledWith(remoteContainer);
     });
 
+    test('should succeed when ?agent=__local__ disambiguates to the controller-local match on /watch', async () => {
+      const localContainer = {
+        name: 'nginx',
+        watcher: 'local',
+        agent: undefined,
+        image: { name: 'nginx' },
+      };
+      const remoteContainer = {
+        name: 'nginx',
+        watcher: 'local',
+        agent: 'ml',
+        image: { name: 'nginx' },
+      };
+      mockGetContainers.mockReturnValue([localContainer, remoteContainer]);
+      const mockWatchContainer = vi.fn().mockResolvedValue(undefined);
+      mockGetState.mockReturnValue({
+        watcher: { 'docker.local': { watchContainer: mockWatchContainer } },
+        trigger: {},
+      });
+
+      const handler = getHandler('post', '/watch/:containerName');
+      const req = createMockRequest({
+        params: { containerName: 'nginx' },
+        query: { agent: '__local__' },
+      });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockWatchContainer).toHaveBeenCalledWith(localContainer);
+    });
+
     test('should succeed when ?watcher= disambiguates to one match on /watch', async () => {
       const container1 = { name: 'nginx', watcher: 'local', agent: 'a1', image: { name: 'nginx' } };
       const container2 = { name: 'nginx', watcher: 'edge', agent: 'a2', image: { name: 'nginx' } };
@@ -1669,6 +1701,46 @@ describe('Webhook Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(202);
+    });
+
+    test('should succeed when ?agent=__local__ disambiguates to the controller-local match on /update', async () => {
+      const localContainer = {
+        id: 'c1',
+        name: 'nginx',
+        watcher: 'local',
+        agent: undefined,
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      const remoteContainer = {
+        id: 'c2',
+        name: 'nginx',
+        watcher: 'local',
+        agent: 'ml',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      };
+      mockGetContainers.mockReturnValue([localContainer, remoteContainer]);
+      const mockTrigger = vi.fn().mockResolvedValue(undefined);
+      mockGetState.mockReturnValue({
+        watcher: {},
+        trigger: { 'docker.default': { type: 'docker', agent: undefined, trigger: mockTrigger } },
+      });
+
+      const handler = getHandler('post', '/update/:containerName');
+      const req = createMockRequest({
+        params: { containerName: 'nginx' },
+        query: { agent: '__local__' },
+      });
+      const res = createMockResponse();
+      await handler(req, res);
+      await flushAcceptedUpdateWork();
+
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(mockTrigger).toHaveBeenCalledWith(
+        localContainer,
+        expect.objectContaining({ operationId: expect.any(String) }),
+      );
     });
 
     test('should succeed when ?watcher= disambiguates to one match on /update', async () => {

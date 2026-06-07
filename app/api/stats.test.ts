@@ -37,11 +37,26 @@ import { createSummaryStatsHandlers } from './container/stats.js';
 import * as statsRouter from './stats.js';
 
 describe('Stats Router', () => {
-  test('starts the aggregator at module load', () => {
-    expect(mockAggregator.start).toHaveBeenCalled();
+  beforeEach(() => {
+    statsRouter.stopStatsAggregation();
+    vi.clearAllMocks();
   });
 
-  test('passes store + registry accessors to the aggregator factory', () => {
+  test('does not create or start the aggregator at module load', () => {
+    expect(createContainerStatsAggregator).not.toHaveBeenCalled();
+    expect(mockAggregator.start).not.toHaveBeenCalled();
+  });
+
+  test('init() starts the aggregator', () => {
+    statsRouter.init();
+
+    expect(createContainerStatsAggregator).toHaveBeenCalledTimes(1);
+    expect(mockAggregator.start).toHaveBeenCalledTimes(1);
+  });
+
+  test('init() passes store + registry accessors to the aggregator factory', () => {
+    statsRouter.init();
+
     expect(createContainerStatsAggregator).toHaveBeenCalledWith({
       getContainers: expect.any(Function),
       getWatchers: expect.any(Function),
@@ -54,12 +69,16 @@ describe('Stats Router', () => {
   });
 
   test('getWatchers falls back to empty object when registry state has no watcher field', () => {
+    statsRouter.init();
+
     mockRegistryState.mockReturnValueOnce({} as unknown as { watcher: Record<string, unknown> });
     const args = vi.mocked(createContainerStatsAggregator).mock.calls[0]?.[0];
     expect(args?.getWatchers()).toEqual({});
   });
 
-  test('builds summary handlers with the aggregator', () => {
+  test('init() builds summary handlers with the aggregator', () => {
+    statsRouter.init();
+
     expect(createSummaryStatsHandlers).toHaveBeenCalledWith({ aggregator: mockAggregator });
   });
 

@@ -1,38 +1,50 @@
-const { mockApp, mockFs, mockHttps, mockGetServerConfiguration, mockHttpServer, mockHttpsServer } =
-  vi.hoisted(() => {
-    const mockHttpServer = {
-      on: vi.fn(),
-    };
-    const mockHttpsServer = {
-      on: vi.fn(),
-      listen: vi.fn((port, cb) => cb()),
-    };
-    return {
-      mockApp: {
-        disable: vi.fn(),
-        set: vi.fn(),
-        use: vi.fn(),
-        listen: vi.fn((port, cb) => {
-          cb();
-          return mockHttpServer;
-        }),
-      },
-      mockFs: {
-        readFileSync: vi.fn(),
-      },
-      mockHttpServer,
-      mockHttpsServer,
-      mockHttps: {
-        createServer: vi.fn(() => mockHttpsServer),
-      },
-      mockGetServerConfiguration: vi.fn(() => ({
-        enabled: true,
-        port: 3000,
-        cors: {},
-        tls: {},
-      })),
-    };
-  });
+const {
+  mockApp,
+  mockRouter,
+  mockFs,
+  mockHttps,
+  mockGetServerConfiguration,
+  mockHttpServer,
+  mockHttpsServer,
+} = vi.hoisted(() => {
+  const mockHttpServer = {
+    on: vi.fn(),
+  };
+  const mockHttpsServer = {
+    on: vi.fn(),
+    listen: vi.fn((port, cb) => cb()),
+  };
+  const mockRouter = {
+    use: vi.fn(),
+    get: vi.fn(),
+  };
+  return {
+    mockApp: {
+      disable: vi.fn(),
+      set: vi.fn(),
+      use: vi.fn(),
+      listen: vi.fn((port, cb) => {
+        cb();
+        return mockHttpServer;
+      }),
+    },
+    mockRouter,
+    mockFs: {
+      readFileSync: vi.fn(),
+    },
+    mockHttpServer,
+    mockHttpsServer,
+    mockHttps: {
+      createServer: vi.fn(() => mockHttpsServer),
+    },
+    mockGetServerConfiguration: vi.fn(() => ({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    })),
+  };
+});
 const mockLog = vi.hoisted(() => ({
   debug: vi.fn(),
   info: vi.fn(),
@@ -59,6 +71,7 @@ vi.mock('express', () => ({
     vi.fn(() => mockApp),
     {
       json: vi.fn(() => 'json-middleware'),
+      Router: vi.fn(() => mockRouter),
     },
   ),
 }));
@@ -129,6 +142,98 @@ vi.mock('../store/settings', () => ({
   isInternetlessModeEnabled: mockIsInternetlessModeEnabled,
 }));
 
+function mockActualApiRouterStatsLifecycle() {
+  const mockStatsAggregator = {
+    start: vi.fn(),
+    stop: vi.fn(),
+    getCurrent: vi.fn(),
+    subscribe: vi.fn(),
+  };
+  const mockCreateContainerStatsAggregator = vi.fn(() => mockStatsAggregator);
+  const mockStatsHandlers = {
+    getStatsSummary: vi.fn(),
+    streamStatsSummary: vi.fn(),
+  };
+
+  vi.doUnmock('./api.js');
+  vi.doUnmock('./stats.js');
+  vi.doMock('../configuration/index.js', () => ({
+    getServerConfiguration: mockGetServerConfiguration,
+    ddEnvVars: mockDdEnvVars,
+  }));
+  vi.doMock('../stats/aggregator.js', () => ({
+    createContainerStatsAggregator: mockCreateContainerStatsAggregator,
+  }));
+  vi.doMock('../store/container.js', () => ({
+    getContainers: vi.fn(() => []),
+  }));
+  vi.doMock('../registry/index.js', () => ({
+    getState: vi.fn(() => ({ watcher: {} })),
+  }));
+  vi.doMock('./container/stats.js', () => ({
+    createSummaryStatsHandlers: vi.fn(() => mockStatsHandlers),
+  }));
+  vi.doMock('express-rate-limit', () => ({
+    default: vi.fn(() => 'api-rate-limiter'),
+  }));
+  vi.doMock('./auth.js', () => ({
+    init: vi.fn(),
+    getSessionMiddleware: mockGetSessionMiddleware,
+    requireAuthentication: vi.fn(),
+  }));
+  vi.doMock('./csrf.js', () => ({
+    requireSameOriginForMutations: vi.fn(),
+  }));
+  vi.doMock('./error-response.js', () => ({
+    sendErrorResponse: vi.fn(),
+  }));
+  vi.doMock('./json-content-type.js', () => ({
+    requireJsonContentTypeForMutations: vi.fn(),
+    shouldParseJsonBody: vi.fn(() => false),
+  }));
+  vi.doMock('./rate-limit-key.js', () => ({
+    createAuthenticatedRouteRateLimitKeyGenerator: vi.fn(() => undefined),
+    isIdentityAwareRateLimitKeyingEnabled: vi.fn(() => false),
+  }));
+
+  const routerModules = [
+    './agent.js',
+    './app.js',
+    './audit.js',
+    './authentication.js',
+    './backup.js',
+    './container.js',
+    './container-actions.js',
+    './debug.js',
+    './group.js',
+    './icons.js',
+    './internal-self-update.js',
+    './log.js',
+    './notification.js',
+    './notification-outbox.js',
+    './operation.js',
+    './preview.js',
+    './registry.js',
+    './server.js',
+    './settings.js',
+    './sse.js',
+    './store.js',
+    './trigger.js',
+    './update-operations.js',
+    './watcher.js',
+    './webhook.js',
+    './webhooks.js',
+  ];
+
+  for (const modulePath of routerModules) {
+    vi.doMock(modulePath, () => ({
+      init: vi.fn(() => `${modulePath}-router`),
+    }));
+  }
+
+  return { mockCreateContainerStatsAggregator, mockStatsAggregator };
+}
+
 // The index module reads configuration at module level, so we must
 // re-import after setting the desired mock return value.
 describe('API Index', () => {
@@ -138,6 +243,8 @@ describe('API Index', () => {
     mockApp.set.mockClear();
     mockApp.use.mockClear();
     mockApp.listen.mockClear();
+    mockRouter.use.mockClear();
+    mockRouter.get.mockClear();
     mockHttpServer.on.mockClear();
     mockHttpsServer.listen.mockClear();
     mockHttpsServer.on.mockClear();
@@ -1035,5 +1142,49 @@ describe('API Index', () => {
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({ error: 'Internal server error' });
+  });
+
+  test('importing the API router module does not start stats polling before router init', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    vi.resetModules();
+    const { mockCreateContainerStatsAggregator, mockStatsAggregator } =
+      mockActualApiRouterStatsLifecycle();
+
+    const apiRouter = await import('./api.js');
+
+    expect(mockCreateContainerStatsAggregator).not.toHaveBeenCalled();
+    expect(mockStatsAggregator.start).not.toHaveBeenCalled();
+
+    apiRouter.init();
+
+    expect(mockCreateContainerStatsAggregator).toHaveBeenCalledTimes(1);
+    expect(mockStatsAggregator.start).toHaveBeenCalledTimes(1);
+  });
+
+  test('DD_SERVER_ENABLED=false does not start stats polling', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: false,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    vi.resetModules();
+    const { mockCreateContainerStatsAggregator, mockStatsAggregator } =
+      mockActualApiRouterStatsLifecycle();
+
+    const indexRouter = await import('./index.js');
+
+    expect(mockCreateContainerStatsAggregator).not.toHaveBeenCalled();
+    expect(mockStatsAggregator.start).not.toHaveBeenCalled();
+
+    await indexRouter.init();
+
+    expect(mockCreateContainerStatsAggregator).not.toHaveBeenCalled();
+    expect(mockStatsAggregator.start).not.toHaveBeenCalled();
   });
 });

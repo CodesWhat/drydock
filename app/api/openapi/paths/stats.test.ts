@@ -10,7 +10,7 @@ describe('statsPaths', () => {
         operationId: 'getFleetStatsSummary',
         responses: {
           200: jsonResponse('Fleet stats summary', {
-            $ref: '#/components/schemas/FleetStatsSummary',
+            $ref: '#/components/schemas/FleetStatsSummaryResponse',
           }),
           401: errorResponse('Authentication required'),
         },
@@ -46,10 +46,10 @@ describe('statsPaths', () => {
     ]);
   });
 
-  test('/api/stats/summary uses FleetStatsSummary $ref in 200 response', () => {
+  test('/api/stats/summary uses wrapped FleetStatsSummaryResponse $ref in 200 response', () => {
     const schema =
       statsPaths['/api/stats/summary'].get.responses[200].content?.['application/json']?.schema;
-    expect(schema).toStrictEqual({ $ref: '#/components/schemas/FleetStatsSummary' });
+    expect(schema).toStrictEqual({ $ref: '#/components/schemas/FleetStatsSummaryResponse' });
   });
 
   test('/api/stats/summary/stream 200 uses text/event-stream content type', () => {

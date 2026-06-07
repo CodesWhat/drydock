@@ -301,5 +301,40 @@ describe('Group Router', () => {
       expect(swarmGroup).toBeDefined();
       expect(swarmGroup.containerCount).toBe(2);
     });
+
+    test.each([
+      ['dd.group', 'constructor'],
+      ['wud.group', 'toString'],
+      ['com.docker.compose.project', 'hasOwnProperty'],
+      ['com.docker.stack.namespace', '__proto__'],
+    ])('should group %s value %s without colliding with object prototype keys', (label, groupName) => {
+      mockGetContainers.mockReturnValue([
+        makeContainer('c1', 'service', { [label]: groupName }, true),
+      ]);
+
+      const handler = getHandler('get', '/groups');
+      const req = createMockRequest();
+      const res = createMockResponse();
+
+      expect(() => handler(req, res)).not.toThrow();
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      const { data: groups, total } = getGroupsPayload(res);
+      expect(total).toBe(1);
+      expect(groups).toHaveLength(1);
+      expect(groups[0]).toEqual({
+        name: groupName,
+        containers: [
+          {
+            id: 'c1',
+            name: 'service',
+            displayName: 'service',
+            updateAvailable: true,
+          },
+        ],
+        containerCount: 1,
+        updatesAvailable: 1,
+      });
+    });
   });
 });

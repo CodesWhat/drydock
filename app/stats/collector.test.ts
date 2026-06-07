@@ -169,6 +169,42 @@ describe('stats/collector', () => {
     expect(harness.stream.destroy).toHaveBeenCalledTimes(1);
   });
 
+  test('uses the agent-prefixed watcher for agent-owned containers', async () => {
+    const localStats = vi.fn(async () => createMockStatsStream());
+    const agentStream = createMockStatsStream();
+    const agentStats = vi.fn(async () => agentStream);
+    const localGetContainer = vi.fn(() => ({ stats: localStats }));
+    const agentGetContainer = vi.fn(() => ({ stats: agentStats }));
+    const collector = createContainerStatsCollector({
+      getContainerById: () =>
+        ({ id: 'c-agent', name: 'web', watcher: 'local', agent: 'edge-agent' }) as any,
+      getWatchers: () => ({
+        'docker.local': {
+          dockerApi: {
+            getContainer: localGetContainer,
+          },
+        },
+        'edge-agent.docker.local': {
+          dockerApi: {
+            getContainer: agentGetContainer,
+          },
+        },
+      }),
+      intervalSeconds: 10,
+      historySize: 3,
+      now: () => Date.now(),
+    });
+
+    const release = collector.watch('c-agent');
+    await Promise.resolve();
+
+    expect(agentGetContainer).toHaveBeenCalledWith('web');
+    expect(agentStats).toHaveBeenCalledWith({ stream: true });
+    expect(localGetContainer).not.toHaveBeenCalled();
+    expect(localStats).not.toHaveBeenCalled();
+    release();
+  });
+
   test('release callback is idempotent', async () => {
     const harness = createHarness();
     const release = harness.collector.watch('c1');

@@ -8,7 +8,7 @@ export const statsPaths = {
       operationId: 'getFleetStatsSummary',
       responses: {
         200: jsonResponse('Fleet stats summary', {
-          $ref: '#/components/schemas/FleetStatsSummary',
+          $ref: '#/components/schemas/FleetStatsSummaryResponse',
         }),
         401: errorResponse('Authentication required'),
       },

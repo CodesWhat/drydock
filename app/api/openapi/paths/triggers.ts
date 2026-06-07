@@ -51,9 +51,13 @@ export const triggerPaths = {
       },
       responses: {
         200: jsonResponse('Trigger executed', { $ref: '#/components/schemas/EmptyObject' }),
+        202: jsonResponse('Update operation accepted', {
+          $ref: '#/components/schemas/OperationAcceptedResponse',
+        }),
         400: errorResponse('Invalid trigger request'),
         401: errorResponse('Authentication required'),
         404: errorResponse('Trigger not found'),
+        409: errorResponse('Update cannot be queued'),
         500: errorResponse('Trigger execution failed'),
       },
     },
@@ -92,9 +96,13 @@ export const triggerPaths = {
       },
       responses: {
         200: jsonResponse('Trigger executed', { $ref: '#/components/schemas/EmptyObject' }),
+        202: jsonResponse('Update operation accepted', {
+          $ref: '#/components/schemas/OperationAcceptedResponse',
+        }),
         400: errorResponse('Invalid trigger request'),
         401: errorResponse('Authentication required'),
         404: errorResponse('Agent not found'),
+        409: errorResponse('Update cannot be queued or route agent does not own container'),
         500: errorResponse('Trigger execution failed'),
       },
     },

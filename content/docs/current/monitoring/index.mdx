@@ -13,13 +13,22 @@ drydock exposes an endpoint to check the service healthiness.
 
 The healthiness is exposed at [/health](http://localhost:3000/health).
 
-If the application is healthy, the Http Response Status Code is `200` (`500` otherwise).
+If the application is healthy, the HTTP response status code is `200`. During startup, before authentication strategies are ready, drydock returns `503` with a startup readiness payload.
 
 ### Example
 
 ```json
 {
   "uptime": 123
+}
+```
+
+Startup readiness response:
+
+```json
+{
+  "status": "starting",
+  "reason": "auth strategies not yet registered"
 }
 ```
 

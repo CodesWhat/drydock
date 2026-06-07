@@ -293,12 +293,10 @@ describe('OpenAPI document', () => {
 
   test('should not define the removed ContainerStatsSummaryItem and ContainerStatsSummaryResponse schemas', () => {
     expect(
-      (openApiDocument.components.schemas as Record<string, unknown>)['ContainerStatsSummaryItem'],
+      (openApiDocument.components.schemas as Record<string, unknown>).ContainerStatsSummaryItem,
     ).toBeUndefined();
     expect(
-      (openApiDocument.components.schemas as Record<string, unknown>)[
-        'ContainerStatsSummaryResponse'
-      ],
+      (openApiDocument.components.schemas as Record<string, unknown>).ContainerStatsSummaryResponse,
     ).toBeUndefined();
   });
 

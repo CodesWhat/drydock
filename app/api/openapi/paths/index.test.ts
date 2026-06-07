@@ -12,6 +12,23 @@ import {
 } from '../common.js';
 import { openApiPaths } from './index.js';
 
+const webhookAgentQueryParam = {
+  name: 'agent',
+  in: 'query',
+  required: false,
+  description:
+    'Agent name used to disambiguate duplicate container names; use __local__ for controller-local containers without an agent',
+  schema: { type: 'string' },
+};
+
+const webhookWatcherQueryParam = {
+  name: 'watcher',
+  in: 'query',
+  required: false,
+  description: 'Watcher name used to disambiguate duplicate container names',
+  schema: { type: 'string' },
+};
+
 describe('openApiPaths', () => {
   describe('createWebhookContainerActionPost', () => {
     test('webhook watch-container path has exact full structure', () => {
@@ -27,7 +44,7 @@ describe('openApiPaths', () => {
           summary: 'Trigger watch for a specific container by name',
           operationId: 'webhookWatchContainer',
           security: [{ webhookBearerAuth: [] }],
-          parameters: [containerNamePathParam],
+          parameters: [containerNamePathParam, webhookAgentQueryParam, webhookWatcherQueryParam],
           responses: {
             200: jsonResponse('Container watch triggered', {
               $ref: '#/components/schemas/WebhookContainerActionResponse',
@@ -35,6 +52,7 @@ describe('openApiPaths', () => {
             401: errorResponse('Missing or invalid webhook authorization header'),
             403: errorResponse('Webhooks are disabled for container'),
             404: errorResponse('Container not found'),
+            409: errorResponse('Ambiguous container name'),
             500: errorResponse('Webhook execution failed'),
           },
         },
@@ -49,14 +67,15 @@ describe('openApiPaths', () => {
           summary: 'Trigger update for a specific container by name',
           operationId: 'webhookUpdateContainer',
           security: [{ webhookBearerAuth: [] }],
-          parameters: [containerNamePathParam],
+          parameters: [containerNamePathParam, webhookAgentQueryParam, webhookWatcherQueryParam],
           responses: {
-            200: jsonResponse('Container update triggered', {
-              $ref: '#/components/schemas/WebhookContainerActionResponse',
+            202: jsonResponse('Container update accepted', {
+              $ref: '#/components/schemas/WebhookContainerUpdateAcceptedResponse',
             }),
             401: errorResponse('Missing or invalid webhook authorization header'),
             403: errorResponse('Webhooks are disabled for container'),
             404: errorResponse('Container or docker trigger not found'),
+            409: errorResponse('Ambiguous container name or update cannot be queued'),
             500: errorResponse('Webhook execution failed'),
           },
         },
@@ -75,6 +94,15 @@ describe('openApiPaths', () => {
           responses: {
             200: jsonResponse('Health check response', {
               $ref: '#/components/schemas/HealthResponse',
+            }),
+            503: jsonResponse('Service is starting', {
+              type: 'object',
+              required: ['status', 'reason'],
+              properties: {
+                status: { type: 'string', enum: ['starting'] },
+                reason: { type: 'string' },
+              },
+              additionalProperties: false,
             }),
           },
         },

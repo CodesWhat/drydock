@@ -7,11 +7,7 @@ import type { Container } from '../model/container.js';
 import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import Trigger from '../triggers/providers/Trigger.js';
-import {
-  enqueueContainerUpdate,
-  requestContainerUpdate,
-  UpdateRequestError,
-} from '../updates/request-update.js';
+import { requestContainerUpdate, UpdateRequestError } from '../updates/request-update.js';
 import { getErrorMessage } from '../util/error.js';
 import * as component from './component.js';
 import { sendErrorResponse } from './error-response.js';
@@ -114,6 +110,25 @@ function getRemoteErrorDetails(error: unknown): Record<string, unknown> | undefi
   return payload?.details && typeof payload.details === 'object'
     ? (payload.details as Record<string, unknown>)
     : undefined;
+}
+
+function buildAgentQualifiedTriggerId(
+  agentName: string,
+  triggerType: string,
+  triggerName: string,
+): string {
+  return `${agentName}.${triggerType}.${triggerName}`;
+}
+
+function formatStoredContainerOwner(container: Container): string {
+  return container.agent ? `${container.agent}.${container.id}` : container.id;
+}
+
+function getRouteAgentOwnershipError(agentName: string, container: Container): string | undefined {
+  if (container.agent === agentName) {
+    return undefined;
+  }
+  return `Route agent ${agentName} does not own container ${formatStoredContainerOwner(container)}`;
 }
 
 /**
@@ -256,28 +271,25 @@ async function runRemoteTrigger(req: Request<RunRemoteTriggerParams>, res: Respo
         return;
       }
 
-      const triggerToRun = registry.getState().trigger[`${triggerType}.${triggerName}`];
-      // Enqueue (not dispatch) the controller-side operation row so its
-      // operationId can be threaded to the agent, which transitions the row via
-      // its lifecycle events. The update itself runs exactly once on the agent
-      // through runRemoteTrigger below. Using requestContainerUpdate here would
-      // also dispatch the update locally on the controller, racing two attempts
-      // on the same operationId and surfacing bogus 409/500s.
-      const accepted = await enqueueContainerUpdate(storedContainer, {
-        ...(triggerToRun
-          ? { trigger: triggerToRun as { type: string; trigger: typeof triggerToRun.trigger } }
-          : {}),
+      const ownershipError = getRouteAgentOwnershipError(agentName, storedContainer);
+      if (ownershipError) {
+        sendErrorResponse(res, 409, ownershipError);
+        return;
+      }
+
+      const triggerId = buildAgentQualifiedTriggerId(agentName, triggerType, triggerName);
+      const triggerToRun = registry.getState().trigger[triggerId];
+      if (!triggerToRun) {
+        sendErrorResponse(res, 404, `Remote update trigger ${triggerId} not found`);
+        return;
+      }
+
+      const accepted = await requestContainerUpdate(storedContainer, {
+        trigger: triggerToRun as { type: string; trigger: typeof triggerToRun.trigger },
         ...(callerOperationId !== undefined ? { operationId: callerOperationId } : {}),
       });
-      const runtimeContext = { operationId: accepted.operationId };
-      await agentClient.runRemoteTrigger(
-        containerToTrigger,
-        triggerType,
-        triggerName,
-        runtimeContext,
-      );
       log.info(
-        `Remote update trigger executed with success (agent=${sanitizeLogParam(agentName)}, type=${sanitizeLogParam(triggerType)}, name=${sanitizeLogParam(triggerName)}, container=${sanitizeLogParam(containerToTrigger.id)}, operationId=${sanitizeLogParam(accepted.operationId)})`,
+        `Accepted remote update trigger ${sanitizeLogParam(triggerId)} (container=${sanitizeLogParam(storedContainer.id)}, operationId=${sanitizeLogParam(accepted.operationId)})`,
       );
       res.status(202).json({ operationId: accepted.operationId });
       return;
