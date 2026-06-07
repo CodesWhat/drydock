@@ -817,6 +817,91 @@ describe('API Index', () => {
     expect(trustProxyWarning).toBeUndefined();
   });
 
+  const initWithTrustProxyDisabled = async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      trustproxy: false,
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const middlewareCall = mockApp.use.mock.calls.find(
+      (call) => typeof call[0] === 'function' && call[0].name === 'warnOnReverseProxyProtoMismatch',
+    );
+    return middlewareCall?.[0];
+  };
+
+  const countReverseProxyWarnings = () =>
+    mockLog.warn.mock.calls.filter((args) => args[0]?.includes?.('X-Forwarded-Proto: https'))
+      .length;
+
+  test('should warn once when trust proxy disabled but proxy forwards https', async () => {
+    const middleware = await initWithTrustProxyDisabled();
+    expect(middleware).toBeDefined();
+
+    const next = vi.fn();
+    const req = {
+      protocol: 'http',
+      get: (header: string) =>
+        header.toLowerCase() === 'x-forwarded-proto' ? 'https, http' : undefined,
+    };
+
+    middleware(req, {}, next);
+    middleware(req, {}, next);
+
+    expect(countReverseProxyWarnings()).toBe(1);
+    expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('DD_SERVER_TRUSTPROXY=1'));
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('csrf-validation-failed-403-behind-a-reverse-proxy'),
+    );
+    expect(next).toHaveBeenCalledTimes(2);
+  });
+
+  test('should not warn about proxy mismatch when X-Forwarded-Proto is absent or http', async () => {
+    const middleware = await initWithTrustProxyDisabled();
+    const next = vi.fn();
+
+    middleware({ protocol: 'http', get: () => undefined }, {}, next);
+    middleware({ protocol: 'http', get: () => 'http' }, {}, next);
+
+    expect(countReverseProxyWarnings()).toBe(0);
+    expect(next).toHaveBeenCalledTimes(2);
+  });
+
+  test('should not warn about proxy mismatch when the request is already https', async () => {
+    const middleware = await initWithTrustProxyDisabled();
+    const next = vi.fn();
+
+    middleware({ protocol: 'https', get: () => 'https' }, {}, next);
+
+    expect(countReverseProxyWarnings()).toBe(0);
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  test('should not register reverse-proxy proto-mismatch middleware when trust proxy enabled', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      trustproxy: 1,
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const middlewareCall = mockApp.use.mock.calls.find(
+      (call) => typeof call[0] === 'function' && call[0].name === 'warnOnReverseProxyProtoMismatch',
+    );
+    expect(middlewareCall).toBeUndefined();
+  });
+
   test('should set json replacer', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,
