@@ -147,8 +147,8 @@ function resultMessage(alert, instance) {
  * URIs because they don't match the `file://` checkout scheme, so we strip
  * the origin and store it in `originalUriBaseIds` at the run level instead.
  *
- * Returns `{ uri, uriBaseId? }` — callers must include the returned object as
- * the `artifactLocation` and register the origin in `originalUriBaseIds`.
+ * Returns `{ uri, origin? }` — callers must include the returned object as the
+ * `artifactLocation` and register the origin in `originalUriBaseIds`.
  */
 function resolveArtifactLocation(rawUri) {
   try {
@@ -158,7 +158,7 @@ function resolveArtifactLocation(rawUri) {
       // GHAS Code Scanning rejects empty artifactLocation.uri values
       // (locationFromSarifResult: expected artifact location).
       const path = parsed.pathname + parsed.search + parsed.hash;
-      return { uri: path, uriBaseId: 'TARGET', origin: parsed.origin + '/' };
+      return { uri: path, origin: `${parsed.origin}/` };
     }
   } catch {
     // Not a URL — fall through and return as-is.
@@ -168,7 +168,7 @@ function resolveArtifactLocation(rawUri) {
 
 function buildResult(alert, instance, siteName) {
   const rawUri = instance.uri || instance.nodeName || siteName || 'zap-target';
-  const { uri, uriBaseId, origin } = resolveArtifactLocation(rawUri);
+  const { uri, origin } = resolveArtifactLocation(rawUri);
   const properties = {
     confidence: alert.confidence,
     risk: alert.riskdesc,
@@ -191,7 +191,6 @@ function buildResult(alert, instance, siteName) {
         physicalLocation: {
           artifactLocation: {
             uri,
-            ...(uriBaseId ? { uriBaseId } : {}),
           },
         },
       },
@@ -230,15 +229,23 @@ export function convertZapJsonToSarif(zapReport) {
   // originalUriBaseIds.  SARIF spec §3.14.14 requires this for uriBaseId
   // references to resolve — GitHub Code Scanning rejects bare http URIs.
   const origins = [...new Set(results.map((r) => r._origin).filter(Boolean))];
+  const originBaseIds = new Map(
+    origins.map((origin, i) => [origin, `TARGET${i > 0 ? `_${i}` : ''}`]),
+  );
   const originalUriBaseIds =
     origins.length > 0
-      ? Object.fromEntries(
-          origins.map((origin, i) => [`TARGET${i > 0 ? `_${i}` : ''}`, { uri: origin }]),
-        )
+      ? Object.fromEntries([...originBaseIds].map(([origin, baseId]) => [baseId, { uri: origin }]))
       : undefined;
 
-  // Strip the internal _origin carrier before serialising.
-  const cleanResults = results.map(({ _origin: _unused, ...rest }) => rest);
+  // Strip the internal _origin carrier before serialising, after binding each
+  // result to the generated uriBaseId for its origin.
+  const cleanResults = results.map(({ _origin: origin, ...rest }) => {
+    const uriBaseId = origin ? originBaseIds.get(origin) : undefined;
+    if (uriBaseId) {
+      rest.locations[0].physicalLocation.artifactLocation.uriBaseId = uriBaseId;
+    }
+    return rest;
+  });
 
   return {
     version: '2.1.0',
