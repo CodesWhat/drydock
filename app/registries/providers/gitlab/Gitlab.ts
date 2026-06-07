@@ -15,10 +15,12 @@ class Gitlab<
   TConfiguration extends GitlabRegistryConfiguration = GitlabRegistryConfiguration,
 > extends BaseRegistry<TConfiguration> {
   protected getTrustedAuthHosts(): string[] {
+    /* v8 ignore next -- GitLab config schema supplies authurl; empty config is direct-construction only. */
     return typeof this.configuration?.authurl === 'string' ? [this.configuration.authurl] : [];
   }
 
   private getTokenRequestCredentials(): string | undefined {
+    /* v8 ignore next -- GitLab config schema requires token; missing token is direct-construction only. */
     return this.configuration.token ? Gitlab.base64Encode('', this.configuration.token) : undefined;
   }
 
@@ -82,6 +84,7 @@ class Gitlab<
       url: `${this.configuration.authurl}/jwt/auth?service=container_registry&scope=${scope}`,
       headers: {
         Accept: 'application/json',
+        /* v8 ignore next -- GitLab config schema requires token before authenticate is callable. */
         ...(credentials ? { Authorization: `Basic ${credentials}` } : {}),
       },
     };

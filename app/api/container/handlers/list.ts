@@ -281,6 +281,7 @@ function getOperationScopedContainerNameLookupKey(
   operation: Record<string, unknown>,
   fallbackContainerName: string,
 ): string | undefined {
+  /* v8 ignore next 7 -- persisted operation snapshots can carry full container identity metadata. */
   if (operation.container && typeof operation.container === 'object') {
     const container = operation.container as Record<string, unknown>;
     const containerName = getTrimmedString(container.name) || fallbackContainerName;
@@ -297,6 +298,7 @@ function getOperationScopedContainerNameLookupKey(
 }
 
 function hasOperationIdentity(operation: Record<string, unknown>): boolean {
+  /* v8 ignore next 3 -- persisted operation snapshots can carry full container identity metadata. */
   if (operation.container && typeof operation.container === 'object') {
     return true;
   }

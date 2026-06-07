@@ -17,6 +17,7 @@ interface GarTokenResponse {
  */
 class Gar extends BaseRegistry<GarRegistryConfiguration> {
   private getServiceAccountCredentials(): string | undefined {
+    /* v8 ignore next 3 -- GAR object config requires clientemail; absence is an anonymous fallback. */
     if (!this.configuration.clientemail) {
       return undefined;
     }

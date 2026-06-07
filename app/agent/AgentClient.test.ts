@@ -4825,6 +4825,24 @@ describe('AgentClient', () => {
     });
   });
 
+  describe('getStoredContainerForAgentOperation', () => {
+    test('finds one agent-owned container by name when payload ids are absent', () => {
+      const row = { id: 'container-1', name: 'nginx', agent: 'test-agent' };
+      vi.mocked(storeContainer.getContainers).mockReturnValue([
+        undefined,
+        row,
+        { id: 'container-2', name: 'nginx', agent: 'other-agent' },
+      ] as any);
+
+      const result = (client as any).getStoredContainerForAgentOperation({
+        containerName: 'nginx',
+      });
+
+      expect(result).toBe(row);
+      expect(storeContainer.getContainers).toHaveBeenCalledWith({ agent: 'test-agent' });
+    });
+  });
+
   describe('applyAgentUpdateOperationChanged — controller-issued row reuse (#289)', () => {
     test('updates the controller-issued row when agent echoes back the controller operationId', () => {
       // Simulate controller row existing at the raw id

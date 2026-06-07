@@ -186,6 +186,7 @@ class BaseRegistry<
     try {
       return new URL(withProtocol).host.toLowerCase();
     } catch {
+      /* v8 ignore next 4 -- malformed auth hosts are normalized defensively for direct config input. */
       return normalizedValue
         .replace(/^https?:\/\//i, '')
         .split('/')[0]

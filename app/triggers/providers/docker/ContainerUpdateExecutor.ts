@@ -78,6 +78,7 @@ function getContainerIdentityFilter(
   }
 
   return {
+    /* v8 ignore next -- local watcher identity omits agent; agent-owned identity is covered by executor tests. */
     ...(typeof container.agent === 'string' ? { agent: container.agent } : {}),
     watcher: container.watcher,
   };

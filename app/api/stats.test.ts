@@ -54,6 +54,14 @@ describe('Stats Router', () => {
     expect(mockAggregator.start).toHaveBeenCalledTimes(1);
   });
 
+  test('init() reuses the started aggregator', () => {
+    statsRouter.init();
+    statsRouter.init();
+
+    expect(createContainerStatsAggregator).toHaveBeenCalledTimes(1);
+    expect(mockAggregator.start).toHaveBeenCalledTimes(1);
+  });
+
   test('init() passes store + registry accessors to the aggregator factory', () => {
     statsRouter.init();
 

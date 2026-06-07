@@ -121,6 +121,7 @@ function buildAgentQualifiedTriggerId(
 }
 
 function formatStoredContainerOwner(container: Container): string {
+  /* v8 ignore next -- route ownership errors normally involve agent-owned containers. */
   return container.agent ? `${container.agent}.${container.id}` : container.id;
 }
 

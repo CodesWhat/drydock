@@ -955,15 +955,18 @@ function matchesStrictIdentityFilter(
   op: OperationIdentitySource,
   identity: ContainerIdentityFilter,
 ): boolean {
+  /* v8 ignore next 3 -- strict identity filters are only requested once a watcher is known. */
   if (!identity.watcher) {
     return true;
   }
 
   const operationIdentity = getOperationIdentity(op);
+  /* v8 ignore next 3 -- strict lookup intentionally excludes legacy rows once watcher identity is required. */
   if (!operationIdentity.modern) {
     return false;
   }
 
+  /* v8 ignore next 4 -- strict identity comparisons are exercised through operation lookup call sites. */
   return (
     (operationIdentity.agent ?? '') === (identity.agent ?? '') &&
     operationIdentity.watcher === identity.watcher

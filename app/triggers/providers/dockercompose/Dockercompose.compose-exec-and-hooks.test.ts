@@ -308,7 +308,7 @@ describe('Dockercompose Trigger', () => {
     ).rejects.toThrow('create failed');
   });
 
-  // BUG #391: rollback safety net tests
+  // Regression coverage for #391 rollback safety net.
   // -----------------------------------------------------------------------
 
   test('[#391] updateContainerWithCompose should attempt to restore old container when recreateContainer throws', async () => {

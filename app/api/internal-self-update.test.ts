@@ -215,6 +215,22 @@ describe('internal-self-update', () => {
       createMockResponse(),
     );
 
+    mockGetOperationById.mockReturnValue({
+      id: 'op-expired',
+      status: 'in-progress',
+      phase: 'prepare',
+      kind: 'self-update',
+    });
+    handler(
+      createFinalizeRequest({
+        body: {
+          operationId: 'op-expired',
+          status: 'expired',
+        },
+      }),
+      createMockResponse(),
+    );
+
     expect(mockMarkOperationTerminal).toHaveBeenNthCalledWith(1, 'op-succeeded', {
       status: 'succeeded',
     });
@@ -223,6 +239,9 @@ describe('internal-self-update', () => {
     });
     expect(mockMarkOperationTerminal).toHaveBeenNthCalledWith(3, 'op-failed', {
       status: 'failed',
+    });
+    expect(mockMarkOperationTerminal).toHaveBeenNthCalledWith(4, 'op-expired', {
+      status: 'expired',
     });
   });
 

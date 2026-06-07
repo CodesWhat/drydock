@@ -101,6 +101,17 @@ describe('parseBearerChallenge', () => {
     });
   });
 
+  test('should parse escaped characters in quoted Bearer param values', () => {
+    const result = parseBearerChallenge(
+      'Bearer realm="https://auth.example.com/token\\"quoted",service="registry\\\\host"',
+    );
+
+    expect(result).toEqual({
+      realm: 'https://auth.example.com/token"quoted',
+      service: 'registry\\host',
+    });
+  });
+
   test('should be case-insensitive on the Bearer scheme token', () => {
     const lowerResult = parseBearerChallenge('bearer realm="https://auth.example.com/token"');
     expect(lowerResult).toEqual({ realm: 'https://auth.example.com/token' });

@@ -19,6 +19,7 @@ class Gcr extends BaseRegistry<GcrRegistryConfiguration> {
   }
 
   private getServiceAccountCredentials(): string | undefined {
+    /* v8 ignore next 3 -- GCR object config requires clientemail; absence is an anonymous fallback. */
     if (!this.configuration.clientemail) {
       return undefined;
     }

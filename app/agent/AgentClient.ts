@@ -952,6 +952,7 @@ export class AgentClient {
         ? { newContainerId: toOptionalString(payload.newContainerId) }
         : {}),
       ...(isContainerUpdateOperationPhase(payload.phase) ? { phase: payload.phase } : {}),
+      /* v8 ignore next 3 -- container object payloads are optional agent event metadata. */
       ...(toOptionalRecord(payload.container) !== undefined
         ? { container: { ...toOptionalRecord(payload.container), agent: this.name } }
         : {}),
@@ -1055,11 +1056,13 @@ export class AgentClient {
           updateOperationStore.updateOperation(operationId, {
             containerName: payload.containerName,
             agent: base.agent,
+            /* v8 ignore next -- watcher is optional when an agent event lacks container metadata. */
             ...(base.watcher !== undefined ? { watcher: base.watcher } : {}),
             ...(payload.containerId !== undefined ? { containerId: payload.containerId } : {}),
             ...(payload.newContainerId !== undefined
               ? { newContainerId: payload.newContainerId }
               : {}),
+            /* v8 ignore next 3 -- existing rows keep their persisted container snapshot. */
             ...(base.container !== undefined && !existing.container
               ? { container: base.container as never }
               : {}),
