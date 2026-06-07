@@ -78,6 +78,7 @@ describe('GitHub Container Registry', () => {
     expect(axios).toHaveBeenCalledWith({
       method: 'GET',
       url: 'https://ghcr.io/token?service=ghcr.io&scope=repository%3Auser%2Frepo%3Apull',
+      maxRedirects: 0,
       headers: {
         Accept: 'application/json',
         Authorization: `Basic ${expectedBasic}`,
@@ -104,6 +105,7 @@ describe('GitHub Container Registry', () => {
     expect(axios).toHaveBeenCalledWith({
       method: 'GET',
       url: 'https://ghcr.io/token?service=ghcr.io&scope=repository%3Auser%2Frepo%3Apull',
+      maxRedirects: 0,
       headers: {
         Accept: 'application/json',
         Authorization: `Basic ${expectedBasic}`,
@@ -165,6 +167,7 @@ describe('GitHub Container Registry', () => {
     expect(axios).toHaveBeenCalledWith({
       method: 'GET',
       url: 'https://ghcr.io/token?service=ghcr.io&scope=repository%3Auser%2Frepo%3Apull',
+      maxRedirects: 0,
       headers: {
         Accept: 'application/json',
       },
@@ -203,6 +206,7 @@ describe('GitHub Container Registry', () => {
     expect(axios).toHaveBeenCalledWith({
       method: 'GET',
       url: 'https://ghcr.io/token?service=ghcr.io&scope=repository%3Auser%2Frepo%3Apull',
+      maxRedirects: 0,
       headers: {
         Accept: 'application/json',
         Authorization: `Basic ${expectedBasic}`,
