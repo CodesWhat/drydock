@@ -445,6 +445,7 @@ class BaseRegistry<
     const request = this.withTlsRequestOptions({
       method: 'GET',
       url: authUrl,
+      maxRedirects: 0,
       headers: {
         Accept: 'application/json',
       },

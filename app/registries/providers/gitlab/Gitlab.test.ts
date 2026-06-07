@@ -113,6 +113,7 @@ test('authenticate should encode scope query parameter', async () => {
   expect(axios).toHaveBeenCalledWith({
     method: 'GET',
     url: 'https://gitlab.com/jwt/auth?service=container_registry&scope=repository%3Agroup%2Fproject%3Apull',
+    maxRedirects: 0,
     headers: {
       Accept: 'application/json',
       Authorization: `Basic ${Buffer.from(`:${TEST_TOKEN}`).toString('base64')}`,
@@ -139,6 +140,7 @@ test('resolveBearerChallengeOptions should use configured token credentials', as
   expect(axios).toHaveBeenCalledWith({
     method: 'GET',
     url: 'https://gitlab.com/jwt/auth?service=container_registry&scope=repository%3Agroup%2Fproject%3Apull',
+    maxRedirects: 0,
     headers: {
       Accept: 'application/json',
       Authorization: `Basic ${Buffer.from(`:${TEST_TOKEN}`).toString('base64')}`,

@@ -79,6 +79,7 @@ class Gar extends BaseRegistry<GarRegistryConfiguration> {
     const request = {
       method: 'GET',
       url: tokenUrl.toString(),
+      maxRedirects: 0,
       headers: {
         Accept: 'application/json',
         Authorization: `Basic ${this.getServiceAccountCredentials()}`,

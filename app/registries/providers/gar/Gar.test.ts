@@ -187,6 +187,7 @@ test('resolveBearerChallengeOptions should use configured service account creden
   expect(axios).toHaveBeenCalledWith({
     method: 'GET',
     url: 'https://us-central1-docker.pkg.dev/v2/token?service=us-central1-docker.pkg.dev&scope=repository%3Aproject%2Frepository%2Fimage%3Apull',
+    maxRedirects: 0,
     headers: {
       Accept: 'application/json',
       Authorization: `Basic ${expectedBasic}`,

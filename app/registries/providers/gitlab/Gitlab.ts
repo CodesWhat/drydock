@@ -82,6 +82,7 @@ class Gitlab<
     const request = {
       method: 'GET',
       url: `${this.configuration.authurl}/jwt/auth?service=container_registry&scope=${scope}`,
+      maxRedirects: 0,
       headers: {
         Accept: 'application/json',
         /* v8 ignore next -- GitLab config schema requires token before authenticate is callable. */

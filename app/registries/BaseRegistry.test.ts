@@ -263,6 +263,7 @@ test('authenticateBearerFromAuthUrl should set bearer token using default extrac
   expect(axios).toHaveBeenCalledWith({
     method: 'GET',
     url: 'https://auth.example.com/token',
+    maxRedirects: 0,
     headers: {
       Accept: 'application/json',
       Authorization: 'Basic dXNlcjpwYXNz',
@@ -748,6 +749,37 @@ test('authenticateBearerFromAuthUrl should apply tls options to token request', 
   expect(result.headers.Authorization).toBe('Bearer abc123');
   expect(result.httpsAgent).toBeDefined();
   expect(result.httpsAgent.options.rejectUnauthorized).toBe(false);
+});
+
+test('authenticateBearerFromAuthUrl should set maxRedirects: 0 on the token-endpoint request to prevent credential exfiltration via redirect', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+
+  await baseRegistry.authenticateBearerFromAuthUrl(
+    { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+    'https://auth.example.com/token',
+    'dXNlcjpwYXNz',
+  );
+
+  expect(axios).toHaveBeenCalledWith(
+    expect.objectContaining({
+      maxRedirects: 0,
+    }),
+  );
+});
+
+test('authenticateBearerFromAuthUrl should fail closed when the token endpoint returns a redirect (3xx treated as request failure)', async () => {
+  const { default: axios } = await import('axios');
+  // axios with maxRedirects:0 rejects on 3xx — simulate that behavior
+  axios.mockRejectedValue(new Error('Request failed with status code 301'));
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      'dXNlcjpwYXNz',
+    ),
+  ).rejects.toThrow('token request failed (Request failed with status code 301)');
 });
 
 test('authenticateBearerFromAuthUrl should reuse cached token within configured ttl', async () => {
