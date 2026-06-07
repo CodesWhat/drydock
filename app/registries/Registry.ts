@@ -513,8 +513,6 @@ class Registry<
       );
     };
 
-    let alreadyRetried = false;
-
     try {
       const envelope = await executeRequest(axiosOptionsWithConnectionReuse);
 
@@ -529,8 +527,9 @@ class Registry<
         : envelope.data;
     } catch (error) {
       // On a 401 with a Bearer challenge, attempt a token exchange and retry once.
+      // The retry is structurally bounded: it runs inside this catch with no
+      // enclosing loop, so a retry that also fails propagates without looping.
       if (
-        !alreadyRetried &&
         error != null &&
         typeof error === 'object' &&
         (error as { response?: { status?: number } }).response?.status === 401
@@ -546,7 +545,6 @@ class Registry<
         );
 
         if (retryOptions !== undefined) {
-          alreadyRetried = true;
           try {
             const retryEnvelope = await executeRequest(retryOptions);
             const end = Date.now();

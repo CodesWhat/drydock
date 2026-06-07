@@ -2491,7 +2491,7 @@ describe('callRegistry', () => {
       expect(axios).toHaveBeenCalledTimes(1);
     });
 
-    test('should not loop when retry also returns 401 (alreadyRetried guard)', async () => {
+    test('should not loop when retry also returns 401 (structurally bounded retry)', async () => {
       const { default: axios } = await import('axios');
       vi.clearAllMocks();
 
