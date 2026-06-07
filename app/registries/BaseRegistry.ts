@@ -592,7 +592,7 @@ class BaseRegistry<
         authUrl = u.toString();
       } catch {
         this.log.debug(
-          `Bearer challenge for ${this.getId()}: realm URL is malformed ("${challenge.realm}"), falling back to original error`,
+          `Bearer challenge for ${this.getId()}: realm URL is malformed ("${sanitizeLogParam(challenge.realm)}"), falling back to original error`,
         );
         return undefined;
       }
