@@ -252,3 +252,21 @@ Setting `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true` opts into the 
 **Note:** enabling the flag changes the Home Assistant entity IDs for agent-owned containers (the MQTT topic path changes). Update any Home Assistant automations, dashboards, or templates that reference the old (agent-less) entity IDs for agent containers. Single-node deployments are unaffected.
 
 **Migration:** Multi-agent deployments should set `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true` and re-point any affected Home Assistant references before v1.7.0 makes it the default.
+
+## Enforced security changes (no deprecation window)
+
+These behaviors were removed immediately rather than going through a grace period, because the deprecated behavior was itself the vulnerability — keeping it alive behind a warning would have left the hole open. They are listed here for upgrade visibility and migration guidance.
+
+### Implicit reverse-proxy header trust for CSRF origin checks
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.5.0-rc.30 |
+| **Removed in** | v1.5.0-rc.30 (immediate — security fix, no grace period) |
+| **Affects** | TLS-terminating reverse-proxy deployments (Synology DSM, Traefik, Nginx, Caddy, HAProxy, …) without `DD_SERVER_TRUSTPROXY` |
+
+Before rc.30, `getExpectedOrigin()` honored `X-Forwarded-Proto` / `X-Forwarded-Host` unconditionally when validating the same-origin (CSRF) check on state-changing requests. A client could forge those headers to satisfy the check even with `trust proxy` disabled ([`a132318e`](https://github.com/CodesWhat/drydock/commit/a132318e)). rc.30 stopped trusting them unless Express `trust proxy` is enabled. Because the forgeable behavior was the vulnerability, it could not be kept alive behind a deprecation window.
+
+A deployment that terminated TLS at a proxy but never set `DD_SERVER_TRUSTPROXY` previously worked only because the unconditional header trust masked the misconfiguration; after rc.30 it returns `403 CSRF validation failed` on every manual update / recheck / scan ([#418](https://github.com/CodesWhat/drydock/issues/418)). Since v1.5.0-rc.34, Drydock logs a startup warning when it detects `X-Forwarded-Proto: https` while `trust proxy` is disabled, so the requirement is no longer silent.
+
+**Migration:** Set `DD_SERVER_TRUSTPROXY` to the number of proxy hops in front of Drydock (e.g. `1`), and make sure the proxy forwards `X-Forwarded-Proto` (and `X-Forwarded-Host`). See [CSRF validation failed (403) behind a reverse proxy](https://getdrydock.com/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy).
