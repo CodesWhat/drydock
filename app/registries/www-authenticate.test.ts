@@ -89,6 +89,18 @@ describe('parseBearerChallenge', () => {
     });
   });
 
+  test('should parse Bearer challenge when it follows Basic and preserve quoted commas', () => {
+    const result = parseBearerChallenge(
+      'Basic realm="registry, login", Bearer realm="https://auth.example.com/token",service="registry.example.com",scope="repository:library/nginx:pull"',
+    );
+
+    expect(result).toEqual({
+      realm: 'https://auth.example.com/token',
+      service: 'registry.example.com',
+      scope: 'repository:library/nginx:pull',
+    });
+  });
+
   test('should be case-insensitive on the Bearer scheme token', () => {
     const lowerResult = parseBearerChallenge('bearer realm="https://auth.example.com/token"');
     expect(lowerResult).toEqual({ realm: 'https://auth.example.com/token' });

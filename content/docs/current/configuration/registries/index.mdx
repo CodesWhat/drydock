@@ -78,14 +78,14 @@ Use `INSECURE=true` only for self-hosted registries on private networks where a 
 
 ## Automatic Bearer token exchange
 
-When a registry responds to a tag-list or manifest request with `401 Unauthorized` and a `WWW-Authenticate: Bearer realm=…,service=…,scope=…` challenge, drydock automatically performs the standard Docker Registry v2 token-auth flow: it fetches a token from the realm endpoint (anonymously for public images, or with the configured credentials for private ones) and retries the request once.
+When a registry responds to a tag-list or manifest request with `401 Unauthorized` and a `WWW-Authenticate` header containing a `Bearer realm=…,service=…,scope=…` challenge, drydock automatically performs the standard Docker Registry v2 token-auth flow: it fetches a token from the realm endpoint (anonymously for public images, or with the configured credentials for private ones) and retries the request once. The Bearer challenge can appear alongside other schemes such as `Basic`, and token responses may use either `token` or `access_token`.
 
 This covers registries that do not require a pre-authenticated session, including:
 
 - Public images on **Codeberg** (`codeberg.org`) and other Forgejo/Gitea instances
 - **Chainguard** (`cgr.dev`) and other registries that always challenge before serving tag lists
 
-The realm host is validated against the registry's own configured host before any credentials are sent — the exchange is silently skipped if the challenge points to an untrusted host, and the original 401 is returned instead. Providers that already perform proactive Bearer auth (GHCR, Docker Hub, Quay) are unaffected.
+The realm authority is validated against the registry's own configured authority before any credentials are sent, including non-default ports. The exchange is silently skipped if the challenge points to an untrusted host or port, and the original 401 is returned instead. If credentials were configured and the trusted token endpoint rejects them with `401` or `403`, drydock surfaces a credential-specific authentication error instead of falling back to the original registry 401. Providers that already perform proactive Bearer auth (GHCR, Docker Hub, Quay) are unaffected.
 
 ## Registry lookup image (`dd.registry.lookup.image`)
 

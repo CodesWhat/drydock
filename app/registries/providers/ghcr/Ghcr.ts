@@ -6,12 +6,34 @@ interface GhcrRegistryConfiguration extends BaseRegistryConfiguration {
   token?: string;
 }
 
+interface GhcrTokenResponse {
+  access_token?: unknown;
+  token?: unknown;
+}
+
 /**
  * Github Container Registry integration.
  */
 class Ghcr extends BaseRegistry<GhcrRegistryConfiguration> {
   protected getTrustedAuthHosts(): string[] {
     return ['ghcr.io'];
+  }
+
+  private getTokenRequestCredentials(): string | undefined {
+    return this.configuration.username && this.configuration.token
+      ? Ghcr.base64Encode(this.configuration.username, this.configuration.token)
+      : undefined;
+  }
+
+  private extractToken(response: { data?: GhcrTokenResponse }): unknown {
+    return response.data?.token || response.data?.access_token;
+  }
+
+  protected override getBearerChallengeAuthOptions() {
+    return {
+      credentials: this.getTokenRequestCredentials(),
+      tokenExtractor: (response: { data?: GhcrTokenResponse }) => this.extractToken(response),
+    };
   }
 
   private isNotFoundError(error) {
@@ -67,10 +89,7 @@ class Ghcr extends BaseRegistry<GhcrRegistryConfiguration> {
   }
 
   async authenticate(image, requestOptions) {
-    const credentials =
-      this.configuration.username && this.configuration.token
-        ? Ghcr.base64Encode(this.configuration.username, this.configuration.token)
-        : undefined;
+    const credentials = this.getTokenRequestCredentials();
     const scope = encodeURIComponent(`repository:${image.name}:pull`);
     const authUrl = `https://ghcr.io/token?service=ghcr.io&scope=${scope}`;
     return this.authenticateBearerFromAuthUrlWithPublicFallback(
@@ -78,7 +97,7 @@ class Ghcr extends BaseRegistry<GhcrRegistryConfiguration> {
       authUrl,
       credentials,
       {
-        tokenExtractor: (response) => response.data.token || response.data.access_token,
+        tokenExtractor: (response: { data?: GhcrTokenResponse }) => this.extractToken(response),
         providerLabel: 'GHCR',
       },
     );

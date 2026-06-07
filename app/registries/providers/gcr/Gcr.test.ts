@@ -160,6 +160,39 @@ test('authenticate should throw actionable error when configured credentials are
   });
 });
 
+test('resolveBearerChallengeOptions should use configured service account credentials', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockImplementationOnce(() => ({
+    data: { access_token: 'challenge-token' },
+  }));
+
+  const result = await (gcr as any).resolveBearerChallengeOptions(
+    {
+      headers: {},
+      url: 'https://gcr.io/v2/project/image/manifests/latest',
+    },
+    'Bearer realm="https://gcr.io/v2/token",service="gcr.io",scope="repository:project/image:pull"',
+    { name: 'project/image' },
+  );
+
+  const expectedBasic = Buffer.from(
+    `_json_key:${JSON.stringify({
+      client_email: TEST_CLIENT_EMAIL,
+      private_key: TEST_PRIVATE_KEY,
+    })}`,
+    'utf-8',
+  ).toString('base64');
+  expect(axios).toHaveBeenCalledWith({
+    method: 'GET',
+    url: 'https://gcr.io/v2/token?service=gcr.io&scope=repository%3Aproject%2Fimage%3Apull',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Basic ${expectedBasic}`,
+    },
+  });
+  expect(result.headers.Authorization).toBe('Bearer challenge-token');
+});
+
 test('authenticate should throw when gcr token is missing', async () => {
   const { default: axios } = await import('axios');
   axios.mockImplementationOnce(() => ({

@@ -14,6 +14,21 @@ export interface GitlabRegistryConfiguration extends BaseRegistryConfiguration {
 class Gitlab<
   TConfiguration extends GitlabRegistryConfiguration = GitlabRegistryConfiguration,
 > extends BaseRegistry<TConfiguration> {
+  protected getTrustedAuthHosts(): string[] {
+    return typeof this.configuration?.authurl === 'string' ? [this.configuration.authurl] : [];
+  }
+
+  private getTokenRequestCredentials(): string | undefined {
+    return this.configuration.token ? Gitlab.base64Encode('', this.configuration.token) : undefined;
+  }
+
+  protected override getBearerChallengeAuthOptions() {
+    return {
+      credentials: this.getTokenRequestCredentials(),
+      tokenFailureMessage: `Unable to authenticate registry ${this.getId()}: GitLab token endpoint response does not contain token`,
+    };
+  }
+
   /**
    * Get the Gitlab configuration schema.
    * @returns {*}
@@ -61,12 +76,13 @@ class Gitlab<
    */
   async authenticate(image, requestOptions) {
     const scope = encodeURIComponent(`repository:${image.name}:pull`);
+    const credentials = this.getTokenRequestCredentials();
     const request = {
       method: 'GET',
       url: `${this.configuration.authurl}/jwt/auth?service=container_registry&scope=${scope}`,
       headers: {
         Accept: 'application/json',
-        Authorization: `Basic ${Gitlab.base64Encode('', this.configuration.token)}`,
+        ...(credentials ? { Authorization: `Basic ${credentials}` } : {}),
       },
     };
     const response = await axios(this.withTlsRequestOptions(request));
