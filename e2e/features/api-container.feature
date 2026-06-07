@@ -4,7 +4,7 @@ Feature: Drydock Container API Exposure
     When I GET /api/containers
     Then response code should be 200
     And response body should be valid json
-    And response body path $.data should be of type array with minimum length 8
+    And response body path $.data should be of type array with minimum length 7
 
   # Test one representative container per registry type + update pattern
   Scenario Outline: Drydock must handle different registry types and update patterns
@@ -22,7 +22,6 @@ Feature: Drydock Container API Exposure
       | registry       | containerName            | registryUrl                                             | imageName                           | tag                | testCase                    |
       # | ecr.private    | ecr_sub_sub_test         | https://229211676173.dkr.ecr.eu-west-1.amazonaws.com/v2 | sub/sub/test                        | 1.0.0              | ECR semver major update     |
       # | ghcr.private   | ghcr_radarr              | https://ghcr.io/v2                                      | linuxserver/radarr                  | 5.14.0.9383-ls245  | GHCR complex semver update  |
-      | gitlab.private | gitlab_test              | https://registry.gitlab.com/v2                          | gitlab-org/gitlab-runner            | v16.0.0            | GitLab semver update        |
       | hub.public     | hub_homeassistant_202161 | https://registry-1.docker.io/v2                         | homeassistant/home-assistant        | 2021.6.1           | Hub date-based versioning   |
       | hub.public     | hub_homeassistant_latest | https://registry-1.docker.io/v2                         | homeassistant/home-assistant        | latest             | Hub latest tag no update    |
       | hub.public     | hub_nginx_120            | https://registry-1.docker.io/v2                         | library/nginx                       | 1.20-alpine        | Hub alpine minor update     |
@@ -31,7 +30,13 @@ Feature: Drydock Container API Exposure
       # | lscr.private   | lscr_radarr              | https://lscr.io/v2                                      | linuxserver/radarr                  | 5.14.0.9383-ls245  | LSCR complex semver update  |
       | quay.public    | quay_prometheus          | https://quay.io/v2                                      | prometheus/prometheus               | v2.52.0            | Quay semver major update    |
 
+    @requires_gitlab
+    Examples:
+      | registry       | containerName | registryUrl                    | imageName                | tag     | testCase             |
+      | gitlab.private | gitlab_test   | https://registry.gitlab.com/v2 | gitlab-org/gitlab-runner | v16.0.0 | GitLab semver update |
+
   # Test detailed container inspection (semver)
+  @requires_gitlab
   Scenario: Drydock must provide detailed container information for semver containers
     Given I GET /api/containers
     And I store the index of container named gitlab_test as containerIndex in scenario scope
@@ -69,6 +74,7 @@ Feature: Drydock Container API Exposure
     And response body path $.result.link should be https://github.com/home-assistant/core/releases/tag/.*
 
   # Test watch trigger functionality
+  @requires_gitlab
   Scenario: Drydock must allow triggering container watch
     Given I GET /api/containers
     And I store the index of container named gitlab_test as containerIndex in scenario scope

@@ -161,7 +161,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          for package_path in package.json app/package.json ui/package.json; do
+          version_files=(
+            package.json
+            package-lock.json
+            app/package.json
+            app/package-lock.json
+            ui/package.json
+            ui/package-lock.json
+            e2e/package.json
+            e2e/package-lock.json
+          )
+
+          for package_path in "${version_files[@]}"; do
             package_version="$(jq -r '.version // empty' "${package_path}")"
             if [ -z "${package_version}" ]; then
               echo "::error::Missing required version field in ${package_path}"
@@ -173,21 +184,16 @@ jobs:
             fi
           done
 
-          echo "Tag version ${BASE_VERSION} matches package.json, app/package.json, and ui/package.json."
+          echo "Tag version ${BASE_VERSION} matches ${version_files[*]}."
 
       - name: Validate CHANGELOG entry for release tag
         env:
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
-          IS_PRERELEASE: ${{ steps.tag.outputs.is_prerelease }}
         run: |
           set -euo pipefail
           entry_file="$(mktemp)"
 
-          if node scripts/extract-changelog-entry.mjs --version "${RELEASE_TAG}" --file CHANGELOG.md > "${entry_file}" 2>/dev/null; then
-            echo "Found exact CHANGELOG entry for ${RELEASE_TAG}."
-          elif [ "${IS_PRERELEASE}" = "true" ] && node scripts/extract-changelog-entry.mjs --version "Unreleased" --file CHANGELOG.md > "${entry_file}" 2>/dev/null; then
-            echo "Using [Unreleased] CHANGELOG section for pre-release ${RELEASE_TAG}."
-          else
+          if ! node scripts/extract-changelog-entry.mjs --version "${RELEASE_TAG}" --file CHANGELOG.md > "${entry_file}" 2>/dev/null; then
             echo "::error::CHANGELOG entry for ${RELEASE_TAG} missing. Add heading '## [${RELEASE_TAG#v}] - YYYY-MM-DD' and retry."
             exit 1
           fi
@@ -585,7 +591,6 @@ jobs:
       - name: Generate release notes from changelog
         id: release_notes
         env:
-          IS_PRERELEASE: ${{ steps.tag.outputs.is_prerelease }}
           RELEASE_TAG: ${{ steps.next.outputs.release_tag }}
           REPO: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
@@ -595,35 +600,15 @@ jobs:
 
           entry_path="$(mktemp)"
           missing_heading="## [${RELEASE_TAG#v}] - YYYY-MM-DD"
-          used_unreleased_fallback=false
           if ! node scripts/extract-changelog-entry.mjs --version "${RELEASE_TAG}" --file CHANGELOG.md > "${entry_path}"; then
-            if [ "${IS_PRERELEASE}" = "true" ] && node scripts/extract-changelog-entry.mjs --version "Unreleased" --file CHANGELOG.md > "${entry_path}" 2>/dev/null; then
-              echo "Using [Unreleased] changelog section for pre-release ${RELEASE_TAG}."
-              used_unreleased_fallback=true
-            else
-              rm -f "${entry_path}" "${notes_path}"
-              echo "::error::Release notes generation failed: CHANGELOG entry missing for ${RELEASE_TAG}. Add heading '${missing_heading}' and retry release."
-              {
-                echo "### Release Notes Generation"
-                echo "- Result: FAIL"
-                echo "- AI_ACTION_REQUIRED: Add CHANGELOG entry for \`${RELEASE_TAG}\` using heading \`${missing_heading}\`, then re-run release."
-              } >> "${GITHUB_STEP_SUMMARY}"
-              exit 1
-            fi
-          fi
-
-          # The [Unreleased] fallback means the CHANGELOG was not stamped before
-          # the cut. Rewrite the section heading in the generated notes so the
-          # published release shows the version and date instead of a literal
-          # "[Unreleased]" — a cut can never ship an unstamped heading. The
-          # CHANGELOG.md file itself is stamped separately at release time.
-          if [ "${used_unreleased_fallback}" = "true" ]; then
-            stamped_heading="## [${RELEASE_TAG#v}] — $(date -u +%Y-%m-%d)"
-            stamped_path="$(mktemp)"
-            awk -v h="${stamped_heading}" \
-              'NR == 1 && /^## \[Unreleased\][[:space:]]*$/ { print h; next } { print }' \
-              "${entry_path}" > "${stamped_path}"
-            mv "${stamped_path}" "${entry_path}"
+            rm -f "${entry_path}" "${notes_path}"
+            echo "::error::Release notes generation failed: CHANGELOG entry missing for ${RELEASE_TAG}. Add heading '${missing_heading}' and retry release."
+            {
+              echo "### Release Notes Generation"
+              echo "- Result: FAIL"
+              echo "- AI_ACTION_REQUIRED: Add CHANGELOG entry for \`${RELEASE_TAG}\` using heading \`${missing_heading}\`, then re-run release."
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 1
           fi
 
           # Resolve the previous release for a Full Changelog compare link. The

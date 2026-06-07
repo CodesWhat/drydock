@@ -115,6 +115,7 @@ dist/
 
 # Local planning docs
 .planning/
+.codex/
 
 # Audit/findings files
 .audit/

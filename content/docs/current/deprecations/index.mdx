@@ -9,6 +9,19 @@ This page lists every deprecated feature, the version it will be removed in, and
 
 <Callout type="warn">Features listed under a removal version will **stop working** in that release. Migrate before upgrading.</Callout>
 
+## Removal in v1.5.0
+
+### Legacy aggregate container stats endpoint {#legacy-container-stats}
+
+`GET /api/v1/containers/stats` was removed when fleet-level stats moved to the dedicated stats API. Current releases catch the old path and return `410 Gone` with migration targets instead of treating `stats` as a container id.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.5.0-rc.29 |
+| **Removed since** | v1.5.0-rc.29 |
+| **Compatibility response since** | v1.5.0-rc.34 |
+| **Migration** | Use `GET /api/v1/stats/summary` or `GET /api/v1/stats/summary/stream` for aggregate stats; use `GET /api/v1/containers/:id/stats` for one container |
+
 ## Removal in v1.6.0
 
 ### Unversioned API paths (`/api/*`) {#unversioned-api-paths}

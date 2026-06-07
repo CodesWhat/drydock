@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -21,6 +22,12 @@ interface WorkflowDefinition {
 }
 
 const workflowPath = fileURLToPath(new URL('../workflows/release-cut.yml', import.meta.url));
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
+const changelogExtractorPath = fileURLToPath(
+  new URL('../../scripts/extract-changelog-entry.mjs', import.meta.url),
+);
+const changelogPath = fileURLToPath(new URL('../../CHANGELOG.md', import.meta.url));
+const gitignorePath = fileURLToPath(new URL('../../.gitignore', import.meta.url));
 const retryAction = 'nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60';
 const metadataAction = 'docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9';
 const transientRetryStepNames = [
@@ -66,6 +73,57 @@ test('release-cut has no hand-rolled fixed retry loops', () => {
     .map((step) => step.name);
 
   expect(handRolledRetrySteps).toStrictEqual([]);
+});
+
+test('release-cut asserts package and lockfile versions for every workspace package', () => {
+  const versionStep = getStep('Assert tag version matches package versions');
+  const expectedVersionFiles = [
+    'package.json',
+    'package-lock.json',
+    'app/package.json',
+    'app/package-lock.json',
+    'ui/package.json',
+    'ui/package-lock.json',
+    'e2e/package.json',
+    'e2e/package-lock.json',
+  ];
+
+  for (const versionFile of expectedVersionFiles) {
+    expect(versionStep?.run).toContain(versionFile);
+  }
+});
+
+test('release-cut requires exact changelog entries for prerelease tags', () => {
+  const validateStep = getStep('Validate CHANGELOG entry for release tag');
+  const notesStep = getStep('Generate release notes from changelog');
+
+  for (const step of [validateStep, notesStep]) {
+    expect(step?.run).toContain('--version "${RELEASE_TAG}"');
+    expect(step?.run).not.toContain('--version "Unreleased"');
+    expect(step?.run).not.toMatch(/used_unreleased_fallback|Using \[Unreleased\]/);
+  }
+
+  expect(validateStep?.run).toContain('CHANGELOG entry for ${RELEASE_TAG} missing');
+  expect(notesStep?.run).toContain('Release notes generation failed');
+});
+
+test('release-cut can extract the apparent next prerelease changelog entry', () => {
+  const entry = execFileSync(
+    process.execPath,
+    [changelogExtractorPath, '--version', 'v1.5.0-rc.34', '--file', changelogPath],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    },
+  );
+
+  expect(entry).toContain('## [1.5.0-rc.34]');
+});
+
+test('internal Codex review artifacts are ignored', () => {
+  const gitignore = readFileSync(gitignorePath, 'utf8');
+
+  expect(gitignore).toMatch(/^\.codex\/$/m);
 });
 
 test('release-cut delegates image tags and labels to docker metadata-action', () => {

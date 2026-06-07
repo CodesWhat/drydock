@@ -106,6 +106,10 @@ echo "🔌 Drydock available on port $E2E_PORT"
 
 # Run e2e tests with the dynamically assigned port
 echo "🏃 Running cucumber tests..."
-(cd "$SCRIPT_DIR/../e2e" && DD_PORT="$E2E_PORT" npm run cucumber)
+CUCUMBER_ARGS=()
+if [ -z "${GITLAB_TOKEN:-}" ]; then
+	CUCUMBER_ARGS+=(--tags "not @requires_gitlab")
+fi
+(cd "$SCRIPT_DIR/../e2e" && DD_PORT="$E2E_PORT" npm run cucumber -- "${CUCUMBER_ARGS[@]}")
 
 echo "✅ E2E tests completed!"
