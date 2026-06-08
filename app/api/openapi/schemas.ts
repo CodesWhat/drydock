@@ -66,7 +66,7 @@ export const openApiSchemas = {
       message: { type: 'string' },
       timestamp: { type: 'number' },
     },
-    required: ['message'],
+    required: ['uptime'],
     additionalProperties: true,
   },
   AppInfo: {
@@ -110,6 +110,23 @@ export const openApiSchemas = {
     required: ['message', 'result'],
     additionalProperties: true,
   },
+  WebhookContainerUpdateAcceptedResponse: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+      operationId: { type: 'string' },
+      result: {
+        type: 'object',
+        properties: {
+          container: { type: 'string' },
+        },
+        required: ['container'],
+        additionalProperties: false,
+      },
+    },
+    required: ['message', 'operationId', 'result'],
+    additionalProperties: false,
+  },
   AuthUser: {
     type: 'object',
     properties: {
@@ -143,6 +160,14 @@ export const openApiSchemas = {
       clientsAtEmit: { type: 'integer', minimum: 0 },
     },
     required: ['status', 'operationId'],
+    additionalProperties: false,
+  },
+  OperationAcceptedResponse: {
+    type: 'object',
+    properties: {
+      operationId: { type: 'string' },
+    },
+    required: ['operationId'],
     additionalProperties: false,
   },
   LogSettings: {
@@ -712,6 +737,14 @@ export const openApiSchemas = {
       'topCpu',
       'topMemory',
     ],
+    additionalProperties: false,
+  },
+  FleetStatsSummaryResponse: {
+    type: 'object',
+    properties: {
+      data: { $ref: '#/components/schemas/FleetStatsSummary' },
+    },
+    required: ['data'],
     additionalProperties: false,
   },
   UpdateOperation: {

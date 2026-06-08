@@ -71,7 +71,9 @@ else
 	DOCKER_ARGS+=(--env "DD_REGISTRY_GHCR_PRIVATE=")
 fi
 
-# GitLab — token always required by schema; dummy token causes one fast 401
+# GitLab — token is required by schema. Without a token the GitLab fixture and
+# tagged scenarios are skipped, but the registry is still present for API shape
+# checks.
 DOCKER_ARGS+=(--env DD_REGISTRY_GITLAB_PRIVATE_TOKEN="${GITLAB_TOKEN:-dummy}")
 
 # LSCR — use real credentials or register anonymously
@@ -144,6 +146,10 @@ DEFAULT_EXPECTED=10
 # ghcr_radarr and lscr_radarr only run when GITHUB_USERNAME is set
 if [ -z "${GITHUB_USERNAME:-}" ]; then
 	DEFAULT_EXPECTED=$((DEFAULT_EXPECTED - 2))
+fi
+# gitlab_test only runs when GITLAB_TOKEN is set
+if [ -z "${GITLAB_TOKEN:-}" ]; then
+	DEFAULT_EXPECTED=$((DEFAULT_EXPECTED - 1))
 fi
 EXPECTED_CONTAINERS=${DD_EXPECTED_CONTAINERS:-$DEFAULT_EXPECTED}
 echo "Waiting for drydock to discover ${EXPECTED_CONTAINERS}+ containers with image data (max 90s)..."

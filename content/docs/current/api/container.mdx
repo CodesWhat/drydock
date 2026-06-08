@@ -709,34 +709,6 @@ curl -X POST http://drydock:3000/api/v1/operations/ea7c33a4-c1e3-4f34-9b95-9662c
 
 Returns 200 (queued — immediately cancelled), 202 (in-progress — cancellation requested), 404 if not found, or 409 if already terminal.
 
-## Get container stats
-
-`GET /api/v1/containers/stats`
-
-Returns CPU and memory usage stats for all monitored containers.
-
-### Query parameters
-
-| Parameter | Type | Default | Description |
-| --- | --- | --- | --- |
-| `touch` | boolean | `true` | When `false`, returns cached snapshots without spinning up per-container Docker stats streams. Use `?touch=false` for read-only summary queries (dashboard) to avoid warming streams unnecessarily. |
-
-### Response
-
-| Field | Type | Description |
-| --- | --- | --- |
-| `data` | array | Array of container stat objects |
-| `data[].id` | string | Container ID |
-| `data[].name` | string | Container name |
-| `data[].stats` | object | Latest stats snapshot |
-| `data[].stats.cpuPercent` | number | CPU usage percentage |
-| `data[].stats.memoryUsageBytes` | number | Memory usage in bytes |
-| `data[].stats.memoryLimitBytes` | number | Memory limit in bytes |
-| `data[].stats.memoryPercent` | number | Memory usage percentage |
-| `data[].stats.networkRxBytes` | number | Network bytes received |
-| `data[].stats.networkTxBytes` | number | Network bytes transmitted |
-| `data[].stats.timestamp` | string | ISO 8601 timestamp |
-
 ## Get single container stats
 
 `GET /api/v1/containers/:id/stats`
@@ -760,7 +732,7 @@ Server-Sent Events stream for real-time container stats. Sends `dd:container-sta
 
 `GET /api/v1/stats/summary`
 
-Returns a fleet-wide CPU and memory snapshot aggregated across all locally-monitored containers. Updated on a configurable polling interval (default 10 s). Use this endpoint for read-only dashboard queries; unlike the per-container stats endpoints, it does not spin up Docker stats streams.
+Returns a fleet-wide CPU and memory snapshot aggregated across watched local and agent-owned containers. Updated on a configurable polling interval (default 10 s). Use this endpoint for read-only dashboard queries and fleet rollups; per-container telemetry remains available from the single-container stats endpoints.
 
 ```bash
 curl http://drydock:3000/api/v1/stats/summary

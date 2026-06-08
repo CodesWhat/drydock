@@ -71,6 +71,7 @@ class Mau extends Gitlab<MauRegistryConfiguration> {
     const request: AxiosRequestConfig & { headers: Record<string, string> } = {
       method: 'GET',
       url: `${this.configuration.authurl}/jwt/auth?service=container_registry&scope=${scope}`,
+      maxRedirects: 0,
       headers: {
         Accept: 'application/json',
       },

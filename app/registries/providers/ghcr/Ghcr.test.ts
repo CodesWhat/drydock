@@ -78,6 +78,7 @@ describe('GitHub Container Registry', () => {
     expect(axios).toHaveBeenCalledWith({
       method: 'GET',
       url: 'https://ghcr.io/token?service=ghcr.io&scope=repository%3Auser%2Frepo%3Apull',
+      maxRedirects: 0,
       headers: {
         Accept: 'application/json',
         Authorization: `Basic ${expectedBasic}`,
@@ -104,6 +105,7 @@ describe('GitHub Container Registry', () => {
     expect(axios).toHaveBeenCalledWith({
       method: 'GET',
       url: 'https://ghcr.io/token?service=ghcr.io&scope=repository%3Auser%2Frepo%3Apull',
+      maxRedirects: 0,
       headers: {
         Accept: 'application/json',
         Authorization: `Basic ${expectedBasic}`,
@@ -165,6 +167,7 @@ describe('GitHub Container Registry', () => {
     expect(axios).toHaveBeenCalledWith({
       method: 'GET',
       url: 'https://ghcr.io/token?service=ghcr.io&scope=repository%3Auser%2Frepo%3Apull',
+      maxRedirects: 0,
       headers: {
         Accept: 'application/json',
       },
@@ -184,6 +187,32 @@ describe('GitHub Container Registry', () => {
     const result = await ghcr.authenticate(image, requestOptions);
 
     expect(result.headers.Authorization).toBe('Bearer access-token');
+  });
+
+  test('should use configured credentials when resolving a Bearer challenge', async () => {
+    ghcr.configuration = { username: 'test-user', token: 'test-token' };
+    axios.mockResolvedValueOnce({ data: { access_token: 'challenge-token' } });
+
+    const result = await (ghcr as any).resolveBearerChallengeOptions(
+      {
+        headers: {},
+        url: 'https://ghcr.io/v2/user/repo/manifests/latest',
+      },
+      'Bearer realm="https://ghcr.io/token",service="ghcr.io",scope="repository:user/repo:pull"',
+      { name: 'user/repo' },
+    );
+
+    const expectedBasic = Buffer.from('test-user:test-token', 'utf-8').toString('base64');
+    expect(axios).toHaveBeenCalledWith({
+      method: 'GET',
+      url: 'https://ghcr.io/token?service=ghcr.io&scope=repository%3Auser%2Frepo%3Apull',
+      maxRedirects: 0,
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Basic ${expectedBasic}`,
+      },
+    });
+    expect(result.headers.Authorization).toBe('Bearer challenge-token');
   });
 
   test('should fetch published date from GHCR package versions API (org endpoint)', async () => {

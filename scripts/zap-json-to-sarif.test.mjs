@@ -217,6 +217,36 @@ describe('zap-json-to-sarif', () => {
     );
   });
 
+  test('assigns each distinct http origin to the matching SARIF uriBaseId', () => {
+    const sarif = convertZapJsonToSarif({
+      site: [
+        {
+          alerts: [
+            {
+              alertRef: 'multiple-origins',
+              alert: 'Multiple origins',
+              instances: [
+                { uri: 'http://first.example/one' },
+                { uri: 'https://second.example/two' },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    assert.deepEqual(sarif.runs[0].originalUriBaseIds, {
+      TARGET: { uri: 'http://first.example/' },
+      TARGET_1: { uri: 'https://second.example/' },
+    });
+    assert.deepEqual(
+      sarif.runs[0].results.map(
+        (result) => result.locations[0].physicalLocation.artifactLocation.uriBaseId,
+      ),
+      ['TARGET', 'TARGET_1'],
+    );
+  });
+
   test('writes SARIF from the CLI entry point', () => {
     const dir = mkdtempSync(join(tmpdir(), 'zap-sarif-'));
     try {

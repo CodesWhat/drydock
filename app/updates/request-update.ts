@@ -177,15 +177,27 @@ function markAcceptedQueuedOperationFailed(operationId: string, error: unknown) 
   if (operation?.status !== 'queued') {
     return;
   }
+  const operationIdentity =
+    operation.container && typeof operation.container.watcher === 'string'
+      ? {
+          agent: operation.container.agent,
+          watcher: operation.container.watcher,
+        }
+      : undefined;
 
   // Issue #410 Part B: if this failure looks like a stale-container 404/409 or
   // a compose "no longer exists" AND there is a recent succeeded op for the same
-  // container name, the duplicate update already succeeded — reclassify to
-  // `expired` so no false "update failed" notification fires.
+  // container name and source identity, the duplicate update already succeeded
+  // — reclassify to `expired` so no false "update failed" notification fires.
   if (
     isDuplicateStyleError(error) &&
     operation.containerName &&
-    classifyDuplicateOpTerminalStatus(error, operation.containerName) === 'expired'
+    classifyDuplicateOpTerminalStatus(
+      error,
+      operation.containerName,
+      undefined,
+      operationIdentity,
+    ) === 'expired'
   ) {
     updateOperationStore.markOperationTerminal(operationId, {
       status: 'expired',

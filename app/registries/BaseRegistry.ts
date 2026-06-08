@@ -35,6 +35,13 @@ type DigestCacheEntry = {
   version?: number;
   fetchedAt: number;
 };
+type BearerChallengeAuthOptions = {
+  credentials?: string;
+  tokenExtractor?: (response: { data?: Record<string, unknown> }) => unknown;
+  tokenFailureMessage?: string;
+};
+
+class RegistryCredentialRejectedError extends Error {}
 
 /**
  * Base Registry with common patterns
@@ -162,21 +169,46 @@ class BaseRegistry<
     return [];
   }
 
+  protected getBearerChallengeAuthOptions(
+    _image: ContainerImage,
+    _authUrl: string,
+  ): BearerChallengeAuthOptions {
+    return {
+      credentials: this.getAuthCredentials(),
+    };
+  }
+
+  private getRegistryAuthHost(value: string): string {
+    const normalizedValue = value.trim();
+    const withProtocol = /^https?:\/\//i.test(normalizedValue)
+      ? normalizedValue
+      : `https://${normalizedValue}`;
+    try {
+      return new URL(withProtocol).host.toLowerCase();
+    } catch {
+      /* v8 ignore next 4 -- malformed auth hosts are normalized defensively for direct config input. */
+      return normalizedValue
+        .replace(/^https?:\/\//i, '')
+        .split('/')[0]
+        .toLowerCase();
+    }
+  }
+
   private getTrustedRegistryHosts(requestOptions: RegistryRequestOptions): string[] {
     const hosts = new Set<string>();
     const requestHostSource = requestOptions?.url;
     if (typeof requestHostSource === 'string' && requestHostSource.trim().length > 0) {
-      hosts.add(this.getRegistryHostname(requestHostSource));
+      hosts.add(this.getRegistryAuthHost(requestHostSource));
     }
 
     const configuredHostSource = this.configuration?.url;
     if (typeof configuredHostSource === 'string' && configuredHostSource.trim().length > 0) {
-      hosts.add(this.getRegistryHostname(configuredHostSource));
+      hosts.add(this.getRegistryAuthHost(configuredHostSource));
     }
 
     for (const host of this.getTrustedAuthHosts()) {
       if (typeof host === 'string' && host.trim().length > 0) {
-        hosts.add(this.getRegistryHostname(host));
+        hosts.add(this.getRegistryAuthHost(host));
       }
     }
 
@@ -205,7 +237,7 @@ class BaseRegistry<
       return;
     }
 
-    const authHost = this.getRegistryHostname(authUrl);
+    const authHost = this.getRegistryAuthHost(authUrl);
     const trustedHosts = this.getTrustedRegistryHosts(requestOptions);
 
     if (trustedHosts.length === 0) {
@@ -380,7 +412,7 @@ class BaseRegistry<
    * @param requestOptions - the request options to augment with auth
    * @param authUrl - the URL to fetch the bearer token from
    * @param credentials - optional Base64 credentials for Basic auth on the token request
-   * @param tokenExtractor - function to extract the token from the axios response (default: response.data.token)
+   * @param tokenExtractor - function to extract the token from the axios response (default: response.data.token || response.data.access_token)
    * @returns the request options with Authorization header set
    */
   async authenticateBearerFromAuthUrl(
@@ -388,7 +420,7 @@ class BaseRegistry<
     authUrl: string,
     credentials?: string,
     tokenExtractor: (response: { data?: Record<string, unknown> }) => unknown = (response) =>
-      response.data?.token,
+      response.data?.token || response.data?.access_token,
     tokenFailureMessage = `Unable to authenticate registry ${this.getId()}: token endpoint response does not contain token`,
   ) {
     this.validateAuthUrlHost(authUrl, requestOptions);
@@ -413,6 +445,7 @@ class BaseRegistry<
     const request = this.withTlsRequestOptions({
       method: 'GET',
       url: authUrl,
+      maxRedirects: 0,
       headers: {
         Accept: 'application/json',
       },
@@ -517,7 +550,7 @@ class BaseRegistry<
       // error instead of silently falling back to anonymous. The anonymous
       // tier would cause 429s that are harder to diagnose than a clean failure.
       const providerLabel = options.providerLabel || this.getId();
-      throw new Error(
+      throw new RegistryCredentialRejectedError(
         `Authentication failed for registry ${this.getId()} (HTTP ${rejectedStatus}): ${providerLabel} credentials were rejected. Check the configured token/login/password and their scopes.`,
       );
     }
@@ -530,14 +563,14 @@ class BaseRegistry<
    * return augmented request options for the retry.
    *
    * Returns `undefined` if the challenge is not parseable, the realm host is
-   * untrusted, or the token fetch fails — so callRegistry rethrows the original
-   * 401 unchanged.  This is purely additive: providers that already perform
-   * proactive Bearer auth before the first request are unaffected.
+   * untrusted, or an anonymous token fetch fails — so callRegistry rethrows the
+   * original 401 unchanged. Credential rejection from a trusted token endpoint
+   * is rethrown with the actionable credential error.
    */
   protected override async resolveBearerChallengeOptions(
     requestOptions: RegistryRequestOptions,
     wwwAuthenticate: string | undefined,
-    _image: ContainerImage,
+    image: ContainerImage,
   ): Promise<RegistryRequestOptions | undefined> {
     try {
       const challenge = parseBearerChallenge(
@@ -560,17 +593,25 @@ class BaseRegistry<
         authUrl = u.toString();
       } catch {
         this.log.debug(
-          `Bearer challenge for ${this.getId()}: realm URL is malformed ("${challenge.realm}"), falling back to original error`,
+          `Bearer challenge for ${this.getId()}: realm URL is malformed ("${sanitizeLogParam(challenge.realm)}"), falling back to original error`,
         );
         return undefined;
       }
 
-      return await this.authenticateBearerFromAuthUrl(
+      const authOptions = this.getBearerChallengeAuthOptions(image, authUrl);
+      return await this.authenticateBearerFromAuthUrlWithPublicFallback(
         requestOptions,
         authUrl,
-        this.getAuthCredentials(),
+        authOptions.credentials,
+        {
+          tokenExtractor: authOptions.tokenExtractor,
+          tokenFailureMessage: authOptions.tokenFailureMessage,
+        },
       );
     } catch (err: unknown) {
+      if (err instanceof RegistryCredentialRejectedError) {
+        throw err;
+      }
       this.log.debug(
         `Bearer challenge token exchange for ${this.getId()} failed (${getErrorMessage(err)}), falling back to original error`,
       );

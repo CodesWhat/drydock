@@ -2011,6 +2011,50 @@ describe('ContainerUpdateExecutor', () => {
       );
     });
 
+    test('operation stays failed when rename 404 only has another agent recent success', async () => {
+      const context = createContext({
+        currentContainerSpec: createCurrentContainerSpec({
+          State: { Running: false },
+          HostConfig: { AutoRemove: false },
+        }),
+      });
+
+      const docker404 = Object.assign(new Error('No such container: web'), { statusCode: 404 });
+      context.currentContainer.rename = vi.fn().mockRejectedValue(docker404);
+
+      const executor = createExecutor({
+        isContainerNotFoundError: vi.fn((err) => err?.statusCode === 404),
+      });
+      mockGetRecentTerminalSucceededOperationByContainerName.mockImplementation(
+        (_containerName, _windowMs, identity) =>
+          identity?.agent === 'agent-B'
+            ? undefined
+            : { id: 'prev-agent-a', containerName: 'web', status: 'succeeded' },
+      );
+
+      await expect(
+        executor.execute(
+          context,
+          createContainer({ agent: 'agent-B', watcher: 'local' }),
+          createLog(),
+        ),
+      ).rejects.toThrow('No such container: web');
+
+      expect(mockGetRecentTerminalSucceededOperationByContainerName).toHaveBeenCalledWith(
+        'web',
+        expect.any(Number),
+        { agent: 'agent-B', watcher: 'local' },
+      );
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        'op-1',
+        expect.objectContaining({ status: 'failed' }),
+      );
+      expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith(
+        'op-1',
+        expect.objectContaining({ status: 'expired' }),
+      );
+    });
+
     test('operation is still marked failed when rename throws a Docker 404 but no recent success exists', async () => {
       const context = createContext({
         currentContainerSpec: createCurrentContainerSpec({

@@ -168,6 +168,7 @@ describe('classifyDuplicateOpTerminalStatus', () => {
     expect(mockGetRecentTerminalSucceededOperationByContainerName).toHaveBeenCalledWith(
       'web',
       DUPLICATE_OP_RECENT_SUCCESS_WINDOW_MS,
+      undefined,
     );
   });
 
@@ -195,6 +196,26 @@ describe('classifyDuplicateOpTerminalStatus', () => {
     expect(mockGetRecentTerminalSucceededOperationByContainerName).toHaveBeenCalledWith(
       'web',
       5000,
+      undefined,
+    );
+  });
+
+  test('passes agent and watcher identity to the recent success lookup', () => {
+    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+      id: 'prev',
+      status: 'succeeded',
+    });
+
+    expect(
+      classifyDuplicateOpTerminalStatus({ statusCode: 404 }, 'web', 5000, {
+        agent: 'agent-A',
+        watcher: 'local',
+      }),
+    ).toBe('expired');
+    expect(mockGetRecentTerminalSucceededOperationByContainerName).toHaveBeenCalledWith(
+      'web',
+      5000,
+      { agent: 'agent-A', watcher: 'local' },
     );
   });
 

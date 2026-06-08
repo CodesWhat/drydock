@@ -263,12 +263,26 @@ test('authenticateBearerFromAuthUrl should set bearer token using default extrac
   expect(axios).toHaveBeenCalledWith({
     method: 'GET',
     url: 'https://auth.example.com/token',
+    maxRedirects: 0,
     headers: {
       Accept: 'application/json',
       Authorization: 'Basic dXNlcjpwYXNz',
     },
   });
   expect(result.headers.Authorization).toBe('Bearer abc123');
+});
+
+test('authenticateBearerFromAuthUrl should set bearer token using access_token from default extractor', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { access_token: 'access-abc123' } });
+
+  const result = await baseRegistry.authenticateBearerFromAuthUrl(
+    { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+    'https://auth.example.com/token',
+    undefined,
+  );
+
+  expect(result.headers.Authorization).toBe('Bearer access-abc123');
 });
 
 test('authenticateBearerFromAuthUrl should reject token endpoint host that does not match registry host', async () => {
@@ -284,6 +298,52 @@ test('authenticateBearerFromAuthUrl should reject token endpoint host that does 
   ).rejects.toThrow('token endpoint host attacker.internal is not trusted');
 
   expect(axios).not.toHaveBeenCalled();
+});
+
+test('authenticateBearerFromAuthUrl should reject token endpoint port that does not match configured registry port', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+  baseRegistry.configuration = { url: 'https://registry.example.com:5000/v2' };
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {} },
+      'https://registry.example.com:8443/token',
+      'dXNlcjpwYXNz',
+    ),
+  ).rejects.toThrow('token endpoint host registry.example.com:8443 is not trusted');
+
+  expect(axios).not.toHaveBeenCalled();
+});
+
+test('authenticateBearerFromAuthUrl should trust token endpoint port that matches configured registry port', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+  baseRegistry.configuration = { url: 'https://registry.example.com:5000/v2' };
+
+  const result = await baseRegistry.authenticateBearerFromAuthUrl(
+    { headers: {} },
+    'https://registry.example.com:5000/token',
+    'dXNlcjpwYXNz',
+  );
+
+  expect(result.headers.Authorization).toBe('Bearer abc123');
+  expect(axios).toHaveBeenCalledTimes(1);
+});
+
+test('authenticateBearerFromAuthUrl should normalize default https port when validating token endpoint', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+  baseRegistry.configuration = { url: 'https://registry.example.com/v2' };
+
+  const result = await baseRegistry.authenticateBearerFromAuthUrl(
+    { headers: {} },
+    'https://registry.example.com:443/token',
+    undefined,
+  );
+
+  expect(result.headers.Authorization).toBe('Bearer abc123');
+  expect(axios).toHaveBeenCalledTimes(1);
 });
 
 test('validateAuthUrlHost should reject http authUrl when request is https (scheme-downgrade attack)', async () => {
@@ -689,6 +749,37 @@ test('authenticateBearerFromAuthUrl should apply tls options to token request', 
   expect(result.headers.Authorization).toBe('Bearer abc123');
   expect(result.httpsAgent).toBeDefined();
   expect(result.httpsAgent.options.rejectUnauthorized).toBe(false);
+});
+
+test('authenticateBearerFromAuthUrl should set maxRedirects: 0 on the token-endpoint request to prevent credential exfiltration via redirect', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValue({ data: { token: 'abc123' } });
+
+  await baseRegistry.authenticateBearerFromAuthUrl(
+    { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+    'https://auth.example.com/token',
+    'dXNlcjpwYXNz',
+  );
+
+  expect(axios).toHaveBeenCalledWith(
+    expect.objectContaining({
+      maxRedirects: 0,
+    }),
+  );
+});
+
+test('authenticateBearerFromAuthUrl should fail closed when the token endpoint returns a redirect (3xx treated as request failure)', async () => {
+  const { default: axios } = await import('axios');
+  // axios with maxRedirects:0 rejects on 3xx — simulate that behavior
+  axios.mockRejectedValue(new Error('Request failed with status code 301'));
+
+  await expect(
+    baseRegistry.authenticateBearerFromAuthUrl(
+      { headers: {}, url: 'https://auth.example.com/v2/library/nginx/manifests/latest' },
+      'https://auth.example.com/token',
+      'dXNlcjpwYXNz',
+    ),
+  ).rejects.toThrow('token request failed (Request failed with status code 301)');
 });
 
 test('authenticateBearerFromAuthUrl should reuse cached token within configured ttl', async () => {
@@ -3804,6 +3895,21 @@ describe('resolveBearerChallengeOptions', () => {
     expect(axios.mock.calls[0][0].headers.Authorization).toMatch(/^Basic /);
   });
 
+  test('should perform token exchange when Bearer challenge appears after Basic challenge', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: { token: 'multi-challenge-token' } });
+    baseRegistry.configuration = {};
+
+    const result = await (baseRegistry as any).resolveBearerChallengeOptions(
+      requestOptionsWithUrl,
+      'Basic realm="registry login", Bearer realm="https://registry.example.com/token",service="registry.example.com"',
+      image,
+    );
+
+    expect(result).toBeDefined();
+    expect(result.headers.Authorization).toBe('Bearer multi-challenge-token');
+  });
+
   test('should return undefined for non-Bearer WWW-Authenticate header', async () => {
     const { default: axios } = await import('axios');
     baseRegistry.configuration = {};
@@ -3845,6 +3951,27 @@ describe('resolveBearerChallengeOptions', () => {
 
     expect(result).toBeUndefined();
     // Axios must NOT have been called — the security guard prevented the exchange
+    expect(axios).not.toHaveBeenCalled();
+  });
+
+  test('should reject same-host different-port realm without sending credentials', async () => {
+    const { default: axios } = await import('axios');
+    baseRegistry.configuration = {
+      url: 'https://registry.example.com:5000/v2',
+      login: 'user',
+      password: 'pass',
+    };
+
+    const result = await (baseRegistry as any).resolveBearerChallengeOptions(
+      {
+        url: 'https://registry.example.com:5000/v2/library/nginx/tags/list',
+        headers: { Accept: 'application/json' },
+      },
+      'Bearer realm="https://registry.example.com:8443/token",service="registry.example.com"',
+      image,
+    );
+
+    expect(result).toBeUndefined();
     expect(axios).not.toHaveBeenCalled();
   });
 
@@ -3892,4 +4019,38 @@ describe('resolveBearerChallengeOptions', () => {
     expect(result).toBeUndefined();
     expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('falling back'));
   });
+});
+
+test('callRegistry should surface credential rejection from Bearer challenge token endpoint', async () => {
+  const { default: axios } = await import('axios');
+  const original401 = new Error('Request failed with status code 401');
+  (original401 as any).response = {
+    status: 401,
+    headers: {
+      'www-authenticate':
+        'Bearer realm="https://registry.example.com/token",service="registry.example.com"',
+    },
+  };
+  const token401 = new Error('Request failed with status code 401');
+  (token401 as any).response = { status: 401 };
+  axios.mockRejectedValueOnce(original401).mockRejectedValueOnce(token401);
+  baseRegistry.type = 'registry';
+  baseRegistry.name = 'challenge';
+  baseRegistry.configuration = { login: 'user', password: 'pass' };
+
+  await expect(
+    baseRegistry.callRegistry({
+      image: {
+        name: 'library/nginx',
+        registry: { url: 'https://registry.example.com/v2' },
+      },
+      url: 'https://registry.example.com/v2/library/nginx/tags/list',
+      method: 'get',
+    }),
+  ).rejects.toThrow(
+    /Authentication failed for registry registry\.challenge \(HTTP 401\): registry\.challenge credentials were rejected/,
+  );
+
+  expect(axios).toHaveBeenCalledTimes(2);
+  expect(axios.mock.calls[1][0].headers.Authorization).toMatch(/^Basic /);
 });

@@ -131,6 +131,12 @@ describe('entrypoint', () => {
     expect(harness.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith([]);
     expect(process.exitCode).toBe(7);
     expect(harness.storeInit).not.toHaveBeenCalled();
+    expect(harness.prometheusInit).not.toHaveBeenCalled();
+    expect(harness.registryInit).not.toHaveBeenCalled();
+    expect(harness.apiInit).not.toHaveBeenCalled();
+    expect(harness.securitySchedulerInit).not.toHaveBeenCalled();
+    expect(harness.startOutboxWorker).not.toHaveBeenCalled();
+    expect(harness.recoverQueuedOperationsOnStartup).not.toHaveBeenCalled();
   });
 
   test('does not set process exitCode for successful config migration commands', async () => {
@@ -144,6 +150,12 @@ describe('entrypoint', () => {
     expect(harness.runConfigMigrateCommandIfRequested).toHaveBeenCalledWith(['config', 'migrate']);
     expect(process.exitCode).toBeUndefined();
     expect(harness.storeInit).not.toHaveBeenCalled();
+    expect(harness.prometheusInit).not.toHaveBeenCalled();
+    expect(harness.registryInit).not.toHaveBeenCalled();
+    expect(harness.apiInit).not.toHaveBeenCalled();
+    expect(harness.securitySchedulerInit).not.toHaveBeenCalled();
+    expect(harness.startOutboxWorker).not.toHaveBeenCalled();
+    expect(harness.recoverQueuedOperationsOnStartup).not.toHaveBeenCalled();
   });
 
   test('starts the controller runtime and dispatches outbox entries through registered triggers', async () => {

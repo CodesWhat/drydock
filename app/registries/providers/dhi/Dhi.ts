@@ -54,6 +54,7 @@ class Dhi extends Custom<DhiRegistryConfiguration> {
     const axiosConfig = {
       method: 'GET',
       url: `https://dhi.io/token?service=registry.docker.io&scope=${scope}&grant_type=password`,
+      maxRedirects: 0,
       headers: {
         Accept: 'application/json',
       } as Record<string, string>,

@@ -1,3 +1,4 @@
+import type { ContainerIdentityFilter } from '../../../store/update-operation.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { OperationCancelledError } from '../../../store/update-operation.js';
 import { startHealthGateHeartbeat } from '../../../updates/health-gate-heartbeat.js';
@@ -68,6 +69,20 @@ type ContainerForUpdate = {
   };
   [key: string]: unknown;
 };
+
+function getContainerIdentityFilter(
+  container: ContainerForUpdate,
+): ContainerIdentityFilter | undefined {
+  if (typeof container.watcher !== 'string') {
+    return undefined;
+  }
+
+  return {
+    /* v8 ignore next -- local watcher identity omits agent; agent-owned identity is covered by executor tests. */
+    ...(typeof container.agent === 'string' ? { agent: container.agent } : {}),
+    watcher: container.watcher,
+  };
+}
 
 type ContainerUpdateContext = {
   dockerApi: DockerApiLike;
@@ -737,6 +752,7 @@ class ContainerUpdateExecutor {
         updateOperationStore.getRecentTerminalSucceededOperationByContainerName(
           container.name,
           15 * 60 * 1000,
+          getContainerIdentityFilter(container),
         );
 
       if (recentSuccess) {

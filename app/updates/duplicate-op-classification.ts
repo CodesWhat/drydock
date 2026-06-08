@@ -17,6 +17,7 @@
  *   Docker.ts / ContainerUpdateExecutor.ts / request-update.ts → duplicate-op-classification
  */
 
+import type { ContainerIdentityFilter } from '../store/update-operation.js';
 import * as updateOperationStore from '../store/update-operation.js';
 
 /** 15-minute window for "was there a recent success?" look-back. */
@@ -83,7 +84,8 @@ export function isDuplicateStyleError(error: unknown): boolean {
  * Returns `'expired'` when:
  *   - the error is a duplicate-style vanish, AND
  *   - a terminal `succeeded` operation for `containerName` exists within the
- *     last `windowMs` milliseconds.
+ *     last `windowMs` milliseconds for the same agent+watcher identity when
+ *     identity is available.
  *
  * Returns `'failed'` in all other cases.
  */
@@ -91,6 +93,7 @@ export function classifyDuplicateOpTerminalStatus(
   error: unknown,
   containerName: string,
   windowMs = DUPLICATE_OP_RECENT_SUCCESS_WINDOW_MS,
+  identity?: ContainerIdentityFilter,
 ): 'expired' | 'failed' {
   if (!isDuplicateStyleError(error)) {
     return 'failed';
@@ -98,6 +101,7 @@ export function classifyDuplicateOpTerminalStatus(
   const recentSuccess = updateOperationStore.getRecentTerminalSucceededOperationByContainerName(
     containerName,
     windowMs,
+    identity,
   );
   return recentSuccess ? 'expired' : 'failed';
 }

@@ -1192,6 +1192,46 @@ describe('request-update', () => {
       );
     });
 
+    test('keeps failed status for Docker 404 when only another agent has a recent same-name success', async () => {
+      const docker404Error = Object.assign(new Error('No such container: web'), {
+        statusCode: 404,
+      });
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockRejectedValue(docker404Error),
+      };
+
+      mockGetOperationById.mockImplementation((id: string) => ({
+        id,
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+        container: { id: 'c-agent-a', name: 'web', watcher: 'local', agent: 'agent-A' },
+      }));
+      mockGetRecentTerminalSucceededOperationByContainerName.mockImplementation(
+        (_containerName, _windowMs, identity) =>
+          identity?.agent === 'agent-A'
+            ? undefined
+            : { id: 'prev-agent-b', containerName: 'web', status: 'succeeded' },
+      );
+
+      const accepted = await requestContainerUpdate(
+        createContainer({ id: 'c-agent-a', name: 'web', watcher: 'local', agent: 'agent-A' }),
+        { trigger },
+      );
+      await flushAsyncWork();
+
+      expect(mockGetRecentTerminalSucceededOperationByContainerName).toHaveBeenCalledWith(
+        'web',
+        expect.any(Number),
+        { agent: 'agent-A', watcher: 'local' },
+      );
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        accepted.operationId,
+        expect.objectContaining({ status: 'failed' }),
+      );
+    });
+
     test('reclassifies a 409 conflict error to expired when a recent success exists', async () => {
       // An agent 409 conflict (active-op on the agent side) with a prior success
       const conflict409Error = Object.assign(new Error('Container update already in progress'), {

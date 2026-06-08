@@ -203,6 +203,35 @@ function createApp() {
       );
     }
     app.set('trust proxy', configuration.trustproxy);
+  } else {
+    // Trust proxy is disabled. If a TLS-terminating reverse proxy forwards
+    // "X-Forwarded-Proto: https" but the internal connection is plain HTTP,
+    // drydock treats its own origin as http:// while the browser sends https://
+    // — so the same-origin check rejects every state-changing request with a
+    // 403 "CSRF validation failed". Warn once (the closure flag suppresses
+    // repeats; the middleware itself stays in the stack) so operators can
+    // self-diagnose instead of filing a bug.
+    let warnedReverseProxyMismatch = false;
+    app.use(function warnOnReverseProxyProtoMismatch(req, _res, next) {
+      if (!warnedReverseProxyMismatch && req.protocol === 'http') {
+        const forwardedProto = String(req.get('x-forwarded-proto') ?? '')
+          .split(',')[0]
+          .trim()
+          .toLowerCase();
+        if (forwardedProto === 'https') {
+          warnedReverseProxyMismatch = true;
+          log.warn(
+            'Detected "X-Forwarded-Proto: https" but DD_SERVER_TRUSTPROXY is not set. ' +
+              'drydock treats its own origin as http:// while browsers send https://, so ' +
+              'every state-changing request (manual update, recheck, scan) is rejected with ' +
+              '403 "CSRF validation failed". Set DD_SERVER_TRUSTPROXY=1 (the number of proxy ' +
+              'hops) to resolve this. ' +
+              'See https://getdrydock.com/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy',
+          );
+        }
+      }
+      next();
+    });
   }
 
   // Replace undefined values by null to prevent them from being removed from json responses

@@ -1,6 +1,7 @@
 import logger from '../log/index.js';
 import type { Container } from '../model/container.js';
 import { getErrorMessage } from '../util/error.js';
+import { getDockerWatcherRegistryId } from '../watchers/providers/docker/container-init.js';
 import {
   type ContainerStatsSnapshot,
   calculateContainerStatsSnapshot,
@@ -302,7 +303,7 @@ function resolveStatsTarget(
     return undefined;
   }
 
-  const watcherId = `docker.${container.watcher}`;
+  const watcherId = getDockerWatcherRegistryId(container.watcher, container.agent ?? undefined);
   const watcher = dependencies.getWatchers()[watcherId];
   if (!isDockerStatsWatcherApi(watcher)) {
     return undefined;

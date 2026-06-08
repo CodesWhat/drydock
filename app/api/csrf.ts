@@ -3,6 +3,13 @@ import { sendErrorResponse } from './error-response.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE']);
 
+const CSRF_FAILED_MESSAGE = 'CSRF validation failed';
+const CSRF_REVERSE_PROXY_MESSAGE =
+  'CSRF validation failed. If Drydock is behind a reverse proxy that terminates TLS, ' +
+  'set DD_SERVER_TRUSTPROXY=1 and restart — without it Drydock sees the request as ' +
+  'http:// while your browser uses https://. ' +
+  'See https://getdrydock.com/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy';
+
 function parseOrigin(value: unknown): string | undefined {
   if (typeof value !== 'string' || value.trim() === '') {
     return undefined;
@@ -85,6 +92,20 @@ function isCrossSiteFetch(req: Request): boolean {
 }
 
 /**
+ * Detect the classic reverse-proxy misconfiguration behind a same-origin CSRF
+ * rejection: a TLS-terminating proxy forwards `X-Forwarded-Proto: https` while
+ * Drydock sees a plain-http connection (`DD_SERVER_TRUSTPROXY` unset), so the
+ * expected origin is computed as `http://…` and never matches the browser's
+ * `https://…` origin. Used only to make the 403 message actionable.
+ */
+function isLikelyReverseProxyMismatch(req: Request): boolean {
+  if (req.protocol !== 'http') {
+    return false;
+  }
+  return getFirstForwardedValue(req.get('x-forwarded-proto'))?.toLowerCase() === 'https';
+}
+
+/**
  * Enforce same-origin checks for cookie-authenticated state-changing requests.
  */
 export function requireSameOriginForMutations(
@@ -98,7 +119,7 @@ export function requireSameOriginForMutations(
   }
 
   if (isCrossSiteFetch(req)) {
-    sendErrorResponse(res, 403, 'CSRF validation failed');
+    sendErrorResponse(res, 403, CSRF_FAILED_MESSAGE);
     return;
   }
 
@@ -106,7 +127,11 @@ export function requireSameOriginForMutations(
   const requestOrigin = getRequestOrigin(req);
 
   if (!expectedOrigin || !requestOrigin || requestOrigin !== expectedOrigin) {
-    sendErrorResponse(res, 403, 'CSRF validation failed');
+    sendErrorResponse(
+      res,
+      403,
+      isLikelyReverseProxyMismatch(req) ? CSRF_REVERSE_PROXY_MESSAGE : CSRF_FAILED_MESSAGE,
+    );
     return;
   }
 

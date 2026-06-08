@@ -159,6 +159,43 @@ test('authenticate should use access_token and create headers when missing', asy
   });
 });
 
+test('resolveBearerChallengeOptions should use configured service account credentials', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValueOnce({
+    data: { access_token: 'challenge-token' },
+  });
+
+  const result = await (gar as any).resolveBearerChallengeOptions(
+    {
+      headers: {},
+      url: 'https://us-central1-docker.pkg.dev/v2/project/repository/image/manifests/latest',
+    },
+    'Bearer realm="https://us-central1-docker.pkg.dev/v2/token",service="us-central1-docker.pkg.dev",scope="repository:project/repository/image:pull"',
+    {
+      name: 'project/repository/image',
+      registry: { url: 'us-central1-docker.pkg.dev' },
+    },
+  );
+
+  const expectedBasic = Buffer.from(
+    `_json_key:${JSON.stringify({
+      client_email: TEST_CLIENT_EMAIL,
+      private_key: TEST_PRIVATE_KEY,
+    })}`,
+    'utf-8',
+  ).toString('base64');
+  expect(axios).toHaveBeenCalledWith({
+    method: 'GET',
+    url: 'https://us-central1-docker.pkg.dev/v2/token?service=us-central1-docker.pkg.dev&scope=repository%3Aproject%2Frepository%2Fimage%3Apull',
+    maxRedirects: 0,
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Basic ${expectedBasic}`,
+    },
+  });
+  expect(result.headers.Authorization).toBe('Bearer challenge-token');
+});
+
 test('authenticate should throw when token response is missing token fields', async () => {
   const { default: axios } = await import('axios');
   axios.mockResolvedValueOnce({

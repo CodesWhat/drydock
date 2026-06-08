@@ -245,10 +245,43 @@ Token-based authentication for public registries has been replaced by password-b
 | **Default flips in** | v1.7.0 |
 | **Affects** | Multi-agent deployments using the Home Assistant MQTT integration (`DD_NOTIFICATION_MQTT_<name>_HASS_ENABLED=true`) where more than one node uses the default watcher name `local` |
 
-The current Home Assistant MQTT topic layout (`<topic>/<watcher>/<container>` and the watcher-level sensor topics) has no agent segment. In a multi-agent deployment where the controller and one or more agents all use the default watcher name `local`, two containers with the same name on different agents publish to — and overwrite — the same MQTT topic, and the watcher-level sensor counts sum across all agents. This is the Home Assistant facet of [#386](https://github.com/CodesWhat/drydock/issues/386).
+The current Home Assistant MQTT topic layout (`<topic>/<watcher>/<container>` and the watcher-level sensor topics) has no agent segment. In a multi-agent deployment where the controller and one or more agents all use the default watcher name `local`, two containers with the same name on different agents publish to — and overwrite — the same MQTT topic, watcher running-status topics collide, and the watcher-level sensor counts sum across all agents. This is the Home Assistant facet of [#386](https://github.com/CodesWhat/drydock/issues/386).
 
-Setting `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true` opts into the corrected layout: an `agent/<name>` segment is inserted into every Home Assistant topic for containers owned by a remote agent, the watcher-level sensor counts are scoped per agent, and discovery-entity cleanup is scoped per agent. Controller-local container topics are unchanged whether or not the flag is set. The corrected layout is targeted to become the default in **v1.7.0**.
+Setting `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true` opts into the corrected layout: an `agent/<name>` segment is inserted into every Home Assistant topic for containers owned by a remote agent, watcher running-status topics and watcher-level sensor counts are scoped per agent, and discovery-entity cleanup is scoped per agent. Controller-local container topics are unchanged whether or not the flag is set. The corrected layout is targeted to become the default in **v1.7.0**.
 
 **Note:** enabling the flag changes the Home Assistant entity IDs for agent-owned containers (the MQTT topic path changes). Update any Home Assistant automations, dashboards, or templates that reference the old (agent-less) entity IDs for agent containers. Single-node deployments are unaffected.
 
 **Migration:** Multi-agent deployments should set `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true` and re-point any affected Home Assistant references before v1.7.0 makes it the default.
+
+## Removed compatibility behaviors
+
+### Legacy aggregate container stats endpoint
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.5.0-rc.29 |
+| **Removed in** | v1.5.0-rc.29 |
+| **Compatibility response added in** | v1.5.0-rc.34 |
+| **Affects** | API consumers using `GET /api/v1/containers/stats` for fleet-level CPU/memory summaries |
+
+The legacy aggregate endpoint `GET /api/v1/containers/stats` was removed when fleet-level stats moved to the dedicated stats API. Since v1.5.0-rc.34, the old path returns **410 Gone** with migration targets instead of falling through to the `/:id` container route as container id `stats`.
+
+**Migration:** Replace aggregate reads with `GET /api/v1/stats/summary` or `GET /api/v1/stats/summary/stream`. Use `GET /api/v1/containers/:id/stats` only for per-container stats.
+
+## Enforced security changes (no deprecation window)
+
+These behaviors were removed immediately rather than going through a grace period, because the deprecated behavior was itself the vulnerability — keeping it alive behind a warning would have left the hole open. They are listed here for upgrade visibility and migration guidance.
+
+### Implicit reverse-proxy header trust for CSRF origin checks
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.5.0-rc.30 |
+| **Removed in** | v1.5.0-rc.30 (immediate — security fix, no grace period) |
+| **Affects** | TLS-terminating reverse-proxy deployments (Traefik, Nginx, NGINX Proxy Manager, Caddy, HAProxy, Synology DSM, …) without `DD_SERVER_TRUSTPROXY` |
+
+Before rc.30, `getExpectedOrigin()` honored `X-Forwarded-Proto` / `X-Forwarded-Host` unconditionally when validating the same-origin (CSRF) check on state-changing requests. A client could forge those headers to satisfy the check even with `trust proxy` disabled ([`a132318e`](https://github.com/CodesWhat/drydock/commit/a132318e)). rc.30 stopped trusting them unless Express `trust proxy` is enabled. Because the forgeable behavior was the vulnerability, it could not be kept alive behind a deprecation window.
+
+A deployment that terminated TLS at a proxy but never set `DD_SERVER_TRUSTPROXY` previously worked only because the unconditional header trust masked the misconfiguration; after rc.30 it returns `403 CSRF validation failed` on every manual update / recheck / scan ([#418](https://github.com/CodesWhat/drydock/issues/418)). Since v1.5.0-rc.34, Drydock logs a startup warning when it detects `X-Forwarded-Proto: https` while `trust proxy` is disabled, so the requirement is no longer silent.
+
+**Migration:** Set `DD_SERVER_TRUSTPROXY` to the number of proxy hops in front of Drydock (e.g. `1`), and make sure the proxy forwards `X-Forwarded-Proto` (and `X-Forwarded-Host`). See [CSRF validation failed (403) behind a reverse proxy](https://getdrydock.com/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy).

@@ -71,6 +71,9 @@ describe('AgentClient', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockResolveConfiguredPath.mockImplementation((path) => path);
+    vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+    vi.mocked(storeContainer.getContainers).mockReturnValue([]);
+    vi.mocked(updateOperationStore.getOperationById).mockReturnValue(undefined);
     vi.useFakeTimers();
     client = new AgentClient('test-agent', {
       host: 'localhost',
@@ -2244,6 +2247,31 @@ describe('AgentClient', () => {
       );
     });
 
+    test('should stamp fresh active agent operation rows with derived identity', async () => {
+      vi.mocked(storeContainer.getContainer).mockReturnValueOnce({
+        id: 'c1',
+        name: 'local_nginx',
+        watcher: 'local',
+        agent: 'test-agent',
+      } as any);
+
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-active-scoped',
+        containerName: 'local_nginx',
+        containerId: 'c1',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+
+      expect(updateOperationStore.insertOperation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'agent-test-agent-remote-op-active-scoped',
+          agent: 'test-agent',
+          watcher: 'local',
+        }),
+      );
+    });
+
     test('should insert active synthetic operations without optional fields', async () => {
       await client.handleEvent('dd:update-operation-changed', {
         operationId: 'remote-op-minimal-active',
@@ -2302,6 +2330,46 @@ describe('AgentClient', () => {
         }),
       );
       expect(updateOperationStore.insertOperation).not.toHaveBeenCalled();
+    });
+
+    test('should hydrate active operation identity from newContainerId when old id is gone', async () => {
+      vi.mocked(updateOperationStore.getOperationById).mockReturnValue(undefined);
+      storeContainer.getContainer.mockImplementation((id) =>
+        id === 'new-c1'
+          ? ({
+              id: 'new-c1',
+              name: 'local_nginx',
+              watcher: 'local',
+              agent: 'test-agent',
+            } as any)
+          : undefined,
+      );
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-new-id-only',
+        containerName: 'local_nginx',
+        containerId: 'old-c1',
+        newContainerId: 'new-c1',
+        status: 'in-progress',
+        phase: 'new-started',
+      });
+
+      expect(updateOperationStore.insertOperation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'agent-test-agent-remote-op-new-id-only',
+          containerName: 'local_nginx',
+          agent: 'test-agent',
+          watcher: 'local',
+          containerId: 'old-c1',
+          newContainerId: 'new-c1',
+          container: expect.objectContaining({
+            id: 'new-c1',
+            watcher: 'local',
+            agent: 'test-agent',
+          }),
+        }),
+      );
     });
 
     test('should update active synthetic operations without optional fields', async () => {
@@ -4692,6 +4760,7 @@ describe('AgentClient', () => {
         id: 'agent-test-agent-op-1',
         kind: 'container-update',
         containerName: 'nginx',
+        agent: 'test-agent',
       });
     });
 
@@ -4753,6 +4822,24 @@ describe('AgentClient', () => {
       vi.mocked(updateOperationStore.getOperationById).mockReturnValue(undefined);
       const result = (client as any).resolveAgentOperationId('agent-test-agent-already-scoped');
       expect(result).toBe('agent-test-agent-already-scoped');
+    });
+  });
+
+  describe('getStoredContainerForAgentOperation', () => {
+    test('finds one agent-owned container by name when payload ids are absent', () => {
+      const row = { id: 'container-1', name: 'nginx', agent: 'test-agent' };
+      vi.mocked(storeContainer.getContainers).mockReturnValue([
+        undefined,
+        row,
+        { id: 'container-2', name: 'nginx', agent: 'other-agent' },
+      ] as any);
+
+      const result = (client as any).getStoredContainerForAgentOperation({
+        containerName: 'nginx',
+      });
+
+      expect(result).toBe(row);
+      expect(storeContainer.getContainers).toHaveBeenCalledWith({ agent: 'test-agent' });
     });
   });
 

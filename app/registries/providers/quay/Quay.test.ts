@@ -191,6 +191,7 @@ test('authenticate should throw actionable error when configured credentials are
   expect(axios).toHaveBeenCalledWith({
     method: 'GET',
     url: 'https://quay.io/v2/auth?service=quay.io&scope=repository:test/image:pull',
+    maxRedirects: 0,
     headers: {
       Accept: 'application/json',
       Authorization: 'Basic bmFtZXNwYWNlK2FjY291bnQ6dG9rZW4=',

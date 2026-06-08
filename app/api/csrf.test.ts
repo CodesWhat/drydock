@@ -504,6 +504,78 @@ describe('CSRF middleware', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'CSRF validation failed' });
   });
 
+  test('trust proxy OFF behind a TLS-terminating proxy: 403 tells the user to set DD_SERVER_TRUSTPROXY (#418)', () => {
+    // Reproduces #418: DSM terminates TLS, so the browser sends Origin: https://…
+    // while Drydock (no trust proxy) sees protocol 'http' + X-Forwarded-Proto: https.
+    // expectedOrigin = http://drydock.example.com ≠ https://drydock.example.com → 403,
+    // and the message is actionable instead of an opaque "CSRF validation failed".
+    const req = createReq({
+      method: 'POST',
+      protocol: 'http',
+      trustProxy: false,
+      headers: {
+        cookie: 'connect.sid=s%3Atest',
+        host: 'drydock.example.com',
+        origin: 'https://drydock.example.com',
+        'x-forwarded-proto': 'https',
+      },
+    });
+    const res = createRes();
+    const next = vi.fn();
+
+    requireSameOriginForMutations(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({
+      error: expect.stringContaining('DD_SERVER_TRUSTPROXY=1'),
+    });
+    expect(res.json).toHaveBeenCalledWith({
+      error: expect.stringContaining('csrf-validation-failed-403-behind-a-reverse-proxy'),
+    });
+  });
+
+  test('trust proxy OFF, plain http with no X-Forwarded-Proto: 403 keeps the plain message', () => {
+    const req = createReq({
+      method: 'POST',
+      protocol: 'http',
+      trustProxy: false,
+      headers: {
+        cookie: 'connect.sid=s%3Atest',
+        host: 'drydock.example.com',
+        origin: 'https://drydock.example.com',
+      },
+    });
+    const res = createRes();
+    const next = vi.fn();
+
+    requireSameOriginForMutations(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ error: 'CSRF validation failed' });
+  });
+
+  test('trust proxy OFF, X-Forwarded-Proto: http (no scheme upgrade): 403 keeps the plain message', () => {
+    const req = createReq({
+      method: 'POST',
+      protocol: 'http',
+      trustProxy: false,
+      headers: {
+        cookie: 'connect.sid=s%3Atest',
+        host: 'drydock.example.com',
+        origin: 'https://drydock.example.com',
+        'x-forwarded-proto': 'http',
+      },
+    });
+    const res = createRes();
+    const next = vi.fn();
+
+    requireSameOriginForMutations(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ error: 'CSRF validation failed' });
+  });
+
   test('trust proxy ON: X-Forwarded-Host including port is honoured for expected origin', () => {
     // With trust proxy on, a legitimate reverse proxy may set X-Forwarded-Host with a port.
     // The port must be preserved so the origin comparison succeeds.

@@ -253,6 +253,17 @@ const statsHandlers = createStatsHandlers({
   statsCollector: containerStatsCollector,
 });
 
+function getLegacyAggregateStats(_req: Request, res: Response) {
+  res.status(410).json({
+    error:
+      'GET /api/v1/containers/stats has been removed. Use GET /api/v1/stats/summary for aggregate stats or GET /api/v1/containers/:id/stats for per-container stats.',
+    migration: {
+      aggregate: '/api/v1/stats/summary',
+      container: '/api/v1/containers/:id/stats',
+    },
+  });
+}
+
 export const deleteContainer = crudHandlers.deleteContainer;
 export const getContainerTriggers = triggerHandlers.getContainerTriggers;
 
@@ -288,6 +299,7 @@ export function init() {
     }),
     bulkSecurityHandlers.scanAll,
   );
+  router.get('/stats', getLegacyAggregateStats);
   router.get('/:id/stats', statsHandlers.getContainerStats);
   router.get('/:id/stats/stream', statsHandlers.streamContainerStats);
   router.get('/:id/release-notes', crudHandlers.getContainerReleaseNotes);

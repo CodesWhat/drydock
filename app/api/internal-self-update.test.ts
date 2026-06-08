@@ -134,6 +134,35 @@ describe('internal-self-update', () => {
     expect(res.status).toHaveBeenCalledWith(202);
   });
 
+  test('marks an active self-update operation as expired', () => {
+    mockGetOperationById.mockReturnValue({
+      id: 'op-123',
+      status: 'in-progress',
+      phase: 'prepare',
+      kind: 'self-update',
+    });
+
+    const handler = createFinalizeSelfUpdateHandler();
+    const req = createFinalizeRequest({
+      body: {
+        operationId: 'op-123',
+        status: 'expired',
+        phase: 'expired',
+        lastError: 'finalize timeout',
+      },
+    });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-123', {
+      status: 'expired',
+      phase: 'expired',
+      lastError: 'finalize timeout',
+    });
+    expect(res.status).toHaveBeenCalledWith(202);
+  });
+
   test('marks terminal payloads without phases and trims blank lastError text', () => {
     const handler = createFinalizeSelfUpdateHandler();
 
@@ -186,6 +215,22 @@ describe('internal-self-update', () => {
       createMockResponse(),
     );
 
+    mockGetOperationById.mockReturnValue({
+      id: 'op-expired',
+      status: 'in-progress',
+      phase: 'prepare',
+      kind: 'self-update',
+    });
+    handler(
+      createFinalizeRequest({
+        body: {
+          operationId: 'op-expired',
+          status: 'expired',
+        },
+      }),
+      createMockResponse(),
+    );
+
     expect(mockMarkOperationTerminal).toHaveBeenNthCalledWith(1, 'op-succeeded', {
       status: 'succeeded',
     });
@@ -194,6 +239,9 @@ describe('internal-self-update', () => {
     });
     expect(mockMarkOperationTerminal).toHaveBeenNthCalledWith(3, 'op-failed', {
       status: 'failed',
+    });
+    expect(mockMarkOperationTerminal).toHaveBeenNthCalledWith(4, 'op-expired', {
+      status: 'expired',
     });
   });
 

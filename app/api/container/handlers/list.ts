@@ -253,7 +253,56 @@ export function attachUpdateEligibility(
 
 interface PreloadedActiveOperationLookup {
   byContainerId: Map<string, ContainerUpdateOperationState>;
+  byScopedContainerName: Map<string, ContainerUpdateOperationState>;
   byLegacyContainerName: Map<string, ContainerUpdateOperationState>;
+}
+
+const SCOPED_CONTAINER_OPERATION_KEY_SEPARATOR = '\0';
+
+function getTrimmedString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function getScopedContainerOperationLookupKey(
+  containerName: unknown,
+  identity: { agent?: unknown; watcher?: unknown },
+): string | undefined {
+  const name = getTrimmedString(containerName);
+  const watcher = getTrimmedString(identity.watcher);
+  if (!name || !watcher) {
+    return undefined;
+  }
+
+  const agent = getTrimmedString(identity.agent);
+  return [agent, watcher, name].join(SCOPED_CONTAINER_OPERATION_KEY_SEPARATOR);
+}
+
+function getOperationScopedContainerNameLookupKey(
+  operation: Record<string, unknown>,
+  fallbackContainerName: string,
+): string | undefined {
+  /* v8 ignore next 7 -- persisted operation snapshots can carry full container identity metadata. */
+  if (operation.container && typeof operation.container === 'object') {
+    const container = operation.container as Record<string, unknown>;
+    const containerName = getTrimmedString(container.name) || fallbackContainerName;
+    return getScopedContainerOperationLookupKey(containerName, {
+      agent: container.agent,
+      watcher: container.watcher,
+    });
+  }
+
+  return getScopedContainerOperationLookupKey(fallbackContainerName, {
+    agent: operation.agent,
+    watcher: operation.watcher,
+  });
+}
+
+function hasOperationIdentity(operation: Record<string, unknown>): boolean {
+  /* v8 ignore next 3 -- persisted operation snapshots can carry full container identity metadata. */
+  if (operation.container && typeof operation.container === 'object') {
+    return true;
+  }
+  return typeof operation.agent === 'string' || typeof operation.watcher === 'string';
 }
 
 function getOperationUpdatedAtTimestamp(operation: ContainerUpdateOperationState): number {
@@ -289,6 +338,7 @@ function buildPreloadedActiveOperationLookup(
   }
 
   const byContainerId = new Map<string, ContainerUpdateOperationState>();
+  const byScopedContainerName = new Map<string, ContainerUpdateOperationState>();
   const byLegacyContainerName = new Map<string, ContainerUpdateOperationState>();
 
   for (const candidate of operations) {
@@ -303,6 +353,7 @@ function buildPreloadedActiveOperationLookup(
       typeof record.newContainerId === 'string' ? record.newContainerId.trim() : '';
     const containerName =
       typeof record.containerName === 'string' ? record.containerName.trim() : '';
+    const scopedContainerNameKey = getOperationScopedContainerNameLookupKey(record, containerName);
 
     if (containerId) {
       setLatestOperationLookupEntry(byContainerId, containerId, operation);
@@ -310,17 +361,31 @@ function buildPreloadedActiveOperationLookup(
     if (newContainerId) {
       setLatestOperationLookupEntry(byContainerId, newContainerId, operation);
     }
-    if (!containerId && !newContainerId && containerName) {
+    if (scopedContainerNameKey) {
+      setLatestOperationLookupEntry(byScopedContainerName, scopedContainerNameKey, operation);
+    }
+    if (
+      !containerId &&
+      !newContainerId &&
+      !scopedContainerNameKey &&
+      !hasOperationIdentity(record) &&
+      containerName
+    ) {
       setLatestOperationLookupEntry(byLegacyContainerName, containerName, operation);
     }
   }
 
-  if (byContainerId.size === 0 && byLegacyContainerName.size === 0) {
+  if (
+    byContainerId.size === 0 &&
+    byScopedContainerName.size === 0 &&
+    byLegacyContainerName.size === 0
+  ) {
     return undefined;
   }
 
   return {
     byContainerId,
+    byScopedContainerName,
     byLegacyContainerName,
   };
 }
@@ -329,8 +394,13 @@ function attachPreloadedActiveUpdateOperation(
   lookup: PreloadedActiveOperationLookup,
   container: Container,
 ): Container {
+  const scopedContainerNameKey = getScopedContainerOperationLookupKey(container.name, container);
   const operation =
-    lookup.byContainerId.get(container.id) ?? lookup.byLegacyContainerName.get(container.name);
+    lookup.byContainerId.get(container.id) ??
+    (scopedContainerNameKey
+      ? lookup.byScopedContainerName.get(scopedContainerNameKey)
+      : undefined) ??
+    lookup.byLegacyContainerName.get(container.name);
   if (!operation) {
     return container;
   }

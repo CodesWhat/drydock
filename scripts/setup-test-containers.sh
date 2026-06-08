@@ -58,8 +58,12 @@ else
 	echo "⚠️  Skipping ghcr_radarr (no GITHUB_USERNAME set)"
 fi
 
-# GITLAB
-run_test_container gitlab_test --label "$LABEL_WATCH" --label 'dd.tag.include=^v16\.[01]\.0$' registry.gitlab.com/gitlab-org/gitlab-runner:v16.0.0
+# GITLAB — requires a token now that rejected credentials do not fall back to anonymous pulls
+if [ -n "${GITLAB_TOKEN:-}" ]; then
+	run_test_container gitlab_test --label "$LABEL_WATCH" --label 'dd.tag.include=^v16\.[01]\.0$' registry.gitlab.com/gitlab-org/gitlab-runner:v16.0.0
+else
+	echo "⚠️  Skipping gitlab_test (no GITLAB_TOKEN set)"
+fi
 
 # HUB
 run_test_container hub_homeassistant_202161 \

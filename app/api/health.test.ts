@@ -11,6 +11,7 @@ vi.mock('express', () => ({
 vi.mock('nocache', () => ({ default: vi.fn() }));
 
 import * as healthRouter from './health.js';
+import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
 // Test the initial module state (before any resetAuthReadyFnForTests call)
 // to ensure the module-level default () => true initializer is covered.
@@ -25,6 +26,15 @@ describe('Health Router — initial module state', () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ uptime: expect.any(Number) });
+
+    const contractValidation = validateOpenApiJsonResponse({
+      path: '/health',
+      method: 'get',
+      statusCode: '200',
+      payload: res.json.mock.calls[0][0],
+    });
+    expect(contractValidation.valid).toBe(true);
+    expect(contractValidation.errors).toStrictEqual([]);
   });
 });
 
@@ -73,6 +83,15 @@ describe('Health Router', () => {
       status: 'starting',
       reason: 'auth strategies not yet registered',
     });
+
+    const contractValidation = validateOpenApiJsonResponse({
+      path: '/health',
+      method: 'get',
+      statusCode: '503',
+      payload: res.json.mock.calls[0][0],
+    });
+    expect(contractValidation.valid).toBe(true);
+    expect(contractValidation.errors).toStrictEqual([]);
   });
 
   test('healthHandler should return 200 when auth is ready via setAuthReadyFn', () => {

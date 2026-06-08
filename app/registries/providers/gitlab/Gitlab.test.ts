@@ -113,11 +113,40 @@ test('authenticate should encode scope query parameter', async () => {
   expect(axios).toHaveBeenCalledWith({
     method: 'GET',
     url: 'https://gitlab.com/jwt/auth?service=container_registry&scope=repository%3Agroup%2Fproject%3Apull',
+    maxRedirects: 0,
     headers: {
       Accept: 'application/json',
       Authorization: `Basic ${Buffer.from(`:${TEST_TOKEN}`).toString('base64')}`,
     },
   });
+});
+
+test('resolveBearerChallengeOptions should use configured token credentials', async () => {
+  axios.mockImplementation(() => ({
+    data: {
+      token: 'challenge-token',
+    },
+  }));
+
+  const result = await (gitlab as any).resolveBearerChallengeOptions(
+    {
+      headers: {},
+      url: 'https://registry.gitlab.com/v2/group/project/manifests/latest',
+    },
+    'Bearer realm="https://gitlab.com/jwt/auth",service="container_registry",scope="repository:group/project:pull"',
+    { name: 'group/project' },
+  );
+
+  expect(axios).toHaveBeenCalledWith({
+    method: 'GET',
+    url: 'https://gitlab.com/jwt/auth?service=container_registry&scope=repository%3Agroup%2Fproject%3Apull',
+    maxRedirects: 0,
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Basic ${Buffer.from(`:${TEST_TOKEN}`).toString('base64')}`,
+    },
+  });
+  expect(result.headers.Authorization).toBe('Bearer challenge-token');
 });
 
 test('authenticate should throw when token response is missing token', async () => {

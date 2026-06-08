@@ -20,6 +20,7 @@ const log = logger.child({ component: 'webhook' });
 const router = express.Router();
 
 type WebhookAction = 'watchall' | 'watch' | 'update';
+const LOCAL_AGENT_QUERY_VALUE = '__local__';
 
 function normalizeRequestPath(req: Request): string {
   const rawPath = (req.path || req.originalUrl || req.url || '').split('?')[0];
@@ -137,7 +138,7 @@ function findContainerByName(
     filters.agent !== undefined || filters.watcher !== undefined
       ? allByName.filter(
           (c) =>
-            (filters.agent === undefined || c.agent === filters.agent) &&
+            (filters.agent === undefined || matchesAgentFilter(c.agent, filters.agent)) &&
             (filters.watcher === undefined || c.watcher === filters.watcher),
         )
       : allByName;
@@ -153,6 +154,20 @@ function findContainerByName(
 }
 
 type StoreContainer = ReturnType<typeof storeContainer.getContainers>[number];
+
+function matchesAgentFilter(containerAgent: unknown, agentFilter: string): boolean {
+  if (agentFilter === LOCAL_AGENT_QUERY_VALUE) {
+    return containerAgent === undefined || containerAgent === null || containerAgent === '';
+  }
+  return containerAgent === agentFilter;
+}
+
+function formatAgentForAmbiguityMessage(agent: unknown): string {
+  if (agent === undefined || agent === null || agent === '') {
+    return LOCAL_AGENT_QUERY_VALUE;
+  }
+  return String(agent);
+}
 
 type ContainerWebhookErrorContext = {
   auditAction: 'webhook-watch-container' | 'webhook-update';
@@ -261,12 +276,12 @@ async function watchContainer(req: Request, res: Response) {
   if (found.candidates) {
     // #386: ambiguous name across agents/watchers — require disambiguation
     const pairs = found.candidates
-      .map((c) => `agent=${c.agent ?? '(none)'},watcher=${c.watcher}`)
+      .map((c) => `agent=${formatAgentForAmbiguityMessage(c.agent)},watcher=${c.watcher}`)
       .join('; ');
     sendErrorResponse(
       res,
       409,
-      `Ambiguous container name: matches multiple sources (${pairs}). Add ?agent= and/or ?watcher= to disambiguate.`,
+      `Ambiguous container name: matches multiple sources (${pairs}). Add ?agent=${LOCAL_AGENT_QUERY_VALUE} for controller-local containers, or use ?agent= and/or ?watcher= to disambiguate.`,
     );
     return;
   }
@@ -333,12 +348,12 @@ async function updateContainer(req: Request, res: Response) {
   if (found.candidates) {
     // #386: ambiguous name across agents/watchers — require disambiguation
     const pairs = found.candidates
-      .map((c) => `agent=${c.agent ?? '(none)'},watcher=${c.watcher}`)
+      .map((c) => `agent=${formatAgentForAmbiguityMessage(c.agent)},watcher=${c.watcher}`)
       .join('; ');
     sendErrorResponse(
       res,
       409,
-      `Ambiguous container name: matches multiple sources (${pairs}). Add ?agent= and/or ?watcher= to disambiguate.`,
+      `Ambiguous container name: matches multiple sources (${pairs}). Add ?agent=${LOCAL_AGENT_QUERY_VALUE} for controller-local containers, or use ?agent= and/or ?watcher= to disambiguate.`,
     );
     return;
   }

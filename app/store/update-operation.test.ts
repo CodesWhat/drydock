@@ -2506,6 +2506,80 @@ describe('Update Operation Store', () => {
       }
     });
 
+    test('returns a succeeded terminal op with matching agent and watcher identity', () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
+        const op = updateOperation.insertOperation({
+          containerName: 'web',
+          status: 'in-progress',
+          phase: 'pulling',
+          container: { id: 'c-agent-a', name: 'web', watcher: 'local', agent: 'agent-A' } as any,
+        });
+        updateOperation.markOperationTerminal(op.id, { status: 'succeeded' });
+
+        vi.setSystemTime(new Date('2026-06-04T12:05:00.000Z'));
+        const result = updateOperation.getRecentTerminalSucceededOperationByContainerName(
+          'web',
+          15 * 60 * 1000,
+          { agent: 'agent-A', watcher: 'local' },
+        );
+        expect(result?.id).toBe(op.id);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('uses top-level identity when a container snapshot lacks watcher metadata', () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
+        const op = updateOperation.insertOperation({
+          containerName: 'web',
+          status: 'in-progress',
+          phase: 'pulling',
+          agent: 'agent-A',
+          watcher: 'local',
+          container: { id: 'c-agent-a', name: 'web', agent: 'agent-A' } as any,
+        });
+        updateOperation.markOperationTerminal(op.id, { status: 'succeeded' });
+
+        vi.setSystemTime(new Date('2026-06-04T12:05:00.000Z'));
+        const result = updateOperation.getRecentTerminalSucceededOperationByContainerName(
+          'web',
+          15 * 60 * 1000,
+          { agent: 'agent-A', watcher: 'local' },
+        );
+        expect(result?.id).toBe(op.id);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('returns undefined for a same-name success from another agent', () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2026-06-04T12:00:00.000Z'));
+        const op = updateOperation.insertOperation({
+          containerName: 'web',
+          status: 'in-progress',
+          phase: 'pulling',
+          container: { id: 'c-agent-b', name: 'web', watcher: 'local', agent: 'agent-B' } as any,
+        });
+        updateOperation.markOperationTerminal(op.id, { status: 'succeeded' });
+
+        vi.setSystemTime(new Date('2026-06-04T12:05:00.000Z'));
+        const result = updateOperation.getRecentTerminalSucceededOperationByContainerName(
+          'web',
+          15 * 60 * 1000,
+          { agent: 'agent-A', watcher: 'local' },
+        );
+        expect(result).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     test('returns undefined when collection is uninitialized', async () => {
       vi.resetModules();
       const fresh = await import('./update-operation.js');
@@ -2576,6 +2650,21 @@ describe('Update Operation Store', () => {
       });
       expect(result).toBeDefined();
       expect(result?.containerName).toBe('web');
+    });
+
+    test('identity-bearing op without watcher is not treated as a legacy name-only match', () => {
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+        agent: 'agent-B',
+      });
+
+      const result = updateOperation.getActiveOperationByContainerName('web', {
+        agent: 'agent-A',
+        watcher: 'local',
+      });
+      expect(result).toBeUndefined();
     });
 
     test('identity without a watcher skips the filter and returns the operation', () => {

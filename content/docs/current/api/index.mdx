@@ -73,7 +73,7 @@ If the header is missing or does not match the expected token, the API responds 
 | Endpoint | Method | Description |
 | --- | --- | --- |
 | `/api/v1/openapi.json` | `GET` | [OpenAPI 3.1.0 specification](#openapi) (machine-readable API docs) |
-| `/health` | `GET` | Health check (returns 200 when healthy) |
+| `/health` | `GET` | Health check (returns 200 when healthy, 503 while startup readiness gates are not satisfied) |
 | `/metrics` | `GET` | Prometheus metrics (bearer token via `DD_SERVER_METRICS_TOKEN`, session auth fallback, or no auth via `DD_SERVER_METRICS_AUTH=false`) |
 | `/api/v1/events/ui` | `GET` | [Server-Sent Events](#server-sent-events-sse) for real-time UI updates |
 | `/api/v1/audit` | `GET` | [Audit trail](#audit-trail) (paginated, filterable by action/container/date) |
@@ -84,7 +84,6 @@ If the header is missing or does not match the expected token, the API responds 
 | `/api/v1/server` | `GET` | Server configuration and compatibility info (see [App API](/docs/api/app)) |
 | `/api/v1/server/security/runtime` | `GET` | Security tools availability (see [App API](/docs/api/app)) |
 | `/api/v1/containers/groups` | `GET` | [Container groups](#container-groups) (by stack/compose project) |
-| `/api/v1/containers/stats` | `GET` | Container CPU and memory usage stats (see [Container API](/docs/api/container)) |
 | `/api/v1/containers/:id/stats` | `GET` | Single container stats snapshot and history (see [Container API](/docs/api/container)) |
 | `/api/v1/containers/:id/stats/stream` | `GET` | SSE stream for real-time container stats (see [Container API](/docs/api/container)) |
 | `/api/v1/stats/summary` | `GET` | Fleet-aggregate CPU/memory snapshot (see [Container API](/docs/api/container#get-fleet-stats-summary)) |

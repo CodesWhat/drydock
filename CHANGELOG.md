@@ -10,11 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0-rc.34] — 2026-06-07
+
 ### Added
 
 - **Trigger environment variable taxonomy split — `DD_ACTION_*` and `DD_NOTIFICATION_*` prefixes.** Action triggers (Docker, Docker Compose, Command) are now configured with `DD_ACTION_*` and `dd.action.*` labels; notification/messaging triggers (Slack, SMTP, Discord, Telegram, ntfy, Pushover, and all others) are configured with `DD_NOTIFICATION_*` and `dd.notification.*` labels. All three prefix families (`DD_ACTION_*`, `DD_NOTIFICATION_*`, `DD_TRIGGER_*`) are interchangeable at runtime — merge priority is `DD_NOTIFICATION_*` > `DD_ACTION_*` > `DD_TRIGGER_*`. A migration CLI (`drydock config migrate --source trigger`) rewrites `DD_TRIGGER_*`, `dd.trigger.include`, and `dd.trigger.exclude` to action-prefixed aliases automatically; use `--dry-run` to preview changes before applying.
 
-- **Per-agent Home Assistant MQTT topic segmentation (`DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT`, default `false`).** When enabled, Drydock inserts an `agent/<name>` segment into every Home Assistant MQTT topic — per-container state topics and watcher-level sensor topics — for containers owned by a remote agent, so two agents that both use the default watcher name `local` no longer publish to (and overwrite) the same topics. Enabling it also scopes the watcher-level sensor counts and the discovery-entity cleanup per agent, fixing the Home Assistant facet of [#386](https://github.com/CodesWhat/drydock/issues/386). Controller-local container topics are unchanged. Because it changes the Home Assistant entity IDs for agent-owned containers, it is opt-in for the v1.5.x line and targeted to become the default in v1.7.0 — see *Deprecated*.
+- **Per-agent Home Assistant MQTT topic segmentation (`DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT`, default `false`).** When enabled, Drydock inserts an `agent/<name>` segment into every Home Assistant MQTT topic — per-container state topics, watcher-level count/update sensors, and watcher running-status sensors — for containers owned by a remote agent, so two agents that both use the default watcher name `local` no longer publish to (and overwrite) the same topics. Enabling it also scopes the watcher-level sensor counts and the discovery-entity cleanup per agent, fixing the Home Assistant facet of [#386](https://github.com/CodesWhat/drydock/issues/386). Controller-local container topics are unchanged. Because it changes the Home Assistant entity IDs for agent-owned containers, it is opt-in for the v1.5.x line and targeted to become the default in v1.7.0 — see *Deprecated*.
 
 - **Up-to-date and pinned badges in Kind column** — Containers table now shows a green check-circle badge ("Up to date") for containers at their latest version, and a green pin badge ("Pinned") for containers with skipped updates, replacing the previous dash placeholder.
 
@@ -34,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Resource usage dashboard widget** — CPU and memory usage bars with top-N resource consumers, progressive detail at different widget sizes.
 
-- **Fleet-aggregate stats subsystem ([commits `feature/v1.5-rc17`](https://github.com/CodesWhat/drydock/commit/dd6c4ae3)).** New `ContainerStatsAggregator` polls each locally-monitored container once per tick (default 10 s) and computes a fleet-wide `ContainerStatsSummary` (total CPU%, total memory, top-N rows). Two new endpoints — `GET /api/v1/stats/summary` and `GET /api/v1/stats/summary/stream` — expose the current snapshot and a live SSE feed; the dashboard Resource Usage widget now consumes the SSE stream directly, fixing the regression (introduced in rc.13 by the `?touch=false` workaround) where the widget showed zeros because the per-container cache was never warmed. The legacy `GET /api/v1/containers/stats` endpoint and the client-side `summarizeContainerResourceUsage` rollup have been removed.
+- **Fleet-aggregate stats subsystem ([commits `feature/v1.5-rc17`](https://github.com/CodesWhat/drydock/commit/dd6c4ae3)).** New `ContainerStatsAggregator` polls watched local and agent-owned containers once per tick (default 10 s) and computes a fleet-wide `ContainerStatsSummary` (total CPU%, total memory, top-N rows). Two new endpoints — `GET /api/v1/stats/summary` and `GET /api/v1/stats/summary/stream` — expose the current snapshot and a live SSE feed; the dashboard Resource Usage widget now consumes the SSE stream directly, fixing the regression (introduced in rc.13 by the `?touch=false` workaround) where the widget showed zeros because the per-container cache was never warmed. The legacy `GET /api/v1/containers/stats` endpoint and the client-side `summarizeContainerResourceUsage` rollup have been removed.
 
 - **Per-container update locks ([commit `761fb834`](https://github.com/CodesWhat/drydock/commit/761fb834)).** New keyed `LockManager` primitive in `app/updates/lock-primitives.ts` replaces the module-level `pLimit(1)` that was serialising every container update across the entire process. Lock keys are derived per container (and per compose project for `Dockercompose`), so two unrelated containers can now pull and recreate concurrently while two services in the same compose project still serialise correctly.
 
@@ -124,6 +126,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Legacy aggregate container stats route now fails explicitly.** `GET /api/v1/containers/stats` is still removed from the public stats API, but the router now catches the legacy path before `/:id` and returns `410 Gone` with migration targets (`GET /api/v1/stats/summary` for aggregate stats, `GET /api/v1/containers/:id/stats` for per-container stats) instead of treating `stats` as a container id.
+
 - **Default watcher cron relaxed from hourly to every 6 hours ([#342](https://github.com/CodesWhat/drydock/issues/342) follow-up).** `app/watchers/providers/docker/Docker.ts` now defaults `cron` to `0 */6 * * *` (every 6 hours) instead of `0 * * * *` (hourly). Users who set `DD_WATCHER_{name}_CRON` explicitly are unaffected. Users who want near-real-time detection can still set `DD_WATCHER_{name}_CRON=0 * * * *`.
 
 - **Action trigger default mode** — Action triggers (`docker`, `dockercompose`, `command`) now default to `AUTO=oninclude` instead of `AUTO=all`, requiring an explicit `dd.action.include` label before auto-updating containers. ([#213](https://github.com/CodesWhat/drydock/issues/213))
@@ -174,7 +178,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`curl` healthcheck override** — `curl` is retained in the image for user-defined HEALTHCHECK overrides during the v1.5.x deprecation window; removal is scheduled for v1.7.0 (v1.6.0 is the final warning release).
 
-- **Agent-less Home Assistant MQTT topic layout for multi-agent deployments** (deprecated v1.5.0, default flips v1.7.0). When more than one node uses the default watcher name `local`, the current agent-less topic layout makes same-named containers on different agents publish to and overwrite the same MQTT topics. Set `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true` to opt into the corrected per-agent layout now; it becomes the default in v1.7.0. Single-node deployments are unaffected. Enabling it changes the Home Assistant entity IDs for agent-owned containers — see [DEPRECATIONS.md](./DEPRECATIONS.md) for migration guidance.
+- **Agent-less Home Assistant MQTT topic layout for multi-agent deployments** (deprecated v1.5.0, default flips v1.7.0). When more than one node uses the default watcher name `local`, the current agent-less topic layout makes same-named containers on different agents publish to and overwrite the same MQTT topics, including watcher running-status topics. Set `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true` to opt into the corrected per-agent layout now; it becomes the default in v1.7.0. Single-node deployments are unaffected. Enabling it changes the Home Assistant entity IDs for agent-owned containers — see [DEPRECATIONS.md](./DEPRECATIONS.md) for migration guidance.
 
 ### Removed
 
@@ -187,6 +191,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Legacy `GET /api/v1/containers/stats` endpoint and `summarizeContainerResourceUsage` client-side rollup** removed; superseded by the new fleet-aggregate stats subsystem (`GET /api/v1/stats/summary`).
 
 ### Fixed
+
+- **[#418](https://github.com/CodesWhat/drydock/issues/418) — Operators behind a TLS-terminating reverse proxy now get an actionable startup log when manual updates fail with `403 CSRF validation failed`.** The rc.30 same-origin hardening made `DD_SERVER_TRUSTPROXY` mandatory behind a proxy that terminates TLS (without it, drydock sees `req.protocol` as `http` while the browser sends an `https` `Origin`, so every state-changing request is rejected) — but the only symptom was an opaque 403 with no pointer to the fix. When trust proxy is disabled and a request arrives carrying `X-Forwarded-Proto: https`, drydock now logs a one-time warning naming the exact cause and the `DD_SERVER_TRUSTPROXY=1` fix (linking the [reverse-proxy FAQ](https://getdrydock.com/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy)). The CSRF guard itself is unchanged — genuine cross-site forgery is still rejected.
 
 - **[#415](https://github.com/CodesWhat/drydock/issues/415) — Registries that require a Bearer token exchange for tag lookups (Chainguard `cgr.dev`, Codeberg/Forgejo `codeberg.org`, and other standard Docker v2 registries) no longer fail with `401 Unauthorized`.** `callRegistry` now implements the spec-compliant flow: on a `401` carrying a `WWW-Authenticate: Bearer realm=…,service=…,scope=…` challenge it fetches a token from the realm (anonymously for public images, or with the configured credentials) and retries the request once. The realm host is validated against the registry's own host via the existing `validateAuthUrlHost` guard, and the handler falls back to the original error if the exchange can't be completed, so it is purely additive for providers that already authenticate. Fixes tag enumeration for public Codeberg images and credentialed Chainguard images.
 
@@ -424,7 +430,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **CSRF same-origin check no longer trusts forged `X-Forwarded-Host` ([commit `a132318e`](https://github.com/CodesWhat/drydock/commit/a132318e)).** `getExpectedOrigin` read `X-Forwarded-Host`/`-Proto` unconditionally, so a client could forge them to satisfy the mutation same-origin check even with `trust proxy` disabled. The forwarded host is now honored only when Express `trust proxy` is enabled, the protocol derives from the already-gated `req.protocol`, and the `Host` port is preserved for non-standard-port deployments. **Upgrade note:** this aligns enforcement with the long-documented requirement to set `DD_SERVER_TRUSTPROXY` behind a TLS-terminating reverse proxy ([reverse-proxy setup](https://getdrydock.com/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy)). A deployment that terminated TLS at a proxy but never set `DD_SERVER_TRUSTPROXY` previously worked only because the unconditional header trust masked the misconfiguration; it must now set `DD_SERVER_TRUSTPROXY` (hop count, e.g. `1`) or state-changing requests will return `403`.
 
-- **GitHub release-notes token withheld for untrusted source repos ([commit `7186195c`](https://github.com/CodesWhat/drydock/commit/7186195c)).** A `dd.source.repo` container label (settable by anyone who controls the container) could redirect the operator's release-notes token — including the GHCR PAT fallback — to an arbitrary GitHub repo. Source-repo resolution now carries provenance, and no token is attached when the repo originates from that per-deployment label; image-label, OCI-label, GHCR-path and Docker Hub sources remain trusted. A follow-up ([commit `0a014304`](https://github.com/CodesWhat/drydock/commit/0a014304)) also segregates the release-notes cache by trust (`#auth`/`#anon`), so an untrusted not-found result can no longer suppress a later trusted, token-bearing fetch for the same repo.
+- **GitHub release-notes token withheld for untrusted source repos ([commit `7186195c`](https://github.com/CodesWhat/drydock/commit/7186195c)).** A `dd.source.repo` container label (settable by anyone who controls the container) could redirect the operator's release-notes token — including the GHCR PAT fallback — to an arbitrary GitHub repo. Source-repo resolution now carries provenance, and no token is attached when the repo originates from that per-deployment label or from a persisted `container.sourceRepo` fallback without provenance; image-label, OCI-label, GHCR-path, and live Docker Hub metadata lookups remain trusted. A follow-up ([commit `0a014304`](https://github.com/CodesWhat/drydock/commit/0a014304)) also segregates the release-notes cache by trust (`#auth`/`#anon`), so an untrusted not-found result can no longer suppress a later trusted, token-bearing fetch for the same repo.
 
 - **Playwright E2E image pinned by digest ([commit `8234ef33`](https://github.com/CodesWhat/drydock/commit/8234ef33)).** `mcr.microsoft.com/playwright:v1.60.0-noble` is now pinned by its `sha256` digest so a mutated/republished tag cannot silently change the image the E2E job pulls and runs.
 
@@ -435,6 +441,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Template method-call arguments split on top-level commas only ([commit `c485f412`](https://github.com/CodesWhat/drydock/commit/c485f412)).** `safeInterpolate` split method arguments on every comma, so a comma inside a quoted string literal or nested parentheses (e.g. `${x.replace(',', ';')}`) was mis-parsed; argument splitting now respects quotes and parentheses, hardening the template parser the digest renderer depends on.
 
 - **Registry token-fetch requests now honor operator TLS settings ([commit `dfbbd159`](https://github.com/CodesWhat/drydock/commit/dfbbd159)).** GAR, GitLab, Mau, DHI and public-ECR built their own token-fetch request and called `axios()` directly, bypassing `withTlsRequestOptions()` — so the credential exchange ignored the configured `cafile` / `insecure` / client-cert and validated against the system trust store. The shared TLS helper is now applied to those token fetches (`Ecr` was realigned to extend `BaseRegistry`).
+
+- **Bearer token-endpoint requests now set `maxRedirects: 0` to prevent credential exfiltration via HTTP redirect.** A host-validated token endpoint returning a 3xx could otherwise redirect the operator's `Basic` credentials to an attacker-controlled host; setting `maxRedirects: 0` causes axios/follow-redirects to fail closed on any redirect response, and the existing `failClosedAuth` catch path turns that into a clean auth failure without forwarding credentials. Applied to `BaseRegistry.authenticateBearerFromAuthUrl` and to the four providers (GAR, GitLab, Mau, DHI) that build their own credentialed token-fetch requests outside the shared helper. The malformed-realm fallback debug log is also sanitized to avoid logging attacker-controlled realm values verbatim (committed separately as `786c2317`).
 
 - **CSRF same-origin enforcement extended to authenticated `/auth` mutations ([commit `d1611f88`](https://github.com/CodesWhat/drydock/commit/d1611f88)).** The `/auth` router sat outside the middleware chain that runs `requireSameOriginForMutations`, leaving bodyless `POST /auth/logout` and `POST /auth/remember` without same-origin protection (exploitable under `DD_SERVER_COOKIE_SAMESITE=none`).
 
@@ -547,6 +555,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **[#342](https://github.com/CodesWhat/drydock/issues/342) follow-up — Registry env-var naming convention now explained in the registries index.** A new "Naming registry instances" callout explains that the `{REGISTRY_NAME}` placeholder is a user-chosen label that namespaces multiple instances of the same registry type.
 
 - **[#342](https://github.com/CodesWhat/drydock/issues/342) follow-up — Watcher cron callout explains rate-limit interaction with hourly polling.**
+
+## [1.5.0-rc.29] — 2026-05-30
+
+### Fixed
+
+- **Docker Compose update failure safety ([#391](https://github.com/CodesWhat/drydock/issues/391), [#407](https://github.com/CodesWhat/drydock/pull/407)).** Prevented a failed Compose update from destroying the running container.
+
+- **ZAP SARIF path handling ([#404](https://github.com/CodesWhat/drydock/pull/404), [#405](https://github.com/CodesWhat/drydock/pull/405)).** Relativized HTTP artifact URIs through SARIF `originalUriBaseIds` and preserved the leading slash so root-path findings validate in GitHub Code Scanning.
+
+- **DAST authentication alignment ([#403](https://github.com/CodesWhat/drydock/pull/403)).** Updated the baseline DAST credentials to match the QA compose password hash.
+
+- **Authentication readiness gate ([#402](https://github.com/CodesWhat/drydock/pull/402)).** Closed a strategy-registration timing gap so `/health` reports readiness only after authentication strategies are registered.
 
 ## [1.4.5] — 2026-03-17
 
@@ -1468,7 +1488,9 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.29...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.34...HEAD
+[1.5.0-rc.34]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.33...v1.5.0-rc.34
+[1.5.0-rc.29]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.28...v1.5.0-rc.29
 [1.4.5]: https://github.com/CodesWhat/drydock/compare/v1.4.4...v1.4.5
 [1.4.4]: https://github.com/CodesWhat/drydock/compare/v1.4.3...v1.4.4
 [1.4.3]: https://github.com/CodesWhat/drydock/compare/v1.4.2...v1.4.3

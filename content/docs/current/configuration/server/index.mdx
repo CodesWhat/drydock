@@ -189,7 +189,7 @@ docker run \
 </Tab>
 </Tabs>
 
-Your proxy must forward the `X-Forwarded-Proto` header so drydock knows whether the original request used HTTPS. Most proxies (Traefik, Caddy) do this by default. For Nginx, add `proxy_set_header X-Forwarded-Proto $scheme;` to your location block. See the [FAQ](/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy) for complete Traefik and Nginx examples.
+Your proxy must forward the `X-Forwarded-Proto` header so drydock knows whether the original request used HTTPS. Most proxies (Traefik, Caddy, NGINX Proxy Manager) do this by default. For Nginx, add `proxy_set_header X-Forwarded-Proto $scheme;` to your location block. See the [FAQ](/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy) for complete Traefik and Nginx examples.
 
 ## Advanced Tuning
 

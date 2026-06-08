@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import logger from '../../log/index.js';
+import { validateOpenApiJsonResponse } from '../openapi-contract.js';
 import { createStatsHandlers, createSummaryStatsHandlers } from './stats.js';
 
 function createResponse() {
@@ -327,6 +328,15 @@ describe('api/container/stats — summary handlers', () => {
     expect(harness.getCurrent).toHaveBeenCalledOnce();
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith({ data: emptySummary });
+
+    const contractValidation = validateOpenApiJsonResponse({
+      path: '/api/stats/summary',
+      method: 'get',
+      statusCode: '200',
+      payload: res.json.mock.calls[0][0],
+    });
+    expect(contractValidation.valid).toBe(true);
+    expect(contractValidation.errors).toStrictEqual([]);
   });
 
   test('SSE stream sets correct headers', () => {

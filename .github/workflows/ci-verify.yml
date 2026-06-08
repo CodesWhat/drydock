@@ -982,7 +982,12 @@ jobs:
         run: ./scripts/start-drydock.sh
 
       - name: Run Cucumber e2e tests
-        run: npm run cucumber
+        # The gitlab_test container needs a private-registry token that is not
+        # available in CI, so setup-test-containers.sh skips it; exclude the
+        # @requires_gitlab scenarios here to match, otherwise they fail looking
+        # for a missing container. The token-gated local path that runs them
+        # lives in scripts/run-e2e-tests.sh.
+        run: npm run cucumber -- --tags "not @requires_gitlab"
         working-directory: e2e
         env:
           DD_PORT: ${{ steps.drydock.outputs.dd_port }}

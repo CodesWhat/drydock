@@ -274,6 +274,7 @@ describe('Container Router', () => {
       expect(router.post).toHaveBeenCalledWith('/watch', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/:id', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/:id/release-notes', expect.any(Function));
+      expect(router.get).toHaveBeenCalledWith('/stats', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/:id/stats', expect.any(Function));
       expect(router.get).toHaveBeenCalledWith('/:id/stats/stream', expect.any(Function));
       expect(router.delete).toHaveBeenCalledWith(
@@ -306,6 +307,23 @@ describe('Container Router', () => {
         expect.any(Function),
       );
       expect(router.get).toHaveBeenCalledWith('/:id/logs', expect.any(Function));
+    });
+
+    test('registers legacy aggregate stats compatibility route before id routes', async () => {
+      const handler = getHandler('get', '/stats');
+      const res = createResponse();
+
+      await handler({} as any, res);
+
+      expect(res.status).toHaveBeenCalledWith(410);
+      expect(res.json).toHaveBeenCalledWith({
+        error:
+          'GET /api/v1/containers/stats has been removed. Use GET /api/v1/stats/summary for aggregate stats or GET /api/v1/containers/:id/stats for per-container stats.',
+        migration: {
+          aggregate: '/api/v1/stats/summary',
+          container: '/api/v1/containers/:id/stats',
+        },
+      });
     });
 
     test('should require destructive confirmation header on delete route', () => {

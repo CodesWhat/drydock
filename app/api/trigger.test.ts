@@ -1,4 +1,3 @@
-import * as updateOperationStore from '../store/update-operation.js';
 import { createMockResponse } from '../test/helpers.js';
 import * as requestUpdate from '../updates/request-update.js';
 
@@ -755,21 +754,38 @@ describe('Trigger Router', () => {
       });
     });
 
-    test('should create a controller-side operation row and return 202 with operationId for a remote docker update trigger', async () => {
+    test('should dispatch a remote docker update through the agent-qualified trigger exactly once', async () => {
       const mockAgentClient = {
         runRemoteTrigger: vi.fn().mockResolvedValue(undefined),
       };
       agent.getAgent.mockReturnValue(mockAgentClient);
-      const mockTrigger = {
+      const localControllerTrigger = {
         type: 'docker',
+        name: 'update',
         trigger: vi.fn().mockResolvedValue(undefined),
       };
+      const remoteAgentTrigger = {
+        type: 'docker',
+        name: 'update',
+        agent: 'my-agent',
+        configuration: {},
+        getId: () => 'my-agent.docker.update',
+        isTriggerIncluded: vi.fn().mockReturnValue(true),
+        isTriggerExcluded: vi.fn().mockReturnValue(false),
+        trigger: vi.fn((container, runtimeContext) =>
+          mockAgentClient.runRemoteTrigger(container, 'docker', 'update', runtimeContext),
+        ),
+      };
       registry.getState.mockReturnValue({
-        trigger: { 'docker.update': mockTrigger },
+        trigger: {
+          'docker.update': localControllerTrigger,
+          'my-agent.docker.update': remoteAgentTrigger,
+        },
       });
       mockGetContainer.mockReturnValue({
         id: 'c1',
         name: 'nginx',
+        agent: 'my-agent',
         image: { name: 'nginx' },
         updateAvailable: true,
       });
@@ -782,15 +798,21 @@ describe('Trigger Router', () => {
       const res = createMockResponse();
 
       await handler(req, res);
+      await flushAcceptedUpdateWork();
 
-      // Response must be 202 with an operationId (not 200 {})
       expect(res.status).toHaveBeenCalledWith(202);
       expect(res.json).toHaveBeenCalledWith({ operationId: expect.any(String) });
 
-      // runRemoteTrigger must receive a runtimeContext containing the operationId
+      expect(localControllerTrigger.trigger).not.toHaveBeenCalled();
+      expect(remoteAgentTrigger.trigger).toHaveBeenCalledTimes(1);
+      expect(remoteAgentTrigger.trigger).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'c1', name: 'nginx', agent: 'my-agent' }),
+        expect.objectContaining({ operationId: expect.any(String) }),
+      );
+      expect(mockAgentClient.runRemoteTrigger).toHaveBeenCalledTimes(1);
       const operationId = (res.json.mock.calls[0][0] as { operationId: string }).operationId;
       expect(mockAgentClient.runRemoteTrigger).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'c1' }),
+        expect.objectContaining({ id: 'c1', name: 'nginx', agent: 'my-agent' }),
         'docker',
         'update',
         { operationId },
@@ -804,19 +826,26 @@ describe('Trigger Router', () => {
       agent.getAgent.mockReturnValue(mockAgentClient);
       const mockTrigger = {
         type: 'docker',
-        trigger: vi.fn().mockResolvedValue(undefined),
+        name: 'update',
+        agent: 'my-agent',
+        configuration: {},
+        getId: () => 'my-agent.docker.update',
+        isTriggerIncluded: vi.fn().mockReturnValue(true),
+        isTriggerExcluded: vi.fn().mockReturnValue(false),
+        trigger: vi.fn((container, runtimeContext) =>
+          mockAgentClient.runRemoteTrigger(container, 'docker', 'update', runtimeContext),
+        ),
       };
       registry.getState.mockReturnValue({
-        trigger: { 'docker.update': mockTrigger },
+        trigger: { 'my-agent.docker.update': mockTrigger },
       });
       mockGetContainer.mockReturnValue({
         id: 'c1',
         name: 'nginx',
+        agent: 'my-agent',
         image: { name: 'nginx' },
         updateAvailable: true,
       });
-      const spy = vi.spyOn(requestUpdate, 'requestContainerUpdate');
-
       const handler = getRemoteTriggerHandler();
       const req = {
         params: { agent: 'my-agent', type: 'docker', name: 'update' },
@@ -825,19 +854,71 @@ describe('Trigger Router', () => {
       const res = createMockResponse();
 
       await handler(req, res);
-      spy.mockRestore();
+      await flushAcceptedUpdateWork();
 
       // Caller-supplied operationId must be honored in the response
       expect(res.status).toHaveBeenCalledWith(202);
       expect(res.json).toHaveBeenCalledWith({ operationId: 'caller-remote-op-uuid' });
 
-      // And forwarded to runRemoteTrigger as runtimeContext
+      expect(mockTrigger.trigger).toHaveBeenCalledTimes(1);
       expect(mockAgentClient.runRemoteTrigger).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'c1' }),
+        expect.objectContaining({ id: 'c1', agent: 'my-agent' }),
         'docker',
         'update',
         { operationId: 'caller-remote-op-uuid' },
       );
+    });
+
+    test('should not make a second remote update call when the agent would reject it with 409', async () => {
+      const mockAgentClient = {
+        runRemoteTrigger: vi
+          .fn()
+          .mockResolvedValueOnce(undefined)
+          .mockRejectedValueOnce({
+            response: {
+              status: 409,
+              data: { error: 'Container update already in progress' },
+            },
+          }),
+      };
+      agent.getAgent.mockReturnValue(mockAgentClient);
+      const remoteAgentTrigger = {
+        type: 'docker',
+        name: 'update',
+        agent: 'my-agent',
+        configuration: {},
+        getId: () => 'my-agent.docker.update',
+        isTriggerIncluded: vi.fn().mockReturnValue(true),
+        isTriggerExcluded: vi.fn().mockReturnValue(false),
+        trigger: vi.fn((container, runtimeContext) =>
+          mockAgentClient.runRemoteTrigger(container, 'docker', 'update', runtimeContext),
+        ),
+      };
+      registry.getState.mockReturnValue({
+        trigger: { 'my-agent.docker.update': remoteAgentTrigger },
+      });
+      mockGetContainer.mockReturnValue({
+        id: 'c1',
+        name: 'nginx',
+        agent: 'my-agent',
+        image: { name: 'nginx' },
+        updateAvailable: true,
+      });
+
+      const handler = getRemoteTriggerHandler();
+      const req = {
+        params: { agent: 'my-agent', type: 'docker', name: 'update' },
+        body: { id: 'c1' },
+      };
+      const res = createMockResponse();
+
+      await handler(req, res);
+      await flushAcceptedUpdateWork();
+
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(remoteAgentTrigger.trigger).toHaveBeenCalledTimes(1);
+      expect(mockAgentClient.runRemoteTrigger).toHaveBeenCalledTimes(1);
+      expect(res.json).toHaveBeenCalledWith({ operationId: expect.any(String) });
     });
 
     test('should return 404 when remote docker update trigger targets a container missing from the store', async () => {
@@ -895,25 +976,20 @@ describe('Trigger Router', () => {
       expect(res.status).toHaveBeenCalledWith(200);
     });
 
-    test('should create an operation row WITHOUT a trigger field when an update-type trigger is not registered on the controller (#289)', async () => {
+    test('should return 404 before dispatch when the agent-qualified update trigger is not registered', async () => {
       const mockAgentClient = {
         runRemoteTrigger: vi.fn().mockResolvedValue(undefined),
       };
       agent.getAgent.mockReturnValue(mockAgentClient);
-      // Update trigger type, but no matching trigger registered on the controller
-      // registry (agent-only trigger) -> triggerToRun is undefined.
       registry.getState.mockReturnValue({ trigger: {} });
       mockGetContainer.mockReturnValue({
         id: 'c1',
         name: 'nginx',
+        agent: 'my-agent',
         image: { name: 'nginx' },
         updateAvailable: true,
       });
-      const spy = vi
-        .spyOn(requestUpdate, 'requestContainerUpdate')
-        .mockResolvedValueOnce({ operationId: 'op-no-trigger' } as Awaited<
-          ReturnType<typeof requestUpdate.requestContainerUpdate>
-        >);
+      const requestSpy = vi.spyOn(requestUpdate, 'requestContainerUpdate');
 
       const handler = getRemoteTriggerHandler();
       const req = {
@@ -924,15 +1000,14 @@ describe('Trigger Router', () => {
 
       await handler(req, res);
 
-      // Still creates a controller-side queued row and returns 202, but
-      // requestContainerUpdate is called WITHOUT a `trigger` field.
-      expect(res.status).toHaveBeenCalledWith(202);
-      expect(res.json).toHaveBeenCalledWith({ operationId: 'op-no-trigger' });
-      expect(spy).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 'c1' }),
-        expect.not.objectContaining({ trigger: expect.anything() }),
-      );
-      spy.mockRestore();
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Remote update trigger my-agent.docker.update not found',
+      });
+      expect(requestSpy).not.toHaveBeenCalled();
+      expect(mockAgentClient.runRemoteTrigger).not.toHaveBeenCalled();
+
+      requestSpy.mockRestore();
     });
 
     test('should surface UpdateRequestError from requestContainerUpdate for remote update triggers', async () => {
@@ -942,14 +1017,21 @@ describe('Trigger Router', () => {
       agent.getAgent.mockReturnValue(mockAgentClient);
       const mockTrigger = {
         type: 'docker',
+        name: 'update',
+        agent: 'my-agent',
+        configuration: {},
+        getId: () => 'my-agent.docker.update',
+        isTriggerIncluded: vi.fn().mockReturnValue(true),
+        isTriggerExcluded: vi.fn().mockReturnValue(false),
         trigger: vi.fn().mockResolvedValue(undefined),
       };
       registry.getState.mockReturnValue({
-        trigger: { 'docker.update': mockTrigger },
+        trigger: { 'my-agent.docker.update': mockTrigger },
       });
       mockGetContainer.mockReturnValue({
         id: 'c1',
         name: 'nginx',
+        agent: 'my-agent',
         image: { name: 'nginx' },
         updateAvailable: true,
       });
@@ -972,31 +1054,25 @@ describe('Trigger Router', () => {
       expect(mockAgentClient.runRemoteTrigger).not.toHaveBeenCalled();
     });
 
-    // Regression tests for issue #410 — false "update failed" after successful auto-update,
-    // focused on the requestContainerUpdate → agentClient.runRemoteTrigger ordering.
-
-    test('#410 GUARD: agent-mismatch hard blocker causes runRemoteTrigger to fail fast (404) and prevents any operation row from being enqueued', async () => {
-      // Controller has an unscoped docker trigger (no agent property).
-      // Container is agent-managed (agent: 'remote-agent').
-      // computeUpdateEligibility detects agent-mismatch → UpdateRequestError(404)
-      // is thrown BEFORE createAcceptedContainerUpdateRequest is called.
-      const unscopedControllerTrigger = {
+    test('should reject route-agent/container-agent mismatch before enqueueing or calling the agent', async () => {
+      const remoteAgentTrigger = {
         type: 'docker',
-        // Deliberately no `agent` field — represents a controller-side trigger
-        trigger: vi.fn().mockResolvedValue(undefined),
+        name: 'update',
+        agent: 'agent-a',
+        configuration: {},
+        getId: () => 'agent-a.docker.update',
         isTriggerIncluded: vi.fn().mockReturnValue(true),
         isTriggerExcluded: vi.fn().mockReturnValue(false),
+        trigger: vi.fn().mockResolvedValue(undefined),
       };
       registry.getState.mockReturnValue({
-        trigger: { 'docker.update': unscopedControllerTrigger },
+        trigger: { 'agent-a.docker.update': remoteAgentTrigger },
       });
 
-      // Agent-managed container with a raw tag update so hasRawTagOrDigestUpdate returns true
-      // (required for the agent-mismatch check to be reached inside computeUpdateEligibility).
       const agentManagedContainer = {
         id: 'c1',
         name: 'nginx',
-        agent: 'remote-agent',
+        agent: 'agent-b',
         updateAvailable: true,
         image: { name: 'nginx', tag: { value: 'v1.0' } },
         result: { tag: 'v2.0' },
@@ -1008,31 +1084,26 @@ describe('Trigger Router', () => {
       };
       agent.getAgent.mockReturnValue(mockAgentClient);
 
-      // Spy on insertOperation to confirm no row is enqueued on the mismatch path.
-      const insertSpy = vi.spyOn(updateOperationStore, 'insertOperation');
+      const requestSpy = vi.spyOn(requestUpdate, 'requestContainerUpdate');
 
       const handler = getRemoteTriggerHandler();
       const req = {
-        params: { agent: 'remote-agent', type: 'docker', name: 'update' },
+        params: { agent: 'agent-a', type: 'docker', name: 'update' },
         body: { id: 'c1' },
       };
       const res = createMockResponse();
 
       await handler(req, res);
 
-      // Must fail fast with 404 (agent-mismatch mapped to HTTP 404 in HARD_BLOCKER_STATUS)
-      expect(res.status).toHaveBeenCalledWith(404);
-
-      // The agent's runRemoteTrigger must never be invoked because requestContainerUpdate
-      // throws before we reach the agentClient call.
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'Route agent agent-a does not own container agent-b.c1',
+      });
+      expect(requestSpy).not.toHaveBeenCalled();
+      expect(remoteAgentTrigger.trigger).not.toHaveBeenCalled();
       expect(mockAgentClient.runRemoteTrigger).not.toHaveBeenCalled();
 
-      // No operation row must have been inserted — the race described in #410 is unreachable
-      // on this path because the throw occurs inside prepareContainerUpdateRequest, before
-      // createAcceptedContainerUpdateRequest can call insertOperation.
-      expect(insertSpy).not.toHaveBeenCalled();
-
-      insertSpy.mockRestore();
+      requestSpy.mockRestore();
     });
   });
 });

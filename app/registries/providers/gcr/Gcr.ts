@@ -5,12 +5,44 @@ interface GcrRegistryConfiguration extends BaseRegistryConfiguration {
   privatekey?: string;
 }
 
+interface GcrTokenResponse {
+  access_token?: unknown;
+  token?: unknown;
+}
+
 /**
  * Google Container Registry integration.
  */
 class Gcr extends BaseRegistry<GcrRegistryConfiguration> {
   protected getTrustedAuthHosts(): string[] {
     return ['gcr.io'];
+  }
+
+  private getServiceAccountCredentials(): string | undefined {
+    /* v8 ignore next 3 -- GCR object config requires clientemail; absence is an anonymous fallback. */
+    if (!this.configuration.clientemail) {
+      return undefined;
+    }
+
+    return Gcr.base64Encode(
+      '_json_key',
+      JSON.stringify({
+        client_email: this.configuration.clientemail,
+        private_key: this.configuration.privatekey,
+      }),
+    );
+  }
+
+  private extractToken(response: { data?: GcrTokenResponse }): unknown {
+    return response.data?.token || response.data?.access_token;
+  }
+
+  protected override getBearerChallengeAuthOptions() {
+    return {
+      credentials: this.getServiceAccountCredentials(),
+      tokenExtractor: (response: { data?: GcrTokenResponse }) => this.extractToken(response),
+      tokenFailureMessage: `Unable to authenticate registry ${this.getId()}: GCR token endpoint response does not contain token`,
+    };
   }
 
   getConfigurationSchema() {
@@ -39,13 +71,7 @@ class Gcr extends BaseRegistry<GcrRegistryConfiguration> {
     if (!this.configuration.clientemail) {
       return requestOptions;
     }
-    const credentials = Gcr.base64Encode(
-      '_json_key',
-      JSON.stringify({
-        client_email: this.configuration.clientemail,
-        private_key: this.configuration.privatekey,
-      }),
-    );
+    const credentials = this.getServiceAccountCredentials();
 
     return this.authenticateBearerFromAuthUrlWithPublicFallback(
       requestOptions,
@@ -54,6 +80,7 @@ class Gcr extends BaseRegistry<GcrRegistryConfiguration> {
       {
         providerLabel: 'GCR',
         tokenFailureMessage: `Unable to authenticate registry ${this.getId()}: GCR token endpoint response does not contain token`,
+        tokenExtractor: (response: { data?: GcrTokenResponse }) => this.extractToken(response),
       },
     );
   }

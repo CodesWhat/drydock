@@ -246,12 +246,21 @@ curl -X POST \
 
 ## Health Check
 
-Returns the Agent's uptime. This endpoint is unauthenticated and intended for Docker `HEALTHCHECK` directives.
+Returns the Agent's uptime once at least one watcher is registered. This endpoint is unauthenticated and intended for Docker `HEALTHCHECK` directives.
 
 ```bash
 curl http://agent:3000/health
 
 {
   "uptime": 3600.123
+}
+```
+
+If the agent starts but no watchers register, it returns `503`:
+
+```json
+{
+  "status": "unhealthy",
+  "reason": "no watchers registered"
 }
 ```

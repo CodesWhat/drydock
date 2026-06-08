@@ -530,6 +530,108 @@ describe('buildContainerListResponse', () => {
     });
   });
 
+  test('preloaded operations fall back to scoped container identity when container ids are stale', () => {
+    const containers = [
+      createContainer({
+        id: 'current-a',
+        name: 'web',
+        displayName: 'web',
+        agent: 'agent-a',
+        watcher: 'prod',
+      }),
+      createContainer({
+        id: 'current-b',
+        name: 'web',
+        displayName: 'web',
+        agent: 'agent-b',
+        watcher: 'prod',
+      }),
+    ];
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => containers),
+      getContainerCountFromStore: vi.fn(() => containers.length),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+
+    (context.updateOperationStore as any).listActiveOperations = vi.fn(() => [
+      {
+        id: 'op-agent-a',
+        containerId: 'stale-a',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+        container: {
+          id: 'stale-a',
+          name: 'web',
+          agent: 'agent-a',
+          watcher: 'prod',
+        },
+      },
+    ]);
+
+    const response = buildContainerListResponse(
+      context,
+      { limit: '10', offset: '0' } as any,
+      '/api/containers',
+    );
+
+    expect(response.data[0]?.updateOperation?.id).toBe('op-agent-a');
+    expect(response.data[1]?.updateOperation).toBeUndefined();
+    expect(context.updateOperationStore.getActiveOperationByContainerId).not.toHaveBeenCalled();
+    expect(context.updateOperationStore.getActiveOperationByContainerName).not.toHaveBeenCalled();
+  });
+
+  test('preloaded operations use top-level scoped identity for agent-originated rows', () => {
+    const containers = [
+      createContainer({
+        id: 'current-a',
+        name: 'web',
+        displayName: 'web',
+        agent: 'agent-a',
+        watcher: 'prod',
+      }),
+      createContainer({
+        id: 'current-b',
+        name: 'web',
+        displayName: 'web',
+        agent: 'agent-b',
+        watcher: 'prod',
+      }),
+    ];
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getContainersFromStore: vi.fn(() => containers),
+      getContainerCountFromStore: vi.fn(() => containers.length),
+      redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
+    };
+
+    (context.updateOperationStore as any).listActiveOperations = vi.fn(() => [
+      {
+        id: 'op-agent-a',
+        containerId: 'stale-a',
+        containerName: 'web',
+        agent: 'agent-a',
+        watcher: 'prod',
+        status: 'in-progress',
+        phase: 'pulling',
+        updatedAt: '2026-04-01T12:00:00.000Z',
+      },
+    ]);
+
+    const response = buildContainerListResponse(
+      context,
+      { limit: '10', offset: '0' } as any,
+      '/api/containers',
+    );
+
+    expect(response.data[0]?.updateOperation?.id).toBe('op-agent-a');
+    expect(response.data[1]?.updateOperation).toBeUndefined();
+    expect(context.updateOperationStore.getActiveOperationByContainerId).not.toHaveBeenCalled();
+    expect(context.updateOperationStore.getActiveOperationByContainerName).not.toHaveBeenCalled();
+  });
+
   test('preloaded operation projections expose compatible descriptors for overridden non-writable properties', () => {
     const container = createContainer({ id: 'c1', name: 'web', displayName: 'web' });
     Object.defineProperty(container, 'updateOperation', {

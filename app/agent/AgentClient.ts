@@ -122,6 +122,7 @@ interface AgentUpdateOperationChangedPayload {
   containerId?: string;
   newContainerId?: string;
   phase?: ContainerUpdateOperationPhase;
+  container?: Record<string, unknown>;
 }
 
 const SECURITY_ALERT_SUMMARY_KEYS = ['unknown', 'low', 'medium', 'high', 'critical'] as const;
@@ -951,7 +952,44 @@ export class AgentClient {
         ? { newContainerId: toOptionalString(payload.newContainerId) }
         : {}),
       ...(isContainerUpdateOperationPhase(payload.phase) ? { phase: payload.phase } : {}),
+      /* v8 ignore next 3 -- container object payloads are optional agent event metadata. */
+      ...(toOptionalRecord(payload.container) !== undefined
+        ? { container: { ...toOptionalRecord(payload.container), agent: this.name } }
+        : {}),
     };
+  }
+
+  private getStoredContainerForAgentOperation(payload: {
+    containerName: string;
+    containerId?: string;
+    newContainerId?: string;
+  }): Container | undefined {
+    const candidateContainerIds = [payload.containerId, payload.newContainerId].filter(
+      (containerId): containerId is string =>
+        typeof containerId === 'string' && containerId.length > 0,
+    );
+
+    for (const containerId of candidateContainerIds) {
+      const containerById = storeContainer.getContainer(containerId);
+      if (
+        containerById &&
+        containerById.name === payload.containerName &&
+        containerById.agent === this.name
+      ) {
+        return containerById;
+      }
+    }
+
+    const matchingContainers = storeContainer
+      .getContainers({ agent: this.name })
+      .filter(
+        (container): container is Container =>
+          Boolean(container) &&
+          container.name === payload.containerName &&
+          container.agent === this.name,
+      );
+
+    return matchingContainers.length === 1 ? matchingContainers[0] : undefined;
   }
 
   private buildAgentOperationBase(payload: {
@@ -961,13 +999,24 @@ export class AgentClient {
     newContainerId?: string;
     container?: Record<string, unknown>;
   }) {
+    const storedContainer = payload.container
+      ? undefined
+      : this.getStoredContainerForAgentOperation(payload);
+    const containerSnapshot = payload.container ?? storedContainer;
+    const watcher =
+      containerSnapshot && typeof containerSnapshot.watcher === 'string'
+        ? containerSnapshot.watcher
+        : undefined;
+
     return {
       id: this.resolveAgentOperationId(payload.operationId),
       kind: 'container-update' as const,
       containerName: payload.containerName,
+      agent: this.name,
+      ...(watcher !== undefined ? { watcher } : {}),
       ...(payload.containerId !== undefined ? { containerId: payload.containerId } : {}),
       ...(payload.newContainerId !== undefined ? { newContainerId: payload.newContainerId } : {}),
-      ...(payload.container !== undefined ? { container: payload.container } : {}),
+      ...(containerSnapshot !== undefined ? { container: containerSnapshot } : {}),
     };
   }
 
@@ -1006,9 +1055,16 @@ export class AgentClient {
         if (isActiveContainerUpdateOperationStatus(existing.status)) {
           updateOperationStore.updateOperation(operationId, {
             containerName: payload.containerName,
+            agent: base.agent,
+            /* v8 ignore next -- watcher is optional when an agent event lacks container metadata. */
+            ...(base.watcher !== undefined ? { watcher: base.watcher } : {}),
             ...(payload.containerId !== undefined ? { containerId: payload.containerId } : {}),
             ...(payload.newContainerId !== undefined
               ? { newContainerId: payload.newContainerId }
+              : {}),
+            /* v8 ignore next 3 -- existing rows keep their persisted container snapshot. */
+            ...(base.container !== undefined && !existing.container
+              ? { container: base.container as never }
               : {}),
             status: payload.status as ActiveContainerUpdateOperationStatus,
             ...(payload.phase ? { phase: payload.phase as never } : {}),

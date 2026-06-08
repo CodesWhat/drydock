@@ -7,10 +7,42 @@ interface GarRegistryConfiguration extends BaseRegistryConfiguration {
   privatekey?: string;
 }
 
+interface GarTokenResponse {
+  access_token?: unknown;
+  token?: unknown;
+}
+
 /**
  * Google Artifact Registry integration.
  */
 class Gar extends BaseRegistry<GarRegistryConfiguration> {
+  private getServiceAccountCredentials(): string | undefined {
+    /* v8 ignore next 3 -- GAR object config requires clientemail; absence is an anonymous fallback. */
+    if (!this.configuration.clientemail) {
+      return undefined;
+    }
+
+    return Gar.base64Encode(
+      '_json_key',
+      JSON.stringify({
+        client_email: this.configuration.clientemail,
+        private_key: this.configuration.privatekey,
+      }),
+    );
+  }
+
+  private extractToken(response: { data?: GarTokenResponse }): unknown {
+    return response.data?.token || response.data?.access_token;
+  }
+
+  protected override getBearerChallengeAuthOptions() {
+    return {
+      credentials: this.getServiceAccountCredentials(),
+      tokenExtractor: (response: { data?: GarTokenResponse }) => this.extractToken(response),
+      tokenFailureMessage: `Unable to authenticate registry ${this.getId()}: GAR token endpoint response does not contain token`,
+    };
+  }
+
   getConfigurationSchema() {
     return this.joi.alternatives([
       this.joi.string().allow(''),
@@ -47,15 +79,10 @@ class Gar extends BaseRegistry<GarRegistryConfiguration> {
     const request = {
       method: 'GET',
       url: tokenUrl.toString(),
+      maxRedirects: 0,
       headers: {
         Accept: 'application/json',
-        Authorization: `Basic ${Gar.base64Encode(
-          '_json_key',
-          JSON.stringify({
-            client_email: this.configuration.clientemail,
-            private_key: this.configuration.privatekey,
-          }),
-        )}`,
+        Authorization: `Basic ${this.getServiceAccountCredentials()}`,
       },
     };
 
@@ -63,7 +90,7 @@ class Gar extends BaseRegistry<GarRegistryConfiguration> {
     return withAuthorizationHeader(
       requestOptions,
       'Bearer',
-      response.data.token || response.data.access_token,
+      this.extractToken(response),
       `Unable to authenticate registry ${this.getId()}: GAR token endpoint response does not contain token`,
     );
   }
