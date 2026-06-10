@@ -63,7 +63,7 @@ When `DD_SERVER_TLS_ENABLED` is not set or is `false`, drydock automatically adj
 - **HSTS** is omitted (since the browser is not on HTTPS)
 - **`upgrade-insecure-requests`** CSP directive is omitted (prevents browsers from blocking sub-resource loads)
 
-No additional configuration is required — drydock detects the TLS state and adapts automatically. If you run drydock behind a TLS-terminating reverse proxy, set `DD_SERVER_TRUSTPROXY=true` (or a hop count) so drydock sees the correct protocol from `X-Forwarded-Proto`.
+No additional configuration is required — drydock detects the TLS state and adapts automatically. If you run drydock behind a TLS-terminating reverse proxy, set `DD_SERVER_TRUSTPROXY=1` (use a hop count, not `true`, to avoid IP spoofing — see the Reverse proxy section below) so drydock sees the correct protocol from `X-Forwarded-Proto`.
 
 ## Session Cookie SameSite Guidance
 
