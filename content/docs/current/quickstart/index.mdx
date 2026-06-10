@@ -27,6 +27,7 @@ services:
       - DD_WATCHER_LOCAL_PORT=2375
       - DD_AUTH_BASIC_ADMIN_USER=admin
       - "DD_AUTH_BASIC_ADMIN_HASH=argon2id$$65536$$3$$4$$H/LzIyo+5tbepUCiuRU2bFai+nbf+y/ZjMYH7h+vf1g=$$GeCkn8cI/+DbKXUiPydlqKUvj5Ujb4wL5sUkSm83rQWyIejvWoejrk6zWmQ2x5an7qvSHYL9gZHpibCXAJNdYw=="
+      # - DD_SERVER_TRUSTPROXY=1  # uncomment if a TLS-terminating reverse proxy sits in front of Drydock
     ports:
       - 3000:3000
 
@@ -72,6 +73,7 @@ services:
     environment:
       - DD_AUTH_BASIC_ADMIN_USER=admin
       - "DD_AUTH_BASIC_ADMIN_HASH=argon2id$$65536$$3$$4$$H/LzIyo+5tbepUCiuRU2bFai+nbf+y/ZjMYH7h+vf1g=$$GeCkn8cI/+DbKXUiPydlqKUvj5Ujb4wL5sUkSm83rQWyIejvWoejrk6zWmQ2x5an7qvSHYL9gZHpibCXAJNdYw=="
+      # - DD_SERVER_TRUSTPROXY=1  # uncomment if a TLS-terminating reverse proxy sits in front of Drydock
     ports:
       - 3000:3000
 ```
@@ -97,6 +99,8 @@ docker run -d --name drydock \
 The official image is published on Docker Hub and GitHub Container Registry.
 
 <Callout type="warn">Authentication is **required by default** on fresh installs. The examples above use Basic auth with username `admin` and password `password`. See the [auth docs](/docs/configuration/authentications) for OIDC, anonymous access, and other options.</Callout>
+
+<Callout type="warn">**Behind a reverse proxy?** If a TLS-terminating reverse proxy (Nginx Proxy Manager, Traefik, Caddy, Synology DSM, etc.) sits in front of Drydock, set `DD_SERVER_TRUSTPROXY=1` (the number of proxy hops) — otherwise every manual action in the UI fails with `403 CSRF validation failed`. See [the FAQ](/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy) for details.</Callout>
 
 ## Migrating from WUD
 
