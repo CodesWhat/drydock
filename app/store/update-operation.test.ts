@@ -2752,6 +2752,25 @@ describe('Update Operation Store', () => {
         }),
       ).toBe(true);
     });
+
+    test('strict identity — both sides fall back to empty-string agent when neither op snapshot nor identity carry an agent', () => {
+      // Inserts an op with a container snapshot that has watcher but NO agent field.
+      // Calling hasOtherActiveOperationByContainerName with an identity that also omits agent
+      // means both (operationIdentity.agent ?? '') and (identity.agent ?? '') resolve to ''.
+      // They must compare equal so the function returns true (line 972 ?? '' paths covered).
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        container: { id: 'c-no-agent', name: 'web', watcher: 'local' } as any,
+      });
+
+      expect(
+        updateOperation.hasOtherActiveOperationByContainerName('web', 'other-id', {
+          watcher: 'local',
+        }),
+      ).toBe(true);
+    });
   });
 
   describe('getActiveOperationByContainerName identity scoping (issue #411)', () => {

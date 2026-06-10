@@ -381,6 +381,20 @@ describe('transform', () => {
       // Formula with no match must also be stable across cache hits.
       expect(semver.transform(formula, 'notaversion')).toBe('notaversion');
     });
+
+    test('cache eviction at capacity (>256 unique formulas) clears and repopulates transparently', () => {
+      // Force the transformPatternCache past MAX_TRANSFORM_CACHE_SIZE (256) by inserting
+      // 257 unique formula strings. The 257th insert triggers the clear() branch (lines 148-149).
+      // After eviction the function must still compile and apply the new formula correctly.
+      for (let i = 0; i < 257; i += 1) {
+        const formula = `^v(\\d+)-${i}$ => $1`;
+        // Each formula matches `v42-<i>` and strips the prefix+suffix to return '42'.
+        expect(semver.transform(formula, `v42-${i}`)).toBe('42');
+      }
+      // One additional call to a brand-new formula post-eviction confirms the cache
+      // was cleared and repopulated without error.
+      expect(semver.transform('^post-eviction-(\\d+)$ => $1', 'post-eviction-99')).toBe('99');
+    });
   });
 });
 
