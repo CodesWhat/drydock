@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0-rc.35] — 2026-06-10
+
 ### Fixed
 
 - **False "update failed" notification when concurrent update requests race ([#421](https://github.com/CodesWhat/drydock/issues/421)).** When a duplicate update request was rejected with HTTP 409 ("update already in progress") while the winning update was still in flight, the controller classified the conflict as a genuine failure — firing an "update failed" notification immediately followed by "updated successfully". The duplicate classifier now recognizes three benign signals instead of one: a recently-succeeded operation (as before), a 409 response whose body explicitly carries the active-update lock message ("Container update already queued/in progress" — authoritative even before the winner's state has propagated from a remote agent over SSE), and another active (queued or in-progress) operation for the same container and agent+watcher identity. The same reclassification now also covers the Docker-native rename path in `ContainerUpdateExecutor`, which previously marked the duplicate failed before the outer classifier could run.
