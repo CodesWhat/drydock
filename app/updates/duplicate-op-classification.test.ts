@@ -1,13 +1,20 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
-const mockGetRecentTerminalSucceededOperationByContainerName = vi.hoisted(() =>
-  vi.fn(() => undefined as unknown),
-);
+const {
+  mockGetRecentTerminalSucceededOperationByContainerName,
+  mockHasOtherActiveOperationByContainerName,
+} = vi.hoisted(() => ({
+  mockGetRecentTerminalSucceededOperationByContainerName: vi.fn(() => undefined as unknown),
+  mockHasOtherActiveOperationByContainerName: vi.fn(() => false),
+}));
 
 vi.mock('../store/update-operation.js', () => ({
   getRecentTerminalSucceededOperationByContainerName: (
     ...args: Parameters<typeof mockGetRecentTerminalSucceededOperationByContainerName>
   ) => mockGetRecentTerminalSucceededOperationByContainerName(...args),
+  hasOtherActiveOperationByContainerName: (
+    ...args: Parameters<typeof mockHasOtherActiveOperationByContainerName>
+  ) => mockHasOtherActiveOperationByContainerName(...args),
 }));
 
 import {
@@ -20,7 +27,10 @@ import {
 } from './duplicate-op-classification.js';
 
 beforeEach(() => {
+  mockGetRecentTerminalSucceededOperationByContainerName.mockReset();
   mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+  mockHasOtherActiveOperationByContainerName.mockReset();
+  mockHasOtherActiveOperationByContainerName.mockReturnValue(false);
 });
 
 describe('isContainerNotFoundError', () => {
@@ -222,5 +232,71 @@ describe('classifyDuplicateOpTerminalStatus', () => {
   test('returns "failed" for null/undefined error', () => {
     expect(classifyDuplicateOpTerminalStatus(null, 'web')).toBe('failed');
     expect(classifyDuplicateOpTerminalStatus(undefined, 'web')).toBe('failed');
+  });
+
+  test('409 + no recent success + other active op exists → "expired" (issue #421)', () => {
+    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+    mockHasOtherActiveOperationByContainerName.mockReturnValue(true);
+    expect(
+      classifyDuplicateOpTerminalStatus(
+        { response: { status: 409 } },
+        'web',
+        undefined,
+        undefined,
+        'op-loser',
+      ),
+    ).toBe('expired');
+  });
+
+  test('409 + no recent success + no other active op → "failed"', () => {
+    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+    mockHasOtherActiveOperationByContainerName.mockReturnValue(false);
+    expect(
+      classifyDuplicateOpTerminalStatus(
+        { response: { status: 409 } },
+        'web',
+        undefined,
+        undefined,
+        'op-loser',
+      ),
+    ).toBe('failed');
+  });
+
+  test('active-op check NOT invoked when excludeOperationId is omitted, result is "failed"', () => {
+    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+    expect(classifyDuplicateOpTerminalStatus({ response: { status: 409 } }, 'web')).toBe('failed');
+    expect(mockHasOtherActiveOperationByContainerName).not.toHaveBeenCalled();
+  });
+
+  test('recent success short-circuits — active-op fn not called', () => {
+    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue({
+      id: 'prev',
+      status: 'succeeded',
+    });
+    classifyDuplicateOpTerminalStatus(
+      { response: { status: 409 } },
+      'web',
+      undefined,
+      undefined,
+      'op-loser',
+    );
+    expect(mockHasOtherActiveOperationByContainerName).not.toHaveBeenCalled();
+  });
+
+  test('forwards containerName, excludeOperationId, and identity to the store fn', () => {
+    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+    mockHasOtherActiveOperationByContainerName.mockReturnValue(true);
+    classifyDuplicateOpTerminalStatus(
+      { response: { status: 409 } },
+      'mycontainer',
+      undefined,
+      { agent: 'agent-A', watcher: 'local' },
+      'op-excl-42',
+    );
+    expect(mockHasOtherActiveOperationByContainerName).toHaveBeenCalledWith(
+      'mycontainer',
+      'op-excl-42',
+      { agent: 'agent-A', watcher: 'local' },
+    );
   });
 });

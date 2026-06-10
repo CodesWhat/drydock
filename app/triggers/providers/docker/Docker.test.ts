@@ -111,6 +111,7 @@ const mockIsOperationCancelRequested = vi.hoisted(() => vi.fn(() => false));
 const mockGetRecentTerminalSucceededOperationByContainerName = vi.hoisted(() =>
   vi.fn(() => undefined),
 );
+const mockHasOtherActiveOperationByContainerName = vi.hoisted(() => vi.fn(() => false));
 const MockOperationCancelledError = vi.hoisted(
   () =>
     class MockOperationCancelledError extends Error {
@@ -138,6 +139,8 @@ vi.mock('../../../store/update-operation.js', () => ({
   isOperationCancelRequested: (...args: any[]) => mockIsOperationCancelRequested(...args),
   getRecentTerminalSucceededOperationByContainerName: (...args: any[]) =>
     mockGetRecentTerminalSucceededOperationByContainerName(...args),
+  hasOtherActiveOperationByContainerName: (...args: any[]) =>
+    mockHasOtherActiveOperationByContainerName(...args),
   OperationCancelledError: MockOperationCancelledError,
 }));
 
@@ -4613,6 +4616,53 @@ describe('extracted lifecycle delegation', () => {
       } finally {
         docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
         mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      }
+    });
+
+    test('marks operation expired when 409 arrives while the winning update is still active and no success row exists yet (issue #421 race)', async () => {
+      const originalUpdateLifecycleExecutor = docker.updateLifecycleExecutor;
+      const conflict409Error = Object.assign(new Error('Container update already in progress'), {
+        response: { status: 409 },
+      });
+      const run = vi.fn().mockRejectedValue(conflict409Error);
+      docker.updateLifecycleExecutor = { run };
+      const container = createTriggerContainer({ name: 'web', agent: 'agent-A', watcher: 'local' });
+
+      mockGetOperationById.mockReturnValue({
+        id: 'op-409-race-loser',
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'prepare',
+        container: { id: 'c-loser', name: 'web', agent: 'agent-A', watcher: 'local' },
+      });
+      // No recent succeeded op yet — the winner is still in flight
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      // But another active operation exists for the same container+identity
+      mockHasOtherActiveOperationByContainerName.mockReturnValue(true);
+
+      try {
+        await expect(
+          docker.runContainerUpdateLifecycle(container, { operationId: 'op-409-race-loser' }),
+        ).rejects.toThrow('already in progress');
+
+        expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+          'op-409-race-loser',
+          expect.objectContaining({ status: 'expired' }),
+        );
+        expect(mockMarkOperationTerminal).not.toHaveBeenCalledWith(
+          'op-409-race-loser',
+          expect.objectContaining({ status: 'failed' }),
+        );
+        // Confirm operation.id was passed as the exclusion
+        expect(mockHasOtherActiveOperationByContainerName).toHaveBeenCalledWith(
+          'web',
+          'op-409-race-loser',
+          { agent: 'agent-A', watcher: 'local' },
+        );
+      } finally {
+        docker.updateLifecycleExecutor = originalUpdateLifecycleExecutor;
+        mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+        mockHasOtherActiveOperationByContainerName.mockReturnValue(false);
       }
     });
 

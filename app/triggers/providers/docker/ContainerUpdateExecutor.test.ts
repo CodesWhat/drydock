@@ -58,6 +58,7 @@ vi.mock('../../../store/update-operation.js', () => ({
   isOperationCancelRequested: mockIsOperationCancelRequested,
   getRecentTerminalSucceededOperationByContainerName:
     mockGetRecentTerminalSucceededOperationByContainerName,
+  hasOtherActiveOperationByContainerName: vi.fn(() => false),
   OperationCancelledError: MockOperationCancelledError,
 }));
 

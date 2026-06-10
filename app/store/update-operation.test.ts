@@ -2589,6 +2589,140 @@ describe('Update Operation Store', () => {
     });
   });
 
+  describe('hasOtherActiveOperationByContainerName (issue #421)', () => {
+    test('returns true when another in-progress op with the same name exists', () => {
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        container: { id: 'c-win', name: 'web', watcher: 'local', agent: 'agent-A' } as any,
+      });
+
+      expect(
+        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
+          agent: 'agent-A',
+          watcher: 'local',
+        }),
+      ).toBe(true);
+    });
+
+    test('returns true for a queued op', () => {
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+        container: { id: 'c-q', name: 'web', watcher: 'local', agent: 'agent-A' } as any,
+      });
+
+      expect(
+        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
+          agent: 'agent-A',
+          watcher: 'local',
+        }),
+      ).toBe(true);
+    });
+
+    test('returns false when the only active op is the excluded id', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        container: { id: 'c-excl', name: 'web', watcher: 'local', agent: 'agent-A' } as any,
+      });
+
+      expect(
+        updateOperation.hasOtherActiveOperationByContainerName('web', op.id, {
+          agent: 'agent-A',
+          watcher: 'local',
+        }),
+      ).toBe(false);
+    });
+
+    test('returns false when no active ops exist (only terminal rows)', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        container: { id: 'c-term', name: 'web', watcher: 'local', agent: 'agent-A' } as any,
+      });
+      updateOperation.markOperationTerminal(op.id, { status: 'succeeded' });
+
+      expect(
+        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
+          agent: 'agent-A',
+          watcher: 'local',
+        }),
+      ).toBe(false);
+    });
+
+    test('strict identity — op from different agent is not counted when identity has watcher', () => {
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        container: { id: 'c-agent-b', name: 'web', watcher: 'local', agent: 'agent-B' } as any,
+      });
+
+      expect(
+        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
+          agent: 'agent-A',
+          watcher: 'local',
+        }),
+      ).toBe(false);
+    });
+
+    test('strict identity — legacy row (no container snapshot) is not counted when identity has a watcher', () => {
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        // no container snapshot — legacy row
+      });
+
+      expect(
+        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
+          agent: 'agent-A',
+          watcher: 'local',
+        }),
+      ).toBe(false);
+    });
+
+    test('returns true when identity agent+watcher align', () => {
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+        container: { id: 'c-match', name: 'web', watcher: 'remote', agent: 'agent-X' } as any,
+      });
+
+      expect(
+        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
+          agent: 'agent-X',
+          watcher: 'remote',
+        }),
+      ).toBe(true);
+    });
+
+    test('identity omitted — any other active op counts', () => {
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        container: { id: 'c-any', name: 'web', watcher: 'local', agent: 'agent-Z' } as any,
+      });
+
+      expect(updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id')).toBe(
+        true,
+      );
+    });
+
+    test('returns false when collection is uninitialized', async () => {
+      vi.resetModules();
+      const fresh = await import('./update-operation.js');
+      expect(fresh.hasOtherActiveOperationByContainerName('web', 'any-id')).toBe(false);
+    });
+  });
+
   describe('getActiveOperationByContainerName identity scoping (issue #411)', () => {
     test('same agent+watcher returns the operation', () => {
       updateOperation.insertOperation({

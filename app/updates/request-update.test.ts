@@ -5,6 +5,7 @@ const {
   mockGetActiveOperationByContainerId,
   mockGetActiveOperationByContainerName,
   mockGetRecentTerminalSucceededOperationByContainerName,
+  mockHasOtherActiveOperationByContainerName,
   mockInsertOperation,
   mockMarkOperationTerminal,
   mockGetState,
@@ -15,6 +16,7 @@ const {
   mockGetActiveOperationByContainerId: vi.fn(),
   mockGetActiveOperationByContainerName: vi.fn(),
   mockGetRecentTerminalSucceededOperationByContainerName: vi.fn(() => undefined),
+  mockHasOtherActiveOperationByContainerName: vi.fn(() => false),
   mockInsertOperation: vi.fn(),
   mockMarkOperationTerminal: vi.fn(),
   mockGetState: vi.fn(() => ({ trigger: {}, watcher: {} })),
@@ -28,6 +30,7 @@ vi.mock('../store/update-operation.js', () => ({
   getActiveOperationByContainerName: mockGetActiveOperationByContainerName,
   getRecentTerminalSucceededOperationByContainerName:
     mockGetRecentTerminalSucceededOperationByContainerName,
+  hasOtherActiveOperationByContainerName: mockHasOtherActiveOperationByContainerName,
   insertOperation: mockInsertOperation,
   markOperationTerminal: mockMarkOperationTerminal,
 }));
@@ -1292,6 +1295,49 @@ describe('request-update', () => {
       expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
         accepted.operationId,
         expect.objectContaining({ status: 'failed' }),
+      );
+    });
+
+    test('reclassifies a 409 conflict to expired when another active op exists for the same container+identity (issue #421 race)', async () => {
+      // The winning update is still in-progress when the loser's 409 arrives,
+      // so no succeeded row exists yet — but another active op proves the
+      // conflict is benign.
+      const conflict409Error = Object.assign(new Error('Container update already in progress'), {
+        response: { status: 409 },
+      });
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockRejectedValue(conflict409Error),
+      };
+
+      mockGetOperationById.mockImplementation((id: string) => ({
+        id,
+        containerName: 'nginx',
+        status: 'queued',
+        phase: 'queued',
+        container: { id: 'c-loser', name: 'nginx', watcher: 'local', agent: 'agent-A' },
+      }));
+
+      // No recent success yet — the winner is still running
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      // But another active op exists for the same container+identity
+      mockHasOtherActiveOperationByContainerName.mockReturnValue(true);
+
+      const accepted = await requestContainerUpdate(
+        createContainer({ name: 'nginx', watcher: 'local', agent: 'agent-A' }),
+        { trigger },
+      );
+      await flushAsyncWork();
+
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        accepted.operationId,
+        expect.objectContaining({ status: 'expired' }),
+      );
+      // Confirm the operation's own id was forwarded as the exclusion id
+      expect(mockHasOtherActiveOperationByContainerName).toHaveBeenCalledWith(
+        'nginx',
+        accepted.operationId,
+        { agent: 'agent-A', watcher: 'local' },
       );
     });
 

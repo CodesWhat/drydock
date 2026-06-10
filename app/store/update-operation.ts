@@ -1072,6 +1072,43 @@ export function getActiveOperationByContainerName(
 }
 
 /**
+ * Return true when an active (in-progress or queued) operation exists for the
+ * container name, excluding the given operation id.
+ *
+ * Used by the duplicate-update dedup logic (issue #421): when a duplicate
+ * request fails with a 409 while the winning update is still in flight, no
+ * succeeded row exists yet — the presence of *another* active operation for
+ * the same container and agent+watcher identity proves the conflict is benign.
+ * Identity matching is strict (legacy rows without a container snapshot are
+ * not counted) so an op from an identically-named container on a different
+ * agent can never silence a genuine failure.
+ */
+export function hasOtherActiveOperationByContainerName(
+  containerName: string,
+  excludeOperationId: string,
+  identity?: ContainerIdentityFilter,
+): boolean {
+  if (!updateOperationCollection) {
+    return false;
+  }
+
+  const nowMs = Date.now();
+  return updateOperationCollection
+    .find({ 'data.containerName': containerName })
+    .map((item) => getFreshActiveOperation(item.data, nowMs))
+    .filter((op): op is ActiveUpdateOperation => Boolean(op))
+    .some(
+      (op) =>
+        op.id !== excludeOperationId &&
+        (!identity ||
+          matchesStrictIdentityFilter(
+            op as { container?: { agent?: string; watcher?: string } },
+            identity,
+          )),
+    );
+}
+
+/**
  * Return the latest active (in-progress OR queued) operation for a container ID.
  */
 export function getActiveOperationByContainerId(

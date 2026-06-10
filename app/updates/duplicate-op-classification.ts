@@ -1,5 +1,6 @@
 /**
- * Shared helpers for detecting "benign duplicate-update" failures (issue #410).
+ * Shared helpers for detecting "benign duplicate-update" failures (issue #410,
+ * issue #421).
  *
  * When Docker Compose or an agent races ahead and successfully recreates a
  * container, a lagging queued or in-progress operation may see:
@@ -8,8 +9,11 @@
  *   - "no longer exists" message           (Dockercompose.ts line ~2078)
  *
  * If a recent succeeded operation exists for the same container name, these
- * errors are benign — the update already happened.  We mark such operations
- * `expired` (silent) rather than `failed` (emits update-failed notification).
+ * errors are benign — the update already happened.  Alternatively, if another
+ * active (in-progress or queued) operation is present for the same container
+ * and agent+watcher identity, the 409 arrived while the winner is still in
+ * flight — the outcome is also benign.  We mark such operations `expired`
+ * (silent) rather than `failed` (emits update-failed notification).
  *
  * Exported so Docker.ts, ContainerUpdateExecutor.ts, and request-update.ts all
  * share one implementation without a circular import:
@@ -82,10 +86,14 @@ export function isDuplicateStyleError(error: unknown): boolean {
  * emits update-failed notification).
  *
  * Returns `'expired'` when:
- *   - the error is a duplicate-style vanish, AND
- *   - a terminal `succeeded` operation for `containerName` exists within the
- *     last `windowMs` milliseconds for the same agent+watcher identity when
- *     identity is available.
+ *   - the error is a duplicate-style vanish, AND one of:
+ *     - a terminal `succeeded` operation for `containerName` exists within the
+ *       last `windowMs` milliseconds for the same agent+watcher identity when
+ *       identity is available; OR
+ *     - `excludeOperationId` is provided and another active (in-progress or
+ *       queued) operation exists for `containerName` with the same identity —
+ *       this handles the race in issue #421 where the winning update is still
+ *       in flight when the loser's 409 arrives.
  *
  * Returns `'failed'` in all other cases.
  */
@@ -94,6 +102,7 @@ export function classifyDuplicateOpTerminalStatus(
   containerName: string,
   windowMs = DUPLICATE_OP_RECENT_SUCCESS_WINDOW_MS,
   identity?: ContainerIdentityFilter,
+  excludeOperationId?: string,
 ): 'expired' | 'failed' {
   if (!isDuplicateStyleError(error)) {
     return 'failed';
@@ -103,5 +112,24 @@ export function classifyDuplicateOpTerminalStatus(
     windowMs,
     identity,
   );
-  return recentSuccess ? 'expired' : 'failed';
+  if (recentSuccess) {
+    return 'expired';
+  }
+  // Issue #421: in the duplicate-request race the winning update may still be
+  // in flight when the loser's 409 arrives, so no succeeded row exists yet.
+  // Another active operation for the same container + identity proves the
+  // conflict is benign — the active op will report the real outcome itself.
+  // Only checked when the caller identifies its own operation, because that
+  // operation is itself still active in the store at classification time.
+  if (
+    excludeOperationId &&
+    updateOperationStore.hasOtherActiveOperationByContainerName(
+      containerName,
+      excludeOperationId,
+      identity,
+    )
+  ) {
+    return 'expired';
+  }
+  return 'failed';
 }

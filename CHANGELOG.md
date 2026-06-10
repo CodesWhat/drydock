@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **False "update failed" notification when concurrent update requests race ([#421](https://github.com/CodesWhat/drydock/issues/421)).** When a duplicate update request was rejected with HTTP 409 ("update already in progress") while the winning update was still in flight, the controller classified the conflict as a genuine failure — firing an "update failed" notification immediately followed by "updated successfully". `classifyDuplicateOpTerminalStatus` now also treats the conflict as benign when another active (queued or in-progress) operation exists for the same container and agent+watcher identity, instead of relying solely on a recently-succeeded operation already existing in the store.
+
 ## [1.5.0-rc.34] — 2026-06-07
 
 ### Added
