@@ -121,8 +121,11 @@ export function isDuplicateStyleError(error: unknown): boolean {
  *      operation for `containerName` exists within the last `windowMs`
  *      milliseconds (optionally filtered by agent+watcher identity).
  *   2. The error is an active-update conflict (409 + active-lock message from
- *      the agent endpoint) — the remote lock is authoritative regardless of
- *      the controller's store state, so no store lookup is needed.
+ *      the agent endpoint) AND `excludeOperationId` is provided — the caller
+ *      identifies itself, so the remote lock is authoritative and no store
+ *      lookup is needed.  Without `excludeOperationId` the branch is skipped to
+ *      prevent a crafted 409 body from suppressing genuine update-failed
+ *      notifications.
  *   3. The error is a duplicate-style vanish, `excludeOperationId` is provided,
  *      `identity.watcher` is present (so the match is trustworthy), AND another
  *      active (in-progress or queued) operation exists for `containerName` with
@@ -155,10 +158,10 @@ export function classifyDuplicateOpTerminalStatus(
   }
 
   // (2) The 409 payload itself proves the agent's active-update lock is held.
-  // The controller's store has no winner row yet (SSE lag), but the agent's
-  // lock message is authoritative — the winner will report its own outcome.
-  // This branch does NOT require excludeOperationId or a store hit.
-  if (isActiveUpdateConflictError(error)) {
+  // Require excludeOperationId so only a caller that identifies its own
+  // operation can use this branch — a compromised agent cannot craft a
+  // matching 409 body to suppress genuine update-failed notifications.
+  if (excludeOperationId && isActiveUpdateConflictError(error)) {
     return 'expired';
   }
 

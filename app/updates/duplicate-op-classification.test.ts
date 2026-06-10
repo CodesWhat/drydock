@@ -334,26 +334,44 @@ describe('classifyDuplicateOpTerminalStatus', () => {
     expect(classifyDuplicateOpTerminalStatus({ status: 404 }, 'web')).toBe('failed');
   });
 
-  test('409 + active-lock body + no recent success → "expired" via isActiveUpdateConflictError (SSE-lag race, issue #421)', () => {
+  test('409 + active-lock body + excludeOperationId + no recent success → "expired" via isActiveUpdateConflictError (SSE-lag race, issue #421)', () => {
     mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
     expect(
       classifyDuplicateOpTerminalStatus(
         { response: { status: 409, data: { error: 'Container update already in progress' } } },
         'web',
+        undefined,
+        undefined,
+        'op-loser',
       ),
     ).toBe('expired');
-    // Active-lock branch requires no store hit and no excludeOperationId/identity.
+    // Active-lock branch requires no store hit.
     expect(mockHasOtherActiveOperationByContainerName).not.toHaveBeenCalled();
   });
 
-  test('409 + active-lock body (queued) → "expired"', () => {
+  test('409 + active-lock body (queued) + excludeOperationId → "expired"', () => {
     mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
     expect(
       classifyDuplicateOpTerminalStatus(
         { response: { status: 409, data: { error: 'Container update already queued' } } },
         'web',
+        undefined,
+        undefined,
+        'op-loser',
       ),
     ).toBe('expired');
+  });
+
+  test('409 + active-lock body WITHOUT excludeOperationId → "failed" (security gate, fix #4)', () => {
+    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+    expect(
+      classifyDuplicateOpTerminalStatus(
+        { response: { status: 409, data: { error: 'Container update already in progress' } } },
+        'web',
+        // excludeOperationId intentionally omitted
+      ),
+    ).toBe('failed');
+    expect(mockHasOtherActiveOperationByContainerName).not.toHaveBeenCalled();
   });
 
   test('409 + unrelated body (e.g. snoozed blocker) + no recent success + no identity → falls through to "failed"', () => {
@@ -480,5 +498,20 @@ describe('classifyDuplicateOpTerminalStatus', () => {
       'op-excl-42',
       { agent: 'agent-A', watcher: 'local' },
     );
+  });
+
+  test('path-3 identity guard: Docker 404 + excludeOperationId + identity { agent: "X", watcher: undefined } → "failed" and hasOtherActiveOperationByContainerName never called', () => {
+    // identity.watcher is absent — the guard `identity?.watcher` short-circuits
+    // before the store lookup, so no cross-agent masking is possible.
+    mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+    const result = classifyDuplicateOpTerminalStatus(
+      { statusCode: 404 },
+      'web',
+      undefined,
+      { agent: 'X', watcher: undefined },
+      'op-self',
+    );
+    expect(result).toBe('failed');
+    expect(mockHasOtherActiveOperationByContainerName).not.toHaveBeenCalled();
   });
 });

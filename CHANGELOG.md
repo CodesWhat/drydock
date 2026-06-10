@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Hook commands can be restricted to an allowlist of binaries (`DD_HOOKS_ALLOWED_COMMANDS`).** With hooks enabled, `dd.hook.pre`/`dd.hook.post` labels could invoke any binary on the image. The new comma-separated allowlist matches the hook command's first token (basename, or exact path for entries containing `/`); when unset, behavior is unchanged and a one-time warning recommends configuring it.
 
-- **HTTP trigger blocks cloud metadata endpoints.** Requests resolving to link-local ranges (`169.254.0.0/16` including `169.254.169.254`, `fe80::/10`, `fd00:ec2::254`) are rejected before sending. Private-network and localhost targets remain fully supported — they are the normal self-hosted case. The rare legitimate link-local target can opt out via `DD_NOTIFICATION_HTTP_{name}_ALLOWMETADATA=true`.
+- **HTTP trigger blocks cloud metadata endpoints.** Requests resolving to link-local ranges (`169.254.0.0/16` including `169.254.169.254`, `fe80::/10`, `fd00:ec2::254`) are rejected before sending — including IPv4-mapped and IPv4-compatible IPv6 spellings of those ranges (`::ffff:169.254.169.254`, `::ffff:a9fe:a9fe`, `::169.254.169.254`), which would otherwise slip past the literal-IP check. Private-network and localhost targets remain fully supported — they are the normal self-hosted case. The rare legitimate link-local target can opt out via `DD_NOTIFICATION_HTTP_{name}_ALLOWMETADATA=true`.
 
 ### Performance
 

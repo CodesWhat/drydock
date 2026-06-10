@@ -26,6 +26,13 @@ interface HttpRequestOptions extends Omit<AxiosRequestConfig, 'proxy'> {
  *   - fd00:ec2::254    (AWS IMDSv2 IPv6 metadata endpoint)
  *
  * RFC-1918 ranges (10.x, 172.16–31.x, 192.168.x) are intentionally allowed.
+ *
+ * IPv4-mapped IPv6 normalization: addresses of the form `::ffff:<ipv4>` (dotted-
+ * quad or hex-pair variants) and the obsolete IPv4-compatible form `::<ipv4>` are
+ * unwrapped to their embedded IPv4 address and re-checked against the IPv4 rules.
+ * This closes the bypass where `[::ffff:169.254.169.254]` would pass all guards
+ * because the literal address contains `:` (treated as IPv6) yet matches none of
+ * the IPv6 blocked ranges.
  */
 export function isMetadataAddress(address: string): boolean {
   // IPv4 169.254.0.0/16
@@ -36,6 +43,35 @@ export function isMetadataAddress(address: string): boolean {
 
   // Normalize to lowercase for IPv6 checks
   const lower = address.toLowerCase();
+
+  // --- IPv4-mapped / IPv4-compatible IPv6 normalization ---
+  // Unwrap the embedded IPv4 address and recurse so the IPv4 rules apply.
+  //
+  // All patterns require at least one colon-delimited prefix group so that
+  // bare IPv4 strings (e.g. "192.168.1.1") never accidentally match and
+  // trigger infinite recursion.
+
+  // Dotted-quad mapped form: ::ffff:169.254.169.254  (and uncompressed variants,
+  // mixed case).  The prefix must contain at least one `<hex>:` segment before
+  // the optional `ffff:` marker.  Also handles the obsolete compatible form
+  // ::169.254.169.254 (all-zero prefix + embedded dotted-quad, no ffff marker).
+  const dottedQuadMapped =
+    /^(?:[0-9a-f]{0,4}:)+(?:ffff:)?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(lower);
+  if (dottedQuadMapped) {
+    return isMetadataAddress(dottedQuadMapped[1]);
+  }
+
+  // Hex-pair mapped form: ::ffff:a9fe:a9fe  (last two hextets encode the IPv4).
+  // Matches ::ffff:<h1>:<h2> and uncompressed equivalents like
+  // 0:0:0:0:0:ffff:<h1>:<h2>.  The prefix must start with at least one
+  // `<hex>:` segment before the `ffff:` marker.
+  const hexMapped = /^(?:[0-9a-f]{0,4}:)+ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(lower);
+  if (hexMapped) {
+    const h1 = Number.parseInt(hexMapped[1], 16);
+    const h2 = Number.parseInt(hexMapped[2], 16);
+    const ipv4 = `${(h1 >> 8) & 0xff}.${h1 & 0xff}.${(h2 >> 8) & 0xff}.${h2 & 0xff}`;
+    return isMetadataAddress(ipv4);
+  }
 
   // AWS IMDSv2 IPv6 metadata address
   if (lower === 'fd00:ec2::254') {

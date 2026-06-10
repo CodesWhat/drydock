@@ -623,6 +623,84 @@ describe('isMetadataAddress helper', () => {
   });
 });
 
+describe('isMetadataAddress — IPv4-mapped IPv6 normalization', () => {
+  // --- blocked ---
+  test('::ffff:169.254.169.254 (dotted-quad mapped) is blocked', () => {
+    expect(isMetadataAddress('::ffff:169.254.169.254')).toBe(true);
+  });
+
+  test('::FFFF:169.254.169.254 (mixed case) is blocked', () => {
+    expect(isMetadataAddress('::FFFF:169.254.169.254')).toBe(true);
+  });
+
+  test('0:0:0:0:0:ffff:169.254.169.254 (uncompressed dotted-quad mapped) is blocked', () => {
+    expect(isMetadataAddress('0:0:0:0:0:ffff:169.254.169.254')).toBe(true);
+  });
+
+  test('::ffff:a9fe:a9fe (hex-pair mapped for 169.254.169.254) is blocked', () => {
+    expect(isMetadataAddress('::ffff:a9fe:a9fe')).toBe(true);
+  });
+
+  test('0:0:0:0:0:ffff:a9fe:a9fe (uncompressed hex-pair mapped) is blocked', () => {
+    expect(isMetadataAddress('0:0:0:0:0:ffff:a9fe:a9fe')).toBe(true);
+  });
+
+  test('::169.254.169.254 (obsolete IPv4-compatible form) is blocked', () => {
+    expect(isMetadataAddress('::169.254.169.254')).toBe(true);
+  });
+
+  // --- allowed ---
+  test('::ffff:8.8.8.8 (public DNS) is NOT blocked', () => {
+    expect(isMetadataAddress('::ffff:8.8.8.8')).toBe(false);
+  });
+
+  test('::ffff:10.0.0.5 (RFC-1918, intentionally allowed) is NOT blocked', () => {
+    expect(isMetadataAddress('::ffff:10.0.0.5')).toBe(false);
+  });
+});
+
+describe('HTTP Trigger SSRF guard — IPv4-mapped IPv6 end-to-end', () => {
+  let http;
+
+  beforeEach(async () => {
+    http = new Http();
+    vi.clearAllMocks();
+  });
+
+  test('rejects bracketed ::ffff:169.254.169.254 URL without executing request', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'http://[::ffff:169.254.169.254]/latest/meta-data',
+    });
+
+    await expect(http.trigger({ name: 'test' })).rejects.toThrow(/metadata.*address/i);
+    expect(axios).not.toHaveBeenCalled();
+  });
+
+  test('rejects bracketed ::FFFF:169.254.169.254 (mixed case) URL', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'http://[::FFFF:169.254.169.254]/latest/meta-data',
+    });
+
+    await expect(http.trigger({ name: 'test' })).rejects.toThrow(/metadata.*address/i);
+    expect(axios).not.toHaveBeenCalled();
+  });
+
+  test('allows bracketed ::ffff:8.8.8.8 (public address)', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'http://[::ffff:8.8.8.8]/webhook',
+    });
+
+    await expect(http.trigger({ name: 'test' })).resolves.toBeDefined();
+    expect(axios).toHaveBeenCalled();
+  });
+});
+
 describe('HTTP Trigger SSRF guard', () => {
   let http;
 
