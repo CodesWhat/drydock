@@ -1009,6 +1009,92 @@ describe('API Index', () => {
     expect(middlewareCall).toBeUndefined();
   });
 
+  test('trustproxy=0 (number) should register warning middleware and warn on https-forwarded-proto request', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      trustproxy: 0,
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const middlewareCall = mockApp.use.mock.calls.find(
+      (call) => typeof call[0] === 'function' && call[0].name === 'warnOnReverseProxyProtoMismatch',
+    );
+    expect(middlewareCall).toBeDefined();
+    expect(mockApp.set).not.toHaveBeenCalledWith('trust proxy', expect.anything());
+
+    const middleware = middlewareCall[0];
+    const next = vi.fn();
+    const req = {
+      protocol: 'http',
+      get: (header: string) => (header.toLowerCase() === 'x-forwarded-proto' ? 'https' : undefined),
+    };
+    middleware(req, {}, next);
+
+    expect(
+      mockLog.warn.mock.calls.filter((args) => args[0]?.includes?.('X-Forwarded-Proto: https')),
+    ).toHaveLength(1);
+    expect(next).toHaveBeenCalledOnce();
+  });
+
+  test('trustproxy="0" (string) should register warning middleware and warn on https-forwarded-proto request', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      trustproxy: '0',
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const middlewareCall = mockApp.use.mock.calls.find(
+      (call) => typeof call[0] === 'function' && call[0].name === 'warnOnReverseProxyProtoMismatch',
+    );
+    expect(middlewareCall).toBeDefined();
+    expect(mockApp.set).not.toHaveBeenCalledWith('trust proxy', expect.anything());
+
+    const middleware = middlewareCall[0];
+    const next = vi.fn();
+    const req = {
+      protocol: 'http',
+      get: (header: string) => (header.toLowerCase() === 'x-forwarded-proto' ? 'https' : undefined),
+    };
+    middleware(req, {}, next);
+
+    expect(
+      mockLog.warn.mock.calls.filter((args) => args[0]?.includes?.('X-Forwarded-Proto: https')),
+    ).toHaveLength(1);
+    expect(next).toHaveBeenCalledOnce();
+  });
+
+  test('trustproxy="10.0.0.0/8" (CIDR string) should be treated as enabled: no warning middleware, app.set called', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+      trustproxy: '10.0.0.0/8',
+    });
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const middlewareCall = mockApp.use.mock.calls.find(
+      (call) => typeof call[0] === 'function' && call[0].name === 'warnOnReverseProxyProtoMismatch',
+    );
+    expect(middlewareCall).toBeUndefined();
+    expect(mockApp.set).toHaveBeenCalledWith('trust proxy', '10.0.0.0/8');
+  });
+
   test('should set json replacer', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,

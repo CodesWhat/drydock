@@ -189,12 +189,31 @@ function startServer(app) {
   return startHttpServer(app);
 }
 
+// Mirror the isTrustProxyEnabled semantics from auth.ts exactly: enabled when
+// boolean true, number > 0, or a non-empty string that is not '0' or 'false'.
+// Numeric 0 and the strings '0'/'false' are all treated as disabled so that
+// DD_SERVER_TRUSTPROXY=0 (which Joi parses to the number 0) gets the
+// warnOnReverseProxyProtoMismatch diagnostic middleware, not app.set('trust proxy', 0).
+function isTrustProxyEnabled(trustproxy: boolean | number | string): boolean {
+  if (trustproxy === true) {
+    return true;
+  }
+  if (typeof trustproxy === 'number') {
+    return trustproxy > 0;
+  }
+  if (typeof trustproxy === 'string') {
+    const normalized = trustproxy.trim().toLowerCase();
+    return normalized !== '' && normalized !== '0' && normalized !== 'false';
+  }
+  return false;
+}
+
 function createApp() {
   const app = express();
   app.disable('x-powered-by');
 
   // Trust proxy (helpful to resolve public facing hostname & protocol)
-  if (configuration.trustproxy !== false) {
+  if (isTrustProxyEnabled(configuration.trustproxy)) {
     if (configuration.trustproxy === true) {
       log.warn(
         'trust proxy is set to boolean true, which trusts ALL X-Forwarded-For hops. ' +
