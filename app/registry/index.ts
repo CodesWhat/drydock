@@ -461,6 +461,30 @@ function pruneOrphanedLocalContainers() {
   }
 }
 
+function pruneOrphanedAgentContainers() {
+  const registeredAgentNames = new Set(
+    Object.values(getState().agent)
+      .map((agent) => agent.name)
+      .filter((name): name is string => typeof name === 'string')
+      .map((name) => name.toLowerCase()),
+  );
+
+  const orphanedAgentContainers = storeContainer.getContainersRaw().filter((container) => {
+    if (typeof container.agent !== 'string' || container.agent === '') {
+      return false;
+    }
+    return !registeredAgentNames.has(container.agent.toLowerCase());
+  });
+
+  orphanedAgentContainers.forEach((container) => {
+    storeContainer.deleteContainer(container.id);
+  });
+
+  if (orphanedAgentContainers.length > 0) {
+    log.warn(`Pruned ${orphanedAgentContainers.length} container entries from removed agent(s)`);
+  }
+}
+
 /**
  * Register triggers.
  * @param options
@@ -893,6 +917,12 @@ export async function init(options: RegistrationOptions = {}) {
 
     // Register agents
     await registerAgents();
+    try {
+      pruneOrphanedAgentContainers();
+    } catch (e: unknown) {
+      log.warn(`Unable to prune orphaned agent containers (${getErrorMessage(e)})`);
+      log.debug(e);
+    }
   }
 
   // Gracefully exit when possible — use once() to prevent stacking if init re-runs
@@ -912,6 +942,7 @@ export {
   deregisterWatchers as testable_deregisterWatchers,
   getKnownProviderSet as testable_getKnownProviderSet,
   log as testable_log,
+  pruneOrphanedAgentContainers as testable_pruneOrphanedAgentContainers,
   registerAuthentications as testable_registerAuthentications,
   registerComponent as testable_registerComponent,
   registerComponents as testable_registerComponents,

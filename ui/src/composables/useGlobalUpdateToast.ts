@@ -7,10 +7,11 @@ import {
 import { resolveUpdateFailureReason } from '../utils/update-error-summary';
 import { useToast } from './useToast';
 
-// Hold operationIds in the dedup window long enough that an SSE replay
-// (Last-Event-ID buffer is 5 min server-side) cannot trigger a duplicate
-// toast for the same terminal event.
-const COMPLETED_OPERATION_TTL_MS = 5 * 60 * 1000;
+// Hold operationIds in the dedup window for 20% longer than the server's
+// 5-minute SSE ring-buffer window. A reconnect at the exact boundary could
+// otherwise replay an event whose dedup entry just expired, producing a
+// duplicate toast. The extra margin ensures the entry outlives any replay.
+const COMPLETED_OPERATION_TTL_MS = 6 * 60 * 1000; // 360 000 ms (server replay buffer is 300 000 ms)
 
 // Hard ceiling on the dedup map size. The TTL alone bounds memory under
 // normal use; this cap defends against runaway operation throughput
@@ -282,6 +283,15 @@ export function useGlobalUpdateToast() {
   function onContainerStateEvent(event: Event) {
     const detail = getDetail(event);
     if (!detail) return;
+    // When the server sends a container-removed event with replacementExpected=true it
+    // means the old container was just destroyed as part of a local-Docker recreate — the
+    // new container has not started yet. Settling the toast here would fire "Updated
+    // Successfully" while the replacement is still starting (the #421 status gap). Skip
+    // settlement and let the subsequent container-added/updated event (or the 5 s safety
+    // fallback) trigger the toast instead.
+    if (event.type === 'dd:sse-container-removed' && detail.replacementExpected === true) {
+      return;
+    }
     const containerId = getDetailString(detail.id) ?? getDetailString(detail.containerId);
     const containerName = getDetailString(detail.name) ?? getDetailString(detail.containerName);
     settleByContainer(containerId, containerName);
