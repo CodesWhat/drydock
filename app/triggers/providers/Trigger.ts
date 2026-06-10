@@ -624,8 +624,17 @@ class Trigger<
    *
    * Cleared per-key when a container report arrives with `updateAvailable=false`
    * (confirmed post-update state), so future real updates still notify.
+   *
+   * Stored as `Map<string, number>` (key → addedAt epoch ms) rather than a plain
+   * Set so entries can be given a TTL. Entries older than
+   * `RECENT_APPLICATION_SEED_WINDOW_MS` (60 min) are treated as absent and
+   * pruned lazily on each add or lookup. This prevents containers that are
+   * permanently deleted or whose agents disconnect from leaking entries forever.
+   * Pruning is lazy (no timer) because the map is small in practice.
+   * The map is also cleared on `deregisterComponent` to release memory promptly
+   * when the trigger is torn down.
    */
-  private readonly recentlyAppliedContainerKeys: Set<string> = new Set();
+  private readonly recentlyAppliedContainerKeys: Map<string, number> = new Map();
   private readonly autoTriggerErrorSeenAt: Map<string, number> = new Map();
   private readonly notificationRuleWarningsSeen: Set<string> = new Set();
   private readonly autoUpdateBlockedSeen: Set<string> = new Set();
@@ -1085,7 +1094,8 @@ class Trigger<
     // watcher sets it to false. Track this key so
     // `shouldHandleSimpleContainerReport` suppresses the spurious notification
     // until the watcher confirms `updateAvailable=false`.
-    this.recentlyAppliedContainerKeys.add(notificationKey);
+    this.pruneExpiredRecentApplicationKeys();
+    this.recentlyAppliedContainerKeys.set(notificationKey, Date.now());
     this.log.debug(`Added ${notificationKey} to recently-applied suppression set`);
 
     // Also register a name-based key so post-recreate reports match (#408 variant):
@@ -1100,7 +1110,7 @@ class Trigger<
         ? fullName(container)
         : undefined;
     if (nameKey && nameKey !== notificationKey) {
-      this.recentlyAppliedContainerKeys.add(nameKey);
+      this.recentlyAppliedContainerKeys.set(nameKey, Date.now());
       this.log.debug(`Added name-key ${nameKey} to recently-applied suppression set`);
     }
 
@@ -1407,14 +1417,14 @@ class Trigger<
       if (!idKey) {
         continue;
       }
-      this.recentlyAppliedContainerKeys.add(idKey);
+      this.recentlyAppliedContainerKeys.set(idKey, Date.now());
       // Also add the name key — matches handleContainerUpdateAppliedEvent exactly.
       const nameKey =
         container && typeof container.watcher === 'string' && container.watcher !== ''
           ? fullName(container)
           : undefined;
       if (nameKey && nameKey !== idKey) {
-        this.recentlyAppliedContainerKeys.add(nameKey);
+        this.recentlyAppliedContainerKeys.set(nameKey, Date.now());
       }
       seeded += 1;
     }
@@ -1448,6 +1458,20 @@ class Trigger<
   }
 
   /**
+   * Sweep `recentlyAppliedContainerKeys` and delete any entries that were added
+   * more than `RECENT_APPLICATION_SEED_WINDOW_MS` ago. Called lazily on every
+   * add and every lookup so no background timer is required.
+   */
+  private pruneExpiredRecentApplicationKeys(): void {
+    const now = Date.now();
+    for (const [k, addedAt] of this.recentlyAppliedContainerKeys) {
+      if (now - addedAt > RECENT_APPLICATION_SEED_WINDOW_MS) {
+        this.recentlyAppliedContainerKeys.delete(k);
+      }
+    }
+  }
+
+  /**
    * Check whether a container is suppressed by the recently-applied guard (#408).
    *
    * Called by all three `shouldHandle*ContainerReport` methods. Returns `true`
@@ -1466,10 +1490,13 @@ class Trigger<
     container: Container,
     suppressLogContext: string,
   ): boolean {
+    // Prune stale entries lazily before every lookup.
+    this.pruneExpiredRecentApplicationKeys();
+
     const primaryKey = getContainerNotificationKey(container) || fullName(container);
     // After a docker/dockercompose recreate the watcher reports the container
     // with a NEW Docker ID. The primary key resolves to that new ID, which was
-    // never added to the suppression set — only the OLD ID and the name-key were.
+    // never added to the suppression map — only the OLD ID and the name-key were.
     // So we must also probe the name-based key when the primary probe misses.
     const nameKey =
       typeof container.watcher === 'string' && container.watcher !== ''
@@ -2526,6 +2553,7 @@ class Trigger<
     this.autoTriggerErrorSuppressor.clear();
     this.autoUpdateBlockedTracker.clear();
     this.notificationRuleWarningsSeen.clear();
+    this.recentlyAppliedContainerKeys.clear();
   }
 
   /**

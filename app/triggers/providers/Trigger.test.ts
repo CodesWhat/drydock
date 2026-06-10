@@ -11040,7 +11040,7 @@ describe('isSuppressedByRecentApplication private helper', () => {
   });
 
   test('returns true and debug-logs when key is in recentlyAppliedContainerKeys', () => {
-    (trigger as any).recentlyAppliedContainerKeys.add('c-suppress-test');
+    (trigger as any).recentlyAppliedContainerKeys.set('c-suppress-test', Date.now());
     const debugSpy = vi.spyOn(trigger.log, 'debug');
     const result = (trigger as any).isSuppressedByRecentApplication(container, 'Suppressing X for');
     expect(result).toBe(true);
@@ -11056,13 +11056,13 @@ describe('isSuppressedByRecentApplication private helper', () => {
       updateAvailable: true,
       updateKind: { kind: 'tag', semverDiff: 'minor' },
     };
-    (trigger as any).recentlyAppliedContainerKeys.add('local_no-id-app');
+    (trigger as any).recentlyAppliedContainerKeys.set('local_no-id-app', Date.now());
     const result = (trigger as any).isSuppressedByRecentApplication(noIdContainer, 'Ctx');
     expect(result).toBe(true);
   });
 
   test('does not modify recentlyAppliedContainerKeys (no lift side-effect)', () => {
-    (trigger as any).recentlyAppliedContainerKeys.add('c-suppress-test');
+    (trigger as any).recentlyAppliedContainerKeys.set('c-suppress-test', Date.now());
     (trigger as any).isSuppressedByRecentApplication(container, 'Ctx');
     expect((trigger as any).recentlyAppliedContainerKeys.has('c-suppress-test')).toBe(true);
   });
@@ -11084,7 +11084,7 @@ describe('liftSuppressionIfConfirmed private helper', () => {
   });
 
   test('removes key and debug-logs when key is present', () => {
-    (trigger as any).recentlyAppliedContainerKeys.add('c-lift-test');
+    (trigger as any).recentlyAppliedContainerKeys.set('c-lift-test', Date.now());
     const debugSpy = vi.spyOn(trigger.log, 'debug');
     (trigger as any).liftSuppressionIfConfirmed(container, 'test context');
     expect((trigger as any).recentlyAppliedContainerKeys.has('c-lift-test')).toBe(false);
@@ -11099,14 +11099,14 @@ describe('liftSuppressionIfConfirmed private helper', () => {
       updateAvailable: false,
       updateKind: { kind: 'tag', semverDiff: 'minor' },
     };
-    (trigger as any).recentlyAppliedContainerKeys.add('local_no-id-lift');
+    (trigger as any).recentlyAppliedContainerKeys.set('local_no-id-lift', Date.now());
     (trigger as any).liftSuppressionIfConfirmed(noIdContainer, 'ctx');
     expect((trigger as any).recentlyAppliedContainerKeys.has('local_no-id-lift')).toBe(false);
   });
 
   test('only removes the specific key — other keys are untouched', () => {
-    (trigger as any).recentlyAppliedContainerKeys.add('c-lift-test');
-    (trigger as any).recentlyAppliedContainerKeys.add('other-key');
+    (trigger as any).recentlyAppliedContainerKeys.set('c-lift-test', Date.now());
+    (trigger as any).recentlyAppliedContainerKeys.set('other-key', Date.now());
     (trigger as any).liftSuppressionIfConfirmed(container, 'ctx');
     expect((trigger as any).recentlyAppliedContainerKeys.has('c-lift-test')).toBe(false);
     expect((trigger as any).recentlyAppliedContainerKeys.has('other-key')).toBe(true);
@@ -11162,7 +11162,7 @@ describe('bug #408 finding 1: post-recreate container (new Docker ID, same name)
       } as any);
 
       // Both keys should be in the suppression set.
-      const keys = (trigger as any).recentlyAppliedContainerKeys as Set<string>;
+      const keys = (trigger as any).recentlyAppliedContainerKeys as Map<string, number>;
       expect(keys.has('old-docker-id')).toBe(true);
       expect(keys.has('local_webapi')).toBe(true);
 
@@ -11257,7 +11257,7 @@ describe('bug #408 finding 3: getBatchRetryContainers skips suppressed container
 
     // Add the container to the suppression set (simulates update-applied firing
     // before the retry attempt).
-    (trigger as any).recentlyAppliedContainerKeys.add('c-retry-suppress');
+    (trigger as any).recentlyAppliedContainerKeys.set('c-retry-suppress', Date.now());
 
     const retryContainers = (trigger as any).getBatchRetryContainers([]);
     expect(retryContainers).toHaveLength(0);
@@ -11423,5 +11423,72 @@ describe('seedRecentApplicationSuppressionFromStore (restart-amnesia guard, #408
 
     expect(keys.has('c-abc')).toBe(false);
     expect(keys.has('local_web')).toBe(false);
+  });
+});
+
+describe('recentlyAppliedContainerKeys TTL (Map-based expiry)', () => {
+  const container = {
+    id: 'c-ttl',
+    watcher: 'local',
+    name: 'ttl-app',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    trigger.type = 'slack';
+    trigger.name = 'notify-ttl';
+    trigger.configuration = { ...configurationValid, once: true, threshold: 'all' };
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test('entry added within TTL still suppresses', () => {
+    // Add the key with a fresh timestamp.
+    (trigger as any).recentlyAppliedContainerKeys.set('c-ttl', Date.now());
+    // Advance time by less than RECENT_APPLICATION_SEED_WINDOW_MS (60 min).
+    vi.advanceTimersByTime(59 * 60 * 1000);
+    const result = (trigger as any).isSuppressedByRecentApplication(container, 'ctx');
+    expect(result).toBe(true);
+  });
+
+  test('entry older than TTL is pruned and no longer suppresses', () => {
+    // Add the key.
+    (trigger as any).recentlyAppliedContainerKeys.set('c-ttl', Date.now());
+    // Advance past the 60-min window.
+    vi.advanceTimersByTime(61 * 60 * 1000);
+    const result = (trigger as any).isSuppressedByRecentApplication(container, 'ctx');
+    expect(result).toBe(false);
+    // The key should have been pruned from the map.
+    expect((trigger as any).recentlyAppliedContainerKeys.has('c-ttl')).toBe(false);
+  });
+
+  test('pruning on add removes expired entries', () => {
+    // Seed a stale entry.
+    (trigger as any).recentlyAppliedContainerKeys.set('stale-key', Date.now());
+    vi.advanceTimersByTime(61 * 60 * 1000);
+    // Adding a new key triggers pruning.
+    (trigger as any).recentlyAppliedContainerKeys.set('fresh-key', Date.now());
+    // Prune is called by the production code via set — call pruneExpired directly here
+    // to mimic what the real add path does.
+    (trigger as any).pruneExpiredRecentApplicationKeys();
+    expect((trigger as any).recentlyAppliedContainerKeys.has('stale-key')).toBe(false);
+    expect((trigger as any).recentlyAppliedContainerKeys.has('fresh-key')).toBe(true);
+  });
+});
+
+describe('recentlyAppliedContainerKeys cleared on deregisterComponent', () => {
+  test('deregisterComponent clears the map', async () => {
+    trigger.type = 'slack';
+    trigger.name = 'notify-deregister';
+    trigger.configuration = { ...configurationValid };
+    (trigger as any).recentlyAppliedContainerKeys.set('key-a', Date.now());
+    (trigger as any).recentlyAppliedContainerKeys.set('key-b', Date.now());
+    expect((trigger as any).recentlyAppliedContainerKeys.size).toBe(2);
+    await trigger.deregisterComponent();
+    expect((trigger as any).recentlyAppliedContainerKeys.size).toBe(0);
   });
 });
