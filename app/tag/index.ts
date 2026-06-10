@@ -115,6 +115,16 @@ function safeRegExp(pattern: string): SafeRegex {
 }
 
 /**
+ * Cache for compiled transform patterns, bounded by MAX_TRANSFORM_CACHE_SIZE.
+ * Keys are formula strings; values are compiled SafeRegex objects.
+ * The Map is cleared when it reaches capacity to avoid unbounded growth while
+ * still giving a large hit rate for the handful of distinct formulas a typical
+ * deployment uses.
+ */
+const MAX_TRANSFORM_CACHE_SIZE = 256;
+const transformPatternCache = new Map<string, SafeRegex>();
+
+/**
  * Transform a tag using a formula.
  * @param transformFormula
  * @param originalTag
@@ -132,7 +142,14 @@ export function transform(transformFormula: string, originalTag: string) {
     }
     const pattern = transformFormula.slice(0, separatorIndex).trim();
     const replacement = transformFormula.slice(separatorIndex + 2).trim();
-    const compiledPattern = safeRegExp(pattern);
+    let compiledPattern = transformPatternCache.get(transformFormula);
+    if (!compiledPattern) {
+      compiledPattern = safeRegExp(pattern);
+      if (transformPatternCache.size >= MAX_TRANSFORM_CACHE_SIZE) {
+        transformPatternCache.clear();
+      }
+      transformPatternCache.set(transformFormula, compiledPattern);
+    }
     const placeholders = replacement.match(/\$\d+/g) || [];
     const originalTagMatches = compiledPattern.exec(originalTag);
     if (!originalTagMatches) {

@@ -3,12 +3,32 @@ import Ghcr from './Ghcr.js';
 
 vi.mock('axios');
 
+/**
+ * Create a proper Axios-shaped error so that `axios.isAxiosError(err)` returns
+ * true and `err.response.status` carries the expected HTTP status code.
+ */
+function makeAxiosError(status: number) {
+  const err = new Error(`Request failed with status code ${status}`) as Error & {
+    isAxiosError: boolean;
+    response: { status: number };
+  };
+  err.isAxiosError = true;
+  err.response = { status };
+  return err;
+}
+
 describe('GitHub Container Registry', () => {
   let ghcr;
 
   beforeEach(async () => {
     axios.mockReset();
     axios.mockResolvedValue({ data: { token: 'registry-token' } });
+    // Restore the real isAxiosError behaviour: check for the `.isAxiosError` flag
+    // that our makeAxiosError helper sets on the thrown error objects.
+    (axios as any).isAxiosError = (err: unknown): boolean =>
+      err != null &&
+      typeof err === 'object' &&
+      (err as { isAxiosError?: boolean }).isAxiosError === true;
     ghcr = new Ghcr();
     await ghcr.register('registry', 'ghcr', 'test', {
       username: 'testuser',
@@ -246,20 +266,18 @@ describe('GitHub Container Registry', () => {
   });
 
   test('should fallback to GHCR user endpoint when org package lookup returns 404', async () => {
-    axios
-      .mockRejectedValueOnce(new Error('Request failed with status code 404'))
-      .mockResolvedValueOnce({
-        data: [
-          {
-            updated_at: '2026-03-05T10:00:00.000Z',
-            metadata: {
-              container: {
-                tags: ['2.0.0'],
-              },
+    axios.mockRejectedValueOnce(makeAxiosError(404)).mockResolvedValueOnce({
+      data: [
+        {
+          updated_at: '2026-03-05T10:00:00.000Z',
+          metadata: {
+            container: {
+              tags: ['2.0.0'],
             },
           },
-        ],
-      });
+        },
+      ],
+    });
 
     const publishedAt = await ghcr.getImagePublishedAt({
       name: 'octocat/demo',
@@ -374,9 +392,7 @@ describe('GitHub Container Registry', () => {
   });
 
   test('should return undefined when both GHCR org and user lookups return 404', async () => {
-    axios
-      .mockRejectedValueOnce(new Error('Request failed with status code 404'))
-      .mockRejectedValueOnce(new Error('Request failed with status code 404'));
+    axios.mockRejectedValueOnce(makeAxiosError(404)).mockRejectedValueOnce(makeAxiosError(404));
 
     const publishedAt = await ghcr.getImagePublishedAt({
       name: 'octocat/demo',
@@ -388,7 +404,7 @@ describe('GitHub Container Registry', () => {
 
   test('should rethrow non-404 errors from GHCR user lookup fallback', async () => {
     axios
-      .mockRejectedValueOnce(new Error('Request failed with status code 404'))
+      .mockRejectedValueOnce(makeAxiosError(404))
       .mockRejectedValueOnce(new Error('Request failed with status code 500'));
 
     await expect(
@@ -421,6 +437,33 @@ describe('GitHub Container Registry', () => {
 
   test('should ignore non-Error values when parsing rejected credential status', async () => {
     expect((ghcr as any).getRejectedCredentialStatus('raw-failure')).toBeUndefined();
+  });
+
+  test('isNotFoundError: plain Error with status-code-404 message is not treated as a 404 (axios check required)', async () => {
+    // A plain Error (no .isAxiosError flag) mentioning "status code 404" must NOT
+    // be swallowed — it must propagate as an unexpected error.
+    axios
+      .mockRejectedValueOnce(new Error('Request failed with status code 404'))
+      .mockRejectedValueOnce(new Error('Some other error'));
+
+    await expect(
+      ghcr.getImagePublishedAt({
+        name: 'acme/widgets',
+        tag: { value: '1.2.3' },
+      }),
+    ).rejects.toThrow('Request failed with status code 404');
+  });
+
+  test('isNotFoundError: proper AxiosError with status 404 is treated as a 404 and falls back to user endpoint', async () => {
+    axios.mockRejectedValueOnce(makeAxiosError(404)).mockResolvedValueOnce({ data: [] });
+
+    const result = await ghcr.getImagePublishedAt({
+      name: 'octocat/demo',
+      tag: { value: '1.0.0' },
+    });
+
+    expect(result).toBeUndefined();
+    expect(axios).toHaveBeenCalledTimes(2);
   });
 
   test('should validate string configuration', async () => {

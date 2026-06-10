@@ -386,15 +386,18 @@ export function filterBySegmentCount(tags: string[], container: Container): stri
 
 /**
  * Sort tags by semver in descending order (mutates the array).
+ * Pre-computes transformed tags to avoid recompiling the transform formula
+ * on every comparator call (O(n log n) calls for an n-element array).
  */
 function sortSemverDescending(tags: string[], transformTags: string | undefined): void {
-  tags.sort((t1, t2) => {
-    const greater = isGreaterSemver(
-      transformTag(transformTags, t2),
-      transformTag(transformTags, t1),
-    );
+  const transformed = tags.map((tag) => ({ tag, transformed: transformTag(transformTags, tag) }));
+  transformed.sort((a, b) => {
+    const greater = isGreaterSemver(b.transformed, a.transformed);
     return greater ? 1 : -1;
   });
+  for (let i = 0; i < tags.length; i += 1) {
+    tags[i] = transformed[i].tag;
+  }
 }
 
 /**
