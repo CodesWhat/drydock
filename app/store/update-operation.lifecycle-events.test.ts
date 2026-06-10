@@ -149,6 +149,51 @@ describe('update operation lifecycle events', () => {
     expect(mockEmitContainerUpdateApplied).not.toHaveBeenCalled();
   });
 
+  test('markOperationTerminal includes newContainerId in the update-applied payload when set on the operation', async () => {
+    const inserted = updateOperation.insertOperation({
+      id: 'op-recreate',
+      containerId: 'c-old',
+      newContainerId: 'c-new',
+      containerName: 'nginx',
+      status: 'in-progress',
+      phase: 'new-started',
+    });
+
+    updateOperation.markOperationTerminal(inserted.id, {
+      status: 'succeeded',
+      phase: 'succeeded',
+    });
+    await flushAsyncLifecycleEvents();
+
+    expect(mockEmitContainerUpdateApplied).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationId: 'op-recreate',
+        containerId: 'c-old',
+        newContainerId: 'c-new',
+        containerName: 'nginx',
+      }),
+    );
+  });
+
+  test('markOperationTerminal omits newContainerId from update-applied payload when not set on the operation', async () => {
+    const inserted = updateOperation.insertOperation({
+      id: 'op-no-recreate',
+      containerId: 'c-1',
+      containerName: 'nginx',
+      status: 'in-progress',
+      phase: 'pulling',
+    });
+
+    updateOperation.markOperationTerminal(inserted.id, {
+      status: 'succeeded',
+      phase: 'succeeded',
+    });
+    await flushAsyncLifecycleEvents();
+
+    const call = mockEmitContainerUpdateApplied.mock.calls[0];
+    expect(call[0]).not.toHaveProperty('newContainerId');
+  });
+
   test('markOperationTerminal does not re-emit lifecycle events for already terminal rows', async () => {
     const inserted = updateOperation.insertOperation({
       id: 'op-1',

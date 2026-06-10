@@ -588,6 +588,36 @@ describe('request-update', () => {
     );
   });
 
+  test('markAcceptedQueuedOperationFailed falls through to failed when containerName is empty string even for duplicate-style error', async () => {
+    // Exercises the `operation.containerName &&` guard in markAcceptedQueuedOperationFailed:
+    // when containerName is '' (falsy), the duplicate-style reclassification is skipped
+    // and the operation is always marked failed regardless of error type.
+    const trigger = {
+      type: 'docker',
+      trigger: vi.fn().mockRejectedValue({ statusCode: 404, message: 'No such container' }),
+    };
+    mockGetOperationById.mockImplementation((id: string) => ({
+      id,
+      status: 'queued',
+      phase: 'queued',
+      containerName: '',
+    }));
+
+    const entry = {
+      container: createContainer(),
+      operationId: 'op-empty-name',
+      trigger,
+    };
+    dispatchAccepted([entry]);
+    await flushAsyncWork();
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-empty-name', {
+      status: 'failed',
+      phase: 'failed',
+      lastError: 'No such container',
+    });
+  });
+
   test('runAcceptedContainerUpdates leaves successful terminalization to the trigger lifecycle', async () => {
     const trigger = {
       type: 'docker',

@@ -24,6 +24,7 @@ import {
   isActiveContainerUpdateOperationPhaseForStatus,
   isTerminalContainerUpdateOperationPhase,
   resolveTerminalContainerUpdateOperationPhase,
+  TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES,
 } from '../model/container-update-operation.js';
 import { daysToMs } from '../model/maturity-policy.js';
 import { toPositiveInteger } from '../util/parse.js';
@@ -274,6 +275,7 @@ const UPDATE_OPERATION_COLLECTION_INDICES = [
   'data.containerId',
   'data.newContainerId',
   'data.status',
+  'data.updatedAt',
 ];
 const DEFAULT_UPDATE_OPERATION_MAX_ENTRIES = getDefaultCacheMaxEntries();
 const DEFAULT_UPDATE_OPERATION_RETENTION_DAYS = 30;
@@ -370,6 +372,7 @@ function buildTerminalLifecycleEventBase(operation: UpdateOperation, batchId?: s
     containerName: operation.containerName,
     ...(batchId ? { batchId } : {}),
     ...(operation.container ? { container: operation.container } : {}),
+    ...(operation.newContainerId ? { newContainerId: operation.newContainerId } : {}),
   };
 }
 
@@ -469,8 +472,13 @@ function pruneOperationsForRetention(
   collection: UpdateOperationCollection,
   nowMs = Date.now(),
 ): number {
-  const documents = collection.find();
-  if (!Array.isArray(documents) || documents.length === 0) {
+  // Query only terminal documents per status using the existing data.status index,
+  // avoiding a full-collection materialisation that would load active ops too.
+  const terminalDocuments = TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES.flatMap((status) =>
+    findOperationDocumentsByStatus(collection, status),
+  );
+
+  if (terminalDocuments.length === 0) {
     return 0;
   }
 
@@ -478,20 +486,16 @@ function pruneOperationsForRetention(
   const cutoffTimestamp = nowMs - retentionWindowMs;
 
   const retainedTerminalIds = new Set(
-    documents
-      .filter((document) => !isActiveOperationStatus(document.data.status))
+    terminalDocuments
       .filter((document) => getOperationTimestamp(document.data) >= cutoffTimestamp)
       .sort((a, b) => getOperationTimestamp(b.data) - getOperationTimestamp(a.data))
       .slice(0, UPDATE_OPERATION_MAX_ENTRIES)
       .map((document) => document.data.id),
   );
 
-  const toRemove = documents.filter((document) => {
-    if (isActiveOperationStatus(document.data.status)) {
-      return false;
-    }
-    return !retainedTerminalIds.has(document.data.id);
-  });
+  const toRemove = terminalDocuments.filter(
+    (document) => !retainedTerminalIds.has(document.data.id),
+  );
 
   for (const document of toRemove) {
     collection.remove(document);
@@ -955,18 +959,15 @@ function matchesStrictIdentityFilter(
   op: OperationIdentitySource,
   identity: ContainerIdentityFilter,
 ): boolean {
-  /* v8 ignore next 3 -- strict identity filters are only requested once a watcher is known. */
   if (!identity.watcher) {
     return true;
   }
 
   const operationIdentity = getOperationIdentity(op);
-  /* v8 ignore next 3 -- strict lookup intentionally excludes legacy rows once watcher identity is required. */
   if (!operationIdentity.modern) {
     return false;
   }
 
-  /* v8 ignore next 4 -- strict identity comparisons are exercised through operation lookup call sites. */
   return (
     (operationIdentity.agent ?? '') === (identity.agent ?? '') &&
     operationIdentity.watcher === identity.watcher
@@ -1208,6 +1209,35 @@ export function getRecentTerminalSucceededOperationByContainerName(
     .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
 
   return candidates.at(0);
+}
+
+/**
+ * Return all `succeeded` operations whose `completedAt` falls within
+ * `Date.now() - sinceMs` (milliseconds), sorted most-recent-first.
+ *
+ * Used by the restart-amnesia guard in Trigger.ts to re-populate
+ * `recentlyAppliedContainerKeys` on controller startup so that a successful
+ * update whose watcher confirmation scan has not yet run does not fire a
+ * spurious "update available" notification after a restart (#408).
+ *
+ * Returns an empty array when the collection is uninitialized.
+ */
+export function listRecentSucceededOperations(sinceMs: number): SucceededUpdateOperation[] {
+  if (!updateOperationCollection) {
+    return [];
+  }
+
+  const cutoffMs = Date.now() - sinceMs;
+
+  return findOperationDocumentsByStatus(updateOperationCollection, 'succeeded')
+    .map((document) => document.data)
+    .filter(
+      (op): op is SucceededUpdateOperation =>
+        op.status === 'succeeded' &&
+        typeof op.completedAt === 'string' &&
+        Date.parse(op.completedAt) >= cutoffMs,
+    )
+    .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
 }
 
 /**

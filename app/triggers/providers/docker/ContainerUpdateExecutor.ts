@@ -1,6 +1,7 @@
 import type { ContainerIdentityFilter } from '../../../store/update-operation.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { OperationCancelledError } from '../../../store/update-operation.js';
+import { DUPLICATE_OP_RECENT_SUCCESS_WINDOW_MS } from '../../../updates/duplicate-op-classification.js';
 import { startHealthGateHeartbeat } from '../../../updates/health-gate-heartbeat.js';
 import {
   POST_START_LIVENESS_GRACE_MS,
@@ -743,19 +744,31 @@ class ContainerUpdateExecutor {
       await currentContainer.rename({ name: tempName });
       updateOperationStore.updateOperation(operation.id, { phase: 'renamed' });
     } catch (tailError: unknown) {
-      // Issue #410 Part B (Docker-native path): if the rename fails with a
-      // Docker 404 "no such container" AND there is a recent succeeded op for the
-      // same container name, the container was already recreated by a concurrent
-      // update — reclassify to `expired` so no false "update failed" fires.
+      // Issue #410 Part B / #421 (Docker-native path): if the rename fails with a
+      // Docker 404 "no such container" AND either (a) there is a recent succeeded
+      // op for the same container name or (b) another active operation for the same
+      // container+identity is still in flight (the #421 race — the winner hasn't
+      // completed yet so no succeeded row exists), reclassify to `expired` so no
+      // false "update failed" notification fires.
+      const isNotFound = this.isContainerNotFoundError(tailError);
+      const identity = getContainerIdentityFilter(container);
       const recentSuccess =
-        this.isContainerNotFoundError(tailError) &&
+        isNotFound &&
         updateOperationStore.getRecentTerminalSucceededOperationByContainerName(
           container.name,
-          15 * 60 * 1000,
-          getContainerIdentityFilter(container),
+          DUPLICATE_OP_RECENT_SUCCESS_WINDOW_MS,
+          identity,
+        );
+      const otherActiveOp =
+        isNotFound &&
+        !recentSuccess &&
+        updateOperationStore.hasOtherActiveOperationByContainerName(
+          container.name,
+          operation.id,
+          identity,
         );
 
-      if (recentSuccess) {
+      if (recentSuccess || otherActiveOp) {
         updateOperationStore.markOperationTerminal(operation.id, {
           status: 'expired',
           phase: 'expired',

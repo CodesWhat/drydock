@@ -36,6 +36,9 @@ export function isContainerNotFoundError(error: unknown): boolean {
   if (typeof err.statusCode === 'number' && err.statusCode === 404) {
     return true;
   }
+  if (typeof err.status === 'number' && err.status === 404) {
+    return true;
+  }
   if (typeof err.message === 'string' && /no such container/i.test(err.message)) {
     return true;
   }
@@ -57,6 +60,34 @@ export function isConflictError(error: unknown): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * True for HTTP 409 responses whose body confirms the agent's active-update
+ * lock is the cause of the conflict.
+ *
+ * The agent's `/api/triggers/:type/:name` endpoint returns
+ * `{ error: "Container update already queued" }` or
+ * `{ error: "Container update already in progress" }` (via `sendErrorResponse`)
+ * when `requestContainerUpdate` throws `UpdateRequestError(409, ...)` for the
+ * active-operation hard blocker.  Matching on this message lets the classifier
+ * treat the 409 as expired even before the winning operation's `dd:update-applied`
+ * SSE arrives on the controller — the remote lock is authoritative.
+ */
+export function isActiveUpdateConflictError(error: unknown): boolean {
+  if (!isConflictError(error)) {
+    return false;
+  }
+  const response = (error as Record<string, unknown>).response as Record<string, unknown>;
+  const data = response?.data;
+  if (!data || typeof data !== 'object') {
+    return false;
+  }
+  const errorMessage = (data as Record<string, unknown>).error;
+  if (typeof errorMessage !== 'string') {
+    return false;
+  }
+  return /container update already (queued|in progress)/i.test(errorMessage);
 }
 
 /** True for Dockercompose "no longer exists" container-vanished errors. */
@@ -85,15 +116,19 @@ export function isDuplicateStyleError(error: unknown): boolean {
  * operation `expired` (benign duplicate, silent) or `failed` (genuine failure,
  * emits update-failed notification).
  *
- * Returns `'expired'` when:
- *   - the error is a duplicate-style vanish, AND one of:
- *     - a terminal `succeeded` operation for `containerName` exists within the
- *       last `windowMs` milliseconds for the same agent+watcher identity when
- *       identity is available; OR
- *     - `excludeOperationId` is provided and another active (in-progress or
- *       queued) operation exists for `containerName` with the same identity —
- *       this handles the race in issue #421 where the winning update is still
- *       in flight when the loser's 409 arrives.
+ * Returns `'expired'` when ANY of the following hold:
+ *   1. The error is a duplicate-style vanish AND a terminal `succeeded`
+ *      operation for `containerName` exists within the last `windowMs`
+ *      milliseconds (optionally filtered by agent+watcher identity).
+ *   2. The error is an active-update conflict (409 + active-lock message from
+ *      the agent endpoint) — the remote lock is authoritative regardless of
+ *      the controller's store state, so no store lookup is needed.
+ *   3. The error is a duplicate-style vanish, `excludeOperationId` is provided,
+ *      `identity.watcher` is present (so the match is trustworthy), AND another
+ *      active (in-progress or queued) operation exists for `containerName` with
+ *      the same identity.  Without both guards, legacy rows (no container
+ *      snapshot) could cross-match containers on different agents that happen to
+ *      share a name (issue #421 cross-agent masking risk).
  *
  * Returns `'failed'` in all other cases.
  */
@@ -107,6 +142,9 @@ export function classifyDuplicateOpTerminalStatus(
   if (!isDuplicateStyleError(error)) {
     return 'failed';
   }
+
+  // (1) Recent succeeded operation for the same container — the update already
+  // completed before our operation arrived.
   const recentSuccess = updateOperationStore.getRecentTerminalSucceededOperationByContainerName(
     containerName,
     windowMs,
@@ -115,14 +153,26 @@ export function classifyDuplicateOpTerminalStatus(
   if (recentSuccess) {
     return 'expired';
   }
-  // Issue #421: in the duplicate-request race the winning update may still be
-  // in flight when the loser's 409 arrives, so no succeeded row exists yet.
-  // Another active operation for the same container + identity proves the
-  // conflict is benign — the active op will report the real outcome itself.
-  // Only checked when the caller identifies its own operation, because that
-  // operation is itself still active in the store at classification time.
+
+  // (2) The 409 payload itself proves the agent's active-update lock is held.
+  // The controller's store has no winner row yet (SSE lag), but the agent's
+  // lock message is authoritative — the winner will report its own outcome.
+  // This branch does NOT require excludeOperationId or a store hit.
+  if (isActiveUpdateConflictError(error)) {
+    return 'expired';
+  }
+
+  // (3) Issue #421: in the duplicate-request race the winning update may still
+  // be in flight when the loser's 409 arrives, so no succeeded row exists yet.
+  // Require both excludeOperationId (caller must identify itself) AND
+  // identity.watcher (so legacy rows without a container snapshot can never
+  // cross-match containers from different agents that share a name).
+  // NOTE: rows older than DD_UPDATE_OPERATION_ACTIVE_TTL_MS are treated as
+  // expired by the freshness check inside hasOtherActiveOperationByContainerName,
+  // so the TTL should not be set below the longest expected pull (audit follow-up).
   if (
     excludeOperationId &&
+    identity?.watcher &&
     updateOperationStore.hasOtherActiveOperationByContainerName(
       containerName,
       excludeOperationId,
@@ -131,5 +181,6 @@ export function classifyDuplicateOpTerminalStatus(
   ) {
     return 'expired';
   }
+
   return 'failed';
 }
