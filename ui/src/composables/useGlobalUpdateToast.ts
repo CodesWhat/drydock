@@ -292,7 +292,7 @@ export function useGlobalUpdateToast() {
     if (event.type === 'dd:sse-container-removed' && detail.replacementExpected === true) {
       return;
     }
-    const containerId = getDetailString(detail.id) ?? getDetailString(detail.containerId);
+    const containerId = getDetailString(detail.id);
     const containerName = getDetailString(detail.name) ?? getDetailString(detail.containerName);
     settleByContainer(containerId, containerName);
   }

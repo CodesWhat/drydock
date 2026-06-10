@@ -275,7 +275,6 @@ const UPDATE_OPERATION_COLLECTION_INDICES = [
   'data.containerId',
   'data.newContainerId',
   'data.status',
-  'data.updatedAt',
 ];
 const DEFAULT_UPDATE_OPERATION_MAX_ENTRIES = getDefaultCacheMaxEntries();
 const DEFAULT_UPDATE_OPERATION_RETENTION_DAYS = 30;
@@ -968,6 +967,9 @@ function matchesStrictIdentityFilter(
     return false;
   }
 
+  // `?? ''` means "local (unagented)" on both sides.  The collision is safe only
+  // because insertOperation normalises '' to undefined before storing, so '' can
+  // never be a real agent name in the store.
   return (
     (operationIdentity.agent ?? '') === (identity.agent ?? '') &&
     operationIdentity.watcher === identity.watcher

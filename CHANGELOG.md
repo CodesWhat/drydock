@@ -42,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Container normalization no longer deep-clones the entire container per registry call.** The watcher now copies only the image/registry fields it mutates instead of `structuredClone` of labels and environment for every container every cycle.
 
-- **Update-operation retention pruning uses indexed status queries** instead of materializing the whole collection every 100th mutation, and the default rejected-credential pattern in `BaseRegistry` is compiled once at module load.
+- **Update-operation retention pruning uses indexed status queries** instead of materializing the whole collection every 100th mutation, and the default rejected-credential pattern in `BaseRegistry` is compiled once at module load. An unused `updatedAt` collection index no longer taxes every mutation.
 
 ### Changed
 

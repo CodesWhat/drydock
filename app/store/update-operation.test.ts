@@ -9,7 +9,13 @@ function createDb(options?: { inactiveIds?: Set<string>; missingIds?: Set<string
   }
 
   function matchesQuery(doc, query = {}) {
-    return Object.entries(query).every(([key, value]) => getByPath(doc, key) === value);
+    return Object.entries(query).every(([key, value]) => {
+      const docValue = getByPath(doc, key);
+      if (value !== null && typeof value === 'object' && '$in' in value) {
+        return (value as { $in: unknown[] }).$in.includes(docValue);
+      }
+      return docValue === value;
+    });
   }
 
   const inactiveIds = options?.inactiveIds ?? new Set<string>();

@@ -2106,13 +2106,14 @@ describe('ContainerUpdateExecutor', () => {
         isContainerNotFoundError: vi.fn((err) => err?.statusCode === 404),
       });
 
-      // No recent success, but the winning op is still in flight
+      // No recent success, but the winning op is still in flight.
+      // watcher must be present so identity.watcher passes the path-3 guard.
       mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
       mockHasOtherActiveOperationByContainerName.mockReturnValue(true);
 
-      await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
-        'No such container: web',
-      );
+      await expect(
+        executor.execute(context, createContainer({ watcher: 'local' }), createLog()),
+      ).rejects.toThrow('No such container: web');
 
       // Should be expired — winner still active, conflict is benign
       expect(mockMarkOperationTerminal).toHaveBeenCalledWith(

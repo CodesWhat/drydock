@@ -1,7 +1,7 @@
 import type { ContainerIdentityFilter } from '../../../store/update-operation.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { OperationCancelledError } from '../../../store/update-operation.js';
-import { DUPLICATE_OP_RECENT_SUCCESS_WINDOW_MS } from '../../../updates/duplicate-op-classification.js';
+import { classifyDuplicateOpTerminalStatus } from '../../../updates/duplicate-op-classification.js';
 import { startHealthGateHeartbeat } from '../../../updates/health-gate-heartbeat.js';
 import {
   POST_START_LIVENESS_GRACE_MS,
@@ -744,31 +744,21 @@ class ContainerUpdateExecutor {
       await currentContainer.rename({ name: tempName });
       updateOperationStore.updateOperation(operation.id, { phase: 'renamed' });
     } catch (tailError: unknown) {
-      // Issue #410 Part B / #421 (Docker-native path): if the rename fails with a
-      // Docker 404 "no such container" AND either (a) there is a recent succeeded
-      // op for the same container name or (b) another active operation for the same
-      // container+identity is still in flight (the #421 race — the winner hasn't
-      // completed yet so no succeeded row exists), reclassify to `expired` so no
-      // false "update failed" notification fires.
-      const isNotFound = this.isContainerNotFoundError(tailError);
+      // Issue #410 Part B / #421 (Docker-native path): classify the rename error
+      // as expired (benign duplicate) or failed (genuine failure) via the shared
+      // classifier.  Note: rename errors here are dockerode-shaped (statusCode,
+      // not axios response.status), so the classifier's 409 lock-body branch
+      // cannot fire on this path; only the 404 recent-success and other-active-op
+      // branches apply.
       const identity = getContainerIdentityFilter(container);
-      const recentSuccess =
-        isNotFound &&
-        updateOperationStore.getRecentTerminalSucceededOperationByContainerName(
-          container.name,
-          DUPLICATE_OP_RECENT_SUCCESS_WINDOW_MS,
-          identity,
-        );
-      const otherActiveOp =
-        isNotFound &&
-        !recentSuccess &&
-        updateOperationStore.hasOtherActiveOperationByContainerName(
-          container.name,
-          operation.id,
-          identity,
-        );
-
-      if (recentSuccess || otherActiveOp) {
+      const terminalStatus = classifyDuplicateOpTerminalStatus(
+        tailError,
+        container.name,
+        undefined,
+        identity,
+        operation.id,
+      );
+      if (terminalStatus === 'expired') {
         updateOperationStore.markOperationTerminal(operation.id, {
           status: 'expired',
           phase: 'expired',
