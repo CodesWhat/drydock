@@ -167,9 +167,9 @@ export function classifyDuplicateOpTerminalStatus(
   // Require both excludeOperationId (caller must identify itself) AND
   // identity.watcher (so legacy rows without a container snapshot can never
   // cross-match containers from different agents that share a name).
-  // NOTE: rows older than DD_UPDATE_OPERATION_ACTIVE_TTL_MS are treated as
-  // expired by the freshness check inside hasOtherActiveOperationByContainerName,
-  // so the TTL should not be set below the longest expected pull (audit follow-up).
+  // Rows older than DD_UPDATE_OPERATION_ACTIVE_TTL_MS are treated as expired
+  // by the freshness check inside hasOtherActiveOperationByContainerName, so
+  // the TTL should not be set below the longest expected pull (audit follow-up).
   if (
     excludeOperationId &&
     identity?.watcher &&

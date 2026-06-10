@@ -27,13 +27,13 @@ This trigger also supports the [common configuration variables](/docs/configurat
 
 <Callout type="info">Container-derived values injected as environment variables are automatically sanitized before being passed to the subprocess. The characters `` ` `` (backtick), `$`, `;`, `&`, `|`, `<`, `>`, `(`, and `)` are replaced with `_` in any string value sourced from container metadata (image name, tags, labels, etc.). This prevents shell injection through container-controlled strings. Static values configured directly in `CMD` are not modified.</Callout>
 
-## Migration note (upgrading from pre-v1.5.1)
+## Migration note (upgrading from pre-v1.5.0)
 
-Before v1.5.1, the subprocess inherited the entire drydock process environment, including every `DD_*` secret. Starting in v1.5.1, only a restricted allowlist is passed by default.
+Before v1.5.0, the subprocess inherited the entire drydock process environment, including every `DD_*` secret. Starting in v1.5.0, only a restricted allowlist is passed by default.
 
 If your command script depends on additional environment variables from the drydock process (for example, `KUBECONFIG` or a custom `DOCKER_HOST`), add them to the `ENV` option:
 
-```
+```bash
 DD_ACTION_COMMAND_LOCAL_ENV=KUBECONFIG,DOCKER_HOST
 ```
 
