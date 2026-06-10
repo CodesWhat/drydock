@@ -70,6 +70,7 @@ interface ContainerLogStreamGatewayDependencies {
   webSocketServer?: WebSocketServerLike;
   isRateLimited?: (key: string) => boolean;
   getRateLimitKey?: (request: UpgradeRequest, authenticated: boolean) => string;
+  serverConfiguration?: Record<string, unknown>;
   getErrorMessage?: (error: unknown) => string;
 }
 
@@ -405,6 +406,7 @@ export function createContainerLogStreamGateway(
       return (key: string) => !limiter.consume(key);
     })(),
     getRateLimitKey = (request: UpgradeRequest) => getDefaultRateLimitKey(request),
+    serverConfiguration,
     getErrorMessage: getLogStreamErrorMessage = getErrorMessage,
   } = dependencies;
 
@@ -415,7 +417,7 @@ export function createContainerLogStreamGateway(
         return;
       }
 
-      if (!isOriginAllowed(request)) {
+      if (!isOriginAllowed(request, serverConfiguration)) {
         writeUpgradeError(socket, 403, 'Forbidden');
         return;
       }
@@ -479,6 +481,7 @@ export function attachContainerLogStreamWebSocketServer(options: {
     sessionMiddleware: options.sessionMiddleware,
     getRateLimitKey: createIdentityAwareUpgradeRateLimitKeyResolver(serverConfiguration),
     isRateLimited: options.isRateLimited,
+    serverConfiguration,
   });
 
   options.server.on('upgrade', (request, socket, head) => {
