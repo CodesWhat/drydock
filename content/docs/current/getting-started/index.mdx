@@ -336,6 +336,7 @@ If you have containers on multiple Docker hosts, deploy Drydock agents on remote
 environment:
   - DD_AGENT_REMOTE1_HOST=<agent-ip>
   - DD_AGENT_REMOTE1_SECRET=a-secure-shared-token
+  # - DD_AGENT_REMOTE1_PORT=3000  # only needed if the agent listens on a non-default port
 ```
 
 **Agent** (remote host — lightweight, no UI):
@@ -345,6 +346,8 @@ services:
   drydock-agent:
     image: codeswhat/drydock
     command: --agent
+    ports:
+      - "3000:3000"  # agent API — the controller connects to this port
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
