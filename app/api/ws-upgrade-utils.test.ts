@@ -5,12 +5,56 @@ import {
   getDefaultRateLimitKey,
   isAuthenticatedSession,
   isOriginAllowed,
+  isTrustProxyEnabled,
   writeUpgradeError,
 } from './ws-upgrade-utils.js';
 
 describe('ws-upgrade-utils', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('isTrustProxyEnabled', () => {
+    test('returns false when trustproxy is false', () => {
+      expect(isTrustProxyEnabled({ trustproxy: false })).toBe(false);
+    });
+
+    test('returns true when trustproxy is true', () => {
+      expect(isTrustProxyEnabled({ trustproxy: true })).toBe(true);
+    });
+
+    test('returns true when trustproxy is a positive integer (hop count)', () => {
+      expect(isTrustProxyEnabled({ trustproxy: 1 })).toBe(true);
+      expect(isTrustProxyEnabled({ trustproxy: 2 })).toBe(true);
+    });
+
+    test('returns false when trustproxy is 0', () => {
+      expect(isTrustProxyEnabled({ trustproxy: 0 })).toBe(false);
+    });
+
+    test('returns false when trustproxy is absent', () => {
+      expect(isTrustProxyEnabled({})).toBe(false);
+    });
+
+    test('returns true for non-empty non-false CIDR string', () => {
+      expect(isTrustProxyEnabled({ trustproxy: '10.0.0.0/8' })).toBe(true);
+    });
+
+    test('returns false for string "false"', () => {
+      expect(isTrustProxyEnabled({ trustproxy: 'false' })).toBe(false);
+    });
+
+    test('returns false for string "0"', () => {
+      expect(isTrustProxyEnabled({ trustproxy: '0' })).toBe(false);
+    });
+
+    test('returns false for empty string', () => {
+      expect(isTrustProxyEnabled({ trustproxy: '' })).toBe(false);
+    });
+
+    test('returns false for whitespace-only string', () => {
+      expect(isTrustProxyEnabled({ trustproxy: '   ' })).toBe(false);
+    });
   });
 
   describe('isOriginAllowed', () => {
@@ -81,6 +125,108 @@ describe('ws-upgrade-utils', () => {
         headers: { origin: 'http://localhost:9999', host: 'localhost:3000' },
       } as any;
       expect(isOriginAllowed(request)).toBe(false);
+    });
+
+    describe('trust proxy disabled', () => {
+      const noProxy = { trustproxy: false };
+
+      test('rejects mismatched host even without trust proxy config', () => {
+        const request = {
+          headers: { origin: 'https://evil.com', host: 'localhost:3000' },
+        } as any;
+        expect(isOriginAllowed(request, noProxy)).toBe(false);
+      });
+
+      test('ignores forged X-Forwarded-Host when trust proxy is off', () => {
+        // Direct client forges X-Forwarded-Host to match their origin — must be rejected
+        const request = {
+          headers: {
+            origin: 'https://attacker.com',
+            host: 'localhost:3000',
+            'x-forwarded-host': 'attacker.com',
+          },
+        } as any;
+        expect(isOriginAllowed(request, noProxy)).toBe(false);
+      });
+
+      test('still allows when Origin matches raw Host even with trust proxy off', () => {
+        const request = {
+          headers: {
+            origin: 'http://localhost:3000',
+            host: 'localhost:3000',
+            'x-forwarded-host': 'some-proxy-host.example.com',
+          },
+        } as any;
+        expect(isOriginAllowed(request, noProxy)).toBe(true);
+      });
+    });
+
+    describe('trust proxy enabled', () => {
+      const withProxy = { trustproxy: 1 };
+
+      test('allows when Origin matches X-Forwarded-Host behind a proxy', () => {
+        const request = {
+          headers: {
+            origin: 'https://drydock.example.com',
+            host: '10.0.0.1:3000',
+            'x-forwarded-host': 'drydock.example.com',
+          },
+        } as any;
+        expect(isOriginAllowed(request, withProxy)).toBe(true);
+      });
+
+      test('takes the first entry in a comma-separated X-Forwarded-Host list', () => {
+        const request = {
+          headers: {
+            origin: 'https://drydock.example.com',
+            host: '10.0.0.1:3000',
+            'x-forwarded-host': 'drydock.example.com, other.example.com',
+          },
+        } as any;
+        expect(isOriginAllowed(request, withProxy)).toBe(true);
+      });
+
+      test('rejects when Origin does not match X-Forwarded-Host', () => {
+        const request = {
+          headers: {
+            origin: 'https://evil.com',
+            host: '10.0.0.1:3000',
+            'x-forwarded-host': 'drydock.example.com',
+          },
+        } as any;
+        expect(isOriginAllowed(request, withProxy)).toBe(false);
+      });
+
+      test('falls back to raw Host when X-Forwarded-Host is absent', () => {
+        const request = {
+          headers: {
+            origin: 'https://drydock.example.com',
+            host: 'drydock.example.com',
+          },
+        } as any;
+        expect(isOriginAllowed(request, withProxy)).toBe(true);
+      });
+
+      test('falls back to raw Host when X-Forwarded-Host is empty', () => {
+        const request = {
+          headers: {
+            origin: 'https://drydock.example.com',
+            host: 'drydock.example.com',
+            'x-forwarded-host': '',
+          },
+        } as any;
+        expect(isOriginAllowed(request, withProxy)).toBe(true);
+      });
+
+      test('rejects when both X-Forwarded-Host and raw Host are missing', () => {
+        const request = {
+          headers: {
+            origin: 'https://drydock.example.com',
+            'x-forwarded-host': '',
+          },
+        } as any;
+        expect(isOriginAllowed(request, withProxy)).toBe(false);
+      });
     });
   });
 

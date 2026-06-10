@@ -529,6 +529,27 @@ describe('docker tag candidates module', () => {
     expect(getNumericTagShape('1.2.3\nbeta', undefined)).toBeNull();
   });
 
+  test('sort output is identical whether transform is applied once up-front or per-compare', () => {
+    // Regression guard for the pre-compute-before-sort optimisation.
+    // The sorted order must match what a naive in-comparator transform would produce.
+    const container = createContainer({
+      image: {
+        tag: {
+          value: 'v1.0.0',
+          semver: true,
+        },
+      },
+      transformTags: '^v(\\d+\\.\\d+\\.\\d+)$ => $1',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const inputTags = ['v1.0.1', 'v1.2.0', 'v1.0.5', 'v1.1.3', 'v2.0.0', 'v1.0.2'];
+    const result = getTagCandidates(container, inputTags, log);
+
+    // Expect descending semver order after transform strips the 'v' prefix
+    expect(result.tags).toEqual(['v2.0.0', 'v1.2.0', 'v1.1.3', 'v1.0.5', 'v1.0.2', 'v1.0.1']);
+  });
+
   test('processes large tag lists within lightweight runtime budget', () => {
     const container = createContainer({
       image: {

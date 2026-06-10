@@ -330,6 +330,35 @@ describe('image-comparison', () => {
       expect(result.image.registry.name).toBe('unknown');
     });
 
+    test('normalizeContainer does not mutate the input container', () => {
+      mockGetState.mockReturnValue({
+        registry: {
+          hub: {
+            getId: () => 'hub',
+            match: () => true,
+            normalizeImage: (image: { name: string; registry: { url: string } }) => ({
+              ...image,
+              name: image.name.includes('/') ? image.name : `library/${image.name}`,
+              registry: { ...image.registry, url: 'https://registry-1.docker.io/v2' },
+            }),
+          },
+        },
+      });
+
+      const originalUrl = 'docker.io';
+      const originalName = 'nginx';
+      const container = {
+        ...createBaseContainer({ url: originalUrl }),
+        image: { ...createBaseContainer({ url: originalUrl }).image, name: originalName },
+      };
+
+      normalizeContainer(container as never);
+
+      // Input must be unmodified
+      expect(container.image.registry.url).toBe(originalUrl);
+      expect(container.image.name).toBe(originalName);
+    });
+
     describe('pickRegistryProvider — deterministic routing', () => {
       function makeProvider(
         id: string,

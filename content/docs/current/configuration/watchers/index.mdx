@@ -33,14 +33,14 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 | `DD_WATCHER_{watcher_name}_PROTOCOL` | ⚪ | Docker remote API protocol | `http`, `https` | `http` |
 | `DD_WATCHER_{watcher_name}_SOCKET` | ⚪ | Docker socket to watch | Valid unix socket | `/var/run/docker.sock` |
 | `DD_WATCHER_{watcher_name}_WATCHALL` | ⚪ | Include containers in **every** state (created, paused, exited, restarting, etc.) — not just running ones | `true`, `false` | `false` |
-| `DD_WATCHER_{watcher_name}_WATCHATSTART` (deprecated) | ⚪ | If drydock must check for image updates during startup | `true`, `false` | `true` if this watcher store is empty |
+| `DD_WATCHER_{watcher_name}_WATCHATSTART` (deprecated) | ⚪ | If drydock must check for image updates during startup | `true`, `false` | `true` |
 | `DD_WATCHER_{watcher_name}_WATCHBYDEFAULT` | ⚪ | Watch containers that don't have an explicit `dd.watch` label | `true`, `false` | `true` |
 | `DD_WATCHER_{watcher_name}_WATCHEVENTS` | ⚪ | If drydock must monitor docker events | `true`, `false` | `true` |
 | `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_*` | ⚪ | Shared per-image defaults (image match + include/exclude/transform/link/display/trigger/lookup) | See **Image Set Presets** section below | |
 
 `WATCHALL` and `WATCHBYDEFAULT` are independent and operate at different stages. `WATCHALL` controls **which container states** Docker returns (running-only vs all states). `WATCHBYDEFAULT` controls **whether unlabeled containers are watched** — the `dd.watch` label always takes precedence when set. See the [behavior matrix](#watchall--watchbydefault-behavior-matrix) below for details.
 
-<Callout type="warn">`DD_WATCHER_{watcher_name}_WATCHDIGEST` is deprecated and will be removed in a future release. Use the `dd.watch.digest` container label instead.</Callout>
+<Callout type="warn">`DD_WATCHER_{watcher_name}_WATCHDIGEST` is deprecated and will be removed in v1.6.0. Use the `dd.watch.digest` container label instead.</Callout>
 
 <Callout type="warn" title="Watcher frequency and registry rate limits">
 As of **v1.5.0-rc.21** the default cron is `0 */6 * * *` (every 6 hours), matching Diun and the broader 2026 community consensus for self-hosted update managers. Earlier RCs defaulted to `0 * * * *` (hourly); if you have an explicit hourly cron set via `DD_WATCHER_{watcher_name}_CRON` it is preserved. With 20+ watched containers and tag lists that paginate to thousands of entries (GHCR images can require 20+ paginated calls each), hourly polling can saturate anonymous Docker Hub limits (100 pulls / 6h) and trigger 429 responses. drydock additionally retries 429s with `Retry-After` honored and rate-limits its own outbound calls via a per-host token bucket. If you need near-real-time detection (security patches), drop the cron to `0 * * * *`; if you want even quieter polling, use `0 1 * * *` (once daily). New updates rarely ship more than once per day per image anyway.
@@ -1176,9 +1176,9 @@ Container lifecycle events (create, start, stop, destroy) that occur during the 
 
 A future release will wire the reconnect path to request events from the last-seen timestamp, closing this gap entirely.
 
-### Native socket proxy (roadmap)
+### Native socket proxy
 
-The root cause of proxy-timeout reconnects is that Drydock cannot control idle timeout behavior on third-party proxies. A purpose-built Drydock socket proxy is planned (see [roadmap](/docs/roadmap)) that will exempt event stream connections from idle timeouts, eliminating the reconnect cycle entirely.
+The root cause of proxy-timeout reconnects is that Drydock cannot control idle timeout behavior on third-party proxies. A purpose-built Drydock socket proxy is on the [roadmap](https://github.com/CodesWhat/drydock#roadmap).
 
 ### Reduce proxy-timeout reconnect churn
 

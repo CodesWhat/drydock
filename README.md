@@ -216,8 +216,8 @@ Fully interactive — real UI, mock data, no install required. Runs entirely in-
 Auto-detect running containers and check for image updates across registries
 </td>
 <td align="center" width="33%">
-<h3>20 Notification Triggers</h3>
-Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, HTTP webhooks, Gotify, NTFY, and more
+<h3>20 Triggers (17 Notification + 3 Action)</h3>
+Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, HTTP webhooks, Gotify, NTFY, and more — plus Docker, Docker Compose, and Command action triggers
 </td>
 <td align="center" width="33%">
 <h3>23 Registry Providers</h3>

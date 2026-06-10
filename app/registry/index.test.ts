@@ -1075,6 +1075,12 @@ test('init should prune local containers whose watcher no longer exists', async 
   watchers = {
     local: {},
   };
+  agents = {
+    'edge-agent': {
+      host: 'http://10.0.0.2:3000',
+      secret: 'mysecret',
+    },
+  };
   mockGetContainersRaw.mockReturnValue([
     {
       id: 'keep-local',
@@ -1088,6 +1094,7 @@ test('init should prune local containers whose watcher no longer exists', async 
       id: 'stale-missing-watcher',
     },
     {
+      // Kept because edge-agent IS registered
       id: 'keep-agent',
       watcher: 'legacy',
       agent: 'edge-agent',
@@ -1101,7 +1108,7 @@ test('init should prune local containers whose watcher no longer exists', async 
   expect(mockDeleteContainer).toHaveBeenCalledWith('stale-missing-watcher');
 });
 
-test('init should skip orphan pruning when no local watchers are registered', async () => {
+test('init should skip local orphan pruning when no local watchers are registered', async () => {
   watchers = {
     invalid: {
       fail: true,
@@ -1116,7 +1123,9 @@ test('init should skip orphan pruning when no local watchers are registered', as
 
   await registry.init();
 
-  expect(mockGetContainersRaw).not.toHaveBeenCalled();
+  // pruneOrphanedLocalContainers skips when no local watchers are registered
+  // (the stale-local container is not deleted)
+  expect(mockDeleteContainer).not.toHaveBeenCalled();
 });
 
 test('init should log and continue when orphan pruning fails', async () => {
@@ -1644,4 +1653,99 @@ test('registerWatchers in agent mode should exit when no watchers configured', a
   await registry.testable_registerWatchers({ agent: true });
   expect(exitSpy).toHaveBeenCalledWith(1);
   exitSpy.mockRestore();
+});
+
+test('pruneOrphanedAgentContainers should delete containers whose agent is no longer registered', async () => {
+  // Seed state with one registered agent named 'active-agent'
+  const activeAgentComponent = new Component();
+  await activeAgentComponent.register('agent', 'dd', 'active-agent', {});
+  registry.getState().agent[activeAgentComponent.getId()] = activeAgentComponent;
+
+  mockGetContainersRaw.mockReturnValue([
+    // Should be pruned — removed-agent is not registered
+    { id: 'ghost-1', agent: 'removed-agent', watcher: 'docker.w' },
+    // Should be kept — active-agent is registered
+    { id: 'keep-1', agent: 'active-agent', watcher: 'docker.w' },
+    // Should be kept — local container (no agent)
+    { id: 'keep-local', watcher: 'docker.w' },
+    // Should be kept — empty string agent treated as local
+    { id: 'keep-empty', agent: '', watcher: 'docker.w' },
+  ]);
+
+  registry.testable_pruneOrphanedAgentContainers();
+
+  expect(mockDeleteContainer).toHaveBeenCalledTimes(1);
+  expect(mockDeleteContainer).toHaveBeenCalledWith('ghost-1');
+});
+
+test('pruneOrphanedAgentContainers should preserve containers of registered-but-disconnected agents', async () => {
+  // Simulate a disconnected (still-registered) agent
+  const disconnectedAgentComponent = new Component();
+  await disconnectedAgentComponent.register('agent', 'dd', 'disconnected-agent', {});
+  registry.getState().agent[disconnectedAgentComponent.getId()] = disconnectedAgentComponent;
+
+  mockGetContainersRaw.mockReturnValue([
+    { id: 'keep-disconnected', agent: 'disconnected-agent', watcher: 'docker.w' },
+  ]);
+
+  registry.testable_pruneOrphanedAgentContainers();
+
+  expect(mockDeleteContainer).not.toHaveBeenCalled();
+});
+
+test('pruneOrphanedAgentContainers should not touch local containers (falsy agent)', async () => {
+  mockGetContainersRaw.mockReturnValue([
+    { id: 'local-1', watcher: 'docker.w' },
+    { id: 'local-2', agent: undefined, watcher: 'docker.w' },
+  ]);
+
+  registry.testable_pruneOrphanedAgentContainers();
+
+  expect(mockDeleteContainer).not.toHaveBeenCalled();
+});
+
+test('init should prune containers from removed agents after registerAgents', async () => {
+  agents = {
+    'current-agent': {
+      host: 'http://10.0.0.1:3000',
+      secret: 'mysecret',
+    },
+  };
+  // Only agent-owned rows — local pruning is a separate concern tested elsewhere
+  mockGetContainersRaw.mockReturnValue([
+    // Belongs to removed agent — should be pruned
+    { id: 'ghost-container', agent: 'old-agent', watcher: 'docker.w' },
+    // Belongs to newly registered agent — should be kept
+    { id: 'active-container', agent: 'current-agent', watcher: 'docker.w' },
+  ]);
+
+  await registry.init();
+
+  expect(mockDeleteContainer).toHaveBeenCalledTimes(1);
+  expect(mockDeleteContainer).toHaveBeenCalledWith('ghost-container');
+});
+
+test('init should log and continue when pruneOrphanedAgentContainers throws', async () => {
+  agents = {
+    node1: {
+      host: 'http://10.0.0.1:3000',
+      secret: 'mysecret',
+    },
+  };
+  // No local watchers configured, so pruneOrphanedLocalContainers returns early
+  // without calling getContainersRaw. The first getContainersRaw call is from
+  // pruneOrphanedAgentContainers — make it throw.
+  mockGetContainersRaw.mockImplementation(() => {
+    throw new Error('store unavailable');
+  });
+
+  const warnSpy = vi.spyOn(registry.testable_log, 'warn');
+  const debugSpy = vi.spyOn(registry.testable_log, 'debug');
+
+  await registry.init();
+
+  expect(warnSpy).toHaveBeenCalledWith(
+    'Unable to prune orphaned agent containers (store unavailable)',
+  );
+  expect(debugSpy).toHaveBeenCalled();
 });

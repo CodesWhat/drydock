@@ -461,6 +461,7 @@ function buildUpdateAppliedSsePayload(
   const candidateImageName = container?.image?.name;
   const imageName = typeof candidateImageName === 'string' ? candidateImageName : undefined;
   const operationId = (payload as ContainerUpdateAppliedEventPayload).operationId;
+  const newContainerId = (payload as ContainerUpdateAppliedEventPayload).newContainerId;
   // previousDigest/newDigest are intentionally null. The full container blob
   // (which carries digests) is stripped from this SSE payload by design — see
   // commit 60716ba9, which removed the digest extraction to mirror the agent-
@@ -476,6 +477,7 @@ function buildUpdateAppliedSsePayload(
     previousDigest: null,
     newDigest: null,
     batchId: (payload as ContainerUpdateAppliedEventPayload).batchId ?? null,
+    ...(typeof newContainerId === 'string' && newContainerId.length > 0 ? { newContainerId } : {}),
     timestamp: new Date().toISOString(),
   };
 }

@@ -21,20 +21,64 @@ export type UpgradeRequest = IncomingMessage & {
 };
 
 /**
- * Validates the Origin header against the Host header to prevent WebSocket CSRF.
+ * Returns true when the server configuration has trust proxy enabled.
+ * Mirrors the semantics used by isTrustProxyEnabled in auth.ts and by Express's
+ * "trust proxy" setting: numeric hops ≥ 1 are enabled, boolean true is enabled,
+ * any non-empty/non-false/non-zero string is enabled.
+ */
+export function isTrustProxyEnabled(serverConfiguration: Record<string, unknown>): boolean {
+  const trustproxy = serverConfiguration.trustproxy;
+  if (trustproxy === true) {
+    return true;
+  }
+  if (typeof trustproxy === 'number') {
+    return trustproxy > 0;
+  }
+  if (typeof trustproxy === 'string') {
+    const normalized = trustproxy.trim().toLowerCase();
+    return normalized !== '' && normalized !== '0' && normalized !== 'false';
+  }
+  return false;
+}
+
+function getFirstForwardedValue(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const firstValue = value
+    .split(',')
+    .map((candidate) => candidate.trim())
+    .find((candidate) => candidate.length > 0);
+  return firstValue || undefined;
+}
+
+/**
+ * Validates the Origin header against the effective Host to prevent WebSocket CSRF.
  * Browsers always send an Origin header on WebSocket upgrade requests, so a
  * browser request with a mismatched Origin indicates a cross-site connection
  * attempt. Non-browser clients (CLI tools, agents) typically omit Origin
  * entirely, which is allowed.
+ *
+ * When serverConfiguration has trust proxy enabled, the effective host is taken
+ * from the first value of X-Forwarded-Host (if present), falling back to the raw
+ * Host header.  When trust proxy is disabled the X-Forwarded-Host header is
+ * ignored entirely so a direct client cannot forge it to bypass the check.
  */
-export function isOriginAllowed(request: IncomingMessage): boolean {
+export function isOriginAllowed(
+  request: IncomingMessage,
+  serverConfiguration?: Record<string, unknown>,
+): boolean {
   const origin = request.headers.origin;
   if (origin === undefined) {
     return true;
   }
 
-  const host = request.headers.host;
-  if (!host) {
+  const trustProxy = serverConfiguration !== undefined && isTrustProxyEnabled(serverConfiguration);
+  const effectiveHost =
+    (trustProxy ? getFirstForwardedValue(request.headers['x-forwarded-host']) : undefined) ??
+    request.headers.host;
+
+  if (!effectiveHost) {
     return false;
   }
 
@@ -45,7 +89,7 @@ export function isOriginAllowed(request: IncomingMessage): boolean {
     return false;
   }
 
-  return originHost === host;
+  return originHost === effectiveHost;
 }
 
 export function writeUpgradeError(socket: Socket, statusCode: number, message: string): void {

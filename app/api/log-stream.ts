@@ -54,6 +54,7 @@ export interface SystemLogStreamGatewayDependencies {
   webSocketServer?: WebSocketServerLike;
   isRateLimited?: (key: string) => boolean;
   getRateLimitKey?: (request: UpgradeRequest, authenticated: boolean) => string;
+  serverConfiguration?: Record<string, unknown>;
   getBackfillEntries?: (options: {
     level?: string;
     component?: string;
@@ -204,6 +205,7 @@ export function createSystemLogStreamGateway(dependencies: SystemLogStreamGatewa
       return (key: string) => !limiter.consume(key);
     })(),
     getRateLimitKey = (request: UpgradeRequest) => getDefaultRateLimitKey(request),
+    serverConfiguration,
     getBackfillEntries = (options) => getEntries(options),
     subscribeToEntries = (listener) => onEntry(listener),
   } = dependencies;
@@ -215,7 +217,7 @@ export function createSystemLogStreamGateway(dependencies: SystemLogStreamGatewa
         return;
       }
 
-      if (!isOriginAllowed(request)) {
+      if (!isOriginAllowed(request, serverConfiguration)) {
         writeUpgradeError(socket, 403, 'Forbidden');
         return;
       }
@@ -275,6 +277,7 @@ export function attachSystemLogStreamWebSocketServer(options: {
     sessionMiddleware: options.sessionMiddleware,
     getRateLimitKey: createIdentityAwareUpgradeRateLimitKeyResolver(serverConfiguration),
     isRateLimited: options.isRateLimited,
+    serverConfiguration,
   });
 
   options.server.on('upgrade', (request, socket, head) => {

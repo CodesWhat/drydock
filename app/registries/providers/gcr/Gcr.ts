@@ -86,6 +86,9 @@ class Gcr extends BaseRegistry<GcrRegistryConfiguration> {
   }
 
   async getAuthPull() {
+    if (!this.configuration.clientemail || !this.configuration.privatekey) {
+      return undefined;
+    }
     return {
       username: this.configuration.clientemail,
       password: this.configuration.privatekey,

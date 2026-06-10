@@ -25,13 +25,29 @@ Lifecycle hooks let you run shell commands before or after a container is update
 
 <Callout type="info">Legacy `wud.hook.*` labels are still supported for backward compatibility. When used, drydock logs a one-time deprecation warning and records the fallback in `dd_legacy_input_total`. You can rewrite labels with `node dist/index.js config migrate`.</Callout>
 
-## Hook enablement
+## Hook enablement and allowlist
 
 | Env var | Required | Description | Supported values | Default |
 | --- | --- | --- | --- | --- |
 | `DD_HOOKS_ENABLED` | ⚪ | Enable execution of lifecycle hook labels (`dd.hook.*` / `wud.hook.*`) | `true`, `false` | `false` |
+| `DD_HOOKS_ALLOWED_COMMANDS` | ⚪ | Comma-separated list of allowed first-token binary names or paths | e.g. `curl,sh,/usr/local/bin/notify.sh` | (unset — see below) |
 
 <Callout type="warn">Hooks sourced from labels are skipped by default. Set `DD_HOOKS_ENABLED=true` to opt in.</Callout>
+
+<Callout type="warn">**Command allowlist (recommended):** When `DD_HOOKS_ENABLED=true` and `DD_HOOKS_ALLOWED_COMMANDS` is **not set**, drydock logs a one-time warning recommending you configure the allowlist. Any hook that passes the syntax validator runs. When `DD_HOOKS_ALLOWED_COMMANDS` **is set**, drydock checks the first token of each hook command against the list before executing. Hooks whose binary is not on the list are rejected with a clear error and never executed.</Callout>
+
+### Allowlist matching rules
+
+- **No slash in entry** (`curl`, `sh`): the basename of the hook command's first token is compared. `curl` matches both `curl` and `/usr/bin/curl`.
+- **Slash in entry** (`/usr/local/bin/notify.sh`): an exact full-path match is required. The basename alone is not sufficient.
+
+Example:
+
+```bash
+DD_HOOKS_ALLOWED_COMMANDS=curl,/usr/local/bin/notify.sh
+```
+
+This permits `curl https://…` and `/usr/local/bin/notify.sh`, but not `notify.sh` or `/other/path/curl`.
 
 ## Hook environment variables
 

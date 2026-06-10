@@ -19,12 +19,15 @@ The `http` trigger lets you send container update notifications via HTTP.
 | `DD_NOTIFICATION_HTTP_{trigger_name}_AUTH_PASSWORD` | ⚪ | The Auth user password if `BASIC` Auth is enabled | | |
 | `DD_NOTIFICATION_HTTP_{trigger_name}_AUTH_BEARER` | ⚪ | The Auth bearer token if `BEARER` Auth is enabled | | |
 | `DD_NOTIFICATION_HTTP_{trigger_name}_PROXY` | ⚪ | The HTTP Proxy | Valid `http` or `https` proxy URL | |
+| `DD_NOTIFICATION_HTTP_{trigger_name}_ALLOWMETADATA` | ⚪ | Allow requests to cloud metadata / link-local addresses | `true`, `false` | `false` |
 
 <Callout type="warn">HTTP trigger auth now fails closed. If `AUTH_TYPE=BASIC`, both `AUTH_USER` and `AUTH_PASSWORD` are required. If `AUTH_TYPE=BEARER`, `AUTH_BEARER` is required.</Callout>
 
 <Callout type="warn">The `PROXY` URL must use an `http://` or `https://` scheme. Any other scheme (e.g. `socks5://`) is rejected at configuration-validation time and prevents the trigger from registering.</Callout>
 
 <Callout type="info">HTTP requests have a 30-second timeout. If the remote server does not respond within 30 seconds, the trigger will fail.</Callout>
+
+<Callout type="info">**Metadata endpoint guard:** Before sending each request, the trigger resolves the target hostname and rejects any address in the cloud metadata / link-local ranges: `169.254.0.0/16` (IPv4, including the AWS IMDSv1 endpoint `169.254.169.254`), `fe80::/10` (IPv6 link-local), and `fd00:ec2::254` (AWS IMDSv2 IPv6). RFC-1918 private ranges (`10.x`, `172.16–31.x`, `192.168.x`) are **not** blocked — self-hosted webhook targets on your local network work normally. Set `ALLOWMETADATA=true` on a specific trigger if you have a legitimate need to reach a link-local address.</Callout>
 
 <Callout type="info">This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration).</Callout>
 

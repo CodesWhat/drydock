@@ -242,3 +242,24 @@ test('getAuthPull should return credentials', async () => {
     password: TEST_PRIVATE_KEY,
   });
 });
+
+test('getAuthPull should return undefined when clientemail is missing', async () => {
+  const gcrAnon = new Gcr();
+  gcrAnon.configuration = {};
+  const result = await gcrAnon.getAuthPull();
+  expect(result).toBeUndefined();
+});
+
+test('getAuthPull should return undefined when only privatekey is set', async () => {
+  const gcrPartial = new Gcr();
+  gcrPartial.configuration = { privatekey: TEST_PRIVATE_KEY };
+  const result = await gcrPartial.getAuthPull();
+  expect(result).toBeUndefined();
+});
+
+test('getAuthPull should return undefined when only clientemail is set', async () => {
+  const gcrPartial = new Gcr();
+  gcrPartial.configuration = { clientemail: TEST_CLIENT_EMAIL };
+  const result = await gcrPartial.getAuthPull();
+  expect(result).toBeUndefined();
+});

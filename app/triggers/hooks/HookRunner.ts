@@ -9,6 +9,12 @@ const HOOKS_DISABLED_MESSAGE =
 const INVALID_HOOK_COMMAND_MESSAGE =
   'Hook command contains unsupported shell syntax. Use a single command with arguments and optional $VAR expansions.';
 
+let hasLoggedAllowlistWarning = false;
+
+export function resetAllowlistWarningStateForTests() {
+  hasLoggedAllowlistWarning = false;
+}
+
 interface HookRunnerOptions {
   timeout?: number;
   env?: Record<string, string>;
@@ -27,6 +33,65 @@ type HookOutput = string | Buffer;
 
 function isHooksExecutionEnabled(): boolean {
   return process.env.DD_HOOKS_ENABLED?.trim().toLowerCase() === 'true';
+}
+
+/**
+ * Extract the first whitespace-delimited token from a hook command string.
+ * This is the binary/command name that will be executed.
+ */
+function extractCommandToken(command: string): string {
+  // trim() + split on whitespace always yields at least one element when called
+  // after isAllowedHookCommand validation (which rejects empty/ws-only input).
+  return command.trim().split(/\s+/)[0]!;
+}
+
+/**
+ * Check whether a hook command is permitted by DD_HOOKS_ALLOWED_COMMANDS.
+ *
+ * - When DD_HOOKS_ALLOWED_COMMANDS is UNSET: all commands are permitted (logs
+ *   a one-time warning recommending the allowlist).
+ * - When DD_HOOKS_ALLOWED_COMMANDS is SET: the first token of the command must
+ *   match an entry. For entries containing '/', an exact match is required.
+ *   For entries without '/', the basename of the first token is compared.
+ *
+ * Returns null if allowed, or an error message string if denied.
+ */
+function checkAllowedCommand(command: string, hookLog: HookLogger): string | null {
+  const rawAllowlist = process.env.DD_HOOKS_ALLOWED_COMMANDS;
+
+  if (rawAllowlist === undefined || rawAllowlist.trim() === '') {
+    if (!hasLoggedAllowlistWarning) {
+      hasLoggedAllowlistWarning = true;
+      hookLog.warn(
+        'DD_HOOKS_ALLOWED_COMMANDS is not set. Set it to a comma-separated list of allowed command names to restrict which binaries hook labels can invoke.',
+      );
+    }
+    return null;
+  }
+
+  const allowedEntries = rawAllowlist
+    .split(',')
+    .map((e) => e.trim())
+    .filter(Boolean);
+
+  const firstToken = extractCommandToken(command);
+
+  for (const entry of allowedEntries) {
+    if (entry.includes('/')) {
+      // Path entry: require exact match
+      if (firstToken === entry) {
+        return null;
+      }
+    } else {
+      // Name entry: basename match
+      const tokenBasename = firstToken.includes('/') ? firstToken.split('/').pop()! : firstToken;
+      if (tokenBasename === entry) {
+        return null;
+      }
+    }
+  }
+
+  return `Hook command "${firstToken}" is not in DD_HOOKS_ALLOWED_COMMANDS allowlist`;
 }
 
 function isTimedOut(error: NodeJS.ErrnoException | null): boolean {
@@ -246,6 +311,18 @@ export async function runHook(command: string, options: HookRunnerOptions): Prom
       exitCode: 1,
       stdout: '',
       stderr: INVALID_HOOK_COMMAND_MESSAGE,
+      timedOut: false,
+    };
+    logHookResult(hookLog, options.label, timeout, result);
+    return result;
+  }
+
+  const allowlistError = checkAllowedCommand(command, hookLog);
+  if (allowlistError !== null) {
+    const result = {
+      exitCode: 1,
+      stdout: '',
+      stderr: allowlistError,
       timedOut: false,
     };
     logHookResult(hookLog, options.label, timeout, result);

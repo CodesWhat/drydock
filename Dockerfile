@@ -28,13 +28,13 @@ RUN apk add --no-cache \
     curl \
     git=2.52.0-r0 \
     jq=1.8.1-r0 \
-    openssl=3.5.6-r0 \
+    openssl=3.5.7-r0 \
     su-exec=0.3-r0 \
     tini=0.19.0-r3 \
     tzdata=2026b-r0 \
     && apk add --no-cache cosign=2.6.3-r1 \
     && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing trivy \
-    && apk upgrade --no-cache zlib \
+    && apk upgrade --no-cache zlib libcrypto3 libssl3 \
     && mkdir /store && chown node:node /store
 
 # Build stage for healthcheck binary (~65KB static binary)

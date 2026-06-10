@@ -44,6 +44,17 @@ type BearerChallengeAuthOptions = {
 class RegistryCredentialRejectedError extends Error {}
 
 /**
+ * Pre-compiled RE2 pattern for `getRejectedCredentialStatus`.
+ * The status codes are substituted at call time via string interpolation;
+ * only the outer pattern is constant and compiled once at module load.
+ * When the set of candidate statuses changes we rebuild, but the common
+ * case (default [401, 403]) is captured by a dedicated module-level constant.
+ */
+const REJECTED_CREDENTIAL_DEFAULT_PATTERN = RE2JS.compile(
+  'token request failed \\(Request failed with status code (401|403)\\)',
+);
+
+/**
  * Base Registry with common patterns
  */
 class BaseRegistry<
@@ -495,11 +506,18 @@ class BaseRegistry<
       return undefined;
     }
 
-    const allowedStatuses = rejectedCredentialStatuses.join('|');
-    const rejectedStatusPattern = RE2JS.compile(
-      `token request failed \\(Request failed with status code (${allowedStatuses})\\)`,
-    );
-    const match = rejectedStatusPattern.matcher(error.message);
+    const defaultStatuses = [401, 403];
+    const isDefault =
+      rejectedCredentialStatuses.length === defaultStatuses.length &&
+      rejectedCredentialStatuses.every((s, i) => s === defaultStatuses[i]);
+
+    const pattern = isDefault
+      ? REJECTED_CREDENTIAL_DEFAULT_PATTERN
+      : RE2JS.compile(
+          `token request failed \\(Request failed with status code (${rejectedCredentialStatuses.join('|')})\\)`,
+        );
+
+    const match = pattern.matcher(error.message);
     return match.find() ? match.group(1) : undefined;
   }
 

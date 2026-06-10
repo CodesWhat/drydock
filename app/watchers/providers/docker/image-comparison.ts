@@ -178,7 +178,13 @@ function pickRegistryProvider(image: ContainerImage): Registry | undefined {
 }
 
 export function normalizeContainer(container: Container) {
-  const containerWithNormalizedImage = structuredClone(container);
+  const containerWithNormalizedImage = {
+    ...container,
+    image: {
+      ...container.image,
+      registry: { ...container.image.registry },
+    },
+  };
   const imageForMatching = getImageForRegistryLookup(containerWithNormalizedImage.image);
   const registryProvider = pickRegistryProvider(imageForMatching);
   if (registryProvider) {
@@ -232,10 +238,13 @@ async function handleDigestWatch(
   tagsCandidates: string[],
   result: ContainerResult,
 ) {
-  const imageToGetDigestFrom = structuredClone(container.image);
-  if (tagsCandidates.length > 0) {
-    [imageToGetDigestFrom.tag.value] = tagsCandidates;
-  }
+  const imageToGetDigestFrom =
+    tagsCandidates.length > 0
+      ? {
+          ...container.image,
+          tag: { ...container.image.tag, value: tagsCandidates[0] },
+        }
+      : container.image;
 
   const queryImage = getImageForRegistryQuery(imageToGetDigestFrom, registryProvider);
   const remoteDigest = await registryProvider.getImageManifestDigest(queryImage);

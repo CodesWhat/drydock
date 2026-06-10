@@ -154,6 +154,147 @@ describe('api/log-stream', () => {
       expect(socket.destroy).toHaveBeenCalledTimes(1);
     });
 
+    test('rejects when trust proxy is off and X-Forwarded-Host is forged to match origin', async () => {
+      const gateway = createSystemLogStreamGateway({
+        sessionMiddleware: authenticatingSessionMiddleware,
+        webSocketServer: { handleUpgrade: vi.fn() },
+        serverConfiguration: { trustproxy: false },
+      });
+      const socket = createUpgradeSocket();
+
+      await gateway.handleUpgrade(
+        {
+          url: '/api/v1/log/stream',
+          headers: {
+            origin: 'https://attacker.com',
+            host: 'localhost:3000',
+            'x-forwarded-host': 'attacker.com',
+          },
+          socket: { remoteAddress: '127.0.0.1' },
+        } as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+
+      expect(socket.write).toHaveBeenCalledWith(expect.stringContaining('403 Forbidden'));
+    });
+
+    test('allows when trust proxy is on and X-Forwarded-Host matches https Origin', async () => {
+      const mockHandleUpgrade = vi.fn(
+        (_req: unknown, _socket: unknown, _head: unknown, callback: (ws: unknown) => void) => {
+          const ws = {
+            on: vi.fn((event: string, listener: () => void) => {
+              if (event === 'close') listener();
+            }),
+            off: vi.fn(),
+            send: vi.fn(),
+            close: vi.fn(),
+          };
+          callback(ws);
+        },
+      );
+      const gateway = createSystemLogStreamGateway({
+        sessionMiddleware: authenticatingSessionMiddleware,
+        webSocketServer: { handleUpgrade: mockHandleUpgrade },
+        serverConfiguration: { trustproxy: 1 },
+      });
+      const socket = createUpgradeSocket();
+
+      await gateway.handleUpgrade(
+        {
+          url: '/api/v1/log/stream',
+          headers: {
+            origin: 'https://drydock.example.com',
+            host: '10.0.0.1:3000',
+            'x-forwarded-host': 'drydock.example.com',
+          },
+          socket: { remoteAddress: '127.0.0.1' },
+        } as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+
+      expect(socket.write).not.toHaveBeenCalledWith(expect.stringContaining('403'));
+      expect(mockHandleUpgrade).toHaveBeenCalledTimes(1);
+    });
+
+    test('takes first entry from comma-separated X-Forwarded-Host list', async () => {
+      const mockHandleUpgrade = vi.fn(
+        (_req: unknown, _socket: unknown, _head: unknown, callback: (ws: unknown) => void) => {
+          const ws = {
+            on: vi.fn((event: string, listener: () => void) => {
+              if (event === 'close') listener();
+            }),
+            off: vi.fn(),
+            send: vi.fn(),
+            close: vi.fn(),
+          };
+          callback(ws);
+        },
+      );
+      const gateway = createSystemLogStreamGateway({
+        sessionMiddleware: authenticatingSessionMiddleware,
+        webSocketServer: { handleUpgrade: mockHandleUpgrade },
+        serverConfiguration: { trustproxy: 1 },
+      });
+      const socket = createUpgradeSocket();
+
+      await gateway.handleUpgrade(
+        {
+          url: '/api/v1/log/stream',
+          headers: {
+            origin: 'https://drydock.example.com',
+            host: '10.0.0.1:3000',
+            'x-forwarded-host': 'drydock.example.com, other.example.com',
+          },
+          socket: { remoteAddress: '127.0.0.1' },
+        } as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+
+      expect(socket.write).not.toHaveBeenCalledWith(expect.stringContaining('403'));
+      expect(mockHandleUpgrade).toHaveBeenCalledTimes(1);
+    });
+
+    test('falls back to raw Host when trust proxy is on but X-Forwarded-Host is absent', async () => {
+      const mockHandleUpgrade = vi.fn(
+        (_req: unknown, _socket: unknown, _head: unknown, callback: (ws: unknown) => void) => {
+          const ws = {
+            on: vi.fn((event: string, listener: () => void) => {
+              if (event === 'close') listener();
+            }),
+            off: vi.fn(),
+            send: vi.fn(),
+            close: vi.fn(),
+          };
+          callback(ws);
+        },
+      );
+      const gateway = createSystemLogStreamGateway({
+        sessionMiddleware: authenticatingSessionMiddleware,
+        webSocketServer: { handleUpgrade: mockHandleUpgrade },
+        serverConfiguration: { trustproxy: 1 },
+      });
+      const socket = createUpgradeSocket();
+
+      await gateway.handleUpgrade(
+        {
+          url: '/api/v1/log/stream',
+          headers: {
+            origin: 'http://localhost:3000',
+            host: 'localhost:3000',
+          },
+          socket: { remoteAddress: '127.0.0.1' },
+        } as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+
+      expect(socket.write).not.toHaveBeenCalledWith(expect.stringContaining('403'));
+      expect(mockHandleUpgrade).toHaveBeenCalledTimes(1);
+    });
+
     test('allows upgrade when Origin matches Host', async () => {
       const mockHandleUpgrade = vi.fn(
         (_req: unknown, _socket: unknown, _head: unknown, callback: (ws: unknown) => void) => {

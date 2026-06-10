@@ -596,7 +596,9 @@ test('authenticateBearerFromAuthUrlWithPublicFallback should throw actionable er
   expect(authenticateSpy).toHaveBeenCalledTimes(1);
 });
 
-test('getRejectedCredentialStatus should use RE2JS for status matching', () => {
+test('getRejectedCredentialStatus should return matched status using module-level compiled pattern', () => {
+  // Default statuses [401, 403] use a module-level pre-compiled RE2 pattern —
+  // RE2JS.compile is NOT invoked at call time for the common case.
   const compileSpy = vi.spyOn(RE2JS, 'compile');
 
   try {
@@ -605,8 +607,34 @@ test('getRejectedCredentialStatus should use RE2JS for status matching', () => {
         new Error('token request failed (Request failed with status code 403)'),
       ),
     ).toBe('403');
+    expect(
+      (baseRegistry as any).getRejectedCredentialStatus(
+        new Error('token request failed (Request failed with status code 401)'),
+      ),
+    ).toBe('401');
+    // The default path must not compile a new pattern on each invocation
+    expect(compileSpy).not.toHaveBeenCalled();
+  } finally {
+    compileSpy.mockRestore();
+  }
+});
+
+test('getRejectedCredentialStatus compiles a new RE2 pattern for custom status lists', () => {
+  const compileSpy = vi
+    .spyOn(RE2JS, 'compile')
+    .mockReturnValue(
+      RE2JS.compile('token request failed \\(Request failed with status code (429)\\)'),
+    );
+
+  try {
+    expect(
+      (baseRegistry as any).getRejectedCredentialStatus(
+        new Error('token request failed (Request failed with status code 429)'),
+        [429],
+      ),
+    ).toBe('429');
     expect(compileSpy).toHaveBeenCalledWith(
-      'token request failed \\(Request failed with status code (401|403)\\)',
+      'token request failed \\(Request failed with status code (429)\\)',
     );
   } finally {
     compileSpy.mockRestore();
