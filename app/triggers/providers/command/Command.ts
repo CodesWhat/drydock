@@ -8,10 +8,29 @@ let hasLoggedShellExecutionWarning = false;
 const SHELL_UNSAFE_ENV_CHARACTERS = new Set(['`', '$', ';', '&', '|', '<', '>', '(', ')']);
 const DELETE_CONTROL_CODE_POINT = 0x7f;
 
+/**
+ * Allowlisted keys inherited from the parent process environment.
+ * DD_* variables are intentionally excluded to prevent credential leakage.
+ * Use the `env` config option to pass specific additional keys.
+ */
+const COMMAND_ENV_ALLOWLIST = new Set([
+  'HOME',
+  'LANG',
+  'LC_ALL',
+  'PATH',
+  'SHELL',
+  'TEMP',
+  'TMP',
+  'TMPDIR',
+  'TZ',
+  'USER',
+]);
+
 interface CommandConfiguration extends TriggerConfiguration {
   cmd: string;
   shell: string;
   timeout: number;
+  env: string[];
 }
 
 function sanitizeCommandEnvString(value: string) {
@@ -80,6 +99,18 @@ class Command extends Trigger<CommandConfiguration> {
       cmd: this.joi.string().required(),
       shell: this.joi.string().default('/bin/sh'),
       timeout: this.joi.number().min(0).default(60000),
+      env: this.joi
+        .alternatives()
+        .try(
+          this.joi.string().custom((value: string) =>
+            value
+              .split(',')
+              .map((k) => k.trim())
+              .filter(Boolean),
+          ),
+          this.joi.array().items(this.joi.string()),
+        )
+        .default([]),
     });
   }
 
@@ -111,15 +142,43 @@ class Command extends Trigger<CommandConfiguration> {
   }
 
   /**
+   * Build the child process environment from an explicit allowlist.
+   *
+   * Only keys in COMMAND_ENV_ALLOWLIST and any keys named in the `env` config
+   * option are inherited from the parent process. DD_* secrets are excluded by
+   * default to prevent credential leakage to user-authored scripts.
+   */
+  private buildCommandEnvironment(
+    extraEnvVars: Record<string, string | undefined>,
+  ): Record<string, string | undefined> {
+    const env: Record<string, string | undefined> = {};
+
+    // Inherit allowlisted standard keys from parent process
+    for (const key of COMMAND_ENV_ALLOWLIST) {
+      if (Object.hasOwn(process.env, key) && process.env[key] !== undefined) {
+        env[key] = process.env[key];
+      }
+    }
+
+    // Inherit user-configured extra keys (always an array after Joi defaults it to [])
+    for (const key of this.configuration.env) {
+      if (Object.hasOwn(process.env, key) && process.env[key] !== undefined) {
+        env[key] = process.env[key];
+      }
+    }
+
+    // Drydock-provided container variables override everything
+    return { ...env, ...extraEnvVars };
+  }
+
+  /**
    * Run the command.
    *
-   * Security note: the subprocess inherits the full drydock process environment
-   * via `...process.env`, including every `DD_*` variable (registry passwords,
-   * OIDC client secrets, agent tokens, etc.). This is intentional — user scripts
-   * need `PATH`, `HOME`, and other standard variables to function — but it means
-   * any command executed here can read all drydock credentials. Only point this
-   * trigger at trusted scripts. See docs/configuration/triggers/command for
-   * guidance. Filtering `process.env` to an allowlist is planned for v1.7.0.
+   * The subprocess receives only a restricted set of process environment
+   * variables (PATH, HOME, TMPDIR, etc.) plus all drydock-provided container
+   * variables. DD_* secrets (registry tokens, agent tokens, etc.) are excluded
+   * by default. Use the `env` config option to pass specific additional keys
+   * from the parent environment.
    *
    * @param {*} extraEnvVars
    */
@@ -127,10 +186,7 @@ class Command extends Trigger<CommandConfiguration> {
     this.logShellExecutionWarningOnce();
 
     const commandOptions = {
-      env: {
-        ...process.env,
-        ...sanitizeCommandEnvVars(extraEnvVars),
-      },
+      env: this.buildCommandEnvironment(sanitizeCommandEnvVars(extraEnvVars)),
       timeout: this.configuration.timeout,
     };
     try {

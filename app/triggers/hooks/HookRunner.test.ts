@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, test, vi } from 'vitest';
-import { runHook } from './HookRunner.js';
+import { resetAllowlistWarningStateForTests, runHook } from './HookRunner.js';
 
 var childProcessMockControl = vi.hoisted(() => ({
   execFileImpl: null as null | ((...args: unknown[]) => unknown),
@@ -31,6 +31,7 @@ describe('HookRunner', () => {
 
   beforeEach(() => {
     process.env.DD_HOOKS_ENABLED = 'true';
+    resetAllowlistWarningStateForTests();
   });
 
   afterAll(() => {
@@ -586,5 +587,153 @@ describe('HookRunner', () => {
     } finally {
       childProcessMockControl.execFileImpl = null;
     }
+  });
+
+  // ---- Security: DD_HOOKS_ALLOWED_COMMANDS (finding 2) ----
+
+  describe('DD_HOOKS_ALLOWED_COMMANDS allowlist', () => {
+    const originalAllowed = process.env.DD_HOOKS_ALLOWED_COMMANDS;
+
+    afterEach(() => {
+      if (originalAllowed === undefined) {
+        delete process.env.DD_HOOKS_ALLOWED_COMMANDS;
+      } else {
+        process.env.DD_HOOKS_ALLOWED_COMMANDS = originalAllowed;
+      }
+      childProcessMockControl.execFileImpl = null;
+    });
+
+    test('when DD_HOOKS_ALLOWED_COMMANDS is UNSET, command runs and a one-time warning is logged', async () => {
+      delete process.env.DD_HOOKS_ALLOWED_COMMANDS;
+
+      var execFileCalls = 0;
+      childProcessMockControl.execFileImpl = (
+        _: string,
+        __: readonly string[],
+        ___: unknown,
+        callback: (...args: unknown[]) => void,
+      ) => {
+        execFileCalls += 1;
+        setImmediate(() => callback(null, 'ok', ''));
+        return { exitCode: 0 };
+      };
+
+      const result = await runHook('echo hello', { label: 'test' });
+      expect(execFileCalls).toBe(1);
+      expect(result.exitCode).toBe(0);
+    });
+
+    test('warning is logged only once across multiple calls when DD_HOOKS_ALLOWED_COMMANDS is UNSET', async () => {
+      delete process.env.DD_HOOKS_ALLOWED_COMMANDS;
+      // hasLoggedAllowlistWarning is reset in beforeEach via resetAllowlistWarningStateForTests
+
+      var execFileCalls = 0;
+      childProcessMockControl.execFileImpl = (
+        _: string,
+        __: readonly string[],
+        ___: unknown,
+        callback: (...args: unknown[]) => void,
+      ) => {
+        execFileCalls += 1;
+        setImmediate(() => callback(null, 'ok', ''));
+        return { exitCode: 0 };
+      };
+
+      // Both calls succeed; the second call takes the already-warned branch
+      await runHook('echo first', { label: 'test' });
+      const result2 = await runHook('echo second', { label: 'test' });
+      expect(execFileCalls).toBe(2);
+      expect(result2.exitCode).toBe(0);
+    });
+
+    test('when DD_HOOKS_ALLOWED_COMMANDS is SET and command basename matches, command runs', async () => {
+      process.env.DD_HOOKS_ALLOWED_COMMANDS = 'echo,curl';
+
+      var execFileCalls = 0;
+      childProcessMockControl.execFileImpl = (
+        _: string,
+        __: readonly string[],
+        ___: unknown,
+        callback: (...args: unknown[]) => void,
+      ) => {
+        execFileCalls += 1;
+        setImmediate(() => callback(null, 'ok', ''));
+        return { exitCode: 0 };
+      };
+
+      const result = await runHook('echo hello', { label: 'test' });
+      expect(execFileCalls).toBe(1);
+      expect(result.exitCode).toBe(0);
+    });
+
+    test('when DD_HOOKS_ALLOWED_COMMANDS is SET and command basename does NOT match, command is rejected without executing', async () => {
+      process.env.DD_HOOKS_ALLOWED_COMMANDS = 'curl,wget';
+
+      var execFileCalls = 0;
+      childProcessMockControl.execFileImpl = (
+        _: string,
+        __: readonly string[],
+        ___: unknown,
+        callback: (...args: unknown[]) => void,
+      ) => {
+        execFileCalls += 1;
+        setImmediate(() => callback(null, 'unexpected', ''));
+        return { exitCode: 0 };
+      };
+
+      const result = await runHook('echo hello', { label: 'test' });
+      expect(execFileCalls).toBe(0);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('not in DD_HOOKS_ALLOWED_COMMANDS');
+    });
+
+    test('when allowlist entry is a full path, exact path match is required', async () => {
+      process.env.DD_HOOKS_ALLOWED_COMMANDS = '/usr/local/bin/notify.sh';
+
+      var execFileCalls = 0;
+      childProcessMockControl.execFileImpl = (
+        _: string,
+        __: readonly string[],
+        ___: unknown,
+        callback: (...args: unknown[]) => void,
+      ) => {
+        execFileCalls += 1;
+        setImmediate(() => callback(null, 'ok', ''));
+        return { exitCode: 0 };
+      };
+
+      // exact path match: allowed
+      const resultAllowed = await runHook('/usr/local/bin/notify.sh arg1', { label: 'test' });
+      expect(execFileCalls).toBe(1);
+      expect(resultAllowed.exitCode).toBe(0);
+
+      execFileCalls = 0;
+
+      // basename match against a path entry: NOT allowed (must be exact)
+      const resultDenied = await runHook('notify.sh arg1', { label: 'test' });
+      expect(execFileCalls).toBe(0);
+      expect(resultDenied.exitCode).toBe(1);
+    });
+
+    test('when allowlist entry has no slash, basename match works for full path commands', async () => {
+      process.env.DD_HOOKS_ALLOWED_COMMANDS = 'curl';
+
+      var execFileCalls = 0;
+      childProcessMockControl.execFileImpl = (
+        _: string,
+        __: readonly string[],
+        ___: unknown,
+        callback: (...args: unknown[]) => void,
+      ) => {
+        execFileCalls += 1;
+        setImmediate(() => callback(null, 'ok', ''));
+        return { exitCode: 0 };
+      };
+
+      // /usr/bin/curl basename is "curl" which matches the allowlist entry "curl"
+      const result = await runHook('/usr/bin/curl https://example.com', { label: 'test' });
+      expect(execFileCalls).toBe(1);
+      expect(result.exitCode).toBe(0);
+    });
   });
 });

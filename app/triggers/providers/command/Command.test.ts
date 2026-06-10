@@ -45,6 +45,7 @@ const configurationValid = {
   cmd: 'echo "hello"',
   timeout: 60000,
   shell: '/bin/sh',
+  env: [],
   threshold: 'all',
   mode: 'simple',
   once: true,
@@ -376,4 +377,197 @@ test('runCommand should coerce non-string stdout/stderr values to empty strings'
 
   expect(logInfoSpy).not.toHaveBeenCalledWith(expect.stringContaining('stdout'));
   expect(logWarnSpy).not.toHaveBeenCalledWith(expect.stringContaining('stderr'));
+});
+
+// ---- Security: env isolation (finding 1) ----
+
+test('env isolation: DD_* secrets are NOT present in the child env by default', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: 'echo test' });
+
+  const originalSecret = process.env.DD_REGISTRY_HUB_PASSWORD;
+  process.env.DD_REGISTRY_HUB_PASSWORD = 'super-secret-token';
+
+  let capturedEnv: Record<string, string | undefined> | undefined;
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    onCall: (_file, _args, options) => {
+      capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    },
+  });
+
+  try {
+    await cmd.trigger({ name: 'test' });
+    expect(capturedEnv?.DD_REGISTRY_HUB_PASSWORD).toBeUndefined();
+  } finally {
+    if (originalSecret === undefined) {
+      delete process.env.DD_REGISTRY_HUB_PASSWORD;
+    } else {
+      process.env.DD_REGISTRY_HUB_PASSWORD = originalSecret;
+    }
+    childProcessMockControl.execFileImpl = null;
+  }
+});
+
+test('env isolation: PATH is present in the child env', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: 'echo test' });
+
+  const originalPath = process.env.PATH;
+  process.env.PATH = '/usr/local/bin:/usr/bin:/bin';
+
+  let capturedEnv: Record<string, string | undefined> | undefined;
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    onCall: (_file, _args, options) => {
+      capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    },
+  });
+
+  try {
+    await cmd.trigger({ name: 'test' });
+    expect(capturedEnv?.PATH).toBe('/usr/local/bin:/usr/bin:/bin');
+  } finally {
+    if (originalPath === undefined) {
+      delete process.env.PATH;
+    } else {
+      process.env.PATH = originalPath;
+    }
+    childProcessMockControl.execFileImpl = null;
+  }
+});
+
+test('env isolation: drydock container variables (name, image_name, etc.) are present', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: 'echo test' });
+
+  let capturedEnv: Record<string, string | undefined> | undefined;
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    onCall: (_file, _args, options) => {
+      capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    },
+  });
+
+  try {
+    await cmd.trigger({
+      name: 'mycontainer',
+      id: 'abc123',
+      image: {
+        name: 'library/nginx',
+        tag: { value: '1.25.0', semver: true },
+        registry: { name: 'hub', url: 'https://registry.example.test' },
+        digest: { watch: false },
+        architecture: 'amd64',
+        os: 'linux',
+      },
+    });
+    expect(capturedEnv?.name).toBe('mycontainer');
+    expect(capturedEnv?.id).toBe('abc123');
+    expect(capturedEnv?.image_name).toBe('library/nginx');
+    expect(capturedEnv?.image_tag_value).toBe('1.25.0');
+    expect(capturedEnv?.container_json).toBeDefined();
+  } finally {
+    childProcessMockControl.execFileImpl = null;
+  }
+});
+
+test('env isolation: extra env keys configured via env option pass through', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', {
+    cmd: 'echo test',
+    env: 'MY_CUSTOM_VAR,ANOTHER_VAR',
+  });
+
+  const originalCustom = process.env.MY_CUSTOM_VAR;
+  const originalAnother = process.env.ANOTHER_VAR;
+  const originalSecret = process.env.DD_SECRET_TOKEN;
+  process.env.MY_CUSTOM_VAR = 'custom-value';
+  process.env.ANOTHER_VAR = 'another-value';
+  process.env.DD_SECRET_TOKEN = 'should-not-leak';
+
+  let capturedEnv: Record<string, string | undefined> | undefined;
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    onCall: (_file, _args, options) => {
+      capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    },
+  });
+
+  try {
+    await cmd.trigger({ name: 'test' });
+    expect(capturedEnv?.MY_CUSTOM_VAR).toBe('custom-value');
+    expect(capturedEnv?.ANOTHER_VAR).toBe('another-value');
+    expect(capturedEnv?.DD_SECRET_TOKEN).toBeUndefined();
+  } finally {
+    if (originalCustom === undefined) delete process.env.MY_CUSTOM_VAR;
+    else process.env.MY_CUSTOM_VAR = originalCustom;
+    if (originalAnother === undefined) delete process.env.ANOTHER_VAR;
+    else process.env.ANOTHER_VAR = originalAnother;
+    if (originalSecret === undefined) delete process.env.DD_SECRET_TOKEN;
+    else process.env.DD_SECRET_TOKEN = originalSecret;
+    childProcessMockControl.execFileImpl = null;
+  }
+});
+
+test('env isolation: extra env key that is not set in process.env is silently ignored', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', {
+    cmd: 'echo test',
+    env: 'NONEXISTENT_VAR_XYZ',
+  });
+
+  delete process.env.NONEXISTENT_VAR_XYZ;
+
+  let capturedEnv: Record<string, string | undefined> | undefined;
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    onCall: (_file, _args, options) => {
+      capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    },
+  });
+
+  try {
+    await cmd.trigger({ name: 'test' });
+    expect(capturedEnv?.NONEXISTENT_VAR_XYZ).toBeUndefined();
+  } finally {
+    childProcessMockControl.execFileImpl = null;
+  }
+});
+
+test('env isolation: env option accepts an array of key names', async () => {
+  const cmd = new Command();
+  await cmd.register('trigger', 'command', 'test', { cmd: 'echo test', env: ['MY_ARR_VAR'] });
+
+  const originalVal = process.env.MY_ARR_VAR;
+  process.env.MY_ARR_VAR = 'array-value';
+
+  let capturedEnv: Record<string, string | undefined> | undefined;
+  childProcessMockControl.execFileImpl = createChildProcessCallbackMock({
+    onCall: (_file, _args, options) => {
+      capturedEnv = (options as { env?: Record<string, string | undefined> }).env;
+    },
+  });
+
+  try {
+    await cmd.trigger({ name: 'test' });
+    expect(capturedEnv?.MY_ARR_VAR).toBe('array-value');
+  } finally {
+    if (originalVal === undefined) delete process.env.MY_ARR_VAR;
+    else process.env.MY_ARR_VAR = originalVal;
+    childProcessMockControl.execFileImpl = null;
+  }
+});
+
+test('validateConfiguration accepts env as comma-separated string', () => {
+  const cmd = new Command();
+  const result = cmd.validateConfiguration({ cmd: 'echo test', env: 'VAR1,VAR2' });
+  expect(result.env).toStrictEqual(['VAR1', 'VAR2']);
+});
+
+test('validateConfiguration accepts env as array', () => {
+  const cmd = new Command();
+  const result = cmd.validateConfiguration({ cmd: 'echo test', env: ['VAR1', 'VAR2'] });
+  expect(result.env).toStrictEqual(['VAR1', 'VAR2']);
+});
+
+test('validateConfiguration defaults env to empty array when not set', () => {
+  const cmd = new Command();
+  const result = cmd.validateConfiguration({ cmd: 'echo test' });
+  expect(result.env).toStrictEqual([]);
 });
