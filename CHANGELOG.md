@@ -10,6 +10,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **False "update failed" notification when concurrent update requests race ([#421](https://github.com/CodesWhat/drydock/issues/421)).** When a duplicate update request was rejected with HTTP 409 ("update already in progress") while the winning update was still in flight, the controller classified the conflict as a genuine failure — firing an "update failed" notification immediately followed by "updated successfully". The duplicate classifier now recognizes three benign signals instead of one: a recently-succeeded operation (as before), a 409 response whose body explicitly carries the active-update lock message ("Container update already queued/in progress" — authoritative even before the winner's state has propagated from a remote agent over SSE), and another active (queued or in-progress) operation for the same container and agent+watcher identity. The same reclassification now also covers the Docker-native rename path in `ContainerUpdateExecutor`, which previously marked the duplicate failed before the outer classifier could run.
+
+- **Update operations could hang in-progress forever when deferred rollback reconciliation failed.** The deferred reconciliation callback only logged a warning on error, leaving the operation permanently active and blocking all future updates for that container until restart. The operation is now terminalized as failed (self-update and already-terminal operations excluded, as elsewhere).
+
+- **Spurious "update available" notifications around just-updated containers ([#408](https://github.com/CodesWhat/drydock/issues/408) hardening).** Three escape hatches in the post-update suppression mechanism are closed: suppression now keys on both the container ID and the watcher-scoped name, so the recreated container's new Docker ID can no longer dodge the check; the batch retry buffer consults suppression before re-queuing; and on startup the suppression set is re-seeded from update operations that succeeded within the last hour, so a controller restart between an update and the watcher's confirming scan no longer re-fires a stale notification. Suppression entries now also expire after one hour and are cleared on trigger deregistration, so containers deleted outright (or agents that never reconnect) can no longer leak entries for the life of the process.
+
+- **Live log viewer returned 403 behind TLS-terminating reverse proxies even with `DD_SERVER_TRUSTPROXY` set.** WebSocket upgrades bypass Express, so the log-stream origin check never honored trust-proxy. It now compares the browser origin against `X-Forwarded-Host`/`X-Forwarded-Proto` (first hop) when trust proxy is enabled — and remains byte-for-byte strict when it is not.
+
+- **Containers of permanently removed agents lingered in the store forever.** Startup now prunes container rows whose `agent` no longer matches any registered agent component. Rows of registered-but-currently-disconnected agents are untouched.
+
+- **"Updated successfully" toast fired while the new container was still starting ([#290](https://github.com/CodesWhat/drydock/issues/290) follow-up).** The toast settled on the *old* container's removal event during a recreate; it now waits for the replacement container's arrival (`replacementExpected` removals are skipped, and the new container's ID rides the `dd:update-applied` payload as `newContainerId`), closing the status gap between the last update activity and the success notification. The toast dedup TTL also gained a 20% margin over the server's SSE replay buffer to prevent a boundary duplicate on reconnect.
+
+- **Watcher enrichment failures that threw non-Error values leaked malformed entries into the container snapshot.** Thrown non-Error values are now wrapped, counted as enrichment errors, and excluded.
+
+- **GCR registry reported anonymous configurations as authenticated.** `Gcr.getAuthPull()` now returns `undefined` without credentials, matching the other providers. GHCR 404 detection now checks the axios response status instead of matching error-message strings.
+
+### Security
+
+- **Command trigger no longer inherits the full process environment.** User-authored command scripts previously received every `DD_*` secret (registry tokens, notification tokens, agent secrets) via `process.env`. The child environment is now built from a fixed allowlist (`PATH`, `HOME`, `SHELL`, `USER`, `LANG`, `LC_ALL`, `TZ`, `TMPDIR`, `TMP`, `TEMP`) plus the drydock-provided container variables. Scripts that legitimately need more can name additional variables with the new `DD_ACTION_COMMAND_{name}_ENV` option (comma-separated).
+
+- **Hook commands can be restricted to an allowlist of binaries (`DD_HOOKS_ALLOWED_COMMANDS`).** With hooks enabled, `dd.hook.pre`/`dd.hook.post` labels could invoke any binary on the image. The new comma-separated allowlist matches the hook command's first token (basename, or exact path for entries containing `/`); when unset, behavior is unchanged and a one-time warning recommends configuring it.
+
+- **HTTP trigger blocks cloud metadata endpoints.** Requests resolving to link-local ranges (`169.254.0.0/16` including `169.254.169.254`, `fe80::/10`, `fd00:ec2::254`) are rejected before sending — including IPv4-mapped and IPv4-compatible IPv6 spellings of those ranges (`::ffff:169.254.169.254`, `::ffff:a9fe:a9fe`, `::169.254.169.254`), which would otherwise slip past the literal-IP check. Private-network and localhost targets remain fully supported — they are the normal self-hosted case. The rare legitimate link-local target can opt out via `DD_NOTIFICATION_HTTP_{name}_ALLOWMETADATA=true`.
+
+### Performance
+
+- **Tag transform patterns are no longer recompiled in the sort hot path.** Compiled RE2 transform patterns are cached per formula and tag candidates are transformed once before sorting instead of twice per comparison — previously ~3,000 compilations per 300-tag container per watch cycle.
+
+- **Container normalization no longer deep-clones the entire container per registry call.** The watcher now copies only the image/registry fields it mutates instead of `structuredClone` of labels and environment for every container every cycle.
+
+- **Update-operation retention pruning uses indexed status queries** instead of materializing the whole collection every 100th mutation, and the default rejected-credential pattern in `BaseRegistry` is compiled once at module load. An unused `updatedAt` collection index no longer taxes every mutation.
+
+### Changed
+
+- **Trigger providers must implement `trigger()`/`triggerBatch()`.** The base implementations now throw instead of silently doing nothing, so a provider that forgets to override fails loudly. All 22 bundled providers already comply; this only affects out-of-tree forks.
+
 ## [1.5.0-rc.34] — 2026-06-07
 
 ### Added

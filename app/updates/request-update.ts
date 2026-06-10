@@ -185,10 +185,12 @@ function markAcceptedQueuedOperationFailed(operationId: string, error: unknown) 
         }
       : undefined;
 
-  // Issue #410 Part B: if this failure looks like a stale-container 404/409 or
-  // a compose "no longer exists" AND there is a recent succeeded op for the same
-  // container name and source identity, the duplicate update already succeeded
-  // — reclassify to `expired` so no false "update failed" notification fires.
+  // Issue #410 Part B / #421: if this failure looks like a stale-container
+  // 404/409 or a compose "no longer exists" AND there is a recent succeeded op
+  // for the same container name and source identity, the duplicate update
+  // already succeeded — reclassify to `expired` so no false "update failed"
+  // notification fires.  Passing operationId activates the active-op check
+  // (issue #421) for when the winner is still in flight.
   if (
     isDuplicateStyleError(error) &&
     operation.containerName &&
@@ -197,6 +199,7 @@ function markAcceptedQueuedOperationFailed(operationId: string, error: unknown) 
       operation.containerName,
       undefined,
       operationIdentity,
+      operationId,
     ) === 'expired'
   ) {
     updateOperationStore.markOperationTerminal(operationId, {

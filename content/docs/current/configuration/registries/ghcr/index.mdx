@@ -3,6 +3,7 @@ title: "GHCR (Github Container Registry)"
 description: "The ghcr registry lets you configure GitHub Container Registry integration."
 ---
 
+import { Callout } from 'fumadocs-ui/components/callout';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 ![logo](/docs/assets/configuration/registries/ghcr/github.png)
@@ -19,8 +20,7 @@ The `ghcr` registry lets you configure [GHCR](https://docs.github.com/en/package
 ## Auth behavior
 
 - Public images work without credentials.
-- If credentials are configured but GHCR rejects them (`401`/`403`), drydock retries the token exchange anonymously for public image checks and logs a warning.
-- Private images still require valid credentials and continue to fail closed when anonymous access is not allowed.
+- If credentials are configured but GHCR rejects them (`401`/`403`), drydock surfaces a credential-specific authentication error — it does not fall back to anonymous access. Check the configured token and its scopes (`read:packages` is required).
 
 <Callout type="info" title="GHCR token doubles as a GitHub release-notes token">
 If you configure a GHCR token (`DD_REGISTRY_GHCR_{REGISTRY_NAME}_TOKEN`), drydock automatically reuses it for the GitHub release-notes provider. You do **not** need to set `DD_RELEASE_NOTES_GITHUB_TOKEN` separately — the GHCR token is tried first and used when it succeeds. If it fails (e.g. scoped to `read:packages` only), set `DD_RELEASE_NOTES_GITHUB_TOKEN` explicitly with a token that has the `public_repo` scope.

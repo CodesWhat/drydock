@@ -1280,7 +1280,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         this.log.warn(
           `${container.Names?.[0]?.replace(/^\//, '') || container.Id?.substring(0, 12)}: Failed to fetch image detail (${errorMessage || `${error}`})`,
         );
-        return error;
+        return error instanceof Error ? error : new Error(String(error));
       }),
     );
     // A thrown enrichment failure (e.g. a transient docker / socket-proxy

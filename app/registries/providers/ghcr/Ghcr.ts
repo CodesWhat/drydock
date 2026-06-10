@@ -37,7 +37,7 @@ class Ghcr extends BaseRegistry<GhcrRegistryConfiguration> {
   }
 
   private isNotFoundError(error) {
-    return error instanceof Error && error.message.includes('status code 404');
+    return axios.isAxiosError(error) && error.response?.status === 404;
   }
 
   private getGithubApiHeaders() {

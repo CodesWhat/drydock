@@ -98,4 +98,4 @@ docker run \
 
 ### Batch mode
 
-When `MODE=batch`, each container in the batch is sent as a separate Kafka message in a single `send()` call. The message key is the container name and the value is the JSON-serialized container object.
+When `MODE=batch`, each container in the batch is sent as a separate Kafka message in a single `send()` call. Messages have no key set (key is `undefined`/`null`) — the value is the JSON-serialized container object. Kafka will distribute messages using default partitioning (round-robin or hash of the null key). Key-based partitioning by container name is not currently supported.

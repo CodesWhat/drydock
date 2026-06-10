@@ -285,3 +285,29 @@ Before rc.30, `getExpectedOrigin()` honored `X-Forwarded-Proto` / `X-Forwarded-H
 A deployment that terminated TLS at a proxy but never set `DD_SERVER_TRUSTPROXY` previously worked only because the unconditional header trust masked the misconfiguration; after rc.30 it returns `403 CSRF validation failed` on every manual update / recheck / scan ([#418](https://github.com/CodesWhat/drydock/issues/418)). Since v1.5.0-rc.34, Drydock logs a startup warning when it detects `X-Forwarded-Proto: https` while `trust proxy` is disabled, so the requirement is no longer silent.
 
 **Migration:** Set `DD_SERVER_TRUSTPROXY` to the number of proxy hops in front of Drydock (e.g. `1`), and make sure the proxy forwards `X-Forwarded-Proto` (and `X-Forwarded-Host`). See [CSRF validation failed (403) behind a reverse proxy](https://getdrydock.com/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy).
+
+### Command trigger process-environment inheritance
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.5.0-rc.35 |
+| **Removed in** | v1.5.0-rc.35 (immediate — security fix, no grace period) |
+| **Affects** | `DD_ACTION_COMMAND_*` triggers whose scripts read drydock process environment variables beyond the standard shell set |
+
+Before rc.35, the command trigger spawned user-authored scripts with the entire drydock process environment — including every `DD_*` secret (registry tokens, notification tokens, agent secrets). Any command script, or any binary it invoked, could read credentials it had no need for. Because the inherited-secrets behavior was itself the exposure, it could not be kept alive behind a deprecation window.
+
+Since rc.35 the child environment is a fixed allowlist (`PATH`, `HOME`, `SHELL`, `USER`, `LANG`, `LC_ALL`, `TZ`, `TMPDIR`, `TMP`, `TEMP`) plus the drydock-provided container variables, which are unchanged.
+
+**Migration:** Scripts that legitimately need additional variables from the drydock process name them explicitly with `DD_ACTION_COMMAND_{name}_ENV` (comma-separated), e.g. `DD_ACTION_COMMAND_LOCAL_ENV=KUBECONFIG,DOCKER_HOST`. See the [command trigger docs](https://getdrydock.com/docs/configuration/triggers/command).
+
+### HTTP trigger requests to cloud metadata endpoints
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.5.0-rc.35 |
+| **Removed in** | v1.5.0-rc.35 (immediate — security fix, no grace period) |
+| **Affects** | `DD_NOTIFICATION_HTTP_*` triggers targeting link-local addresses (`169.254.0.0/16`, `fe80::/10`, `fd00:ec2::254`) |
+
+Before rc.35, the HTTP trigger sent requests to any syntactically valid URL, including cloud instance-metadata services (`169.254.169.254` and friends) — an SSRF primitive for anyone able to influence trigger configuration. Requests resolving to link-local/metadata ranges are now rejected before sending. Private-network (RFC-1918) and localhost targets are unaffected — they remain the normal self-hosted case.
+
+**Migration:** The rare deployment that genuinely needs a link-local target sets `DD_NOTIFICATION_HTTP_{name}_ALLOWMETADATA=true` on that trigger. See the [http trigger docs](https://getdrydock.com/docs/configuration/triggers/http).

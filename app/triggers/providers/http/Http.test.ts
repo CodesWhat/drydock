@@ -1,4 +1,4 @@
-import Http from './Http.js';
+import Http, { isMetadataAddress } from './Http.js';
 
 // Mock axios
 vi.mock('axios', () => ({ default: vi.fn() }));
@@ -7,6 +7,22 @@ vi.mock('../../../log/index.js', () => ({
     child: () => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() }),
   },
 }));
+
+var dnsMockControl = vi.hoisted(() => ({
+  lookupImpl: null as null | ((hostname: string) => Promise<{ address: string; family: number }[]>),
+}));
+
+vi.mock('node:dns/promises', async () => {
+  return {
+    lookup: (hostname: string, options: unknown) => {
+      if (dnsMockControl.lookupImpl !== null) {
+        return dnsMockControl.lookupImpl(hostname);
+      }
+      // Default: resolve to a normal RFC-1918 address (not metadata)
+      return Promise.resolve([{ address: '192.168.1.50', family: 4 }]);
+    },
+  };
+});
 
 describe('HTTP Trigger', () => {
   let http;
@@ -556,5 +572,230 @@ describe('HTTP Trigger', () => {
         process.env.DD_OUTBOUND_HTTP_TIMEOUT_MS = previousTimeout;
       }
     }
+  });
+});
+
+// ---- Security: SSRF metadata guard (finding 3) ----
+
+describe('isMetadataAddress helper', () => {
+  test('169.254.169.254 is a metadata address (AWS IMDSv1)', () => {
+    expect(isMetadataAddress('169.254.169.254')).toBe(true);
+  });
+
+  test('169.254.0.1 is a metadata/link-local address', () => {
+    expect(isMetadataAddress('169.254.0.1')).toBe(true);
+  });
+
+  test('169.254.255.255 is a metadata/link-local address', () => {
+    expect(isMetadataAddress('169.254.255.255')).toBe(true);
+  });
+
+  test('192.168.1.50 is NOT a metadata address (RFC-1918, allowed)', () => {
+    expect(isMetadataAddress('192.168.1.50')).toBe(false);
+  });
+
+  test('10.0.0.1 is NOT a metadata address (RFC-1918, allowed)', () => {
+    expect(isMetadataAddress('10.0.0.1')).toBe(false);
+  });
+
+  test('1.2.3.4 is NOT a metadata address (public)', () => {
+    expect(isMetadataAddress('1.2.3.4')).toBe(false);
+  });
+
+  test('fe80::1 is a metadata/link-local IPv6 address', () => {
+    expect(isMetadataAddress('fe80::1')).toBe(true);
+  });
+
+  test('fe80:0000:0000:0000:0000:0000:0000:0001 is link-local IPv6', () => {
+    expect(isMetadataAddress('fe80:0000:0000:0000:0000:0000:0000:0001')).toBe(true);
+  });
+
+  test('fd00:ec2::254 is the AWS metadata IPv6 address', () => {
+    expect(isMetadataAddress('fd00:ec2::254')).toBe(true);
+  });
+
+  test('::1 is NOT a metadata address', () => {
+    expect(isMetadataAddress('::1')).toBe(false);
+  });
+
+  test('2001:db8::1 is NOT a metadata address', () => {
+    expect(isMetadataAddress('2001:db8::1')).toBe(false);
+  });
+});
+
+describe('isMetadataAddress — IPv4-mapped IPv6 normalization', () => {
+  // --- blocked ---
+  test('::ffff:169.254.169.254 (dotted-quad mapped) is blocked', () => {
+    expect(isMetadataAddress('::ffff:169.254.169.254')).toBe(true);
+  });
+
+  test('::FFFF:169.254.169.254 (mixed case) is blocked', () => {
+    expect(isMetadataAddress('::FFFF:169.254.169.254')).toBe(true);
+  });
+
+  test('0:0:0:0:0:ffff:169.254.169.254 (uncompressed dotted-quad mapped) is blocked', () => {
+    expect(isMetadataAddress('0:0:0:0:0:ffff:169.254.169.254')).toBe(true);
+  });
+
+  test('::ffff:a9fe:a9fe (hex-pair mapped for 169.254.169.254) is blocked', () => {
+    expect(isMetadataAddress('::ffff:a9fe:a9fe')).toBe(true);
+  });
+
+  test('0:0:0:0:0:ffff:a9fe:a9fe (uncompressed hex-pair mapped) is blocked', () => {
+    expect(isMetadataAddress('0:0:0:0:0:ffff:a9fe:a9fe')).toBe(true);
+  });
+
+  test('::169.254.169.254 (obsolete IPv4-compatible form) is blocked', () => {
+    expect(isMetadataAddress('::169.254.169.254')).toBe(true);
+  });
+
+  // --- allowed ---
+  test('::ffff:8.8.8.8 (public DNS) is NOT blocked', () => {
+    expect(isMetadataAddress('::ffff:8.8.8.8')).toBe(false);
+  });
+
+  test('::ffff:10.0.0.5 (RFC-1918, intentionally allowed) is NOT blocked', () => {
+    expect(isMetadataAddress('::ffff:10.0.0.5')).toBe(false);
+  });
+});
+
+describe('HTTP Trigger SSRF guard — IPv4-mapped IPv6 end-to-end', () => {
+  let http;
+
+  beforeEach(async () => {
+    http = new Http();
+    vi.clearAllMocks();
+  });
+
+  test('rejects bracketed ::ffff:169.254.169.254 URL without executing request', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'http://[::ffff:169.254.169.254]/latest/meta-data',
+    });
+
+    await expect(http.trigger({ name: 'test' })).rejects.toThrow(/metadata.*address/i);
+    expect(axios).not.toHaveBeenCalled();
+  });
+
+  test('rejects bracketed ::FFFF:169.254.169.254 (mixed case) URL', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'http://[::FFFF:169.254.169.254]/latest/meta-data',
+    });
+
+    await expect(http.trigger({ name: 'test' })).rejects.toThrow(/metadata.*address/i);
+    expect(axios).not.toHaveBeenCalled();
+  });
+
+  test('allows bracketed ::ffff:8.8.8.8 (public address)', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'http://[::ffff:8.8.8.8]/webhook',
+    });
+
+    await expect(http.trigger({ name: 'test' })).resolves.toBeDefined();
+    expect(axios).toHaveBeenCalled();
+  });
+});
+
+describe('HTTP Trigger SSRF guard', () => {
+  let http;
+
+  beforeEach(async () => {
+    http = new Http();
+    vi.clearAllMocks();
+    dnsMockControl.lookupImpl = null;
+  });
+
+  afterEach(() => {
+    dnsMockControl.lookupImpl = null;
+  });
+
+  test('rejects literal 169.254.169.254 URL without executing request', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'http://169.254.169.254/latest/meta-data/',
+    });
+
+    await expect(http.trigger({ name: 'test' })).rejects.toThrow(/metadata.*address/i);
+    expect(axios).not.toHaveBeenCalled();
+  });
+
+  test('rejects hostname that resolves to 169.254.x.x (mocked dns)', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'http://metadata.internal/data',
+    });
+
+    dnsMockControl.lookupImpl = async () => [{ address: '169.254.169.254', family: 4 }];
+
+    await expect(http.trigger({ name: 'test' })).rejects.toThrow(/metadata.*address/i);
+    expect(axios).not.toHaveBeenCalled();
+  });
+
+  test('allows RFC-1918 target (192.168.x.x) — normal self-hosted use case', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'http://192.168.1.10/webhook',
+    });
+
+    // Default mock resolves to RFC-1918 192.168.1.50
+    await expect(http.trigger({ name: 'test' })).resolves.toBeDefined();
+    expect(axios).toHaveBeenCalled();
+  });
+
+  test('allowmetadata=true bypasses the guard for 169.254.169.254', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'http://169.254.169.254/latest/meta-data/',
+      allowmetadata: true,
+    });
+
+    await expect(http.trigger({ name: 'test' })).resolves.toBeDefined();
+    expect(axios).toHaveBeenCalled();
+  });
+
+  test('rejects IPv6 link-local URL in brackets [fe80::1]', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: {} });
+    await http.register('trigger', 'http', 'test', {
+      url: 'http://[fe80::1]/webhook',
+    });
+
+    await expect(http.trigger({ name: 'test' })).rejects.toThrow(/metadata.*address/i);
+    expect(axios).not.toHaveBeenCalled();
+  });
+
+  test('DNS resolution failure does not mask the error — original axios error propagates', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockRejectedValue(new Error('connect ECONNREFUSED'));
+    await http.register('trigger', 'http', 'test', {
+      url: 'http://nonexistent-host.example/webhook',
+    });
+
+    dnsMockControl.lookupImpl = async () => {
+      throw new Error('ENOTFOUND nonexistent-host.example');
+    };
+
+    await expect(http.trigger({ name: 'test' })).rejects.toThrow(/ENOTFOUND/);
+    expect(axios).not.toHaveBeenCalled();
+  });
+
+  test('validateConfiguration accepts allowmetadata boolean option', () => {
+    expect(() =>
+      http.validateConfiguration({ url: 'http://example.com/webhook', allowmetadata: true }),
+    ).not.toThrow();
+  });
+
+  test('validateConfiguration defaults allowmetadata to false', () => {
+    const result = http.validateConfiguration({ url: 'http://example.com/webhook' });
+    expect(result.allowmetadata).toBe(false);
   });
 });

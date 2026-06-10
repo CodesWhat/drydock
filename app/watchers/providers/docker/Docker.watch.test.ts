@@ -798,10 +798,30 @@ describe('Docker Watcher', () => {
         expect(docker.log.warn).toHaveBeenCalledWith(
           expect.stringContaining('test1: Failed to fetch image detail ([object Object])'),
         );
-        expect(result).toEqual([{ message: '' }]);
+        // Non-Error thrown value is wrapped into an Error and excluded from result
+        expect(result).toEqual([]);
       } finally {
         getErrorMessageSpy.mockRestore();
       }
+    });
+
+    test('should count non-Error rejection as enrichment error and exclude it from containers', async () => {
+      mockDockerApi.listContainers.mockResolvedValue([
+        { Id: '1', Labels: { 'dd.watch': 'true' }, Names: ['/test1'] },
+      ]);
+      docker.addImageDetailsToContainer = vi.fn().mockRejectedValue('socket timeout');
+      await docker.register('watcher', 'docker', 'test', { watchbydefault: true });
+      docker.log = createMockLog(['warn', 'info', 'debug']);
+
+      const diagnostics = { enrichmentErrors: 0 };
+      const result = await docker.getContainers(diagnostics);
+
+      expect(docker.log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to fetch image detail'),
+      );
+      // String rejection is wrapped to an Error — counted as error, not a container
+      expect(result).toHaveLength(0);
+      expect(diagnostics.enrichmentErrors).toBe(1);
     });
 
     test('should use container id fallback in image-detail warning when docker names are missing', async () => {

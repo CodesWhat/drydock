@@ -121,6 +121,13 @@ export interface UpdateOperationChangedEventPayload {
 export interface ContainerUpdateAppliedEventPayload {
   containerName: string;
   containerId?: string;
+  /**
+   * The ID of the replacement container created during a local-Docker recreate.
+   * Set when the operation completes via the new-created → new-started phase
+   * path. The UI uses this to match the success event to the NEW container row
+   * instead of the old one (fixing the "Updated Successfully" status gap, issue #421).
+   */
+  newContainerId?: string;
   container?: Container;
   operationId?: string;
   batchId?: string | null;

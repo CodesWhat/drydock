@@ -334,7 +334,9 @@ If you have containers on multiple Docker hosts, deploy Drydock agents on remote
 
 ```yaml
 environment:
-  - DD_AGENT_CONTROLLER_TOKEN=a-secure-shared-token
+  - DD_AGENT_REMOTE1_HOST=<agent-ip>
+  - DD_AGENT_REMOTE1_SECRET=a-secure-shared-token
+  # - DD_AGENT_REMOTE1_PORT=3000  # only needed if the agent listens on a non-default port
 ```
 
 **Agent** (remote host — lightweight, no UI):
@@ -343,15 +345,16 @@ environment:
 services:
   drydock-agent:
     image: codeswhat/drydock
+    command: --agent
+    ports:
+      - "3000:3000"  # agent API — the controller connects to this port
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - DD_AGENT_MODE=agent
-      - DD_AGENT_CONTROLLER_URL=https://drydock.example.com
-      - DD_AGENT_CONTROLLER_TOKEN=a-secure-shared-token
+      - DD_AGENT_SECRET=a-secure-shared-token
 ```
 
-Agents forward container state to the controller. Triggers (both notifications and updates) execute on the agent, allowing remote container updates.
+Agents forward container state to the controller. The controller connects outbound to agents; agents do not call back to the controller. Notification triggers (Slack, SMTP, etc.) run on the controller; Docker update triggers run on the agent.
 
 **Docs:** [Agents configuration](/docs/configuration/agents)
 

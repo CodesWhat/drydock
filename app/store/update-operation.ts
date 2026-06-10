@@ -24,6 +24,7 @@ import {
   isActiveContainerUpdateOperationPhaseForStatus,
   isTerminalContainerUpdateOperationPhase,
   resolveTerminalContainerUpdateOperationPhase,
+  TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES,
 } from '../model/container-update-operation.js';
 import { daysToMs } from '../model/maturity-policy.js';
 import { toPositiveInteger } from '../util/parse.js';
@@ -370,6 +371,7 @@ function buildTerminalLifecycleEventBase(operation: UpdateOperation, batchId?: s
     containerName: operation.containerName,
     ...(batchId ? { batchId } : {}),
     ...(operation.container ? { container: operation.container } : {}),
+    ...(operation.newContainerId ? { newContainerId: operation.newContainerId } : {}),
   };
 }
 
@@ -469,8 +471,13 @@ function pruneOperationsForRetention(
   collection: UpdateOperationCollection,
   nowMs = Date.now(),
 ): number {
-  const documents = collection.find();
-  if (!Array.isArray(documents) || documents.length === 0) {
+  // Query only terminal documents per status using the existing data.status index,
+  // avoiding a full-collection materialisation that would load active ops too.
+  const terminalDocuments = TERMINAL_CONTAINER_UPDATE_OPERATION_STATUSES.flatMap((status) =>
+    findOperationDocumentsByStatus(collection, status),
+  );
+
+  if (terminalDocuments.length === 0) {
     return 0;
   }
 
@@ -478,20 +485,16 @@ function pruneOperationsForRetention(
   const cutoffTimestamp = nowMs - retentionWindowMs;
 
   const retainedTerminalIds = new Set(
-    documents
-      .filter((document) => !isActiveOperationStatus(document.data.status))
+    terminalDocuments
       .filter((document) => getOperationTimestamp(document.data) >= cutoffTimestamp)
       .sort((a, b) => getOperationTimestamp(b.data) - getOperationTimestamp(a.data))
       .slice(0, UPDATE_OPERATION_MAX_ENTRIES)
       .map((document) => document.data.id),
   );
 
-  const toRemove = documents.filter((document) => {
-    if (isActiveOperationStatus(document.data.status)) {
-      return false;
-    }
-    return !retainedTerminalIds.has(document.data.id);
-  });
+  const toRemove = terminalDocuments.filter(
+    (document) => !retainedTerminalIds.has(document.data.id),
+  );
 
   for (const document of toRemove) {
     collection.remove(document);
@@ -955,18 +958,18 @@ function matchesStrictIdentityFilter(
   op: OperationIdentitySource,
   identity: ContainerIdentityFilter,
 ): boolean {
-  /* v8 ignore next 3 -- strict identity filters are only requested once a watcher is known. */
   if (!identity.watcher) {
     return true;
   }
 
   const operationIdentity = getOperationIdentity(op);
-  /* v8 ignore next 3 -- strict lookup intentionally excludes legacy rows once watcher identity is required. */
   if (!operationIdentity.modern) {
     return false;
   }
 
-  /* v8 ignore next 4 -- strict identity comparisons are exercised through operation lookup call sites. */
+  // `?? ''` means "local (unagented)" on both sides.  The collision is safe only
+  // because insertOperation normalises '' to undefined before storing, so '' can
+  // never be a real agent name in the store.
   return (
     (operationIdentity.agent ?? '') === (identity.agent ?? '') &&
     operationIdentity.watcher === identity.watcher
@@ -1072,6 +1075,43 @@ export function getActiveOperationByContainerName(
 }
 
 /**
+ * Return true when an active (in-progress or queued) operation exists for the
+ * container name, excluding the given operation id.
+ *
+ * Used by the duplicate-update dedup logic (issue #421): when a duplicate
+ * request fails with a 409 while the winning update is still in flight, no
+ * succeeded row exists yet — the presence of *another* active operation for
+ * the same container and agent+watcher identity proves the conflict is benign.
+ * Identity matching is strict (legacy rows without a container snapshot are
+ * not counted) so an op from an identically-named container on a different
+ * agent can never silence a genuine failure.
+ */
+export function hasOtherActiveOperationByContainerName(
+  containerName: string,
+  excludeOperationId: string,
+  identity?: ContainerIdentityFilter,
+): boolean {
+  if (!updateOperationCollection) {
+    return false;
+  }
+
+  const nowMs = Date.now();
+  return updateOperationCollection
+    .find({ 'data.containerName': containerName })
+    .map((item) => getFreshActiveOperation(item.data, nowMs))
+    .filter((op): op is ActiveUpdateOperation => Boolean(op))
+    .some(
+      (op) =>
+        op.id !== excludeOperationId &&
+        (!identity ||
+          matchesStrictIdentityFilter(
+            op as { container?: { agent?: string; watcher?: string } },
+            identity,
+          )),
+    );
+}
+
+/**
  * Return the latest active (in-progress OR queued) operation for a container ID.
  */
 export function getActiveOperationByContainerId(
@@ -1171,6 +1211,35 @@ export function getRecentTerminalSucceededOperationByContainerName(
     .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
 
   return candidates.at(0);
+}
+
+/**
+ * Return all `succeeded` operations whose `completedAt` falls within
+ * `Date.now() - sinceMs` (milliseconds), sorted most-recent-first.
+ *
+ * Used by the restart-amnesia guard in Trigger.ts to re-populate
+ * `recentlyAppliedContainerKeys` on controller startup so that a successful
+ * update whose watcher confirmation scan has not yet run does not fire a
+ * spurious "update available" notification after a restart (#408).
+ *
+ * Returns an empty array when the collection is uninitialized.
+ */
+export function listRecentSucceededOperations(sinceMs: number): SucceededUpdateOperation[] {
+  if (!updateOperationCollection) {
+    return [];
+  }
+
+  const cutoffMs = Date.now() - sinceMs;
+
+  return findOperationDocumentsByStatus(updateOperationCollection, 'succeeded')
+    .map((document) => document.data)
+    .filter(
+      (op): op is SucceededUpdateOperation =>
+        op.status === 'succeeded' &&
+        typeof op.completedAt === 'string' &&
+        Date.parse(op.completedAt) >= cutoffMs,
+    )
+    .sort((a, b) => getOperationTimestamp(b) - getOperationTimestamp(a));
 }
 
 /**

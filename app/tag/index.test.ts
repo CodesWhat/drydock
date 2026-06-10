@@ -316,7 +316,10 @@ describe('transform', () => {
       });
 
       try {
-        expect(() => semver.transform('^v(.+)$ => $1', 'v1.2.3')).toThrow(/regex compile failed/);
+        // Use a formula not cached by any other test so the compile spy is always reached.
+        expect(() => semver.transform('^unique_object_throw(.+)$ => $1', 'v1.2.3')).toThrow(
+          /regex compile failed/,
+        );
         expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('regex compile failed'));
       } finally {
         compileSpy.mockRestore();
@@ -331,7 +334,8 @@ describe('transform', () => {
       });
 
       try {
-        expect(() => semver.transform('^v(.+)$ => $1', 'v1.2.3')).toThrow(/42/);
+        // Use a formula not cached by any other test so the compile spy is always reached.
+        expect(() => semver.transform('^unique_numeric_throw(.+)$ => $1', 'v1.2.3')).toThrow(/42/);
         expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('42'));
       } finally {
         compileSpy.mockRestore();
@@ -366,6 +370,30 @@ describe('transform', () => {
       for (let i = 0; i < 5000; i += 1) {
         expect(semver.transform(formula, input)).toBe('1.2.3');
       }
+    });
+
+    test('cached transform pattern returns consistent results across repeated calls', () => {
+      const formula = '^v(\\d+\\.\\d+\\.\\d+)$ => $1';
+      // First call populates the cache, subsequent calls must return the same result.
+      expect(semver.transform(formula, 'v2.3.4')).toBe('2.3.4');
+      expect(semver.transform(formula, 'v2.3.4')).toBe('2.3.4');
+      expect(semver.transform(formula, 'v10.0.1')).toBe('10.0.1');
+      // Formula with no match must also be stable across cache hits.
+      expect(semver.transform(formula, 'notaversion')).toBe('notaversion');
+    });
+
+    test('cache eviction at capacity (>256 unique formulas) clears and repopulates transparently', () => {
+      // Force the transformPatternCache past MAX_TRANSFORM_CACHE_SIZE (256) by inserting
+      // 257 unique formula strings. The 257th insert triggers the clear() branch (lines 148-149).
+      // After eviction the function must still compile and apply the new formula correctly.
+      for (let i = 0; i < 257; i += 1) {
+        const formula = `^v(\\d+)-${i}$ => $1`;
+        // Each formula matches `v42-<i>` and strips the prefix+suffix to return '42'.
+        expect(semver.transform(formula, `v42-${i}`)).toBe('42');
+      }
+      // One additional call to a brand-new formula post-eviction confirms the cache
+      // was cleared and repopulated without error.
+      expect(semver.transform('^post-eviction-(\\d+)$ => $1', 'post-eviction-99')).toBe('99');
     });
   });
 });

@@ -33,7 +33,10 @@ On Webhook call, Ifttt captures the following ingredients:
 
 ### Batch mode
 
-When `MODE=batch`, the webhook sends only `value1` containing the full JSON array of all containers with available updates. `value2` and `value3` are not sent in batch mode.
+When `MODE=batch`, the webhook behavior depends on the event context:
+
+- **Standard batch:** `value1` contains the full JSON array of all containers with available updates. `value2` and `value3` are not sent.
+- **Security-alert digest** (when a `runtimeContext` with `title`/`body` is present, e.g. `security-alert-digest` events): `value1` = alert title, `value2` = alert body, `value3` = JSON array of affected containers.
 
 ## Examples
 

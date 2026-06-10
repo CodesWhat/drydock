@@ -511,6 +511,46 @@ describe('SSE lifecycle event handlers', () => {
       expect(eventWrite).toMatch(/^id: test-boot-id:\d+\n/);
     });
 
+    test('update-applied includes newContainerId in the wire payload when set on the operation', () => {
+      sseRouter.init();
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+
+      const onUpdateApplied = mockRegisterContainerUpdateApplied.mock.calls.at(-1)[0];
+      onUpdateApplied({
+        containerName: 'nginx',
+        operationId: 'op-recreate',
+        containerId: 'c-old',
+        newContainerId: 'c-new',
+        batchId: null,
+      } as any);
+
+      const payload = parseSseEventPayload(res, 'dd:update-applied');
+      expect(payload).toMatchObject({
+        operationId: 'op-recreate',
+        containerId: 'c-old',
+        newContainerId: 'c-new',
+        containerName: 'nginx',
+      });
+    });
+
+    test('update-applied omits newContainerId from the wire payload when absent', () => {
+      sseRouter.init();
+      const handler = getHandler();
+      const { res } = connectSseClient(handler);
+
+      const onUpdateApplied = mockRegisterContainerUpdateApplied.mock.calls.at(-1)[0];
+      onUpdateApplied({
+        containerName: 'nginx',
+        operationId: 'op-no-recreate',
+        containerId: 'c-1',
+        batchId: null,
+      } as any);
+
+      const payload = parseSseEventPayload(res, 'dd:update-applied');
+      expect(payload).not.toHaveProperty('newContainerId');
+    });
+
     test('update-applied omits operationId when operationId is absent from payload', () => {
       sseRouter.init();
       const handler = getHandler();

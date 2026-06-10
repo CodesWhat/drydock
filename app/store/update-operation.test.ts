@@ -9,7 +9,13 @@ function createDb(options?: { inactiveIds?: Set<string>; missingIds?: Set<string
   }
 
   function matchesQuery(doc, query = {}) {
-    return Object.entries(query).every(([key, value]) => getByPath(doc, key) === value);
+    return Object.entries(query).every(([key, value]) => {
+      const docValue = getByPath(doc, key);
+      if (value !== null && typeof value === 'object' && '$in' in value) {
+        return (value as { $in: unknown[] }).$in.includes(docValue);
+      }
+      return docValue === value;
+    });
   }
 
   const inactiveIds = options?.inactiveIds ?? new Set<string>();
@@ -374,8 +380,9 @@ describe('Update Operation Store', () => {
         Boolean(query) && Object.keys(query).length === 1 && 'data.status' in query,
     );
 
+    // Active statuses from startup repair + terminal statuses from the startup prune call
     expect(new Set(statusQueries.map((query) => query['data.status']))).toEqual(
-      new Set(['queued', 'in-progress']),
+      new Set(['queued', 'in-progress', 'succeeded', 'rolled-back', 'failed', 'expired']),
     );
   });
 
@@ -1578,10 +1585,6 @@ describe('Update Operation Store', () => {
     expect(updateOperation.getActiveOperationByContainerId('')).toBeUndefined();
   });
 
-  test('getActiveOperationByContainerId should return undefined for empty string', () => {
-    expect(updateOperation.getActiveOperationByContainerId('')).toBeUndefined();
-  });
-
   test('getActiveOperationByContainerName should ignore inactive operations', () => {
     updateOperation.insertOperation({
       containerName: 'web',
@@ -2589,6 +2592,193 @@ describe('Update Operation Store', () => {
     });
   });
 
+  describe('hasOtherActiveOperationByContainerName (issue #421)', () => {
+    test('returns true when another in-progress op with the same name exists', () => {
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        container: { id: 'c-win', name: 'web', watcher: 'local', agent: 'agent-A' } as any,
+      });
+
+      expect(
+        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
+          agent: 'agent-A',
+          watcher: 'local',
+        }),
+      ).toBe(true);
+    });
+
+    test('returns true for a queued op', () => {
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+        container: { id: 'c-q', name: 'web', watcher: 'local', agent: 'agent-A' } as any,
+      });
+
+      expect(
+        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
+          agent: 'agent-A',
+          watcher: 'local',
+        }),
+      ).toBe(true);
+    });
+
+    test('returns false when the only active op is the excluded id', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        container: { id: 'c-excl', name: 'web', watcher: 'local', agent: 'agent-A' } as any,
+      });
+
+      expect(
+        updateOperation.hasOtherActiveOperationByContainerName('web', op.id, {
+          agent: 'agent-A',
+          watcher: 'local',
+        }),
+      ).toBe(false);
+    });
+
+    test('returns false when no active ops exist (only terminal rows)', () => {
+      const op = updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        container: { id: 'c-term', name: 'web', watcher: 'local', agent: 'agent-A' } as any,
+      });
+      updateOperation.markOperationTerminal(op.id, { status: 'succeeded' });
+
+      expect(
+        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
+          agent: 'agent-A',
+          watcher: 'local',
+        }),
+      ).toBe(false);
+    });
+
+    test('strict identity — op from different agent is not counted when identity has watcher', () => {
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        container: { id: 'c-agent-b', name: 'web', watcher: 'local', agent: 'agent-B' } as any,
+      });
+
+      expect(
+        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
+          agent: 'agent-A',
+          watcher: 'local',
+        }),
+      ).toBe(false);
+    });
+
+    test('strict identity — legacy row (no container snapshot) is not counted when identity has a watcher', () => {
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        // no container snapshot — legacy row
+      });
+
+      expect(
+        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
+          agent: 'agent-A',
+          watcher: 'local',
+        }),
+      ).toBe(false);
+    });
+
+    test('returns true when identity agent+watcher align', () => {
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+        container: { id: 'c-match', name: 'web', watcher: 'remote', agent: 'agent-X' } as any,
+      });
+
+      expect(
+        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
+          agent: 'agent-X',
+          watcher: 'remote',
+        }),
+      ).toBe(true);
+    });
+
+    test('identity omitted — any other active op counts', () => {
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        container: { id: 'c-any', name: 'web', watcher: 'local', agent: 'agent-Z' } as any,
+      });
+
+      expect(updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id')).toBe(
+        true,
+      );
+    });
+
+    test('returns false when collection is uninitialized', async () => {
+      vi.resetModules();
+      const fresh = await import('./update-operation.js');
+      expect(fresh.hasOtherActiveOperationByContainerName('web', 'any-id')).toBe(false);
+    });
+
+    test('strict identity no-watcher short-circuit — identity with watcher:undefined accepts any modern op', () => {
+      // Exercises the matchesStrictIdentityFilter `!identity.watcher → return true` branch.
+      // Even though the op belongs to agent-B, passing watcher:undefined skips the strict check.
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        container: { id: 'c-skip', name: 'web', watcher: 'local', agent: 'agent-B' } as any,
+      });
+
+      expect(
+        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
+          agent: 'agent-A',
+          watcher: undefined,
+        }),
+      ).toBe(true);
+    });
+
+    test('strict identity — legacy row accepted when identity has no watcher (no-watcher short-circuit)', () => {
+      // Legacy row + { watcher: undefined } → matchesStrictIdentityFilter returns true.
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'queued',
+        phase: 'queued',
+        // no container snapshot — legacy row
+      });
+
+      expect(
+        updateOperation.hasOtherActiveOperationByContainerName('web', 'some-other-id', {
+          watcher: undefined,
+        }),
+      ).toBe(true);
+    });
+
+    test('strict identity — both sides fall back to empty-string agent when neither op snapshot nor identity carry an agent', () => {
+      // Inserts an op with a container snapshot that has watcher but NO agent field.
+      // Calling hasOtherActiveOperationByContainerName with an identity that also omits agent
+      // means both (operationIdentity.agent ?? '') and (identity.agent ?? '') resolve to ''.
+      // They must compare equal so the function returns true (line 972 ?? '' paths covered).
+      updateOperation.insertOperation({
+        containerName: 'web',
+        status: 'in-progress',
+        phase: 'pulling',
+        container: { id: 'c-no-agent', name: 'web', watcher: 'local' } as any,
+      });
+
+      expect(
+        updateOperation.hasOtherActiveOperationByContainerName('web', 'other-id', {
+          watcher: 'local',
+        }),
+      ).toBe(true);
+    });
+  });
+
   describe('getActiveOperationByContainerName identity scoping (issue #411)', () => {
     test('same agent+watcher returns the operation', () => {
       updateOperation.insertOperation({
@@ -2745,6 +2935,90 @@ describe('Update Operation Store', () => {
       });
       expect(result).toBeDefined();
       expect(result?.containerName).toBe('api');
+    });
+  });
+
+  describe('listRecentSucceededOperations (restart-amnesia seed, #408)', () => {
+    test('returns succeeded ops whose completedAt is within the window, sorted most-recent-first', () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2026-06-10T10:00:00.000Z'));
+        const older = updateOperation.insertOperation({
+          containerName: 'nginx',
+          status: 'in-progress',
+          phase: 'pulling',
+        });
+        updateOperation.markOperationTerminal(older.id, { status: 'succeeded' });
+
+        vi.setSystemTime(new Date('2026-06-10T10:30:00.000Z'));
+        const newer = updateOperation.insertOperation({
+          containerName: 'redis',
+          status: 'in-progress',
+          phase: 'pulling',
+        });
+        updateOperation.markOperationTerminal(newer.id, { status: 'succeeded' });
+
+        vi.setSystemTime(new Date('2026-06-10T10:45:00.000Z'));
+        const windowMs = 60 * 60 * 1000; // 60 min
+        const result = updateOperation.listRecentSucceededOperations(windowMs);
+        expect(result).toHaveLength(2);
+        expect(result[0].id).toBe(newer.id);
+        expect(result[1].id).toBe(older.id);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('excludes succeeded ops older than the window', () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2026-06-10T08:00:00.000Z'));
+        const old = updateOperation.insertOperation({
+          containerName: 'nginx',
+          status: 'in-progress',
+          phase: 'pulling',
+        });
+        updateOperation.markOperationTerminal(old.id, { status: 'succeeded' });
+
+        vi.setSystemTime(new Date('2026-06-10T10:00:00.000Z'));
+        const windowMs = 60 * 60 * 1000; // 60 min, but 120 min have passed
+        const result = updateOperation.listRecentSucceededOperations(windowMs);
+        expect(result).toHaveLength(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('excludes failed, rolled-back and expired ops even when within the window', () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2026-06-10T10:00:00.000Z'));
+        const failed = updateOperation.insertOperation({
+          containerName: 'app',
+          status: 'in-progress',
+          phase: 'pulling',
+        });
+        updateOperation.markOperationTerminal(failed.id, { status: 'failed' });
+
+        const rolledBack = updateOperation.insertOperation({
+          containerName: 'app2',
+          status: 'in-progress',
+          phase: 'pulling',
+        });
+        updateOperation.markOperationTerminal(rolledBack.id, { status: 'rolled-back' });
+
+        vi.setSystemTime(new Date('2026-06-10T10:20:00.000Z'));
+        const result = updateOperation.listRecentSucceededOperations(60 * 60 * 1000);
+        expect(result).toHaveLength(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    test('returns empty array when collection is uninitialized', async () => {
+      vi.resetModules();
+      const fresh = await import('./update-operation.js');
+      expect(fresh.listRecentSucceededOperations(60 * 60 * 1000)).toEqual([]);
     });
   });
 });

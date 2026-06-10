@@ -171,12 +171,41 @@ describe('useGlobalUpdateToast', () => {
       await settle();
       expect(addSpy).toHaveBeenCalledTimes(1);
 
-      // Advance past the 5-minute completed-operation TTL so the dedup entry is cleared.
-      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      // Advance past the 6-minute completed-operation TTL so the dedup entry is cleared.
+      await vi.advanceTimersByTimeAsync(6 * 60 * 1000);
 
       dispatch('dd:sse-update-applied', detail);
       await settle();
       expect(addSpy).toHaveBeenCalledTimes(2);
+
+      addSpy.mockRestore();
+      wrapper.unmount();
+    });
+
+    it('still deduplicates an SSE replay replayed at the old 5-minute boundary (TTL is 6 minutes)', async () => {
+      // Regression guard: the TTL was bumped from 5 min to 6 min to prevent a
+      // reconnect at the boundary from replaying an event whose dedup entry just
+      // expired. This test confirms that at exactly 5 min the entry is still live.
+      const { wrapper } = mountGlobalToast();
+      const store = useToastStore();
+      const addSpy = vi.spyOn(store, 'add');
+      const detail = {
+        containerName: 'nginx',
+        operationId: 'op-ttl-boundary',
+        batchId: null,
+      };
+
+      dispatch('dd:sse-update-applied', detail);
+      await settle();
+      expect(addSpy).toHaveBeenCalledTimes(1);
+
+      // Advance to exactly 5 minutes — entry must still be in the dedup map.
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+
+      dispatch('dd:sse-update-applied', detail);
+      await settle();
+      // Should still be deduplicated — only one call total.
+      expect(addSpy).toHaveBeenCalledTimes(1);
 
       addSpy.mockRestore();
       wrapper.unmount();
@@ -238,6 +267,72 @@ describe('useGlobalUpdateToast', () => {
       await nextTick();
 
       expect(toast.toasts.value.slice(before)).toHaveLength(1);
+
+      wrapper.unmount();
+    });
+
+    it('does not settle on container-removed when replacementExpected is true (waits for the new container)', async () => {
+      // Reproduces the #421 status gap: local-Docker recreate emits a
+      // container-removed(replacementExpected=true) for the OLD container BEFORE
+      // the new one is started. The toast must NOT fire on the removed event —
+      // it should wait for the subsequent container-added/updated event.
+      const { wrapper, toast } = mountGlobalToast();
+      const before = toast.toasts.value.length;
+
+      dispatch('dd:sse-update-applied', {
+        operationId: 'op-recreate-gap',
+        containerId: 'c-old-gap',
+        newContainerId: 'c-new-gap',
+        containerName: 'nginx',
+        batchId: null,
+      });
+      await nextTick();
+      expect(toast.toasts.value.slice(before)).toHaveLength(0);
+
+      // Old container is removed with replacementExpected=true — must NOT settle.
+      dispatch('dd:sse-container-removed', {
+        id: 'c-old-gap',
+        name: 'nginx',
+        replacementExpected: true,
+      });
+      await nextTick();
+      expect(toast.toasts.value.slice(before)).toHaveLength(0);
+
+      // New container arrives — now the toast should fire.
+      dispatch('dd:sse-container-added', { id: 'c-new-gap', name: 'nginx' });
+      await nextTick();
+      expect(toast.toasts.value.slice(before)).toHaveLength(1);
+      expect(toast.toasts.value.slice(before)[0]).toMatchObject({
+        tone: 'success',
+        title: 'Updated: nginx',
+      });
+
+      wrapper.unmount();
+    });
+
+    it('does settle on container-removed when replacementExpected is absent (container truly deleted)', async () => {
+      // Containers that are genuinely deleted (no replacement) must still settle
+      // on the removed event; the fix must only skip when replacementExpected=true.
+      const { wrapper, toast } = mountGlobalToast();
+      const before = toast.toasts.value.length;
+
+      dispatch('dd:sse-update-applied', {
+        operationId: 'op-deleted',
+        containerId: 'c-deleted',
+        containerName: 'nginx',
+        batchId: null,
+      });
+      await nextTick();
+      expect(toast.toasts.value.slice(before)).toHaveLength(0);
+
+      dispatch('dd:sse-container-removed', { id: 'c-deleted', name: 'nginx' });
+      await nextTick();
+
+      expect(toast.toasts.value.slice(before)).toHaveLength(1);
+      expect(toast.toasts.value.slice(before)[0]).toMatchObject({
+        tone: 'success',
+        title: 'Updated: nginx',
+      });
 
       wrapper.unmount();
     });
@@ -501,7 +596,8 @@ describe('useGlobalUpdateToast', () => {
       await settle();
       expect(addSpy).toHaveBeenCalledTimes(1);
 
-      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+      // Advance past the 6-minute completed-operation TTL so the dedup entry is cleared.
+      await vi.advanceTimersByTimeAsync(6 * 60 * 1000);
 
       dispatch('dd:sse-update-failed', detail);
       await settle();
