@@ -19,6 +19,7 @@ import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
 import * as notificationHistoryStore from '../../store/notification-history.js';
 import { enqueueOutboxEntry } from '../../store/notification-outbox.js';
+import { listRecentSucceededOperations } from '../../store/update-operation.js';
 import {
   dispatchAccepted,
   enqueueContainerUpdate,
@@ -164,8 +165,51 @@ interface EventDispatchOptions extends notificationStore.NotificationRuleDispatc
 const AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS = 15_000;
 const AUTO_TRIGGER_ERROR_SUPPRESSION_RETENTION_MS = AUTO_TRIGGER_ERROR_SUPPRESSION_WINDOW_MS * 4;
 const AUTO_EVENT_BATCH_FLUSH_DELAY_MS = 250;
+/**
+ * How far back to look for recently-succeeded operations when seeding the
+ * `recentlyAppliedContainerKeys` suppression set on controller startup.
+ *
+ * Must comfortably exceed the worst-case watcher confirmation latency after an
+ * update (i.e. how long it can take for the watcher to re-scan and report
+ * `updateAvailable=false` after a container is recreated). A 60-minute window
+ * is generous relative to the typical Docker watcher poll interval (minutes)
+ * while still being tight enough to avoid re-suppressing containers from truly
+ * completed update cycles hours in the past (#408 restart amnesia).
+ */
+const RECENT_APPLICATION_SEED_WINDOW_MS = 60 * 60 * 1000;
 export const BUFFER_ENTRY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+/**
+ * Trigger types that **execute** a container update (pull-and-recreate or
+ * compose-pull-and-up). Used by `isUpdateActionTrigger()` to route containers
+ * through the admission queue instead of the notification dispatch path.
+ *
+ * Intentionally does NOT include `'command'`. A command trigger invokes an
+ * arbitrary shell command configured by the user — it is classified as an
+ * "action" for configuration-taxonomy purposes (so its `auto` default is
+ * `'oninclude'`), but it does not execute the Docker update lifecycle itself
+ * and therefore must NOT be routed through the admission/accept queue.
+ *
+ * If you add a new update-executing type here, also add it to
+ * `ACTION_TRIGGER_TYPES` below so the category taxonomy stays in sync.
+ */
 const UPDATE_ACTION_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
+
+/**
+ * Trigger types classified as "action" triggers for configuration-taxonomy
+ * purposes. Determines:
+ *   - The default `auto` value (`'oninclude'` instead of `true`/`'all'`).
+ *   - The `category` metadata field returned by `getMetadata()`.
+ *
+ * This is a strict superset of `UPDATE_ACTION_TRIGGER_TYPES`. The only
+ * additional member is `'command'`: a command trigger is an "action" in the
+ * sense that it executes something on the host, but it does NOT implement the
+ * Docker update lifecycle and must NOT enter the admission queue — so it must
+ * not appear in `UPDATE_ACTION_TRIGGER_TYPES`.
+ *
+ * Derived from `UPDATE_ACTION_TRIGGER_TYPES` plus `'command'` so the two sets
+ * cannot silently diverge if a new update-executing type is added.
+ */
+const ACTION_TRIGGER_TYPES = new Set([...UPDATE_ACTION_TRIGGER_TYPES, 'command']);
 
 function getContainerNotificationKey(
   container: Pick<Container, 'id' | 'name' | 'watcher'> | undefined,
@@ -226,7 +270,6 @@ function getContainerUpdateAppliedEventNotificationKey(
   );
 }
 const TRIGGER_RELEASE_NOTES_BODY_MAX_LENGTH = 500;
-const ACTION_TRIGGER_TYPES = new Set(['command', 'docker', 'dockercompose']);
 export function buildLiteralTemplateExpression(expression: string): string {
   return `\${${expression}}`;
 }
@@ -1045,6 +1088,22 @@ class Trigger<
     this.recentlyAppliedContainerKeys.add(notificationKey);
     this.log.debug(`Added ${notificationKey} to recently-applied suppression set`);
 
+    // Also register a name-based key so post-recreate reports match (#408 variant):
+    // a docker/dockercompose action recreates the container with a NEW Docker ID,
+    // so the watcher's next report carries a different ID. The lookup in
+    // isSuppressedByRecentApplication falls back to fullName only when the
+    // container has NO id — which is not the case for fresh containers — so the
+    // ID-keyed entry above would miss. Adding the name key (watcher_name) makes
+    // the add and lookup symmetric across the recreate boundary.
+    const nameKey =
+      container && typeof container.watcher === 'string' && container.watcher !== ''
+        ? fullName(container)
+        : undefined;
+    if (nameKey && nameKey !== notificationKey) {
+      this.recentlyAppliedContainerKeys.add(nameKey);
+      this.log.debug(`Added name-key ${nameKey} to recently-applied suppression set`);
+    }
+
     const notificationContainer = container
       ? withNotificationEvent(container, { kind: 'update-applied' })
       : undefined;
@@ -1315,17 +1374,171 @@ class Trigger<
     }
   }
 
+  /**
+   * Re-populate `recentlyAppliedContainerKeys` from persisted store state after
+   * a controller restart (restart-amnesia guard, #408).
+   *
+   * A successful update writes a `succeeded` operation row to the store. If the
+   * controller restarts before the watcher's next scan sets `updateAvailable=false`,
+   * the in-memory suppression set is empty and the first scan fires a spurious
+   * "update available" notification for the already-updated container. Seeding
+   * the set from recent succeeded operations closes the amnesia window.
+   *
+   * Key derivation mirrors `handleContainerUpdateAppliedEvent` exactly:
+   *   - ID key: `getContainerNotificationKey(container) ?? containerName`
+   *   - Name key: `fullName(container)` when the container snapshot has a
+   *     non-empty `watcher` string (and differs from the ID key).
+   *
+   * Both keys are required so post-recreate containers (which arrive with a NEW
+   * Docker ID) match the name-keyed entry when the ID-keyed one misses.
+   *
+   * The `liftSuppressionIfConfirmed` path clears these seeded keys exactly as it
+   * would clear in-process entries — no special handling needed.
+   *
+   * Operations with no usable container identity (no container snapshot and no
+   * non-empty containerName) are skipped.
+   */
+  private seedRecentApplicationSuppressionFromStore(): void {
+    const ops = listRecentSucceededOperations(RECENT_APPLICATION_SEED_WINDOW_MS);
+    let seeded = 0;
+    for (const op of ops) {
+      const { container, containerName } = op;
+      const idKey = this.resolveRecentApplicationKey(container, containerName);
+      if (!idKey) {
+        continue;
+      }
+      this.recentlyAppliedContainerKeys.add(idKey);
+      // Also add the name key — matches handleContainerUpdateAppliedEvent exactly.
+      const nameKey =
+        container && typeof container.watcher === 'string' && container.watcher !== ''
+          ? fullName(container)
+          : undefined;
+      if (nameKey && nameKey !== idKey) {
+        this.recentlyAppliedContainerKeys.add(nameKey);
+      }
+      seeded += 1;
+    }
+    if (seeded > 0) {
+      this.log.debug(
+        `Seeded recently-applied suppression set with ${seeded} persisted succeeded operation${seeded === 1 ? '' : 's'} (restart-amnesia guard #408)`,
+      );
+    }
+  }
+
+  /**
+   * Derive the primary notification key for a recently-applied store operation.
+   *
+   * Extracted as a private helper so `seedRecentApplicationSuppressionFromStore`
+   * and any future callers use an identical derivation path, preventing the two
+   * from silently diverging.
+   *
+   * Mirrors `handleContainerUpdateAppliedEvent`:
+   *   - prefer `getContainerNotificationKey(container)` (container.id when set,
+   *     else `watcher_name` fullName when watcher+name are present)
+   *   - fall back to the raw `containerName` string on the operation row
+   *   - return `undefined` when neither yields a non-empty value
+   */
+  private resolveRecentApplicationKey(
+    container: Container | undefined,
+    containerName: string,
+  ): string | undefined {
+    const keyFromContainer = getContainerNotificationKey(container);
+    const key = keyFromContainer ?? (containerName !== '' ? containerName : undefined);
+    return key;
+  }
+
+  /**
+   * Check whether a container is suppressed by the recently-applied guard (#408).
+   *
+   * Called by all three `shouldHandle*ContainerReport` methods. Returns `true`
+   * when the container's notification key is in `recentlyAppliedContainerKeys`,
+   * meaning an update was just applied and the watcher has not yet confirmed the
+   * post-update state (`updateAvailable=false`). The `suppressLogContext` string
+   * is embedded in the debug log so each call site retains its distinct message.
+   *
+   * **Does NOT lift the suppression key** — that is the responsibility of the
+   * callers that observe `updateAvailable=false` reports:
+   *   - `shouldHandleSimpleContainerReport` (via `liftSuppressionIfConfirmed`)
+   *   - `handleContainerReportDigest` (direct, before delegating here)
+   *   - `handleContainerReports` (direct loop, batch path)
+   */
+  private isSuppressedByRecentApplication(
+    container: Container,
+    suppressLogContext: string,
+  ): boolean {
+    const primaryKey = getContainerNotificationKey(container) || fullName(container);
+    // After a docker/dockercompose recreate the watcher reports the container
+    // with a NEW Docker ID. The primary key resolves to that new ID, which was
+    // never added to the suppression set — only the OLD ID and the name-key were.
+    // So we must also probe the name-based key when the primary probe misses.
+    const nameKey =
+      typeof container.watcher === 'string' && container.watcher !== ''
+        ? fullName(container)
+        : undefined;
+
+    const matchedKey = this.recentlyAppliedContainerKeys.has(primaryKey)
+      ? primaryKey
+      : nameKey && this.recentlyAppliedContainerKeys.has(nameKey)
+        ? nameKey
+        : undefined;
+
+    if (!matchedKey) {
+      return false;
+    }
+    this.log.debug(
+      `${suppressLogContext} ${matchedKey}: update just applied, waiting for watcher confirmation`,
+    );
+    return true;
+  }
+
+  /**
+   * Lift the recently-applied suppression key for a container when the watcher
+   * has confirmed the post-update state (`updateAvailable=false`).
+   *
+   * Called by paths that observe `updateAvailable=false` reports — currently:
+   *   - `shouldHandleSimpleContainerReport` (simple mode)
+   *   - `handleContainerReportDigest` (digest mode, before calling
+   *     `shouldHandleDigestContainerReport`)
+   *   - `handleContainerReports` (batch mode loop)
+   *
+   * The `liftLogContext` string is embedded in the debug log so each call site
+   * retains its distinct message.
+   */
+  private liftSuppressionIfConfirmed(container: Container, liftLogContext: string): void {
+    const key = getContainerNotificationKey(container) || fullName(container);
+    // Also derive the name-based key so post-recreate containers (which arrive
+    // with a NEW Docker ID that was never added to the set) still clear the
+    // name-keyed suppression entry that was paired with the old ID on insert.
+    const nameKey =
+      typeof container.watcher === 'string' && container.watcher !== ''
+        ? fullName(container)
+        : undefined;
+
+    const hasIdKey = this.recentlyAppliedContainerKeys.has(key);
+    const hasNameKey = nameKey !== undefined && this.recentlyAppliedContainerKeys.has(nameKey);
+
+    if (!hasIdKey && !hasNameKey) {
+      return;
+    }
+    if (hasIdKey) {
+      this.recentlyAppliedContainerKeys.delete(key);
+      this.log.debug(`Cleared ${key} from recently-applied suppression set (${liftLogContext})`);
+    }
+    if (hasNameKey && nameKey !== key) {
+      this.recentlyAppliedContainerKeys.delete(nameKey!);
+      this.log.debug(
+        `Cleared name-key ${nameKey} from recently-applied suppression set (${liftLogContext})`,
+      );
+    }
+  }
+
   private shouldHandleSimpleContainerReport(containerReport: ContainerReport) {
     const { container } = containerReport;
 
     if (!container.updateAvailable) {
       // Watcher confirmed post-update state: lift the recently-applied
       // suppression so future real updates can notify again.
-      const key = getContainerNotificationKey(container) || fullName(container);
-      if (this.recentlyAppliedContainerKeys.has(key)) {
-        this.recentlyAppliedContainerKeys.delete(key);
-        this.log.debug(`Cleared ${key} from recently-applied suppression set (update confirmed)`);
-      }
+      this.liftSuppressionIfConfirmed(container, 'update confirmed');
       return false;
     }
 
@@ -1334,11 +1547,7 @@ class Trigger<
     // `once` gate) and the watcher's next scan that sets updateAvailable=false.
     // Without this guard, a concurrent report still carrying updateAvailable=true
     // passes the `once` check and fires a duplicate notification (#408).
-    const key = getContainerNotificationKey(container) || fullName(container);
-    if (this.recentlyAppliedContainerKeys.has(key)) {
-      this.log.debug(
-        `Suppressing update-available for ${key}: update just applied, waiting for watcher confirmation`,
-      );
+    if (this.isSuppressedByRecentApplication(container, 'Suppressing update-available for')) {
       return false;
     }
 
@@ -1353,6 +1562,8 @@ class Trigger<
     eventKind: DigestEventKind = 'update-available-digest',
   ) {
     if (!containerReport.container.updateAvailable) {
+      // The caller (handleContainerReportDigest) handles the lift before
+      // invoking this method — no lift here so the concerns stay separated.
       return false;
     }
 
@@ -1363,12 +1574,12 @@ class Trigger<
     // Without this guard a concurrent digest report still carrying
     // updateAvailable=true passes the `once` check and re-buffers the container
     // for a spurious digest notification.
-    const key =
-      getContainerNotificationKey(containerReport.container) || fullName(containerReport.container);
-    if (this.recentlyAppliedContainerKeys.has(key)) {
-      this.log.debug(
-        `Suppressing digest buffer for ${key}: update just applied, waiting for watcher confirmation`,
-      );
+    if (
+      this.isSuppressedByRecentApplication(
+        containerReport.container,
+        'Suppressing digest buffer for',
+      )
+    ) {
       return false;
     }
 
@@ -1448,12 +1659,15 @@ class Trigger<
     // scan that sets updateAvailable=false. Without this guard a concurrent batch
     // report still carrying updateAvailable=true re-notifies right after a
     // successful update.
-    const key =
-      getContainerNotificationKey(containerReport.container) || fullName(containerReport.container);
-    if (this.recentlyAppliedContainerKeys.has(key)) {
-      this.log.debug(
-        `Suppressing batch update-available for ${key}: update just applied, waiting for watcher confirmation`,
-      );
+    // Note: `!updateAvailable` is pre-filtered by shouldDispatchUpdateAvailableContainer,
+    // so this method never sees it; the lift for batch confirmations lives in the
+    // handleContainerReports loop that iterates all reports (including !updateAvailable ones).
+    if (
+      this.isSuppressedByRecentApplication(
+        containerReport.container,
+        'Suppressing batch update-available for',
+      )
+    ) {
       return false;
     }
     if (!this.configuration.once) {
@@ -1499,6 +1713,21 @@ class Trigger<
         currentContainersByBusinessId.get(containerName);
 
       if (!currentContainer || !this.shouldDispatchUpdateAvailableContainer(currentContainer)) {
+        if (this.batchRetryBuffer.get(containerName) === bufferedContainer) {
+          this.batchRetryBufferStore.delete(containerName);
+        }
+        continue;
+      }
+
+      // Skip containers that are suppressed by the recently-applied guard (#408):
+      // a batch retry must not bypass the same suppression that shouldHandleBatchContainerReport
+      // enforces for newly-arriving reports. Without this check, a container whose update
+      // was just applied can slip through via the retry buffer before the watcher confirms
+      // updateAvailable=false. Evict from the retry buffer as well — a notification for an
+      // update that was just applied does not need to be retried.
+      if (this.isSuppressedByRecentApplication(currentContainer, 'Suppressing batch retry for')) {
+        // c8 ignore next: defensive guard mirrors the identical check in the eligibility branch above
+        /* c8 ignore next */
         if (this.batchRetryBuffer.get(containerName) === bufferedContainer) {
           this.batchRetryBufferStore.delete(containerName);
         }
@@ -1689,13 +1918,7 @@ class Trigger<
     // the container's update-available notifications would be muted permanently.
     for (const report of containerReports) {
       if (!report.container.updateAvailable) {
-        const key = getContainerNotificationKey(report.container) || fullName(report.container);
-        if (this.recentlyAppliedContainerKeys.has(key)) {
-          this.recentlyAppliedContainerKeys.delete(key);
-          this.log.debug(
-            `Cleared ${key} from recently-applied suppression set (batch update confirmed)`,
-          );
-        }
+        this.liftSuppressionIfConfirmed(report.container, 'batch update confirmed');
       }
     }
 
@@ -1791,12 +2014,7 @@ class Trigger<
       // Mirror the simple-path suppression-lift (#408): watcher confirmed the
       // post-update state, so lift the recently-applied guard so future real
       // updates can notify again via the digest path.
-      if (this.recentlyAppliedContainerKeys.has(containerName)) {
-        this.recentlyAppliedContainerKeys.delete(containerName);
-        this.log.debug(
-          `Cleared ${containerName} from recently-applied suppression set (digest update confirmed)`,
-        );
-      }
+      this.liftSuppressionIfConfirmed(container, 'digest update confirmed');
       return;
     }
 
@@ -2204,6 +2422,7 @@ class Trigger<
       }
 
       this.seedNotificationHistoryFromStore();
+      this.seedRecentApplicationSuppressionFromStore();
     } else {
       this.log.info('Registering for manual execution (lifecycle notifications still active)');
     }
@@ -2381,26 +2600,35 @@ class Trigger<
   }
 
   /**
-   * Trigger method. Must be overridden in trigger implementation class.
+   * Trigger method. MUST be overridden in every trigger provider subclass.
+   *
+   * The base implementation throws unconditionally so that a provider that
+   * forgets to override fails loudly at runtime rather than silently doing
+   * nothing. In production every concrete provider overrides this method;
+   * direct instantiation of the bare `Trigger` class is only valid in tests
+   * that mock or spy on this method before invoking it.
    */
-  async trigger(containerWithResult: Container): Promise<unknown> {
-    // do nothing by default
-    this.log.warn('Cannot trigger container result; this trigger does not implement "simple" mode');
-    return containerWithResult;
+  async trigger(_containerWithResult: Container): Promise<unknown> {
+    throw new Error(`trigger() not implemented by ${this.type}`);
   }
 
   /**
-   * Trigger batch method. Must be overridden in trigger implementation class.
+   * Trigger batch method. MUST be overridden in every trigger provider subclass.
+   *
+   * The base implementation throws unconditionally so that a provider that
+   * forgets to override fails loudly at runtime rather than silently doing
+   * nothing. In production every concrete provider overrides this method;
+   * direct instantiation of the bare `Trigger` class is only valid in tests
+   * that mock or spy on this method before invoking it.
+   *
    * @param containersWithResult
-   * @returns {*}
+   * @param _runtimeContext optional pre-rendered title/body for digest paths (#328)
    */
   async triggerBatch(
-    containersWithResult: Container[],
+    _containersWithResult: Container[],
     _runtimeContext?: BatchRuntimeContext | unknown,
   ): Promise<unknown> {
-    // do nothing by default
-    this.log.warn('Cannot trigger container results; this trigger does not implement "batch" mode');
-    return containersWithResult;
+    throw new Error(`triggerBatch() not implemented by ${this.type}`);
   }
 
   private isUpdateActionTrigger(): boolean {

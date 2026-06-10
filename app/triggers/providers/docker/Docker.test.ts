@@ -3741,6 +3741,170 @@ describe('scheduleDeferredReconciliation', () => {
     mockGetOperationById.mockReset();
     vi.useRealTimers();
   });
+
+  test('deferred reconciliation throws → marks non-terminal in-progress operation as failed', async () => {
+    vi.useFakeTimers();
+    const storeContainer = await import('../../../store/container.js');
+    const mockContainer = {
+      id: 'ctr-fail',
+      name: 'web',
+      watcher: 'test',
+      agent: undefined,
+      image: { name: 'nginx', tag: { value: '1.0.0' } },
+    };
+    // First call: operation id lookup for containerId; second call: terminal guard lookup
+    mockGetOperationById
+      .mockReturnValueOnce({ containerId: 'ctr-fail' }) // container resolution
+      .mockReturnValueOnce({ id: 'op-deferred-fail', kind: 'update', status: 'in-progress' }); // terminal guard
+    (storeContainer.getContainer as any).mockReturnValue(mockContainer);
+
+    const originalReconcile =
+      docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation;
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = vi
+      .fn()
+      .mockRejectedValue(new Error('reconcile exploded'));
+
+    const warnSpy = vi.fn();
+    const originalLog = docker.log;
+    docker.log = {
+      warn: warnSpy,
+      child: vi.fn().mockReturnValue({ info: vi.fn(), warn: vi.fn(), debug: vi.fn() }),
+    };
+
+    mockMarkOperationTerminal.mockReset();
+
+    const callback = (docker as any).containerUpdateExecutor.scheduleDeferredReconciliation;
+    callback('web', 'op-deferred-fail', 1_000);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Deferred reconciliation failed for web'),
+    );
+    expect(mockMarkOperationTerminal).toHaveBeenCalledOnce();
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-deferred-fail', {
+      status: 'failed',
+      phase: 'failed',
+      lastError: 'reconcile exploded',
+    });
+
+    docker.log = originalLog;
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = originalReconcile;
+    mockGetOperationById.mockReset();
+    mockMarkOperationTerminal.mockReset();
+    vi.useRealTimers();
+  });
+
+  test('deferred reconciliation throws → does NOT call markOperationTerminal for already-terminal operation', async () => {
+    vi.useFakeTimers();
+    const storeContainer = await import('../../../store/container.js');
+    const mockContainer = {
+      id: 'ctr-already-done',
+      name: 'web',
+      watcher: 'test',
+      agent: undefined,
+      image: { name: 'nginx', tag: { value: '1.0.0' } },
+    };
+    // First call: container resolution; second call: terminal guard — status is already 'failed'
+    mockGetOperationById
+      .mockReturnValueOnce({ containerId: 'ctr-already-done' })
+      .mockReturnValueOnce({ id: 'op-already-done', kind: 'update', status: 'failed' });
+    (storeContainer.getContainer as any).mockReturnValue(mockContainer);
+
+    const originalReconcile =
+      docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation;
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = vi
+      .fn()
+      .mockRejectedValue(new Error('reconcile exploded'));
+
+    mockMarkOperationTerminal.mockReset();
+
+    const callback = (docker as any).containerUpdateExecutor.scheduleDeferredReconciliation;
+    callback('web', 'op-already-done', 1_000);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = originalReconcile;
+    mockGetOperationById.mockReset();
+    mockMarkOperationTerminal.mockReset();
+    vi.useRealTimers();
+  });
+
+  test('deferred reconciliation throws → does NOT call markOperationTerminal for self-update operation', async () => {
+    vi.useFakeTimers();
+    const storeContainer = await import('../../../store/container.js');
+    const mockContainer = {
+      id: 'ctr-self',
+      name: 'drydock',
+      watcher: 'test',
+      agent: undefined,
+      image: { name: 'drydock', tag: { value: '1.5.0' } },
+    };
+    // First call: container resolution; second call: terminal guard — kind is 'self-update'
+    mockGetOperationById
+      .mockReturnValueOnce({ containerId: 'ctr-self' })
+      .mockReturnValueOnce({ id: 'op-self', kind: 'self-update', status: 'in-progress' });
+    (storeContainer.getContainer as any).mockReturnValue(mockContainer);
+
+    const originalReconcile =
+      docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation;
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = vi
+      .fn()
+      .mockRejectedValue(new Error('reconcile exploded'));
+
+    mockMarkOperationTerminal.mockReset();
+
+    const callback = (docker as any).containerUpdateExecutor.scheduleDeferredReconciliation;
+    callback('drydock', 'op-self', 1_000);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = originalReconcile;
+    mockGetOperationById.mockReset();
+    mockMarkOperationTerminal.mockReset();
+    vi.useRealTimers();
+  });
+
+  test('deferred reconciliation throws → does NOT call markOperationTerminal when operation not found', async () => {
+    vi.useFakeTimers();
+    const storeContainer = await import('../../../store/container.js');
+    const mockContainer = {
+      id: 'ctr-missing-op',
+      name: 'web',
+      watcher: 'test',
+      agent: undefined,
+      image: { name: 'nginx', tag: { value: '1.0.0' } },
+    };
+    // First call: container resolution; second call: terminal guard returns undefined
+    mockGetOperationById
+      .mockReturnValueOnce({ containerId: 'ctr-missing-op' })
+      .mockReturnValueOnce(undefined);
+    (storeContainer.getContainer as any).mockReturnValue(mockContainer);
+
+    const originalReconcile =
+      docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation;
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = vi
+      .fn()
+      .mockRejectedValue(new Error('reconcile exploded'));
+
+    mockMarkOperationTerminal.mockReset();
+
+    const callback = (docker as any).containerUpdateExecutor.scheduleDeferredReconciliation;
+    callback('web', 'op-missing-op', 1_000);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+
+    docker.containerUpdateExecutor.reconcileInProgressContainerUpdateOperation = originalReconcile;
+    mockGetOperationById.mockReset();
+    mockMarkOperationTerminal.mockReset();
+    vi.useRealTimers();
+  });
 });
 
 describe('findDockerSocketBind', () => {

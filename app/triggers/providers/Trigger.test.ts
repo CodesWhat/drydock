@@ -7,6 +7,7 @@ import * as auditStore from '../../store/audit.js';
 import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
 import * as notificationHistoryStore from '../../store/notification-history.js';
+import * as updateOperationStore from '../../store/update-operation.js';
 import { UpdateRequestError } from '../../updates/request-update.js';
 import Trigger, {
   BUFFER_ENTRY_RETENTION_MS,
@@ -147,6 +148,13 @@ vi.mock('../../prometheus/trigger', () => ({
     inc: mockTriggerCounterInc,
   }),
 }));
+vi.mock('../../store/update-operation.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../store/update-operation.js')>();
+  return {
+    ...actual,
+    listRecentSucceededOperations: vi.fn(() => []),
+  };
+});
 
 let trigger;
 
@@ -178,6 +186,7 @@ beforeEach(async () => {
   storeContainer.getContainersRaw.mockImplementation((query, pagination) =>
     storeContainer.getContainers(query, pagination),
   );
+  updateOperationStore.listRecentSucceededOperations.mockReturnValue([]);
   notificationHistoryStore.resetForTesting();
   trigger = new Trigger();
   trigger.log = log;
@@ -10985,5 +10994,434 @@ describe('bug #290: update-failed uses payload.container over stale store record
     );
     // Stale record must NOT be used.
     expect(triggerSpy).not.toHaveBeenCalledWith(expect.objectContaining({ id: 'c-applied-stale' }));
+  });
+});
+
+// ── Base method throw behavior (finding #1) ────────────────────────────────────
+describe('Trigger base class: trigger() and triggerBatch() must throw when not overridden', () => {
+  test('trigger() throws with a message containing the trigger type', async () => {
+    trigger.type = 'mytype';
+    await expect(trigger.trigger({} as any)).rejects.toThrow('trigger() not implemented by mytype');
+  });
+
+  test('trigger() throws with a message containing the type for a different type name', async () => {
+    trigger.type = 'slack';
+    await expect(trigger.trigger({} as any)).rejects.toThrow('trigger() not implemented by slack');
+  });
+
+  test('triggerBatch() throws with a message containing the trigger type', async () => {
+    trigger.type = 'mytype';
+    await expect(trigger.triggerBatch([] as any)).rejects.toThrow(
+      'triggerBatch() not implemented by mytype',
+    );
+  });
+
+  test('triggerBatch() throws with a message containing the type for a different type name', async () => {
+    trigger.type = 'discord';
+    await expect(trigger.triggerBatch([] as any)).rejects.toThrow(
+      'triggerBatch() not implemented by discord',
+    );
+  });
+});
+
+// ── Suppression helpers (finding #2) ──────────────────────────────────────────
+describe('isSuppressedByRecentApplication private helper', () => {
+  const container = {
+    id: 'c-suppress-test',
+    watcher: 'local',
+    name: 'app',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+  };
+
+  test('returns false when key is not in recentlyAppliedContainerKeys', () => {
+    const result = (trigger as any).isSuppressedByRecentApplication(container, 'Suppressing X for');
+    expect(result).toBe(false);
+  });
+
+  test('returns true and debug-logs when key is in recentlyAppliedContainerKeys', () => {
+    (trigger as any).recentlyAppliedContainerKeys.add('c-suppress-test');
+    const debugSpy = vi.spyOn(trigger.log, 'debug');
+    const result = (trigger as any).isSuppressedByRecentApplication(container, 'Suppressing X for');
+    expect(result).toBe(true);
+    expect(debugSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Suppressing X for c-suppress-test'),
+    );
+  });
+
+  test('uses fullName fallback when container has no id', () => {
+    const noIdContainer = {
+      watcher: 'local',
+      name: 'no-id-app',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'minor' },
+    };
+    (trigger as any).recentlyAppliedContainerKeys.add('local_no-id-app');
+    const result = (trigger as any).isSuppressedByRecentApplication(noIdContainer, 'Ctx');
+    expect(result).toBe(true);
+  });
+
+  test('does not modify recentlyAppliedContainerKeys (no lift side-effect)', () => {
+    (trigger as any).recentlyAppliedContainerKeys.add('c-suppress-test');
+    (trigger as any).isSuppressedByRecentApplication(container, 'Ctx');
+    expect((trigger as any).recentlyAppliedContainerKeys.has('c-suppress-test')).toBe(true);
+  });
+});
+
+describe('liftSuppressionIfConfirmed private helper', () => {
+  const container = {
+    id: 'c-lift-test',
+    watcher: 'local',
+    name: 'app',
+    updateAvailable: false,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+  };
+
+  test('no-ops when key is not in recentlyAppliedContainerKeys', () => {
+    expect((trigger as any).recentlyAppliedContainerKeys.size).toBe(0);
+    (trigger as any).liftSuppressionIfConfirmed(container, 'test context');
+    expect((trigger as any).recentlyAppliedContainerKeys.size).toBe(0);
+  });
+
+  test('removes key and debug-logs when key is present', () => {
+    (trigger as any).recentlyAppliedContainerKeys.add('c-lift-test');
+    const debugSpy = vi.spyOn(trigger.log, 'debug');
+    (trigger as any).liftSuppressionIfConfirmed(container, 'test context');
+    expect((trigger as any).recentlyAppliedContainerKeys.has('c-lift-test')).toBe(false);
+    expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('c-lift-test'));
+    expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('test context'));
+  });
+
+  test('uses fullName fallback when container has no id', () => {
+    const noIdContainer = {
+      watcher: 'local',
+      name: 'no-id-lift',
+      updateAvailable: false,
+      updateKind: { kind: 'tag', semverDiff: 'minor' },
+    };
+    (trigger as any).recentlyAppliedContainerKeys.add('local_no-id-lift');
+    (trigger as any).liftSuppressionIfConfirmed(noIdContainer, 'ctx');
+    expect((trigger as any).recentlyAppliedContainerKeys.has('local_no-id-lift')).toBe(false);
+  });
+
+  test('only removes the specific key — other keys are untouched', () => {
+    (trigger as any).recentlyAppliedContainerKeys.add('c-lift-test');
+    (trigger as any).recentlyAppliedContainerKeys.add('other-key');
+    (trigger as any).liftSuppressionIfConfirmed(container, 'ctx');
+    expect((trigger as any).recentlyAppliedContainerKeys.has('c-lift-test')).toBe(false);
+    expect((trigger as any).recentlyAppliedContainerKeys.has('other-key')).toBe(true);
+  });
+});
+
+// ── Bug #408 finding 1: old-container-ID key mismatch after recreate ───────────
+describe('bug #408 finding 1: post-recreate container (new Docker ID, same name) is still suppressed', () => {
+  // Docker/dockercompose recreates the container with a new Docker ID.
+  // The suppression was added when the old ID was the key; the watcher now
+  // reports a container with a brand-new ID. Both the suppress check and the
+  // lift must work symmetrically across the ID boundary.
+  const oldContainer = {
+    id: 'old-docker-id',
+    watcher: 'local',
+    name: 'webapi',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+  };
+  const newContainerUpdateAvailable = {
+    id: 'new-docker-id', // NEW ID after recreate
+    watcher: 'local',
+    name: 'webapi', // same name
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+  };
+  const newContainerConfirmed = {
+    id: 'new-docker-id',
+    watcher: 'local',
+    name: 'webapi',
+    updateAvailable: false,
+    updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '2.0', semverDiff: 'equal' },
+  };
+
+  beforeEach(() => {
+    trigger.type = 'slack';
+    trigger.name = 'notify-recreate';
+    trigger.configuration = { ...configurationValid, once: true, threshold: 'all' };
+    storeContainer.getContainersRaw.mockReturnValue([newContainerUpdateAvailable]);
+    storeContainer.getContainers.mockReturnValue([newContainerUpdateAvailable]);
+  });
+
+  test(
+    'post-recreate report with new Docker ID and updateAvailable=true is suppressed ' +
+      '(name-based key matches even though ID changed)',
+    async () => {
+      const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+      // Update applied carries the old container snapshot (enqueue-time ID).
+      await trigger.handleContainerUpdateAppliedEvent({
+        containerName: 'local_webapi',
+        container: oldContainer,
+      } as any);
+
+      // Both keys should be in the suppression set.
+      const keys = (trigger as any).recentlyAppliedContainerKeys as Set<string>;
+      expect(keys.has('old-docker-id')).toBe(true);
+      expect(keys.has('local_webapi')).toBe(true);
+
+      // Watcher reports the new container (new ID) — update NOT yet confirmed.
+      // Must be suppressed via the name-based key.
+      await trigger.handleContainerReport({
+        container: newContainerUpdateAvailable,
+        changed: false,
+      } as any);
+
+      const updateAvailableCalls = triggerSpy.mock.calls.filter(
+        (args) => !(args[0] as any)?.notificationEvent,
+      );
+      expect(updateAvailableCalls).toHaveLength(0);
+    },
+  );
+
+  test(
+    'confirmation report (new Docker ID, updateAvailable=false) lifts both keys ' +
+      'so a subsequent genuine update notifies',
+    async () => {
+      const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+      // Update applied with old container snapshot.
+      await trigger.handleContainerUpdateAppliedEvent({
+        containerName: 'local_webapi',
+        container: oldContainer,
+      } as any);
+
+      // Spurious report with new ID (still updateAvailable=true) — suppressed.
+      await trigger.handleContainerReport({
+        container: newContainerUpdateAvailable,
+        changed: false,
+      } as any);
+
+      // Watcher confirms post-update state: updateAvailable=false.
+      // The name key should be removed (old-ID key may remain as an inert orphan,
+      // so we only assert the name key is gone — that is what unlocks future notifications).
+      await trigger.handleContainerReport({
+        container: newContainerConfirmed,
+        changed: true,
+      } as any);
+
+      expect((trigger as any).recentlyAppliedContainerKeys.has('local_webapi')).toBe(false);
+
+      // Genuine new update (different remote version) must fire.
+      const genuineUpdate = {
+        id: 'new-docker-id',
+        watcher: 'local',
+        name: 'webapi',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '2.0', remoteValue: '3.0', semverDiff: 'major' },
+      };
+      storeContainer.getContainersRaw.mockReturnValue([genuineUpdate]);
+      storeContainer.getContainers.mockReturnValue([genuineUpdate]);
+      await trigger.handleContainerReport({ container: genuineUpdate, changed: true } as any);
+
+      const updateAvailableCalls = triggerSpy.mock.calls.filter(
+        (args) => !(args[0] as any)?.notificationEvent,
+      );
+      expect(updateAvailableCalls).toHaveLength(1);
+    },
+  );
+});
+
+// ── Bug #408 finding 3: batch retry buffer bypasses suppression ────────────────
+describe('bug #408 finding 3: getBatchRetryContainers skips suppressed containers', () => {
+  const container = {
+    id: 'c-retry-suppress',
+    watcher: 'local',
+    name: 'retry-app',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+  };
+
+  beforeEach(() => {
+    trigger.type = 'slack';
+    trigger.name = 'notify-retry';
+    trigger.configuration = {
+      ...configurationValid,
+      once: true,
+      threshold: 'all',
+      mode: 'batch',
+    };
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+    storeContainer.getContainers.mockReturnValue([container]);
+  });
+
+  test('container in suppression set is excluded from getBatchRetryContainers output', () => {
+    // Seed the retry buffer directly (simulates a previous failed batch dispatch).
+    trigger.batchRetryBuffer.set('c-retry-suppress', container as any);
+
+    // Add the container to the suppression set (simulates update-applied firing
+    // before the retry attempt).
+    (trigger as any).recentlyAppliedContainerKeys.add('c-retry-suppress');
+
+    const retryContainers = (trigger as any).getBatchRetryContainers([]);
+    expect(retryContainers).toHaveLength(0);
+  });
+
+  test('container not in suppression set is included in getBatchRetryContainers output', () => {
+    // Seed the retry buffer.
+    trigger.batchRetryBuffer.set('c-retry-suppress', container as any);
+    // No suppression key — update-applied has not fired for this container.
+
+    const retryContainers = (trigger as any).getBatchRetryContainers([]);
+    expect(retryContainers).toHaveLength(1);
+    expect(retryContainers[0]).toMatchObject({ id: 'c-retry-suppress' });
+  });
+
+  test('end-to-end: retry container suppressed by recently-applied guard does not reach triggerBatch', async () => {
+    const triggerBatchSpy = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+
+    // 1. First batch dispatch fails → container enters retry buffer.
+    triggerBatchSpy.mockRejectedValueOnce(new Error('network timeout'));
+    await trigger.handleContainerReports([{ container, changed: true } as any]);
+    expect(trigger.batchRetryBuffer.has('c-retry-suppress')).toBe(true);
+    triggerBatchSpy.mockResolvedValue(undefined);
+
+    // 2. Update applied for this container → key added to suppression set.
+    await trigger.handleContainerUpdateAppliedEvent({
+      containerName: 'local_retry-app',
+      container,
+    } as any);
+
+    const callsAfterApply = triggerBatchSpy.mock.calls.length;
+
+    // 3. Next batch report cycle: retry buffer is consulted but container is
+    //    suppressed — must NOT be passed to triggerBatch.
+    await trigger.handleContainerReports([{ container, changed: false } as any]);
+
+    expect(triggerBatchSpy).toHaveBeenCalledTimes(callsAfterApply);
+  });
+});
+
+describe('seedRecentApplicationSuppressionFromStore (restart-amnesia guard, #408)', () => {
+  function initTriggerAuto() {
+    trigger.configuration = { ...trigger.configuration, auto: true };
+    return trigger.init();
+  }
+
+  test('seeds both ID key and name key for an op with a full container snapshot', async () => {
+    const op = {
+      id: 'op-1',
+      containerName: 'local_web',
+      status: 'succeeded',
+      completedAt: new Date().toISOString(),
+      container: { id: 'c-abc', name: 'web', watcher: 'local' },
+    };
+    updateOperationStore.listRecentSucceededOperations.mockReturnValue([op]);
+    await initTriggerAuto();
+
+    const keys = (trigger as any).recentlyAppliedContainerKeys;
+    // ID key — from getContainerNotificationKey(container) = container.id
+    expect(keys.has('c-abc')).toBe(true);
+    // Name key — fullName({ name: 'web', watcher: 'local' }) = 'local_web'
+    expect(keys.has('local_web')).toBe(true);
+  });
+
+  test('seeds only the name key when container has no id', async () => {
+    const op = {
+      id: 'op-2',
+      containerName: 'local_api',
+      status: 'succeeded',
+      completedAt: new Date().toISOString(),
+      container: { name: 'api', watcher: 'local' },
+    };
+    updateOperationStore.listRecentSucceededOperations.mockReturnValue([op]);
+    await initTriggerAuto();
+
+    const keys = (trigger as any).recentlyAppliedContainerKeys;
+    // No container.id → getContainerNotificationKey resolves to fullName = 'local_api'
+    expect(keys.has('local_api')).toBe(true);
+    // No distinct name key since they are the same value — set size should be 1
+    expect(keys.size).toBe(1);
+  });
+
+  test('seeds containerName fallback key when container snapshot is absent', async () => {
+    const op = {
+      id: 'op-3',
+      containerName: 'local_worker',
+      status: 'succeeded',
+      completedAt: new Date().toISOString(),
+    };
+    updateOperationStore.listRecentSucceededOperations.mockReturnValue([op]);
+    await initTriggerAuto();
+
+    const keys = (trigger as any).recentlyAppliedContainerKeys;
+    expect(keys.has('local_worker')).toBe(true);
+  });
+
+  test('respects the window — listRecentSucceededOperations is called with RECENT_APPLICATION_SEED_WINDOW_MS', async () => {
+    await initTriggerAuto();
+    expect(updateOperationStore.listRecentSucceededOperations).toHaveBeenCalledWith(60 * 60 * 1000);
+  });
+
+  test('skips ops with no usable identity (no container and empty containerName)', async () => {
+    const op = {
+      id: 'op-4',
+      containerName: '',
+      status: 'succeeded',
+      completedAt: new Date().toISOString(),
+    };
+    updateOperationStore.listRecentSucceededOperations.mockReturnValue([op]);
+    await initTriggerAuto();
+
+    const keys = (trigger as any).recentlyAppliedContainerKeys;
+    expect(keys.size).toBe(0);
+  });
+
+  test('seeds multiple ops and logs the plural form of the debug message', async () => {
+    const ops = [
+      {
+        id: 'op-m1',
+        containerName: 'local_web',
+        status: 'succeeded',
+        completedAt: new Date().toISOString(),
+        container: { id: 'c-m1', name: 'web', watcher: 'local' },
+      },
+      {
+        id: 'op-m2',
+        containerName: 'local_api',
+        status: 'succeeded',
+        completedAt: new Date().toISOString(),
+        container: { id: 'c-m2', name: 'api', watcher: 'local' },
+      },
+    ];
+    updateOperationStore.listRecentSucceededOperations.mockReturnValue(ops);
+    await initTriggerAuto();
+
+    const keys = (trigger as any).recentlyAppliedContainerKeys;
+    expect(keys.has('c-m1')).toBe(true);
+    expect(keys.has('c-m2')).toBe(true);
+  });
+
+  test('seeded keys are cleared by liftSuppressionIfConfirmed on confirmed update', async () => {
+    const op = {
+      id: 'op-5',
+      containerName: 'local_web',
+      status: 'succeeded',
+      completedAt: new Date().toISOString(),
+      container: { id: 'c-abc', name: 'web', watcher: 'local' },
+    };
+    updateOperationStore.listRecentSucceededOperations.mockReturnValue([op]);
+    await initTriggerAuto();
+
+    const keys = (trigger as any).recentlyAppliedContainerKeys;
+    expect(keys.has('c-abc')).toBe(true);
+
+    // Simulate watcher reporting updateAvailable=false — should lift both keys.
+    const confirmedContainer = {
+      id: 'c-abc',
+      name: 'web',
+      watcher: 'local',
+      updateAvailable: false,
+    };
+    (trigger as any).liftSuppressionIfConfirmed(confirmedContainer, 'test-lift');
+
+    expect(keys.has('c-abc')).toBe(false);
+    expect(keys.has('local_web')).toBe(false);
   });
 });

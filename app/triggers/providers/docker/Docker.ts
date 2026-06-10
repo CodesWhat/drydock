@@ -494,6 +494,23 @@ class Docker<
             this.log?.warn?.(
               `Deferred reconciliation failed for ${containerName}: ${String((e as Error)?.message ?? e)}`,
             );
+            // Prevent the operation from being permanently stuck in-progress:
+            // if the reconciliation callback itself throws, mark the operation
+            // terminal as failed — unless it has already been terminalized by
+            // another path or is a self-update (whose termination is owned by
+            // the finalize callback, with startup reconciliation as the fallback).
+            const deferredOperation = updateOperationStore.getOperationById(operationId);
+            if (
+              deferredOperation &&
+              deferredOperation.kind !== 'self-update' &&
+              (deferredOperation.status === 'queued' || deferredOperation.status === 'in-progress')
+            ) {
+              updateOperationStore.markOperationTerminal(operationId, {
+                status: 'failed',
+                phase: 'failed',
+                lastError: getErrorMessage(e),
+              });
+            }
           }
         }, delayMs);
       },
