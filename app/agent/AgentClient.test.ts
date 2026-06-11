@@ -4841,6 +4841,54 @@ describe('AgentClient', () => {
       expect(result).toBe(row);
       expect(storeContainer.getContainers).toHaveBeenCalledWith({ agent: 'test-agent' });
     });
+
+    test('returns undefined when two agent-owned containers share the same name (ambiguous match)', () => {
+      // Two containers both named 'nginx' on this agent — cannot determine which
+      // identity to stamp, so the function must return undefined rather than
+      // picking one arbitrarily.
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.getContainers).mockReturnValue([
+        { id: 'nginx-1', name: 'nginx', agent: 'test-agent', watcher: 'local' },
+        { id: 'nginx-2', name: 'nginx', agent: 'test-agent', watcher: 'local' },
+      ] as any);
+
+      const result = (client as any).getStoredContainerForAgentOperation({
+        containerName: 'nginx',
+      });
+
+      expect(result).toBeUndefined();
+    });
+
+    test('ambiguous two-name: buildAgentOperationBase omits container snapshot and watcher when store is ambiguous', async () => {
+      // When two same-named containers exist on the agent, getStoredContainerForAgentOperation
+      // returns undefined, so buildAgentOperationBase must not stamp a container or watcher.
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.getContainers).mockReturnValue([
+        { id: 'nginx-1', name: 'nginx', agent: 'test-agent', watcher: 'local' },
+        { id: 'nginx-2', name: 'nginx', agent: 'test-agent', watcher: 'local' },
+      ] as any);
+
+      await client.handleEvent('dd:update-operation-changed', {
+        operationId: 'remote-op-ambiguous',
+        containerName: 'nginx',
+        status: 'in-progress',
+        phase: 'pulling',
+      });
+
+      expect(updateOperationStore.insertOperation).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          container: expect.anything(),
+          watcher: expect.anything(),
+        }),
+      );
+      expect(updateOperationStore.insertOperation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'agent-test-agent-remote-op-ambiguous',
+          containerName: 'nginx',
+          agent: 'test-agent',
+        }),
+      );
+    });
   });
 
   describe('applyAgentUpdateOperationChanged — controller-issued row reuse (#289)', () => {
