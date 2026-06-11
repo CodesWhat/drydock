@@ -402,6 +402,87 @@ describe('Update Operation Store', () => {
     expect(inserted.updatedAt).toBeDefined();
   });
 
+  test('insertOperation normalises empty-string agent to undefined', () => {
+    const inserted = updateOperation.insertOperation({
+      containerName: 'web',
+      agent: '',
+    });
+
+    expect((inserted as unknown as Record<string, unknown>).agent).toBeUndefined();
+  });
+
+  test('insertOperation normalises empty-string watcher to undefined', () => {
+    const inserted = updateOperation.insertOperation({
+      containerName: 'web',
+      watcher: '',
+    });
+
+    expect((inserted as unknown as Record<string, unknown>).watcher).toBeUndefined();
+  });
+
+  test('insertOperation normalises empty-string agent/watcher inside container snapshot to undefined', () => {
+    const inputContainer = { id: 'c1', name: 'web', agent: '', watcher: '' } as any;
+    const inserted = updateOperation.insertOperation({
+      containerName: 'web',
+      container: inputContainer,
+    });
+
+    const container = (inserted as unknown as Record<string, unknown>).container as Record<
+      string,
+      unknown
+    >;
+    expect(container.agent).toBeUndefined();
+    expect(container.watcher).toBeUndefined();
+    // The stored container must be a clone — the caller's object must not be mutated.
+    expect(container).not.toBe(inputContainer);
+    expect(inputContainer.agent).toBe('');
+    expect(inputContainer.watcher).toBe('');
+  });
+
+  test('insertOperation normalises empty-string agent but preserves non-empty watcher in container snapshot', () => {
+    const inserted = updateOperation.insertOperation({
+      containerName: 'web',
+      container: { id: 'c1', name: 'web', agent: '', watcher: 'local' } as any,
+    });
+
+    const container = (inserted as unknown as Record<string, unknown>).container as Record<
+      string,
+      unknown
+    >;
+    expect(container.agent).toBeUndefined();
+    expect(container.watcher).toBe('local');
+  });
+
+  test('insertOperation normalises empty-string watcher but preserves non-empty agent in container snapshot', () => {
+    const inserted = updateOperation.insertOperation({
+      containerName: 'web',
+      container: { id: 'c1', name: 'web', agent: 'agent-A', watcher: '' } as any,
+    });
+
+    const container = (inserted as unknown as Record<string, unknown>).container as Record<
+      string,
+      unknown
+    >;
+    expect(container.agent).toBe('agent-A');
+    expect(container.watcher).toBeUndefined();
+  });
+
+  test('insertOperation preserves non-empty agent and watcher strings unchanged', () => {
+    const inserted = updateOperation.insertOperation({
+      containerName: 'web',
+      agent: 'agent-A',
+      watcher: 'local',
+      container: { id: 'c1', name: 'web', agent: 'agent-A', watcher: 'local' } as any,
+    });
+
+    const op = inserted as unknown as Record<string, unknown>;
+    const container = op.container as Record<string, unknown>;
+    expect(op.agent).toBe('agent-A');
+    expect(op.watcher).toBe('local');
+    expect(container.agent).toBe('agent-A');
+    expect(container.watcher).toBe('local');
+  });
+
   test('updateOperation should merge patch and refresh updatedAt', () => {
     const inserted = updateOperation.insertOperation({
       containerName: 'web',
@@ -2776,6 +2857,51 @@ describe('Update Operation Store', () => {
           watcher: 'local',
         }),
       ).toBe(true);
+    });
+
+    test('returns false and expires the winner op when it is past the active TTL', async () => {
+      // Verify that a stale in-progress "winner" op (past DD_UPDATE_OPERATION_ACTIVE_TTL_MS)
+      // is not counted as active: hasOtherActiveOperationByContainerName must return false
+      // and the freshness check inside it must terminalize the winner op as expired.
+      vi.resetModules();
+      const previousActiveTtlMs = process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS;
+      process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS = '60000';
+      vi.useFakeTimers();
+
+      try {
+        const fresh = await import('./update-operation.js');
+        fresh.createCollections(createDb());
+
+        vi.setSystemTime(new Date('2026-02-23T00:00:00.000Z'));
+        const winner = fresh.insertOperation({
+          containerName: 'web',
+          status: 'in-progress',
+          phase: 'pulling',
+          container: { id: 'c-winner', name: 'web', watcher: 'local', agent: 'agent-A' } as any,
+        });
+
+        // Advance past the 60 s TTL so the winner op is stale.
+        vi.setSystemTime(new Date('2026-02-23T00:01:01.000Z'));
+
+        const result = fresh.hasOtherActiveOperationByContainerName('web', 'loser-op-id', {
+          agent: 'agent-A',
+          watcher: 'local',
+        });
+
+        expect(result).toBe(false);
+
+        // The freshness check inside hasOtherActiveOperationByContainerName must have
+        // terminalized the stale winner op as expired.
+        const winnerAfter = fresh.getOperationById(winner.id);
+        expect(winnerAfter?.status).toBe('expired');
+      } finally {
+        vi.useRealTimers();
+        if (previousActiveTtlMs === undefined) {
+          delete process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS;
+        } else {
+          process.env.DD_UPDATE_OPERATION_ACTIVE_TTL_MS = previousActiveTtlMs;
+        }
+      }
     });
   });
 

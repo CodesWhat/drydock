@@ -1402,5 +1402,108 @@ describe('request-update', () => {
         expect.objectContaining({ status: 'failed' }),
       );
     });
+
+    test('winner fails after loser was expired: one failed + one expired, update-failed fires exactly once', async () => {
+      // Sequence:
+      //   (1) Winner op is accepted and running (in-progress).
+      //   (2) Loser op gets a 409 active-lock conflict while the winner is still
+      //       in flight → classified as `expired` (no update-failed).
+      //   (3) Winner's trigger subsequently fails → classified as `failed`
+      //       (exactly ONE update-failed-worthy terminal transition).
+      //
+      // The test operates at the markOperationTerminal seam: we verify it is
+      // called exactly twice — once with { status: 'expired' } for the loser,
+      // once with { status: 'failed' } for the winner — proving the loser's
+      // expiry cannot retroactively become a second failure event.
+      const winnerPull = deferred();
+      const loserConflict409 = Object.assign(new Error('Container update already in progress'), {
+        response: { status: 409, data: { error: 'Container update already in progress' } },
+      });
+
+      const winnerTrigger = {
+        type: 'docker',
+        trigger: vi.fn(() => winnerPull.promise),
+      };
+      const loserTrigger = {
+        type: 'docker',
+        trigger: vi.fn().mockRejectedValue(loserConflict409),
+      };
+
+      // Winner op: queued with agent+watcher identity.
+      let winnerOpId: string | undefined;
+      mockInsertOperation.mockImplementationOnce(
+        (operation: { id?: string; [k: string]: unknown }) => {
+          const row = { id: operation.id || 'winner-op-id', ...operation };
+          winnerOpId = row.id;
+          return row;
+        },
+      );
+      mockGetOperationById.mockImplementation((id: string) => {
+        if (id === winnerOpId) {
+          return {
+            id: winnerOpId,
+            containerName: 'nginx',
+            status: 'queued',
+            phase: 'queued',
+            container: { id: 'c-winner', name: 'nginx', watcher: 'local', agent: 'agent-A' },
+          };
+        }
+        return {
+          id,
+          containerName: 'nginx',
+          status: 'queued',
+          phase: 'queued',
+          container: { id: 'c-loser', name: 'nginx', watcher: 'local', agent: 'agent-A' },
+        };
+      });
+
+      // (1) Enqueue winner — runs in background.
+      const winnerAccepted = await requestContainerUpdate(
+        createContainer({ name: 'nginx', watcher: 'local', agent: 'agent-A' }),
+        { trigger: winnerTrigger },
+      );
+      // Winner is now in-flight (promise unresolved).
+
+      // (2) Loser: active-lock 409 arrives while winner is in flight.
+      // hasOtherActiveOperationByContainerName returns true to classify as expired.
+      mockGetRecentTerminalSucceededOperationByContainerName.mockReturnValue(undefined);
+      mockHasOtherActiveOperationByContainerName.mockReturnValue(true);
+      mockGetActiveOperationByContainerId.mockReturnValue(undefined);
+      mockGetActiveOperationByContainerName.mockReturnValue(undefined);
+
+      const loserAccepted = await requestContainerUpdate(
+        createContainer({ name: 'nginx', watcher: 'local', agent: 'agent-A' }),
+        { trigger: loserTrigger },
+      );
+      await flushAsyncWork();
+
+      // Loser must be expired; winner is still running.
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        loserAccepted.operationId,
+        expect.objectContaining({ status: 'expired' }),
+      );
+      const callsAfterLoser = mockMarkOperationTerminal.mock.calls.length;
+      expect(callsAfterLoser).toBe(1);
+
+      // (3) Winner now fails.
+      winnerPull.reject(new Error('pull failed for winner'));
+      await flushAsyncWork();
+
+      // Final state: two markOperationTerminal calls total.
+      expect(mockMarkOperationTerminal).toHaveBeenCalledTimes(2);
+      expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+        winnerAccepted.operationId,
+        expect.objectContaining({ status: 'failed' }),
+      );
+      // The loser's expired terminal status is unchanged — only one call used 'expired'.
+      const expiredCalls = mockMarkOperationTerminal.mock.calls.filter(
+        ([, patch]) => (patch as { status?: string }).status === 'expired',
+      );
+      const failedCalls = mockMarkOperationTerminal.mock.calls.filter(
+        ([, patch]) => (patch as { status?: string }).status === 'failed',
+      );
+      expect(expiredCalls).toHaveLength(1);
+      expect(failedCalls).toHaveLength(1);
+    });
   });
 });

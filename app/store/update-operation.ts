@@ -617,6 +617,27 @@ export function insertOperation(
     updatedAt: now,
   } as UpdateOperation;
 
+  // Normalise empty-string identity fields to undefined after building the
+  // operation object.  `getOperationIdentity` and `matchesStrictIdentityFilter`
+  // treat '' and undefined identically via `?? ''`, so leaving '' in the store
+  // would make the identity-matching invariant depend on every caller being
+  // careful.  Doing it here makes the guarantee unconditional.
+  const op = operationToSave as unknown as Record<string, unknown>;
+  if (op.agent === '') op.agent = undefined;
+  if (op.watcher === '') op.watcher = undefined;
+  const savedContainer = op.container;
+  if (savedContainer && typeof savedContainer === 'object') {
+    const c = savedContainer as Record<string, unknown>;
+    if (c.agent === '' || c.watcher === '') {
+      // Clone rather than mutate in place: the container snapshot belongs to the
+      // caller and may be a live store document; mutating it would corrupt shared state.
+      const cloned = { ...c };
+      if (cloned.agent === '') cloned.agent = undefined;
+      if (cloned.watcher === '') cloned.watcher = undefined;
+      op.container = cloned;
+    }
+  }
+
   if (updateOperationCollection) {
     updateOperationCollection.insert({ data: operationToSave });
     maybePruneOperationsForRetention(updateOperationCollection);
