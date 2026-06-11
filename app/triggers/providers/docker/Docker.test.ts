@@ -3496,6 +3496,19 @@ describe('resolveHelperImage for infrastructure updates', () => {
   });
 });
 
+describe('selfUpdateOrchestrator touchOperation wiring', () => {
+  test('touchOperation lambda calls updateOperation with (id, {})', () => {
+    mockUpdateOperation.mockReturnValue(undefined);
+
+    const touchOperation = (docker as any).selfUpdateOrchestrator.touchOperation;
+    expect(typeof touchOperation).toBe('function');
+
+    touchOperation('op-wire-test');
+
+    expect(mockUpdateOperation).toHaveBeenCalledWith('op-wire-test', {});
+  });
+});
+
 describe('scheduleDeferredReconciliation', () => {
   test('should invoke reconciliation after delay for matching container', async () => {
     vi.useFakeTimers();

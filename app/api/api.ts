@@ -27,6 +27,7 @@ import {
   isIdentityAwareRateLimitKeyingEnabled,
 } from './rate-limit-key.js';
 import * as registryRouter from './registry.js';
+import * as selfUpdateRouter from './self-update.js';
 import * as serverRouter from './server.js';
 import * as settingsRouter from './settings.js';
 import * as sseRouter from './sse.js';
@@ -97,6 +98,12 @@ export function init(): express.Router {
   // plus a per-process shared secret in the sub-router, so it must remain
   // ahead of session auth.
   router.use('/internal', internalSelfUpdateRouter.init());
+
+  // Public self-update status endpoint — the UI polls this while Drydock replaces
+  // its own container; the session may be unavailable mid-restart. The operation
+  // UUID acts as the capability token; the response is minimal (no secrets, no
+  // container snapshot). The global apiLimiter still applies.
+  router.use('/self-update', selfUpdateRouter.init());
 
   // Routes to protect after this line
   router.use(requireAuthentication);

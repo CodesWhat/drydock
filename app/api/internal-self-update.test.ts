@@ -1,11 +1,14 @@
+import crypto from 'node:crypto';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
 import {
   createFinalizeSelfUpdateHandler,
   getSelfUpdateFinalizeSecret,
+  getSelfUpdateFinalizeSecretForOperation,
   init,
   isLoopbackAddress,
+  issueSelfUpdateFinalizeSecret,
   SELF_UPDATE_FINALIZE_SECRET_HEADER,
 } from './internal-self-update.js';
 
@@ -23,6 +26,16 @@ describe('internal-self-update', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+
+  function createActiveSelfUpdateOp(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'op-123',
+      status: 'in-progress',
+      phase: 'prepare',
+      kind: 'self-update',
+      ...overrides,
+    };
+  }
 
   function createFinalizeRequest(overrides: Record<string, unknown> = {}) {
     const headers = new Map<string, string>([[SELF_UPDATE_FINALIZE_SECRET_HEADER, finalizeSecret]]);
@@ -50,12 +63,7 @@ describe('internal-self-update', () => {
   });
 
   test('marks an active self-update operation terminal from a loopback request', () => {
-    mockGetOperationById.mockReturnValue({
-      id: 'op-123',
-      status: 'in-progress',
-      phase: 'prepare',
-      kind: 'self-update',
-    });
+    mockGetOperationById.mockReturnValue(createActiveSelfUpdateOp());
 
     const handler = createFinalizeSelfUpdateHandler();
     const req = createFinalizeRequest({
@@ -79,12 +87,7 @@ describe('internal-self-update', () => {
   });
 
   test('marks an active self-update operation as succeeded', () => {
-    mockGetOperationById.mockReturnValue({
-      id: 'op-123',
-      status: 'in-progress',
-      phase: 'prepare',
-      kind: 'self-update',
-    });
+    mockGetOperationById.mockReturnValue(createActiveSelfUpdateOp());
 
     const handler = createFinalizeSelfUpdateHandler();
     const req = createFinalizeRequest({
@@ -106,12 +109,7 @@ describe('internal-self-update', () => {
   });
 
   test('marks an active self-update operation as failed', () => {
-    mockGetOperationById.mockReturnValue({
-      id: 'op-123',
-      status: 'in-progress',
-      phase: 'prepare',
-      kind: 'self-update',
-    });
+    mockGetOperationById.mockReturnValue(createActiveSelfUpdateOp());
 
     const handler = createFinalizeSelfUpdateHandler();
     const req = createFinalizeRequest({
@@ -135,12 +133,7 @@ describe('internal-self-update', () => {
   });
 
   test('marks an active self-update operation as expired', () => {
-    mockGetOperationById.mockReturnValue({
-      id: 'op-123',
-      status: 'in-progress',
-      phase: 'prepare',
-      kind: 'self-update',
-    });
+    mockGetOperationById.mockReturnValue(createActiveSelfUpdateOp());
 
     const handler = createFinalizeSelfUpdateHandler();
     const req = createFinalizeRequest({
@@ -166,12 +159,7 @@ describe('internal-self-update', () => {
   test('marks terminal payloads without phases and trims blank lastError text', () => {
     const handler = createFinalizeSelfUpdateHandler();
 
-    mockGetOperationById.mockReturnValue({
-      id: 'op-succeeded',
-      status: 'in-progress',
-      phase: 'prepare',
-      kind: 'self-update',
-    });
+    mockGetOperationById.mockReturnValue(createActiveSelfUpdateOp({ id: 'op-succeeded' }));
     handler(
       createFinalizeRequest({
         body: {
@@ -182,12 +170,7 @@ describe('internal-self-update', () => {
       createMockResponse(),
     );
 
-    mockGetOperationById.mockReturnValue({
-      id: 'op-rolled-back',
-      status: 'in-progress',
-      phase: 'prepare',
-      kind: 'self-update',
-    });
+    mockGetOperationById.mockReturnValue(createActiveSelfUpdateOp({ id: 'op-rolled-back' }));
     handler(
       createFinalizeRequest({
         body: {
@@ -198,12 +181,7 @@ describe('internal-self-update', () => {
       createMockResponse(),
     );
 
-    mockGetOperationById.mockReturnValue({
-      id: 'op-failed',
-      status: 'in-progress',
-      phase: 'prepare',
-      kind: 'self-update',
-    });
+    mockGetOperationById.mockReturnValue(createActiveSelfUpdateOp({ id: 'op-failed' }));
     handler(
       createFinalizeRequest({
         body: {
@@ -215,12 +193,7 @@ describe('internal-self-update', () => {
       createMockResponse(),
     );
 
-    mockGetOperationById.mockReturnValue({
-      id: 'op-expired',
-      status: 'in-progress',
-      phase: 'prepare',
-      kind: 'self-update',
-    });
+    mockGetOperationById.mockReturnValue(createActiveSelfUpdateOp({ id: 'op-expired' }));
     handler(
       createFinalizeRequest({
         body: {
@@ -325,7 +298,9 @@ describe('internal-self-update', () => {
     expect(res.status).toHaveBeenCalledWith(403);
   });
 
-  test('rejects loopback callers without the finalize secret', () => {
+  test('rejects loopback callers without the finalize secret (fallback path, no stored hash)', () => {
+    // Op without a stored hash — falls back to process-level secret check.
+    mockGetOperationById.mockReturnValue(createActiveSelfUpdateOp());
     const handler = createFinalizeSelfUpdateHandler();
     const req = createMockRequest({
       socket: { remoteAddress: '127.0.0.1' },
@@ -343,7 +318,9 @@ describe('internal-self-update', () => {
     expect(res.status).toHaveBeenCalledWith(403);
   });
 
-  test('rejects loopback callers with a mismatched finalize secret length', () => {
+  test('rejects loopback callers with a mismatched finalize secret length (fallback path)', () => {
+    // Op without a stored hash — falls back to process-level secret check.
+    mockGetOperationById.mockReturnValue(createActiveSelfUpdateOp());
     const handler = createFinalizeSelfUpdateHandler();
     const req = createMockRequest({
       socket: { remoteAddress: '127.0.0.1' },
@@ -472,5 +449,126 @@ describe('internal-self-update', () => {
         (layer) => layer.route?.path === '/self-update/finalize' && layer.route.methods.post,
       ),
     ).toBe(true);
+  });
+
+  test('issueSelfUpdateFinalizeSecret generates a secret and its sha256 hash', () => {
+    const { secret, secretHash } = issueSelfUpdateFinalizeSecret('op-issue-test');
+
+    expect(typeof secret).toBe('string');
+    expect(secret.length).toBeGreaterThan(0);
+    const expectedHash = crypto.createHash('sha256').update(secret).digest('hex');
+    expect(secretHash).toBe(expectedHash);
+  });
+
+  test('getSelfUpdateFinalizeSecretForOperation returns the issued secret', () => {
+    const { secret } = issueSelfUpdateFinalizeSecret('op-retrieve-test');
+    expect(getSelfUpdateFinalizeSecretForOperation('op-retrieve-test')).toBe(secret);
+  });
+
+  test('getSelfUpdateFinalizeSecretForOperation falls back to process secret for unknown ops', () => {
+    expect(getSelfUpdateFinalizeSecretForOperation('op-never-issued')).toBe(finalizeSecret);
+  });
+
+  test('per-op hash validation succeeds when correct secret is supplied', () => {
+    const { secret, secretHash } = issueSelfUpdateFinalizeSecret('op-per-hash');
+    mockGetOperationById.mockReturnValue(
+      createActiveSelfUpdateOp({ id: 'op-per-hash', finalizeSecretHash: secretHash }),
+    );
+
+    const handler = createFinalizeSelfUpdateHandler();
+    const req = createMockRequest({
+      socket: { remoteAddress: '127.0.0.1' },
+      header: (name: string) =>
+        name.toLowerCase() === SELF_UPDATE_FINALIZE_SECRET_HEADER ? secret : undefined,
+      body: { operationId: 'op-per-hash', status: 'succeeded' },
+    });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(202);
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-per-hash', { status: 'succeeded' });
+  });
+
+  test('per-op hash validation fails when wrong secret is supplied', () => {
+    const { secretHash } = issueSelfUpdateFinalizeSecret('op-wrong-secret');
+    mockGetOperationById.mockReturnValue(
+      createActiveSelfUpdateOp({ id: 'op-wrong-secret', finalizeSecretHash: secretHash }),
+    );
+
+    const handler = createFinalizeSelfUpdateHandler();
+    const req = createMockRequest({
+      socket: { remoteAddress: '127.0.0.1' },
+      header: (name: string) =>
+        name.toLowerCase() === SELF_UPDATE_FINALIZE_SECRET_HEADER ? 'wrong-secret' : undefined,
+      body: { operationId: 'op-wrong-secret', status: 'succeeded' },
+    });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+  });
+
+  test('per-op hash validation fails when no secret is supplied', () => {
+    const { secretHash } = issueSelfUpdateFinalizeSecret('op-no-secret');
+    mockGetOperationById.mockReturnValue(
+      createActiveSelfUpdateOp({ id: 'op-no-secret', finalizeSecretHash: secretHash }),
+    );
+
+    const handler = createFinalizeSelfUpdateHandler();
+    const req = createMockRequest({
+      socket: { remoteAddress: '127.0.0.1' },
+      header: () => undefined,
+      body: { operationId: 'op-no-secret', status: 'succeeded' },
+    });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(mockMarkOperationTerminal).not.toHaveBeenCalled();
+  });
+
+  test('map is cleaned up after successful finalize', () => {
+    const { secret } = issueSelfUpdateFinalizeSecret('op-cleanup');
+    mockGetOperationById.mockReturnValue(createActiveSelfUpdateOp({ id: 'op-cleanup' }));
+
+    // Use process-level secret (op has no stored hash, fallback path)
+    const handler = createFinalizeSelfUpdateHandler();
+    const req = createFinalizeRequest({
+      body: { operationId: 'op-cleanup', status: 'succeeded' },
+    });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(202);
+    // After cleanup, the per-op secret is no longer in the map
+    expect(getSelfUpdateFinalizeSecretForOperation('op-cleanup')).toBe(finalizeSecret);
+    // The secret we originally issued is gone
+    expect(getSelfUpdateFinalizeSecretForOperation('op-cleanup')).not.toBe(secret);
+  });
+
+  test('map is cleaned up on the already-terminal path too', () => {
+    issueSelfUpdateFinalizeSecret('op-already-terminal');
+    mockGetOperationById.mockReturnValue({
+      id: 'op-already-terminal',
+      status: 'succeeded',
+      phase: 'succeeded',
+      kind: 'self-update',
+    });
+
+    const handler = createFinalizeSelfUpdateHandler();
+    const req = createFinalizeRequest({
+      body: { operationId: 'op-already-terminal', status: 'succeeded' },
+    });
+    const res = createMockResponse();
+
+    handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(202);
+    expect(getSelfUpdateFinalizeSecretForOperation('op-already-terminal')).toBe(finalizeSecret);
   });
 });

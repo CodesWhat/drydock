@@ -24,17 +24,17 @@ Drydock detects when its own container image has an update available, just like 
 
 ## Update sequence
 
-1. **Notify UI** — A `dd:self-update` SSE event is broadcast to all connected browsers, displaying an animated full-screen overlay. The server waits for at least one browser to acknowledge receipt before proceeding (see [SSE acknowledgment](#sse-acknowledgment) below)
+1. **Notify UI** — A `dd:self-update` SSE event is broadcast to all connected browsers, displaying an animated full-screen overlay. The SSE connection is intentionally closed as the update begins; the UI then polls `GET /api/v1/self-update/{operationId}/status` every 5 seconds and reloads itself once the operation reaches a terminal status (see [Status polling](#status-polling) and [SSE acknowledgment](#sse-acknowledgment) below). The server waits for at least one browser to acknowledge receipt before proceeding.
 2. **Backup current image** — The running image is backed up before proceeding
 3. **Pull new image** — The updated image is pulled while the current container is still running
 4. **Rename old container** — The current container is renamed to `drydock-old-{timestamp}` to free the original name
 5. **Create new container** — A new container is created with the original name and updated image (not started yet)
-6. **Helper container** — A temporary container is spawned with its own access to the Docker daemon. The helper's connection is resolved in this order: if the Drydock container has `/var/run/docker.sock` bind-mounted, the helper uses that direct socket path. Otherwise, if the watcher is configured with a TCP Docker host, the helper connects over TCP (receiving `DD_SELF_UPDATE_DOCKER_HOST` / `DD_SELF_UPDATE_DOCKER_PORT` / `DD_SELF_UPDATE_DOCKER_PROTOCOL`) and is attached to Drydock's Docker network so it can resolve the proxy by DNS. It:
+6. **Helper container** — A temporary container (`drydock-self-update-<timestamp>`, `dd.watch=false`) is spawned with its own access to the Docker daemon. The helper's connection is resolved in this order: if the Drydock container has `/var/run/docker.sock` bind-mounted, the helper uses that direct socket path. Otherwise, if the watcher is configured with a TCP Docker host, the helper connects over TCP (receiving `DD_SELF_UPDATE_DOCKER_HOST` / `DD_SELF_UPDATE_DOCKER_PORT` / `DD_SELF_UPDATE_DOCKER_PROTOCOL`) and is attached to Drydock's Docker network so it can resolve the proxy by DNS. It:
    - Stops the old container
    - Starts the new container
    - Deletes the old container on success
    - If the new container fails to start, restarts the old container as a fallback
-7. **Reconnect** — The UI automatically reconnects to the new container
+7. **Finalize** — The helper calls back into the new container to record the outcome. The operation is then marked `succeeded` and the UI overlay clears on the next poll.
 
 ## Error recovery
 
@@ -55,9 +55,38 @@ When the self-update begins, the server needs to ensure that connected browsers 
 
 The ack timeout defaults to 3 seconds. If no browsers are connected, the update proceeds immediately without waiting.
 
+## Status polling
+
+Once the self-update begins, the UI closes its SSE connection and polls the following endpoint every 5 seconds until the operation reaches a terminal status:
+
+```text
+GET /api/v1/self-update/{operationId}/status
+```
+
+This endpoint is **unauthenticated** — the operation UUID itself acts as the access capability, allowing the UI to check progress even while the session may be unavailable during the container swap. Returns `404` when the operation ID is unknown.
+
+Example response:
+
+```json
+{
+  "operationId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "in-progress",
+  "phase": "prepare"
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `operationId` | string | UUID of the self-update operation |
+| `status` | string | Current status: `queued`, `in-progress`, `succeeded`, `rolled-back`, `failed`, or `expired` |
+| `phase` | string | Current phase within the operation |
+| `completedAt` | string | ISO 8601 timestamp when the operation reached a terminal status — omitted while the operation is still active |
+
+When `status` is one of the terminal values — `succeeded`, `rolled-back`, `failed`, or `expired` — the UI performs a one-time hard reload to reconnect to the new (or restored) container. No manual refresh is needed.
+
 ## Dry-run mode
 
-When `DD_ACTION_DOCKER_{trigger_name}_DRYRUN=true`, the self-update is logged but not executed. The new image is pulled ahead of time but no container replacement occurs.
+When `DD_ACTION_DOCKER_{trigger_name}_DRYRUN=true`, the self-update is logged but not executed. The new image is pulled ahead of time but no container replacement occurs. The full-screen overlay is not shown in dry-run mode.
 
 ## TCP deployments (socket proxy)
 
@@ -79,7 +108,7 @@ The helper's network mode is cloned from the Drydock container so it can resolve
 A *filtering* socket proxy must be configured to permit the self-update helper.
 
 - **Container ownership** — proxies that scope operations by an ownership label (for example sockguard's `com.sockguard.owner`) reject the helper's attempt to stop and replace the Drydock container unless the Drydock container itself carries that label. Add the label to the Drydock container so the helper is allowed to act on it.
-- **Finalize `exec`** — after the swap the helper runs `node dist/triggers/providers/docker/self-update-finalize-entrypoint.js` inside the new container via `docker exec`. A proxy with an exec allowlist must include that command. This step is non-fatal: if it is blocked the update still completes, but the operation will not report a clean terminal status.
+- **Finalize `exec`** — after the swap the helper runs `node dist/triggers/providers/docker/self-update-finalize-entrypoint.js` inside the new container via `docker exec`. A proxy with an exec allowlist must include that command. This step is non-fatal: if it is blocked the update still completes, but the operation cannot reach `succeeded` — the UI overlay will remain visible until the grace window (~10 minutes from when the helper was spawned) expires the operation. To avoid this, allowlist `node dist/triggers/providers/docker/self-update-finalize-entrypoint.js` in the proxy exec allowlist.
 </Callout>
 
 ## Infrastructure update mode
@@ -125,8 +154,9 @@ If Drydock restarts while an update is in progress, the outcome depends on which
 | `queued` | Resumed automatically after startup |
 | `pulling` | Reset to `queued` and resumed (pull is idempotent) |
 | `prepare`, `renamed`, `new-created`, `old-stopped`, `new-started`, `health-gate`, `rollback-*` | Marked `failed` — requires operator review |
+| In-progress (helper spawned, awaiting finalize) | 10-minute grace window; if the helper finalizes within the window the operation reaches `succeeded`, otherwise it is expired at the end of the window |
 
-<Callout type="info">Self-update operations are not recovered automatically — a self-update interrupted mid-flight should be re-triggered manually once Drydock is running again.</Callout>
+<Callout type="info">Self-update operations are not recovered automatically — a self-update interrupted mid-flight should be re-triggered manually once Drydock is running again. When a restart occurs after the helper has been spawned, the operation receives a 10-minute grace window (clock starting from when the helper was spawned, i.e. after the image pull). If the helper never finalizes — due to a crash or a blocked exec — the operation is expired at the end of the grace window and the UI overlay clears at that point.</Callout>
 
 ### Boot-time recovery concurrency
 
@@ -188,4 +218,4 @@ volumes:
 </Tab>
 </Tabs>
 
-<Callout type="info">The self-update overlay includes an animated visual indicator and auto-reconnect. No manual refresh is needed.</Callout>
+<Callout type="info">The self-update overlay includes an animated visual indicator and persists through the entire container replacement. The UI polls the status endpoint every 5 seconds and reloads itself once the operation reaches a terminal status. No manual refresh is needed.</Callout>

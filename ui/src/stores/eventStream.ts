@@ -270,10 +270,23 @@ export const useEventStreamStore = defineStore('eventStream', () => {
     source.addEventListener('dd:self-update', (event: MessageEvent) => {
       const payload = parseSelfUpdatePayload(event?.data);
       selfUpdateMode = true;
-      if (payload.opId) {
-        void acknowledgeSelfUpdate(payload.opId, event?.lastEventId || undefined);
-      }
       emit('self-update', payload, event?.lastEventId || undefined);
+      // The browser's native EventSource retry must not outlive self-update mode.
+      // A successful reconnect to the new server would fire dd:connected, clear the overlay
+      // early, and leave the SPA on stale pre-update assets.  AppLayout's status-poll
+      // followed by a hard reload is the only valid recovery path during a self-update.
+      if (payload.opId) {
+        // Give the ack POST a chance to complete before closing — the server validates the
+        // ack against its active-client registry, and closing the SSE connection first would
+        // deregister the client and force the server to sit out the full ack timeout.
+        acknowledgeSelfUpdate(payload.opId, event?.lastEventId || undefined).finally(() => {
+          closeSource();
+          status.value = 'closed';
+        });
+      } else {
+        closeSource();
+        status.value = 'closed';
+      }
     });
 
     source.addEventListener('dd:scan-started', (event: MessageEvent) => {

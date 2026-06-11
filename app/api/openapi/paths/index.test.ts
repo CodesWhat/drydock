@@ -436,5 +436,32 @@ describe('openApiPaths', () => {
         },
       });
     });
+
+    test('/api/self-update/{operationId}/status GET path is fully specified', () => {
+      expect(openApiPaths['/api/self-update/{operationId}/status']).toStrictEqual({
+        get: {
+          tags: ['System'],
+          summary: 'Get self-update operation status',
+          operationId: 'getSelfUpdateOperationStatus',
+          security: [],
+          parameters: [operationIdPathParam],
+          responses: {
+            200: jsonResponse('Self-update operation status', {
+              type: 'object',
+              required: ['operationId', 'status', 'phase'],
+              properties: {
+                operationId: { type: 'string' },
+                status: { type: 'string' },
+                phase: { type: 'string' },
+                completedAt: { type: 'string' },
+              },
+              additionalProperties: false,
+            }),
+            400: errorResponse('operationId is required'),
+            404: errorResponse('Self-update operation not found'),
+          },
+        },
+      });
+    });
   });
 });

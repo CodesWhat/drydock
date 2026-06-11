@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import {
   markSelfUpdateOperationFailed,
+  markSelfUpdateOperationSkipped,
   type PrepareSelfUpdateOperationArgs,
   prepareSelfUpdateOperation,
 } from './self-update-operation.js';
@@ -11,12 +12,17 @@ const mockInsertOperation = vi.hoisted(() => vi.fn());
 const mockUpdateOperation = vi.hoisted(() => vi.fn());
 const mockGetOperationById = vi.hoisted(() => vi.fn());
 const mockMarkOperationTerminal = vi.hoisted(() => vi.fn());
+const mockIssueSelfUpdateFinalizeSecret = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../store/update-operation.js', () => ({
   insertOperation: (...args: unknown[]) => mockInsertOperation(...args),
   updateOperation: (...args: unknown[]) => mockUpdateOperation(...args),
   getOperationById: (...args: unknown[]) => mockGetOperationById(...args),
   markOperationTerminal: (...args: unknown[]) => mockMarkOperationTerminal(...args),
+}));
+
+vi.mock('../../../api/internal-self-update.js', () => ({
+  issueSelfUpdateFinalizeSecret: (...args: unknown[]) => mockIssueSelfUpdateFinalizeSecret(...args),
 }));
 
 function createArgs(
@@ -54,6 +60,10 @@ describe('prepareSelfUpdateOperation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetOperationById.mockReturnValue(undefined);
+    mockIssueSelfUpdateFinalizeSecret.mockReturnValue({
+      secret: 'test-secret',
+      secretHash: 'test-hash',
+    });
   });
 
   test('reuses a requested operation id and upgrades it into an active self-update operation', () => {
@@ -93,6 +103,7 @@ describe('prepareSelfUpdateOperation', () => {
         targetImage: 'ghcr.io/acme/drydock:2.0.0',
         completedAt: undefined,
         lastError: undefined,
+        finalizeSecretHash: 'test-hash',
       }),
     );
     expect(mockInsertOperation).not.toHaveBeenCalled();
@@ -124,6 +135,7 @@ describe('prepareSelfUpdateOperation', () => {
         kind: 'self-update',
         status: 'in-progress',
         phase: 'prepare',
+        finalizeSecretHash: 'test-hash',
       }),
     );
     expect(mockInsertOperation).not.toHaveBeenCalled();
@@ -149,6 +161,7 @@ describe('prepareSelfUpdateOperation', () => {
         containerId: 'container-id',
         containerName: 'drydock',
         triggerName: 'docker.test',
+        finalizeSecretHash: 'test-hash',
       }),
     );
   });
@@ -441,5 +454,133 @@ describe('markSelfUpdateOperationFailed', () => {
       toVersion: '4.0.0',
       targetImage: 'ghcr.io/acme/myapp:4.0.0',
     });
+  });
+});
+
+describe('markSelfUpdateOperationSkipped', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('marks an existing active operation as expired with the given lastError', () => {
+    const existing = {
+      id: 'op-dryrun',
+      status: 'in-progress',
+      phase: 'prepare',
+      kind: 'self-update',
+      containerId: 'c-1',
+      containerName: 'drydock',
+    };
+    const terminal = {
+      ...existing,
+      status: 'expired',
+      phase: 'expired',
+      lastError: 'Self-update transition skipped because dry-run mode is enabled',
+      completedAt: '2026-04-11T13:00:00.000Z',
+    };
+    mockMarkOperationTerminal.mockReturnValue(terminal);
+
+    const result = markSelfUpdateOperationSkipped(
+      'op-dryrun',
+      'Self-update transition skipped because dry-run mode is enabled',
+    );
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith('op-dryrun', {
+      status: 'expired',
+      lastError: 'Self-update transition skipped because dry-run mode is enabled',
+    });
+    expect(result).toEqual(terminal);
+  });
+
+  test('returns undefined (no-op) when the operation ID does not exist', () => {
+    mockMarkOperationTerminal.mockReturnValue(undefined);
+
+    const result = markSelfUpdateOperationSkipped('nonexistent-op', 'some reason');
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith('nonexistent-op', {
+      status: 'expired',
+      lastError: 'some reason',
+    });
+    expect(result).toBeUndefined();
+  });
+});
+
+describe('prepareSelfUpdateOperation — secret issuance', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetOperationById.mockReturnValue(undefined);
+    mockIssueSelfUpdateFinalizeSecret.mockReturnValue({
+      secret: 'issued-secret',
+      secretHash: 'issued-hash',
+    });
+  });
+
+  test('issues secret for the reused active operation id', () => {
+    mockGetOperationById.mockReturnValue({ id: 'queued-op-id', status: 'queued', phase: 'queued' });
+    mockUpdateOperation.mockReturnValue({
+      id: 'queued-op-id',
+      status: 'in-progress',
+      phase: 'prepare',
+      kind: 'self-update',
+    });
+
+    prepareSelfUpdateOperation(createArgs({ runtimeContext: { operationId: 'queued-op-id' } }));
+
+    expect(mockIssueSelfUpdateFinalizeSecret).toHaveBeenCalledWith('queued-op-id');
+    expect(mockUpdateOperation).toHaveBeenCalledWith(
+      'queued-op-id',
+      expect.objectContaining({ finalizeSecretHash: 'issued-hash' }),
+    );
+  });
+
+  test('issues secret for a new id when requested op is terminal', () => {
+    mockGetOperationById.mockReturnValue({ id: 'failed-op-id', status: 'failed', phase: 'failed' });
+    mockInsertOperation.mockReturnValue({
+      id: 'generated-operation-id',
+      status: 'in-progress',
+      phase: 'prepare',
+      kind: 'self-update',
+    });
+
+    prepareSelfUpdateOperation(createArgs({ runtimeContext: { operationId: 'failed-op-id' } }));
+
+    expect(mockIssueSelfUpdateFinalizeSecret).toHaveBeenCalledWith('generated-operation-id');
+    expect(mockInsertOperation).toHaveBeenCalledWith(
+      expect.objectContaining({ finalizeSecretHash: 'issued-hash' }),
+    );
+  });
+
+  test('issues secret for the requested id when no existing row', () => {
+    mockGetOperationById.mockReturnValue(undefined);
+    mockInsertOperation.mockReturnValue({
+      id: 'requested-op-id',
+      status: 'in-progress',
+      phase: 'prepare',
+      kind: 'self-update',
+    });
+
+    prepareSelfUpdateOperation(createArgs({ runtimeContext: { operationId: 'requested-op-id' } }));
+
+    expect(mockIssueSelfUpdateFinalizeSecret).toHaveBeenCalledWith('requested-op-id');
+    expect(mockInsertOperation).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'requested-op-id', finalizeSecretHash: 'issued-hash' }),
+    );
+  });
+
+  test('issues secret for the generated id when no requested op', () => {
+    mockGetOperationById.mockReturnValue(undefined);
+    mockInsertOperation.mockReturnValue({
+      id: 'generated-operation-id',
+      status: 'in-progress',
+      phase: 'prepare',
+      kind: 'self-update',
+    });
+
+    prepareSelfUpdateOperation(createArgs());
+
+    expect(mockIssueSelfUpdateFinalizeSecret).toHaveBeenCalledWith('generated-operation-id');
+    expect(mockInsertOperation).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'generated-operation-id', finalizeSecretHash: 'issued-hash' }),
+    );
   });
 });
