@@ -1144,21 +1144,58 @@ function stopConnectivityPolling() {
   connectivityTimer = undefined;
 }
 
+function recoverFromOutage() {
+  // Server is back — stop SSE reconnect loop, then hard-reload to login.
+  // Hard reload is required because a server restart produces new asset
+  // hashes; router.push would try to lazy-load stale chunks and fail.
+  sseService.disconnect();
+  stopConnectivityPolling();
+  globalThis.location.replace('/login');
+}
+
 async function checkConnectivity() {
   if (!connectionLost.value) {
     stopConnectivityPolling();
     return;
   }
 
+  const opId = selfUpdateOperationId.value;
+
+  // During a self-update with a known operation id, poll the status endpoint
+  // rather than /auth/user. The old server keeps answering /auth/user during
+  // the image pull phase, so "server responds" is not "update finished"; the
+  // status turns terminal only after the helper container commits the swap
+  // (succeeded) or gives up (rolled-back / failed / expired).
+  if (selfUpdateInProgress.value && opId) {
+    try {
+      const res = await fetch(`/api/v1/self-update/${encodeURIComponent(opId)}/status`, {
+        credentials: 'include',
+        redirect: 'manual',
+      });
+      if (res.status === 404) {
+        // Operation unknown — pruned or store reset; recovering beats hanging.
+        recoverFromOutage();
+      } else if (res.ok) {
+        const body = await res.json().catch(() => undefined);
+        const status =
+          body && typeof body === 'object' ? (body as Record<string, unknown>).status : undefined;
+        if (typeof status === 'string' && status !== 'queued' && status !== 'in-progress') {
+          // Terminal status — update completed (or failed/rolled-back/expired).
+          recoverFromOutage();
+        }
+        // Still active or unparseable body — keep holding, interval polls again.
+      }
+      // Any other non-ok response (5xx/429/403) — keep holding.
+    } catch {
+      // Network error — expected mid-restart, keep holding.
+    }
+    return;
+  }
+
   try {
     const res = await fetch('/auth/user', { credentials: 'include', redirect: 'manual' });
     if (res.ok || res.status === 401) {
-      // Server is back — stop SSE reconnect loop, then hard-reload to login.
-      // Hard reload is required because a server restart produces new asset
-      // hashes; router.push would try to lazy-load stale chunks and fail.
-      sseService.disconnect();
-      stopConnectivityPolling();
-      globalThis.location.replace('/login');
+      recoverFromOutage();
     }
   } catch {
     // Network error — server is unreachable

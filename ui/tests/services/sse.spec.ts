@@ -1,5 +1,7 @@
+import { flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import sseService from '@/services/sse';
+import { useEventStreamStore } from '@/stores/eventStream';
 
 describe('SseService', () => {
   type EventListener = (...args: unknown[]) => unknown;
@@ -137,7 +139,7 @@ describe('SseService', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('emits self-update payload on dd:self-update event and acknowledges operation', () => {
+  it('emits self-update payload on dd:self-update event and acknowledges operation', async () => {
     sseService.connect(mockEventBus);
     eventListeners['dd:connected']({ data: JSON.stringify(connectedPayload) });
     eventListeners['dd:self-update']({
@@ -164,9 +166,14 @@ describe('SseService', () => {
         }),
       }),
     );
+    // EventSource must be closed after the ack promise settles so the browser's native
+    // retry cannot reconnect and prematurely clear the overlay.
+    await flushPromises();
+    expect(mockEventSource.close).toHaveBeenCalled();
+    expect(useEventStreamStore().status).toBe('closed');
   });
 
-  it('acknowledges self-update without lastEventId when not provided', () => {
+  it('acknowledges self-update without lastEventId when not provided', async () => {
     sseService.connect(mockEventBus);
     eventListeners['dd:connected']({ data: JSON.stringify(connectedPayload) });
     eventListeners['dd:self-update']({ data: '{"opId":"op-456"}' });
@@ -180,6 +187,46 @@ describe('SseService', () => {
         }),
       }),
     );
+    await flushPromises();
+    expect(mockEventSource.close).toHaveBeenCalled();
+    expect(useEventStreamStore().status).toBe('closed');
+  });
+
+  it('closes EventSource after ack promise fulfils on dd:self-update with opId', async () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:connected']({ data: JSON.stringify(connectedPayload) });
+    mockFetch.mockResolvedValueOnce({ ok: true });
+    eventListeners['dd:self-update']({ data: '{"opId":"op-789"}', lastEventId: 'evt-2' });
+
+    // Before all microtasks settle the close has not been called yet.
+    expect(mockEventSource.close).not.toHaveBeenCalled();
+
+    // After all microtasks flush the finally() handler fires.
+    await flushPromises();
+    expect(mockEventSource.close).toHaveBeenCalledTimes(1);
+    expect(useEventStreamStore().status).toBe('closed');
+  });
+
+  it('closes EventSource after ack promise rejects on dd:self-update with opId', async () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:connected']({ data: JSON.stringify(connectedPayload) });
+    mockFetch.mockRejectedValueOnce(new Error('network error'));
+    eventListeners['dd:self-update']({ data: '{"opId":"op-rej"}' });
+
+    await flushPromises();
+    // acknowledgeSelfUpdate swallows the rejection; .finally still fires.
+    expect(mockEventSource.close).toHaveBeenCalledTimes(1);
+    expect(useEventStreamStore().status).toBe('closed');
+  });
+
+  it('closes EventSource immediately on dd:self-update without opId, no ack POST sent', () => {
+    sseService.connect(mockEventBus);
+    eventListeners['dd:connected']({ data: JSON.stringify(connectedPayload) });
+    eventListeners['dd:self-update']({ data: '{}' });
+
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockEventSource.close).toHaveBeenCalledTimes(1);
+    expect(useEventStreamStore().status).toBe('closed');
   });
 
   it('emits scan-started with parsed containerId on dd:scan-started event', () => {

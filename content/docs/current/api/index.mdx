@@ -89,6 +89,7 @@ If the header is missing or does not match the expected token, the API responds 
 | `/api/v1/stats/summary` | `GET` | Fleet-aggregate CPU/memory snapshot (see [Container API](/docs/api/container#get-fleet-stats-summary)) |
 | `/api/v1/stats/summary/stream` | `GET` | SSE feed of fleet-aggregate stats — consumed by the dashboard Resource Usage widget (see [Container API](/docs/api/container#stream-fleet-stats-summary-sse)) |
 | `/api/v1/update-operations/:id` | `GET` | Single update/rollback operation by ID — SSE-miss fallback (see [Container API](/docs/api/container#get-a-single-update-operation)) |
+| `/api/v1/self-update/:operationId/status` | `GET` | Self-update operation status — unauthenticated; polled by the UI overlay during a self-update (operation UUID acts as the access capability; returns `{ operationId, status, phase, completedAt? }`, 404 when unknown) |
 | `/api/v1/operations/:id/cancel` | `POST` | Cancel a queued or in-progress update operation (see [Container API](/docs/api/container#cancel-an-update-operation)) |
 | `/api/v1/containers/:id/release-notes` | `GET` | GitHub release notes for a container's available update (see [Container API](/docs/api/container)) |
 | `/api/v1/containers/backups` | `GET` | [All image backups](/docs/api/container#list-all-backups) (optionally filter by `containerName`) |

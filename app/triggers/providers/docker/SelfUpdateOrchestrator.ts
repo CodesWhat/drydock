@@ -50,7 +50,7 @@ interface SelfUpdateOrchestratorDependencies {
   emitSelfUpdateStarting: (payload: SelfUpdateStartingPayload) => Promise<void>;
   createOperationId: () => string;
   resolveFinalizeUrl: () => string;
-  resolveFinalizeSecret: () => string;
+  resolveFinalizeSecret: (operationId: string) => string;
 }
 
 interface SelfUpdateOrchestratorConstructorOptions {
@@ -77,8 +77,9 @@ interface SelfUpdateOrchestratorConstructorOptions {
   emitSelfUpdateStarting?: SelfUpdateOrchestratorDependencies['emitSelfUpdateStarting'];
   createOperationId?: SelfUpdateOrchestratorDependencies['createOperationId'];
   resolveFinalizeUrl?: SelfUpdateOrchestratorDependencies['resolveFinalizeUrl'];
-  resolveFinalizeSecret?: SelfUpdateOrchestratorDependencies['resolveFinalizeSecret'];
+  resolveFinalizeSecret?: (operationId: string) => string;
   resolveHelperImage?: (container: SelfUpdateContainerRef) => string | undefined;
+  touchOperation?: (operationId: string) => void;
 }
 
 function missingDependency(dependencyName: string): never {
@@ -108,6 +109,8 @@ class SelfUpdateOrchestrator {
 
   resolveHelperImage?: (container: SelfUpdateContainerRef) => string | undefined;
 
+  touchOperation?: (operationId: string) => void;
+
   constructor(options: SelfUpdateOrchestratorConstructorOptions = {}) {
     this.getConfiguration = options.getConfiguration || (() => ({}));
     this.runtimeConfigManager = options.runtimeConfigManager || {
@@ -133,8 +136,10 @@ class SelfUpdateOrchestrator {
       options.resolveFinalizeUrl ||
       (() => 'http://127.0.0.1:3000/api/v1/internal/self-update/finalize');
     this.resolveFinalizeSecret =
-      options.resolveFinalizeSecret || (() => 'missing-self-update-finalize-secret');
+      options.resolveFinalizeSecret ||
+      ((_operationId: string) => 'missing-self-update-finalize-secret');
     this.resolveHelperImage = options.resolveHelperImage;
+    this.touchOperation = options.touchOperation;
   }
 
   isSelfUpdate(container: SelfUpdateContainerRef): boolean {
@@ -156,6 +161,11 @@ class SelfUpdateOrchestrator {
     operationId?: string,
   ): Promise<void> {
     if (!this.isSelfUpdate(container)) {
+      return;
+    }
+
+    if (this.getConfiguration()?.dryrun) {
+      logContainer.info('Self-update UI notification skipped because dry-run mode is enabled');
       return;
     }
 
@@ -190,6 +200,7 @@ class SelfUpdateOrchestrator {
         resolveFinalizeUrl: this.resolveFinalizeUrl,
         resolveFinalizeSecret: this.resolveFinalizeSecret,
         resolveHelperImage: resolveHelperImage ? () => resolveHelperImage(container) : undefined,
+        touchOperation: this.touchOperation,
       },
       context,
       container,

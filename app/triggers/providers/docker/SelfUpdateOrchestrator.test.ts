@@ -133,6 +133,37 @@ describe('SelfUpdateOrchestrator', () => {
     expect(orchestrator.isInfrastructureUpdate(createContainer({ labels: null }))).toBe(false);
   });
 
+  test('passes touchOperation through to executeSelfUpdateTransition', async () => {
+    const touchOperation = vi.fn();
+    const helperContainer = { start: vi.fn().mockResolvedValue(undefined) };
+    const dockerApiCreateContainer = vi.fn().mockResolvedValue(helperContainer);
+    const newContainer = {
+      inspect: vi.fn().mockResolvedValue({ Id: 'new-id' }),
+      remove: vi.fn().mockResolvedValue(undefined),
+    };
+    const orchestrator = createOrchestrator({
+      touchOperation,
+      createContainer: vi.fn().mockResolvedValue(newContainer),
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+    const context = {
+      dockerApi: { createContainer: dockerApiCreateContainer },
+      auth: undefined,
+      newImage: 'drydock:latest',
+      currentContainer: { rename: vi.fn().mockResolvedValue(undefined) },
+      currentContainerSpec: {
+        Name: '/drydock',
+        Id: 'old-id',
+        HostConfig: { Binds: ['/var/run/docker.sock:/var/run/docker.sock'] },
+      },
+    };
+
+    await orchestrator.execute(context as never, createContainer(), log, 'op-touch-orch');
+
+    expect(touchOperation).toHaveBeenCalledOnce();
+    expect(touchOperation).toHaveBeenCalledWith('op-touch-orch');
+  });
+
   test('passes resolveHelperImage through to executeSelfUpdateTransition', async () => {
     const resolveHelperImage = vi.fn(() => 'drydock:latest');
     const helperContainer = { start: vi.fn().mockResolvedValue(undefined) };
@@ -189,6 +220,37 @@ describe('SelfUpdateOrchestrator', () => {
 
     await orchestrator.maybeNotify(createContainer(), log);
     expect(createOperationId).toHaveBeenCalled();
+  });
+
+  test('maybeNotify skips emitSelfUpdateStarting and logs when dry-run mode is enabled', async () => {
+    const emitSelfUpdateStarting = vi.fn().mockResolvedValue(undefined);
+    const orchestrator = createOrchestrator({
+      getConfiguration: () => ({ dryrun: true }),
+      emitSelfUpdateStarting,
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await orchestrator.maybeNotify(createContainer(), log, 'op-dryrun');
+
+    expect(emitSelfUpdateStarting).not.toHaveBeenCalled();
+    expect(log.info).toHaveBeenCalledWith(
+      'Self-update UI notification skipped because dry-run mode is enabled',
+    );
+  });
+
+  test('maybeNotify emits self-update-starting when dryrun is false', async () => {
+    const emitSelfUpdateStarting = vi.fn().mockResolvedValue(undefined);
+    const orchestrator = createOrchestrator({
+      getConfiguration: () => ({ dryrun: false }),
+      emitSelfUpdateStarting,
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await orchestrator.maybeNotify(createContainer(), log, 'op-live');
+
+    expect(emitSelfUpdateStarting).toHaveBeenCalledWith(
+      expect.objectContaining({ opId: 'op-live' }),
+    );
   });
 
   test('returns false in dry-run mode', async () => {
@@ -360,5 +422,14 @@ describe('SelfUpdateOrchestrator', () => {
     expect(contextHelperFail.currentContainer.rename).toHaveBeenNthCalledWith(2, {
       name: 'drydock',
     });
+  });
+});
+
+describe('SelfUpdateOrchestrator resolveFinalizeSecret default', () => {
+  test('resolveFinalizeSecret default returns missing-self-update-finalize-secret for any operationId', () => {
+    const orchestrator = new SelfUpdateOrchestrator();
+    expect(orchestrator.resolveFinalizeSecret('some-op-id')).toBe(
+      'missing-self-update-finalize-secret',
+    );
   });
 });

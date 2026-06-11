@@ -67,6 +67,7 @@ interface UpdateOperationBase {
    * is re-watched). See issue #385.
    */
   container?: Container;
+  finalizeSecretHash?: string;
   [key: string]: unknown;
 }
 
@@ -279,6 +280,7 @@ const UPDATE_OPERATION_COLLECTION_INDICES = [
 const DEFAULT_UPDATE_OPERATION_MAX_ENTRIES = getDefaultCacheMaxEntries();
 const DEFAULT_UPDATE_OPERATION_RETENTION_DAYS = 30;
 const DEFAULT_UPDATE_OPERATION_ACTIVE_TTL_MS = 30 * 60 * 1000;
+export const SELF_UPDATE_OPERATION_GRACE_MS = 10 * 60 * 1000;
 const UPDATE_OPERATION_PRUNE_MUTATION_INTERVAL = 100;
 let updateOperationMutationsSincePrune = 0;
 const ACTIVE_STATUSES = ACTIVE_CONTAINER_UPDATE_OPERATION_STATUSES;
@@ -561,6 +563,17 @@ function reconcileStaleActiveOperationsOnStartup(collection: UpdateOperationColl
   // an ActiveUpdateOperation (queued or in-progress).
   for (const document of documents) {
     const operation = document.data as ActiveUpdateOperation;
+    // A fresh self-update in-progress op (past the pull phase) is still being
+    // finalized by the helper container; skip it so the new process does not
+    // expire the operation before the helper POSTs to /internal/self-update/finalize.
+    if (
+      operation.kind === 'self-update' &&
+      operation.status === 'in-progress' &&
+      operation.phase !== 'pulling' &&
+      Date.now() - getOperationTimestamp(operation) <= SELF_UPDATE_OPERATION_GRACE_MS
+    ) {
+      continue;
+    }
     if (!isResumableActiveOperationOnStartup(operation)) {
       reconcileOrphanedActiveOperationOnStartup(operation);
       continue;
@@ -671,6 +684,33 @@ export function getOperationById(id: string): UpdateOperation | undefined {
   }
 
   return updateOperationCollection.findOne({ 'data.id': id })?.data;
+}
+
+/**
+ * Return a self-update operation by id, expiring it if it has exceeded the
+ * grace window. Returns undefined for unknown ids, missing collections, and
+ * non-self-update kinds. Terminal rows are returned as-is.
+ */
+export function getFreshSelfUpdateOperationById(id: string): UpdateOperation | undefined {
+  if (!updateOperationCollection || !id) {
+    return undefined;
+  }
+
+  const op = updateOperationCollection.findOne({ 'data.id': id })?.data;
+  if (!op || op.kind !== 'self-update') {
+    return undefined;
+  }
+
+  if (isActiveOperationStatus(op.status)) {
+    if (Date.now() - getOperationTimestamp(op) > SELF_UPDATE_OPERATION_GRACE_MS) {
+      return markOperationTerminal(id, {
+        status: 'expired',
+        lastError: 'Self-update operation exceeded the grace window without finalization',
+      });
+    }
+  }
+
+  return op;
 }
 
 function persistOperationPatch(
@@ -1372,14 +1412,16 @@ export function isOperationCancelRequested(id: string | undefined): boolean {
 }
 
 /**
- * Strip internal-only fields (`container` snapshot) from an operation row
- * before returning it from the REST API. The snapshot is persisted so terminal
- * lifecycle events can carry the container even after a recreate; it MUST NOT
- * be exposed to API consumers (it may contain secrets in details.env / labels).
+ * Strip internal-only fields (`container` snapshot, `finalizeSecretHash`) from
+ * an operation row before returning it from the REST API. The container snapshot
+ * is persisted so terminal lifecycle events can carry the container even after a
+ * recreate; it MUST NOT be exposed to API consumers (it may contain secrets in
+ * details.env / labels). The finalizeSecretHash is a per-operation secret hash
+ * used by the finalize endpoint and must never be exposed.
  */
-export function toApiUpdateOperation<T extends { container?: unknown }>(
-  op: T,
-): Omit<T, 'container'> {
-  const { container: _container, ...rest } = op;
+export function toApiUpdateOperation<
+  T extends { container?: unknown; finalizeSecretHash?: unknown },
+>(op: T): Omit<T, 'container' | 'finalizeSecretHash'> {
+  const { container: _container, finalizeSecretHash: _finalizeSecretHash, ...rest } = op;
   return rest;
 }

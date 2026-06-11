@@ -18,6 +18,10 @@ export const SELF_UPDATE_FINALIZE_SECRET_HEADER = 'x-dd-self-update-secret';
 
 const SELF_UPDATE_FINALIZE_SECRET = crypto.randomBytes(32).toString('hex');
 
+// Per-operation finalize secrets. Key = operationId, value = plaintext secret.
+// Populated by issueSelfUpdateFinalizeSecret; cleaned up after finalization.
+const operationFinalizeSecrets = new Map<string, string>();
+
 type FinalizeSelfUpdateBody = {
   operationId?: unknown;
   status?: unknown;
@@ -53,6 +57,20 @@ function secretsMatch(expectedSecret: string, providedSecret: string | undefined
 
 export function getSelfUpdateFinalizeSecret(): string {
   return SELF_UPDATE_FINALIZE_SECRET;
+}
+
+export function issueSelfUpdateFinalizeSecret(operationId: string): {
+  secret: string;
+  secretHash: string;
+} {
+  const secret = crypto.randomBytes(32).toString('hex');
+  const secretHash = crypto.createHash('sha256').update(secret).digest('hex');
+  operationFinalizeSecrets.set(operationId, secret);
+  return { secret, secretHash };
+}
+
+export function getSelfUpdateFinalizeSecretForOperation(operationId: string): string {
+  return operationFinalizeSecrets.get(operationId) ?? SELF_UPDATE_FINALIZE_SECRET;
 }
 
 export function isLoopbackAddress(address: string | undefined): boolean {
@@ -187,10 +205,6 @@ export function createFinalizeSelfUpdateHandler() {
       sendErrorResponse(res, 403, 'Loopback access required');
       return;
     }
-    if (!secretsMatch(SELF_UPDATE_FINALIZE_SECRET, getFinalizeSecretHeaderValue(req))) {
-      sendErrorResponse(res, 403, 'Valid self-update finalize secret required');
-      return;
-    }
 
     const body = validateFinalizeRequestBody(getFinalizeRequestBody(req), res);
     if (!body) {
@@ -202,7 +216,39 @@ export function createFinalizeSelfUpdateHandler() {
       return;
     }
 
+    const providedSecret = getFinalizeSecretHeaderValue(req);
+    const storedHash =
+      typeof (operation as { finalizeSecretHash?: unknown }).finalizeSecretHash === 'string' &&
+      (operation as { finalizeSecretHash: string }).finalizeSecretHash.trim() !== ''
+        ? (operation as { finalizeSecretHash: string }).finalizeSecretHash
+        : undefined;
+
+    if (storedHash) {
+      // Validate by comparing sha256(providedSecret) against the stored hash.
+      if (!providedSecret) {
+        sendErrorResponse(res, 403, 'Valid self-update finalize secret required');
+        return;
+      }
+      const providedHash = crypto.createHash('sha256').update(providedSecret).digest('hex');
+      const storedHashBuffer = Buffer.from(storedHash, 'utf8');
+      const providedHashBuffer = Buffer.from(providedHash, 'utf8');
+      if (
+        storedHashBuffer.length !== providedHashBuffer.length ||
+        !crypto.timingSafeEqual(storedHashBuffer, providedHashBuffer)
+      ) {
+        sendErrorResponse(res, 403, 'Valid self-update finalize secret required');
+        return;
+      }
+    } else {
+      // Legacy: row without a stored hash — fall back to process-level secret.
+      if (!secretsMatch(SELF_UPDATE_FINALIZE_SECRET, providedSecret)) {
+        sendErrorResponse(res, 403, 'Valid self-update finalize secret required');
+        return;
+      }
+    }
+
     if (isAlreadyTerminalOperation(operation)) {
+      operationFinalizeSecrets.delete(body.operationId);
       res.status(202).json({
         status: 'ignored',
         operationId: body.operationId,
@@ -212,6 +258,7 @@ export function createFinalizeSelfUpdateHandler() {
     }
 
     applyFinalizeTerminalPatch(body);
+    operationFinalizeSecrets.delete(body.operationId);
 
     res.status(202).json({
       status: 'accepted',

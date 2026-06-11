@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { issueSelfUpdateFinalizeSecret } from '../../../api/internal-self-update.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { getRequestedOperationId } from './update-runtime-context.js';
 
@@ -69,29 +70,38 @@ export function prepareSelfUpdateOperation(args: PrepareSelfUpdateOperationArgs)
     phase: 'prepare' as const,
   };
 
+  // Resolve the final operation id before issuing any secrets.
   const existingOperation = requestedOperationId
     ? updateOperationStore.getOperationById(requestedOperationId)
     : undefined;
-  const operation = existingOperation
-    ? existingOperation.status === 'queued' || existingOperation.status === 'in-progress'
-      ? updateOperationStore.updateOperation(requestedOperationId!, {
-          ...operationFields,
-          completedAt: undefined,
-          lastError: undefined,
-          rollbackReason: undefined,
-          newContainerId: undefined,
-        })
-      : updateOperationStore.insertOperation({
-          id: generateOperationId(),
-          createdAt: args.now?.(),
-          updatedAt: args.now?.(),
-          ...operationFields,
-        })
+
+  const isReusable =
+    existingOperation &&
+    (existingOperation.status === 'queued' || existingOperation.status === 'in-progress');
+
+  const operationId = isReusable
+    ? requestedOperationId!
+    : requestedOperationId && !existingOperation
+      ? requestedOperationId
+      : generateOperationId();
+
+  const { secretHash } = issueSelfUpdateFinalizeSecret(operationId);
+
+  const operationFieldsWithSecret = { ...operationFields, finalizeSecretHash: secretHash };
+
+  const operation = isReusable
+    ? updateOperationStore.updateOperation(operationId, {
+        ...operationFieldsWithSecret,
+        completedAt: undefined,
+        lastError: undefined,
+        rollbackReason: undefined,
+        newContainerId: undefined,
+      })
     : updateOperationStore.insertOperation({
-        id: requestedOperationId || generateOperationId(),
+        id: operationId,
         createdAt: args.now?.(),
         updatedAt: args.now?.(),
-        ...operationFields,
+        ...operationFieldsWithSecret,
       });
 
   if (!operation) {
@@ -107,6 +117,16 @@ export function markSelfUpdateOperationFailed(
 ): ReturnType<typeof updateOperationStore.markOperationTerminal> {
   return updateOperationStore.markOperationTerminal(operationId, {
     status: 'failed',
+    lastError,
+  });
+}
+
+export function markSelfUpdateOperationSkipped(
+  operationId: string,
+  lastError: string,
+): ReturnType<typeof updateOperationStore.markOperationTerminal> {
+  return updateOperationStore.markOperationTerminal(operationId, {
+    status: 'expired',
     lastError,
   });
 }

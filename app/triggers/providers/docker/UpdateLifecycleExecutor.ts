@@ -121,6 +121,7 @@ type UpdateLifecycleExecutorCallbacks = {
     runtimeContext?: unknown,
   ) => Promise<boolean>;
   markSelfUpdateOperationFailed: (operationId: string, lastError: string) => Promise<void> | void;
+  markSelfUpdateOperationSkipped: (operationId: string, lastError: string) => Promise<void> | void;
   runPreRuntimeUpdateLifecycle: (
     context: UpdateLifecycleContext,
     container: UpdateLifecycleContainer,
@@ -183,6 +184,7 @@ type UpdateLifecycleSelfUpdateServices = Pick<
   | 'maybeNotifySelfUpdate'
   | 'executeSelfUpdate'
   | 'markSelfUpdateOperationFailed'
+  | 'markSelfUpdateOperationSkipped'
 >;
 
 type UpdateLifecycleRuntimeUpdateServices = Pick<
@@ -239,6 +241,7 @@ const REQUIRED_UPDATE_LIFECYCLE_EXECUTOR_DEPENDENCY_KEYS = {
     'maybeNotifySelfUpdate',
     'executeSelfUpdate',
     'markSelfUpdateOperationFailed',
+    'markSelfUpdateOperationSkipped',
   ],
   runtimeUpdate: ['runPreRuntimeUpdateLifecycle', 'performContainerUpdate'],
   postUpdate: ['cleanupOldImages', 'getRollbackConfig', 'maybeStartAutoRollbackMonitor'],
@@ -354,6 +357,16 @@ class UpdateLifecycleExecutor {
             runtimeContext,
           );
           if (!updated) {
+            try {
+              await this.selfUpdate.markSelfUpdateOperationSkipped(
+                selfUpdateOperationId,
+                'Self-update transition skipped because dry-run mode is enabled',
+              );
+            } catch (markErr: unknown) {
+              containerLogger.warn?.(
+                `Failed to mark self-update operation ${selfUpdateOperationId} as skipped: ${String((markErr as Error)?.message ?? markErr)}`,
+              );
+            }
             return;
           }
           return;

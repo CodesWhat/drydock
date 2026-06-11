@@ -41,6 +41,7 @@ function createHarness(overrides = {}) {
     maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
     executeSelfUpdate: vi.fn().mockResolvedValue(true),
     markSelfUpdateOperationFailed: vi.fn().mockResolvedValue(undefined),
+    markSelfUpdateOperationSkipped: vi.fn().mockResolvedValue(undefined),
     runPreRuntimeUpdateLifecycle: vi.fn().mockResolvedValue(undefined),
     performContainerUpdate: vi.fn().mockResolvedValue(true),
     runPostUpdateHook: vi.fn().mockResolvedValue(undefined),
@@ -80,6 +81,7 @@ function createHarness(overrides = {}) {
       maybeNotifySelfUpdate: deps.maybeNotifySelfUpdate,
       executeSelfUpdate: deps.executeSelfUpdate,
       markSelfUpdateOperationFailed: deps.markSelfUpdateOperationFailed,
+      markSelfUpdateOperationSkipped: deps.markSelfUpdateOperationSkipped,
     },
     runtimeUpdate: {
       runPreRuntimeUpdateLifecycle: deps.runPreRuntimeUpdateLifecycle,
@@ -136,6 +138,7 @@ describe('UpdateLifecycleExecutor', () => {
         maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
         executeSelfUpdate: vi.fn().mockResolvedValue(true),
         markSelfUpdateOperationFailed: vi.fn().mockResolvedValue(undefined),
+        markSelfUpdateOperationSkipped: vi.fn().mockResolvedValue(undefined),
       },
       runtimeUpdate: {
         runPreRuntimeUpdateLifecycle: vi.fn().mockResolvedValue(undefined),
@@ -186,6 +189,7 @@ describe('UpdateLifecycleExecutor', () => {
         maybeNotifySelfUpdate: vi.fn(),
         executeSelfUpdate: vi.fn(),
         markSelfUpdateOperationFailed: vi.fn(),
+        markSelfUpdateOperationSkipped: vi.fn(),
       },
       runtimeUpdate: {
         runPreRuntimeUpdateLifecycle: vi.fn(),
@@ -230,6 +234,7 @@ describe('UpdateLifecycleExecutor', () => {
         maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
         executeSelfUpdate: vi.fn().mockResolvedValue(true),
         markSelfUpdateOperationFailed: vi.fn().mockResolvedValue(undefined),
+        markSelfUpdateOperationSkipped: vi.fn().mockResolvedValue(undefined),
       },
       runtimeUpdate: {
         runPreRuntimeUpdateLifecycle: vi.fn().mockResolvedValue(undefined),
@@ -286,6 +291,7 @@ describe('UpdateLifecycleExecutor', () => {
         maybeNotifySelfUpdate: vi.fn().mockResolvedValue(undefined),
         executeSelfUpdate: vi.fn().mockResolvedValue(true),
         markSelfUpdateOperationFailed: vi.fn().mockResolvedValue(undefined),
+        markSelfUpdateOperationSkipped: vi.fn().mockResolvedValue(undefined),
       },
       runtimeUpdate: {
         runPreRuntimeUpdateLifecycle: vi.fn().mockResolvedValue(undefined),
@@ -359,6 +365,43 @@ describe('UpdateLifecycleExecutor', () => {
     );
     expect(harness.runPreRuntimeUpdateLifecycle).not.toHaveBeenCalled();
     expect(harness.emitContainerUpdateApplied).not.toHaveBeenCalled();
+  });
+
+  test('marks self-update operation as skipped when executeSelfUpdate resolves false', async () => {
+    const harness = createHarness({
+      isSelfUpdate: vi.fn(() => true),
+      prepareSelfUpdateOperation: vi.fn().mockResolvedValue('op-self-update-dryrun'),
+      executeSelfUpdate: vi.fn().mockResolvedValue(false),
+    });
+
+    await harness.executor.run(createContainer());
+
+    expect(harness.markSelfUpdateOperationSkipped).toHaveBeenCalledWith(
+      'op-self-update-dryrun',
+      'Self-update transition skipped because dry-run mode is enabled',
+    );
+    expect(harness.markSelfUpdateOperationFailed).not.toHaveBeenCalled();
+    expect(harness.runPreRuntimeUpdateLifecycle).not.toHaveBeenCalled();
+    expect(harness.emitContainerUpdateApplied).not.toHaveBeenCalled();
+  });
+
+  test('logs but swallows markSelfUpdateOperationSkipped errors so run still returns cleanly', async () => {
+    const warn = vi.fn();
+    const harness = createHarness({
+      isSelfUpdate: vi.fn(() => true),
+      prepareSelfUpdateOperation: vi.fn().mockResolvedValue('op-self-update-skip-err'),
+      executeSelfUpdate: vi.fn().mockResolvedValue(false),
+      markSelfUpdateOperationSkipped: vi.fn().mockRejectedValue(new Error('store unavailable')),
+    });
+    harness.rootLogger.child.mockReturnValue({ info: vi.fn(), warn, debug: vi.fn() });
+
+    await expect(harness.executor.run(createContainer())).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Failed to mark self-update operation op-self-update-skip-err as skipped: store unavailable',
+      ),
+    );
   });
 
   test('routes infrastructure update through self-update path', async () => {
@@ -622,6 +665,25 @@ describe('UpdateLifecycleExecutor', () => {
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining(
         'Failed to mark self-update operation op-self-update-mark-noe as failed: 404',
+      ),
+    );
+  });
+
+  test('stringifies non-Error thrown from markSelfUpdateOperationSkipped in the warn log', async () => {
+    const warn = vi.fn();
+    const harness = createHarness({
+      isSelfUpdate: vi.fn(() => true),
+      prepareSelfUpdateOperation: vi.fn().mockResolvedValue('op-self-update-skip-noe'),
+      executeSelfUpdate: vi.fn().mockResolvedValue(false),
+      markSelfUpdateOperationSkipped: vi.fn().mockRejectedValue(404),
+    });
+    harness.rootLogger.child.mockReturnValue({ info: vi.fn(), warn, debug: vi.fn() });
+
+    await expect(harness.executor.run(createContainer())).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Failed to mark self-update operation op-self-update-skip-noe as skipped: 404',
       ),
     );
   });

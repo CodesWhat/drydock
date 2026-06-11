@@ -294,7 +294,7 @@ describe('Update Operation Store', () => {
     }
   });
 
-  test('createCollections should still fail self-update operations even if queued or pulling', async () => {
+  test('createCollections should still fail stale self-update operations but preserve fresh in-progress ones', async () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date('2026-02-23T03:00:00.000Z'));
@@ -323,14 +323,48 @@ describe('Update Operation Store', () => {
             updatedAt: '2026-02-23T02:55:00.000Z',
           },
         },
+        {
+          data: {
+            id: 'self-update-fresh-inprogress',
+            kind: 'self-update',
+            containerName: 'drydock',
+            status: 'in-progress',
+            phase: 'prepare',
+            // 2 minutes ago — within the 10-minute grace window
+            createdAt: '2026-02-23T02:58:00.000Z',
+            updatedAt: '2026-02-23T02:58:00.000Z',
+          },
+        },
+        {
+          data: {
+            id: 'self-update-stale-inprogress',
+            kind: 'self-update',
+            containerName: 'drydock',
+            status: 'in-progress',
+            phase: 'prepare',
+            // 15 minutes ago — older than 10-minute grace window
+            createdAt: '2026-02-23T02:40:00.000Z',
+            updatedAt: '2026-02-23T02:45:00.000Z',
+          },
+        },
       ];
 
       fresh.createCollections(createDocumentBackedDb(documents) as any);
 
+      // Queued self-update ops are NOT resumable — they expire as before.
       expect(fresh.getOperationById('self-update-queued')).toEqual(
         expect.objectContaining({ status: 'expired', phase: 'expired' }),
       );
+      // Pulling self-update ops are NOT resumable — they expire as before.
       expect(fresh.getOperationById('self-update-pulling')).toEqual(
+        expect.objectContaining({ status: 'expired', phase: 'expired' }),
+      );
+      // Fresh in-progress self-update (within grace window) is preserved.
+      expect(fresh.getOperationById('self-update-fresh-inprogress')).toEqual(
+        expect.objectContaining({ status: 'in-progress', phase: 'prepare' }),
+      );
+      // Stale in-progress self-update (beyond grace window) is expired.
+      expect(fresh.getOperationById('self-update-stale-inprogress')).toEqual(
         expect.objectContaining({ status: 'expired', phase: 'expired' }),
       );
     } finally {
@@ -3146,5 +3180,142 @@ describe('Update Operation Store', () => {
       const fresh = await import('./update-operation.js');
       expect(fresh.listRecentSucceededOperations(60 * 60 * 1000)).toEqual([]);
     });
+  });
+});
+
+describe('getFreshSelfUpdateOperationById', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+  });
+
+  test('returns undefined when collection is uninitialized', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    expect(fresh.getFreshSelfUpdateOperationById('op-1')).toBeUndefined();
+  });
+
+  test('returns undefined for empty/falsy id', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    fresh.createCollections(createDb());
+    expect(fresh.getFreshSelfUpdateOperationById('')).toBeUndefined();
+  });
+
+  test('returns undefined when operation is not found', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    fresh.createCollections(createDb());
+    expect(fresh.getFreshSelfUpdateOperationById('nonexistent')).toBeUndefined();
+  });
+
+  test('returns undefined for non-self-update kind', async () => {
+    vi.resetModules();
+    const fresh = await import('./update-operation.js');
+    fresh.createCollections(createDb());
+    const op = fresh.insertOperation({
+      id: 'regular-op',
+      containerName: 'web',
+      kind: 'container-update',
+      status: 'in-progress',
+      phase: 'prepare',
+    });
+    expect(op.kind).toBe('container-update');
+    expect(fresh.getFreshSelfUpdateOperationById('regular-op')).toBeUndefined();
+  });
+
+  test('returns an active self-update op within the grace window as-is', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-01-01T01:00:00.000Z'));
+      vi.resetModules();
+      const fresh = await import('./update-operation.js');
+      fresh.createCollections(createDb());
+      // Insert at current system time (01:00) — op is 0 minutes old, within grace window
+      fresh.insertOperation({
+        id: 'fresh-self-update',
+        containerName: 'drydock',
+        kind: 'self-update',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+      const result = fresh.getFreshSelfUpdateOperationById('fresh-self-update');
+      expect(result).toMatchObject({ id: 'fresh-self-update', status: 'in-progress' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('expires and returns an active self-update op older than the grace window', async () => {
+    vi.useFakeTimers();
+    try {
+      // Insert at "40 minutes ago" timestamp
+      vi.setSystemTime(new Date('2026-01-01T00:40:00.000Z'));
+      vi.resetModules();
+      const fresh = await import('./update-operation.js');
+      fresh.createCollections(createDb());
+      fresh.insertOperation({
+        id: 'stale-self-update',
+        containerName: 'drydock',
+        kind: 'self-update',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+      // Advance time so the op is now 20 minutes old (past the 10-minute grace window)
+      vi.setSystemTime(new Date('2026-01-01T01:00:00.000Z'));
+      const result = fresh.getFreshSelfUpdateOperationById('stale-self-update');
+      expect(result).toMatchObject({
+        id: 'stale-self-update',
+        status: 'expired',
+        lastError: expect.stringContaining('grace window'),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('returns a terminal self-update op unchanged regardless of age', async () => {
+    vi.useFakeTimers();
+    try {
+      // Insert at an old time
+      vi.setSystemTime(new Date('2026-01-01T00:30:00.000Z'));
+      vi.resetModules();
+      const fresh = await import('./update-operation.js');
+      fresh.createCollections(createDb());
+      // Insert, then mark terminal
+      fresh.insertOperation({
+        id: 'done-self-update',
+        containerName: 'drydock',
+        kind: 'self-update',
+        status: 'in-progress',
+        phase: 'prepare',
+      });
+      fresh.markOperationTerminal('done-self-update', { status: 'succeeded' });
+      // Advance time well past grace window
+      vi.setSystemTime(new Date('2026-01-01T02:00:00.000Z'));
+      const result = fresh.getFreshSelfUpdateOperationById('done-self-update');
+      expect(result).toMatchObject({ id: 'done-self-update', status: 'succeeded' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('toApiUpdateOperation', () => {
+  beforeEach(() => {
+    updateOperation.createCollections(createDb());
+  });
+
+  test('toApiUpdateOperation strips finalizeSecretHash', () => {
+    const op = {
+      id: 'op-1',
+      containerName: 'drydock',
+      status: 'in-progress' as const,
+      phase: 'prepare' as const,
+      kind: 'self-update',
+      finalizeSecretHash: 'abc123hash',
+    };
+    const result = updateOperation.toApiUpdateOperation(op);
+    expect(result).not.toHaveProperty('finalizeSecretHash');
+    expect(result).toHaveProperty('id', 'op-1');
   });
 });

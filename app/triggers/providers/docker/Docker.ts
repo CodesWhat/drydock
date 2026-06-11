@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import pLimit from 'p-limit';
 import parse from 'parse-docker-image-name';
-import { getSelfUpdateFinalizeSecret } from '../../../api/internal-self-update.js';
+import { getSelfUpdateFinalizeSecretForOperation } from '../../../api/internal-self-update.js';
 import { getSecurityConfiguration, getServerConfiguration } from '../../../configuration/index.js';
 import { getPreferredLabelValue as resolvePreferredLabelValue } from '../../../docker/legacy-label.js';
 import {
@@ -45,6 +45,7 @@ import SecurityGate, { type SecurityStatePatch } from './SecurityGate.js';
 import SelfUpdateOrchestrator from './SelfUpdateOrchestrator.js';
 import {
   markSelfUpdateOperationFailed as markSelfUpdateOperationFailedFromStore,
+  markSelfUpdateOperationSkipped as markSelfUpdateOperationSkippedFromStore,
   prepareSelfUpdateOperation as preparePersistedSelfUpdateOperation,
 } from './self-update-operation.js';
 import UpdateLifecycleExecutor from './UpdateLifecycleExecutor.js';
@@ -295,6 +296,7 @@ const UPDATE_LIFECYCLE_ORCHESTRATOR_METHODS = [
   'maybeNotifySelfUpdate',
   'executeSelfUpdate',
   'markSelfUpdateOperationFailed',
+  'markSelfUpdateOperationSkipped',
   'runPreRuntimeUpdateLifecycle',
   'performContainerUpdate',
   'runPostUpdateHook',
@@ -396,7 +398,7 @@ class Docker<
       ...pickOrchestratorCallbacks(this, SELF_UPDATE_ORCHESTRATOR_METHODS),
       emitSelfUpdateStarting,
       resolveFinalizeUrl: () => this.getSelfUpdateFinalizeUrl(),
-      resolveFinalizeSecret: () => this.getSelfUpdateFinalizeSecret(),
+      resolveFinalizeSecret: (operationId) => this.getSelfUpdateFinalizeSecret(operationId),
       resolveHelperImage: (container) => {
         if (this.selfUpdateOrchestrator.isSelfUpdate(container)) {
           return undefined;
@@ -420,6 +422,9 @@ class Docker<
           return `${name}:${tag.value}`;
         }
         return buildImageReference(registry.url, name, tag.value);
+      },
+      touchOperation: (operationId) => {
+        updateOperationStore.updateOperation(operationId, {});
       },
     });
     this.containerUpdateExecutor = new ContainerUpdateExecutor({
@@ -552,6 +557,7 @@ class Docker<
         maybeNotifySelfUpdate: updateLifecycleCallbacks.maybeNotifySelfUpdate,
         executeSelfUpdate: updateLifecycleCallbacks.executeSelfUpdate,
         markSelfUpdateOperationFailed: updateLifecycleCallbacks.markSelfUpdateOperationFailed,
+        markSelfUpdateOperationSkipped: updateLifecycleCallbacks.markSelfUpdateOperationSkipped,
       },
       runtimeUpdate: {
         runPreRuntimeUpdateLifecycle: updateLifecycleCallbacks.runPreRuntimeUpdateLifecycle,
@@ -1380,8 +1386,8 @@ class Docker<
     return `http://127.0.0.1:${port}/api/v1/internal/self-update/finalize`;
   }
 
-  getSelfUpdateFinalizeSecret() {
-    return getSelfUpdateFinalizeSecret();
+  getSelfUpdateFinalizeSecret(operationId: string) {
+    return getSelfUpdateFinalizeSecretForOperation(operationId);
   }
 
   async prepareSelfUpdateOperation(context, container, _logContainer, runtimeContext?: unknown) {
@@ -1409,6 +1415,10 @@ class Docker<
 
   async markSelfUpdateOperationFailed(operationId: string, lastError: string): Promise<void> {
     markSelfUpdateOperationFailedFromStore(operationId, lastError);
+  }
+
+  async markSelfUpdateOperationSkipped(operationId: string, lastError: string): Promise<void> {
+    markSelfUpdateOperationSkippedFromStore(operationId, lastError);
   }
 
   async persistSecurityState(container, securityPatch: SecurityStatePatch, logContainer) {

@@ -771,4 +771,278 @@ describe('AppLayout', () => {
     expect(wrapper.find('[data-testid="legacy-config-deprecation-banner"]').exists()).toBe(false);
     expect(localStorage.getItem('dd-banner-legacy-config-v1')).toBe('true');
   });
+
+  describe('self-update connectivity polling', () => {
+    function setupSelfUpdateTest() {
+      vi.useFakeTimers();
+      const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+      const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval');
+      return { setIntervalSpy, clearIntervalSpy };
+    }
+
+    function getEmit(wrapper: VueWrapper) {
+      void wrapper;
+      return mockSseConnect.mock.calls[0]?.[0]?.emit as
+        | ((event: string, payload?: unknown) => void)
+        | undefined;
+    }
+
+    it('polls status endpoint (not /auth/user) when self-update mode is active with opId', async () => {
+      const { setIntervalSpy, clearIntervalSpy } = setupSelfUpdateTest();
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 'in-progress' }),
+      } as unknown as Response);
+
+      try {
+        const wrapper = mountLayout();
+        mountedWrappers.push(wrapper);
+        await flushPromises();
+
+        const emit = getEmit(wrapper);
+        expect(emit).toBeTypeOf('function');
+
+        emit?.('self-update', { opId: 'abc-123' });
+        await flushPromises();
+
+        vi.advanceTimersByTime(5_000);
+        await flushPromises();
+
+        expect(mockFetch).toHaveBeenCalledWith('/api/v1/self-update/abc-123/status', {
+          credentials: 'include',
+          redirect: 'manual',
+        });
+        expect(mockFetch).not.toHaveBeenCalledWith('/auth/user', expect.anything());
+      } finally {
+        clearIntervalSpy.mockRestore();
+        setIntervalSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not recover when status is in-progress — keeps polling', async () => {
+      const { setIntervalSpy, clearIntervalSpy } = setupSelfUpdateTest();
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 'in-progress' }),
+      } as unknown as Response);
+
+      try {
+        const wrapper = mountLayout();
+        mountedWrappers.push(wrapper);
+        await flushPromises();
+
+        const emit = getEmit(wrapper);
+        emit?.('self-update', { opId: 'abc-123' });
+        await flushPromises();
+
+        const pollTimer = setIntervalSpy.mock.results[0]?.value;
+        const fetchCallsBefore = mockFetch.mock.calls.length;
+
+        vi.advanceTimersByTime(5_000);
+        await flushPromises();
+
+        expect(mockSseDisconnect).not.toHaveBeenCalled();
+        expect(clearIntervalSpy).not.toHaveBeenCalledWith(pollTimer);
+
+        // A second poll tick still fires.
+        vi.advanceTimersByTime(5_000);
+        await flushPromises();
+
+        expect(mockFetch.mock.calls.length - fetchCallsBefore).toBe(2);
+        expect(mockSseDisconnect).not.toHaveBeenCalled();
+      } finally {
+        clearIntervalSpy.mockRestore();
+        setIntervalSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it.each([
+      ['succeeded'],
+      ['rolled-back'],
+      ['expired'],
+    ])('recovers when status is %s', async (terminalStatus) => {
+      const { setIntervalSpy, clearIntervalSpy } = setupSelfUpdateTest();
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: terminalStatus }),
+      } as unknown as Response);
+
+      try {
+        const wrapper = mountLayout();
+        mountedWrappers.push(wrapper);
+        await flushPromises();
+
+        const emit = getEmit(wrapper);
+        emit?.('self-update', { opId: 'abc-123' });
+        await flushPromises();
+
+        const pollTimer = setIntervalSpy.mock.results[0]?.value;
+
+        vi.advanceTimersByTime(5_000);
+        await flushPromises();
+
+        expect(mockSseDisconnect).toHaveBeenCalledTimes(1);
+        expect(clearIntervalSpy).toHaveBeenCalledWith(pollTimer);
+      } finally {
+        clearIntervalSpy.mockRestore();
+        setIntervalSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('recovers on 404 (operation unknown)', async () => {
+      const { setIntervalSpy, clearIntervalSpy } = setupSelfUpdateTest();
+      mockFetch.mockResolvedValue({ ok: false, status: 404 } as Response);
+
+      try {
+        const wrapper = mountLayout();
+        mountedWrappers.push(wrapper);
+        await flushPromises();
+
+        const emit = getEmit(wrapper);
+        emit?.('self-update', { opId: 'abc-123' });
+        await flushPromises();
+
+        const pollTimer = setIntervalSpy.mock.results[0]?.value;
+
+        vi.advanceTimersByTime(5_000);
+        await flushPromises();
+
+        expect(mockSseDisconnect).toHaveBeenCalledTimes(1);
+        expect(clearIntervalSpy).toHaveBeenCalledWith(pollTimer);
+      } finally {
+        clearIntervalSpy.mockRestore();
+        setIntervalSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not recover on 500 — keeps polling', async () => {
+      const { setIntervalSpy, clearIntervalSpy } = setupSelfUpdateTest();
+      mockFetch.mockResolvedValue({ ok: false, status: 500 } as Response);
+
+      try {
+        const wrapper = mountLayout();
+        mountedWrappers.push(wrapper);
+        await flushPromises();
+
+        const emit = getEmit(wrapper);
+        emit?.('self-update', { opId: 'abc-123' });
+        await flushPromises();
+
+        const pollTimer = setIntervalSpy.mock.results[0]?.value;
+
+        vi.advanceTimersByTime(5_000);
+        await flushPromises();
+
+        expect(mockSseDisconnect).not.toHaveBeenCalled();
+        expect(clearIntervalSpy).not.toHaveBeenCalledWith(pollTimer);
+      } finally {
+        clearIntervalSpy.mockRestore();
+        setIntervalSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not recover on fetch rejection (mid-restart network error)', async () => {
+      const { setIntervalSpy, clearIntervalSpy } = setupSelfUpdateTest();
+      mockFetch.mockRejectedValue(new TypeError('Failed to fetch'));
+
+      try {
+        const wrapper = mountLayout();
+        mountedWrappers.push(wrapper);
+        await flushPromises();
+
+        const emit = getEmit(wrapper);
+        emit?.('self-update', { opId: 'abc-123' });
+        await flushPromises();
+
+        const pollTimer = setIntervalSpy.mock.results[0]?.value;
+
+        vi.advanceTimersByTime(5_000);
+        await flushPromises();
+
+        expect(mockSseDisconnect).not.toHaveBeenCalled();
+        expect(clearIntervalSpy).not.toHaveBeenCalledWith(pollTimer);
+      } finally {
+        clearIntervalSpy.mockRestore();
+        setIntervalSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not recover when response body is unparseable', async () => {
+      const { setIntervalSpy, clearIntervalSpy } = setupSelfUpdateTest();
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new SyntaxError('Unexpected token');
+        },
+      } as unknown as Response);
+
+      try {
+        const wrapper = mountLayout();
+        mountedWrappers.push(wrapper);
+        await flushPromises();
+
+        const emit = getEmit(wrapper);
+        emit?.('self-update', { opId: 'abc-123' });
+        await flushPromises();
+
+        const pollTimer = setIntervalSpy.mock.results[0]?.value;
+
+        vi.advanceTimersByTime(5_000);
+        await flushPromises();
+
+        expect(mockSseDisconnect).not.toHaveBeenCalled();
+        expect(clearIntervalSpy).not.toHaveBeenCalledWith(pollTimer);
+      } finally {
+        clearIntervalSpy.mockRestore();
+        setIntervalSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
+    it('falls back to /auth/user when self-update event has no opId, and recovers on 200', async () => {
+      const { setIntervalSpy, clearIntervalSpy } = setupSelfUpdateTest();
+      mockFetch.mockResolvedValue({ ok: true, status: 200 } as Response);
+
+      try {
+        const wrapper = mountLayout();
+        mountedWrappers.push(wrapper);
+        await flushPromises();
+
+        const emit = getEmit(wrapper);
+        // Emit self-update without opId
+        emit?.('self-update', {});
+        await flushPromises();
+
+        const pollTimer = setIntervalSpy.mock.results[0]?.value;
+
+        vi.advanceTimersByTime(5_000);
+        await flushPromises();
+
+        expect(mockFetch).toHaveBeenCalledWith('/auth/user', {
+          credentials: 'include',
+          redirect: 'manual',
+        });
+        expect(mockFetch).not.toHaveBeenCalledWith(
+          expect.stringContaining('/api/v1/self-update'),
+          expect.anything(),
+        );
+        expect(mockSseDisconnect).toHaveBeenCalledTimes(1);
+        expect(clearIntervalSpy).toHaveBeenCalledWith(pollTimer);
+      } finally {
+        clearIntervalSpy.mockRestore();
+        setIntervalSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+  });
 });

@@ -217,6 +217,53 @@ describe('SelfUpdateTransitionShared', () => {
     );
   });
 
+  test('helper container Labels include dd.watch=false', async () => {
+    const context = createContext();
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await executeSelfUpdateTransition(
+      dependencies,
+      context,
+      createContainer(),
+      log,
+      'op-label-test',
+    );
+
+    expect(context.dockerApi.createContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Labels: expect.objectContaining({ 'dd.watch': 'false' }),
+      }),
+    );
+  });
+
+  test('resolveFinalizeSecret is called with the operation id', async () => {
+    const context = createContext();
+    const resolveFinalizeSecret = vi.fn(() => 'op-specific-secret');
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      resolveFinalizeSecret,
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await executeSelfUpdateTransition(
+      dependencies,
+      context,
+      createContainer(),
+      log,
+      'op-secret-test',
+    );
+
+    expect(resolveFinalizeSecret).toHaveBeenCalledWith('op-secret-test');
+    expect(context.dockerApi.createContainer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Env: expect.arrayContaining(['DD_SELF_UPDATE_FINALIZE_SECRET=op-specific-secret']),
+      }),
+    );
+  });
+
   test('uses container name for temp rename prefix instead of hardcoded drydock', async () => {
     const context = createContext({
       currentContainerSpec: createCurrentContainerSpec({ Name: '/socket-proxy' }),
@@ -250,6 +297,45 @@ describe('SelfUpdateTransitionShared', () => {
     expect(log.warn).toHaveBeenCalledWith(
       'Failed to inspect new container, rolling back: inspect failed',
     );
+  });
+
+  test('touchOperation is called with the operation id before helper container is spawned', async () => {
+    const context = createContext();
+    const touchOperation = vi.fn();
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      touchOperation,
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await executeSelfUpdateTransition(
+      dependencies,
+      context,
+      createContainer(),
+      log,
+      'op-touch-test',
+    );
+
+    expect(touchOperation).toHaveBeenCalledOnce();
+    expect(touchOperation).toHaveBeenCalledWith('op-touch-test');
+
+    // Must be called before the helper container create (which triggers the log line)
+    const touchCallOrder = touchOperation.mock.invocationCallOrder[0];
+    const helperCreateCallOrder = context.dockerApi.createContainer.mock.invocationCallOrder[0];
+    expect(touchCallOrder).toBeLessThan(helperCreateCallOrder);
+  });
+
+  test('touchOperation absent does not crash (optional-chaining branch)', async () => {
+    const context = createContext();
+    const dependencies = createDependencies({
+      createContainer: vi.fn().mockResolvedValue(context.newContainer),
+      // touchOperation intentionally omitted
+    });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), log, 'op-no-touch'),
+    ).resolves.toBe(true);
   });
 
   test('rolls back when new container inspect fails and remove also fails', async () => {

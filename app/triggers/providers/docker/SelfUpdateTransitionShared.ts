@@ -50,8 +50,12 @@ interface SelfUpdateTransitionDependencies {
   ) => Promise<SelfUpdateCreatedContainer>;
   createOperationId: () => string;
   resolveFinalizeUrl: () => string;
-  resolveFinalizeSecret: () => string;
+  resolveFinalizeSecret: (operationId: string) => string;
   resolveHelperImage?: () => string | undefined;
+  // touchOperation refreshes updatedAt immediately before the helper is spawned so the
+  // grace window for the post-restart finalize is measured from after the (potentially
+  // slow) image pull, not from prepare time.
+  touchOperation?: (operationId: string) => void;
 }
 
 type HelperDockerConnection =
@@ -209,7 +213,7 @@ async function executeSelfUpdateTransition(
   const oldContainerId = currentContainerSpec.Id;
   const selfUpdateOperationId = operationId || dependencies.createOperationId();
   const finalizeUrl = dependencies.resolveFinalizeUrl();
-  const finalizeSecret = dependencies.resolveFinalizeSecret();
+  const finalizeSecret = dependencies.resolveFinalizeSecret(selfUpdateOperationId);
 
   const baseEnv = [
     `DD_SELF_UPDATE_OP_ID=${selfUpdateOperationId}`,
@@ -248,6 +252,7 @@ async function executeSelfUpdateTransition(
     };
   }
 
+  dependencies.touchOperation?.(selfUpdateOperationId);
   logContainer.info('Spawning helper container for self-update transition');
   try {
     await dockerApi
@@ -258,6 +263,7 @@ async function executeSelfUpdateTransition(
         Labels: {
           'dd.self-update.helper': 'true',
           'dd.self-update.operation-id': selfUpdateOperationId,
+          'dd.watch': 'false',
         },
         HostConfig: hostConfig,
         name: `drydock-self-update-${Date.now()}`,
