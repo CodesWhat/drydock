@@ -6,6 +6,13 @@ export default defineConfig({
     environment: 'node',
     // Coverage writes can race with clean-up; keep file execution serial.
     fileParallelism: false,
+    // One retry guards a rare, non-deterministic cross-file isolation flake: a
+    // prior file's module mock occasionally leaks under serial execution (seen
+    // in store/index.test.ts and registry/index.test.ts). This only re-runs a
+    // *failing* test once — green runs and hard failures are unaffected, so it
+    // cannot hide a consistently-broken test. Backported from main. Keep at 1
+    // so genuine new flakiness stays visible.
+    retry: 1,
     exclude: ['**/node_modules/**', '**/dist/**'],
     server: {
       deps: {
