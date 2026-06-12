@@ -130,3 +130,64 @@ name = "zizmor"
 [[triage]]
 match.rules = ["trivy:DS002", "trivy:DS-0002"]
 set.ignored = true
+
+# ── osv-scanner: non-shipping advisory triage (maintenance/1.4.x) ─────────────
+# These advisories are reported against dependency versions that are NOT present
+# in the shipped drydock 1.4.x artifact. The backend image runs `npm prune
+# --omit=dev` (Dockerfile) and the dashboard ships as static build output, so
+# dev/build/test dependencies never reach the deployed container. Verified via
+# `npm ls --omit=dev` that every runtime dependency is on a patched version
+# (protobufjs 7.6.4, @grpc/grpc-js 1.14.4, ws 8.21.0, yaml 2.9.0,
+# fast-xml-parser 5.8.0, uuid 13.0.2, path-to-regexp 8.4.2, fast-xml-builder
+# 1.2.0). The flagged-vulnerable versions live only in apps/web (Next.js site,
+# deployed from main), the e2e harness, and build tooling — surfaces maintained
+# on main and tracked separately. Pinned by CVE id, so a NEW advisory against a
+# shipped version still fails the gate.
+[[triage]]
+match.rules = [
+  "osv-scanner:CVE-2026-2950",
+  "osv-scanner:CVE-2026-33349",
+  "osv-scanner:CVE-2026-33532",
+  "osv-scanner:CVE-2026-33671",
+  "osv-scanner:CVE-2026-33672",
+  "osv-scanner:CVE-2026-33750",
+  "osv-scanner:CVE-2026-39363",
+  "osv-scanner:CVE-2026-39364",
+  "osv-scanner:CVE-2026-39365",
+  "osv-scanner:CVE-2026-41242",
+  "osv-scanner:CVE-2026-41305",
+  "osv-scanner:CVE-2026-41650",
+  "osv-scanner:CVE-2026-41907",
+  "osv-scanner:CVE-2026-44288",
+  "osv-scanner:CVE-2026-44289",
+  "osv-scanner:CVE-2026-44290",
+  "osv-scanner:CVE-2026-44291",
+  "osv-scanner:CVE-2026-44292",
+  "osv-scanner:CVE-2026-44293",
+  "osv-scanner:CVE-2026-44294",
+  "osv-scanner:CVE-2026-44572",
+  "osv-scanner:CVE-2026-44573",
+  "osv-scanner:CVE-2026-44574",
+  "osv-scanner:CVE-2026-44575",
+  "osv-scanner:CVE-2026-44576",
+  "osv-scanner:CVE-2026-44577",
+  "osv-scanner:CVE-2026-44578",
+  "osv-scanner:CVE-2026-44579",
+  "osv-scanner:CVE-2026-44580",
+  "osv-scanner:CVE-2026-44581",
+  "osv-scanner:CVE-2026-44582",
+  "osv-scanner:CVE-2026-44665",
+  "osv-scanner:CVE-2026-45109",
+  "osv-scanner:CVE-2026-45149",
+  "osv-scanner:CVE-2026-45736",
+  "osv-scanner:CVE-2026-45740",
+  "osv-scanner:CVE-2026-4800",
+  "osv-scanner:CVE-2026-48038",
+  "osv-scanner:CVE-2026-48068",
+  "osv-scanner:CVE-2026-48069",
+  "osv-scanner:CVE-2026-4923",
+  "osv-scanner:CVE-2026-4926",
+  "osv-scanner:GHSA-8h8q-6873-q5fj",
+  "osv-scanner:GHSA-q4gf-8mx6-v5v3",
+]
+set.ignored = true
