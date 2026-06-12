@@ -50,6 +50,9 @@
 
 <hr>
 
+> [!WARNING]
+> **Upgrading? Read the upgrade notes first.** Release **1.4.6** and the entire **1.5** line ship security-hardening fixes that change runtime behavior — they are not deprecations and have no grace period: OIDC now requires `authorization_endpoint` in your provider's discovery metadata, unauthenticated rate-limiting keys on the TCP peer address (shared bucket behind a reverse proxy), and HTTP-trigger proxy URLs must use `http(s)://`. See **[UPGRADE-NOTES.md](UPGRADE-NOTES.md)** before updating.
+
 <h2 align="center">📑 Contents</h2>
 
 - [📖 Documentation](https://getdrydock.com/docs)
