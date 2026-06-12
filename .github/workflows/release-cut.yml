@@ -630,6 +630,17 @@ jobs:
             cat "${entry_path}"
           } > "${notes_path}"
           rm -f "${entry_path}"
+
+          # Standing upgrade notes: the per-version extract above only carries
+          # notes written into that one CHANGELOG section, so a release that did
+          # not repeat the 1.4.6/1.5 behavioral-change callout would ship without
+          # it. Append the maintained block to every 1.4.6+ / 1.5.x release
+          # (idempotent — skipped if the section already inlines the marker).
+          node scripts/append-upgrade-notes.mjs \
+            --notes "${notes_path}" \
+            --version "${RELEASE_TAG}" \
+            --file UPGRADE-NOTES.md
+
           echo "path=${notes_path}" >> "$GITHUB_OUTPUT"
 
       # ────────────────────────────────────────────────────────────────────
