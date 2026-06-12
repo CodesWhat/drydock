@@ -10,6 +10,7 @@ function createRequest(
       isAuthenticated?: () => boolean;
       sessionID?: unknown;
       user?: { username?: unknown };
+      socket?: { remoteAddress?: string };
     }
   >,
 ): Request {
@@ -68,6 +69,35 @@ describe('createAuthenticatedRouteRateLimitKeyGenerator', () => {
     const secondKey = await keyGenerator!(
       createRequest({
         ip: '203.0.113.20',
+        isAuthenticated: () => false,
+      }),
+      response,
+    );
+
+    expect(firstKey).toMatch(/^ip:/);
+    expect(secondKey).toBe(firstKey);
+  });
+
+  test('should prefer socket remote address over request ip for unauthenticated requests', async () => {
+    const keyGenerator = createAuthenticatedRouteRateLimitKeyGenerator(true);
+    expect(keyGenerator).toBeDefined();
+
+    const firstKey = await keyGenerator!(
+      createRequest({
+        ip: '203.0.113.20',
+        socket: {
+          remoteAddress: '198.51.100.7',
+        } as Request['socket'],
+        isAuthenticated: () => false,
+      }),
+      response,
+    );
+    const secondKey = await keyGenerator!(
+      createRequest({
+        ip: '203.0.113.21',
+        socket: {
+          remoteAddress: '198.51.100.7',
+        } as Request['socket'],
         isAuthenticated: () => false,
       }),
       response,

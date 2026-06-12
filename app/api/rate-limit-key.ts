@@ -18,12 +18,7 @@ function getTrimmedString(value: unknown): string | undefined {
 }
 
 function getIpRateLimitKey(request: Request): string {
-  const rawRequestIp = request.ip;
-  if (rawRequestIp === undefined) {
-    return 'ip:unknown';
-  }
-
-  const requestIp = getTrimmedString(rawRequestIp);
+  const requestIp = getTrimmedString(request.socket?.remoteAddress) || getTrimmedString(request.ip);
   if (!requestIp) {
     return 'ip:unknown';
   }
