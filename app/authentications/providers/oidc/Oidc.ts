@@ -515,11 +515,11 @@ class Oidc extends Authentication {
     if (authUrl.protocol !== 'http:' && authUrl.protocol !== 'https:') {
       return false;
     }
-    const { strictEndpoints, allowedOrigins } = this.getAllowedAuthorizationRedirects();
-    if (strictEndpoints.size > 0) {
-      return strictEndpoints.has(toEndpointKey(authUrl));
+    const { strictEndpoints } = this.getAllowedAuthorizationRedirects();
+    if (strictEndpoints.size === 0) {
+      return false;
     }
-    return allowedOrigins.has(authUrl.origin);
+    return strictEndpoints.has(toEndpointKey(authUrl));
   }
 
   async redirect(req: OidcRedirectRequest, res: Response): Promise<void> {
