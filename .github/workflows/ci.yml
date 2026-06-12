@@ -228,6 +228,12 @@ jobs:
       - name: Install e2e dependencies
         run: npm ci
         working-directory: e2e
+        env:
+          # artillery → artillery-engine-playwright → @playwright/browser-chromium
+          # runs a postinstall that fetches ~160 MiB of Chromium from cdn.playwright.dev.
+          # The CDN now stalls on GitHub runners and hangs `npm ci` indefinitely. No job
+          # here launches a browser (cucumber + Artillery HTTP engine only), so skip it.
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
       - name: Setup test containers
         run: ./scripts/setup-test-containers.sh
@@ -285,6 +291,12 @@ jobs:
       - name: Install e2e dependencies
         run: npm ci
         working-directory: e2e
+        env:
+          # artillery → artillery-engine-playwright → @playwright/browser-chromium
+          # runs a postinstall that fetches ~160 MiB of Chromium from cdn.playwright.dev.
+          # The CDN now stalls on GitHub runners and hangs `npm ci` indefinitely. No job
+          # here launches a browser (cucumber + Artillery HTTP engine only), so skip it.
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
       - name: Run Artillery smoke test (advisory)
         continue-on-error: true
@@ -500,6 +512,12 @@ jobs:
       - name: Install e2e dependencies
         run: npm ci
         working-directory: e2e
+        env:
+          # artillery → artillery-engine-playwright → @playwright/browser-chromium
+          # runs a postinstall that fetches ~160 MiB of Chromium from cdn.playwright.dev.
+          # The CDN now stalls on GitHub runners and hangs `npm ci` indefinitely. No job
+          # here launches a browser (cucumber + Artillery HTTP engine only), so skip it.
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
 
       - name: Run Artillery load test
         env:
