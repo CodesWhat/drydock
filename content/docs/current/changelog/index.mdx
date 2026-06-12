@@ -13,6 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.6] — 2026-06-12
+
+Security maintenance release for the 1.4.x line.
+
+### Security
+
+- **Dependency security updates** — Cleared all known advisories in the shipped backend (`app`) and dashboard (`ui`) dependencies, including a **critical** arbitrary-code-execution issue in `protobufjs` and **high**-severity SSRF / prototype-pollution / credential-leak issues in `axios`, plus `@grpc/grpc-js`, `fast-uri`, `fast-xml-parser`, `path-to-regexp`, `qs`, and others. Both workspaces now report zero `npm audit` vulnerabilities. No major dependency upgrades were needed — the Docker watcher stays on `dockerode` 4.x (the flagged transitive `uuid` advisory affects `v3`/`v5`/`v6` with a `buf` argument and is not reachable through `dockerode`'s `v4()` usage; it is pinned to a fixed release via an override).
+- **OIDC authorization-redirect hardening** — The OIDC provider now requires a strict authorization-endpoint match and no longer falls back to a broad same-origin allowlist when discovery metadata lacks an `authorization_endpoint`. This prevents an attacker who controls a different path under a shared-origin identity provider from steering the authorization redirect to an attacker-controlled endpoint.
+- **HTTP trigger SSRF guard** — Proxy URLs configured for the HTTP trigger are now restricted to `http`/`https` schemes, validated both at configuration time (schema) and at runtime, failing closed on any other scheme.
+- **Rate-limit key spoofing fix** — Unauthenticated rate-limit keys are now derived from the TCP peer address (`socket.remoteAddress`) instead of `request.ip`, so a client behind a trusted proxy cannot spoof `X-Forwarded-For` to evade per-IP rate limits.
+
 ## [1.4.5] — 2026-03-17
 
 ### Fixed
