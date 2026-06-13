@@ -9,6 +9,7 @@ const log = logger.child({ component: 'store' });
 
 import { getStoreConfiguration } from '../configuration/index.js';
 
+import * as agentKeys from './agent-keys.js';
 import * as app from './app.js';
 import * as audit from './audit.js';
 import * as backup from './backup.js';
@@ -40,6 +41,7 @@ let isMemoryMode = false;
 let storePathResolved: string | undefined;
 
 function createCollections() {
+  agentKeys.createCollections(db);
   app.createCollections(db);
   audit.createCollections(db);
   backup.createCollections(db);
