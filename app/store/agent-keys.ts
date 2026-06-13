@@ -62,6 +62,14 @@ export function addKey(pubkeyBuffer: Buffer, label: string): AgentKeyRecord {
     throw new Error('agent-keys collection not initialized');
   }
 
+  // Defense-in-depth: enforce exactly 32 bytes here regardless of call site.
+  // The REST route validates length before calling addKey, but programmatic callers
+  // and future code paths must not be able to insert a malformed key that would
+  // cause crypto.createPublicKey to throw during signature verification.
+  if (pubkeyBuffer.length !== 32) {
+    throw new Error(`Ed25519 public key must be exactly 32 bytes (got ${pubkeyBuffer.length})`);
+  }
+
   const keyId = deriveKeyId(pubkeyBuffer);
   const existing = agentKeyCollection.findOne({ keyId, revokedAt: null });
   if (existing) {

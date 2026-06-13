@@ -113,6 +113,24 @@ describe('addKey', () => {
     const rawKey = generateEd25519RawPublicKey();
     expect(() => addKey(rawKey, 'test')).toThrow(/not initialized/);
   });
+
+  test('throws when pubkeyBuffer is shorter than 32 bytes', async () => {
+    const { createCollections, addKey } = await import('./agent-keys.js');
+    const collection = createMockCollection();
+    createCollections(createMockDb(collection));
+
+    const shortKey = Buffer.alloc(16); // 16 bytes instead of 32
+    expect(() => addKey(shortKey, 'short')).toThrow(/32 bytes/);
+  });
+
+  test('throws when pubkeyBuffer is longer than 32 bytes', async () => {
+    const { createCollections, addKey } = await import('./agent-keys.js');
+    const collection = createMockCollection();
+    createCollections(createMockDb(collection));
+
+    const longKey = Buffer.alloc(64); // 64 bytes instead of 32
+    expect(() => addKey(longKey, 'long')).toThrow(/32 bytes/);
+  });
 });
 
 describe('getKey', () => {
