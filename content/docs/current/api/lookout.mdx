@@ -1,0 +1,186 @@
+---
+title: "Lookout Edge API"
+description: "Ed25519 agent-key registry and the lookout/1.0 WebSocket edge endpoint for firewall-traversing agents."
+---
+
+Edge mode inverts the normal drydock connection model. In the standard setup the controller dials out to each remote agent. Edge mode is for agents that sit behind NAT or a firewall and cannot accept inbound connections: the `lookout` agent dials **out** to drydock over an encrypted WebSocket (`wss://`), and drydock registers the connection as if the agent had been reached normally. No inbound port on the agent host is needed. The chain is `sockguard → lookout (edge client) → drydock (this endpoint)`.
+
+> For agents that accept inbound connections from the controller, see the [Agent API](/docs/api/agent).
+
+---
+
+## Ed25519 authentication model
+
+Edge connections use public-key authentication; no session cookie or shared secret is involved.
+
+1. The operator generates an Ed25519 keypair on the agent host and registers the **public key** with drydock via the [key registry REST API](#key-registry) below.
+2. drydock stores the raw 32-byte public key (as standard base64) and derives a **key ID**: `hex(SHA-256(raw 32-byte pubkey)[0:8])`, yielding exactly 16 lowercase hex characters.
+3. When the agent connects it sends a signed **hello frame** as the first WebSocket message. The frame includes the `keyId`, a Unix timestamp (seconds), a random 32-hex-char nonce, and an Ed25519 signature.
+4. drydock verifies the timestamp is within **±60 seconds** of server time and that the nonce has not been seen before in that window. Both checks guard against replay attacks.
+5. Only after a successful signature verification is the nonce committed to the replay cache.
+
+The signature is computed over a canonical, newline-joined message (SigV4-style), so the agent and server derive the identical bytes independently:
+
+```text
+GET
+/api/lookout/ws
+<SHA-256 hex of the empty request body>
+<unix-timestamp-seconds>
+<nonce>
+```
+
+The body hash is the SHA-256 of an empty body (`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`), and the path segment is always the literal `/api/lookout/ws` — see [the WebSocket endpoint](#websocket-endpoint) note on the versioned alias.
+
+---
+
+## Key registry
+
+The key registry is mounted at `/api/lookout/keys` (alias: `/api/v1/lookout/keys`). All routes require an authenticated drydock session (same-origin or equivalent).
+
+### List keys
+
+Returns all registered keys — both active and revoked.
+
+```bash
+curl http://drydock:3000/api/lookout/keys
+
+[
+  {
+    "keyId": "3f8a1c2e9b047d56",
+    "pubkey": "kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE=",
+    "label": "prod-agent-us-east",
+    "createdAt": "2026-05-01T09:00:00.000Z",
+    "revokedAt": null
+  }
+]
+```
+
+Each record has the shape:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `keyId` | string | 16 lowercase hex chars — `hex(SHA-256(raw pubkey)[0:8])` |
+| `pubkey` | string | Base64-standard encoded raw 32-byte Ed25519 public key (44 chars) |
+| `label` | string | Human-readable name supplied at registration |
+| `createdAt` | string | ISO-8601 UTC timestamp |
+| `revokedAt` | string \| null | ISO-8601 UTC revocation timestamp, or `null` while active |
+
+### Register a key
+
+```bash
+curl -X POST http://drydock:3000/api/lookout/keys \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pubkeyBase64": "kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE=",
+    "label": "prod-agent-us-east"
+  }'
+
+HTTP/1.1 201 Created
+
+{
+  "keyId": "3f8a1c2e9b047d56",
+  "label": "prod-agent-us-east",
+  "createdAt": "2026-05-01T09:00:00.000Z"
+}
+```
+
+#### Request body
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `pubkeyBase64` | string | Yes | Standard base64-encoded raw 32-byte Ed25519 public key |
+| `label` | string | Yes | Human-readable identifier for this key |
+
+#### Status codes
+
+| Code | Meaning |
+| --- | --- |
+| `201` | Key registered; response body contains `keyId`, `label`, `createdAt` |
+| `400` | Missing or malformed fields (non-string, empty string, invalid base64, wrong key length) |
+| `409` | A non-revoked key with this `keyId` is already registered |
+
+### Revoke a key
+
+Revoked keys are rejected on the next connection attempt. The record is retained (with `revokedAt` set) for audit purposes.
+
+```bash
+curl -X DELETE http://drydock:3000/api/lookout/keys/3f8a1c2e9b047d56
+
+HTTP/1.1 204 No Content
+```
+
+#### Status codes
+
+| Code | Meaning |
+| --- | --- |
+| `204` | Key revoked |
+| `404` | No key with this `keyId` found |
+
+---
+
+## WebSocket endpoint
+
+Edge agents connect to:
+
+```text
+wss://drydock/api/lookout/ws
+```
+
+An unversioned alias `/api/v1/lookout/ws` is also accepted and is signature-equivalent — the canonical path `/api/lookout/ws` is always used in signature computation regardless of which path the agent dialed.
+
+**Subprotocol:** `lookout/1.0`
+
+### Connection flow
+
+1. The agent opens a WebSocket upgrade to `wss://drydock/api/lookout/ws` with the `lookout/1.0` subprotocol header.
+2. The agent sends a **hello frame** as the first message (within 30 seconds, otherwise the connection is closed). The frame carries the `keyId`, timestamp, nonce, and Ed25519 signature described under [Ed25519 authentication model](#ed25519-authentication-model) above.
+3. drydock verifies the hello. On success it replies with a **welcome frame** carrying poll configuration and server version information.
+4. The connection is then live: the agent multiplexes container-sync and exec frames over the same WebSocket.
+
+### Protocol limits
+
+| Parameter | Value |
+| --- | --- |
+| Clock skew window | ±60 seconds |
+| Nonce format | 32 lowercase hex characters |
+| Max frame payload | 16 MB |
+| Hello timeout | 30 seconds |
+
+### Error frames
+
+If the hello is rejected, drydock sends a JSON error frame before closing:
+
+```json
+{
+  "type": "error",
+  "data": {
+    "code": "bad-signature",
+    "message": "Ed25519 signature verification failed"
+  }
+}
+```
+
+Common error codes: `unknown-key`, `timestamp-skew`, `replay`, `bad-signature`, `protocol-mismatch`, `ed25519-required`.
+
+---
+
+## Enrolling a lookout agent
+
+1. **Generate a keypair** on the agent host:
+
+   ```bash
+   openssl genpkey -algorithm ed25519 -out agent.key
+   openssl pkey -in agent.key -pubout -outform DER | tail -c 32 | base64
+   ```
+
+   The last command prints the 44-character base64 public key to register.
+
+2. **Register the public key** with drydock using `POST /api/lookout/keys`. Save the returned `keyId` — the agent needs it in its configuration.
+
+3. **Configure and start the agent.** Point `lookout` at:
+
+   ```text
+   wss://drydock/api/lookout/ws
+   ```
+
+   and supply the private key file and `keyId`. The agent will dial out and authenticate automatically.
