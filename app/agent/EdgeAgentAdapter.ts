@@ -322,10 +322,12 @@ export class EdgeAgentAdapter {
     if (!requestId) {
       return;
     }
+    // Confirm the stream is known; do NOT resolve the promise here.
+    // Resolution is deferred to handleStreamEnd so that callers of
+    // sendStreamRequest receive the complete event, not individual chunks.
     const pending = this.pendingRequests.get(`stream:${requestId}`);
     if (pending) {
-      // Accumulate data — resolve will be deferred to stream_end
-      pending.resolve({ partial: true, data: data.data });
+      log.debug(`${this.agentName}: stream chunk for ${requestId}`);
     }
   }
 
@@ -365,13 +367,20 @@ export class EdgeAgentAdapter {
     if (!execId) {
       return;
     }
-    const session: ExecSession = {
-      execId,
-      close: () => {
-        this.execSessions.delete(execId);
-      },
-    };
-    this.execSessions.set(execId, session);
+    // startExec() pre-registers the session (with outputHandler) before sending
+    // exec_start.  exec_ready is the agent's confirmation that the process
+    // started; we only need to create a session here for the (unusual) case
+    // where exec_ready arrives for an execId we did not initiate (e.g. server
+    // restart mid-session).  Preserve any existing session to keep outputHandler.
+    if (!this.execSessions.has(execId)) {
+      const session: ExecSession = {
+        execId,
+        close: () => {
+          this.execSessions.delete(execId);
+        },
+      };
+      this.execSessions.set(execId, session);
+    }
   }
 
   private handleExecOutput(data: Record<string, unknown>): void {
@@ -397,6 +406,86 @@ export class EdgeAgentAdapter {
     if (session) {
       session.close();
     }
+  }
+
+  /**
+   * Request container logs from the edge agent.
+   * Returns a promise that resolves with the log text, or rejects after 30s.
+   * The pending entry is keyed as `log:${containerId}` to match the
+   * dd:container_log_response handler.
+   */
+  requestContainerLogs(
+    containerId: string,
+    options: { tail?: number; since?: string; until?: string; follow?: boolean } = {},
+  ): Promise<string> {
+    const pendingKey = `log:${containerId}`;
+    if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) {
+      return Promise.reject(new Error('concurrent request limit reached'));
+    }
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingRequests.delete(pendingKey);
+        reject(new Error(`Container log request for ${containerId} timed out after ${REQUEST_TIMEOUT_MS}ms`));
+      }, REQUEST_TIMEOUT_MS);
+
+      this.pendingRequests.set(pendingKey, { resolve: resolve as (value: unknown) => void, reject, timer });
+
+      try {
+        this.ws.send(
+          JSON.stringify({
+            type: 'dd:container_log_request',
+            data: { containerId, ...options },
+          }),
+        );
+      } catch (err: unknown) {
+        clearTimeout(timer);
+        this.pendingRequests.delete(pendingKey);
+        reject(err);
+      }
+    });
+  }
+
+  /**
+   * Send a streaming tunnel request frame to the edge agent.
+   * The pending entry is registered under `stream:${requestId}` so that
+   * handleStream() and handleStreamEnd() can find it — those handlers look up
+   * the `stream:` prefix, not the bare requestId.
+   * Resolves with { complete: true, reason } on stream_end.
+   */
+  sendStreamRequest(
+    method: string,
+    path: string,
+    headers?: Record<string, string>,
+    body?: unknown,
+  ): Promise<unknown> {
+    if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) {
+      return Promise.reject(new Error('concurrent request limit reached'));
+    }
+
+    const requestId = uuidv7();
+    const pendingKey = `stream:${requestId}`;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingRequests.delete(pendingKey);
+        reject(new Error(`Stream request ${requestId} timed out after ${REQUEST_TIMEOUT_MS}ms`));
+      }, REQUEST_TIMEOUT_MS);
+
+      this.pendingRequests.set(pendingKey, { resolve, reject, timer });
+
+      try {
+        this.ws.send(
+          JSON.stringify({
+            type: 'request',
+            data: { requestId, method, path, headers, body },
+          }),
+        );
+      } catch (err: unknown) {
+        clearTimeout(timer);
+        this.pendingRequests.delete(pendingKey);
+        reject(err);
+      }
+    });
   }
 
   /**
@@ -453,12 +542,14 @@ export class EdgeAgentAdapter {
   }
 
   /**
-   * Start an exec session on the edge agent (M5 scaffold).
+   * Start an exec session on the edge agent.
+   * Returns the execId once the exec_start frame is sent.
+   * outputCallback receives decoded bytes for each exec_output frame.
    */
   startExec(
     containerId: string,
     cmd: string[],
-    options?: { user?: string; cols?: number; rows?: number },
+    options?: { user?: string; cols?: number; rows?: number; outputCallback?: (data: Buffer) => void },
   ): Promise<string> {
     if (this.execSessions.size >= MAX_EXEC_SESSIONS) {
       const execId = uuidv7();
@@ -476,6 +567,19 @@ export class EdgeAgentAdapter {
     }
 
     const execId = uuidv7();
+    const outputCallback = options?.outputCallback;
+
+    // Pre-register the session with the callback so exec_output frames arriving
+    // before the caller has a chance to wire up the handler are not lost.
+    const session: ExecSession = {
+      execId,
+      outputHandler: outputCallback,
+      close: () => {
+        this.execSessions.delete(execId);
+      },
+    };
+    this.execSessions.set(execId, session);
+
     try {
       this.ws.send(
         JSON.stringify({
@@ -491,10 +595,45 @@ export class EdgeAgentAdapter {
         }),
       );
     } catch (err: unknown) {
+      this.execSessions.delete(execId);
       return Promise.reject(err);
     }
 
     return Promise.resolve(execId);
+  }
+
+  /**
+   * Send stdin bytes to an active exec session.
+   * data is encoded as base64 (standard) before transmission, matching
+   * the base64 decoding in handleExecOutput.
+   */
+  sendInput(execId: string, stdinBytes: Buffer): void {
+    try {
+      this.ws.send(
+        JSON.stringify({
+          type: 'exec_input',
+          data: { execId, data: stdinBytes.toString('base64') },
+        }),
+      );
+    } catch {
+      // connection may be closing
+    }
+  }
+
+  /**
+   * Send a terminal resize event to an active exec session.
+   */
+  sendResize(execId: string, cols: number, rows: number): void {
+    try {
+      this.ws.send(
+        JSON.stringify({
+          type: 'exec_resize',
+          data: { execId, cols, rows },
+        }),
+      );
+    } catch {
+      // connection may be closing
+    }
   }
 
   async onDisconnect(): Promise<void> {

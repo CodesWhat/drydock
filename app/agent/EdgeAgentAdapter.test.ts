@@ -482,3 +482,214 @@ describe('EdgeAgentAdapter — dd:container_sync sets connected state', () => {
     expect(emitAgentConnected).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('EdgeAgentAdapter — sendStreamRequest / stream frames', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('stream_end frame resolves promise registered by sendStreamRequest', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const streamPromise = adapter.sendStreamRequest('GET', '/containers/c1/logs?follow=1');
+
+    // Extract the requestId from the sent request frame
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      type: string;
+      data: { requestId: string };
+    };
+    const { requestId } = sentFrame.data;
+
+    // Simulate partial stream data
+    sendFrame(ws, 'stream', { requestId, data: 'chunk-1' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Simulate stream end
+    sendFrame(ws, 'stream_end', { requestId, reason: 'done' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    const result = await streamPromise;
+    expect((result as { complete: boolean; reason: string }).complete).toBe(true);
+    expect((result as { complete: boolean; reason: string }).reason).toBe('done');
+  });
+
+  test('sendStreamRequest timeout rejects after 30s', async () => {
+    vi.useFakeTimers();
+    const { adapter } = createAdapter();
+    adapter.activate();
+
+    const streamPromise = adapter.sendStreamRequest('GET', '/containers/c1/logs?follow=1');
+
+    vi.advanceTimersByTime(31_000);
+    await expect(streamPromise).rejects.toThrow(/timed out/);
+
+    vi.useRealTimers();
+  });
+
+  test('stream frame without stream_end does not resolve the promise', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    let resolved = false;
+    const streamPromise = adapter.sendStreamRequest('GET', '/containers/c1/logs?follow=1');
+    streamPromise.then(() => { resolved = true; }).catch(() => {});
+
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      data: { requestId: string };
+    };
+    sendFrame(ws, 'stream', { requestId: sentFrame.data.requestId, data: 'chunk' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(resolved).toBe(false);
+    // Clean up by disconnecting to avoid timer leaks
+    await adapter.onDisconnect();
+  });
+});
+
+describe('EdgeAgentAdapter — exec stdin/resize (sendInput, sendResize)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('sendInput sends exec_input frame with base64-encoded data', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const execId = await adapter.startExec('c1', ['/bin/bash']);
+    // Clear start frame from sentMessages tracking
+    ws.sentMessages.length = 0;
+
+    const stdin = Buffer.from('hello\n');
+    adapter.sendInput(execId, stdin);
+
+    expect(ws.sentMessages).toHaveLength(1);
+    const frame = JSON.parse(ws.sentMessages[0]) as {
+      type: string;
+      data: { execId: string; data: string };
+    };
+    expect(frame.type).toBe('exec_input');
+    expect(frame.data.execId).toBe(execId);
+    // data must be base64-encoded stdin
+    expect(Buffer.from(frame.data.data, 'base64').toString()).toBe('hello\n');
+  });
+
+  test('sendResize sends exec_resize frame with cols and rows', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const execId = await adapter.startExec('c1', ['/bin/bash']);
+    ws.sentMessages.length = 0;
+
+    adapter.sendResize(execId, 120, 40);
+
+    expect(ws.sentMessages).toHaveLength(1);
+    const frame = JSON.parse(ws.sentMessages[0]) as {
+      type: string;
+      data: { execId: string; cols: number; rows: number };
+    };
+    expect(frame.type).toBe('exec_resize');
+    expect(frame.data.execId).toBe(execId);
+    expect(frame.data.cols).toBe(120);
+    expect(frame.data.rows).toBe(40);
+  });
+});
+
+describe('EdgeAgentAdapter — exec outputCallback via startExec', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('outputCallback passed to startExec receives exec_output bytes', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const received: Buffer[] = [];
+    const execId = await adapter.startExec('c1', ['/bin/bash'], {
+      outputCallback: (buf) => received.push(buf),
+    });
+
+    const payload = Buffer.from('from container');
+    sendFrame(ws, 'exec_output', { execId, data: payload.toString('base64') });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(received).toHaveLength(1);
+    expect(received[0].toString()).toBe('from container');
+  });
+
+  test('exec_ready for pre-registered execId preserves outputHandler', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const received: Buffer[] = [];
+    const execId = await adapter.startExec('c1', ['/bin/bash'], {
+      outputCallback: (buf) => received.push(buf),
+    });
+
+    // Agent sends exec_ready (should not overwrite existing session / clear handler)
+    sendFrame(ws, 'exec_ready', { execId });
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Output after exec_ready must still reach callback
+    const payload = Buffer.from('after ready');
+    sendFrame(ws, 'exec_output', { execId, data: payload.toString('base64') });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(received).toHaveLength(1);
+    expect(received[0].toString()).toBe('after ready');
+  });
+});
+
+describe('EdgeAgentAdapter — requestContainerLogs', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('sends dd:container_log_request frame and resolves on dd:container_log_response', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-abc';
+    const logPromise = adapter.requestContainerLogs(containerId, { tail: 100 });
+
+    // Verify the sent frame
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      type: string;
+      data: { containerId: string; tail: number };
+    };
+    expect(sentFrame.type).toBe('dd:container_log_request');
+    expect(sentFrame.data.containerId).toBe(containerId);
+    expect(sentFrame.data.tail).toBe(100);
+
+    // Agent sends log response
+    sendFrame(ws, 'dd:container_log_response', { containerId, logs: 'line1\nline2\n' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    const result = await logPromise;
+    expect(result).toBe('line1\nline2\n');
+  });
+
+  test('requestContainerLogs rejects after 30s timeout', async () => {
+    vi.useFakeTimers();
+    const { adapter } = createAdapter();
+    adapter.activate();
+
+    const logPromise = adapter.requestContainerLogs('c-timeout');
+
+    vi.advanceTimersByTime(31_000);
+    await expect(logPromise).rejects.toThrow(/timed out/);
+
+    vi.useRealTimers();
+  });
+
+  test('onDisconnect rejects pending log request', async () => {
+    const { adapter } = createAdapter();
+    adapter.activate();
+
+    const logPromise = adapter.requestContainerLogs('c-disc').catch((err: Error) => err.message);
+
+    await adapter.onDisconnect();
+
+    expect(await logPromise).toMatch(/connection closed/);
+  });
+});
