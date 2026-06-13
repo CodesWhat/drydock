@@ -3,6 +3,8 @@ title: "Agent API"
 description: "Controller endpoints for remote agent status and logs, plus the Agent's own internal API."
 ---
 
+For agents that cannot accept inbound connections and dial out to drydock instead, see the [Lookout Edge API](/docs/api/lookout).
+
 ## Controller endpoints
 
 These endpoints are served by the Controller and provide read-only access to connected remote agents.
@@ -151,10 +153,14 @@ Sent immediately upon connection to confirm the handshake.
 {
   "type": "dd:ack",
   "data": {
-    "version": "1.5.0"
+    "version": "1.5.0",
+    "logLevel": "info",
+    "pollInterval": "0 */6 * * *"
   }
 }
 ```
+
+The `logLevel` and `pollInterval` fields correspond to the same-named fields in the [GET /agents](#list-all-agents) response. For edge agents connecting via the lookout protocol see the [Lookout Edge API](/docs/api/lookout).
 
 #### `dd:container-added`
 

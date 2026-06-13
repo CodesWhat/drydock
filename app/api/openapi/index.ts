@@ -42,6 +42,10 @@ export const openApiDocument = {
     { name: 'Webhook', description: 'Token-authenticated webhook endpoints' },
     { name: 'Metrics', description: 'Prometheus metrics endpoint' },
     { name: 'Docs', description: 'API documentation endpoints' },
+    {
+      name: 'Lookout',
+      description: 'Edge agent key registry — experimental, requires DD_EXPERIMENTAL_LOOKOUT=true',
+    },
   ],
   security: [{ sessionAuth: [] }],
   components: {
