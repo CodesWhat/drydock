@@ -4467,6 +4467,35 @@ describe('AgentClient', () => {
       // Should not throw — optional chaining prevents it
       expect(result).toBeDefined();
     });
+
+    test('applies logLevel and pollInterval from ack payload', () => {
+      const internal = client as any;
+      client.info = { logLevel: 'info', pollInterval: '300' };
+
+      const result = internal.buildRuntimeInfoFromAck({
+        logLevel: 'debug',
+        pollInterval: '60',
+      });
+      expect(result.logLevel).toBe('debug');
+      expect(result.pollInterval).toBe('60');
+    });
+
+    test('falls back to existing logLevel and pollInterval when absent from ack payload', () => {
+      const internal = client as any;
+      client.info = { logLevel: 'warn', pollInterval: '120' };
+
+      const result = internal.buildRuntimeInfoFromAck({});
+      expect(result.logLevel).toBe('warn');
+      expect(result.pollInterval).toBe('120');
+    });
+
+    test('falls back to existing logLevel when ack payload logLevel is empty string', () => {
+      const internal = client as any;
+      client.info = { logLevel: 'error' };
+
+      const result = internal.buildRuntimeInfoFromAck({ logLevel: '' });
+      expect(result.logLevel).toBe('error');
+    });
   });
 
   describe('handleWatcherSnapshotEvent optional chaining', () => {

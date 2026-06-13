@@ -86,6 +86,8 @@ interface AgentRuntimeAckPayload {
   memoryGb?: unknown;
   uptimeSeconds?: unknown;
   lastSeen?: unknown;
+  logLevel?: unknown;
+  pollInterval?: unknown;
 }
 
 interface AgentSsePayload {
@@ -759,6 +761,14 @@ export class AgentClient {
         typeof runtimeData?.lastSeen === 'string' && runtimeData.lastSeen
           ? runtimeData.lastSeen
           : new Date().toISOString(),
+      logLevel:
+        typeof runtimeData?.logLevel === 'string' && runtimeData.logLevel
+          ? runtimeData.logLevel
+          : this.info.logLevel,
+      pollInterval:
+        typeof runtimeData?.pollInterval === 'string' && runtimeData.pollInterval
+          ? runtimeData.pollInterval
+          : this.info.pollInterval,
     };
   }
 
