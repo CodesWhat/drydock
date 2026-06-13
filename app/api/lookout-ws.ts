@@ -37,6 +37,8 @@ const PROTOCOL_STRING = 'lookout/1.0';
 const SERVER_COMPAT_LEVEL = '1.4';
 const HELLO_TIMEOUT_MS = 30_000;
 const NONCE_PATTERN = /^[0-9a-f]{32}$/;
+// Key IDs are hex(SHA-256(raw32Bytes)[:8]) → exactly 16 lowercase hex chars.
+const KEY_ID_PATTERN = /^[0-9a-f]{16}$/;
 const MAX_CLOCK_SKEW_SECONDS = 60;
 const MAX_PAYLOAD_BYTES = 16 * 1024 * 1024; // 16 MB — matches lookout conn.SetReadLimit
 
@@ -52,8 +54,27 @@ const ED25519_SPKI_HEADER = Buffer.from('302a300506032b6570032100', 'hex');
 // Global nonce cache: nonce → Unix second when accepted.
 // NOT per-connection — prevents replay across connections.
 // In clustered deployments nonces are not shared; see risk note in design doc.
+//
+// Security note: the cache is shared across all key IDs.  A single authenticated
+// principal could legitimately fill the pool (10,000 entries × 120 s window ≈ 83/s).
+// The admission check below (NONCE_ADMISSION_PER_KEY_PER_WINDOW) provides a
+// per-key rate limit that makes sustained pool-exhaustion attacks impractical;
+// adjust the constant if the expected burst rate of legitimate agents rises above it.
 const nonceCache = new Map<string, number>();
+// Per-key nonce admission tracking: keyId → count of nonces admitted in the current window.
+// Evicted alongside the main cache during periodic pruning.
+const noncesPerKey = new Map<string, number>();
+// Maximum nonces a single key may seed into the global cache within one clock-skew window.
+// 200 → comfortable headroom for burst reconnects; attackers need 50× more to fill the pool.
+const NONCE_ADMISSION_PER_KEY_PER_WINDOW = 200;
 let noncePruneInterval: ReturnType<typeof setInterval> | undefined;
+
+// In-flight agent registrations: agentName is added here before welcome is sent
+// and removed after activate() returns (or if welcome send fails).  This closes
+// the TOCTOU window between the getAgent() duplicate-check and the addAgent()
+// call inside EdgeAgentAdapter.activate() — concurrent hellos with the same
+// agentId will hit this Set rather than both slipping through.
+const inFlightAgents = new Set<string>();
 
 function startNoncePruning(): void {
   if (noncePruneInterval !== undefined) {
@@ -66,6 +87,8 @@ function startNoncePruning(): void {
         nonceCache.delete(nonce);
       }
     }
+    // Reset per-key admission counters each pruning cycle (every 60 s).
+    noncesPerKey.clear();
   }, 60_000);
   /* v8 ignore next */
   if (typeof noncePruneInterval.unref === 'function') {
@@ -76,6 +99,8 @@ function startNoncePruning(): void {
 /** Exposed for tests to reset global state. */
 export function clearNonceCacheForTesting(): void {
   nonceCache.clear();
+  noncesPerKey.clear();
+  inFlightAgents.clear();
 }
 
 function sendErrorAndClose(ws: WebSocketLike, code: string, message: string, closeCode: number): void {
@@ -107,6 +132,12 @@ export function injectDrydockVersionForTesting(version: string): void {
 /**
  * Verify the Ed25519 signature in the hello frame.
  * Canonical message: METHOD\nPATH\nBODY_HASH_HEX\nUNIX_TIMESTAMP_DECIMAL\nNONCE
+ *
+ * PATH is intentionally hard-coded to '/api/lookout/ws' regardless of whether the
+ * agent connected via the versioned alias '/api/v1/lookout/ws'.  Both paths are
+ * signature-equivalent by design: the lookout client always signs over the canonical
+ * unversioned path so that adding or removing the /v1 alias never forces a key rotation.
+ * If this equivalence is ever removed, agents MUST be updated to sign the actual path.
  */
 function verifyHelloSignature(
   pubkeyBase64: string,
@@ -238,6 +269,19 @@ async function processHello(
 
   const hello = data as unknown as HelloMessage;
 
+  // Step 2a: Validate agentId before it is used in logs or as a Map key.
+  // Must be a non-empty string of safe characters (alphanumeric, hyphens, underscores)
+  // with a reasonable upper bound; rejects numbers, objects, null, and injection strings.
+  if (
+    typeof hello.agentId !== 'string' ||
+    hello.agentId.length === 0 ||
+    hello.agentId.length > 64 ||
+    !/^[a-zA-Z0-9_-]+$/.test(hello.agentId)
+  ) {
+    sendErrorAndClose(ws, 'parse-error', 'Invalid agentId', 1008);
+    return;
+  }
+
   // Step 3: Protocol check
   if (hello.protocol !== PROTOCOL_STRING) {
     sendErrorAndClose(
@@ -281,8 +325,11 @@ async function processHello(
   }
 
   if (!hasEd25519) {
-    // tokenHash fallback — not implemented; reject
-    sendErrorAndClose(ws, 'no-auth', 'Token auth not supported; use Ed25519', 1008);
+    // Token-hash-only connections are rejected at the edge endpoint: this server
+    // has no shared TOKEN secret to compare against — the Ed25519 public-key
+    // registry is the sole auth mechanism here.  Agents without PRIVATE_KEY_FILE
+    // must obtain a key or use the non-edge SSE path instead.
+    sendErrorAndClose(ws, 'ed25519-required', 'Ed25519 key auth required; token auth not supported on edge endpoint', 1008);
     return;
   }
 
@@ -292,10 +339,18 @@ async function processHello(
   const nonce = hello.nonce as string;
   const signature = hello.signature as string;
 
-  // Step 5: Key lookup
+  // Step 4a: Validate keyId format before passing it anywhere (DB or logs).
+  // keyId must be exactly 16 lowercase hex chars; reject anything else to prevent
+  // log injection, arbitrary-length DB queries, and key-oracle probing.
+  if (!KEY_ID_PATTERN.test(pubKeyId)) {
+    sendErrorAndClose(ws, 'unknown-key', 'Unknown or revoked key', 1008);
+    return;
+  }
+
+  // Step 5: Key lookup — generic error message to avoid key-existence oracle.
   const keyRecord = keyStore.getKey(pubKeyId);
   if (!keyRecord) {
-    sendErrorAndClose(ws, 'unknown-key', `Unknown or revoked key: ${pubKeyId}`, 1008);
+    sendErrorAndClose(ws, 'unknown-key', 'Unknown or revoked key', 1008);
     return;
   }
 
@@ -312,7 +367,9 @@ async function processHello(
     return;
   }
 
-  // Step 8: Nonce replay
+  // Step 8: Nonce replay — check presence only; do NOT commit until after sig verification.
+  // Committing before verification would let an attacker exhaust the 10,000-entry nonce
+  // pool with bad-signature hellos (one valid keyId × 10k unique nonces fills the cache).
   if (nonceCache.size > 10_000) {
     // Evict expired entries first
     for (const [n, ts] of nonceCache.entries()) {
@@ -329,9 +386,8 @@ async function processHello(
     sendErrorAndClose(ws, 'replay', 'Nonce already used', 1008);
     return;
   }
-  nonceCache.set(nonce, nowSeconds);
 
-  // Step 9: Signature verify
+  // Step 9: Signature verify — must happen before nonce is committed.
   let signatureOk: boolean;
   try {
     signatureOk = verifyHelloSignature(keyRecord.pubkey, timestamp, nonce, signature);
@@ -346,12 +402,27 @@ async function processHello(
     return;
   }
 
-  // Step 10: Prevent duplicate agent names
+  // Commit the nonce only after successful signature verification to prevent
+  // pool exhaustion by unauthenticated callers.
+  //
+  // Per-key admission guard: cap how many nonces a single key may seed per pruning
+  // window so that one legitimate-but-misbehaving agent cannot monopolise the shared pool.
+  const keyNonceCount = (noncesPerKey.get(pubKeyId) ?? 0) + 1;
+  if (keyNonceCount > NONCE_ADMISSION_PER_KEY_PER_WINDOW) {
+    sendErrorAndClose(ws, 'rate-limited', 'Nonce admission limit reached for this key', 1008);
+    return;
+  }
+  noncesPerKey.set(pubKeyId, keyNonceCount);
+  nonceCache.set(nonce, nowSeconds);
+
+  // Step 10: Prevent duplicate agent names — atomic check/reserve with inFlightAgents
+  // so that concurrent hellos cannot both pass before either calls activate().
   const agentName = `lookout-edge-${hello.agentId}`;
-  if (getAgent(agentName)) {
+  if (getAgent(agentName) || inFlightAgents.has(agentName)) {
     sendErrorAndClose(ws, 'agent-already-connected', `Agent ${agentName} already connected`, 1008);
     return;
   }
+  inFlightAgents.add(agentName);
 
   // Step 11: Send WELCOME
   const pollInterval = 300;
@@ -370,6 +441,7 @@ async function processHello(
     ws.send(JSON.stringify(welcome));
   } catch (err: unknown) {
     log.error(`Failed to send welcome to ${agentName}: ${getErrorMessage(err)}`);
+    inFlightAgents.delete(agentName);
     return;
   }
 
@@ -389,7 +461,10 @@ async function processHello(
     agentId: hello.agentId,
     version: hello.version,
   });
+  // activate() calls addAgent() — release the in-flight reservation immediately
+  // after so the slot is held by the manager instead.
   adapter.activate();
+  inFlightAgents.delete(agentName);
 
   log.info(
     `Edge agent connected: ${agentName} (version=${hello.version}, drydockCompat=${hello.drydockCompat ?? 'absent'})`,

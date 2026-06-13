@@ -424,7 +424,7 @@ describe('hello verification — rejection paths', () => {
     expect(ws.close).toHaveBeenCalledWith(1008, 'no-auth');
   });
 
-  test('no-auth when tokenHash present but no Ed25519 (tokenHash fallback not implemented)', async () => {
+  test('ed25519-required when tokenHash present but no Ed25519 fields', async () => {
     const { ws } = doHandshake(null, {
       type: 'hello',
       data: {
@@ -441,7 +441,10 @@ describe('hello verification — rejection paths', () => {
     await new Promise((r) => setTimeout(r, 0));
 
     const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
-    expect(errorFrame.data.code).toBe('no-auth');
+    // Edge endpoint requires Ed25519; token-hash-only agents receive a clear error
+    // rather than the generic 'no-auth' code so operators know what to fix.
+    expect(errorFrame.data.code).toBe('ed25519-required');
+    expect(ws.close).toHaveBeenCalledWith(1008, 'ed25519-required');
   });
 
   test('unknown-key when key not in registry', async () => {
@@ -524,6 +527,10 @@ describe('hello verification — rejection paths', () => {
   });
 
   test('replay when same nonce used twice', async () => {
+    // Both connections use a valid keypair and a correct signature so that the
+    // first hello fully succeeds (nonce is seeded into the global cache only
+    // after signature verification), then the second with the identical nonce
+    // must be rejected with exactly 'replay' — never 'bad-signature'.
     const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
     const ts = Math.floor(Date.now() / 1000);
     const nonce = makeNonce();
@@ -537,50 +544,41 @@ describe('hello verification — rejection paths', () => {
       revokedAt: null,
     };
 
-    // First hello succeeds (we'll get bad-signature since we're using a dummy sig for first)
-    // Actually we need the first to fully succeed to seed the nonce cache.
-    // Use a different approach: just force-seed the cache by sending one valid hello,
-    // then verify the second (same nonce, different agentId) gets replay.
-
-    // To avoid needing two agents, we test the replay detection directly
-    // by sending the same nonce in the same hello flow twice (different connections)
     clearNonceCacheForTesting();
 
-    // First connection: should fail at bad-signature (since record pubkey mismatch would be
-    // caught, but we want the NONCE to get seeded). Need a proper matching connection first.
-    // Let's just check that if nonce is already in cache, replay is returned.
-
-    // Build a valid first connection to seed nonce cache
+    // First connection: valid hello — should succeed (welcome sent) and seed the nonce.
     const { gateway: gw1, getUpgradedWs: getWs1 } = createGateway(record);
-    const sock1 = createMockSocket();
     gw1.handleUpgrade(
       createRequest('/api/lookout/ws'),
-      sock1 as unknown as Socket,
+      createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
     const ws1 = getWs1()!;
     sendMessageToGateway(ws1, buildHello(keyId, ts, nonce, sig));
     await new Promise((r) => setTimeout(r, 10));
 
-    // Second connection: same nonce → replay
+    // Verify the first connection received a welcome (proves the nonce was seeded
+    // after successful auth, not before — which is the core invariant being tested).
+    const firstFrame = JSON.parse(ws1.sentMessages[0]) as { type: string };
+    expect(firstFrame.type).toBe('welcome');
+
+    // Second connection: same nonce — must be rejected with exactly 'replay'.
     const { gateway: gw2, getUpgradedWs: getWs2 } = createGateway(record);
-    const sock2 = createMockSocket();
     gw2.handleUpgrade(
       createRequest('/api/lookout/ws'),
-      sock2 as unknown as Socket,
+      createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
     const ws2 = getWs2()!;
     sendMessageToGateway(ws2, buildHello(keyId, ts, nonce, sig));
     await new Promise((r) => setTimeout(r, 10));
 
-    const lastMsg = JSON.parse(ws2.sentMessages[ws2.sentMessages.length - 1]) as {
+    const replayFrame = JSON.parse(ws2.sentMessages[0]) as {
       type: string;
       data: { code: string };
     };
-    // The second should get either bad-signature (if first passed sig check) or replay
-    // Since nonce was seeded after the first passed the nonce check, it should be replay
-    expect(['replay', 'bad-signature']).toContain(lastMsg.data.code);
+    expect(replayFrame.data.code).toBe('replay');
+    expect(ws2.close).toHaveBeenCalledWith(1008, 'replay');
   });
 
   test('bad-signature when Ed25519 signature is wrong', async () => {
@@ -619,6 +617,153 @@ describe('hello verification — rejection paths', () => {
 
     const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
     expect(errorFrame.data.code).toBe('unknown-key');
+  });
+
+  test('unknown-key error message does not echo the supplied keyId', async () => {
+    // Regression guard: the error body must never reflect attacker-controlled input.
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'c2b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+    const sig = signHello(privateKey, ts, nonce);
+
+    const { ws } = doHandshake(null, buildHello(keyId, ts, nonce, sig));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string; message: string } };
+    expect(errorFrame.data.code).toBe('unknown-key');
+    expect(errorFrame.data.message).not.toContain(keyId);
+  });
+
+  test('parse-error when agentId is a number', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'c3b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+    const sig = signHello(privateKey, ts, nonce);
+
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { ws } = doHandshake(record, buildHello(keyId, ts, nonce, sig, { agentId: 42 }));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame.data.code).toBe('parse-error');
+    expect(ws.close).toHaveBeenCalledWith(1008, 'parse-error');
+  });
+
+  test('parse-error when agentId exceeds 64 chars', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'c4b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+    const sig = signHello(privateKey, ts, nonce);
+
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const longId = 'a'.repeat(65);
+    const { ws } = doHandshake(record, buildHello(keyId, ts, nonce, sig, { agentId: longId }));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame.data.code).toBe('parse-error');
+  });
+
+  test('parse-error when agentId contains unsafe characters', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'c5b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+    const sig = signHello(privateKey, ts, nonce);
+
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { ws } = doHandshake(record, buildHello(keyId, ts, nonce, sig, { agentId: 'agent\x00id' }));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame.data.code).toBe('parse-error');
+  });
+
+  test('unknown-key when keyId has wrong format (not 16 hex chars)', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'c6b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+    const sig = signHello(privateKey, ts, nonce);
+
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    // Send a keyId that is too long / contains non-hex chars
+    const { ws } = doHandshake(record, buildHello('../../../../etc/passwd', ts, nonce, sig));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame.data.code).toBe('unknown-key');
+    expect(ws.close).toHaveBeenCalledWith(1008, 'unknown-key');
+  });
+
+  test('bad-signature does NOT seed the nonce into the replay cache', async () => {
+    // Regression guard for the pre-fix race: if a bad-sig hello were to commit
+    // the nonce, an attacker with one valid keyId could exhaust the nonce pool.
+    // After the fix, only verified hellos may seed the cache.
+    const { privateKey: _k1, pubkeyBase64, keyId } = generateKeyPair();
+    const { privateKey: wrongKey } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'c7b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+    const badSig = signHello(wrongKey, ts, nonce);
+    const goodSig = signHello(_k1, ts, nonce); // correct sig for the same nonce
+
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    clearNonceCacheForTesting();
+
+    // First attempt: bad signature — must NOT seed the nonce.
+    const { ws: ws1 } = doHandshake(record, buildHello(keyId, ts, nonce, badSig));
+    await new Promise((r) => setTimeout(r, 10));
+    const firstErr = JSON.parse(ws1.sentMessages[0]) as { data: { code: string } };
+    expect(firstErr.data.code).toBe('bad-signature');
+
+    // Second attempt: same nonce but now with the correct signature.
+    // If the nonce had been seeded on the first (bad-sig) attempt this would
+    // return 'replay'; with the fix it must proceed to the welcome.
+    const { gateway: gw2, getUpgradedWs: getWs2 } = createGateway(record);
+    gw2.handleUpgrade(
+      createRequest('/api/lookout/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws2 = getWs2()!;
+    sendMessageToGateway(ws2, buildHello(keyId, ts, nonce, goodSig));
+    await new Promise((r) => setTimeout(r, 10));
+
+    const secondFrame = JSON.parse(ws2.sentMessages[0]) as { type: string };
+    expect(secondFrame.type).toBe('welcome');
   });
 });
 
@@ -738,5 +883,65 @@ describe('version handshake', () => {
     };
     expect(welcome.data.config.serverCompatLevel).toBe('1.4');
     expect(welcome.data.config.supportedProtocols).toBe('lookout/1.0');
+  });
+});
+
+describe('duplicate-agent guard', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearNonceCacheForTesting();
+  });
+
+  /**
+   * Sends a valid hello to the given gateway and waits for processing.
+   * Returns the upgraded WebSocket.
+   */
+  async function sendValidHello(
+    gateway: ReturnType<typeof createGateway>['gateway'],
+    getUpgradedWs: ReturnType<typeof createGateway>['getUpgradedWs'],
+    keyId: string,
+    privateKey: import('node:crypto').KeyObject,
+    pubkeyBase64: string,
+    nonce: string,
+  ) {
+    const ts = Math.floor(Date.now() / 1000);
+    const sig = signHello(privateKey, ts, nonce);
+    const socket = createMockSocket();
+    gateway.handleUpgrade(createRequest('/api/lookout/ws'), socket as unknown as Socket, Buffer.alloc(0));
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig, { agentId: 'concurrent-agent' }));
+    await new Promise((r) => setTimeout(r, 10));
+    return ws;
+  }
+
+  test('agent-already-connected when manager already has the agent name', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const nonce = 'a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5';
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    // Make getAgent return a truthy value for any agent name (simulate existing connection)
+    const { getAgent } = await import('../agent/manager.js');
+    vi.mocked(getAgent).mockReturnValue({ name: 'lookout-edge-concurrent-agent' } as unknown as Parameters<typeof getAgent>[0] extends string ? ReturnType<typeof getAgent> : never);
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    const ts = Math.floor(Date.now() / 1000);
+    const sig = signHello(privateKey, ts, nonce);
+    const socket = createMockSocket();
+    gateway.handleUpgrade(createRequest('/api/lookout/ws'), socket as unknown as Socket, Buffer.alloc(0));
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig, { agentId: 'concurrent-agent' }));
+    await new Promise((r) => setTimeout(r, 10));
+
+    const lastMsg = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      data: { code: string };
+    };
+    expect(lastMsg.data.code).toBe('agent-already-connected');
+    expect(ws.close).toHaveBeenCalledWith(1008, 'agent-already-connected');
   });
 });
