@@ -86,6 +86,35 @@ test('getLocalWatcherEnabled should return false when disabled via env', async (
   delete configuration.ddEnvVars.DD_LOCAL_WATCHER;
 });
 
+test('getExperimentalLookoutEnabled should default to false', () => {
+  delete configuration.ddEnvVars.DD_EXPERIMENTAL_LOOKOUT;
+  expect(configuration.getExperimentalLookoutEnabled()).toStrictEqual(false);
+});
+
+test('getExperimentalLookoutEnabled should return true when set to "true"', () => {
+  configuration.ddEnvVars.DD_EXPERIMENTAL_LOOKOUT = 'true';
+  expect(configuration.getExperimentalLookoutEnabled()).toStrictEqual(true);
+  delete configuration.ddEnvVars.DD_EXPERIMENTAL_LOOKOUT;
+});
+
+test('getExperimentalLookoutEnabled should normalize casing', () => {
+  configuration.ddEnvVars.DD_EXPERIMENTAL_LOOKOUT = 'TRUE';
+  expect(configuration.getExperimentalLookoutEnabled()).toStrictEqual(true);
+  delete configuration.ddEnvVars.DD_EXPERIMENTAL_LOOKOUT;
+});
+
+test('getExperimentalLookoutEnabled should trim whitespace before comparing', () => {
+  configuration.ddEnvVars.DD_EXPERIMENTAL_LOOKOUT = '  true  ';
+  expect(configuration.getExperimentalLookoutEnabled()).toStrictEqual(true);
+  delete configuration.ddEnvVars.DD_EXPERIMENTAL_LOOKOUT;
+});
+
+test('getExperimentalLookoutEnabled should return false for non-"true" values', () => {
+  configuration.ddEnvVars.DD_EXPERIMENTAL_LOOKOUT = '1';
+  expect(configuration.getExperimentalLookoutEnabled()).toStrictEqual(false);
+  delete configuration.ddEnvVars.DD_EXPERIMENTAL_LOOKOUT;
+});
+
 test('getDnsMode should default to ipv4first', () => {
   delete configuration.ddEnvVars.DD_DNS_MODE;
   expect(configuration.getDnsMode()).toBe('ipv4first');
