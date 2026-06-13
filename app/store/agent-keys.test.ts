@@ -307,7 +307,9 @@ describe('loadAuthorizedKeysFile', () => {
     const collection = createMockCollection();
     createCollections(createMockDb(collection));
 
-    const statSpy = vi.spyOn(fs, 'statSync').mockReturnValue({ mode: 0o644 } as fs.Stats);
+    vi.spyOn(fs, 'openSync').mockReturnValue(3);
+    vi.spyOn(fs, 'closeSync').mockReturnValue(undefined);
+    const statSpy = vi.spyOn(fs, 'fstatSync').mockReturnValue({ mode: 0o644 } as fs.Stats);
     expect(() => loadAuthorizedKeysFile('/fake/path')).toThrow(/world-readable/);
     statSpy.mockRestore();
   });
@@ -335,7 +337,9 @@ describe('loadAuthorizedKeysFile', () => {
     const pubkeyBase64 = rawKey.toString('base64');
     const fileContent = ['# comment line', '', `ed25519 ${pubkeyBase64} test-label`].join('\n');
 
-    vi.spyOn(fs, 'statSync').mockReturnValue({ mode: 0o600 } as fs.Stats);
+    vi.spyOn(fs, 'openSync').mockReturnValue(3);
+    vi.spyOn(fs, 'closeSync').mockReturnValue(undefined);
+    vi.spyOn(fs, 'fstatSync').mockReturnValue({ mode: 0o600 } as fs.Stats);
     vi.spyOn(fs, 'readFileSync').mockReturnValue(fileContent);
 
     loadAuthorizedKeysFile('/fake/authorized_keys');
@@ -360,7 +364,9 @@ describe('loadAuthorizedKeysFile', () => {
     };
     createCollections(createMockDb(collection));
 
-    vi.spyOn(fs, 'statSync').mockReturnValue({ mode: 0o600 } as fs.Stats);
+    vi.spyOn(fs, 'openSync').mockReturnValue(3);
+    vi.spyOn(fs, 'closeSync').mockReturnValue(undefined);
+    vi.spyOn(fs, 'fstatSync').mockReturnValue({ mode: 0o600 } as fs.Stats);
     vi.spyOn(fs, 'readFileSync').mockReturnValue('rsa AAAA invalid-key-type\n');
 
     loadAuthorizedKeysFile('/fake/authorized_keys');
@@ -384,7 +390,9 @@ describe('loadAuthorizedKeysFile', () => {
 
     // 16 bytes instead of 32
     const shortKey = Buffer.alloc(16).toString('base64');
-    vi.spyOn(fs, 'statSync').mockReturnValue({ mode: 0o600 } as fs.Stats);
+    vi.spyOn(fs, 'openSync').mockReturnValue(3);
+    vi.spyOn(fs, 'closeSync').mockReturnValue(undefined);
+    vi.spyOn(fs, 'fstatSync').mockReturnValue({ mode: 0o600 } as fs.Stats);
     vi.spyOn(fs, 'readFileSync').mockReturnValue(`ed25519 ${shortKey} wrong-length\n`);
 
     loadAuthorizedKeysFile('/fake/authorized_keys');
@@ -413,7 +421,9 @@ describe('loadAuthorizedKeysFile', () => {
     const pubkeyBase64 = rawKey.toString('base64');
     const fileContent = `ed25519 ${pubkeyBase64} test-label`;
 
-    vi.spyOn(fs, 'statSync').mockReturnValue({ mode: 0o600 } as fs.Stats);
+    vi.spyOn(fs, 'openSync').mockReturnValue(3);
+    vi.spyOn(fs, 'closeSync').mockReturnValue(undefined);
+    vi.spyOn(fs, 'fstatSync').mockReturnValue({ mode: 0o600 } as fs.Stats);
     vi.spyOn(fs, 'readFileSync').mockReturnValue(fileContent);
 
     // Should not throw — addKey error is caught and logged
@@ -445,7 +455,9 @@ describe('loadAuthorizedKeysFile', () => {
     const pubkeyBase64 = rawKey.toString('base64');
     const fileContent = `ed25519 ${pubkeyBase64} agent`;
 
-    vi.spyOn(fs, 'statSync').mockReturnValue({ mode: 0o600 } as fs.Stats);
+    vi.spyOn(fs, 'openSync').mockReturnValue(3);
+    vi.spyOn(fs, 'closeSync').mockReturnValue(undefined);
+    vi.spyOn(fs, 'fstatSync').mockReturnValue({ mode: 0o600 } as fs.Stats);
     vi.spyOn(fs, 'readFileSync').mockReturnValue(fileContent);
 
     loadAuthorizedKeysFile('/fake/authorized_keys');
@@ -481,7 +493,9 @@ describe('loadAuthorizedKeysFile', () => {
     // Line with only 2 parts (no comment) — triggers the 'imported' fallback
     const fileContent = `ed25519 ${pubkeyBase64}`;
 
-    vi.spyOn(fs, 'statSync').mockReturnValue({ mode: 0o600 } as fs.Stats);
+    vi.spyOn(fs, 'openSync').mockReturnValue(3);
+    vi.spyOn(fs, 'closeSync').mockReturnValue(undefined);
+    vi.spyOn(fs, 'fstatSync').mockReturnValue({ mode: 0o600 } as fs.Stats);
     vi.spyOn(fs, 'readFileSync').mockReturnValue(fileContent);
 
     loadAuthorizedKeysFile('/fake/authorized_keys');

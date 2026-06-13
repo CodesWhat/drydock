@@ -85,7 +85,7 @@ export function addKey(pubkeyBuffer: Buffer, label: string): AgentKeyRecord {
   };
 
   agentKeyCollection.insert(record);
-  log.info(`Added agent key ${keyId} (${label})`);
+  log.info({ keyId, label }, 'Added agent key');
   return record;
 }
 
@@ -120,7 +120,7 @@ export function revokeKey(keyId: string): boolean {
   }
   record.revokedAt = new Date().toISOString();
   agentKeyCollection.update(record);
-  log.info(`Revoked agent key ${keyId}`);
+  log.info({ keyId: record.keyId }, 'Revoked agent key');
   return true;
 }
 
@@ -143,15 +143,23 @@ export function listKeys(): AgentKeyRecord[] {
  * @param filePath - path to the authorized_keys file
  */
 export function loadAuthorizedKeysFile(filePath: string): void {
-  const stat = fs.statSync(filePath);
-  /* v8 ignore next */
-  if (stat.mode & 0o004) {
-    throw new Error(
-      `Authorized keys file ${filePath} is world-readable (mode ${(stat.mode & 0o777).toString(8)}). Fix permissions to 0600.`,
-    );
+  // Open once and operate on the file descriptor so the permission check and the
+  // read target the same inode. This closes a TOCTOU race where the file could be
+  // swapped between an independent stat() and a subsequent readFile() by path.
+  const fd = fs.openSync(filePath, 'r');
+  let content: string;
+  try {
+    const stat = fs.fstatSync(fd);
+    if (stat.mode & 0o004) {
+      throw new Error(
+        `Authorized keys file ${filePath} is world-readable (mode ${(stat.mode & 0o777).toString(8)}). Fix permissions to 0600.`,
+      );
+    }
+    content = fs.readFileSync(fd, 'utf-8');
+  } finally {
+    fs.closeSync(fd);
   }
 
-  const content = fs.readFileSync(filePath, 'utf-8');
   const lines = content.split('\n');
   let loaded = 0;
 
@@ -162,7 +170,7 @@ export function loadAuthorizedKeysFile(filePath: string): void {
     }
     const parts = trimmed.split(/\s+/);
     if (parts.length < 2 || parts[0] !== 'ed25519') {
-      log.warn(`Skipping unrecognized line in authorized_keys: ${trimmed.substring(0, 80)}`);
+      log.warn({ line: trimmed.substring(0, 80) }, 'Skipping unrecognized line in authorized_keys');
       continue;
     }
     const pubkeyBase64 = parts[1];
@@ -173,7 +181,10 @@ export function loadAuthorizedKeysFile(filePath: string): void {
       pubkeyBuffer = Buffer.from(pubkeyBase64, 'base64');
       /* v8 ignore start */
     } catch {
-      log.warn(`Skipping invalid base64 in authorized_keys: ${pubkeyBase64.substring(0, 44)}`);
+      log.warn(
+        { key: pubkeyBase64.substring(0, 44) },
+        'Skipping invalid base64 in authorized_keys',
+      );
       continue;
     }
     /* v8 ignore stop */
@@ -193,7 +204,7 @@ export function loadAuthorizedKeysFile(filePath: string): void {
       addKey(pubkeyBuffer, comment);
       loaded += 1;
     } catch (error: unknown) {
-      log.warn(`Failed to add key ${keyId}: ${String(error)}`);
+      log.warn({ keyId, error: String(error) }, 'Failed to add key');
     }
   }
 
