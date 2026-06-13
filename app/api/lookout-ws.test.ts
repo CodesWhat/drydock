@@ -8,8 +8,10 @@ import type { Socket } from 'node:net';
 import type { AgentKeyRecord } from '../store/agent-keys.js';
 import {
   attachLookoutWsServer,
+  clearLiveSessionsForTesting,
   clearNonceCacheForTesting,
   createLookoutWsGateway,
+  disconnectByKeyId,
   fillNonceCacheForTesting,
   fillNoncesPerKeyForTesting,
   injectDrydockVersionForTesting,
@@ -1685,5 +1687,524 @@ describe('attachLookoutWsServer — default serverConfiguration branch', () => {
     });
 
     expect(onSpy).toHaveBeenCalledWith('upgrade', expect.any(Function));
+  });
+});
+
+describe('handleConnection — hello timer cleanup on premature disconnect', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    clearNonceCacheForTesting();
+    clearLiveSessionsForTesting();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test('close event before hello clears the timer (no timeout close after 30s)', () => {
+    const { gateway, getUpgradedWs } = createGateway();
+    const socket = createMockSocket();
+    gateway.handleUpgrade(
+      createRequest('/api/lookout/ws'),
+      socket as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    // Simulate client disconnecting before sending hello
+    ws.emit('close');
+
+    // Advance past 30s — timer must have been cleared, so ws.close should NOT be called
+    vi.advanceTimersByTime(31_000);
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('error event before hello clears the timer (no timeout close after 30s)', () => {
+    const { gateway, getUpgradedWs } = createGateway();
+    const socket = createMockSocket();
+    gateway.handleUpgrade(
+      createRequest('/api/lookout/ws'),
+      socket as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    // Simulate connection error before hello
+    ws.emit('error', new Error('connection reset'));
+
+    vi.advanceTimersByTime(31_000);
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+});
+
+describe('hello verification — NaN/non-finite timestamp rejection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearNonceCacheForTesting();
+    clearLiveSessionsForTesting();
+  });
+
+  // JSON.stringify converts NaN and Infinity to null, so typeof timestamp === 'object'
+  // fails the hasEd25519 check (typeof null !== 'number'), resulting in 'no-auth'.
+  // These tests verify the correct wire-level behavior.
+  test('no-auth when timestamp is null (NaN/Infinity serialize to null in JSON)', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'fa100000000000000000000000000001';
+    const sig = signHello(privateKey, ts, nonce);
+
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/lookout/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    // Send a raw JSON string with timestamp: null (what NaN/Infinity become after JSON round-trip).
+    // typeof null !== 'number', so hasEd25519 is false → no-auth.
+    ws.emit(
+      'message',
+      JSON.stringify({
+        type: 'hello',
+        data: {
+          ...buildHello(keyId, ts, nonce, sig).data,
+          timestamp: null,
+        },
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+
+    const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame.data.code).toBe('no-auth');
+    expect(ws.close).toHaveBeenCalledWith(1008, 'no-auth');
+  });
+
+  // The Number.isFinite guard in the skew check is defense-in-depth that cannot be
+  // triggered via standard JSON (which never produces NaN/Infinity). We exercise it
+  // by emitting a raw object whose toString() returns a JSON string that, after
+  // JSON.parse, yields a typeof-number value (via a reviver-like trick).
+  //
+  // The trick: emit an object with a custom toString() that produces a payload where
+  // the timestamp field is a number that passes typeof but fails isFinite. Since
+  // JSON.parse can't produce Infinity, we instead build the payload so that the
+  // `hello.timestamp as number` cast operates on Infinity injected via a non-standard
+  // JSON reviver path — but that isn't available here.
+  //
+  // Pragmatic approach: mark the !Number.isFinite branch as defensive code and test
+  // it by emitting a message whose toString() returns JSON where timestamp is 1 (a
+  // safe integer), then confirm the check passes. The guard itself is exercised by
+  // the combined condition — if isFinite is true the second part (skew) runs, which
+  // existing tests already cover. The !isFinite true-branch is covered separately
+  // by emitting a raw non-string with a fake toString that produces a payload with
+  // a large-enough-to-be-skewed but finite timestamp value. However, because standard
+  // JSON cannot carry Infinity, the !isFinite branch is unreachable via the wire; the
+  // source marks it with /* v8 ignore next */ so coverage doesn't penalize it.
+  test('timestamp-skew guard works for finite timestamps far in future (exercises second OR branch)', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    // Use a timestamp 70 seconds in the future (past the 60s skew window)
+    const ts = Math.floor(Date.now() / 1000) + 70;
+    const nonce = 'fa200000000000000000000000000001';
+    const sig = signHello(privateKey, ts, nonce);
+
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/lookout/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
+    await new Promise((r) => setTimeout(r, 10));
+
+    const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame.data.code).toBe('timestamp-skew');
+    expect(ws.close).toHaveBeenCalledWith(1008, 'timestamp-skew');
+  });
+});
+
+describe('hello verification — signature length cap', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearNonceCacheForTesting();
+    clearLiveSessionsForTesting();
+  });
+
+  test('bad-signature when signature exceeds 200 chars', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'fb100000000000000000000000000001';
+    const sig = signHello(privateKey, ts, nonce);
+
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/lookout/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    // Craft a signature that is 201 chars (1 over the limit)
+    const oversizedSig = sig.padEnd(201, 'A');
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, oversizedSig));
+    await new Promise((r) => setTimeout(r, 10));
+
+    const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame.data.code).toBe('bad-signature');
+    expect(ws.close).toHaveBeenCalledWith(1008, 'bad-signature');
+  });
+
+  test('valid 86-char Ed25519 signature is accepted (not falsely rejected by length cap)', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'fb200000000000000000000000000001';
+    const sig = signHello(privateKey, ts, nonce);
+
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/lookout/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    // Real Ed25519 base64url sig is 86 chars — must pass the length cap
+    expect(sig.length).toBe(86);
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
+    await new Promise((r) => setTimeout(r, 10));
+
+    const firstFrame = JSON.parse(ws.sentMessages[0]) as { type: string };
+    expect(firstFrame.type).toBe('welcome');
+  });
+});
+
+describe('disconnectByKeyId', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearNonceCacheForTesting();
+    clearLiveSessionsForTesting();
+  });
+
+  test('returns 0 and does nothing when keyId has no live sessions', () => {
+    const count = disconnectByKeyId('deadbeefdeadbeef');
+    expect(count).toBe(0);
+  });
+
+  test('disconnects all live sessions for a keyId and returns count', async () => {
+    // Establish a real live session through the full hello flow
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'fc100000000000000000000000000001';
+    const sig = signHello(privateKey, ts, nonce);
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/lookout/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Confirm the session was established
+    const welcomeFrame = JSON.parse(ws.sentMessages[0]) as { type: string };
+    expect(welcomeFrame.type).toBe('welcome');
+
+    // Now disconnect by keyId
+    const count = disconnectByKeyId(keyId);
+    expect(count).toBe(1);
+
+    // The ws should have received an error frame and been closed
+    const errorFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      type: string;
+      data: { code: string; message: string };
+    };
+    expect(errorFrame.type).toBe('error');
+    expect(errorFrame.data.code).toBe('unknown-key');
+    expect(errorFrame.data.message).toBe('key revoked');
+    expect(ws.close).toHaveBeenCalledWith(1008, 'unknown-key');
+  });
+
+  test('calling disconnectByKeyId twice returns 0 on second call (sessions removed)', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'fc200000000000000000000000000001';
+    const sig = signHello(privateKey, ts, nonce);
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/lookout/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(disconnectByKeyId(keyId)).toBe(1);
+    expect(disconnectByKeyId(keyId)).toBe(0);
+  });
+
+  test('ws close event deregisters session from live-session map', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'fc300000000000000000000000000001';
+    const sig = signHello(privateKey, ts, nonce);
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/lookout/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Session is registered; simulating close deregisters it
+    ws.emit('close');
+
+    // After deregistration, disconnectByKeyId returns 0
+    expect(disconnectByKeyId(keyId)).toBe(0);
+  });
+
+  test('ws error event deregisters session from live-session map', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'fc400000000000000000000000000001';
+    const sig = signHello(privateKey, ts, nonce);
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/lookout/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Simulating error deregisters the session
+    ws.emit('error', new Error('network failure'));
+
+    expect(disconnectByKeyId(keyId)).toBe(0);
+  });
+
+  test('clearLiveSessionsForTesting clears the live-session registry', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'fc500000000000000000000000000001';
+    const sig = signHello(privateKey, ts, nonce);
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/lookout/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Confirm a session is registered
+    clearLiveSessionsForTesting();
+    // After clearing, disconnectByKeyId returns 0 (no sessions)
+    expect(disconnectByKeyId(keyId)).toBe(0);
+    // The ws should NOT have been closed by clearLiveSessionsForTesting itself
+    expect(ws.close).not.toHaveBeenCalledWith(1008, 'unknown-key');
+  });
+
+  test('deregister is a no-op when the set was already removed from the map (e.g., after disconnectByKeyId)', async () => {
+    // Exercises the `if (s)` false-branch in the deregister closure:
+    // disconnectByKeyId deletes the set, then ws.emit('close') fires deregister
+    // and gets undefined from the map — must not throw.
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'fc600000000000000000000000000001';
+    const sig = signHello(privateKey, ts, nonce);
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/lookout/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
+    await new Promise((r) => setTimeout(r, 10));
+
+    // disconnectByKeyId removes the set from the map
+    disconnectByKeyId(keyId);
+
+    // Now firing close hits the `if (s)` false-branch — must be a no-op (no throw)
+    expect(() => ws.emit('close')).not.toThrow();
+  });
+
+  test('deregister does not delete the set when other sessions remain (s.size > 0 branch)', async () => {
+    // Exercises the `if (s.size === 0)` false-branch: two sessions under the same
+    // keyId; when the first fires close the set still has one entry, so the set
+    // must NOT be deleted from the map.
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    // First session
+    const ts1 = Math.floor(Date.now() / 1000);
+    const nonce1 = 'fc700000000000000000000000000001';
+    const sig1 = signHello(privateKey, ts1, nonce1);
+    const { gateway: gw1, getUpgradedWs: getWs1 } = createGateway(record);
+    gw1.handleUpgrade(
+      createRequest('/api/lookout/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws1 = getWs1()!;
+    sendMessageToGateway(ws1, buildHello(keyId, ts1, nonce1, sig1));
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Second session (different nonce, different agentId so no duplicate-agent guard)
+    const ts2 = Math.floor(Date.now() / 1000);
+    const nonce2 = 'fc800000000000000000000000000001';
+    const sig2 = signHello(privateKey, ts2, nonce2);
+    const { gateway: gw2, getUpgradedWs: getWs2 } = createGateway(record);
+    gw2.handleUpgrade(
+      createRequest('/api/lookout/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws2 = getWs2()!;
+    sendMessageToGateway(ws2, buildHello(keyId, ts2, nonce2, sig2, { agentId: 'test-agent-456' }));
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Both sessions established — 2 live sessions under keyId
+    // Close ws1 — deregister runs: deletes ws1 from the set, set.size becomes 1
+    // (not 0), so `liveSessionsByKeyId.delete` is NOT called (false branch).
+    ws1.emit('close');
+
+    // After ws1 closes, ws2 is still registered; disconnectByKeyId returns 1
+    expect(disconnectByKeyId(keyId)).toBe(1);
+  });
+
+  test('close fires deregister on set with one entry (s.size === 0 true-branch: set deleted)', async () => {
+    // Exercises the `if (s.size === 0)` true-branch directly via ws.emit('close')
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'fc900000000000000000000000000001';
+    const sig = signHello(privateKey, ts, nonce);
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/lookout/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Emit close — deregister runs, deletes ws from set, set becomes empty,
+    // set is deleted from the map (s.size === 0 true-branch).
+    ws.emit('close');
+
+    // The session is gone; disconnectByKeyId returns 0
+    expect(disconnectByKeyId(keyId)).toBe(0);
   });
 });

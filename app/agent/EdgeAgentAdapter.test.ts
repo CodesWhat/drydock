@@ -371,7 +371,7 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
     expect((result as { statusCode: number }).statusCode).toBe(200);
   });
 
-  test('exec start when limit reached sends exec_end frame, does not close connection', async () => {
+  test('exec start when limit reached rejects with session-limit error and sends NO exec_end frame', async () => {
     const { adapter, ws } = createAdapter();
     adapter.activate();
 
@@ -390,14 +390,12 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
       });
     }
 
-    await adapter.startExec('c1', ['/bin/bash']).catch(() => {});
+    const sentCountBefore = ws.sentMessages.length;
 
-    const lastSent = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
-      type: string;
-      data: { reason: string };
-    };
-    expect(lastSent.type).toBe('exec_end');
-    expect(lastSent.data.reason).toBe('session limit reached');
+    await expect(adapter.startExec('c1', ['/bin/bash'])).rejects.toThrow('session limit reached');
+
+    // No new frame should have been sent — the exec_end send is spurious and has been removed
+    expect(ws.sentMessages.length).toBe(sentCountBefore);
     expect(ws.close).not.toHaveBeenCalled();
   });
 
@@ -557,6 +555,36 @@ describe('EdgeAgentAdapter — sendStreamRequest / stream frames', () => {
     await expect(streamPromise).rejects.toThrow(/timed out/);
 
     vi.useRealTimers();
+  });
+
+  test('error frame for a streaming request rejects the promise promptly (no 30s timeout)', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const streamPromise = adapter.sendStreamRequest('GET', '/containers/c1/logs?follow=1');
+    // Attach rejection handler immediately so the promise is never "unhandled"
+    const rejection = streamPromise.catch((err: Error) => err.message);
+
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      type: string;
+      data: { requestId: string };
+    };
+    const { requestId } = sentFrame.data;
+
+    // Agent replies with an error frame using the bare requestId (as the protocol specifies),
+    // but the pending entry was registered under `stream:${requestId}`.
+    // The fix must find it via the stream: prefix and reject immediately — no timeout needed.
+    sendFrame(ws, 'error', { requestId, message: 'stream request failed' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Must reject with the error message without waiting 30s
+    expect(await rejection).toBe('stream request failed');
+
+    // Verify the pending entry was cleaned up
+    const adapterInternal = adapter as unknown as {
+      pendingRequests: Map<string, unknown>;
+    };
+    expect(adapterInternal.pendingRequests.size).toBe(0);
   });
 
   test('stream frame without stream_end does not resolve the promise', async () => {

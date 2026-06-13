@@ -55,6 +55,11 @@ const EMPTY_BODY_HASH = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991
 // Ed25519 keys — only the trailing 32 bytes vary.
 const ED25519_SPKI_HEADER = Buffer.from('302a300506032b6570032100', 'hex');
 
+// Live-session registry: pubKeyId → Set of WebSocket connections that have
+// completed a successful hello under that key.  Used by DELETE /keys/:keyId
+// to disconnect all live sessions immediately on revocation.
+const liveSessionsByKeyId = new Map<string, Set<WebSocketLike>>();
+
 // Global nonce cache: nonce → Unix second when accepted.
 // NOT per-connection — prevents replay across connections.
 // In clustered deployments nonces are not shared; see risk note in design doc.
@@ -105,10 +110,35 @@ export function clearNonceCacheForTesting(): void {
   nonceCache.clear();
   noncesPerKey.clear();
   inFlightAgents.clear();
+  liveSessionsByKeyId.clear();
   if (noncePruneInterval !== undefined) {
     clearInterval(noncePruneInterval);
     noncePruneInterval = undefined;
   }
+}
+
+/** Exposed for tests to reset the live-session registry. */
+export function clearLiveSessionsForTesting(): void {
+  liveSessionsByKeyId.clear();
+}
+
+/**
+ * Disconnect all live WebSocket sessions authenticated under the given keyId.
+ * Sends an 'unknown-key' error frame and closes with code 1008 ('key revoked').
+ * Returns the number of connections closed.
+ */
+export function disconnectByKeyId(keyId: string): number {
+  const sessions = liveSessionsByKeyId.get(keyId);
+  if (!sessions || sessions.size === 0) {
+    return 0;
+  }
+  let count = 0;
+  for (const ws of sessions) {
+    sendErrorAndClose(ws, 'unknown-key', 'key revoked', 1008);
+    count++;
+  }
+  liveSessionsByKeyId.delete(keyId);
+  return count;
 }
 
 /** Exposed for tests to pre-fill the nonce cache (e.g. to test the >10,000 eviction path). */
@@ -259,6 +289,11 @@ function handleConnection(
 
   let helloHandled = false;
 
+  // Clear the hello timer if the client disconnects or errors before sending hello,
+  // preventing a ~30s timer leak.
+  ws.on('close', () => clearTimeout(helloTimer));
+  ws.on('error', () => clearTimeout(helloTimer));
+
   ws.on('message', (raw: unknown) => {
     if (helloHandled) {
       // Post-hello messages are routed by EdgeAgentAdapter
@@ -374,6 +409,14 @@ async function processHello(
   const nonce = hello.nonce as string;
   const signature = hello.signature as string;
 
+  // Reject unreasonably long signature strings before allocating a Buffer.
+  // Ed25519 base64url signatures are exactly 86 chars; 200 is a generous ceiling.
+  // This prevents a large Buffer.from() allocation from attacker-controlled input.
+  if (signature.length > 200) {
+    sendErrorAndClose(ws, 'bad-signature', 'Ed25519 signature verification failed', 1008);
+    return;
+  }
+
   // Step 4a: Validate keyId format before passing it anywhere (DB or logs).
   // keyId must be exactly 16 lowercase hex chars; reject anything else to prevent
   // log injection, arbitrary-length DB queries, and key-oracle probing.
@@ -390,8 +433,14 @@ async function processHello(
   }
 
   // Step 6: Timestamp skew
+  // Guard against NaN/Infinity first: Math.abs(n - NaN) is NaN, which is not > anything,
+  // so a NaN timestamp would silently bypass the skew window without this check.
+  // Note: standard JSON never produces NaN/Infinity (they serialize as null, which fails
+  // the typeof check in hasEd25519 above), so this branch is defense-in-depth for
+  // non-JSON code paths and is intentionally left unreachable via the normal wire path.
   const nowSeconds = Math.floor(Date.now() / 1000);
-  if (Math.abs(nowSeconds - timestamp) > MAX_CLOCK_SKEW_SECONDS) {
+  /* v8 ignore next */
+  if (!Number.isFinite(timestamp) || Math.abs(nowSeconds - timestamp) > MAX_CLOCK_SKEW_SECONDS) {
     sendErrorAndClose(ws, 'timestamp-skew', 'Timestamp out of acceptable range', 1008);
     return;
   }
@@ -500,6 +549,24 @@ async function processHello(
   // after so the slot is held by the manager instead.
   adapter.activate();
   inFlightAgents.delete(agentName);
+
+  // Register this session under pubKeyId so it can be disconnected on key revocation.
+  const sessions = liveSessionsByKeyId.get(pubKeyId) ?? new Set<WebSocketLike>();
+  sessions.add(ws);
+  liveSessionsByKeyId.set(pubKeyId, sessions);
+
+  // Deregister on disconnect so the Set doesn't grow unboundedly.
+  const deregister = () => {
+    const s = liveSessionsByKeyId.get(pubKeyId);
+    if (s) {
+      s.delete(ws);
+      if (s.size === 0) {
+        liveSessionsByKeyId.delete(pubKeyId);
+      }
+    }
+  };
+  ws.on('close', deregister);
+  ws.on('error', deregister);
 
   log.info(
     `Edge agent connected: ${agentName} (version=${hello.version}, drydockCompat=${hello.drydockCompat ?? 'absent'})`,

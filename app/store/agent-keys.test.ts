@@ -5,8 +5,20 @@ import { createHash, generateKeyPairSync } from 'node:crypto';
 import fs from 'node:fs';
 import * as agentKeys from './agent-keys.js';
 
+// Stable log spies — hoisted so the same functions are referenced by every module
+// instance loaded via vi.resetModules() + dynamic import(). This avoids the issue
+// where results[0] belongs to the static top-level import and results[1] to the
+// dynamic one inside a test, causing the wrong child to be inspected.
+const { mockLogWarn, mockLogInfo, mockLogDebug } = vi.hoisted(() => ({
+  mockLogWarn: vi.fn(),
+  mockLogInfo: vi.fn(),
+  mockLogDebug: vi.fn(),
+}));
+
 vi.mock('../log/index.js', () => ({
-  default: { child: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn() })) },
+  default: {
+    child: vi.fn(() => ({ info: mockLogInfo, warn: mockLogWarn, debug: mockLogDebug })),
+  },
 }));
 
 // Minimal LokiJS collection mock
@@ -502,6 +514,150 @@ describe('loadAuthorizedKeysFile', () => {
 
     expect(docs).toHaveLength(1);
     expect(docs[0].label).toBe('imported');
+
+    vi.restoreAllMocks();
+  });
+
+  test('does not re-activate a revoked key present in authorized_keys and logs warn', async () => {
+    const { createCollections, loadAuthorizedKeysFile } = await import('./agent-keys.js');
+
+    // Seed a revoked record directly so findOne({ keyId }) returns it
+    const rawKey = generateEd25519RawPublicKey();
+    const keyId = _deriveKeyId(rawKey);
+    const revokedRecord: agentKeys.AgentKeyRecord = {
+      keyId,
+      pubkey: rawKey.toString('base64'),
+      label: 'existing',
+      createdAt: new Date().toISOString(),
+      revokedAt: new Date().toISOString(), // already revoked
+    };
+    const docs: agentKeys.AgentKeyRecord[] = [revokedRecord];
+
+    const collection = {
+      findOne: vi.fn((query: Record<string, unknown>) => {
+        return (
+          docs.find((doc) =>
+            Object.entries(query).every(([k, v]) => (doc as Record<string, unknown>)[k] === v),
+          ) ?? null
+        );
+      }),
+      find: vi.fn(() => [...docs]),
+      insert: vi.fn((doc: agentKeys.AgentKeyRecord) => {
+        docs.push(doc);
+      }),
+      update: vi.fn(),
+    };
+    createCollections(createMockDb(collection));
+
+    const pubkeyBase64 = rawKey.toString('base64');
+    const fileContent = `ed25519 ${pubkeyBase64} revoked-agent`;
+
+    vi.spyOn(fs, 'openSync').mockReturnValue(3);
+    vi.spyOn(fs, 'closeSync').mockReturnValue(undefined);
+    vi.spyOn(fs, 'fstatSync').mockReturnValue({ mode: 0o600 } as fs.Stats);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(fileContent);
+
+    loadAuthorizedKeysFile('/fake/authorized_keys');
+
+    // Key must NOT be re-inserted
+    expect(docs).toHaveLength(1);
+    expect(docs[0].revokedAt).not.toBeNull(); // still revoked
+
+    // warn must have been called with the keyId (mockLogWarn is shared across all module instances)
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ keyId }),
+      expect.stringContaining('Revoked key'),
+    );
+
+    vi.restoreAllMocks();
+  });
+
+  test('is idempotent for already-active keys — no insert, no warn', async () => {
+    const { createCollections, loadAuthorizedKeysFile } = await import('./agent-keys.js');
+
+    const rawKey = generateEd25519RawPublicKey();
+    const keyId = _deriveKeyId(rawKey);
+    const activeRecord: agentKeys.AgentKeyRecord = {
+      keyId,
+      pubkey: rawKey.toString('base64'),
+      label: 'active-agent',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+    const docs: agentKeys.AgentKeyRecord[] = [activeRecord];
+
+    const collection = {
+      findOne: vi.fn((query: Record<string, unknown>) => {
+        return (
+          docs.find((doc) =>
+            Object.entries(query).every(([k, v]) => (doc as Record<string, unknown>)[k] === v),
+          ) ?? null
+        );
+      }),
+      find: vi.fn(() => [...docs]),
+      insert: vi.fn((doc: agentKeys.AgentKeyRecord) => {
+        docs.push(doc);
+      }),
+      update: vi.fn(),
+    };
+    createCollections(createMockDb(collection));
+
+    const pubkeyBase64 = rawKey.toString('base64');
+    const fileContent = `ed25519 ${pubkeyBase64} active-agent`;
+
+    vi.spyOn(fs, 'openSync').mockReturnValue(3);
+    vi.spyOn(fs, 'closeSync').mockReturnValue(undefined);
+    vi.spyOn(fs, 'fstatSync').mockReturnValue({ mode: 0o600 } as fs.Stats);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(fileContent);
+
+    loadAuthorizedKeysFile('/fake/authorized_keys');
+
+    // Still only 1 doc, no duplicate inserted
+    expect(docs).toHaveLength(1);
+    expect(collection.insert).not.toHaveBeenCalled();
+
+    // No "Revoked key" warn for active keys
+    expect(mockLogWarn).not.toHaveBeenCalledWith(
+      expect.objectContaining({ keyId }),
+      expect.stringContaining('Revoked key'),
+    );
+
+    vi.restoreAllMocks();
+  });
+
+  test('adds a brand-new keyId that has no existing record', async () => {
+    const { createCollections, loadAuthorizedKeysFile } = await import('./agent-keys.js');
+    const docs: agentKeys.AgentKeyRecord[] = [];
+    const collection = {
+      findOne: vi.fn((query: Record<string, unknown>) => {
+        return (
+          docs.find((doc) =>
+            Object.entries(query).every(([k, v]) => (doc as Record<string, unknown>)[k] === v),
+          ) ?? null
+        );
+      }),
+      find: vi.fn(() => [...docs]),
+      insert: vi.fn((doc: agentKeys.AgentKeyRecord) => {
+        docs.push(doc);
+      }),
+      update: vi.fn(),
+    };
+    createCollections(createMockDb(collection));
+
+    const rawKey = generateEd25519RawPublicKey();
+    const pubkeyBase64 = rawKey.toString('base64');
+    const fileContent = `ed25519 ${pubkeyBase64} brand-new`;
+
+    vi.spyOn(fs, 'openSync').mockReturnValue(3);
+    vi.spyOn(fs, 'closeSync').mockReturnValue(undefined);
+    vi.spyOn(fs, 'fstatSync').mockReturnValue({ mode: 0o600 } as fs.Stats);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(fileContent);
+
+    loadAuthorizedKeysFile('/fake/authorized_keys');
+
+    expect(docs).toHaveLength(1);
+    expect(docs[0].label).toBe('brand-new');
+    expect(docs[0].revokedAt).toBeNull();
 
     vi.restoreAllMocks();
   });

@@ -354,10 +354,12 @@ export class EdgeAgentAdapter {
     if (!requestId) {
       return;
     }
-    const pending = this.pendingRequests.get(requestId);
+    // Check bare key first (non-stream requests); fall back to stream: prefix for streaming requests.
+    const pendingKey = this.pendingRequests.has(requestId) ? requestId : `stream:${requestId}`;
+    const pending = this.pendingRequests.get(pendingKey);
     if (pending) {
       clearTimeout(pending.timer);
-      this.pendingRequests.delete(requestId);
+      this.pendingRequests.delete(pendingKey);
       pending.reject(new Error(typeof data.message === 'string' ? data.message : 'agent error'));
     }
   }
@@ -565,17 +567,6 @@ export class EdgeAgentAdapter {
     },
   ): Promise<string> {
     if (this.execSessions.size >= MAX_EXEC_SESSIONS) {
-      const execId = uuidv7();
-      try {
-        this.ws.send(
-          JSON.stringify({
-            type: 'exec_end',
-            data: { execId, reason: 'session limit reached' },
-          }),
-        );
-      } catch {
-        // connection may be closing
-      }
       return Promise.reject(new Error('session limit reached'));
     }
 

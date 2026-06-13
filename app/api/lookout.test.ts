@@ -5,23 +5,25 @@ import { generateKeyPairSync } from 'node:crypto';
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
 
 // Route handlers and mocks all hoisted so they are available before imports
-const { capturedHandlers, mockAgentKeys, mockSendErrorResponse } = vi.hoisted(() => {
-  const handlers: {
-    getKeys?: (req: unknown, res: unknown) => void;
-    postKeys?: (req: unknown, res: unknown) => void;
-    deleteKey?: (req: unknown, res: unknown) => void;
-  } = {};
+const { capturedHandlers, mockAgentKeys, mockSendErrorResponse, mockDisconnectByKeyId } =
+  vi.hoisted(() => {
+    const handlers: {
+      getKeys?: (req: unknown, res: unknown) => void;
+      postKeys?: (req: unknown, res: unknown) => void;
+      deleteKey?: (req: unknown, res: unknown) => void;
+    } = {};
 
-  return {
-    capturedHandlers: handlers,
-    mockAgentKeys: {
-      listKeys: vi.fn(() => []),
-      addKey: vi.fn(),
-      revokeKey: vi.fn(() => false),
-    },
-    mockSendErrorResponse: vi.fn(),
-  };
-});
+    return {
+      capturedHandlers: handlers,
+      mockAgentKeys: {
+        listKeys: vi.fn(() => []),
+        addKey: vi.fn(),
+        revokeKey: vi.fn(() => false),
+      },
+      mockSendErrorResponse: vi.fn(),
+      mockDisconnectByKeyId: vi.fn(() => 0),
+    };
+  });
 
 vi.mock('express', () => ({
   default: {
@@ -41,6 +43,7 @@ vi.mock('express', () => ({
 
 vi.mock('../store/agent-keys.js', () => mockAgentKeys);
 vi.mock('./error-response.js', () => ({ sendErrorResponse: mockSendErrorResponse }));
+vi.mock('./lookout-ws.js', () => ({ disconnectByKeyId: mockDisconnectByKeyId }));
 
 import * as lookoutRouterModule from './lookout.js';
 
@@ -220,5 +223,78 @@ describe('DELETE /keys/:keyId', () => {
       404,
       expect.stringContaining('not found'),
     );
+  });
+
+  test('returns 400 for keyId that is too short', () => {
+    const req = createMockRequest({ params: { keyId: 'abc123' } });
+    const res = createMockResponse();
+    capturedHandlers.deleteKey!(req, res);
+    expect(mockSendErrorResponse).toHaveBeenCalledWith(res, 400, 'Invalid keyId format');
+    expect(mockAgentKeys.revokeKey).not.toHaveBeenCalled();
+  });
+
+  test('returns 400 for keyId that is too long', () => {
+    const req = createMockRequest({ params: { keyId: 'aabbccddeeff001122' } });
+    const res = createMockResponse();
+    capturedHandlers.deleteKey!(req, res);
+    expect(mockSendErrorResponse).toHaveBeenCalledWith(res, 400, 'Invalid keyId format');
+    expect(mockAgentKeys.revokeKey).not.toHaveBeenCalled();
+  });
+
+  test('returns 400 for keyId with uppercase hex', () => {
+    const req = createMockRequest({ params: { keyId: 'AABBCCDDEEFF0011' } });
+    const res = createMockResponse();
+    capturedHandlers.deleteKey!(req, res);
+    expect(mockSendErrorResponse).toHaveBeenCalledWith(res, 400, 'Invalid keyId format');
+    expect(mockAgentKeys.revokeKey).not.toHaveBeenCalled();
+  });
+
+  test('returns 400 for keyId with non-hex characters (path traversal attempt)', () => {
+    const req = createMockRequest({ params: { keyId: '../../../../etc/pass' } });
+    const res = createMockResponse();
+    capturedHandlers.deleteKey!(req, res);
+    expect(mockSendErrorResponse).toHaveBeenCalledWith(res, 400, 'Invalid keyId format');
+    expect(mockAgentKeys.revokeKey).not.toHaveBeenCalled();
+  });
+
+  test('400 error message is fixed (does not reflect the raw keyId)', () => {
+    const injected = 'INJECTED_VALUE0000';
+    const req = createMockRequest({ params: { keyId: injected } });
+    const res = createMockResponse();
+    capturedHandlers.deleteKey!(req, res);
+    const [[, , msg]] = mockSendErrorResponse.mock.calls as [[unknown, number, string]];
+    expect(msg).not.toContain(injected);
+    expect(msg).toBe('Invalid keyId format');
+  });
+
+  test('calls disconnectByKeyId after successful revocation', () => {
+    mockAgentKeys.revokeKey.mockReturnValue(true);
+    mockDisconnectByKeyId.mockReturnValue(1);
+    const req = createMockRequest({ params: { keyId: 'aabbccddeeff0011' } });
+    const res = createMockResponse();
+    capturedHandlers.deleteKey!(req, res);
+    expect(mockDisconnectByKeyId).toHaveBeenCalledWith('aabbccddeeff0011');
+    expect(res.status).toHaveBeenCalledWith(204);
+    expect(res.send).toHaveBeenCalled();
+  });
+
+  test('does NOT call disconnectByKeyId when key not found (revokeKey returns false)', () => {
+    mockAgentKeys.revokeKey.mockReturnValue(false);
+    const req = createMockRequest({ params: { keyId: '0000000000000000' } });
+    const res = createMockResponse();
+    capturedHandlers.deleteKey!(req, res);
+    expect(mockDisconnectByKeyId).not.toHaveBeenCalled();
+    expect(mockSendErrorResponse).toHaveBeenCalledWith(
+      res,
+      404,
+      expect.stringContaining('not found'),
+    );
+  });
+
+  test('does NOT call disconnectByKeyId when keyId format is invalid', () => {
+    const req = createMockRequest({ params: { keyId: 'bad-key-id' } });
+    const res = createMockResponse();
+    capturedHandlers.deleteKey!(req, res);
+    expect(mockDisconnectByKeyId).not.toHaveBeenCalled();
   });
 });
