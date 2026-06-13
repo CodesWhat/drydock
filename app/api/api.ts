@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { getServerConfiguration } from '../configuration/index.js';
 import * as agentRouter from './agent.js';
 import * as appRouter from './app.js';
+import * as lookoutRouter from './lookout.js';
 import * as auditRouter from './audit.js';
 import { requireAuthentication } from './auth.js';
 import * as authenticationRouter from './authentication.js';
@@ -171,6 +172,9 @@ export function init(): express.Router {
 
   // Mount agents
   router.use('/agents', agentRouter.init());
+
+  // Mount lookout key management (edge agent auth registry)
+  router.use('/lookout', lookoutRouter.init());
 
   // Mount audit log
   router.use('/audit', auditRouter.init());

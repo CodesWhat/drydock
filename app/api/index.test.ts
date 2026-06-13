@@ -57,6 +57,7 @@ const mockIsInternetlessModeEnabled = vi.hoisted(() => vi.fn(() => false));
 const mockGetSessionMiddleware = vi.hoisted(() => vi.fn(() => vi.fn()));
 const mockAttachContainerLogStreamWebSocketServer = vi.hoisted(() => vi.fn());
 const mockAttachSystemLogStreamWebSocketServer = vi.hoisted(() => vi.fn());
+const mockAttachLookoutWsServer = vi.hoisted(() => vi.fn());
 
 vi.mock('node:fs', () => ({
   default: mockFs,
@@ -131,6 +132,10 @@ vi.mock('./container/log-stream', () => ({
 
 vi.mock('./log-stream', () => ({
   attachSystemLogStreamWebSocketServer: mockAttachSystemLogStreamWebSocketServer,
+}));
+
+vi.mock('./lookout-ws', () => ({
+  attachLookoutWsServer: mockAttachLookoutWsServer,
 }));
 
 vi.mock('../configuration', () => ({
@@ -209,6 +214,7 @@ function mockActualApiRouterStatsLifecycle() {
     './icons.js',
     './internal-self-update.js',
     './log.js',
+    './lookout.js',
     './notification.js',
     './notification-outbox.js',
     './operation.js',
@@ -254,6 +260,7 @@ describe('API Index', () => {
     mockGetSessionMiddleware.mockReturnValue(vi.fn());
     mockAttachContainerLogStreamWebSocketServer.mockClear();
     mockAttachSystemLogStreamWebSocketServer.mockClear();
+    mockAttachLookoutWsServer.mockClear();
     Object.keys(mockDdEnvVars).forEach((key) => delete mockDdEnvVars[key]);
   });
 
@@ -298,6 +305,11 @@ describe('API Index', () => {
     expect(mockAttachSystemLogStreamWebSocketServer).toHaveBeenCalledWith({
       server: mockHttpServer,
       sessionMiddleware: expect.any(Function),
+      serverConfiguration: expect.objectContaining({ enabled: true }),
+      isRateLimited: expect.any(Function),
+    });
+    expect(mockAttachLookoutWsServer).toHaveBeenCalledWith({
+      server: mockHttpServer,
       serverConfiguration: expect.objectContaining({ enabled: true }),
       isRateLimited: expect.any(Function),
     });
