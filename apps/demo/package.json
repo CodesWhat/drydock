@@ -37,7 +37,8 @@
   },
   "overrides": {
     "postcss": "8.5.10",
-    "yaml": "2.8.3"
+    "yaml": "2.8.3",
+    "esbuild": "0.28.1"
   },
   "msw": {
     "workerDirectory": [
