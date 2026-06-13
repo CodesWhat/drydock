@@ -426,10 +426,18 @@ export class EdgeAgentAdapter {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingRequests.delete(pendingKey);
-        reject(new Error(`Container log request for ${containerId} timed out after ${REQUEST_TIMEOUT_MS}ms`));
+        reject(
+          new Error(
+            `Container log request for ${containerId} timed out after ${REQUEST_TIMEOUT_MS}ms`,
+          ),
+        );
       }, REQUEST_TIMEOUT_MS);
 
-      this.pendingRequests.set(pendingKey, { resolve: resolve as (value: unknown) => void, reject, timer });
+      this.pendingRequests.set(pendingKey, {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+        timer,
+      });
 
       try {
         this.ws.send(
@@ -549,7 +557,12 @@ export class EdgeAgentAdapter {
   startExec(
     containerId: string,
     cmd: string[],
-    options?: { user?: string; cols?: number; rows?: number; outputCallback?: (data: Buffer) => void },
+    options?: {
+      user?: string;
+      cols?: number;
+      rows?: number;
+      outputCallback?: (data: Buffer) => void;
+    },
   ): Promise<string> {
     if (this.execSessions.size >= MAX_EXEC_SESSIONS) {
       const execId = uuidv7();

@@ -47,10 +47,12 @@ router.post('/keys', (req: Request, res: Response) => {
       sendErrorResponse(res, 400, 'pubkeyBase64 does not decode to any bytes');
       return;
     }
+    /* v8 ignore start */
   } catch {
     sendErrorResponse(res, 400, 'pubkeyBase64 is not valid base64');
     return;
   }
+  /* v8 ignore stop */
 
   if (pubkeyBuffer.length !== 32) {
     sendErrorResponse(

@@ -139,6 +139,18 @@ describe('POST /keys', () => {
     expect(mockSendErrorResponse).toHaveBeenCalledWith(res, 400, expect.any(String));
   });
 
+  test('returns 400 when pubkeyBase64 decodes to zero bytes (padding-only base64)', () => {
+    // '====' is a non-empty string that passes the truthy check but decodes to 0 bytes
+    const req = createMockRequest({ body: { pubkeyBase64: '====', label: 'agent' } });
+    const res = createMockResponse();
+    capturedHandlers.postKeys!(req, res);
+    expect(mockSendErrorResponse).toHaveBeenCalledWith(
+      res,
+      400,
+      expect.stringContaining('does not decode'),
+    );
+  });
+
   test('returns 201 with keyId/label/createdAt for valid 32-byte key', () => {
     const rawKey = generateEd25519RawPubkey();
     const record = {

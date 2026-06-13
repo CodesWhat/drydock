@@ -50,7 +50,7 @@ function generateEd25519RawPublicKey(): Buffer {
   return spkiDer.subarray(12); // Ed25519 SPKI always has a 12-byte prefix
 }
 
-function deriveKeyId(rawPubkey: Buffer): string {
+function _deriveKeyId(rawPubkey: Buffer): string {
   return createHash('sha256').update(rawPubkey).digest().subarray(0, 8).toString('hex');
 }
 
@@ -287,11 +287,7 @@ describe('listKeys', () => {
 describe('keyId derivation (golden test)', () => {
   test('matches lookout hex(SHA-256[:8]) formula', () => {
     const rawKey = generateEd25519RawPublicKey();
-    const expected = createHash('sha256')
-      .update(rawKey)
-      .digest()
-      .subarray(0, 8)
-      .toString('hex');
+    const expected = createHash('sha256').update(rawKey).digest().subarray(0, 8).toString('hex');
 
     // deriveKeyId is not exported, but we can verify it by addKey returning matching keyId
     // We do it directly using the same algorithm
@@ -337,11 +333,7 @@ describe('loadAuthorizedKeysFile', () => {
 
     const rawKey = generateEd25519RawPublicKey();
     const pubkeyBase64 = rawKey.toString('base64');
-    const fileContent = [
-      '# comment line',
-      '',
-      `ed25519 ${pubkeyBase64} test-label`,
-    ].join('\n');
+    const fileContent = ['# comment line', '', `ed25519 ${pubkeyBase64} test-label`].join('\n');
 
     vi.spyOn(fs, 'statSync').mockReturnValue({ mode: 0o600 } as fs.Stats);
     vi.spyOn(fs, 'readFileSync').mockReturnValue(fileContent);
@@ -401,6 +393,35 @@ describe('loadAuthorizedKeysFile', () => {
     vi.restoreAllMocks();
   });
 
+  test('logs warning when addKey throws (e.g. insert throws)', async () => {
+    const { createCollections, loadAuthorizedKeysFile } = await import('./agent-keys.js');
+    const docs: agentKeys.AgentKeyRecord[] = [];
+    const collection = {
+      findOne: vi.fn(() => null),
+      find: vi.fn(() => [...docs]),
+      insert: vi.fn(() => {
+        throw new Error('DB write failed');
+      }),
+      update: vi.fn(),
+    };
+    createCollections(createMockDb(collection));
+
+    const { generateKeyPairSync: genKP } = await import('node:crypto');
+    const { publicKey } = genKP('ed25519');
+    const spki = publicKey.export({ type: 'spki', format: 'der' }) as Buffer;
+    const rawKey = spki.subarray(12);
+    const pubkeyBase64 = rawKey.toString('base64');
+    const fileContent = `ed25519 ${pubkeyBase64} test-label`;
+
+    vi.spyOn(fs, 'statSync').mockReturnValue({ mode: 0o600 } as fs.Stats);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(fileContent);
+
+    // Should not throw — addKey error is caught and logged
+    expect(() => loadAuthorizedKeysFile('/fake/authorized_keys')).not.toThrow();
+
+    vi.restoreAllMocks();
+  });
+
   test('is idempotent — skips already-active keys', async () => {
     const { createCollections, loadAuthorizedKeysFile } = await import('./agent-keys.js');
     const docs: agentKeys.AgentKeyRecord[] = [];
@@ -432,6 +453,41 @@ describe('loadAuthorizedKeysFile', () => {
 
     // Only one insert should have occurred
     expect(docs).toHaveLength(1);
+
+    vi.restoreAllMocks();
+  });
+
+  test('uses "imported" as label when line has no comment field', async () => {
+    const { createCollections, loadAuthorizedKeysFile } = await import('./agent-keys.js');
+    const docs: agentKeys.AgentKeyRecord[] = [];
+    const collection = {
+      findOne: vi.fn((query: Record<string, unknown>) => {
+        return (
+          docs.find((doc) =>
+            Object.entries(query).every(([k, v]) => (doc as Record<string, unknown>)[k] === v),
+          ) ?? null
+        );
+      }),
+      find: vi.fn(() => [...docs]),
+      insert: vi.fn((doc: agentKeys.AgentKeyRecord) => {
+        docs.push(doc);
+      }),
+      update: vi.fn(),
+    };
+    createCollections(createMockDb(collection));
+
+    const rawKey = generateEd25519RawPublicKey();
+    const pubkeyBase64 = rawKey.toString('base64');
+    // Line with only 2 parts (no comment) — triggers the 'imported' fallback
+    const fileContent = `ed25519 ${pubkeyBase64}`;
+
+    vi.spyOn(fs, 'statSync').mockReturnValue({ mode: 0o600 } as fs.Stats);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(fileContent);
+
+    loadAuthorizedKeysFile('/fake/authorized_keys');
+
+    expect(docs).toHaveLength(1);
+    expect(docs[0].label).toBe('imported');
 
     vi.restoreAllMocks();
   });

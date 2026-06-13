@@ -11,11 +11,11 @@ import { initCollection } from './util.js';
 const log = logger.child({ component: 'store.agent-keys' });
 
 export interface AgentKeyRecord {
-  keyId: string;      // 16 lowercase hex chars — hex(SHA-256(raw 32-byte pubkey)[:8])
-  pubkey: string;     // base64-standard (44 chars)
-  label: string;      // human-readable name supplied by operator
-  createdAt: string;  // ISO-8601 UTC
-  revokedAt: string | null;  // ISO-8601 UTC or null when active
+  keyId: string; // 16 lowercase hex chars — hex(SHA-256(raw 32-byte pubkey)[:8])
+  pubkey: string; // base64-standard (44 chars)
+  label: string; // human-readable name supplied by operator
+  createdAt: string; // ISO-8601 UTC
+  revokedAt: string | null; // ISO-8601 UTC or null when active
 }
 
 interface AgentKeyCollection {
@@ -171,10 +171,12 @@ export function loadAuthorizedKeysFile(filePath: string): void {
     let pubkeyBuffer: Buffer;
     try {
       pubkeyBuffer = Buffer.from(pubkeyBase64, 'base64');
+      /* v8 ignore start */
     } catch {
       log.warn(`Skipping invalid base64 in authorized_keys: ${pubkeyBase64.substring(0, 44)}`);
       continue;
     }
+    /* v8 ignore stop */
 
     if (pubkeyBuffer.length !== 32) {
       log.warn(`Skipping key with wrong length (${pubkeyBuffer.length} bytes, expected 32)`);

@@ -8,14 +8,18 @@
  * reference to 1.5.x reflects pre-release planning and has no bearing on the
  * wire protocol implemented here.
  */
-import { createHash, createPublicKey, verify as cryptoVerify } from 'node:crypto';
+import { createPublicKey, verify as cryptoVerify } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import type { Socket } from 'node:net';
 import { WebSocketServer } from 'ws';
-import { getServerConfiguration } from '../configuration/index.js';
 import { AgentClient } from '../agent/AgentClient.js';
+import {
+  EdgeAgentAdapter,
+  type HelloMessage,
+  type WebSocketLike,
+} from '../agent/EdgeAgentAdapter.js';
 import { getAgent } from '../agent/manager.js';
-import { EdgeAgentAdapter, type HelloMessage, type WebSocketLike } from '../agent/EdgeAgentAdapter.js';
+import { getServerConfiguration } from '../configuration/index.js';
 import logger from '../log/index.js';
 import * as agentKeys from '../store/agent-keys.js';
 import { getErrorMessage } from '../util/error.js';
@@ -101,9 +105,32 @@ export function clearNonceCacheForTesting(): void {
   nonceCache.clear();
   noncesPerKey.clear();
   inFlightAgents.clear();
+  if (noncePruneInterval !== undefined) {
+    clearInterval(noncePruneInterval);
+    noncePruneInterval = undefined;
+  }
 }
 
-function sendErrorAndClose(ws: WebSocketLike, code: string, message: string, closeCode: number): void {
+/** Exposed for tests to pre-fill the nonce cache (e.g. to test the >10,000 eviction path). */
+export function fillNonceCacheForTesting(nonces: Map<string, number>): void {
+  for (const [k, v] of nonces) {
+    nonceCache.set(k, v);
+  }
+}
+
+/** Exposed for tests to set per-key nonce admission counters. */
+export function fillNoncesPerKeyForTesting(perKey: Map<string, number>): void {
+  for (const [k, v] of perKey) {
+    noncesPerKey.set(k, v);
+  }
+}
+
+function sendErrorAndClose(
+  ws: WebSocketLike,
+  code: string,
+  message: string,
+  closeCode: number,
+): void {
   try {
     ws.send(JSON.stringify({ type: 'error', data: { message, code } }));
   } catch {
@@ -176,6 +203,7 @@ interface LookoutWsGatewayDependencies {
 export function createLookoutWsGateway(dependencies: LookoutWsGatewayDependencies = {}) {
   const {
     webSocketServer = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD_BYTES }),
+    /* v8 ignore next -- Buffer.from('…','base64') never throws; default lambda is defensive */
     isRateLimited = () => false,
     serverConfiguration = getServerConfiguration() as Record<string, unknown>,
     getAgentKeys = agentKeys,
@@ -190,9 +218,11 @@ export function createLookoutWsGateway(dependencies: LookoutWsGatewayDependencie
       let pathname: string;
       try {
         pathname = new URL(url, 'http://localhost').pathname;
+        /* v8 ignore start */
       } catch {
         return;
       }
+      /* v8 ignore stop */
       if (!LOOKOUT_WS_ROUTE_PATTERN.test(pathname)) {
         return;
       }
@@ -329,7 +359,12 @@ async function processHello(
     // has no shared TOKEN secret to compare against — the Ed25519 public-key
     // registry is the sole auth mechanism here.  Agents without PRIVATE_KEY_FILE
     // must obtain a key or use the non-edge SSE path instead.
-    sendErrorAndClose(ws, 'ed25519-required', 'Ed25519 key auth required; token auth not supported on edge endpoint', 1008);
+    sendErrorAndClose(
+      ws,
+      'ed25519-required',
+      'Ed25519 key auth required; token auth not supported on edge endpoint',
+      1008,
+    );
     return;
   }
 

@@ -3,11 +3,18 @@
  */
 import { emitAgentConnected, emitAgentDisconnected } from '../event/index.js';
 import { AgentClient } from './AgentClient.js';
-import { EdgeAgentAdapter, type HelloMessage, type WebSocketLike } from './EdgeAgentAdapter.js';
+import {
+  buildEdgeSentinelConfig,
+  EdgeAgentAdapter,
+  type HelloMessage,
+  type WebSocketLike,
+} from './EdgeAgentAdapter.js';
 import * as manager from './manager.js';
 
 vi.mock('../log/index.js', () => ({
-  default: { child: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() })) },
+  default: {
+    child: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() })),
+  },
 }));
 vi.mock('../event/index.js', () => ({
   emitAgentConnected: vi.fn().mockResolvedValue(undefined),
@@ -157,7 +164,9 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
 
     await new Promise((r) => setTimeout(r, 0));
 
-    expect((client as unknown as { handleContainerSync: ReturnType<typeof vi.fn> }).handleContainerSync).toHaveBeenCalledWith(containers);
+    expect(
+      (client as unknown as { handleContainerSync: ReturnType<typeof vi.fn> }).handleContainerSync,
+    ).toHaveBeenCalledWith(containers);
   });
 
   test('dd:component_sync calls handleComponentSync', async () => {
@@ -170,7 +179,9 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
 
     await new Promise((r) => setTimeout(r, 0));
 
-    expect((client as unknown as { handleComponentSync: ReturnType<typeof vi.fn> }).handleComponentSync).toHaveBeenCalledWith(watchers, triggers);
+    expect(
+      (client as unknown as { handleComponentSync: ReturnType<typeof vi.fn> }).handleComponentSync,
+    ).toHaveBeenCalledWith(watchers, triggers);
   });
 
   test('dd:container_added reaches handleEvent with hyphenated name', async () => {
@@ -182,7 +193,9 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
 
     await new Promise((r) => setTimeout(r, 0));
 
-    expect((client as unknown as { handleEvent: ReturnType<typeof vi.fn> }).handleEvent).toHaveBeenCalledWith('dd:container-added', container);
+    expect(
+      (client as unknown as { handleEvent: ReturnType<typeof vi.fn> }).handleEvent,
+    ).toHaveBeenCalledWith('dd:container-added', container);
   });
 
   test('dd:container_updated reaches handleEvent with hyphenated name', async () => {
@@ -194,7 +207,9 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
 
     await new Promise((r) => setTimeout(r, 0));
 
-    expect((client as unknown as { handleEvent: ReturnType<typeof vi.fn> }).handleEvent).toHaveBeenCalledWith('dd:container-updated', container);
+    expect(
+      (client as unknown as { handleEvent: ReturnType<typeof vi.fn> }).handleEvent,
+    ).toHaveBeenCalledWith('dd:container-updated', container);
   });
 
   test('dd:container_removed reaches handleEvent with id and name', async () => {
@@ -205,7 +220,9 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
 
     await new Promise((r) => setTimeout(r, 0));
 
-    expect((client as unknown as { handleEvent: ReturnType<typeof vi.fn> }).handleEvent).toHaveBeenCalledWith('dd:container-removed', { id: 'c1', name: 'test' });
+    expect(
+      (client as unknown as { handleEvent: ReturnType<typeof vi.fn> }).handleEvent,
+    ).toHaveBeenCalledWith('dd:container-removed', { id: 'c1', name: 'test' });
   });
 
   test('metrics frame updates client.info', async () => {
@@ -225,7 +242,10 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
     expect(client.info.memoryGb).toBeCloseTo(8, 1);
     expect(client.info.uptimeSeconds).toBe(3600);
     expect(client.info.lastSeen).toBeTruthy();
-    expect((client as unknown as { scheduleStatsChangedPublic: ReturnType<typeof vi.fn> }).scheduleStatsChangedPublic).toHaveBeenCalled();
+    expect(
+      (client as unknown as { scheduleStatsChangedPublic: ReturnType<typeof vi.fn> })
+        .scheduleStatsChangedPublic,
+    ).toHaveBeenCalled();
   });
 
   test('ping frame sends pong with same timestamp', async () => {
@@ -236,10 +256,12 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
 
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(ws.sentMessages.some((m) => {
-      const parsed = JSON.parse(m) as { type: string; data: { timestamp: number } };
-      return parsed.type === 'pong' && parsed.data.timestamp === 12345678;
-    })).toBe(true);
+    expect(
+      ws.sentMessages.some((m) => {
+        const parsed = JSON.parse(m) as { type: string; data: { timestamp: number } };
+        return parsed.type === 'pong' && parsed.data.timestamp === 12345678;
+      }),
+    ).toBe(true);
   });
 
   test('pong frame is a no-op (no exception)', async () => {
@@ -254,7 +276,11 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
     adapter.activate();
 
     expect(() =>
-      sendFrame(ws, 'dd:watch_response', { watcherType: 'docker', watcherName: 'local', results: [] }),
+      sendFrame(ws, 'dd:watch_response', {
+        watcherType: 'docker',
+        watcherName: 'local',
+        results: [],
+      }),
     ).not.toThrow();
   });
 
@@ -288,7 +314,10 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
 
     // Access private execSessions for test
     const adapterInternal = adapter as unknown as {
-      execSessions: Map<string, { execId: string; outputHandler?: (buf: Buffer) => void; close: () => void }>;
+      execSessions: Map<
+        string,
+        { execId: string; outputHandler?: (buf: Buffer) => void; close: () => void }
+      >;
     };
     const session = adapterInternal.execSessions.get('exec-002');
     if (session) {
@@ -347,7 +376,10 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
     adapter.activate();
 
     const adapterInternal = adapter as unknown as {
-      execSessions: Map<string, { execId: string; outputHandler?: (buf: Buffer) => void; close: () => void }>;
+      execSessions: Map<
+        string,
+        { execId: string; outputHandler?: (buf: Buffer) => void; close: () => void }
+      >;
     };
 
     // Fill execSessions to limit
@@ -371,7 +403,7 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
 
   test('sendRequest rejects after 30s timeout', async () => {
     vi.useFakeTimers();
-    const { adapter, ws } = createAdapter();
+    const { adapter } = createAdapter();
     adapter.activate();
 
     const requestPromise = adapter.sendRequest('GET', '/api/test');
@@ -389,7 +421,7 @@ describe('EdgeAgentAdapter — disconnect cleanup', () => {
   });
 
   test('onDisconnect rejects all pending requests', async () => {
-    const { adapter, ws } = createAdapter();
+    const { adapter } = createAdapter();
     adapter.activate();
 
     const p1 = adapter.sendRequest('GET', '/api/test').catch((err: Error) => err.message);
@@ -533,7 +565,11 @@ describe('EdgeAgentAdapter — sendStreamRequest / stream frames', () => {
 
     let resolved = false;
     const streamPromise = adapter.sendStreamRequest('GET', '/containers/c1/logs?follow=1');
-    streamPromise.then(() => { resolved = true; }).catch(() => {});
+    streamPromise
+      .then(() => {
+        resolved = true;
+      })
+      .catch(() => {});
 
     const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
       data: { requestId: string };
@@ -691,5 +727,801 @@ describe('EdgeAgentAdapter — requestContainerLogs', () => {
     await adapter.onDisconnect();
 
     expect(await logPromise).toMatch(/connection closed/);
+  });
+});
+
+describe('buildEdgeSentinelConfig', () => {
+  test('returns correct sentinel config for a given agentId', () => {
+    const config = buildEdgeSentinelConfig('my-agent');
+    expect(config.host).toBe('http://edge-agent-placeholder-my-agent');
+    expect(config.port).toBe(0);
+    expect(config.secret).toBe('');
+  });
+});
+
+describe('EdgeAgentAdapter — activate error handler', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('ws error event logs and calls onDisconnect', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    ws.emit('error', new Error('connection reset'));
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(manager.removeAgent).toHaveBeenCalled();
+  });
+
+  test('onMessage catch block logs when frame handler throws', async () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    // Make handleContainerSync throw — onMessage catches it and logs
+    (
+      client as unknown as { handleContainerSync: ReturnType<typeof vi.fn> }
+    ).handleContainerSync.mockRejectedValueOnce(new Error('sync failed'));
+
+    sendFrame(ws, 'dd:container_sync', { containers: [] });
+    await new Promise((r) => setTimeout(r, 10));
+
+    // No crash — the error was caught and logged
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+});
+
+describe('EdgeAgentAdapter — frame dispatch additional paths', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('non-JSON frame logs warn and returns', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    ws.emit('message', 'not-valid-json{{{');
+    await new Promise((r) => setTimeout(r, 10));
+
+    // No crash — logged and returned
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('malformed frame (type is null) logs warn', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    ws.emit('message', JSON.stringify({ type: null, data: null }));
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('dd:watch_container_response is logged at debug', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    expect(() => sendFrame(ws, 'dd:watch_container_response', { watcherId: 'w1' })).not.toThrow();
+    await new Promise((r) => setTimeout(r, 10));
+  });
+
+  test('dd:trigger_response is logged at debug', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    expect(() => sendFrame(ws, 'dd:trigger_response', { triggerId: 't1' })).not.toThrow();
+    await new Promise((r) => setTimeout(r, 10));
+  });
+
+  test('error frame with no requestId is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    sendFrame(ws, 'error', { message: 'some error' });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('error frame with unknown requestId is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    sendFrame(ws, 'error', { requestId: 'nonexistent-req-id', message: 'fail' });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('error frame with known requestId rejects the pending promise', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Issue a request to register a pending entry
+    const requestPromise = adapter.sendRequest('GET', '/containers');
+
+    // Extract the requestId from the sent WS frame
+    const sentRaw = (ws.send as ReturnType<typeof vi.fn>).mock.calls.slice(-1)[0]?.[0] as string;
+    const sentFrame = JSON.parse(sentRaw) as { data: { requestId: string } };
+    const requestId = sentFrame.data.requestId;
+
+    // Send an error frame with the matching requestId
+    sendFrame(ws, 'error', { requestId, message: 'agent rejected request' });
+
+    // The promise should reject with the error message
+    await expect(requestPromise).rejects.toThrow('agent rejected request');
+  });
+
+  test('unknown frame type is logged at debug', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    expect(() => sendFrame(ws, 'completely_unknown_frame_type', { foo: 'bar' })).not.toThrow();
+    await new Promise((r) => setTimeout(r, 10));
+  });
+
+  test('handleContainerLogResponse with no containerId is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    sendFrame(ws, 'dd:container_log_response', { logs: 'some logs' });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('response frame with no requestId is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    sendFrame(ws, 'response', { statusCode: 200, body: 'ok' });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('response frame with unknown requestId is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    sendFrame(ws, 'response', { requestId: 'no-such-id', statusCode: 200 });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('stream frame with no requestId is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    sendFrame(ws, 'stream', { data: 'chunk' });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('stream_end frame with no requestId is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    sendFrame(ws, 'stream_end', { reason: 'done' });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('exec_ready with no execId is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    sendFrame(ws, 'exec_ready', {});
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('exec_output with no execId is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    sendFrame(ws, 'exec_output', { data: 'aGVsbG8=' });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('exec_output with unknown execId is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    sendFrame(ws, 'exec_output', { execId: 'no-such-session', data: 'aGVsbG8=' });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('exec_end with no execId is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    sendFrame(ws, 'exec_end', {});
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+});
+
+describe('EdgeAgentAdapter — emitAgentConnected catch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('logs debug when emitAgentConnected rejects', async () => {
+    vi.mocked(emitAgentConnected).mockRejectedValueOnce(new Error('event bus down'));
+
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    sendFrame(ws, 'dd:container_sync', { containers: [] });
+    await new Promise((r) => setTimeout(r, 10));
+
+    // No crash — the rejection was caught and logged at debug
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+});
+
+describe('EdgeAgentAdapter — requestContainerLogs limit and send error', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('rejects immediately when pending request limit is reached', async () => {
+    const { adapter } = createAdapter();
+    adapter.activate();
+
+    const adapterInternal = adapter as unknown as {
+      pendingRequests: Map<string, unknown>;
+    };
+
+    // Fill to limit
+    for (let i = 0; i < 100; i++) {
+      adapterInternal.pendingRequests.set(`req-${i}`, {
+        resolve: () => {},
+        reject: () => {},
+        timer: setTimeout(() => {}, 99_999),
+      });
+    }
+
+    await expect(adapter.requestContainerLogs('c-overflow')).rejects.toThrow(
+      /concurrent request limit/,
+    );
+
+    // Clean up timers
+    for (const [, pending] of adapterInternal.pendingRequests) {
+      clearTimeout((pending as { timer: ReturnType<typeof setTimeout> }).timer);
+    }
+  });
+
+  test('rejects when ws.send throws during requestContainerLogs', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Make send throw on next call
+    (ws.send as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+      throw new Error('send failed');
+    });
+
+    await expect(adapter.requestContainerLogs('c-throw')).rejects.toThrow('send failed');
+  });
+});
+
+describe('EdgeAgentAdapter — sendStreamRequest limit and send error', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('rejects immediately when pending request limit is reached', async () => {
+    const { adapter } = createAdapter();
+    adapter.activate();
+
+    const adapterInternal = adapter as unknown as {
+      pendingRequests: Map<string, unknown>;
+    };
+
+    for (let i = 0; i < 100; i++) {
+      adapterInternal.pendingRequests.set(`req-${i}`, {
+        resolve: () => {},
+        reject: () => {},
+        timer: setTimeout(() => {}, 99_999),
+      });
+    }
+
+    await expect(adapter.sendStreamRequest('GET', '/containers/c1/logs')).rejects.toThrow(
+      /concurrent request limit/,
+    );
+
+    for (const [, pending] of adapterInternal.pendingRequests) {
+      clearTimeout((pending as { timer: ReturnType<typeof setTimeout> }).timer);
+    }
+  });
+
+  test('rejects when ws.send throws during sendStreamRequest', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    (ws.send as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+      throw new Error('stream send failed');
+    });
+
+    await expect(adapter.sendStreamRequest('GET', '/containers/c1/logs')).rejects.toThrow(
+      'stream send failed',
+    );
+  });
+});
+
+describe('EdgeAgentAdapter — sendRequest limit and send error', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('sends error frame and rejects when pending request limit is reached', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const adapterInternal = adapter as unknown as {
+      pendingRequests: Map<string, unknown>;
+    };
+
+    for (let i = 0; i < 100; i++) {
+      adapterInternal.pendingRequests.set(`req-${i}`, {
+        resolve: () => {},
+        reject: () => {},
+        timer: setTimeout(() => {}, 99_999),
+      });
+    }
+
+    await expect(adapter.sendRequest('GET', '/containers')).rejects.toThrow(
+      /concurrent request limit/,
+    );
+
+    // Verify an error frame was sent to the agent
+    const lastSent = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      type: string;
+      data: { code: string };
+    };
+    expect(lastSent.type).toBe('error');
+    expect(lastSent.data.code).toBe('stream-limit');
+
+    for (const [, pending] of adapterInternal.pendingRequests) {
+      clearTimeout((pending as { timer: ReturnType<typeof setTimeout> }).timer);
+    }
+  });
+
+  test('sendRequest with limit reached — send still works when ws.send throws on error frame', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const adapterInternal = adapter as unknown as {
+      pendingRequests: Map<string, unknown>;
+    };
+
+    for (let i = 0; i < 100; i++) {
+      adapterInternal.pendingRequests.set(`req-${i}`, {
+        resolve: () => {},
+        reject: () => {},
+        timer: setTimeout(() => {}, 99_999),
+      });
+    }
+
+    // Make the error-frame send throw to hit the inner catch
+    (ws.send as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+      throw new Error('send threw during limit error');
+    });
+
+    await expect(adapter.sendRequest('GET', '/containers')).rejects.toThrow(
+      /concurrent request limit/,
+    );
+
+    for (const [, pending] of adapterInternal.pendingRequests) {
+      clearTimeout((pending as { timer: ReturnType<typeof setTimeout> }).timer);
+    }
+  });
+
+  test('rejects and cleans up when ws.send throws after registering pending', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Make send throw on next call (the actual request send, not the error-frame send)
+    (ws.send as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+      throw new Error('request send failed');
+    });
+
+    await expect(adapter.sendRequest('GET', '/containers')).rejects.toThrow('request send failed');
+  });
+});
+
+describe('EdgeAgentAdapter — startExec close closure and send error', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('exec_end after startExec invokes the startExec close closure', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const execId = await adapter.startExec('c1', ['/bin/bash']);
+
+    const adapterInternal = adapter as unknown as {
+      execSessions: Map<string, unknown>;
+    };
+    expect(adapterInternal.execSessions.has(execId)).toBe(true);
+
+    // Send exec_end with the execId returned by startExec
+    // This hits the startExec close closure (line 589)
+    sendFrame(ws, 'exec_end', { execId });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(adapterInternal.execSessions.has(execId)).toBe(false);
+  });
+
+  test('startExec rejects when ws.send throws', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    (ws.send as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+      throw new Error('exec start send failed');
+    });
+
+    await expect(adapter.startExec('c1', ['/bin/bash'])).rejects.toThrow('exec start send failed');
+  });
+});
+
+describe('EdgeAgentAdapter — emitAgentDisconnected catch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('logs debug when emitAgentDisconnected rejects', async () => {
+    vi.mocked(emitAgentDisconnected).mockRejectedValueOnce(new Error('event bus down'));
+
+    const { adapter, ws: _ws, client } = createAdapter();
+    adapter.activate();
+
+    // Mark as connected
+    (adapter as unknown as { connected: boolean }).connected = true;
+    client.isConnected = true;
+
+    await adapter.onDisconnect();
+
+    // No crash — rejection logged at debug
+    expect(manager.removeAgent).toHaveBeenCalled();
+  });
+});
+
+describe('EdgeAgentAdapter — stream sessionId branches', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('stream frame with sessionId (not requestId) is routed correctly', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const streamPromise = adapter.sendStreamRequest('GET', '/containers/c1/logs?follow=1');
+    // Get the requestId from the sent frame
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      data: { requestId: string };
+    };
+    const { requestId } = sentFrame.data;
+
+    // Send stream with sessionId instead of requestId — covers the sessionId branch in handleStream
+    sendFrame(ws, 'stream', { sessionId: requestId, data: 'chunk' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Then resolve with stream_end using sessionId
+    sendFrame(ws, 'stream_end', { sessionId: requestId, reason: 'done' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    const result = await streamPromise;
+    expect((result as { complete: boolean }).complete).toBe(true);
+  });
+
+  test('stream frame with requestId not in pending map is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Send stream with a requestId that was never registered via sendStreamRequest
+    sendFrame(ws, 'stream', { requestId: 'unknown-stream-id', data: 'chunk' });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('stream_end with sessionId (not requestId) resolves promise', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const streamPromise = adapter.sendStreamRequest('GET', '/containers/c1/logs?follow=1');
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      data: { requestId: string };
+    };
+    const { requestId } = sentFrame.data;
+
+    // Resolve with stream_end using sessionId — covers the sessionId branch in handleStreamEnd
+    sendFrame(ws, 'stream_end', { sessionId: requestId, reason: 'end-via-session' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    const result = await streamPromise;
+    expect((result as { complete: boolean; reason: string }).reason).toBe('end-via-session');
+  });
+
+  test('stream_end with requestId not in pending map is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Send stream_end with an unknown requestId — covers the false branch at `if (pending)` in handleStreamEnd
+    sendFrame(ws, 'stream_end', { requestId: 'no-such-stream-id', reason: 'done' });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+});
+
+describe('EdgeAgentAdapter — branch coverage for uncovered paths', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('exec_output with non-string data field is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Create a session with execId
+    sendFrame(ws, 'exec_ready', { execId: 'exec-branch-1' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Send exec_output with execId but data is a number (not string) — covers false branch of rawData ternary
+    ws.emit(
+      'message',
+      JSON.stringify({ type: 'exec_output', data: { execId: 'exec-branch-1', data: 42 } }),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('exec_end with execId not in sessions map is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Send exec_end with an execId that was never registered — covers false branch of `if (session)`
+    sendFrame(ws, 'exec_end', { execId: 'nonexistent-exec-id-xyz' });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('onDisconnect when pingInterval is already undefined (called twice)', async () => {
+    const { adapter } = createAdapter();
+    adapter.activate();
+
+    // First call — clears pingInterval (sets to undefined)
+    await adapter.onDisconnect();
+    // Second call — pingInterval is already undefined, covers the false branch
+    await adapter.onDisconnect();
+
+    expect(manager.removeAgent).toHaveBeenCalledTimes(2);
+  });
+
+  test('exec_output to session without outputHandler is a no-op (no crash)', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Register session without outputHandler via exec_ready
+    sendFrame(ws, 'exec_ready', { execId: 'exec-no-handler' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    // exec_output with valid execId and data — session exists but no outputHandler
+    const data = Buffer.from('test data').toString('base64');
+    sendFrame(ws, 'exec_output', { execId: 'exec-no-handler', data });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('containerSyncWarnTimer — connected=true suppresses the warning', () => {
+    vi.useFakeTimers();
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Mark as connected before the timer fires so the warn branch is not taken
+    (adapter as unknown as { connected: boolean }).connected = true;
+
+    // Advance to fire the 30s container sync warn timer
+    vi.advanceTimersByTime(31_000);
+
+    // No close called — the timer ran but skipped the warn because connected=true
+    expect(ws.close).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+
+  test('error frame with non-string message uses fallback "agent error"', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Issue a request to register a pending entry
+    const requestPromise = adapter.sendRequest('GET', '/containers');
+
+    const sentRaw = (ws.send as ReturnType<typeof vi.fn>).mock.calls.slice(-1)[0]?.[0] as string;
+    const sentFrame = JSON.parse(sentRaw) as { data: { requestId: string } };
+    const requestId = sentFrame.data.requestId;
+
+    // Send an error frame with message as a number (not a string) → hits the false branch of
+    // typeof data.message === 'string' ? data.message : 'agent error'
+    sendFrame(ws, 'error', { requestId, message: 42 });
+
+    await expect(requestPromise).rejects.toThrow('agent error');
+  });
+
+  test('stream frame using sessionId (not requestId) as key', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Register a pending stream under a sessionId key
+    const sessionId = 'session-abc-123';
+    const adapterInternal = adapter as unknown as {
+      pendingRequests: Map<string, unknown>;
+    };
+    adapterInternal.pendingRequests.set(`stream:${sessionId}`, {
+      resolve: () => {},
+      reject: () => {},
+      timer: setTimeout(() => {}, 99_999),
+    });
+
+    // Send stream frame with sessionId (no requestId) — exercises the sessionId ternary branch
+    sendFrame(ws, 'stream', { sessionId, data: 'chunk' });
+    await new Promise((r) => setTimeout(r, 10));
+
+    // No crash — sessionId was used as the lookup key
+    expect(ws.close).not.toHaveBeenCalled();
+
+    clearTimeout(
+      (
+        adapterInternal.pendingRequests.get(`stream:${sessionId}`) as {
+          timer: ReturnType<typeof setTimeout>;
+        }
+      )?.timer,
+    );
+  });
+
+  test('stream frame with known requestId where no pending exists (if(pending) false)', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Send stream with a requestId that has no matching pending entry
+    sendFrame(ws, 'stream', { requestId: 'no-pending-req', data: 'chunk' });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('stream_end frame using sessionId (not requestId) as key', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Register a pending stream under a sessionId key
+    const sessionId = 'session-end-xyz';
+    const adapterInternal = adapter as unknown as {
+      pendingRequests: Map<string, unknown>;
+    };
+    let resolved = false;
+    adapterInternal.pendingRequests.set(`stream:${sessionId}`, {
+      resolve: () => {
+        resolved = true;
+      },
+      reject: () => {},
+      timer: setTimeout(() => {}, 99_999),
+    });
+
+    // Send stream_end with sessionId (no requestId) — exercises the sessionId ternary branch
+    sendFrame(ws, 'stream_end', { sessionId, reason: 'done' });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(resolved).toBe(true);
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('stream_end with known requestId where no pending exists (if(pending) false)', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Send stream_end with a requestId that has no matching pending entry
+    sendFrame(ws, 'stream_end', { requestId: 'no-pending-stream', reason: 'done' });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+});
+
+describe('EdgeAgentAdapter — false-branch coverage for ternary fallbacks', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('dd:container_sync with non-array containers falls back to empty array', async () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    // Send containers as a non-array (string) — exercises the `[] ` false branch of Array.isArray
+    sendFrame(ws, 'dd:container_sync', { containers: 'not-an-array' });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(
+      (client as unknown as { handleContainerSync: ReturnType<typeof vi.fn> }).handleContainerSync,
+    ).toHaveBeenCalledWith([]);
+  });
+
+  test('dd:component_sync with non-array watchers and triggers falls back to empty arrays', async () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    // Send watchers and triggers as non-arrays — exercises both `[]` false branches
+    sendFrame(ws, 'dd:component_sync', { watchers: 'bad', triggers: 'bad' });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(
+      (client as unknown as { handleComponentSync: ReturnType<typeof vi.fn> }).handleComponentSync,
+    ).toHaveBeenCalledWith([], []);
+  });
+
+  test('metrics frame with zero memoryTotal and zero uptime uses fallback values', async () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    // Pre-set some values so the fallback can be verified
+    (client as unknown as { info: Record<string, unknown> }).info = {
+      memoryGb: 4,
+      uptimeSeconds: 1000,
+    };
+
+    // memoryTotal=0 → fallback to existing client.info.memoryGb
+    // uptime=0 → fallback to existing client.info.uptimeSeconds
+    sendFrame(ws, 'metrics', { memoryTotal: 0, uptime: 0 });
+    await new Promise((r) => setTimeout(r, 10));
+
+    // The false branch of each ternary was taken — info preserved
+    expect(client.info.memoryGb).toBe(4);
+    expect(client.info.uptimeSeconds).toBe(1000);
+  });
+
+  test('metrics frame with non-number memoryTotal and uptime falls back to 0', async () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    // Pre-set info so we can verify fallback is NOT using pre-existing values
+    (client as unknown as { info: Record<string, unknown> }).info = {
+      memoryGb: undefined,
+      uptimeSeconds: undefined,
+    };
+
+    // Send metrics with non-number values — covers the `typeof ... === 'number' ? ... : 0` false branch at lines 265-266
+    sendFrame(ws, 'metrics', { memoryTotal: 'not-a-number', uptime: null });
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Both fall back to 0, so memoryTotal > 0 is false → memoryGb stays undefined, uptime 0 > 0 is false → uptimeSeconds stays undefined
+    expect(client.info.memoryGb).toBeUndefined();
+    expect(client.info.uptimeSeconds).toBeUndefined();
+  });
+
+  test('dd:container_log_response with unknown containerId is a no-op (if(pending) false)', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Send a log response for a containerId that has no matching pending request
+    sendFrame(ws, 'dd:container_log_response', { containerId: 'unknown-container', logs: 'hello' });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
   });
 });
