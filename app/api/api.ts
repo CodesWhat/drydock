@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { getServerConfiguration } from '../configuration/index.js';
+import { getExperimentalLookoutEnabled, getServerConfiguration } from '../configuration/index.js';
 import * as agentRouter from './agent.js';
 import * as appRouter from './app.js';
 import * as auditRouter from './audit.js';
@@ -18,6 +18,7 @@ import * as iconsRouter from './icons.js';
 import * as internalSelfUpdateRouter from './internal-self-update.js';
 import { requireJsonContentTypeForMutations, shouldParseJsonBody } from './json-content-type.js';
 import * as logRouter from './log.js';
+import * as lookoutRouter from './lookout.js';
 import * as notificationRouter from './notification.js';
 import * as notificationOutboxRouter from './notification-outbox.js';
 import * as operationRouter from './operation.js';
@@ -171,6 +172,11 @@ export function init(): express.Router {
 
   // Mount agents
   router.use('/agents', agentRouter.init());
+
+  // Mount lookout key management (edge agent auth registry) — experimental
+  if (getExperimentalLookoutEnabled()) {
+    router.use('/lookout', lookoutRouter.init());
+  }
 
   // Mount audit log
   router.use('/audit', auditRouter.init());

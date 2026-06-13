@@ -62,6 +62,7 @@ const {
     );
     vi.doMock('node:fs', () => createFsMock(overrides.fs));
     vi.doMock('../configuration', () => createConfigMock(overrides.config ?? STORE_CONFIG));
+    vi.doMock('./agent-keys', createCollectionsMock);
     vi.doMock('./app', createCollectionsMock);
     vi.doMock('./audit', createCollectionsMock);
     vi.doMock('./backup', createCollectionsMock);
@@ -97,6 +98,7 @@ vi.mock('./backup', createCollectionsMock);
 vi.mock('./container', createCollectionsMock);
 vi.mock('./notification', createCollectionsMock);
 vi.mock('./notification-history', createCollectionsMock);
+vi.mock('./agent-keys', createCollectionsMock);
 vi.mock('./notification-outbox', createCollectionsMock);
 vi.mock('./secrets', createCollectionsMock);
 vi.mock('./settings', createCollectionsMock);

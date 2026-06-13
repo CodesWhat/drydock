@@ -86,6 +86,8 @@ interface AgentRuntimeAckPayload {
   memoryGb?: unknown;
   uptimeSeconds?: unknown;
   lastSeen?: unknown;
+  logLevel?: unknown;
+  pollInterval?: unknown;
 }
 
 interface AgentSsePayload {
@@ -759,6 +761,14 @@ export class AgentClient {
         typeof runtimeData?.lastSeen === 'string' && runtimeData.lastSeen
           ? runtimeData.lastSeen
           : new Date().toISOString(),
+      logLevel:
+        typeof runtimeData?.logLevel === 'string' && runtimeData.logLevel
+          ? runtimeData.logLevel
+          : this.info.logLevel,
+      pollInterval:
+        typeof runtimeData?.pollInterval === 'string' && runtimeData.pollInterval
+          ? runtimeData.pollInterval
+          : this.info.pollInterval,
     };
   }
 
@@ -1602,5 +1612,41 @@ export class AgentClient {
       );
       throw error;
     }
+  }
+
+  /**
+   * Public shim: process an authoritative container list received from an edge
+   * agent via dd:container_sync. Replaces handshake() for edge connections.
+   */
+  async handleContainerSync(containers: Container[]): Promise<void> {
+    const reports = await this.processAuthoritativeContainers(containers);
+    if (containers.length > 0) {
+      this.pruneOldContainers(containers);
+    }
+    this.scheduleStatsChanged();
+    // Suppress unused variable warning — reports are emitted internally.
+    void reports;
+  }
+
+  /**
+   * Public shim: register watchers and triggers received from an edge agent
+   * via dd:component_sync. Replaces the handshake() watcher/trigger fetch.
+   */
+  async handleComponentSync(
+    watchers: AgentComponentDescriptor[],
+    triggers: AgentComponentDescriptor[],
+  ): Promise<void> {
+    await registry.deregisterAgentComponents(this.name);
+    await this.registerAgentComponents('watcher', watchers);
+    this.seedWatcherSnapshotCacheFromHandshake(watchers);
+    await this.registerAgentComponents('trigger', triggers);
+  }
+
+  /**
+   * Public shim: schedule a debounced agentStatsChanged event emission.
+   * Allows EdgeAgentAdapter to trigger stats updates after metrics frames.
+   */
+  scheduleStatsChangedPublic(): void {
+    this.scheduleStatsChanged();
   }
 }

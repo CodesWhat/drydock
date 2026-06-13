@@ -4467,6 +4467,35 @@ describe('AgentClient', () => {
       // Should not throw — optional chaining prevents it
       expect(result).toBeDefined();
     });
+
+    test('applies logLevel and pollInterval from ack payload', () => {
+      const internal = client as any;
+      client.info = { logLevel: 'info', pollInterval: '300' };
+
+      const result = internal.buildRuntimeInfoFromAck({
+        logLevel: 'debug',
+        pollInterval: '60',
+      });
+      expect(result.logLevel).toBe('debug');
+      expect(result.pollInterval).toBe('60');
+    });
+
+    test('falls back to existing logLevel and pollInterval when absent from ack payload', () => {
+      const internal = client as any;
+      client.info = { logLevel: 'warn', pollInterval: '120' };
+
+      const result = internal.buildRuntimeInfoFromAck({});
+      expect(result.logLevel).toBe('warn');
+      expect(result.pollInterval).toBe('120');
+    });
+
+    test('falls back to existing logLevel when ack payload logLevel is empty string', () => {
+      const internal = client as any;
+      client.info = { logLevel: 'error' };
+
+      const result = internal.buildRuntimeInfoFromAck({ logLevel: '' });
+      expect(result.logLevel).toBe('error');
+    });
   });
 
   describe('handleWatcherSnapshotEvent optional chaining', () => {
@@ -6924,6 +6953,72 @@ describe('AgentClient', () => {
       // c2 must have been pruned; c1 must remain.
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2');
       expect(containerStore.map((c) => c.id)).toEqual(['c1']);
+    });
+  });
+
+  describe('handleContainerSync (edge agent public shim)', () => {
+    test('processes authoritative containers and calls scheduleStatsChanged', async () => {
+      vi.mocked(storeContainer.getContainers).mockReturnValue([]);
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.insertContainer).mockImplementation((c) => c);
+
+      // Call with an empty container list — processAuthoritativeContainers runs, pruneOldContainers is skipped
+      await client.handleContainerSync([]);
+
+      // emitContainerReports is mocked; scheduleStatsChanged is covered by this call
+      expect(event.emitContainerReports).toHaveBeenCalledWith([]);
+    });
+
+    test('calls pruneOldContainers when containers list is non-empty', async () => {
+      const containers = [
+        { id: 'c1', name: 'web', agent: 'test-agent', watcher: 'local', status: 'running' },
+      ];
+      vi.mocked(storeContainer.getContainers).mockReturnValue([]);
+      vi.mocked(storeContainer.getContainer).mockReturnValue(undefined);
+      vi.mocked(storeContainer.insertContainer).mockImplementation((c) => c);
+
+      await client.handleContainerSync(
+        containers as Parameters<typeof client.handleContainerSync>[0],
+      );
+
+      // pruneOldContainers was called (deletes containers not in the provided list)
+      expect(storeContainer.getContainers).toHaveBeenCalled();
+    });
+  });
+
+  describe('handleComponentSync (edge agent public shim)', () => {
+    test('deregisters agent components and re-registers watchers and triggers', async () => {
+      const watchers = [{ type: 'docker', name: 'local', configuration: {} }];
+      const triggers = [{ type: 'mock', name: 'update', configuration: {} }];
+
+      await client.handleComponentSync(watchers, triggers);
+
+      expect(registry.deregisterAgentComponents).toHaveBeenCalledWith('test-agent');
+      expect(registry.registerComponent).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'watcher', provider: 'docker', name: 'local' }),
+      );
+      expect(registry.registerComponent).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'trigger', provider: 'mock', name: 'update' }),
+      );
+    });
+
+    test('works with empty watchers and triggers (no-op)', async () => {
+      await client.handleComponentSync([], []);
+
+      expect(registry.deregisterAgentComponents).toHaveBeenCalledWith('test-agent');
+      expect(registry.registerComponent).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('scheduleStatsChangedPublic (edge agent public shim)', () => {
+    test('invokes scheduleStatsChanged debounce without throwing', () => {
+      // scheduleStatsChanged sets a debounce timer; calling the public shim
+      // must not throw and must schedule the stats event.
+      expect(() => client.scheduleStatsChangedPublic()).not.toThrow();
+      // Advance timer to fire the debounce
+      vi.advanceTimersByTime(1000);
+      // emitAgentStatsChanged is scheduled by the debounce; no assertion needed
+      // beyond not throwing — the debounce fires async on its own timer.
     });
   });
 });

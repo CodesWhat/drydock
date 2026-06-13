@@ -89,6 +89,16 @@ vi.mock('./rate-limit-key.js', () => ({
   isIdentityAwareRateLimitKeyingEnabled: mockIsIdentityAwareRateLimitKeyingEnabled,
 }));
 
+const mockGetExperimentalLookoutEnabled = vi.hoisted(() => vi.fn(() => false));
+vi.mock('../configuration/index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../configuration/index.js')>();
+  return {
+    ...actual,
+    getExperimentalLookoutEnabled: mockGetExperimentalLookoutEnabled,
+  };
+});
+vi.mock('./lookout', mockInit);
+
 describe('API Router', () => {
   let api;
   let router;
@@ -98,6 +108,7 @@ describe('API Router', () => {
     resetMockRouterCallLog();
     mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(false);
     mockCreateAuthenticatedRouteRateLimitKeyGenerator.mockReturnValue(undefined);
+    mockGetExperimentalLookoutEnabled.mockReturnValue(false);
     vi.resetModules();
     api = await import('./api.js');
     router = api.init();
@@ -440,5 +451,29 @@ describe('API Router', () => {
         keyGenerator,
       }),
     );
+  });
+
+  test('should mount /lookout router when DD_EXPERIMENTAL_LOOKOUT is enabled', async () => {
+    mockGetExperimentalLookoutEnabled.mockReturnValue(true);
+
+    vi.resetModules();
+    const isolatedApi = await import('./api.js');
+    const isolatedRouter = isolatedApi.init();
+
+    const useCalls = isolatedRouter.use.mock.calls;
+    const lookoutMount = useCalls.find((c) => c[0] === '/lookout');
+    expect(lookoutMount).toBeDefined();
+  });
+
+  test('should NOT mount /lookout router when DD_EXPERIMENTAL_LOOKOUT is disabled', async () => {
+    mockGetExperimentalLookoutEnabled.mockReturnValue(false);
+
+    vi.resetModules();
+    const isolatedApi = await import('./api.js');
+    const isolatedRouter = isolatedApi.init();
+
+    const useCalls = isolatedRouter.use.mock.calls;
+    const lookoutMount = useCalls.find((c) => c[0] === '/lookout');
+    expect(lookoutMount).toBeUndefined();
   });
 });

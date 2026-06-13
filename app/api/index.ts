@@ -10,7 +10,11 @@ import { getErrorMessage } from '../util/error.js';
 
 const log = logger.child({ component: 'api' });
 
-import { ddEnvVars, getServerConfiguration } from '../configuration/index.js';
+import {
+  ddEnvVars,
+  getExperimentalLookoutEnabled,
+  getServerConfiguration,
+} from '../configuration/index.js';
 import * as settingsStore from '../store/settings.js';
 import * as apiRouter from './api.js';
 import * as auth from './auth.js';
@@ -19,6 +23,7 @@ import { attachContainerLogStreamWebSocketServer } from './container/log-stream.
 import { sendErrorResponse } from './error-response.js';
 import * as healthRouter from './health.js';
 import { attachSystemLogStreamWebSocketServer } from './log-stream.js';
+import { attachLookoutWsServer } from './lookout-ws.js';
 import * as prometheusRouter from './prometheus.js';
 import * as uiRouter from './ui.js';
 import { createFixedWindowRateLimiter } from './ws-upgrade-utils.js';
@@ -299,4 +304,12 @@ export async function init() {
     serverConfiguration: configuration as Record<string, unknown>,
     isRateLimited,
   });
+  if (getExperimentalLookoutEnabled()) {
+    log.info('lookout/1.0 edge endpoint enabled (experimental, DD_EXPERIMENTAL_LOOKOUT=true)');
+    attachLookoutWsServer({
+      server,
+      serverConfiguration: configuration as Record<string, unknown>,
+      isRateLimited,
+    });
+  }
 }

@@ -1,0 +1,286 @@
+---
+title: "Lookout Edge API"
+description: "Ed25519 agent-key registry and the lookout/1.0 WebSocket edge endpoint for firewall-traversing agents."
+---
+
+> **Experimental feature.** The Lookout edge endpoint must be explicitly enabled with the environment variable `DD_EXPERIMENTAL_LOOKOUT=true` on the drydock server. When this flag is absent or set to any other value the `/api/v1/lookout/*` routes (both REST and WebSocket) are **not mounted at all**. The wire protocol may change between releases while the feature is experimental.
+
+Edge mode inverts the normal drydock connection model. In the standard setup the controller dials out to each remote agent. Edge mode is for agents that sit behind NAT or a firewall and cannot accept inbound connections: the `lookout` agent dials **out** to drydock over an encrypted WebSocket (`wss://`), and drydock registers the connection as if the agent had been reached normally. No inbound port on the agent host is needed. The chain is `sockguard → lookout (edge client) → drydock (this endpoint)`.
+
+> For agents that accept inbound connections from the controller, see the [Agent API](/docs/api/agent).
+
+---
+
+## Ed25519 authentication model
+
+Edge connections use public-key authentication; no session cookie or shared secret is involved.
+
+1. The operator generates an Ed25519 keypair on the agent host and registers the **public key** with drydock via the [key registry REST API](#key-registry) below.
+2. drydock stores the raw 32-byte public key (as standard base64) and derives a **key ID**: `hex(SHA-256(raw 32-byte pubkey)[0:8])`, yielding exactly 16 lowercase hex characters.
+3. When the agent connects it sends a signed **hello frame** as the first WebSocket message. The frame includes the `pubKeyId`, a Unix timestamp (seconds), a random 32-hex-char nonce, and an Ed25519 signature.
+4. drydock verifies the timestamp is within **±60 seconds** of server time and that the nonce has not been seen before in that window. Both checks guard against replay attacks.
+5. Only after a successful signature verification is the nonce committed to the replay cache.
+
+The signature is computed over a canonical, newline-joined message (SigV4-style), so the agent and server derive the identical bytes independently:
+
+```text
+GET
+/api/lookout/ws
+<SHA-256 hex of the empty request body>
+<unix-timestamp-seconds>
+<nonce>
+```
+
+The body hash is the SHA-256 of an empty body (`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`), and the path segment is always the literal `/api/lookout/ws` — both the versioned path `/api/v1/lookout/ws` and the deprecated unversioned path `/api/lookout/ws` are signature-equivalent by design, so that adding or removing the `/v1` prefix never requires a key rotation.
+
+**Encoding note.** The `signature` field is **base64url** (RFC 4648 §5 — URL-safe alphabet, no padding). An Ed25519 signature is 64 bytes, which encodes to exactly 86 base64url characters. The public key stored in the registry (`pubkey` field) uses **standard base64** (44 characters for a 32-byte key). These two encodings are distinct — agents must use base64url for the signature and standard base64 for the public-key submission.
+
+---
+
+## Key registry
+
+The key registry is mounted at `/api/v1/lookout/keys`. All routes require an authenticated drydock session (same-origin or equivalent).
+
+> The unversioned path `/api/lookout/keys` is a deprecated alias that will be removed in **v1.6.0**. Third-party integrations should migrate to `/api/v1/lookout/keys`.
+
+### List keys
+
+Returns all registered keys — both active and revoked.
+
+```bash
+curl http://drydock:3000/api/v1/lookout/keys
+
+[
+  {
+    "keyId": "3f8a1c2e9b047d56",
+    "pubkey": "kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE=",
+    "label": "prod-agent-us-east",
+    "createdAt": "2026-05-01T09:00:00.000Z",
+    "revokedAt": null
+  }
+]
+```
+
+Each record has the shape:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `keyId` | string | 16 lowercase hex chars — `hex(SHA-256(raw pubkey)[0:8])` |
+| `pubkey` | string | Standard base64-encoded raw 32-byte Ed25519 public key (44 chars) |
+| `label` | string | Human-readable name supplied at registration |
+| `createdAt` | string | ISO-8601 UTC timestamp |
+| `revokedAt` | string \| null | ISO-8601 UTC revocation timestamp, or `null` while active |
+
+### Register a key
+
+```bash
+curl -X POST http://drydock:3000/api/v1/lookout/keys \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pubkeyBase64": "kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE=",
+    "label": "prod-agent-us-east"
+  }'
+
+HTTP/1.1 201 Created
+
+{
+  "keyId": "3f8a1c2e9b047d56",
+  "label": "prod-agent-us-east",
+  "createdAt": "2026-05-01T09:00:00.000Z"
+}
+```
+
+#### Request body
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `pubkeyBase64` | string | Yes | Standard base64-encoded raw 32-byte Ed25519 public key |
+| `label` | string | Yes | Human-readable identifier for this key |
+
+#### Status codes
+
+| Code | Meaning |
+| --- | --- |
+| `201` | Key registered; response body contains `keyId`, `label`, `createdAt` |
+| `400` | Missing or malformed fields (non-string, empty string, invalid base64, wrong key length) |
+| `409` | A non-revoked key with this `keyId` is already registered |
+
+### Revoke a key
+
+Revoked keys are rejected on the next connection attempt. The record is retained (with `revokedAt` set) for audit purposes. Any live WebSocket sessions authenticated under the revoked key are disconnected immediately.
+
+```bash
+curl -X DELETE http://drydock:3000/api/v1/lookout/keys/3f8a1c2e9b047d56
+
+HTTP/1.1 204 No Content
+```
+
+#### Status codes
+
+| Code | Meaning |
+| --- | --- |
+| `204` | Key revoked |
+| `404` | No active key with this `keyId` found (key does not exist or has already been revoked) |
+
+---
+
+## WebSocket endpoint
+
+Edge agents connect to the **versioned** path:
+
+```text
+wss://drydock/api/v1/lookout/ws
+```
+
+The unversioned path `/api/lookout/ws` is also accepted and is signature-equivalent — it is a deprecated alias that will be removed in **v1.6.0**. The canonical path `/api/lookout/ws` is always used in signature computation regardless of which path the agent dialed, so migrating from the unversioned to the versioned path does not require a key rotation.
+
+**Subprotocol:** `lookout/1.0`
+
+### Connection flow
+
+1. The agent opens a WebSocket upgrade to `wss://drydock/api/v1/lookout/ws` with the `lookout/1.0` subprotocol header.
+2. The agent sends a **hello frame** as the first message (within 30 seconds, otherwise the connection is closed). The frame carries the `pubKeyId`, timestamp, nonce, and Ed25519 signature described under [Ed25519 authentication model](#ed25519-authentication-model) above.
+3. drydock verifies the hello. On success it replies with a **welcome frame** carrying poll configuration and server version information.
+4. The connection is then live: the agent multiplexes container-sync and exec frames over the same WebSocket.
+
+### Hello frame
+
+The hello frame is a flat JSON object sent as the first WebSocket message after the upgrade. All fields are at the top level (no nesting).
+
+```json
+{
+  "type": "hello",
+  "protocol": "lookout/1.0",
+  "agentId": "us-east-prod-1",
+  "agentName": "us-east-prod-1",
+  "version": "1.5.0",
+  "dockerVersion": "27.3.1",
+  "hostname": "agent-host.example.com",
+  "capabilities": ["container_sync", "exec"],
+  "drydockCompat": "1.4",
+  "watcherTypes": ["docker"],
+  "triggerTypes": ["slack"],
+  "pubKeyId": "3f8a1c2e9b047d56",
+  "timestamp": 1749823200,
+  "nonce": "a3f1c2e9b047d56a3f1c2e9b047d56ab",
+  "signature": "dGhpcyBpcyBhIGZha2UgZWQyNTUxOSBzaWduYXR1cmUgZm9yIGV4YW1wbGVvbmx5"
+}
+```
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `type` | string | Yes | Always `"hello"` |
+| `protocol` | string | Yes | Must be `"lookout/1.0"` |
+| `agentId` | string | Yes | Agent identifier (alphanumeric, hyphens, underscores; max 64 chars) |
+| `agentName` | string | Yes | Human-readable agent name |
+| `version` | string | Yes | Agent drydock version string |
+| `dockerVersion` | string | Yes | Docker Engine version on the agent host |
+| `hostname` | string | Yes | Agent host name |
+| `capabilities` | string[] | Yes | List of capabilities the agent supports |
+| `pubKeyId` | string | Yes (Ed25519) | 16 lowercase hex chars identifying the registered public key |
+| `timestamp` | number | Yes (Ed25519) | Current Unix time in **seconds** (integer) |
+| `nonce` | string | Yes (Ed25519) | Exactly 32 lowercase hex characters; unique per connection |
+| `signature` | string | Yes (Ed25519) | Ed25519 signature encoded as **base64url** (RFC 4648 §5, no padding; exactly 86 chars for a valid Ed25519 signature) |
+| `drydockCompat` | string | No | Minimum drydock compat level required by this agent (e.g. `"1.4"`) |
+| `watcherTypes` | string[] | No | Watcher provider types active on this agent |
+| `triggerTypes` | string[] | No | Trigger provider types active on this agent |
+| `tokenHash` | string | No | Token hash for non-edge auth (rejected at the edge endpoint — Ed25519 is required here) |
+
+### Welcome frame
+
+On a successful hello, drydock replies with a welcome frame:
+
+```json
+{
+  "type": "welcome",
+  "data": {
+    "pollInterval": 300,
+    "config": {
+      "drydockVersion": "1.5.0",
+      "supportedProtocols": "lookout/1.0",
+      "serverCompatLevel": "1.4"
+    }
+  }
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `data.pollInterval` | number | Recommended container-sync poll interval in seconds (currently `300`) |
+| `data.config.drydockVersion` | string | Server drydock version |
+| `data.config.supportedProtocols` | string | Protocol string accepted by this server (`"lookout/1.0"`) |
+| `data.config.serverCompatLevel` | string | Server compat level (`"1.4"`) |
+
+### Protocol limits
+
+| Parameter | Value |
+| --- | --- |
+| Clock skew window | ±60 seconds |
+| Nonce format | 32 lowercase hex characters |
+| Max frame payload | 16 MB |
+| Hello timeout | 30 seconds |
+
+### Error frames
+
+If the hello is rejected, drydock sends a JSON error frame before closing:
+
+```json
+{
+  "type": "error",
+  "data": {
+    "message": "Ed25519 signature verification failed",
+    "code": "bad-signature"
+  }
+}
+```
+
+> JSON field order in serialized messages is unspecified; agents should not rely on field ordering.
+
+### Error code catalogue
+
+| Code | Trigger | Recommended agent behavior |
+| --- | --- | --- |
+| `parse-error` | Hello frame could not be parsed as JSON, or a required field has the wrong type | Fix the frame construction |
+| `expected-hello` | First frame was not `type: "hello"` | Send the hello frame immediately after upgrade |
+| `no-auth` | Hello frame contains neither Ed25519 fields nor a `tokenHash` | Include `pubKeyId`, `timestamp`, `nonce`, and `signature` |
+| `ed25519-required` | Hello supplied only `tokenHash` (no Ed25519 fields) | Include a registered Ed25519 key |
+| `protocol-mismatch` | `protocol` field is not `"lookout/1.0"` | Upgrade the agent or check the configured protocol string |
+| `unknown-key` | `pubKeyId` is not registered, has been revoked, or does not match the 16 hex-char format | Re-register a valid key; also fired when an active session is disconnected due to key revocation |
+| `timestamp-skew` | `timestamp` is more than 60 seconds from server time | Sync the agent clock (NTP); check for time-zone misconfiguration |
+| `bad-nonce` | `nonce` is not exactly 32 lowercase hex characters | Generate a cryptographically random 16-byte value and hex-encode it |
+| `replay` | `nonce` was already seen in the current window (or the nonce cache is full under a suspected attack) | Wait a moment and reconnect with a fresh nonce |
+| `bad-signature` | Ed25519 signature verification failed, or the signature string exceeds the sanity length limit | Verify the canonical message format and base64url encoding |
+| `internal-error` | Unexpected server-side error during signature verification | Retry with exponential back-off |
+| `rate-limited` | This key has exceeded its per-window nonce admission limit | Back off and retry; spread reconnect attempts over time |
+| `agent-already-connected` | An agent with the same `agentId` is already connected or in the process of completing a hello | Wait for the existing session to expire or disconnect before reconnecting |
+
+---
+
+## Enrolling a lookout agent
+
+1. **Enable the experimental feature** on the drydock server:
+
+   ```bash
+   DD_EXPERIMENTAL_LOOKOUT=true
+   ```
+
+   Without this flag, the `/api/v1/lookout/*` routes are not mounted and connections will be refused at the HTTP layer.
+
+2. **Generate a keypair** on the agent host:
+
+   ```bash
+   openssl genpkey -algorithm ed25519 -out agent.key
+   openssl pkey -in agent.key -pubout -outform DER | tail -c 32 | base64
+   ```
+
+   The last command prints the 44-character standard-base64 public key to register.
+
+3. **Register the public key** with drydock using `POST /api/v1/lookout/keys`. Save the returned `keyId` — the agent needs it in its configuration.
+
+4. **Configure and start the agent.** Point `lookout` at the versioned endpoint:
+
+   ```text
+   wss://drydock/api/v1/lookout/ws
+   ```
+
+   and supply the private key file and `keyId`. The agent will dial out and authenticate automatically.
