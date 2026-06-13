@@ -19,6 +19,7 @@ import { attachContainerLogStreamWebSocketServer } from './container/log-stream.
 import { sendErrorResponse } from './error-response.js';
 import * as healthRouter from './health.js';
 import { attachSystemLogStreamWebSocketServer } from './log-stream.js';
+import { attachLookoutWsServer } from './lookout-ws.js';
 import * as prometheusRouter from './prometheus.js';
 import * as uiRouter from './ui.js';
 import { createFixedWindowRateLimiter } from './ws-upgrade-utils.js';
@@ -296,6 +297,11 @@ export async function init() {
   attachSystemLogStreamWebSocketServer({
     server,
     sessionMiddleware: auth.getSessionMiddleware?.(),
+    serverConfiguration: configuration as Record<string, unknown>,
+    isRateLimited,
+  });
+  attachLookoutWsServer({
+    server,
     serverConfiguration: configuration as Record<string, unknown>,
     isRateLimited,
   });
