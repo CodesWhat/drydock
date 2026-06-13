@@ -173,6 +173,10 @@ export function getLocalWatcherEnabled() {
   return ddEnvVars.DD_LOCAL_WATCHER?.trim().toLowerCase() !== 'false';
 }
 
+export function getExperimentalLookoutEnabled() {
+  return ddEnvVars.DD_EXPERIMENTAL_LOOKOUT?.trim().toLowerCase() === 'true';
+}
+
 function parseWatcherMaintenanceEnvAlias(envKey: string) {
   const envKeyUpper = envKey.toUpperCase();
   const prefix = 'DD_WATCHER_';

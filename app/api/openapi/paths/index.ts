@@ -12,6 +12,7 @@ import {
 import { authPaths } from './auth.js';
 import { componentReadPaths } from './component-read.js';
 import { containerPaths } from './containers.js';
+import { lookoutPaths } from './lookout.js';
 import { notificationOutboxPaths } from './notification-outbox.js';
 import { statsPaths } from './stats.js';
 import { triggerPaths } from './triggers.js';
@@ -416,6 +417,7 @@ export const openApiPaths = {
     },
   },
   ...triggerPaths,
+  ...lookoutPaths,
   ...componentReadPaths,
   '/api/agents': {
     get: {

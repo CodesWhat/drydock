@@ -195,8 +195,16 @@ export function loadAuthorizedKeysFile(filePath: string): void {
     }
 
     const keyId = deriveKeyId(pubkeyBuffer);
-    if (getKey(keyId)) {
-      log.debug(`Key ${keyId} already active, skipping`);
+    const existingAny = agentKeyCollection.findOne({ keyId });
+    if (existingAny) {
+      if (existingAny.revokedAt !== null) {
+        log.warn(
+          { keyId },
+          'Revoked key found in authorized_keys file — ignoring. Remove the entry from the file to prevent re-authorization.',
+        );
+      } else {
+        log.debug(`Key ${keyId} already active, skipping`);
+      }
       continue;
     }
 

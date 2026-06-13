@@ -58,6 +58,7 @@ const mockGetSessionMiddleware = vi.hoisted(() => vi.fn(() => vi.fn()));
 const mockAttachContainerLogStreamWebSocketServer = vi.hoisted(() => vi.fn());
 const mockAttachSystemLogStreamWebSocketServer = vi.hoisted(() => vi.fn());
 const mockAttachLookoutWsServer = vi.hoisted(() => vi.fn());
+const mockGetExperimentalLookoutEnabled = vi.hoisted(() => vi.fn(() => false));
 
 vi.mock('node:fs', () => ({
   default: mockFs,
@@ -141,6 +142,7 @@ vi.mock('./lookout-ws', () => ({
 vi.mock('../configuration', () => ({
   getServerConfiguration: mockGetServerConfiguration,
   ddEnvVars: mockDdEnvVars,
+  getExperimentalLookoutEnabled: mockGetExperimentalLookoutEnabled,
 }));
 
 vi.mock('../store/settings', () => ({
@@ -165,6 +167,7 @@ function mockActualApiRouterStatsLifecycle() {
   vi.doMock('../configuration/index.js', () => ({
     getServerConfiguration: mockGetServerConfiguration,
     ddEnvVars: mockDdEnvVars,
+    getExperimentalLookoutEnabled: mockGetExperimentalLookoutEnabled,
   }));
   vi.doMock('../stats/aggregator.js', () => ({
     createContainerStatsAggregator: mockCreateContainerStatsAggregator,
@@ -261,6 +264,7 @@ describe('API Index', () => {
     mockAttachContainerLogStreamWebSocketServer.mockClear();
     mockAttachSystemLogStreamWebSocketServer.mockClear();
     mockAttachLookoutWsServer.mockClear();
+    mockGetExperimentalLookoutEnabled.mockReturnValue(false);
     Object.keys(mockDdEnvVars).forEach((key) => delete mockDdEnvVars[key]);
   });
 
@@ -290,6 +294,7 @@ describe('API Index', () => {
       cors: {},
       tls: {},
     });
+    mockGetExperimentalLookoutEnabled.mockReturnValue(true);
 
     vi.resetModules();
     const indexRouter = await import('./index.js');
@@ -1284,5 +1289,44 @@ describe('API Index', () => {
 
     expect(mockCreateContainerStatsAggregator).not.toHaveBeenCalled();
     expect(mockStatsAggregator.start).not.toHaveBeenCalled();
+  });
+
+  test('should attach lookout WS server when DD_EXPERIMENTAL_LOOKOUT is enabled', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    mockGetExperimentalLookoutEnabled.mockReturnValue(true);
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockAttachLookoutWsServer).toHaveBeenCalledWith({
+      server: mockHttpServer,
+      serverConfiguration: expect.objectContaining({ enabled: true }),
+      isRateLimited: expect.any(Function),
+    });
+    expect(mockLog.info).toHaveBeenCalledWith(
+      'lookout/1.0 edge endpoint enabled (experimental, DD_EXPERIMENTAL_LOOKOUT=true)',
+    );
+  });
+
+  test('should NOT attach lookout WS server when DD_EXPERIMENTAL_LOOKOUT is disabled', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    mockGetExperimentalLookoutEnabled.mockReturnValue(false);
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockAttachLookoutWsServer).not.toHaveBeenCalled();
   });
 });

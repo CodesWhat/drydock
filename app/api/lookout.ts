@@ -8,6 +8,10 @@
 import express, { type Request, type Response } from 'express';
 import * as agentKeys from '../store/agent-keys.js';
 import { sendErrorResponse } from './error-response.js';
+import { disconnectByKeyId } from './lookout-ws.js';
+
+// Key IDs are hex(SHA-256(raw32Bytes)[:8]) → exactly 16 lowercase hex chars.
+const KEY_ID_PATTERN = /^[0-9a-f]{16}$/;
 
 const router = express.Router();
 
@@ -84,11 +88,16 @@ router.post('/keys', (req: Request, res: Response) => {
  */
 router.delete('/keys/:keyId', (req: Request, res: Response) => {
   const { keyId } = req.params as { keyId: string };
+  if (!KEY_ID_PATTERN.test(keyId)) {
+    sendErrorResponse(res, 400, 'Invalid keyId format');
+    return;
+  }
   const revoked = agentKeys.revokeKey(keyId);
   if (!revoked) {
     sendErrorResponse(res, 404, `Key ${keyId} not found`);
     return;
   }
+  disconnectByKeyId(keyId);
   res.status(204).send();
 });
 
