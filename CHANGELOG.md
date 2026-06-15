@@ -16,6 +16,8 @@ scheme restriction) live in `UPGRADE-NOTES.md` and are auto-appended to every
 1.4.6+ / 1.5.x release's notes by `scripts/append-upgrade-notes.mjs` (wired into
 `release-cut.yml`). Update that file — not this comment — when the notes change. -->
 
+## [1.5.0-rc.36] — 2026-06-15
+
 ### Added
 
 - **Experimental Portwing edge-agent mode — agents behind NAT or firewalls can now dial OUT to drydock over a persistent `wss://` WebSocket instead of waiting for an inbound controller connection ([PR #429](https://github.com/CodesWhat/drydock/pull/429), M5).** The feature is **experimental** and opt-in: set `DD_EXPERIMENTAL_PORTWING=true` to enable it. When disabled, the endpoint is not mounted and the feature has zero runtime footprint. Once enabled, agents connect to `WS /api/v1/portwing/ws` using the `portwing/1.0` subprotocol. Authentication is Ed25519 public-key challenge-response with timestamp + nonce replay protection (±60 s clock-skew window, 16 MB maximum frame size). Operator key management is exposed through a REST registry at `/api/v1/portwing/keys` (list, register, revoke). Because the feature is experimental the protocol and API surface may change in a future release without a deprecation notice.
