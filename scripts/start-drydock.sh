@@ -143,7 +143,9 @@ done
 # name, registry URL, and tag fields are populated asynchronously after
 # discovery and the E2E assertions depend on them.
 AUTH_HEADER="Basic $(echo -n 'john:doe' | base64)"
-DEFAULT_EXPECTED=10
+# 11 fixtures total in setup-test-containers.sh: ecr, ghcr, gitlab, 2x homeassistant,
+# 2x nginx, traefik, lscr, trueforge, quay. Adjusted below for credential-gated ones.
+DEFAULT_EXPECTED=11
 # ghcr_radarr and lscr_radarr only run when GITHUB_USERNAME is set
 if [ -z "${GITHUB_USERNAME:-}" ]; then
 	DEFAULT_EXPECTED=$((DEFAULT_EXPECTED - 2))
@@ -153,7 +155,10 @@ if [ -z "${GITLAB_TOKEN:-}" ]; then
 	DEFAULT_EXPECTED=$((DEFAULT_EXPECTED - 1))
 fi
 EXPECTED_CONTAINERS=${DD_EXPECTED_CONTAINERS:-$DEFAULT_EXPECTED}
-READY_TOLERANCE=${DD_READY_TOLERANCE:-1}
+# Strict by default: fixtures are kept alive deterministically (keep-alive entrypoints
+# in setup-test-containers.sh), so every expected container must resolve image data
+# before the suite runs. This matches the Cucumber api-container.feature ">= 7" gate.
+READY_TOLERANCE=${DD_READY_TOLERANCE:-0}
 EXPECTED_CONTAINERS=$((EXPECTED_CONTAINERS - READY_TOLERANCE))
 echo "Waiting for drydock to discover ${EXPECTED_CONTAINERS}+ containers with image data (max 150s)..."
 for i in $(seq 1 75); do

@@ -47,14 +47,20 @@ async function openAnyContainerDetail(page: Page): Promise<string> {
   const searchInput = page.getByPlaceholder('Search name or image...');
   if (await searchInput.isVisible().catch(() => false)) {
     await searchInput.clear();
-    await page.waitForTimeout(300);
+    await expect(searchInput).toHaveValue('');
   }
   await expect(page.getByRole('button', { name: 'Table view' })).toBeVisible({ timeout: 30_000 });
   const detailPanel = page.locator('[data-test="container-side-detail"]');
 
+  // Ensure the table has rendered its rows before the count()-based lookups below;
+  // locator.count() does not auto-wait, so a still-filtering table would yield 0.
+  await expect(page.locator('tbody tr').first()).toBeVisible({ timeout: 15_000 });
+
   for (const containerName of KNOWN_CONTAINER_NAMES) {
+    // Plain substring match: a \b anchor after an escaped ")" (e.g. "Nginx (Hooked)")
+    // never matches, silently skipping the intended row.
     const locator = page.getByRole('row', {
-      name: new RegExp(`\\b${escapeRegExp(containerName)}\\b`, 'i'),
+      name: new RegExp(escapeRegExp(containerName), 'i'),
     });
     if ((await locator.count()) > 0) {
       await locator.first().click();
