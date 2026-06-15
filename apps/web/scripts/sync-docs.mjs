@@ -32,10 +32,30 @@ description: "All notable changes to this project will be documented in this fil
 // them ("use {/* */}"), which fails the fumadocs/Turbopack build. They are not
 // published-docs content, so drop them, then collapse the blank-line gap left
 // behind so the generated MDX stays tidy.
-const body = changelogMd
-  .replace(/^# Changelog\n/, "")
-  .replace(/<!--[\s\S]*?-->/g, "")
-  .replace(/\n{3,}/g, "\n\n");
+//
+// An index scan is used instead of a `/<!--[\s\S]*?-->/g` replace on purpose: a
+// single-pass regex replace can leave a residual "<!--" when comment spans abut,
+// which CodeQL flags as incomplete sanitization (js/incomplete-multi-character-
+// sanitization). This walks each complete span out of the string and leaves any
+// unterminated trailing "<!--" as-is.
+function stripHtmlComments(text) {
+  let result = "";
+  let cursor = 0;
+  for (let open = text.indexOf("<!--"); open !== -1; open = text.indexOf("<!--", cursor)) {
+    const close = text.indexOf("-->", open + 4);
+    if (close === -1) {
+      break;
+    }
+    result += text.slice(cursor, open);
+    cursor = close + 3;
+  }
+  return result + text.slice(cursor);
+}
+
+const body = stripHtmlComments(changelogMd.replace(/^# Changelog\n/, "")).replace(
+  /\n{3,}/g,
+  "\n\n",
+);
 
 // Write changelog into the current (v1.5) source dir so it gets copied
 const changelogDir = join(repoRoot, "content", "docs", "current", "changelog");
