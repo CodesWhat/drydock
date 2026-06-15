@@ -550,6 +550,129 @@ describe('docker tag candidates module', () => {
     expect(result.tags).toEqual(['v2.0.0', 'v1.2.0', 'v1.1.3', 'v1.0.5', 'v1.0.2', 'v1.0.1']);
   });
 
+  describe('specific-tag pin gate', () => {
+    test('specific v1.13.3, no labels → digest-only, no semver climb', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: 'v1.13.3',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(
+        container,
+        ['v1.13.3', 'v1.13.4', 'v1.14.0', 'v1.46.1', 'v2.0.0'],
+        log,
+      );
+
+      expect(result.tags).toEqual([]);
+      expect(result.noUpdateReason).toContain('Pinned tag');
+      expect(log.debug).toHaveBeenCalledWith(expect.stringContaining('Pinned tag'));
+    });
+
+    test('specific v1.13.3 + dd.tag.include → climbs within filter, not beyond', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: 'v1.13.3',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        includeTags: '^v1\\.13\\.',
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['v1.13.3', 'v1.13.4', 'v1.14.0', 'v1.46.1'], log);
+
+      expect(result.tags).toContain('v1.13.4');
+      expect(result.tags).not.toContain('v1.14.0');
+      expect(result.tags).not.toContain('v1.46.1');
+    });
+
+    test('specific v1.13.3 + dd.tag.family=loose → semver climb allowed', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: 'v1.13.3',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'loose',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['v1.13.3', 'v1.13.4', 'v1.14.0', 'v1.46.1'], log);
+
+      expect(result.tags).toContain('v1.46.1');
+    });
+
+    test('floating latest with no labels → unchanged (floating gate fires, not specific gate)', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: 'latest',
+            semver: true,
+            tagPrecision: 'floating',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['latest', '1.0.0', '2.0.0'], log);
+
+      expect(result.tags).toEqual([]);
+      expect(result.noUpdateReason).toContain('Floating tag alias');
+    });
+
+    test('specific CalVer 2026.3.0, no labels → pinned, no semver climb', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: '2026.3.0',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['2026.3.0', '2026.4.0', '2027.1.0'], log);
+
+      expect(result.tags).toEqual([]);
+      expect(result.noUpdateReason).toContain('Pinned tag');
+    });
+
+    test('specific pin with digest.watch=true → noUpdateReason is undefined', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: 'v1.13.3',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+          digest: { watch: true },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['v1.13.3', 'v1.13.4', 'v1.46.1'], log);
+
+      expect(result.tags).toEqual([]);
+      expect(result.noUpdateReason).toBeUndefined();
+    });
+  });
+
   test('processes large tag lists within lightweight runtime budget', () => {
     const container = createContainer({
       image: {
