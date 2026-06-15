@@ -210,6 +210,11 @@ services:
       - dd.display.name=Redis Cache
       - dd.display.icon=si:redis
       - dd.group=web-stack
+      # Opt into 7.x.x-alpine family climbing. This is the container the Playwright
+      # 'actions tab' test actually opens (openAnyContainerDetail skips Nginx (Hooked)
+      # because its \b…\) regex can't match a name ending in a paren), so it must have
+      # an available update post-#321 gate or the Update Now control never renders.
+      - dd.tag.include=^7\.\d+\.\d+-alpine$$
 
   # Traefik with auto-rollback (tests rollback UI)
   # Icon uses dash separator (standard format — baseline comparison)
