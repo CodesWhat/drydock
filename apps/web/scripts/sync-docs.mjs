@@ -27,7 +27,15 @@ title: "Changelog"
 description: "All notable changes to this project will be documented in this file."
 ---`;
 
-const body = changelogMd.replace(/^# Changelog\n/, "");
+// Strip HTML comments (<!-- ... -->) before emitting MDX. They are valid in the
+// GitHub-rendered CHANGELOG (used for maintainer-only notes) but MDX v3 rejects
+// them ("use {/* */}"), which fails the fumadocs/Turbopack build. They are not
+// published-docs content, so drop them, then collapse the blank-line gap left
+// behind so the generated MDX stays tidy.
+const body = changelogMd
+  .replace(/^# Changelog\n/, "")
+  .replace(/<!--[\s\S]*?-->/g, "")
+  .replace(/\n{3,}/g, "\n\n");
 
 // Write changelog into the current (v1.5) source dir so it gets copied
 const changelogDir = join(repoRoot, "content", "docs", "current", "changelog");
