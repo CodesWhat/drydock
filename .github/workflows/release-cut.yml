@@ -90,11 +90,11 @@ jobs:
           github-token: ${{ github.token }}
           workflow-file: ${{ env.CI_VERIFY_WORKFLOW_FILE }}
           target-sha: ${{ steps.target.outputs.sha }}
-          # 60-min budget at 5-min cadence. CI Verify runs 20-30m typically;
+          # 90-min budget at 5-min cadence. CI Verify runs 20-30m typically;
           # pathological CodeQL/mutation overlap can push to ~60m. Polling
           # more often than every 5m is wasteful because CI jobs only change
           # state on completion, not mid-flight.
-          max-attempts: '12'
+          max-attempts: '18'
           sleep-seconds: '300'
 
       - name: Wait for successful E2E Playwright on target SHA
@@ -105,9 +105,9 @@ jobs:
           target-sha: ${{ steps.target.outputs.sha }}
           # Playwright moved to its own workflow so its failures don't
           # poison ci-verify's Check Suite for Scorecard. Releases still
-          # gate on it — runs ~10-15m typically, share the same 60-min
+          # gate on it — runs ~10-15m typically, share the same 90-min
           # budget shape.
-          max-attempts: '12'
+          max-attempts: '18'
           sleep-seconds: '300'
 
       - name: Resolve release tag from input

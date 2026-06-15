@@ -74,11 +74,11 @@ export async function acquireToken(config: BucketConfig): Promise<void> {
 
 /** Conservative per-host rate limits. */
 const HOST_CONFIGS: Array<{ pattern: RegExp; ratePerSec: number; burst: number }> = [
-  { pattern: /^(ghcr\.io|pkg-containers\.githubusercontent\.com)$/, ratePerSec: 2, burst: 5 },
+  { pattern: /^(ghcr\.io|pkg-containers\.githubusercontent\.com)$/, ratePerSec: 2, burst: 10 },
   {
     pattern: /^(registry-1\.docker\.io|auth\.docker\.io|production\.cloudflare\.docker\.com)$/,
     ratePerSec: 2,
-    burst: 5,
+    burst: 10,
   },
   { pattern: /^api\.github\.com$/, ratePerSec: 1, burst: 3 },
 ];

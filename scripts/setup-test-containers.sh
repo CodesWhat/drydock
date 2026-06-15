@@ -70,8 +70,13 @@ run_test_container hub_homeassistant_202161 \
 	--label "$LABEL_WATCH" \
 	--label 'dd.tag.include=^\d+\.\d+.\d+$' \
 	--label 'dd.link.template=https://github.com/home-assistant/core/releases/tag/'"\${major}.\${minor}.\${patch}" \
-	homeassistant/home-assistant:2021.6.1
-run_test_container hub_homeassistant_latest --label "$LABEL_WATCH" --label 'dd.watch.digest=true' --label 'dd.tag.include=^latest$' homeassistant/home-assistant
+	--entrypoint tail \
+	homeassistant/home-assistant:2021.6.1 \
+	-f /dev/null
+# Keep-alive entrypoint: drydock only reads the image reference for metadata; the
+# real home-assistant app crashes in CI (needs a valid /config) and drydock lists
+# only running containers, so an exited fixture vanishes from /api/containers.
+run_test_container hub_homeassistant_latest --label "$LABEL_WATCH" --label 'dd.watch.digest=true' --label 'dd.tag.include=^latest$' --entrypoint tail homeassistant/home-assistant -f /dev/null
 run_test_container hub_nginx_120 --label "$LABEL_WATCH" --label 'dd.tag.include=^\d+\.\d+-alpine$' nginx:1.20-alpine
 run_test_container hub_nginx_latest --label "$LABEL_WATCH" --label 'dd.watch.digest=true' --label 'dd.tag.include=^latest$' nginx
 run_test_container hub_traefik_245 --label "$LABEL_WATCH" --label 'dd.tag.include=^\d+\.\d+.\d+$' traefik:2.4.5
@@ -84,7 +89,9 @@ else
 fi
 
 # TrueForge
-run_test_container trueforge_radarr --label "$LABEL_WATCH" --label 'dd.tag.include=^v\d+\.\d+\.\d+$' --memory 512m --tmpfs /config oci.trueforge.org/containerforge/radarr:6.0.4
+# Keep-alive entrypoint (see hub_homeassistant_latest): Radarr's s6-overlay exits
+# in CI without writable DB dirs; tail -f keeps the container running for watching.
+run_test_container trueforge_radarr --label "$LABEL_WATCH" --label 'dd.tag.include=^v\d+\.\d+\.\d+$' --memory 512m --tmpfs /config --entrypoint tail oci.trueforge.org/containerforge/radarr:6.0.4 -f /dev/null
 
 # QUAY
 run_test_container quay_prometheus --label "$LABEL_WATCH" --label 'dd.tag.include=^v\d+\.\d+\.\d+$' --user root --tmpfs /prometheus:rw,mode=777 quay.io/prometheus/prometheus:v2.52.0

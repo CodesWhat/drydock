@@ -134,3 +134,11 @@ set.ignored = true
 [[triage]]
 match.rules = ["osv-scanner:CVE-2025-59472"]
 set.ignored = true
+
+# js-yaml@3.14.2 via artillery (e2e load-testing only). The only fix is js-yaml 4.2.0,
+# which removes safeLoad() that artillery@2.0.32 calls (artillery/lib/util.js) — a
+# breaking change. The DoS (quadratic merge-key parsing) is unreachable: artillery
+# parses only trusted, in-repo load-test configs. Test-only dep; not shipped.
+[[triage]]
+match.rules = ["osv-scanner:CVE-2026-53550"]
+set.ignored = true

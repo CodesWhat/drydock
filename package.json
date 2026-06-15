@@ -14,5 +14,8 @@
     "lefthook": "2.1.6",
     "vitest": "4.1.7",
     "yaml": "2.9.0"
+  },
+  "overrides": {
+    "vite": "8.0.16"
   }
 }

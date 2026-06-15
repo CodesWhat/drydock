@@ -50,6 +50,7 @@ export default mergeConfig(
       globals: true,
       environment: 'jsdom',
       fileParallelism: false,
+      retry: 1,
       setupFiles: ['./tests/setup.ts'],
       include: ['tests/**/*.spec.ts'],
       css: true,

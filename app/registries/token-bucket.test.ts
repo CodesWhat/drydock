@@ -7,20 +7,20 @@ import { acquireToken, getBucketForUrl } from './token-bucket.js';
 
 describe('getBucketForUrl', () => {
   test.each([
-    ['https://ghcr.io/v2/acme/img/tags/list', 'ghcr.io', 2, 5],
+    ['https://ghcr.io/v2/acme/img/tags/list', 'ghcr.io', 2, 10],
     [
       'https://pkg-containers.githubusercontent.com/v2/acme/img/tags/list',
       'pkg-containers.githubusercontent.com',
       2,
-      5,
+      10,
     ],
-    ['https://registry-1.docker.io/v2/library/nginx/tags/list', 'registry-1.docker.io', 2, 5],
-    ['https://auth.docker.io/token', 'auth.docker.io', 2, 5],
+    ['https://registry-1.docker.io/v2/library/nginx/tags/list', 'registry-1.docker.io', 2, 10],
+    ['https://auth.docker.io/token', 'auth.docker.io', 2, 10],
     [
       'https://production.cloudflare.docker.com/v2/library/nginx/tags/list',
       'production.cloudflare.docker.com',
       2,
-      5,
+      10,
     ],
     ['https://api.github.com/repos/acme/svc/releases/tags/v1', 'api.github.com', 1, 3],
     ['https://registry.example.com/v2/img/tags/list', 'registry.example.com', 5, 10],
