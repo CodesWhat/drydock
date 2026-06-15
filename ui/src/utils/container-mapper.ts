@@ -700,6 +700,7 @@ const VALID_UPDATE_BLOCKER_REASONS: ReadonlySet<UpdateBlockerReason> = new Set([
   'trigger-not-included',
   'agent-mismatch',
   'no-update-trigger-configured',
+  'maintenance-window-closed',
 ]);
 
 function isUpdateBlockerReason(value: unknown): value is UpdateBlockerReason {

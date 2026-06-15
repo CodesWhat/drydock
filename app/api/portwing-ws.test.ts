@@ -1,5 +1,5 @@
 /**
- * Tests for the lookout/1.0 WebSocket gateway (lookout-ws.ts).
+ * Tests for the portwing/1.0 WebSocket gateway (portwing-ws.ts).
  * Real Ed25519 keypairs generated in-test via Node crypto.
  */
 import { createHash, sign as cryptoSign, generateKeyPairSync } from 'node:crypto';
@@ -7,16 +7,16 @@ import type { IncomingMessage } from 'node:http';
 import type { Socket } from 'node:net';
 import type { AgentKeyRecord } from '../store/agent-keys.js';
 import {
-  attachLookoutWsServer,
+  attachPortwingWsServer,
   clearLiveSessionsForTesting,
   clearNonceCacheForTesting,
-  createLookoutWsGateway,
+  createPortwingWsGateway,
   disconnectByKeyId,
   fillNonceCacheForTesting,
   fillNoncesPerKeyForTesting,
   injectDrydockVersionForTesting,
-  LOOKOUT_WS_ROUTE_PATTERN,
-} from './lookout-ws.js';
+  PORTWING_WS_ROUTE_PATTERN,
+} from './portwing-ws.js';
 
 vi.mock('../configuration/index.js', () => ({
   getServerConfiguration: vi.fn(() => ({})),
@@ -34,7 +34,7 @@ vi.mock('../log/index.js', () => ({
 }));
 
 // Mock AgentClient as a proper constructor class so that `new AgentClient(...)`
-// works in lookout-ws.ts. Arrow-factory implementations are not usable as
+// works in portwing-ws.ts. Arrow-factory implementations are not usable as
 // constructors in newer Vitest versions — use vi.hoisted() exactly like
 // EdgeAgentAdapter.test.ts does.
 const { MockAgentClient, MockEdgeAgentAdapter } = vi.hoisted(() => {
@@ -111,11 +111,12 @@ function signHello(
   privateKey: import('node:crypto').KeyObject,
   timestamp: number,
   nonce: string,
+  canonicalPath = '/api/portwing/ws',
 ): string {
   const canonical = Buffer.from(
     [
       'GET',
-      '/api/lookout/ws',
+      canonicalPath,
       'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
       String(timestamp),
       nonce,
@@ -209,9 +210,9 @@ function createGateway(
     ),
   };
 
-  const gateway = createLookoutWsGateway({
+  const gateway = createPortwingWsGateway({
     webSocketServer: mockWsServer as unknown as Parameters<
-      typeof createLookoutWsGateway
+      typeof createPortwingWsGateway
     >[0]['webSocketServer'],
     isRateLimited: options.isRateLimited ?? (() => false),
     serverConfiguration: {},
@@ -236,7 +237,7 @@ function buildHello(
     type: 'hello',
     data: {
       version: '0.2.0',
-      protocol: 'lookout/1.0',
+      protocol: 'portwing/1.0',
       agentId: 'test-agent-123',
       agentName: 'test-agent',
       dockerVersion: '27.0.0',
@@ -254,21 +255,21 @@ function buildHello(
 
 // ---- Tests ----
 
-describe('LOOKOUT_WS_ROUTE_PATTERN', () => {
-  test('matches /api/lookout/ws', () => {
-    expect(LOOKOUT_WS_ROUTE_PATTERN.test('/api/lookout/ws')).toBe(true);
+describe('PORTWING_WS_ROUTE_PATTERN', () => {
+  test('matches canonical /api/portwing/ws', () => {
+    expect(PORTWING_WS_ROUTE_PATTERN.test('/api/portwing/ws')).toBe(true);
   });
 
-  test('matches /api/v1/lookout/ws', () => {
-    expect(LOOKOUT_WS_ROUTE_PATTERN.test('/api/v1/lookout/ws')).toBe(true);
+  test('matches canonical /api/v1/portwing/ws', () => {
+    expect(PORTWING_WS_ROUTE_PATTERN.test('/api/v1/portwing/ws')).toBe(true);
   });
 
-  test('does not match /api/lookout/ws/extra', () => {
-    expect(LOOKOUT_WS_ROUTE_PATTERN.test('/api/lookout/ws/extra')).toBe(false);
+  test('does not match /api/portwing/ws/extra', () => {
+    expect(PORTWING_WS_ROUTE_PATTERN.test('/api/portwing/ws/extra')).toBe(false);
   });
 
   test('does not match /api/containers', () => {
-    expect(LOOKOUT_WS_ROUTE_PATTERN.test('/api/containers')).toBe(false);
+    expect(PORTWING_WS_ROUTE_PATTERN.test('/api/containers')).toBe(false);
   });
 });
 
@@ -293,7 +294,7 @@ describe('handleUpgrade — pre-upgrade checks', () => {
   test('returns 403 when Origin header is present and mismatched', () => {
     const { gateway } = createGateway(null, {});
     const socket = createMockSocket();
-    const request = createRequest('/api/lookout/ws', {
+    const request = createRequest('/api/portwing/ws', {
       origin: 'http://evil.example.com',
       host: 'mydrydock.example.com',
     });
@@ -307,7 +308,7 @@ describe('handleUpgrade — pre-upgrade checks', () => {
   test('returns 429 when rate limited', () => {
     const { gateway } = createGateway(null, { isRateLimited: () => true });
     const socket = createMockSocket();
-    const request = createRequest('/api/lookout/ws');
+    const request = createRequest('/api/portwing/ws');
 
     gateway.handleUpgrade(request, socket as unknown as Socket, Buffer.alloc(0));
 
@@ -329,7 +330,7 @@ describe('handleUpgrade — hello timeout', () => {
   test('closes with 1008 hello timeout when no message arrives within 30s', async () => {
     const { gateway, getUpgradedWs } = createGateway();
     const socket = createMockSocket();
-    const request = createRequest('/api/lookout/ws');
+    const request = createRequest('/api/portwing/ws');
 
     gateway.handleUpgrade(request, socket as unknown as Socket, Buffer.alloc(0));
     const ws = getUpgradedWs()!;
@@ -353,7 +354,7 @@ describe('hello verification — rejection paths', () => {
   ) {
     const { gateway, getUpgradedWs } = createGateway(keyRecord, opts);
     const socket = createMockSocket();
-    const request = createRequest('/api/lookout/ws');
+    const request = createRequest('/api/portwing/ws');
 
     gateway.handleUpgrade(request, socket as unknown as Socket, Buffer.alloc(0));
     const ws = getUpgradedWs()!;
@@ -366,7 +367,7 @@ describe('hello verification — rejection paths', () => {
     const { gateway, getUpgradedWs } = createGateway();
     const socket = createMockSocket();
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       socket as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -390,7 +391,7 @@ describe('hello verification — rejection paths', () => {
     expect(ws.close).toHaveBeenCalledWith(1008, 'expected-hello');
   });
 
-  test('protocol-mismatch when protocol is lookout/1', async () => {
+  test('protocol-mismatch when protocol is portwing/1', async () => {
     const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
     const ts = Math.floor(Date.now() / 1000);
     const nonce = makeNonce();
@@ -406,7 +407,7 @@ describe('hello verification — rejection paths', () => {
 
     const { ws } = doHandshake(
       record,
-      buildHello(keyId, ts, nonce, sig, { protocol: 'lookout/1' }),
+      buildHello(keyId, ts, nonce, sig, { protocol: 'portwing/1' }),
     );
     await new Promise((r) => setTimeout(r, 0));
 
@@ -415,7 +416,7 @@ describe('hello verification — rejection paths', () => {
     expect(ws.close).toHaveBeenCalledWith(1008, 'protocol-mismatch');
   });
 
-  test('protocol-mismatch when protocol is lookout/2.0', async () => {
+  test('protocol-mismatch when protocol is portwing/2.0', async () => {
     const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
     const ts = Math.floor(Date.now() / 1000);
     const nonce = makeNonce();
@@ -431,7 +432,7 @@ describe('hello verification — rejection paths', () => {
 
     const { ws } = doHandshake(
       record,
-      buildHello(keyId, ts, nonce, sig, { protocol: 'lookout/2.0' }),
+      buildHello(keyId, ts, nonce, sig, { protocol: 'portwing/2.0' }),
     );
     await new Promise((r) => setTimeout(r, 0));
 
@@ -444,7 +445,7 @@ describe('hello verification — rejection paths', () => {
       type: 'hello',
       data: {
         version: '0.2.0',
-        protocol: 'lookout/1.0',
+        protocol: 'portwing/1.0',
         agentId: 'test',
         agentName: 'test',
         dockerVersion: 'unknown',
@@ -464,7 +465,7 @@ describe('hello verification — rejection paths', () => {
       type: 'hello',
       data: {
         version: '0.2.0',
-        protocol: 'lookout/1.0',
+        protocol: 'portwing/1.0',
         agentId: 'test',
         agentName: 'test',
         dockerVersion: 'unknown',
@@ -584,7 +585,7 @@ describe('hello verification — rejection paths', () => {
     // First connection: valid hello — should succeed (welcome sent) and seed the nonce.
     const { gateway: gw1, getUpgradedWs: getWs1 } = createGateway(record);
     gw1.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -600,7 +601,7 @@ describe('hello verification — rejection paths', () => {
     // Second connection: same nonce — must be rejected with exactly 'replay'.
     const { gateway: gw2, getUpgradedWs: getWs2 } = createGateway(record);
     gw2.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -795,7 +796,7 @@ describe('hello verification — rejection paths', () => {
     // return 'replay'; with the fix it must proceed to the welcome.
     const { gateway: gw2, getUpgradedWs: getWs2 } = createGateway(record);
     gw2.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -831,7 +832,7 @@ describe('hello verification — happy path', () => {
     const { gateway, getUpgradedWs } = createGateway(record);
     const socket = createMockSocket();
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       socket as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -855,10 +856,10 @@ describe('hello verification — happy path', () => {
     expect(welcome.type).toBe('welcome');
     expect(welcome.data.pollInterval).toBeGreaterThan(0);
     expect(welcome.data.config.serverCompatLevel).toBe('1.4');
-    expect(welcome.data.config.supportedProtocols).toBe('lookout/1.0');
+    expect(welcome.data.config.supportedProtocols).toBe('portwing/1.0');
   });
 
-  test('protocol lookout/1.0 is accepted', async () => {
+  test('protocol portwing/1.0 is accepted', async () => {
     const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
     const ts = Math.floor(Date.now() / 1000);
     const nonce = 'e1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
@@ -875,7 +876,7 @@ describe('hello verification — happy path', () => {
     const { gateway, getUpgradedWs } = createGateway(record);
     const socket = createMockSocket();
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       socket as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -887,6 +888,39 @@ describe('hello verification — happy path', () => {
     const welcome = JSON.parse(ws.sentMessages[0]) as { type: string };
     expect(welcome.type).toBe('welcome');
   });
+
+  test('protocol portwing/1.0 is accepted with Portwing canonical signature path', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'e2b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+    const sig = signHello(privateKey, ts, nonce, '/api/portwing/ws');
+
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    const socket = createMockSocket();
+    gateway.handleUpgrade(
+      createRequest('/api/v1/portwing/ws'),
+      socket as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig, { protocol: 'portwing/1.0' }));
+    await new Promise((r) => setTimeout(r, 10));
+
+    const welcome = JSON.parse(ws.sentMessages[0]) as {
+      type: string;
+      data: { config: { supportedProtocols: string } };
+    };
+    expect(welcome.type).toBe('welcome');
+    expect(welcome.data.config.supportedProtocols).toBe('portwing/1.0');
+  });
 });
 
 describe('version handshake', () => {
@@ -895,7 +929,7 @@ describe('version handshake', () => {
     clearNonceCacheForTesting();
   });
 
-  test('welcome config includes serverCompatLevel=1.4 and supportedProtocols=lookout/1.0', async () => {
+  test('welcome config includes serverCompatLevel=1.4 and supportedProtocols=portwing/1.0', async () => {
     const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
     const ts = Math.floor(Date.now() / 1000);
     const nonce = 'f1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
@@ -911,7 +945,7 @@ describe('version handshake', () => {
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -923,7 +957,7 @@ describe('version handshake', () => {
       data: { config: { serverCompatLevel: string; supportedProtocols: string } };
     };
     expect(welcome.data.config.serverCompatLevel).toBe('1.4');
-    expect(welcome.data.config.supportedProtocols).toBe('lookout/1.0');
+    expect(welcome.data.config.supportedProtocols).toBe('portwing/1.0');
   });
 });
 
@@ -949,7 +983,7 @@ describe('duplicate-agent guard', () => {
     const sig = signHello(privateKey, ts, nonce);
     const socket = createMockSocket();
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       socket as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -973,7 +1007,7 @@ describe('duplicate-agent guard', () => {
     // Make getAgent return a truthy value for any agent name (simulate existing connection)
     const { getAgent } = await import('../agent/manager.js');
     vi.mocked(getAgent).mockReturnValue({
-      name: 'lookout-edge-concurrent-agent',
+      name: 'portwing-edge-concurrent-agent',
     } as unknown as Parameters<typeof getAgent>[0] extends string
       ? ReturnType<typeof getAgent>
       : never);
@@ -983,7 +1017,7 @@ describe('duplicate-agent guard', () => {
     const sig = signHello(privateKey, ts, nonce);
     const socket = createMockSocket();
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       socket as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -1022,7 +1056,7 @@ describe('injectDrydockVersionForTesting', () => {
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -1053,7 +1087,7 @@ describe('startNoncePruning — setInterval callback', () => {
   test('prunes expired nonces and resets per-key counters after 60s', () => {
     vi.useFakeTimers();
 
-    // createGateway calls startNoncePruning() inside createLookoutWsGateway()
+    // createGateway calls startNoncePruning() inside createPortwingWsGateway()
     createGateway();
 
     // Seed an old nonce (timestamp 0 = epoch; will be expired after 60s+)
@@ -1071,7 +1105,7 @@ describe('startNoncePruning — setInterval callback', () => {
   });
 });
 
-describe('createLookoutWsGateway — default serverConfiguration branch', () => {
+describe('createPortwingWsGateway — default serverConfiguration branch', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     clearNonceCacheForTesting();
@@ -1083,9 +1117,9 @@ describe('createLookoutWsGateway — default serverConfiguration branch', () => 
     const mockWsServer = {
       handleUpgrade: vi.fn(),
     };
-    const gateway = createLookoutWsGateway({
+    const gateway = createPortwingWsGateway({
       webSocketServer: mockWsServer as unknown as Parameters<
-        typeof createLookoutWsGateway
+        typeof createPortwingWsGateway
       >[0]['webSocketServer'],
     });
     // Gateway object is returned; the default branch was exercised.
@@ -1111,16 +1145,16 @@ describe('createLookoutWsGateway — default serverConfiguration branch', () => 
       ),
     };
 
-    const gateway = createLookoutWsGateway({
+    const gateway = createPortwingWsGateway({
       webSocketServer: mockWsServer as unknown as Parameters<
-        typeof createLookoutWsGateway
+        typeof createPortwingWsGateway
       >[0]['webSocketServer'],
       serverConfiguration: {},
       // isRateLimited intentionally omitted — default () => false lambda should be invoked
     });
 
     const socket = createMockSocket();
-    const request = createRequest('/api/lookout/ws');
+    const request = createRequest('/api/portwing/ws');
     // handleUpgrade reaches the rate-limit check and calls () => false
     gateway.handleUpgrade(request, socket as unknown as Socket, Buffer.alloc(0));
 
@@ -1150,7 +1184,7 @@ describe('hello verification — helloHandled guard (post-hello messages ignored
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -1180,7 +1214,7 @@ describe('hello verification — missing data field', () => {
   test('parse-error when hello data is null', async () => {
     const { gateway, getUpgradedWs } = createGateway();
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -1216,7 +1250,7 @@ describe('hello verification — drydockCompat version warning', () => {
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -1261,7 +1295,7 @@ describe('hello verification — nonce cache full path', () => {
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -1299,7 +1333,7 @@ describe('hello verification — nonce cache full path', () => {
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -1337,7 +1371,7 @@ describe('hello verification — verifyHelloSignature throws (malformed pubkey)'
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -1376,7 +1410,7 @@ describe('hello verification — nonce admission rate limit', () => {
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -1448,9 +1482,9 @@ describe('hello verification — ws.send throws during welcome', () => {
       ),
     };
 
-    const gateway = createLookoutWsGateway({
+    const gateway = createPortwingWsGateway({
       webSocketServer: mockWsServer as unknown as Parameters<
-        typeof createLookoutWsGateway
+        typeof createPortwingWsGateway
       >[0]['webSocketServer'],
       isRateLimited: () => false,
       serverConfiguration: {},
@@ -1458,7 +1492,7 @@ describe('hello verification — ws.send throws during welcome', () => {
     });
 
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -1471,7 +1505,7 @@ describe('hello verification — ws.send throws during welcome', () => {
   });
 });
 
-describe('attachLookoutWsServer', () => {
+describe('attachPortwingWsServer', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     clearNonceCacheForTesting();
@@ -1480,8 +1514,8 @@ describe('attachLookoutWsServer', () => {
   test('registers upgrade handler on server', () => {
     const onSpy = vi.fn();
     const mockServer = { on: onSpy };
-    const gateway = attachLookoutWsServer({
-      server: mockServer as unknown as Parameters<typeof attachLookoutWsServer>[0]['server'],
+    const gateway = attachPortwingWsServer({
+      server: mockServer as unknown as Parameters<typeof attachPortwingWsServer>[0]['server'],
       serverConfiguration: {},
     });
     expect(onSpy).toHaveBeenCalledWith('upgrade', expect.any(Function));
@@ -1497,15 +1531,15 @@ describe('attachLookoutWsServer', () => {
       },
     };
 
-    attachLookoutWsServer({
-      server: mockServer as unknown as Parameters<typeof attachLookoutWsServer>[0]['server'],
+    attachPortwingWsServer({
+      server: mockServer as unknown as Parameters<typeof attachPortwingWsServer>[0]['server'],
       serverConfiguration: {},
       isRateLimited: () => true,
     });
 
     // Invoke the registered upgrade handler with a request that should be rate-limited
     const socket = createMockSocket();
-    const request = createRequest('/api/lookout/ws');
+    const request = createRequest('/api/portwing/ws');
     listeners.upgrade(request, socket, Buffer.alloc(0));
 
     // Rate limited → 429 written to socket
@@ -1516,8 +1550,8 @@ describe('attachLookoutWsServer', () => {
     // Exercises the `?? getServerConfiguration()` false branch on the nullish coalescing operator
     const onSpy = vi.fn();
     const mockServer = { on: onSpy };
-    const gateway = attachLookoutWsServer({
-      server: mockServer as unknown as Parameters<typeof attachLookoutWsServer>[0]['server'],
+    const gateway = attachPortwingWsServer({
+      server: mockServer as unknown as Parameters<typeof attachPortwingWsServer>[0]['server'],
       // serverConfiguration deliberately omitted → falls back to getServerConfiguration()
     });
     expect(gateway).toBeDefined();
@@ -1525,7 +1559,7 @@ describe('attachLookoutWsServer', () => {
   });
 });
 
-describe('createLookoutWsGateway — default isRateLimited branch', () => {
+describe('createPortwingWsGateway — default isRateLimited branch', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     clearNonceCacheForTesting();
@@ -1541,9 +1575,9 @@ describe('createLookoutWsGateway — default isRateLimited branch', () => {
       ),
     };
     // Omit isRateLimited to exercise the default () => false branch (line 207)
-    const gateway = createLookoutWsGateway({
+    const gateway = createPortwingWsGateway({
       webSocketServer: mockWsServer as unknown as Parameters<
-        typeof createLookoutWsGateway
+        typeof createPortwingWsGateway
       >[0]['webSocketServer'],
       serverConfiguration: {},
     });
@@ -1551,7 +1585,7 @@ describe('createLookoutWsGateway — default isRateLimited branch', () => {
     const socket = createMockSocket();
     // Request matches the route — upgrade is attempted, which invokes isRateLimited
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       socket as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -1572,7 +1606,7 @@ describe('handleUpgrade — URL parse error path', () => {
     const socket = createMockSocket();
 
     // A URL with a null byte causes new URL() to throw
-    const badRequest = createRequest('/api/lookout/ws\x00bad');
+    const badRequest = createRequest('/api/portwing/ws\x00bad');
 
     gateway.handleUpgrade(badRequest, socket as unknown as Socket, Buffer.alloc(0));
 
@@ -1627,7 +1661,7 @@ describe('hello verification — drydockCompat absent branch', () => {
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -1671,7 +1705,7 @@ describe('startNoncePruning — fresh nonce branch in interval callback', () => 
   });
 });
 
-describe('attachLookoutWsServer — default serverConfiguration branch', () => {
+describe('attachPortwingWsServer — default serverConfiguration branch', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     clearNonceCacheForTesting();
@@ -1682,8 +1716,8 @@ describe('attachLookoutWsServer — default serverConfiguration branch', () => {
     const mockServer = { on: onSpy };
 
     // Omit serverConfiguration to exercise the ?? branch (getServerConfiguration() fallback)
-    attachLookoutWsServer({
-      server: mockServer as unknown as Parameters<typeof attachLookoutWsServer>[0]['server'],
+    attachPortwingWsServer({
+      server: mockServer as unknown as Parameters<typeof attachPortwingWsServer>[0]['server'],
     });
 
     expect(onSpy).toHaveBeenCalledWith('upgrade', expect.any(Function));
@@ -1706,7 +1740,7 @@ describe('handleConnection — hello timer cleanup on premature disconnect', () 
     const { gateway, getUpgradedWs } = createGateway();
     const socket = createMockSocket();
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       socket as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -1725,7 +1759,7 @@ describe('handleConnection — hello timer cleanup on premature disconnect', () 
     const { gateway, getUpgradedWs } = createGateway();
     const socket = createMockSocket();
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       socket as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -1766,7 +1800,7 @@ describe('hello verification — NaN/non-finite timestamp rejection', () => {
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -1828,7 +1862,7 @@ describe('hello verification — NaN/non-finite timestamp rejection', () => {
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -1866,7 +1900,7 @@ describe('hello verification — signature length cap', () => {
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -1898,7 +1932,7 @@ describe('hello verification — signature length cap', () => {
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -1942,7 +1976,7 @@ describe('disconnectByKeyId', () => {
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -1985,7 +2019,7 @@ describe('disconnectByKeyId', () => {
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -2013,7 +2047,7 @@ describe('disconnectByKeyId', () => {
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -2044,7 +2078,7 @@ describe('disconnectByKeyId', () => {
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -2074,7 +2108,7 @@ describe('disconnectByKeyId', () => {
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -2109,7 +2143,7 @@ describe('disconnectByKeyId', () => {
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -2144,7 +2178,7 @@ describe('disconnectByKeyId', () => {
     const sig1 = signHello(privateKey, ts1, nonce1);
     const { gateway: gw1, getUpgradedWs: getWs1 } = createGateway(record);
     gw1.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -2158,7 +2192,7 @@ describe('disconnectByKeyId', () => {
     const sig2 = signHello(privateKey, ts2, nonce2);
     const { gateway: gw2, getUpgradedWs: getWs2 } = createGateway(record);
     gw2.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );
@@ -2191,7 +2225,7 @@ describe('disconnectByKeyId', () => {
 
     const { gateway, getUpgradedWs } = createGateway(record);
     gateway.handleUpgrade(
-      createRequest('/api/lookout/ws'),
+      createRequest('/api/portwing/ws'),
       createMockSocket() as unknown as Socket,
       Buffer.alloc(0),
     );

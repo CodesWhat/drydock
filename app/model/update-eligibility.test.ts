@@ -1150,6 +1150,7 @@ describe('computeUpdateEligibility', () => {
         'trigger-not-included',
         'agent-mismatch',
         'no-update-trigger-configured',
+        'maintenance-window-closed',
       ] as const;
       for (const reason of allReasons) {
         expect(BLOCKER_SEVERITY[reason]).toMatch(/^(hard|soft)$/);
@@ -1385,5 +1386,87 @@ describe('computeUpdateEligibility — self-update-unavailable', () => {
       makeContext({ isSelfUpdateAvailable: false }),
     );
     expect(result.blockers.some((b) => b.reason === 'self-update-unavailable')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// maintenance-window-closed blocker
+// ---------------------------------------------------------------------------
+
+describe('computeUpdateEligibility — maintenance-window-closed', () => {
+  test('emits blocker when maintenanceWindowOpen is false (auto-update path)', () => {
+    const trigger = makeTrigger();
+    const container = makeContainerWithTagUpdate();
+    const result = computeUpdateEligibility(
+      container,
+      makeContext({
+        triggers: { 'docker.update': trigger as never },
+        maintenanceWindowOpen: false,
+        now: FIXED_NOW,
+      }),
+    );
+    const blocker = result.blockers.find((b) => b.reason === 'maintenance-window-closed');
+    expect(blocker).toBeDefined();
+    expect(blocker?.actionable).toBe(false);
+    expect(blocker?.message).toContain('maintenance window');
+    expect(result.eligible).toBe(false);
+  });
+
+  test('blocker has severity "soft" — manual updates are not blocked', () => {
+    expect(BLOCKER_SEVERITY['maintenance-window-closed']).toBe('soft');
+    const trigger = makeTrigger();
+    const container = makeContainerWithTagUpdate();
+    const result = computeUpdateEligibility(
+      container,
+      makeContext({
+        triggers: { 'docker.update': trigger as never },
+        maintenanceWindowOpen: false,
+        now: FIXED_NOW,
+      }),
+    );
+    const blocker = result.blockers.find((b) => b.reason === 'maintenance-window-closed');
+    expect(blocker?.severity).toBe('soft');
+  });
+
+  test('no blocker when maintenanceWindowOpen is true', () => {
+    const trigger = makeTrigger();
+    const container = makeContainerWithTagUpdate();
+    const result = computeUpdateEligibility(
+      container,
+      makeContext({
+        triggers: { 'docker.update': trigger as never },
+        maintenanceWindowOpen: true,
+        now: FIXED_NOW,
+      }),
+    );
+    expect(result.blockers.find((b) => b.reason === 'maintenance-window-closed')).toBeUndefined();
+    expect(result.eligible).toBe(true);
+  });
+
+  test('no blocker when maintenanceWindowOpen is undefined (manual update path — fail open)', () => {
+    const trigger = makeTrigger();
+    const container = makeContainerWithTagUpdate();
+    const result = computeUpdateEligibility(
+      container,
+      makeContext({
+        triggers: { 'docker.update': trigger as never },
+        maintenanceWindowOpen: undefined,
+        now: FIXED_NOW,
+      }),
+    );
+    expect(result.blockers.find((b) => b.reason === 'maintenance-window-closed')).toBeUndefined();
+    expect(result.eligible).toBe(true);
+  });
+
+  test('maintenance-window-closed does not appear when no update exists (short-circuit)', () => {
+    // no-update-available short-circuit fires first
+    const container = makeContainer();
+    const result = computeUpdateEligibility(
+      container,
+      makeContext({ maintenanceWindowOpen: false, now: FIXED_NOW }),
+    );
+    expect(result.blockers).toHaveLength(1);
+    expect(result.blockers[0].reason).toBe('no-update-available');
+    expect(result.blockers.find((b) => b.reason === 'maintenance-window-closed')).toBeUndefined();
   });
 });

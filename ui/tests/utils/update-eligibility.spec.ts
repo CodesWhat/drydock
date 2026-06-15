@@ -52,6 +52,7 @@ describe('BLOCKER_SEVERITY', () => {
     expect(BLOCKER_SEVERITY['threshold-not-reached']).toBe('soft');
     expect(BLOCKER_SEVERITY['trigger-excluded']).toBe('soft');
     expect(BLOCKER_SEVERITY['trigger-not-included']).toBe('soft');
+    expect(BLOCKER_SEVERITY['maintenance-window-closed']).toBe('soft');
   });
 });
 

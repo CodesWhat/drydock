@@ -99,7 +99,7 @@ function createMockWs(): WebSocketLike & {
 function createHello(overrides: Partial<HelloMessage> = {}): HelloMessage {
   return {
     version: '0.2.0',
-    protocol: 'lookout/1.0',
+    protocol: 'portwing/1.0',
     agentId: 'test-agent-id-1234',
     agentName: 'test-agent',
     dockerVersion: '27.0.0',
@@ -117,7 +117,7 @@ function createHello(overrides: Partial<HelloMessage> = {}): HelloMessage {
 function createAdapter(hello?: Partial<HelloMessage>) {
   const ws = createMockWs();
   const helloMsg = createHello(hello);
-  const client = new AgentClient(`lookout-edge-${helloMsg.agentId}`, {
+  const client = new AgentClient(`portwing-edge-${helloMsg.agentId}`, {
     host: 'http://edge-agent-placeholder',
     port: 0,
     secret: '',

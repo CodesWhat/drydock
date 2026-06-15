@@ -12,7 +12,7 @@ const log = logger.child({ component: 'api' });
 
 import {
   ddEnvVars,
-  getExperimentalLookoutEnabled,
+  getExperimentalPortwingEnabled,
   getServerConfiguration,
 } from '../configuration/index.js';
 import * as settingsStore from '../store/settings.js';
@@ -23,7 +23,7 @@ import { attachContainerLogStreamWebSocketServer } from './container/log-stream.
 import { sendErrorResponse } from './error-response.js';
 import * as healthRouter from './health.js';
 import { attachSystemLogStreamWebSocketServer } from './log-stream.js';
-import { attachLookoutWsServer } from './lookout-ws.js';
+import { attachPortwingWsServer } from './portwing-ws.js';
 import * as prometheusRouter from './prometheus.js';
 import * as uiRouter from './ui.js';
 import { createFixedWindowRateLimiter } from './ws-upgrade-utils.js';
@@ -304,9 +304,9 @@ export async function init() {
     serverConfiguration: configuration as Record<string, unknown>,
     isRateLimited,
   });
-  if (getExperimentalLookoutEnabled()) {
-    log.info('lookout/1.0 edge endpoint enabled (experimental, DD_EXPERIMENTAL_LOOKOUT=true)');
-    attachLookoutWsServer({
+  if (getExperimentalPortwingEnabled()) {
+    log.info('portwing/1.0 edge endpoint enabled (experimental, DD_EXPERIMENTAL_PORTWING=true)');
+    attachPortwingWsServer({
       server,
       serverConfiguration: configuration as Record<string, unknown>,
       isRateLimited,

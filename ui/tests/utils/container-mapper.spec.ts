@@ -1779,6 +1779,7 @@ describe('container-mapper', () => {
       'trigger-not-included',
       'agent-mismatch',
       'no-update-trigger-configured',
+      'maintenance-window-closed',
     ] as const;
 
     for (const reason of ALL_VALID_REASONS) {

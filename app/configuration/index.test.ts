@@ -86,33 +86,33 @@ test('getLocalWatcherEnabled should return false when disabled via env', async (
   delete configuration.ddEnvVars.DD_LOCAL_WATCHER;
 });
 
-test('getExperimentalLookoutEnabled should default to false', () => {
-  delete configuration.ddEnvVars.DD_EXPERIMENTAL_LOOKOUT;
-  expect(configuration.getExperimentalLookoutEnabled()).toStrictEqual(false);
+test('getExperimentalPortwingEnabled should default to false', () => {
+  delete configuration.ddEnvVars.DD_EXPERIMENTAL_PORTWING;
+  expect(configuration.getExperimentalPortwingEnabled()).toStrictEqual(false);
 });
 
-test('getExperimentalLookoutEnabled should return true when set to "true"', () => {
-  configuration.ddEnvVars.DD_EXPERIMENTAL_LOOKOUT = 'true';
-  expect(configuration.getExperimentalLookoutEnabled()).toStrictEqual(true);
-  delete configuration.ddEnvVars.DD_EXPERIMENTAL_LOOKOUT;
+test('getExperimentalPortwingEnabled should return true when set to "true"', () => {
+  configuration.ddEnvVars.DD_EXPERIMENTAL_PORTWING = 'true';
+  expect(configuration.getExperimentalPortwingEnabled()).toStrictEqual(true);
+  delete configuration.ddEnvVars.DD_EXPERIMENTAL_PORTWING;
 });
 
-test('getExperimentalLookoutEnabled should normalize casing', () => {
-  configuration.ddEnvVars.DD_EXPERIMENTAL_LOOKOUT = 'TRUE';
-  expect(configuration.getExperimentalLookoutEnabled()).toStrictEqual(true);
-  delete configuration.ddEnvVars.DD_EXPERIMENTAL_LOOKOUT;
+test('getExperimentalPortwingEnabled should normalize casing', () => {
+  configuration.ddEnvVars.DD_EXPERIMENTAL_PORTWING = 'TRUE';
+  expect(configuration.getExperimentalPortwingEnabled()).toStrictEqual(true);
+  delete configuration.ddEnvVars.DD_EXPERIMENTAL_PORTWING;
 });
 
-test('getExperimentalLookoutEnabled should trim whitespace before comparing', () => {
-  configuration.ddEnvVars.DD_EXPERIMENTAL_LOOKOUT = '  true  ';
-  expect(configuration.getExperimentalLookoutEnabled()).toStrictEqual(true);
-  delete configuration.ddEnvVars.DD_EXPERIMENTAL_LOOKOUT;
+test('getExperimentalPortwingEnabled should trim whitespace before comparing', () => {
+  configuration.ddEnvVars.DD_EXPERIMENTAL_PORTWING = '  true  ';
+  expect(configuration.getExperimentalPortwingEnabled()).toStrictEqual(true);
+  delete configuration.ddEnvVars.DD_EXPERIMENTAL_PORTWING;
 });
 
-test('getExperimentalLookoutEnabled should return false for non-"true" values', () => {
-  configuration.ddEnvVars.DD_EXPERIMENTAL_LOOKOUT = '1';
-  expect(configuration.getExperimentalLookoutEnabled()).toStrictEqual(false);
-  delete configuration.ddEnvVars.DD_EXPERIMENTAL_LOOKOUT;
+test('getExperimentalPortwingEnabled should return false for non-"true" values', () => {
+  configuration.ddEnvVars.DD_EXPERIMENTAL_PORTWING = '1';
+  expect(configuration.getExperimentalPortwingEnabled()).toStrictEqual(false);
+  delete configuration.ddEnvVars.DD_EXPERIMENTAL_PORTWING;
 });
 
 test('getDnsMode should default to ipv4first', () => {

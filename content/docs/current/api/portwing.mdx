@@ -1,11 +1,11 @@
 ---
-title: "Lookout Edge API"
-description: "Ed25519 agent-key registry and the lookout/1.0 WebSocket edge endpoint for firewall-traversing agents."
+title: "Portwing Edge API"
+description: "Ed25519 agent-key registry and the portwing/1.0 WebSocket edge endpoint for firewall-traversing agents."
 ---
 
-> **Experimental feature.** The Lookout edge endpoint must be explicitly enabled with the environment variable `DD_EXPERIMENTAL_LOOKOUT=true` on the drydock server. When this flag is absent or set to any other value the `/api/v1/lookout/*` routes (both REST and WebSocket) are **not mounted at all**. The wire protocol may change between releases while the feature is experimental.
+> **Experimental feature.** The Portwing edge endpoint must be explicitly enabled with the environment variable `DD_EXPERIMENTAL_PORTWING=true` on the drydock server. When the feature is disabled, the `/api/v1/portwing/*` routes (both REST and WebSocket) are **not mounted at all**. The wire protocol may change between releases while the feature is experimental.
 
-Edge mode inverts the normal drydock connection model. In the standard setup the controller dials out to each remote agent. Edge mode is for agents that sit behind NAT or a firewall and cannot accept inbound connections: the `lookout` agent dials **out** to drydock over an encrypted WebSocket (`wss://`), and drydock registers the connection as if the agent had been reached normally. No inbound port on the agent host is needed. The chain is `sockguard → lookout (edge client) → drydock (this endpoint)`.
+Edge mode inverts the normal drydock connection model. In the standard setup the controller dials out to each remote agent. Edge mode is for agents that sit behind NAT or a firewall and cannot accept inbound connections: the Portwing agent dials **out** to drydock over an encrypted WebSocket (`wss://`), and drydock registers the connection as if the agent had been reached normally. No inbound port on the agent host is needed. The chain is `sockguard -> portwing (edge client) -> drydock (this endpoint)`.
 
 > For agents that accept inbound connections from the controller, see the [Agent API](/docs/api/agent).
 
@@ -25,13 +25,13 @@ The signature is computed over a canonical, newline-joined message (SigV4-style)
 
 ```text
 GET
-/api/lookout/ws
+/api/portwing/ws
 <SHA-256 hex of the empty request body>
 <unix-timestamp-seconds>
 <nonce>
 ```
 
-The body hash is the SHA-256 of an empty body (`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`), and the path segment is always the literal `/api/lookout/ws` — both the versioned path `/api/v1/lookout/ws` and the deprecated unversioned path `/api/lookout/ws` are signature-equivalent by design, so that adding or removing the `/v1` prefix never requires a key rotation.
+The body hash is the SHA-256 of an empty body (`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`), and the Portwing path segment is always the literal `/api/portwing/ws` — both the versioned path `/api/v1/portwing/ws` and the deprecated unversioned path `/api/portwing/ws` are signature-equivalent by design, so that adding or removing the `/v1` prefix never requires a key rotation.
 
 **Encoding note.** The `signature` field is **base64url** (RFC 4648 §5 — URL-safe alphabet, no padding). An Ed25519 signature is 64 bytes, which encodes to exactly 86 base64url characters. The public key stored in the registry (`pubkey` field) uses **standard base64** (44 characters for a 32-byte key). These two encodings are distinct — agents must use base64url for the signature and standard base64 for the public-key submission.
 
@@ -39,16 +39,16 @@ The body hash is the SHA-256 of an empty body (`e3b0c44298fc1c149afbf4c8996fb924
 
 ## Key registry
 
-The key registry is mounted at `/api/v1/lookout/keys`. All routes require an authenticated drydock session (same-origin or equivalent).
+The key registry is mounted at `/api/v1/portwing/keys`. All routes require an authenticated drydock session (same-origin or equivalent).
 
-> The unversioned path `/api/lookout/keys` is a deprecated alias that will be removed in **v1.6.0**. Third-party integrations should migrate to `/api/v1/lookout/keys`.
+> The unversioned path `/api/portwing/keys` is a deprecated alias that will be removed in **v1.6.0**. Third-party integrations should migrate to `/api/v1/portwing/keys`.
 
 ### List keys
 
 Returns all registered keys — both active and revoked.
 
 ```bash
-curl http://drydock:3000/api/v1/lookout/keys
+curl http://drydock:3000/api/v1/portwing/keys
 
 [
   {
@@ -74,7 +74,7 @@ Each record has the shape:
 ### Register a key
 
 ```bash
-curl -X POST http://drydock:3000/api/v1/lookout/keys \
+curl -X POST http://drydock:3000/api/v1/portwing/keys \
   -H "Content-Type: application/json" \
   -d '{
     "pubkeyBase64": "kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE=",
@@ -110,7 +110,7 @@ HTTP/1.1 201 Created
 Revoked keys are rejected on the next connection attempt. The record is retained (with `revokedAt` set) for audit purposes. Any live WebSocket sessions authenticated under the revoked key are disconnected immediately.
 
 ```bash
-curl -X DELETE http://drydock:3000/api/v1/lookout/keys/3f8a1c2e9b047d56
+curl -X DELETE http://drydock:3000/api/v1/portwing/keys/3f8a1c2e9b047d56
 
 HTTP/1.1 204 No Content
 ```
@@ -129,16 +129,16 @@ HTTP/1.1 204 No Content
 Edge agents connect to the **versioned** path:
 
 ```text
-wss://drydock/api/v1/lookout/ws
+wss://drydock/api/v1/portwing/ws
 ```
 
-The unversioned path `/api/lookout/ws` is also accepted and is signature-equivalent — it is a deprecated alias that will be removed in **v1.6.0**. The canonical path `/api/lookout/ws` is always used in signature computation regardless of which path the agent dialed, so migrating from the unversioned to the versioned path does not require a key rotation.
+The unversioned path `/api/portwing/ws` is also accepted and is signature-equivalent — it is a deprecated alias that will be removed in **v1.6.0**. The canonical path `/api/portwing/ws` is always used in signature computation regardless of which path the agent dialed, so migrating from the unversioned to the versioned path does not require a key rotation.
 
-**Subprotocol:** `lookout/1.0`
+**Subprotocol:** `portwing/1.0`
 
 ### Connection flow
 
-1. The agent opens a WebSocket upgrade to `wss://drydock/api/v1/lookout/ws` with the `lookout/1.0` subprotocol header.
+1. The agent opens a WebSocket upgrade to `wss://drydock/api/v1/portwing/ws` with the `portwing/1.0` subprotocol header.
 2. The agent sends a **hello frame** as the first message (within 30 seconds, otherwise the connection is closed). The frame carries the `pubKeyId`, timestamp, nonce, and Ed25519 signature described under [Ed25519 authentication model](#ed25519-authentication-model) above.
 3. drydock verifies the hello. On success it replies with a **welcome frame** carrying poll configuration and server version information.
 4. The connection is then live: the agent multiplexes container-sync and exec frames over the same WebSocket.
@@ -150,7 +150,7 @@ The hello frame is a flat JSON object sent as the first WebSocket message after 
 ```json
 {
   "type": "hello",
-  "protocol": "lookout/1.0",
+  "protocol": "portwing/1.0",
   "agentId": "us-east-prod-1",
   "agentName": "us-east-prod-1",
   "version": "1.5.0",
@@ -170,7 +170,7 @@ The hello frame is a flat JSON object sent as the first WebSocket message after 
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `type` | string | Yes | Always `"hello"` |
-| `protocol` | string | Yes | Must be `"lookout/1.0"` |
+| `protocol` | string | Yes | Must be `"portwing/1.0"` |
 | `agentId` | string | Yes | Agent identifier (alphanumeric, hyphens, underscores; max 64 chars) |
 | `agentName` | string | Yes | Human-readable agent name |
 | `version` | string | Yes | Agent drydock version string |
@@ -197,7 +197,7 @@ On a successful hello, drydock replies with a welcome frame:
     "pollInterval": 300,
     "config": {
       "drydockVersion": "1.5.0",
-      "supportedProtocols": "lookout/1.0",
+      "supportedProtocols": "portwing/1.0",
       "serverCompatLevel": "1.4"
     }
   }
@@ -208,7 +208,7 @@ On a successful hello, drydock replies with a welcome frame:
 | --- | --- | --- |
 | `data.pollInterval` | number | Recommended container-sync poll interval in seconds (currently `300`) |
 | `data.config.drydockVersion` | string | Server drydock version |
-| `data.config.supportedProtocols` | string | Protocol string accepted by this server (`"lookout/1.0"`) |
+| `data.config.supportedProtocols` | string | Canonical protocol string advertised by this server (`"portwing/1.0"`) |
 | `data.config.serverCompatLevel` | string | Server compat level (`"1.4"`) |
 
 ### Protocol limits
@@ -244,7 +244,7 @@ If the hello is rejected, drydock sends a JSON error frame before closing:
 | `expected-hello` | First frame was not `type: "hello"` | Send the hello frame immediately after upgrade |
 | `no-auth` | Hello frame contains neither Ed25519 fields nor a `tokenHash` | Include `pubKeyId`, `timestamp`, `nonce`, and `signature` |
 | `ed25519-required` | Hello supplied only `tokenHash` (no Ed25519 fields) | Include a registered Ed25519 key |
-| `protocol-mismatch` | `protocol` field is not `"lookout/1.0"` | Upgrade the agent or check the configured protocol string |
+| `protocol-mismatch` | `protocol` field is not `"portwing/1.0"` | Upgrade the agent or check the configured protocol string |
 | `unknown-key` | `pubKeyId` is not registered, has been revoked, or does not match the 16 hex-char format | Re-register a valid key; also fired when an active session is disconnected due to key revocation |
 | `timestamp-skew` | `timestamp` is more than 60 seconds from server time | Sync the agent clock (NTP); check for time-zone misconfiguration |
 | `bad-nonce` | `nonce` is not exactly 32 lowercase hex characters | Generate a cryptographically random 16-byte value and hex-encode it |
@@ -256,15 +256,15 @@ If the hello is rejected, drydock sends a JSON error frame before closing:
 
 ---
 
-## Enrolling a lookout agent
+## Enrolling a Portwing agent
 
 1. **Enable the experimental feature** on the drydock server:
 
    ```bash
-   DD_EXPERIMENTAL_LOOKOUT=true
+   DD_EXPERIMENTAL_PORTWING=true
    ```
 
-   Without this flag, the `/api/v1/lookout/*` routes are not mounted and connections will be refused at the HTTP layer.
+   Without this flag, the `/api/v1/portwing/*` routes are not mounted and connections will be refused at the HTTP layer.
 
 2. **Generate a keypair** on the agent host:
 
@@ -275,12 +275,12 @@ If the hello is rejected, drydock sends a JSON error frame before closing:
 
    The last command prints the 44-character standard-base64 public key to register.
 
-3. **Register the public key** with drydock using `POST /api/v1/lookout/keys`. Save the returned `keyId` — the agent needs it in its configuration.
+3. **Register the public key** with drydock using `POST /api/v1/portwing/keys`. Save the returned `keyId` — the agent needs it in its configuration.
 
-4. **Configure and start the agent.** Point `lookout` at the versioned endpoint:
+4. **Configure and start the agent.** Point Portwing at the versioned endpoint:
 
    ```text
-   wss://drydock/api/v1/lookout/ws
+   wss://drydock/api/v1/portwing/ws
    ```
 
    and supply the private key file and `keyId`. The agent will dial out and authenticate automatically.

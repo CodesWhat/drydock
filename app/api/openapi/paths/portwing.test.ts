@@ -1,26 +1,26 @@
 import { describe, expect, test } from 'vitest';
 import { errorResponse, noContentResponse } from '../common.js';
-import { lookoutPaths } from './lookout.js';
+import { portwingPaths } from './portwing.js';
 
-describe('lookoutPaths', () => {
-  describe('/api/v1/lookout/keys GET', () => {
-    const getPath = lookoutPaths['/api/v1/lookout/keys'].get;
+describe('portwingPaths', () => {
+  describe('/api/v1/portwing/keys GET', () => {
+    const getPath = portwingPaths['/api/v1/portwing/keys'].get;
 
-    test('has tag Lookout', () => {
-      expect(getPath.tags).toStrictEqual(['Lookout']);
+    test('has tag Portwing', () => {
+      expect(getPath.tags).toStrictEqual(['Portwing']);
     });
 
-    test('operationId is listLookoutKeys', () => {
-      expect(getPath.operationId).toBe('listLookoutKeys');
+    test('operationId is listPortwingKeys', () => {
+      expect(getPath.operationId).toBe('listPortwingKeys');
     });
 
     test('summary is correct', () => {
       expect(getPath.summary).toBe('List all registered edge-agent keys');
     });
 
-    test('description mentions EXPERIMENTAL and DD_EXPERIMENTAL_LOOKOUT=true', () => {
+    test('description mentions EXPERIMENTAL and DD_EXPERIMENTAL_PORTWING=true', () => {
       expect(getPath.description).toContain('EXPERIMENTAL');
-      expect(getPath.description).toContain('DD_EXPERIMENTAL_LOOKOUT=true');
+      expect(getPath.description).toContain('DD_EXPERIMENTAL_PORTWING=true');
     });
 
     test('200 response is a json array', () => {
@@ -63,24 +63,24 @@ describe('lookoutPaths', () => {
     });
   });
 
-  describe('/api/v1/lookout/keys POST', () => {
-    const postPath = lookoutPaths['/api/v1/lookout/keys'].post;
+  describe('/api/v1/portwing/keys POST', () => {
+    const postPath = portwingPaths['/api/v1/portwing/keys'].post;
 
-    test('has tag Lookout', () => {
-      expect(postPath.tags).toStrictEqual(['Lookout']);
+    test('has tag Portwing', () => {
+      expect(postPath.tags).toStrictEqual(['Portwing']);
     });
 
-    test('operationId is createLookoutKey', () => {
-      expect(postPath.operationId).toBe('createLookoutKey');
+    test('operationId is createPortwingKey', () => {
+      expect(postPath.operationId).toBe('createPortwingKey');
     });
 
     test('summary is correct', () => {
       expect(postPath.summary).toBe('Register a new authorized edge-agent key');
     });
 
-    test('description mentions EXPERIMENTAL and DD_EXPERIMENTAL_LOOKOUT=true', () => {
+    test('description mentions EXPERIMENTAL and DD_EXPERIMENTAL_PORTWING=true', () => {
       expect(postPath.description).toContain('EXPERIMENTAL');
-      expect(postPath.description).toContain('DD_EXPERIMENTAL_LOOKOUT=true');
+      expect(postPath.description).toContain('DD_EXPERIMENTAL_PORTWING=true');
     });
 
     test('request body requires pubkeyBase64 and label', () => {
@@ -132,24 +132,24 @@ describe('lookoutPaths', () => {
     });
   });
 
-  describe('/api/v1/lookout/keys/{keyId} DELETE', () => {
-    const deletePath = lookoutPaths['/api/v1/lookout/keys/{keyId}'].delete;
+  describe('/api/v1/portwing/keys/{keyId} DELETE', () => {
+    const deletePath = portwingPaths['/api/v1/portwing/keys/{keyId}'].delete;
 
-    test('has tag Lookout', () => {
-      expect(deletePath.tags).toStrictEqual(['Lookout']);
+    test('has tag Portwing', () => {
+      expect(deletePath.tags).toStrictEqual(['Portwing']);
     });
 
-    test('operationId is revokeLookoutKey', () => {
-      expect(deletePath.operationId).toBe('revokeLookoutKey');
+    test('operationId is revokePortwingKey', () => {
+      expect(deletePath.operationId).toBe('revokePortwingKey');
     });
 
     test('summary is correct', () => {
       expect(deletePath.summary).toBe('Revoke a registered edge-agent key');
     });
 
-    test('description mentions EXPERIMENTAL and DD_EXPERIMENTAL_LOOKOUT=true', () => {
+    test('description mentions EXPERIMENTAL and DD_EXPERIMENTAL_PORTWING=true', () => {
       expect(deletePath.description).toContain('EXPERIMENTAL');
-      expect(deletePath.description).toContain('DD_EXPERIMENTAL_LOOKOUT=true');
+      expect(deletePath.description).toContain('DD_EXPERIMENTAL_PORTWING=true');
     });
 
     test('keyId path param has correct name and pattern', () => {
@@ -181,32 +181,32 @@ describe('lookoutPaths', () => {
     });
   });
 
-  test('lookoutPaths exports exactly the two expected path keys', () => {
-    expect(Object.keys(lookoutPaths)).toStrictEqual([
-      '/api/v1/lookout/keys',
-      '/api/v1/lookout/keys/{keyId}',
+  test('portwingPaths exports exactly the two expected path keys', () => {
+    expect(Object.keys(portwingPaths)).toStrictEqual([
+      '/api/v1/portwing/keys',
+      '/api/v1/portwing/keys/{keyId}',
     ]);
   });
 
-  test('GET /api/v1/lookout/keys 200 response uses jsonResponse helper shape', () => {
-    const response = lookoutPaths['/api/v1/lookout/keys'].get.responses[200];
+  test('GET /api/v1/portwing/keys 200 response uses jsonResponse helper shape', () => {
+    const response = portwingPaths['/api/v1/portwing/keys'].get.responses[200];
     expect(response).toHaveProperty('description');
     expect(response).toHaveProperty('content');
     expect(response.content).toHaveProperty('application/json');
   });
 
-  test('POST /api/v1/lookout/keys 201 response uses jsonResponse helper shape', () => {
-    const response = lookoutPaths['/api/v1/lookout/keys'].post.responses[201];
+  test('POST /api/v1/portwing/keys 201 response uses jsonResponse helper shape', () => {
+    const response = portwingPaths['/api/v1/portwing/keys'].post.responses[201];
     expect(response).toHaveProperty('description');
     expect(response).toHaveProperty('content');
     expect(response.content).toHaveProperty('application/json');
   });
 
   test('full GET path matches expected shape', () => {
-    const getPath = lookoutPaths['/api/v1/lookout/keys'].get;
+    const getPath = portwingPaths['/api/v1/portwing/keys'].get;
     expect(getPath).toMatchObject({
-      tags: ['Lookout'],
-      operationId: 'listLookoutKeys',
+      tags: ['Portwing'],
+      operationId: 'listPortwingKeys',
       responses: {
         401: errorResponse('Authentication required'),
       },
@@ -214,10 +214,10 @@ describe('lookoutPaths', () => {
   });
 
   test('full DELETE path matches expected shape', () => {
-    const deletePath = lookoutPaths['/api/v1/lookout/keys/{keyId}'].delete;
+    const deletePath = portwingPaths['/api/v1/portwing/keys/{keyId}'].delete;
     expect(deletePath).toMatchObject({
-      tags: ['Lookout'],
-      operationId: 'revokeLookoutKey',
+      tags: ['Portwing'],
+      operationId: 'revokePortwingKey',
       responses: {
         204: noContentResponse,
         401: errorResponse('Authentication required'),

@@ -173,8 +173,12 @@ export function getLocalWatcherEnabled() {
   return ddEnvVars.DD_LOCAL_WATCHER?.trim().toLowerCase() !== 'false';
 }
 
-export function getExperimentalLookoutEnabled() {
-  return ddEnvVars.DD_EXPERIMENTAL_LOOKOUT?.trim().toLowerCase() === 'true';
+function envFlagEnabled(value: string | undefined) {
+  return value?.trim().toLowerCase() === 'true';
+}
+
+export function getExperimentalPortwingEnabled() {
+  return envFlagEnabled(ddEnvVars.DD_EXPERIMENTAL_PORTWING);
 }
 
 function parseWatcherMaintenanceEnvAlias(envKey: string) {

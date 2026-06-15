@@ -453,6 +453,23 @@ export function getTagCandidates(
     };
   }
 
+  // A 'specific' (fully-pinned) tag is digest-only by default.
+  // Opt out with dd.tag.include filter OR dd.tag.family=loose.
+  if (
+    container.image.tag.tagPrecision === 'specific' &&
+    !container.includeTags &&
+    tagFamilyPolicy !== 'loose'
+  ) {
+    const noUpdateReason = `Pinned tag "${container.image.tag.value}" is compared by digest only. Set dd.tag.family=loose or add a dd.tag.include filter to allow semver version climbing.`;
+    if (typeof logContainer?.debug === 'function') {
+      logContainer.debug(noUpdateReason);
+    }
+    return {
+      tags: [],
+      noUpdateReason: container.image.digest?.watch ? undefined : noUpdateReason,
+    };
+  }
+
   if (filteredTags.length === 0) {
     logContainer.warn('No tags found after filtering; check you regex filters');
   }

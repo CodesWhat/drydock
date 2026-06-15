@@ -1,5 +1,5 @@
 /**
- * Tests for the lookout pubkey management HTTP API.
+ * Tests for the Portwing pubkey management HTTP API.
  */
 import { generateKeyPairSync } from 'node:crypto';
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
@@ -43,12 +43,12 @@ vi.mock('express', () => ({
 
 vi.mock('../store/agent-keys.js', () => mockAgentKeys);
 vi.mock('./error-response.js', () => ({ sendErrorResponse: mockSendErrorResponse }));
-vi.mock('./lookout-ws.js', () => ({ disconnectByKeyId: mockDisconnectByKeyId }));
+vi.mock('./portwing-ws.js', () => ({ disconnectByKeyId: mockDisconnectByKeyId }));
 
-import * as lookoutRouterModule from './lookout.js';
+import * as portwingRouterModule from './portwing.js';
 
 // Initialize the router once to register all handlers and capture them
-lookoutRouterModule.init();
+portwingRouterModule.init();
 
 function generateEd25519RawPubkey(): Buffer {
   const { publicKey } = generateKeyPairSync('ed25519');
@@ -56,7 +56,7 @@ function generateEd25519RawPubkey(): Buffer {
   return spki.subarray(12);
 }
 
-describe('Lookout Router — init', () => {
+describe('Portwing Router — init', () => {
   test('registers GET /keys', () => {
     expect(capturedHandlers.getKeys).toBeDefined();
   });

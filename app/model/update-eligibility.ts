@@ -20,7 +20,8 @@ export type UpdateBlockerReason =
   | 'trigger-not-included'
   | 'agent-mismatch'
   | 'no-update-trigger-configured'
-  | 'self-update-unavailable';
+  | 'self-update-unavailable'
+  | 'maintenance-window-closed';
 
 /**
  * Severity controls how a blocker is enforced:
@@ -50,6 +51,8 @@ export const BLOCKER_SEVERITY: Record<UpdateBlockerReason, UpdateBlockerSeverity
   // Deprecation: become 'hard' in v1.7.0. See DEPRECATIONS.md.
   'trigger-excluded': 'soft',
   'trigger-not-included': 'soft',
+  // soft: manual UI/API updates bypass this; only auto-trigger dispatch is gated
+  'maintenance-window-closed': 'soft',
 };
 
 export interface UpdateBlocker {
@@ -99,6 +102,15 @@ export interface UpdateEligibilityContext {
   ) => { id: string; status: 'queued' | 'in-progress'; updatedAt?: string } | undefined;
   now?: number;
   isSelfUpdateAvailable?: boolean;
+  /**
+   * Optional. When explicitly set to `false` by a caller, a soft `maintenance-window-closed`
+   * blocker is recorded in the eligibility result. Defaults to `undefined`.
+   * NOTE: No auto-trigger dispatch path currently sets this field — auto-update window
+   * enforcement is done at scan time in the Docker watcher (watchFromCron /
+   * maybeFastResyncAfterUpdate return early when the window is closed). Manual UI/API update
+   * requests leave it undefined and are never gated by it.
+   */
+  maintenanceWindowOpen?: boolean;
 }
 
 /**
@@ -189,6 +201,18 @@ export function computeUpdateEligibility(
   }
 
   const blockers: UpdateBlocker[] = [];
+
+  // maintenance-window-closed: fires only when the caller explicitly passes `false` (auto-trigger
+  // dispatch). Manual API/UI callers pass `undefined` → no check → window never blocks manual ops.
+  if (context.maintenanceWindowOpen === false) {
+    blockers.push(
+      makeBlocker({
+        reason: 'maintenance-window-closed',
+        message: 'Outside maintenance window — auto update deferred until the window opens.',
+        actionable: false,
+      }),
+    );
+  }
 
   // 0. self-update-unavailable — fires only when the container is the Drydock self-container
   // AND the caller has explicitly determined that self-update cannot run (isSelfUpdateAvailable

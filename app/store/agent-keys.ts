@@ -1,6 +1,6 @@
 /**
  * Agent key registry store.
- * Tracks Ed25519 public keys that are authorized to connect via the lookout/1.0
+ * Tracks Ed25519 public keys that are authorized to connect via the portwing/1.0
  * WebSocket protocol. One document per key; active keys have revokedAt === null.
  */
 import { createHash } from 'node:crypto';
@@ -34,7 +34,7 @@ let agentKeyCollection: AgentKeyCollection | undefined;
 
 /**
  * Derive the 16-char hex key ID from a raw 32-byte Ed25519 public key buffer.
- * Matches lookout's derivation: hex(SHA-256(raw32Bytes)[:8])
+ * Matches Portwing's derivation: hex(SHA-256(raw32Bytes)[:8])
  */
 function deriveKeyId(pubkeyBuffer: Buffer): string {
   return createHash('sha256').update(pubkeyBuffer).digest().subarray(0, 8).toString('hex');

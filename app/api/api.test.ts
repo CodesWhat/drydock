@@ -89,15 +89,15 @@ vi.mock('./rate-limit-key.js', () => ({
   isIdentityAwareRateLimitKeyingEnabled: mockIsIdentityAwareRateLimitKeyingEnabled,
 }));
 
-const mockGetExperimentalLookoutEnabled = vi.hoisted(() => vi.fn(() => false));
+const mockGetExperimentalPortwingEnabled = vi.hoisted(() => vi.fn(() => false));
 vi.mock('../configuration/index.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../configuration/index.js')>();
   return {
     ...actual,
-    getExperimentalLookoutEnabled: mockGetExperimentalLookoutEnabled,
+    getExperimentalPortwingEnabled: mockGetExperimentalPortwingEnabled,
   };
 });
-vi.mock('./lookout', mockInit);
+vi.mock('./portwing', mockInit);
 
 describe('API Router', () => {
   let api;
@@ -108,7 +108,7 @@ describe('API Router', () => {
     resetMockRouterCallLog();
     mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(false);
     mockCreateAuthenticatedRouteRateLimitKeyGenerator.mockReturnValue(undefined);
-    mockGetExperimentalLookoutEnabled.mockReturnValue(false);
+    mockGetExperimentalPortwingEnabled.mockReturnValue(false);
     vi.resetModules();
     api = await import('./api.js');
     router = api.init();
@@ -453,27 +453,27 @@ describe('API Router', () => {
     );
   });
 
-  test('should mount /lookout router when DD_EXPERIMENTAL_LOOKOUT is enabled', async () => {
-    mockGetExperimentalLookoutEnabled.mockReturnValue(true);
+  test('should mount only /portwing router when DD_EXPERIMENTAL_PORTWING is enabled', async () => {
+    mockGetExperimentalPortwingEnabled.mockReturnValue(true);
 
     vi.resetModules();
     const isolatedApi = await import('./api.js');
     const isolatedRouter = isolatedApi.init();
 
     const useCalls = isolatedRouter.use.mock.calls;
-    const lookoutMount = useCalls.find((c) => c[0] === '/lookout');
-    expect(lookoutMount).toBeDefined();
+    const portwingMount = useCalls.find((c) => c[0] === '/portwing');
+    expect(portwingMount).toBeDefined();
   });
 
-  test('should NOT mount /lookout router when DD_EXPERIMENTAL_LOOKOUT is disabled', async () => {
-    mockGetExperimentalLookoutEnabled.mockReturnValue(false);
+  test('should not mount /portwing router when DD_EXPERIMENTAL_PORTWING is disabled', async () => {
+    mockGetExperimentalPortwingEnabled.mockReturnValue(false);
 
     vi.resetModules();
     const isolatedApi = await import('./api.js');
     const isolatedRouter = isolatedApi.init();
 
     const useCalls = isolatedRouter.use.mock.calls;
-    const lookoutMount = useCalls.find((c) => c[0] === '/lookout');
-    expect(lookoutMount).toBeUndefined();
+    const portwingMount = useCalls.find((c) => c[0] === '/portwing');
+    expect(portwingMount).toBeUndefined();
   });
 });

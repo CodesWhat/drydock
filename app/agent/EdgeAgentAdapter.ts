@@ -1,10 +1,10 @@
 /**
  * EdgeAgentAdapter — drives the existing AgentClient pipeline for edge agents
- * that connect via the lookout/1.0 WebSocket protocol instead of the SSE path.
+ * that connect via the portwing/1.0 WebSocket protocol instead of the SSE path.
  *
  * After a successful hello/welcome handshake the gateway calls:
  *   new EdgeAgentAdapter(client, ws, hello, config)
- * The adapter then owns the WebSocket and translates incoming lookout frames
+ * The adapter then owns the WebSocket and translates incoming Portwing frames
  * into AgentClient pipeline calls.
  */
 import { emitAgentConnected, emitAgentDisconnected } from '../event/index.js';
@@ -63,7 +63,7 @@ interface AgentComponentDescriptor {
   configuration: Record<string, unknown>;
 }
 
-interface LookoutFrame {
+interface PortwingFrame {
   type: string;
   data: Record<string, unknown>;
 }
@@ -157,9 +157,9 @@ export class EdgeAgentAdapter {
   }
 
   private async onMessage(raw: unknown): Promise<void> {
-    let frame: LookoutFrame;
+    let frame: PortwingFrame;
     try {
-      frame = JSON.parse(String(raw)) as LookoutFrame;
+      frame = JSON.parse(String(raw)) as PortwingFrame;
     } catch {
       log.warn(`${this.agentName}: non-JSON frame received`);
       return;

@@ -879,6 +879,68 @@ describe('Docker Watcher', () => {
       const watchOrder = docker.watchContainer.mock.invocationCallOrder[0];
       expect(markOrder).toBeLessThan(watchOrder);
     });
+
+    // Maintenance window gate — maybeFastResyncAfterUpdate must respect the same
+    // window check as watchFromCron (Fix 2, #321).
+    test('callback does not call watchContainer when maintenance window is closed', async () => {
+      await docker.register('watcher', 'docker', 'test', { maintenancewindow: '0 2 * * *' });
+      await docker.init();
+
+      const mockLog = createMockLog(['info', 'warn', 'debug', 'error']);
+      docker.log = mockLog;
+
+      const matchedContainer = { name: 'myapp', watcher: 'test' };
+      storeContainer.getContainers.mockReturnValue([matchedContainer]);
+      event.getContainerUpdateAppliedEventContainerName.mockReturnValue('test_myapp');
+      maintenance.isInMaintenanceWindow.mockReturnValue(false); // window CLOSED
+
+      docker.watchContainer = vi.fn().mockResolvedValue({});
+
+      const registeredCallback = event.registerContainerUpdateApplied.mock.calls[0][0];
+      await registeredCallback('test_myapp');
+
+      expect(docker.watchContainer).not.toHaveBeenCalled();
+      expect(mockLog.debug).toHaveBeenCalledWith(
+        expect.stringContaining('outside maintenance window'),
+      );
+    });
+
+    test('callback calls watchContainer when maintenance window is open', async () => {
+      await docker.register('watcher', 'docker', 'test', { maintenancewindow: '0 2 * * *' });
+      await docker.init();
+
+      const matchedContainer = { name: 'myapp', watcher: 'test' };
+      storeContainer.getContainers.mockReturnValue([matchedContainer]);
+      event.getContainerUpdateAppliedEventContainerName.mockReturnValue('test_myapp');
+      maintenance.isInMaintenanceWindow.mockReturnValue(true); // window OPEN
+
+      docker.watchContainer = vi.fn().mockResolvedValue({});
+
+      const registeredCallback = event.registerContainerUpdateApplied.mock.calls[0][0];
+      await registeredCallback('test_myapp');
+
+      expect(docker.watchContainer).toHaveBeenCalledWith(matchedContainer, {
+        emitBatchEvent: false,
+      });
+    });
+
+    test('callback calls watchContainer when no maintenance window is configured', async () => {
+      await docker.register('watcher', 'docker', 'test', {}); // no maintenancewindow
+      await docker.init();
+
+      const matchedContainer = { name: 'myapp', watcher: 'test' };
+      storeContainer.getContainers.mockReturnValue([matchedContainer]);
+      event.getContainerUpdateAppliedEventContainerName.mockReturnValue('test_myapp');
+
+      docker.watchContainer = vi.fn().mockResolvedValue({});
+
+      const registeredCallback = event.registerContainerUpdateApplied.mock.calls[0][0];
+      await registeredCallback('test_myapp');
+
+      expect(docker.watchContainer).toHaveBeenCalledWith(matchedContainer, {
+        emitBatchEvent: false,
+      });
+    });
   });
 
   describe('OIDC Remote Auth', () => {
