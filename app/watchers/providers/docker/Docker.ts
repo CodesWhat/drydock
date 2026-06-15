@@ -912,6 +912,14 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     if (!matched) {
       return;
     }
+    // Gate the fast resync by the maintenance window — if the window is closed, skip
+    // the resync scan just as watchFromCron does.
+    if (this.configuration.maintenancewindow && !this.isMaintenanceWindowOpen()) {
+      this.log.debug(
+        `Skipping fast resync after update for "${matched.name}" — outside maintenance window`,
+      );
+      return;
+    }
     // Mark the epoch BEFORE starting the resync scan so that any cron scan
     // already in-flight (watchStartedAtMs <= clearedAtMs) is suppressed by
     // the preserveClearedUpdateState guard in container-processing.ts and

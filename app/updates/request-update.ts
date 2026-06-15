@@ -166,6 +166,8 @@ const HARD_BLOCKER_STATUS: Record<UpdateBlockerReason, number> = {
   'threshold-not-reached': 409,
   'trigger-excluded': 409,
   'trigger-not-included': 409,
+  // soft — manual callers do not reach this code path but the map must be exhaustive
+  'maintenance-window-closed': 409,
 };
 
 function statusCodeForHardBlocker(blocker: UpdateBlocker): number {

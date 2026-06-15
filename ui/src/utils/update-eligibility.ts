@@ -28,6 +28,8 @@ export const BLOCKER_SEVERITY: Record<UpdateBlockerReason, UpdateBlockerSeverity
   // Deprecation: become 'hard' in v1.7.0. See DEPRECATIONS.md.
   'trigger-excluded': 'soft',
   'trigger-not-included': 'soft',
+  // soft: manual UI updates bypass this; only auto-trigger dispatch is gated
+  'maintenance-window-closed': 'soft',
 };
 
 export function severityOf(blocker: UpdateBlocker): UpdateBlockerSeverity {
