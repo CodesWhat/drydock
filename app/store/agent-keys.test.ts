@@ -297,7 +297,7 @@ describe('listKeys', () => {
 });
 
 describe('keyId derivation (golden test)', () => {
-  test('matches lookout hex(SHA-256[:8]) formula', () => {
+  test('matches Portwing hex(SHA-256[:8]) formula', () => {
     const rawKey = generateEd25519RawPublicKey();
     const expected = createHash('sha256').update(rawKey).digest().subarray(0, 8).toString('hex');
 

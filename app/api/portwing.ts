@@ -1,14 +1,14 @@
 /**
- * Lookout pubkey management REST API.
+ * Portwing pubkey management REST API.
  *
- * Mounted at /api/v1/lookout (and /api/lookout) AFTER requireAuthentication
+ * Mounted at /api/v1/portwing (and compatibility aliases) AFTER requireAuthentication
  * + requireSameOriginForMutations in api.ts. Operators use these routes to
  * manage which Ed25519 public keys are authorized for edge agent connections.
  */
 import express, { type Request, type Response } from 'express';
 import * as agentKeys from '../store/agent-keys.js';
 import { sendErrorResponse } from './error-response.js';
-import { disconnectByKeyId } from './lookout-ws.js';
+import { disconnectByKeyId } from './portwing-ws.js';
 
 // Key IDs are hex(SHA-256(raw32Bytes)[:8]) → exactly 16 lowercase hex chars.
 const KEY_ID_PATTERN = /^[0-9a-f]{16}$/;
@@ -16,7 +16,7 @@ const KEY_ID_PATTERN = /^[0-9a-f]{16}$/;
 const router = express.Router();
 
 /**
- * GET /lookout/keys
+ * GET /portwing/keys
  * List all keys (active + revoked).
  */
 router.get('/keys', (_req: Request, res: Response) => {
@@ -25,7 +25,7 @@ router.get('/keys', (_req: Request, res: Response) => {
 });
 
 /**
- * POST /lookout/keys
+ * POST /portwing/keys
  * Add a new authorized key.
  * Body: { pubkeyBase64: string, label: string }
  * Returns 201 { keyId, label, createdAt }
@@ -83,7 +83,7 @@ router.post('/keys', (req: Request, res: Response) => {
 });
 
 /**
- * DELETE /lookout/keys/:keyId
+ * DELETE /portwing/keys/:keyId
  * Revoke a key. Returns 204 on success, 404 if not found.
  */
 router.delete('/keys/:keyId', (req: Request, res: Response) => {
@@ -102,7 +102,7 @@ router.delete('/keys/:keyId', (req: Request, res: Response) => {
 });
 
 /**
- * Init the lookout router.
+ * Init the Portwing router.
  */
 export function init(): express.Router {
   return router;

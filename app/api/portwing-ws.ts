@@ -1,10 +1,10 @@
 /**
- * Lookout/1.0 WebSocket gateway.
+ * Portwing/1.0 WebSocket gateway.
  *
- * Accepts edge agent connections at /api/lookout/ws (or /api/v1/lookout/ws).
+ * Accepts edge agent connections at /api/portwing/ws (or /api/v1/portwing/ws).
  * Auth is entirely in the first WS frame (Ed25519 hello); no session cookie required.
  *
- * DrydockCompat 1.4.0 is the level advertised by the lookout client; the doc
+ * DrydockCompat 1.4.0 is the level advertised by the edge agent client; the doc
  * reference to 1.5.x reflects pre-release planning and has no bearing on the
  * wire protocol implemented here.
  */
@@ -30,21 +30,19 @@ import {
   writeUpgradeError,
 } from './ws-upgrade-utils.js';
 
-const log = logger.child({ component: 'lookout-ws' });
+const log = logger.child({ component: 'portwing-ws' });
 
-// Matches /api/lookout/ws and /api/v1/lookout/ws — the versioned alias is free.
-// The lookout client dials cfg.DrydockURL + "/api/lookout/ws" so the primary
-// match is the unversioned path.
-export const LOOKOUT_WS_ROUTE_PATTERN = /^\/api(?:\/v1)?\/lookout\/ws$/;
+// Matches canonical Portwing paths.
+export const PORTWING_WS_ROUTE_PATTERN = /^\/api(?:\/v1)?\/portwing\/ws$/;
 
-const PROTOCOL_STRING = 'lookout/1.0';
+const PROTOCOL_STRING = 'portwing/1.0';
 const SERVER_COMPAT_LEVEL = '1.4';
 const HELLO_TIMEOUT_MS = 30_000;
 const NONCE_PATTERN = /^[0-9a-f]{32}$/;
 // Key IDs are hex(SHA-256(raw32Bytes)[:8]) → exactly 16 lowercase hex chars.
 const KEY_ID_PATTERN = /^[0-9a-f]{16}$/;
 const MAX_CLOCK_SKEW_SECONDS = 60;
-const MAX_PAYLOAD_BYTES = 16 * 1024 * 1024; // 16 MB — matches lookout conn.SetReadLimit
+const MAX_PAYLOAD_BYTES = 16 * 1024 * 1024; // 16 MB — matches the agent conn.SetReadLimit
 
 // SHA-256 of empty string — the WebSocket upgrade has no body.
 const EMPTY_BODY_HASH = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
@@ -190,11 +188,10 @@ export function injectDrydockVersionForTesting(version: string): void {
  * Verify the Ed25519 signature in the hello frame.
  * Canonical message: METHOD\nPATH\nBODY_HASH_HEX\nUNIX_TIMESTAMP_DECIMAL\nNONCE
  *
- * PATH is intentionally hard-coded to '/api/lookout/ws' regardless of whether the
- * agent connected via the versioned alias '/api/v1/lookout/ws'.  Both paths are
- * signature-equivalent by design: the lookout client always signs over the canonical
- * unversioned path so that adding or removing the /v1 alias never forces a key rotation.
- * If this equivalence is ever removed, agents MUST be updated to sign the actual path.
+ * PATH is intentionally canonicalized to '/api/portwing/ws' regardless of
+ * whether the agent connected via the versioned alias '/api/v1/portwing/ws'.
+ * Both paths are signature-equivalent by design, so adding or removing the /v1
+ * prefix never forces a key rotation.
  */
 function verifyHelloSignature(
   pubkeyBase64: string,
@@ -202,9 +199,6 @@ function verifyHelloSignature(
   nonce: string,
   signatureBase64url: string,
 ): boolean {
-  const canonical = Buffer.from(
-    ['GET', '/api/lookout/ws', EMPTY_BODY_HASH, String(timestamp), nonce].join('\n'),
-  );
   // Registry stores raw 32-byte Ed25519 key as base64. Node.js crypto.verify
   // does not accept format:'raw' — reconstruct the full SPKI DER by prepending
   // the constant Ed25519 ASN.1 header before calling createPublicKey.
@@ -213,10 +207,13 @@ function verifyHelloSignature(
   const pubKey = createPublicKey({ key: spkiDer, format: 'der', type: 'spki' });
   const sigBuf = Buffer.from(signatureBase64url, 'base64url');
 
+  const canonical = Buffer.from(
+    ['GET', '/api/portwing/ws', EMPTY_BODY_HASH, String(timestamp), nonce].join('\n'),
+  );
   return cryptoVerify(null, canonical, pubKey, sigBuf);
 }
 
-interface LookoutWsGatewayDependencies {
+interface PortwingWsGatewayDependencies {
   webSocketServer?: {
     handleUpgrade: (
       request: IncomingMessage,
@@ -230,7 +227,7 @@ interface LookoutWsGatewayDependencies {
   getAgentKeys?: typeof agentKeys;
 }
 
-export function createLookoutWsGateway(dependencies: LookoutWsGatewayDependencies = {}) {
+export function createPortwingWsGateway(dependencies: PortwingWsGatewayDependencies = {}) {
   const {
     webSocketServer = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD_BYTES }),
     /* v8 ignore next -- Buffer.from('…','base64') never throws; default lambda is defensive */
@@ -253,7 +250,7 @@ export function createLookoutWsGateway(dependencies: LookoutWsGatewayDependencie
         return;
       }
       /* v8 ignore stop */
-      if (!LOOKOUT_WS_ROUTE_PATTERN.test(pathname)) {
+      if (!PORTWING_WS_ROUTE_PATTERN.test(pathname)) {
         return;
       }
 
@@ -501,7 +498,7 @@ async function processHello(
 
   // Step 10: Prevent duplicate agent names — atomic check/reserve with inFlightAgents
   // so that concurrent hellos cannot both pass before either calls activate().
-  const agentName = `lookout-edge-${hello.agentId}`;
+  const agentName = `portwing-edge-${hello.agentId}`;
   if (getAgent(agentName) || inFlightAgents.has(agentName)) {
     sendErrorAndClose(ws, 'agent-already-connected', `Agent ${agentName} already connected`, 1008);
     return;
@@ -573,7 +570,7 @@ async function processHello(
   );
 }
 
-export function attachLookoutWsServer(options: {
+export function attachPortwingWsServer(options: {
   server: {
     on: (
       event: 'upgrade',
@@ -586,7 +583,7 @@ export function attachLookoutWsServer(options: {
   const serverConfiguration =
     options.serverConfiguration ?? (getServerConfiguration() as Record<string, unknown>);
 
-  const gateway = createLookoutWsGateway({
+  const gateway = createPortwingWsGateway({
     isRateLimited: options.isRateLimited,
     serverConfiguration,
   });

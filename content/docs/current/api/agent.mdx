@@ -3,7 +3,7 @@ title: "Agent API"
 description: "Controller endpoints for remote agent status and logs, plus the Agent's own internal API."
 ---
 
-For agents that cannot accept inbound connections and dial out to drydock instead, see the [Lookout Edge API](/docs/api/lookout).
+For agents that cannot accept inbound connections and dial out to drydock instead, see the [Portwing Edge API](/docs/api/portwing).
 
 ## Controller endpoints
 
@@ -160,7 +160,7 @@ Sent immediately upon connection to confirm the handshake.
 }
 ```
 
-The `logLevel` and `pollInterval` fields correspond to the same-named fields in the [GET /agents](#list-all-agents) response. For edge agents connecting via the lookout protocol see the [Lookout Edge API](/docs/api/lookout).
+The `logLevel` and `pollInterval` fields correspond to the same-named fields in the [GET /agents](#list-all-agents) response. For edge agents connecting via the Portwing protocol, see the [Portwing Edge API](/docs/api/portwing).
 
 #### `dd:container-added`
 

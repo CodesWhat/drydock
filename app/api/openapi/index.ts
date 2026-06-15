@@ -43,8 +43,8 @@ export const openApiDocument = {
     { name: 'Metrics', description: 'Prometheus metrics endpoint' },
     { name: 'Docs', description: 'API documentation endpoints' },
     {
-      name: 'Lookout',
-      description: 'Edge agent key registry — experimental, requires DD_EXPERIMENTAL_LOOKOUT=true',
+      name: 'Portwing',
+      description: 'Edge agent key registry — experimental, requires DD_EXPERIMENTAL_PORTWING=true',
     },
   ],
   security: [{ sessionAuth: [] }],

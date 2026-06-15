@@ -34,7 +34,7 @@ const agentKeyRecord = {
 } as const;
 
 const experimentalNote =
-  'EXPERIMENTAL: only available when the server is started with DD_EXPERIMENTAL_LOOKOUT=true.';
+  'EXPERIMENTAL: only available when the server is started with DD_EXPERIMENTAL_PORTWING=true.';
 
 const keyIdPathParam = {
   name: 'keyId',
@@ -44,12 +44,12 @@ const keyIdPathParam = {
   schema: { type: 'string', pattern: '^[0-9a-f]{16}$' },
 } as const;
 
-export const lookoutPaths = {
-  '/api/v1/lookout/keys': {
+export const portwingPaths = {
+  '/api/v1/portwing/keys': {
     get: {
-      tags: ['Lookout'],
+      tags: ['Portwing'],
       summary: 'List all registered edge-agent keys',
-      operationId: 'listLookoutKeys',
+      operationId: 'listPortwingKeys',
       description: `Returns all keys — active and revoked. ${experimentalNote}`,
       responses: {
         200: jsonResponse('Array of agent key records', {
@@ -60,9 +60,9 @@ export const lookoutPaths = {
       },
     },
     post: {
-      tags: ['Lookout'],
+      tags: ['Portwing'],
       summary: 'Register a new authorized edge-agent key',
-      operationId: 'createLookoutKey',
+      operationId: 'createPortwingKey',
       description: `Registers a new Ed25519 public key for edge agent authentication. ${experimentalNote}`,
       requestBody: {
         required: true,
@@ -108,11 +108,11 @@ export const lookoutPaths = {
       },
     },
   },
-  '/api/v1/lookout/keys/{keyId}': {
+  '/api/v1/portwing/keys/{keyId}': {
     delete: {
-      tags: ['Lookout'],
+      tags: ['Portwing'],
       summary: 'Revoke a registered edge-agent key',
-      operationId: 'revokeLookoutKey',
+      operationId: 'revokePortwingKey',
       description: `Revokes the key and disconnects any live WebSocket session authenticated with it. ${experimentalNote}`,
       parameters: [keyIdPathParam],
       responses: {
