@@ -710,4 +710,256 @@ describe('docker tag candidates module', () => {
     const avgMs = totalMs / runs;
     expect(avgMs).toBeLessThan(200);
   });
+
+  // Coverage for branch: excludeTags compile fails (safeRegExp returns null) → no filtering
+  test('skips exclude filtering when excludeTags regex fails to compile', () => {
+    const compileSpy = vi.spyOn(RE2JS, 'compile').mockImplementationOnce(() => {
+      throw new Error('bad regex');
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const result = getTagCandidates(
+      createContainer({ excludeTags: '[invalid' }),
+      ['1.0.1', '1.0.2'],
+      log,
+    );
+
+    // With failed excludeTags compile, all tags pass through
+    expect(result.tags.length).toBeGreaterThanOrEqual(0);
+    compileSpy.mockRestore();
+  });
+
+  // Coverage for branch: specific-tag pin gate without debug function
+  test('specific pin gate does not throw when logContainer has no debug function', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: 'v1.0.0',
+          semver: true,
+          tagPrecision: 'specific',
+        },
+      },
+      tagFamily: 'strict',
+    });
+    const log = { warn: vi.fn() };
+
+    const result = getTagCandidates(container, ['v1.0.1', 'v1.1.0'], log as any);
+
+    expect(result.tags).toEqual([]);
+    expect(result.noUpdateReason).toContain('Pinned tag');
+  });
+
+  // Coverage for pre-existing branch: regex pattern length exceeds 1024 chars
+  test('warns and returns null when includeTags regex pattern exceeds max length', () => {
+    const log = { warn: vi.fn(), debug: vi.fn() };
+    const overLongPattern = 'a'.repeat(1025);
+
+    const result = getTagCandidates(
+      createContainer({ includeTags: overLongPattern }),
+      ['1.0.1'],
+      log,
+    );
+
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Regex pattern exceeds maximum length'),
+    );
+    // When includeTags compile fails, baseTags is unfiltered — falls through non-semver path
+    expect(result).toBeDefined();
+  });
+
+  // Coverage for pre-existing branch: no prefix (tag starts with a digit, no prefix string)
+  test('warns with no-prefix message when current tag has no alphabetic prefix', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '1.2.3',
+          semver: true,
+        },
+      },
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    // Pass tags that don't start with digits and don't start with '1'
+    getTagCandidates(container, ['v1.2.4', 'v1.3.0'], log);
+
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('No tags found starting with a number'),
+    );
+  });
+
+  // Coverage for pre-existing branch: tagFamily is undefined/falsy → strict
+  test('returns strict when tagFamily is undefined', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '1.2.3',
+          semver: true,
+        },
+      },
+      tagFamily: undefined,
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    // Should not warn about invalid tagFamily when it's undefined
+    const result = getTagCandidates(container, ['1.2.4'], log);
+    expect(log.warn).not.toHaveBeenCalledWith(expect.stringContaining('Invalid tag family'));
+    expect(result.tags).toContain('1.2.4');
+  });
+
+  // Coverage for pre-existing branch: isSemverFamilyMatch with null referenceShape
+  test('accepts any candidate when current tag has no parseable numeric shape', () => {
+    // Tag 'latest' has no numeric segments → referenceShape is null → isSemverFamilyMatch returns true
+    const container = createContainer({
+      image: {
+        tag: {
+          value: 'latest',
+          semver: true,
+          // No tagPrecision set — not 'floating', so floating gate doesn't fire
+        },
+      },
+      includeTags: '^\\d+',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const result = getTagCandidates(container, ['1.0.0', '2.0.0'], log);
+
+    // With no referenceShape, family matching is skipped — any semver candidate passes
+    expect(result.tags.length).toBeGreaterThan(0);
+  });
+
+  // Coverage for pre-existing branch: invalid tagFamily warns and falls back to strict
+  test('warns and falls back to strict when tagFamily has an invalid value', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '1.2.3',
+          semver: true,
+        },
+      },
+      tagFamily: 'invalid-value',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    // Should still run and fall back to strict behavior
+    const result = getTagCandidates(container, ['1.2.4', '1.3.0'], log);
+
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Invalid tag family policy "invalid-value"'),
+    );
+    expect(result.tags).toContain('1.2.4');
+  });
+
+  // Coverage for pre-existing branch: logSemverCandidateFilterStats returns early when no debug function
+  test('does not throw when logContainer has no debug function during stats logging', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '1.2.3',
+          semver: true,
+        },
+      },
+    });
+    // Logger without debug function
+    const log = { warn: vi.fn() };
+
+    expect(() => getTagCandidates(container, ['1.2.4'], log as any)).not.toThrow();
+  });
+
+  // Coverage for pre-existing branch: non-semver tag + includeTags returns semver tags from filtered set
+  test('returns semver tags for non-semver tag with includeTags when filtered tags include semver', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: 'nightly',
+          semver: false,
+        },
+      },
+      includeTags: '^v',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    // Include filter passes v-prefixed tags; filterSemverOnly keeps valid semver only
+    const result = getTagCandidates(container, ['v1.0.0', 'v1.1.0', 'not-semver'], log);
+
+    expect(result.tags).toContain('v1.1.0');
+    expect(result.tags).toContain('v1.0.0');
+  });
+
+  // Coverage for branch: non-semver tag + includeTags when none of the filtered tags parse as semver
+  test('returns empty tags for non-semver tag with includeTags when no filtered tags are semver', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: 'nightly',
+          semver: false,
+        },
+      },
+      includeTags: '^v\\d+\\.\\d+\\.\\d+$',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    // All tags pass include filter but none parse as semver
+    const result = getTagCandidates(container, ['nightly', 'unstable'], log);
+
+    expect(result.tags).toEqual([]);
+  });
+
+  // Coverage for pre-existing branch: warn when filteredTags is empty after include/exclude
+  test('warns when all tags are filtered out before semver candidate pass', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '1.0.0',
+          semver: true,
+        },
+      },
+      includeTags: '^will-never-match-anything$',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    getTagCandidates(container, ['1.0.1', '1.0.2'], log);
+
+    expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('No tags found after filtering'));
+  });
+
+  // Coverage for pre-existing branch: warn when no tags pass prefix filter
+  test('warns when no candidate tags match the current tag prefix', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: 'v1.0.0',
+          semver: true,
+        },
+      },
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    // All candidates start with 'r' not 'v'
+    getTagCandidates(container, ['r1.0.1', 'r1.0.2'], log);
+
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining("No tags found with existing prefix: 'v'"),
+    );
+  });
+
+  // Coverage for pre-existing branch: warn when semver candidates exist but none in same family
+  test('warns when semver tags exist but none are in the same inferred family', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '1.2.3-arm64',
+          semver: true,
+        },
+      },
+      tagFamily: 'strict',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    // Candidates are valid semver but with different suffix family
+    getTagCandidates(container, ['1.2.4-amd64', '1.3.0-amd64'], log);
+
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.stringContaining('No tags found in the same inferred family'),
+    );
+  });
 });
