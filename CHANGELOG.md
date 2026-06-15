@@ -16,6 +16,18 @@ scheme restriction) live in `UPGRADE-NOTES.md` and are auto-appended to every
 1.4.6+ / 1.5.x release's notes by `scripts/append-upgrade-notes.mjs` (wired into
 `release-cut.yml`). Update that file — not this comment — when the notes change. -->
 
+## [1.5.0-rc.37] — 2026-06-15
+
+### Security
+
+- **Patched a batch of newly-disclosed transitive CVEs across every workspace.** osv-scanner flagged advisories disclosed 2026-06-15 in build- and test-time dependencies: `vite` ([CVE-2026-53571](https://github.com/advisories/GHSA-fx2h-pf6j-xcff), [CVE-2026-53632](https://github.com/advisories/GHSA-v6wh-96g9-6wx3)), `@babel/core` (CVE-2026-49356), `form-data` (CVE-2026-12143), `protobufjs` (CVE-2026-54269), and `ws` ([CVE-2026-48779](https://github.com/advisories/GHSA-96hv-2xvq-fx4p)). Each is pinned to a fixed version via an override (or a direct bump where the dependency is direct). `js-yaml@3.14.2`, reachable only through artillery's test-only load-test harness, is triaged as unreachable: its sole fix removes the `safeLoad()` API artillery still calls, and it parses only trusted in-repo configs.
+
+### Changed
+
+- **Registry rate-limiter burst raised from 5 to 10 for ghcr.io and Docker Hub.** The conservative burst allowance was tripping the limiter during legitimate request spikes (enumerating tags across many containers at once); the sustained rate (2 req/s) is unchanged.
+
+- **Hardened the E2E/CI suite against transient flakes.** Crash-prone real-application e2e fixtures (Home Assistant, Radarr) now run a keep-alive entrypoint so the watcher consistently discovers the full container set instead of intermittently seeing one short; the test-bootstrap readiness count is now exact and strict; and the Playwright container-detail helpers wait on real conditions rather than fixed timeouts. No shipped runtime behavior changes from this item.
+
 ## [1.5.0-rc.36] — 2026-06-15
 
 ### Added
