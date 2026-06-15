@@ -191,6 +191,10 @@ services:
       - dd.display.name=Nginx (Hooked)
       - dd.display.icon=si:si:nginx
       - dd.group=web-stack
+      # Opt into climbing within the 1.x.x-alpine family. Required since the #321
+      # fix gates bare specific (3-segment) tags to digest-only by default; without
+      # this include the hooks demo would never have an update to run hooks against.
+      - dd.tag.include=^1\.\d+\.\d+-alpine$$
       - dd.hook.pre=echo "pre-update check"
       - dd.hook.post=echo "post-update cleanup"
       - dd.hook.timeout=30000
