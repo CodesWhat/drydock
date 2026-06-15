@@ -671,6 +671,50 @@ describe('docker tag candidates module', () => {
       expect(result.tags).toEqual([]);
       expect(result.noUpdateReason).toBeUndefined();
     });
+
+    test('specific suffixed 3-segment 1.13.3-bookworm, no labels → digest-only, no semver climb', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: '1.13.3-bookworm',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(
+        container,
+        ['1.13.3-bookworm', '1.13.4-bookworm', '1.14.0-bookworm', '1.46.1-bookworm'],
+        log,
+      );
+
+      expect(result.tags).toEqual([]);
+      expect(result.noUpdateReason).toContain('Pinned tag');
+      expect(log.debug).toHaveBeenCalledWith(expect.stringContaining('Pinned tag'));
+    });
+
+    test('specific 4-segment 1.2.3.4, no labels → digest-only, no semver climb', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: '1.2.3.4',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['1.2.3.4', '1.2.3.5', '1.3.0.0'], log);
+
+      expect(result.tags).toEqual([]);
+      expect(result.noUpdateReason).toContain('Pinned tag');
+      expect(log.debug).toHaveBeenCalledWith(expect.stringContaining('Pinned tag'));
+    });
   });
 
   test('processes large tag lists within lightweight runtime budget', () => {
@@ -724,8 +768,8 @@ describe('docker tag candidates module', () => {
       log,
     );
 
-    // With failed excludeTags compile, all tags pass through
-    expect(result.tags.length).toBeGreaterThanOrEqual(0);
+    // With failed excludeTags compile, all tags pass through unfiltered (sorted descending)
+    expect(result.tags).toEqual(['1.0.2', '1.0.1']);
     compileSpy.mockRestore();
   });
 

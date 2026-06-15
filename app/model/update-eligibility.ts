@@ -103,9 +103,12 @@ export interface UpdateEligibilityContext {
   now?: number;
   isSelfUpdateAvailable?: boolean;
   /**
-   * Set to `false` by auto-trigger dispatch to block updates outside the maintenance window.
-   * When `undefined` (the default for manual API/UI requests) the check is skipped so that
-   * operators can always force an update regardless of the window.
+   * Optional. When explicitly set to `false` by a caller, a soft `maintenance-window-closed`
+   * blocker is recorded in the eligibility result. Defaults to `undefined`.
+   * NOTE: No auto-trigger dispatch path currently sets this field — auto-update window
+   * enforcement is done at scan time in the Docker watcher (watchFromCron /
+   * maybeFastResyncAfterUpdate return early when the window is closed). Manual UI/API update
+   * requests leave it undefined and are never gated by it.
    */
   maintenanceWindowOpen?: boolean;
 }
