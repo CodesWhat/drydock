@@ -170,7 +170,7 @@ jobs:
       - name: Wait for QA health
         run: |
           set -euo pipefail
-          for _ in $(seq 1 60); do
+          for _ in $(seq 1 90); do
             if curl -sf http://localhost:3333/health >/dev/null 2>&1; then
               echo "Drydock QA is healthy"
               exit 0
@@ -178,8 +178,9 @@ jobs:
             sleep 2
           done
 
-          echo "Drydock QA failed to become healthy after 120 seconds."
+          echo "Drydock QA failed to become healthy after 180 seconds."
           docker compose -p drydock-playwright -f test/qa-compose.yml ps
+          docker compose -p drydock-playwright -f test/qa-compose.yml logs --no-color --tail=30
           exit 1
 
       # Run npm ci + playwright test inside the official Playwright

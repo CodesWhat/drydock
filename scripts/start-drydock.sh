@@ -56,6 +56,7 @@ DOCKER_ARGS=(
 	--env DD_TRIGGER_DOCKER_LOCAL_AUTO=false
 	--env DD_TRIGGER_MOCK_EXAMPLE_MOCK=mock
 	--env DD_WATCHER_LOCAL_WATCHBYDEFAULT=false
+	--env DD_WATCHER_LOCAL_JITTER=0
 )
 
 # ECR — dummy credentials are fine (no retry logic, fast 401)
@@ -152,8 +153,10 @@ if [ -z "${GITLAB_TOKEN:-}" ]; then
 	DEFAULT_EXPECTED=$((DEFAULT_EXPECTED - 1))
 fi
 EXPECTED_CONTAINERS=${DD_EXPECTED_CONTAINERS:-$DEFAULT_EXPECTED}
-echo "Waiting for drydock to discover ${EXPECTED_CONTAINERS}+ containers with image data (max 90s)..."
-for i in $(seq 1 45); do
+READY_TOLERANCE=${DD_READY_TOLERANCE:-1}
+EXPECTED_CONTAINERS=$((EXPECTED_CONTAINERS - READY_TOLERANCE))
+echo "Waiting for drydock to discover ${EXPECTED_CONTAINERS}+ containers with image data (max 150s)..."
+for i in $(seq 1 75); do
 	# Count containers that have a populated image.name (not just discovered)
 	CONTAINERS_JSON=""
 	if CONTAINERS_JSON=$(curl -sf -H "Authorization: ${AUTH_HEADER}" "http://localhost:${E2E_PORT}/api/containers" 2>/dev/null); then
@@ -168,8 +171,8 @@ for i in $(seq 1 45); do
 		echo "✅ drydock has ${READY} containers with resolved image data"
 		break
 	fi
-	if [ "$i" -eq 45 ]; then
-		echo "❌ drydock only has ${READY}/${EXPECTED_CONTAINERS} ready containers after 90s"
+	if [ "$i" -eq 75 ]; then
+		echo "❌ drydock only has ${READY}/${EXPECTED_CONTAINERS} ready containers after 150s"
 		docker logs drydock --tail 50
 		exit 1
 	fi

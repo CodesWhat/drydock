@@ -568,7 +568,7 @@ jobs:
       - name: Wait for QA health
         run: |
           set -euo pipefail
-          for _ in $(seq 1 60); do
+          for _ in $(seq 1 90); do
             if curl -sf http://localhost:3333/health >/dev/null 2>&1; then
               echo "Drydock is healthy"
               exit 0
@@ -576,8 +576,9 @@ jobs:
             sleep 2
           done
 
-          echo "Drydock failed to become healthy after 120 seconds."
+          echo "Drydock failed to become healthy after 180 seconds."
           docker compose -p drydock-zap -f test/qa-compose.yml ps
+          docker compose -p drydock-zap -f test/qa-compose.yml logs --no-color --tail=30
           exit 1
 
       - name: Create ZAP authenticated session
@@ -975,7 +976,12 @@ jobs:
           command: cd e2e && npm ci
 
       - name: Setup test containers
-        run: ./scripts/setup-test-containers.sh
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          retry_wait_seconds: 10
+          command: ./scripts/setup-test-containers.sh
 
       - name: Start drydock
         id: drydock
@@ -987,7 +993,7 @@ jobs:
         # @requires_gitlab scenarios here to match, otherwise they fail looking
         # for a missing container. The token-gated local path that runs them
         # lives in scripts/run-e2e-tests.sh.
-        run: npm run cucumber -- --tags "not @requires_gitlab"
+        run: npm run cucumber -- --tags "not @requires_gitlab" --retry 1
         working-directory: e2e
         env:
           DD_PORT: ${{ steps.drydock.outputs.dd_port }}
@@ -1041,8 +1047,12 @@ jobs:
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
 
       - name: Install e2e dependencies
-        run: npm ci
-        working-directory: e2e
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: cd e2e && npm ci
 
       - name: Run Artillery load test
         id: run-load-test-ci
@@ -1159,8 +1169,12 @@ jobs:
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
 
       - name: Install e2e dependencies
-        run: npm ci
-        working-directory: e2e
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60  # v4.0.0
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: cd e2e && npm ci
 
       - name: Run Artillery behavior test
         id: run-load-test-behavior

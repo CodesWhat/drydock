@@ -124,7 +124,6 @@ test.describe('Containers', () => {
     await showFilterPanel(page);
     const searchInput = page.getByPlaceholder('Search name or image...');
     await searchInput.fill('nginx');
-    await page.waitForTimeout(500);
 
     await expect(page.getByText(/nginx/i).first()).toBeVisible({ timeout: 10000 });
     const filteredCards = page.getByRole('button', { name: /Select / });
