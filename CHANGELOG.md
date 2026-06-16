@@ -20,6 +20,8 @@ scheme restriction) live in `UPGRADE-NOTES.md` and are auto-appended to every
 
 - **Documentation site (`apps/web`) js-yaml pinned to 4.2.0 ([GHSA-h67p-54hq-rp68](https://github.com/advisories/GHSA-h67p-54hq-rp68)).** `fumadocs-mdx` pulled js-yaml 4.1.1 transitively; an override forces the patched 4.2.0. Build-time dependency of the website only — not part of the shipped drydock image.
 
+- **E2E load-test harness `@opentelemetry/core` pinned to 2.8.0 ([CVE-2026-54285](https://github.com/advisories/GHSA-8988-4f7v-96qf)).** artillery pulled `@opentelemetry/core` 2.7.1 transitively, vulnerable to unbounded memory allocation in W3C Baggage propagation; an override forces the patched 2.8.0. Test-only dependency — not part of the shipped drydock image.
+
 ## [1.5.0-rc.37] — 2026-06-15
 
 ### Security
