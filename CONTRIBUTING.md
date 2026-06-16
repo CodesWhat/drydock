@@ -220,8 +220,8 @@ The `pre-commit` hook runs a scoped `vitest --changed` on staged workspaces for 
 
 Stryker runs monthly (`.github/workflows/quality-mutation-monthly.yml`), advisory only. Use it as a quality signal, not a score target.
 
-### Paid security scans
+### Dependency & container scanning
 
-Snyk (Open Source, Code, Container, IaC) runs weekly via `.github/workflows/security-snyk-weekly.yml` to preserve monthly quotas.
+Grype runs via `.github/workflows/security-grype.yml`: the dependency scan (every `package-lock.json`) on pull requests touching dependency/Dockerfile surfaces, plus a weekly cron and manual dispatch; the container-image scan runs on the scheduled/manual runs. Both fail on HIGH/CRITICAL and upload SARIF to the Security tab. SAST is CodeQL and new-dependency CVEs are flagged by `dependency-review` (both in `ci-verify.yml`); OpenSSF Scorecard runs in `security-scorecard.yml`.
 
 </details>

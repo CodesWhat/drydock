@@ -21,7 +21,9 @@
 # tests run exactly once per push instead of once embedded in build-and-test
 # plus again if we ever add a standalone coverage gate.
 #
-# Snyk scans are CI-only (release workflow) to preserve the 200/month quota.
+# Dependency / container CVE scanning (Grype) is CI-only — see
+# security-grype.yml (PR + weekly). govulncheck-style call-graph scanning
+# does not apply here; drydock is TypeScript/Node, not Go.
 #
 # Biome runs directly (not via qlty) because qlty's biome integration
 # does not reliably apply fixes. Qlty handles all other linters.
