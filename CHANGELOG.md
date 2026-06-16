@@ -16,6 +16,10 @@ scheme restriction) live in `UPGRADE-NOTES.md` and are auto-appended to every
 1.4.6+ / 1.5.x release's notes by `scripts/append-upgrade-notes.mjs` (wired into
 `release-cut.yml`). Update that file — not this comment — when the notes change. -->
 
+### Added
+
+- **Colored startup banner.** When drydock starts on an interactive terminal it now renders the whale logo as a compact truecolor half-block banner followed by a `drydock v<version> · <mode>` identity line. The art is baked from the master logo (`drydock.png`) at build time by `scripts/gen-banner.mjs`, so startup decodes no image. The banner is written to stderr and suppressed automatically when stdout/stderr is not a TTY or `NO_COLOR` is set, so logs and piped output stay clean.
+
 ### Changed
 
 - **Refreshed the drydock whale logo across the app, website, demo, and docs.** A new master render replaces the brand mark everywhere — the in-app logo and favicons, the website/demo favicons, PWA icons, and OpenGraph cards, and the README/docs logos (including the dark-mode variant). All brand assets are now regenerated from a single master (`drydock.png`) via `scripts/regenerate-brand-assets.sh`. Filenames are unchanged, so the Home Assistant `entity_picture` URL contract is preserved.

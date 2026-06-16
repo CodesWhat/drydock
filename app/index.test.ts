@@ -41,6 +41,7 @@ async function loadEntryPoint({
   const setDefaultResultOrder = vi.fn();
   const getDnsMode = vi.fn(() => 'ipv4first');
   const runConfigMigrateCommandIfRequested = vi.fn(() => migrateExitCode);
+  const renderBanner = vi.fn();
   const logInfo = vi.fn();
   const logWarn = vi.fn();
   const storeInit = vi.fn(async () => undefined);
@@ -59,6 +60,7 @@ async function loadEntryPoint({
   vi.doMock('node:dns', () => ({
     default: { setDefaultResultOrder },
   }));
+  vi.doMock('./banner/index.js', () => ({ renderBanner }));
   vi.doMock('./configuration/index.js', () => ({ getDnsMode }));
   vi.doMock('./configuration/migrate-cli.js', () => ({ runConfigMigrateCommandIfRequested }));
   vi.doMock('./log/index.js', () => ({
@@ -92,6 +94,7 @@ async function loadEntryPoint({
     setDefaultResultOrder,
     getDnsMode,
     runConfigMigrateCommandIfRequested,
+    renderBanner,
     logInfo,
     logWarn,
     storeInit,
@@ -169,6 +172,7 @@ describe('entrypoint', () => {
 
     await harness.imported;
 
+    expect(harness.renderBanner).toHaveBeenCalledWith({ mode: 'controller' });
     expect(harness.logInfo).toHaveBeenCalledWith('drydock is starting');
     expect(harness.storeInit).toHaveBeenCalledWith({ memory: false });
     expect(harness.prometheusInit).toHaveBeenCalledOnce();
@@ -199,6 +203,7 @@ describe('entrypoint', () => {
 
     await harness.imported;
 
+    expect(harness.renderBanner).toHaveBeenCalledWith({ mode: 'agent' });
     expect(harness.storeInit).toHaveBeenCalledWith({ memory: true });
     expect(harness.prometheusInit).not.toHaveBeenCalled();
     expect(harness.registryInit).toHaveBeenCalledWith({ agent: true });

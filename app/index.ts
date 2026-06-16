@@ -2,6 +2,7 @@ import dns from 'node:dns';
 import * as agentServer from './agent/api/index.js';
 import * as agentManager from './agent/index.js';
 import * as api from './api/index.js';
+import { renderBanner } from './banner/index.js';
 import { getDnsMode } from './configuration/index.js';
 import { runConfigMigrateCommandIfRequested } from './configuration/migrate-cli.js';
 import log from './log/index.js';
@@ -29,6 +30,7 @@ if (commandExitCode !== null) {
   const runningAsRoot = typeof process.getuid === 'function' && process.getuid() === 0;
   const runAsRootEnabled = process.env.DD_RUN_AS_ROOT === 'true';
   const insecureRootAcknowledged = process.env.DD_ALLOW_INSECURE_ROOT === 'true';
+  renderBanner({ mode: isAgent ? 'agent' : 'controller' });
   log.info('drydock is starting');
 
   if (runningAsRoot && runAsRootEnabled && !insecureRootAcknowledged) {
