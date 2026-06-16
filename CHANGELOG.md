@@ -31,6 +31,8 @@ scheme restriction) live in `UPGRADE-NOTES.md` and are auto-appended to every
 
 - **E2E load-test harness `@opentelemetry/core` pinned to 2.8.0 ([CVE-2026-54285](https://github.com/advisories/GHSA-8988-4f7v-96qf)).** artillery pulled `@opentelemetry/core` 2.7.1 transitively, vulnerable to unbounded memory allocation in W3C Baggage propagation; an override forces the patched 2.8.0. Test-only dependency — not part of the shipped drydock image.
 
+- **Patched the container image's HIGH/CRITICAL CVE surface and scoped the Grype image gate.** The first `grype-image` scan on `main` flagged a pre-existing CVE backlog that nothing had been scanning (Snyk Container never ran — no token was configured). Bumped the `node:24-alpine` base (node 24.14.0 → 24.16.0 clearing CVE-2026-21710, musl 1.2.5 → 1.2.6, curl 8.19.0 → 8.20.0, git 2.52.0 → 2.54.0) and `cosign` 2.6.3 → 3.0.6, which clears every HIGH/CRITICAL in the Node runtime and Alpine OS packages. The only residual HIGH/CRITICAL findings live inside the vendored Go module graphs compiled into the bundled `cosign` and `trivy` CLI binaries (drydock shells out to them for signature verification and container scanning) — those clear only when Alpine rebuilds the packages, so a documented `.grype.yaml` scopes the fail-on-HIGH image gate to the dependencies drydock controls (Node, OS packages, the app npm graph) and excludes the two tool-binary locations. cosign 3.0.6 keeps the `verify --output json`/`--certificate-identity`/`--certificate-oidc-issuer`/`--key` flags drydock's signature path uses.
+
 ## [1.5.0-rc.37] — 2026-06-15
 
 ### Security
