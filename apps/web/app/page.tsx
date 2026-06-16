@@ -663,13 +663,6 @@ export default function Home() {
                     />
                   </a>
                   <a
-                    href="https://snyk.io/test/github/CodesWhat/drydock"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <img src="https://snyk.io/test/github/CodesWhat/drydock/badge.svg" alt="Snyk" />
-                  </a>
-                  <a
                     href="https://dashboard.stryker-mutator.io/reports/github.com/CodesWhat/drydock/main"
                     target="_blank"
                     rel="noopener noreferrer"

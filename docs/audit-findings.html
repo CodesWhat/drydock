@@ -51,8 +51,6 @@
   .concern-section[data-concern="gates"] .concern-header { color: var(--accent-orange); }
   .concern-section[data-concern="efficiency"] .concern-header { color: var(--accent-yellow); }
   .concern-section[data-concern="observability"] .concern-header { color: var(--accent-green); }
-  .concern-section[data-concern="hardening"] .concern-header { color: var(--accent-purple); }
-  .concern-section[data-concern="decisions"] .concern-header { color: var(--text-dim); }
 
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 0.5rem; transition: border-color 0.15s; }
   .card:hover { border-color: #3a5080; }
@@ -104,9 +102,8 @@
 <p class="subtitle">March 2026 &mdash; lefthook + GitHub Actions &mdash; Round 1 + Round 2</p>
 
 <div class="summary">
-  <span class="chip chip-closed"><b>26</b> closed (round 1)</span>
+  <span class="chip chip-closed"><b>21</b> closed (round 1)</span>
   <span class="chip chip-open"><b>4</b> new open (round 2)</span>
-  <span class="chip chip-wontfix"><b>1</b> won't fix</span>
 </div>
 
 <div class="toolbar">
@@ -196,18 +193,6 @@
         <div class="card-body">CodeQL, Fuzz, Scorecard triggered alongside CI Verify.</div>
         <div class="card-detail"><em>Fix:</em> Dropped push:main. Kept schedule + PR only.</div>
         <div class="card-footer">H2b &middot; 40/50/60 workflows</div>
-      </div>
-      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
-    </div>
-  </div>
-
-  <div class="card" data-status="fixed" data-files="security-snyk-weekly.yml" data-concern="efficiency">
-    <div class="card-row">
-      <div class="card-content">
-        <div class="card-title">Snyk container scan rebuilt image from scratch</div>
-        <div class="card-body">Weekly scan built without cache. ~5-10 min redundant.</div>
-        <div class="card-detail"><em>Fix:</em> Buildx + GHA cache.</div>
-        <div class="card-footer">security-snyk-weekly.yml</div>
       </div>
       <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
     </div>
@@ -303,17 +288,6 @@
         <div class="card-title">E2E lock PID check used kill -0</div>
         <div class="card-detail"><em>Fix:</em> <code>ps -p</code> with numeric guard.</div>
         <div class="card-footer">H11</div>
-      </div>
-      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
-    </div>
-  </div>
-
-  <div class="card" data-status="fixed" data-files="security-snyk-weekly.yml" data-concern="observability">
-    <div class="card-row">
-      <div class="card-content">
-        <div class="card-title">Snyk CLI version pinned inline in 4 places</div>
-        <div class="card-detail"><em>Fix:</em> Single workflow-level env var.</div>
-        <div class="card-footer">security-snyk-weekly.yml</div>
       </div>
       <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
     </div>
@@ -434,28 +408,6 @@
     </div>
   </div>
 
-  <div class="card" data-status="fixed" data-files="security-snyk-weekly.yml" data-concern="gates">
-    <div class="card-row">
-      <div class="card-content">
-        <div class="card-title">Snyk quota gate didn't block scan jobs</div>
-        <div class="card-detail"><em>Fix:</em> <code>if: needs.quota-plan.result == 'success'</code>.</div>
-        <div class="card-footer">H3</div>
-      </div>
-      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
-    </div>
-  </div>
-
-  <div class="card" data-status="fixed" data-files="security-snyk-weekly.yml" data-concern="gates">
-    <div class="card-row">
-      <div class="card-content">
-        <div class="card-title">Snyk Code had continue-on-error</div>
-        <div class="card-detail"><em>Fix:</em> Removed. Weekly run is blocking.</div>
-        <div class="card-footer">H10</div>
-      </div>
-      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
-    </div>
-  </div>
-
   <div class="card" data-status="fixed" data-files="lefthook.yml" data-concern="gates">
     <div class="card-row">
       <div class="card-content">
@@ -497,39 +449,6 @@
         <div class="card-footer">ci-verify.yml + validate-commit-range.mjs</div>
       </div>
       <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
-    </div>
-  </div>
-</div>
-
-<div class="concern-section" data-concern="hardening">
-  <div class="concern-header">
-    <span>Hardening &amp; Config</span>
-    <button type="button" class="copy-group-btn" onclick="copyConcern('hardening')">Copy open</button>
-  </div>
-
-  <div class="card" data-status="fixed" data-files="snyk-quota-config.json,snyk-quota-plan.mjs" data-concern="hardening">
-    <div class="card-row">
-      <div class="card-content">
-        <div class="card-title">Snyk quota limits hardcoded in script</div>
-        <div class="card-detail"><em>Fix:</em> Single config file <code>snyk-quota-config.json</code>.</div>
-        <div class="card-footer">security-snyk-weekly.yml + scripts/</div>
-      </div>
-      <div class="card-actions"><span class="status status-fixed"><span class="dot dot-fixed"></span> Closed</span></div>
-    </div>
-  </div>
-</div>
-
-<div class="concern-section" data-concern="decisions">
-  <div class="concern-header"><span>Decisions</span></div>
-
-  <div class="card" data-status="wontfix" data-files="" data-concern="decisions">
-    <div class="card-row">
-      <div class="card-content">
-        <div class="card-title">Snyk as release-cut prerequisite</div>
-        <div class="card-body">Weekly scan sufficient. Hard-gating would block emergency hotfixes.</div>
-        <div class="card-footer">H3 note</div>
-      </div>
-      <div class="card-actions"><span class="status status-wontfix"><span class="dot dot-wontfix"></span> Won't fix</span></div>
     </div>
   </div>
 </div>

@@ -1,0 +1,147 @@
+name: "🛡️ Security: Grype"
+run-name: >-
+  ${{
+    github.event_name == 'schedule' && '🛡️ Security: Grype — Weekly run' ||
+    github.event_name == 'pull_request' && format('🛡️ Security: Grype — PR #{0}', github.event.pull_request.number) ||
+    format('🛡️ Security: Grype — Manual by {0}', github.actor)
+  }}
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    # Grype matches lockfile-resolved versions, so only dependency / image
+    # surface changes can move its findings — scope PR runs to those so
+    # source- or doc-only PRs stay fast. Source SAST is CodeQL's job
+    # (ci-verify.yml); new-dependency CVEs are dependency-review's.
+    paths:
+      - '**/package.json'
+      - '**/package-lock.json'
+      - 'Dockerfile'
+      - '.github/workflows/security-grype.yml'
+  schedule:
+    - cron: '15 7 * * 1'  # Weekly on Monday at 07:15 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-grype-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  grype-deps:
+    name: "📦 Security: Grype Dependency Scan (npm lockfiles)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Run Grype across the repository (npm lockfiles)
+        # Scanning the repo root catalogs every package-lock.json
+        # (root, app, ui, e2e, apps/demo, apps/web) in a single pass.
+        # Grype matches the lockfile-resolved versions — not the manifest
+        # requirement graph — so it does not emit the phantom-dependency
+        # findings the SCM manifest-graph scanners do.
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
+        id: grype-deps
+        with:
+          path: .
+          severity-cutoff: high
+          fail-build: true
+          output-format: sarif
+
+      - name: Upload Grype dependency SARIF
+        # Code scanning uploads need a public repo or GHAS. Drydock is public,
+        # so this runs; the guard keeps the job green on a fork/private mirror.
+        if: always() && github.event.repository.visibility == 'public'
+        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa  # v4.36.0
+        with:
+          sarif_file: ${{ steps.grype-deps.outputs.sarif }}
+          category: grype-deps
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "### Grype Dependency Scan (npm lockfiles)"
+            echo "- Scanned every package-lock.json across the repo for HIGH/CRITICAL CVEs"
+            echo "- Matches lockfile-resolved versions (no requirement-graph false positives)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  grype-image:
+    name: "🐳 Security: Grype Container Scan"
+    # The image build is the heavy step; keep it on scheduled/manual runs.
+    # PRs get fast, accurate dependency coverage from grype-deps without
+    # paying for a Docker build on every push.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411  # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+
+      - name: Build image for scanning
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
+        with:
+          context: .
+          push: false
+          load: true
+          tags: drydock:grype-scan
+          build-args: DD_VERSION=grype
+          # load: true uses the docker exporter, which can't accept the OCI
+          # manifest list produced by provenance attestations. The scan just
+          # needs the local image; real attestations live on release-cut.yml.
+          provenance: false
+          cache-from: type=gha,scope=drydock
+          cache-to: type=gha,mode=max,scope=drydock,ignore-error=true
+
+      - name: Run Grype vulnerability scanner
+        # The built image's package catalog is the dependency set actually
+        # shipped — so this is the authoritative view of the runtime CVE surface.
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
+        id: grype
+        with:
+          image: drydock:grype-scan
+          severity-cutoff: high
+          fail-build: true
+          output-format: sarif
+
+      - name: Upload Grype SARIF to code scanning
+        if: always() && github.event.repository.visibility == 'public'
+        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa  # v4.36.0
+        with:
+          sarif_file: ${{ steps.grype.outputs.sarif }}
+          category: grype-image
+
+      - name: Summarize
+        if: always()
+        run: |
+          {
+            echo "### Grype Container Scan"
+            echo "- Scanned the built image (shipped dependency set) for HIGH/CRITICAL CVEs"
+          } >> "$GITHUB_STEP_SUMMARY"

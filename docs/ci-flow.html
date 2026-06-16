@@ -305,10 +305,8 @@ header p{font-size:14px;color:#666;margin-top:4px}
         <tr><td><span class="dot" style="background:#86efac"></span></td><td>Fuzz Testing</td><td>Sun 06:00</td><td>PRs</td><td>Blocking</td></tr>
         <tr><td><span class="dot" style="background:#fde047"></span></td><td>OpenSSF Scorecard</td><td>Mon 06:00</td><td>branch protection</td><td>Advisory</td></tr>
         <tr><td><span class="dot" style="background:#fde047"></span></td><td>Mutation (Stryker)</td><td>Tue 06:15</td><td>manual dispatch</td><td>Advisory</td></tr>
-        <tr><td><span class="dot" style="background:#c4b5fd"></span></td><td>Snyk Open Source</td><td>Mon 07:15</td><td>manual (main)</td><td>Blocking (quota-gated)</td></tr>
-        <tr><td><span class="dot" style="background:#c4b5fd"></span></td><td>Snyk Code SAST</td><td>Mon 07:15</td><td>manual (main)</td><td>Blocking (quota-gated)</td></tr>
-        <tr><td><span class="dot" style="background:#c4b5fd"></span></td><td>Snyk Container</td><td>Mon 07:15</td><td>manual (main)</td><td>Blocking (quota-gated)</td></tr>
-        <tr><td><span class="dot" style="background:#c4b5fd"></span></td><td>Snyk IaC</td><td>Mon 07:15</td><td>manual (main)</td><td>Blocking (quota-gated)</td></tr>
+        <tr><td><span class="dot" style="background:#86efac"></span></td><td>Grype Dependency (npm lockfiles)</td><td>Mon 07:15</td><td>PRs (deps/Dockerfile)</td><td>Blocking</td></tr>
+        <tr><td><span class="dot" style="background:#86efac"></span></td><td>Grype Container</td><td>Mon 07:15</td><td>manual dispatch</td><td>Blocking</td></tr>
       </tbody>
     </table>
   </div>
@@ -325,13 +323,13 @@ header p{font-size:14px;color:#666;margin-top:4px}
       <li><span class="label">Merge</span> + enforced load test (committed baseline) + auto-tag</li>
       <li><span class="label">Release</span> Version assert &rarr; CI verify &rarr; build &rarr; sign &rarr; CHANGELOG gate &rarr; publish</li>
       <li><span class="label">Manual Cut</span> CI verify &rarr; bump &rarr; CHANGELOG gate &rarr; tag</li>
-      <li><span class="label">Weekly</span> Paid security scans + advisory mutation review</li>
+      <li><span class="label">Weekly</span> Grype dependency + container scan, advisory mutation review</li>
     </ul>
   </div>
   <div class="info-card">
     <h3>Design Decisions</h3>
     <ul>
-      <li><span class="label">Free / Paid</span> Free tools gate PRs, paid (Snyk) weekly + quota-gated</li>
+      <li><span class="label">Scanning</span> Grype (deps on PRs + image weekly), CodeQL, Scorecard — all free, no paid scanners</li>
       <li><span class="label">QA Image</span> Built once in CI, shared as artifact</li>
       <li><span class="label">Release CI</span> Dynamic workflow lookup, polls for prior success</li>
       <li><span class="label">Version</span> Tag base version asserted against all package.json files</li>
@@ -373,7 +371,7 @@ header p{font-size:14px;color:#666;margin-top:4px}
       <li><span class="label">CI Verify</span> ci-verify.yml (includes 🛡️ CodeQL and 🎯 Fuzz Testing jobs)</li>
       <li><span class="label">Release Cut</span> release-cut.yml (manual dispatch; builds, signs, attests, and tags as the final step)</li>
       <li><span class="label">Scorecard</span> security-scorecard.yml</li>
-      <li><span class="label">Snyk</span> security-snyk-weekly.yml (weekly + manual)</li>
+      <li><span class="label">Grype</span> security-grype.yml (deps on PRs + weekly/manual; container weekly/manual)</li>
       <li><span class="label">Stryker</span> quality-mutation-monthly.yml (monthly + manual)</li>
     </ul>
   </div>
