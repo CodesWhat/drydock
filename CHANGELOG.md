@@ -16,6 +16,10 @@ scheme restriction) live in `UPGRADE-NOTES.md` and are auto-appended to every
 1.4.6+ / 1.5.x release's notes by `scripts/append-upgrade-notes.mjs` (wired into
 `release-cut.yml`). Update that file — not this comment — when the notes change. -->
 
+### Security
+
+- **Documentation site (`apps/web`) js-yaml pinned to 4.2.0 ([GHSA-h67p-54hq-rp68](https://github.com/advisories/GHSA-h67p-54hq-rp68)).** `fumadocs-mdx` pulled js-yaml 4.1.1 transitively; an override forces the patched 4.2.0. Build-time dependency of the website only — not part of the shipped drydock image.
+
 ## [1.5.0-rc.37] — 2026-06-15
 
 ### Security
