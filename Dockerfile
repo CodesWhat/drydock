@@ -1,6 +1,6 @@
 # checkov:skip=CKV_DOCKER_3: entrypoint uses su-exec for runtime privilege drop
 # Common Stage
-FROM node:24-alpine@sha256:7fddd9ddeae8196abf4a3ef2de34e11f7b1a722119f91f28ddf1e99dcafdf114 AS base
+FROM node:24-alpine@sha256:21f403ab171f2dc89bad4dd69d7721bfd15f084ccb46cdd225f31f2bc59b5c9a AS base
 WORKDIR /home/node/app
 
 LABEL maintainer="CodesWhat"
@@ -24,15 +24,15 @@ HEALTHCHECK --interval=30s --timeout=5s CMD ["sh", "-c", "if [ -n \"$DD_SERVER_E
 # pinned to the package name only.
 # hadolint ignore=DL3018
 RUN apk add --no-cache \
-    bash=5.3.3-r1 \
+    bash=5.3.9-r1 \
     curl \
-    git=2.52.0-r0 \
+    git=2.54.0-r0 \
     jq=1.8.1-r0 \
     openssl=3.5.7-r0 \
     su-exec=0.3-r0 \
     tini=0.19.0-r3 \
     tzdata=2026b-r0 \
-    && apk add --no-cache cosign=2.6.3-r1 \
+    && apk add --no-cache cosign=3.0.6-r1 \
     && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing trivy \
     && apk upgrade --no-cache zlib libcrypto3 libssl3 \
     && mkdir /store && chown node:node /store

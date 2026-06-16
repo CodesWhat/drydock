@@ -125,6 +125,12 @@ jobs:
         # shipped — so this is the authoritative view of the runtime CVE surface.
         uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
         id: grype
+        env:
+          # Load the repo-root .grype.yaml explicitly (it documents why the
+          # bundled cosign/trivy CLI binaries' vendored Go-module CVEs are
+          # triaged). grype also auto-discovers it from the workspace, but
+          # pinning the path keeps the gate deterministic across action versions.
+          GRYPE_CONFIG: ${{ github.workspace }}/.grype.yaml
         with:
           image: drydock:grype-scan
           severity-cutoff: high
