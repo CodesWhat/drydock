@@ -16,6 +16,8 @@ scheme restriction) live in `UPGRADE-NOTES.md` and are auto-appended to every
 1.4.6+ / 1.5.x release's notes by `scripts/append-upgrade-notes.mjs` (wired into
 `release-cut.yml`). Update that file — not this comment — when the notes change. -->
 
+## [1.5.0-rc.38] — 2026-06-19
+
 ### Added
 
 - **Colored startup banner.** When drydock starts on an interactive terminal it now renders the whale logo as a compact truecolor half-block banner followed by a `drydock v<version> · <mode>` identity line. The art is baked from the master logo (`drydock.png`) at build time by `scripts/gen-banner.mjs`, so startup decodes no image. The banner is written to stderr and suppressed automatically when stdout/stderr is not a TTY or `NO_COLOR` is set, so logs and piped output stay clean.
