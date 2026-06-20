@@ -51,7 +51,7 @@
     "mqtt": "5.15.1",
     "nocache": "4.0.0",
     "node-cron": "4.2.1",
-    "nodemailer": "8.0.10",
+    "nodemailer": "9.0.1",
     "openid-client": "6.8.4",
     "p-limit": "7.3.0",
     "parse-docker-image-name": "3.0.0",
@@ -66,7 +66,7 @@
     "semver": "7.8.1",
     "set-value": "4.1.0",
     "sort-es": "1.7.18",
-    "undici": "8.3.0",
+    "undici": "8.5.0",
     "unix-crypt-td-js": "1.1.4",
     "uuid": "14.0.0",
     "ws": "8.21.0",
@@ -85,7 +85,8 @@
     "vite": "8.0.16",
     "@babel/core": "7.29.6",
     "form-data": "4.0.6",
-    "protobufjs": "7.6.3"
+    "protobufjs": "7.6.3",
+    "undici": "8.5.0"
   },
   "devDependencies": {
     "@fast-check/vitest": "0.4.1",
