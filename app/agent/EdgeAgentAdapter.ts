@@ -3,7 +3,7 @@
  * that connect via the portwing/1.0 WebSocket protocol instead of the SSE path.
  *
  * After a successful hello/welcome handshake the gateway calls:
- *   new EdgeAgentAdapter(client, ws, hello, config)
+ *   new EdgeAgentAdapter(client, ws)
  * The adapter then owns the WebSocket and translates incoming Portwing frames
  * into AgentClient pipeline calls.
  */
@@ -37,12 +37,6 @@ export interface HelloMessage {
   timestamp?: number;
   nonce?: string;
   signature?: string;
-}
-
-export interface EdgeAgentAdapterConfig {
-  pollInterval: number;
-  agentId: string;
-  version: string;
 }
 
 interface ExecSession {
@@ -93,8 +87,6 @@ export function buildEdgeSentinelConfig(agentId: string): AgentClientConfig {
 export class EdgeAgentAdapter {
   private readonly client: AgentClient;
   private readonly ws: WebSocketLike;
-  private readonly hello: HelloMessage;
-  private readonly adapterConfig: EdgeAgentAdapterConfig;
   private readonly agentName: string;
   private readonly execSessions: Map<string, ExecSession>;
   private readonly pendingRequests: Map<string, PendingRequest>;
@@ -102,16 +94,9 @@ export class EdgeAgentAdapter {
   private containerSyncWarnTimer: ReturnType<typeof setTimeout> | undefined;
   private connected = false;
 
-  constructor(
-    client: AgentClient,
-    ws: WebSocketLike,
-    hello: HelloMessage,
-    adapterConfig: EdgeAgentAdapterConfig,
-  ) {
+  constructor(client: AgentClient, ws: WebSocketLike) {
     this.client = client;
     this.ws = ws;
-    this.hello = hello;
-    this.adapterConfig = adapterConfig;
     this.agentName = client.name;
     this.execSessions = new Map();
     this.pendingRequests = new Map();
