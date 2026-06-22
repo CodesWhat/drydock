@@ -9,7 +9,7 @@
  *   node scripts/gen-banner.mjs
  */
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,7 +28,7 @@ const RESET = `${ESC}[0m`;
 // ---------------------------------------------------------------------------
 // 1. Dump pixels via ImageMagick
 // ---------------------------------------------------------------------------
-const raw = execSync(`magick ${PNG} -resize ${TARGET_WIDTH}x -depth 8 txt:-`, {
+const raw = execFileSync('magick', [PNG, '-resize', `${TARGET_WIDTH}x`, '-depth', '8', 'txt:-'], {
   encoding: 'utf8',
   maxBuffer: 10 * 1024 * 1024,
 });
@@ -143,7 +143,7 @@ writeFileSync(OUT, tsContent, 'utf8');
 // 5. Lint/format the generated file
 // ---------------------------------------------------------------------------
 try {
-  execSync(`npx @biomejs/biome check --write ${OUT}`, {
+  execFileSync('npx', ['@biomejs/biome', 'check', '--write', OUT], {
     cwd: ROOT,
     encoding: 'utf8',
     stdio: 'pipe',
