@@ -7,7 +7,9 @@
     },
     "password": {
       "label": "Mot de passe",
-      "placeholder": "Saisissez votre mot de passe"
+      "placeholder": "Saisissez votre mot de passe",
+      "show": "Show password",
+      "hide": "Hide password"
     },
     "submit": {
       "signIn": "Se connecter",

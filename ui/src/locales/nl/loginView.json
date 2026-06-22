@@ -7,7 +7,9 @@
     },
     "password": {
       "label": "Wachtwoord",
-      "placeholder": "Voer uw wachtwoord in"
+      "placeholder": "Voer uw wachtwoord in",
+      "show": "Show password",
+      "hide": "Hide password"
     },
     "submit": {
       "signIn": "Log in",

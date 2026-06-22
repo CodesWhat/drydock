@@ -7,7 +7,9 @@
     },
     "password": {
       "label": "パスワード",
-      "placeholder": "パスワードを入力"
+      "placeholder": "パスワードを入力",
+      "show": "Show password",
+      "hide": "Hide password"
     },
     "submit": {
       "signIn": "サインイン",

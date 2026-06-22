@@ -7,7 +7,9 @@
     },
     "password": {
       "label": "Пароль",
-      "placeholder": "Введіть пароль"
+      "placeholder": "Введіть пароль",
+      "show": "Show password",
+      "hide": "Hide password"
     },
     "submit": {
       "signIn": "Увійти",
