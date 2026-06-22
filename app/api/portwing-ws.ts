@@ -537,11 +537,7 @@ async function processHello(
     pollInterval: String(pollInterval),
   };
 
-  const adapter = new EdgeAgentAdapter(client, ws, hello, {
-    pollInterval,
-    agentId: hello.agentId,
-    version: hello.version,
-  });
+  const adapter = new EdgeAgentAdapter(client, ws);
   // activate() calls addAgent() — release the in-flight reservation immediately
   // after so the slot is held by the manager instead.
   adapter.activate();

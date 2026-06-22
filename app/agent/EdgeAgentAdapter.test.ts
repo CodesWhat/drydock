@@ -122,11 +122,7 @@ function createAdapter(hello?: Partial<HelloMessage>) {
     port: 0,
     secret: '',
   });
-  const adapter = new EdgeAgentAdapter(client, ws, helloMsg, {
-    pollInterval: 300,
-    agentId: helloMsg.agentId,
-    version: helloMsg.version,
-  });
+  const adapter = new EdgeAgentAdapter(client, ws);
   return { adapter, ws, client, hello: helloMsg };
 }
 

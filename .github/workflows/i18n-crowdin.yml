@@ -48,6 +48,15 @@ jobs:
           pull_request_base_branch_name: main
           commit_message: "🔧 chore(i18n): sync translations from Crowdin"
         env:
+          # The crowdin/github-action entrypoint runs `git config --global`
+          # (safe.directory, then the commit user) but the container inherits
+          # HOME=/ from the runner, so those writes hit "could not lock config
+          # file //.gitconfig: Permission denied" and the commit/PR step fails.
+          # A step-level HOME can't fix it: GitHub passes HOME to container
+          # actions via `-e HOME` pass-through, which always wins. Instead point
+          # git's global config at a mounted, writable file — GIT_CONFIG_GLOBAL
+          # is honored independent of HOME (git >= 2.32).
+          GIT_CONFIG_GLOBAL: /github/home/.gitconfig
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
