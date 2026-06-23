@@ -311,5 +311,9 @@ export async function init() {
       serverConfiguration: configuration as Record<string, unknown>,
       isRateLimited,
     });
+  } else {
+    log.info(
+      'portwing/1.0 edge endpoint is disabled — set DD_EXPERIMENTAL_PORTWING=true to enable it',
+    );
   }
 }

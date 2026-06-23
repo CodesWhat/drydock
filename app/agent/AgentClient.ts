@@ -67,6 +67,15 @@ interface AgentClientRuntimeInfo {
   lastSeen?: string;
   logLevel?: string;
   pollInterval?: string;
+  cpuUsage?: number;
+  cpuCores?: number;
+  memoryUsed?: number;
+  memoryFree?: number;
+  diskTotal?: number;
+  diskUsed?: number;
+  diskFree?: number;
+  networkRxBytes?: number;
+  networkTxBytes?: number;
 }
 
 interface AgentComponentDescriptor {

@@ -1329,4 +1329,22 @@ describe('API Index', () => {
 
     expect(mockAttachPortwingWsServer).not.toHaveBeenCalled();
   });
+
+  test('should log info that portwing endpoint is disabled when DD_EXPERIMENTAL_PORTWING is false', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    mockGetExperimentalPortwingEnabled.mockReturnValue(false);
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockLog.info).toHaveBeenCalledWith(
+      'portwing/1.0 edge endpoint is disabled — set DD_EXPERIMENTAL_PORTWING=true to enable it',
+    );
+  });
 });

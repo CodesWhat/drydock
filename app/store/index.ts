@@ -7,7 +7,7 @@ import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../runti
 
 const log = logger.child({ component: 'store' });
 
-import { getStoreConfiguration } from '../configuration/index.js';
+import { getPortwingAuthorizedKeysPath, getStoreConfiguration } from '../configuration/index.js';
 
 import * as agentKeys from './agent-keys.js';
 import * as app from './app.js';
@@ -56,6 +56,25 @@ function createCollections() {
 }
 
 /**
+ * Load authorized keys from DD_PORTWING_AUTHORIZED_KEYS if set.
+ * Errors are logged and swallowed so a bad keys file does not abort startup.
+ */
+function loadAuthorizedKeysIfConfigured() {
+  const keysPath = getPortwingAuthorizedKeysPath();
+  if (!keysPath) {
+    return;
+  }
+  try {
+    agentKeys.loadAuthorizedKeysFile(keysPath);
+  } catch (error: unknown) {
+    log.warn(
+      { path: keysPath, error: String(error) },
+      'Failed to load DD_PORTWING_AUTHORIZED_KEYS — edge connections will require manual key registration',
+    );
+  }
+}
+
+/**
  * Load DB.
  * @param err
  * @param resolve
@@ -72,6 +91,7 @@ async function loadDb(
   } else {
     // Create collections
     createCollections();
+    loadAuthorizedKeysIfConfigured();
     resolve();
   }
 }
@@ -102,6 +122,7 @@ export async function init(options: { memory?: boolean } = {}) {
   if (isMemoryMode) {
     log.info('Init store in memory mode');
     createCollections();
+    loadAuthorizedKeysIfConfigured();
     return;
   }
 

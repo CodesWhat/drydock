@@ -368,6 +368,9 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
   });
 
   test('exec start when limit reached rejects with session-limit error and sends NO exec_end frame', async () => {
+    // When the session limit is reached, startExec rejects before registering any session,
+    // so no exec_end should be sent for the rejected call. exec_end is only sent by the
+    // close() closure of successfully-registered sessions (O5 fix).
     const { adapter, ws } = createAdapter();
     adapter.activate();
 
@@ -390,7 +393,9 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
 
     await expect(adapter.startExec('c1', ['/bin/bash'])).rejects.toThrow('session limit reached');
 
-    // No new frame should have been sent — the exec_end send is spurious and has been removed
+    // No new frame should have been sent — the session was never registered so
+    // no exec_end is generated (exec_end is only sent from the close() closure of a
+    // successfully-registered session, which this rejected call never created).
     expect(ws.sentMessages.length).toBe(sentCountBefore);
     expect(ws.close).not.toHaveBeenCalled();
   });
@@ -425,12 +430,15 @@ describe('EdgeAgentAdapter — disconnect cleanup', () => {
     expect(await p1).toMatch(/connection closed/);
   });
 
-  test('onDisconnect clears all exec sessions', async () => {
+  test('onDisconnect clears all exec sessions and sends exec_end for each (O5)', async () => {
+    // O5 fix: onDisconnect calls session.close() for each live session, which now
+    // sends exec_end to the edge before deleting the map entry.
     const { adapter, ws } = createAdapter();
     adapter.activate();
 
-    sendFrame(ws, 'exec_ready', { execId: 'exec-99' });
-    await new Promise((r) => setTimeout(r, 0));
+    // Register a session via startExec so the close closure includes sendExecEnd
+    const execId = await adapter.startExec('c1', ['/bin/bash']);
+    ws.sentMessages.length = 0; // clear exec_start frame
 
     const adapterInternal = adapter as unknown as { execSessions: Map<string, unknown> };
     expect(adapterInternal.execSessions.size).toBe(1);
@@ -438,6 +446,14 @@ describe('EdgeAgentAdapter — disconnect cleanup', () => {
     await adapter.onDisconnect();
 
     expect(adapterInternal.execSessions.size).toBe(0);
+
+    // exec_end must have been sent to the edge for the live session (O5)
+    expect(
+      ws.sentMessages.some((m) => {
+        const parsed = JSON.parse(m) as { type: string; data: { execId: string } };
+        return parsed.type === 'exec_end' && parsed.data.execId === execId;
+      }),
+    ).toBe(true);
   });
 
   test('onDisconnect calls removeAgent', async () => {
@@ -1169,11 +1185,14 @@ describe('EdgeAgentAdapter — startExec close closure and send error', () => {
     vi.clearAllMocks();
   });
 
-  test('exec_end after startExec invokes the startExec close closure', async () => {
+  test('exec_end after startExec invokes the startExec close closure and sends exec_end to edge (O5)', async () => {
+    // O5 fix: session.close() now sends exec_end to the edge BEFORE deleting the map
+    // entry, so the edge can tear down Docker exec processes / goroutines.
     const { adapter, ws } = createAdapter();
     adapter.activate();
 
     const execId = await adapter.startExec('c1', ['/bin/bash']);
+    ws.sentMessages.length = 0; // clear exec_start frame
 
     const adapterInternal = adapter as unknown as {
       execSessions: Map<string, unknown>;
@@ -1181,11 +1200,19 @@ describe('EdgeAgentAdapter — startExec close closure and send error', () => {
     expect(adapterInternal.execSessions.has(execId)).toBe(true);
 
     // Send exec_end with the execId returned by startExec
-    // This hits the startExec close closure (line 589)
+    // This hits the startExec close closure which now calls sendExecEnd(execId)
     sendFrame(ws, 'exec_end', { execId });
     await new Promise((r) => setTimeout(r, 0));
 
     expect(adapterInternal.execSessions.has(execId)).toBe(false);
+
+    // Verify exec_end was sent outbound to the edge agent (O5)
+    expect(
+      ws.sentMessages.some((m) => {
+        const parsed = JSON.parse(m) as { type: string; data: { execId: string } };
+        return parsed.type === 'exec_end' && parsed.data.execId === execId;
+      }),
+    ).toBe(true);
   });
 
   test('startExec rejects when ws.send throws', async () => {
@@ -1465,6 +1492,347 @@ describe('EdgeAgentAdapter — branch coverage for uncovered paths', () => {
     await new Promise((r) => setTimeout(r, 10));
 
     expect(ws.close).not.toHaveBeenCalled();
+  });
+});
+
+describe('EdgeAgentAdapter — O4: stream inactivity timeout resets on chunk', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('stream chunks arriving within 30s reset the timer so the promise does not time out', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const streamPromise = adapter.sendStreamRequest('GET', '/containers/c1/logs?follow=1');
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      data: { requestId: string };
+    };
+    const { requestId } = sentFrame.data;
+
+    // Advance 25s — no timeout yet (timer is 30s)
+    vi.advanceTimersByTime(25_000);
+
+    // A chunk arrives — this resets the 30s inactivity timer
+    sendFrame(ws, 'stream', { requestId, data: Buffer.from('chunk').toString('base64') });
+
+    // Advance another 25s — without the reset this would have timed out (25+25=50>30)
+    vi.advanceTimersByTime(25_000);
+
+    // Stream ends now — should still resolve (total 50s but timer was reset at 25s)
+    sendFrame(ws, 'stream_end', { requestId, reason: 'done' });
+
+    vi.useRealTimers();
+    const result = await streamPromise;
+    expect((result as { complete: boolean }).complete).toBe(true);
+  });
+
+  test('stream times out when no chunk arrives within 30s of the last activity', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const streamPromise = adapter.sendStreamRequest('GET', '/containers/c1/logs?follow=1');
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      data: { requestId: string };
+    };
+    const { requestId } = sentFrame.data;
+
+    // Advance 25s and send a chunk (resets timer)
+    vi.advanceTimersByTime(25_000);
+    sendFrame(ws, 'stream', { requestId, data: Buffer.from('chunk').toString('base64') });
+
+    // Now advance 31s with NO new chunk — should time out
+    vi.advanceTimersByTime(31_000);
+
+    await expect(streamPromise).rejects.toThrow(/timed out/);
+    vi.useRealTimers();
+  });
+});
+
+describe('EdgeAgentAdapter — O7: metrics reads all 11 fields', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('metrics frame populates all 11 camelCase fields on client.info', async () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    sendFrame(ws, 'metrics', {
+      cpuUsage: 0.75,
+      cpuCores: 8,
+      memoryTotal: 16 * 1e9,
+      memoryUsed: 8 * 1e9,
+      memoryFree: 8 * 1e9,
+      diskTotal: 500 * 1e9,
+      diskUsed: 200 * 1e9,
+      diskFree: 300 * 1e9,
+      networkRxBytes: 1_000_000,
+      networkTxBytes: 500_000,
+      uptime: 7200,
+    });
+
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(client.info.memoryGb).toBeCloseTo(16, 1);
+    expect(client.info.uptimeSeconds).toBe(7200);
+    expect(client.info.cpuUsage).toBe(0.75);
+    expect(client.info.cpuCores).toBe(8);
+    expect(client.info.memoryUsed).toBe(8 * 1e9);
+    expect(client.info.memoryFree).toBe(8 * 1e9);
+    expect(client.info.diskTotal).toBe(500 * 1e9);
+    expect(client.info.diskUsed).toBe(200 * 1e9);
+    expect(client.info.diskFree).toBe(300 * 1e9);
+    expect(client.info.networkRxBytes).toBe(1_000_000);
+    expect(client.info.networkTxBytes).toBe(500_000);
+  });
+
+  test('metrics frame with missing optional fields leaves them absent from client.info', async () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    sendFrame(ws, 'metrics', { memoryTotal: 8 * 1e9, uptime: 3600 });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(client.info.cpuUsage).toBeUndefined();
+    expect(client.info.cpuCores).toBeUndefined();
+    expect(client.info.memoryUsed).toBeUndefined();
+  });
+});
+
+describe('EdgeAgentAdapter — O9: response isStream=true stashes headers/statusCode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('response frame with isStream=true stashes statusCode/headers and does not resolve', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    let resolved = false;
+    const streamPromise = adapter.sendStreamRequest('GET', '/containers/c1/archive');
+    streamPromise
+      .then(() => {
+        resolved = true;
+      })
+      .catch(() => {});
+
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      data: { requestId: string };
+    };
+    const { requestId } = sentFrame.data;
+
+    // Portwing sends initial response frame before stream chunks
+    sendFrame(ws, 'response', {
+      requestId,
+      isStream: true,
+      statusCode: 200,
+      headers: { 'content-type': 'application/x-tar' },
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Must NOT have resolved yet (stream chunks still pending)
+    expect(resolved).toBe(false);
+
+    // Resolve with stream_end — statusCode/headers must appear in resolved value
+    sendFrame(ws, 'stream_end', { requestId, reason: 'done' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    const result = await streamPromise;
+    const res = result as {
+      complete: boolean;
+      statusCode?: number;
+      headers?: Record<string, string>;
+      body: Buffer;
+    };
+    expect(res.complete).toBe(true);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers?.['content-type']).toBe('application/x-tar');
+  });
+
+  test('response with isStream=true that receives no chunks times out and rejects (covers stream-response inactivity timer)', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const streamPromise = adapter.sendStreamRequest('GET', '/containers/c1/archive');
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      data: { requestId: string };
+    };
+    const { requestId } = sentFrame.data;
+
+    sendFrame(ws, 'response', {
+      requestId,
+      isStream: true,
+      statusCode: 200,
+      headers: { 'content-type': 'application/x-tar' },
+    });
+    vi.advanceTimersByTime(31_000);
+
+    await expect(streamPromise).rejects.toThrow(/timed out/);
+    vi.useRealTimers();
+  });
+
+  test('isStream=true response without statusCode/headers leaves them unset (covers false guards)', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const streamPromise = adapter.sendStreamRequest('GET', '/containers/c1/archive');
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      data: { requestId: string };
+    };
+    const { requestId } = sentFrame.data;
+
+    sendFrame(ws, 'response', { requestId, isStream: true });
+    await new Promise((r) => setTimeout(r, 0));
+
+    sendFrame(ws, 'stream_end', { requestId, reason: 'done' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    const result = await streamPromise;
+    const res = result as {
+      complete: boolean;
+      statusCode?: number;
+      headers?: Record<string, string>;
+    };
+    expect(res.complete).toBe(true);
+    expect(res.statusCode).toBeUndefined();
+    expect(res.headers).toBeUndefined();
+  });
+
+  test('stream frame with non-string data is ignored (covers false branch of typeof check)', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const streamPromise = adapter.sendStreamRequest('GET', '/containers/c1/archive');
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      data: { requestId: string };
+    };
+    const { requestId } = sentFrame.data;
+
+    sendFrame(ws, 'stream', { requestId });
+    await new Promise((r) => setTimeout(r, 0));
+
+    sendFrame(ws, 'stream_end', { requestId, reason: 'done' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    const result = await streamPromise;
+    const res = result as { complete: boolean; body: Buffer };
+    expect(res.complete).toBe(true);
+    expect(res.body.length).toBe(0);
+  });
+});
+
+describe('EdgeAgentAdapter — O10: stream chunks assembled into body', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('stream chunks are base64-decoded and concatenated; body appears in resolved value', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const streamPromise = adapter.sendStreamRequest('GET', '/containers/c1/archive');
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      data: { requestId: string };
+    };
+    const { requestId } = sentFrame.data;
+
+    const part1 = Buffer.from('hello ');
+    const part2 = Buffer.from('world');
+
+    sendFrame(ws, 'stream', { requestId, data: part1.toString('base64') });
+    sendFrame(ws, 'stream', { requestId, data: part2.toString('base64') });
+    await new Promise((r) => setTimeout(r, 0));
+
+    sendFrame(ws, 'stream_end', { requestId, reason: 'done' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    const result = await streamPromise;
+    const res = result as { complete: boolean; body: Buffer };
+    expect(res.complete).toBe(true);
+    expect(res.body.toString()).toBe('hello world');
+  });
+
+  test('stream_end with no preceding chunks resolves with empty body', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const streamPromise = adapter.sendStreamRequest('GET', '/containers/c1/archive');
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      data: { requestId: string };
+    };
+    const { requestId } = sentFrame.data;
+
+    sendFrame(ws, 'stream_end', { requestId, reason: 'done' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    const result = await streamPromise;
+    const res = result as { complete: boolean; body: Buffer };
+    expect(res.complete).toBe(true);
+    expect(res.body.length).toBe(0);
+  });
+});
+
+describe('EdgeAgentAdapter — O12: startExec includes tty field', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('startExec sends tty: true by default', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    await adapter.startExec('c1', ['/bin/bash']);
+
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      type: string;
+      data: { tty: boolean };
+    };
+    expect(sentFrame.type).toBe('exec_start');
+    expect(sentFrame.data.tty).toBe(true);
+  });
+
+  test('startExec sends tty: false when explicitly set', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    await adapter.startExec('c1', ['/bin/sh', '-c', 'ls'], { tty: false });
+
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      type: string;
+      data: { tty: boolean };
+    };
+    expect(sentFrame.type).toBe('exec_start');
+    expect(sentFrame.data.tty).toBe(false);
+  });
+});
+
+describe('EdgeAgentAdapter — O5: startExec close sends exec_end outbound', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('calling session.close() directly sends exec_end to edge', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const execId = await adapter.startExec('c1', ['/bin/bash']);
+    ws.sentMessages.length = 0; // clear exec_start
+
+    // Call close() directly (simulates caller-side teardown)
+    const adapterInternal = adapter as unknown as {
+      execSessions: Map<string, { close: () => void }>;
+    };
+    adapterInternal.execSessions.get(execId)?.close();
+
+    const execEndSent = ws.sentMessages.some((m) => {
+      const parsed = JSON.parse(m) as { type: string; data: { execId: string } };
+      return parsed.type === 'exec_end' && parsed.data.execId === execId;
+    });
+    expect(execEndSent).toBe(true);
   });
 });
 
