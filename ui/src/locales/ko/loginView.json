@@ -7,7 +7,9 @@
     },
     "password": {
       "label": "비밀번호",
-      "placeholder": "비밀번호를 입력하세요"
+      "placeholder": "비밀번호를 입력하세요",
+      "show": "Show password",
+      "hide": "Hide password"
     },
     "submit": {
       "signIn": "로그인",

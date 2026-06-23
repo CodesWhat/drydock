@@ -7,7 +7,9 @@
     },
     "password": {
       "label": "كلمة المرور",
-      "placeholder": "أدخل كلمة المرور"
+      "placeholder": "أدخل كلمة المرور",
+      "show": "Show password",
+      "hide": "Hide password"
     },
     "submit": {
       "signIn": "تسجيل الدخول",
