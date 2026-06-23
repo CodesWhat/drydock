@@ -36,7 +36,7 @@ const log = logger.child({ component: 'portwing-ws' });
 export const PORTWING_WS_ROUTE_PATTERN = /^\/api(?:\/v1)?\/portwing\/ws$/;
 
 const PROTOCOL_STRING = 'portwing/1.0';
-const SERVER_COMPAT_LEVEL = '1.4';
+const SERVER_COMPAT_LEVEL = '1.4.0';
 const HELLO_TIMEOUT_MS = 30_000;
 const NONCE_PATTERN = /^[0-9a-f]{32}$/;
 // Key IDs are hex(SHA-256(raw32Bytes)[:8]) → exactly 16 lowercase hex chars.
