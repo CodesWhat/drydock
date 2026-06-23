@@ -256,9 +256,9 @@ const roadmap = [
     version: "v1.5.0",
     title: "Observability & User-Requested Features",
     emoji: "\u{26A1}",
-    status: "next" as const,
+    status: "released" as const,
     dotColor:
-      "border-amber-500 bg-amber-50 text-amber-600 dark:border-amber-400 dark:bg-amber-950 dark:text-amber-400",
+      "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
     items: [
       "Real-time WebSocket log viewer with ANSI colors + JSON syntax highlighting",
       "Diagnostic debug dump with automatic redaction",
