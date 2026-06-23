@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Coverage reporting moved from Codecov to Qlty Cloud.** Part of the org-wide consolidation onto Qlty (one vendor for code quality and coverage). CI now publishes the normalized app/ui lcov reports to Qlty Cloud via GitHub OIDC — no stored coverage token — replacing the Codecov upload and `codecov.yml`. The vitest 100% coverage thresholds in the app/ and ui/ test suites remain the enforced gate; the README coverage badge now points at Qlty.
+
 <!-- The 1.4.6/1.5 behavioral/breaking upgrade notes (OIDC `authorization_endpoint`
 required, unauthenticated rate-limit keying on the TCP peer, HTTP-trigger proxy
 scheme restriction) live in `UPGRADE-NOTES.md` and are auto-appended to every
