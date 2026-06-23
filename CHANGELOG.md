@@ -16,6 +16,84 @@ scheme restriction) live in `UPGRADE-NOTES.md` and are auto-appended to every
 1.4.6+ / 1.5.x release's notes by `scripts/append-upgrade-notes.mjs` (wired into
 `release-cut.yml`). Update that file — not this comment — when the notes change. -->
 
+## [1.5.0] — 2026-06-22
+
+### Added
+
+- **Trigger taxonomy split — `DD_ACTION_*` and `DD_NOTIFICATION_*` prefixes.** Action triggers (Docker, Docker Compose, Command) now use `DD_ACTION_*` / `dd.action.*`; messaging triggers (Slack, SMTP, Discord, Telegram, ntfy, Pushover, and all others) use `DD_NOTIFICATION_*` / `dd.notification.*`. All three families remain interchangeable at runtime through v1.7.0. A migration CLI (`drydock config migrate --source trigger`) rewrites existing configs automatically. The legacy `DD_TRIGGER_*` / `dd.trigger.*` aliases are deprecated (removal targeted v1.7.0).
+
+- **Experimental Portwing edge-agent mode.** Agents behind NAT or firewalls can dial out to the controller over a persistent `wss://` WebSocket instead of requiring an inbound connection. Enable with `DD_EXPERIMENTAL_PORTWING=true`. Uses Ed25519 public-key challenge-response auth; operator key management is exposed at `/api/v1/portwing/keys`.
+
+- **Real-time container log viewer.** WebSocket-based live log streaming from Docker containers in the UI — ANSI color rendering, automatic JSON pretty-printing, free-text/regex search, stdout/stderr and log-level filtering, copy to clipboard, and gzip download. Available in the container detail panel and at `/containers/:id/logs`.
+
+- **Notification outbox with retry and dead-letter queue.** Failed notification deliveries are persisted and retried with exponential backoff + jitter. After 5 attempts (configurable), entries move to a dead-letter queue. New `/api/notifications/outbox` REST surface and a dedicated UI page let operators list, retry, or discard entries.
+
+- **Durable update queue with restart recovery.** Container updates are queued server-side with per-trigger concurrency limits. Queued and mid-pull operations survive controller restarts and are recovered automatically. New cancel endpoint (`POST /api/operations/:id/cancel`) accepts both queued and in-flight operations. A global concurrent-update cap (`DD_UPDATE_MAX_CONCURRENT`) is available.
+
+- **Customizable dashboard.** Drag-to-reorder, resize, and per-widget visibility toggles. New Resource Usage widget shows fleet-wide CPU and memory with top-N consumers, fed by a live fleet-stats SSE stream (`GET /api/v1/stats/summary/stream`).
+
+- **Diagnostic debug dump.** One-click export of redacted system state from Configuration > Diagnostics — runtime metadata, component state, Docker diagnostics, recent events, and `DD_*` env vars, with sensitive values auto-redacted. Available at `GET /api/v1/debug/dump`.
+
+- **SSE Last-Event-ID replay.** Every broadcast event carries a monotonic `<bootId>:<counter>` id; clients reconnecting with `Last-Event-ID` receive missed events from a 5-minute ring buffer. Clients that fall behind the buffer receive a `dd:resync-required` event.
+
+- **Update-eligibility blockers on container rows.** Sixteen structured blocker reasons are surfaced inline on the Containers list, so users see why a container isn't updating without opening the detail drawer. Hard blockers lock the Update button; soft blockers show a warn-and-confirm modal.
+
+- **Per-agent Home Assistant MQTT topic segmentation (`DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT`).** Prevents two agents sharing the default watcher name from overwriting each other's topics. Opt-in for v1.5.x; targets default-on in v1.7.0.
+
+- **Full i18n coverage across the UI.** All hardcoded strings migrated to per-namespace JSON catalogs with 17 locale options (de, es, fr, it, nl, pl, pt-BR, tr, zh-CN, zh-TW, ar, ja, ko, ru, uk, vi, plus English). Human translations synced from Crowdin.
+
+- **Colored startup banner.** Renders the whale logo as a truecolor half-block art print on interactive terminals; auto-suppressed when not a TTY or when `NO_COLOR` is set.
+
+### Changed
+
+- **Action trigger default mode changed to `AUTO=oninclude`.** Action triggers no longer auto-update every container by default; an explicit `dd.action.include` label is required. Notification triggers are unaffected.
+
+- **Default watcher cron relaxed from hourly to every 6 hours.** Reduces registry pressure for the common case; override with `DD_WATCHER_{name}_CRON`.
+
+- **Consolidated security scanning on Grype; dropped Snyk.** Grype now scans both the built container image and all six npm lockfiles. Snyk's GitHub SCM integration, `.snyk` policy file, `security-snyk-weekly.yml`, and related scripts are removed. Free gates (CodeQL, dependency-review, OpenSSF Scorecard, zizmor) continue to run on every PR.
+
+- **Healthcheck binary replaces curl.** Default HEALTHCHECK now uses a 65 KB static C binary (`/bin/healthcheck`). curl is retained for user-defined overrides through v1.6.0 (removal in v1.7.0).
+
+- **`DD_SESSION_SECRET` auto-generated and persisted when unset.** On first boot without the variable set, drydock generates 64 random bytes and persists them in the store so sessions survive restarts. The env var still takes precedence.
+
+- **Tag-last release pipeline.** The git tag is pushed only after the Docker image is built, pushed, signed (cosign), and attested (SLSA). If the tag exists, the image exists.
+
+### Fixed
+
+- **Containers pinned to a fully-specified semver tag no longer climb to newer versions by default.** Tags classified as `specific` precision now track digest changes only. Opt in to semver climbing with `dd.tag.include` or `dd.tag.family=loose`.
+
+- **Multi-agent deployments no longer produce spurious 409 conflicts, cross-agent container contamination, or persistent "0 running containers" in the controller UI.** Root causes: the controller's local watcher was pruning remote-agent rows; agent watcher snapshots were lost when the SSE stream was half-open mid-reconnect. Fixed by scoping store reads and key derivation to `{ agent, watcher }` at every call site, and having agents replay the latest snapshot to each new SSE client immediately after `dd:ack`.
+
+- **Self-update overlay holds until the swap is complete.** Three compounding bugs (premature overlay dismissal, unreachable finalize callback, helper container appearing in the watcher list) are fixed. A new unauthenticated `/api/v1/self-update/{operationId}/status` endpoint lets the UI poll during the restart window.
+
+- **Spurious "update failed" and "update available" notifications eliminated.** False notifications arising from concurrent duplicate requests (409 race), post-update stale watcher scans, timed-out operation TTLs, and digest/batch path suppress-lifecycle gaps are all closed.
+
+- **Live log viewer and WebSocket upgrades now work behind TLS-terminating reverse proxies.** WebSocket upgrades and the log-stream origin check now honor `X-Forwarded-Host`/`X-Forwarded-Proto` when `DD_SERVER_TRUSTPROXY` is set.
+
+- **Docker Compose update no longer destroys the running container on failure.** A pre-flight architecture-compatibility check runs before removing the old container; if the recreate still fails, the original container is restored from its captured spec.
+
+- **Registry 429/503 handling with Retry-After and per-host token bucket.** Every registry HTTP call retries up to 3 times with exponential backoff honoring upstream `Retry-After`; a per-host token bucket prevents self-inflicted rate limiting during large cron cycles.
+
+- **Standard Bearer token exchange now works for Chainguard, Codeberg/Forgejo, and other v2 registries that issue a WWW-Authenticate challenge.** `callRegistry` implements the spec-compliant challenge-response flow with realm-host validation.
+
+### Security
+
+- **Command trigger no longer inherits the full process environment.** Child processes receive a fixed allowlist of system variables plus drydock-provided container vars. Additional variables can be whitelisted with `DD_ACTION_COMMAND_{name}_ENV`.
+
+- **HTTP trigger blocks cloud metadata endpoints.** Requests resolving to `169.254.0.0/16`, `fe80::/10`, and related link-local ranges (including IPv4-mapped and IPv4-compatible spellings) are rejected before sending. Opt-out available via `DD_NOTIFICATION_HTTP_{name}_ALLOWMETADATA=true`.
+
+- **CSRF same-origin enforcement hardened.** Forwarded-host headers are now trusted only when Express `trust proxy` is enabled; `/auth` mutations (logout, remember) are now covered by the same-origin check; and `DD_SERVER_TRUSTPROXY=true` (all hops) now emits a startup warning recommending a hop count.
+
+- **Security digest templates no longer evaluated as JavaScript.** `SECURITYDIGESTTITLE`/`SECURITYDIGESTBODY` previously passed through `new Function()` — arbitrary code execution. The renderer now uses the same sandboxed `${…}` interpolation engine as all other trigger templates.
+
+- **Bearer token-endpoint requests now set `maxRedirects: 0`** to prevent credential exfiltration if a token endpoint returns a redirect. Applied to `BaseRegistry` and all providers that build their own credentialed token-fetch requests.
+
+- **Container image CVE surface cleared.** Bumped `node:24-alpine` base (24.14.0 → 24.16.0), `cosign` (2.6.3 → 3.0.6), musl, curl, and git, clearing all HIGH/CRITICAL findings in drydock-controlled packages. Residual HIGHs inside vendored Go binaries (`cosign`, `trivy`) are scoped out of the fail-on-HIGH gate via `.grype.yaml`.
+
+- **LokiJS query-filter values constrained to primitives.** `?key[$regex]=…`-style operator injection (ReDoS via native RegExp, `$ne`/`$gt` operator injection) is neutralized at the store choke point for every caller.
+
+- **Multiple CVE patches:** `undici` bumped to 8.5.0 (8 advisories including CVE-2026-9675), `nodemailer` bumped to 9.0.1 (GHSA-p6gq-j5cr-w38f, CVSS 7.1), `protobufjs` to 7.6.3 (GHSA-xq3m-2v4x-88gg, critical), `vite` to 8.0.16, `axios` to 1.16.1 (CVE-2025-62718), and additional transitive patches across all six lockfiles.
+
 ## [1.5.0-rc.38] — 2026-06-19
 
 ### Added
@@ -1585,7 +1663,12 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.34...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.38...v1.5.0
+[1.5.0-rc.38]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.37...v1.5.0-rc.38
+[1.5.0-rc.37]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.36...v1.5.0-rc.37
+[1.5.0-rc.36]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.35...v1.5.0-rc.36
+[1.5.0-rc.35]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.34...v1.5.0-rc.35
 [1.5.0-rc.34]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.33...v1.5.0-rc.34
 [1.5.0-rc.29]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.28...v1.5.0-rc.29
 [1.4.5]: https://github.com/CodesWhat/drydock/compare/v1.4.4...v1.4.5
