@@ -368,9 +368,9 @@ jobs:
     name: "🧪 Quality: Test & Coverage"
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: ci-codecov
     permissions:
       contents: read
+      id-token: write  # OIDC for the Qlty coverage upload — no stored token
 
     steps:
       - name: Harden Runner
@@ -431,16 +431,25 @@ jobs:
         run: npm run test:unit
         working-directory: ui
 
-      - name: Normalize coverage paths for Codecov
+      - name: Normalize coverage paths
+        # Rewrites lcov SF: paths to be repo-root-relative (app/…, ui/…) so the
+        # coverage service resolves them against the checkout. This is exactly
+        # the normalization Qlty needs too.
         run: node scripts/prepare-codecov-reports.mjs
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354  # v6.0.1
+      - name: Publish coverage to Qlty
+        # Org-wide coverage consolidated on Qlty Cloud (replaces Codecov). OIDC
+        # auth — no token to store or rotate. Skipped on fork PRs, which GitHub
+        # does not grant id-token:write. Advisory (continue-on-error): a publish
+        # hiccup never blocks CI — the vitest 100% coverage thresholds enforced
+        # in the app/ui test steps above are the real gate.
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+        continue-on-error: true
+        uses: qltysh/qlty-action/coverage@fd52dc852530a708d68c3b7342f8d33d1df4cd55  # v2.2.1
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          oidc: true
           files: coverage/codecov-app.lcov.info,coverage/codecov-ui.lcov.info
-          flags: app,ui
-          fail_ci_if_error: false  # coverage upload is informational — don't block CI on transient Codecov infra failures
+          format: lcov
 
   build:
     name: "🏗️ Build"
