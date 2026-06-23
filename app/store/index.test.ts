@@ -8,6 +8,7 @@ const {
   createFsMock,
   createConfigMock,
   createCollectionsMock,
+  createAgentKeysMock,
   createLogMock,
   registerCommonMocks,
 } = vi.hoisted(() => {
@@ -43,8 +44,16 @@ const {
     return { createCollections: vi.fn(), completeStartupInitialization: vi.fn() };
   }
 
+  function createAgentKeysMock() {
+    return {
+      createCollections: vi.fn(),
+      completeStartupInitialization: vi.fn(),
+      loadAuthorizedKeysFile: vi.fn(),
+    };
+  }
+
   function createLogMock() {
-    return { default: { child: vi.fn(() => ({ info: vi.fn() })) } };
+    return { default: { child: vi.fn(() => ({ info: vi.fn(), warn: vi.fn() })) } };
   }
 
   /** Register the standard set of doMock calls needed after vi.resetModules. */
@@ -55,14 +64,18 @@ const {
       lokiInstance?: Parameters<typeof createLokiMock>[2];
       fs?: Record<string, unknown>;
       config?: Record<string, unknown>;
+      portwingAuthorizedKeysPath?: string | undefined;
     } = {},
   ) {
     vi.doMock('lokijs', () =>
       createLokiMock(overrides.loki, overrides.lokiSave, overrides.lokiInstance),
     );
     vi.doMock('node:fs', () => createFsMock(overrides.fs));
-    vi.doMock('../configuration', () => createConfigMock(overrides.config ?? STORE_CONFIG));
-    vi.doMock('./agent-keys', createCollectionsMock);
+    vi.doMock('../configuration', () => ({
+      ...createConfigMock(overrides.config ?? STORE_CONFIG),
+      getPortwingAuthorizedKeysPath: vi.fn(() => overrides.portwingAuthorizedKeysPath),
+    }));
+    vi.doMock('./agent-keys', createAgentKeysMock);
     vi.doMock('./app', createCollectionsMock);
     vi.doMock('./audit', createCollectionsMock);
     vi.doMock('./backup', createCollectionsMock);
@@ -82,6 +95,7 @@ const {
     createFsMock,
     createConfigMock,
     createCollectionsMock,
+    createAgentKeysMock,
     createLogMock,
     registerCommonMocks,
   };
@@ -91,14 +105,17 @@ const {
 
 vi.mock('lokijs', () => createLokiMock());
 vi.mock('node:fs', () => createFsMock());
-vi.mock('../configuration', () => createConfigMock());
+vi.mock('../configuration', () => ({
+  ...createConfigMock(),
+  getPortwingAuthorizedKeysPath: vi.fn(() => undefined),
+}));
 vi.mock('./app', createCollectionsMock);
 vi.mock('./audit', createCollectionsMock);
 vi.mock('./backup', createCollectionsMock);
 vi.mock('./container', createCollectionsMock);
 vi.mock('./notification', createCollectionsMock);
 vi.mock('./notification-history', createCollectionsMock);
-vi.mock('./agent-keys', createCollectionsMock);
+vi.mock('./agent-keys', createAgentKeysMock);
 vi.mock('./notification-outbox', createCollectionsMock);
 vi.mock('./secrets', createCollectionsMock);
 vi.mock('./settings', createCollectionsMock);
@@ -443,5 +460,92 @@ describe('Store Module', () => {
       lastPersistAt: undefined,
       collections: [{ name: 'only', documents: 1 }],
     });
+  });
+
+  test('should call loadAuthorizedKeysFile when DD_PORTWING_AUTHORIZED_KEYS is set', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      fs: { existsSync: vi.fn(() => true), mkdirSync: vi.fn(), renameSync: vi.fn() },
+      portwingAuthorizedKeysPath: '/etc/drydock/authorized_keys',
+    });
+
+    const storeWithKeys = await import('./index.js');
+    await storeWithKeys.init();
+
+    const agentKeysMod = await import('./agent-keys.js');
+    expect(agentKeysMod.loadAuthorizedKeysFile).toHaveBeenCalledWith(
+      '/etc/drydock/authorized_keys',
+    );
+  });
+
+  test('should skip loadAuthorizedKeysFile when DD_PORTWING_AUTHORIZED_KEYS is unset', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      fs: { existsSync: vi.fn(() => true), mkdirSync: vi.fn(), renameSync: vi.fn() },
+      portwingAuthorizedKeysPath: undefined,
+    });
+
+    const storeNoKeys = await import('./index.js');
+    await storeNoKeys.init();
+
+    const agentKeysMod = await import('./agent-keys.js');
+    expect(agentKeysMod.loadAuthorizedKeysFile).not.toHaveBeenCalled();
+  });
+
+  test('should warn and continue startup when loadAuthorizedKeysFile throws', async () => {
+    vi.resetModules();
+
+    const mockWarn = vi.fn();
+    vi.doMock('lokijs', () => createLokiMock());
+    vi.doMock('node:fs', () =>
+      createFsMock({ existsSync: vi.fn(() => true), mkdirSync: vi.fn(), renameSync: vi.fn() }),
+    );
+    vi.doMock('../configuration', () => ({
+      ...createConfigMock(STORE_CONFIG),
+      getPortwingAuthorizedKeysPath: vi.fn(() => '/bad/authorized_keys'),
+    }));
+    vi.doMock('./agent-keys', () => ({
+      createCollections: vi.fn(),
+      completeStartupInitialization: vi.fn(),
+      loadAuthorizedKeysFile: vi.fn(() => {
+        throw new Error('permission denied');
+      }),
+    }));
+    vi.doMock('./app', createCollectionsMock);
+    vi.doMock('./audit', createCollectionsMock);
+    vi.doMock('./backup', createCollectionsMock);
+    vi.doMock('./container', createCollectionsMock);
+    vi.doMock('./notification', createCollectionsMock);
+    vi.doMock('./notification-history', createCollectionsMock);
+    vi.doMock('./notification-outbox', createCollectionsMock);
+    vi.doMock('./secrets', createCollectionsMock);
+    vi.doMock('./settings', createCollectionsMock);
+    vi.doMock('./update-operation', createCollectionsMock);
+    vi.doMock('../log', () => ({
+      default: { child: vi.fn(() => ({ info: vi.fn(), warn: mockWarn })) },
+    }));
+
+    const storeWithBadKeys = await import('./index.js');
+    await expect(storeWithBadKeys.init()).resolves.toBeUndefined();
+    expect(mockWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ path: '/bad/authorized_keys' }),
+      expect.stringContaining('DD_PORTWING_AUTHORIZED_KEYS'),
+    );
+  });
+
+  test('should call loadAuthorizedKeysFile when DD_PORTWING_AUTHORIZED_KEYS is set in memory mode', async () => {
+    vi.resetModules();
+    registerCommonMocks({
+      fs: { renameSync: vi.fn() },
+      portwingAuthorizedKeysPath: '/etc/drydock/authorized_keys',
+    });
+
+    const storeMemoryWithKeys = await import('./index.js');
+    await storeMemoryWithKeys.init({ memory: true });
+
+    const agentKeysMod = await import('./agent-keys.js');
+    expect(agentKeysMod.loadAuthorizedKeysFile).toHaveBeenCalledWith(
+      '/etc/drydock/authorized_keys',
+    );
   });
 });

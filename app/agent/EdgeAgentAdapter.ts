@@ -49,6 +49,10 @@ interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (reason: unknown) => void;
   timer: ReturnType<typeof setTimeout>;
+  // Stream accumulation fields (set by handleResponse / handleStream for stream: keys)
+  statusCode?: number;
+  headers?: Record<string, string>;
+  chunks?: Buffer[];
 }
 
 interface AgentComponentDescriptor {
@@ -252,11 +256,32 @@ export class EdgeAgentAdapter {
     const memoryTotal = typeof data.memoryTotal === 'number' ? data.memoryTotal : 0;
     const uptime = typeof data.uptime === 'number' ? data.uptime : 0;
 
+    const cpuUsage = typeof data.cpuUsage === 'number' ? data.cpuUsage : undefined;
+    const cpuCores = typeof data.cpuCores === 'number' ? data.cpuCores : undefined;
+    const memoryUsed = typeof data.memoryUsed === 'number' ? data.memoryUsed : undefined;
+    const memoryFree = typeof data.memoryFree === 'number' ? data.memoryFree : undefined;
+    const diskTotal = typeof data.diskTotal === 'number' ? data.diskTotal : undefined;
+    const diskUsed = typeof data.diskUsed === 'number' ? data.diskUsed : undefined;
+    const diskFree = typeof data.diskFree === 'number' ? data.diskFree : undefined;
+    const networkRxBytes =
+      typeof data.networkRxBytes === 'number' ? data.networkRxBytes : undefined;
+    const networkTxBytes =
+      typeof data.networkTxBytes === 'number' ? data.networkTxBytes : undefined;
+
     this.client.info = {
       ...this.client.info,
       memoryGb: memoryTotal > 0 ? memoryTotal / 1e9 : this.client.info.memoryGb,
       uptimeSeconds: uptime > 0 ? uptime : this.client.info.uptimeSeconds,
       lastSeen: new Date().toISOString(),
+      ...(cpuUsage !== undefined ? { cpuUsage } : {}),
+      ...(cpuCores !== undefined ? { cpuCores } : {}),
+      ...(memoryUsed !== undefined ? { memoryUsed } : {}),
+      ...(memoryFree !== undefined ? { memoryFree } : {}),
+      ...(diskTotal !== undefined ? { diskTotal } : {}),
+      ...(diskUsed !== undefined ? { diskUsed } : {}),
+      ...(diskFree !== undefined ? { diskFree } : {}),
+      ...(networkRxBytes !== undefined ? { networkRxBytes } : {}),
+      ...(networkTxBytes !== undefined ? { networkTxBytes } : {}),
     };
     this.client.scheduleStatsChangedPublic();
   }
@@ -288,13 +313,38 @@ export class EdgeAgentAdapter {
     if (!requestId) {
       return;
     }
+
+    // Check bare key first (non-stream requests)
     const pending = this.pendingRequests.get(requestId);
-    if (!pending) {
+    if (pending) {
+      clearTimeout(pending.timer);
+      this.pendingRequests.delete(requestId);
+      pending.resolve(data);
       return;
     }
-    clearTimeout(pending.timer);
-    this.pendingRequests.delete(requestId);
-    pending.resolve(data);
+
+    // O9: portwing sends a response frame with isStream=true BEFORE stream chunks.
+    // sendStreamRequest registers the entry under `stream:${requestId}`, so the bare
+    // lookup above misses. Fall back to the stream: key; stash statusCode/headers and
+    // do NOT resolve — handleStreamEnd will resolve once all chunks are received.
+    const streamKey = `stream:${requestId}`;
+    const streamPending = this.pendingRequests.get(streamKey);
+    if (streamPending && data.isStream === true) {
+      if (typeof data.statusCode === 'number') {
+        streamPending.statusCode = data.statusCode;
+      }
+      if (data.headers && typeof data.headers === 'object' && !Array.isArray(data.headers)) {
+        streamPending.headers = data.headers as Record<string, string>;
+      }
+      // Reset the inactivity timer (O4) — initial response counts as activity
+      clearTimeout(streamPending.timer);
+      streamPending.timer = setTimeout(() => {
+        this.pendingRequests.delete(streamKey);
+        streamPending.reject(
+          new Error(`Stream request ${requestId} timed out after ${REQUEST_TIMEOUT_MS}ms`),
+        );
+      }, REQUEST_TIMEOUT_MS);
+    }
   }
 
   private handleStream(data: Record<string, unknown>): void {
@@ -310,10 +360,32 @@ export class EdgeAgentAdapter {
     // Confirm the stream is known; do NOT resolve the promise here.
     // Resolution is deferred to handleStreamEnd so that callers of
     // sendStreamRequest receive the complete event, not individual chunks.
-    const pending = this.pendingRequests.get(`stream:${requestId}`);
-    if (pending) {
-      log.debug(`${this.agentName}: stream chunk for ${requestId}`);
+    const streamKey = `stream:${requestId}`;
+    const pending = this.pendingRequests.get(streamKey);
+    if (!pending) {
+      return;
     }
+
+    log.debug(`${this.agentName}: stream chunk for ${requestId}`);
+
+    // O10: accumulate base64-decoded chunk on the pending entry
+    if (typeof data.data === 'string') {
+      const chunk = Buffer.from(data.data, 'base64');
+      if (!pending.chunks) {
+        pending.chunks = [];
+      }
+      pending.chunks.push(chunk);
+    }
+
+    // O4: reset the inactivity timer so a stream lasting >30s is not rejected
+    // as long as chunks keep arriving within 30s of each other.
+    clearTimeout(pending.timer);
+    pending.timer = setTimeout(() => {
+      this.pendingRequests.delete(streamKey);
+      pending.reject(
+        new Error(`Stream request ${requestId} timed out after ${REQUEST_TIMEOUT_MS}ms`),
+      );
+    }, REQUEST_TIMEOUT_MS);
   }
 
   private handleStreamEnd(data: Record<string, unknown>): void {
@@ -330,7 +402,19 @@ export class EdgeAgentAdapter {
     if (pending) {
       clearTimeout(pending.timer);
       this.pendingRequests.delete(`stream:${requestId}`);
-      pending.resolve({ complete: true, reason: data.reason });
+      // O10: assemble accumulated chunks into a single body Buffer (O9 stashed
+      // statusCode/headers on the pending entry from the initial response frame).
+      const body =
+        pending.chunks && pending.chunks.length > 0
+          ? Buffer.concat(pending.chunks)
+          : Buffer.alloc(0);
+      pending.resolve({
+        complete: true,
+        reason: data.reason,
+        body,
+        statusCode: pending.statusCode,
+        headers: pending.headers,
+      });
     }
   }
 
@@ -548,6 +632,7 @@ export class EdgeAgentAdapter {
       user?: string;
       cols?: number;
       rows?: number;
+      tty?: boolean;
       outputCallback?: (data: Buffer) => void;
     },
   ): Promise<string> {
@@ -564,6 +649,8 @@ export class EdgeAgentAdapter {
       execId,
       outputHandler: outputCallback,
       close: () => {
+        // O5: notify the edge so it can tear down the Docker exec process/goroutine.
+        this.sendExecEnd(execId);
         this.execSessions.delete(execId);
       },
     };
@@ -580,6 +667,7 @@ export class EdgeAgentAdapter {
             user: options?.user,
             cols: options?.cols ?? 80,
             rows: options?.rows ?? 24,
+            tty: options?.tty ?? true,
           },
         }),
       );
@@ -589,6 +677,19 @@ export class EdgeAgentAdapter {
     }
 
     return Promise.resolve(execId);
+  }
+
+  /**
+   * Notify the edge agent that an exec session has ended.
+   * Portwing handles inbound exec_end by tearing down the Docker exec process;
+   * without this the edge leaks goroutines and Docker exec processes (O5).
+   */
+  private sendExecEnd(execId: string): void {
+    try {
+      this.ws.send(JSON.stringify({ type: 'exec_end', data: { execId } }));
+    } catch {
+      // connection may be closing
+    }
   }
 
   /**
@@ -642,7 +743,7 @@ export class EdgeAgentAdapter {
       this.pendingRequests.delete(requestId);
     }
 
-    // Close all exec sessions
+    // Close all exec sessions — session.close() sends exec_end before deleting (O5)
     for (const session of this.execSessions.values()) {
       session.close();
     }

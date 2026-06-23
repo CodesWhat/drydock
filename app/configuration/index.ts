@@ -181,6 +181,16 @@ export function getExperimentalPortwingEnabled() {
   return envFlagEnabled(ddEnvVars.DD_EXPERIMENTAL_PORTWING);
 }
 
+/**
+ * Return the path configured via DD_PORTWING_AUTHORIZED_KEYS, or undefined if unset.
+ * When set, drydock loads this authorized_keys file at startup to pre-populate
+ * the agent-key registry without requiring one-by-one REST API registration.
+ */
+export function getPortwingAuthorizedKeysPath(): string | undefined {
+  const raw = ddEnvVars.DD_PORTWING_AUTHORIZED_KEYS?.trim();
+  return raw || undefined;
+}
+
 function parseWatcherMaintenanceEnvAlias(envKey: string) {
   const envKeyUpper = envKey.toUpperCase();
   const prefix = 'DD_WATCHER_';
