@@ -8,7 +8,7 @@ Project status|Archived (Dec 2025)|Actively maintained|drydock
 Language|Go|TypeScript|tie
 Web UI|None (CLI only)|Full dashboard|drydock
 Update approach|Auto-pulls & restarts|Monitor + notify (optional update)|drydock
-Monitor-only mode|Flag exists but unreliable|Core design — monitor-first|drydock
+Monitor-only mode|Flag exists; pulls images anyway due to Docker API limits|Core design — monitor-first|drydock
 Dry-run preview|No|Yes|drydock
 Registry support|Docker Hub + private via Docker config|23 dedicated registry integrations|drydock
 Notifications|Via Shoutrrr (~18 services)|20 native trigger integrations|tie
@@ -24,15 +24,15 @@ Container actions|Restart only (via update)|Start/stop/restart from UI/API|drydo
 Docker Compose updates|Limited|Full compose pull & recreate|drydock
 Lifecycle hooks|Yes (advisory — no abort on failure)|Yes (pre/post with abort & audit)|drydock
 Image backup|No|Pre-update backup with retention|drydock
-Webhook API|HTTP API mode|Token-authenticated webhooks|drydock
+Webhook API|HTTP API (token-authenticated, on-demand trigger)|Event-driven webhooks (token-authenticated)|drydock
 License|Apache 2.0|AGPL-3.0|tie
 `,
   highlightsTable: `
 monitor|Full Web Dashboard|Watchtower is CLI-only with no built-in UI. Drydock ships with a full web dashboard for browsing containers, viewing update status, triggering actions, and inspecting logs — no terminal required.
-eye|Monitor-First Design|Watchtower's default behavior auto-pulls and restarts containers, which can be risky in production. Drydock is monitor-first by design — it detects updates and notifies you, with optional dry-run preview before any changes are applied.
+eye|Monitor-First Design|Watchtower's default behavior auto-pulls and restarts containers without confirmation. Drydock is monitor-first by design — it detects updates and notifies you, with optional dry-run preview before any changes are applied.
 shield|Security Scanning|Drydock integrates Trivy vulnerability scanning, SBOM generation (CycloneDX & SPDX), and cosign image signature verification. Watchtower has no security scanning capabilities.
 network|Distributed Architecture|Monitor remote Docker hosts via lightweight SSE-based agents with a centralized dashboard. Watchtower is limited to the local Docker socket or basic remote connections.
-radio|23 Registry Integrations|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, LSCR, ACR, Harbor, Artifactory, Nexus, and more — rather than relying on Docker's credential config.
+radio|23 Registry Integrations|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, LSCR, ACR, Harbor, Artifactory, Nexus, and more — each with provider-specific auth handling rather than a shared Docker credential file.
 rotate|Rollback & Backup|Pre-update image backups with configurable retention and automatic rollback on health check failure. Watchtower has no rollback or backup mechanism.
 `,
   highlightIconMap: {

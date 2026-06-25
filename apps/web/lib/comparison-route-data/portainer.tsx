@@ -13,7 +13,7 @@ Automatic rollback|No|Yes, on health check failure|drydock
 Maintenance windows|No|Yes|drydock
 Lifecycle hooks (pre/post)|No|Yes, with timeout & abort|drydock
 Image backup & dry-run|No|Pre-update backup + dry-run preview|drydock
-Security scanning|Yes (BE only — paid)|Trivy + SBOM + cosign (free)|drydock
+Security scanning|No|Trivy + SBOM + cosign (free)|drydock
 Registry providers|Major registries|23 dedicated integrations|drydock
 Notifications|Slack, Teams (BE only)|20 native trigger integrations|drydock
 MQTT / Home Assistant|No|Yes|drydock
@@ -29,12 +29,12 @@ Resource footprint|Heavier (~100–200MB RAM)|Lightweight (~80MB RAM)|drydock
 License|Zlib (CE) / Proprietary (BE)|AGPL-3.0|drydock
 `,
   highlightsTable: `
-rotate|Update Safety Controls|Automatic rollback on health check failure, maintenance windows, lifecycle hooks, and dry-run preview. Portainer can update containers but has none of these safety primitives.
-shield|Free Security Scanning|Trivy vulnerability scanning, SBOM generation, and cosign verification — all free and open source. Portainer's security features require the paid Business Edition.
-lock|No Paywall|Every Drydock feature is free and open source. Portainer gates security scanning, audit logs, RBAC, and most notification integrations behind the paid Business Edition.
-bell|20 Notification Services|Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, Kafka, Gotify, NTFY, and more — all free. Portainer CE has very limited notification options.
+rotate|Update Safety Controls|Automatic rollback on health check failure, maintenance windows, lifecycle hooks, and dry-run preview. We built these into Drydock because Portainer doesn't offer automatic rollback or these safety primitives.
+shield|Free Security Scanning|Drydock bundles Trivy scanning, SBOM generation, and cosign verification at no cost. Portainer has no built-in image or vulnerability scanning in any edition.
+lock|No Paywall|Every Drydock feature is free and open source. Portainer gates audit logs, RBAC, and notification integrations behind the paid Business Edition. Portainer has no built-in vulnerability scanning in any edition.
+bell|20 Notification Services|Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, Kafka, Gotify, NTFY, and more — all free. Portainer CE has no alerting integrations — Slack, Teams, email, and webhook notifications all require the paid Business Edition.
 radio|23 Registry Integrations|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more with per-registry configuration.
-eye|Lightweight & Focused|Drydock uses ~80MB RAM and focuses on doing update monitoring well. Portainer is a full management platform that uses significantly more resources.
+eye|Lightweight & Focused|We keep Drydock under 80MB RAM with a single focused purpose. Portainer is a full management platform that typically uses 100–200MB RAM or more.
 `,
   highlightIconMap: {
     rotate: RotateCcw,

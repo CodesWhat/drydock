@@ -1,8 +1,9 @@
 "use client";
 
-import { ExternalLink, Maximize2, Palette, Share, X } from "lucide-react";
+import { ExternalLink, Maximize2, Monitor, Palette, Share, X } from "lucide-react";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { SectionHeading } from "@/components/section-heading";
 import { Button } from "@/components/ui/button";
 
 const DEMO_URL = process.env.NEXT_PUBLIC_DEMO_URL || "https://demo.getdrydock.com";
@@ -243,23 +244,6 @@ function navigateDemoIframe(iframeRef: RefObject<HTMLIFrameElement | null>, path
   }
 }
 
-function DemoHeading() {
-  return (
-    <div className="relative mb-12 text-center">
-      <div className="pointer-events-none absolute inset-y-[-1.5rem] left-1/2 w-[30rem] max-w-full -translate-x-1/2 bg-[radial-gradient(ellipse_at_center,_white_20%,_transparent_50%)] dark:bg-[radial-gradient(ellipse_at_center,_rgb(10,10,10)_20%,_transparent_50%)]" />
-      <p className="relative mb-2 text-3xl font-bold tracking-tight text-neutral-400 line-through decoration-2 sm:text-4xl dark:text-neutral-600">
-        Screenshots
-      </p>
-      <h2 className="relative mb-4 text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl dark:text-neutral-50">
-        See it in action!
-      </h2>
-      <p className="relative mx-auto max-w-2xl text-neutral-600 dark:text-neutral-400">
-        Try the fully interactive demo below — real UI, real data*, no install required.
-      </p>
-    </div>
-  );
-}
-
 function DemoInlineActions({
   onOpenThemeEditor,
   onOpenFullscreen,
@@ -381,13 +365,28 @@ function DemoFrame({
         className={
           isFixed
             ? "fixed z-50 flex flex-col overflow-hidden bg-white shadow-2xl dark:bg-neutral-950"
-            : "isolate overflow-hidden rounded-xl border border-neutral-200 bg-white/50 shadow-sm backdrop-blur-sm hover:shadow-lg hover:border-neutral-300 dark:border-neutral-800 dark:bg-neutral-900/50 dark:hover:border-neutral-700"
+            : "isolate flex flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white/50 shadow-2xl backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/50"
         }
         style={isFixed ? { inset: mode === "fullscreen" ? "0" : undefined } : undefined}
       >
         {isFixed ? (
           <DemoFullscreenHeader onClose={onClose} onShare={onShare} onThemeEditor={onThemeEditor} />
-        ) : null}
+        ) : (
+          <div className="flex h-10 shrink-0 items-center gap-3 border-b border-neutral-200 bg-neutral-100/80 px-4 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/80">
+            <div className="flex items-center gap-1.5">
+              <div className="h-3 w-3 rounded-full bg-red-400" />
+              <div className="h-3 w-3 rounded-full bg-yellow-400" />
+              <div className="h-3 w-3 rounded-full bg-green-400" />
+            </div>
+            <div className="flex flex-1 items-center justify-center">
+              <div className="flex h-6 items-center gap-1.5 rounded-md bg-white/70 px-3 text-xs text-neutral-500 dark:bg-neutral-800/70 dark:text-neutral-400">
+                <Monitor className="h-3 w-3 shrink-0" />
+                <span>demo.getdrydock.com</span>
+              </div>
+            </div>
+            <div className="w-[54px]" />
+          </div>
+        )}
 
         <div className={`relative ${isFixed ? "flex-1" : "aspect-[16/10] overflow-hidden"}`}>
           <iframe
@@ -407,7 +406,7 @@ function DemoFrame({
   );
 }
 
-export function DemoSection() {
+export function DemoVariants() {
   const [mode, setMode] = useState<DemoMode>("inline");
   const [iframeStatus, setIframeStatus] = useState<IframeStatus>("loading");
   const containerRef = useRef<HTMLDivElement>(null);
@@ -445,32 +444,39 @@ export function DemoSection() {
   useFullscreenDocumentEffects(mode, closeFullscreen);
 
   return (
-    <section className="px-4 py-24">
-      <div className="mx-auto max-w-6xl">
-        <DemoHeading />
-
-        {mode === "inline" ? (
-          <DemoInlineActions
-            onOpenThemeEditor={openThemeEditor}
-            onOpenFullscreen={openFullscreen}
-          />
-        ) : null}
-
-        <DemoFrame
-          mode={mode}
-          iframeStatus={iframeStatus}
-          containerRef={containerRef}
-          iframeRef={iframeRef}
-          onClose={closeFullscreen}
-          onShare={handleShare}
-          onThemeEditor={openThemeEditor}
+    <section className="border-t border-border/60 py-16">
+      <div className="mx-auto max-w-6xl px-4">
+        <SectionHeading
+          strike="Screenshots"
+          title="See it in action!"
+          subtitle="Try the fully interactive demo below — real UI, real data*, no install required."
+          align="left"
         />
 
-        {mode === "inline" ? (
-          <p className="mt-3 text-center text-xs text-neutral-400 dark:text-neutral-600">
-            *Not real data
-          </p>
-        ) : null}
+        <div className="mx-auto max-w-4xl">
+          {mode === "inline" ? (
+            <DemoInlineActions
+              onOpenThemeEditor={openThemeEditor}
+              onOpenFullscreen={openFullscreen}
+            />
+          ) : null}
+
+          <DemoFrame
+            mode={mode}
+            iframeStatus={iframeStatus}
+            containerRef={containerRef}
+            iframeRef={iframeRef}
+            onClose={closeFullscreen}
+            onShare={handleShare}
+            onThemeEditor={openThemeEditor}
+          />
+
+          {mode === "inline" ? (
+            <p className="mt-3 text-center text-xs text-neutral-400 dark:text-neutral-600">
+              *Not real data
+            </p>
+          ) : null}
+        </div>
       </div>
     </section>
   );

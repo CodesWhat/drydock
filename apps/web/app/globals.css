@@ -71,6 +71,83 @@
   --ring: 0 0% 83.1%;
 }
 
+/* ----------------------------------------------------------------------------
+   Aurora background palettes. Each [data-bg] sets the --au-* color stops used
+   by .aurora-mesh and the --au-glow used by accent glows (e.g. split hero).
+   Light values here; .dark variants below brighten the stops for dark mode.
+---------------------------------------------------------------------------- */
+[data-bg="ember"] {
+  --au-1: rgba(249, 115, 22, 0.22);
+  --au-2: rgba(251, 191, 36, 0.16);
+  --au-3: rgba(244, 63, 94, 0.1);
+  --au-4: rgba(249, 115, 22, 0.08);
+  --au-glow: rgba(251, 146, 60, 0.2);
+}
+[data-bg="ocean"] {
+  --au-1: rgba(14, 165, 233, 0.2);
+  --au-2: rgba(34, 211, 238, 0.15);
+  --au-3: rgba(99, 102, 241, 0.1);
+  --au-4: rgba(59, 130, 246, 0.08);
+  --au-glow: rgba(56, 189, 248, 0.2);
+}
+[data-bg="violet"] {
+  --au-1: rgba(139, 92, 246, 0.2);
+  --au-2: rgba(217, 70, 239, 0.14);
+  --au-3: rgba(99, 102, 241, 0.1);
+  --au-4: rgba(168, 85, 247, 0.08);
+  --au-glow: rgba(167, 139, 250, 0.2);
+}
+[data-bg="forest"] {
+  --au-1: rgba(16, 185, 129, 0.18);
+  --au-2: rgba(45, 212, 191, 0.14);
+  --au-3: rgba(132, 204, 22, 0.1);
+  --au-4: rgba(34, 197, 94, 0.08);
+  --au-glow: rgba(52, 211, 153, 0.2);
+}
+[data-bg="mono"] {
+  --au-1: rgba(100, 116, 139, 0.14);
+  --au-2: rgba(148, 163, 184, 0.1);
+  --au-3: rgba(100, 116, 139, 0.07);
+  --au-4: rgba(148, 163, 184, 0.06);
+  --au-glow: rgba(148, 163, 184, 0.16);
+}
+
+.dark [data-bg="ember"] {
+  --au-1: rgba(249, 115, 22, 0.28);
+  --au-2: rgba(251, 191, 36, 0.18);
+  --au-3: rgba(244, 63, 94, 0.12);
+  --au-4: rgba(249, 115, 22, 0.1);
+  --au-glow: rgba(249, 115, 22, 0.15);
+}
+.dark [data-bg="ocean"] {
+  --au-1: rgba(14, 165, 233, 0.26);
+  --au-2: rgba(34, 211, 238, 0.18);
+  --au-3: rgba(99, 102, 241, 0.12);
+  --au-4: rgba(59, 130, 246, 0.1);
+  --au-glow: rgba(14, 165, 233, 0.16);
+}
+.dark [data-bg="violet"] {
+  --au-1: rgba(139, 92, 246, 0.26);
+  --au-2: rgba(217, 70, 239, 0.16);
+  --au-3: rgba(99, 102, 241, 0.12);
+  --au-4: rgba(168, 85, 247, 0.1);
+  --au-glow: rgba(139, 92, 246, 0.16);
+}
+.dark [data-bg="forest"] {
+  --au-1: rgba(16, 185, 129, 0.24);
+  --au-2: rgba(45, 212, 191, 0.16);
+  --au-3: rgba(132, 204, 22, 0.12);
+  --au-4: rgba(34, 197, 94, 0.1);
+  --au-glow: rgba(16, 185, 129, 0.16);
+}
+.dark [data-bg="mono"] {
+  --au-1: rgba(148, 163, 184, 0.12);
+  --au-2: rgba(203, 213, 225, 0.08);
+  --au-3: rgba(148, 163, 184, 0.06);
+  --au-4: rgba(203, 213, 225, 0.05);
+  --au-glow: rgba(148, 163, 184, 0.12);
+}
+
 /* Let docs content fill the full viewport width */
 #nd-flux-layout {
   --fd-layout-width: 100vw;
@@ -158,5 +235,20 @@
   }
   .dark\:bg-grid-neutral-800\/50 {
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32' width='32' height='32' fill='none' stroke='rgb(38 38 38 / 0.5)'%3e%3cpath d='M0 .5H31.5V32'/%3e%3c/svg%3e");
+  }
+
+  /* Aurora mesh — palette colors come from the --au-* vars set per [data-bg] */
+  .aurora-mesh {
+    background:
+      radial-gradient(ellipse 55% 45% at 20% 5%, var(--au-1), transparent 60%),
+      radial-gradient(ellipse 45% 40% at 78% 12%, var(--au-2), transparent 55%),
+      radial-gradient(ellipse 35% 35% at 50% 20%, var(--au-3), transparent 50%),
+      radial-gradient(ellipse 60% 30% at 40% 0%, var(--au-4), transparent 70%);
+    filter: blur(40px);
+  }
+
+  /* Aurora film grain — SVG fractal noise as a data URI */
+  .aurora-grain {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
   }
 }

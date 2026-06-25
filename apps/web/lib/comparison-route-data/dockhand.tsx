@@ -5,7 +5,7 @@ export const dockhandComparisonRouteData = {
   slug: "dockhand",
   comparisonTable: `
 Project status|Actively maintained|Actively maintained|tie
-Language|Go|TypeScript|tie
+Language|Svelte + TypeScript (Bun)|TypeScript|tie
 Web UI|Yes|Yes|tie
 Image update detection|Yes|Yes|tie
 Auto-update containers|Yes|Yes (monitor-first)|tie
@@ -16,23 +16,23 @@ Lifecycle hooks (pre/post)|No|Yes, with timeout & abort|drydock
 Image backup|No|Pre-update backup with retention|drydock
 Dry-run preview|No|Yes|drydock
 Registry providers|Major registries|23 dedicated integrations|drydock
-Notifications|Email, Gotify, Ntfy, webhooks, Apprise|20 native trigger integrations|drydock
+Notifications|SMTP, Gotify, ntfy, Pushover, Telegram, Mattermost, Teams, Bark, Signal, Apprise passthrough (80+ services)|20 native trigger integrations|drydock
 MQTT / Home Assistant|No|Yes|drydock
 Distributed agents|Yes (headless agents)|Yes (SSE-based agents)|tie
 OIDC / SSO|Yes|Yes (Authelia, Auth0, Authentik)|tie
 Prometheus metrics|Planned|Full /metrics endpoint + Grafana template|drydock
-Audit log|Enterprise only|Yes, free (REST API)|drydock
+Audit log|Activity log (free); compliance audit log (Enterprise only)|Yes, free (REST API)|drydock
 Git-based stack deployment|Yes|Planned|competitor
 Web terminal / shell|Yes|Planned|competitor
 File browser|Yes|Planned|competitor
-Secret management|Enterprise only|Planned (free)|tie
-License|Apache 2.0 / Proprietary (EE)|AGPL-3.0|drydock
+Secret management|Planned|Planned (free)|tie
+License|BSL 1.1 (source-available; converts to Apache 2.0 in 2029)|AGPL-3.0|drydock
 `,
   highlightsTable: `
-rotate|Update Safety Controls|Automatic rollback on health check failure, maintenance windows, lifecycle hooks, and dry-run preview. Dockhand can scan and update but lacks these safety primitives for production deployments.
+rotate|Update Safety Controls|Automatic rollback on health check failure, maintenance windows, lifecycle hooks, and dry-run preview. Dockhand's safe-pull protection rolls back if a new container fails to start, but doesn't support proactive health-check rollback, maintenance windows, or lifecycle hooks.
 radio|23 Registry Providers|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more — broader registry support than Dockhand.
-bell|20 Notification Services|Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, Kafka, Gotify, NTFY, and more. Dockhand's notification options are more limited out of the box.
-history|Free Audit Log|Full audit trail with REST API and Prometheus counter — included free. Dockhand's audit logging is gated behind the Enterprise edition.
+bell|20 Notification Services|Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, Kafka, Gotify, NTFY, and more. Dockhand offers SMTP, Gotify, ntfy, Telegram, and several others, plus Apprise passthrough. Drydock's 20 native integrations include Kafka, MQTT/Home Assistant, and Matrix out of the box without needing an Apprise server.
+history|Free Audit Log|Full audit trail with REST API and Prometheus counter — included free. Dockhand includes a basic activity log in the free tier, but compliance-grade audit logging requires the Enterprise edition.
 network|SSE-Based Agents|Both tools support distributed monitoring. Drydock uses SSE-based agents for real-time communication with a centralized dashboard.
 lock|Fully Open Source|Every Drydock feature is free and open source. Dockhand gates audit logs, secret management, and some features behind an Enterprise tier.
 `,

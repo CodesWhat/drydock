@@ -19,20 +19,20 @@ Prometheus metrics|No|Full /metrics endpoint + Grafana template|drydock
 Audit log|No|Yes, with REST API|drydock
 Log viewer|Advanced (SQL, split-screen, regex)|Basic (level filtering, auto-fetch)|competitor
 Log analytics / SQL|Yes|No|competitor
-Resource monitoring|Yes (CPU, memory)|Planned|competitor
+Resource monitoring|Yes (CPU, memory, network — live)|Planned|competitor
 Multi-host agents|Yes|Yes (SSE-based)|tie
 Container start/stop/restart|Yes|Yes|tie
-OIDC authentication|No|Yes (Authelia, Auth0, Authentik)|drydock
+OIDC authentication|Via forward proxy (Authelia, Authentik, Cloudflare)|Yes (Authelia, Auth0, Authentik)|drydock
 RBAC|Yes|Planned|competitor
 Docker Swarm|Yes|Planned|competitor
-Kubernetes|Yes|Planned (v2.0.0)|competitor
-License|Apache 2.0|AGPL-3.0|tie
+Kubernetes|Yes (since v8.11)|Planned (v2.0.0)|competitor
+License|MIT|AGPL-3.0|tie
 `,
   highlightsTable: `
 eye|Image Update Detection|Dozzle is a log viewer — it doesn't monitor for image updates. Drydock continuously checks 23 registries and notifies you when new versions are available.
-shield|Security Scanning|Trivy vulnerability scanning, SBOM generation, and cosign signature verification before updates are applied. Dozzle has no security capabilities.
+shield|Security Scanning|Trivy vulnerability scanning, SBOM generation, and cosign signature verification before updates are applied. Dozzle has no image security capabilities — no vulnerability scanning, SBOM generation, or signature verification.
 rotate|Safe Update Pipeline|Dry-run preview, pre-update backup, automatic rollback on health check failure, and maintenance windows. Dozzle doesn't manage container updates at all.
-bell|20 Notification Services|Get notified about available updates via Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, and more. Dozzle's notifications are limited to log-based alerts.
+bell|20 Notification Services|Drydock notifies on image update availability across 20 services — Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, and more. Dozzle sends runtime alerts (log patterns, CPU/memory spikes, container crashes) via webhooks to Slack, Discord, or ntfy.
 radio|23 Registry Integrations|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more.
 rotate|Works Great Together|Dozzle for deep log analysis and Drydock for update monitoring — they solve different problems and can run side-by-side in your Docker stack.
 `,

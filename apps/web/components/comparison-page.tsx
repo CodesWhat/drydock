@@ -1,10 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 import { AlertTriangle, Check, Clock, Minus, X } from "lucide-react";
-import Image from "next/image";
-import Link from "next/link";
 import { CtaButtons } from "@/components/cta-buttons";
 import { DockerRunSnippet } from "@/components/docker-run-snippet";
-import { SiteFooter } from "@/components/site-footer";
+import { MarketingShell } from "@/components/marketing-shell";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -65,213 +63,185 @@ export function ComparisonPage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <main className="relative min-h-screen bg-gradient-to-br from-neutral-50 to-neutral-100 dark:from-neutral-950 dark:to-neutral-900">
-        {/* Background Pattern */}
-        <div className="bg-grid-neutral-200/50 dark:bg-grid-neutral-800/50 fixed inset-0" />
+      <MarketingShell>
+        {/* Hero */}
+        <section className="px-4 pt-16 pb-16">
+          <div className="mx-auto max-w-4xl text-center">
+            <h1 className="mb-6 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 sm:text-5xl lg:text-6xl">
+              {heroTitle}
+            </h1>
 
-        <div className="relative z-10">
-          {/* Hero Section */}
-          <section className="relative px-4 pt-20 pb-16">
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_white_20%,_transparent_70%)] dark:bg-[radial-gradient(ellipse_at_center,_rgb(10,10,10)_20%,_transparent_70%)]" />
-
-            <div className="relative z-10 mx-auto max-w-4xl text-center">
-              <Link
-                href="/"
-                className="mb-8 inline-flex items-center gap-1.5 text-sm text-neutral-500 transition-colors hover:text-neutral-900 dark:hover:text-neutral-100"
-              >
-                <Image
-                  src="/whale-logo.png"
-                  alt="Drydock"
-                  width={20}
-                  height={20}
-                  className="dark:invert"
-                />
-                getdrydock.com
-              </Link>
-
-              <h1 className="mt-6 mb-6 text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100 sm:text-5xl lg:text-6xl">
-                {heroTitle}
-              </h1>
-
-              <div className="mx-auto mb-8 max-w-2xl text-lg text-neutral-600 dark:text-neutral-400">
-                {heroDescription}
-              </div>
-
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <Badge className={competitorBadge.className}>
-                  <competitorBadge.icon className="mr-1.5 h-3.5 w-3.5" />
-                  {competitorBadge.label}
-                </Badge>
-                <Badge className={drydockBadge.className}>
-                  <drydockBadge.icon className="mr-1.5 h-3.5 w-3.5" />
-                  {drydockBadge.label}
-                </Badge>
-              </div>
+            <div className="mx-auto mb-8 max-w-2xl text-lg text-neutral-600 dark:text-neutral-400">
+              {heroDescription}
             </div>
-          </section>
 
-          {/* Comparison Table */}
-          <section className="px-4 py-16">
-            <div className="mx-auto max-w-5xl">
-              <div className="relative mb-12 text-center">
-                <div className="pointer-events-none absolute inset-y-[-1.5rem] left-1/2 w-[30rem] max-w-full -translate-x-1/2 bg-[radial-gradient(ellipse_at_center,_white_20%,_transparent_50%)] dark:bg-[radial-gradient(ellipse_at_center,_rgb(10,10,10)_20%,_transparent_50%)]" />
-                <h2 className="relative mb-4 text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl dark:text-neutral-50">
-                  Feature Comparison
-                </h2>
-                <p className="relative mx-auto max-w-2xl text-neutral-600 dark:text-neutral-400">
-                  A side-by-side look at what each tool offers.
-                </p>
-              </div>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <Badge className={competitorBadge.className}>
+                <competitorBadge.icon className="mr-1.5 h-3.5 w-3.5" />
+                {competitorBadge.label}
+              </Badge>
+              <Badge className={drydockBadge.className}>
+                <drydockBadge.icon className="mr-1.5 h-3.5 w-3.5" />
+                {drydockBadge.label}
+              </Badge>
+            </div>
+          </div>
+        </section>
 
-              <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white/50 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/50">
-                <table className="w-full min-w-[600px] text-sm">
-                  <thead>
-                    <tr className="border-b border-neutral-200 dark:border-neutral-800">
-                      <th className="px-4 py-3 text-left font-semibold text-neutral-900 sm:px-6 dark:text-neutral-100">
-                        Feature
-                      </th>
-                      <th className="px-4 py-3 text-left font-semibold text-neutral-500 sm:px-6 dark:text-neutral-400">
-                        {competitorName}
-                      </th>
-                      <th className="px-4 py-3 text-left font-semibold text-neutral-900 sm:px-6 dark:text-neutral-100">
-                        Drydock
-                      </th>
+        {/* Comparison Table */}
+        <section className="px-4 py-16">
+          <div className="mx-auto max-w-5xl">
+            <div className="mb-12 text-center">
+              <h2 className="mb-4 text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl dark:text-neutral-50">
+                Feature Comparison
+              </h2>
+              <p className="mx-auto max-w-2xl text-neutral-600 dark:text-neutral-400">
+                Here's how we compare on the features that matter most.
+              </p>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white/50 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/50">
+              <table className="w-full min-w-[600px] text-sm">
+                <thead>
+                  <tr className="border-b border-neutral-200 dark:border-neutral-800">
+                    <th className="px-4 py-3 text-left font-semibold text-neutral-900 sm:px-6 dark:text-neutral-100">
+                      Feature
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold text-neutral-500 sm:px-6 dark:text-neutral-400">
+                      {competitorName}
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold text-neutral-900 sm:px-6 dark:text-neutral-100">
+                      Drydock
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {comparisonData.map((row, i) => (
+                    <tr
+                      key={row.feature}
+                      className={
+                        i < comparisonData.length - 1
+                          ? "border-b border-neutral-100 dark:border-neutral-800/50"
+                          : ""
+                      }
+                    >
+                      <td className="px-4 py-3 font-medium text-neutral-900 sm:px-6 dark:text-neutral-100">
+                        {row.feature}
+                      </td>
+                      <td className="px-4 py-3 text-neutral-500 sm:px-6 dark:text-neutral-400">
+                        <span className="flex items-center gap-2">
+                          {row.competitor === "No" || row.competitor === "None" ? (
+                            <X className="h-4 w-4 shrink-0 text-neutral-300 dark:text-neutral-600" />
+                          ) : row.verdict === "drydock" ? (
+                            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+                          ) : row.verdict === "competitor" ? (
+                            <Check className="h-4 w-4 shrink-0 text-emerald-500" />
+                          ) : (
+                            <VerdictIcon verdict="tie" />
+                          )}
+                          {row.competitor}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 sm:px-6">
+                        <span className="flex items-center gap-2 text-neutral-900 dark:text-neutral-100">
+                          {row.verdict === "drydock" ? (
+                            <Check className="h-4 w-4 shrink-0 text-emerald-500" />
+                          ) : row.verdict === "competitor" ? (
+                            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
+                          ) : (
+                            <VerdictIcon verdict="tie" />
+                          )}
+                          {row.drydock}
+                        </span>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {comparisonData.map((row, i) => (
-                      <tr
-                        key={row.feature}
-                        className={
-                          i < comparisonData.length - 1
-                            ? "border-b border-neutral-100 dark:border-neutral-800/50"
-                            : ""
-                        }
-                      >
-                        <td className="px-4 py-3 font-medium text-neutral-900 sm:px-6 dark:text-neutral-100">
-                          {row.feature}
-                        </td>
-                        <td className="px-4 py-3 text-neutral-500 sm:px-6 dark:text-neutral-400">
-                          <span className="flex items-center gap-2">
-                            {row.competitor === "No" || row.competitor === "None" ? (
-                              <X className="h-4 w-4 shrink-0 text-neutral-300 dark:text-neutral-600" />
-                            ) : row.verdict === "drydock" ? (
-                              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
-                            ) : row.verdict === "competitor" ? (
-                              <Check className="h-4 w-4 shrink-0 text-emerald-500" />
-                            ) : (
-                              <VerdictIcon verdict="tie" />
-                            )}
-                            {row.competitor}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 sm:px-6">
-                          <span className="flex items-center gap-2 text-neutral-900 dark:text-neutral-100">
-                            {row.verdict === "drydock" ? (
-                              <Check className="h-4 w-4 shrink-0 text-emerald-500" />
-                            ) : row.verdict === "competitor" ? (
-                              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
-                            ) : (
-                              <VerdictIcon verdict="tie" />
-                            )}
-                            {row.drydock}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </section>
+          </div>
+        </section>
 
-          {/* Key Differentiators */}
-          <section className="px-4 py-16">
-            <div className="mx-auto max-w-5xl">
-              <div className="relative mb-12 text-center">
-                <div className="pointer-events-none absolute inset-y-[-1.5rem] left-1/2 w-[30rem] max-w-full -translate-x-1/2 bg-[radial-gradient(ellipse_at_center,_white_20%,_transparent_50%)] dark:bg-[radial-gradient(ellipse_at_center,_rgb(10,10,10)_20%,_transparent_50%)]" />
-                <h2 className="relative mb-4 text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl dark:text-neutral-50">
-                  Key Differentiators
-                </h2>
-                <p className="relative mx-auto max-w-2xl text-neutral-600 dark:text-neutral-400">
-                  Where Drydock goes beyond what {competitorName} offers.
-                </p>
-              </div>
+        {/* Key Differentiators */}
+        <section className="px-4 py-16">
+          <div className="mx-auto max-w-5xl">
+            <div className="mb-12 text-center">
+              <h2 className="mb-4 text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl dark:text-neutral-50">
+                Key Differentiators
+              </h2>
+              <p className="mx-auto max-w-2xl text-neutral-600 dark:text-neutral-400">
+                What we built that {competitorName} doesn't cover.
+              </p>
+            </div>
 
-              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-                {highlights.map((item) => (
-                  <Card
-                    key={item.title}
-                    className="border-neutral-200 bg-white/50 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/50"
-                  >
-                    <CardContent className="pt-6">
-                      <div className="mb-4 flex items-center gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900/50">
-                          <item.icon className="h-5 w-5 text-emerald-500 dark:text-emerald-400" />
-                        </div>
-                        <h3 className="font-semibold text-neutral-900 dark:text-neutral-100">
-                          {item.title}
-                        </h3>
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {highlights.map((item) => (
+                <Card
+                  key={item.title}
+                  className="border-neutral-200 bg-white/50 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/50"
+                >
+                  <CardContent className="pt-6">
+                    <div className="mb-4 flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900/50">
+                        <item.icon className="h-5 w-5 text-emerald-500 dark:text-emerald-400" />
                       </div>
-                      <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                        {item.description}
-                      </p>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          {/* Migration note */}
-          <section className="px-4 py-16">
-            <div className="mx-auto max-w-3xl">
-              <Card className="border-neutral-200 bg-white/50 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/50">
-                <CardContent className="pt-6">
-                  <div className="flex items-start gap-4">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/50">
-                      <Clock className="h-5 w-5 text-amber-500 dark:text-amber-400" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="mb-2 text-lg font-semibold text-neutral-900 dark:text-neutral-100">
-                        {migrationTitle}
+                      <h3 className="font-semibold text-neutral-900 dark:text-neutral-100">
+                        {item.title}
                       </h3>
-                      <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
-                        {migrationDescription}
-                      </p>
-                      <DockerRunSnippet
-                        contentClassName="pt-4 pb-4"
-                        iconClassName="h-3.5 w-3.5"
-                        headerClassName="mb-2 flex items-center gap-2 text-neutral-500"
-                        label="Quick start"
-                      />
                     </div>
+                    <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                      {item.description}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Migration note */}
+        <section className="px-4 py-16">
+          <div className="mx-auto max-w-3xl">
+            <Card className="border-neutral-200 bg-white/50 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/50">
+              <CardContent className="pt-6">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/50">
+                    <Clock className="h-5 w-5 text-amber-500 dark:text-amber-400" />
                   </div>
-                </CardContent>
-              </Card>
-            </div>
-          </section>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="mb-2 text-lg font-semibold text-neutral-900 dark:text-neutral-100">
+                      {migrationTitle}
+                    </h3>
+                    <p className="mb-4 text-sm text-neutral-600 dark:text-neutral-400">
+                      {migrationDescription}
+                    </p>
+                    <DockerRunSnippet
+                      contentClassName="pt-4 pb-4"
+                      iconClassName="h-3.5 w-3.5"
+                      headerClassName="mb-2 flex items-center gap-2 text-neutral-500"
+                      label="Quick start"
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
 
-          {/* CTA */}
-          <section className="px-4 py-16">
-            <div className="mx-auto max-w-3xl text-center">
-              <div className="relative">
-                <div className="pointer-events-none absolute inset-y-[-1.5rem] left-1/2 w-[30rem] max-w-full -translate-x-1/2 bg-[radial-gradient(ellipse_at_center,_white_20%,_transparent_50%)] dark:bg-[radial-gradient(ellipse_at_center,_rgb(10,10,10)_20%,_transparent_50%)]" />
-                <h2 className="relative mb-4 text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl dark:text-neutral-50">
-                  Ready to try Drydock?
-                </h2>
-                <p className="relative mb-8 text-neutral-600 dark:text-neutral-400">
-                  Open source, AGPL-3.0 licensed, and actively maintained.
-                </p>
-              </div>
+        {/* CTA */}
+        <section className="px-4 py-16">
+          <div className="mx-auto max-w-3xl text-center">
+            <h2 className="mb-4 text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl dark:text-neutral-50">
+              Ready to try Drydock?
+            </h2>
+            <p className="mb-8 text-neutral-600 dark:text-neutral-400">
+              No SaaS subscription, no data sent off your host, and we ship updates fast.
+            </p>
 
-              <CtaButtons />
-            </div>
-          </section>
-
-          <SiteFooter />
-        </div>
-      </main>
+            <CtaButtons />
+          </div>
+        </section>
+      </MarketingShell>
     </>
   );
 }

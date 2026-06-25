@@ -24,6 +24,14 @@ export default function Layout({ children }: { children: ReactNode }) {
       }}
       links={[
         {
+          text: "Home",
+          url: "/",
+        },
+        {
+          text: "Compare",
+          url: "/compare",
+        },
+        {
           text: "GitHub",
           url: "https://github.com/CodesWhat/drydock",
           external: true,
