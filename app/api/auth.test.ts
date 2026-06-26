@@ -7,6 +7,7 @@ const {
   mockRateLimit,
   mockCreateAuthenticatedRouteRateLimitKeyGenerator,
   mockIsIdentityAwareRateLimitKeyingEnabled,
+  mockDdEnvVars,
 } = vi.hoisted(() => {
   const jsonMiddleware = vi.fn();
   const rateLimitMiddleware = vi.fn((_, __, next) => next());
@@ -24,6 +25,7 @@ const {
     mockRateLimit: vi.fn(() => rateLimitMiddleware),
     mockCreateAuthenticatedRouteRateLimitKeyGenerator: vi.fn(() => undefined),
     mockIsIdentityAwareRateLimitKeyingEnabled: vi.fn(() => false),
+    mockDdEnvVars: {} as Record<string, string | undefined>,
   };
 });
 const LOCKOUT_TRACKED_IDENTITIES_CAP_FOR_TESTS = 5;
@@ -97,6 +99,7 @@ vi.mock('../log', () => ({ default: { error: vi.fn(), warn: vi.fn(), info: vi.fn
 vi.mock('../configuration', () => ({
   getVersion: vi.fn(() => '1.0.0'),
   getServerConfiguration: mockGetServerConfiguration,
+  ddEnvVars: mockDdEnvVars,
 }));
 vi.mock('./audit-events.js', () => ({
   recordAuditEvent: mockRecordAuditEvent,
@@ -120,8 +123,6 @@ import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
 const lockoutStateFiles = new Map<string, string>();
 const LOCKOUT_STATE_PATH = '/test/store/db.json.auth-lockouts.json';
-const previousSessionSecretForSuite = process.env.DD_SESSION_SECRET;
-
 function createApp() {
   return {
     use: vi.fn(),
@@ -186,12 +187,6 @@ function getRouteMiddleware(method, path) {
 
 describe('Auth Router', () => {
   afterAll(() => {
-    if (previousSessionSecretForSuite === undefined) {
-      delete process.env.DD_SESSION_SECRET;
-    } else {
-      process.env.DD_SESSION_SECRET = previousSessionSecretForSuite;
-    }
-
     if (previousMaxTrackedLockoutIdentities === undefined) {
       delete process.env.DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES;
       return;
@@ -202,7 +197,7 @@ describe('Auth Router', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.DD_SESSION_SECRET = 'test-suite-session-secret';
+    mockDdEnvVars.DD_SESSION_SECRET = 'test-suite-session-secret';
     mockIsIdentityAwareRateLimitKeyingEnabled.mockReturnValue(false);
     mockCreateAuthenticatedRouteRateLimitKeyGenerator.mockReturnValue(undefined);
     lockoutStateFiles.clear();
@@ -1501,18 +1496,9 @@ describe('Auth Router', () => {
 
     test('should use DD_SESSION_SECRET when environment variable is set', () => {
       const app = createApp();
-      const previousSessionSecret = process.env.DD_SESSION_SECRET;
-      process.env.DD_SESSION_SECRET = 'session-secret-from-env';
+      mockDdEnvVars.DD_SESSION_SECRET = 'session-secret-from-env';
 
-      try {
-        auth.init(app);
-      } finally {
-        if (previousSessionSecret === undefined) {
-          delete process.env.DD_SESSION_SECRET;
-        } else {
-          process.env.DD_SESSION_SECRET = previousSessionSecret;
-        }
-      }
+      auth.init(app);
 
       expect(session).toHaveBeenCalledWith(
         expect.objectContaining({
