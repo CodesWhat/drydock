@@ -44,6 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Secret files are checked for unsafe permissions and trailing newlines.** When a `DD_*__FILE` secret is readable by group or others, drydock logs a non-fatal warning recommending `chmod 600` (skipped on Windows, where the mode bits are not meaningful). File-sourced secret values are also trimmed of a trailing newline so an editor- or `echo`-added `\n` can't corrupt a credential, matching the common Docker `*_FILE` convention.
 
+- **Debug dump and container environment no longer leak credentials.** The debug dump's redaction missed SMTP passwords (`*_PASS` keys) and webhook URLs with embedded secrets, both of which appeared in the dumped environment for any authenticated user. They are now redacted, and the same `*_PASS` gap is closed for the container runtime environment shown via `/api/containers`. Registry usernames and service hostnames stay visible by design, since they aren't secrets and aid debugging.
+
 ### Upgrade Notes
 
 - **One-time notification burst on first scan after upgrade (Docker Hub / GHCR containers only).** Containers on Docker Hub or GHCR whose pending update is already older than `maturityMinAgeDays` will clear the maturity gate immediately on the first poll after upgrading. Notification triggers in `always` mode will fire once for each such container. Action triggers (`docker`, `docker-compose`, `command`) will also fire, so containers previously held by the gate may be updated automatically on that first poll. Review your active action-trigger configuration before upgrading if you want to control the timing. This is expected behavior: those images were already mature; the gate was simply unaware of it.

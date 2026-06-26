@@ -86,6 +86,24 @@ describe('api/container/shared', () => {
       expect(isSensitiveKey('MYSQL_PASSWD')).toBe(true);
     });
 
+    test('detects bare PASS segment (SMTP and DB credential keys)', () => {
+      // 'PASS' is added with segment-exact matching to close the same credential-leak
+      // class that debug/redact.ts already closes with its 'pass' token.
+      expect(isSensitiveKey('SMTP_PASS')).toBe(true);
+      expect(isSensitiveKey('DB_PASS')).toBe(true);
+      expect(isSensitiveKey('REDIS_PASS')).toBe(true);
+    });
+
+    test('does not falsely redact keys that contain PASS as an internal substring', () => {
+      // 'COMPASS' and 'BYPASS' contain the letter sequence P-A-S-S but are not
+      // credential keys. Segment matching (split on '_') prevents these false positives
+      // that plain .includes('PASS') would produce.
+      expect(isSensitiveKey('COMPASS')).toBe(false);
+      expect(isSensitiveKey('BYPASS')).toBe(false);
+      expect(isSensitiveKey('COMPASS_DIRECTION')).toBe(false);
+      expect(isSensitiveKey('BYPASS_RATE')).toBe(false);
+    });
+
     test('returns false for non-sensitive keys', () => {
       expect(isSensitiveKey('PATH')).toBe(false);
       expect(isSensitiveKey('NODE_ENV')).toBe(false);

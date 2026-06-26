@@ -698,4 +698,45 @@ describe('debug dump utilities', () => {
       'drydock-debug-dump-2026-03-18.json',
     );
   });
+
+  test('collectDebugDump passes env vars containing webhook URLs through redactDebugDump', async () => {
+    configureFixture();
+    // Inject a webhook URL env var to verify it reaches the redactor
+    mockDdEnvVars.DD_NOTIFICATION_DISCORD_BOT_URL =
+      'https://discord.com/api/webhooks/T000/B000/XXXXSECRET';
+
+    await collectDebugDump();
+
+    expect(mockRedactDebugDump).toHaveBeenCalledTimes(1);
+    const capturedPayload = mockRedactDebugDump.mock.calls[0][0] as {
+      environment: { ddEnvVars: Record<string, string> };
+    };
+    // The raw webhook URL reaches redactDebugDump — the real implementation masks it.
+    // This test verifies the dump pipeline routes env vars through the redactor.
+    expect(capturedPayload.environment.ddEnvVars.DD_NOTIFICATION_DISCORD_BOT_URL).toBe(
+      'https://discord.com/api/webhooks/T000/B000/XXXXSECRET',
+    );
+  });
+
+  test('webhook URL env vars are masked in dump output when real redactDebugDump is used', async () => {
+    const { redactDebugDump: realRedact } =
+      await vi.importActual<typeof import('./redact.js')>('./redact.js');
+
+    const dumpLike = {
+      environment: {
+        ddEnvVars: {
+          DD_NOTIFICATION_DISCORD_BOT_URL: 'https://discord.com/api/webhooks/T000/B000/XXXXSECRET',
+          DD_NOTIFICATION_SMTP_ALERTS_PASS: 'smtp-secret',
+          DD_DEBUG: 'true',
+        },
+      },
+    };
+
+    const result = realRedact(dumpLike) as typeof dumpLike;
+
+    expect(result.environment.ddEnvVars.DD_NOTIFICATION_DISCORD_BOT_URL).toBe('[REDACTED]');
+    expect(result.environment.ddEnvVars.DD_NOTIFICATION_SMTP_ALERTS_PASS).toBe('[REDACTED]');
+    // Non-secret env vars remain visible for debugging
+    expect(result.environment.ddEnvVars.DD_DEBUG).toBe('true');
+  });
 });
