@@ -281,18 +281,18 @@ function DemoFullscreenHeader({
       </span>
 
       <div className="flex justify-center">
-        <Button variant="ghost" size="sm" onClick={onShare}>
+        <Button variant="ghost" size="sm" aria-label="Share" onClick={onShare}>
           <Share className="h-4 w-4" />
           <span className="hidden sm:inline">Share</span>
         </Button>
       </div>
 
       <div className="flex items-center justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={onThemeEditor}>
+        <Button variant="ghost" size="sm" aria-label="Theme Editor" onClick={onThemeEditor}>
           <Palette className="h-4 w-4" />
           <span className="hidden sm:inline">Theme Editor</span>
         </Button>
-        <Button variant="ghost" size="sm" onClick={onClose}>
+        <Button variant="ghost" size="sm" aria-label="Back to site" onClick={onClose}>
           <X className="h-4 w-4" />
           <span className="hidden sm:inline">Back to site</span>
         </Button>

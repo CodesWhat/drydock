@@ -50,6 +50,7 @@ export function FeaturesVariants() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search capabilities…"
+                aria-label="Search capabilities"
                 className="flex-1 bg-transparent text-sm text-neutral-700 placeholder-neutral-400 outline-none dark:text-neutral-300 dark:placeholder-neutral-600"
                 autoComplete="off"
                 spellCheck={false}

@@ -124,15 +124,34 @@ export function GetStartedSecureToggle() {
             role="tablist"
             aria-label="Install preset"
             className="inline-flex gap-1 rounded-xl border border-neutral-200 bg-white/60 p-1 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/60"
+            onKeyDown={(e) => {
+              const currentIndex = PRESETS.findIndex((p) => p.id === preset);
+              if (e.key === "ArrowRight") {
+                e.preventDefault();
+                setPreset(PRESETS[(currentIndex + 1) % PRESETS.length].id);
+              } else if (e.key === "ArrowLeft") {
+                e.preventDefault();
+                setPreset(PRESETS[(currentIndex - 1 + PRESETS.length) % PRESETS.length].id);
+              } else if (e.key === "Home") {
+                e.preventDefault();
+                setPreset(PRESETS[0].id);
+              } else if (e.key === "End") {
+                e.preventDefault();
+                setPreset(PRESETS[PRESETS.length - 1].id);
+              }
+            }}
           >
             {PRESETS.map(({ id, label, icon: Icon }) => {
               const active = preset === id;
               return (
                 <button
                   key={id}
+                  id={`tab-${id}`}
                   type="button"
                   role="tab"
                   aria-selected={active}
+                  aria-controls="preset-panel"
+                  tabIndex={active ? 0 : -1}
                   onClick={() => setPreset(id)}
                   className={[
                     "flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors",
@@ -149,27 +168,29 @@ export function GetStartedSecureToggle() {
           </div>
         </div>
 
-        {preset === "quick" ? <QuickSnippet /> : <SecureSnippet />}
+        <div role="tabpanel" id="preset-panel" aria-labelledby={`tab-${preset}`}>
+          {preset === "quick" ? <QuickSnippet /> : <SecureSnippet />}
 
-        {/* Contextual note under the snippet */}
-        <div className="mt-4 flex items-start justify-center gap-2 px-2 text-center text-sm">
-          {preset === "quick" ? (
-            <p className="flex items-center gap-2 text-neutral-500 dark:text-neutral-400">
-              <TriangleAlert className="h-4 w-4 shrink-0 text-amber-500" />
-              Mounts the Docker socket directly — fine for a local try, not for production.
-            </p>
-          ) : (
-            <p className="flex items-center gap-2 text-neutral-500 dark:text-neutral-400">
-              <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-500" />
-              Drydock never touches the raw socket.{" "}
-              <Link
-                href="/docs/guides/security"
-                className="font-medium text-neutral-900 underline-offset-4 hover:underline dark:text-neutral-100"
-              >
-                Hardening guide
-              </Link>
-            </p>
-          )}
+          {/* Contextual note under the snippet */}
+          <div className="mt-4 flex items-start justify-center gap-2 px-2 text-center text-sm">
+            {preset === "quick" ? (
+              <p className="flex items-center gap-2 text-neutral-500 dark:text-neutral-400">
+                <TriangleAlert className="h-4 w-4 shrink-0 text-amber-500" />
+                Mounts the Docker socket directly — fine for a local try, not for production.
+              </p>
+            ) : (
+              <p className="flex items-center gap-2 text-neutral-500 dark:text-neutral-400">
+                <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-500" />
+                Drydock never touches the raw socket.{" "}
+                <Link
+                  href="/docs/guides/security"
+                  className="font-medium text-neutral-900 underline-offset-4 hover:underline dark:text-neutral-100"
+                >
+                  Hardening guide
+                </Link>
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </section>
