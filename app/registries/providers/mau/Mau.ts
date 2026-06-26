@@ -83,7 +83,7 @@ class Mau extends Gitlab<MauRegistryConfiguration> {
 
     const response = await axios(this.withTlsRequestOptions(request));
     return withAuthorizationHeader(
-      requestOptions,
+      this.withTlsRequestOptions(requestOptions),
       'Bearer',
       response.data.token,
       `Unable to authenticate registry ${this.getId()}: dock.mau.dev token endpoint response does not contain token`,

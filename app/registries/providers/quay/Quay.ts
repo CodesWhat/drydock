@@ -54,7 +54,7 @@ class Quay extends BaseRegistry<QuayRegistryConfiguration> {
   async authenticate(image, requestOptions) {
     const credentials = this.getAuthCredentials();
     if (!credentials) {
-      return requestOptions;
+      return this.withTlsRequestOptions(requestOptions);
     }
     const authUrl = `https://quay.io/v2/auth?service=quay.io&scope=repository:${image.name}:pull`;
     return this.authenticateBearerFromAuthUrlWithPublicFallback(
@@ -100,8 +100,8 @@ class Quay extends BaseRegistry<QuayRegistryConfiguration> {
     const itemsPerPage = 1000;
     let nextOrLast = '';
     if (link) {
-      const nextPageRegex = link.match(/^.*next_page=(.*)$/);
-      const lastRegex = link.match(/^.*last=(.*)>;.*$/);
+      const nextPageRegex = link.match(/[?&]next_page=([^>&]+)/);
+      const lastRegex = link.match(/[?&]last=([^>&]+)/);
       if (nextPageRegex) {
         nextOrLast = `&next_page=${encodeURIComponent(nextPageRegex[1])}`;
       } else if (lastRegex) {

@@ -127,6 +127,16 @@ test('authenticate should return unchanged options when no clientemail configure
   expect(result).toEqual({ headers: {} });
 });
 
+test('authenticate anonymous with insecure=true should return httpsAgent on the returned options', async () => {
+  const gcrAnonInsecure = new Gcr();
+  gcrAnonInsecure.configuration = { insecure: true };
+
+  const result = await gcrAnonInsecure.authenticate({}, { headers: {} });
+
+  expect(result.httpsAgent).toBeDefined();
+  expect((result.httpsAgent as any).options.rejectUnauthorized).toBe(false);
+});
+
 test('authenticate should throw actionable error when configured credentials are rejected with 403', async () => {
   const { default: axios } = await import('axios');
   const gcrWithCreds = new Gcr();
@@ -238,8 +248,11 @@ test('authenticate should propagate 429 rate limit errors', async () => {
 test('getAuthPull should return credentials', async () => {
   const result = await gcr.getAuthPull();
   expect(result).toEqual({
-    username: TEST_CLIENT_EMAIL,
-    password: TEST_PRIVATE_KEY,
+    username: '_json_key',
+    password: JSON.stringify({
+      client_email: TEST_CLIENT_EMAIL,
+      private_key: TEST_PRIVATE_KEY,
+    }),
   });
 });
 

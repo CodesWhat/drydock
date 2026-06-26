@@ -69,7 +69,7 @@ class Gcr extends BaseRegistry<GcrRegistryConfiguration> {
 
   async authenticate(image, requestOptions) {
     if (!this.configuration.clientemail) {
-      return requestOptions;
+      return this.withTlsRequestOptions(requestOptions);
     }
     const credentials = this.getServiceAccountCredentials();
 
@@ -90,8 +90,11 @@ class Gcr extends BaseRegistry<GcrRegistryConfiguration> {
       return undefined;
     }
     return {
-      username: this.configuration.clientemail,
-      password: this.configuration.privatekey,
+      username: '_json_key',
+      password: JSON.stringify({
+        client_email: this.configuration.clientemail,
+        private_key: this.configuration.privatekey,
+      }),
     };
   }
 }

@@ -68,7 +68,7 @@ class Gar extends BaseRegistry<GarRegistryConfiguration> {
 
   async authenticate(image, requestOptions) {
     if (!this.configuration.clientemail) {
-      return requestOptions;
+      return this.withTlsRequestOptions(requestOptions);
     }
 
     const registryHostname = this.getRegistryHostname(image.registry?.url || '');
@@ -88,7 +88,7 @@ class Gar extends BaseRegistry<GarRegistryConfiguration> {
 
     const response = await axios(this.withTlsRequestOptions(request));
     return withAuthorizationHeader(
-      requestOptions,
+      this.withTlsRequestOptions(requestOptions),
       'Bearer',
       this.extractToken(response),
       `Unable to authenticate registry ${this.getId()}: GAR token endpoint response does not contain token`,
@@ -96,9 +96,15 @@ class Gar extends BaseRegistry<GarRegistryConfiguration> {
   }
 
   async getAuthPull() {
+    if (!this.configuration.clientemail || !this.configuration.privatekey) {
+      return undefined;
+    }
     return {
-      username: this.configuration.clientemail,
-      password: this.configuration.privatekey,
+      username: '_json_key',
+      password: JSON.stringify({
+        client_email: this.configuration.clientemail,
+        private_key: this.configuration.privatekey,
+      }),
     };
   }
 }

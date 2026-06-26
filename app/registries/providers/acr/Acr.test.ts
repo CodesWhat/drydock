@@ -114,6 +114,25 @@ test('getAuthPull should return clientid and clientsecret', async () => {
   });
 });
 
+test('authenticate should return httpsAgent in returned options when insecure=true', async () => {
+  const acrInsecure = new Acr();
+  acrInsecure.configuration = {
+    clientid: 'clientid',
+    clientsecret: 'clientsecret',
+    insecure: true,
+  };
+
+  const result = await acrInsecure.authenticate(undefined, { headers: {} });
+
+  expect(result.httpsAgent).toBeDefined();
+  expect((result.httpsAgent as any).options.rejectUnauthorized).toBe(false);
+});
+
+test('authenticate should NOT attach httpsAgent when no TLS config is set', async () => {
+  const result = await acr.authenticate(undefined, { headers: {} });
+  expect(result.httpsAgent).toBeUndefined();
+});
+
 test('normalizeImage should not double-prepend https when url already has it', async () => {
   expect(
     acr.normalizeImage({

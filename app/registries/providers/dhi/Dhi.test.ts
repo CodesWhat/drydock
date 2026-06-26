@@ -194,4 +194,20 @@ describe('DHI Registry', () => {
     expect(calledConfig.method).toBe('GET');
     expect(calledConfig.url).toContain('https://dhi.io/token');
   });
+
+  test('should return httpsAgent in returned options when insecure=true', async () => {
+    const { default: axios } = await import('axios');
+    axios.mockResolvedValue({ data: { token: 'auth-token' } });
+
+    dhi.configuration = {
+      url: 'https://dhi.io',
+      insecure: true,
+    };
+    dhi.getAuthCredentials = vi.fn().mockReturnValue(null);
+
+    const result = await dhi.authenticate({ name: 'python' }, { headers: {} });
+
+    expect(result.httpsAgent).toBeDefined();
+    expect((result.httpsAgent as any).options.rejectUnauthorized).toBe(false);
+  });
 });
