@@ -23,7 +23,7 @@ export function SiteHeader({
     <header className="sticky top-0 z-50 border-b border-border/60 bg-white/70 backdrop-blur-md dark:bg-neutral-950/70">
       <div className={`mx-auto flex h-14 items-center justify-between px-4 ${maxWidthClassName}`}>
         <Link href="/" className="flex items-center gap-2.5">
-          <Image src="/whale-logo.png" alt="" width={36} height={36} className="dark:invert" />
+          <Image src="/whale-logo.png" alt="" width={43} height={43} className="dark:invert" />
           <span className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
             Drydock
           </span>
