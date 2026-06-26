@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Remote agents now report their log level and watcher schedule.** The agent handshake (`dd:ack`) includes `logLevel` and `pollInterval` (the watcher's cron), so the `GET /api/v1/agents` response and the Agents view populate these fields for connected agents instead of leaving them blank.
+
 ### Changed
 
 - **Coverage reporting moved from Codecov to Qlty Cloud.** Part of the org-wide consolidation onto Qlty (one vendor for code quality and coverage). CI now publishes the normalized app/ui lcov reports to Qlty Cloud via GitHub OIDC — no stored coverage token — replacing the Codecov upload and `codecov.yml`. The vitest 100% coverage thresholds in the app/ and ui/ test suites remain the enforced gate; the README coverage badge now points at Qlty.

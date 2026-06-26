@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 import * as event from '../../event/index.js';
 import { sanitizeLogParam } from '../../log/sanitize.js';
+import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
 import * as eventApi from './event.js';
 
@@ -40,6 +41,15 @@ vi.mock('../../event/index.js', () => ({
 
 vi.mock('../../configuration/index.js', () => ({
   getVersion: vi.fn().mockReturnValue('1.0.0'),
+  getLogLevel: vi.fn().mockReturnValue('info'),
+}));
+
+vi.mock('../../registry/index.js', () => ({
+  getState: vi.fn().mockReturnValue({
+    watcher: {
+      'docker:local': { configuration: { cron: '0 */6 * * *' } },
+    },
+  }),
 }));
 
 vi.mock('node:os', () => ({
@@ -128,6 +138,75 @@ describe('agent API event', () => {
         '"containers":{"total":3,"running":2,"stopped":1,"updatesAvailable":0}',
       );
       expect(ackPayload).toContain('"images":2');
+    });
+
+    test('ack payload should include logLevel from configuration', () => {
+      eventApi.subscribeEvents(req, res);
+      const ackPayload = res.write.mock.calls[0][0];
+      expect(ackPayload).toContain('"logLevel":"info"');
+    });
+
+    test('ack payload should include pollInterval when a watcher has a cron', () => {
+      vi.mocked(registry.getState).mockReturnValue({
+        watcher: {
+          'docker:local': { configuration: { cron: '0 */6 * * *' } } as never,
+        },
+      } as never);
+
+      eventApi.subscribeEvents(req, res);
+      const ackPayload = res.write.mock.calls[0][0];
+      expect(ackPayload).toContain('"pollInterval":"0 */6 * * *"');
+      expect(ackPayload).toContain('"logLevel":"info"');
+    });
+
+    test('ack payload should omit pollInterval when no watchers exist', () => {
+      vi.mocked(registry.getState).mockReturnValue({ watcher: {} } as never);
+
+      eventApi.subscribeEvents(req, res);
+      const ackPayload = res.write.mock.calls[0][0];
+      expect(ackPayload).not.toContain('"pollInterval"');
+      expect(ackPayload).toContain('"logLevel":"info"');
+    });
+
+    test('ack payload should omit pollInterval when all watcher crons are empty', () => {
+      vi.mocked(registry.getState).mockReturnValue({
+        watcher: {
+          'docker:local': { configuration: { cron: '' } } as never,
+        },
+      } as never);
+
+      eventApi.subscribeEvents(req, res);
+      const ackPayload = res.write.mock.calls[0][0];
+      expect(ackPayload).not.toContain('"pollInterval"');
+      expect(ackPayload).toContain('"logLevel":"info"');
+    });
+
+    test('getAgentWatcherCron uses sorted keys and skips watchers with empty cron', () => {
+      // Two watchers: 'aaa' has empty cron (skipped), 'bbb' has valid cron (returned)
+      vi.mocked(registry.getState).mockReturnValue({
+        watcher: {
+          'bbb:local': { configuration: { cron: '0 */12 * * *' } } as never,
+          'aaa:local': { configuration: { cron: '' } } as never,
+        },
+      } as never);
+
+      eventApi.subscribeEvents(req, res);
+      const ackPayload = res.write.mock.calls[0][0];
+      // 'aaa:local' sorts first but has empty cron → skipped; 'bbb:local' provides the cron
+      expect(ackPayload).toContain('"pollInterval":"0 */12 * * *"');
+    });
+
+    test('getAgentWatcherCron skips watcher with non-string cron and picks next sorted key', () => {
+      vi.mocked(registry.getState).mockReturnValue({
+        watcher: {
+          'aaa:local': { configuration: { cron: 42 } } as never,
+          'bbb:local': { configuration: { cron: '0 */6 * * *' } } as never,
+        },
+      } as never);
+
+      eventApi.subscribeEvents(req, res);
+      const ackPayload = res.write.mock.calls[0][0];
+      expect(ackPayload).toContain('"pollInterval":"0 */6 * * *"');
     });
 
     test('should compute image and stopped counts using fallback image keys', () => {

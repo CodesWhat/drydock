@@ -1,9 +1,10 @@
 import os from 'node:os';
 import type { Request, Response } from 'express';
-import { getVersion } from '../../configuration/index.js';
+import { getLogLevel, getVersion } from '../../configuration/index.js';
 import * as event from '../../event/index.js';
 import logger from '../../log/index.js';
 import { sanitizeLogParam } from '../../log/sanitize.js';
+import * as registry from '../../registry/index.js';
 import * as storeContainer from '../../store/container.js';
 import { getContainerStatusSummary } from '../../util/container-summary.js';
 
@@ -287,8 +288,20 @@ function getContainerSummary(nowMs: number = Date.now()): ContainerSummary {
   return summary;
 }
 
+function getAgentWatcherCron(): string | undefined {
+  const watchers = registry.getState().watcher;
+  for (const id of Object.keys(watchers).sort()) {
+    const cron = (watchers[id]?.configuration as { cron?: unknown })?.cron;
+    if (typeof cron === 'string' && cron) {
+      return cron;
+    }
+  }
+  return undefined;
+}
+
 function getAckPayloadData() {
   const summary = getContainerSummary();
+  const pollInterval = getAgentWatcherCron();
   return {
     version: getVersion(),
     os: os.platform(),
@@ -297,6 +310,8 @@ function getAckPayloadData() {
     memoryGb: Number((os.totalmem() / 1024 / 1024 / 1024).toFixed(1)),
     uptimeSeconds: Math.floor(process.uptime()),
     lastSeen: new Date().toISOString(),
+    logLevel: getLogLevel(),
+    ...(pollInterval ? { pollInterval } : {}),
     ...summary,
   };
 }
