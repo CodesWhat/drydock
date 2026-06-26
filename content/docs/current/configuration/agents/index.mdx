@@ -305,11 +305,11 @@ Agent connections are driven entirely from the controller, so the controller log
 | `Connecting to agent remote1 at http://…:3000` then `Handshake successful. Received N containers.` | Connected and working | — |
 | Startup `Error: Agent remote1 is configured with a secret over insecure HTTP …` | A secret is set but the agent is plain HTTP | Configure TLS, or set `DD_AGENT_ALLOW_INSECURE_SECRET=true` on a trusted LAN |
 | `SSE Connection failed: Request failed with status code 401. Retrying...` | The secrets don't match | Make `DD_AGENT_{name}_SECRET` (controller) equal `DD_AGENT_SECRET` (agent) |
-| `SSE Connection failed: connect ECONNREFUSED 192.168.1.50:3000. Retrying...` | Agent isn't running, or its port isn't published/reachable | Confirm the agent is up and its `ports:` are published; check firewalls |
+| `SSE Connection failed: connect ECONNREFUSED 192.168.1.50:3000. Retrying...` | Agent unreachable — not running, crashed at boot, or its port isn't published/reachable | Check `docker logs <agent>` (see below), confirm its `ports:` are published, and check firewalls |
 | `SSE Connection failed: connect ETIMEDOUT 192.168.1.50:3000. Retrying...` | A firewall or NAT is blocking the path | Open the path from controller to agent, or check NAT |
 | Repeated `401`s against an agent that *looks* like it's running | The agent container was started **without** `command: --agent`, so it's running as a controller and never validated the secret | Add `command: --agent` to the agent service |
 
-If the **agent** container won't respond at all, check its own log for a startup error — the agent throws immediately if neither `DD_AGENT_SECRET` nor `DD_AGENT_SECRET_FILE` is set, and never starts listening.
+`ECONNREFUSED` only tells you the agent isn't answering, not why, so check `docker logs <agent>`. The agent throws and exits at boot in two cases: neither `DD_AGENT_SECRET` nor `DD_AGENT_SECRET_FILE` is set, or no watcher is configured (it logs `Agent mode requires at least one watcher configured.`). Add the missing secret or a `DD_WATCHER_*` (e.g. `DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock`) and restart.
 
 The agent also exposes an unauthenticated `GET /health` on its port: it returns `200` once at least one watcher is registered, or `503` with `{"status":"unhealthy","reason":"no watchers registered"}` otherwise. Use it for a compose `healthcheck` or an uptime probe.
 
