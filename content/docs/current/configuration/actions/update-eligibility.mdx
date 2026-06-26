@@ -27,6 +27,7 @@ If a container has an available update but **no pill**, it is eligible and the n
 | Reason code | Pill label | Severity | Why it fires | How to clear it |
 | --- | --- | --- | --- | --- |
 | `security-scan-blocked` | **Security blocked** | Red | The candidate image scan **or** the current container's existing scan detected critical/high vulnerabilities exceeding the configured threshold. Both the "what we'd pull" scan and the "what we're already running" scan are evaluated — either being blocked halts the update. | Lower the scan severity threshold, fix the vulnerability upstream, or use force-update to override for one cycle. |
+| `last-update-rolled-back` | **Rolled back** | Red | The previous update attempt for this container was rolled back, and the same candidate image (digest if available, otherwise tag) is still the pending target. Drydock blocks re-applying the identical target so a known-bad update isn't retried automatically; a different, newer image is never blocked. | Wait for a newer image to be released, or set `dd.update.rollback-gate=off` on the container to override the gate. |
 | `snoozed` | **Snoozed** | Amber | Container's update policy has `snoozeUntil` set to a future timestamp. | Clear the snooze from the container row's **Update policy** menu, or wait for the lift date shown in the tooltip. |
 | `skip-tag` | **Tag skipped** | Amber | The remote tag is in the container's `skipTags` list. | Remove the tag from the skip list in the **Update policy** menu. |
 | `skip-digest` | **Digest skipped** | Amber | The remote digest is in the container's `skipDigests` list. | Remove the digest from the skip list in the **Update policy** menu. |
@@ -40,6 +41,7 @@ If a container has an available update but **no pill**, it is eligible and the n
 | `rollback-container` | **Rollback** | Neutral | Container was created during a previous update as a rollback artifact and isn't itself updateable. | Not actionable — remove the rollback container manually if no longer needed. |
 | `active-operation` | **In progress** | Blue | An update is queued or already running for this container. | Wait for completion. |
 | `no-update-available` | *no pill* | — | No newer image was detected. Internal short-circuit; never rendered as a pill. | N/A |
+| `maintenance-window-closed` | *no pill* | — | Reserved for automatic-update dispatch: recorded only when eligibility is evaluated with the maintenance window explicitly closed. No code path currently sets that flag — maintenance-window enforcement happens at scan time in the watcher, so manual UI/API updates are never gated by it and it isn't rendered as a pill. | N/A — manual updates are unaffected; automatic updates resume when the window reopens. |
 
 <Callout type="info">The pill component hides `no-update-available` and (when an "in progress" badge is already shown elsewhere on the row) `active-operation`, to avoid duplicate signals. All other reasons render whenever active.</Callout>
 
@@ -88,6 +90,7 @@ The `updateEligibility` object is returned on every container in `GET /api/v1/co
   "blockers": [
     {
       "reason": "trigger-not-included",
+      "severity": "soft",
       "message": "Trigger not matched by container label dd.action.include='undefined'.",
       "actionable": true,
       "actionHint": "Adjust the `dd.action.include` / `dd.action.exclude` labels on the container.",
@@ -105,6 +108,7 @@ Fields:
 
 - `eligible` — `true` only when an update exists and no blockers apply.
 - `blockers[].reason` — one of the codes in the [reasons reference](#reasons-reference) above. Stable identifier; safe to switch on programmatically.
+- `blockers[].severity` — `'hard'` or `'soft'`. A **hard** blocker prevents manual updates too: the API rejects the update request and the UI disables the Update button (e.g. `security-scan-blocked`, `rollback-container`). A **soft** blocker only defers automatic dispatch — manual updates still succeed, with the UI showing a confirm modal that lists the soft blockers (e.g. `maturity-not-reached`, `snoozed`).
 - `blockers[].message` — human-readable summary, with concrete values interpolated (tag, threshold, days remaining, etc.).
 - `blockers[].actionable` — `true` when a user can clear the blocker; `false` for terminal states (`rollback-container`, `active-operation`, `no-update-available`).
 - `blockers[].actionHint` — short next-step suggestion. Used as the second line in tooltips and the **Action** field on full-page cards.

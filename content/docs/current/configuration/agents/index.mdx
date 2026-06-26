@@ -143,13 +143,17 @@ If `HOST` or `SECRET` is missing for an agent, the controller logs `Skipping age
 
 <Callout type="warn">Setting `DD_AGENT_ALLOW_INSECURE_SECRET=true` means your agent secret is transmitted over the network in cleartext on every request. An attacker with network access can capture it and impersonate the controller. Prefer HTTPS (configure `DD_AGENT_{name}_CERTFILE`/`DD_AGENT_{name}_CAFILE`) or terminate TLS at a reverse proxy. Only use this flag on isolated private networks where you explicitly accept that risk.</Callout>
 
-<Callout type="error">**Without this flag set, a secret configured over plain HTTP is a hard startup error — the controller refuses to boot.** You'll see:
+<Callout type="error">
+
+**Without this flag set, a secret configured over plain HTTP is a hard startup error — the controller refuses to boot.** You'll see:
 
 ```
 Agent remote1 is configured with a secret over insecure HTTP (http://192.168.1.50:3000). Configure HTTPS (certfile/cafile) to protect X-Dd-Agent-Secret.
 ```
 
-Fix it by configuring TLS (`DD_AGENT_{name}_CAFILE`/`CERTFILE`), terminating TLS at a reverse proxy, or — on a trusted LAN only — setting `DD_AGENT_ALLOW_INSECURE_SECRET=true` (which demotes the error to a one-time warning).</Callout>
+Fix it by configuring TLS (`DD_AGENT_{name}_CAFILE`/`CERTFILE`), terminating TLS at a reverse proxy, or — on a trusted LAN only — setting `DD_AGENT_ALLOW_INSECURE_SECRET=true` (which demotes the error to a one-time warning).
+
+</Callout>
 
 ### Controller Example (Docker Compose)
 
