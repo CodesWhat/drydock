@@ -137,10 +137,14 @@ function LicenseLine({ className }: { className?: string }) {
 
 // ─── Brand-peer band — Drydock left, CodesWhat right ─────────────────────────
 
-export function FooterVariants() {
+export function FooterVariants({
+  maxWidthClassName = "max-w-6xl",
+}: {
+  maxWidthClassName?: string;
+}) {
   return (
     <footer className="border-t border-border/60">
-      <div className="mx-auto max-w-6xl px-4 py-12">
+      <div className={`mx-auto px-4 py-12 ${maxWidthClassName}`}>
         {/* Brand band + columns share one row — brand on the left, links on the right */}
         <div className="flex flex-col gap-10 lg:flex-row lg:justify-between">
           {/* Brand */}

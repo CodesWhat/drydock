@@ -148,9 +148,29 @@
   --au-glow: rgba(148, 163, 184, 0.12);
 }
 
-/* Let docs content fill the full viewport width */
-#nd-flux-layout {
-  --fd-layout-width: 100vw;
+/* Docs wear the site chrome (DocsShell): the SiteHeader + footer align to the same
+   --fd-layout-width as the fumadocs body, so the whole docs app centers as one bounded
+   column instead of jamming the sidebar/header/footer against the screen edge. Capped at
+   75vw on a wide monitor (so it never exceeds ~75% width and keeps real side margins) with
+   a 1500px floor so laptops still use their space. --fd-nav-height offsets the sticky
+   sidebar/TOC below the 56px header. */
+:root {
+  --fd-layout-width: max(1500px, 75vw);
+  --fd-nav-height: 56px;
+}
+
+/* SWR look: drop the grey sidebar fill and the vertical divider line (horizontal borders only) */
+#nd-sidebar {
+  background-color: transparent;
+  border-inline-end-width: 0;
+}
+
+/* Cap the content column so it sits as an isolated, centered block with gutters to the
+   sidebar/TOC instead of stretching code blocks edge-to-edge on a wide monitor. fumadocs
+   already centers (mx-auto) and pads (px-4 md:px-6 xl:px-8) #nd-page; this widens its
+   default 900px to a comfortable 72rem. `full` pages keep their own wider width. */
+#nd-page:not([data-full="true"]) {
+  max-width: 72rem;
 }
 
 @layer base {
