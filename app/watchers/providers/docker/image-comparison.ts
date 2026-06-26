@@ -27,6 +27,7 @@ export interface ContainerTagLookupProvider {
     version?: number;
   }>;
   getImagePublishedAt?: (image: Container['image'], tag?: string) => Promise<string | undefined>;
+  publishedAtIsPushDate?: boolean;
 }
 
 /**
@@ -345,6 +346,9 @@ export async function findNewVersion(
       );
       if (typeof publishedAt === 'string') {
         result.publishedAt = publishedAt;
+        if (registryProvider.publishedAtIsPushDate === true) {
+          result.publishedAtTrusted = true;
+        }
       }
     }
   } catch (error: unknown) {

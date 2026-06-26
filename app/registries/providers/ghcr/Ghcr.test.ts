@@ -482,4 +482,8 @@ describe('GitHub Container Registry', () => {
     const auth = await ghcr.getAuthPull();
     expect(auth).toBeUndefined();
   });
+
+  test('publishedAtIsPushDate is true on Ghcr', () => {
+    expect(ghcr.publishedAtIsPushDate).toBe(true);
+  });
 });

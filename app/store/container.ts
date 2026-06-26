@@ -12,7 +12,7 @@ import { toPositiveInteger } from '../util/parse.js';
 const { validate: validateContainer } = container;
 
 import { emitContainerAdded, emitContainerRemoved, emitContainerUpdated } from '../event/index.js';
-import { isRollbackContainerName } from '../model/container.js';
+import { hasRawUpdate, isRollbackContainerName } from '../model/container.js';
 import { initCollection } from './util.js';
 
 let containers: ReturnType<typeof initCollection> | undefined;
@@ -23,9 +23,10 @@ const containersQueryCacheMalformedKeys = new Set<string>();
 const containersQueryCacheParsedEntries = new Map<string, Array<readonly [string, unknown]>>();
 const DEFAULT_CACHE_MAX_ENTRIES = getDefaultCacheMaxEntries();
 
-// Security state cache: keyed by "{watcher}_{name}" to survive container recreation
+// Security state cache: keyed by "{watcher}::{name}" to survive container recreation
 const DEFAULT_CONTAINERS_QUERY_CACHE_MAX_ENTRIES = DEFAULT_CACHE_MAX_ENTRIES;
 const DEFAULT_SECURITY_STATE_CACHE_TTL_MS = 15 * 60 * 1000;
+const DEFAULT_UPDATE_LIFECYCLE_CACHE_TTL_MS = 30 * 60 * 1000;
 const DEFAULT_SECURITY_STATE_CACHE_MAX_ENTRIES = DEFAULT_CACHE_MAX_ENTRIES;
 const SECURITY_STATE_CACHE_PRUNE_SCAN_BUDGET = 10;
 const CONTAINER_COLLECTION_INDICES = ['data.watcher', 'data.status', 'data.updateAvailable'];
@@ -47,13 +48,31 @@ let securityStateCachePruneIterator:
   | IterableIterator<[string, SecurityStateCacheEntry]>
   | undefined;
 
+type UpdateLifecycleCacheEntry = {
+  updateDetectedAt: string;
+  firstSeenAt?: string;
+  resultSignature: string;
+  expiresAt: number;
+};
+
+const updateLifecycleCache = new Map<string, UpdateLifecycleCacheEntry>();
+
 interface ContainerListPaginationOptions {
   limit?: number;
   offset?: number;
 }
 
 function toCacheKey(watcher, name) {
-  return `${watcher}_${name}`;
+  return `${watcher}::${name}`;
+}
+
+function getResultSignature(
+  c: { result?: { tag?: unknown; digest?: unknown } } | undefined,
+): string {
+  return JSON.stringify({
+    tag: c?.result?.tag ?? null,
+    digest: c?.result?.digest ?? null,
+  });
 }
 
 export const SECURITY_STATE_CACHE_TTL_MS = toPositiveInteger(
@@ -67,6 +86,14 @@ export const CONTAINERS_QUERY_CACHE_MAX_ENTRIES = toPositiveInteger(
 export const SECURITY_STATE_CACHE_MAX_ENTRIES = toPositiveInteger(
   process.env.DD_SECURITY_STATE_CACHE_MAX_ENTRIES,
   DEFAULT_SECURITY_STATE_CACHE_MAX_ENTRIES,
+);
+export const UPDATE_LIFECYCLE_CACHE_TTL_MS = toPositiveInteger(
+  process.env.DD_UPDATE_LIFECYCLE_CACHE_TTL_MS,
+  DEFAULT_UPDATE_LIFECYCLE_CACHE_TTL_MS,
+);
+export const UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES = toPositiveInteger(
+  process.env.DD_UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES,
+  DEFAULT_CACHE_MAX_ENTRIES,
 );
 
 function pruneSecurityStateCache(nowMs = Date.now()) {
@@ -659,7 +686,10 @@ function getFirstSeenAt(containerCurrent, containerNext) {
 }
 
 function getUpdateLifecycleTimestamp(containerCurrent, containerNext, timestampField) {
-  if (!containerNext.updateAvailable) {
+  // Gate on raw-update presence, not the suppression-aware updateAvailable getter.
+  // In mature mode updateAvailable is false (suppressed) until the window passes,
+  // but we still need to stamp the timestamp so the maturity clock can start.
+  if (!hasRawUpdate(containerNext)) {
     return undefined;
   }
 
@@ -678,7 +708,7 @@ function getUpdateLifecycleTimestamp(containerCurrent, containerNext, timestampF
     typeof containerCurrent.resultChanged === 'function' &&
     containerCurrent.resultChanged(containerNext);
 
-  if (!containerCurrent.updateAvailable || updateChanged) {
+  if (!hasRawUpdate(containerCurrent) || updateChanged) {
     return new Date().toISOString();
   }
 
@@ -717,6 +747,33 @@ export function insertContainer(container) {
     if (cachedSecurity && !container.security) {
       container.security = cachedSecurity;
       clearCachedSecurityState(container.watcher, container.name);
+    }
+    const lifecycleCacheKey = toCacheKey(container.watcher, container.name);
+    const lifecycleEntry = updateLifecycleCache.get(lifecycleCacheKey);
+    if (lifecycleEntry) {
+      if (lifecycleEntry.expiresAt <= Date.now()) {
+        updateLifecycleCache.delete(lifecycleCacheKey);
+      } else if (getResultSignature(container) === lifecycleEntry.resultSignature) {
+        if (hasRawUpdate(container)) {
+          if (
+            !(
+              typeof container.updateDetectedAt === 'string' &&
+              container.updateDetectedAt.length > 0
+            )
+          ) {
+            container.updateDetectedAt = lifecycleEntry.updateDetectedAt;
+          }
+          if (
+            lifecycleEntry.firstSeenAt !== undefined &&
+            !(typeof container.firstSeenAt === 'string' && container.firstSeenAt.length > 0)
+          ) {
+            container.firstSeenAt = lifecycleEntry.firstSeenAt;
+          }
+        }
+        updateLifecycleCache.delete(lifecycleCacheKey);
+      } else {
+        updateLifecycleCache.delete(lifecycleCacheKey);
+      }
     }
   }
   const containerToSave = validateContainer(container);
@@ -1005,6 +1062,41 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
       .remove();
     invalidateContainersCacheForMutation(containerRaw, undefined);
     containerSecurityStateHashCache.delete(id);
+    if (
+      options.replacementExpected === true &&
+      !(typeof containerRaw?.agent === 'string' && containerRaw.agent !== '') &&
+      !isRollbackContainerName(containerRaw?.name) &&
+      typeof containerRaw?.updateDetectedAt === 'string' &&
+      containerRaw.updateDetectedAt.length > 0
+    ) {
+      const lifecycleCacheKey = toCacheKey(containerRaw.watcher, containerRaw.name);
+      updateLifecycleCache.delete(lifecycleCacheKey);
+      updateLifecycleCache.set(lifecycleCacheKey, {
+        updateDetectedAt: containerRaw.updateDetectedAt,
+        firstSeenAt:
+          typeof containerRaw.firstSeenAt === 'string' && containerRaw.firstSeenAt.length > 0
+            ? containerRaw.firstSeenAt
+            : undefined,
+        resultSignature: getResultSignature(containerRaw),
+        expiresAt: Date.now() + UPDATE_LIFECYCLE_CACHE_TTL_MS,
+      });
+      if (updateLifecycleCache.size > UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES) {
+        const nowMs = Date.now();
+        for (const [expiredKey, expiredEntry] of updateLifecycleCache.entries()) {
+          if (expiredEntry.expiresAt <= nowMs) {
+            updateLifecycleCache.delete(expiredKey);
+          }
+        }
+      }
+      while (updateLifecycleCache.size > UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES) {
+        const oldestLifecycleKey = updateLifecycleCache.keys().next().value;
+        /* istanbul ignore next */
+        if (oldestLifecycleKey === undefined) {
+          break;
+        }
+        updateLifecycleCache.delete(oldestLifecycleKey);
+      }
+    }
     if (!isRollbackContainerName(container.name)) {
       emitContainerRemoved({
         ...container,
@@ -1017,6 +1109,7 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
 export function _resetContainerStoreStateForTests() {
   clearContainersQueryCacheState();
   securityStateCache.clear();
+  updateLifecycleCache.clear();
   pendingFreshStateAfterManualUpdate.clear();
   containerSecurityStateHashCache.clear();
   securityStateObjectHashCache = new WeakMap<object, string>();
@@ -1082,4 +1175,15 @@ export function _pruneSecurityStateCacheIncrementallyForTests(nowMs = Date.now()
 
 export function _getValueByPathForTests(source, path) {
   return getValueByPath(source, path);
+}
+
+export function _getUpdateLifecycleCacheForTests() {
+  return updateLifecycleCache;
+}
+
+export function _setUpdateLifecycleCacheEntryForTests(
+  cacheKey: string,
+  entry: UpdateLifecycleCacheEntry,
+) {
+  updateLifecycleCache.set(cacheKey, entry);
 }

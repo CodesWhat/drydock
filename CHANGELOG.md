@@ -14,6 +14,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Coverage reporting moved from Codecov to Qlty Cloud.** Part of the org-wide consolidation onto Qlty (one vendor for code quality and coverage). CI now publishes the normalized app/ui lcov reports to Qlty Cloud via GitHub OIDC — no stored coverage token — replacing the Codecov upload and `codecov.yml`. The vitest 100% coverage thresholds in the app/ and ui/ test suites remain the enforced gate; the README coverage badge now points at Qlty.
 
+- **Maturity gate counts from the registry publish date when trustworthy.** For Docker Hub and GHCR (including lscr.io), the gate now measures elapsed time from the real image push date (`last_updated` / `updated_at`) instead of from when drydock first detected the update. An image that has been public longer than `maturityMinAgeDays` clears the gate immediately on the first scan that finds it. All other registries expose only the OCI image build date, which is not a reliable push signal, so drydock falls back to its own first-detection timestamp (`updateDetectedAt`) for those. A trusted publish date is skipped if it fails to parse or is in the future (clock-skew protection).
+
+### Fixed
+
+- **Maturity gate (`maturityMode: 'mature'`) never triggered; the first-detection timestamp was never computed.** The function that stamps `updateDetectedAt` returned `undefined` immediately whenever `updateAvailable` was `false`, which is always the case while maturity suppression is active, so the timestamp was never computed and the maturity clock never started. Containers blocked by the maturity gate remained permanently "maturing" and never became update-available.
+
+- **Maturity clock reset on every container recreation.** When a container was stopped and recreated (Portainer stack redeploy, `docker compose down && up`), its new Docker container ID caused drydock to treat it as a fresh container, resetting `updateDetectedAt` to zero. Containers that are frequently redeployed could never accumulate enough age to clear the gate. The clock is now keyed on a stable container identity and survives recreation as long as the same update remains pending.
+
+- **In-memory container cache key collision.** The cache key joined watcher name and container name with `_`, so `my_prod` + `nginx` and `my` + `prod_nginx` produced the same key. A wrong cache hit could apply a stale security scan result or maturity timestamp from one container to a different container, most visibly after a recreation event. The separator is now `::`.
+
+### Upgrade Notes
+
+- **One-time notification burst on first scan after upgrade (Docker Hub / GHCR containers only).** Containers on Docker Hub or GHCR whose pending update is already older than `maturityMinAgeDays` will clear the maturity gate immediately on the first poll after upgrading. Notification triggers in `always` mode will fire once for each such container. Action triggers (`docker`, `docker-compose`, `command`) will also fire, so containers previously held by the gate may be updated automatically on that first poll. Review your active action-trigger configuration before upgrading if you want to control the timing. This is expected behavior: those images were already mature; the gate was simply unaware of it.
+
 <!-- The 1.4.6/1.5 behavioral/breaking upgrade notes (OIDC `authorization_endpoint`
 required, unauthenticated rate-limit keying on the TCP peer, HTTP-trigger proxy
 scheme restriction) live in `UPGRADE-NOTES.md` and are auto-appended to every

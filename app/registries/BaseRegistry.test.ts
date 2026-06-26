@@ -4082,3 +4082,7 @@ test('callRegistry should surface credential rejection from Bearer challenge tok
   expect(axios).toHaveBeenCalledTimes(2);
   expect(axios.mock.calls[1][0].headers.Authorization).toMatch(/^Basic /);
 });
+
+test('publishedAtIsPushDate is false on BaseRegistry', () => {
+  expect(baseRegistry.publishedAtIsPushDate).toBe(false);
+});

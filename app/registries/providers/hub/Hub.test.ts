@@ -379,4 +379,8 @@ describe('Docker Hub Registry', () => {
       'Request failed with status code 429',
     );
   });
+
+  test('publishedAtIsPushDate is true on Hub', () => {
+    expect(hub.publishedAtIsPushDate).toBe(true);
+  });
 });

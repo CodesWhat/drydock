@@ -1129,7 +1129,7 @@ The container model includes additional fields useful for understanding update s
 | Field | Type | Description |
 | --- | --- | --- |
 | `result.noUpdateReason` | `string` | When no update is available, explains why (e.g. tag filtering, no newer version found) |
-| `updateDetectedAt` | `string (ISO 8601)` | Timestamp of when an update was first detected for this container |
+| `updateDetectedAt` | `string (ISO 8601)` | Drydock's own wall-clock timestamp recorded when it **first** stored a pending update for this container. This is not the image build date or the registry push date. The value is preserved across polls and across container recreation — if a container is redeployed (e.g. via a Portainer stack redeploy or `docker compose down && up`) with the same stable identity and the same update still pending, the original timestamp is carried forward. When no trusted registry publish date is available, the maturity gate uses `updateDetectedAt` as its fallback clock to measure how long an update has been known. |
 | `image.tag.tagPrecision` | `'specific' \| 'floating'` | Whether the container's tag is a mutable version alias (`floating`, e.g. `latest`, `v3`, `1.4`) or a pinned release (`specific`, e.g. `1.4.5`). Computed automatically; used by digest-watch auto-enable logic and the Hide Pinned UI filter. |
 
 ## Next-run visibility

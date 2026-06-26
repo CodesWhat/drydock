@@ -3,7 +3,11 @@ import type Trigger from '../triggers/providers/Trigger.js';
 import { isThresholdReached } from '../triggers/providers/trigger-threshold.js';
 import type { Container } from './container.js';
 import { isRollbackContainer } from './container.js';
-import { maturityMinAgeDaysToMilliseconds, resolveMaturityMinAgeDays } from './maturity-policy.js';
+import {
+  getMaturityStartMs,
+  maturityMinAgeDaysToMilliseconds,
+  resolveMaturityMinAgeDays,
+} from './maturity-policy.js';
 
 export type UpdateBlockerReason =
   | 'no-update-available'
@@ -336,18 +340,20 @@ export function computeUpdateEligibility(
 
   // 5. maturity-not-reached
   if (container.updatePolicy?.maturityMode === 'mature') {
-    const updateDetectedAtMs = Date.parse(container.updateDetectedAt || '');
+    const maturityStartMs = getMaturityStartMs(container, now);
     const maturityMinAgeDays = resolveMaturityMinAgeDays(container.updatePolicy.maturityMinAgeDays);
     const maturityMinAgeMs = maturityMinAgeDaysToMilliseconds(maturityMinAgeDays);
 
-    if (!Number.isFinite(updateDetectedAtMs) || now - updateDetectedAtMs < maturityMinAgeMs) {
-      const remainingMs = Number.isFinite(updateDetectedAtMs)
-        ? Math.max(0, maturityMinAgeMs - (now - updateDetectedAtMs))
-        : maturityMinAgeMs;
+    if (maturityStartMs === undefined || now - maturityStartMs < maturityMinAgeMs) {
+      const remainingMs =
+        maturityStartMs !== undefined
+          ? Math.max(0, maturityMinAgeMs - (now - maturityStartMs))
+          : maturityMinAgeMs;
       const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
-      const liftableAt = Number.isFinite(updateDetectedAtMs)
-        ? new Date(updateDetectedAtMs + maturityMinAgeMs).toISOString()
-        : undefined;
+      const liftableAt =
+        maturityStartMs !== undefined
+          ? new Date(maturityStartMs + maturityMinAgeMs).toISOString()
+          : undefined;
 
       blockers.push(
         makeBlocker({

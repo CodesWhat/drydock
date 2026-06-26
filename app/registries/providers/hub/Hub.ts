@@ -19,6 +19,8 @@ interface HubRegistryConfiguration extends CustomRegistryConfiguration {
  * Docker Hub integration.
  */
 class Hub extends Custom<HubRegistryConfiguration> {
+  override readonly publishedAtIsPushDate = true;
+
   protected getTrustedAuthHosts(): string[] {
     return ['auth.docker.io'];
   }

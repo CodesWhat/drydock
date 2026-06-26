@@ -60,6 +60,8 @@ const REJECTED_CREDENTIAL_DEFAULT_PATTERN = RE2JS.compile(
 class BaseRegistry<
   TConfiguration extends BaseRegistryConfiguration = BaseRegistryConfiguration,
 > extends Registry<TConfiguration> {
+  readonly publishedAtIsPushDate: boolean = false;
+
   private httpsAgent?: https.Agent;
   private bearerTokenCache = new Map<string, { token: string; expiresAt: number }>();
   private digestManifestCache = new Map<string, DigestCacheEntry>();

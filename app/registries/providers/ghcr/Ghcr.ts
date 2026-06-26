@@ -15,6 +15,8 @@ interface GhcrTokenResponse {
  * Github Container Registry integration.
  */
 class Ghcr extends BaseRegistry<GhcrRegistryConfiguration> {
+  override readonly publishedAtIsPushDate = true;
+
   protected getTrustedAuthHosts(): string[] {
     return ['ghcr.io'];
   }

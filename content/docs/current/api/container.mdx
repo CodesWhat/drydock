@@ -45,11 +45,56 @@ curl "http://drydock:3000/api/v1/containers?limit=25&offset=0"
 
 ### Maturity filter configuration
 
-The `hot`/`mature` age boundary used by the `maturity` query parameter is set server-side:
+Drydock has two separate maturity concepts. Do not conflate them.
+
+#### Display badge (informational only)
+
+The display badge labels each pending update as `hot`, `mature`, or `established`. It is informational — it never holds or suppresses an update.
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
 | `DD_UI_MATURITY_THRESHOLD_DAYS` | ⚪ | Age threshold (days) that separates `hot` updates from `mature` updates. Updates younger than this value are classified `hot`; updates at or older than this value (up to 30 days) are classified `mature`; updates older than 30 days are always `established`. | integer (`>0`) | `7` |
+
+Display age is computed as `now − min(firstSeenAt, result.publishedAt)`. For Docker Hub and GHCR registries `publishedAt` is the real push date, so an image that shipped days ago can arrive already-`mature`. For all other registries `publishedAt` is the OCI image build date (see the table below), which may be older or pinned to an epoch date, meaning the badge can read older than the actual push date.
+
+> **Note:** The badge and the policy gate measure age differently. The badge uses `min(firstSeenAt, result.publishedAt)`; the gate uses the trusted publish date (or `updateDetectedAt`). For untrusted registries the badge can therefore read older than the gate, because it relies on the OCI build date. The badge only labels updates that are currently surfaced: while the policy gate is suppressing an update in `mature` mode the update is not shown, so no badge appears either. The `Maturing` eligibility pill indicates that state instead.
+
+#### Policy gate (holds updates)
+
+The policy gate is a per-container setting that suppresses an update until the image has aged past a minimum threshold. Configure it from the UI (Update policy menu) or via the API — there is no `dd.*` container label for this.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `maturityMode` | string | `all` | `all` = no gate (updates fire immediately); `mature` = enable the age gate |
+| `maturityMinAgeDays` | integer | `7` | Minimum age in days an update must reach before the gate passes. Valid range: 1–365. |
+
+The gate clock starts from the **earliest point** at which the update is known to have existed:
+
+- If the registry exposes a trustworthy push timestamp (`result.publishedAtTrusted: true`), the clock starts from the earlier of that date and `updateDetectedAt`. An image that has already been public longer than `maturityMinAgeDays` is immediately mature, regardless of when this Drydock instance first noticed it.
+- Otherwise, the clock starts from `updateDetectedAt` — Drydock's own wall-clock time when it first recorded the pending update.
+- If the trusted publish date fails to parse or lies in the future (clock-skew protection), it is discarded and the gate falls back to `updateDetectedAt`.
+
+The gate clock survives container recreation. A Portainer stack redeploy or `docker compose down && up` gives the container a new Docker ID, but Drydock carries the maturity clock forward via the container's stable identity as long as the same update is still pending.
+
+When the gate blocks an update the blocker reason is `maturity-not-reached`. The dialog shows days remaining and a `liftableAt` timestamp computed from whichever start timestamp applies.
+
+#### `publishedAt` source by registry
+
+The source of `result.publishedAt` — and whether it is trusted for the policy gate — depends on the registry:
+
+| Registry | `publishedAt` source | Trusted for gate? |
+| --- | --- | --- |
+| Docker Hub | `last_updated` from the tag API — real push/upload date | ✅ yes (`result.publishedAtTrusted: true`) |
+| GHCR (and lscr.io) | `updated_at` from the GitHub Packages API — real version date | ✅ yes (`result.publishedAtTrusted: true`) |
+| All other registries (ACR, ECR, GCR, GAR, Quay, Harbor, Nexus, Gitea, Forgejo, custom/OCI, …) | OCI image-config `created` = image **build** date, not the push date | ❌ no — gate falls back to `updateDetectedAt` |
+
+Quay.io has a push-date API but Drydock does not yet read it; Quay is treated as untrusted until a future release adds support.
+
+#### `result.publishedAtTrusted` field
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `result.publishedAtTrusted` | boolean | `true` when `result.publishedAt` came from a trusted registry push-date source (Docker Hub or GHCR). Absent or `false` for all other registries. When `true`, the policy gate uses `publishedAt` as the start of the maturity clock; when `false` or absent, the gate falls back to `updateDetectedAt`. |
 
 ## Get container summary
 
@@ -78,8 +123,8 @@ curl http://drydock:3000/api/v1/containers/summary
 | `containers.running` | integer | Number of running containers |
 | `containers.stopped` | integer | Number of stopped containers |
 | `security.issues` | integer | Number of containers with critical or high vulnerabilities |
-| `hotUpdates` | integer | Number of containers with updates less than 24 hours old |
-| `matureUpdates` | integer | Number of containers with updates between 24 hours and 7 days old |
+| `hotUpdates` | integer | Number of containers whose `updateMaturityLevel` is `hot` |
+| `matureUpdates` | integer | Number of containers whose `updateMaturityLevel` is `mature` or `established` |
 
 ## Get recent container status
 
@@ -212,7 +257,7 @@ curl http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28
         "once": true,
         "simpletitle": "New ${kind} found for container ${name}",
         "simplebody": "Container ${container.name} running with ${container.updateKind.kind} ${container.updateKind.localValue} can be updated to ${container.updateKind.kind} ${container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}",
-        "batchtitle": "${containers.length} updates available",
+        "batchtitle": "${containers.length} updates available"
       }
     }
   ],
