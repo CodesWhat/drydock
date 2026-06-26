@@ -3,8 +3,6 @@ title: "Container API"
 description: "This API allows to query the state of the watched containers."
 ---
 
-This API allows to query the state of the watched containers.
-
 ## Get all containers
 
 This operation lets you get all the watched containers.
@@ -543,6 +541,8 @@ curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d
 | `env[].sensitive` | boolean | Whether the key matches known sensitive patterns (passwords, tokens, secrets) |
 
 Returns 200 with the env array on success, 404 if the container is not found, or 429 if rate-limited.
+
+### Authentication
 
 Container action auth model: `/start`, `/stop`, `/restart`, and `/update` are authentication-gated only. In current single-operator deployments, any authenticated user can execute these actions for any container.
 

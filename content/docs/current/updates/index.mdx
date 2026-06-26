@@ -34,7 +34,7 @@ description: "Release update notes and feature highlights, with direct links to 
   Docs: [Watchers Podman setup](/docs/configuration/watchers#podman-quick-start), [Podman FAQ](/docs/faq).
 - **Container-action failure toasts** — UI now surfaces update/delete failures as visible toast notifications instead of silent failures.  
   Docs: [Container actions](/docs/configuration/actions).
-- **Unified update-completion toasts (v1.5.0-rc.19)** — All terminal "Updated / Update failed / Rolled back / Cancelled" toasts now fire from a single `useGlobalUpdateToast` composable mounted at `App.vue`, replacing three independent per-view handlers that each had their own missing-state edge cases. Toast emission is gated on the matching `dd:sse-container-added/updated/removed` event so the toast appears the moment the row's "Updating" badge clears, not on a hardcoded settle delay; a 5s safety fallback covers remote agents and deleted containers. The SSE reconnect path now also sends `Last-Event-ID` via query param so missed terminal events get replayed from the server-side 5-minute ring buffer. Closes [#289](https://github.com/CodesWhat/drydock/issues/289), [#290](https://github.com/CodesWhat/drydock/issues/290), [#291](https://github.com/CodesWhat/drydock/issues/291).
+- **Unified update-completion toasts (v1.5.0-rc.19)** — Update, rollback, and cancel result toasts now appear the moment the operation completes, and are replayed correctly after a reconnect.
 
 ## Per-container Update Policy (February 9, 2026)
 

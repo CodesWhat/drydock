@@ -5,8 +5,6 @@ description: "Drydock is configured via environment variables and Docker labels.
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-drydock is configured via **Environment Variables** and **[Docker labels](https://docs.docker.com/engine/manage-resources/labels/)**.
-
 ## Prefix convention
 
 All environment variables use the `DD_` prefix. All Docker labels use the `dd.` prefix.
@@ -51,7 +49,7 @@ See [Diagnostic debug dump](/docs/api/app#download-diagnostic-debug-dump) for th
 ```yaml
 services:
 
-  # Valid semver following by os name
+  # Valid semver followed by OS name
   vaultwarden:
     image: vaultwarden/server:1.22.1-alpine
     container_name: bitwarden
@@ -59,7 +57,7 @@ services:
       - 'dd.tag.include=^\d+\.\d+\.\d+-alpine$$'
       - 'dd.link.template=https://github.com/dani-garcia/vaultwarden/releases/tag/$${major}.$${minor}.$${patch}'
 
-  # Valid semver following by an build number (linux server style)
+  # Valid semver followed by a build number (linux server style)
   duplicati:
     image: linuxserver/duplicati:v2.0.6.3-2.0.6.3_beta_2021-06-17-ls104
     container_name: duplicati

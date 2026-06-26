@@ -51,7 +51,7 @@ services:
       - DD_AGENT_ALLOW_INSECURE_SECRET=true                 # plain-HTTP LAN only; see note below
 ```
 
-That's the whole connection. The `{name}` segment (`REMOTE1`) is a label you choose; it's stored lowercased, so it appears as `remote1` in logs and the UI. A working connection logs `Handshake successful. Received N containers.` on the controller. If it doesn't connect, see [Troubleshooting](#troubleshooting). The rest of this page covers the full option set.
+That's the whole connection. The `{name}` segment (`REMOTE1`) is a label you choose. See [Controller Configuration](#controller-configuration) for naming rules. A working connection logs `Handshake successful. Received N containers.` on the controller. If it doesn't connect, see [Troubleshooting](#troubleshooting). The rest of this page covers the full option set.
 
 This example talks to the agent over plain HTTP, so it sets `DD_AGENT_ALLOW_INSECURE_SECRET=true`. Without that flag (or TLS) the controller refuses to boot rather than send the secret in cleartext. On anything but a trusted LAN, configure TLS instead (see [Controller Environment Variables](#controller-environment-variables)).
 

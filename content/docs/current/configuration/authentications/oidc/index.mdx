@@ -1,6 +1,6 @@
 ---
-title: "Openid Connect Authentication"
-description: "The oidc authentication lets you protect drydock access using the Openid Connect standard."
+title: "OpenID Connect Authentication"
+description: "The oidc authentication lets you protect drydock access using the OpenID Connect standard."
 ---
 
 import { Callout } from 'fumadocs-ui/components/callout';
@@ -8,15 +8,13 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 ![logo](/docs/assets/configuration/authentications/oidc/oidc.png)
 
-The `oidc` authentication lets you protect drydock access using the [Openid Connect standard](https://openid.net/).
-
 ## Variables
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
 | `DD_AUTH_OIDC_{auth_name}_CLIENTID` | 🔴 | Client ID | | |
 | `DD_AUTH_OIDC_{auth_name}_CLIENTSECRET` | 🔴 | Client Secret | | |
-| `DD_AUTH_OIDC_{auth_name}_DISCOVERY` | 🔴 | Oidc discovery URL | | |
+| `DD_AUTH_OIDC_{auth_name}_DISCOVERY` | 🔴 | OIDC discovery URL | | |
 | `DD_AUTH_OIDC_{auth_name}_CAFILE` | ⚪ | Path to a PEM CA certificate (or chain) used for OIDC HTTPS requests | File path | empty |
 | `DD_AUTH_OIDC_{auth_name}_INSECURE` | ⚪ | Disable TLS certificate verification for OIDC HTTPS requests (development only) | `true`, `false` | `false` |
 | `DD_AUTH_OIDC_{auth_name}_REDIRECT` | ⚪ | Skip internal login page & automatically redirect to the OIDC provider | `true`, `false` | `false` |
