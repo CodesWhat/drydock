@@ -14,6 +14,47 @@ The **Agent Mode** allows running drydock in a distributed manner.
 
 The Controller connects to one or more Agents via HTTP/HTTPS. The Agent pushes real-time updates (container changes, new versions found) to the Controller using Server-Sent Events (SSE).
 
+<Callout type="info">**The controller dials out to each agent — the agent does not need to know where the controller is.** Only the controller side gets `DD_AGENT_{name}_HOST`. The agent just needs its port reachable from the controller. (Both ends share the same secret so they trust each other.)</Callout>
+
+## Quickstart
+
+A minimal two-host setup: one agent watching a remote host, one controller aggregating it.
+
+**Agent** (on the remote host) — run drydock with `--agent`, give it a secret and a watcher:
+
+```yaml
+services:
+  drydock-agent:
+    image: codeswhat/drydock
+    command: --agent
+    ports:
+      - "3000:3000"            # must be reachable from the controller
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DD_AGENT_SECRET=pick-a-long-random-string
+      - DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
+```
+
+**Controller** — point at the agent's host with the **same** secret:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ports:
+      - "3000:3000"
+    environment:
+      - DD_LOCAL_WATCHER=false                              # optional: pure aggregator, no local watcher
+      - DD_AGENT_REMOTE1_HOST=192.168.1.50
+      - DD_AGENT_REMOTE1_SECRET=pick-a-long-random-string   # must match the agent's DD_AGENT_SECRET
+      - DD_AGENT_ALLOW_INSECURE_SECRET=true                 # plain-HTTP LAN only; see note below
+```
+
+That's the whole connection. The `{name}` segment (`REMOTE1`) is a label you choose; it's stored lowercased, so it appears as `remote1` in logs and the UI. A working connection logs `Handshake successful. Received N containers.` on the controller. If it doesn't connect, see [Troubleshooting](#troubleshooting). The rest of this page covers the full option set.
+
+This example talks to the agent over plain HTTP, so it sets `DD_AGENT_ALLOW_INSECURE_SECRET=true`. Without that flag (or TLS) the controller refuses to boot rather than send the secret in cleartext. On anything but a trusted LAN, configure TLS instead (see [Controller Environment Variables](#controller-environment-variables)).
+
 ## Agent Configuration
 
 To run drydock in Agent mode, start the application with the `--agent` command line flag.
@@ -83,14 +124,14 @@ services:
 
 ## Controller Configuration
 
-To connect a Controller to an Agent, use the `DD_AGENT_{name}_*` environment variables.
+To connect a Controller to an Agent, use the `DD_AGENT_{name}_*` environment variables. The `{name}` segment is a label you choose to identify the agent (e.g. `REMOTE1`, `NAS`, `WORKER2`). It's stored lowercased by the config parser, so `DD_AGENT_REMOTE1_*` shows up as `remote1` in logs and the UI.
 
 ### Controller Environment Variables
 
 | Env var | Required | Description | Default |
 | :--- | :---: | :--- | :--- |
 | `DD_AGENT_{name}_SECRET` | 🔴 | Secret token to authenticate with the Agent | |
-| `DD_AGENT_{name}_SECRET_FILE` | ⚪ | Path to file containing the secret token | |
+| `DD_AGENT_{name}_SECRET__FILE` | ⚪ | Path to file containing the secret token. Note the **double** underscore, which follows the general [`DD_*__FILE`](/docs/configuration#secret-management) secret-file convention. | |
 | `DD_AGENT_{name}_HOST` | 🔴 | Hostname or IP of the Agent | |
 | `DD_AGENT_{name}_PORT` | ⚪ | Port of the Agent | `3000` |
 | `DD_AGENT_{name}_CAFILE` | ⚪ | CA certificate path for TLS connection | |
@@ -98,7 +139,17 @@ To connect a Controller to an Agent, use the `DD_AGENT_{name}_*` environment var
 | `DD_AGENT_{name}_KEYFILE` | ⚪ | Client key path for TLS connection | |
 | `DD_AGENT_ALLOW_INSECURE_SECRET` | ⚪ | **Insecure.** When `true`, allows configuring agents with a `secret` over plain HTTP. Drydock will log a warning on every startup but won't refuse to boot. Only enable on trusted private networks where you accept that the agent secret is sent in cleartext. | `false` |
 
+If `HOST` or `SECRET` is missing for an agent, the controller logs `Skipping agent {name}: Missing host or secret` and starts without that agent rather than failing to boot. So a typo'd agent name shows up as a missing agent in the UI, not a startup crash. Check the controller log for `Skipping agent` warnings if an agent never appears.
+
 <Callout type="warn">Setting `DD_AGENT_ALLOW_INSECURE_SECRET=true` means your agent secret is transmitted over the network in cleartext on every request. An attacker with network access can capture it and impersonate the controller. Prefer HTTPS (configure `DD_AGENT_{name}_CERTFILE`/`DD_AGENT_{name}_CAFILE`) or terminate TLS at a reverse proxy. Only use this flag on isolated private networks where you explicitly accept that risk.</Callout>
+
+<Callout type="error">**Without this flag set, a secret configured over plain HTTP is a hard startup error — the controller refuses to boot.** You'll see:
+
+```
+Agent remote1 is configured with a secret over insecure HTTP (http://192.168.1.50:3000). Configure HTTPS (certfile/cafile) to protect X-Dd-Agent-Secret.
+```
+
+Fix it by configuring TLS (`DD_AGENT_{name}_CAFILE`/`CERTFILE`), terminating TLS at a reverse proxy, or — on a trusted LAN only — setting `DD_AGENT_ALLOW_INSECURE_SECRET=true` (which demotes the error to a one-time warning).</Callout>
 
 ### Controller Example (Docker Compose)
 
@@ -109,6 +160,7 @@ services:
     environment:
       - DD_AGENT_REMOTE1_HOST=192.168.1.50
       - DD_AGENT_REMOTE1_SECRET=mysecretkey
+      - DD_AGENT_ALLOW_INSECURE_SECRET=true  # trusted LAN only, use TLS in production
     ports:
       - 3000:3000
 ```
@@ -128,7 +180,7 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      socket-proxy:
+      drydock-socket-proxy:
         condition: service_healthy
     volumes:
       - /path/to/store:/store
@@ -145,6 +197,7 @@ services:
       - DD_AGENT_REMOTE1_HOST=192.168.1.50
       - DD_AGENT_REMOTE1_PORT=3000
       - DD_AGENT_REMOTE1_SECRET=mysecretkey
+      - DD_AGENT_ALLOW_INSECURE_SECRET=true  # trusted LAN only, use TLS in production
 
       # --- Notifications (run on controller only) ---
       - DD_NOTIFICATION_SMTP_ALERTS_HOST=smtp.example.com
@@ -154,7 +207,7 @@ services:
       - DD_NOTIFICATION_SMTP_ALERTS_FROM=drydock@example.com
       - DD_NOTIFICATION_SMTP_ALERTS_TO=admin@example.com
 
-  socket-proxy:
+  drydock-socket-proxy:
     image: lscr.io/linuxserver/socket-proxy:latest
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -229,7 +282,7 @@ When the Docker watcher on an agent fails to enumerate containers (e.g. a brief 
 
 ### Container list payload
 
-The agent's `POST /update` endpoint receives only `{ id, name }` for each container rather than the full container object. This prevents HTTP 413 errors in large fleets where full payloads exceeded the agent's 256 KB body cap.
+When the controller proxies an update to an agent, it posts to the agent's `POST /api/triggers/{type}/{name}` route (or `…/batch` for batch updates). For single-update calls on `docker` and `dockercompose` triggers it sends only `{ id, name }` (plus an `operationId` when one is in flight) rather than the full container object, which prevents HTTP 413 errors where full payloads exceeded the agent's 256 KB body cap. Batch update calls (`…/batch`) still send the full container per item, so a very large fleet updated in one batch can still approach that cap.
 
 ## Features in Agent Mode
 
@@ -238,3 +291,22 @@ The agent's `POST /update` endpoint receives only `{ id, name }` for each contai
 - **Triggers**:
   - `docker` and `dockercompose` triggers are configured and executed **on the Agent** (allowing update of remote containers). The controller automatically proxies update requests to the correct agent.
   - Notification triggers (e.g. `smtp`, `discord`) are configured and executed **on the Controller**. Notifications automatically include a `[server-name]` prefix identifying which server each update comes from. The controller name defaults to the detected Docker or Podman daemon host name when available, then the process hostname, and can be overridden with `DD_SERVER_NAME`.
+
+## Troubleshooting
+
+Agent connections are driven entirely from the controller, so the controller log (`docker logs <controller>`) is where you diagnose them. The controller retries with exponential backoff (up to 60s between attempts), so a failing connection repeats in the log until the agent is healthy.
+
+| What you see on the controller | What it means | Fix |
+| :--- | :--- | :--- |
+| `Connecting to agent remote1 at http://…:3000` then `Handshake successful. Received N containers.` | Connected and working | — |
+| Startup `Error: Agent remote1 is configured with a secret over insecure HTTP …` | A secret is set but the agent is plain HTTP | Configure TLS, or set `DD_AGENT_ALLOW_INSECURE_SECRET=true` on a trusted LAN |
+| `SSE Connection failed: Request failed with status code 401. Retrying...` | The secrets don't match | Make `DD_AGENT_{name}_SECRET` (controller) equal `DD_AGENT_SECRET` (agent) |
+| `SSE Connection failed: connect ECONNREFUSED 192.168.1.50:3000. Retrying...` | Agent isn't running, or its port isn't published/reachable | Confirm the agent is up and its `ports:` are published; check firewalls |
+| `SSE Connection failed: connect ETIMEDOUT 192.168.1.50:3000. Retrying...` | A firewall or NAT is blocking the path | Open the path from controller to agent, or check NAT |
+| Repeated `401`s against an agent that *looks* like it's running | The agent container was started **without** `command: --agent`, so it's running as a controller and never validated the secret | Add `command: --agent` to the agent service |
+
+If the **agent** container won't respond at all, check its own log for a startup error — the agent throws immediately if neither `DD_AGENT_SECRET` nor `DD_AGENT_SECRET_FILE` is set, and never starts listening.
+
+The agent also exposes an unauthenticated `GET /health` on its port: it returns `200` once at least one watcher is registered, or `503` with `{"status":"unhealthy","reason":"no watchers registered"}` otherwise. Use it for a compose `healthcheck` or an uptime probe.
+
+Still stuck? Set `DD_LOG_LEVEL=debug` on the controller for the full `agent-client` handshake trace, and open a [Q&A discussion](https://github.com/CodesWhat/drydock/discussions) with those lines.

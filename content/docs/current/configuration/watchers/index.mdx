@@ -137,6 +137,8 @@ These two variables are **orthogonal** — they filter at different stages of th
 
 ### Watch a remote docker host via TCP on 2375
 
+<Callout type="info">**Monitoring containers on other hosts?** The remote-host examples below have a single Drydock instance reach a remote Docker daemon directly, which means exposing the Docker API (TCP/TLS/SSH) on each host. To monitor multiple hosts without exposing the Docker API at all, run a lightweight [Agent](/docs/configuration/agents) on each remote host instead — it connects back to a central controller over HTTP/HTTPS and aggregates into one UI.</Callout>
+
 <Tabs items={["Docker Compose (Remote TCP)", "Docker (Remote TCP)"]}>
 <Tab value="Docker Compose (Remote TCP)">
 
@@ -337,7 +339,7 @@ Other compatible proxies include [linuxserver/docker-socket-proxy](https://githu
 
 ### Option 2: Remote Docker over TLS
 
-Instead of mounting the socket at all, Drydock can connect to a remote Docker host over the network using mutual TLS (mTLS). This is ideal for multi-host setups or when you want to completely avoid socket mounts.
+Instead of mounting the socket at all, Drydock can connect to a remote Docker host over the network using mutual TLS (mTLS). This is ideal when you need a single Drydock instance to reach a remote Docker daemon directly, or want to avoid socket mounts entirely. For monitoring containers across multiple independent hosts from one UI, consider [Agents](/docs/configuration/agents), which don't require exposing the Docker API over the network.
 
 #### Step 1: Generate TLS certificates on the Docker host
 
