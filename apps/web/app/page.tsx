@@ -7,6 +7,7 @@ import { HeroVariants } from "@/components/lab/hero-variants";
 import { RoadmapVariants } from "@/components/lab/roadmap-variants";
 import { StarHistoryVariants } from "@/components/lab/starhistory-variants";
 import { MarketingShell } from "@/components/marketing-shell";
+import { Reveal } from "@/components/reveal";
 
 export default function Home() {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com";
@@ -35,13 +36,27 @@ export default function Home() {
       />
       <MarketingShell>
         <HeroVariants />
-        <FeaturesVariants />
-        <GetStartedSecureToggle />
+        <Reveal>
+          <FeaturesVariants />
+        </Reveal>
+        <Reveal>
+          <GetStartedSecureToggle />
+        </Reveal>
+        {/* Demo is left unwrapped: its fullscreen expand uses position:fixed,
+            which a transformed Reveal ancestor would re-anchor and break. */}
         <DemoVariants />
-        <RoadmapVariants />
-        <StarHistoryVariants />
-        <CompareVariants />
-        <EcosystemVariants />
+        <Reveal>
+          <RoadmapVariants />
+        </Reveal>
+        <Reveal>
+          <StarHistoryVariants />
+        </Reveal>
+        <Reveal>
+          <CompareVariants />
+        </Reveal>
+        <Reveal>
+          <EcosystemVariants />
+        </Reveal>
       </MarketingShell>
     </>
   );

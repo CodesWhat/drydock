@@ -8,7 +8,7 @@ import { SiteHeader } from "@/components/site-header";
 // shares the same chrome.
 export function MarketingShell({ children }: { children: ReactNode }) {
   return (
-    <main data-bg="ocean" className="relative min-h-screen">
+    <main data-bg="ocean" data-aurora-motion="true" className="relative min-h-screen">
       <SiteBackground />
       <div className="relative z-10">
         <SiteHeader />

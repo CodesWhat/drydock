@@ -272,3 +272,49 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
   }
 }
+
+/* ── Scroll reveal + aurora drift ──────────────────────────────────────────
+   Aurora drift is opted into by the marketing shell (data-aurora-motion="true");
+   the <Reveal> wrapper drives fade-and-rise on the homepage sections. Both are
+   disabled for users who prefer reduced motion (see the @media block below). */
+
+/* Slow aurora drift — opt in via [data-aurora-motion="true"] on an ancestor. */
+@keyframes aurora-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-2%, 1.5%, 0) scale(1.08); }
+}
+[data-aurora-motion="true"] .aurora-mesh {
+  transform-origin: 50% 0%;
+  will-change: transform;
+  animation: aurora-drift 30s ease-in-out infinite;
+}
+
+/* Reveal-on-scroll: the <Reveal> component sets data-reveal="hidden|shown";
+   when reveal is disabled it omits the attribute and content renders normally. */
+[data-reveal] {
+  transition: opacity 700ms ease-out, transform 700ms ease-out;
+}
+[data-reveal="hidden"] {
+  opacity: 0;
+  transform: translateY(16px);
+}
+[data-reveal="shown"] {
+  opacity: 1;
+  transform: none;
+}
+
+/* Respect reduced motion — disable decorative motion and snap reveals to their
+   end state for users who've asked the OS for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  .aurora-mesh,
+  .animate-float,
+  .animate-bounce-slow,
+  .animate-gradient {
+    animation: none !important;
+  }
+  [data-reveal] {
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
