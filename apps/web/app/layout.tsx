@@ -16,6 +16,10 @@ const ibmPlexMono = IBM_Plex_Mono({
   variable: "--font-mono",
 });
 
+// Bump this whenever the favicon/app icons change so browsers re-fetch them
+// instead of serving a stale cached icon (favicons cache aggressively).
+const ICON_VERSION = "2";
+
 export const metadata: Metadata = {
   title: "Drydock - Container Update Monitoring",
   description:
@@ -48,37 +52,10 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      {
-        url: "/favicon.svg",
-        media: "(prefers-color-scheme: light)",
-        type: "image/svg+xml",
-      },
-      {
-        url: "/favicon.svg",
-        media: "(prefers-color-scheme: dark)",
-        type: "image/svg+xml",
-      },
-      {
-        url: "/favicon.ico",
-        sizes: "32x32",
-      },
-      {
-        url: "/favicon-96x96.png",
-        sizes: "96x96",
-        type: "image/png",
-      },
-      {
-        url: "/web-app-manifest-192x192.png",
-        sizes: "192x192",
-        type: "image/png",
-      },
-      {
-        url: "/web-app-manifest-512x512.png",
-        sizes: "512x512",
-        type: "image/png",
-      },
+      { url: `/favicon.ico?v=${ICON_VERSION}`, sizes: "any" },
+      { url: `/favicon-96x96.png?v=${ICON_VERSION}`, sizes: "96x96", type: "image/png" },
     ],
-    apple: "/apple-touch-icon.png",
+    apple: [{ url: `/apple-touch-icon.png?v=${ICON_VERSION}`, sizes: "180x180" }],
   },
   manifest: "/site.webmanifest",
   alternates: {
