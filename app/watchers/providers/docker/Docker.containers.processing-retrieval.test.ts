@@ -541,8 +541,12 @@ describe('Docker Watcher', () => {
       await docker.register('watcher', 'docker', 'test', {});
       await docker.getContainers();
 
-      expect(hStoreContainer.deleteContainer).toHaveBeenCalledWith('old1');
-      expect(hStoreContainer.deleteContainer).toHaveBeenCalledWith('old2');
+      expect(hStoreContainer.deleteContainer).toHaveBeenCalledWith('old1', {
+        replacementExpected: true,
+      });
+      expect(hStoreContainer.deleteContainer).toHaveBeenCalledWith('old2', {
+        replacementExpected: true,
+      });
     });
 
     test('should continue when pruneOldContainers throws during stale record cleanup', async () => {

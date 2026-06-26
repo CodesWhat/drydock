@@ -105,6 +105,35 @@ class Ghcr extends BaseRegistry<GhcrRegistryConfiguration> {
     );
   }
 
+  private async fetchVersionsPagedForOwner(
+    baseUrl: string,
+    tagToLookup: string,
+  ): Promise<string | undefined> {
+    const perPage = 100;
+    const maxPages = 10;
+    const headers = this.getGithubApiHeaders();
+
+    for (let page = 1; page <= maxPages; page++) {
+      const response = await axios({
+        method: 'GET',
+        url: `${baseUrl}?per_page=${perPage}&page=${page}`,
+        headers,
+      });
+
+      const versions = response?.data;
+      const result = this.getVersionUpdatedAt(versions, tagToLookup);
+      if (result !== undefined) {
+        return result;
+      }
+
+      if (!Array.isArray(versions) || versions.length < perPage) {
+        break;
+      }
+    }
+
+    return undefined;
+  }
+
   async getImagePublishedAt(image, tag?: string): Promise<string | undefined> {
     const tagToLookup = typeof tag === 'string' && tag.length > 0 ? tag : image.tag?.value;
     if (!tagToLookup || typeof image.name !== 'string' || image.name.length === 0) {
@@ -118,17 +147,11 @@ class Ghcr extends BaseRegistry<GhcrRegistryConfiguration> {
     const packageName = packageNameParts.join('/');
     const ownerPath = encodeURIComponent(owner);
     const packagePath = encodeURIComponent(packageName);
-    const headers = this.getGithubApiHeaders();
-    const orgUrl = `https://api.github.com/orgs/${ownerPath}/packages/container/${packagePath}/versions?per_page=100`;
-    const userUrl = `https://api.github.com/users/${ownerPath}/packages/container/${packagePath}/versions?per_page=100`;
+    const orgBaseUrl = `https://api.github.com/orgs/${ownerPath}/packages/container/${packagePath}/versions`;
+    const userBaseUrl = `https://api.github.com/users/${ownerPath}/packages/container/${packagePath}/versions`;
 
     try {
-      const orgResponse = await axios({
-        method: 'GET',
-        url: orgUrl,
-        headers,
-      });
-      return this.getVersionUpdatedAt(orgResponse?.data, tagToLookup);
+      return await this.fetchVersionsPagedForOwner(orgBaseUrl, tagToLookup);
     } catch (error) {
       if (!this.isNotFoundError(error)) {
         throw error;
@@ -136,12 +159,7 @@ class Ghcr extends BaseRegistry<GhcrRegistryConfiguration> {
     }
 
     try {
-      const userResponse = await axios({
-        method: 'GET',
-        url: userUrl,
-        headers,
-      });
-      return this.getVersionUpdatedAt(userResponse?.data, tagToLookup);
+      return await this.fetchVersionsPagedForOwner(userBaseUrl, tagToLookup);
     } catch (error) {
       if (this.isNotFoundError(error)) {
         return undefined;

@@ -330,6 +330,118 @@ describe('image-comparison', () => {
     expect(result.noUpdateReason).toBe('Running by digest — no tag to compare');
   });
 
+  test('digest-only with comparisonTag on trusted provider sets publishedAt and publishedAtTrusted', async () => {
+    const publishedAt = '2026-05-01T12:00:00.000Z';
+    const getImagePublishedAt = vi.fn().mockResolvedValue(publishedAt);
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['latest']),
+          getImageManifestDigest: createManifestLookup(),
+          normalizeImage: identityNormalizeImage,
+          getImagePublishedAt,
+          publishedAtIsPushDate: true,
+        },
+      },
+    });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+
+    const result = await findNewVersion(createDigestOnlyContainer() as never, log);
+
+    expect(result.publishedAt).toBe(publishedAt);
+    expect(result.publishedAtTrusted).toBe(true);
+    expect(getImagePublishedAt).toHaveBeenCalledWith(expect.any(Object), 'latest');
+  });
+
+  test('digest-only with comparisonTag on untrusted provider sets publishedAt but not publishedAtTrusted', async () => {
+    const publishedAt = '2026-05-01T12:00:00.000Z';
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['latest']),
+          getImageManifestDigest: createManifestLookup(),
+          normalizeImage: identityNormalizeImage,
+          getImagePublishedAt: vi.fn().mockResolvedValue(publishedAt),
+          publishedAtIsPushDate: false,
+        },
+      },
+    });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+
+    const result = await findNewVersion(createDigestOnlyContainer() as never, log);
+
+    expect(result.publishedAt).toBe(publishedAt);
+    expect(result.publishedAtTrusted).toBeUndefined();
+  });
+
+  test('digest-only with comparisonTag swallows getImagePublishedAt errors and still returns result', async () => {
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['latest']),
+          getImageManifestDigest: createManifestLookup(),
+          normalizeImage: identityNormalizeImage,
+          getImagePublishedAt: vi.fn().mockRejectedValue(new Error('registry timeout')),
+          publishedAtIsPushDate: true,
+        },
+      },
+    });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+
+    const result = await findNewVersion(createDigestOnlyContainer() as never, log);
+
+    expect(result.publishedAt).toBeUndefined();
+    expect(result.publishedAtTrusted).toBeUndefined();
+    expect(result.digest).toBe('sha256:def456');
+    expect(log.debug).toHaveBeenCalledWith(expect.stringContaining('registry timeout'));
+  });
+
+  test('digest-only with comparisonTag does not set publishedAt when getImagePublishedAt returns non-string', async () => {
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['latest']),
+          getImageManifestDigest: createManifestLookup(),
+          normalizeImage: identityNormalizeImage,
+          getImagePublishedAt: vi.fn().mockResolvedValue(null),
+          publishedAtIsPushDate: true,
+        },
+      },
+    });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+
+    const result = await findNewVersion(createDigestOnlyContainer() as never, log);
+
+    expect(result.publishedAt).toBeUndefined();
+    expect(result.publishedAtTrusted).toBeUndefined();
+    expect(result.digest).toBe('sha256:def456');
+  });
+
+  test('digest-only with no comparisonTag returns result without publishedAt', async () => {
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['latest', 'stable']),
+          getImageManifestDigest: createManifestLookup(),
+          normalizeImage: identityNormalizeImage,
+          getImagePublishedAt: vi.fn().mockResolvedValue('2026-05-01T12:00:00.000Z'),
+          publishedAtIsPushDate: true,
+        },
+      },
+    });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+
+    // includeTags that matches nothing forces comparisonTag to be undefined
+    const result = await findNewVersion(
+      createDigestOnlyContainer({ includeTags: '^nonexistent$' }) as never,
+      log,
+    );
+
+    expect(result.publishedAt).toBeUndefined();
+    expect(result.publishedAtTrusted).toBeUndefined();
+    expect(result.noUpdateReason).toBe('Running by digest — no tag to compare');
+  });
+
   test('resolveDigestComparisonTag returns suggestTag result when no latest and suggestTag is non-null', async () => {
     const getImageManifestDigest = createManifestLookup();
     mockGetState.mockReturnValue({

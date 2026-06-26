@@ -693,6 +693,20 @@ function getUpdateLifecycleTimestamp(containerCurrent, containerNext, timestampF
     return undefined;
   }
 
+  // Restart the clock when the candidate update itself changed (new digest/tag)
+  // versus the stored record, so a fresh image soaks for the full maturity window
+  // instead of inheriting the previous candidate's elapsed time. This must run
+  // before the timestamp-preserve below: in the local watch path containerNext
+  // carries the prior updateDetectedAt, which would otherwise short-circuit here.
+  if (
+    containerCurrent &&
+    hasRawUpdate(containerCurrent) &&
+    typeof containerCurrent.resultChanged === 'function' &&
+    containerCurrent.resultChanged(containerNext)
+  ) {
+    return new Date().toISOString();
+  }
+
   if (
     typeof containerNext[timestampField] === 'string' &&
     containerNext[timestampField].length > 0
@@ -704,11 +718,7 @@ function getUpdateLifecycleTimestamp(containerCurrent, containerNext, timestampF
     return new Date().toISOString();
   }
 
-  const updateChanged =
-    typeof containerCurrent.resultChanged === 'function' &&
-    containerCurrent.resultChanged(containerNext);
-
-  if (!hasRawUpdate(containerCurrent) || updateChanged) {
+  if (!hasRawUpdate(containerCurrent)) {
     return new Date().toISOString();
   }
 

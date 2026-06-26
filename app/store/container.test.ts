@@ -881,6 +881,160 @@ test('updateContainer should refresh firstSeenAt when update result changes', as
   expect(updated.firstSeenAt).not.toBe(existingFirstSeenAt);
 });
 
+test('updateContainer should reset updateDetectedAt when candidate update changes mid-soak (local watch path)', async () => {
+  // Reproduces the bug: in the local watch path the container flowing into
+  // updateContainer already carries the prior updateDetectedAt from the store
+  // record. When the registry finds a *different* update the clock must reset,
+  // not inherit the old detection time.
+  vi.useFakeTimers();
+  try {
+    const frozenNow = new Date('2026-06-01T12:00:00.000Z');
+    vi.setSystemTime(frozenNow);
+    const oldDetectedAt = '2026-05-31T09:15:00.000Z';
+    const existingFixture = createContainerFixture();
+    const existingContainer = {
+      data: {
+        ...existingFixture,
+        image: {
+          ...existingFixture.image,
+          tag: { ...existingFixture.image.tag, value: '1.0.0' },
+        },
+        result: { tag: '2.0.0' },
+        updateDetectedAt: oldDetectedAt,
+      },
+    };
+    const collection = {
+      findOne: () => existingContainer,
+      insert: () => {},
+      chain: () => ({
+        find: () => ({
+          remove: () => ({}),
+        }),
+      }),
+    };
+    const db = {
+      getCollection: () => collection,
+      addCollection: () => null,
+    };
+    const nextFixture = createContainerFixture();
+    // containerToSave simulates the local watch path: the old updateDetectedAt is
+    // carried forward from the previous store record, but the result tag changed.
+    const containerToSave = {
+      ...nextFixture,
+      image: {
+        ...nextFixture.image,
+        tag: { ...nextFixture.image.tag, value: '1.0.0' },
+      },
+      result: { tag: '2.1.0' },
+      updateDetectedAt: oldDetectedAt,
+    };
+
+    container.createCollections(db);
+    const updated = container.updateContainer(containerToSave);
+
+    // Result changed (2.0.0 → 2.1.0), so the clock must reset to now even
+    // though containerToSave carried the old timestamp.
+    expect(updated.updateDetectedAt).toBe(frozenNow.toISOString());
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('updateContainer should reset firstSeenAt when candidate update changes mid-soak (local watch path)', async () => {
+  // Same scenario as above but for firstSeenAt.
+  vi.useFakeTimers();
+  try {
+    const frozenNow = new Date('2026-06-01T12:00:00.000Z');
+    vi.setSystemTime(frozenNow);
+    const oldFirstSeenAt = '2026-05-31T09:15:00.000Z';
+    const existingFixture = createContainerFixture();
+    const existingContainer = {
+      data: {
+        ...existingFixture,
+        image: {
+          ...existingFixture.image,
+          tag: { ...existingFixture.image.tag, value: '1.0.0' },
+        },
+        result: { tag: '2.0.0' },
+        firstSeenAt: oldFirstSeenAt,
+      },
+    };
+    const collection = {
+      findOne: () => existingContainer,
+      insert: () => {},
+      chain: () => ({
+        find: () => ({
+          remove: () => ({}),
+        }),
+      }),
+    };
+    const db = {
+      getCollection: () => collection,
+      addCollection: () => null,
+    };
+    const nextFixture = createContainerFixture();
+    // containerToSave simulates the local watch path: the old firstSeenAt is
+    // carried forward from the previous store record, but the result tag changed.
+    const containerToSave = {
+      ...nextFixture,
+      image: {
+        ...nextFixture.image,
+        tag: { ...nextFixture.image.tag, value: '1.0.0' },
+      },
+      result: { tag: '2.1.0' },
+      firstSeenAt: oldFirstSeenAt,
+    };
+
+    container.createCollections(db);
+    const updated = container.updateContainer(containerToSave);
+
+    // Result changed (2.0.0 → 2.1.0), so firstSeenAt must reset to now even
+    // though containerToSave carried the old timestamp.
+    expect(updated.firstSeenAt).toBe(frozenNow.toISOString());
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('updateContainer should stamp updateDetectedAt when containerCurrent had no raw update', async () => {
+  // Covers the path where a container transitions from no-update to having one.
+  const existingFixture = createContainerFixture();
+  const existingContainer = {
+    data: {
+      // Default fixture: image tag === result tag → no raw update
+      ...existingFixture,
+    },
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: () => {},
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const nextFixture = createContainerFixture();
+  const containerToSave = {
+    ...nextFixture,
+    image: {
+      ...nextFixture.image,
+      tag: { ...nextFixture.image.tag, value: '1.0.0' },
+    },
+    result: { tag: '2.0.0' },
+  };
+
+  container.createCollections(db);
+  const updated = container.updateContainer(containerToSave);
+
+  // containerCurrent had no raw update; containerNext has one → stamp now.
+  expect(typeof updated.updateDetectedAt).toBe('string');
+});
+
 test('updateContainer should clear updateDetectedAt when update is no longer available', async () => {
   const existingFixture = createContainerFixture();
   const existingContainer = {

@@ -784,8 +784,12 @@ describe('Docker Watcher', () => {
       await docker.register('watcher', 'docker', 'test', {});
       await docker.getContainers();
 
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old1');
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old2');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old1', {
+        replacementExpected: true,
+      });
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old2', {
+        replacementExpected: true,
+      });
     });
 
     test('should continue when pruneOldContainers throws during stale record cleanup', async () => {
@@ -4149,7 +4153,9 @@ describe('Docker Watcher', () => {
       await docker.getContainers();
 
       // The local (undefined-agent) row is legitimately stale and should be pruned.
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('local-container-2');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('local-container-2', {
+        replacementExpected: true,
+      });
     });
 
     test('agent-owned watcher only considers its own rows as prune candidates', async () => {
@@ -4177,7 +4183,9 @@ describe('Docker Watcher', () => {
       // The cross-agent (undefined-agent) row must never be deleted by the 'ml' watcher.
       expect(storeContainer.deleteContainer).not.toHaveBeenCalledWith('local-container-3');
       // The ml watcher's own stale row is a valid candidate and gets pruned.
-      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('ml-container-3');
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('ml-container-3', {
+        replacementExpected: true,
+      });
     });
   });
 
