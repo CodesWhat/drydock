@@ -52,21 +52,42 @@ const tools = [
 export default function ComparePage() {
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "CollectionPage",
-    name: "Drydock vs Alternatives — Container Update Tool Comparisons",
-    description:
-      "Compare Drydock to Watchtower, Portainer, Diun, Komodo, Dockge, Dockhand, Dozzle, Ouroboros, and WUD.",
-    url: `${baseUrl}/compare`,
-    mainEntity: {
-      "@type": "ItemList",
-      numberOfItems: tools.length,
-      itemListElement: tools.map((tool, i) => ({
-        "@type": "ListItem",
-        position: i + 1,
-        url: `${baseUrl}/compare/${tool.slug}`,
-        name: `${tool.name} vs Drydock`,
-      })),
-    },
+    "@graph": [
+      {
+        "@type": "CollectionPage",
+        name: "Drydock vs Alternatives — Container Update Tool Comparisons",
+        description:
+          "Compare Drydock to Watchtower, Portainer, Diun, Komodo, Dockge, Dockhand, Dozzle, Ouroboros, and WUD.",
+        url: `${baseUrl}/compare`,
+        mainEntity: {
+          "@type": "ItemList",
+          numberOfItems: tools.length,
+          itemListElement: tools.map((tool, i) => ({
+            "@type": "ListItem",
+            position: i + 1,
+            url: `${baseUrl}/compare/${tool.slug}`,
+            name: `${tool.name} vs Drydock`,
+          })),
+        },
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          {
+            "@type": "ListItem",
+            position: 1,
+            name: "Home",
+            item: baseUrl,
+          },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: "Compare",
+            item: `${baseUrl}/compare`,
+          },
+        ],
+      },
+    ],
   };
 
   return (

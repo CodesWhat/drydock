@@ -58,9 +58,6 @@ export const metadata: Metadata = {
     apple: [{ url: `/apple-touch-icon.png?v=${ICON_VERSION}`, sizes: "180x180" }],
   },
   manifest: "/site.webmanifest",
-  alternates: {
-    canonical: process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com",
-  },
 };
 
 export const viewport: Viewport = {
