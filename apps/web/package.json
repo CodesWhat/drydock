@@ -18,6 +18,7 @@
     "check": "biome check .",
     "check:fix": "biome check --fix .",
     "type-check": "tsc --noEmit",
+    "test:scripts": "node --test scripts/*.test.mjs",
     "vercel-build": "npm run build",
     "postinstall": "npm run sync:docs && fumadocs-mdx"
   },
