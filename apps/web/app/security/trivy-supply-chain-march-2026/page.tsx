@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { MarketingShell } from "@/components/marketing-shell";
 import { Badge } from "@/components/ui/badge";
 
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com";
+
 export const metadata: Metadata = {
   title: "Trivy Supply Chain Compromise - Drydock Security Advisory",
   description:
@@ -9,7 +11,13 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Trivy Supply Chain Compromise - Drydock Security Advisory",
     description: "Analysis of the March 2026 Trivy supply chain breach. Drydock is not affected.",
+    url: `${baseUrl}/security/trivy-supply-chain-march-2026`,
+    siteName: "Drydock",
+    locale: "en_US",
     type: "article",
+  },
+  alternates: {
+    canonical: `${baseUrl}/security/trivy-supply-chain-march-2026`,
   },
 };
 
