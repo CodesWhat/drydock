@@ -1,13 +1,13 @@
 import { createMDX } from "fumadocs-mdx/next";
 
-import { versions } from "./scripts/docs-versions.mjs";
+import { escapeRegExp, versions } from "./scripts/docs-versions.mjs";
 
 const withMDX = createMDX();
 
 // Derived from the single source of truth in scripts/docs-versions.mjs.
 // First entry = current/default version; all slugs feed the prefix regex.
 const docsCurrentVersion = versions[0].slug;
-const docsVersionPrefixes = versions.map((v) => v.slug.replace(/\./g, "\\.") + "(?:/|$)").join("|");
+const docsVersionPrefixes = versions.map((v) => escapeRegExp(v.slug) + "(?:/|$)").join("|");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {

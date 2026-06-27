@@ -5,7 +5,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import nextConfig from "../next.config.mjs";
-import { versions } from "./docs-versions.mjs";
+import { escapeRegExp, versions } from "./docs-versions.mjs";
 
 // Mirror the repoRoot logic from sync-docs.mjs:
 // scriptDir = apps/web/scripts/, webRoot = apps/web/, repoRoot = repo root
@@ -52,7 +52,7 @@ test("deep-link compatibility redirect covers every version slug", async () => {
 
   for (const v of versions) {
     // Each slug "v1.5" must appear escaped as "v1\.5" in the negative lookahead pattern
-    const escapedSlug = v.slug.replace(/\./g, "\\.");
+    const escapedSlug = escapeRegExp(v.slug);
     assert.ok(
       deepRedirect.source.includes(escapedSlug),
       `redirect pattern should include version ${v.slug} (escaped: ${escapedSlug})`,
