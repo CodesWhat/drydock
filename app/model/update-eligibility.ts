@@ -109,7 +109,7 @@ export interface UpdateEligibilityContext {
   /**
    * Optional. When explicitly set to `false` by a caller, a soft `maintenance-window-closed`
    * blocker is recorded in the eligibility result. Defaults to `undefined`.
-   * NOTE: No auto-trigger dispatch path currently sets this field — auto-update window
+   * No auto-trigger dispatch path currently sets this field. Auto-update window
    * enforcement is done at scan time in the Docker watcher (watchFromCron /
    * maybeFastResyncAfterUpdate return early when the window is closed). Manual UI/API update
    * requests leave it undefined and are never gated by it.
