@@ -107,20 +107,30 @@ pre-push:
       priority: 8
       timeout: 2m
 
+    # ── apps/web scripts tests: node:test for the marketing/docs site ──
+    # apps/web ships via Vercel, which runs `next build` but never the
+    # node:test scripts suite (SRI/version-coupling/etc.). Gate it here.
+    # Globbed so it only fires when the push touches the site.
+    web-scripts-test:
+      glob: 'apps/web/**'
+      run: npm run test:scripts --prefix apps/web
+      priority: 9
+      timeout: 60s
+
     # ── Coverage: sharded app+ui parallel, 100% threshold ────────────
     # Runs tests with coverage. On failure, writes .coverage-gaps.json
     # with exact files + uncovered lines/branches (parsed from lcov.info).
     # Honors DD_COVERAGE_FAIL_FAST=1 for sequential first-failure mode.
     coverage:
       run: ./scripts/pre-push-coverage.sh
-      priority: 9
+      priority: 10
       timeout: 10m
 
     # ── Build: sharded app+ui parallel, no tests ─────────────────────
     # Tests already ran in the coverage step, so this is tsc/vite only.
     build:
       run: ./scripts/pre-push-build.sh
-      priority: 10
+      priority: 11
       timeout: 4m
 
     # ── Docker build (opt-in via DD_LOCAL_DOCKER=1) ───────────────────
@@ -129,7 +139,7 @@ pre-push:
       run: docker build --build-arg DD_VERSION=local -t drydock:local .
       skip:
         - run: '[ -z "$DD_LOCAL_DOCKER" ]'
-      priority: 11
+      priority: 12
       timeout: 10m
       fail_text: "Docker QA build failed — fix Dockerfile before push"
 
@@ -139,5 +149,5 @@ pre-push:
       run: zizmor .github/workflows/
       skip:
         - run: '! command -v zizmor >/dev/null 2>&1'
-      priority: 12
+      priority: 13
       timeout: 30s
