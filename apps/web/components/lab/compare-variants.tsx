@@ -63,7 +63,7 @@ function ViewAllLink() {
   );
 }
 
-const tools = ["Drydock", "Watchtower", "Diun", "Portainer"] as const;
+const tools = ["Drydock", "Portainer", "Diun", "Watchtower"] as const;
 type Tool = (typeof tools)[number];
 
 function cellValue(row: FeatureRow, tool: Tool): FeatureValue {
@@ -83,7 +83,7 @@ export function CompareVariants() {
         <SectionHeading
           eyebrow="Why Drydock"
           title="How we compare"
-          subtitle="A quick look at what we support that Watchtower, Portainer, Diun, and others don't."
+          subtitle="A quick look at what we support that Portainer, Diun, and others don't."
           align="right"
         />
 
@@ -108,6 +108,11 @@ export function CompareVariants() {
                       {tool}
                       {tool === "Drydock" && (
                         <span className="ml-1.5 inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      )}
+                      {tool === "Watchtower" && (
+                        <span className="mt-0.5 block text-[10px] font-normal uppercase tracking-wide text-neutral-400 dark:text-neutral-600">
+                          Archived
+                        </span>
                       )}
                     </th>
                   ))}
