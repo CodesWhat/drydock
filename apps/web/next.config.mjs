@@ -14,11 +14,12 @@ const nextConfig = {
   turbopack: {
     root: import.meta.dirname,
   },
-  experimental: {
-    sri: {
-      algorithm: "sha256",
-    },
-  },
+  // Do NOT re-enable experimental.sri here. Next emits integrity hashes that
+  // don't match the bytes Vercel actually serves (Turbopack chunks plus
+  // post-build compression), so the browser blocks every script and nothing
+  // hydrates: homepage reveal sections stay invisible and the docs nav goes
+  // dead. It was removed in #236 for this exact reason and re-added by mistake
+  // in v1.5.1-rc.1 (#454). The CSP in vercel.json is the real script hardening.
   images: {
     remotePatterns: [
       {
