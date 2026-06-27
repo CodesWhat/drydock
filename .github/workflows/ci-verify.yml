@@ -688,6 +688,7 @@ jobs:
         with:
           target: http://localhost:3333
           docker_name: ghcr.io/zaproxy/zaproxy@sha256:2ec1d5d5b44d55cfd02ba9b89cd26852f06d92b7fc0ce9f064b9463babc73074  # stable digest, 2026-05-28
+          rules_file_name: .zap/rules.tsv
           allow_issue_writing: false
           fail_action: true
           cmd_options: '-I'

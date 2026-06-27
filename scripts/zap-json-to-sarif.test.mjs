@@ -5,7 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
-import { convertZapJsonToSarif, stripMarkup } from './zap-json-to-sarif.mjs';
+import {
+  convertZapJsonToSarif,
+  IGNORED_ZAP_PLUGIN_IDS,
+  stripMarkup,
+} from './zap-json-to-sarif.mjs';
 
 describe('zap-json-to-sarif', () => {
   test('strips basic ZAP HTML markup from text fields', () => {
@@ -265,6 +269,86 @@ describe('zap-json-to-sarif', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  test('IGNORED_ZAP_PLUGIN_IDS contains plugin 10049', () => {
+    assert.ok(IGNORED_ZAP_PLUGIN_IDS.has('10049'));
+  });
+
+  test('drops plugin 10049 alerts from rules and results entirely', () => {
+    const sarif = convertZapJsonToSarif({
+      site: [
+        {
+          '@name': 'http://localhost:3333',
+          alerts: [
+            {
+              pluginid: '10049',
+              alertRef: '10049-3',
+              alert: 'Storable and Cacheable Content',
+              name: 'Storable and Cacheable Content',
+              riskcode: '0',
+              instances: [{ uri: 'http://localhost:3333/assets/icons-CQFCvl7r.js', method: 'GET' }],
+            },
+            {
+              pluginid: '10055',
+              alertRef: '10055-6',
+              alert: 'CSP: style-src unsafe-inline',
+              name: 'CSP: style-src unsafe-inline',
+              riskcode: '2',
+              instances: [{ uri: 'http://localhost:3333/', method: 'GET' }],
+            },
+          ],
+        },
+      ],
+    });
+
+    // 10049 must not appear in rules
+    assert.ok(
+      !sarif.runs[0].tool.driver.rules.some((r) => r.id.startsWith('10049')),
+      'rule 10049 must be excluded',
+    );
+    // 10049 must not appear in results
+    assert.ok(
+      !sarif.runs[0].results.some((r) => r.ruleId.startsWith('10049')),
+      'result for 10049 must be excluded',
+    );
+    // The non-ignored alert must still be present
+    assert.equal(sarif.runs[0].tool.driver.rules.length, 1);
+    assert.equal(sarif.runs[0].tool.driver.rules[0].id, '10055-6');
+    assert.equal(sarif.runs[0].results.length, 1);
+    assert.equal(sarif.runs[0].results[0].ruleId, '10055-6');
+  });
+
+  test('drops all 10049 alertRef variants regardless of suffix', () => {
+    const sarif = convertZapJsonToSarif({
+      site: [
+        {
+          alerts: [
+            {
+              pluginid: '10049',
+              alertRef: '10049-1',
+              alert: 'Storable and Cacheable Content',
+              riskcode: '0',
+            },
+            {
+              pluginid: '10049',
+              alertRef: '10049-2',
+              alert: 'Storable and Cacheable Content',
+              riskcode: '0',
+            },
+            {
+              pluginid: '10049',
+              alertRef: '10049-3',
+              alert: 'Storable and Cacheable Content',
+              riskcode: '0',
+            },
+          ],
+        },
+      ],
+    });
+
+    assert.equal(sarif.runs[0].tool.driver.rules.length, 0, 'no rules for any 10049 variant');
+    assert.equal(sarif.runs[0].results.length, 0, 'no results for any 10049 variant');
   });
 
   test('CLI exits with usage when required arguments are missing', () => {
