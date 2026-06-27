@@ -3,6 +3,7 @@ export const REDACTED_VALUE = '[REDACTED]';
 const SENSITIVE_KEY_TOKENS = new Set([
   'password',
   'passwd',
+  'pass',
   'secret',
   'token',
   'tokens',
@@ -14,7 +15,7 @@ const SENSITIVE_KEY_TOKENS = new Set([
   'accesskey',
   'privatekey',
 ]);
-const ENV_SENSITIVE_KEY_TOKENS = new Set(['auth', 'bearer', 'login']);
+const ENV_SENSITIVE_KEY_TOKENS = new Set(['auth', 'bearer', 'login', 'url']);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) {

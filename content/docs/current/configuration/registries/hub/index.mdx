@@ -62,8 +62,8 @@ services:
 <Tab value="Docker (Login/Token)">
 ```bash
 docker run \
-  -e DD_REGISTRY_HUB_PUBLIC_LOGIN="mylogin"
-  -e DD_REGISTRY_HUB_PUBLIC_PASSWORD="fb4d5db9-e64d-3648-8846-74d0846e55de"
+  -e DD_REGISTRY_HUB_PUBLIC_LOGIN="mylogin" \
+  -e DD_REGISTRY_HUB_PUBLIC_PASSWORD="fb4d5db9-e64d-3648-8846-74d0846e55de" \
   ...
   codeswhat/drydock
 ```
@@ -102,7 +102,7 @@ services:
 <Tab value="Docker (Base64 Auth)">
 ```bash
 docker run \
-  -e DD_REGISTRY_HUB_PUBLIC_AUTH="am9obmRvZToyYzFiZDg3Mi1lZmI2LTRmM2EtODFhYS03MjQ1MThhMGE1OTI="
+  -e DD_REGISTRY_HUB_PUBLIC_AUTH="am9obmRvZToyYzFiZDg3Mi1lZmI2LTRmM2EtODFhYS03MjQ1MThhMGE1OTI=" \
   ...
   codeswhat/drydock
 ```

@@ -640,6 +640,37 @@ describe('Docker Watcher', () => {
       expect(storeContainer.updateContainer).not.toHaveBeenCalled();
       expect(storeContainer.deleteContainer).toHaveBeenCalledWith('alias-1');
     });
+
+    test('pruneOldContainers should pass replacementExpected:true when inspect fails (slow-restart path)', async () => {
+      // Simulates the slow-restart scenario: a container was removed but its replacement
+      // is not yet visible (e.g. Docker is still pulling a new image layer).  The
+      // inspect call throws, so the stale record falls into the catch block.  The fix
+      // ensures the maturity-clock timestamps (updateDetectedAt / firstSeenAt) are
+      // stashed in updateLifecycleCache so insertContainer can carry them forward.
+      const dockerApi = {
+        getContainer: vi.fn().mockReturnValue({
+          inspect: vi.fn().mockRejectedValue(new Error('no such container')),
+        }),
+      };
+
+      await testable_pruneOldContainers(
+        [],
+        [
+          {
+            id: 'slow-restart-1',
+            watcher: 'docker',
+            name: 'my-app',
+          },
+        ] as any,
+        dockerApi as any,
+      );
+
+      expect(dockerApi.getContainer).toHaveBeenCalledWith('slow-restart-1');
+      expect(storeContainer.updateContainer).not.toHaveBeenCalled();
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('slow-restart-1', {
+        replacementExpected: true,
+      });
+    });
   });
 
   describe('Additional Coverage - getContainers same-source filtering', () => {

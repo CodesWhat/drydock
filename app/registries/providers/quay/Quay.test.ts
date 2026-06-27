@@ -168,6 +168,19 @@ test('authenticate should not populate header with base64 bearer when anonymous'
   );
 });
 
+test('authenticate anonymous with insecure=true should return httpsAgent on the returned options', async () => {
+  const quayAnonInsecure = new Quay();
+  quayAnonInsecure.configuration = { insecure: true };
+
+  const result = await quayAnonInsecure.authenticate(
+    {},
+    { headers: {}, url: 'https://quay.io/v2/test/image/manifests/latest' },
+  );
+
+  expect(result.httpsAgent).toBeDefined();
+  expect((result.httpsAgent as any).options.rejectUnauthorized).toBe(false);
+});
+
 test('authenticate should throw actionable error when configured credentials are rejected with 403', async () => {
   const quayInstance = new Quay();
   await quayInstance.register('registry', 'quay', 'test', {
@@ -295,7 +308,7 @@ test('getTagsPage should percent-encode next_page tokens containing URL metachar
   expect(calledUrl).toContain('next_page=');
 });
 
-test('getTagsPage should percent-encode last tokens containing URL metacharacters', async () => {
+test('getTagsPage should drop &-prefixed last value to prevent query-param injection', async () => {
   const quayInstance = new Quay();
   quayInstance.configuration = {};
   quayInstance.callRegistry = vi.fn().mockResolvedValue({ data: { tags: [] } });
@@ -306,8 +319,55 @@ test('getTagsPage should percent-encode last tokens containing URL metacharacter
     `</v2/test/image/tags/list?last=${maliciousLast}>; rel="next"`,
   );
   const calledUrl = quayInstance.callRegistry.mock.calls[0][0].url;
-  // The injected & must be encoded; no raw extra query param should appear
+  // The value starts with & so [^>&]+ refuses to match — no last param is emitted,
+  // and the injected scope query param never reaches the registry URL.
   expect(calledUrl).not.toMatch(/&scope=/);
-  expect(calledUrl).toContain('last=');
-  expect(calledUrl).toContain('%26');
+  expect(calledUrl).toBe('https://quay.io/v2/test/image/tags/list?n=1000');
+});
+
+test('getTagsPage should capture next_page token from second query param (&next_page=cursor99)', async () => {
+  const quayInstance = new Quay();
+  quayInstance.configuration = {};
+  quayInstance.callRegistry = vi.fn().mockResolvedValue({ data: { tags: [] } });
+  await quayInstance.getTagsPage(
+    { name: 'test/image', registry: { url: 'https://quay.io/v2' } },
+    'sometag',
+    '/v2/test/image/tags/list?n=100&next_page=cursor99',
+  );
+  expect(quayInstance.callRegistry).toHaveBeenCalledWith({
+    image: { name: 'test/image', registry: { url: 'https://quay.io/v2' } },
+    url: 'https://quay.io/v2/test/image/tags/list?n=1000&next_page=cursor99',
+    resolveWithFullResponse: true,
+  });
+});
+
+test('getTagsPage should capture bare last value without RFC5988 angle brackets', async () => {
+  const quayInstance = new Quay();
+  quayInstance.configuration = {};
+  quayInstance.callRegistry = vi.fn().mockResolvedValue({ data: { tags: [] } });
+  await quayInstance.getTagsPage(
+    { name: 'test/image', registry: { url: 'https://quay.io/v2' } },
+    'sometag',
+    '/v2/test/image/tags/list?last=plainvalue',
+  );
+  expect(quayInstance.callRegistry).toHaveBeenCalledWith({
+    image: { name: 'test/image', registry: { url: 'https://quay.io/v2' } },
+    url: 'https://quay.io/v2/test/image/tags/list?n=1000&last=plainvalue',
+    resolveWithFullResponse: true,
+  });
+});
+
+test('getTagsPage should handle RFC 5988 link with next_page cursor cleanly', async () => {
+  const quayInstance = new Quay();
+  quayInstance.configuration = {};
+  quayInstance.callRegistry = vi.fn().mockResolvedValue({ data: { tags: [] } });
+  await quayInstance.getTagsPage(
+    { name: 'test/image', registry: { url: 'https://quay.io/v2' } },
+    'sometag',
+    '</v2/test/image/tags/list?next_page=gAAAAcursorXYZ>; rel="next"',
+  );
+  const calledUrl = quayInstance.callRegistry.mock.calls[0][0].url;
+  // The closing > must not be captured into the cursor token
+  expect(calledUrl).toContain('next_page=gAAAAcursorXYZ');
+  expect(calledUrl).not.toContain('gAAAAcursorXYZ%3E');
 });

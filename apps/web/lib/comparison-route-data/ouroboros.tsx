@@ -10,11 +10,11 @@ Web UI|None (CLI only)|Full dashboard|drydock
 Auto-update containers|Yes|Yes (optional, monitor-first)|drydock
 Docker Compose updates|No|Yes, pull & recreate|drydock
 Registry support|Docker Hub + private via Docker config|23 dedicated registry integrations|drydock
-Notifications|~6 services|20 native trigger integrations|drydock
+Notifications|Apprise passthrough (150+ platforms via Apprise URLs)|20 native trigger integrations|drydock
 Security scanning|None|Trivy + SBOM + cosign verification|drydock
 OIDC authentication|None|Authelia, Auth0, Authentik|drydock
 REST API|None|Full REST API|drydock
-Prometheus metrics|Basic|Full /metrics endpoint + Grafana template|drydock
+Prometheus metrics|Basic (container update counts; official Grafana template available)|Full /metrics endpoint + Grafana template|drydock
 Image backup & rollback|No|Pre-update backup with retention + auto rollback|drydock
 Container grouping|No|Smart stack detection with batch actions|drydock
 Lifecycle hooks|No|Pre/post-update shell commands|drydock
@@ -29,11 +29,11 @@ License|MIT|AGPL-3.0|tie
 `,
   highlightsTable: `
 monitor|Full Web Dashboard|Ouroboros is CLI-only with no built-in UI. Drydock ships with a full web dashboard for browsing containers, viewing update status, triggering actions, and inspecting logs.
-eye|Monitor-First Design|Ouroboros auto-pulls and restarts containers with no preview option. Drydock is monitor-first by design — it detects updates and notifies you, with dry-run preview before any changes.
+eye|Monitor-First Design|Drydock is monitor-first by design — it detects updates and notifies you, with dry-run preview before any changes are applied. Ouroboros auto-pulls and restarts containers with no preview option.
 shield|Security Scanning|Drydock integrates Trivy vulnerability scanning, SBOM generation (CycloneDX & SPDX), and cosign image signature verification. Ouroboros has no security scanning.
 radio|23 Registry Integrations|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more — far beyond Ouroboros's Docker-config-based approach.
 rotate|Rollback & Backup|Pre-update image backups with configurable retention and automatic rollback on health check failure. Ouroboros has no rollback or backup mechanism.
-bell|20 Notification Services|Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, HTTP webhooks, Gotify, NTFY, and more — compared to Ouroboros's ~6 notification options.
+bell|20 Notification Services|Drydock notifies on image update availability across 20 native services — Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, and more. Ouroboros delegates notifications to Apprise (any Apprise-compatible URL works), but has no native trigger system — no scheduling, templating, threshold filtering, or batch mode.
 `,
   highlightIconMap: {
     monitor: Monitor,
@@ -64,12 +64,12 @@ bell|20 Notification Services|Slack, Discord, Telegram, Teams, Matrix, SMTP, MQT
   heroTitle: "Ouroboros vs Drydock",
   heroDescription: (
     <p>
-      Ouroboros was a popular Python-based container updater, but it has been{" "}
+      The original pyouroboros project has been{" "}
       <strong className="text-neutral-900 dark:text-neutral-200">
         unmaintained since around 2020
-      </strong>
-      . Drydock offers a modern, actively maintained alternative with a full web UI, security
-      scanning, and comprehensive container management.
+      </strong>{" "}
+      (last release: v1.4.3, December 2019). Drydock offers a modern, actively maintained
+      alternative with a full web UI, security scanning, and comprehensive container management.
     </p>
   ),
   competitorBadge: {

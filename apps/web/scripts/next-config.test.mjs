@@ -5,14 +5,19 @@ import { test } from "node:test";
 import nextConfig from "../next.config.mjs";
 
 test("next config enables SRI for frontend bundles", () => {
-  assert.equal(nextConfig.experimental?.sri?.algorithm, "sha384");
+  assert.equal(nextConfig.experimental?.sri?.algorithm, "sha256");
 });
 
-test("production build uses webpack so SRI is applied", () => {
+test("production build uses Turbopack without --webpack", () => {
   const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  const buildScript = packageJson.scripts?.build ?? "";
 
-  assert.match(packageJson.scripts?.build ?? "", /\bnext build\b[\s\S]*--webpack\b/);
-  assert.match(packageJson.scripts?.build ?? "", /\bnode\s+scripts\/apply-sri\.mjs\b/);
+  assert.match(buildScript, /\bnext build\b/, "build script should run next build");
+  assert.doesNotMatch(buildScript, /--webpack\b/, "Turbopack build must not pass --webpack");
+  assert.ok(
+    nextConfig.experimental?.sri?.algorithm,
+    "experimental.sri must be configured so Turbopack emits integrity hashes natively",
+  );
 });
 
 test("docs redirects keep versioned URLs and map legacy deep links to current docs", async () => {

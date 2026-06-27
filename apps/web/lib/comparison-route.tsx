@@ -22,6 +22,7 @@ type ComparisonJsonLdConfig = {
   slug: string;
   name: string;
   description: string;
+  competitorName: string;
 };
 
 export type ComparisonRouteConfig = {
@@ -95,23 +96,51 @@ export function buildComparisonJsonLd({
   slug,
   name,
   description,
+  competitorName,
 }: ComparisonJsonLdConfig): Record<string, unknown> {
   const baseUrl = getBaseUrl();
 
   return {
     "@context": "https://schema.org",
-    "@type": "WebPage",
-    name,
-    description,
-    url: `${baseUrl}/compare/${slug}`,
-    mainEntity: {
-      "@type": "SoftwareApplication",
-      name: "Drydock",
-      url: baseUrl,
-      applicationCategory: "DeveloperApplication",
-      operatingSystem: "Docker",
-      license: "https://opensource.org/licenses/AGPL-3.0",
-    },
+    "@graph": [
+      {
+        "@type": "WebPage",
+        name,
+        description,
+        url: `${baseUrl}/compare/${slug}`,
+        mainEntity: {
+          "@type": "SoftwareApplication",
+          name: "Drydock",
+          url: baseUrl,
+          applicationCategory: "DeveloperApplication",
+          operatingSystem: "Docker",
+          license: "https://opensource.org/licenses/AGPL-3.0",
+        },
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          {
+            "@type": "ListItem",
+            position: 1,
+            name: "Home",
+            item: baseUrl,
+          },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: "Compare",
+            item: `${baseUrl}/compare`,
+          },
+          {
+            "@type": "ListItem",
+            position: 3,
+            name: competitorName,
+            item: `${baseUrl}/compare/${slug}`,
+          },
+        ],
+      },
+    ],
   };
 }
 
@@ -152,6 +181,7 @@ export function createComparisonRoute(config: ComparisonRouteConfig) {
           slug: config.slug,
           name: config.jsonLdName,
           description: config.jsonLdDescription,
+          competitorName: config.competitorName,
         })}
       />
     );

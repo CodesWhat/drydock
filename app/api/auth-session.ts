@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import joi from 'joi';
+import { ddEnvVars } from '../configuration/index.js';
 import log from '../log/index.js';
 import { getStoredSessionSecret, setStoredSessionSecret } from '../store/secrets.js';
 import { getErrorMessage } from '../util/error.js';
@@ -35,14 +36,17 @@ export function getCookieMaxAge(days: number): number {
  * Get session secret key.
  *
  * Precedence:
- * 1. DD_SESSION_SECRET env var (non-empty after trim) — operator-supplied, highest priority.
+ * 1. ddEnvVars.DD_SESSION_SECRET (non-empty after trim) — reads the resolved value from the
+ *    post-replaceSecrets() configuration map. If DD_SESSION_SECRET__FILE was set, its file
+ *    contents have already been substituted into ddEnvVars.DD_SESSION_SECRET, so the file
+ *    value wins over the bare env var (consistent with drydock's secret resolution everywhere).
  * 2. Persisted secret in the LokiJS store — survives restarts without operator intervention.
  * 3. Auto-generated: 64 random bytes (hex) written to the store so it persists across restarts.
  *
  * @returns {string}
  */
 export function getSessionSecretKey(): string {
-  const envSecret = process.env.DD_SESSION_SECRET?.trim();
+  const envSecret = ddEnvVars.DD_SESSION_SECRET?.trim();
   if (envSecret) {
     log.info('Using session secret from DD_SESSION_SECRET environment variable');
     return envSecret;

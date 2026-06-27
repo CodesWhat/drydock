@@ -881,6 +881,160 @@ test('updateContainer should refresh firstSeenAt when update result changes', as
   expect(updated.firstSeenAt).not.toBe(existingFirstSeenAt);
 });
 
+test('updateContainer should reset updateDetectedAt when candidate update changes mid-soak (local watch path)', async () => {
+  // Reproduces the bug: in the local watch path the container flowing into
+  // updateContainer already carries the prior updateDetectedAt from the store
+  // record. When the registry finds a *different* update the clock must reset,
+  // not inherit the old detection time.
+  vi.useFakeTimers();
+  try {
+    const frozenNow = new Date('2026-06-01T12:00:00.000Z');
+    vi.setSystemTime(frozenNow);
+    const oldDetectedAt = '2026-05-31T09:15:00.000Z';
+    const existingFixture = createContainerFixture();
+    const existingContainer = {
+      data: {
+        ...existingFixture,
+        image: {
+          ...existingFixture.image,
+          tag: { ...existingFixture.image.tag, value: '1.0.0' },
+        },
+        result: { tag: '2.0.0' },
+        updateDetectedAt: oldDetectedAt,
+      },
+    };
+    const collection = {
+      findOne: () => existingContainer,
+      insert: () => {},
+      chain: () => ({
+        find: () => ({
+          remove: () => ({}),
+        }),
+      }),
+    };
+    const db = {
+      getCollection: () => collection,
+      addCollection: () => null,
+    };
+    const nextFixture = createContainerFixture();
+    // containerToSave simulates the local watch path: the old updateDetectedAt is
+    // carried forward from the previous store record, but the result tag changed.
+    const containerToSave = {
+      ...nextFixture,
+      image: {
+        ...nextFixture.image,
+        tag: { ...nextFixture.image.tag, value: '1.0.0' },
+      },
+      result: { tag: '2.1.0' },
+      updateDetectedAt: oldDetectedAt,
+    };
+
+    container.createCollections(db);
+    const updated = container.updateContainer(containerToSave);
+
+    // Result changed (2.0.0 → 2.1.0), so the clock must reset to now even
+    // though containerToSave carried the old timestamp.
+    expect(updated.updateDetectedAt).toBe(frozenNow.toISOString());
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('updateContainer should reset firstSeenAt when candidate update changes mid-soak (local watch path)', async () => {
+  // Same scenario as above but for firstSeenAt.
+  vi.useFakeTimers();
+  try {
+    const frozenNow = new Date('2026-06-01T12:00:00.000Z');
+    vi.setSystemTime(frozenNow);
+    const oldFirstSeenAt = '2026-05-31T09:15:00.000Z';
+    const existingFixture = createContainerFixture();
+    const existingContainer = {
+      data: {
+        ...existingFixture,
+        image: {
+          ...existingFixture.image,
+          tag: { ...existingFixture.image.tag, value: '1.0.0' },
+        },
+        result: { tag: '2.0.0' },
+        firstSeenAt: oldFirstSeenAt,
+      },
+    };
+    const collection = {
+      findOne: () => existingContainer,
+      insert: () => {},
+      chain: () => ({
+        find: () => ({
+          remove: () => ({}),
+        }),
+      }),
+    };
+    const db = {
+      getCollection: () => collection,
+      addCollection: () => null,
+    };
+    const nextFixture = createContainerFixture();
+    // containerToSave simulates the local watch path: the old firstSeenAt is
+    // carried forward from the previous store record, but the result tag changed.
+    const containerToSave = {
+      ...nextFixture,
+      image: {
+        ...nextFixture.image,
+        tag: { ...nextFixture.image.tag, value: '1.0.0' },
+      },
+      result: { tag: '2.1.0' },
+      firstSeenAt: oldFirstSeenAt,
+    };
+
+    container.createCollections(db);
+    const updated = container.updateContainer(containerToSave);
+
+    // Result changed (2.0.0 → 2.1.0), so firstSeenAt must reset to now even
+    // though containerToSave carried the old timestamp.
+    expect(updated.firstSeenAt).toBe(frozenNow.toISOString());
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('updateContainer should stamp updateDetectedAt when containerCurrent had no raw update', async () => {
+  // Covers the path where a container transitions from no-update to having one.
+  const existingFixture = createContainerFixture();
+  const existingContainer = {
+    data: {
+      // Default fixture: image tag === result tag → no raw update
+      ...existingFixture,
+    },
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: () => {},
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const nextFixture = createContainerFixture();
+  const containerToSave = {
+    ...nextFixture,
+    image: {
+      ...nextFixture.image,
+      tag: { ...nextFixture.image.tag, value: '1.0.0' },
+    },
+    result: { tag: '2.0.0' },
+  };
+
+  container.createCollections(db);
+  const updated = container.updateContainer(containerToSave);
+
+  // containerCurrent had no raw update; containerNext has one → stamp now.
+  expect(typeof updated.updateDetectedAt).toBe('string');
+});
+
 test('updateContainer should clear updateDetectedAt when update is no longer available', async () => {
   const existingFixture = createContainerFixture();
   const existingContainer = {
@@ -963,6 +1117,82 @@ test('updateContainer should clear firstSeenAt when update is no longer availabl
   const updated = container.updateContainer(containerToSave);
 
   expect(updated.firstSeenAt).toBeUndefined();
+});
+
+test('insertContainer should stamp updateDetectedAt when raw update exists under mature mode', async () => {
+  const collection = {
+    findOne: () => {},
+    insert: () => {},
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const base = createContainerFixture();
+  const containerWithUpdate = {
+    ...base,
+    image: {
+      ...base.image,
+      tag: { ...base.image.tag, value: '1.0.0' },
+    },
+    result: { tag: '2.0.0' },
+    updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 1 },
+  };
+
+  container.createCollections(db);
+  const inserted = container.insertContainer(containerWithUpdate);
+
+  // Raw update exists (1.0.0 → 2.0.0) so updateDetectedAt must be stamped,
+  // even though maturity suppression makes updateAvailable false.
+  expect(typeof inserted.updateDetectedAt).toBe('string');
+});
+
+test('updateContainer should preserve updateDetectedAt while update is suppressed by mature mode', async () => {
+  const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString();
+  const existingFixture = createContainerFixture();
+  const existingContainer = {
+    data: {
+      ...existingFixture,
+      image: {
+        ...existingFixture.image,
+        tag: { ...existingFixture.image.tag, value: '1.0.0' },
+      },
+      result: { tag: '2.0.0' },
+      updateDetectedAt: twelveHoursAgo,
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 1 },
+    },
+  };
+  const collection = {
+    findOne: () => existingContainer,
+    insert: () => {},
+    chain: () => ({
+      find: () => ({
+        remove: () => ({}),
+      }),
+    }),
+  };
+  const db = {
+    getCollection: () => collection,
+    addCollection: () => null,
+  };
+  const nextFixture = createContainerFixture();
+  const containerToSave = {
+    ...nextFixture,
+    image: {
+      ...nextFixture.image,
+      tag: { ...nextFixture.image.tag, value: '1.0.0' },
+    },
+    result: { tag: '2.0.0' },
+    updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 1 },
+  };
+
+  container.createCollections(db);
+  const updated = container.updateContainer(containerToSave);
+
+  // The raw update (1.0.0 → 2.0.0) is unchanged; the 12-hour-old timestamp must
+  // be preserved so the maturity clock keeps ticking. Before the fix it was wiped
+  // to undefined because updateAvailable is false while still suppressed.
+  expect(updated.updateDetectedAt).toBe(twelveHoursAgo);
 });
 
 test('getContainers should return all containers sorted by name', async () => {
@@ -2343,12 +2573,12 @@ test('getContainers should clone cached cyclic structures without throwing', () 
 test('security state prune should remove expired entries and trim oldest active entries', () => {
   const nowMs = Date.now();
   const maxEntries = container.SECURITY_STATE_CACHE_MAX_ENTRIES;
-  container._setSecurityStateCacheEntryForTests('expired_entry', {
+  container._setSecurityStateCacheEntryForTests('expired::entry', {
     security: { stale: true },
     expiresAt: nowMs - 1,
   });
   for (let index = 0; index <= maxEntries; index += 1) {
-    container._setSecurityStateCacheEntryForTests(`active_${index}`, {
+    container._setSecurityStateCacheEntryForTests(`active::${index}`, {
       security: { index },
       expiresAt: nowMs + 60_000,
     });
@@ -3247,5 +3477,523 @@ describe('getSafeContainerQueryEntries / operator injection guard', () => {
 
     container.getContainersForStats({ watcher: { $ne: 'docker' } } as Record<string, unknown>);
     expect(collection.find).toHaveBeenCalledWith({});
+  });
+});
+
+describe('updateLifecycleCache carry-forward', () => {
+  function makeDigestUpdateFixture(overrides: Record<string, unknown> = {}) {
+    const base = createContainerFixture();
+    return {
+      ...base,
+      watcher: 'local',
+      name: 'myapp',
+      image: {
+        ...base.image,
+        digest: { watch: true, value: 'sha256:old', repo: undefined },
+      },
+      result: { tag: 'version', digest: 'sha256:new' },
+      ...overrides,
+    };
+  }
+
+  test('carries forward updateDetectedAt and firstSeenAt on container recreation', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-old-1',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    container.deleteContainer('lifecycle-old-1', { replacementExpected: true });
+    const newFixture = makeDigestUpdateFixture({ id: 'lifecycle-new-1' });
+    const inserted = container.insertContainer(newFixture);
+    expect(inserted.updateDetectedAt).toBe(twelveHoursAgo);
+    expect(inserted.firstSeenAt).toBe(twelveHoursAgo);
+  });
+
+  test('does not carry forward when the update result changed', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-old-2',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    container.deleteContainer('lifecycle-old-2', { replacementExpected: true });
+    const newFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-new-2',
+      result: { tag: 'version', digest: 'sha256:completely-different' },
+    });
+    const inserted = container.insertContainer(newFixture);
+    expect(inserted.updateDetectedAt).not.toBe(twelveHoursAgo);
+    expect(typeof inserted.updateDetectedAt).toBe('string');
+  });
+
+  test('does not cache when deleteContainer is called without replacementExpected', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-old-3',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    container.deleteContainer('lifecycle-old-3');
+    const newFixture = makeDigestUpdateFixture({ id: 'lifecycle-new-3' });
+    const inserted = container.insertContainer(newFixture);
+    expect(inserted.updateDetectedAt).not.toBe(twelveHoursAgo);
+  });
+
+  test('does not carry forward when new container has no raw update', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-old-4',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    container.deleteContainer('lifecycle-old-4', { replacementExpected: true });
+    const base = createContainerFixture();
+    const newFixture = {
+      ...base,
+      id: 'lifecycle-new-4',
+      watcher: 'local',
+      name: 'myapp',
+      image: {
+        ...base.image,
+        digest: { watch: true, value: 'sha256:new', repo: undefined },
+      },
+      result: { tag: 'version', digest: 'sha256:new' },
+    };
+    const inserted = container.insertContainer(newFixture);
+    expect(inserted.updateDetectedAt).toBeUndefined();
+  });
+
+  test('treats the lifecycle cache entry as absent when it has expired', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-06-01T00:00:00.000Z'));
+      const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+      const oldFixture = makeDigestUpdateFixture({
+        id: 'lifecycle-old-5',
+        updateDetectedAt: twelveHoursAgo,
+        firstSeenAt: twelveHoursAgo,
+      });
+      const collection = createFilterableCollection([{ data: oldFixture }]);
+      container.createCollections({ getCollection: () => collection, addCollection: () => null });
+      container.deleteContainer('lifecycle-old-5', { replacementExpected: true });
+      vi.advanceTimersByTime(container.UPDATE_LIFECYCLE_CACHE_TTL_MS + 1);
+      const newFixture = makeDigestUpdateFixture({ id: 'lifecycle-new-5' });
+      const inserted = container.insertContainer(newFixture);
+      expect(inserted.updateDetectedAt).not.toBe(twelveHoursAgo);
+      expect(typeof inserted.updateDetectedAt).toBe('string');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('does not write cache when old container has no updateDetectedAt', () => {
+    const oldFixture = makeDigestUpdateFixture({ id: 'lifecycle-old-6' });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    container.deleteContainer('lifecycle-old-6', { replacementExpected: true });
+    // No updateDetectedAt on the old container → no cache entry written
+    const lifecycleCache = container._getUpdateLifecycleCacheForTests();
+    expect(lifecycleCache.has('local::myapp')).toBe(false);
+    const newFixture = makeDigestUpdateFixture({ id: 'lifecycle-new-6' });
+    const inserted = container.insertContainer(newFixture);
+    expect(typeof inserted.updateDetectedAt).toBe('string');
+  });
+
+  test('carries forward updateDetectedAt but not firstSeenAt when old container had no firstSeenAt', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-old-7',
+      updateDetectedAt: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    container.deleteContainer('lifecycle-old-7', { replacementExpected: true });
+    const newFixture = makeDigestUpdateFixture({ id: 'lifecycle-new-7' });
+    const inserted = container.insertContainer(newFixture);
+    expect(inserted.updateDetectedAt).toBe(twelveHoursAgo);
+    expect(inserted.firstSeenAt).not.toBeUndefined();
+    expect(typeof inserted.firstSeenAt).toBe('string');
+  });
+
+  test('does not overwrite existing incoming updateDetectedAt with cached value', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-old-8',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    container.deleteContainer('lifecycle-old-8', { replacementExpected: true });
+    const newFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-new-8',
+      updateDetectedAt: '2026-01-01T00:00:00.000Z',
+    });
+    const inserted = container.insertContainer(newFixture);
+    expect(inserted.updateDetectedAt).toBe('2026-01-01T00:00:00.000Z');
+  });
+
+  test('evicts oldest lifecycle cache entries when size cap is exceeded', () => {
+    const maxEntries = container.UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES;
+    const fixtures = [];
+    const oldTimestamp = new Date(Date.now() - 1000).toISOString();
+    for (let i = 0; i <= maxEntries; i++) {
+      fixtures.push({
+        data: makeDigestUpdateFixture({
+          id: `lifecycle-evict-${i}`,
+          name: `evict-app-${i}`,
+          updateDetectedAt: oldTimestamp,
+          firstSeenAt: oldTimestamp,
+        }),
+      });
+    }
+    const collection = createFilterableCollection(fixtures);
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    for (let i = 0; i <= maxEntries; i++) {
+      container.deleteContainer(`lifecycle-evict-${i}`, { replacementExpected: true });
+    }
+    const lifecycleCache = container._getUpdateLifecycleCacheForTests();
+    expect(lifecycleCache.size).toBeLessThanOrEqual(maxEntries);
+    expect(lifecycleCache.has('local::evict-app-0')).toBe(false);
+  });
+
+  test('getResultSignature handles missing result tag and digest fields', () => {
+    // Exercise the ?? null branches in getResultSignature for tag and digest
+    const oldTimestamp = new Date(Date.now() - 1000).toISOString();
+    const base = createContainerFixture();
+    const oldFixture = {
+      ...base,
+      id: 'lifecycle-sig-old',
+      watcher: 'local',
+      name: 'myapp-sig',
+      image: {
+        ...base.image,
+        digest: { watch: true, value: 'sha256:old', repo: undefined },
+      },
+      result: { digest: 'sha256:new' }, // no 'tag' field
+      updateDetectedAt: oldTimestamp,
+      firstSeenAt: oldTimestamp,
+    };
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    container.deleteContainer('lifecycle-sig-old', { replacementExpected: true });
+    // Insert new fixture with same result signature (no tag field, same digest)
+    const newFixture = {
+      ...base,
+      id: 'lifecycle-sig-new',
+      watcher: 'local',
+      name: 'myapp-sig',
+      image: {
+        ...base.image,
+        digest: { watch: true, value: 'sha256:old', repo: undefined },
+      },
+      result: { digest: 'sha256:new' }, // no 'tag' field — matches old
+    };
+    const inserted = container.insertContainer(newFixture);
+    expect(inserted.updateDetectedAt).toBe(oldTimestamp);
+  });
+
+  test('getResultSignature handles missing result digest field (null-digest branch)', () => {
+    const oldTimestamp = new Date(Date.now() - 1000).toISOString();
+    const base = createContainerFixture();
+    const oldFixture = {
+      ...base,
+      id: 'lifecycle-sig-digest-old',
+      watcher: 'local',
+      name: 'myapp-sig-digest',
+      image: {
+        ...base.image,
+        digest: { watch: true, value: 'sha256:old', repo: undefined },
+      },
+      result: { tag: 'v1.0.0' }, // no 'digest' field
+      updateDetectedAt: oldTimestamp,
+      firstSeenAt: oldTimestamp,
+    };
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    container.deleteContainer('lifecycle-sig-digest-old', { replacementExpected: true });
+    const newFixture = {
+      ...base,
+      id: 'lifecycle-sig-digest-new',
+      watcher: 'local',
+      name: 'myapp-sig-digest',
+      image: {
+        ...base.image,
+        digest: { watch: true, value: 'sha256:old', repo: undefined },
+      },
+      result: { tag: 'v1.0.0' }, // matches old — no digest in either
+    };
+    const inserted = container.insertContainer(newFixture);
+    expect(inserted.updateDetectedAt).toBe(oldTimestamp);
+  });
+
+  test('_setUpdateLifecycleCacheEntryForTests writes an entry into the lifecycle cache', () => {
+    const cache = container._getUpdateLifecycleCacheForTests();
+    container._setUpdateLifecycleCacheEntryForTests('test_key', {
+      updateDetectedAt: '2026-01-01T00:00:00.000Z',
+      firstSeenAt: '2026-01-01T00:00:00.000Z',
+      resultSignature: '{}',
+      expiresAt: Date.now() + 60_000,
+    });
+    expect(cache.has('test_key')).toBe(true);
+    expect(cache.get('test_key')?.updateDetectedAt).toBe('2026-01-01T00:00:00.000Z');
+  });
+
+  test('lifecycle cache eviction stays within max after overflow without mocking Map internals', () => {
+    const maxEntries = container.UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES;
+    const oldTimestamp = new Date(Date.now() - 1000).toISOString();
+    const fixtures = [];
+    for (let i = 0; i <= maxEntries; i++) {
+      fixtures.push({
+        data: makeDigestUpdateFixture({
+          id: `lifecycle-overflow-${i}`,
+          name: `overflow-app-${i}`,
+          updateDetectedAt: oldTimestamp,
+          firstSeenAt: oldTimestamp,
+        }),
+      });
+    }
+    const collection = createFilterableCollection(fixtures);
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    for (let i = 0; i <= maxEntries; i++) {
+      container.deleteContainer(`lifecycle-overflow-${i}`, { replacementExpected: true });
+    }
+    const lifecycleCache = container._getUpdateLifecycleCacheForTests();
+    expect(lifecycleCache.size).toBeLessThanOrEqual(maxEntries);
+  });
+
+  test('deleteContainer replacementExpected → insertContainer carry-forward with realistic mature-mode fixture', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-a-old',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 1 },
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    container.deleteContainer('lifecycle-a-old', { replacementExpected: true });
+    const newFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-a-new',
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 1 },
+    });
+    const inserted = container.insertContainer(newFixture);
+    expect(inserted.updateDetectedAt).toBe(twelveHoursAgo);
+    expect(inserted.firstSeenAt).toBe(twelveHoursAgo);
+  });
+
+  test('insertContainer stamps exact fresh updateDetectedAt when lifecycle cache result changed (pinned clock)', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-06-01T12:00:00.000Z'));
+      const oldFixture = makeDigestUpdateFixture({
+        id: 'lifecycle-b-old',
+        updateDetectedAt: new Date(Date.now() - 12 * 3600 * 1000).toISOString(),
+        firstSeenAt: new Date(Date.now() - 12 * 3600 * 1000).toISOString(),
+      });
+      const collection = createFilterableCollection([{ data: oldFixture }]);
+      container.createCollections({ getCollection: () => collection, addCollection: () => null });
+      container.deleteContainer('lifecycle-b-old', { replacementExpected: true });
+      // Insert with a DIFFERENT digest — signature mismatch → fresh stamp
+      const newFixture = makeDigestUpdateFixture({
+        id: 'lifecycle-b-new',
+        result: { tag: 'version', digest: 'sha256:completely-changed' },
+      });
+      const inserted = container.insertContainer(newFixture);
+      expect(inserted.updateDetectedAt).toBe(new Date().toISOString());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('mature-mode soak clock survives container recreation', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-c-old',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 1 },
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    container.deleteContainer('lifecycle-c-old', { replacementExpected: true });
+    const newFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-c-new',
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 1 },
+    });
+    const inserted = container.insertContainer(newFixture);
+    expect(inserted.updateDetectedAt).toBe(twelveHoursAgo);
+  });
+
+  test('BLOCKER-1: firstSeenAt is restored from cache independently when incoming has updateDetectedAt but no firstSeenAt', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const incomingDetectedAt = '2026-01-01T00:00:00.000Z';
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'blocker1-old',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    container.deleteContainer('blocker1-old', { replacementExpected: true });
+    const newFixture = makeDigestUpdateFixture({
+      id: 'blocker1-new',
+      updateDetectedAt: incomingDetectedAt,
+      // no firstSeenAt — should be restored from cache
+    });
+    const inserted = container.insertContainer(newFixture);
+    // updateDetectedAt keeps the incoming value (not replaced from cache)
+    expect(inserted.updateDetectedAt).toBe(incomingDetectedAt);
+    // firstSeenAt is independently restored from cache
+    expect(inserted.firstSeenAt).toBe(twelveHoursAgo);
+  });
+
+  test('toCacheKey collision is gone: watcher "my_prod"/name "nginx" does not collide with watcher "my"/name "prod_nginx"', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const fixture1 = makeDigestUpdateFixture({
+      id: 'collision-old',
+      watcher: 'my_prod',
+      name: 'nginx',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: fixture1 }]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    container.deleteContainer('collision-old', { replacementExpected: true });
+
+    const base = createContainerFixture();
+    const fixture2 = {
+      ...base,
+      id: 'collision-new',
+      watcher: 'my',
+      name: 'prod_nginx',
+      image: {
+        ...base.image,
+        digest: { watch: true, value: 'sha256:old', repo: undefined },
+      },
+      result: { tag: 'version', digest: 'sha256:new' },
+    };
+    const inserted = container.insertContainer(fixture2);
+    // With the new :: separator, no collision — cached entry is NOT picked up
+    expect(inserted.updateDetectedAt).not.toBe(twelveHoursAgo);
+  });
+
+  test('deleteContainer does not write lifecycle cache for agent containers', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const agentFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-agent-guard',
+      agent: 'remote-agent',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: agentFixture }]);
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    const lifecycleCache = container._getUpdateLifecycleCacheForTests();
+    const cacheSizeBefore = lifecycleCache.size;
+    container.deleteContainer('lifecycle-agent-guard', { replacementExpected: true });
+    expect(lifecycleCache.size).toBe(cacheSizeBefore);
+  });
+
+  test('deleteContainer does not write lifecycle cache for rollback-named containers', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const rollbackFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-rollback-guard',
+      name: 'myapp-old-1773933154786',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: rollbackFixture }]);
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    const lifecycleCache = container._getUpdateLifecycleCacheForTests();
+    const cacheSizeBefore = lifecycleCache.size;
+    container.deleteContainer('lifecycle-rollback-guard', { replacementExpected: true });
+    expect(lifecycleCache.size).toBe(cacheSizeBefore);
+  });
+
+  test('deleteContainer evicts expired lifecycle cache entries before oldest live entries', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-06-01T00:00:00.000Z'));
+      const maxEntries = container.UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES;
+      const pastTimestamp = new Date(Date.now() - 1000).toISOString();
+
+      // Build maxEntries + 1 fixtures (all in the collection)
+      const fixtures = [];
+      for (let i = 0; i <= maxEntries; i++) {
+        fixtures.push({
+          data: makeDigestUpdateFixture({
+            id: `lifecycle-expfirst-${i}`,
+            name: `expfirst-app-${i}`,
+            updateDetectedAt: pastTimestamp,
+            firstSeenAt: pastTimestamp,
+          }),
+        });
+      }
+      const collection = createFilterableCollection(fixtures);
+      container.createCollections({ getCollection: () => collection, addCollection: () => null });
+
+      // Delete the first maxEntries containers → fill cache exactly to the limit
+      for (let i = 0; i < maxEntries; i++) {
+        container.deleteContainer(`lifecycle-expfirst-${i}`, { replacementExpected: true });
+      }
+      const lifecycleCache = container._getUpdateLifecycleCacheForTests();
+      expect(lifecycleCache.size).toBe(maxEntries);
+
+      // Advance time past TTL so all existing entries expire
+      vi.advanceTimersByTime(container.UPDATE_LIFECYCLE_CACHE_TTL_MS + 1);
+
+      // Delete the last container — triggers size check → should evict expired entries first
+      container.deleteContainer(`lifecycle-expfirst-${maxEntries}`, { replacementExpected: true });
+
+      // New entry should be present
+      expect(lifecycleCache.has(`local::expfirst-app-${maxEntries}`)).toBe(true);
+      // All old (now-expired) entries should be gone
+      expect(lifecycleCache.has(`local::expfirst-app-0`)).toBe(false);
+      // Total size should be 1 (only the fresh entry remains)
+      expect(lifecycleCache.size).toBeLessThanOrEqual(maxEntries);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('insertContainer does not overwrite existing incoming firstSeenAt with cached value', () => {
+    const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const incomingFirstSeenAt = '2026-02-01T00:00:00.000Z';
+    const oldFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-fseat-old',
+      updateDetectedAt: twelveHoursAgo,
+      firstSeenAt: twelveHoursAgo,
+    });
+    const collection = createFilterableCollection([{ data: oldFixture }]);
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    container.deleteContainer('lifecycle-fseat-old', { replacementExpected: true });
+    const newFixture = makeDigestUpdateFixture({
+      id: 'lifecycle-fseat-new',
+      firstSeenAt: incomingFirstSeenAt, // pre-set on incoming
+    });
+    const inserted = container.insertContainer(newFixture);
+    // firstSeenAt must not be overwritten by cached value
+    expect(inserted.firstSeenAt).toBe(incomingFirstSeenAt);
   });
 });

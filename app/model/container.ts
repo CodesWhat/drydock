@@ -14,6 +14,7 @@ import type {
   ContainerUpdateOperationKind,
 } from './container-update-operation.js';
 import {
+  getMaturityStartMs,
   MATURITY_MIN_AGE_DAYS_MAX,
   MATURITY_MIN_AGE_DAYS_MIN,
   maturityMinAgeDaysToMilliseconds,
@@ -77,6 +78,7 @@ export interface ContainerResult {
   digest?: string;
   created?: string;
   publishedAt?: string;
+  publishedAtTrusted?: boolean;
   link?: string;
   noUpdateReason?: string;
   releaseNotes?: ContainerReleaseNotes;
@@ -334,6 +336,7 @@ const schema = joi.object({
     digest: joi.string(),
     created: joi.string().isoDate(),
     publishedAt: joi.string().isoDate(),
+    publishedAtTrusted: joi.boolean(),
     link: joi.string(),
     noUpdateReason: joi.string().min(1),
     releaseNotes: joi.object({
@@ -549,13 +552,10 @@ function isUpdateSuppressed(container: Container, updateKind: ContainerUpdateKin
   }
 
   if (updatePolicy.maturityMode === 'mature') {
-    const updateDetectedAtMs = Date.parse(container.updateDetectedAt || '');
+    const maturityStartMs = getMaturityStartMs(container);
     const maturityMinAgeDays = resolveMaturityMinAgeDays(updatePolicy.maturityMinAgeDays);
     const maturityMinAgeMs = maturityMinAgeDaysToMilliseconds(maturityMinAgeDays);
-    if (
-      !Number.isFinite(updateDetectedAtMs) ||
-      Date.now() - updateDetectedAtMs < maturityMinAgeMs
-    ) {
+    if (maturityStartMs === undefined || Date.now() - maturityStartMs < maturityMinAgeMs) {
       return true;
     }
   }
@@ -958,6 +958,8 @@ export function isRollbackContainer(container: { name?: unknown }) {
   return isRollbackContainerName(container?.name);
 }
 
+// Production export: needed by store/container.ts to gate lifecycle timestamps
+// on raw-update presence rather than the suppression-aware updateAvailable getter.
 // The following exports are meant for testing only
 export {
   addLinkProperty as testable_addLinkProperty,
@@ -967,6 +969,7 @@ export {
   getRawTagUpdate as testable_getRawTagUpdate,
   getRawUpdateAge as testable_getRawUpdateAge,
   getRawUpdateKind as testable_getRawUpdateKind,
+  hasRawUpdate,
   hasRawUpdate as testable_hasRawUpdate,
   isUpdateSuppressed as testable_isUpdateSuppressed,
   resultChangedFunction as testable_resultChangedFunction,

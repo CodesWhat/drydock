@@ -6,8 +6,6 @@ description: "Triggers are responsible for performing actions when a new contain
 import { Callout } from 'fumadocs-ui/components/callout';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
-Triggers are responsible for performing actions when a new container version is found.
-
 Triggers are enabled using environment variables.
 
 ```bash
@@ -113,7 +111,7 @@ All implemented triggers, in addition to their specific configuration, also supp
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_ORDER` | ⚪ | Trigger execution order (lower runs first) | Number | `100` |
 | `DD_EVENT_HANDLER_TIMEOUT_MS` | ⚪ | Per-handler execution cap in milliseconds. If a single notification handler (e.g. an SMTP transport stalling on retry) runs longer than this value, it is abandoned and the emit chain continues. Prevents one slow provider from stalling the entire update lifecycle. Applies globally — not per-trigger-name. If the value is absent, zero, or non-numeric it falls back to the default silently. | Positive integer (milliseconds) | `30000` (30 s) |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SIMPLEBODY` | ⚪ | The template to use to render the body of the notification | JS string template with vars `container` | `Container ${container.name} running with ${container.updateKind.kind} ${container.updateKind.localValue} can be updated to ${container.updateKind.kind} ${container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}` |
-| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SIMPLETITLE` | ⚪ | The template to use to render the title of the notification (simple mode) | JS string template with vars `${containers}` | `New ${container.updateKind.kind} found for container ${container.name}` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SIMPLETITLE` | ⚪ | The template to use to render the title of the notification (simple mode) | JS string template with vars `${container}` | `New ${container.updateKind.kind} found for container ${container.name}` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_THRESHOLD` | ⚪ | The threshold to reach to run the trigger | `all`, `major`, `major-only`, `minor`, `minor-only`, `patch`, `digest`, and `*-no-digest` variants (`major-no-digest`, `major-only-no-digest`, `minor-no-digest`, `minor-only-no-digest`, `patch-no-digest`) | `all` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_RESOLVENOTIFICATIONS` | ⚪ | Auto-dismiss the notification after the container is successfully updated | `true`, `false` | `false` |
 

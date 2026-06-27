@@ -633,6 +633,73 @@ describe('computeUpdateEligibility', () => {
       const blocker = result.blockers.find((b) => b.reason === 'maturity-not-reached');
       expect(blocker?.details?.minAgeDays).toBe(7);
     });
+
+    test('no blocker when trusted publishedAt is old enough even if updateDetectedAt is recent', () => {
+      const trigger = makeTrigger();
+      // updateDetectedAt is 2 days ago (not old enough), but trusted publishedAt is 10 days ago
+      const updateDetectedAt = new Date(FIXED_NOW - 2 * 24 * 60 * 60 * 1000).toISOString();
+      const publishedAt = new Date(FIXED_NOW - 10 * 24 * 60 * 60 * 1000).toISOString();
+      const container = makeContainerWithTagUpdate({
+        updateDetectedAt,
+        result: { tag: '1.1.0', publishedAt, publishedAtTrusted: true },
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      });
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({ triggers: { 'docker.update': trigger as never }, now: FIXED_NOW }),
+      );
+      expect(result.blockers.find((b) => b.reason === 'maturity-not-reached')).toBeUndefined();
+    });
+
+    test('emits blocker when trusted publishedAt is still within maturity window', () => {
+      // publishedAt = 3 days ago (trusted, older than detectedAt=2 days)
+      // Math.min(now-3, now-2) = now-3 → age = 3 days < 7 → blocker
+      const updateDetectedAt = new Date(FIXED_NOW - 2 * 24 * 60 * 60 * 1000).toISOString();
+      const publishedAt = new Date(FIXED_NOW - 3 * 24 * 60 * 60 * 1000).toISOString();
+      const container = makeContainerWithTagUpdate({
+        updateDetectedAt,
+        result: { tag: '1.1.0', publishedAt, publishedAtTrusted: true },
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      });
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      const blocker = result.blockers.find((b) => b.reason === 'maturity-not-reached');
+      expect(blocker).toBeDefined();
+    });
+
+    test('ignores untrusted publishedAt and uses updateDetectedAt', () => {
+      const trigger = makeTrigger();
+      // publishedAt is old but trust=false → should fall back to updateDetectedAt (10 days) → pass
+      const updateDetectedAt = new Date(FIXED_NOW - 10 * 24 * 60 * 60 * 1000).toISOString();
+      const publishedAt = new Date(FIXED_NOW - 2 * 24 * 60 * 60 * 1000).toISOString();
+      const container = makeContainerWithTagUpdate({
+        updateDetectedAt,
+        result: { tag: '1.1.0', publishedAt, publishedAtTrusted: false },
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      });
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({ triggers: { 'docker.update': trigger as never }, now: FIXED_NOW }),
+      );
+      expect(result.blockers.find((b) => b.reason === 'maturity-not-reached')).toBeUndefined();
+    });
+
+    test('liftableAt uses trusted publishedAt as start when it is earlier than detectedAt', () => {
+      // publishedAt is 2 days ago, detectedAt is 1 day ago; maturity start = publishedAt
+      const publishedAt = new Date(FIXED_NOW - 2 * 24 * 60 * 60 * 1000).toISOString();
+      const updateDetectedAt = new Date(FIXED_NOW - 1 * 24 * 60 * 60 * 1000).toISOString();
+      const container = makeContainerWithTagUpdate({
+        updateDetectedAt,
+        result: { tag: '1.1.0', publishedAt, publishedAtTrusted: true },
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      });
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      const blocker = result.blockers.find((b) => b.reason === 'maturity-not-reached');
+      expect(blocker).toBeDefined();
+      const expectedLiftableAt = new Date(
+        Date.parse(publishedAt) + 7 * 24 * 60 * 60 * 1000,
+      ).toISOString();
+      expect(blocker?.liftableAt).toBe(expectedLiftableAt);
+    });
   });
 
   describe('no-update-trigger-configured', () => {

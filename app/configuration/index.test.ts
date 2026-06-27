@@ -3079,3 +3079,170 @@ describe('getSecurityConfiguration – schema validation field assertions', () =
     delete configuration.ddEnvVars.DD_SECURITY_TOTALLY_UNKNOWN_KEY;
   });
 });
+
+// ── Secret file hardening: permission check (Fix 1) + trailing-newline trim (Fix 2) ──
+
+describe('replaceSecrets – secret file hardening', () => {
+  // Fix 1 – permission check
+  // When a secret file's permissions allow group or others to read it, replaceSecrets
+  // emits a logWarn naming the file and recommending chmod 600.
+  // The check is skipped on non-POSIX platforms (Windows) where mode bits are synthetic.
+
+  test('should warn when secret file has world-readable permissions (0644)', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-perms-'));
+    const secretPath = path.join(tempDir, 'secret.txt');
+    fs.writeFileSync(secretPath, 'my-secret');
+    fs.chmodSync(secretPath, 0o644);
+
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+    try {
+      const vars: Record<string, string | undefined> = { DD_PERM_WARN__FILE: secretPath };
+      await configuration.replaceSecrets(vars);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(secretPath));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('chmod 600'));
+    } finally {
+      warnSpy.mockRestore();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test('should not warn when secret file has owner-only permissions (0600)', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-perms-'));
+    const secretPath = path.join(tempDir, 'secret.txt');
+    fs.writeFileSync(secretPath, 'my-secret');
+    fs.chmodSync(secretPath, 0o600);
+
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+    try {
+      const vars: Record<string, string | undefined> = { DD_PERM_OK__FILE: secretPath };
+      await configuration.replaceSecrets(vars);
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test('should prefer __FILE contents over the bare env var when both are set (file wins)', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-precedence-'));
+    const secretPath = path.join(tempDir, 'session-secret.txt');
+    fs.writeFileSync(secretPath, 'secret-from-file');
+    fs.chmodSync(secretPath, 0o600);
+
+    try {
+      const vars: Record<string, string | undefined> = {
+        DD_SESSION_SECRET: 'direct-env-value',
+        DD_SESSION_SECRET__FILE: secretPath,
+      };
+      await configuration.replaceSecrets(vars);
+      // __FILE wins: the file contents replace the bare env var value
+      expect(vars.DD_SESSION_SECRET).toBe('secret-from-file');
+      expect(vars.DD_SESSION_SECRET__FILE).toBeUndefined();
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test('should skip permission check on non-POSIX platforms (win32)', async () => {
+    // Covers the os.platform() === 'win32' branch so that the mode-bit check is skipped.
+    // We spy on os.platform() – the same os module imported by both test file and implementation –
+    // so that the guard evaluates to false for this call.
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-perms-'));
+    const secretPath = path.join(tempDir, 'secret.txt');
+    fs.writeFileSync(secretPath, 'my-secret');
+    fs.chmodSync(secretPath, 0o644);
+
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+    const platformSpy = vi.spyOn(os, 'platform').mockReturnValueOnce('win32' as NodeJS.Platform);
+    try {
+      const vars: Record<string, string | undefined> = { DD_PERM_WIN__FILE: secretPath };
+      await configuration.replaceSecrets(vars);
+      // World-readable file, but platform guard fires first – no permission warn expected.
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('chmod 600'));
+    } finally {
+      platformSpy.mockRestore();
+      warnSpy.mockRestore();
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  // Fix 2 – trailing-newline trim
+  // Secret files created with editors or `echo` typically have a trailing newline.
+  // replaceSecrets trims trailing whitespace (trimEnd()) matching the Docker *_FILE convention
+  // used by the official postgres image (POSTGRES_PASSWORD_FILE resolved via $(< file)).
+
+  test('should trim a trailing newline from secret file value', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-trim-'));
+    const secretPath = path.join(tempDir, 'token.txt');
+    fs.writeFileSync(secretPath, 'my-token\n');
+    fs.chmodSync(secretPath, 0o600);
+
+    try {
+      const vars: Record<string, string | undefined> = { DD_TRIM_NL__FILE: secretPath };
+      await configuration.replaceSecrets(vars);
+      expect(vars.DD_TRIM_NL).toBe('my-token');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test('should trim multiple trailing newlines from secret file value', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-trim-'));
+    const secretPath = path.join(tempDir, 'token.txt');
+    fs.writeFileSync(secretPath, 'my-token\n\n');
+    fs.chmodSync(secretPath, 0o600);
+
+    try {
+      const vars: Record<string, string | undefined> = { DD_TRIM_MULTI__FILE: secretPath };
+      await configuration.replaceSecrets(vars);
+      expect(vars.DD_TRIM_MULTI).toBe('my-token');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test('should preserve leading whitespace while trimming only trailing whitespace', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-trim-'));
+    const secretPath = path.join(tempDir, 'token.txt');
+    fs.writeFileSync(secretPath, '  indented-secret\n');
+    fs.chmodSync(secretPath, 0o600);
+
+    try {
+      const vars: Record<string, string | undefined> = { DD_TRIM_LEAD__FILE: secretPath };
+      await configuration.replaceSecrets(vars);
+      expect(vars.DD_TRIM_LEAD).toBe('  indented-secret');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test('should preserve internal newlines while trimming only the trailing newline', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-trim-'));
+    const secretPath = path.join(tempDir, 'token.txt');
+    fs.writeFileSync(secretPath, 'line1\nline2\n');
+    fs.chmodSync(secretPath, 0o600);
+
+    try {
+      const vars: Record<string, string | undefined> = { DD_TRIM_INTERNAL__FILE: secretPath };
+      await configuration.replaceSecrets(vars);
+      expect(vars.DD_TRIM_INTERNAL).toBe('line1\nline2');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  test('should trim a trailing CRLF from secret file value (handles Windows line endings)', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drydock-trim-'));
+    const secretPath = path.join(tempDir, 'token-crlf.txt');
+    fs.writeFileSync(secretPath, 'my-token\r\n');
+    fs.chmodSync(secretPath, 0o600);
+
+    try {
+      const vars: Record<string, string | undefined> = { DD_TRIM_CRLF__FILE: secretPath };
+      await configuration.replaceSecrets(vars);
+      expect(vars.DD_TRIM_CRLF).toBe('my-token');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+});

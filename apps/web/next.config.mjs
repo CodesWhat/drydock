@@ -1,13 +1,23 @@
 import { createMDX } from "fumadocs-mdx/next";
 
+import { escapeRegExp, versions } from "./scripts/docs-versions.mjs";
+
 const withMDX = createMDX();
-const docsCurrentVersion = "v1.5";
-const docsVersionPrefixes = "v1\\.5(?:/|$)|v1\\.4(?:/|$)|v1\\.3(?:/|$)";
+
+// Derived from the single source of truth in scripts/docs-versions.mjs.
+// First entry = current/default version; all slugs feed the prefix regex.
+const docsCurrentVersion = versions[0].slug;
+const docsVersionPrefixes = versions.map((v) => escapeRegExp(v.slug) + "(?:/|$)").join("|");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   turbopack: {
     root: import.meta.dirname,
+  },
+  experimental: {
+    sri: {
+      algorithm: "sha256",
+    },
   },
   images: {
     remotePatterns: [

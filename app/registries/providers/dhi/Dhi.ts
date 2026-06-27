@@ -67,7 +67,7 @@ class Dhi extends Custom<DhiRegistryConfiguration> {
 
     const response = await axios(this.withTlsRequestOptions(axiosConfig));
     return withAuthorizationHeader(
-      requestOptions,
+      this.withTlsRequestOptions(requestOptions),
       'Bearer',
       response.data.token,
       `Unable to authenticate registry ${this.getId()}: DHI token endpoint response does not contain token`,

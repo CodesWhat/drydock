@@ -251,3 +251,20 @@ test('authenticate should NOT attach httpsAgent when no TLS config is set', asyn
   expect(calledConfig.method).toBe('GET');
   expect(calledConfig.headers.Authorization).toContain('Basic ');
 });
+
+test('authenticate should return httpsAgent in returned options when insecure=true', async () => {
+  axios.mockImplementation(() => ({ data: { token: 'token' } }));
+
+  const gitlabInsecure = new Gitlab();
+  gitlabInsecure.configuration = {
+    url: 'https://registry.gitlab.com',
+    authurl: 'https://gitlab.com',
+    token: TEST_TOKEN,
+    insecure: true,
+  };
+
+  const result = await gitlabInsecure.authenticate({ name: 'group/project' }, { headers: {} });
+
+  expect(result.httpsAgent).toBeDefined();
+  expect((result.httpsAgent as any).options.rejectUnauthorized).toBe(false);
+});

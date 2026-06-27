@@ -27,6 +27,7 @@ export interface ContainerTagLookupProvider {
     version?: number;
   }>;
   getImagePublishedAt?: (image: Container['image'], tag?: string) => Promise<string | undefined>;
+  publishedAtIsPushDate?: boolean;
 }
 
 /**
@@ -294,6 +295,22 @@ export async function findNewVersion(
 
       if (comparisonTag) {
         await handleDigestWatch(container, registryProvider, [comparisonTag], result);
+        try {
+          if (typeof registryProvider.getImagePublishedAt === 'function') {
+            const publishedAt = await registryProvider.getImagePublishedAt(
+              getImageForRegistryQuery(container.image, registryProvider),
+              comparisonTag,
+            );
+            if (typeof publishedAt === 'string') {
+              result.publishedAt = publishedAt;
+              if (registryProvider.publishedAtIsPushDate === true) {
+                result.publishedAtTrusted = true;
+              }
+            }
+          }
+        } catch (error: unknown) {
+          logContainer.debug(`Remote publish date lookup failed (${getErrorMessage(error)})`);
+        }
       } else {
         logContainer.debug('Digest-only image — no registry tag candidate available');
       }
@@ -345,6 +362,9 @@ export async function findNewVersion(
       );
       if (typeof publishedAt === 'string') {
         result.publishedAt = publishedAt;
+        if (registryProvider.publishedAtIsPushDate === true) {
+          result.publishedAtTrusted = true;
+        }
       }
     }
   } catch (error: unknown) {

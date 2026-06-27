@@ -97,7 +97,7 @@ describe('debug/redact', () => {
       DD_ANONYMOUS_AUTH_CONFIRM: '[REDACTED]',
       AUTH_ERROR: '[REDACTED]',
       Auth_Error: 'mixed-case auth key',
-      DD_WATCHER_REMOTE_URL: 'https://docker.example.com',
+      DD_WATCHER_REMOTE_URL: '[REDACTED]',
     });
     expect(redacted.state.authentications).toEqual([{ id: 'auth.main', kind: 'authentication' }]);
     expect(redacted.dockerApi.authInitializationError).toBe('beta auth failed');
@@ -195,6 +195,108 @@ describe('debug/redact', () => {
     const redacted = redactDebugDump(source);
 
     expect(redacted).toEqual({ '---': 'keep-me', ___: 42 });
+  });
+
+  test('redacts pass field (SMTP-style credential) as a sensitive key', () => {
+    const source = {
+      smtp: {
+        pass: 'smtp-password',
+        user: 'operator@example.com',
+        host: 'smtp.example.com',
+      },
+      nested: {
+        passPhrase: 'secret-phrase',
+      },
+    };
+
+    const redacted = redactDebugDump(source);
+
+    // 'pass' is a sensitive token — direct field is masked
+    expect((redacted.smtp as Record<string, unknown>).pass).toBe('[REDACTED]');
+    // user and host are not credential secrets — left visible
+    expect((redacted.smtp as Record<string, unknown>).user).toBe('operator@example.com');
+    expect((redacted.smtp as Record<string, unknown>).host).toBe('smtp.example.com');
+    // camelCase key containing 'pass' sub-token (passPhrase → ['pass','phrase']) is also caught
+    expect((redacted.nested as Record<string, unknown>).passPhrase).toBe('[REDACTED]');
+  });
+
+  test('redacts DD_NOTIFICATION_SMTP_NAME_PASS env var (pass token in env-style key)', () => {
+    const source = {
+      DD_NOTIFICATION_SMTP_ALERTS_PASS: 'smtp-secret',
+      DD_NOTIFICATION_SMTP_ALERTS_USER: 'alerts@example.com',
+      DD_NOTIFICATION_SMTP_ALERTS_HOST: 'smtp.example.com',
+      DD_DEBUG: 'true',
+    };
+
+    const redacted = redactDebugDump(source);
+
+    expect(redacted).toEqual({
+      DD_NOTIFICATION_SMTP_ALERTS_PASS: '[REDACTED]',
+      // user and host are not credential secrets — left visible
+      DD_NOTIFICATION_SMTP_ALERTS_USER: 'alerts@example.com',
+      DD_NOTIFICATION_SMTP_ALERTS_HOST: 'smtp.example.com',
+      DD_DEBUG: 'true',
+    });
+  });
+
+  test('redacts webhook URL env vars (url token in env-style key)', () => {
+    const source = {
+      DD_NOTIFICATION_DISCORD_MYBOT_URL: 'https://discord.com/api/webhooks/T000/B000/XXXXSECRET',
+      DD_NOTIFICATION_HTTP_ALERTS_URL: 'https://hooks.example.com/services/TOKEN',
+      DD_NOTIFICATION_GOOGLECHAT_BOT_URL: 'https://chat.googleapis.com/v1/spaces/TOKEN',
+      DD_WATCHER_REMOTE_URL: 'https://docker.internal:2376',
+      DD_DEBUG: 'true',
+    };
+
+    const redacted = redactDebugDump(source);
+
+    expect(redacted).toEqual({
+      DD_NOTIFICATION_DISCORD_MYBOT_URL: '[REDACTED]',
+      DD_NOTIFICATION_HTTP_ALERTS_URL: '[REDACTED]',
+      DD_NOTIFICATION_GOOGLECHAT_BOT_URL: '[REDACTED]',
+      // watcher remote URL is also redacted — URL env vars can embed secrets
+      DD_WATCHER_REMOTE_URL: '[REDACTED]',
+      DD_DEBUG: 'true',
+    });
+  });
+
+  test('camelCase url field is not redacted (url is env-only sensitive token)', () => {
+    // url as a camelCase object key is not an env-style key so it should pass through.
+    // Trigger configuration url fields are separately handled by
+    // redactTriggerConfigurationInfrastructureDetails in the trigger pipeline.
+    const source = {
+      configuration: {
+        url: 'https://public.endpoint.example.com',
+        topic: 'dd/container',
+      },
+    };
+
+    const redacted = redactDebugDump(source);
+
+    expect((redacted.configuration as Record<string, unknown>).url).toBe(
+      'https://public.endpoint.example.com',
+    );
+    expect((redacted.configuration as Record<string, unknown>).topic).toBe('dd/container');
+  });
+
+  test('DD_PUBLIC_URL is redacted — intentional safe-default over-redaction', () => {
+    // Adding 'url' to ENV_SENSITIVE_KEY_TOKENS means any env-style key whose last
+    // segment is URL is masked, including legitimately public values like DD_PUBLIC_URL.
+    // This is a deliberate safe default: the debug dump is auth-gated admin diagnostics
+    // where URLs can embed secrets (webhook tokens, API keys in query strings).
+    // If a future maintainer sees this and wonders whether it's a bug — it's not.
+    // The trade-off is documented here so it doesn't get "fixed" accidentally.
+    const source = {
+      DD_PUBLIC_URL: 'https://drydock.example.com',
+      DD_SERVER_PORT: '3000',
+    };
+
+    const redacted = redactDebugDump(source);
+
+    expect(redacted).toEqual({
+      DD_PUBLIC_URL: '[REDACTED]',
+      DD_SERVER_PORT: '3000',
+    });
   });
 
   test('redacts plural tokens keys (DD_SERVER_WEBHOOK_TOKENS_* and camelCase webhookTokens)', () => {

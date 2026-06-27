@@ -316,8 +316,14 @@ export async function pruneOldContainers(
         storeContainer.updateContainer({ ...containerToRemove, status: newStatus });
       }
     } catch (_error: unknown) {
-      // Container no longer exists in Docker — remove from store
-      storeContainer.deleteContainer(containerToRemove.id);
+      // Container no longer exists in Docker — remove from store.
+      // Pass replacementExpected: true so the lifecycle cache (updateDetectedAt /
+      // firstSeenAt) is stashed and can be restored by the next insertContainer
+      // call when the same-named container reappears.  This is the slow-restart
+      // path: Docker is still pulling a new image layer when the prune runs, so
+      // the replacement container isn't visible yet.  The cache entry expires
+      // harmlessly after 30 min if no replacement ever arrives.
+      storeContainer.deleteContainer(containerToRemove.id, { replacementExpected: true });
     }
   }
 }

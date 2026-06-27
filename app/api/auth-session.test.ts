@@ -3,6 +3,7 @@ const {
   enforceConcurrentSessionLimitMock,
   mockGetStoredSessionSecret,
   mockSetStoredSessionSecret,
+  mockDdEnvVars,
 } = vi.hoisted(() => ({
   mockLog: {
     info: vi.fn(),
@@ -12,10 +13,15 @@ const {
   enforceConcurrentSessionLimitMock: vi.fn().mockResolvedValue(undefined),
   mockGetStoredSessionSecret: vi.fn(() => null as string | null),
   mockSetStoredSessionSecret: vi.fn(),
+  mockDdEnvVars: {} as Record<string, string | undefined>,
 }));
 
 vi.mock('../log/index.js', () => ({
   default: mockLog,
+}));
+
+vi.mock('../configuration/index.js', () => ({
+  ddEnvVars: mockDdEnvVars,
 }));
 
 vi.mock('../util/session-limit.js', () => ({
@@ -166,23 +172,18 @@ describe('configureSessionLimits + enforceSessionLimitBeforeLogin', () => {
 });
 
 describe('getSessionSecretKey', () => {
-  const originalEnv = process.env.DD_SESSION_SECRET;
-
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetStoredSessionSecret.mockReturnValue(null);
+    delete mockDdEnvVars.DD_SESSION_SECRET;
   });
 
   afterEach(() => {
-    if (originalEnv === undefined) {
-      delete process.env.DD_SESSION_SECRET;
-    } else {
-      process.env.DD_SESSION_SECRET = originalEnv;
-    }
+    delete mockDdEnvVars.DD_SESSION_SECRET;
   });
 
-  test('returns env var value and logs env message when DD_SESSION_SECRET is set', () => {
-    process.env.DD_SESSION_SECRET = 'my-env-secret';
+  test('returns resolved-config value and logs env message when DD_SESSION_SECRET is set', () => {
+    mockDdEnvVars.DD_SESSION_SECRET = 'my-env-secret';
 
     const secret = getSessionSecretKey();
 
@@ -194,8 +195,33 @@ describe('getSessionSecretKey', () => {
     expect(mockSetStoredSessionSecret).not.toHaveBeenCalled();
   });
 
+  test('DD_SESSION_SECRET__FILE: file contents (post-resolution) are used as the session secret', () => {
+    // replaceSecrets() in configuration/index.ts resolves DD_SESSION_SECRET__FILE by reading the
+    // file and storing its contents as DD_SESSION_SECRET in ddEnvVars. Simulate that here.
+    // Critically, process.env.DD_SESSION_SECRET is NOT set — only the resolved ddEnvVars entry is.
+    mockDdEnvVars.DD_SESSION_SECRET = 'super-secret-from-file';
+
+    const secret = getSessionSecretKey();
+
+    expect(secret).toBe('super-secret-from-file');
+    expect(mockLog.info).toHaveBeenCalledWith(
+      'Using session secret from DD_SESSION_SECRET environment variable',
+    );
+    expect(mockGetStoredSessionSecret).not.toHaveBeenCalled();
+  });
+
+  test('direct DD_SESSION_SECRET in resolved config takes precedence over store', () => {
+    mockDdEnvVars.DD_SESSION_SECRET = 'env-wins';
+    mockGetStoredSessionSecret.mockReturnValue('stored-value');
+
+    const secret = getSessionSecretKey();
+
+    expect(secret).toBe('env-wins');
+    expect(mockGetStoredSessionSecret).not.toHaveBeenCalled();
+  });
+
   test('trims whitespace-only DD_SESSION_SECRET and falls through to store', () => {
-    process.env.DD_SESSION_SECRET = '   ';
+    mockDdEnvVars.DD_SESSION_SECRET = '   ';
     mockGetStoredSessionSecret.mockReturnValue('stored-secret');
 
     const secret = getSessionSecretKey();
@@ -207,8 +233,8 @@ describe('getSessionSecretKey', () => {
     );
   });
 
-  test('falls through to store when DD_SESSION_SECRET is undefined', () => {
-    delete process.env.DD_SESSION_SECRET;
+  test('falls through to store when DD_SESSION_SECRET is undefined in resolved config', () => {
+    delete mockDdEnvVars.DD_SESSION_SECRET;
     mockGetStoredSessionSecret.mockReturnValue('stored-secret');
 
     const secret = getSessionSecretKey();
@@ -218,8 +244,8 @@ describe('getSessionSecretKey', () => {
     expect(mockSetStoredSessionSecret).not.toHaveBeenCalled();
   });
 
-  test('falls through to store when DD_SESSION_SECRET is empty string', () => {
-    process.env.DD_SESSION_SECRET = '';
+  test('falls through to store when DD_SESSION_SECRET is empty string in resolved config', () => {
+    mockDdEnvVars.DD_SESSION_SECRET = '';
     mockGetStoredSessionSecret.mockReturnValue('stored-secret');
 
     const secret = getSessionSecretKey();
@@ -228,8 +254,8 @@ describe('getSessionSecretKey', () => {
     expect(mockLog.info).toHaveBeenCalledWith('Using persisted session secret from store');
   });
 
-  test('generates and persists new secret when env var missing and store empty', () => {
-    delete process.env.DD_SESSION_SECRET;
+  test('generates and persists new secret when resolved config has no secret and store empty', () => {
+    delete mockDdEnvVars.DD_SESSION_SECRET;
     mockGetStoredSessionSecret.mockReturnValue(null);
 
     const secret = getSessionSecretKey();
@@ -245,18 +271,8 @@ describe('getSessionSecretKey', () => {
     expect(mockLog.info).not.toHaveBeenCalledWith('Using persisted session secret from store');
   });
 
-  test('env var takes precedence over store', () => {
-    process.env.DD_SESSION_SECRET = 'env-wins';
-    mockGetStoredSessionSecret.mockReturnValue('stored-value');
-
-    const secret = getSessionSecretKey();
-
-    expect(secret).toBe('env-wins');
-    expect(mockGetStoredSessionSecret).not.toHaveBeenCalled();
-  });
-
-  test('no warn is emitted when DD_SESSION_SECRET is set', () => {
-    process.env.DD_SESSION_SECRET = 'explicit-secret';
+  test('no warn is emitted when DD_SESSION_SECRET is set in resolved config', () => {
+    mockDdEnvVars.DD_SESSION_SECRET = 'explicit-secret';
 
     getSessionSecretKey();
 
@@ -264,7 +280,7 @@ describe('getSessionSecretKey', () => {
   });
 
   test('warn is emitted exactly once when DD_SESSION_SECRET is unset and stored secret exists', () => {
-    delete process.env.DD_SESSION_SECRET;
+    delete mockDdEnvVars.DD_SESSION_SECRET;
     mockGetStoredSessionSecret.mockReturnValue('persisted-secret');
 
     const secret = getSessionSecretKey();
@@ -278,7 +294,7 @@ describe('getSessionSecretKey', () => {
   });
 
   test('warn is emitted exactly once when DD_SESSION_SECRET is unset and no stored secret exists', () => {
-    delete process.env.DD_SESSION_SECRET;
+    delete mockDdEnvVars.DD_SESSION_SECRET;
     mockGetStoredSessionSecret.mockReturnValue(null);
 
     const secret = getSessionSecretKey();

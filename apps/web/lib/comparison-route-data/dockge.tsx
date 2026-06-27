@@ -16,11 +16,11 @@ Automatic rollback|No|Yes, on health check failure|drydock
 Image backup|No|Pre-update backup with retention|drydock
 Prometheus metrics|No|Full /metrics endpoint + Grafana template|drydock
 OIDC authentication|No|Authelia, Auth0, Authentik|drydock
-Distributed agents|No|SSE-based agent architecture|drydock
+Distributed agents|Yes (requires full Dockge instance per host)|SSE-based lightweight agent architecture|drydock
 Audit log|No|Yes, with REST API|drydock
 Compose file editing|Yes (visual editor)|No (compose updates only)|competitor
 Docker run → compose|Yes|No|competitor
-Multi-language (i18n)|Yes (15+ languages)|Planned|competitor
+Multi-language (i18n)|Yes (30+ languages)|Planned|competitor
 Container start/stop/restart|Yes|Yes|tie
 Container grouping / stacks|Yes|Yes (auto-detected)|tie
 Dark/light theme|Yes|Yes|tie
@@ -31,7 +31,7 @@ eye|Image Update Detection|Dockge manages compose stacks but doesn't check for i
 shield|Security Scanning|Trivy vulnerability scanning, SBOM generation, and cosign signature verification before any update is applied. Dockge has no security scanning.
 rotate|Safe Update Pipeline|Dry-run preview, pre-update backup, automatic rollback on health check failure, and maintenance windows. Dockge lets you manually update stacks but has no safety controls.
 bell|20 Notification Services|Get notified about available updates via Slack, Discord, Telegram, Teams, Matrix, SMTP, MQTT, and more. Dockge has no notification system.
-network|Distributed Monitoring|Monitor remote Docker hosts via SSE-based agents with a centralized dashboard. Dockge manages only the local Docker instance.
+network|Distributed Monitoring|Drydock's lightweight agents connect to remote hosts without requiring a full web service on each machine. Dockge supports managing remote hosts by running a full Dockge instance on each host as a proxy node — no lightweight agent binary, just another full Dockge service.
 radio|23 Registry Integrations|Dedicated integrations for Docker Hub, GHCR, ECR, GCR, GAR, GitLab, Quay, Harbor, Artifactory, Nexus, and more. Dockge doesn't query registries at all.
 `,
   highlightIconMap: {

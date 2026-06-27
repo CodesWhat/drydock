@@ -12,3 +12,11 @@ runtime:
   - '.github/filters/runtime.yml'
   - '.github/workflows/ci-verify.yml'
   - '.github/workflows/e2e-playwright.yml'
+
+# The marketing/docs site (apps/web) deploys via Vercel, not the Docker image,
+# so it's separate from the `runtime` gate above. Its `node --test` scripts suite
+# is what Vercel never runs — the `web` job below gates it. content/docs is
+# included because sync-docs pulls it into the build.
+web:
+  - 'apps/web/**'
+  - 'content/docs/**'

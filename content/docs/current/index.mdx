@@ -5,8 +5,6 @@ description: "Open source container update monitoring built in TypeScript. Auto-
 
 import { Callout } from 'fumadocs-ui/components/callout';
 
-Drydock monitors your Docker containers for image updates. It auto-discovers running containers, checks 23 registries for new versions, and triggers notifications or automated updates via 20+ services.
-
 ## 🔍 How it works
 
 🐳 **Watchers** scan Docker hosts to discover containers to monitor.
@@ -25,7 +23,7 @@ Drydock monitors your Docker containers for image updates. It auto-discovers run
 - 🔄 Auto-rollback on health check failure
 - 🪝 Pre/post-update lifecycle hooks
 - 🔁 Graceful self-update
-- 🌐 Distributed agents for remote Docker hosts
+- 🌐 [Distributed agents](/docs/configuration/agents) for remote Docker hosts
 - 📊 Prometheus metrics and Grafana dashboard
 - 🔐 OIDC authentication support
 - 🛡️ Update Bouncer — vulnerability scanning, signature verification, and SBOM
@@ -55,5 +53,6 @@ Direct socket access grants the container full control over the Docker daemon. S
 - [Backup & rollback](/docs/configuration/rollback) — automatic backups and one-click restore
 - [Enable authentication](/docs/configuration/authentications) — secure your instance
 - [Monitor with Prometheus](/docs/monitoring) — add observability
+- [Distributed agents](/docs/configuration/agents) — monitor containers across multiple Docker hosts from one UI
 - [Container log viewer](/docs/configuration/logs) — stream and search container logs
-- [Debug dump](/docs/api/app#diagnostic-debug-dump) — export diagnostic snapshots for troubleshooting
+- [Debug dump](/docs/api/app#download-diagnostic-debug-dump) — export diagnostic snapshots for troubleshooting

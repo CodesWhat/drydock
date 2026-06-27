@@ -218,7 +218,7 @@ location / {
 
 **NGINX Proxy Manager:**
 
-NGINX Proxy Manager forwards `X-Forwarded-Proto` and rewrites the `Host` header to your external hostname by default, so no custom proxy headers are required — just set the env var and recreate the container:
+NGINX Proxy Manager forwards `X-Forwarded-Proto` and rewrites the `Host` header to your external hostname by default, so no custom proxy headers are required — set the env var and recreate the container:
 
 ```yaml
 services:

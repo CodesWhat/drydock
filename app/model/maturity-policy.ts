@@ -46,3 +46,21 @@ export function daysToMs(days: number): number {
 export function maturityMinAgeDaysToMilliseconds(days: number): number {
   return daysToMs(days);
 }
+
+export function getMaturityStartMs(
+  container: {
+    updateDetectedAt?: string;
+    result?: { publishedAt?: string; publishedAtTrusted?: boolean };
+  },
+  nowMs: number = Date.now(),
+): number | undefined {
+  const detectedMs = Date.parse(container.updateDetectedAt || '');
+  const detectedFinite = Number.isFinite(detectedMs) ? detectedMs : undefined;
+  if (container.result?.publishedAtTrusted === true) {
+    const publishedMs = Date.parse(container.result.publishedAt || '');
+    if (Number.isFinite(publishedMs) && publishedMs <= nowMs) {
+      return detectedFinite !== undefined ? Math.min(publishedMs, detectedFinite) : publishedMs;
+    }
+  }
+  return detectedFinite;
+}

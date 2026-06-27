@@ -266,6 +266,23 @@ test('authenticate should NOT attach httpsAgent when no TLS config is set', asyn
   expect(calledConfig.headers.Authorization).toContain('Basic ');
 });
 
+test('authenticate should return httpsAgent in returned options when insecure=true', async () => {
+  axios.mockImplementation(() => ({ data: { token: 'token' } }));
+
+  const mauInsecure = new Mau();
+  mauInsecure.configuration = {
+    url: 'https://dock.mau.dev',
+    authurl: 'https://dock.mau.dev',
+    token: TEST_TOKEN,
+    insecure: true,
+  };
+
+  const result = await mauInsecure.authenticate({ name: 'team/image' }, { headers: {} });
+
+  expect(result.httpsAgent).toBeDefined();
+  expect((result.httpsAgent as any).options.rejectUnauthorized).toBe(false);
+});
+
 test('authenticate should percent-encode special characters in image name within scope parameter', async () => {
   axios.mockImplementation(() => ({ data: { token: 'token' } }));
 

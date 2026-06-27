@@ -4,18 +4,13 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { versions } from "./docs-versions.mjs";
+
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const webRoot = join(scriptDir, "..");
 const repoRoot = join(webRoot, "..", "..");
 
 const targetDir = join(webRoot, "content", "docs");
-
-// Version definitions — order matters (first = default/active tab)
-const versions = [
-  { slug: "v1.5", source: "current", title: "v1.5" },
-  { slug: "v1.4", source: "v1.4", title: "v1.4" },
-  { slug: "v1.3", source: "v1.3", title: "v1.3" },
-];
 
 // Generate changelog MDX from root CHANGELOG.md (single source of truth).
 // The root file is plain markdown — just prepend frontmatter and strip the

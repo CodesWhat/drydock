@@ -187,7 +187,7 @@ class Ecr extends BaseRegistry<EcrRegistryConfiguration> {
     if (this.configuration.accesskeyid) {
       const tokenValue = await this.fetchPrivateEcrAuthToken();
       return withAuthorizationHeader(
-        requestOptionsWithAuth,
+        this.withTlsRequestOptions(requestOptionsWithAuth),
         'Basic',
         tokenValue,
         `Unable to authenticate registry ${this.getId()}: ECR authorization token is missing`,
@@ -205,13 +205,13 @@ class Ecr extends BaseRegistry<EcrRegistryConfiguration> {
         }),
       );
       return withAuthorizationHeader(
-        requestOptionsWithAuth,
+        this.withTlsRequestOptions(requestOptionsWithAuth),
         'Bearer',
         response.data.token,
         `Unable to authenticate registry ${this.getId()}: public ECR token endpoint response does not contain token`,
       );
     }
-    return requestOptionsWithAuth;
+    return this.withTlsRequestOptions(requestOptionsWithAuth);
   }
 
   async getAuthPull() {

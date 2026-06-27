@@ -68,6 +68,42 @@ type HookExecutorConstructorOptions = Omit<
 const REQUIRED_HOOK_EXECUTOR_DEPENDENCY_KEYS = ['runHook', 'getPreferredLabelValue'] as const;
 const DEFAULT_HOOK_TIMEOUT_MS = 60000;
 
+/**
+ * Shell-unsafe characters that must not appear unescaped in env values
+ * passed to a /bin/sh -c invocation. Matches the set used by the Command
+ * trigger provider for consistency.
+ */
+const HOOK_ENV_UNSAFE_CHARACTERS = new Set(['`', '$', ';', '&', '|', '<', '>', '(', ')']);
+const HOOK_ENV_DELETE_CODE_POINT = 0x7f;
+
+/**
+ * Sanitize a string value before it is placed in the hook environment.
+ * Replaces shell-metacharacters, control codes, and DEL with '_' so that
+ * registry-controlled data (image name, tag, update digest) cannot inject
+ * commands into hook scripts that expand the variables unquoted.
+ *
+ * Uses the same character set as Command trigger's sanitizeCommandEnvString.
+ */
+function sanitizeHookEnvValue(value: string | undefined | null): string {
+  if (value === undefined || value === null) {
+    return '';
+  }
+  return Array.from(value)
+    .map((character) => {
+      const codePoint = character.codePointAt(0);
+      if (
+        codePoint === undefined ||
+        codePoint < 0x20 ||
+        codePoint === HOOK_ENV_DELETE_CODE_POINT ||
+        HOOK_ENV_UNSAFE_CHARACTERS.has(character)
+      ) {
+        return '_';
+      }
+      return character;
+    })
+    .join('');
+}
+
 function parseHookTimeout(rawValue: string | undefined): number {
   try {
     const parsedValue = parseEnvNonNegativeInteger(rawValue, 'dd.hook.timeout');
@@ -126,13 +162,13 @@ class HookExecutor {
         ),
       ),
       hookEnv: {
-        DD_CONTAINER_NAME: container.name,
-        DD_CONTAINER_ID: container.id,
-        DD_IMAGE_NAME: container.image.name,
-        DD_IMAGE_TAG: container.image.tag.value,
-        DD_UPDATE_KIND: container.updateKind.kind,
-        DD_UPDATE_FROM: container.updateKind.localValue ?? '',
-        DD_UPDATE_TO: container.updateKind.remoteValue ?? '',
+        DD_CONTAINER_NAME: sanitizeHookEnvValue(container.name),
+        DD_CONTAINER_ID: sanitizeHookEnvValue(container.id),
+        DD_IMAGE_NAME: sanitizeHookEnvValue(container.image.name),
+        DD_IMAGE_TAG: sanitizeHookEnvValue(container.image.tag.value),
+        DD_UPDATE_KIND: sanitizeHookEnvValue(container.updateKind.kind),
+        DD_UPDATE_FROM: sanitizeHookEnvValue(container.updateKind.localValue ?? ''),
+        DD_UPDATE_TO: sanitizeHookEnvValue(container.updateKind.remoteValue ?? ''),
       },
     };
   }

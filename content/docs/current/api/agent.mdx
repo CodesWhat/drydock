@@ -21,7 +21,7 @@ curl http://drydock:3000/api/v1/agents
       "host": "192.168.1.50",
       "port": 3000,
       "connected": true,
-      "version": "1.5.0",
+      "version": "1.5.1",
       "os": "linux",
       "arch": "amd64",
       "cpus": 4,
@@ -74,9 +74,9 @@ Returns 404 if the agent is not found, or 503 if the agent is not connected.
 
 The Agent exposes specific endpoints for the Controller to synchronize state and receive events. These are generally internal APIs used by the Controller but are documented here for reference or advanced debugging.
 
-Authentication is required for all endpoints via the `X-Dd-Agent-Secret` header.
+All endpoints require the `X-Dd-Agent-Secret` header, except the unauthenticated `GET /health` check.
 
-## Get State
+### Get State
 
 Returns a snapshot of the Agent's current state (containers, watchers, triggers).
 
@@ -91,7 +91,7 @@ curl -H "X-Dd-Agent-Secret: <SECRET>" http://agent:3000/api/watchers
 curl -H "X-Dd-Agent-Secret: <SECRET>" http://agent:3000/api/triggers
 ```
 
-## Watch Resources
+### Watch Resources
 
 Trigger a manual watch on a specific watcher or container hosted by the Agent.
 
@@ -107,7 +107,7 @@ curl -X POST \
   http://agent:3000/api/watchers/:type/:name/container/:id
 ```
 
-## Delete a Container
+### Delete a Container
 
 Delete a container from the Agent's state.
 > **Note**: This operation requires `DD_SERVER_FEATURE_DELETE` to be enabled on the Agent.
@@ -118,19 +118,19 @@ curl -X DELETE \
   http://agent:3000/api/containers/:id
 ```
 
-## Real-time Events (SSE)
+### Real-time Events (SSE)
 
 Subscribes to real-time updates from the Agent using Server-Sent Events (SSE).
 
 The Agent pushes events when containers are added, updated, or removed.
 
-### Endpoint
+#### Endpoint
 
 ```bash
 curl -N -H "X-Dd-Agent-Secret: <SECRET>" -H "Accept: text/event-stream" http://agent:3000/api/events
 ```
 
-### Protocol
+#### Protocol
 
 Events are sent as JSON objects with the following structure:
 
@@ -141,9 +141,9 @@ data: {
 }
 ```
 
-### Supported Events
+#### Supported Events
 
-#### `dd:ack`
+##### `dd:ack`
 
 Sent immediately upon connection to confirm the handshake.
 
@@ -151,16 +151,24 @@ Sent immediately upon connection to confirm the handshake.
 {
   "type": "dd:ack",
   "data": {
-    "version": "1.5.0",
+    "version": "1.5.1",
+    "os": "linux",
+    "arch": "amd64",
+    "cpus": 4,
+    "memoryGb": 8,
+    "uptimeSeconds": 86400,
+    "lastSeen": "2026-03-28T10:00:00.000Z",
     "logLevel": "info",
-    "pollInterval": "0 */6 * * *"
+    "pollInterval": "0 */6 * * *",
+    "containers": { "total": 5, "running": 4, "stopped": 1 },
+    "images": 5
   }
 }
 ```
 
 The `logLevel` and `pollInterval` fields correspond to the same-named fields in the [GET /agents](#list-all-agents) response.
 
-#### `dd:container-added`
+##### `dd:container-added`
 
 Sent when a new container is discovered.
 
@@ -171,7 +179,7 @@ Sent when a new container is discovered.
 }
 ```
 
-#### `dd:container-updated`
+##### `dd:container-updated`
 
 Sent when an existing container is updated (e.g. status change, new image tag).
 
@@ -182,7 +190,7 @@ Sent when an existing container is updated (e.g. status change, new image tag).
 }
 ```
 
-#### `dd:container-removed`
+##### `dd:container-removed`
 
 Sent when a container is removed (e.g. stopped and pruned).
 
@@ -195,7 +203,7 @@ Sent when a container is removed (e.g. stopped and pruned).
 }
 ```
 
-## Container Logs
+### Container Logs
 
 Returns stdout/stderr output from a container running on the Agent.
 
@@ -206,7 +214,7 @@ curl -H "X-Dd-Agent-Secret: <SECRET>" \
 
 Query parameters are the same as the [controller container logs endpoint](/docs/api/container#download-container-logs).
 
-## Application Log Entries
+### Application Log Entries
 
 Returns application log entries from the Agent's in-memory ring buffer.
 
@@ -215,7 +223,7 @@ curl -H "X-Dd-Agent-Secret: <SECRET>" \
   "http://agent:3000/api/log/entries?level=warn&tail=50"
 ```
 
-### Query parameters
+#### Query parameters
 
 | Parameter | Type | Description |
 | --- | --- | --- |
@@ -224,7 +232,7 @@ curl -H "X-Dd-Agent-Secret: <SECRET>" \
 | `tail` | integer | Number of entries to return from the end |
 | `since` | integer | Unix timestamp (milliseconds) -- only entries after this time |
 
-## Execute Remote Trigger
+### Execute Remote Trigger
 
 Executes a specific trigger on the Agent (e.g., to update a container).
 
@@ -236,7 +244,7 @@ curl -X POST \
   http://agent:3000/api/triggers/:type/:name
 ```
 
-### Batch execution
+#### Batch execution
 
 Execute a trigger for multiple containers in a single request.
 
@@ -248,7 +256,7 @@ curl -X POST \
   http://agent:3000/api/triggers/:type/:name/batch
 ```
 
-## Health Check
+### Health Check
 
 Returns the Agent's uptime once at least one watcher is registered. This endpoint is unauthenticated and intended for Docker `HEALTHCHECK` directives.
 

@@ -8,8 +8,6 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 ![logo](/docs/assets/configuration/watchers/docker.png)
 
-Watchers are responsible for scanning Docker containers.
-
 The `docker` watcher lets you configure the Docker hosts you want to watch.
 
 ## Variables
@@ -43,13 +41,13 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 <Callout type="warn">`DD_WATCHER_{watcher_name}_WATCHDIGEST` is deprecated and will be removed in v1.6.0. Use the `dd.watch.digest` container label instead.</Callout>
 
 <Callout type="warn" title="Watcher frequency and registry rate limits">
-As of **v1.5.0-rc.21** the default cron is `0 */6 * * *` (every 6 hours), matching Diun and the broader 2026 community consensus for self-hosted update managers. Earlier RCs defaulted to `0 * * * *` (hourly); if you have an explicit hourly cron set via `DD_WATCHER_{watcher_name}_CRON` it is preserved. With 20+ watched containers and tag lists that paginate to thousands of entries (GHCR images can require 20+ paginated calls each), hourly polling can saturate anonymous Docker Hub limits (100 pulls / 6h) and trigger 429 responses. drydock additionally retries 429s with `Retry-After` honored and rate-limits its own outbound calls via a per-host token bucket. If you need near-real-time detection (security patches), drop the cron to `0 * * * *`; if you want even quieter polling, use `0 1 * * *` (once daily). New updates rarely ship more than once per day per image anyway.
+The default cron is `0 */6 * * *` (every 6 hours). With many watched containers and tag lists that paginate to thousands of entries (a single GHCR image can take 20+ paginated calls), polling more often can saturate anonymous Docker Hub limits (100 pulls / 6h) and trigger `429` responses. Drydock honors `Retry-After` on 429s and rate-limits its own outbound calls with a per-host token bucket. Set `DD_WATCHER_{watcher_name}_CRON` to change the interval — use `0 * * * *` for near-real-time detection or `0 1 * * *` for once-daily polling. An explicit `CRON` you set is always preserved.
 </Callout>
 
 **Notes:**
 
 - If no watcher is configured, a default one named `local` will be automatically created (reading the Docker socket). To suppress this default watcher (e.g. when running as a controller-only node for remote agents), set `DD_LOCAL_WATCHER=false`.
-- Multiple watchers can be configured (if you have multiple Docker hosts to watch). Just give them different names.
+- Multiple watchers can be configured (if you have multiple Docker hosts to watch). Give them different names.
 - Socket configuration and host/port configuration are mutually exclusive.
 - When `MAINTENANCE_WINDOW` is configured and a check is skipped outside the allowed schedule, drydock queues one pending check and runs it automatically when the next maintenance window opens.
 - Legacy compatibility: `wud.*` labels are still accepted as fallback to `dd.*`. When a fallback is used, drydock emits a one-time warning for that key and increments `dd_legacy_input_total{source="label",key="<legacy_key>"}`. To rewrite configs in place, run `node dist/index.js config migrate --dry-run` then `node dist/index.js config migrate --file <path>`.
@@ -136,6 +134,8 @@ These two variables are **orthogonal** — they filter at different stages of th
 <Callout type="warn">A stopped container with `dd.watch=true` will **not** be watched when `WATCHALL` is `false` because it is never returned by the Docker API in the first place. Set `WATCHALL=true` if you need to monitor non-running containers.</Callout>
 
 ### Watch a remote docker host via TCP on 2375
+
+<Callout type="info">**Monitoring containers on other hosts?** The remote-host examples below have a single Drydock instance reach a remote Docker daemon directly, which means exposing the Docker API (TCP/TLS/SSH) on each host. To monitor multiple hosts without exposing the Docker API at all, run a lightweight [Agent](/docs/configuration/agents) on each remote host instead — it connects back to a central controller over HTTP/HTTPS and aggregates into one UI.</Callout>
 
 <Tabs items={["Docker Compose (Remote TCP)", "Docker (Remote TCP)"]}>
 <Tab value="Docker Compose (Remote TCP)">
@@ -337,7 +337,7 @@ Other compatible proxies include [linuxserver/docker-socket-proxy](https://githu
 
 ### Option 2: Remote Docker over TLS
 
-Instead of mounting the socket at all, Drydock can connect to a remote Docker host over the network using mutual TLS (mTLS). This is ideal for multi-host setups or when you want to completely avoid socket mounts.
+Instead of mounting the socket at all, Drydock can connect to a remote Docker host over the network using mutual TLS (mTLS). This is ideal when you need a single Drydock instance to reach a remote Docker daemon directly, or want to avoid socket mounts entirely. For monitoring containers across multiple independent hosts from one UI, consider [Agents](/docs/configuration/agents), which don't require exposing the Docker API over the network.
 
 #### Step 1: Generate TLS certificates on the Docker host
 
@@ -946,7 +946,7 @@ The capturing groups are accessible with the syntax `$1`, `$2`, `$3`....
 
 <Callout type="warn">The first capturing group is accessible as `$1`!</Callout>
 
-For example, you can indicate that you want to watch x.y.z versions only
+For example, to watch only `x.y.z-n-hash`-style tags and strip the hash suffix before comparison:
 <Tabs items={["Docker Compose (Tag Transform)", "Docker (Tag Transform)"]}>
 <Tab value="Docker Compose (Tag Transform)">
 
@@ -1127,7 +1127,7 @@ The container model includes additional fields useful for understanding update s
 | Field | Type | Description |
 | --- | --- | --- |
 | `result.noUpdateReason` | `string` | When no update is available, explains why (e.g. tag filtering, no newer version found) |
-| `updateDetectedAt` | `string (ISO 8601)` | Timestamp of when an update was first detected for this container |
+| `updateDetectedAt` | `string (ISO 8601)` | Drydock's own wall-clock timestamp recorded when it **first** stored a pending update for this container. This is not the image build date or the registry push date. The value is preserved across polls and across container recreation — if a container is redeployed (e.g. via a Portainer stack redeploy or `docker compose down && up`) with the same stable identity and the same update still pending, the original timestamp is carried forward. When no trusted registry publish date is available, the maturity gate uses `updateDetectedAt` as its fallback clock to measure how long an update has been known. |
 | `image.tag.tagPrecision` | `'specific' \| 'floating'` | Whether the container's tag is a mutable version alias (`floating`, e.g. `latest`, `v3`, `1.4`) or a pinned release (`specific`, e.g. `1.4.5`). Computed automatically; used by digest-watch auto-enable logic and the Hide Pinned UI filter. |
 
 ## Next-run visibility

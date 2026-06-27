@@ -3,7 +3,6 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import { RootProvider } from "fumadocs-ui/provider/next";
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
-import { AnnouncementBanner } from "@/components/announcement-banner";
 import "./globals.css";
 
 const ibmPlexSans = IBM_Plex_Sans({
@@ -16,6 +15,10 @@ const ibmPlexMono = IBM_Plex_Mono({
   weight: ["400", "500"],
   variable: "--font-mono",
 });
+
+// Bump this whenever the favicon/app icons change so browsers re-fetch them
+// instead of serving a stale cached icon (favicons cache aggressively).
+const ICON_VERSION = "2";
 
 export const metadata: Metadata = {
   title: "Drydock - Container Update Monitoring",
@@ -49,42 +52,12 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      {
-        url: "/favicon.svg",
-        media: "(prefers-color-scheme: light)",
-        type: "image/svg+xml",
-      },
-      {
-        url: "/favicon.svg",
-        media: "(prefers-color-scheme: dark)",
-        type: "image/svg+xml",
-      },
-      {
-        url: "/favicon.ico",
-        sizes: "32x32",
-      },
-      {
-        url: "/favicon-96x96.png",
-        sizes: "96x96",
-        type: "image/png",
-      },
-      {
-        url: "/web-app-manifest-192x192.png",
-        sizes: "192x192",
-        type: "image/png",
-      },
-      {
-        url: "/web-app-manifest-512x512.png",
-        sizes: "512x512",
-        type: "image/png",
-      },
+      { url: `/favicon.ico?v=${ICON_VERSION}`, sizes: "any" },
+      { url: `/favicon-96x96.png?v=${ICON_VERSION}`, sizes: "96x96", type: "image/png" },
     ],
-    apple: "/apple-touch-icon.png",
+    apple: [{ url: `/apple-touch-icon.png?v=${ICON_VERSION}`, sizes: "180x180" }],
   },
   manifest: "/site.webmanifest",
-  alternates: {
-    canonical: process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com",
-  },
 };
 
 export const viewport: Viewport = {
@@ -105,9 +78,6 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="Drydock" />
       </head>
       <body className={`${ibmPlexSans.className} ${ibmPlexMono.variable}`}>
-        <AnnouncementBanner id="trivy-march-2026" href="/security/trivy-supply-chain-march-2026">
-          Security Advisory: Trivy supply chain compromise — Drydock is not affected. Read more
-        </AnnouncementBanner>
         <RootProvider>{children}</RootProvider>
         <Analytics />
         <SpeedInsights />

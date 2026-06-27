@@ -1,6 +1,6 @@
 import fs from 'node:fs';
-import { readFile } from 'node:fs/promises';
-import { hostname } from 'node:os';
+import { readFile, stat } from 'node:fs/promises';
+import os from 'node:os';
 import type { Request } from 'express';
 import joi from 'joi';
 import setValue from 'set-value';
@@ -57,8 +57,27 @@ export async function replaceSecrets(ddEnvVars: Record<string, string | undefine
         `Secret file for ${secretFileEnvVar} exceeds maximum size of ${MAX_SECRET_FILE_SIZE_BYTES} bytes`,
       );
     }
+
+    // Permission check: warn if the file is readable by group or others.
+    // On non-POSIX platforms (Windows), mode bits are synthetic and do not reflect
+    // ACL-based access control, so we skip the check there to avoid false warnings.
+    if (os.platform() !== 'win32') {
+      const secretStats = await stat(secretFilePath);
+      if ((secretStats.mode & 0o077) !== 0) {
+        logWarn(
+          `Secret file "${secretFilePath}" (${secretFileEnvVar}) is readable by group or others ` +
+            `(mode 0${(secretStats.mode & 0o777).toString(8).padStart(3, '0')}). ` +
+            `Restrict permissions with: chmod 600 "${secretFilePath}"`,
+        );
+      }
+    }
+
     delete ddEnvVars[secretFileEnvVar];
-    ddEnvVars[secretKey] = secretFileValue;
+    // Trim trailing whitespace/newlines to match the Docker *_FILE convention:
+    // the official postgres image resolves POSTGRES_PASSWORD_FILE via shell $(< file),
+    // which strips the trailing newline that editors and `echo` add. trimEnd()
+    // handles both LF and CRLF while preserving leading and internal whitespace.
+    ddEnvVars[secretKey] = secretFileValue.trimEnd();
   }
 }
 
@@ -145,7 +164,7 @@ export function getServerName(): string {
   if (detectedServerName) {
     return detectedServerName;
   }
-  return hostname();
+  return os.hostname();
 }
 
 export function setDetectedServerName(name: string | undefined): void {

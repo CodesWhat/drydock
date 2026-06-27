@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { SiteFooter } from "@/components/site-footer";
+import { MarketingShell } from "@/components/marketing-shell";
 import { Badge } from "@/components/ui/badge";
+
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com";
 
 export const metadata: Metadata = {
   title: "Trivy Supply Chain Compromise - Drydock Security Advisory",
@@ -10,37 +11,76 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Trivy Supply Chain Compromise - Drydock Security Advisory",
     description: "Analysis of the March 2026 Trivy supply chain breach. Drydock is not affected.",
+    url: `${baseUrl}/security/trivy-supply-chain-march-2026`,
+    siteName: "Drydock",
+    locale: "en_US",
     type: "article",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Trivy Supply Chain Compromise - Drydock Security Advisory",
+    description:
+      "Analysis of the March 2026 Trivy supply chain breach (GHSA-69fq-xp46-6x23). Drydock is not affected. Full audit and recommendations for users.",
+    creator: "@codeswhat",
+  },
+  alternates: {
+    canonical: `${baseUrl}/security/trivy-supply-chain-march-2026`,
   },
 };
 
 export default function TrivyAdvisoryPage() {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: "Trivy Supply Chain Compromise — Drydock Security Advisory",
+    description:
+      "Analysis of the March 2026 Trivy supply chain breach (GHSA-69fq-xp46-6x23). Drydock is not affected. Full audit and recommendations for users.",
+    datePublished: "2026-03-22",
+    dateModified: "2026-03-22",
+    image: `${baseUrl}/og-image.png`,
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": `${baseUrl}/security/trivy-supply-chain-march-2026`,
+    },
+    author: {
+      "@type": "Organization",
+      name: "CodesWhat",
+      url: "https://codeswhat.com",
+      sameAs: ["https://github.com/CodesWhat"],
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "CodesWhat",
+      url: "https://codeswhat.com",
+      logo: {
+        "@type": "ImageObject",
+        url: `${baseUrl}/og-image.png`,
+      },
+    },
+    keywords: "GHSA-69fq-xp46-6x23, CWE-506, supply chain attack, Trivy, security advisory",
+    about: [
+      {
+        "@type": "Thing",
+        name: "GHSA-69fq-xp46-6x23",
+        url: "https://github.com/aquasecurity/trivy/security/advisories/GHSA-69fq-xp46-6x23",
+      },
+      {
+        "@type": "Thing",
+        name: "CWE-506: Embedded Malicious Code",
+        url: "https://cwe.mitre.org/data/definitions/506.html",
+      },
+    ],
+  };
+
   return (
-    <main className="relative min-h-screen bg-gradient-to-br from-neutral-50 to-neutral-100 dark:from-neutral-950 dark:to-neutral-900">
-      <div className="bg-grid-neutral-200/50 dark:bg-grid-neutral-800/50 fixed inset-0" />
-
-      <div className="relative z-10">
-        {/* Header */}
-        <header className="border-b border-neutral-200 bg-white/80 backdrop-blur dark:border-neutral-800 dark:bg-neutral-950/80">
-          <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
-            <Link
-              href="/"
-              className="text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
-            >
-              &larr; Back to Drydock
-            </Link>
-            <Link
-              href="/docs"
-              className="text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
-            >
-              Documentation
-            </Link>
-          </div>
-        </header>
-
-        {/* Content */}
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <MarketingShell>
         <article className="mx-auto max-w-4xl px-6 py-16">
-          <div className="rounded-xl border border-neutral-200 bg-white p-8 shadow-sm sm:p-12 dark:border-neutral-800 dark:bg-neutral-950">
+          <div className="rounded-xl border border-neutral-200 bg-white/70 p-8 shadow-sm backdrop-blur-sm sm:p-12 dark:border-neutral-800 dark:bg-neutral-950/70">
             {/* Title block */}
             <div className="mb-12">
               <div className="mb-4 flex flex-wrap items-center gap-3">
@@ -463,21 +503,9 @@ uses: aquasecurity/trivy-action@<full-commit-sha>  # 0.24.0`}</code>
                 </table>
               </div>
             </div>
-
-            {/* Back link */}
-            <div className="mt-12 border-t border-neutral-200 pt-8 dark:border-neutral-800">
-              <Link
-                href="/"
-                className="text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
-              >
-                &larr; Back to Drydock
-              </Link>
-            </div>
           </div>
         </article>
-
-        <SiteFooter />
-      </div>
-    </main>
+      </MarketingShell>
+    </>
   );
 }

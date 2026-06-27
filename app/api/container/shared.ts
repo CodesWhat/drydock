@@ -38,9 +38,18 @@ const SENSITIVE_KEY_PATTERNS = [
   'ACCESS_KEY',
 ];
 
+// Short tokens that require an exact segment match (split on '_') to prevent
+// substring false positives. For example, 'PASS' would otherwise match
+// 'COMPASS' or 'BYPASS' under a plain .includes() check.
+const SENSITIVE_SEGMENT_PATTERNS = ['PASS'];
+
 export function isSensitiveKey(key: string): boolean {
   const upper = key.toUpperCase();
-  return SENSITIVE_KEY_PATTERNS.some((pattern) => upper.includes(pattern));
+  if (SENSITIVE_KEY_PATTERNS.some((pattern) => upper.includes(pattern))) {
+    return true;
+  }
+  const segments = upper.split('_');
+  return SENSITIVE_SEGMENT_PATTERNS.some((pattern) => segments.includes(pattern));
 }
 
 export function getErrorStatusCode(error: unknown): number | undefined {

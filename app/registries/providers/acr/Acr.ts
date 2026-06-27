@@ -52,7 +52,7 @@ class Acr extends BaseRegistry<AcrRegistryConfiguration> {
       },
     };
     requestOptionsWithAuth.headers.Authorization = `Basic ${Acr.base64Encode(this.configuration.clientid, this.configuration.clientsecret)}`;
-    return requestOptionsWithAuth;
+    return this.withTlsRequestOptions(requestOptionsWithAuth);
   }
 
   async getAuthPull() {

@@ -133,9 +133,26 @@ test('authenticate should return unchanged options when no clientemail configure
 test('getAuthPull should return credentials', async () => {
   const result = await gar.getAuthPull();
   expect(result).toEqual({
-    username: TEST_CLIENT_EMAIL,
-    password: TEST_PRIVATE_KEY,
+    username: '_json_key',
+    password: JSON.stringify({
+      client_email: TEST_CLIENT_EMAIL,
+      private_key: TEST_PRIVATE_KEY,
+    }),
   });
+});
+
+test('getAuthPull should return undefined when clientemail is missing', async () => {
+  const garNoEmail = new Gar();
+  garNoEmail.configuration = { privatekey: TEST_PRIVATE_KEY };
+  const result = await garNoEmail.getAuthPull();
+  expect(result).toBeUndefined();
+});
+
+test('getAuthPull should return undefined when privatekey is missing', async () => {
+  const garNoKey = new Gar();
+  garNoKey.configuration = { clientemail: TEST_CLIENT_EMAIL };
+  const result = await garNoKey.getAuthPull();
+  expect(result).toBeUndefined();
 });
 
 test('authenticate should use access_token and create headers when missing', async () => {
@@ -341,4 +358,37 @@ test('authenticate should NOT attach httpsAgent when no TLS config is set', asyn
   expect(calledConfig.httpsAgent).toBeUndefined();
   expect(calledConfig.method).toBe('GET');
   expect(calledConfig.url).toContain('https://us-central1-docker.pkg.dev/v2/token');
+});
+
+test('authenticate should return httpsAgent in returned options when insecure=true', async () => {
+  const { default: axios } = await import('axios');
+  axios.mockResolvedValueOnce({ data: { token: 'tok' } });
+
+  const garInsecure = new Gar();
+  garInsecure.configuration = {
+    clientemail: TEST_CLIENT_EMAIL,
+    privatekey: TEST_PRIVATE_KEY,
+    insecure: true,
+  };
+
+  const result = await garInsecure.authenticate(
+    { name: 'project/repository/image', registry: { url: 'us-central1-docker.pkg.dev' } },
+    { headers: {} },
+  );
+
+  expect(result.httpsAgent).toBeDefined();
+  expect((result.httpsAgent as any).options.rejectUnauthorized).toBe(false);
+});
+
+test('authenticate anonymous with insecure=true should return httpsAgent on the returned options', async () => {
+  const garAnonInsecure = new Gar();
+  garAnonInsecure.configuration = { insecure: true };
+
+  const result = await garAnonInsecure.authenticate(
+    { name: 'project/repository/image', registry: { url: 'us-central1-docker.pkg.dev' } },
+    { headers: {} },
+  );
+
+  expect(result.httpsAgent).toBeDefined();
+  expect((result.httpsAgent as any).options.rejectUnauthorized).toBe(false);
 });

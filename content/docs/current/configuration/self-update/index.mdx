@@ -6,7 +6,7 @@ description: "Drydock can gracefully update itself when a new version is availab
 import { Callout } from 'fumadocs-ui/components/callout';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
-Drydock can gracefully update itself when a new version is available, using a safe rollback-capable process that ensures zero downtime.
+Drydock can gracefully update itself when a new version is available, using a safe rollback-capable process.
 
 ## How it works
 
@@ -217,5 +217,3 @@ volumes:
 
 </Tab>
 </Tabs>
-
-<Callout type="info">The self-update overlay includes an animated visual indicator and persists through the entire container replacement. The UI polls the status endpoint every 5 seconds and reloads itself once the operation reaches a terminal status. No manual refresh is needed.</Callout>

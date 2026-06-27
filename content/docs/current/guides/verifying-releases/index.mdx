@@ -30,7 +30,7 @@ Everything is keyless — you do NOT need a Drydock-specific public key. Sigstor
 The release workflow signs every pushed tag (`ghcr.io`, `docker.io`, `quay.io`) with the same identity. Use this policy to verify:
 
 ```bash
-TAG="v1.5.0-rc.9"
+TAG="v1.5.0"
 VERSION="${TAG#v}"
 IMAGE="ghcr.io/codeswhat/drydock:${VERSION}"
 IDENTITY_REGEX='^https://github.com/CodesWhat/drydock/.github/workflows/release-cut.yml@refs/heads/main$'
@@ -48,21 +48,21 @@ Swap `IMAGE` for any of the three registries we publish to:
 <Tab value="GHCR">
 
 ```bash
-IMAGE="ghcr.io/codeswhat/drydock:1.5.0-rc.9"
+IMAGE="ghcr.io/codeswhat/drydock:1.5.0"
 ```
 
 </Tab>
 <Tab value="Docker Hub">
 
 ```bash
-IMAGE="docker.io/codeswhat/drydock:1.5.0-rc.9"
+IMAGE="docker.io/codeswhat/drydock:1.5.0"
 ```
 
 </Tab>
 <Tab value="Quay.io">
 
 ```bash
-IMAGE="quay.io/codeswhat/drydock:1.5.0-rc.9"
+IMAGE="quay.io/codeswhat/drydock:1.5.0"
 ```
 
 </Tab>
@@ -76,7 +76,7 @@ The container image also carries a signed [SLSA provenance](https://slsa.dev/spe
 
 ```bash
 gh attestation verify \
-  oci://ghcr.io/codeswhat/drydock:1.5.0-rc.9 \
+  oci://ghcr.io/codeswhat/drydock:1.5.0 \
   --repo CodesWhat/drydock
 ```
 
@@ -166,7 +166,7 @@ slsa-verifier verify-artifact \
 </Tab>
 </Tabs>
 
-A PASS on both the cosign signature AND the SLSA attestation is the strongest guarantee we offer: the tarball came from our workflow, on this tag, unchanged.
+Passing both the cosign signature and the SLSA attestation confirms the tarball came from the release workflow, on this tag, and has not been modified.
 
 ## Why some older tags look different
 
@@ -176,7 +176,7 @@ The Drydock release pipeline has been reshaped twice. Signatures embed the workf
 # v1.5.0-rc.11 and newer (tag-last pipeline, signed by release-cut.yml on main):
 IDENTITY_REGEX='^https://github.com/CodesWhat/drydock/.github/workflows/release-cut.yml@refs/heads/main$'
 
-# v1.5.0 through v1.5.0-rc.10 (tag-triggered pipeline, signed by release-from-tag.yml on the tag):
+# v1.5.0-rc.1 through v1.5.0-rc.10 (tag-triggered pipeline, signed by release-from-tag.yml on the tag):
 IDENTITY_REGEX='^https://github.com/CodesWhat/drydock/.github/workflows/release-from-tag.yml@refs/tags/.+$'
 
 # v1.4.x and older (signed by release.yml):

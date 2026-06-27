@@ -855,7 +855,7 @@ describe('hello verification — happy path', () => {
     };
     expect(welcome.type).toBe('welcome');
     expect(welcome.data.pollInterval).toBeGreaterThan(0);
-    expect(welcome.data.config.serverCompatLevel).toBe('1.4');
+    expect(welcome.data.config.serverCompatLevel).toBe('1.4.0');
     expect(welcome.data.config.supportedProtocols).toBe('portwing/1.0');
   });
 
@@ -929,7 +929,7 @@ describe('version handshake', () => {
     clearNonceCacheForTesting();
   });
 
-  test('welcome config includes serverCompatLevel=1.4 and supportedProtocols=portwing/1.0', async () => {
+  test('welcome config includes serverCompatLevel=1.4.0 and supportedProtocols=portwing/1.0', async () => {
     const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
     const ts = Math.floor(Date.now() / 1000);
     const nonce = 'f1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
@@ -956,7 +956,7 @@ describe('version handshake', () => {
     const welcome = JSON.parse(ws.sentMessages[0]) as {
       data: { config: { serverCompatLevel: string; supportedProtocols: string } };
     };
-    expect(welcome.data.config.serverCompatLevel).toBe('1.4');
+    expect(welcome.data.config.serverCompatLevel).toBe('1.4.0');
     expect(welcome.data.config.supportedProtocols).toBe('portwing/1.0');
   });
 });
@@ -1256,7 +1256,7 @@ describe('hello verification — drydockCompat version warning', () => {
     );
     const ws = getUpgradedWs()!;
 
-    // drydockCompat '2.0.0' has majorVersion=2, server implements '1.4' (major=1)
+    // drydockCompat '2.0.0' has majorVersion=2, server implements '1.4.0' (major=1)
     // triggers the warn branch but still sends welcome
     sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig, { drydockCompat: '2.0.0' }));
     await new Promise((r) => setTimeout(r, 10));

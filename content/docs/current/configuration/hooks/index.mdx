@@ -65,7 +65,7 @@ When a hook runs, drydock injects environment variables describing the update:
 
 ## Command validation
 
-Hook commands are validated against a restricted shell-safe grammar at configuration time. Commands containing any of the following are rejected at startup with a clear error:
+Hook commands are validated against a restricted shell-safe grammar. Commands containing any of the following are rejected when the hook runs, with a clear error:
 
 - Command substitution: `$(...)` or backticks (`` ` ``)
 - Output or input redirections: `>`, `>>`, `<`
@@ -118,10 +118,12 @@ services:
     image: myapp:latest
     labels:
       - dd.watch=true
-      - dd.hook.pre=docker exec mydb pg_dump -U postgres mydb > /backup/pre-update.sql
+      - dd.hook.pre=docker exec mydb pg_dump -U postgres -F c -f /backup/pre-update.dump mydb
       - dd.hook.post=curl -X POST https://hooks.slack.com/services/xxx -d '{"text":"myapp updated"}'
       - dd.hook.pre.abort=true
       - dd.hook.timeout=120000
 ```
+
+Commands that require shell redirects (`>`, `|`, etc.) must be wrapped in a script file and invoked via the hook (e.g. `dd.hook.pre=/usr/local/bin/backup.sh`).
 
 <Callout type="warn">Hooks run with the permissions of the drydock process. Ensure the Docker socket is mounted if your hooks need to interact with Docker.</Callout>

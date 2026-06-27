@@ -1220,6 +1220,104 @@ test('model should default maturityMinAgeDays to 7 when not provided', async () 
   expect(containerValidated.updateAvailable).toBeFalsy();
 });
 
+test('model should suppress when trusted publishedAt is older than detectedAt but both within window', async () => {
+  vi.useFakeTimers();
+  try {
+    const now = new Date('2026-04-23T12:00:00.000Z');
+    vi.setSystemTime(now);
+    // detectedAt = 2 days ago, publishedAt = 4 days ago (trusted, earlier)
+    // Math.min(now-4, now-2) = now-4 → age = 4 days < 7 → suppressed
+    const updateDetectedAt = new Date(now.getTime() - daysToMs(2)).toISOString();
+    const publishedAt = new Date(now.getTime() - daysToMs(4)).toISOString();
+    const containerValidated = container.validate({
+      id: 'container-trust-published',
+      name: 'test',
+      watcher: 'test',
+      updateDetectedAt,
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      image: {
+        id: 'image-123456789',
+        registry: { name: 'hub', url: 'https://hub' },
+        name: 'organization/image',
+        tag: { value: '1.0.0', semver: true },
+        digest: { watch: false },
+        architecture: 'arch',
+        os: 'os',
+      },
+      result: { tag: '1.0.1', publishedAt, publishedAtTrusted: true },
+    });
+    expect(containerValidated.updateAvailable).toBeFalsy();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('model should allow update when trusted publishedAt makes maturity gate pass', async () => {
+  vi.useFakeTimers();
+  try {
+    const now = new Date('2026-04-23T12:00:00.000Z');
+    vi.setSystemTime(now);
+    // updateDetectedAt is only 2 days old, but trusted publishedAt is 10 days old
+    const updateDetectedAt = new Date(now.getTime() - daysToMs(2)).toISOString();
+    const publishedAt = new Date(now.getTime() - daysToMs(10)).toISOString();
+    const containerValidated = container.validate({
+      id: 'container-trust-published-pass',
+      name: 'test',
+      watcher: 'test',
+      updateDetectedAt,
+      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      image: {
+        id: 'image-123456789',
+        registry: { name: 'hub', url: 'https://hub' },
+        name: 'organization/image',
+        tag: { value: '1.0.0', semver: true },
+        digest: { watch: false },
+        architecture: 'arch',
+        os: 'os',
+      },
+      result: { tag: '1.0.1', publishedAt, publishedAtTrusted: true },
+    });
+    expect(containerValidated.updateAvailable).toBeTruthy();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('testable_isUpdateSuppressed should use trusted publishedAt when present and earlier', () => {
+  const now = Date.now();
+  // detectedAt is 2 days ago, publishedAt is 10 days ago, trust is true
+  // min age is 7 days → publishedAt is older → gate passes (not suppressed)
+  const updateDetectedAt = new Date(now - daysToMs(2)).toISOString();
+  const publishedAt = new Date(now - daysToMs(10)).toISOString();
+  expect(
+    container.testable_isUpdateSuppressed(
+      {
+        updateDetectedAt,
+        result: { publishedAt, publishedAtTrusted: true },
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      },
+      { kind: 'tag', remoteValue: '1.0.1', semverDiff: 'patch' },
+    ),
+  ).toBe(false);
+});
+
+test('testable_isUpdateSuppressed should ignore untrusted publishedAt', () => {
+  const now = Date.now();
+  // publishedAt is 10 days ago but trust is false → falls back to detectedAt (2 days) → suppressed
+  const updateDetectedAt = new Date(now - daysToMs(2)).toISOString();
+  const publishedAt = new Date(now - daysToMs(10)).toISOString();
+  expect(
+    container.testable_isUpdateSuppressed(
+      {
+        updateDetectedAt,
+        result: { publishedAt, publishedAtTrusted: false },
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      },
+      { kind: 'tag', remoteValue: '1.0.1', semverDiff: 'patch' },
+    ),
+  ).toBe(true);
+});
+
 test('model should allow mature updates when maturity threshold has elapsed', async () => {
   const updateDetectedAt = new Date(Date.now() - daysToMs(10)).toISOString();
   const containerValidated = container.validate({
@@ -2273,6 +2371,19 @@ test('getLink should handle unknown template vars gracefully', () => {
   expect(result).toEqual('https://test-.acme.com');
 });
 
+test('getLink leaves semver vars empty when tag is semver:true but not parseable', () => {
+  const { testable_getLink: getLink } = container;
+  // semver: true but 'alpine-latest' is not a valid semver string → parseSemver returns null
+  const result = getLink(
+    {
+      linkTemplate: 'https://test-${major}.${minor}.${patch}.acme.com',
+      image: { tag: { semver: true } },
+    },
+    'alpine-latest',
+  );
+  expect(result).toEqual('https://test-...acme.com');
+});
+
 test('model should handle non-semver tag update', async () => {
   const { testable_addUpdateKindProperty: addUpdateKindProperty } = container;
   const containerObject = {
@@ -2767,4 +2878,31 @@ test('deriveContainerIdentityKey returns undefined when name is missing', () => 
   expect(
     container.deriveContainerIdentityKey({ name: '', watcher: 'local' } as never),
   ).toBeUndefined();
+});
+
+// These tests exercise the pre-existing `getContainerIdentityKey` function in model/container.ts.
+// The `::` separator here is part of the identity-key format, not the store `toCacheKey`
+// separator change (which lives in store/container.ts and is covered by the store test suite).
+test('getContainerIdentityKey returns undefined when identity is undefined', () => {
+  expect(container.getContainerIdentityKey(undefined as never)).toBeUndefined();
+});
+
+test('getContainerIdentityKey returns undefined when watcher is empty string', () => {
+  expect(container.getContainerIdentityKey({ watcher: '', name: 'nginx' })).toBeUndefined();
+});
+
+test('getContainerIdentityKey returns undefined when name is empty string', () => {
+  expect(container.getContainerIdentityKey({ watcher: 'docker', name: '' })).toBeUndefined();
+});
+
+test('getContainerIdentityKey returns key with agent prefix when agent is set', () => {
+  expect(
+    container.getContainerIdentityKey({ agent: 'remote', watcher: 'docker', name: 'nginx' }),
+  ).toBe('remote::docker::nginx');
+});
+
+test('getContainerIdentityKey returns key without agent prefix when agent is absent', () => {
+  expect(container.getContainerIdentityKey({ watcher: 'docker', name: 'nginx' })).toBe(
+    '::docker::nginx',
+  );
 });

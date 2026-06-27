@@ -561,6 +561,19 @@ test('authenticate should return unchanged options when neither private nor publ
   expect(result).toEqual({ headers: {} });
 });
 
+test('authenticate should return httpsAgent on returned options for third path (no creds, not public ECR) with insecure=true', async () => {
+  const ecrAnonInsecure = new Ecr();
+  ecrAnonInsecure.configuration = { insecure: true };
+
+  const result = await ecrAnonInsecure.authenticate(
+    { registry: { url: 'https://some-other-registry.com/v2' } },
+    { headers: {} },
+  );
+
+  expect(result.httpsAgent).toBeDefined();
+  expect((result.httpsAgent as any).options.rejectUnauthorized).toBe(false);
+});
+
 test('authenticate should return unchanged options when image is missing and no credentials are configured', async () => {
   const ecrAnon = new Ecr();
   ecrAnon.configuration = {};
@@ -666,4 +679,35 @@ test('authenticate public ECR gallery should NOT attach httpsAgent when no TLS c
   expect(calledConfig.httpsAgent).toBeUndefined();
   expect(calledConfig.method).toBe('GET');
   expect(calledConfig.url).toBe('https://public.ecr.aws/token/');
+});
+
+test('authenticate private ECR should return httpsAgent in returned options when insecure=true', async () => {
+  const ecrPrivate = new Ecr();
+  ecrPrivate.configuration = {
+    accesskeyid: 'accesskeyid',
+    secretaccesskey: 'secretaccesskey',
+    region: 'region',
+    insecure: true,
+  };
+  ecrPrivate.fetchPrivateEcrAuthToken = vi.fn().mockResolvedValue('QVdTOnh4eHg=');
+
+  const result = await ecrPrivate.authenticate(undefined, { headers: {} });
+
+  expect(result.httpsAgent).toBeDefined();
+  expect((result.httpsAgent as any).options.rejectUnauthorized).toBe(false);
+});
+
+test('authenticate public ECR gallery should return httpsAgent in returned options when insecure=true', async () => {
+  mockAxios.mockResolvedValueOnce({ data: { token: 'public-token-insecure' } });
+
+  const ecrPublicInsecure = new Ecr();
+  ecrPublicInsecure.configuration = { insecure: true };
+
+  const result = await ecrPublicInsecure.authenticate(
+    { registry: { url: 'https://public.ecr.aws/v2' } },
+    { headers: {} },
+  );
+
+  expect(result.httpsAgent).toBeDefined();
+  expect((result.httpsAgent as any).options.rejectUnauthorized).toBe(false);
 });

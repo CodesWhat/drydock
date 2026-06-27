@@ -197,6 +197,8 @@ By default, triggers fire on every detected update. Use `THRESHOLD` to only noti
 | `patch` | Patch or prerelease changes |
 | `digest` | Digest-only updates |
 
+The threshold controls which range of change magnitudes are allowed through, not a minimum severity floor. For example, `THRESHOLD=major` fires on every semver bump (major, minor, or patch), while `THRESHOLD=minor` fires on minor and smaller changes but skips major version jumps.
+
 ```yaml
 environment:
   - DD_NOTIFICATION_SLACK_ALERTS_TOKEN=xoxb-xxxxx
@@ -336,6 +338,7 @@ If you have containers on multiple Docker hosts, deploy Drydock agents on remote
 environment:
   - DD_AGENT_REMOTE1_HOST=<agent-ip>
   - DD_AGENT_REMOTE1_SECRET=a-secure-shared-token
+  - DD_AGENT_ALLOW_INSECURE_SECRET=true  # plain-HTTP LAN only; use TLS in production
   # - DD_AGENT_REMOTE1_PORT=3000  # only needed if the agent listens on a non-default port
 ```
 
@@ -352,6 +355,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - DD_AGENT_SECRET=a-secure-shared-token
+      - DD_WATCHER_LOCAL_SOCKET=/var/run/docker.sock
 ```
 
 Agents forward container state to the controller. The controller connects outbound to agents; agents do not call back to the controller. Notification triggers (Slack, SMTP, etc.) run on the controller; Docker update triggers run on the agent.
