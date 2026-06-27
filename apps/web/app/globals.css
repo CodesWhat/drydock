@@ -275,7 +275,7 @@
 
 /* ── Scroll reveal + aurora drift ──────────────────────────────────────────
    Aurora drift is opted into by the marketing shell (data-aurora-motion="true");
-   the <Reveal> wrapper drives fade-and-rise on the homepage sections. Both are
+   the .reveal class drives fade-and-rise on the homepage sections. Both are
    disabled for users who prefer reduced motion (see the @media block below). */
 
 /* Slow aurora drift — opt in via [data-aurora-motion="true"] on an ancestor. */
@@ -289,16 +289,19 @@
   animation: aurora-drift 30s ease-in-out infinite;
 }
 
-/* Reveal-on-scroll: the <Reveal> component sets data-reveal="hidden|shown";
-   when reveal is disabled it omits the attribute and content renders normally. */
-[data-reveal] {
+/* Reveal-on-scroll: .reveal is visible by default (fail-open). The hidden state
+   only engages once the inline bootstrap in layout.tsx adds `js` to <html> and
+   an IntersectionObserver toggles `.visible`. If JS never runs (disabled, blocked
+   bundle, or no IntersectionObserver) content stays visible. */
+.reveal {
   transition: opacity 700ms ease-out, transform 700ms ease-out;
 }
-[data-reveal="hidden"] {
+html.js .reveal {
   opacity: 0;
   transform: translateY(16px);
 }
-[data-reveal="shown"] {
+/* Out-specify `html.js .reveal` so the shown state wins. */
+html.js .reveal.visible {
   opacity: 1;
   transform: none;
 }
@@ -312,7 +315,7 @@
   .animate-gradient {
     animation: none !important;
   }
-  [data-reveal] {
+  .reveal {
     transition: none !important;
     opacity: 1 !important;
     transform: none !important;
