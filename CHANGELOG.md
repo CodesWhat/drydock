@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1-rc.1] — 2026-06-26
+
 ### Added
 
 - **Remote agents now report their log level and watcher schedule.** The agent handshake (`dd:ack`) includes `logLevel` and `pollInterval` (the watcher's cron), so the `GET /api/v1/agents` response and the Agents view populate these fields for connected agents instead of leaving them blank.
