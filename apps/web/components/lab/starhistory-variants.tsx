@@ -1,14 +1,12 @@
 import { GithubIcon } from "@/components/github-icon";
 import { SectionHeading } from "@/components/section-heading";
-import { GITHUB_URL } from "@/lib/site-config";
+import { GITHUB_URL, REPO_SLUG } from "@/lib/site-config";
 
 // Locked: Star History = clean framed card, title above the chart (left-aligned).
 
-const DARK_SRC =
-  "https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&theme=dark&legend=top-left";
-const LIGHT_SRC =
-  "https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&legend=top-left";
-const CHART_HREF = "https://www.star-history.com/#CodesWhat/drydock&type=timeline&legend=top-left";
+const DARK_SRC = `https://api.star-history.com/svg?repos=${REPO_SLUG}&type=timeline&theme=dark&legend=top-left`;
+const LIGHT_SRC = `https://api.star-history.com/svg?repos=${REPO_SLUG}&type=timeline&legend=top-left`;
+const CHART_HREF = `https://www.star-history.com/#${REPO_SLUG}&type=timeline&legend=top-left`;
 
 function StarChart({ className }: { className?: string }) {
   return (

@@ -5,13 +5,14 @@ import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SectionHeading } from "@/components/section-heading";
 import { Button } from "@/components/ui/button";
-import { DEMO_URL } from "@/lib/site-config";
+import { DEMO_URL, SITE_CONFIG } from "@/lib/site-config";
 
 const DEMO_TRANSITION = "all 350ms cubic-bezier(0.4, 0, 0.2, 1)";
 const DEMO_SHARE_DATA = {
-  title: "Drydock Interactive Demo",
-  text: "Try Drydock — open source container update monitoring. Interactive demo, no install required.",
-  url: DEMO_URL,
+  title: `${SITE_CONFIG.name} Interactive Demo`,
+  text: `Try ${SITE_CONFIG.name} — open source container update monitoring. Interactive demo, no install required.`,
+  // Share the canonical production demo, not a per-env preview URL.
+  url: SITE_CONFIG.demoUrl,
 };
 
 type DemoMode = "inline" | "expanding" | "fullscreen" | "collapsing";
@@ -392,7 +393,7 @@ function DemoFrame({
           <iframe
             ref={iframeRef}
             src={DEMO_URL}
-            title="Drydock Interactive Demo"
+            title={`${SITE_CONFIG.name} Interactive Demo`}
             className="h-full w-full border-0"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
             allow="clipboard-write"

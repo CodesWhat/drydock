@@ -149,13 +149,13 @@ export function FooterVariants({
             <div className="flex items-center gap-3">
               <Image
                 src={SITE_CONFIG.logo}
-                alt="Drydock"
+                alt=""
                 width={30}
                 height={30}
-                className="dark:invert"
+                className={SITE_CONFIG.logoInvertOnDark ? "dark:invert" : undefined}
               />
               <span className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
-                Drydock
+                {SITE_CONFIG.name}
               </span>
             </div>
             <p className="text-sm leading-relaxed text-neutral-500 dark:text-neutral-400">

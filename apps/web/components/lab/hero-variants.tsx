@@ -68,10 +68,10 @@ export function HeroVariants() {
           </div>
           <Image
             src={SITE_CONFIG.logo}
-            alt="Drydock whale"
+            alt=""
             width={280}
             height={190}
-            className="animate-float drop-shadow-2xl dark:invert"
+            className={`animate-float drop-shadow-2xl${SITE_CONFIG.logoInvertOnDark ? " dark:invert" : ""}`}
             priority
           />
         </div>

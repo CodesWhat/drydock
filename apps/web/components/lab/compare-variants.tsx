@@ -69,7 +69,7 @@ type Tool = (typeof tools)[number];
 
 function cellValue(row: FeatureRow, tool: Tool): FeatureValue {
   const map: Record<Tool, FeatureValue> = {
-    Drydock: row.drydock,
+    [SITE_CONFIG.name]: row.drydock,
     Watchtower: row.watchtower,
     Diun: row.diun,
     Portainer: row.portainer,
@@ -82,7 +82,7 @@ export function CompareVariants() {
     <section className="border-t border-border/60 py-20">
       <div className="mx-auto max-w-4xl px-4">
         <SectionHeading
-          eyebrow="Why Drydock"
+          eyebrow={`Why ${SITE_CONFIG.name}`}
           title="How we compare"
           subtitle="A quick look at what we support that Portainer, Diun, and others don't."
           align="right"
