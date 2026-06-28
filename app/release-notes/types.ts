@@ -10,9 +10,12 @@ export interface ReleaseNotes {
 
 export interface FetchByTagOptions {
   /**
-   * When false, no token (explicit or GHCR fallback) is attached to the request.
-   * Set to false when the source repo originates from a per-deployment container
-   * label (dd.source.repo) that may be attacker-controlled.
+   * When false, the GHCR PAT fallback (getGhcrTokenFallback) is NOT attached to the
+   * request. An explicitly-provided token (e.g. DD_RELEASE_NOTES_GITHUB_TOKEN) is
+   * always forwarded regardless of this flag — the operator scoped it deliberately for
+   * release-notes lookups, even for untrusted container-label source repos.
+   * Set to false when the source repo originates from a per-deployment container label
+   * (dd.source.repo) that may be attacker-controlled.
    */
   allowToken?: boolean;
 }
@@ -26,4 +29,11 @@ export interface ReleaseNotesProviderClient {
     token?: string,
     options?: FetchByTagOptions,
   ) => Promise<ReleaseNotes | undefined>;
+  fetchRange?: (
+    sourceRepo: string,
+    fromTag: string,
+    toTag: string,
+    token?: string,
+    options?: FetchByTagOptions,
+  ) => Promise<{ notes: ReleaseNotes[]; interrupted: boolean }>;
 }

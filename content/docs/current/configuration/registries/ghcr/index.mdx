@@ -23,7 +23,11 @@ The `ghcr` registry lets you configure [GHCR](https://docs.github.com/en/package
 - If credentials are configured but GHCR rejects them (`401`/`403`), drydock surfaces a credential-specific authentication error — it does not fall back to anonymous access. Check the configured token and its scopes (`read:packages` is required).
 
 <Callout type="info" title="GHCR token doubles as a GitHub release-notes token">
-If you configure a GHCR token (`DD_REGISTRY_GHCR_{REGISTRY_NAME}_TOKEN`), drydock automatically reuses it for the GitHub release-notes provider. You do **not** need to set `DD_RELEASE_NOTES_GITHUB_TOKEN` separately — the GHCR token is tried first and used when it succeeds. If it fails (e.g. scoped to `read:packages` only), set `DD_RELEASE_NOTES_GITHUB_TOKEN` explicitly with a token that has the `public_repo` scope.
+If you configure a GHCR token (`DD_REGISTRY_GHCR_{REGISTRY_NAME}_TOKEN`), drydock automatically reuses it for the GitHub release-notes provider when the source repo was resolved from trusted metadata (OCI image labels or a GHCR image path). You do **not** need to set `DD_RELEASE_NOTES_GITHUB_TOKEN` separately for those containers — the GHCR token is tried first and used when it succeeds.
+
+The GHCR fallback is **not** sent to repos resolved from a `dd.source.repo` container label or a persisted `container.sourceRepo` value. For container-label sources, configure `DD_RELEASE_NOTES_GITHUB_TOKEN` explicitly with a narrowly-scoped token: a classic PAT with `public_repo` scope only, or a fine-grained PAT with read-only **Contents** permission limited to public repositories and no write or account permissions. See [Watchers — release notes popover](/docs/configuration/watchers) for details on token behavior and intermediate release fetching.
+
+If the GHCR token fails for trusted sources (e.g. scoped to `read:packages` only), set `DD_RELEASE_NOTES_GITHUB_TOKEN` explicitly.
 </Callout>
 
 ## Examples

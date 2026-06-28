@@ -319,7 +319,10 @@
       "releaseNotes": "Note di rilascio",
       "viewFullNotes": "Vedi note complete",
       "currentSuffix": "(corrente)",
-      "availableSuffix": "(disponibile)"
+      "availableSuffix": "(disponibile)",
+      "intermediateNotes": "Intermediate releases ({count})",
+      "olderReleasesNotShown": "{count} older release not shown | {count} older releases not shown",
+      "loadingIntermediateNotes": "Loading intermediate releases…"
     },
     "suggestedTag": {
       "badgeText": "Suggerito",
@@ -468,6 +471,15 @@
       },
       "operationHistoryLoadFailed": "Failed to load update operation history"
     },
+    "updateAge": {
+      "availableDaysSingular": "Available for 1 day",
+      "availableDaysPlural": "Available for {count} days",
+      "availableHoursSingular": "Available for 1 hour",
+      "availableHoursPlural": "Available for {count} hours",
+      "availableMinutesSingular": "Available for 1 minute",
+      "availableMinutesPlural": "Available for {count} minutes",
+      "justNow": "Available just now"
+    },
     "preview": {
       "toasts": {
         "failedTitle": "Preview failed",
@@ -502,15 +514,6 @@
         "updateFrom": "Current tag or digest",
         "updateTo": "New tag or digest"
       }
-    },
-    "updateAge": {
-      "availableDaysSingular": "Available for 1 day",
-      "availableDaysPlural": "Available for {count} days",
-      "availableHoursSingular": "Available for 1 hour",
-      "availableHoursPlural": "Available for {count} hours",
-      "availableMinutesSingular": "Available for 1 minute",
-      "availableMinutesPlural": "Available for {count} minutes",
-      "justNow": "Available just now"
     },
     "logs": {
       "noLogs": "No logs available for this container",

@@ -1,6 +1,7 @@
 import {
   deleteContainer,
   getAllContainers,
+  getContainerIntermediateReleaseNotes,
   getContainerLogs,
   getContainerRecentStatus,
   getContainerReleaseNotes,
@@ -1083,6 +1084,115 @@ describe('Container Service', () => {
       await expect(getContainerReleaseNotes('c1')).rejects.toThrow(
         'Failed to get release notes for container c1: Internal Server Error',
       );
+    });
+  });
+
+  describe('getContainerIntermediateReleaseNotes', () => {
+    const validNote = {
+      title: 'v1.9.0',
+      body: 'Intermediate release body.',
+      url: 'https://github.com/org/repo/releases/tag/v1.9.0',
+      publishedAt: '2026-02-01T00:00:00Z',
+      provider: 'github',
+    };
+
+    it('returns mapped release notes and hiddenCount on 200', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ releaseNotes: [validNote], hiddenCount: 2 }),
+      } as any);
+
+      const result = await getContainerIntermediateReleaseNotes('c1', 'v1.8.0', 'v2.0.0');
+
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/v1/containers/c1/intermediate-release-notes?from=v1.8.0&to=v2.0.0',
+        { credentials: 'include' },
+      );
+      expect(result).not.toBeNull();
+      expect(result!.releaseNotes).toHaveLength(1);
+      expect(result!.releaseNotes[0]).toMatchObject({ title: 'v1.9.0' });
+      expect(result!.hiddenCount).toBe(2);
+    });
+
+    it('returns null on 404', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+      } as any);
+
+      const result = await getContainerIntermediateReleaseNotes('c1', 'v1.0', 'v2.0');
+      expect(result).toBeNull();
+    });
+
+    it('throws on non-404 error', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      } as any);
+
+      await expect(getContainerIntermediateReleaseNotes('c1', 'v1.0', 'v2.0')).rejects.toThrow(
+        'Failed to get intermediate release notes for container c1: Internal Server Error',
+      );
+    });
+
+    it('normalizes negative hiddenCount to 0', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ releaseNotes: [validNote], hiddenCount: -3 }),
+      } as any);
+
+      const result = await getContainerIntermediateReleaseNotes('c1', 'v1.0', 'v2.0');
+      expect(result!.hiddenCount).toBe(0);
+    });
+
+    it('normalizes absent hiddenCount to 0', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ releaseNotes: [validNote] }),
+      } as any);
+
+      const result = await getContainerIntermediateReleaseNotes('c1', 'v1.0', 'v2.0');
+      expect(result!.hiddenCount).toBe(0);
+    });
+
+    it('passes through a valid positive hiddenCount', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ releaseNotes: [], hiddenCount: 5 }),
+      } as any);
+
+      const result = await getContainerIntermediateReleaseNotes('c1', 'v1.0', 'v2.0');
+      expect(result!.hiddenCount).toBe(5);
+    });
+
+    it('returns empty releaseNotes when payload releaseNotes is not an array', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ releaseNotes: null, hiddenCount: 0 }),
+      } as any);
+
+      const result = await getContainerIntermediateReleaseNotes('c1', 'v1.0', 'v2.0');
+      expect(result!.releaseNotes).toEqual([]);
+    });
+
+    it('filters out notes that fail normalization (missing fields)', async () => {
+      const incompleteNote = { title: 'missing body/url/etc' };
+      vi.mocked(fetch).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ releaseNotes: [incompleteNote, validNote], hiddenCount: 0 }),
+      } as any);
+
+      const result = await getContainerIntermediateReleaseNotes('c1', 'v1.0', 'v2.0');
+      expect(result!.releaseNotes).toHaveLength(1);
+      expect(result!.releaseNotes[0].title).toBe('v1.9.0');
     });
   });
 

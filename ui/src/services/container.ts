@@ -1,6 +1,7 @@
 import type { ApiContainerUpdateOperation } from '../types/api';
 import { extractCollectionData, readJsonResponse } from '../utils/api';
 import type { ApiContainerInput } from '../utils/container-mapper';
+import { normalizeReleaseNotes } from '../utils/container-mapper';
 import { ApiError, errorMessage } from '../utils/error';
 
 interface ContainerGroupMember {
@@ -392,6 +393,34 @@ async function getContainerReleaseNotes(containerId: string) {
   return readJsonResponse(response, 'Container release notes API');
 }
 
+async function getContainerIntermediateReleaseNotes(containerId: string, from: string, to: string) {
+  const params = new URLSearchParams({ from, to });
+  const response = await fetch(
+    `/api/v1/containers/${containerId}/intermediate-release-notes?${params.toString()}`,
+    { credentials: 'include' },
+  );
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(
+      `Failed to get intermediate release notes for container ${containerId}: ${response.statusText}`,
+    );
+  }
+  const payload = await readJsonResponse<{ releaseNotes?: unknown[]; hiddenCount?: number }>(
+    response,
+    'Container intermediate release notes API',
+  );
+  const releaseNotes = Array.isArray(payload?.releaseNotes)
+    ? payload.releaseNotes
+        .map((rn) => normalizeReleaseNotes(rn as never))
+        .filter((rn): rn is NonNullable<typeof rn> => rn !== null)
+    : [];
+  const hiddenCount =
+    typeof payload?.hiddenCount === 'number' && payload.hiddenCount > 0 ? payload.hiddenCount : 0;
+  return { releaseNotes, hiddenCount };
+}
+
 async function getUpdateOperationById(
   operationId: string,
 ): Promise<ApiContainerUpdateOperation | null> {
@@ -423,6 +452,7 @@ export {
   deleteContainer,
   getAllContainers,
   getContainerGroups,
+  getContainerIntermediateReleaseNotes,
   getContainerLogs,
   getContainerRecentStatus,
   getContainerReleaseNotes,
