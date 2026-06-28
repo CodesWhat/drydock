@@ -1,6 +1,14 @@
 #!/usr/bin/env node
 
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -11,16 +19,11 @@ const webRoot = join(scriptDir, "..");
 const repoRoot = join(webRoot, "..", "..");
 
 const targetDir = join(webRoot, "content", "docs");
+const tmpDir = join(webRoot, "content", "docs.tmp");
 
-// Generate changelog MDX from root CHANGELOG.md (single source of truth).
-// The root file is plain markdown — just prepend frontmatter and strip the
-// top-level heading (the frontmatter title replaces it).
-const changelogMd = readFileSync(join(repoRoot, "CHANGELOG.md"), "utf8");
-
-const frontmatter = `---
-title: "Changelog"
-description: "All notable changes to this project will be documented in this file."
----`;
+// Resolve changelog path — DD_CHANGELOG_PATH overrides the default so a sibling
+// site that doesn't have a root CHANGELOG.md can still use this script.
+const changelogPath = process.env.DD_CHANGELOG_PATH ?? join(repoRoot, "CHANGELOG.md");
 
 // Strip HTML comments (<!-- ... -->) before emitting MDX. They are valid in the
 // GitHub-rendered CHANGELOG (used for maintainer-only notes) but MDX v3 rejects
@@ -47,22 +50,36 @@ function stripHtmlComments(text) {
   return result + text.slice(cursor);
 }
 
-const body = stripHtmlComments(changelogMd.replace(/^# Changelog\n/, "")).replace(
-  /\n{3,}/g,
-  "\n\n",
-);
+// Generate changelog MDX from CHANGELOG.md (single source of truth).
+// The root file is plain markdown — just prepend frontmatter and strip the
+// top-level heading (the frontmatter title replaces it).
+// changelogMdx is null when the file is absent (sibling-site portability).
+let changelogMdx = null;
 
-// Write changelog into the current (v1.5) source dir so it gets copied
-const changelogDir = join(repoRoot, "content", "docs", "current", "changelog");
-mkdirSync(changelogDir, { recursive: true });
-writeFileSync(join(changelogDir, "index.mdx"), `${frontmatter}\n${body}`);
-console.log("Generated changelog MDX from CHANGELOG.md");
+if (existsSync(changelogPath)) {
+  const changelogMd = readFileSync(changelogPath, "utf8");
 
-// Clean target and recreate
-if (existsSync(targetDir)) {
-  rmSync(targetDir, { recursive: true, force: true });
+  const frontmatter = `---
+title: "Changelog"
+description: "All notable changes to this project will be documented in this file."
+---`;
+
+  const body = stripHtmlComments(changelogMd.replace(/^# Changelog\n/, "")).replace(
+    /\n{3,}/g,
+    "\n\n",
+  );
+
+  changelogMdx = `${frontmatter}\n${body}`;
+  console.log("Generated changelog MDX from CHANGELOG.md");
+} else {
+  console.warn(`No CHANGELOG.md at ${changelogPath}; skipping changelog generation`);
 }
-mkdirSync(targetDir, { recursive: true });
+
+// Build into a temp directory so a mid-run crash can't leave a blank docs site.
+if (existsSync(tmpDir)) {
+  rmSync(tmpDir, { recursive: true, force: true });
+}
+mkdirSync(tmpDir, { recursive: true });
 
 // Copy each version as a subfolder with root: true meta.json
 for (const ver of versions) {
@@ -72,7 +89,7 @@ for (const ver of versions) {
     process.exit(1);
   }
 
-  const dest = join(targetDir, ver.slug);
+  const dest = join(tmpDir, ver.slug);
   cpSync(sourceDir, dest, { force: true, recursive: true });
 
   // Override meta.json with root folder config for sidebar tabs
@@ -85,9 +102,17 @@ for (const ver of versions) {
   console.log(`Synced ${ver.source} -> ${dest} (root folder: ${ver.title})`);
 }
 
+// Write changelog into the active version's slug in the build target.
+// This keeps the generated file out of the source tree entirely.
+if (changelogMdx !== null) {
+  const changelogDir = join(tmpDir, versions[0].slug, "changelog");
+  mkdirSync(changelogDir, { recursive: true });
+  writeFileSync(join(changelogDir, "index.mdx"), changelogMdx);
+}
+
 // Write top-level meta.json listing version folders
 writeFileSync(
-  join(targetDir, "meta.json"),
+  join(tmpDir, "meta.json"),
   JSON.stringify(
     {
       title: "Documentation",
@@ -97,5 +122,12 @@ writeFileSync(
     2,
   ),
 );
+
+// Atomic swap: rename the fully-built temp dir into place.
+// The empty-target window is reduced to a single OS rename.
+if (existsSync(targetDir)) {
+  rmSync(targetDir, { recursive: true, force: true });
+}
+renameSync(tmpDir, targetDir);
 
 console.log("Docs sync complete");
