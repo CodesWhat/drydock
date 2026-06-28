@@ -1,4 +1,5 @@
 import { computed, type Ref, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useToast } from '../../composables/useToast';
 import type { ContainerComposePreview, ContainerPreviewPayload } from '../../services/preview';
 import { previewContainer } from '../../services/preview';
@@ -62,6 +63,7 @@ async function runContainerPreviewState(args: {
   previewLoading: Ref<boolean>;
   previewError: Ref<string | null>;
   detailPreview: Ref<ContainerPreviewPayload | null>;
+  t: (key: string) => string;
 }) {
   if (!args.containerId || args.previewLoading.value) {
     return;
@@ -72,16 +74,17 @@ async function runContainerPreviewState(args: {
     args.detailPreview.value = await previewContainer(args.containerId);
   } catch (e: unknown) {
     args.detailPreview.value = null;
-    const msg = errorMessage(e, 'Failed to generate update preview');
+    const msg = errorMessage(e, args.t('containerComponents.preview.toasts.failedDetail'));
     args.previewError.value = msg;
     const toast = useToast();
-    toast.error('Preview failed', msg);
+    toast.error(args.t('containerComponents.preview.toasts.failedTitle'), msg);
   } finally {
     args.previewLoading.value = false;
   }
 }
 
 export function useContainerPreview(input: UseContainerPreviewInput) {
+  const { t } = useI18n();
   const detailPreview = ref<ContainerPreviewPayload | null>(null);
   const detailComposePreview = computed<ContainerComposePreview | null>(() =>
     buildDetailComposePreview(detailPreview.value),
@@ -100,6 +103,7 @@ export function useContainerPreview(input: UseContainerPreviewInput) {
       previewLoading,
       previewError,
       detailPreview,
+      t,
     });
   }
 

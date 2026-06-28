@@ -41,7 +41,6 @@
       "widgetAria": "사용 가능한 업데이트 위젯",
       "updateAll": "모두 업데이트",
       "noUpdates": "사용 가능한 업데이트 없음",
-      "releaseNotes": "릴리스 노트",
       "securityBlocked": "보안으로 인해 차단됨",
       "updateContainer": "컨테이너 업데이트",
       "compactSingle": "{count}개 업데이트 사용 가능",
@@ -104,6 +103,23 @@
       "minor": "마이너",
       "patch": "패치",
       "digest": "다이제스트"
+    },
+    "maintenanceWindow": {
+      "openNow": "Open now",
+      "scheduled": "Scheduled",
+      "openingSoon": "Opening soon"
+    },
+    "dataLoadFailed": "Failed to load dashboard data",
+    "widgets": {
+      "statContainers": "Containers",
+      "statUpdates": "Updates Available",
+      "statSecurity": "Security Issues",
+      "statRegistries": "Registries",
+      "recentUpdates": "Updates Available",
+      "securityOverview": "Security Overview",
+      "resourceUsage": "Resource Usage",
+      "hostStatus": "Host Status",
+      "updateBreakdown": "Update Breakdown"
     }
   }
 }

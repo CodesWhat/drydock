@@ -1467,7 +1467,10 @@ describe('useContainerActions', () => {
       expect(firstState).toBe(secondState);
       expect(maturityTooltip).toContain('Mature-only policy');
       expect(snoozeTooltip).toContain('Updates snoozed until');
-      expect(dateNowSpy).toHaveBeenCalledTimes(2);
+      // 2 calls from buildContainerListPolicyStateFromPolicy (snooze + maturity checks),
+      // plus 2 more from vue-i18n's internal devtools timestamp in the two t() calls
+      // inside containerPolicyTooltip. The cache is verified above by firstState === secondState.
+      expect(dateNowSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
     } finally {
       dateNowSpy.mockRestore();
     }

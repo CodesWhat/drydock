@@ -180,6 +180,7 @@ async function executeContainerActionState(args: {
   staleMessage?: string;
   treatNoUpdateAsStale?: boolean;
   pendingLifecycleMode?: PendingActionLifecycleMode;
+  t: TranslateFn;
 }): Promise<boolean> {
   if (!args.containerActionsEnabled) {
     args.inputError.value = args.containerActionsDisabledReason;
@@ -253,10 +254,16 @@ async function executeContainerActionState(args: {
     }
     return true;
   } catch (e: unknown) {
-    const msg = errorMessage(e, `Action failed for ${args.name}`);
+    const msg = errorMessage(
+      e,
+      args.t('containerComponents.actionToasts.actionFailedDetail', { name: args.name }),
+    );
     args.inputError.value = msg;
     const toast = useToast();
-    toast.error(`Update failed: ${args.name}`, msg);
+    toast.error(
+      args.t('containerComponents.actionToasts.updateFailedTitle', { name: args.name }),
+      msg,
+    );
     if (shouldReloadContainers) {
       await args.loadContainers();
     }
@@ -338,7 +345,12 @@ async function updateAllInGroupState(args: {
       if (isStaleContainerUpdateError(rejected.message)) {
         continue;
       }
-      toast.error(`Failed to update ${rejected.containerName}: ${rejected.message}`);
+      toast.error(
+        args.t('containerComponents.actionToasts.groupUpdateRejected', {
+          name: rejected.containerName,
+          message: rejected.message,
+        }),
+      );
     }
 
     await args.loadContainers();
@@ -368,7 +380,12 @@ async function updateAllInGroupState(args: {
     }
   } catch (error: unknown) {
     args.clearBatch(args.group.key);
-    useToast().error(errorMessage(error, `Failed to update ${args.group.key}`));
+    useToast().error(
+      errorMessage(
+        error,
+        args.t('containerComponents.actionToasts.groupUpdateFailed', { name: args.group.key }),
+      ),
+    );
   } finally {
     if (acceptedTargetIds.length === 0) {
       args.clearBatch(args.group.key);
@@ -393,6 +410,7 @@ async function deleteContainerState(args: {
   closeFullPage: () => void;
   closePanel: () => void;
   loadContainers: () => Promise<void>;
+  t: TranslateFn;
 }): Promise<boolean> {
   if (!args.containerActionsEnabled) {
     args.inputError.value = args.containerActionsDisabledReason;
@@ -414,13 +432,19 @@ async function deleteContainerState(args: {
     }
     await args.loadContainers();
     const toast = useToast();
-    toast.success(`Deleted: ${args.name}`);
+    toast.success(args.t('containerComponents.actionToasts.deleted', { name: args.name }));
     return true;
   } catch (e: unknown) {
-    const msg = errorMessage(e, `Failed to delete ${args.name}`);
+    const msg = errorMessage(
+      e,
+      args.t('containerComponents.actionToasts.deleteFailedDetail', { name: args.name }),
+    );
     args.inputError.value = msg;
     const toast = useToast();
-    toast.error(`Delete failed: ${args.name}`, msg);
+    toast.error(
+      args.t('containerComponents.actionToasts.deleteFailedTitle', { name: args.name }),
+      msg,
+    );
     return false;
   } finally {
     const next = new Map(args.actionInProgress.value);
@@ -657,15 +681,17 @@ function createConfirmHandlers(args: {
   function confirmStop(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
     args.confirm.require({
-      header: 'Stop Container',
-      message: `Stop ${name}?`,
-      rejectLabel: 'Cancel',
-      acceptLabel: 'Stop',
+      header: args.t('containerComponents.confirmDialogs.stop.header'),
+      message: args.t('containerComponents.confirmDialogs.stop.message', { name }),
+      rejectLabel: args.t('containerComponents.confirmDialogs.cancel'),
+      acceptLabel: args.t('containerComponents.confirmDialogs.stop.acceptLabel'),
       severity: 'danger',
       accept: () =>
         args.executeAction(target, apiStopContainer, {
           kind: 'lifecycle',
-          successMessage: `Stopped: ${name}`,
+          successMessage: args.t('containerComponents.confirmDialogs.stop.successMessage', {
+            name,
+          }),
         }) as unknown as Promise<void>,
     });
   }
@@ -673,15 +699,17 @@ function createConfirmHandlers(args: {
   function confirmRestart(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
     args.confirm.require({
-      header: 'Restart Container',
-      message: `Restart ${name}?`,
-      rejectLabel: 'Cancel',
-      acceptLabel: 'Restart',
+      header: args.t('containerComponents.confirmDialogs.restart.header'),
+      message: args.t('containerComponents.confirmDialogs.restart.message', { name }),
+      rejectLabel: args.t('containerComponents.confirmDialogs.cancel'),
+      acceptLabel: args.t('containerComponents.confirmDialogs.restart.acceptLabel'),
       severity: 'warn',
       accept: () =>
         args.executeAction(target, apiRestartContainer, {
           kind: 'lifecycle',
-          successMessage: `Restarted: ${name}`,
+          successMessage: args.t('containerComponents.confirmDialogs.restart.successMessage', {
+            name,
+          }),
         }) as unknown as Promise<void>,
     });
   }
@@ -689,10 +717,10 @@ function createConfirmHandlers(args: {
   function confirmForceUpdate(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
     args.confirm.require({
-      header: 'Force Update',
-      message: `Force update ${name}? This clears skip/snooze policy before attempting update.`,
-      rejectLabel: 'Cancel',
-      acceptLabel: 'Force Update',
+      header: args.t('containerComponents.confirmDialogs.forceUpdate.header'),
+      message: args.t('containerComponents.confirmDialogs.forceUpdate.message', { name }),
+      rejectLabel: args.t('containerComponents.confirmDialogs.cancel'),
+      acceptLabel: args.t('containerComponents.confirmDialogs.forceUpdate.acceptLabel'),
       severity: 'warn',
       accept: () => args.forceUpdate(target),
     });
@@ -714,14 +742,22 @@ function createConfirmHandlers(args: {
       return;
     }
 
-    let message = `Update ${name} now? This will apply the latest discovered image.`;
+    let message = args.t('containerComponents.confirmDialogs.update.messageLatest', { name });
     if (container && container.currentTag && container.newTag) {
       const isTagChange = container.updateKind !== 'digest';
       if (isTagChange) {
         const kind = container.updateKind ? ` (${container.updateKind})` : '';
-        message = `Update ${name}? This will change the image tag from :${container.currentTag} to :${container.newTag}${kind}.`;
+        message = args.t('containerComponents.confirmDialogs.update.messageTagChange', {
+          name,
+          currentTag: container.currentTag,
+          newTag: container.newTag,
+          kind,
+        });
       } else {
-        message = `Update ${name}? A newer build of :${container.currentTag} is available (digest change).`;
+        message = args.t('containerComponents.confirmDialogs.update.messageDigestChange', {
+          name,
+          currentTag: container.currentTag,
+        });
       }
     }
 
@@ -730,14 +766,17 @@ function createConfirmHandlers(args: {
     const softBlockers = getSoftBlockers(eligibility);
     if (softBlockers.length > 0) {
       const list = softBlockers.map((b) => `• ${b.message}`).join('\n');
-      message = `${message}\n\nThis update is currently policy-blocked:\n${list}\n\nClick Update anyway to override.`;
+      message = `${message}${args.t('containerComponents.confirmDialogs.update.softBlockerSuffix', { list })}`;
     }
 
     args.confirm.require({
-      header: 'Update Container',
+      header: args.t('containerComponents.confirmDialogs.update.header'),
       message,
-      rejectLabel: 'Cancel',
-      acceptLabel: softBlockers.length > 0 ? 'Update anyway' : 'Update',
+      rejectLabel: args.t('containerComponents.confirmDialogs.cancel'),
+      acceptLabel:
+        softBlockers.length > 0
+          ? args.t('containerComponents.confirmDialogs.update.acceptLabelOverride')
+          : args.t('containerComponents.confirmDialogs.update.acceptLabel'),
       severity: 'warn',
       accept: () =>
         args.executeAction(target, apiUpdateContainer, {
@@ -752,10 +791,10 @@ function createConfirmHandlers(args: {
   function confirmDelete(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
     args.confirm.require({
-      header: 'Delete Container',
-      message: `Delete ${name}? This will remove it from Drydock tracking until rediscovered.`,
-      rejectLabel: 'Cancel',
-      acceptLabel: 'Delete',
+      header: args.t('containerComponents.confirmDialogs.delete.header'),
+      message: args.t('containerComponents.confirmDialogs.delete.message', { name }),
+      rejectLabel: args.t('containerComponents.confirmDialogs.cancel'),
+      acceptLabel: args.t('containerComponents.confirmDialogs.delete.acceptLabel'),
       severity: 'danger',
       accept: () => args.deleteContainer(target) as unknown as Promise<void>,
     });
@@ -767,10 +806,12 @@ function createConfirmHandlers(args: {
       return;
     }
     args.confirm.require({
-      header: 'Clear Update Policy',
-      message: `Clear all update policy for ${containerName}? This removes skips, snooze, and maturity settings.`,
-      rejectLabel: 'Cancel',
-      acceptLabel: 'Clear Policy',
+      header: args.t('containerComponents.confirmDialogs.clearPolicy.header'),
+      message: args.t('containerComponents.confirmDialogs.clearPolicy.message', {
+        name: containerName,
+      }),
+      rejectLabel: args.t('containerComponents.confirmDialogs.cancel'),
+      acceptLabel: args.t('containerComponents.confirmDialogs.clearPolicy.acceptLabel'),
       severity: 'warn',
       accept: () => args.clearPolicySelected(),
     });
@@ -781,12 +822,17 @@ function createConfirmHandlers(args: {
     if (!containerName) {
       return;
     }
-    const rollbackTarget = backupId ? 'the selected backup image' : 'the latest backup image';
     args.confirm.require({
-      header: 'Rollback Container',
-      message: `Rollback ${containerName} to ${rollbackTarget}? This will replace the running container image.`,
-      rejectLabel: 'Cancel',
-      acceptLabel: 'Rollback',
+      header: args.t('containerComponents.confirmDialogs.rollback.header'),
+      message: backupId
+        ? args.t('containerComponents.confirmDialogs.rollback.messageSelected', {
+            name: containerName,
+          })
+        : args.t('containerComponents.confirmDialogs.rollback.messageLatest', {
+            name: containerName,
+          }),
+      rejectLabel: args.t('containerComponents.confirmDialogs.cancel'),
+      acceptLabel: args.t('containerComponents.confirmDialogs.rollback.acceptLabel'),
       severity: 'danger',
       accept: () => args.rollbackToBackup(backupId),
     });
@@ -839,7 +885,7 @@ function createContainerActionHandlers(args: {
     const name = typeof target === 'string' ? target : target.name;
     await args.executeAction(target, apiStartContainer, {
       kind: 'lifecycle',
-      successMessage: `Started: ${name}`,
+      successMessage: args.t('containerComponents.actionToasts.started', { name }),
     });
   }
 
@@ -874,13 +920,16 @@ function createContainerActionHandlers(args: {
     try {
       await apiScanContainer(containerId);
       const toast = useToast();
-      toast.success(`Scan triggered: ${name}`);
+      toast.success(args.t('containerComponents.actionToasts.scanTriggered', { name }));
     } catch (e: unknown) {
       args.markScanCompleted(containerId);
-      const msg = errorMessage(e, `Scan failed for ${name}`);
+      const msg = errorMessage(
+        e,
+        args.t('containerComponents.actionToasts.scanFailedDetail', { name }),
+      );
       args.inputError.value = msg;
       const toast = useToast();
-      toast.error(`Scan failed: ${name}`, msg);
+      toast.error(args.t('containerComponents.actionToasts.scanFailedTitle', { name }), msg);
     }
   }
 
@@ -891,7 +940,7 @@ function createContainerActionHandlers(args: {
       target,
       'skip-current',
       {},
-      `Skipped current update for ${name}`,
+      args.t('containerComponents.policy.toasts.skipped', { name }),
     );
     if (applied) {
       args.skippedUpdates.value.add(targetKey);
@@ -906,7 +955,12 @@ function createContainerActionHandlers(args: {
 
   async function forceUpdate(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
-    await args.applyPolicy(target, 'clear', {}, `Cleared update policy for ${name}`);
+    await args.applyPolicy(
+      target,
+      'clear',
+      {},
+      args.t('containerComponents.policy.toasts.clearPolicy'),
+    );
     await args.executeAction(target, apiUpdateContainer, {
       kind: 'update',
       successMessage: getForceContainerUpdateStartedMessage(name, args.t),
@@ -1242,6 +1296,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       staleMessage: options?.staleMessage,
       treatNoUpdateAsStale: options?.treatNoUpdateAsStale,
       pendingLifecycleMode: options?.pendingLifecycleMode,
+      t: t as TranslateFn,
     });
   }
 
@@ -1293,19 +1348,19 @@ export function useContainerActions(input: UseContainerActionsInput) {
     try {
       const outcome = await apiCancelUpdateOperation(operationId);
       if (outcome === 'cancel-requested') {
-        toast.success(`Cancellation requested: ${name}`);
+        toast.success(t('containerComponents.actionToasts.cancellationRequested', { name }));
       } else {
-        toast.success(`Cancelled: ${name}`);
+        toast.success(t('containerComponents.actionToasts.cancelled', { name }));
       }
       await input.loadContainers();
     } catch (e: unknown) {
       const statusCode = (e as { statusCode?: number }).statusCode;
       if (statusCode === 409) {
-        toast.warning(`Update already finished for ${name}, cannot cancel`);
+        toast.warning(t('containerComponents.actionToasts.cancelAlreadyFinished', { name }));
       } else if (statusCode === 404) {
-        toast.error(`Operation not found: ${name}`);
+        toast.error(t('containerComponents.actionToasts.cancelOperationNotFound', { name }));
       } else {
-        toast.error(errorMessage(e, `Failed to cancel update for ${name}`));
+        toast.error(errorMessage(e, t('containerComponents.actionToasts.cancelFailed', { name })));
       }
     }
   }
@@ -1327,6 +1382,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
       closeFullPage: input.closeFullPage,
       closePanel: input.closePanel,
       loadContainers: input.loadContainers,
+      t: t as TranslateFn,
     });
   }
 

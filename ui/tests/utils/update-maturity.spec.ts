@@ -110,5 +110,72 @@ describe('update-maturity', () => {
       const futureDate = new Date(NOW + ONE_HOUR).toISOString();
       expect(formatUpdateAge(futureDate, true, NOW)).toBe('Available just now');
     });
+
+    describe('with t param', () => {
+      const mockT = vi.fn((key: string, params?: Record<string, unknown>) =>
+        params ? `${key}:${JSON.stringify(params)}` : key,
+      );
+
+      beforeEach(() => {
+        mockT.mockClear();
+      });
+
+      it('calls singular days key for 1 day', () => {
+        const oneDayAgo = new Date(NOW - ONE_DAY).toISOString();
+        const result = formatUpdateAge(oneDayAgo, true, NOW, mockT);
+        expect(result).toBe('containerComponents.updateAge.availableDaysSingular');
+        expect(mockT).toHaveBeenCalledWith('containerComponents.updateAge.availableDaysSingular');
+      });
+
+      it('calls plural days key for 2+ days', () => {
+        const twoDaysAgo = new Date(NOW - 2 * ONE_DAY).toISOString();
+        const result = formatUpdateAge(twoDaysAgo, true, NOW, mockT);
+        expect(result).toBe('containerComponents.updateAge.availableDaysPlural:{"count":2}');
+        expect(mockT).toHaveBeenCalledWith('containerComponents.updateAge.availableDaysPlural', {
+          count: 2,
+        });
+      });
+
+      it('calls singular hours key for 1 hour', () => {
+        const oneHourAgo = new Date(NOW - ONE_HOUR).toISOString();
+        const result = formatUpdateAge(oneHourAgo, true, NOW, mockT);
+        expect(result).toBe('containerComponents.updateAge.availableHoursSingular');
+        expect(mockT).toHaveBeenCalledWith('containerComponents.updateAge.availableHoursSingular');
+      });
+
+      it('calls plural hours key for 2+ hours', () => {
+        const twoHoursAgo = new Date(NOW - 2 * ONE_HOUR).toISOString();
+        const result = formatUpdateAge(twoHoursAgo, true, NOW, mockT);
+        expect(result).toBe('containerComponents.updateAge.availableHoursPlural:{"count":2}');
+        expect(mockT).toHaveBeenCalledWith('containerComponents.updateAge.availableHoursPlural', {
+          count: 2,
+        });
+      });
+
+      it('calls singular minutes key for 1 minute', () => {
+        const oneMinuteAgo = new Date(NOW - ONE_MINUTE).toISOString();
+        const result = formatUpdateAge(oneMinuteAgo, true, NOW, mockT);
+        expect(result).toBe('containerComponents.updateAge.availableMinutesSingular');
+        expect(mockT).toHaveBeenCalledWith(
+          'containerComponents.updateAge.availableMinutesSingular',
+        );
+      });
+
+      it('calls plural minutes key for 2+ minutes', () => {
+        const twoMinutesAgo = new Date(NOW - 2 * ONE_MINUTE).toISOString();
+        const result = formatUpdateAge(twoMinutesAgo, true, NOW, mockT);
+        expect(result).toBe('containerComponents.updateAge.availableMinutesPlural:{"count":2}');
+        expect(mockT).toHaveBeenCalledWith('containerComponents.updateAge.availableMinutesPlural', {
+          count: 2,
+        });
+      });
+
+      it('calls justNow key for zero age', () => {
+        const justNow = new Date(NOW - 30_000).toISOString();
+        const result = formatUpdateAge(justNow, true, NOW, mockT);
+        expect(result).toBe('containerComponents.updateAge.justNow');
+        expect(mockT).toHaveBeenCalledWith('containerComponents.updateAge.justNow');
+      });
+    });
   });
 });

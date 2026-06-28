@@ -1053,12 +1053,14 @@ describe('DashboardView', () => {
       ];
 
       const wrapper = await mountDashboard(containers);
-      const releaseLink = wrapper
+      // Widget now renders ReleaseNotesLink in icon-only mode; the trigger is an icon button,
+      // not a direct <a> link. The actual link lives inside a popover (Teleported, closed by
+      // default). Verify the icon button trigger is present instead.
+      const releaseBtn = wrapper
         .find('[data-widget-id="recent-updates"]')
-        .find('a[href="https://example.com/releases/api-2.0.0"]');
+        .find('[data-test="release-link"]');
 
-      expect(releaseLink.exists()).toBe(true);
-      expect(releaseLink.text()).toContain('Release notes');
+      expect(releaseBtn.exists()).toBe(true);
     });
 
     it('shows an empty state when no recent updates are available', async () => {
@@ -1190,7 +1192,7 @@ describe('DashboardView', () => {
       const agents = [{ name: 'offline-agent', connected: false }];
       const wrapper = await mountDashboard([], agents);
       expect(wrapper.text()).toContain('offline-agent');
-      expect(wrapper.text()).toContain('disconnected');
+      expect(wrapper.text()).toContain('Disconnected');
     });
 
     it('shows container counts per server', async () => {

@@ -1,4 +1,5 @@
-import { effectScope, nextTick, ref } from 'vue';
+import { mount } from '@vue/test-utils';
+import { defineComponent, nextTick, ref } from 'vue';
 import type { Container } from '@/types/container';
 import { useContainerPolicy } from '@/views/containers/useContainerPolicy';
 
@@ -54,7 +55,6 @@ function createPolicyHarness(
     selectedContainer?: Container | null;
   } = {},
 ) {
-  const scope = effectScope();
   const selectedContainer = ref<Container | null>(options.selectedContainer ?? null);
   const containerMetaMap = ref<Record<string, unknown>>(options.containerMetaMap ?? {});
   const containerIdMap = ref<Record<string, string>>(options.containerIdMap ?? {});
@@ -66,23 +66,26 @@ function createPolicyHarness(
   const loadContainers = vi.fn().mockResolvedValue(undefined);
   const refreshActionTabData = vi.fn().mockResolvedValue(undefined);
 
-  let composable: ReturnType<typeof useContainerPolicy> | undefined;
-  scope.run(() => {
-    composable = useContainerPolicy({
-      selectedContainer,
-      containerMetaMap,
-      containerIdMap,
-      loadContainers,
-      skippedUpdates,
-      containerActionsEnabled,
-      containerActionsDisabledReason,
-      refreshActionTabData,
-    });
-  });
+  let composable!: ReturnType<typeof useContainerPolicy>;
 
-  if (!composable) {
-    throw new Error('Policy harness did not initialize');
-  }
+  const wrapper = mount(
+    defineComponent({
+      setup() {
+        composable = useContainerPolicy({
+          selectedContainer,
+          containerMetaMap,
+          containerIdMap,
+          loadContainers,
+          skippedUpdates,
+          containerActionsEnabled,
+          containerActionsDisabledReason,
+          refreshActionTabData,
+        });
+        return {};
+      },
+      template: '<div />',
+    }),
+  );
 
   return {
     composable,
@@ -92,7 +95,7 @@ function createPolicyHarness(
     containerMetaMap,
     loadContainers,
     refreshActionTabData,
-    scope,
+    wrapper,
     selectedContainer,
     skippedUpdates,
   };
@@ -147,7 +150,7 @@ describe('useContainerPolicy', () => {
       harness.composable.containerPolicyTooltip({ id: 'container-1', name: 'web' }, 'maturity'),
     ).toBe('Maturity policy allows all updates');
 
-    harness.scope.stop();
+    harness.wrapper.unmount();
   });
 
   it('uses the direct string key and does not mark maturity blocked when updateAvailable is not false', () => {
@@ -178,7 +181,7 @@ describe('useContainerPolicy', () => {
       'Mature-only policy active (7 days minimum age)',
     );
 
-    harness.scope.stop();
+    harness.wrapper.unmount();
   });
 
   it('blocks mature-only updates when a suppressed digest update is still recent', () => {
@@ -212,7 +215,7 @@ describe('useContainerPolicy', () => {
       harness.composable.containerPolicyTooltip({ id: 'container-2', name: 'tagged' }, 'maturity'),
     ).toBe('Mature-only policy blocks updates younger than 7 days');
 
-    harness.scope.stop();
+    harness.wrapper.unmount();
   });
 
   it('syncs selected policy state from name and id lookups as the selection changes', async () => {
@@ -279,6 +282,6 @@ describe('useContainerPolicy', () => {
     expect(harness.composable.maturityModeInput.value).toBe('all');
     expect(harness.composable.maturityMinAgeDaysInput.value).toBe(4);
 
-    harness.scope.stop();
+    harness.wrapper.unmount();
   });
 });

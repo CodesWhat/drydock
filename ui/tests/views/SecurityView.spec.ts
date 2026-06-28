@@ -60,6 +60,7 @@ vi.mock('@/views/security/securityViewUtils', async () => {
 });
 
 import { mount } from '@vue/test-utils';
+import { preferences, resetPreferences } from '@/preferences/store';
 import { clearIconCache, updateSettings } from '@/services/settings';
 import SecurityView from '@/views/SecurityView.vue';
 
@@ -119,7 +120,8 @@ const stubs: Record<string, any> = {
   DataCardGrid: defineComponent({
     props: ['items', 'itemKey', 'minWidth', 'selectedKey'],
     emits: ['item-click'],
-    template: '<div class="dcg" :data-items="items.length" />',
+    template:
+      '<div class="dcg" :data-items="items.length"><div v-for="item in items" :key="item[itemKey]" class="dcg-card"><slot name="card" :item="item" /></div></div>',
   }),
   DataListAccordion: defineComponent({
     props: ['items', 'itemKey', 'selectedKey'],
@@ -1429,6 +1431,106 @@ describe('SecurityView', () => {
       expect(summary.releaseLink).toBe('https://github.com/nginx/nginx/releases');
     });
 
+    it('populates sourceRepo and currentReleaseNotes on summaries for no-update containers', async () => {
+      mockContainers([
+        makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          security: {
+            scan: {
+              vulnerabilities: [{ id: 'CVE-1', severity: 'HIGH', packageName: 'openssl' }],
+            },
+          },
+        }),
+      ]);
+      mockGetAllContainers.mockResolvedValue([
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          image: { name: 'nginx', tag: { value: '1.25' } },
+          newTag: null,
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: null,
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          sourceRepo: 'github.com/nginx/nginx',
+          currentReleaseNotes: {
+            title: 'v1.25.0',
+            body: 'Current notes',
+            url: 'https://github.com/nginx/nginx/releases/tag/v1.25.0',
+            publishedAt: '2025-12-01T00:00:00Z',
+            provider: 'github',
+          },
+        },
+      ]);
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      const vm = w.vm as any;
+      const summary = vm.filteredSummaries[0];
+      expect(summary.hasUpdate).toBeUndefined();
+      expect(summary.sourceRepo).toBe('github.com/nginx/nginx');
+      expect(summary.currentReleaseNotes?.title).toBe('v1.25.0');
+    });
+
+    it('detail panel shows release notes and project link but not update button for no-update image', async () => {
+      mockContainers([
+        makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          security: {
+            scan: {
+              vulnerabilities: [{ id: 'CVE-1', severity: 'HIGH', packageName: 'openssl' }],
+            },
+          },
+        }),
+      ]);
+      mockGetAllContainers.mockResolvedValue([
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          image: { name: 'nginx', tag: { value: '1.25' } },
+          newTag: null,
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: null,
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          sourceRepo: 'github.com/nginx/nginx',
+          currentReleaseNotes: {
+            title: 'v1.25.0',
+            body: 'Current notes',
+            url: 'https://github.com/nginx/nginx/releases/tag/v1.25.0',
+            publishedAt: '2025-12-01T00:00:00Z',
+            provider: 'github',
+          },
+        },
+      ]);
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      const vm = w.vm as any;
+      vm.openDetail(vm.filteredSummaries[0]);
+      await nextTick();
+      await flushPromises();
+
+      expect(w.find('[data-test="security-detail-update-btn"]').exists()).toBe(false);
+      // Fallthrough attr from SecurityDetailPanel overrides the component's own data-test
+      expect(w.find('[data-test="security-detail-release-notes"]').exists()).toBe(true);
+      expect(w.find('[data-test="security-detail-project-link"]').exists()).toBe(true);
+    });
+
     it('navigateToContainerUpdate joins multiple container IDs with comma', async () => {
       mockContainers([
         makeContainer({
@@ -1494,6 +1596,60 @@ describe('SecurityView', () => {
         path: '/containers',
         query: { containerIds: 'c1,c2' },
       });
+    });
+  });
+
+  describe('cards view', () => {
+    afterEach(() => {
+      resetPreferences();
+    });
+
+    it('card footer shows ReleaseNotesLink and ProjectLink for a no-update image with currentReleaseNotes and sourceRepo', async () => {
+      mockContainers([
+        makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          security: {
+            scan: {
+              vulnerabilities: [{ id: 'CVE-1', severity: 'HIGH', packageName: 'openssl' }],
+            },
+          },
+        }),
+      ]);
+      mockGetAllContainers.mockResolvedValue([
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          image: { name: 'nginx', tag: { value: '1.25' } },
+          newTag: null,
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: null,
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          sourceRepo: 'github.com/nginx/nginx',
+          currentReleaseNotes: {
+            title: 'v1.25.0',
+            body: 'Current notes',
+            url: 'https://github.com/nginx/nginx/releases/tag/v1.25.0',
+            publishedAt: '2025-12-01T00:00:00Z',
+            provider: 'github',
+          },
+        },
+      ]);
+
+      preferences.views.security.mode = 'cards';
+
+      const w = factory();
+      await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      expect(w.find('[data-test="security-release-notes"]').exists()).toBe(true);
+      expect(w.find('[data-test="security-project-link"]').exists()).toBe(true);
+      expect(w.find('[data-test="security-update-btn"]').exists()).toBe(false);
     });
   });
 });

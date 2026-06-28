@@ -1,4 +1,5 @@
 import { type Ref, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useToast } from '../../composables/useToast';
 import { getContainerTriggers, runTrigger as runContainerTrigger } from '../../services/container';
 import type { ApiContainerTrigger } from '../../types/api';
@@ -31,6 +32,7 @@ async function runAssociatedTriggerState(args: {
   triggerError: Ref<string | null>;
   loadContainers: () => Promise<void>;
   refreshActionTabData: () => Promise<void>;
+  t: (key: string, params?: Record<string, unknown>) => string;
 }) {
   if (!args.containerActionsEnabled) {
     args.triggerMessage.value = null;
@@ -51,22 +53,28 @@ async function runAssociatedTriggerState(args: {
       triggerName: args.trigger.name,
       triggerAgent: args.trigger.agent,
     });
-    args.triggerMessage.value = `Trigger ${triggerKey} ran successfully`;
+    args.triggerMessage.value = args.t('containerComponents.triggers.toasts.ranSuccessfully', {
+      key: triggerKey,
+    });
     const toast = useToast();
-    toast.success(`Trigger ran: ${triggerKey}`);
+    toast.success(args.t('containerComponents.triggers.toasts.ran', { key: triggerKey }));
     await args.loadContainers();
     await args.refreshActionTabData();
   } catch (e: unknown) {
-    const msg = errorMessage(e, `Failed to run ${triggerKey}`);
+    const msg = errorMessage(
+      e,
+      args.t('containerComponents.triggers.toasts.failedDetail', { key: triggerKey }),
+    );
     args.triggerError.value = msg;
     const toast = useToast();
-    toast.error(`Trigger failed: ${triggerKey}`, msg);
+    toast.error(args.t('containerComponents.triggers.toasts.failed', { key: triggerKey }), msg);
   } finally {
     args.triggerRunInProgress.value = null;
   }
 }
 
 export function useContainerTriggers(input: UseContainerTriggersInput) {
+  const { t } = useI18n();
   const detailTriggers = ref<Record<string, unknown>[]>([]);
   const triggersLoading = ref(false);
   const triggerRunInProgress = ref<string | null>(null);
@@ -89,7 +97,7 @@ export function useContainerTriggers(input: UseContainerTriggersInput) {
       error: triggerError,
       value: detailTriggers,
       loader: getContainerTriggers,
-      failureMessage: 'Failed to load associated triggers',
+      failureMessage: t('containerComponents.triggers.toasts.loadFailed'),
     });
   }
 
@@ -104,6 +112,7 @@ export function useContainerTriggers(input: UseContainerTriggersInput) {
       triggerError,
       loadContainers: input.loadContainers,
       refreshActionTabData: input.refreshActionTabData,
+      t,
     });
   }
 

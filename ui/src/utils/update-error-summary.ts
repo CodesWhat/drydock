@@ -1,3 +1,4 @@
+import type { TranslateFn } from '../types/i18n';
 import { formatRollbackReason } from '../views/containers/useContainerBackups';
 
 const MAX_RAW_ERROR_LENGTH = 120;
@@ -15,11 +16,14 @@ const MAX_RAW_ERROR_LENGTH = 120;
  * the operator. Single source of truth for the resolution order so the toast,
  * the row banner, and the detail pane never disagree.
  */
-export function resolveUpdateFailureReason(args: {
-  lastError?: string;
-  rollbackReason?: string;
-}): string | undefined {
-  const summarised = summariseUpdateError(args.lastError);
+export function resolveUpdateFailureReason(
+  args: {
+    lastError?: string;
+    rollbackReason?: string;
+  },
+  t?: TranslateFn,
+): string | undefined {
+  const summarised = summariseUpdateError(args.lastError, t);
   if (summarised) {
     return summarised;
   }
@@ -49,25 +53,31 @@ export function resolveUpdateFailureReason(args: {
  *
  * The full error string is kept available separately (operation row's
  * `lastError`) for tooltips and detail panes.
+ *
+ * When `t` is provided, all returned strings are run through the i18n
+ * translate function so they render in the active locale.
  */
-export function summariseUpdateError(error: string | undefined): string | undefined {
+export function summariseUpdateError(
+  error: string | undefined,
+  t?: TranslateFn,
+): string | undefined {
   if (!error) {
     return undefined;
   }
   const lower = error.toLowerCase();
 
   if (lower.includes('rate limit') || lower.includes('toomanyrequests')) {
-    return 'Registry rate limit hit';
+    return t ? t('common.errorSummary.rateLimitHit') : 'Registry rate limit hit';
   }
   if (lower.includes('http code 403') || lower.includes('denied') || lower.includes('forbidden')) {
-    return 'Registry access denied';
+    return t ? t('common.errorSummary.accessDenied') : 'Registry access denied';
   }
   if (
     lower.includes('manifest unknown') ||
     lower.includes('no such image') ||
     lower.includes('http code 404')
   ) {
-    return 'Image not found';
+    return t ? t('common.errorSummary.imageNotFound') : 'Image not found';
   }
   if (
     lower.includes('http code 401') ||
@@ -75,22 +85,22 @@ export function summariseUpdateError(error: string | undefined): string | undefi
     lower.includes('invalid_token') ||
     lower.includes('authentication required')
   ) {
-    return 'Registry authentication failed';
+    return t ? t('common.errorSummary.authFailed') : 'Registry authentication failed';
   }
   const isConnectionError =
     lower.includes('econnrefused') || lower.includes('econnreset') || lower.includes('etimedout');
   const isResolutionError = lower.includes('enotfound') || lower.includes('socket hang up');
   if (isConnectionError || isResolutionError) {
-    return 'Registry unreachable';
+    return t ? t('common.errorSummary.unreachable') : 'Registry unreachable';
   }
   if (error === 'Cancelled by operator') {
-    return 'Cancelled';
+    return t ? t('common.errorSummary.cancelled') : 'Cancelled';
   }
   if (lower.includes('security scan blocked')) {
-    return 'Blocked by security scan';
+    return t ? t('common.errorSummary.securityBlocked') : 'Blocked by security scan';
   }
   if (lower.includes('signature verification') || lower.includes('cosign')) {
-    return 'Signature verification failed';
+    return t ? t('common.errorSummary.signatureFailed') : 'Signature verification failed';
   }
   return undefined;
 }

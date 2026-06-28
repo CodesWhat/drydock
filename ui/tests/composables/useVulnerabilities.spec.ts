@@ -1334,5 +1334,275 @@ describe('useVulnerabilities', () => {
       expect(summary.hasUpdate).toBeUndefined();
       expect(summary.containersWithUpdate).toBeUndefined();
     });
+
+    it('populates sourceRepo and currentReleaseNotes for a no-update image', async () => {
+      mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+        totalContainers: 1,
+        scannedContainers: 1,
+        latestScannedAt: null,
+        images: [
+          {
+            image: 'nginx',
+            containerIds: ['c1'],
+            vulnerabilities: [{ id: 'CVE-9', severity: 'HIGH', package: 'openssl' }],
+          },
+        ],
+      });
+
+      const currentNotes = {
+        title: 'v1.25.0',
+        body: 'Current running tag notes',
+        url: 'https://github.com/nginx/nginx/releases/tag/v1.25.0',
+        publishedAt: '2025-12-01T00:00:00Z',
+        provider: 'github',
+      };
+
+      const containers = ref<Container[]>([
+        {
+          id: 'c1',
+          name: 'nginx',
+          image: 'nginx:1.25',
+          newTag: null,
+          identityKey: '::Local::nginx',
+          currentTag: '1.25',
+          isDigestPinned: false,
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: null,
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          icon: 'docker',
+          sourceRepo: 'github.com/nginx/nginx',
+          currentReleaseNotes: currentNotes,
+          releaseLink: 'https://github.com/nginx/nginx/releases',
+          details: { ports: [], volumes: [], env: [], labels: [] },
+        },
+      ]);
+
+      const state = useVulnerabilities({
+        securitySortField: ref('critical'),
+        securitySortAsc: ref(false),
+        containers,
+      });
+      await state.fetchVulnerabilities();
+
+      const summary = state.filteredSummaries.value[0];
+      expect(summary.hasUpdate).toBeUndefined();
+      expect(summary.sourceRepo).toBe('github.com/nginx/nginx');
+      expect(summary.currentReleaseNotes).toEqual(currentNotes);
+      expect(summary.releaseLink).toBe('https://github.com/nginx/nginx/releases');
+      expect(summary.releaseNotes).toBeUndefined();
+    });
+
+    it('skips updating containers without releaseNotes and does not clobber currentReleaseNotes from the no-update container', async () => {
+      mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+        totalContainers: 3,
+        scannedContainers: 3,
+        latestScannedAt: null,
+        images: [
+          {
+            image: 'myapp',
+            containerIds: ['cA', 'cB1', 'cB2'],
+            vulnerabilities: [{ id: 'CVE-11', severity: 'HIGH', package: 'curl' }],
+          },
+        ],
+      });
+
+      const currentNotes = {
+        title: 'running-1.0',
+        body: 'Running notes',
+        url: 'https://github.com/acme/app/releases/tag/1.0',
+        publishedAt: '2025-11-01T00:00:00Z',
+        provider: 'github',
+      };
+      const updateNotes = {
+        title: 'update-2.0',
+        body: 'Update notes',
+        url: 'https://github.com/acme/app/releases/tag/2.0',
+        publishedAt: '2026-01-01T00:00:00Z',
+        provider: 'github',
+      };
+
+      const containers = ref<Container[]>([
+        {
+          id: 'cA',
+          name: 'app-a',
+          image: 'myapp:1.0',
+          newTag: null,
+          identityKey: '::Local::app-a',
+          currentTag: '1.0',
+          isDigestPinned: false,
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: null,
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          icon: 'docker',
+          sourceRepo: 'github.com/acme/app',
+          currentReleaseNotes: currentNotes,
+          details: { ports: [], volumes: [], env: [], labels: [] },
+        },
+        {
+          id: 'cB1',
+          name: 'app-b1',
+          image: 'myapp:1.0',
+          newTag: '2.0',
+          identityKey: '::Local::app-b1',
+          currentTag: '1.0',
+          isDigestPinned: false,
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'major',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          icon: 'docker',
+          currentReleaseNotes: null,
+          details: { ports: [], volumes: [], env: [], labels: [] },
+        },
+        {
+          id: 'cB2',
+          name: 'app-b2',
+          image: 'myapp:1.0',
+          newTag: '2.0',
+          identityKey: '::Local::app-b2',
+          currentTag: '1.0',
+          isDigestPinned: false,
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'major',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          icon: 'docker',
+          releaseNotes: updateNotes,
+          currentReleaseNotes: null,
+          details: { ports: [], volumes: [], env: [], labels: [] },
+        },
+      ]);
+
+      const state = useVulnerabilities({
+        securitySortField: ref('critical'),
+        securitySortAsc: ref(false),
+        containers,
+      });
+      await state.fetchVulnerabilities();
+
+      const summary = state.filteredSummaries.value[0];
+      expect(summary.hasUpdate).toBe(true);
+      expect(summary.releaseNotes?.title).toBe('update-2.0');
+      expect(summary.currentReleaseNotes?.title).toBe('running-1.0');
+      expect(summary.sourceRepo).toBe('github.com/acme/app');
+    });
+
+    it('skips overview container ids that have no matching container', async () => {
+      mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+        totalContainers: 1,
+        scannedContainers: 1,
+        latestScannedAt: null,
+        images: [
+          {
+            image: 'ghost',
+            containerIds: ['missing-id'],
+            vulnerabilities: [{ id: 'CVE-99', severity: 'LOW', package: 'glibc' }],
+          },
+        ],
+      });
+
+      // A non-empty containers list (so the early return is passed) whose ids
+      // do not include the overview's 'missing-id', exercising the not-found
+      // guard in the running-tag metadata loop.
+      const containers = ref<Container[]>([
+        {
+          id: 'unrelated',
+          name: 'other',
+          image: 'other:1',
+          newTag: null,
+          identityKey: '::Local::other',
+          currentTag: '1',
+          isDigestPinned: false,
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: null,
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          icon: 'docker',
+          details: { ports: [], volumes: [], env: [], labels: [] },
+        },
+      ]);
+
+      const state = useVulnerabilities({
+        securitySortField: ref('critical'),
+        securitySortAsc: ref(false),
+        containers,
+      });
+      await state.fetchVulnerabilities();
+
+      const summary = state.filteredSummaries.value.find((s) => s.image === 'ghost');
+      expect(summary).toBeDefined();
+      expect(summary?.sourceRepo).toBeUndefined();
+      expect(summary?.currentReleaseNotes).toBeUndefined();
+      expect(summary?.hasUpdate).toBeUndefined();
+    });
+
+    it('populates sourceRepo on summaries that also have an update', async () => {
+      mockGetSecurityVulnerabilityOverview.mockResolvedValue({
+        totalContainers: 1,
+        scannedContainers: 1,
+        latestScannedAt: null,
+        images: [
+          {
+            image: 'redis',
+            containerIds: ['c1'],
+            vulnerabilities: [{ id: 'CVE-10', severity: 'LOW', package: 'glibc' }],
+          },
+        ],
+      });
+
+      const updateNotes = {
+        title: 'v7.2.0',
+        body: 'New release',
+        url: 'https://github.com/redis/redis/releases/tag/7.2.0',
+        publishedAt: '2026-01-01T00:00:00Z',
+        provider: 'github',
+      };
+
+      const containers = ref<Container[]>([
+        {
+          id: 'c1',
+          name: 'redis',
+          image: 'redis:7',
+          newTag: '7.2',
+          identityKey: '::Local::redis',
+          currentTag: '7.0',
+          isDigestPinned: false,
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'minor',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          icon: 'docker',
+          sourceRepo: 'github.com/redis/redis',
+          releaseNotes: updateNotes,
+          details: { ports: [], volumes: [], env: [], labels: [] },
+        },
+      ]);
+
+      const state = useVulnerabilities({
+        securitySortField: ref('critical'),
+        securitySortAsc: ref(false),
+        containers,
+      });
+      await state.fetchVulnerabilities();
+
+      const summary = state.filteredSummaries.value[0];
+      expect(summary.hasUpdate).toBe(true);
+      expect(summary.sourceRepo).toBe('github.com/redis/redis');
+      expect(summary.releaseNotes).toEqual(updateNotes);
+    });
   });
 });

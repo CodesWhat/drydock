@@ -205,7 +205,9 @@ describe('WatchersView', () => {
     const table = wrapper.findComponent(richDataTableStub);
     const rows = table.props('rows') as Array<{ lastRun: string }>;
 
-    expect(rows[0].lastRun).toBe('5m ago');
+    expect(rows[0].lastRun).toBe(
+      new Intl.RelativeTimeFormat('en', { numeric: 'always', style: 'short' }).format(-5, 'minute'),
+    );
   });
 
   it('renders em dash for lastRun when metadata.lastRunAt is absent', async () => {

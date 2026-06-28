@@ -41,7 +41,6 @@
       "widgetAria": "أداة التحديثات المتاحة",
       "updateAll": "تحديث الكل",
       "noUpdates": "لا توجد تحديثات متاحة",
-      "releaseNotes": "ملاحظات الإصدار",
       "securityBlocked": "محظور أمنياً",
       "updateContainer": "تحديث الحاوية",
       "compactSingle": "{count} تحديث متاح",
@@ -104,6 +103,23 @@
       "minor": "ثانوي",
       "patch": "تصحيح",
       "digest": "ملخص"
+    },
+    "maintenanceWindow": {
+      "openNow": "Open now",
+      "scheduled": "Scheduled",
+      "openingSoon": "Opening soon"
+    },
+    "dataLoadFailed": "Failed to load dashboard data",
+    "widgets": {
+      "statContainers": "Containers",
+      "statUpdates": "Updates Available",
+      "statSecurity": "Security Issues",
+      "statRegistries": "Registries",
+      "recentUpdates": "Updates Available",
+      "securityOverview": "Security Overview",
+      "resourceUsage": "Resource Usage",
+      "hostStatus": "Host Status",
+      "updateBreakdown": "Update Breakdown"
     }
   }
 }

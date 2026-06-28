@@ -7,6 +7,14 @@ import { fileURLToPath } from 'node:url';
 const SARIF_SCHEMA = 'https://json.schemastore.org/sarif-2.1.0.json';
 const ZAP_INFORMATION_URI = 'https://www.zaproxy.org/';
 
+// ZAP plugin IDs to drop from the SARIF/code-scanning surface. 10049
+// ("Storable and Cacheable Content") is an informational passive rule that
+// fires on every content-hashed static asset (e.g. /assets/*-<hash>.js).
+// Those assets are immutable and intentionally cacheable and hold no
+// sensitive data, so the alert is a false positive that otherwise recurs
+// under a new hash on every build.
+export const IGNORED_ZAP_PLUGIN_IDS = new Set(['10049']);
+
 function asArray(value) {
   if (Array.isArray(value)) {
     return value;
@@ -209,6 +217,9 @@ export function convertZapJsonToSarif(zapReport) {
 
   for (const site of asArray(zapReport?.site)) {
     for (const alert of asArray(site?.alerts)) {
+      if (IGNORED_ZAP_PLUGIN_IDS.has(String(alert.pluginid))) {
+        continue;
+      }
       const id = ruleId(alert);
       if (!ruleMap.has(id)) {
         ruleMap.set(id, buildRule(alert));

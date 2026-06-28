@@ -10,6 +10,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1-rc.2] — 2026-06-28
+
+### Changed
+
+- **The entire UI is now translatable.** The last hardcoded English strings (dashboard widgets, security view, detail panels, host-status labels, the log viewer's invalid-regex notice, and SSE update-failed fallbacks) were extracted into the vue-i18n catalogs, so every surface now resolves through the translation system. Combined with the newly opened community translation project on Crowdin, contributors can translate any part of the interface.
+
+### Fixed
+
+- **The security view now shows release notes for the running image even when no update is pending.** The detail panel, table, and card surfaces previously gated the release-notes link behind "an update is available," so a container with no pending update showed nothing even though its current release notes were known. The running-tag notes now appear whenever they exist, and a "View project" link (the source repository) was added alongside them, matching the containers view. (Discussion #295)
+
+- **The dashboard "Recent Updates" widget now uses the shared release-notes and project-link components.** It previously rendered a bare release-notes anchor with no project link and no structured current/available notes. It now renders the same icon links as every other surface, fed from the container's `sourceRepo`, `releaseNotes`, and `currentReleaseNotes`. (Discussion #295)
+
+- **Auto-apply update triggers now honor the maintenance window on every detection path.** A container update detected through certain code paths could be auto-applied outside the configured maintenance window because the window check was missing on those paths. The gate is now enforced uniformly, so updates only auto-apply inside the window regardless of how the update was detected. (#321)
+
+### Security
+
+- **Suppressed a ZAP DAST false positive (rule 10049, Storable and Cacheable Content).** The baseline scan flagged cacheable static responses that are not sensitive; the rule is now downgraded in `.zap/rules.tsv` and the JSON-to-SARIF converter handles the suppression so the security workflow stays green without masking real findings. (#374)
+
 ## [1.5.1-rc.1] — 2026-06-26
 
 ### Added

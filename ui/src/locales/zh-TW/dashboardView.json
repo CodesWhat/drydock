@@ -41,7 +41,6 @@
       "widgetAria": "可用更新小部件",
       "updateAll": "全部更新",
       "noUpdates": "沒有可用更新",
-      "releaseNotes": "發行說明",
       "securityBlocked": "被安全機制阻止",
       "updateContainer": "更新容器",
       "compactSingle": "{count} 個可用更新",
@@ -104,6 +103,23 @@
       "minor": "次要",
       "patch": "修補",
       "digest": "摘要"
+    },
+    "maintenanceWindow": {
+      "openNow": "Open now",
+      "scheduled": "Scheduled",
+      "openingSoon": "Opening soon"
+    },
+    "dataLoadFailed": "Failed to load dashboard data",
+    "widgets": {
+      "statContainers": "Containers",
+      "statUpdates": "Updates Available",
+      "statSecurity": "Security Issues",
+      "statRegistries": "Registries",
+      "recentUpdates": "Updates Available",
+      "securityOverview": "Security Overview",
+      "resourceUsage": "Resource Usage",
+      "hostStatus": "Host Status",
+      "updateBreakdown": "Update Breakdown"
     }
   }
 }

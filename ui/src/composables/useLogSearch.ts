@@ -10,6 +10,7 @@ interface UseLogSearchOptions<TEntry extends SearchableLogEntry> {
   visibleEntries: Ref<TEntry[]> | ComputedRef<TEntry[]>;
   lineElements: Map<number, HTMLElement>;
   searchTextForEntry?: (entry: TEntry) => string;
+  t?: (key: string) => string;
 }
 
 function escapeRegExp(value: string): string {
@@ -37,7 +38,10 @@ export function useLogSearch<TEntry extends SearchableLogEntry>(
       searchError.value = null;
       return pattern;
     } catch {
-      searchError.value = regexSearch.value ? 'Invalid regular expression' : null;
+      searchError.value = regexSearch.value
+        ? (options.t?.('containerComponents.logViewer.invalidRegex') ??
+          'Invalid regular expression')
+        : null;
       return null;
     }
   });

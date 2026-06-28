@@ -67,6 +67,9 @@ export const viewport: Viewport = {
   ],
 };
 
+const REVEAL_BOOTSTRAP =
+  "(function(){var d=document,de=d.documentElement;de.classList.add('js');var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;function all(){var e=d.querySelectorAll('.reveal');for(var i=0;i<e.length;i++)e[i].classList.add('visible');}function arm(){if(reduce||!('IntersectionObserver' in window)){all();return;}var io=new IntersectionObserver(function(en){for(var i=0;i<en.length;i++){if(en[i].isIntersecting){en[i].target.classList.add('visible');io.unobserve(en[i].target);}}},{threshold:0.12,rootMargin:'0px 0px -40px 0px'});var e=d.querySelectorAll('.reveal');for(var i=0;i<e.length;i++)io.observe(e[i]);}if(d.readyState==='loading'){d.addEventListener('DOMContentLoaded',arm);}else{arm();}})();";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -78,6 +81,11 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="Drydock" />
       </head>
       <body className={`${ibmPlexSans.className} ${ibmPlexMono.variable}`}>
+        {/* Fail-open reveal gate: this inline script runs even if the bundled
+            JS is blocked (e.g. SRI/CSP), adds `js` to <html> before sections
+            paint, and runs a single IntersectionObserver. If JS never runs, the
+            `.reveal` CSS defaults to visible. See globals.css. */}
+        <script dangerouslySetInnerHTML={{ __html: REVEAL_BOOTSTRAP }} />
         <RootProvider>{children}</RootProvider>
         <Analytics />
         <SpeedInsights />

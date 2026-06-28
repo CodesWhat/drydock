@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppBadge from '../../components/AppBadge.vue';
+import ProjectLink from '../../components/containers/ProjectLink.vue';
 import ReleaseNotesLink from '../../components/containers/ReleaseNotesLink.vue';
 import type { ImageSummary } from '../../composables/useVulnerabilities';
 import type { SbomFormat, SbomState, Vulnerability } from './securityViewTypes';
@@ -88,32 +89,38 @@ const showSbomDocumentModel = computed({
         </AppBadge>
         <span class="text-2xs dd-text-muted ml-auto">{{ selectedImage?.total }} {{ t('securityView.card.total') }}</span>
       </div>
-      <div v-if="selectedImage?.hasUpdate" class="mt-2 flex items-center gap-2 flex-wrap">
-        <AppButton
-          size="xs"
-          variant="secondary"
-          class="inline-flex items-center gap-1.5"
-          :disabled="selectedImageUpdateBlocked"
-          data-test="security-detail-update-btn"
-          @click="emit('openUpdate')">
-          <AppIcon :name="selectedImageUpdateBlocked ? 'lock' : 'cloud-download'" :size="10" />
-          {{ t('securityView.update') }}
-        </AppButton>
-        <AppButton
-          size="xs"
-          variant="text-secondary"
-          weight="medium"
-          class="inline-flex items-center underline hover:no-underline"
-          data-test="security-detail-containers-link"
-          @click="emit('navigateToContainerUpdate')">
-          {{ t('securityView.viewInContainers') }}
-        </AppButton>
+      <div v-if="selectedImage && (selectedImage.hasUpdate || selectedImage.releaseNotes || selectedImage.currentReleaseNotes || selectedImage.releaseLink || selectedImage.sourceRepo)"
+           class="mt-2 flex items-center gap-2 flex-wrap">
+        <template v-if="selectedImage.hasUpdate">
+          <AppButton
+            size="xs"
+            variant="secondary"
+            class="inline-flex items-center gap-1.5"
+            :disabled="selectedImageUpdateBlocked"
+            data-test="security-detail-update-btn"
+            @click="emit('openUpdate')">
+            <AppIcon :name="selectedImageUpdateBlocked ? 'lock' : 'cloud-download'" :size="10" />
+            {{ t('securityView.update') }}
+          </AppButton>
+          <AppButton
+            size="xs"
+            variant="text-secondary"
+            weight="medium"
+            class="inline-flex items-center underline hover:no-underline"
+            data-test="security-detail-containers-link"
+            @click="emit('navigateToContainerUpdate')">
+            {{ t('securityView.viewInContainers') }}
+          </AppButton>
+        </template>
         <ReleaseNotesLink
           v-if="selectedImage.releaseNotes || selectedImage.currentReleaseNotes || selectedImage.releaseLink"
           :release-notes="selectedImage.releaseNotes"
           :current-release-notes="selectedImage.currentReleaseNotes"
           :release-link="selectedImage.releaseLink"
           data-test="security-detail-release-notes" />
+        <ProjectLink
+          :source-repo="selectedImage.sourceRepo"
+          data-test="security-detail-project-link" />
       </div>
     </template>
 

@@ -4,8 +4,17 @@ import { test } from "node:test";
 
 import nextConfig from "../next.config.mjs";
 
-test("next config enables SRI for frontend bundles", () => {
-  assert.equal(nextConfig.experimental?.sri?.algorithm, "sha256");
+// experimental.sri must stay OFF. Turbopack DID gain SRI support in Next 16.2,
+// so "the bundler supports it now" is not a reason to turn it back on: the hash
+// is computed at build time on the raw chunk, but Vercel's edge re-encodes the
+// bytes (brotli/gzip), so the integrity attribute never matches what the browser
+// receives and every script gets blocked. Nothing hydrates: homepage reveal
+// sections stay invisible and the docs nav goes dead. Open upstream bug:
+// vercel/next.js#91633. Removed in #236, re-added by mistake in v1.5.1-rc.1
+// (#454). Only safe to re-enable once #91633 ships a fix. The CSP in
+// vercel.json is the real script hardening.
+test("next config does not enable experimental SRI (it blocks hydration)", () => {
+  assert.equal(nextConfig.experimental?.sri, undefined);
 });
 
 test("production build uses Turbopack without --webpack", () => {
@@ -14,10 +23,6 @@ test("production build uses Turbopack without --webpack", () => {
 
   assert.match(buildScript, /\bnext build\b/, "build script should run next build");
   assert.doesNotMatch(buildScript, /--webpack\b/, "Turbopack build must not pass --webpack");
-  assert.ok(
-    nextConfig.experimental?.sri?.algorithm,
-    "experimental.sri must be configured so Turbopack emits integrity hashes natively",
-  );
 });
 
 test("docs redirects keep versioned URLs and map legacy deep links to current docs", async () => {

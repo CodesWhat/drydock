@@ -1,4 +1,5 @@
 import { computed, type Ref, ref } from 'vue';
+import { i18n } from '../boot/i18n';
 import { getSecurityVulnerabilityOverview } from '../services/container';
 import type {
   Container,
@@ -30,6 +31,7 @@ export interface ImageSummary {
   delta?: ContainerSecurityDelta;
   hasUpdate?: boolean;
   containersWithUpdate?: string[];
+  sourceRepo?: string;
   releaseNotes?: ContainerReleaseNotes | null;
   currentReleaseNotes?: ContainerReleaseNotes | null;
   releaseLink?: string;
@@ -237,7 +239,7 @@ function incrementImageSummary(summary: ImageSummary, vulnerability: Vulnerabili
   summary.total += 1;
 }
 
-function annotateImageSummariesWithUpdates(
+function annotateImageSummariesFromContainers(
   summaries: ImageSummary[],
   containerIdsByImage: Record<string, string[]>,
   containers: Container[],
@@ -252,6 +254,26 @@ function annotateImageSummariesWithUpdates(
 
   for (const summary of summaries) {
     const ids = containerIdsByImage[summary.image] ?? [];
+
+    // Populate running-tag metadata from all containers for this image,
+    // independent of whether an update is available.
+    for (const id of ids) {
+      const container = containerById.get(id);
+      if (!container) continue;
+      if (!summary.sourceRepo && container.sourceRepo) {
+        summary.sourceRepo = container.sourceRepo;
+      }
+      if (!summary.currentReleaseNotes && container.currentReleaseNotes) {
+        summary.currentReleaseNotes = container.currentReleaseNotes;
+      }
+      if (!summary.releaseLink && container.releaseLink) {
+        summary.releaseLink = container.releaseLink;
+      }
+    }
+
+    // Update-specific behavior layered on top. The running-tag fields
+    // (currentReleaseNotes, releaseLink, sourceRepo) are already owned by the
+    // loop above, so the update path only contributes the new-tag releaseNotes.
     const withUpdate = ids.filter((id) => Boolean(containerById.get(id)?.newTag));
     if (withUpdate.length > 0) {
       summary.hasUpdate = true;
@@ -260,15 +282,7 @@ function annotateImageSummariesWithUpdates(
         const container = containerById.get(id);
         if (container?.releaseNotes) {
           summary.releaseNotes = container.releaseNotes;
-          summary.currentReleaseNotes = container.currentReleaseNotes;
-          summary.releaseLink = container.releaseLink;
           break;
-        }
-        if (container?.currentReleaseNotes && !summary.currentReleaseNotes) {
-          summary.currentReleaseNotes = container.currentReleaseNotes;
-        }
-        if (container?.releaseLink && !summary.releaseLink) {
-          summary.releaseLink = container.releaseLink;
         }
       }
     }
@@ -304,7 +318,7 @@ function buildImageSummaries(
   }
 
   const result = [...map.values()];
-  annotateImageSummariesWithUpdates(result, containerIdsByImage, containers);
+  annotateImageSummariesFromContainers(result, containerIdsByImage, containers);
   return result;
 }
 
@@ -383,7 +397,10 @@ function clearVulnerabilityState(state: VulnerabilityStateRefs) {
   state.scannedContainerCount.value = 0;
 }
 
-function createFetchVulnerabilities(state: FetchVulnerabilityStateRefs) {
+function createFetchVulnerabilities(
+  state: FetchVulnerabilityStateRefs,
+  t: (key: string) => string,
+) {
   return async function fetchVulnerabilities() {
     if (state.securityVulnerabilities.value.length === 0) {
       state.loading.value = true;
@@ -394,7 +411,7 @@ function createFetchVulnerabilities(state: FetchVulnerabilityStateRefs) {
       const overview = await getSecurityVulnerabilityOverview();
       applyOverviewToState(overview, state);
     } catch (caught: unknown) {
-      state.error.value = errorMessage(caught, 'Failed to load vulnerability data');
+      state.error.value = errorMessage(caught, t('containerComponents.vulnerabilities.loadFailed'));
       clearVulnerabilityState(state);
     } finally {
       state.loading.value = false;
@@ -407,6 +424,7 @@ export function useVulnerabilities({
   securitySortAsc,
   containers,
 }: UseVulnerabilitiesOptions) {
+  const t = i18n.global.t;
   const loading = ref(true);
   const error = ref<string | null>(null);
   const securityVulnerabilities = ref<Vulnerability[]>([]);
@@ -461,11 +479,14 @@ export function useVulnerabilities({
     scannedContainerCount,
   };
 
-  const fetchVulnerabilities = createFetchVulnerabilities({
-    loading,
-    error,
-    ...vulnerabilityState,
-  });
+  const fetchVulnerabilities = createFetchVulnerabilities(
+    {
+      loading,
+      error,
+      ...vulnerabilityState,
+    },
+    t,
+  );
 
   return {
     loading,

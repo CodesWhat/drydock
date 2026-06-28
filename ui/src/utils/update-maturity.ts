@@ -1,4 +1,5 @@
 /** Update maturity classification based on how long an update has been available. */
+import type { TranslateFn } from '../types/i18n';
 import { daysToMs, MS_PER_DAY } from './maturity-policy';
 
 type UpdateMaturity = 'fresh' | 'settled' | null;
@@ -36,6 +37,7 @@ export function formatUpdateAge(
   updateDetectedAt: string | undefined,
   hasUpdate: boolean,
   nowMs: number = Date.now(),
+  t?: TranslateFn,
 ): string | undefined {
   if (!hasUpdate || !updateDetectedAt) {
     return undefined;
@@ -52,13 +54,25 @@ export function formatUpdateAge(
   const days = Math.floor(ageMs / MS_PER_DAY);
 
   if (days > 0) {
-    return `Available for ${days} day${days === 1 ? '' : 's'}`;
+    return t
+      ? days === 1
+        ? t('containerComponents.updateAge.availableDaysSingular')
+        : t('containerComponents.updateAge.availableDaysPlural', { count: days })
+      : `Available for ${days} day${days === 1 ? '' : 's'}`;
   }
   if (hours > 0) {
-    return `Available for ${hours} hour${hours === 1 ? '' : 's'}`;
+    return t
+      ? hours === 1
+        ? t('containerComponents.updateAge.availableHoursSingular')
+        : t('containerComponents.updateAge.availableHoursPlural', { count: hours })
+      : `Available for ${hours} hour${hours === 1 ? '' : 's'}`;
   }
   if (minutes > 0) {
-    return `Available for ${minutes} minute${minutes === 1 ? '' : 's'}`;
+    return t
+      ? minutes === 1
+        ? t('containerComponents.updateAge.availableMinutesSingular')
+        : t('containerComponents.updateAge.availableMinutesPlural', { count: minutes })
+      : `Available for ${minutes} minute${minutes === 1 ? '' : 's'}`;
   }
-  return 'Available just now';
+  return t ? t('containerComponents.updateAge.justNow') : 'Available just now';
 }

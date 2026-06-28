@@ -6,6 +6,7 @@ import AppBadge from '../components/AppBadge.vue';
 import AppIconButton from '../components/AppIconButton.vue';
 import AppStatusIndicator from '../components/AppStatusIndicator.vue';
 import ContainerUpdateDialog from '../components/containers/ContainerUpdateDialog.vue';
+import ProjectLink from '../components/containers/ProjectLink.vue';
 import ReleaseNotesLink from '../components/containers/ReleaseNotesLink.vue';
 import ScanProgressBanner from '../components/ScanProgressBanner.vue';
 import SecurityEmptyState from '../components/SecurityEmptyState.vue';
@@ -671,13 +672,21 @@ onUnmounted(() => {
                 @click.stop="navigateToContainerUpdate(row)">
                 {{ t('securityView.viewInContainers') }}
               </AppButton>
-              <ReleaseNotesLink
-                v-if="row.releaseNotes || row.currentReleaseNotes || row.releaseLink"
-                :release-notes="row.releaseNotes"
-                :current-release-notes="row.currentReleaseNotes"
-                :release-link="row.releaseLink"
-                data-test="security-release-notes" />
             </template>
+            <ReleaseNotesLink
+              v-if="row.releaseNotes || row.currentReleaseNotes || row.releaseLink"
+              :release-notes="row.releaseNotes"
+              :current-release-notes="row.currentReleaseNotes"
+              :release-link="row.releaseLink"
+              icon-only
+              icon-size="toolbar"
+              data-test="security-release-notes" />
+            <ProjectLink
+              v-if="row.sourceRepo"
+              :source-repo="row.sourceRepo"
+              icon-only
+              icon-size="toolbar"
+              data-test="security-project-link" />
           </div>
         </template>
         <template #cell-critical="{ row }">
@@ -768,7 +777,7 @@ onUnmounted(() => {
             </AppBadge>
             <span class="text-3xs dd-text-muted ml-auto">{{ t('securityView.card.vsUpdate') }}</span>
           </div>
-          <div class="px-4 py-2.5 flex items-center justify-between mt-auto"
+          <div class="px-4 py-2.5 flex items-center justify-between gap-2 mt-auto"
                :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
             <span v-if="summary.fixable > 0" class="text-2xs-plus font-medium flex items-center gap-1"
                   :style="{ color: fixableColor(summary.fixable, summary.total) }">
@@ -776,36 +785,42 @@ onUnmounted(() => {
               {{ fixablePercent(summary.fixable, summary.total) }}% {{ t('securityView.card.fixable') }}
             </span>
             <span v-else class="text-2xs-plus dd-text-muted">{{ t('securityView.card.noFixesAvailable') }}</span>
-            <template v-if="summary.hasUpdate">
-              <AppButton
-                size="xs"
-                :variant="isSummaryUpdateBlocked(summary) ? 'danger-subtle' : 'info-subtle'"
-                weight="semibold"
-                class="inline-flex items-center gap-1 uppercase tracking-wide"
-                :class="isSummaryUpdateBlocked(summary) ? 'opacity-60 cursor-not-allowed' : ''"
-                data-test="security-update-btn"
-                :disabled="isSummaryUpdateBlocked(summary)"
-                @click.stop="openUpdateAction(summary)">
-                <AppIcon :name="isSummaryUpdateBlocked(summary) ? 'lock' : 'cloud-download'" :size="9" />
-                {{ t('securityView.update') }}
-              </AppButton>
-              <AppButton
-                size="xs"
-                variant="text-secondary"
-                weight="medium"
-                class="inline-flex items-center gap-1"
-                data-test="security-containers-link"
-                @click.stop="navigateToContainerUpdate(summary)">
-                {{ t('securityView.viewInContainers') }}
-              </AppButton>
+            <div class="flex items-center gap-2 flex-wrap">
+              <template v-if="summary.hasUpdate">
+                <AppButton
+                  size="xs"
+                  :variant="isSummaryUpdateBlocked(summary) ? 'danger-subtle' : 'info-subtle'"
+                  weight="semibold"
+                  class="inline-flex items-center gap-1 uppercase tracking-wide"
+                  :class="isSummaryUpdateBlocked(summary) ? 'opacity-60 cursor-not-allowed' : ''"
+                  data-test="security-update-btn"
+                  :disabled="isSummaryUpdateBlocked(summary)"
+                  @click.stop="openUpdateAction(summary)">
+                  <AppIcon :name="isSummaryUpdateBlocked(summary) ? 'lock' : 'cloud-download'" :size="9" />
+                  {{ t('securityView.update') }}
+                </AppButton>
+                <AppButton
+                  size="xs"
+                  variant="text-secondary"
+                  weight="medium"
+                  class="inline-flex items-center gap-1"
+                  data-test="security-containers-link"
+                  @click.stop="navigateToContainerUpdate(summary)">
+                  {{ t('securityView.viewInContainers') }}
+                </AppButton>
+              </template>
+              <span v-else class="text-2xs dd-text-muted">{{ summary.total }} {{ t('securityView.card.total') }}</span>
               <ReleaseNotesLink
                 v-if="summary.releaseNotes || summary.currentReleaseNotes || summary.releaseLink"
                 :release-notes="summary.releaseNotes"
                 :current-release-notes="summary.currentReleaseNotes"
                 :release-link="summary.releaseLink"
                 data-test="security-release-notes" />
-            </template>
-            <span v-else class="text-2xs dd-text-muted">{{ summary.total }} {{ t('securityView.card.total') }}</span>
+              <ProjectLink
+                v-if="summary.sourceRepo"
+                :source-repo="summary.sourceRepo"
+                data-test="security-project-link" />
+            </div>
           </div>
         </template>
       </DataCardGrid>

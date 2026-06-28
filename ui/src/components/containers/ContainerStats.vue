@@ -105,7 +105,7 @@ async function loadStats() {
     if (requestId !== loadRequestId) {
       return;
     }
-    loadError.value = errorMessage(error, 'Failed to load container stats');
+    loadError.value = errorMessage(error, t('containerComponents.stats.loadFailed'));
     stopStream();
   } finally {
     if (requestId === loadRequestId) {

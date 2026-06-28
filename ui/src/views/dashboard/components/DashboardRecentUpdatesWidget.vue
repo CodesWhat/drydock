@@ -3,6 +3,8 @@ import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppIconButton from '@/components/AppIconButton.vue';
 import AppStatusIndicator from '@/components/AppStatusIndicator.vue';
+import ProjectLink from '@/components/containers/ProjectLink.vue';
+import ReleaseNotesLink from '@/components/containers/ReleaseNotesLink.vue';
 import { useBreakpoints } from '@/composables/useBreakpoints';
 import type { DashboardUpdateSequenceEntry, RecentUpdateRow, UpdateKind } from '../dashboardTypes';
 
@@ -347,16 +349,18 @@ function updateKindInitial(kind?: string): string {
                 <div v-if="row.registryError" class="text-2xs mt-0.5 truncate" style="color: var(--dd-danger);">
                   {{ row.registryError }}
                 </div>
-                <a
-                  v-if="row.releaseLink"
-                  :href="row.releaseLink"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="text-2xs mt-0.5 inline-flex underline hover:no-underline"
-                  style="color: var(--dd-info);"
-                  @click.stop>
-                  {{ t('dashboardView.recentUpdates.releaseNotes') }}
-                </a>
+                <ReleaseNotesLink
+                  v-if="row.releaseNotes || row.currentReleaseNotes || row.releaseLink"
+                  :release-notes="row.releaseNotes"
+                  :current-release-notes="row.currentReleaseNotes"
+                  :release-link="row.releaseLink"
+                  icon-only
+                />
+                <ProjectLink
+                  v-if="row.sourceRepo"
+                  :source-repo="row.sourceRepo"
+                  icon-only
+                />
               </div>
             </div>
           </template>
