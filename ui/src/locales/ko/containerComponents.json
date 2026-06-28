@@ -319,7 +319,10 @@
       "releaseNotes": "릴리스 노트",
       "viewFullNotes": "전체 노트 보기",
       "currentSuffix": "(현재)",
-      "availableSuffix": "(사용 가능)"
+      "availableSuffix": "(사용 가능)",
+      "intermediateNotes": "Intermediate releases ({count})",
+      "olderReleasesNotShown": "{count} older release not shown | {count} older releases not shown",
+      "loadingIntermediateNotes": "Loading intermediate releases…"
     },
     "suggestedTag": {
       "badgeText": "추천",

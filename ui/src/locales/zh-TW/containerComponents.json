@@ -319,7 +319,10 @@
       "releaseNotes": "發行說明",
       "viewFullNotes": "檢視完整說明",
       "currentSuffix": "（目前）",
-      "availableSuffix": "（可用）"
+      "availableSuffix": "（可用）",
+      "intermediateNotes": "Intermediate releases ({count})",
+      "olderReleasesNotShown": "{count} older release not shown | {count} older releases not shown",
+      "loadingIntermediateNotes": "Loading intermediate releases…"
     },
     "suggestedTag": {
       "badgeText": "建議",

@@ -319,7 +319,10 @@
       "releaseNotes": "ملاحظات الإصدار",
       "viewFullNotes": "عرض الملاحظات الكاملة",
       "currentSuffix": "(الحالي)",
-      "availableSuffix": "(متاح)"
+      "availableSuffix": "(متاح)",
+      "intermediateNotes": "Intermediate releases ({count})",
+      "olderReleasesNotShown": "{count} older release not shown | {count} older releases not shown",
+      "loadingIntermediateNotes": "Loading intermediate releases…"
     },
     "suggestedTag": {
       "badgeText": "مقترح",

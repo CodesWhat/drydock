@@ -319,7 +319,10 @@
       "releaseNotes": "Release-opmerkingen",
       "viewFullNotes": "Bekijk de volledige notities",
       "currentSuffix": "(huidige)",
-      "availableSuffix": "(beschikbaar)"
+      "availableSuffix": "(beschikbaar)",
+      "intermediateNotes": "Intermediate releases ({count})",
+      "olderReleasesNotShown": "{count} older release not shown | {count} older releases not shown",
+      "loadingIntermediateNotes": "Loading intermediate releases…"
     },
     "suggestedTag": {
       "badgeText": "Voorgesteld",

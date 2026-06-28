@@ -354,6 +354,9 @@ function updateKindInitial(kind?: string): string {
                   :release-notes="row.releaseNotes"
                   :current-release-notes="row.currentReleaseNotes"
                   :release-link="row.releaseLink"
+                  :container-id="row.id"
+                  :from-tag="row.oldVer"
+                  :to-tag="row.newVer"
                   icon-only
                 />
                 <ProjectLink

@@ -660,7 +660,7 @@ function deriveRuntimeDetails(
   };
 }
 
-function normalizeReleaseNotes(
+export function normalizeReleaseNotes(
   rn: ApiContainerReleaseNotes | null | undefined,
 ): ContainerReleaseNotes | null {
   if (!rn || typeof rn !== 'object') return null;

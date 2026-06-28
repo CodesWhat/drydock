@@ -319,7 +319,10 @@
       "releaseNotes": "发布说明",
       "viewFullNotes": "查看完整说明",
       "currentSuffix": "（当前）",
-      "availableSuffix": "（可用）"
+      "availableSuffix": "（可用）",
+      "intermediateNotes": "Intermediate releases ({count})",
+      "olderReleasesNotShown": "{count} older release not shown | {count} older releases not shown",
+      "loadingIntermediateNotes": "Loading intermediate releases…"
     },
     "suggestedTag": {
       "badgeText": "建议",

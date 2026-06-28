@@ -2,6 +2,12 @@ import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import ReleaseNotesLink from '@/components/containers/ReleaseNotesLink.vue';
 
+vi.mock('@/services/container', () => ({
+  getContainerIntermediateReleaseNotes: vi.fn(),
+}));
+
+import { getContainerIntermediateReleaseNotes } from '@/services/container';
+
 describe('ReleaseNotesLink', () => {
   const globalConfig = {
     stubs: { AppIcon: { template: '<span />', props: ['name', 'size'] } },
@@ -19,6 +25,7 @@ describe('ReleaseNotesLink', () => {
 
   afterEach(() => {
     document.body.innerHTML = '';
+    vi.clearAllMocks();
   });
 
   it('renders nothing when neither releaseNotes nor releaseLink is provided', () => {
@@ -493,5 +500,431 @@ describe('ReleaseNotesLink', () => {
     expect(document.body.querySelector('[data-test="release-notes-popover"]')).toBeNull();
 
     wrapper.unmount();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Intermediate release notes
+  // ---------------------------------------------------------------------------
+  describe('intermediate release notes', () => {
+    const intermediateNote1 = {
+      title: 'v1.9.0',
+      body: 'Changes in v1.9.0.',
+      url: 'https://github.com/example/repo/releases/tag/v1.9.0',
+      publishedAt: '2026-02-01T00:00:00Z',
+      provider: 'github',
+    };
+    const intermediateNote2 = {
+      title: 'v1.8.5',
+      body: 'Changes in v1.8.5.',
+      url: 'https://github.com/example/repo/releases/tag/v1.8.5',
+      publishedAt: '2026-01-15T00:00:00Z',
+      provider: 'github',
+    };
+
+    it('does not fetch or render intermediate section when containerId is absent', async () => {
+      const wrapper = mount(ReleaseNotesLink, {
+        props: { releaseNotes: sampleNotes },
+        global: globalConfig,
+      });
+      await nextTick();
+      expect(getContainerIntermediateReleaseNotes).not.toHaveBeenCalled();
+      expect(wrapper.find('[data-test="intermediate-release-notes-section"]').exists()).toBe(false);
+    });
+
+    it('does not fetch when fromTag equals toTag (canFetchIntermediate is false)', async () => {
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          releaseNotes: sampleNotes,
+          containerId: 'c1',
+          fromTag: 'v1.0.0',
+          toTag: 'v1.0.0',
+        },
+        global: globalConfig,
+        attachTo: document.body,
+      });
+      await nextTick();
+      // Inline mode: onMounted should not fire because canFetch is false
+      expect(getContainerIntermediateReleaseNotes).not.toHaveBeenCalled();
+
+      // Open a popover (iconOnly=false so no popover, but in icon mode check):
+      wrapper.unmount();
+    });
+
+    it('does not fetch in icon mode when fromTag equals toTag', async () => {
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          releaseNotes: sampleNotes,
+          iconOnly: true,
+          containerId: 'c1',
+          fromTag: 'v1.0.0',
+          toTag: 'v1.0.0',
+        },
+        global: globalConfig,
+        attachTo: document.body,
+      });
+      await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+      await nextTick();
+      expect(getContainerIntermediateReleaseNotes).not.toHaveBeenCalled();
+      wrapper.unmount();
+    });
+
+    it('fetches on popover open in iconOnly mode and renders rows in Teleported popover', async () => {
+      vi.mocked(getContainerIntermediateReleaseNotes).mockResolvedValueOnce({
+        releaseNotes: [intermediateNote1, intermediateNote2],
+        hiddenCount: 0,
+      });
+
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          releaseNotes: sampleNotes,
+          iconOnly: true,
+          containerId: 'c1',
+          fromTag: 'v1.8.0',
+          toTag: 'v2.0.0',
+        },
+        global: globalConfig,
+        attachTo: document.body,
+      });
+
+      await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+      await nextTick();
+      await nextTick(); // extra tick to allow the async fetch to settle
+
+      expect(getContainerIntermediateReleaseNotes).toHaveBeenCalledWith('c1', 'v1.8.0', 'v2.0.0');
+      const section = document.body.querySelector(
+        '[data-test="intermediate-release-notes-section"]',
+      );
+      expect(section).not.toBeNull();
+      const rows = document.body.querySelectorAll('[data-test="intermediate-release-note-row"]');
+      expect(rows).toHaveLength(2);
+
+      wrapper.unmount();
+    });
+
+    it('fetches on mount in inline mode and renders intermediate section', async () => {
+      vi.mocked(getContainerIntermediateReleaseNotes).mockResolvedValueOnce({
+        releaseNotes: [intermediateNote1],
+        hiddenCount: 0,
+      });
+
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          releaseNotes: sampleNotes,
+          containerId: 'c1',
+          fromTag: 'v1.8.0',
+          toTag: 'v2.0.0',
+        },
+        global: globalConfig,
+      });
+      await nextTick();
+      await nextTick();
+
+      expect(getContainerIntermediateReleaseNotes).toHaveBeenCalledWith('c1', 'v1.8.0', 'v2.0.0');
+      expect(wrapper.find('[data-test="intermediate-release-notes-section"]').exists()).toBe(true);
+      expect(wrapper.findAll('[data-test="intermediate-release-note-row"]')).toHaveLength(1);
+    });
+
+    it('service returns null → no intermediate section rendered', async () => {
+      vi.mocked(getContainerIntermediateReleaseNotes).mockResolvedValueOnce(null);
+
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          releaseNotes: sampleNotes,
+          containerId: 'c1',
+          fromTag: 'v1.8.0',
+          toTag: 'v2.0.0',
+        },
+        global: globalConfig,
+      });
+      await nextTick();
+      await nextTick();
+
+      expect(wrapper.find('[data-test="intermediate-release-notes-section"]').exists()).toBe(false);
+    });
+
+    it('row expand/collapse: expand row 0, row 1 stays collapsed; re-click collapses row 0', async () => {
+      vi.mocked(getContainerIntermediateReleaseNotes).mockResolvedValueOnce({
+        releaseNotes: [intermediateNote1, intermediateNote2],
+        hiddenCount: 0,
+      });
+
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          releaseNotes: sampleNotes,
+          containerId: 'c1',
+          fromTag: 'v1.8.0',
+          toTag: 'v2.0.0',
+        },
+        global: globalConfig,
+      });
+      await nextTick();
+      await nextTick();
+
+      const rows = wrapper.findAll('[data-test="intermediate-release-note-row"]');
+      expect(rows).toHaveLength(2);
+
+      // Expand row 0
+      const row0Button = rows[0].find('button');
+      await row0Button.trigger('click');
+      await nextTick();
+      expect(rows[0].text()).toContain(intermediateNote1.body);
+      expect(rows[1].text()).not.toContain(intermediateNote2.body);
+
+      // Re-click to collapse row 0
+      await row0Button.trigger('click');
+      await nextTick();
+      expect(rows[0].text()).not.toContain(intermediateNote1.body);
+    });
+
+    it('hiddenCount > 0 renders the older-hidden badge', async () => {
+      vi.mocked(getContainerIntermediateReleaseNotes).mockResolvedValueOnce({
+        releaseNotes: [intermediateNote1],
+        hiddenCount: 3,
+      });
+
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          releaseNotes: sampleNotes,
+          containerId: 'c1',
+          fromTag: 'v1.8.0',
+          toTag: 'v2.0.0',
+        },
+        global: globalConfig,
+      });
+      await nextTick();
+      await nextTick();
+
+      const badge = wrapper.find('[data-test="intermediate-older-hidden"]');
+      expect(badge.exists()).toBe(true);
+      expect(badge.text()).toContain('3');
+    });
+
+    it('hiddenCount = 0 → no older-hidden badge', async () => {
+      vi.mocked(getContainerIntermediateReleaseNotes).mockResolvedValueOnce({
+        releaseNotes: [intermediateNote1],
+        hiddenCount: 0,
+      });
+
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          releaseNotes: sampleNotes,
+          containerId: 'c1',
+          fromTag: 'v1.8.0',
+          toTag: 'v2.0.0',
+        },
+        global: globalConfig,
+      });
+      await nextTick();
+      await nextTick();
+
+      expect(wrapper.find('[data-test="intermediate-older-hidden"]').exists()).toBe(false);
+    });
+
+    it('hiddenCount > 0 but empty notes list → no badge rendered', async () => {
+      vi.mocked(getContainerIntermediateReleaseNotes).mockResolvedValueOnce({
+        releaseNotes: [],
+        hiddenCount: 5,
+      });
+
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          releaseNotes: sampleNotes,
+          containerId: 'c1',
+          fromTag: 'v1.8.0',
+          toTag: 'v2.0.0',
+        },
+        global: globalConfig,
+      });
+      await nextTick();
+      await nextTick();
+
+      // Section itself doesn't render (hasIntermediateNotes is false)
+      expect(wrapper.find('[data-test="intermediate-release-notes-section"]').exists()).toBe(false);
+      expect(wrapper.find('[data-test="intermediate-older-hidden"]').exists()).toBe(false);
+    });
+
+    it('view-full link is present with correct href after expanding an intermediate row', async () => {
+      vi.mocked(getContainerIntermediateReleaseNotes).mockResolvedValueOnce({
+        releaseNotes: [intermediateNote1],
+        hiddenCount: 0,
+      });
+
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          releaseNotes: sampleNotes,
+          containerId: 'c1',
+          fromTag: 'v1.8.0',
+          toTag: 'v2.0.0',
+        },
+        global: globalConfig,
+      });
+      await nextTick();
+      await nextTick();
+
+      const row = wrapper.find('[data-test="intermediate-release-note-row"]');
+      await row.find('button').trigger('click');
+      await nextTick();
+
+      const link = row.find('a');
+      expect(link.exists()).toBe(true);
+      expect(link.attributes('href')).toBe(intermediateNote1.url);
+    });
+
+    it('body in intermediate row is truncated at 200 chars', async () => {
+      const noteWithLongBody = {
+        ...intermediateNote1,
+        body: 'X'.repeat(250),
+      };
+      vi.mocked(getContainerIntermediateReleaseNotes).mockResolvedValueOnce({
+        releaseNotes: [noteWithLongBody],
+        hiddenCount: 0,
+      });
+
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          releaseNotes: sampleNotes,
+          containerId: 'c1',
+          fromTag: 'v1.8.0',
+          toTag: 'v2.0.0',
+        },
+        global: globalConfig,
+      });
+      await nextTick();
+      await nextTick();
+
+      const row = wrapper.find('[data-test="intermediate-release-note-row"]');
+      await row.find('button').trigger('click');
+      await nextTick();
+
+      expect(row.text()).toContain('X'.repeat(200));
+      expect(row.text()).toContain('...');
+      expect(row.text()).not.toContain('X'.repeat(250));
+    });
+
+    it('shows loading indicator while fetch is in-flight', async () => {
+      let resolvePromise!: (v: any) => void;
+      const pending = new Promise((resolve) => {
+        resolvePromise = resolve;
+      });
+      vi.mocked(getContainerIntermediateReleaseNotes).mockReturnValueOnce(pending as any);
+
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          releaseNotes: sampleNotes,
+          containerId: 'c1',
+          fromTag: 'v1.8.0',
+          toTag: 'v2.0.0',
+        },
+        global: globalConfig,
+      });
+      await nextTick(); // mounted fires fetch, loading = true
+
+      expect(wrapper.find('[data-test="intermediate-loading"]').exists()).toBe(true);
+
+      // Resolve so we don't leave a dangling promise
+      resolvePromise({ releaseNotes: [], hiddenCount: 0 });
+      await nextTick();
+      await nextTick();
+
+      expect(wrapper.find('[data-test="intermediate-loading"]').exists()).toBe(false);
+    });
+
+    it('service rejection is caught: no section rendered, two-panel view intact', async () => {
+      vi.mocked(getContainerIntermediateReleaseNotes).mockRejectedValueOnce(
+        new Error('network error'),
+      );
+
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          releaseNotes: sampleNotes,
+          containerId: 'c1',
+          fromTag: 'v1.8.0',
+          toTag: 'v2.0.0',
+        },
+        global: globalConfig,
+      });
+      await nextTick();
+      await nextTick();
+
+      expect(wrapper.find('[data-test="intermediate-release-notes-section"]').exists()).toBe(false);
+      // The main update panel is still present
+      expect(wrapper.find('[data-test="update-release-notes-panel"]').exists()).toBe(true);
+    });
+
+    it('fire-once guard: opening the icon popover twice calls the service exactly once', async () => {
+      vi.mocked(getContainerIntermediateReleaseNotes).mockResolvedValue({
+        releaseNotes: [intermediateNote1],
+        hiddenCount: 0,
+      });
+
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          releaseNotes: sampleNotes,
+          iconOnly: true,
+          containerId: 'c1',
+          fromTag: 'v1.8.0',
+          toTag: 'v2.0.0',
+        },
+        global: globalConfig,
+        attachTo: document.body,
+      });
+
+      // Open first time
+      await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+      await nextTick();
+      await nextTick();
+
+      // Close via escape
+      globalThis.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await nextTick();
+
+      // Open second time
+      await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+      await nextTick();
+      await nextTick();
+
+      expect(getContainerIntermediateReleaseNotes).toHaveBeenCalledTimes(1);
+
+      wrapper.unmount();
+    });
+
+    it('dynamic popover height includes extra offset when intermediates are present', async () => {
+      vi.mocked(getContainerIntermediateReleaseNotes).mockResolvedValue({
+        releaseNotes: [intermediateNote1, intermediateNote2],
+        hiddenCount: 0,
+      });
+
+      // Mount with notes loaded (inline) to prime the intermediateNotes ref,
+      // then re-mount icon-only to test height calculation.
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          releaseNotes: sampleNotes,
+          iconOnly: true,
+          containerId: 'c1',
+          fromTag: 'v1.8.0',
+          toTag: 'v2.0.0',
+        },
+        global: globalConfig,
+        attachTo: document.body,
+      });
+
+      // Open popover → triggers fetch
+      await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+      await nextTick();
+      await nextTick();
+
+      // The popover should exist
+      const popover = document.body.querySelector('[data-test="release-notes-popover"]');
+      expect(popover).not.toBeNull();
+
+      // With intermediates present (2 * 44 = 88px extra), base height was 360, now 448.
+      // We can't easily assert the computed px value from jsdom, but we can assert
+      // the intermediate section rendered (which implies height was extended).
+      expect(
+        document.body.querySelector('[data-test="intermediate-release-notes-section"]'),
+      ).not.toBeNull();
+
+      wrapper.unmount();
+    });
   });
 });

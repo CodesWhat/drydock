@@ -319,7 +319,10 @@
       "releaseNotes": "Примечания к выпуску",
       "viewFullNotes": "Полные примечания",
       "currentSuffix": "(текущий)",
-      "availableSuffix": "(доступный)"
+      "availableSuffix": "(доступный)",
+      "intermediateNotes": "Intermediate releases ({count})",
+      "olderReleasesNotShown": "{count} older release not shown | {count} older releases not shown",
+      "loadingIntermediateNotes": "Loading intermediate releases…"
     },
     "suggestedTag": {
       "badgeText": "Рекомендуемый",

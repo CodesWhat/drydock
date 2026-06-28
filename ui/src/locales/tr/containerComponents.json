@@ -319,7 +319,10 @@
       "releaseNotes": "Sürüm notları",
       "viewFullNotes": "Notların tamamını görüntüle",
       "currentSuffix": "(güncel)",
-      "availableSuffix": "(mevcut)"
+      "availableSuffix": "(mevcut)",
+      "intermediateNotes": "Intermediate releases ({count})",
+      "olderReleasesNotShown": "{count} older release not shown | {count} older releases not shown",
+      "loadingIntermediateNotes": "Loading intermediate releases…"
     },
     "suggestedTag": {
       "badgeText": "Önerilen",

@@ -152,6 +152,9 @@ const {
           :release-notes="selectedContainer.releaseNotes"
           :current-release-notes="selectedContainer.currentReleaseNotes"
           :release-link="selectedContainer.releaseLink"
+          :container-id="selectedContainer.id"
+          :from-tag="selectedContainer.currentTag"
+          :to-tag="selectedContainer.newTag"
         />
         <ProjectLink :source-repo="selectedContainer.sourceRepo" />
         <div class="pt-1 space-y-1.5">
