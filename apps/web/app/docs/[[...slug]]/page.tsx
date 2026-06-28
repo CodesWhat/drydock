@@ -1,5 +1,5 @@
-import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/layouts/docs/page";
 import defaultMdxComponents from "fumadocs-ui/mdx";
+import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/page";
 import type { StaticImageData } from "next/image";
 import NextImage from "next/image";
 import { notFound } from "next/navigation";
