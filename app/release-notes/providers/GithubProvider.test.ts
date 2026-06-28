@@ -955,7 +955,7 @@ describe('release-notes/providers/GithubProvider', () => {
       mockAxiosGet.mockReset();
 
       const result = await provider.fetchRange('github.com/acme/service', '1.0.0', '2.0.0');
-      expect(result).toEqual({ notes: [], interrupted: false });
+      expect(result).toEqual({ notes: [], interrupted: true });
       expect(mockAxiosGet).not.toHaveBeenCalled();
 
       vi.useRealTimers();
@@ -1082,13 +1082,14 @@ describe('release-notes/providers/GithubProvider', () => {
     test('hard cap: stops at MAX_RELEASE_LIST_PAGES (10) even when all pages are full', async () => {
       const provider = new GithubProvider();
 
-      // 11 full pages — only 10 should be fetched
+      // 11 full pages — only 10 should be fetched; reaching the cap with a full page
+      // means there may be more data, so interrupted must be true.
       for (let i = 0; i < 11; i++) {
         mockAxiosGet.mockResolvedValueOnce({ data: makePaddingPage(100) });
       }
 
       const result = await provider.fetchRange('github.com/acme/service', '1.0.0', '2.0.0');
-      expect(result.interrupted).toBe(false);
+      expect(result.interrupted).toBe(true);
       expect(result.notes).toEqual([]);
       expect(mockAxiosGet).toHaveBeenCalledTimes(10);
     });
@@ -1109,13 +1110,9 @@ describe('release-notes/providers/GithubProvider', () => {
       const provider = new GithubProvider();
       mockAxiosGet.mockResolvedValueOnce({ data: [] });
 
-      await provider.fetchRange(
-        'github.com/acme/service',
-        '1.0.0',
-        '2.0.0',
-        'explicit-token',
-        { allowToken: false },
-      );
+      await provider.fetchRange('github.com/acme/service', '1.0.0', '2.0.0', 'explicit-token', {
+        allowToken: false,
+      });
 
       expect(mockAxiosGet).toHaveBeenCalledWith(
         expect.any(String),
@@ -1124,6 +1121,20 @@ describe('release-notes/providers/GithubProvider', () => {
             Authorization: 'Bearer explicit-token',
           }),
         }),
+      );
+    });
+
+    test('fetchRange logs debug when explicit token forwarded to untrusted source (allowToken:false)', async () => {
+      const provider = new GithubProvider();
+      mockAxiosGet.mockResolvedValueOnce({ data: [] });
+
+      await provider.fetchRange('github.com/acme/untrusted', '1.0.0', '2.0.0', 'explicit-token', {
+        allowToken: false,
+      });
+
+      expect(mockLogDebug).toHaveBeenCalledWith(
+        expect.stringContaining('DD_RELEASE_NOTES_GITHUB_TOKEN forwarded'),
+        'github.com/acme/untrusted',
       );
     });
 

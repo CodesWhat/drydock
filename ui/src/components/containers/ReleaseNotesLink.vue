@@ -73,9 +73,14 @@ const updatePopoverLabel = computed(() => {
   return `${releaseNotesLabel.value} - ${title}${suffix}`;
 });
 
-const canFetchIntermediate = computed(
-  () =>
-    Boolean(props.containerId && props.fromTag && props.toTag && props.fromTag !== props.toTag),
+const canFetchIntermediate = computed(() =>
+  Boolean(
+    props.containerId &&
+      props.fromTag &&
+      props.toTag &&
+      props.fromTag !== props.toTag &&
+      hasStructuredNotes.value,
+  ),
 );
 
 const hasIntermediateNotes = computed(() => intermediateNotes.value.length > 0);

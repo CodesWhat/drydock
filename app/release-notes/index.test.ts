@@ -1524,6 +1524,43 @@ describe('release-notes service', () => {
       expect(mockAxiosGet).toHaveBeenCalledTimes(2);
     });
 
+    test('v-prefix normalization: v1.0.0→2.0.0 and 1.0.0→2.0.0 share the same cache entry', async () => {
+      // Both tag forms should map to the same cache key — second call must NOT re-invoke fetchRange.
+      mockAxiosGet.mockResolvedValueOnce({ data: [makeNote(1)] });
+
+      const first = await getIntermediateReleaseNotes(trustedContainer, 'v1.0.0', 'v2.0.0');
+      const second = await getIntermediateReleaseNotes(trustedContainer, '1.0.0', '2.0.0');
+
+      expect(first.releaseNotes).toHaveLength(1);
+      expect(second.releaseNotes).toHaveLength(1);
+      // Only one network call — both forms resolve to the same cache key.
+      expect(mockAxiosGet).toHaveBeenCalledTimes(1);
+    });
+
+    test('untrusted source + no token (#anon bucket) is isolated from trusted (#auth) for the same range', async () => {
+      // Call 1: untrusted container label + no token configured → anon bucket
+      const untrustedContainer = {
+        labels: { 'dd.source.repo': 'https://github.com/acme/service.git' },
+        image: { name: 'acme/service', registry: { url: 'registry.example.com' } },
+        result: { tag: '2.0.0' },
+      } as any;
+
+      delete ddEnvVars.DD_RELEASE_NOTES_GITHUB_TOKEN;
+      mockAxiosGet.mockResolvedValueOnce({ data: [makeNote(1)] });
+
+      const anon = await getIntermediateReleaseNotes(untrustedContainer, '1.0.0', '2.0.0');
+      expect(anon.releaseNotes).toHaveLength(1);
+
+      // Call 2: trusted (GHCR) + same repo+range → auth bucket, separate network call
+      mockAxiosGet.mockResolvedValueOnce({ data: [makeNote(1), makeNote(2)] });
+
+      const auth = await getIntermediateReleaseNotes(trustedContainer, '1.0.0', '2.0.0');
+      expect(auth.releaseNotes).toHaveLength(2);
+
+      // Two separate network calls — #anon and #auth are different buckets.
+      expect(mockAxiosGet).toHaveBeenCalledTimes(2);
+    });
+
     test('bodies are truncated via toContainerReleaseNotes when body exceeds 2000 chars', async () => {
       const longBody = 'x'.repeat(3000);
       mockAxiosGet.mockResolvedValueOnce({

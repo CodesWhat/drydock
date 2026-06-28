@@ -364,6 +364,10 @@ function getReleaseNotesCacheKey(
   return `${providerId}:${sourceRepo.toLowerCase()}@${tag.toLowerCase()}#${getReleaseNotesAuthTier(trusted)}`;
 }
 
+function normalizeTagForCacheKey(tag: string) {
+  return tag.trim().replace(/^v/i, '').toLowerCase();
+}
+
 function getIntermediateReleaseNotesCacheKey(
   providerId: string,
   sourceRepo: string,
@@ -371,7 +375,7 @@ function getIntermediateReleaseNotesCacheKey(
   toTag: string,
   trusted: boolean,
 ) {
-  return `intermediate:${providerId}:${sourceRepo.toLowerCase()}@${fromTag.toLowerCase()}..${toTag.toLowerCase()}#${getReleaseNotesAuthTier(trusted)}`;
+  return `intermediate:${providerId}:${sourceRepo.toLowerCase()}@${normalizeTagForCacheKey(fromTag)}..${normalizeTagForCacheKey(toTag)}#${getReleaseNotesAuthTier(trusted)}`;
 }
 
 async function getReleaseNotesForSourceRepo(sourceRepo: string, tag: string, trusted: boolean) {
@@ -491,9 +495,15 @@ export async function getIntermediateReleaseNotes(
   if (cached.found) {
     allNotes = cached.value;
   } else {
-    const result = await provider.fetchRange(resolution.sourceRepo, fromTag, toTag, getGithubToken(), {
-      allowToken: resolution.trusted,
-    });
+    const result = await provider.fetchRange(
+      resolution.sourceRepo,
+      fromTag,
+      toTag,
+      getGithubToken(),
+      {
+        allowToken: resolution.trusted,
+      },
+    );
     allNotes = result.notes;
     // Only cache complete results. A partial (interrupted) fetch must be retried next time.
     if (!result.interrupted) {

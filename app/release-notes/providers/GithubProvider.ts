@@ -302,7 +302,7 @@ class GithubProvider implements ReleaseNotesProviderClient {
   ): Promise<{ notes: ReleaseNotes[]; interrupted: boolean }> {
     // Cooldown — skip to avoid hammering an already-tripped rate limit.
     if (Date.now() < rateLimitCooldownUntil) {
-      return { notes: [], interrupted: false };
+      return { notes: [], interrupted: true };
     }
 
     const repo = normalizeGithubRepo(sourceRepo);
@@ -321,6 +321,12 @@ class GithubProvider implements ReleaseNotesProviderClient {
     // allowToken gates ONLY the GHCR PAT fallback (same semantics as fetchByTag).
     const allowGhcrFallback = options?.allowToken !== false;
     const effectiveToken = token ?? (allowGhcrFallback ? getGhcrTokenFallback() : undefined);
+    if (token !== undefined && !allowGhcrFallback) {
+      log.debug(
+        'DD_RELEASE_NOTES_GITHUB_TOKEN forwarded to untrusted source repo %s (intermediate range fetch)',
+        sourceRepo,
+      );
+    }
 
     const collected: { notes: ReleaseNotes; version: semver.SemVer }[] = [];
     let interrupted = false;
@@ -380,6 +386,10 @@ class GithubProvider implements ReleaseNotesProviderClient {
         // No more pages when the response is empty or shorter than a full page
         if (releases.length === 0 || releases.length < 100) {
           break;
+        }
+        // Full page at the page cap — more releases may exist beyond what we fetch.
+        if (page === MAX_RELEASE_LIST_PAGES) {
+          interrupted = true;
         }
       } catch (error: unknown) {
         if (isSecondaryRateLimit403(error)) {

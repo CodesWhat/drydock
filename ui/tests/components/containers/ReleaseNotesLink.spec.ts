@@ -851,6 +851,54 @@ describe('ReleaseNotesLink', () => {
       expect(wrapper.find('[data-test="update-release-notes-panel"]').exists()).toBe(true);
     });
 
+    it('icon-only releaseLink-only popover does NOT call the service even when fetch conditions are met', async () => {
+      // canFetchIntermediate now requires hasStructuredNotes; releaseLink-only has no structured notes.
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          releaseLink: 'https://example.com/releases',
+          iconOnly: true,
+          containerId: 'c1',
+          fromTag: 'v1.0.0',
+          toTag: 'v2.0.0',
+        },
+        global: globalConfig,
+        attachTo: document.body,
+      });
+      await wrapper.find('[data-test="release-link"]').trigger('click');
+      await nextTick();
+      await nextTick();
+
+      expect(getContainerIntermediateReleaseNotes).not.toHaveBeenCalled();
+
+      wrapper.unmount();
+    });
+
+    it('icon-only structured-notes popover still calls the service when fetch conditions are met', async () => {
+      vi.mocked(getContainerIntermediateReleaseNotes).mockResolvedValueOnce({
+        releaseNotes: [intermediateNote1],
+        hiddenCount: 0,
+      });
+
+      const wrapper = mount(ReleaseNotesLink, {
+        props: {
+          releaseNotes: sampleNotes,
+          iconOnly: true,
+          containerId: 'c1',
+          fromTag: 'v1.0.0',
+          toTag: 'v2.0.0',
+        },
+        global: globalConfig,
+        attachTo: document.body,
+      });
+      await wrapper.find('[data-test="release-notes-link"]').trigger('click');
+      await nextTick();
+      await nextTick();
+
+      expect(getContainerIntermediateReleaseNotes).toHaveBeenCalledWith('c1', 'v1.0.0', 'v2.0.0');
+
+      wrapper.unmount();
+    });
+
     it('fire-once guard: opening the icon popover twice calls the service exactly once', async () => {
       vi.mocked(getContainerIntermediateReleaseNotes).mockResolvedValue({
         releaseNotes: [intermediateNote1],
