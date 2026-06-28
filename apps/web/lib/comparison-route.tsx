@@ -62,7 +62,9 @@ export function buildComparisonMetadata({
   twitterDescription = description,
 }: ComparisonMetadataConfig): Metadata {
   return {
-    title,
+    // absolute: comparison titles already carry the brand ("X vs Drydock …");
+    // opt out of the root "%s | Drydock" template.
+    title: { absolute: title },
     description,
     keywords,
     openGraph: {
@@ -70,7 +72,7 @@ export function buildComparisonMetadata({
       description: openGraphDescription,
       url: `${BASE_URL}/compare/${slug}`,
       siteName: SITE_CONFIG.name,
-      locale: "en_US",
+      locale: SITE_CONFIG.locale,
       type: "website",
     },
     twitter: {

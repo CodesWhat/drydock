@@ -22,19 +22,22 @@ const ibmPlexMono = IBM_Plex_Mono({
 const ICON_VERSION = "2";
 
 export const metadata: Metadata = {
-  title: "Drydock - Container Update Monitoring",
+  title: {
+    default: `${SITE_CONFIG.name} - ${SITE_CONFIG.tagline}`,
+    template: `%s | ${SITE_CONFIG.name}`,
+  },
   description: SITE_CONFIG.description,
   metadataBase: new URL(BASE_URL),
   openGraph: {
-    title: "Drydock - Container Update Monitoring",
+    title: `${SITE_CONFIG.name} - ${SITE_CONFIG.tagline}`,
     description: SITE_CONFIG.description,
     url: BASE_URL,
     siteName: SITE_CONFIG.name,
-    locale: "en_US",
+    locale: SITE_CONFIG.locale,
     type: "website",
     images: [
       {
-        url: "/og-image.png",
+        url: SITE_CONFIG.ogImage,
         width: 1200,
         height: 630,
         alt: `${SITE_CONFIG.name} - ${SITE_CONFIG.tagline}`,
@@ -43,10 +46,10 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Drydock - Container Update Monitoring",
+    title: `${SITE_CONFIG.name} - ${SITE_CONFIG.tagline}`,
     description: SITE_CONFIG.description,
     creator: SITE_CONFIG.twitterCreator,
-    images: ["/og-image.png"],
+    images: [SITE_CONFIG.ogImage],
   },
   icons: {
     icon: [

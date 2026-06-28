@@ -4,10 +4,14 @@ import type { StaticImageData } from "next/image";
 import NextImage from "next/image";
 import { notFound } from "next/navigation";
 import type React from "react";
-import { isFaqSlug } from "@/lib/docs-faq-route";
-import { source } from "@/lib/source";
+import { BASE_URL, SITE_CONFIG } from "@/lib/site-config";
+import { getDocsPage, source } from "@/lib/source";
 
-function MdxImage(props: React.ComponentProps<"img"> & { src?: string | StaticImageData }) {
+function MdxImage(
+  props: Omit<React.ComponentProps<"img">, "src"> & {
+    src?: React.ComponentProps<"img">["src"] | StaticImageData;
+  },
+) {
   const { src, alt, style, width, height, ...rest } = props;
   // Fumadocs MDX may transform image src into a static import object
   if (typeof src === "object" && src !== null && "src" in src) {
@@ -21,23 +25,22 @@ function MdxImage(props: React.ComponentProps<"img"> & { src?: string | StaticIm
 
 export default async function Page(props: { params: Promise<{ slug?: string[] }> }) {
   const params = await props.params;
-  const page = source.getPage(params.slug);
+  const page = getDocsPage(params.slug);
   if (!page) notFound();
 
-  const data = page.data as any;
+  const data = page.data;
   const MDX = data.body;
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com";
   const segments = params.slug ?? [];
   const breadcrumbItems = [
-    { name: "Home", url: baseUrl },
-    { name: "Docs", url: `${baseUrl}/docs` },
+    { name: "Home", url: BASE_URL },
+    { name: "Docs", url: `${BASE_URL}/docs` },
     ...segments.map((seg, i) => ({
       name:
         i === segments.length - 1
           ? data.title
           : seg.charAt(0).toUpperCase() + seg.slice(1).replace(/-/g, " "),
-      url: `${baseUrl}/docs/${segments.slice(0, i + 1).join("/")}`,
+      url: `${BASE_URL}/docs/${segments.slice(0, i + 1).join("/")}`,
     })),
   ];
   const breadcrumbJsonLd = {
@@ -51,37 +54,12 @@ export default async function Page(props: { params: Promise<{ slug?: string[] }>
     })),
   };
 
-  const isFaqPage = isFaqSlug(params.slug);
-
-  const faqJsonLd = isFaqPage
-    ? {
-        "@context": "https://schema.org",
-        "@type": "FAQPage",
-        mainEntity: [
-          {
-            "@type": "Question",
-            name: "Socket permission errors (EACCES)",
-            acceptedAnswer: {
-              "@type": "Answer",
-              text: "Drydock runs as a non-root user by default. Use a Docker socket proxy so drydock never needs direct socket access. If you cannot use a socket proxy, set both DD_RUN_AS_ROOT=true and DD_ALLOW_INSECURE_ROOT=true environment variables.",
-            },
-          },
-        ],
-      }
-    : null;
-
   return (
     <DocsPage toc={data.toc} full={data.full}>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
       />
-      {faqJsonLd && (
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
-        />
-      )}
       <DocsTitle>{data.title}</DocsTitle>
       <DocsDescription>{data.description}</DocsDescription>
       <DocsBody>
@@ -97,11 +75,10 @@ export async function generateStaticParams() {
 
 export async function generateMetadata(props: { params: Promise<{ slug?: string[] }> }) {
   const params = await props.params;
-  const page = source.getPage(params.slug);
+  const page = getDocsPage(params.slug);
   if (!page) notFound();
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com";
-  const url = `${baseUrl}${page.url}`;
+  const url = `${BASE_URL}${page.url}`;
 
   return {
     title: page.data.title,
@@ -114,12 +91,13 @@ export async function generateMetadata(props: { params: Promise<{ slug?: string[
       description: page.data.description,
       url,
       type: "article",
-      siteName: "Drydock",
+      siteName: SITE_CONFIG.name,
     },
     twitter: {
       title: page.data.title,
       description: page.data.description,
-      card: "summary",
+      card: "summary_large_image",
+      creator: SITE_CONFIG.twitterCreator,
     },
   };
 }

@@ -33,6 +33,10 @@ export const SITE_CONFIG = {
   logo: "/whale-logo.png",
   /** Whether the logo inverts in dark mode (adds `dark:invert`). */
   logoInvertOnDark: true,
+  /** Default OpenGraph / Twitter share image in /public. */
+  ogImage: "/og-image.png",
+  /** OpenGraph locale. */
+  locale: "en_US",
   /** Live demo URL (overridable per-environment via NEXT_PUBLIC_DEMO_URL). */
   demoUrl: "https://demo.getdrydock.com",
   /** Docker Hub image, "owner/name". */

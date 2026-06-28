@@ -4,7 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { BASE_URL, GITHUB_URL, SITE_CONFIG } from "@/lib/site-config";
 
 export const metadata: Metadata = {
-  title: "Trivy Supply Chain Compromise - Drydock Security Advisory",
+  // absolute: this title already carries the brand; opt out of the root "%s | Drydock" template.
+  title: { absolute: "Trivy Supply Chain Compromise - Drydock Security Advisory" },
   description:
     "Analysis of the March 2026 Trivy supply chain breach (GHSA-69fq-xp46-6x23). Drydock is not affected. Full audit and recommendations for users.",
   openGraph: {
@@ -12,7 +13,7 @@ export const metadata: Metadata = {
     description: "Analysis of the March 2026 Trivy supply chain breach. Drydock is not affected.",
     url: `${BASE_URL}/security/trivy-supply-chain-march-2026`,
     siteName: SITE_CONFIG.name,
-    locale: "en_US",
+    locale: SITE_CONFIG.locale,
     type: "article",
   },
   twitter: {
@@ -36,7 +37,7 @@ export default function TrivyAdvisoryPage() {
       "Analysis of the March 2026 Trivy supply chain breach (GHSA-69fq-xp46-6x23). Drydock is not affected. Full audit and recommendations for users.",
     datePublished: "2026-03-22",
     dateModified: "2026-03-22",
-    image: `${BASE_URL}/og-image.png`,
+    image: `${BASE_URL}${SITE_CONFIG.ogImage}`,
     mainEntityOfPage: {
       "@type": "WebPage",
       "@id": `${BASE_URL}/security/trivy-supply-chain-march-2026`,
@@ -53,7 +54,7 @@ export default function TrivyAdvisoryPage() {
       url: "https://codeswhat.com",
       logo: {
         "@type": "ImageObject",
-        url: `${BASE_URL}/og-image.png`,
+        url: `${BASE_URL}${SITE_CONFIG.ogImage}`,
       },
     },
     keywords: "GHSA-69fq-xp46-6x23, CWE-506, supply chain attack, Trivy, security advisory",

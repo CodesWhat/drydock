@@ -4,7 +4,8 @@ import { MarketingShell } from "@/components/marketing-shell";
 import { BASE_URL, SITE_CONFIG } from "@/lib/site-config";
 
 export const metadata: Metadata = {
-  title: "Drydock vs Alternatives — Container Update Tool Comparisons",
+  // absolute: this title already carries the brand; opt out of the root "%s | Drydock" template.
+  title: { absolute: "Drydock vs Alternatives — Container Update Tool Comparisons" },
   description:
     "Compare Drydock to Watchtower, Portainer, Diun, Komodo, Dockge, Dockhand, Dozzle, Ouroboros, and WUD. Feature-by-feature breakdowns for container update monitoring tools.",
   keywords: [
@@ -22,7 +23,7 @@ export const metadata: Metadata = {
       "Compare Drydock to Watchtower, Portainer, Diun, and more. Feature-by-feature breakdowns.",
     url: `${BASE_URL}/compare`,
     siteName: SITE_CONFIG.name,
-    locale: "en_US",
+    locale: SITE_CONFIG.locale,
     type: "website",
   },
   twitter: {
