@@ -4,25 +4,25 @@ import type { ComparisonRouteRawConfig } from "@/lib/comparison-route-data/types
 export const ouroborosComparisonRouteData = {
   slug: "ouroboros",
   comparisonTable: `
-Project status|Unmaintained (since ~2020)|Actively maintained|drydock
+Project status|Unmaintained (since ~2020)|Actively maintained|self
 Language|Python|TypeScript|tie
-Web UI|None (CLI only)|Full dashboard|drydock
-Auto-update containers|Yes|Yes (optional, monitor-first)|drydock
-Docker Compose updates|No|Yes, pull & recreate|drydock
-Registry support|Docker Hub + private via Docker config|23 dedicated registry integrations|drydock
-Notifications|Apprise passthrough (150+ platforms via Apprise URLs)|20 native trigger integrations|drydock
-Security scanning|None|Trivy + SBOM + cosign verification|drydock
-OIDC authentication|None|Authelia, Auth0, Authentik|drydock
-REST API|None|Full REST API|drydock
-Prometheus metrics|Basic (container update counts; official Grafana template available)|Full /metrics endpoint + Grafana template|drydock
-Image backup & rollback|No|Pre-update backup with retention + auto rollback|drydock
-Container grouping|No|Smart stack detection with batch actions|drydock
-Lifecycle hooks|No|Pre/post-update shell commands|drydock
-Webhook API|No|Token-authenticated webhooks for CI/CD|drydock
-Container actions|No|Start/stop/restart from UI/API|drydock
-Distributed agents|No|SSE-based agent architecture|drydock
-Audit log|No|Yes, with REST API|drydock
-Semver-aware updates|No|Yes|drydock
+Web UI|None (CLI only)|Full dashboard|self
+Auto-update containers|Yes|Yes (optional, monitor-first)|self
+Docker Compose updates|No|Yes, pull & recreate|self
+Registry support|Docker Hub + private via Docker config|23 dedicated registry integrations|self
+Notifications|Apprise passthrough (150+ platforms via Apprise URLs)|20 native trigger integrations|self
+Security scanning|None|Trivy + SBOM + cosign verification|self
+OIDC authentication|None|Authelia, Auth0, Authentik|self
+REST API|None|Full REST API|self
+Prometheus metrics|Basic (container update counts; official Grafana template available)|Full /metrics endpoint + Grafana template|self
+Image backup & rollback|No|Pre-update backup with retention + auto rollback|self
+Container grouping|No|Smart stack detection with batch actions|self
+Lifecycle hooks|No|Pre/post-update shell commands|self
+Webhook API|No|Token-authenticated webhooks for CI/CD|self
+Container actions|No|Start/stop/restart from UI/API|self
+Distributed agents|No|SSE-based agent architecture|self
+Audit log|No|Yes, with REST API|self
+Semver-aware updates|No|Yes|self
 Digest watching|Yes|Yes|tie
 Multi-arch (amd64/arm64)|Yes|Yes|tie
 License|MIT|AGPL-3.0|tie
@@ -78,7 +78,7 @@ bell|20 Notification Services|Drydock notifies on image update availability acro
     className:
       "bg-neutral-200 px-3 py-1 text-sm text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
   },
-  drydockBadge: {
+  selfBadge: {
     icon: Check,
     label: "Drydock — Actively Maintained",
     className:

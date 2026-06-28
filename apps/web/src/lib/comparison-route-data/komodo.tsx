@@ -9,23 +9,23 @@ Language|Rust + TypeScript|TypeScript|tie
 Web UI|Yes|Yes|tie
 Image update detection|Yes|Yes|tie
 Auto-update containers|Yes|Yes (monitor-first)|tie
-Automatic rollback|No|Yes, on health check failure|drydock
-Maintenance windows|No|Yes|drydock
-Lifecycle hooks (pre/post)|No|Yes, with timeout & abort|drydock
-Image backup|No|Pre-update backup with retention|drydock
-Security scanning (Trivy)|No|Trivy + SBOM + cosign verification|drydock
-Registry providers|Limited|23 dedicated integrations|drydock
-Notification services|Slack, Discord, Ntfy, Pushover|20 native trigger integrations|drydock
-MQTT / Home Assistant|No|Yes|drydock
+Automatic rollback|No|Yes, on health check failure|self
+Maintenance windows|No|Yes|self
+Lifecycle hooks (pre/post)|No|Yes, with timeout & abort|self
+Image backup|No|Pre-update backup with retention|self
+Security scanning (Trivy)|No|Trivy + SBOM + cosign verification|self
+Registry providers|Limited|23 dedicated integrations|self
+Notification services|Slack, Discord, Ntfy, Pushover|20 native trigger integrations|self
+MQTT / Home Assistant|No|Yes|self
 OIDC / SSO|Yes|Yes (Authelia, Auth0, Authentik)|tie
 Passkey / TOTP 2FA|Yes|Planned|competitor
 CI/CD pipelines|Yes|No (webhook API for CI/CD)|competitor
 TypeScript scripting|Yes (Actions)|Planned|competitor
 TOML GitOps config|Yes|Planned (YAML)|competitor
 CLI tool|Yes|Planned|competitor
-Prometheus metrics|No|Full /metrics endpoint + Grafana template|drydock
+Prometheus metrics|No|Full /metrics endpoint + Grafana template|self
 Audit log|Yes|Yes, with REST API|tie
-Dry-run preview|No|Yes|drydock
+Dry-run preview|No|Yes|self
 License|GPL-3.0|AGPL-3.0|tie
 `,
   highlightsTable: `

@@ -8,24 +8,24 @@ Project status|Actively maintained|Actively maintained|tie
 Language|TypeScript|TypeScript (full ESM)|tie
 Web UI|Yes|Yes (redesigned)|tie
 Auto-update containers|Yes|Yes|tie
-Docker Compose updates|Yes|Yes, with multi-network support|drydock
-Registry providers|13|23|drydock
-Notifications|16 triggers|20 native trigger integrations|drydock
-Security scanning|None|Trivy + SBOM + cosign verification|drydock
+Docker Compose updates|Yes|Yes, with multi-network support|self
+Registry providers|13|23|self
+Notifications|16 triggers|20 native trigger integrations|self
+Security scanning|None|Trivy + SBOM + cosign verification|self
 OIDC authentication|OIDC supported (Authelia, Auth0, Authentik)|Authelia, Auth0, Authentik|tie
-REST API|Yes|Yes (expanded)|drydock
-Prometheus metrics|Yes|Yes + Grafana dashboard template|drydock
+REST API|Yes|Yes (expanded)|self
+Prometheus metrics|Yes|Yes + Grafana dashboard template|self
 MQTT / Home Assistant|Yes|Yes|tie
-Image backup & rollback|None|Pre-update backup with retention + auto rollback|drydock
-Container grouping|Yes|Yes (enhanced with batch actions)|drydock
-Lifecycle hooks|None|Pre/post-update shell commands|drydock
-Webhook API|None|Token-authenticated webhooks for CI/CD|drydock
-Container actions|None|Start/stop/restart from UI/API|drydock
-Distributed agents|Multi-host via Docker TCP API|SSE-based agents (no exposed Docker API required)|drydock
-Audit log|None|Yes, with REST API & Prometheus counter|drydock
+Image backup & rollback|None|Pre-update backup with retention + auto rollback|self
+Container grouping|Yes|Yes (enhanced with batch actions)|self
+Lifecycle hooks|None|Pre/post-update shell commands|self
+Webhook API|None|Token-authenticated webhooks for CI/CD|self
+Container actions|None|Start/stop/restart from UI/API|self
+Distributed agents|Multi-host via Docker TCP API|SSE-based agents (no exposed Docker API required)|self
+Audit log|None|Yes, with REST API & Prometheus counter|self
 Semver-aware updates|Yes|Yes|tie
-Container log viewer|None|Yes, with level filtering & auto-fetch|drydock
-Test framework|Jest|Vitest 4|drydock
+Container log viewer|None|Yes, with level filtering & auto-fetch|self
+Test framework|Jest|Vitest 4|self
 License|MIT|AGPL-3.0|tie
 `,
   highlightsTable: `

@@ -8,16 +8,16 @@ Project status|Actively maintained|Actively maintained|tie
 Language|TypeScript|TypeScript|tie
 Web UI|Yes|Yes|tie
 Primary focus|Compose stack management|Container update monitoring|tie
-Image update detection|No|Yes, across 23 registries|drydock
-Auto-update containers|No|Yes (optional, monitor-first)|drydock
-Notifications on updates|No|20 native trigger integrations|drydock
-Security scanning|No|Trivy + SBOM + cosign verification|drydock
-Automatic rollback|No|Yes, on health check failure|drydock
-Image backup|No|Pre-update backup with retention|drydock
-Prometheus metrics|No|Full /metrics endpoint + Grafana template|drydock
-OIDC authentication|No|Authelia, Auth0, Authentik|drydock
-Distributed agents|Yes (requires full Dockge instance per host)|SSE-based lightweight agent architecture|drydock
-Audit log|No|Yes, with REST API|drydock
+Image update detection|No|Yes, across 23 registries|self
+Auto-update containers|No|Yes (optional, monitor-first)|self
+Notifications on updates|No|20 native trigger integrations|self
+Security scanning|No|Trivy + SBOM + cosign verification|self
+Automatic rollback|No|Yes, on health check failure|self
+Image backup|No|Pre-update backup with retention|self
+Prometheus metrics|No|Full /metrics endpoint + Grafana template|self
+OIDC authentication|No|Authelia, Auth0, Authentik|self
+Distributed agents|Yes (requires full Dockge instance per host)|SSE-based lightweight agent architecture|self
+Audit log|No|Yes, with REST API|self
 Compose file editing|Yes (visual editor)|No (compose updates only)|competitor
 Docker run → compose|Yes|No|competitor
 Multi-language (i18n)|Yes (30+ languages)|Planned|competitor

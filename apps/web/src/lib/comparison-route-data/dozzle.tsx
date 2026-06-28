@@ -8,21 +8,21 @@ Project status|Actively maintained|Actively maintained|tie
 Language|Go|TypeScript|tie
 Web UI|Yes|Yes|tie
 Primary focus|Real-time log viewing|Container update monitoring|tie
-Image update detection|No|Yes, across 23 registries|drydock
-Auto-update containers|No|Yes (optional, monitor-first)|drydock
-Security scanning|No|Trivy + SBOM + cosign verification|drydock
-Automatic rollback|No|Yes, on health check failure|drydock
-Image backup|No|Pre-update backup with retention|drydock
-Notifications|Slack, Discord, Ntfy, webhooks|20 native trigger integrations|drydock
-MQTT / Home Assistant|No|Yes|drydock
-Prometheus metrics|No|Full /metrics endpoint + Grafana template|drydock
-Audit log|No|Yes, with REST API|drydock
+Image update detection|No|Yes, across 23 registries|self
+Auto-update containers|No|Yes (optional, monitor-first)|self
+Security scanning|No|Trivy + SBOM + cosign verification|self
+Automatic rollback|No|Yes, on health check failure|self
+Image backup|No|Pre-update backup with retention|self
+Notifications|Slack, Discord, Ntfy, webhooks|20 native trigger integrations|self
+MQTT / Home Assistant|No|Yes|self
+Prometheus metrics|No|Full /metrics endpoint + Grafana template|self
+Audit log|No|Yes, with REST API|self
 Log viewer|Advanced (SQL, split-screen, regex)|Basic (level filtering, auto-fetch)|competitor
 Log analytics / SQL|Yes|No|competitor
 Resource monitoring|Yes (CPU, memory, network — live)|Planned|competitor
 Multi-host agents|Yes|Yes (SSE-based)|tie
 Container start/stop/restart|Yes|Yes|tie
-OIDC authentication|Via forward proxy (Authelia, Authentik, Cloudflare)|Yes (Authelia, Auth0, Authentik)|drydock
+OIDC authentication|Via forward proxy (Authelia, Authentik, Cloudflare)|Yes (Authelia, Auth0, Authentik)|self
 RBAC|Yes|Planned|competitor
 Docker Swarm|Yes|Planned|competitor
 Kubernetes|Yes (since v8.11)|Planned (v2.0.0)|competitor

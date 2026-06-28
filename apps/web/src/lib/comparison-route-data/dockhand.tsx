@@ -10,23 +10,23 @@ Web UI|Yes|Yes|tie
 Image update detection|Yes|Yes|tie
 Auto-update containers|Yes|Yes (monitor-first)|tie
 Vulnerability scanning|Yes (Safe-Pull Protection)|Yes (Trivy + SBOM + cosign)|tie
-Automatic rollback|No|Yes, on health check failure|drydock
-Maintenance windows|No|Yes|drydock
-Lifecycle hooks (pre/post)|No|Yes, with timeout & abort|drydock
-Image backup|No|Pre-update backup with retention|drydock
-Dry-run preview|No|Yes|drydock
-Registry providers|Major registries|23 dedicated integrations|drydock
-Notifications|SMTP, Gotify, ntfy, Pushover, Telegram, Mattermost, Teams, Bark, Signal, Apprise passthrough (80+ services)|20 native trigger integrations|drydock
-MQTT / Home Assistant|No|Yes|drydock
+Automatic rollback|No|Yes, on health check failure|self
+Maintenance windows|No|Yes|self
+Lifecycle hooks (pre/post)|No|Yes, with timeout & abort|self
+Image backup|No|Pre-update backup with retention|self
+Dry-run preview|No|Yes|self
+Registry providers|Major registries|23 dedicated integrations|self
+Notifications|SMTP, Gotify, ntfy, Pushover, Telegram, Mattermost, Teams, Bark, Signal, Apprise passthrough (80+ services)|20 native trigger integrations|self
+MQTT / Home Assistant|No|Yes|self
 Distributed agents|Yes (headless agents)|Yes (SSE-based agents)|tie
 OIDC / SSO|Yes|Yes (Authelia, Auth0, Authentik)|tie
-Prometheus metrics|Planned|Full /metrics endpoint + Grafana template|drydock
-Audit log|Activity log (free); compliance audit log (Enterprise only)|Yes, free (REST API)|drydock
+Prometheus metrics|Planned|Full /metrics endpoint + Grafana template|self
+Audit log|Activity log (free); compliance audit log (Enterprise only)|Yes, free (REST API)|self
 Git-based stack deployment|Yes|Planned|competitor
 Web terminal / shell|Yes|Planned|competitor
 File browser|Yes|Planned|competitor
 Secret management|Planned|Planned (free)|tie
-License|BSL 1.1 (source-available; converts to Apache 2.0 in 2029)|AGPL-3.0|drydock
+License|BSL 1.1 (source-available; converts to Apache 2.0 in 2029)|AGPL-3.0|self
 `,
   highlightsTable: `
 rotate|Update Safety Controls|Automatic rollback on health check failure, maintenance windows, lifecycle hooks, and dry-run preview. Dockhand's safe-pull protection rolls back if a new container fails to start, but doesn't support proactive health-check rollback, maintenance windows, or lifecycle hooks.

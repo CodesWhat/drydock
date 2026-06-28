@@ -4,27 +4,27 @@ import type { ComparisonRouteRawConfig } from "@/lib/comparison-route-data/types
 export const watchtowerComparisonRouteData = {
   slug: "watchtower",
   comparisonTable: `
-Project status|Archived (Dec 2025)|Actively maintained|drydock
+Project status|Archived (Dec 2025)|Actively maintained|self
 Language|Go|TypeScript|tie
-Web UI|None (CLI only)|Full dashboard|drydock
-Update approach|Auto-pulls & restarts|Monitor + notify (optional update)|drydock
-Monitor-only mode|Flag exists; pulls images anyway due to Docker API limits|Core design — monitor-first|drydock
-Dry-run preview|No|Yes|drydock
-Registry support|Docker Hub + private via Docker config|23 dedicated registry integrations|drydock
+Web UI|None (CLI only)|Full dashboard|self
+Update approach|Auto-pulls & restarts|Monitor + notify (optional update)|self
+Monitor-only mode|Flag exists; pulls images anyway due to Docker API limits|Core design — monitor-first|self
+Dry-run preview|No|Yes|self
+Registry support|Docker Hub + private via Docker config|23 dedicated registry integrations|self
 Notifications|Via Shoutrrr (~18 services)|20 native trigger integrations|tie
-Security scanning|None|Trivy + SBOM + cosign verification|drydock
-Per-container scheduling|No|Yes (per-watcher CRON)|drydock
-Include/exclude patterns|Labels only|Labels, regex, image sets|drydock
-Distributed/remote hosts|Limited|SSE-based agent architecture|drydock
-Prometheus metrics|Basic|Full /metrics endpoint + Grafana template|drydock
-Audit log|No|Yes, with REST API|drydock
-Auto rollback|No|Yes, on health check failure|drydock
-Authentication|None|OIDC (Authelia, Auth0, Authentik)|drydock
-Container actions|Restart only (via update)|Start/stop/restart from UI/API|drydock
-Docker Compose updates|Limited|Full compose pull & recreate|drydock
-Lifecycle hooks|Yes (advisory — no abort on failure)|Yes (pre/post with abort & audit)|drydock
-Image backup|No|Pre-update backup with retention|drydock
-Webhook API|HTTP API (token-authenticated, on-demand trigger)|Event-driven webhooks (token-authenticated)|drydock
+Security scanning|None|Trivy + SBOM + cosign verification|self
+Per-container scheduling|No|Yes (per-watcher CRON)|self
+Include/exclude patterns|Labels only|Labels, regex, image sets|self
+Distributed/remote hosts|Limited|SSE-based agent architecture|self
+Prometheus metrics|Basic|Full /metrics endpoint + Grafana template|self
+Audit log|No|Yes, with REST API|self
+Auto rollback|No|Yes, on health check failure|self
+Authentication|None|OIDC (Authelia, Auth0, Authentik)|self
+Container actions|Restart only (via update)|Start/stop/restart from UI/API|self
+Docker Compose updates|Limited|Full compose pull & recreate|self
+Lifecycle hooks|Yes (advisory — no abort on failure)|Yes (pre/post with abort & audit)|self
+Image backup|No|Pre-update backup with retention|self
+Webhook API|HTTP API (token-authenticated, on-demand trigger)|Event-driven webhooks (token-authenticated)|self
 License|Apache 2.0|AGPL-3.0|tie
 `,
   highlightsTable: `
@@ -76,7 +76,7 @@ rotate|Rollback & Backup|Pre-update image backups with configurable retention an
     className:
       "bg-neutral-200 px-3 py-1 text-sm text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
   },
-  drydockBadge: {
+  selfBadge: {
     icon: Check,
     label: "Drydock — Actively Maintained",
     className:

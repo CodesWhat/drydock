@@ -5,12 +5,13 @@ import { DockerRunSnippet } from "@/components/docker-run-snippet";
 import { MarketingShell } from "@/components/marketing-shell";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { SITE_CONFIG } from "@/lib/site-config";
 
 export type ComparisonRow = {
   feature: string;
   competitor: string;
-  drydock: string;
-  verdict: "drydock" | "competitor" | "tie";
+  self: string;
+  verdict: "self" | "competitor" | "tie";
 };
 
 export type Highlight = {
@@ -30,7 +31,7 @@ type Props = {
   heroTitle: string;
   heroDescription: React.ReactNode;
   competitorBadge: CompetitorBadge;
-  drydockBadge: CompetitorBadge;
+  selfBadge: CompetitorBadge;
   comparisonData: ComparisonRow[];
   highlights: Highlight[];
   migrationTitle: string;
@@ -39,7 +40,7 @@ type Props = {
 };
 
 function VerdictIcon({ verdict }: { verdict: ComparisonRow["verdict"] }) {
-  if (verdict === "drydock" || verdict === "competitor") {
+  if (verdict === "self" || verdict === "competitor") {
     return <Check className="h-4 w-4 text-emerald-500" />;
   }
   return <Minus className="h-4 w-4 text-neutral-400" />;
@@ -50,7 +51,7 @@ export function ComparisonPage({
   heroTitle,
   heroDescription,
   competitorBadge,
-  drydockBadge,
+  selfBadge,
   comparisonData,
   highlights,
   migrationTitle,
@@ -80,9 +81,9 @@ export function ComparisonPage({
                 <competitorBadge.icon className="mr-1.5 h-3.5 w-3.5" />
                 {competitorBadge.label}
               </Badge>
-              <Badge className={drydockBadge.className}>
-                <drydockBadge.icon className="mr-1.5 h-3.5 w-3.5" />
-                {drydockBadge.label}
+              <Badge className={selfBadge.className}>
+                <selfBadge.icon className="mr-1.5 h-3.5 w-3.5" />
+                {selfBadge.label}
               </Badge>
             </div>
           </div>
@@ -132,7 +133,7 @@ export function ComparisonPage({
                         <span className="flex items-center gap-2">
                           {row.competitor === "No" || row.competitor === "None" ? (
                             <X className="h-4 w-4 shrink-0 text-neutral-300 dark:text-neutral-600" />
-                          ) : row.verdict === "drydock" ? (
+                          ) : row.verdict === "self" ? (
                             <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
                           ) : row.verdict === "competitor" ? (
                             <Check className="h-4 w-4 shrink-0 text-emerald-500" />
@@ -144,14 +145,14 @@ export function ComparisonPage({
                       </td>
                       <td className="px-4 py-3 sm:px-6">
                         <span className="flex items-center gap-2 text-neutral-900 dark:text-neutral-100">
-                          {row.verdict === "drydock" ? (
+                          {row.verdict === "self" ? (
                             <Check className="h-4 w-4 shrink-0 text-emerald-500" />
                           ) : row.verdict === "competitor" ? (
                             <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
                           ) : (
                             <VerdictIcon verdict="tie" />
                           )}
-                          {row.drydock}
+                          {row.self}
                         </span>
                       </td>
                     </tr>
@@ -232,7 +233,7 @@ export function ComparisonPage({
         <section className="px-4 py-16">
           <div className="mx-auto max-w-3xl text-center">
             <h2 className="mb-4 text-3xl font-bold tracking-tight text-neutral-900 sm:text-4xl dark:text-neutral-50">
-              Ready to try Drydock?
+              {`Ready to try ${SITE_CONFIG.name}?`}
             </h2>
             <p className="mb-8 text-neutral-600 dark:text-neutral-400">
               No SaaS subscription, no data sent off your host, and we ship updates fast.

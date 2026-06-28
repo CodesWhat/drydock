@@ -41,7 +41,7 @@ export type ComparisonRouteConfig = {
     label: string;
     className: string;
   };
-  drydockBadge?: {
+  selfBadge?: {
     icon: LucideIcon;
     label: string;
     className: string;
@@ -50,7 +50,7 @@ export type ComparisonRouteConfig = {
 
 const competitorBadgeClassName =
   "bg-blue-100 px-3 py-1 text-sm text-blue-700 dark:bg-blue-900/50 dark:text-blue-400";
-const drydockBadgeClassName =
+const selfBadgeClassName =
   "bg-emerald-100 px-3 py-1 text-sm text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-400";
 
 export function buildComparisonMetadata({
@@ -143,10 +143,10 @@ export function createComparisonRoute(config: ComparisonRouteConfig) {
     label: `${config.competitorName} — Active`,
     className: competitorBadgeClassName,
   };
-  const drydockBadge = config.drydockBadge ?? {
+  const selfBadge = config.selfBadge ?? {
     icon: Check,
     label: `${SITE_CONFIG.name} — Active`,
-    className: drydockBadgeClassName,
+    className: selfBadgeClassName,
   };
 
   const metadata = buildComparisonMetadata({
@@ -165,7 +165,7 @@ export function createComparisonRoute(config: ComparisonRouteConfig) {
         heroTitle={config.heroTitle}
         heroDescription={config.heroDescription}
         competitorBadge={competitorBadge}
-        drydockBadge={drydockBadge}
+        selfBadge={selfBadge}
         comparisonData={config.comparisonData}
         highlights={config.highlights}
         migrationTitle={config.migrationTitle}
@@ -186,10 +186,10 @@ export function createComparisonRoute(config: ComparisonRouteConfig) {
 export function row(
   feature: string,
   competitor: string,
-  drydock: string,
+  self: string,
   verdict: ComparisonRow["verdict"],
 ): ComparisonRow {
-  return { feature, competitor, drydock, verdict };
+  return { feature, competitor, self, verdict };
 }
 
 export function highlight(icon: LucideIcon, title: string, description: string): Highlight {
@@ -210,12 +210,12 @@ export function rowsFromPipeTable(table: string): ComparisonRow[] {
       throw new Error(`Invalid comparison row at line ${index + 1}: expected 4 columns`);
     }
 
-    const [feature, competitor, drydock, verdict] = columns;
-    if (verdict !== "drydock" && verdict !== "competitor" && verdict !== "tie") {
+    const [feature, competitor, self, verdict] = columns;
+    if (verdict !== "self" && verdict !== "competitor" && verdict !== "tie") {
       throw new Error(`Invalid verdict at line ${index + 1}: ${verdict}`);
     }
 
-    return row(feature, competitor, drydock, verdict);
+    return row(feature, competitor, self, verdict);
   });
 }
 

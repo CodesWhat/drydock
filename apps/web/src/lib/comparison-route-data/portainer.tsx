@@ -5,28 +5,28 @@ export const portainerComparisonRouteData = {
   slug: "portainer",
   comparisonTable: `
 Project status|Actively maintained|Actively maintained|tie
-Pricing|Free CE / Paid BE ($$$)|Free, AGPL-3.0 licensed|drydock
+Pricing|Free CE / Paid BE ($$$)|Free, AGPL-3.0 licensed|self
 Web UI|Yes|Yes|tie
 Image update detection|Yes|Yes|tie
 Auto-update containers|Yes|Yes (monitor-first)|tie
-Automatic rollback|No|Yes, on health check failure|drydock
-Maintenance windows|No|Yes|drydock
-Lifecycle hooks (pre/post)|No|Yes, with timeout & abort|drydock
-Image backup & dry-run|No|Pre-update backup + dry-run preview|drydock
-Security scanning|No|Trivy + SBOM + cosign (free)|drydock
-Registry providers|Major registries|23 dedicated integrations|drydock
-Notifications|Slack, Teams (BE only)|20 native trigger integrations|drydock
-MQTT / Home Assistant|No|Yes|drydock
-Grafana dashboard|No|Yes, importable template|drydock
+Automatic rollback|No|Yes, on health check failure|self
+Maintenance windows|No|Yes|self
+Lifecycle hooks (pre/post)|No|Yes, with timeout & abort|self
+Image backup & dry-run|No|Pre-update backup + dry-run preview|self
+Security scanning|No|Trivy + SBOM + cosign (free)|self
+Registry providers|Major registries|23 dedicated integrations|self
+Notifications|Slack, Teams (BE only)|20 native trigger integrations|self
+MQTT / Home Assistant|No|Yes|self
+Grafana dashboard|No|Yes, importable template|self
 OIDC / SSO|Yes|Yes (Authelia, Auth0, Authentik)|tie
 RBAC|Yes (BE only)|Planned|competitor
 Kubernetes support|Yes|Planned (v2.0.0)|competitor
 Docker Swarm|Yes|Planned (v2.0.0)|competitor
 Web terminal / shell|Yes|Planned|competitor
 Compose templates|Yes|Planned|competitor
-Audit log|Yes (BE only)|Yes (free)|drydock
-Resource footprint|Heavier (~100–200MB RAM)|Lightweight (~80MB RAM)|drydock
-License|Zlib (CE) / Proprietary (BE)|AGPL-3.0|drydock
+Audit log|Yes (BE only)|Yes (free)|self
+Resource footprint|Heavier (~100–200MB RAM)|Lightweight (~80MB RAM)|self
+License|Zlib (CE) / Proprietary (BE)|AGPL-3.0|self
 `,
   highlightsTable: `
 rotate|Update Safety Controls|Automatic rollback on health check failure, maintenance windows, lifecycle hooks, and dry-run preview. We built these into Drydock because Portainer doesn't offer automatic rollback or these safety primitives.
