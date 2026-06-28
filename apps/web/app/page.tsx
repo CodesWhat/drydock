@@ -8,12 +8,11 @@ import { HeroVariants } from "@/components/lab/hero-variants";
 import { RoadmapVariants } from "@/components/lab/roadmap-variants";
 import { StarHistoryVariants } from "@/components/lab/starhistory-variants";
 import { MarketingShell } from "@/components/marketing-shell";
-
-const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com";
+import { BASE_URL, GITHUB_RELEASES_URL, GITHUB_URL, SITE_CONFIG } from "@/lib/site-config";
 
 export const metadata: Metadata = {
   alternates: {
-    canonical: baseUrl,
+    canonical: BASE_URL,
   },
 };
 
@@ -21,20 +20,20 @@ export default function Home() {
   const softwareAppJsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: "Drydock",
-    url: baseUrl,
+    name: SITE_CONFIG.name,
+    url: BASE_URL,
     description: "Open source container update monitoring built in TypeScript with modern tooling.",
     applicationCategory: "DeveloperApplication",
     operatingSystem: "Docker",
     license: "https://opensource.org/licenses/AGPL-3.0",
-    downloadUrl: "https://github.com/CodesWhat/drydock/releases",
-    installUrl: "https://github.com/CodesWhat/drydock/releases",
+    downloadUrl: GITHUB_RELEASES_URL,
+    installUrl: GITHUB_RELEASES_URL,
     offers: {
       "@type": "Offer",
       price: "0",
       priceCurrency: "USD",
     },
-    sameAs: ["https://github.com/CodesWhat/drydock", "https://x.com/codeswhat"],
+    sameAs: [GITHUB_URL, SITE_CONFIG.twitterUrl],
     author: {
       "@type": "Organization",
       name: "CodesWhat",
@@ -43,15 +42,15 @@ export default function Home() {
     },
     softwareHelp: {
       "@type": "WebPage",
-      url: `${baseUrl}/docs`,
+      url: `${BASE_URL}/docs`,
     },
   };
 
   const websiteJsonLd = {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    name: "Drydock",
-    url: baseUrl,
+    name: SITE_CONFIG.name,
+    url: BASE_URL,
     publisher: {
       "@type": "Organization",
       name: "CodesWhat",

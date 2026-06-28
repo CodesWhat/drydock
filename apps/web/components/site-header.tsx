@@ -3,8 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { GithubIcon } from "@/components/github-icon";
 import { ThemeToggle } from "@/components/theme-toggle";
-
-const GITHUB = "https://github.com/CodesWhat/drydock";
+import { GITHUB_URL, SITE_CONFIG } from "@/lib/site-config";
 
 const navLink =
   "text-sm text-neutral-600 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100";
@@ -23,9 +22,9 @@ export function SiteHeader({
     <header className="sticky top-0 z-50 border-b border-border/60 bg-white/70 backdrop-blur-md dark:bg-neutral-950/70">
       <div className={`mx-auto flex h-14 items-center justify-between px-4 ${maxWidthClassName}`}>
         <Link href="/" className="flex items-center gap-2.5">
-          <Image src="/whale-logo.png" alt="" width={43} height={43} className="dark:invert" />
+          <Image src={SITE_CONFIG.logo} alt="" width={43} height={43} className="dark:invert" />
           <span className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">
-            Drydock
+            {SITE_CONFIG.name}
           </span>
         </Link>
         <nav className="flex items-center gap-1 sm:gap-2">
@@ -44,7 +43,7 @@ export function SiteHeader({
             Compare
           </Link>
           <a
-            href={GITHUB}
+            href={GITHUB_URL}
             target="_blank"
             rel="noopener noreferrer"
             aria-label="GitHub"

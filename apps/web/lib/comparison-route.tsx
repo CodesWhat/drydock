@@ -2,12 +2,7 @@ import { Check, type LucideIcon } from "lucide-react";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { ComparisonPage, type ComparisonRow, type Highlight } from "@/components/comparison-page";
-
-const fallbackBaseUrl = "https://getdrydock.com";
-
-function getBaseUrl() {
-  return process.env.NEXT_PUBLIC_SITE_URL || fallbackBaseUrl;
-}
+import { BASE_URL, SITE_CONFIG } from "@/lib/site-config";
 
 type ComparisonMetadataConfig = {
   slug: string;
@@ -66,8 +61,6 @@ export function buildComparisonMetadata({
   openGraphDescription = description,
   twitterDescription = description,
 }: ComparisonMetadataConfig): Metadata {
-  const baseUrl = getBaseUrl();
-
   return {
     title,
     description,
@@ -75,8 +68,8 @@ export function buildComparisonMetadata({
     openGraph: {
       title,
       description: openGraphDescription,
-      url: `${baseUrl}/compare/${slug}`,
-      siteName: "Drydock",
+      url: `${BASE_URL}/compare/${slug}`,
+      siteName: SITE_CONFIG.name,
       locale: "en_US",
       type: "website",
     },
@@ -84,10 +77,10 @@ export function buildComparisonMetadata({
       card: "summary_large_image",
       title,
       description: twitterDescription,
-      creator: "@codeswhat",
+      creator: SITE_CONFIG.twitterCreator,
     },
     alternates: {
-      canonical: `${baseUrl}/compare/${slug}`,
+      canonical: `${BASE_URL}/compare/${slug}`,
     },
   };
 }
@@ -98,8 +91,6 @@ export function buildComparisonJsonLd({
   description,
   competitorName,
 }: ComparisonJsonLdConfig): Record<string, unknown> {
-  const baseUrl = getBaseUrl();
-
   return {
     "@context": "https://schema.org",
     "@graph": [
@@ -107,11 +98,11 @@ export function buildComparisonJsonLd({
         "@type": "WebPage",
         name,
         description,
-        url: `${baseUrl}/compare/${slug}`,
+        url: `${BASE_URL}/compare/${slug}`,
         mainEntity: {
           "@type": "SoftwareApplication",
-          name: "Drydock",
-          url: baseUrl,
+          name: SITE_CONFIG.name,
+          url: BASE_URL,
           applicationCategory: "DeveloperApplication",
           operatingSystem: "Docker",
           license: "https://opensource.org/licenses/AGPL-3.0",
@@ -124,19 +115,19 @@ export function buildComparisonJsonLd({
             "@type": "ListItem",
             position: 1,
             name: "Home",
-            item: baseUrl,
+            item: BASE_URL,
           },
           {
             "@type": "ListItem",
             position: 2,
             name: "Compare",
-            item: `${baseUrl}/compare`,
+            item: `${BASE_URL}/compare`,
           },
           {
             "@type": "ListItem",
             position: 3,
             name: competitorName,
-            item: `${baseUrl}/compare/${slug}`,
+            item: `${BASE_URL}/compare/${slug}`,
           },
         ],
       },
@@ -152,7 +143,7 @@ export function createComparisonRoute(config: ComparisonRouteConfig) {
   };
   const drydockBadge = config.drydockBadge ?? {
     icon: Check,
-    label: "Drydock — Active",
+    label: `${SITE_CONFIG.name} — Active`,
     className: drydockBadgeClassName,
   };
 

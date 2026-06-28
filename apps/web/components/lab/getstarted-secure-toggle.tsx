@@ -4,6 +4,7 @@ import { ShieldCheck, Terminal, TriangleAlert, Zap } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { SectionHeading } from "@/components/section-heading";
+import { SITE_CONFIG } from "@/lib/site-config";
 
 type Preset = "quick" | "secure";
 
@@ -36,7 +37,8 @@ function QuickSnippet() {
         {"  "}--name drydock \{"\n"}
         {"  "}-v /var/run/docker.sock:/var/run/docker.sock \{"\n"}
         {"  "}-p 3000:3000 \{"\n"}
-        {"  "}codeswhat/drydock
+        {"  "}
+        {SITE_CONFIG.dockerImage}
       </code>
     </CodeCard>
   );
@@ -77,7 +79,7 @@ function SecureSnippet() {
         {"  "}
         <span className={key}>drydock</span>:{"\n"}
         {"    "}
-        <span className={key}>image</span>: <span className={val}>codeswhat/drydock</span>
+        <span className={key}>image</span>: <span className={val}>{SITE_CONFIG.dockerImage}</span>
         {"\n"}
         {"    "}
         <span className={key}>restart</span>: unless-stopped{"\n"}

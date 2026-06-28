@@ -1,14 +1,13 @@
 import type { MetadataRoute } from "next";
+import { BASE_URL } from "@/lib/site-config";
 
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com";
-
   return {
     rules: {
       userAgent: "*",
       allow: "/",
       disallow: ["/api/", "/_next/"],
     },
-    sitemap: `${baseUrl}/sitemap.xml`,
+    sitemap: `${BASE_URL}/sitemap.xml`,
   };
 }

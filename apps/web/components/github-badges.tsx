@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import { Download, GitFork, Heart, Star } from "lucide-react";
 import type { ReactNode } from "react";
+import { DOCKER_HUB_URL, GITHUB_URL, REPO_SLUG } from "@/lib/site-config";
 
 // Awesome Lists brand mark (Simple Icons) — the sunglasses, in their pink.
 function AwesomeIcon({ className }: { className?: string }) {
@@ -28,18 +29,18 @@ type Badge = { href: string; src: string; alt: string };
 // ── Treatment 1: quality/security (shields.io, the visual lead) ──────────────
 const quality: Badge[] = [
   {
-    href: "https://github.com/CodesWhat/drydock/blob/main/LICENSE",
+    href: `${GITHUB_URL}/blob/main/LICENSE`,
     src: "https://img.shields.io/badge/license-AGPL--3.0-C9A227",
     alt: "License AGPL-3.0",
   },
   {
-    href: "https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml",
-    src: "https://github.com/CodesWhat/drydock/actions/workflows/ci-verify.yml/badge.svg?branch=main",
+    href: `${GITHUB_URL}/actions/workflows/ci-verify.yml`,
+    src: `${GITHUB_URL}/actions/workflows/ci-verify.yml/badge.svg?branch=main`,
     alt: "CI",
   },
   {
-    href: "https://securityscorecards.dev/viewer/?uri=github.com/CodesWhat/drydock",
-    src: "https://img.shields.io/ossf-scorecard/github.com/CodesWhat/drydock?label=openssf+scorecard&style=flat",
+    href: `https://securityscorecards.dev/viewer/?uri=github.com/${REPO_SLUG}`,
+    src: `https://img.shields.io/ossf-scorecard/github.com/${REPO_SLUG}?label=openssf+scorecard&style=flat`,
     alt: "OpenSSF Scorecard",
   },
   {
@@ -48,8 +49,8 @@ const quality: Badge[] = [
     alt: "Test coverage",
   },
   {
-    href: "https://dashboard.stryker-mutator.io/reports/github.com/CodesWhat/drydock/main",
-    src: "https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2FCodesWhat%2Fdrydock%2Fmain",
+    href: `https://dashboard.stryker-mutator.io/reports/github.com/${REPO_SLUG}/main`,
+    src: `https://img.shields.io/endpoint?style=flat&url=https%3A%2F%2Fbadge-api.stryker-mutator.io%2Fgithub.com%2F${REPO_SLUG.replace("/", "%2F")}%2Fmain`,
     alt: "Mutation score",
   },
 ];
@@ -66,21 +67,21 @@ type Stat = {
 
 const stats: Stat[] = [
   {
-    href: "https://github.com/CodesWhat/drydock/stargazers",
+    href: `${GITHUB_URL}/stargazers`,
     icon: Star,
     iconClass: "fill-amber-400 text-amber-400",
     value: "203",
     label: "stars",
   },
   {
-    href: "https://hub.docker.com/r/codeswhat/drydock",
+    href: DOCKER_HUB_URL,
     icon: Download,
     iconClass: "text-sky-500",
     value: "128K",
     label: "downloads",
   },
   {
-    href: "https://github.com/CodesWhat/drydock/forks",
+    href: `${GITHUB_URL}/forks`,
     icon: GitFork,
     iconClass: "text-violet-500",
     value: "10",

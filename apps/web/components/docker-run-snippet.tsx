@@ -1,5 +1,6 @@
 import { Terminal } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { SITE_CONFIG } from "@/lib/site-config";
 
 type Props = {
   cardClassName?: string;
@@ -30,7 +31,8 @@ export function DockerRunSnippet({
             {"  "}--name drydock \{"\n"}
             {"  "}-v /var/run/docker.sock:/var/run/docker.sock \{"\n"}
             {"  "}-p 3000:3000 \{"\n"}
-            {"  "}codeswhat/drydock
+            {"  "}
+            {SITE_CONFIG.dockerImage}
           </code>
         </pre>
       </CardContent>

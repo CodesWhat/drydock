@@ -1,5 +1,6 @@
 import { GithubIcon } from "@/components/github-icon";
 import { SectionHeading } from "@/components/section-heading";
+import { GITHUB_URL } from "@/lib/site-config";
 
 // Locked: Star History = clean framed card, title above the chart (left-aligned).
 
@@ -8,7 +9,6 @@ const DARK_SRC =
 const LIGHT_SRC =
   "https://api.star-history.com/svg?repos=CodesWhat/drydock&type=timeline&legend=top-left";
 const CHART_HREF = "https://www.star-history.com/#CodesWhat/drydock&type=timeline&legend=top-left";
-const GITHUB_HREF = "https://github.com/CodesWhat/drydock";
 
 function StarChart({ className }: { className?: string }) {
   return (
@@ -23,7 +23,7 @@ function StarChart({ className }: { className?: string }) {
 function GithubCta({ label = "Star on GitHub" }: { label?: string }) {
   return (
     <a
-      href={GITHUB_HREF}
+      href={GITHUB_URL}
       target="_blank"
       rel="noopener"
       className="inline-flex items-center gap-2 rounded-lg border border-neutral-200 bg-white/60 px-5 py-2.5 text-sm font-medium text-neutral-900 backdrop-blur-sm transition-all hover:border-neutral-300 hover:bg-white/90 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-100 dark:hover:border-neutral-600 dark:hover:bg-neutral-800/90"

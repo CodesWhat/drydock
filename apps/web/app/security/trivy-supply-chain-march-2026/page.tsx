@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { MarketingShell } from "@/components/marketing-shell";
 import { Badge } from "@/components/ui/badge";
-
-const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com";
+import { BASE_URL, GITHUB_URL, SITE_CONFIG } from "@/lib/site-config";
 
 export const metadata: Metadata = {
   title: "Trivy Supply Chain Compromise - Drydock Security Advisory",
@@ -11,8 +10,8 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Trivy Supply Chain Compromise - Drydock Security Advisory",
     description: "Analysis of the March 2026 Trivy supply chain breach. Drydock is not affected.",
-    url: `${baseUrl}/security/trivy-supply-chain-march-2026`,
-    siteName: "Drydock",
+    url: `${BASE_URL}/security/trivy-supply-chain-march-2026`,
+    siteName: SITE_CONFIG.name,
     locale: "en_US",
     type: "article",
   },
@@ -21,10 +20,10 @@ export const metadata: Metadata = {
     title: "Trivy Supply Chain Compromise - Drydock Security Advisory",
     description:
       "Analysis of the March 2026 Trivy supply chain breach (GHSA-69fq-xp46-6x23). Drydock is not affected. Full audit and recommendations for users.",
-    creator: "@codeswhat",
+    creator: SITE_CONFIG.twitterCreator,
   },
   alternates: {
-    canonical: `${baseUrl}/security/trivy-supply-chain-march-2026`,
+    canonical: `${BASE_URL}/security/trivy-supply-chain-march-2026`,
   },
 };
 
@@ -37,10 +36,10 @@ export default function TrivyAdvisoryPage() {
       "Analysis of the March 2026 Trivy supply chain breach (GHSA-69fq-xp46-6x23). Drydock is not affected. Full audit and recommendations for users.",
     datePublished: "2026-03-22",
     dateModified: "2026-03-22",
-    image: `${baseUrl}/og-image.png`,
+    image: `${BASE_URL}/og-image.png`,
     mainEntityOfPage: {
       "@type": "WebPage",
-      "@id": `${baseUrl}/security/trivy-supply-chain-march-2026`,
+      "@id": `${BASE_URL}/security/trivy-supply-chain-march-2026`,
     },
     author: {
       "@type": "Organization",
@@ -54,7 +53,7 @@ export default function TrivyAdvisoryPage() {
       url: "https://codeswhat.com",
       logo: {
         "@type": "ImageObject",
-        url: `${baseUrl}/og-image.png`,
+        url: `${BASE_URL}/og-image.png`,
       },
     },
     keywords: "GHSA-69fq-xp46-6x23, CWE-506, supply chain attack, Trivy, security advisory",
@@ -429,7 +428,7 @@ uses: aquasecurity/trivy-action@<full-commit-sha>  # 0.24.0`}</code>
                 </li>
                 <li>
                   <a
-                    href="https://github.com/CodesWhat/drydock/discussions/197"
+                    href={`${GITHUB_URL}/discussions/197`}
                     target="_blank"
                     rel="noopener noreferrer"
                   >

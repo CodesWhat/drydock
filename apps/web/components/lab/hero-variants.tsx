@@ -2,6 +2,7 @@ import Image from "next/image";
 import { CtaButtons } from "@/components/cta-buttons";
 import { GitHubBadges } from "@/components/github-badges";
 import { Badge } from "@/components/ui/badge";
+import { SITE_CONFIG } from "@/lib/site-config";
 
 const stats = [
   { value: "23", label: "registries" },
@@ -66,7 +67,7 @@ export function HeroVariants() {
             <div className="h-72 w-72 rounded-full bg-[var(--au-glow)] opacity-50 blur-3xl" />
           </div>
           <Image
-            src="/whale-logo.png"
+            src={SITE_CONFIG.logo}
             alt="Drydock whale"
             width={280}
             height={190}

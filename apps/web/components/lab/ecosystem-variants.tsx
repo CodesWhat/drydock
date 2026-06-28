@@ -1,6 +1,7 @@
 import { ArrowUpRight } from "lucide-react";
 import Image from "next/image";
 import { SectionHeading } from "@/components/section-heading";
+import { SITE_CONFIG } from "@/lib/site-config";
 
 // Locked: Ecosystem = family lineup — the CodesWhat mascot family
 // (whale · pitbull · pigeon) in one panel, each with a light + dark logo.
@@ -21,11 +22,11 @@ type Project = {
 
 const PROJECTS: Project[] = [
   {
-    name: "Drydock",
+    name: SITE_CONFIG.name,
     tagline: "Container update monitoring",
     blurb: "Watches every container you run and flags what's outdated or exposed — on your terms.",
-    light: "/whale-logo.png",
-    dark: "/whale-logo.png",
+    light: SITE_CONFIG.logo,
+    dark: SITE_CONFIG.logo,
     box: "h-[4.8rem] w-[7.2rem]",
     href: null,
     current: true,

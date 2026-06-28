@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { CompareMatrix } from "@/components/compare-matrix";
 import { MarketingShell } from "@/components/marketing-shell";
-
-const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com";
+import { BASE_URL, SITE_CONFIG } from "@/lib/site-config";
 
 export const metadata: Metadata = {
   title: "Drydock vs Alternatives — Container Update Tool Comparisons",
@@ -21,8 +20,8 @@ export const metadata: Metadata = {
     title: "Drydock vs Alternatives — Container Update Tool Comparisons",
     description:
       "Compare Drydock to Watchtower, Portainer, Diun, and more. Feature-by-feature breakdowns.",
-    url: `${baseUrl}/compare`,
-    siteName: "Drydock",
+    url: `${BASE_URL}/compare`,
+    siteName: SITE_CONFIG.name,
     locale: "en_US",
     type: "website",
   },
@@ -30,10 +29,10 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Drydock vs Alternatives — Container Update Tool Comparisons",
     description: "Compare Drydock to Watchtower, Portainer, Diun, and more.",
-    creator: "@codeswhat",
+    creator: SITE_CONFIG.twitterCreator,
   },
   alternates: {
-    canonical: `${baseUrl}/compare`,
+    canonical: `${BASE_URL}/compare`,
   },
 };
 
@@ -58,14 +57,14 @@ export default function ComparePage() {
         name: "Drydock vs Alternatives — Container Update Tool Comparisons",
         description:
           "Compare Drydock to Watchtower, Portainer, Diun, Komodo, Dockge, Dockhand, Dozzle, Ouroboros, and WUD.",
-        url: `${baseUrl}/compare`,
+        url: `${BASE_URL}/compare`,
         mainEntity: {
           "@type": "ItemList",
           numberOfItems: tools.length,
           itemListElement: tools.map((tool, i) => ({
             "@type": "ListItem",
             position: i + 1,
-            url: `${baseUrl}/compare/${tool.slug}`,
+            url: `${BASE_URL}/compare/${tool.slug}`,
             name: `${tool.name} vs Drydock`,
           })),
         },
@@ -77,13 +76,13 @@ export default function ComparePage() {
             "@type": "ListItem",
             position: 1,
             name: "Home",
-            item: baseUrl,
+            item: BASE_URL,
           },
           {
             "@type": "ListItem",
             position: 2,
             name: "Compare",
-            item: `${baseUrl}/compare`,
+            item: `${BASE_URL}/compare`,
           },
         ],
       },

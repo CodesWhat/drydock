@@ -3,6 +3,7 @@
 import { AlertTriangle, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { SITE_CONFIG } from "@/lib/site-config";
 
 interface AnnouncementBannerProps {
   id: string;
@@ -11,7 +12,7 @@ interface AnnouncementBannerProps {
 }
 
 export function AnnouncementBanner({ id, href, children }: AnnouncementBannerProps) {
-  const storageKey = `dd-banner-dismissed-${id}`;
+  const storageKey = `${SITE_CONFIG.storagePrefix}-banner-dismissed-${id}`;
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {

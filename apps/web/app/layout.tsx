@@ -3,6 +3,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next";
 import { RootProvider } from "fumadocs-ui/provider/next";
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { BASE_URL, SITE_CONFIG } from "@/lib/site-config";
 import "./globals.css";
 
 const ibmPlexSans = IBM_Plex_Sans({
@@ -22,15 +23,13 @@ const ICON_VERSION = "2";
 
 export const metadata: Metadata = {
   title: "Drydock - Container Update Monitoring",
-  description:
-    "Open source container update monitoring built in TypeScript. Auto-discover containers, detect image updates, and trigger notifications across 20+ services.",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com"),
+  description: SITE_CONFIG.description,
+  metadataBase: new URL(BASE_URL),
   openGraph: {
     title: "Drydock - Container Update Monitoring",
-    description:
-      "Open source container update monitoring built in TypeScript. Auto-discover containers, detect image updates, and trigger notifications across 20+ services.",
-    url: process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com",
-    siteName: "Drydock",
+    description: SITE_CONFIG.description,
+    url: BASE_URL,
+    siteName: SITE_CONFIG.name,
     locale: "en_US",
     type: "website",
     images: [
@@ -38,16 +37,15 @@ export const metadata: Metadata = {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Drydock - Container Update Monitoring",
+        alt: `${SITE_CONFIG.name} - ${SITE_CONFIG.tagline}`,
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
     title: "Drydock - Container Update Monitoring",
-    description:
-      "Open source container update monitoring built in TypeScript. Auto-discover containers, detect image updates, and trigger notifications across 20+ services.",
-    creator: "@codeswhat",
+    description: SITE_CONFIG.description,
+    creator: SITE_CONFIG.twitterCreator,
     images: ["/og-image.png"],
   },
   icons: {
@@ -78,7 +76,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <meta name="apple-mobile-web-app-title" content="Drydock" />
+        <meta name="apple-mobile-web-app-title" content={SITE_CONFIG.name} />
       </head>
       <body className={`${ibmPlexSans.className} ${ibmPlexMono.variable}`}>
         {/* Fail-open reveal gate: this inline script runs even if the bundled

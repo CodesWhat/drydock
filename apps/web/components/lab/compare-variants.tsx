@@ -1,6 +1,7 @@
 import { ArrowRight, Check, Minus, X } from "lucide-react";
 import Link from "next/link";
 import { SectionHeading } from "@/components/section-heading";
+import { SITE_CONFIG } from "@/lib/site-config";
 
 // Locked: Compare = the mini comparison table teaser.
 
@@ -63,7 +64,7 @@ function ViewAllLink() {
   );
 }
 
-const tools = ["Drydock", "Portainer", "Diun", "Watchtower"] as const;
+const tools = [SITE_CONFIG.name, "Portainer", "Diun", "Watchtower"] as const;
 type Tool = (typeof tools)[number];
 
 function cellValue(row: FeatureRow, tool: Tool): FeatureValue {
@@ -100,13 +101,13 @@ export function CompareVariants() {
                       key={tool}
                       className={[
                         "px-4 py-3 text-center font-semibold",
-                        tool === "Drydock"
+                        tool === SITE_CONFIG.name
                           ? "bg-neutral-900/5 text-neutral-900 dark:bg-neutral-100/5 dark:text-neutral-100"
                           : "text-neutral-500 dark:text-neutral-400",
                       ].join(" ")}
                     >
                       {tool}
-                      {tool === "Drydock" && (
+                      {tool === SITE_CONFIG.name && (
                         <span className="ml-1.5 inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
                       )}
                       {tool === "Watchtower" && (
@@ -135,7 +136,7 @@ export function CompareVariants() {
                         key={tool}
                         className={[
                           "px-4 py-3 text-center",
-                          tool === "Drydock" ? "bg-neutral-900/5 dark:bg-neutral-100/5" : "",
+                          tool === SITE_CONFIG.name ? "bg-neutral-900/5 dark:bg-neutral-100/5" : "",
                         ].join(" ")}
                       >
                         <FeatureIcon value={cellValue(row, tool)} />

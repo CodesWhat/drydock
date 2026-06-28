@@ -1,6 +1,7 @@
 import { statSync } from "node:fs";
 import { join } from "node:path";
 import type { MetadataRoute } from "next";
+import { BASE_URL } from "@/lib/site-config";
 import { source } from "@/lib/source";
 
 const contentDir = join(process.cwd(), "content", "docs");
@@ -15,10 +16,8 @@ function getFileModifiedDate(page: { absolutePath?: string; path: string }): Dat
 }
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://getdrydock.com";
-
   const docPages = source.getPages().map((page) => ({
-    url: `${baseUrl}${page.url}`,
+    url: `${BASE_URL}${page.url}`,
     lastModified: getFileModifiedDate(page),
     changeFrequency: "weekly" as const,
     priority: 0.7,
@@ -35,7 +34,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "dockhand",
     "dozzle",
   ].map((slug) => ({
-    url: `${baseUrl}/compare/${slug}`,
+    url: `${BASE_URL}/compare/${slug}`,
     lastModified: new Date(),
     changeFrequency: "monthly" as const,
     priority: 0.8,
@@ -43,20 +42,20 @@ export default function sitemap(): MetadataRoute.Sitemap {
 
   return [
     {
-      url: baseUrl,
+      url: BASE_URL,
       lastModified: new Date(),
       changeFrequency: "weekly",
       priority: 1,
     },
     {
-      url: `${baseUrl}/compare`,
+      url: `${BASE_URL}/compare`,
       lastModified: new Date(),
       changeFrequency: "monthly" as const,
       priority: 0.9,
     },
     ...comparePages,
     {
-      url: `${baseUrl}/security/trivy-supply-chain-march-2026`,
+      url: `${BASE_URL}/security/trivy-supply-chain-march-2026`,
       lastModified: new Date("2026-03-22"),
       changeFrequency: "yearly" as const,
       priority: 0.6,

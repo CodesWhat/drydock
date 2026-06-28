@@ -2,13 +2,20 @@ import type { ReactNode } from "react";
 import { FooterVariants } from "@/components/lab/footer-variants";
 import { SiteBackground } from "@/components/site-background";
 import { SiteHeader } from "@/components/site-header";
+import { type AuroraPalette, SITE_CONFIG } from "@/lib/site-config";
 
 // Shared marketing shell — ocean (blue) aurora, sticky header, footer.
 // Used by the homepage and the /compare route so every marketing page
 // shares the same chrome.
-export function MarketingShell({ children }: { children: ReactNode }) {
+export function MarketingShell({
+  children,
+  aurora = SITE_CONFIG.aurora,
+}: {
+  children: ReactNode;
+  aurora?: AuroraPalette;
+}) {
   return (
-    <div data-bg="ocean" data-aurora-motion="true" className="relative min-h-screen">
+    <div data-bg={aurora} data-aurora-motion="true" className="relative min-h-screen">
       <SiteBackground />
       <a
         href="#main-content"

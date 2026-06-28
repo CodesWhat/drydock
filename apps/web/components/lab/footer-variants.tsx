@@ -2,13 +2,10 @@ import { ArrowUpRight, BookOpen } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { GithubIcon } from "@/components/github-icon";
+import { DEMO_URL, GITHUB_RELEASES_URL, GITHUB_URL, SITE_CONFIG } from "@/lib/site-config";
 
 // Locked: Footer = brand-peer band — Drydock left, CodesWhat pill right.
 
-const GITHUB = "https://github.com/CodesWhat/drydock";
-const RELEASES = "https://github.com/CodesWhat/drydock/releases";
-const LICENSE = "https://www.gnu.org/licenses/agpl-3.0.html";
-const DEMO = "https://demo.getdrydock.com";
 const CODESWHAT = "https://github.com/CodesWhat";
 const YEAR = new Date().getFullYear();
 const BLURB =
@@ -24,14 +21,14 @@ type FooterLink = { label: string; href: string; external?: boolean };
 
 const productLinks: FooterLink[] = [
   { label: "Documentation", href: "/docs" },
-  { label: "Live demo", href: DEMO, external: true },
+  { label: "Live demo", href: DEMO_URL, external: true },
   { label: "Compare", href: "/compare" },
 ];
 
 const projectLinks: FooterLink[] = [
-  { label: "GitHub", href: GITHUB, external: true },
-  { label: "Releases", href: RELEASES, external: true },
-  { label: "License", href: LICENSE, external: true },
+  { label: "GitHub", href: GITHUB_URL, external: true },
+  { label: "Releases", href: GITHUB_RELEASES_URL, external: true },
+  { label: "License", href: SITE_CONFIG.licenseUrl, external: true },
 ];
 
 // ─── Shared pieces ────────────────────────────────────────────────────────────
@@ -73,7 +70,7 @@ function SocialIcons() {
   return (
     <div className="-ml-2 flex items-center gap-1">
       <a
-        href={GITHUB}
+        href={GITHUB_URL}
         target="_blank"
         rel="noopener noreferrer"
         className={iconLink}
@@ -123,7 +120,7 @@ function LicenseLine({ className }: { className?: string }) {
     <p className={`text-xs text-neutral-500 dark:text-neutral-400 ${className ?? ""}`}>
       &copy; {YEAR} CodesWhat. Released under the{" "}
       <a
-        href={LICENSE}
+        href={SITE_CONFIG.licenseUrl}
         target="_blank"
         rel="noopener noreferrer"
         className="underline underline-offset-2 hover:text-neutral-900 dark:hover:text-neutral-100"
@@ -151,7 +148,7 @@ export function FooterVariants({
           <div className="flex max-w-xs flex-col gap-4">
             <div className="flex items-center gap-3">
               <Image
-                src="/whale-logo.png"
+                src={SITE_CONFIG.logo}
                 alt="Drydock"
                 width={30}
                 height={30}

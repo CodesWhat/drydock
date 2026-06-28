@@ -1,5 +1,6 @@
 import { ArrowUpRight, Check, Minus, X } from "lucide-react";
 import Link from "next/link";
+import { SITE_CONFIG } from "@/lib/site-config";
 
 // Full comparison matrix for /compare. Each competitor row links to its
 // dedicated deep-dive page. Cell values are derived from the per-tool
@@ -30,7 +31,7 @@ type Tool = {
 
 const TOOLS: Tool[] = [
   {
-    name: "Drydock",
+    name: SITE_CONFIG.name,
     slug: null,
     highlight: true,
     cells: {
