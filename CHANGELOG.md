@@ -12,7 +12,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.5.1-rc.3] — Unreleased
 
+### Added
+
+- **Intermediate release notes between the running and target version.** When a container is several versions behind, drydock now fetches the releases between the running tag (exclusive) and the update target (inclusive) and shows them in the release-notes popover. Best-effort and semver-only — date tags and rolling tags (`latest`, `stable`) fall back to the standard two-panel view. Cap the range with `DD_RELEASE_NOTES_MAX_INTERMEDIATE` (default `20`; set to `0` to disable). When the range exceeds the cap, the popover shows a non-silent "N older releases not shown" notice. Supports the `__FILE` secret-file convention (`DD_RELEASE_NOTES_MAX_INTERMEDIATE__FILE`). (#453)
+
+- **New `GET /api/containers/{id}/intermediate-release-notes` endpoint.** Lazy-loads the intermediate release list on demand when the release-notes popover opens; not embedded in the container model or agent snapshot, so it adds no ongoing payload weight. Accepts `from` (required) and `to` (defaults to the container's pending update tag) query parameters. (#453)
+
+- **Warn log when a `dd.source.repo` container label shadows a trusted OCI image source label.** Adding a `dd.source.repo` label to a running container when the image already carries a trusted `org.opencontainers.image.source` (or `org.opencontainers.image.url`) OCI label silently downgrades source resolution from trusted to untrusted, which drops the GHCR token fallback for release-notes lookups. Drydock now logs a `warn`-level line each watch cycle when it detects this conflict, naming both repos. (#452)
+
 ### Changed
+
+- **`DD_RELEASE_NOTES_GITHUB_TOKEN` is now forwarded to release-notes lookups for repos resolved from a `dd.source.repo` container label or a persisted `container.sourceRepo` value.** Previously these sources were always fetched anonymously. The GHCR token fallback stays restricted to trusted sources (OCI image labels and GHCR image paths) and is never sent to a container-label source. Because the dedicated token can be sent to a repo named by a container label, scope it narrowly: a classic PAT with `public_repo` scope only, or a fine-grained PAT with read-only Contents permission limited to public repositories and no write or account permissions. (#452)
 
 - **Re-synced the UI translation catalogs from Crowdin.** The 16 target-locale `containerComponents.json` files were regenerated from the Crowdin project so their key order tracks the English source catalog, keeping the on-disk catalogs and the translation platform in lockstep as community translations land.
 
