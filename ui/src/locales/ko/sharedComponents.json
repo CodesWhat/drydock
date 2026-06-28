@@ -60,6 +60,12 @@
       "clearFilters": "모든 필터 초기화",
       "setupGuide": "설정 가이드",
       "scanNow": "지금 스캔"
+    },
+    "notifications": {
+      "loadFailed": "Failed to load notifications"
+    },
+    "serverFeatures": {
+      "loadFailed": "Failed to load server feature configuration"
     }
   }
 }

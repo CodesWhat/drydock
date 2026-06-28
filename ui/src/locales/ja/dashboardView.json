@@ -41,7 +41,6 @@
       "widgetAria": "利用可能な更新ウィジェット",
       "updateAll": "すべて更新",
       "noUpdates": "利用可能な更新はありません",
-      "releaseNotes": "リリースノート",
       "securityBlocked": "セキュリティによりブロック",
       "updateContainer": "コンテナを更新",
       "compactSingle": "{count} 件の更新が利用可能",
@@ -104,6 +103,23 @@
       "minor": "マイナー",
       "patch": "パッチ",
       "digest": "ダイジェスト"
+    },
+    "maintenanceWindow": {
+      "openNow": "Open now",
+      "scheduled": "Scheduled",
+      "openingSoon": "Opening soon"
+    },
+    "dataLoadFailed": "Failed to load dashboard data",
+    "widgets": {
+      "statContainers": "Containers",
+      "statUpdates": "Updates Available",
+      "statSecurity": "Security Issues",
+      "statRegistries": "Registries",
+      "recentUpdates": "Updates Available",
+      "securityOverview": "Security Overview",
+      "resourceUsage": "Resource Usage",
+      "hostStatus": "Host Status",
+      "updateBreakdown": "Update Breakdown"
     }
   }
 }

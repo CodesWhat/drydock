@@ -1,4 +1,5 @@
 import { computed, type Ref, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
   getContainerSbom as fetchContainerSbom,
   getContainerVulnerabilities as fetchContainerVulnerabilities,
@@ -202,6 +203,7 @@ function createSelectedRuntimeOrigins(
 
 function createSelectedLifecycleHooks(
   selectedContainerMeta: Readonly<Ref<Record<string, unknown> | undefined>>,
+  t: (key: string) => string,
 ) {
   return computed(() => {
     const labels = selectedContainerMeta.value?.labels;
@@ -218,19 +220,20 @@ function createSelectedLifecycleHooks(
       timeoutLabel:
         Number.isFinite(timeoutParsed) && timeoutParsed > 0
           ? `${timeoutParsed}ms`
-          : '60000ms (default)',
+          : t('containerComponents.security.timeoutDefault'),
       preAbortBehavior:
         preAbort === undefined
           ? undefined
           : preAbort
-            ? 'Abort update on pre-hook failure'
-            : 'Continue update on pre-hook failure',
+            ? t('containerComponents.security.preAbortYes')
+            : t('containerComponents.security.preAbortNo'),
     };
   });
 }
 
 function createSelectedAutoRollbackConfig(
   selectedContainerMeta: Readonly<Ref<Record<string, unknown> | undefined>>,
+  t: (key: string) => string,
 ) {
   return computed(() => {
     const labels = selectedContainerMeta.value?.labels;
@@ -251,7 +254,11 @@ function createSelectedAutoRollbackConfig(
 
     return {
       enabledLabel:
-        enabled === true ? 'Enabled' : enabled === false ? 'Disabled' : 'Disabled (default)',
+        enabled === true
+          ? t('containerComponents.security.enabledLabel')
+          : enabled === false
+            ? t('containerComponents.security.disabledLabel')
+            : t('containerComponents.security.disabledDefaultLabel'),
       windowLabel: `${windowMs}ms`,
       intervalLabel: `${intervalMs}ms`,
     };
@@ -261,6 +268,7 @@ function createSelectedAutoRollbackConfig(
 function createSelectedRuntimeDriftWarnings(
   selectedContainerMeta: Readonly<Ref<Record<string, unknown> | undefined>>,
   selectedRuntimeOrigins: Readonly<Ref<RuntimeOrigins>>,
+  t: (key: string, params?: Record<string, unknown>) => string,
 ) {
   return computed<string[]>(() => {
     if (!selectedContainerMeta.value) {
@@ -269,19 +277,17 @@ function createSelectedRuntimeDriftWarnings(
 
     const missingOrigins: string[] = [];
     if (selectedRuntimeOrigins.value.entrypoint === 'unknown') {
-      missingOrigins.push('Entrypoint');
+      missingOrigins.push(t('containerComponents.security.originName.entrypoint'));
     }
     if (selectedRuntimeOrigins.value.cmd === 'unknown') {
-      missingOrigins.push('Cmd');
+      missingOrigins.push(t('containerComponents.security.originName.cmd'));
     }
     if (missingOrigins.length === 0) {
       return [];
     }
 
     return [
-      `Runtime origin metadata is missing for ${missingOrigins.join(
-        ' and ',
-      )}. Updates will preserve current values to avoid dropping explicit overrides, which can cause runtime drift.`,
+      t('containerComponents.security.runtimeDriftWarning', { list: missingOrigins.join(' and ') }),
     ];
   });
 }
@@ -290,16 +296,6 @@ function createSelectedComposePaths(
   selectedContainerMeta: Readonly<Ref<Record<string, unknown> | undefined>>,
 ) {
   return computed<string[]>(() => getComposePathsFromMeta(selectedContainerMeta.value));
-}
-
-function runtimeOriginLabel(origin: RuntimeOrigin): string {
-  if (origin === 'explicit') {
-    return 'Explicit';
-  }
-  if (origin === 'inherited') {
-    return 'Inherited';
-  }
-  return 'Unknown';
 }
 
 function runtimeOriginStyle(origin: RuntimeOrigin) {
@@ -401,10 +397,6 @@ function severityStyle(severity: string) {
   return { bg: 'var(--dd-info-muted)', text: 'var(--dd-info)' };
 }
 
-function getVulnerabilityPackage(vulnerability: ApiVulnerability): string {
-  return vulnerability?.packageName || vulnerability?.package || 'unknown';
-}
-
 function resetVulnerabilityState(state: DetailSecurityState) {
   state.detailVulnerabilityResult.value = null;
   state.detailVulnerabilityError.value = null;
@@ -424,6 +416,7 @@ function createDetailSecurityActions(
   input: UseContainerSecurityInput,
   selectedSbomFormat: Readonly<Ref<'spdx-json' | 'cyclonedx-json'>>,
   state: DetailSecurityState,
+  t: (key: string) => string,
 ) {
   async function loadDetailVulnerabilities() {
     const containerId = input.selectedContainerId.value;
@@ -438,7 +431,10 @@ function createDetailSecurityActions(
       state.detailVulnerabilityResult.value = await fetchContainerVulnerabilities(containerId);
     } catch (e: unknown) {
       state.detailVulnerabilityResult.value = null;
-      state.detailVulnerabilityError.value = errorMessage(e, 'Failed to load vulnerabilities');
+      state.detailVulnerabilityError.value = errorMessage(
+        e,
+        t('containerComponents.security.loadVulnerabilitiesFailed'),
+      );
     } finally {
       state.detailVulnerabilityLoading.value = false;
     }
@@ -460,7 +456,10 @@ function createDetailSecurityActions(
       );
     } catch (e: unknown) {
       state.detailSbomResult.value = null;
-      state.detailSbomError.value = errorMessage(e, 'Failed to load SBOM');
+      state.detailSbomError.value = errorMessage(
+        e,
+        t('containerComponents.security.loadSbomFailed'),
+      );
     } finally {
       state.detailSbomLoading.value = false;
     }
@@ -508,23 +507,55 @@ function setupDetailSecurityWatchers(
   );
 }
 
-const lifecycleHookTemplateVariables = [
-  { name: 'DD_CONTAINER_NAME', description: 'Container name' },
-  { name: 'DD_CONTAINER_ID', description: 'Container ID' },
-  { name: 'DD_IMAGE_NAME', description: 'Image name (without registry)' },
-  { name: 'DD_IMAGE_TAG', description: 'Current image tag' },
-  { name: 'DD_UPDATE_KIND', description: 'Update type (tag or digest)' },
-  { name: 'DD_UPDATE_FROM', description: 'Current tag or digest' },
-  { name: 'DD_UPDATE_TO', description: 'New tag or digest' },
-];
-
 export function useContainerSecurity(input: UseContainerSecurityInput) {
+  const { t } = useI18n();
+
+  function runtimeOriginLabel(origin: RuntimeOrigin): string {
+    if (origin === 'explicit') {
+      return t('containerComponents.security.originLabels.explicit');
+    }
+    if (origin === 'inherited') {
+      return t('containerComponents.security.originLabels.inherited');
+    }
+    return t('containerComponents.security.originLabels.unknown');
+  }
+
+  function localizedGetVulnerabilityPackage(vulnerability: ApiVulnerability): string {
+    return vulnerability?.packageName || vulnerability?.package || t('common.unknown');
+  }
+
+  const lifecycleHookTemplateVariables = [
+    {
+      name: 'DD_CONTAINER_NAME',
+      description: t('containerComponents.security.templateVar.containerName'),
+    },
+    {
+      name: 'DD_CONTAINER_ID',
+      description: t('containerComponents.security.templateVar.containerId'),
+    },
+    { name: 'DD_IMAGE_NAME', description: t('containerComponents.security.templateVar.imageName') },
+    { name: 'DD_IMAGE_TAG', description: t('containerComponents.security.templateVar.imageTag') },
+    {
+      name: 'DD_UPDATE_KIND',
+      description: t('containerComponents.security.templateVar.updateKind'),
+    },
+    {
+      name: 'DD_UPDATE_FROM',
+      description: t('containerComponents.security.templateVar.updateFrom'),
+    },
+    { name: 'DD_UPDATE_TO', description: t('containerComponents.security.templateVar.updateTo') },
+  ];
+
   const selectedRuntimeOrigins = createSelectedRuntimeOrigins(input.selectedContainerMeta);
-  const selectedLifecycleHooks = createSelectedLifecycleHooks(input.selectedContainerMeta);
-  const selectedAutoRollbackConfig = createSelectedAutoRollbackConfig(input.selectedContainerMeta);
+  const selectedLifecycleHooks = createSelectedLifecycleHooks(input.selectedContainerMeta, t);
+  const selectedAutoRollbackConfig = createSelectedAutoRollbackConfig(
+    input.selectedContainerMeta,
+    t,
+  );
   const selectedRuntimeDriftWarnings = createSelectedRuntimeDriftWarnings(
     input.selectedContainerMeta,
     selectedRuntimeOrigins,
+    t,
   );
   const selectedComposePaths = createSelectedComposePaths(input.selectedContainerMeta);
   const selectedImageMetadata = createSelectedImageMetadata(input.selectedContainerMeta);
@@ -558,6 +589,7 @@ export function useContainerSecurity(input: UseContainerSecurityInput) {
     input,
     selectedSbomFormat,
     detailSecurityState,
+    t,
   );
   setupDetailSecurityWatchers(input, selectedSbomFormat, detailSecurityState, {
     loadDetailSbom,
@@ -569,7 +601,7 @@ export function useContainerSecurity(input: UseContainerSecurityInput) {
     detailSbomLoading,
     detailVulnerabilityError,
     detailVulnerabilityLoading,
-    getVulnerabilityPackage,
+    getVulnerabilityPackage: localizedGetVulnerabilityPackage,
     lifecycleHookTemplateVariables,
     loadDetailSbom,
     loadDetailSecurityData,

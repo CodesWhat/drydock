@@ -60,6 +60,12 @@
       "clearFilters": "Xóa tất cả bộ lọc",
       "setupGuide": "Hướng dẫn cài đặt",
       "scanNow": "Quét ngay"
+    },
+    "notifications": {
+      "loadFailed": "Failed to load notifications"
+    },
+    "serverFeatures": {
+      "loadFailed": "Failed to load server feature configuration"
     }
   }
 }

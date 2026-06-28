@@ -60,6 +60,12 @@
       "clearFilters": "Очистить все фильтры",
       "setupGuide": "Руководство по настройке",
       "scanNow": "Сканировать сейчас"
+    },
+    "notifications": {
+      "loadFailed": "Failed to load notifications"
+    },
+    "serverFeatures": {
+      "loadFailed": "Failed to load server feature configuration"
     }
   }
 }

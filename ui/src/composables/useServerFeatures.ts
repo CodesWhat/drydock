@@ -1,4 +1,5 @@
 import { computed, readonly, ref } from 'vue';
+import { i18n } from '../boot/i18n';
 import { getServer } from '../services/server';
 import { errorMessage } from '../utils/error';
 
@@ -46,7 +47,7 @@ async function loadServerFeatures(): Promise<void> {
       loaded.value = true;
     } catch (e: unknown) {
       featureFlags.value = {};
-      error.value = errorMessage(e, 'Failed to load server feature configuration');
+      error.value = errorMessage(e, i18n.global.t('sharedComponents.serverFeatures.loadFailed'));
     } finally {
       loading.value = false;
       loadPromise = null;

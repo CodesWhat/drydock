@@ -60,6 +60,12 @@
       "clearFilters": "すべてのフィルターをクリア",
       "setupGuide": "セットアップガイド",
       "scanNow": "今すぐスキャン"
+    },
+    "notifications": {
+      "loadFailed": "Failed to load notifications"
+    },
+    "serverFeatures": {
+      "loadFailed": "Failed to load server feature configuration"
     }
   }
 }

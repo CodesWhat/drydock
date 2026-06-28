@@ -41,7 +41,6 @@
       "widgetAria": "Виджет «Доступные обновления»",
       "updateAll": "Обновить все",
       "noUpdates": "Обновлений нет",
-      "releaseNotes": "Примечания к выпуску",
       "securityBlocked": "Заблокировано безопасностью",
       "updateContainer": "Обновить контейнер",
       "compactSingle": "Доступно {count} обновление",
@@ -104,6 +103,23 @@
       "minor": "Минорное",
       "patch": "Патч",
       "digest": "Дайджест"
+    },
+    "maintenanceWindow": {
+      "openNow": "Open now",
+      "scheduled": "Scheduled",
+      "openingSoon": "Opening soon"
+    },
+    "dataLoadFailed": "Failed to load dashboard data",
+    "widgets": {
+      "statContainers": "Containers",
+      "statUpdates": "Updates Available",
+      "statSecurity": "Security Issues",
+      "statRegistries": "Registries",
+      "recentUpdates": "Updates Available",
+      "securityOverview": "Security Overview",
+      "resourceUsage": "Resource Usage",
+      "hostStatus": "Host Status",
+      "updateBreakdown": "Update Breakdown"
     }
   }
 }

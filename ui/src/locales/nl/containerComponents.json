@@ -238,7 +238,8 @@
       "created": "Gemaakt",
       "unknown": "Onbekend",
       "imageMetadata": "Image-metadata",
-      "imageAge": "Leeftijd image"
+      "imageAge": "Leeftijd image",
+      "revealFailed": "Failed to reveal value"
     },
     "listContent": {
       "loadingContainers": "Containers laden...",
@@ -294,7 +295,8 @@
       "cpu": "CPU",
       "memory": "Geheugen",
       "networkRxTx": "Netwerk RX/TX",
-      "blockIo": "Blok I/O"
+      "blockIo": "Blok I/O",
+      "loadFailed": "Failed to load container stats"
     },
     "updateDialog": {
       "title": "Container bijwerken",
@@ -303,7 +305,8 @@
       "confirmDigestChange": "{name} bijwerken? Er is een nieuwere versie van :{currentTag} beschikbaar (digestwijziging).",
       "confirmLatest": "{name} nu bijwerken? Hiermee wordt de laatst gevonden image toegepast.",
       "updating": "Updaten...",
-      "update": "Bijwerken"
+      "update": "Bijwerken",
+      "updateFailed": "Update failed"
     },
     "floatingTag": {
       "badgeText": "zwevend label",
@@ -345,6 +348,194 @@
       "mature": "RIJP",
       "newTooltip": "Nieuwe update",
       "matureTooltip": "Volwassen update"
+    },
+    "confirmDialogs": {
+      "cancel": "Cancel",
+      "stop": {
+        "header": "Stop Container",
+        "message": "Stop {name}?",
+        "acceptLabel": "Stop",
+        "successMessage": "Stopped: {name}"
+      },
+      "restart": {
+        "header": "Restart Container",
+        "message": "Restart {name}?",
+        "acceptLabel": "Restart",
+        "successMessage": "Restarted: {name}"
+      },
+      "forceUpdate": {
+        "header": "Force Update",
+        "message": "Force update {name}? This clears skip/snooze policy before attempting update.",
+        "acceptLabel": "Force Update"
+      },
+      "update": {
+        "header": "Update Container",
+        "messageLatest": "Update {name} now? This will apply the latest discovered image.",
+        "messageTagChange": "Update {name}? This will change the image tag from :{currentTag} to :{newTag}{kind}.",
+        "messageDigestChange": "Update {name}? A newer build of :{currentTag} is available (digest change).",
+        "softBlockerSuffix": "\n\nThis update is currently policy-blocked:\n{list}\n\nClick Update anyway to override.",
+        "acceptLabel": "Update",
+        "acceptLabelOverride": "Update anyway"
+      },
+      "delete": {
+        "header": "Delete Container",
+        "message": "Delete {name}? This will remove it from Drydock tracking until rediscovered.",
+        "acceptLabel": "Delete"
+      },
+      "clearPolicy": {
+        "header": "Clear Update Policy",
+        "message": "Clear all update policy for {name}? This removes skips, snooze, and maturity settings.",
+        "acceptLabel": "Clear Policy"
+      },
+      "rollback": {
+        "header": "Rollback Container",
+        "messageSelected": "Rollback {name} to the selected backup image? This will replace the running container image.",
+        "messageLatest": "Rollback {name} to the latest backup image? This will replace the running container image.",
+        "acceptLabel": "Rollback"
+      }
+    },
+    "actionToasts": {
+      "started": "Started: {name}",
+      "scanTriggered": "Scan triggered: {name}",
+      "scanFailedTitle": "Scan failed: {name}",
+      "scanFailedDetail": "Scan failed for {name}",
+      "actionFailedDetail": "Action failed for {name}",
+      "updateFailedTitle": "Update failed: {name}",
+      "deleted": "Deleted: {name}",
+      "deleteFailedTitle": "Delete failed: {name}",
+      "deleteFailedDetail": "Failed to delete {name}",
+      "cancellationRequested": "Cancellation requested: {name}",
+      "cancelled": "Cancelled: {name}",
+      "cancelAlreadyFinished": "Update already finished for {name}, cannot cancel",
+      "cancelOperationNotFound": "Operation not found: {name}",
+      "cancelFailed": "Failed to cancel update for {name}",
+      "groupUpdateRejected": "Failed to update {name}: {message}",
+      "groupUpdateFailed": "Failed to update {name}"
+    },
+    "policy": {
+      "entryCountSingular": "{count} entry",
+      "entryCountPlural": "{count} entries",
+      "tooltips": {
+        "snoozedUntil": "Updates snoozed until {date}",
+        "snoozed": "Updates snoozed",
+        "maturityBlockedSingular": "Mature-only policy blocks updates younger than {days} day",
+        "maturityBlockedPlural": "Mature-only policy blocks updates younger than {days} days",
+        "maturityActiveSingular": "Mature-only policy active ({days} day minimum age)",
+        "maturityActivePlural": "Mature-only policy active ({days} days minimum age)",
+        "maturityAllowAll": "Maturity policy allows all updates",
+        "maturityGeneric": "Maturity policy active",
+        "skippedGeneric": "Skipped updates policy active",
+        "skippedWithCount": "Skipped updates policy active ({count})"
+      },
+      "toasts": {
+        "snoozedSingular": "Snoozed updates for {days} day",
+        "snoozedPlural": "Snoozed updates for {days} days",
+        "snoozedUntil": "Snoozed until {date}",
+        "unsnooze": "Snooze cleared",
+        "clearSkips": "Skipped updates cleared",
+        "clearPolicy": "Update policy cleared",
+        "clearMaturity": "Maturity policy cleared",
+        "setMatureSingular": "Maturity policy set to mature-only ({days} day)",
+        "setMaturePlural": "Maturity policy set to mature-only ({days} days)",
+        "setAll": "Maturity policy set to allow all updates",
+        "skipped": "Skipped current update for {name}",
+        "removeSkip": "Removed skipped {kind} {value}",
+        "failedTitle": "Policy update failed: {name}",
+        "failedDetail": "Failed to update policy"
+      },
+      "validation": {
+        "snoozeDate": "Select a valid snooze date",
+        "maturityAge": "Enter a maturity age between {min} and {max} days"
+      }
+    },
+    "triggers": {
+      "toasts": {
+        "ran": "Trigger ran: {key}",
+        "ranSuccessfully": "Trigger {key} ran successfully",
+        "failed": "Trigger failed: {key}",
+        "failedDetail": "Failed to run {key}",
+        "loadFailed": "Failed to load associated triggers"
+      }
+    },
+    "backups": {
+      "timestampUnknown": "Unknown",
+      "loadFailed": "Failed to load backups",
+      "rollback": {
+        "completedFromSelected": "Rollback completed from selected backup",
+        "completedFromLatest": "Rollback completed from latest backup",
+        "failedTitle": "Rollback failed",
+        "failedDetail": "Rollback failed"
+      },
+      "operationHistoryLoadFailed": "Failed to load update operation history"
+    },
+    "preview": {
+      "toasts": {
+        "failedTitle": "Preview failed",
+        "failedDetail": "Failed to generate update preview"
+      }
+    },
+    "security": {
+      "originLabels": {
+        "explicit": "Explicit",
+        "inherited": "Inherited",
+        "unknown": "Unknown"
+      },
+      "timeoutDefault": "60000ms (default)",
+      "preAbortYes": "Abort update on pre-hook failure",
+      "preAbortNo": "Continue update on pre-hook failure",
+      "enabledLabel": "Enabled",
+      "disabledLabel": "Disabled",
+      "disabledDefaultLabel": "Disabled (default)",
+      "originName": {
+        "entrypoint": "Entrypoint",
+        "cmd": "Cmd"
+      },
+      "runtimeDriftWarning": "Runtime origin metadata is missing for {list}. Updates will preserve current values to avoid dropping explicit overrides, which can cause runtime drift.",
+      "loadVulnerabilitiesFailed": "Failed to load vulnerabilities",
+      "loadSbomFailed": "Failed to load SBOM",
+      "templateVar": {
+        "containerName": "Container name",
+        "containerId": "Container ID",
+        "imageName": "Image name (without registry)",
+        "imageTag": "Current image tag",
+        "updateKind": "Update type (tag or digest)",
+        "updateFrom": "Current tag or digest",
+        "updateTo": "New tag or digest"
+      }
+    },
+    "updateAge": {
+      "availableDaysSingular": "Available for 1 day",
+      "availableDaysPlural": "Available for {count} days",
+      "availableHoursSingular": "Available for 1 hour",
+      "availableHoursPlural": "Available for {count} hours",
+      "availableMinutesSingular": "Available for 1 minute",
+      "availableMinutesPlural": "Available for {count} minutes",
+      "justNow": "Available just now"
+    },
+    "logs": {
+      "noLogs": "No logs available for this container",
+      "loadFailed": "Failed to load container logs",
+      "loading": "Loading logs..."
+    },
+    "vulnerabilities": {
+      "loadFailed": "Failed to load vulnerability data"
+    },
+    "sbomDetail": {
+      "noContainerId": "No container identifier is available for this image.",
+      "loadFailed": "Failed to load SBOM"
+    },
+    "detailPanel": {
+      "tabs": {
+        "overview": "Overview",
+        "stats": "Stats",
+        "logs": "Logs",
+        "environment": "Environment",
+        "labels": "Labels",
+        "actions": "Actions"
+      }
+    },
+    "logViewer": {
+      "invalidRegex": "Invalid regular expression"
     }
   }
 }

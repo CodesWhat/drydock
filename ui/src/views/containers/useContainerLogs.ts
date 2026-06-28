@@ -1,4 +1,5 @@
 import { type Ref, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useAutoFetchLogs, useLogViewport } from '../../composables/useLogViewerBehavior';
 import { getContainerLogs as fetchContainerLogs } from '../../services/container';
 import type { Container } from '../../types/container';
@@ -33,6 +34,7 @@ function resolveLogTarget(
 }
 
 export function useContainerLogs(input: UseContainerLogsInput) {
+  const { t } = useI18n();
   const containerLogsCache = ref<Record<string, string[]>>({});
   const containerLogsLoading = ref<Record<string, boolean>>({});
 
@@ -53,9 +55,9 @@ export function useContainerLogs(input: UseContainerLogsInput) {
       const logs = result?.logs ?? '';
       containerLogsCache.value[cacheKey] = logs
         ? logs.split('\n').filter((line: string) => line.length > 0)
-        : ['No logs available for this container'];
+        : [t('containerComponents.logs.noLogs')];
     } catch {
-      containerLogsCache.value[cacheKey] = ['Failed to load container logs'];
+      containerLogsCache.value[cacheKey] = [t('containerComponents.logs.loadFailed')];
     } finally {
       containerLogsLoading.value[cacheKey] = false;
     }
@@ -64,11 +66,11 @@ export function useContainerLogs(input: UseContainerLogsInput) {
   function getContainerLogs(target: LogTarget): string[] {
     const { cacheKey } = resolveLogTarget(target, input.containerIdMap.value);
     if (!cacheKey) {
-      return ['Loading logs...'];
+      return [t('containerComponents.logs.loading')];
     }
     if (!containerLogsCache.value[cacheKey]) {
       void loadContainerLogs(target);
-      return ['Loading logs...'];
+      return [t('containerComponents.logs.loading')];
     }
     return containerLogsCache.value[cacheKey];
   }

@@ -1,4 +1,5 @@
 import { computed, type Ref, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useToast } from '../../composables/useToast';
 import { updateContainerPolicy } from '../../services/container';
 import type { Container } from '../../types/container';
@@ -189,47 +190,61 @@ function deriveContainerListPolicyState(meta: unknown): ContainerListPolicyState
   return buildContainerListPolicyStateFromPolicy(metaRecord, policy);
 }
 
-function formatPolicyEntryCount(skipCount: number): string {
-  return `${skipCount} entr${skipCount === 1 ? 'y' : 'ies'}`;
+type PolicyTranslateFn = (key: string, params?: Record<string, unknown>) => string;
+
+function formatPolicyEntryCount(skipCount: number, t: PolicyTranslateFn): string {
+  return skipCount === 1
+    ? t('containerComponents.policy.entryCountSingular', { count: skipCount })
+    : t('containerComponents.policy.entryCountPlural', { count: skipCount });
 }
 
-function buildSnoozedPolicyTooltip(state: ContainerListPolicyState): string {
+function buildSnoozedPolicyTooltip(state: ContainerListPolicyState, t: PolicyTranslateFn): string {
   return state.snoozeUntil
-    ? `Updates snoozed until ${new Date(state.snoozeUntil).toLocaleString()}`
-    : 'Updates snoozed';
+    ? t('containerComponents.policy.tooltips.snoozedUntil', {
+        date: new Date(state.snoozeUntil).toLocaleString(),
+      })
+    : t('containerComponents.policy.tooltips.snoozed');
 }
 
-function buildMaturityPolicyTooltip(state: ContainerListPolicyState): string {
+function buildMaturityPolicyTooltip(state: ContainerListPolicyState, t: PolicyTranslateFn): string {
   if (state.maturityMode === 'mature') {
     const minAgeDays = state.maturityMinAgeDays;
-    return state.maturityBlocked
-      ? `Mature-only policy blocks updates younger than ${minAgeDays} day${minAgeDays === 1 ? '' : 's'}`
-      : `Mature-only policy active (${minAgeDays} day${minAgeDays === 1 ? '' : 's'} minimum age)`;
+    if (state.maturityBlocked) {
+      return minAgeDays === 1
+        ? t('containerComponents.policy.tooltips.maturityBlockedSingular', { days: minAgeDays })
+        : t('containerComponents.policy.tooltips.maturityBlockedPlural', { days: minAgeDays });
+    }
+    return minAgeDays === 1
+      ? t('containerComponents.policy.tooltips.maturityActiveSingular', { days: minAgeDays })
+      : t('containerComponents.policy.tooltips.maturityActivePlural', { days: minAgeDays });
   }
   if (state.maturityMode === 'all') {
-    return 'Maturity policy allows all updates';
+    return t('containerComponents.policy.tooltips.maturityAllowAll');
   }
-  return 'Maturity policy active';
+  return t('containerComponents.policy.tooltips.maturityGeneric');
 }
 
-function buildSkippedPolicyTooltip(state: ContainerListPolicyState): string {
+function buildSkippedPolicyTooltip(state: ContainerListPolicyState, t: PolicyTranslateFn): string {
   if (state.skipCount <= 0) {
-    return 'Skipped updates policy active';
+    return t('containerComponents.policy.tooltips.skippedGeneric');
   }
-  return `Skipped updates policy active (${formatPolicyEntryCount(state.skipCount)})`;
+  return t('containerComponents.policy.tooltips.skippedWithCount', {
+    count: formatPolicyEntryCount(state.skipCount, t),
+  });
 }
 
 function buildContainerPolicyTooltip(
   state: ContainerListPolicyState,
   kind: 'snoozed' | 'skipped' | 'maturity',
+  t: PolicyTranslateFn,
 ): string {
   if (kind === 'snoozed') {
-    return buildSnoozedPolicyTooltip(state);
+    return buildSnoozedPolicyTooltip(state, t);
   }
   if (kind === 'maturity') {
-    return buildMaturityPolicyTooltip(state);
+    return buildMaturityPolicyTooltip(state, t);
   }
-  return buildSkippedPolicyTooltip(state);
+  return buildSkippedPolicyTooltip(state, t);
 }
 
 async function runForSelectedContainer(
@@ -256,6 +271,7 @@ async function applyPolicyState(args: {
   policyMessage: Ref<string | null>;
   policyError: Ref<string | null>;
   loadContainers: () => Promise<void>;
+  t: PolicyTranslateFn;
 }): Promise<boolean> {
   if (!args.containerActionsEnabled) {
     args.policyMessage.value = null;
@@ -276,10 +292,10 @@ async function applyPolicyState(args: {
     await args.loadContainers();
     return true;
   } catch (e: unknown) {
-    const msg = errorMessage(e, 'Failed to update policy');
+    const msg = errorMessage(e, args.t('containerComponents.policy.toasts.failedDetail'));
     args.policyError.value = msg;
     const toast = useToast();
-    toast.error(`Policy update failed: ${args.name}`, msg);
+    toast.error(args.t('containerComponents.policy.toasts.failedTitle', { name: args.name }), msg);
     return false;
   } finally {
     args.policyInProgress.value = null;
@@ -299,6 +315,7 @@ type SelectedPolicyActionsArgs = {
   policyError: Ref<string | null>;
   snoozeDateInput: Ref<string>;
   maturityMinAgeDaysInput: Ref<number>;
+  t: PolicyTranslateFn;
 };
 
 function createSkipCurrentForSelectedAction(args: SelectedPolicyActionsArgs) {
@@ -308,7 +325,7 @@ function createSkipCurrentForSelectedAction(args: SelectedPolicyActionsArgs) {
         container,
         'skip-current',
         {},
-        `Skipped current update for ${container.name}`,
+        args.t('containerComponents.policy.toasts.skipped', { name: container.name }),
       );
       if (applied) {
         args.skippedUpdates.value.add(resolveContainerPolicyTargetKey(container));
@@ -325,7 +342,9 @@ function createSnoozeSelectedAction(args: SelectedPolicyActionsArgs) {
         container,
         'snooze',
         { days },
-        `Snoozed updates for ${days} day${days === 1 ? '' : 's'}`,
+        days === 1
+          ? args.t('containerComponents.policy.toasts.snoozedSingular', { days })
+          : args.t('containerComponents.policy.toasts.snoozedPlural', { days }),
       );
     });
   };
@@ -335,7 +354,7 @@ function createSnoozeSelectedUntilDateAction(args: SelectedPolicyActionsArgs) {
   return async function snoozeSelectedUntilDate() {
     const snoozeUntil = resolveSnoozeUntilFromInput(args.snoozeDateInput.value);
     if (!snoozeUntil) {
-      args.policyError.value = 'Select a valid snooze date';
+      args.policyError.value = args.t('containerComponents.policy.validation.snoozeDate');
       return;
     }
     await runForSelectedContainer(args.selectedContainer, async (container) => {
@@ -343,7 +362,9 @@ function createSnoozeSelectedUntilDateAction(args: SelectedPolicyActionsArgs) {
         container,
         'snooze',
         { snoozeUntil },
-        `Snoozed until ${args.snoozeDateInput.value}`,
+        args.t('containerComponents.policy.toasts.snoozedUntil', {
+          date: args.snoozeDateInput.value,
+        }),
       );
     });
   };
@@ -352,7 +373,12 @@ function createSnoozeSelectedUntilDateAction(args: SelectedPolicyActionsArgs) {
 function createUnsnoozeSelectedAction(args: SelectedPolicyActionsArgs) {
   return async function unsnoozeSelected() {
     await runForSelectedContainer(args.selectedContainer, async (container) => {
-      await args.applyPolicy(container, 'unsnooze', {}, 'Snooze cleared');
+      await args.applyPolicy(
+        container,
+        'unsnooze',
+        {},
+        args.t('containerComponents.policy.toasts.unsnooze'),
+      );
     });
   };
 }
@@ -361,7 +387,12 @@ function createClearSkipsSelectedAction(args: SelectedPolicyActionsArgs) {
   return async function clearSkipsSelected() {
     await runForSelectedContainer(args.selectedContainer, async (container) => {
       args.skippedUpdates.value.delete(resolveContainerPolicyTargetKey(container));
-      await args.applyPolicy(container, 'clear-skips', {}, 'Skipped updates cleared');
+      await args.applyPolicy(
+        container,
+        'clear-skips',
+        {},
+        args.t('containerComponents.policy.toasts.clearSkips'),
+      );
     });
   };
 }
@@ -370,7 +401,12 @@ function createClearPolicySelectedAction(args: SelectedPolicyActionsArgs) {
   return async function clearPolicySelected() {
     await runForSelectedContainer(args.selectedContainer, async (container) => {
       args.skippedUpdates.value.delete(resolveContainerPolicyTargetKey(container));
-      await args.applyPolicy(container, 'clear', {}, 'Update policy cleared');
+      await args.applyPolicy(
+        container,
+        'clear',
+        {},
+        args.t('containerComponents.policy.toasts.clearPolicy'),
+      );
     });
   };
 }
@@ -379,7 +415,10 @@ function createSetMaturityPolicySelectedAction(args: SelectedPolicyActionsArgs) 
   return async function setMaturityPolicySelected(mode: 'all' | 'mature') {
     const minAgeDays = parseMaturityMinAgeDays(args.maturityMinAgeDaysInput.value);
     if (minAgeDays === undefined) {
-      args.policyError.value = `Enter a maturity age between ${MATURITY_MIN_AGE_DAYS_MIN} and ${MATURITY_MIN_AGE_DAYS_MAX} days`;
+      args.policyError.value = args.t('containerComponents.policy.validation.maturityAge', {
+        min: MATURITY_MIN_AGE_DAYS_MIN,
+        max: MATURITY_MIN_AGE_DAYS_MAX,
+      });
       return;
     }
     await runForSelectedContainer(args.selectedContainer, async (container) => {
@@ -388,8 +427,10 @@ function createSetMaturityPolicySelectedAction(args: SelectedPolicyActionsArgs) 
         'set-maturity-policy',
         { mode, minAgeDays },
         mode === 'mature'
-          ? `Maturity policy set to mature-only (${minAgeDays} day${minAgeDays === 1 ? '' : 's'})`
-          : 'Maturity policy set to allow all updates',
+          ? minAgeDays === 1
+            ? args.t('containerComponents.policy.toasts.setMatureSingular', { days: minAgeDays })
+            : args.t('containerComponents.policy.toasts.setMaturePlural', { days: minAgeDays })
+          : args.t('containerComponents.policy.toasts.setAll'),
       );
     });
   };
@@ -398,7 +439,12 @@ function createSetMaturityPolicySelectedAction(args: SelectedPolicyActionsArgs) 
 function createClearMaturityPolicySelectedAction(args: SelectedPolicyActionsArgs) {
   return async function clearMaturityPolicySelected() {
     await runForSelectedContainer(args.selectedContainer, async (container) => {
-      await args.applyPolicy(container, 'clear-maturity-policy', {}, 'Maturity policy cleared');
+      await args.applyPolicy(
+        container,
+        'clear-maturity-policy',
+        {},
+        args.t('containerComponents.policy.toasts.clearMaturity'),
+      );
     });
   };
 }
@@ -414,7 +460,7 @@ function createRemoveSkipSelectedAction(args: SelectedPolicyActionsArgs) {
         container,
         'remove-skip',
         { kind, value },
-        `Removed skipped ${kind} ${value}`,
+        args.t('containerComponents.policy.toasts.removeSkip', { kind, value }),
       );
     });
   };
@@ -515,6 +561,7 @@ function createSelectedPolicyState(input: UseContainerPolicyInput) {
 
 function createContainerPolicyStateAccessors(
   containerMetaMap: Readonly<Ref<Record<string, unknown>>>,
+  t: PolicyTranslateFn,
 ) {
   const policyStateCache = new Map<
     string,
@@ -549,7 +596,7 @@ function createContainerPolicyStateAccessors(
     kind: 'snoozed' | 'skipped' | 'maturity',
   ): string {
     const state = getContainerListPolicyState(target);
-    return buildContainerPolicyTooltip(state, kind);
+    return buildContainerPolicyTooltip(state, kind, t);
   }
 
   return {
@@ -559,6 +606,7 @@ function createContainerPolicyStateAccessors(
 }
 
 export function useContainerPolicy(input: UseContainerPolicyInput) {
+  const { t } = useI18n();
   const policyInProgress = ref<string | null>(null);
   const policyMessage = ref<string | null>(null);
   const policyError = ref<string | null>(null);
@@ -583,6 +631,7 @@ export function useContainerPolicy(input: UseContainerPolicyInput) {
       policyMessage,
       policyError,
       loadContainers: input.loadContainers,
+      t,
     });
   }
 
@@ -618,6 +667,7 @@ export function useContainerPolicy(input: UseContainerPolicyInput) {
     policyError,
     snoozeDateInput,
     maturityMinAgeDaysInput,
+    t,
   });
 
   function resetPolicyMessages() {
@@ -626,7 +676,7 @@ export function useContainerPolicy(input: UseContainerPolicyInput) {
   }
 
   const { containerPolicyTooltip, getContainerListPolicyState } =
-    createContainerPolicyStateAccessors(input.containerMetaMap);
+    createContainerPolicyStateAccessors(input.containerMetaMap, t);
 
   return {
     applyPolicy,

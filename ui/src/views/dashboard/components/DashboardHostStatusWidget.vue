@@ -105,7 +105,7 @@ watchEffect(() => {
           size="sm"
           class="mt-0.5 shrink-0"
           :tone="serverTone(server.status)"
-          :label="server.statusLabel ?? server.status" />
+          :label="server.statusLabel ?? (server.status === 'connected' ? t('dashboardView.hostStatus.connected') : t('dashboardView.hostStatus.disconnected'))" />
       </div>
     </div>
 
@@ -124,7 +124,7 @@ watchEffect(() => {
             marker="icon"
             :icon="server.status === 'connected' ? 'check' : 'xmark'"
             :tone="serverTone(server.status)"
-            :label="server.statusLabel ?? server.status"
+            :label="server.statusLabel ?? (server.status === 'connected' ? t('dashboardView.hostStatus.connected') : t('dashboardView.hostStatus.disconnected'))"
             size="sm"
             class="justify-center" />
           <div class="text-xs font-semibold dd-text truncate w-full">{{ server.name }}</div>

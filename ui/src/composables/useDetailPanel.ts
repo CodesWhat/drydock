@@ -1,4 +1,5 @@
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { Container } from '../types/container';
 import { useSessionStorageItem } from './useSessionStorageItem';
 
@@ -28,6 +29,7 @@ export function useDetailPanelStorage() {
 }
 
 export function useDetailPanel() {
+  const { t } = useI18n();
   const panelStorage = useDetailPanelStorage();
   const selectedContainer = ref<Container | null>(null);
   const detailPanelOpen = ref(false);
@@ -43,14 +45,18 @@ export function useDetailPanel() {
         : '0 0 var(--dd-layout-panel-width-lg)',
   );
 
-  const detailTabs = [
-    { id: 'overview', label: 'Overview', icon: 'info' },
-    { id: 'stats', label: 'Stats', icon: 'uptime' },
-    { id: 'logs', label: 'Logs', icon: 'logs' },
-    { id: 'environment', label: 'Environment', icon: 'config' },
-    { id: 'labels', label: 'Labels', icon: 'containers' },
-    { id: 'actions', label: 'Actions', icon: 'triggers' },
-  ];
+  const detailTabs = computed(() => [
+    { id: 'overview', label: t('containerComponents.detailPanel.tabs.overview'), icon: 'info' },
+    { id: 'stats', label: t('containerComponents.detailPanel.tabs.stats'), icon: 'uptime' },
+    { id: 'logs', label: t('containerComponents.detailPanel.tabs.logs'), icon: 'logs' },
+    {
+      id: 'environment',
+      label: t('containerComponents.detailPanel.tabs.environment'),
+      icon: 'config',
+    },
+    { id: 'labels', label: t('containerComponents.detailPanel.tabs.labels'), icon: 'containers' },
+    { id: 'actions', label: t('containerComponents.detailPanel.tabs.actions'), icon: 'triggers' },
+  ]);
 
   function savePanelState() {
     if (selectedContainer.value) {

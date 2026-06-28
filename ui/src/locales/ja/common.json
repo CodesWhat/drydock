@@ -8,6 +8,25 @@
     "confirm": "確認",
     "close": "閉じる",
     "retry": "再試行",
-    "unknown": "不明"
+    "unknown": "不明",
+    "errorSummary": {
+      "rateLimitHit": "Registry rate limit hit",
+      "accessDenied": "Registry access denied",
+      "imageNotFound": "Image not found",
+      "authFailed": "Registry authentication failed",
+      "unreachable": "Registry unreachable",
+      "cancelled": "Cancelled",
+      "securityBlocked": "Blocked by security scan",
+      "signatureFailed": "Signature verification failed"
+    },
+    "display": {
+      "custom": "Custom"
+    },
+    "timeAgo": {
+      "justNow": "just now"
+    },
+    "imageAge": {
+      "now": "now"
+    }
   }
 }

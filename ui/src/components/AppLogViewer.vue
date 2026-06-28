@@ -103,6 +103,7 @@ const {
 } = useLogSearch({
   visibleEntries: computed(() => props.entries),
   lineElements,
+  t: (key: string) => t(key),
   searchTextForEntry: (entry) =>
     [entry.timestamp, entry.level, entry.channel, entry.component, entry.plainLine]
       .filter(Boolean)

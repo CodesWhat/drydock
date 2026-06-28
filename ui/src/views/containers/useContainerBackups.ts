@@ -1,4 +1,5 @@
 import { type Ref, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useToast } from '../../composables/useToast';
 import { getBackups, rollback } from '../../services/backup';
 import { getContainerUpdateOperations as fetchContainerUpdateOperations } from '../../services/container';
@@ -15,9 +16,12 @@ interface UseContainerBackupsInput {
   loadContainers: () => Promise<void>;
 }
 
-export function formatTimestamp(timestamp: string | undefined): string {
+export function formatTimestamp(
+  timestamp: string | undefined,
+  t?: (key: string) => string,
+): string {
   if (!timestamp) {
-    return 'Unknown';
+    return t ? t('containerComponents.backups.timestampUnknown') : 'Unknown';
   }
   const parsed = new Date(timestamp);
   if (Number.isNaN(parsed.getTime())) {
@@ -76,6 +80,7 @@ async function loadDetailUpdateOperationsState(args: {
   detailUpdateOperations: Ref<ApiContainerUpdateOperation[]>;
   updateOperationsLoading: Ref<boolean>;
   updateOperationsError: Ref<string | null>;
+  t: (key: string) => string;
 }) {
   if (!args.containerId) {
     args.detailUpdateOperations.value = [];
@@ -89,7 +94,10 @@ async function loadDetailUpdateOperationsState(args: {
     args.detailUpdateOperations.value = await fetchContainerUpdateOperations(args.containerId);
   } catch (e: unknown) {
     args.detailUpdateOperations.value = [];
-    args.updateOperationsError.value = errorMessage(e, 'Failed to load update operation history');
+    args.updateOperationsError.value = errorMessage(
+      e,
+      args.t('containerComponents.backups.operationHistoryLoadFailed'),
+    );
   } finally {
     args.updateOperationsLoading.value = false;
   }
@@ -108,6 +116,7 @@ async function rollbackToBackupState(args: {
   loadContainers: () => Promise<void>;
   loadDetailBackups: () => Promise<void>;
   loadDetailUpdateOperations: () => Promise<void>;
+  t: (key: string) => string;
 }) {
   if (!args.containerActionsEnabled) {
     args.rollbackMessage.value = null;
@@ -123,8 +132,8 @@ async function rollbackToBackupState(args: {
   try {
     await rollback(args.containerId, args.backupId);
     const successMessage = args.backupId
-      ? 'Rollback completed from selected backup'
-      : 'Rollback completed from latest backup';
+      ? args.t('containerComponents.backups.rollback.completedFromSelected')
+      : args.t('containerComponents.backups.rollback.completedFromLatest');
     args.rollbackMessage.value = successMessage;
     const toast = useToast();
     toast.success(successMessage);
@@ -132,16 +141,17 @@ async function rollbackToBackupState(args: {
     await args.loadContainers();
     await Promise.all([args.loadDetailBackups(), args.loadDetailUpdateOperations()]);
   } catch (e: unknown) {
-    const msg = errorMessage(e, 'Rollback failed');
+    const msg = errorMessage(e, args.t('containerComponents.backups.rollback.failedDetail'));
     args.rollbackError.value = msg;
     const toast = useToast();
-    toast.error('Rollback failed', msg);
+    toast.error(args.t('containerComponents.backups.rollback.failedTitle'), msg);
   } finally {
     args.rollbackInProgress.value = null;
   }
 }
 
 export function useContainerBackups(input: UseContainerBackupsInput) {
+  const { t } = useI18n();
   const detailBackups = ref<Record<string, unknown>[]>([]);
   const backupsLoading = ref(false);
   const rollbackInProgress = ref<string | null>(null);
@@ -170,7 +180,7 @@ export function useContainerBackups(input: UseContainerBackupsInput) {
       error: rollbackError,
       value: detailBackups,
       loader: getBackups,
-      failureMessage: 'Failed to load backups',
+      failureMessage: t('containerComponents.backups.loadFailed'),
     });
   }
 
@@ -180,6 +190,7 @@ export function useContainerBackups(input: UseContainerBackupsInput) {
       detailUpdateOperations,
       updateOperationsLoading,
       updateOperationsError,
+      t,
     });
   }
 
@@ -197,7 +208,12 @@ export function useContainerBackups(input: UseContainerBackupsInput) {
       loadContainers: input.loadContainers,
       loadDetailBackups,
       loadDetailUpdateOperations,
+      t,
     });
+  }
+
+  function formatTimestampLocalized(timestamp: string | undefined): string {
+    return formatTimestamp(timestamp, t);
   }
 
   return {
@@ -208,7 +224,7 @@ export function useContainerBackups(input: UseContainerBackupsInput) {
     formatOperationPhase,
     formatOperationStatus,
     formatRollbackReason,
-    formatTimestamp,
+    formatTimestamp: formatTimestampLocalized,
     getOperationStatusStyle,
     loadDetailBackups,
     loadDetailUpdateOperations,

@@ -130,6 +130,9 @@ describe('audit-helpers', () => {
   });
 
   describe('timeAgo', () => {
+    const enRtf = new Intl.RelativeTimeFormat('en', { numeric: 'always', style: 'short' });
+    const enDtf = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' });
+
     it('returns "just now" for timestamps less than 60 seconds ago', () => {
       const now = new Date().toISOString();
       expect(timeAgo(now)).toBe('just now');
@@ -142,41 +145,27 @@ describe('audit-helpers', () => {
 
     it('returns minutes ago', () => {
       const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
-      expect(timeAgo(fiveMinAgo)).toBe('5m ago');
+      expect(timeAgo(fiveMinAgo)).toBe(enRtf.format(-5, 'minute'));
     });
 
     it('returns 1m ago at exactly 60 seconds', () => {
       const oneMinAgo = new Date(Date.now() - 60_000).toISOString();
-      expect(timeAgo(oneMinAgo)).toBe('1m ago');
+      expect(timeAgo(oneMinAgo)).toBe(enRtf.format(-1, 'minute'));
     });
 
     it('returns hours ago', () => {
       const threeHrsAgo = new Date(Date.now() - 3 * 3_600_000).toISOString();
-      expect(timeAgo(threeHrsAgo)).toBe('3h ago');
+      expect(timeAgo(threeHrsAgo)).toBe(enRtf.format(-3, 'hour'));
     });
 
     it('returns days ago', () => {
       const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000).toISOString();
-      expect(timeAgo(twoDaysAgo)).toBe('2d ago');
+      expect(timeAgo(twoDaysAgo)).toBe(enRtf.format(-2, 'day'));
     });
 
-    it('returns "Mon D" format for 7+ days ago', () => {
+    it('returns date format for 7+ days ago', () => {
       const tenDaysAgo = new Date(Date.now() - 10 * 86_400_000);
-      const months = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec',
-      ];
-      const expected = `${months[tenDaysAgo.getMonth()]} ${tenDaysAgo.getDate()}`;
+      const expected = enDtf.format(tenDaysAgo);
       expect(timeAgo(tenDaysAgo.toISOString())).toBe(expected);
     });
 
@@ -186,27 +175,50 @@ describe('audit-helpers', () => {
 
     it('returns 59m ago at boundary', () => {
       const fiftyNineMin = new Date(Date.now() - 59 * 60_000).toISOString();
-      expect(timeAgo(fiftyNineMin)).toBe('59m ago');
+      expect(timeAgo(fiftyNineMin)).toBe(enRtf.format(-59, 'minute'));
     });
 
     it('returns 1h ago at 60 minutes', () => {
       const sixtyMin = new Date(Date.now() - 60 * 60_000).toISOString();
-      expect(timeAgo(sixtyMin)).toBe('1h ago');
+      expect(timeAgo(sixtyMin)).toBe(enRtf.format(-1, 'hour'));
     });
 
     it('returns 23h ago at boundary', () => {
       const twentyThreeHrs = new Date(Date.now() - 23 * 3_600_000).toISOString();
-      expect(timeAgo(twentyThreeHrs)).toBe('23h ago');
+      expect(timeAgo(twentyThreeHrs)).toBe(enRtf.format(-23, 'hour'));
     });
 
     it('returns 1d ago at 24 hours', () => {
       const twentyFourHrs = new Date(Date.now() - 24 * 3_600_000).toISOString();
-      expect(timeAgo(twentyFourHrs)).toBe('1d ago');
+      expect(timeAgo(twentyFourHrs)).toBe(enRtf.format(-1, 'day'));
     });
 
     it('returns 6d ago at boundary', () => {
       const sixDays = new Date(Date.now() - 6 * 86_400_000).toISOString();
-      expect(timeAgo(sixDays)).toBe('6d ago');
+      expect(timeAgo(sixDays)).toBe(enRtf.format(-6, 'day'));
+    });
+
+    it('uses the provided locale for formatting', () => {
+      const deRtf = new Intl.RelativeTimeFormat('de', { numeric: 'always', style: 'short' });
+      const fiveMinAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+      expect(timeAgo(fiveMinAgo, 'de')).toBe(deRtf.format(-5, 'minute'));
+    });
+
+    it('uses Intl.DateTimeFormat with locale for 7+ days', () => {
+      const deDtf = new Intl.DateTimeFormat('de', { month: 'short', day: 'numeric' });
+      const tenDaysAgo = new Date(Date.now() - 10 * 86_400_000);
+      expect(timeAgo(tenDaysAgo.toISOString(), 'de')).toBe(deDtf.format(tenDaysAgo));
+    });
+
+    it('uses t param for just now when provided', () => {
+      const mockT = (key: string) => key;
+      const now = new Date().toISOString();
+      expect(timeAgo(now, undefined, mockT)).toBe('common.timeAgo.justNow');
+    });
+
+    it('falls back to hardcoded just now when t is not provided', () => {
+      const now = new Date().toISOString();
+      expect(timeAgo(now)).toBe('just now');
     });
   });
 
@@ -283,6 +295,17 @@ describe('audit-helpers', () => {
 
     it('returns em dash for empty string', () => {
       expect(imageAge('')).toBe('\u2014');
+    });
+
+    it('uses t param for now when provided and date is in the future', () => {
+      const mockT = (key: string) => key;
+      const future = new Date(Date.now() + 60_000).toISOString();
+      expect(imageAge(future, mockT)).toBe('common.imageAge.now');
+    });
+
+    it('falls back to hardcoded now when t is not provided and date is in the future', () => {
+      const future = new Date(Date.now() + 60_000).toISOString();
+      expect(imageAge(future)).toBe('now');
     });
   });
 });

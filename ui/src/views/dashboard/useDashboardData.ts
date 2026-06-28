@@ -1,4 +1,5 @@
 import { computed, onMounted, onUnmounted, type Ref, ref, watch } from 'vue';
+import { i18n } from '../../boot/i18n';
 import { getAgents } from '../../services/agent';
 import { getAllContainers, getContainerRecentStatus } from '../../services/container';
 import { getAllRegistries } from '../../services/registry';
@@ -333,7 +334,7 @@ function createDashboardDataFetchers(state: DashboardStateRefs) {
       });
     } catch (e: unknown) {
       if (!background || !hasRenderedData) {
-        state.error.value = errorMessage(e, 'Failed to load dashboard data');
+        state.error.value = errorMessage(e, i18n.global.t('dashboardView.dataLoadFailed'));
       } else {
         console.debug(errorMessage(e, 'Dashboard background refresh failed'));
       }

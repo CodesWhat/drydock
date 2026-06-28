@@ -955,6 +955,58 @@ describe('useDashboardComputed recent updates', () => {
     });
   });
 
+  it('maps sourceRepo, releaseNotes, and currentReleaseNotes from container onto the recent update row', () => {
+    const releaseNotes = {
+      title: 'v2.0.0',
+      body: 'New features',
+      url: 'https://example.com/releases/v2.0.0',
+      publishedAt: '2026-01-01T00:00:00.000Z',
+      provider: 'github',
+    };
+    const currentReleaseNotes = {
+      title: 'v1.0.0',
+      body: 'Initial release',
+      url: 'https://example.com/releases/v1.0.0',
+      publishedAt: '2025-06-01T00:00:00.000Z',
+      provider: 'github',
+    };
+    const state = createState({
+      containers: [
+        makeBaseContainer({
+          id: 'with-repo',
+          name: 'with-repo',
+          newTag: '2.0.0',
+          updateKind: 'major',
+          updateDetectedAt: '2026-03-04T09:00:00.000Z',
+          sourceRepo: 'github.com/example/app',
+          releaseNotes,
+          currentReleaseNotes,
+        }),
+        makeBaseContainer({
+          id: 'no-extras',
+          name: 'no-extras',
+          newTag: '2.0.0',
+          updateKind: 'minor',
+          updateDetectedAt: '2026-03-03T09:00:00.000Z',
+        }),
+      ],
+    });
+
+    const rows = state.recentUpdates.value;
+    const rowByName = new Map(rows.map((row) => [row.name, row]));
+
+    expect(rowByName.get('with-repo')).toMatchObject({
+      sourceRepo: 'github.com/example/app',
+      releaseNotes,
+      currentReleaseNotes,
+    });
+    expect(rowByName.get('no-extras')).toMatchObject({
+      sourceRepo: undefined,
+      releaseNotes: undefined,
+      currentReleaseNotes: undefined,
+    });
+  });
+
   it('does not bleed identity-keyed operation status from one same-name sibling onto the other (#291)', () => {
     // Regression: two containers sharing a display name but homed on different
     // agents must each resolve their own identity-keyed status. The status

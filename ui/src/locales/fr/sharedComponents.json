@@ -60,6 +60,12 @@
       "clearFilters": "Effacer tous les filtres",
       "setupGuide": "Guide de configuration",
       "scanNow": "Scanner maintenant"
+    },
+    "notifications": {
+      "loadFailed": "Failed to load notifications"
+    },
+    "serverFeatures": {
+      "loadFailed": "Failed to load server feature configuration"
     }
   }
 }
