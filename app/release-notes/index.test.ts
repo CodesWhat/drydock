@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mockAxiosGet = vi.hoisted(() => vi.fn());
+const mockLogWarn = vi.hoisted(() => vi.fn());
+const mockLogDebug = vi.hoisted(() => vi.fn());
+const mockLogInfo = vi.hoisted(() => vi.fn());
+const mockLogError = vi.hoisted(() => vi.fn());
 
 vi.mock('axios', () => ({
   default: {
@@ -11,10 +15,10 @@ vi.mock('axios', () => ({
 vi.mock('../log/index.js', () => ({
   default: {
     child: () => ({
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
+      debug: mockLogDebug,
+      info: mockLogInfo,
+      warn: mockLogWarn,
+      error: mockLogError,
     }),
   },
 }));
@@ -24,6 +28,7 @@ import {
   _resetReleaseNotesCacheForTests,
   detectSourceRepoFromImageMetadata,
   getFullReleaseNotesForContainer,
+  getIntermediateReleaseNotes,
   resolveSourceRepoForContainer,
   toContainerReleaseNotes,
   truncateReleaseNotesBody,
@@ -829,8 +834,11 @@ describe('release-notes service', () => {
   // L-4 security fix: container label (dd.source.repo) must not receive a token
   // -----------------------------------------------------------------------
 
-  test('L-4: source repo from container label (dd.source.repo) causes no Authorization header to be sent', async () => {
-    // Simulate an attacker-controlled container label pointing to an arbitrary GitHub repo
+  test('L-4: explicit DD_RELEASE_NOTES_GITHUB_TOKEN is forwarded even to untrusted container-label source repos', async () => {
+    // Commit A changed the semantics: an explicit operator token is forwarded
+    // to ALL repos (trusted + untrusted), because the operator deliberately scoped
+    // it for release-notes lookups. Only the GHCR PAT fallback is suppressed for
+    // untrusted sources.
     mockAxiosGet.mockResolvedValueOnce({
       data: {
         tag_name: 'v1.0.0',
@@ -841,7 +849,6 @@ describe('release-notes service', () => {
       },
     });
 
-    // Provide an explicit GitHub token to make the suppression visible
     ddEnvVars.DD_RELEASE_NOTES_GITHUB_TOKEN = 'ghp_operator_secret';
 
     await getFullReleaseNotesForContainer({
@@ -855,18 +862,20 @@ describe('release-notes service', () => {
       result: { tag: '1.0.0' },
     } as any);
 
-    // The request must have been made without any Authorization header
+    // The explicit token IS forwarded to untrusted sources (only GHCR fallback is suppressed)
     expect(mockAxiosGet).toHaveBeenCalledWith(
       expect.stringContaining('api.github.com'),
       expect.objectContaining({
-        headers: expect.not.objectContaining({
-          Authorization: expect.any(String),
+        headers: expect.objectContaining({
+          Authorization: 'Bearer ghp_operator_secret',
         }),
       }),
     );
   });
 
-  test('L-4: cached sourceRepo without provenance causes no Authorization header to be sent', async () => {
+  test('L-4: explicit token is forwarded even when source comes from cached container.sourceRepo (untrusted provenance)', async () => {
+    // container.sourceRepo without label/image-metadata provenance is treated as untrusted,
+    // but the explicit operator token is still forwarded (only GHCR fallback is suppressed).
     ddEnvVars.DD_RELEASE_NOTES_GITHUB_TOKEN = 'ghp_operator_secret';
     mockAxiosGet.mockResolvedValueOnce({
       data: {
@@ -891,8 +900,8 @@ describe('release-notes service', () => {
     expect(mockAxiosGet).toHaveBeenCalledWith(
       expect.stringContaining('api.github.com'),
       expect.objectContaining({
-        headers: expect.not.objectContaining({
-          Authorization: expect.any(String),
+        headers: expect.objectContaining({
+          Authorization: 'Bearer ghp_operator_secret',
         }),
       }),
     );
@@ -1143,5 +1152,397 @@ describe('release-notes service', () => {
     expect(second?.title).toBe('Cached Release');
     // fetchByTag must only have been called once — second call served from cache
     expect(mockAxiosGet).toHaveBeenCalledTimes(1);
+  });
+
+  // -----------------------------------------------------------------------
+  // Three-tier cache bucket isolation (#452 cache-poisoning fix)
+  // -----------------------------------------------------------------------
+
+  test('cache-segregation: three-tier isolation — #token, #auth, and #anon buckets are all separate', async () => {
+    const { getReleaseNotesForTag } = await import('./index.js');
+    ddEnvVars.DD_RELEASE_NOTES_GITHUB_TOKEN = 'ghp_token';
+
+    // Call 1: untrusted (container label) WITH token configured → writes to #token bucket
+    mockAxiosGet
+      .mockRejectedValueOnce({ response: { status: 404 } })
+      .mockRejectedValueOnce({ response: { status: 404 } });
+
+    const untrustedWithToken = await getReleaseNotesForTag(
+      {
+        labels: { 'dd.source.repo': 'https://github.com/acme/repo.git' },
+        image: { name: 'acme/image', registry: { url: 'registry.example.com' } },
+        result: { tag: '4.0.0' },
+      } as any,
+      '4.0.0',
+    );
+    expect(untrustedWithToken).toBeUndefined();
+
+    // Call 2: trusted (OCI image label, same repo+tag) → writes to #auth bucket (hits network)
+    mockAxiosGet.mockResolvedValueOnce({
+      data: {
+        tag_name: 'v4.0.0',
+        name: 'Auth Release',
+        body: 'notes',
+        html_url: 'https://github.com/acme/repo/releases/tag/v4.0.0',
+        published_at: '2026-01-01T00:00:00.000Z',
+      },
+    });
+
+    const trusted = await getReleaseNotesForTag(
+      {
+        labels: {},
+        image: { name: 'acme/image', registry: { url: 'registry.example.com' } },
+        result: { tag: '4.0.0' },
+      } as any,
+      '4.0.0',
+      { 'org.opencontainers.image.source': 'https://github.com/acme/repo' },
+    );
+    expect(trusted?.title).toBe('Auth Release');
+
+    // Call 3: untrusted WITHOUT token → writes to #anon bucket (hits network, different from #token)
+    delete ddEnvVars.DD_RELEASE_NOTES_GITHUB_TOKEN;
+    mockAxiosGet
+      .mockRejectedValueOnce({ response: { status: 404 } })
+      .mockRejectedValueOnce({ response: { status: 404 } });
+
+    const untrustedAnon = await getReleaseNotesForTag(
+      {
+        labels: { 'dd.source.repo': 'https://github.com/acme/repo.git' },
+        image: { name: 'acme/image', registry: { url: 'registry.example.com' } },
+        result: { tag: '4.0.0' },
+      } as any,
+      '4.0.0',
+    );
+    expect(untrustedAnon).toBeUndefined();
+
+    // Total: 2 (#token 404s) + 1 (#auth hit) + 2 (#anon 404s) = 5 calls
+    // Each of the three buckets triggered its own network round-trip.
+    expect(mockAxiosGet).toHaveBeenCalledTimes(5);
+  });
+
+  // -----------------------------------------------------------------------
+  // Silent-downgrade warn (#452 secondary issue)
+  // -----------------------------------------------------------------------
+
+  describe('detectSourceRepoFromImageMetadata silent-downgrade warn', () => {
+    test('fires when dd.source.repo container label shadows an OCI image.source label', () => {
+      detectSourceRepoFromImageMetadata({
+        containerLabels: { 'dd.source.repo': 'github.com/attacker/evil' },
+        imageLabels: { 'org.opencontainers.image.source': 'https://github.com/acme/real' },
+      });
+
+      expect(mockLogWarn).toHaveBeenCalledTimes(1);
+      const [msg, containerLabel, trustedLabel] = mockLogWarn.mock.calls[0];
+      expect(msg).toContain('dd.source.repo container label');
+      expect(containerLabel).toBe('github.com/attacker/evil');
+      expect(trustedLabel).toBe('github.com/acme/real');
+    });
+
+    test('fires when dd.source.repo container label shadows a dd.source.repo image label', () => {
+      detectSourceRepoFromImageMetadata({
+        containerLabels: { 'dd.source.repo': 'github.com/attacker/evil' },
+        imageLabels: { 'dd.source.repo': 'https://github.com/acme/image-label' },
+      });
+
+      expect(mockLogWarn).toHaveBeenCalledTimes(1);
+      const [, , trustedLabel] = mockLogWarn.mock.calls[0];
+      expect(trustedLabel).toBe('github.com/acme/image-label');
+    });
+
+    test('fires when dd.source.repo container label shadows an OCI image.url label', () => {
+      detectSourceRepoFromImageMetadata({
+        containerLabels: { 'dd.source.repo': 'github.com/attacker/evil' },
+        imageLabels: { 'org.opencontainers.image.url': 'https://github.com/acme/url-repo' },
+      });
+
+      expect(mockLogWarn).toHaveBeenCalledTimes(1);
+      const [, , trustedLabel] = mockLogWarn.mock.calls[0];
+      expect(trustedLabel).toBe('github.com/acme/url-repo');
+    });
+
+    test('does NOT fire when container label is present but imageLabels has no trusted source', () => {
+      detectSourceRepoFromImageMetadata({
+        containerLabels: { 'dd.source.repo': 'github.com/attacker/evil' },
+        imageLabels: { 'some.other.label': 'value' },
+      });
+
+      expect(mockLogWarn).not.toHaveBeenCalled();
+    });
+
+    test('resolution is still trusted:false in all warn cases', () => {
+      const result = detectSourceRepoFromImageMetadata({
+        containerLabels: { 'dd.source.repo': 'github.com/attacker/evil' },
+        imageLabels: { 'org.opencontainers.image.source': 'https://github.com/acme/real' },
+      });
+
+      expect(result).toEqual({ sourceRepo: 'github.com/attacker/evil', trusted: false });
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // getMaxIntermediateReleaseNotes (tested indirectly via getIntermediateReleaseNotes)
+  // -----------------------------------------------------------------------
+
+  describe('getIntermediateReleaseNotes — max cap and env var', () => {
+    const baseContainer = {
+      labels: {},
+      image: { name: 'acme/image', registry: { url: 'https://ghcr.io' } },
+      result: { tag: '2.0.0' },
+    } as any;
+
+    function makeNotes(count: number) {
+      return Array.from({ length: count }, (_, i) => ({
+        tag_name: `v1.0.${i + 1}`,
+        name: `Release 1.0.${i + 1}`,
+        body: 'notes',
+        html_url: `https://github.com/acme/service/releases/tag/v1.0.${i + 1}`,
+        published_at: '2026-01-01T00:00:00.000Z',
+      }));
+    }
+
+    test('default max is 20 when DD_RELEASE_NOTES_MAX_INTERMEDIATE is unset', async () => {
+      delete ddEnvVars.DD_RELEASE_NOTES_MAX_INTERMEDIATE;
+      // fetchRange returns 25 notes; default cap is 20 → 20 returned, hiddenCount 5
+      mockAxiosGet.mockResolvedValueOnce({ data: makeNotes(25) });
+
+      const result = await getIntermediateReleaseNotes(baseContainer, '1.0.0', '2.0.0');
+
+      expect(result.releaseNotes).toHaveLength(20);
+      expect(result.hiddenCount).toBe(5);
+    });
+
+    test('max=0 disables the feature and provider.fetchRange is NOT called', async () => {
+      ddEnvVars.DD_RELEASE_NOTES_MAX_INTERMEDIATE = '0';
+
+      const result = await getIntermediateReleaseNotes(baseContainer, '1.0.0', '2.0.0');
+
+      expect(result.releaseNotes).toHaveLength(0);
+      expect(result.hiddenCount).toBe(0);
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+    });
+
+    test('blank string falls back to default 20', async () => {
+      ddEnvVars.DD_RELEASE_NOTES_MAX_INTERMEDIATE = '   ';
+      mockAxiosGet.mockResolvedValueOnce({ data: makeNotes(25) });
+
+      const result = await getIntermediateReleaseNotes(baseContainer, '1.0.0', '2.0.0');
+
+      expect(result.releaseNotes).toHaveLength(20);
+      expect(result.hiddenCount).toBe(5);
+    });
+
+    test('non-integer string falls back to default 20', async () => {
+      ddEnvVars.DD_RELEASE_NOTES_MAX_INTERMEDIATE = 'banana';
+      mockAxiosGet.mockResolvedValueOnce({ data: makeNotes(25) });
+
+      const result = await getIntermediateReleaseNotes(baseContainer, '1.0.0', '2.0.0');
+
+      expect(result.releaseNotes).toHaveLength(20);
+    });
+
+    test('negative integer falls back to default 20', async () => {
+      ddEnvVars.DD_RELEASE_NOTES_MAX_INTERMEDIATE = '-5';
+      mockAxiosGet.mockResolvedValueOnce({ data: makeNotes(25) });
+
+      const result = await getIntermediateReleaseNotes(baseContainer, '1.0.0', '2.0.0');
+
+      expect(result.releaseNotes).toHaveLength(20);
+    });
+
+    afterEach(() => {
+      delete ddEnvVars.DD_RELEASE_NOTES_MAX_INTERMEDIATE;
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // getIntermediateReleaseNotes — orchestration & caching
+  // -----------------------------------------------------------------------
+
+  describe('getIntermediateReleaseNotes', () => {
+    const trustedContainer = {
+      labels: {},
+      image: { name: 'acme/service', registry: { url: 'https://ghcr.io' } },
+      result: { tag: '2.0.0' },
+    } as any;
+
+    function makeNote(patch: number) {
+      return {
+        tag_name: `v1.0.${patch}`,
+        name: `Release 1.0.${patch}`,
+        body: 'notes',
+        html_url: `https://github.com/acme/service/releases/tag/v1.0.${patch}`,
+        published_at: '2026-01-01T00:00:00.000Z',
+      };
+    }
+
+    afterEach(() => {
+      delete ddEnvVars.DD_RELEASE_NOTES_MAX_INTERMEDIATE;
+    });
+
+    test('fromTag === toTag returns empty, no provider call', async () => {
+      const result = await getIntermediateReleaseNotes(trustedContainer, '1.0.0', '1.0.0');
+
+      expect(result).toEqual({ releaseNotes: [], hiddenCount: 0 });
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+    });
+
+    test('blank fromTag returns empty', async () => {
+      const result = await getIntermediateReleaseNotes(trustedContainer, '   ', '2.0.0');
+
+      expect(result).toEqual({ releaseNotes: [], hiddenCount: 0 });
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+    });
+
+    test('blank toTag returns empty', async () => {
+      const result = await getIntermediateReleaseNotes(trustedContainer, '1.0.0', '');
+
+      expect(result).toEqual({ releaseNotes: [], hiddenCount: 0 });
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+    });
+
+    test('source unresolvable returns empty', async () => {
+      const container = {
+        labels: {},
+        image: { name: 'acme/image', registry: { url: 'quay.io' } },
+        result: { tag: '2.0.0' },
+      } as any;
+
+      const result = await getIntermediateReleaseNotes(container, '1.0.0', '2.0.0');
+
+      expect(result).toEqual({ releaseNotes: [], hiddenCount: 0 });
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+    });
+
+    test('provider without fetchRange returns empty', async () => {
+      // Use a gitlab-like source repo that no provider supports
+      const container = {
+        sourceRepo: 'gitlab.com/acme/service',
+        labels: {},
+        image: { name: 'acme/image', registry: { url: 'quay.io' } },
+        result: { tag: '2.0.0' },
+      } as any;
+
+      const result = await getIntermediateReleaseNotes(container, '1.0.0', '2.0.0');
+
+      expect(result).toEqual({ releaseNotes: [], hiddenCount: 0 });
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+    });
+
+    test('cache MISS calls fetchRange and stores when not interrupted', async () => {
+      mockAxiosGet.mockResolvedValueOnce({ data: [makeNote(1), makeNote(2)] });
+
+      const result = await getIntermediateReleaseNotes(trustedContainer, '1.0.0', '2.0.0');
+
+      expect(result.releaseNotes).toHaveLength(2);
+      expect(result.hiddenCount).toBe(0);
+      expect(mockAxiosGet).toHaveBeenCalledTimes(1);
+    });
+
+    test('cache HIT skips fetchRange on second call', async () => {
+      mockAxiosGet.mockResolvedValueOnce({ data: [makeNote(1)] });
+
+      const first = await getIntermediateReleaseNotes(trustedContainer, '1.0.0', '2.0.0');
+      const second = await getIntermediateReleaseNotes(trustedContainer, '1.0.0', '2.0.0');
+
+      expect(first.releaseNotes).toHaveLength(1);
+      expect(second.releaseNotes).toHaveLength(1);
+      expect(mockAxiosGet).toHaveBeenCalledTimes(1);
+    });
+
+    test('interrupted result is NOT cached — second call re-invokes fetchRange', async () => {
+      // First call: range fetch fails (network error → interrupted=true)
+      // GithubProvider returns interrupted=true on exception; trigger by having the
+      // list endpoint throw a generic error
+      mockAxiosGet.mockRejectedValueOnce(new Error('network error'));
+      // Second call: succeeds
+      mockAxiosGet.mockResolvedValueOnce({ data: [makeNote(1)] });
+
+      const first = await getIntermediateReleaseNotes(trustedContainer, '1.0.0', '2.0.0');
+      const second = await getIntermediateReleaseNotes(trustedContainer, '1.0.0', '2.0.0');
+
+      // First call returns empty because the range fetch was interrupted (no notes collected)
+      expect(first.releaseNotes).toHaveLength(0);
+      // Second call hits the network again (result was NOT cached due to interruption)
+      expect(second.releaseNotes).toHaveLength(1);
+      expect(mockAxiosGet).toHaveBeenCalledTimes(2);
+    });
+
+    test('cap applied at read time — fetchRange returns 25, max=20 → 20 returned + hiddenCount 5', async () => {
+      delete ddEnvVars.DD_RELEASE_NOTES_MAX_INTERMEDIATE; // default 20
+      mockAxiosGet.mockResolvedValueOnce({
+        data: Array.from({ length: 25 }, (_, i) => makeNote(i + 1)),
+      });
+
+      const result = await getIntermediateReleaseNotes(trustedContainer, '1.0.0', '2.0.0');
+
+      expect(result.releaseNotes).toHaveLength(20);
+      expect(result.hiddenCount).toBe(5);
+    });
+
+    test('cap change between two warm-cache calls reflects new hiddenCount without re-fetch', async () => {
+      // Populate cache with 10 notes (max=20, so all 10 fit initially)
+      delete ddEnvVars.DD_RELEASE_NOTES_MAX_INTERMEDIATE;
+      mockAxiosGet.mockResolvedValueOnce({
+        data: Array.from({ length: 10 }, (_, i) => makeNote(i + 1)),
+      });
+
+      const first = await getIntermediateReleaseNotes(trustedContainer, '1.0.0', '2.0.0');
+      expect(first.releaseNotes).toHaveLength(10);
+      expect(first.hiddenCount).toBe(0);
+
+      // Now tighten the cap to 3 — the cache holds 10, but we get 3 + hiddenCount 7
+      ddEnvVars.DD_RELEASE_NOTES_MAX_INTERMEDIATE = '3';
+      const second = await getIntermediateReleaseNotes(trustedContainer, '1.0.0', '2.0.0');
+      expect(second.releaseNotes).toHaveLength(3);
+      expect(second.hiddenCount).toBe(7);
+      // No additional network call — served from cache
+      expect(mockAxiosGet).toHaveBeenCalledTimes(1);
+    });
+
+    test('three-tier key isolation for intermediate — untrusted+token vs trusted = separate entries', async () => {
+      ddEnvVars.DD_RELEASE_NOTES_GITHUB_TOKEN = 'ghp_tok';
+
+      // Untrusted (container label) lookup → #token bucket, 1 note
+      mockAxiosGet.mockResolvedValueOnce({ data: [makeNote(1)] });
+
+      const untrustedContainer = {
+        labels: { 'dd.source.repo': 'https://github.com/acme/service.git' },
+        image: { name: 'acme/service', registry: { url: 'registry.example.com' } },
+        result: { tag: '2.0.0' },
+      } as any;
+
+      const untrusted = await getIntermediateReleaseNotes(untrustedContainer, '1.0.0', '2.0.0');
+      expect(untrusted.releaseNotes).toHaveLength(1);
+
+      // Trusted (GHCR) lookup → #auth bucket, separate network call, 2 notes
+      mockAxiosGet.mockResolvedValueOnce({ data: [makeNote(1), makeNote(2)] });
+
+      const trusted = await getIntermediateReleaseNotes(trustedContainer, '1.0.0', '2.0.0');
+      expect(trusted.releaseNotes).toHaveLength(2);
+
+      // Two separate network calls — different cache keys (#token vs #auth)
+      expect(mockAxiosGet).toHaveBeenCalledTimes(2);
+    });
+
+    test('bodies are truncated via toContainerReleaseNotes when body exceeds 2000 chars', async () => {
+      const longBody = 'x'.repeat(3000);
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [
+          {
+            tag_name: 'v1.0.1',
+            name: 'Release 1.0.1',
+            body: longBody,
+            html_url: 'https://github.com/acme/service/releases/tag/v1.0.1',
+            published_at: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      });
+
+      const result = await getIntermediateReleaseNotes(trustedContainer, '1.0.0', '2.0.0');
+
+      expect(result.releaseNotes).toHaveLength(1);
+      expect(result.releaseNotes[0].body.length).toBe(2000);
+      expect(result.releaseNotes[0].body.endsWith('...')).toBe(true);
+    });
   });
 });
