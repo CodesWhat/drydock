@@ -21,10 +21,22 @@ const mockTriggerCounterInc = vi.hoisted(() => vi.fn());
 const mockGetAgents = vi.hoisted(() => vi.fn(() => []));
 const mockGetServerName = vi.hoisted(() => vi.fn(() => 'controller-host'));
 const forceRejectedUpdateBatch = vi.hoisted(() => ({ enabled: false }));
+const mockRegistryGetState = vi.hoisted(() =>
+  vi.fn(() => ({
+    watcher: {} as Record<string, unknown>,
+    trigger: {},
+    registry: {},
+    authentication: {},
+    agent: {},
+  })),
+);
 
 vi.mock('node-cron');
 vi.mock('../../log');
 vi.mock('../../event');
+vi.mock('../../registry/index.js', () => ({
+  getState: (...args: any[]) => mockRegistryGetState(...args),
+}));
 vi.mock('../../agent/manager.js', () => ({
   getAgents: mockGetAgents,
 }));
@@ -177,6 +189,13 @@ const configurationValid = {
 beforeEach(async () => {
   vi.resetAllMocks();
   mockTriggerCounterInc.mockReset();
+  mockRegistryGetState.mockReturnValue({
+    watcher: {} as Record<string, unknown>,
+    trigger: {},
+    registry: {},
+    authentication: {},
+    agent: {},
+  });
   notificationStore.isTriggerEnabledForRule.mockReturnValue(true);
   notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
     enabled: true,
@@ -11490,5 +11509,241 @@ describe('recentlyAppliedContainerKeys cleared on deregisterComponent', () => {
     expect((trigger as any).recentlyAppliedContainerKeys.size).toBe(2);
     await trigger.deregisterComponent();
     expect((trigger as any).recentlyAppliedContainerKeys.size).toBe(0);
+  });
+});
+
+describe('maintenance window auto-apply gate (isAutoUpdateDeferredByMaintenanceWindow)', () => {
+  const container = {
+    id: 'c1',
+    name: 'app',
+    watcher: 'local',
+    updateAvailable: true,
+    updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+  } as any;
+
+  // (a) action trigger + window CLOSED -> defers, does NOT dispatch, counter = success
+  test('action trigger with closed maintenance window defers the update and returns success', async () => {
+    trigger.type = 'docker';
+    trigger.configuration = { ...configurationValid, mode: 'simple' };
+    mockRegistryGetState.mockReturnValue({
+      watcher: {
+        'docker.local': { isMaintenanceWindowOpen: () => false },
+      },
+      trigger: {},
+      registry: {},
+      authentication: {},
+      agent: {},
+    });
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    const debugSpy = vi.spyOn(trigger.log, 'debug');
+
+    await trigger.handleContainerReport({ changed: true, container });
+
+    expect(triggerSpy).not.toHaveBeenCalled();
+    expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('Outside maintenance window'));
+    // Counter must record success (early return, not error)
+    expect(mockTriggerCounterInc).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'success' }),
+    );
+  });
+
+  // (b) action trigger + window OPEN -> dispatches normally (trigger.trigger called via dispatch chain)
+  test('action trigger with open maintenance window proceeds normally', async () => {
+    trigger.type = 'docker';
+    trigger.configuration = { ...configurationValid, mode: 'simple' };
+    mockRegistryGetState.mockReturnValue({
+      watcher: {
+        'docker.local': { isMaintenanceWindowOpen: () => true },
+      },
+      trigger: {},
+      registry: {},
+      authentication: {},
+      agent: {},
+    });
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleContainerReport({ changed: true, container });
+
+    expect(triggerSpy).toHaveBeenCalled();
+  });
+
+  // (c) fail-open cases: empty watcher, missing watcher, missing isMaintenanceWindowOpen
+  test('action trigger fails open when container.watcher is empty', async () => {
+    trigger.type = 'docker';
+    trigger.configuration = { ...configurationValid, mode: 'simple' };
+    // watcher field is '' — should fail open
+    const containerNoWatcher = { ...container, watcher: '' };
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleContainerReport({ changed: true, container: containerNoWatcher });
+
+    expect(triggerSpy).toHaveBeenCalled();
+  });
+
+  test('action trigger fails open when watcher is not in registry', async () => {
+    trigger.type = 'docker';
+    trigger.configuration = { ...configurationValid, mode: 'simple' };
+    // registry returns empty watcher map — watcher id not found
+    mockRegistryGetState.mockReturnValue({
+      watcher: {},
+      trigger: {},
+      registry: {},
+      authentication: {},
+      agent: {},
+    });
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleContainerReport({ changed: true, container });
+
+    expect(triggerSpy).toHaveBeenCalled();
+  });
+
+  test('action trigger fails open when watcher lacks isMaintenanceWindowOpen', async () => {
+    trigger.type = 'docker';
+    trigger.configuration = { ...configurationValid, mode: 'simple' };
+    mockRegistryGetState.mockReturnValue({
+      watcher: {
+        'docker.local': {}, // no isMaintenanceWindowOpen
+      },
+      trigger: {},
+      registry: {},
+      authentication: {},
+      agent: {},
+    });
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleContainerReport({ changed: true, container });
+
+    expect(triggerSpy).toHaveBeenCalled();
+  });
+
+  // (c) agent-scoped container watcher ID uses agent prefix
+  test('isAutoUpdateDeferredByMaintenanceWindow constructs agent-scoped watcher id', () => {
+    mockRegistryGetState.mockReturnValue({
+      watcher: {
+        'my-agent.docker.remote': { isMaintenanceWindowOpen: () => false },
+      },
+      trigger: {},
+      registry: {},
+      authentication: {},
+      agent: {},
+    });
+    const agentContainer = { ...container, watcher: 'remote', agent: 'my-agent' };
+    expect((trigger as any).isAutoUpdateDeferredByMaintenanceWindow(agentContainer)).toBe(true);
+  });
+
+  test('isAutoUpdateDeferredByMaintenanceWindow returns false when container.watcher is not a string', () => {
+    const noWatcher = { ...container, watcher: undefined };
+    expect((trigger as any).isAutoUpdateDeferredByMaintenanceWindow(noWatcher)).toBe(false);
+  });
+
+  // (d) notification trigger (not docker/dockercompose) + window closed -> still fires
+  test('notification trigger is not gated by maintenance window', async () => {
+    trigger.type = 'slack';
+    trigger.configuration = { ...configurationValid, mode: 'simple' };
+    mockRegistryGetState.mockReturnValue({
+      watcher: {
+        'docker.local': { isMaintenanceWindowOpen: () => false },
+      },
+      trigger: {},
+      registry: {},
+      authentication: {},
+      agent: {},
+    });
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    await trigger.handleContainerReport({ changed: true, container });
+
+    expect(triggerSpy).toHaveBeenCalled();
+  });
+
+  // (e) batch mode: window closed -> deferred containers are filtered, window open -> enqueued
+  test('runAcceptedUpdateBatch defers containers whose watcher window is closed', async () => {
+    trigger.type = 'docker';
+    mockRegistryGetState.mockReturnValue({
+      watcher: {
+        'docker.local': { isMaintenanceWindowOpen: () => false },
+      },
+      trigger: {},
+      registry: {},
+      authentication: {},
+      agent: {},
+    });
+    const debugSpy = vi.spyOn(trigger.log, 'debug').mockImplementation(() => undefined);
+
+    await (trigger as any).runAcceptedUpdateBatch([container]);
+
+    expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('Outside maintenance window'));
+    debugSpy.mockRestore();
+  });
+
+  test('runAcceptedUpdateBatch passes through containers whose watcher window is open', async () => {
+    trigger.type = 'docker';
+    mockRegistryGetState.mockReturnValue({
+      watcher: {
+        'docker.local': { isMaintenanceWindowOpen: () => true },
+      },
+      trigger: {},
+      registry: {},
+      authentication: {},
+      agent: {},
+    });
+    const dispatchSpy = vi
+      .spyOn(trigger as any, 'isAutoUpdateDeferredByMaintenanceWindow')
+      .mockReturnValue(false);
+
+    const enqueueResult = { accepted: [], rejected: [] };
+    const { enqueueContainerUpdates: enqueueContainerUpdatesMock } = await import(
+      '../../updates/request-update.js'
+    );
+    vi.mocked(enqueueContainerUpdatesMock).mockResolvedValueOnce(enqueueResult as any);
+
+    await (trigger as any).runAcceptedUpdateBatch([container]);
+
+    expect(dispatchSpy).toHaveBeenCalled();
+    dispatchSpy.mockRestore();
+  });
+
+  test('runAcceptedUpdateBatch deferred-log falls back to fullName when notification key is absent', async () => {
+    // id='' and name='' make getContainerNotificationKey return undefined, exercising the
+    // || fullName(container) fallback branch in the defer-log loop.
+    trigger.type = 'docker';
+    mockRegistryGetState.mockReturnValue({
+      watcher: {
+        'docker.local': { isMaintenanceWindowOpen: () => false },
+      },
+      trigger: {},
+      registry: {},
+      authentication: {},
+      agent: {},
+    });
+    const noKeyContainer = {
+      id: '',
+      name: '',
+      watcher: 'local',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0', semverDiff: 'major' },
+    } as any;
+    const debugSpy = vi.spyOn(trigger.log, 'debug').mockImplementation(() => undefined);
+
+    await (trigger as any).runAcceptedUpdateBatch([noKeyContainer]);
+
+    expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('Outside maintenance window'));
+    debugSpy.mockRestore();
+  });
+
+  test('runAcceptedUpdateBatch returns early when all containers are deferred', async () => {
+    trigger.type = 'docker';
+    // All containers deferred
+    vi.spyOn(trigger as any, 'isAutoUpdateDeferredByMaintenanceWindow').mockReturnValue(true);
+    // Spy on enqueueContainerUpdates to confirm it is not called
+    const { enqueueContainerUpdates: enqueueMock } = await import(
+      '../../updates/request-update.js'
+    );
+    vi.mocked(enqueueMock).mockClear();
+
+    await (trigger as any).runAcceptedUpdateBatch([container]);
+
+    expect(vi.mocked(enqueueMock)).not.toHaveBeenCalled();
   });
 });

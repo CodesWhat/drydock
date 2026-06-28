@@ -13,6 +13,7 @@ const RECREATED_ALIAS_RE = /^[a-f0-9]{12}_(.+)$/i;
 import type { NotificationOutboxEntry } from '../../model/notification-outbox.js';
 import { getTriggerCounter } from '../../prometheus/trigger.js';
 import Component, { type ComponentConfiguration } from '../../registry/Component.js';
+import * as registry from '../../registry/index.js';
 import { redactTriggerConfigurationInfrastructureDetails } from '../../registry/trigger-config-redaction.js';
 import * as auditStore from '../../store/audit.js';
 import * as storeContainer from '../../store/container.js';
@@ -1833,6 +1834,12 @@ class Trigger<
 
     logContainer.debug('Run');
     if (this.isUpdateActionTrigger()) {
+      if (this.isAutoUpdateDeferredByMaintenanceWindow(container)) {
+        logContainer.debug(
+          'Outside maintenance window, deferring auto update until the window opens',
+        );
+        return;
+      }
       const accepted = await enqueueContainerUpdate(container, {
         trigger: this as unknown as {
           type: string;
@@ -2663,8 +2670,47 @@ class Trigger<
     return UPDATE_ACTION_TRIGGER_TYPES.has(this.type.toLowerCase());
   }
 
+  /**
+   * Returns true when the owning watcher's maintenance window is currently closed,
+   * meaning the auto-apply should be deferred. Fail-open: when the watcher cannot
+   * be resolved, or does not expose isMaintenanceWindowOpen, the update proceeds.
+   * isMaintenanceWindowOpen() itself returns true when no window is configured,
+   * so an unconfigured window also lets updates through.
+   */
+  private isAutoUpdateDeferredByMaintenanceWindow(container: Container): boolean {
+    const watcherName = typeof container.watcher === 'string' ? container.watcher.trim() : '';
+    if (watcherName === '') return false;
+    const watcherId = container.agent
+      ? `${container.agent}.docker.${watcherName}`
+      : `docker.${watcherName}`;
+    const watcher = registry.getState().watcher[watcherId] as unknown as
+      | { isMaintenanceWindowOpen?: () => boolean }
+      | undefined;
+    if (!watcher || typeof watcher.isMaintenanceWindowOpen !== 'function') return false;
+    return !watcher.isMaintenanceWindowOpen();
+  }
+
   private async runAcceptedUpdateBatch(containers: Container[]): Promise<void> {
-    const { accepted, rejected } = await enqueueContainerUpdates(containers, {
+    const deferred: Container[] = [];
+    const ready = containers.filter((container) => {
+      if (this.isAutoUpdateDeferredByMaintenanceWindow(container)) {
+        deferred.push(container);
+        return false;
+      }
+      return true;
+    });
+
+    for (const container of deferred) {
+      this.log.debug(
+        `Outside maintenance window, deferring auto update for ${getContainerNotificationKey(container) || fullName(container)} until the window opens`,
+      );
+    }
+
+    if (ready.length === 0) {
+      return;
+    }
+
+    const { accepted, rejected } = await enqueueContainerUpdates(ready, {
       trigger: this as unknown as {
         type: string;
         trigger: (container: Container, runtimeContext?: unknown) => Promise<unknown>;

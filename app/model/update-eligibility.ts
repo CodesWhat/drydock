@@ -109,10 +109,12 @@ export interface UpdateEligibilityContext {
   /**
    * Optional. When explicitly set to `false` by a caller, a soft `maintenance-window-closed`
    * blocker is recorded in the eligibility result. Defaults to `undefined`.
-   * No auto-trigger dispatch path currently sets this field. Auto-update window
-   * enforcement is done at scan time in the Docker watcher (watchFromCron /
-   * maybeFastResyncAfterUpdate return early when the window is closed). Manual UI/API update
-   * requests leave it undefined and are never gated by it.
+   * Auto-update window enforcement happens at two layers: (1) the Docker watcher's scheduled
+   * scan (watchFromCron / maybeFastResyncAfterUpdate return early when the window is closed),
+   * and (2) the auto-trigger's apply gate (runUpdateAvailableSimpleTrigger defers action
+   * triggers when the owning watcher's window is closed, via isAutoUpdateDeferredByMaintenanceWindow).
+   * This field lets a caller additionally reflect the window state here as a soft blocker in the
+   * eligibility model. Manual UI/API update requests leave it undefined and are never gated by it.
    */
   maintenanceWindowOpen?: boolean;
 }
@@ -206,8 +208,11 @@ export function computeUpdateEligibility(
 
   const blockers: UpdateBlocker[] = [];
 
-  // maintenance-window-closed: fires only when the caller explicitly passes `false` (auto-trigger
-  // dispatch). Manual API/UI callers pass `undefined` → no check → window never blocks manual ops.
+  // maintenance-window-closed: fires only when the caller explicitly passes `false`. Manual
+  // API/UI callers pass `undefined` so the window never blocks manual ops. The actual auto-apply
+  // gate lives in Trigger.isAutoUpdateDeferredByMaintenanceWindow (simple path) and
+  // Trigger.runAcceptedUpdateBatch (batch/digest path). Those guard action triggers regardless
+  // of how container detection was triggered.
   if (context.maintenanceWindowOpen === false) {
     blockers.push(
       makeBlocker({
