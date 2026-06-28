@@ -1,4 +1,5 @@
 import axios from 'axios';
+import semver from 'semver';
 import logger from '../../log/index.js';
 import { getGhcrTokenFallback } from '../../registries/ghcr-token-fallback.js';
 import { withRetry } from '../../registries/http-retry.js';
@@ -18,6 +19,9 @@ const DEFAULT_SECONDARY_RATE_LIMIT_COOLDOWN_MS = 60_000;
  * effectively permanent for the lifetime of the process.
  */
 const MAX_SECONDARY_RATE_LIMIT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour hard cap
+
+/** Bounds API cost; GitHub /releases is 100/page. */
+const MAX_RELEASE_LIST_PAGES = 10;
 
 /**
  * Module-level cooldown timestamp.  While Date.now() < rateLimitCooldownUntil,
@@ -145,6 +149,36 @@ function getSecondaryRateLimitDelayMs(error: unknown): number {
   return Math.min(Math.max(0, rawMs), MAX_SECONDARY_RATE_LIMIT_COOLDOWN_MS);
 }
 
+function mapGithubReleaseToNotes(
+  data: UnknownRecord,
+  repo: { owner: string; repo: string },
+  tagForFallback: string,
+): ReleaseNotes {
+  const body = typeof data?.body === 'string' ? data.body : '';
+  const title =
+    typeof data?.name === 'string' && data.name.trim() !== '' ? data.name : tagForFallback;
+  const url =
+    typeof data?.html_url === 'string' && data.html_url.trim() !== ''
+      ? data.html_url
+      : `https://github.com/${repo.owner}/${repo.repo}/releases/tag/${encodeURIComponent(tagForFallback)}`;
+  const publishedAt =
+    typeof data?.published_at === 'string' && !Number.isNaN(Date.parse(data.published_at))
+      ? data.published_at
+      : new Date(0).toISOString();
+
+  return {
+    title,
+    body,
+    url,
+    publishedAt,
+    provider: 'github',
+  };
+}
+
+function toStrictReleaseSemver(tag: string): semver.SemVer | null {
+  return semver.parse(tag.trim().replace(/^v/i, ''));
+}
+
 class GithubProvider implements ReleaseNotesProviderClient {
   id = 'github' as const;
 
@@ -179,15 +213,17 @@ class GithubProvider implements ReleaseNotesProviderClient {
       return undefined;
     }
 
-    // allowToken defaults to true so existing call sites without the option are unchanged.
-    // When false (untrusted container-label source), suppress both the explicit token and
-    // the GHCR PAT fallback so the operator's credentials are never sent to an
-    // attacker-controlled repo.
-    const allowToken = options?.allowToken !== false;
-
-    // Use explicitly provided token, then fall back to any configured GHCR PAT
-    // (GitHub PATs work for both ghcr.io and api.github.com).
-    const effectiveToken = allowToken ? (token ?? getGhcrTokenFallback()) : undefined;
+    // allowToken gates ONLY the GHCR PAT fallback. An explicitly-provided token
+    // (DD_RELEASE_NOTES_GITHUB_TOKEN) is always forwarded — the operator scoped it
+    // deliberately for release-notes lookups, even for untrusted container-label sources.
+    const allowGhcrFallback = options?.allowToken !== false;
+    const effectiveToken = token ?? (allowGhcrFallback ? getGhcrTokenFallback() : undefined);
+    if (token !== undefined && !allowGhcrFallback) {
+      log.debug(
+        'DD_RELEASE_NOTES_GITHUB_TOKEN forwarded to untrusted source repo %s (dd.source.repo container label or persisted container.sourceRepo)',
+        sourceRepo,
+      );
+    }
 
     for (const tagVariant of tagVariants) {
       const endpoint = `https://api.github.com/repos/${repo.owner}/${repo.repo}/releases/tags/${encodeURIComponent(
@@ -221,26 +257,7 @@ class GithubProvider implements ReleaseNotesProviderClient {
           },
         );
         const data = envelope.data;
-
-        const body = typeof data?.body === 'string' ? data.body : '';
-        const title =
-          typeof data?.name === 'string' && data.name.trim() !== '' ? data.name : tagVariant;
-        const url =
-          typeof data?.html_url === 'string' && data.html_url.trim() !== ''
-            ? data.html_url
-            : `https://github.com/${repo.owner}/${repo.repo}/releases/tag/${encodeURIComponent(tagVariant)}`;
-        const publishedAt =
-          typeof data?.published_at === 'string' && !Number.isNaN(Date.parse(data.published_at))
-            ? data.published_at
-            : new Date(0).toISOString();
-
-        return {
-          title,
-          body,
-          url,
-          publishedAt,
-          provider: 'github',
-        };
+        return mapGithubReleaseToNotes(data, repo, tagVariant);
       } catch (error: unknown) {
         const statusCode = getErrorStatusCode(error);
         if (statusCode === 404) {
@@ -274,6 +291,124 @@ class GithubProvider implements ReleaseNotesProviderClient {
     }
 
     return undefined;
+  }
+
+  async fetchRange(
+    sourceRepo: string,
+    fromTag: string,
+    toTag: string,
+    token?: string,
+    options?: FetchByTagOptions,
+  ): Promise<{ notes: ReleaseNotes[]; interrupted: boolean }> {
+    // Cooldown — skip to avoid hammering an already-tripped rate limit.
+    if (Date.now() < rateLimitCooldownUntil) {
+      return { notes: [], interrupted: false };
+    }
+
+    const repo = normalizeGithubRepo(sourceRepo);
+    if (!repo) {
+      return { notes: [], interrupted: false };
+    }
+
+    // Strict semver only — date/rolling/partial tags return null so the range
+    // fetch falls back to the existing two-panel behaviour.
+    const fromSemver = toStrictReleaseSemver(fromTag);
+    const toSemver = toStrictReleaseSemver(toTag);
+    if (!fromSemver || !toSemver || fromSemver.compare(toSemver) >= 0) {
+      return { notes: [], interrupted: false };
+    }
+
+    // allowToken gates ONLY the GHCR PAT fallback (same semantics as fetchByTag).
+    const allowGhcrFallback = options?.allowToken !== false;
+    const effectiveToken = token ?? (allowGhcrFallback ? getGhcrTokenFallback() : undefined);
+
+    const collected: { notes: ReleaseNotes; version: semver.SemVer }[] = [];
+    let interrupted = false;
+
+    for (let page = 1; page <= MAX_RELEASE_LIST_PAGES; page++) {
+      const listEndpoint = `https://api.github.com/repos/${repo.owner}/${repo.repo}/releases?per_page=100&page=${page}`;
+      const requestLabel = `github-release-notes GET ${listEndpoint}`;
+      try {
+        const envelope = await withRetry<unknown>(
+          () =>
+            axios
+              .get(listEndpoint, {
+                headers: {
+                  Accept: 'application/vnd.github+json',
+                  ...(effectiveToken ? { Authorization: `Bearer ${effectiveToken}` } : {}),
+                },
+                timeout: 10_000,
+              })
+              .then((r) => ({
+                status: r.status,
+                headers: r.headers as Record<string, string | undefined>,
+                data: r.data as unknown,
+              })),
+          {
+            logger: log,
+            requestLabel,
+            retryableStatuses: [429, 503],
+            retryPredicate: isSecondaryRateLimit403,
+            retryDelayMs: (err) =>
+              isSecondaryRateLimit403(err) ? getSecondaryRateLimitDelayMs(err) : undefined,
+          },
+        );
+
+        const rawData = envelope.data;
+        const releases: UnknownRecord[] = Array.isArray(rawData)
+          ? (rawData as UnknownRecord[])
+          : [];
+
+        for (const record of releases) {
+          if (!isRecord(record)) {
+            continue;
+          }
+          const tagName = typeof record.tag_name === 'string' ? record.tag_name : undefined;
+          if (!tagName) {
+            continue;
+          }
+          const version = toStrictReleaseSemver(tagName);
+          if (!version) {
+            continue;
+          }
+          // Exclusive from, inclusive to
+          if (fromSemver.compare(version) < 0 && toSemver.compare(version) >= 0) {
+            collected.push({ notes: mapGithubReleaseToNotes(record, repo, tagName), version });
+          }
+        }
+
+        // No more pages when the response is empty or shorter than a full page
+        if (releases.length === 0 || releases.length < 100) {
+          break;
+        }
+      } catch (error: unknown) {
+        if (isSecondaryRateLimit403(error)) {
+          const cooldownMs =
+            getSecondaryRateLimitDelayMs(error) || DEFAULT_SECONDARY_RATE_LIMIT_COOLDOWN_MS;
+          rateLimitCooldownUntil = Date.now() + cooldownMs;
+          log.warn(
+            `GitHub release list is rate-limited (${effectiveToken !== undefined ? 'authenticated' : 'unauthenticated'}) — cooldown active for ${Math.ceil(cooldownMs / 1000)}s`,
+          );
+        } else {
+          const statusCode = getErrorStatusCode(error);
+          if (statusCode === 401 || statusCode === 403) {
+            if (token === undefined && effectiveToken !== undefined) {
+              log.warn('GHCR token fallback was rejected by GitHub API — check token scopes');
+            } else if (token !== undefined) {
+              log.warn('Configured GITHUB_TOKEN rejected by GitHub API — check token scopes');
+            }
+          } else {
+            log.debug(`Unable to list GitHub releases (${getDebugErrorMessage(error)})`);
+          }
+        }
+        interrupted = true;
+        break;
+      }
+    }
+
+    // Sort newest-first by semver (GitHub returns by created_at, backports may appear early)
+    collected.sort((a, b) => b.version.compare(a.version));
+    return { notes: collected.map((c) => c.notes), interrupted };
   }
 }
 
