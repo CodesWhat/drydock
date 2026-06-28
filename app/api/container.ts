@@ -302,6 +302,7 @@ export function init() {
   router.get('/stats', getLegacyAggregateStats);
   router.get('/:id/stats', statsHandlers.getContainerStats);
   router.get('/:id/stats/stream', statsHandlers.streamContainerStats);
+  router.get('/:id/intermediate-release-notes', crudHandlers.getContainerIntermediateReleaseNotes);
   router.get('/:id/release-notes', crudHandlers.getContainerReleaseNotes);
   router.get('/:id', crudHandlers.getContainer);
   router.get('/:id/update-operations', crudHandlers.getContainerUpdateOperations);

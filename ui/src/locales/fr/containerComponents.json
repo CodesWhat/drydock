@@ -319,7 +319,10 @@
       "releaseNotes": "Notes de version",
       "viewFullNotes": "Voir les notes complètes",
       "currentSuffix": "(actuel)",
-      "availableSuffix": "(disponible)"
+      "availableSuffix": "(disponible)",
+      "intermediateNotes": "Intermediate releases ({count})",
+      "olderReleasesNotShown": "{count} older release not shown | {count} older releases not shown",
+      "loadingIntermediateNotes": "Loading intermediate releases…"
     },
     "suggestedTag": {
       "badgeText": "Suggéré",

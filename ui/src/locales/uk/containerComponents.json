@@ -319,7 +319,10 @@
       "releaseNotes": "Примітки до випуску",
       "viewFullNotes": "Переглянути повні примітки",
       "currentSuffix": "(поточний)",
-      "availableSuffix": "(доступний)"
+      "availableSuffix": "(доступний)",
+      "intermediateNotes": "Intermediate releases ({count})",
+      "olderReleasesNotShown": "{count} older release not shown | {count} older releases not shown",
+      "loadingIntermediateNotes": "Loading intermediate releases…"
     },
     "suggestedTag": {
       "badgeText": "Рекомендовано",

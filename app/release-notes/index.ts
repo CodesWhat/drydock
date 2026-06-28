@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { ddEnvVars } from '../configuration/index.js';
 import logger from '../log/index.js';
-import type { Container } from '../model/container.js';
+import type { Container, ContainerReleaseNotes } from '../model/container.js';
 import { getErrorMessage } from '../util/error.js';
 import GithubProvider from './providers/GithubProvider.js';
 import type { ReleaseNotes, ReleaseNotesProviderClient } from './types.js';
@@ -18,6 +18,7 @@ const RELEASE_NOTES_CACHE_TTL_MS = 60 * 60 * 1000;
 const RELEASE_NOTES_CACHE_NOT_FOUND_TTL_MS = 10 * 60 * 1000;
 const SOURCE_REPO_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const SOURCE_REPO_CACHE_NOT_FOUND_TTL_MS = 30 * 60 * 1000;
+const DEFAULT_MAX_INTERMEDIATE_RELEASE_NOTES = 20;
 
 const CONTAINER_RELEASE_NOTES_BODY_MAX_LENGTH = 2000;
 
@@ -37,6 +38,7 @@ type CacheLookup<T> =
 
 const releaseNotesCache = new Map<string, CacheEntry<ReleaseNotes | null>>();
 const sourceRepoCache = new Map<string, CacheEntry<string | null>>();
+const intermediateReleaseNotesCache = new Map<string, CacheEntry<ReleaseNotes[]>>();
 const providers: ReleaseNotesProviderClient[] = [new GithubProvider()];
 
 function pruneExpiredCache<T>(cache: Map<string, CacheEntry<T>>) {
@@ -224,6 +226,17 @@ export function detectSourceRepoFromImageMetadata(options: {
     options.containerLabels?.[DD_SOURCE_REPO_LABEL],
   );
   if (containerLabelOverride) {
+    const trustedImageSource =
+      normalizeSourceRepo(options.imageLabels?.[DD_SOURCE_REPO_LABEL]) ??
+      normalizeSourceRepo(options.imageLabels?.[OCI_SOURCE_REPO_LABEL]) ??
+      normalizeSourceRepo(options.imageLabels?.[OCI_URL_REPO_LABEL]);
+    if (trustedImageSource) {
+      log.warn(
+        'dd.source.repo container label (%s) overrides a trusted image source label (%s); the source repo is treated as untrusted and the GHCR token fallback will not be sent. Remove the dd.source.repo container label to restore trusted resolution.',
+        containerLabelOverride,
+        trustedImageSource,
+      );
+    }
     return { sourceRepo: containerLabelOverride, trusted: false };
   }
 
@@ -326,13 +339,43 @@ function getGithubToken() {
   return tokenTrimmed !== '' ? tokenTrimmed : undefined;
 }
 
+function getReleaseNotesAuthTier(trusted: boolean): 'auth' | 'token' | 'anon' {
+  if (trusted) {
+    return 'auth';
+  }
+  return getGithubToken() !== undefined ? 'token' : 'anon';
+}
+
+function getMaxIntermediateReleaseNotes(): number {
+  const raw = ddEnvVars.DD_RELEASE_NOTES_MAX_INTERMEDIATE;
+  if (typeof raw !== 'string' || raw.trim() === '') {
+    return DEFAULT_MAX_INTERMEDIATE_RELEASE_NOTES;
+  }
+  const parsed = Number(raw.trim());
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : DEFAULT_MAX_INTERMEDIATE_RELEASE_NOTES;
+}
+
 function getReleaseNotesCacheKey(
   providerId: string,
   sourceRepo: string,
   tag: string,
   trusted: boolean,
 ) {
-  return `${providerId}:${sourceRepo.toLowerCase()}@${tag.toLowerCase()}#${trusted ? 'auth' : 'anon'}`;
+  return `${providerId}:${sourceRepo.toLowerCase()}@${tag.toLowerCase()}#${getReleaseNotesAuthTier(trusted)}`;
+}
+
+function normalizeTagForCacheKey(tag: string) {
+  return tag.trim().replace(/^v/i, '').toLowerCase();
+}
+
+function getIntermediateReleaseNotesCacheKey(
+  providerId: string,
+  sourceRepo: string,
+  fromTag: string,
+  toTag: string,
+  trusted: boolean,
+) {
+  return `intermediate:${providerId}:${sourceRepo.toLowerCase()}@${normalizeTagForCacheKey(fromTag)}..${normalizeTagForCacheKey(toTag)}#${getReleaseNotesAuthTier(trusted)}`;
 }
 
 async function getReleaseNotesForSourceRepo(sourceRepo: string, tag: string, trusted: boolean) {
@@ -405,7 +448,80 @@ export function toContainerReleaseNotes(
   };
 }
 
+export async function getIntermediateReleaseNotes(
+  container: Container,
+  fromTag: string,
+  toTag: string,
+  imageLabels?: Record<string, string>,
+): Promise<{ releaseNotes: ContainerReleaseNotes[]; hiddenCount: number }> {
+  const empty = { releaseNotes: [] as ContainerReleaseNotes[], hiddenCount: 0 };
+  if (
+    typeof fromTag !== 'string' ||
+    fromTag.trim() === '' ||
+    typeof toTag !== 'string' ||
+    toTag.trim() === '' ||
+    fromTag.trim() === toTag.trim()
+  ) {
+    return empty;
+  }
+
+  const max = getMaxIntermediateReleaseNotes();
+  if (max === 0) {
+    return empty;
+  }
+
+  const resolution = await resolveSourceRepoForContainer(container, imageLabels);
+  if (!resolution) {
+    return empty;
+  }
+
+  const provider = providers.find((releaseNotesProvider) =>
+    releaseNotesProvider.supports(resolution.sourceRepo),
+  );
+  if (!provider || !provider.fetchRange) {
+    return empty;
+  }
+
+  const cacheKey = getIntermediateReleaseNotesCacheKey(
+    provider.id,
+    resolution.sourceRepo,
+    fromTag,
+    toTag,
+    resolution.trusted,
+  );
+  const cached = getCacheValue(intermediateReleaseNotesCache, cacheKey);
+
+  let allNotes: ReleaseNotes[];
+  if (cached.found) {
+    allNotes = cached.value;
+  } else {
+    const result = await provider.fetchRange(
+      resolution.sourceRepo,
+      fromTag,
+      toTag,
+      getGithubToken(),
+      {
+        allowToken: resolution.trusted,
+      },
+    );
+    allNotes = result.notes;
+    // Only cache complete results. A partial (interrupted) fetch must be retried next time.
+    if (!result.interrupted) {
+      setCacheValue(intermediateReleaseNotesCache, cacheKey, allNotes, RELEASE_NOTES_CACHE_TTL_MS);
+    }
+  }
+
+  // Cap is applied at READ time so changing DD_RELEASE_NOTES_MAX_INTERMEDIATE takes
+  // effect without invalidating the cache, and hiddenCount is never silently dropped.
+  const capped = allNotes.slice(0, max);
+  return {
+    releaseNotes: capped.map((note) => toContainerReleaseNotes(note)),
+    hiddenCount: Math.max(0, allNotes.length - max),
+  };
+}
+
 export function _resetReleaseNotesCacheForTests() {
   releaseNotesCache.clear();
   sourceRepoCache.clear();
+  intermediateReleaseNotesCache.clear();
 }

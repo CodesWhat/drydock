@@ -319,7 +319,10 @@
       "releaseNotes": "リリースノート",
       "viewFullNotes": "全文を表示",
       "currentSuffix": "（現在）",
-      "availableSuffix": "（利用可能）"
+      "availableSuffix": "（利用可能）",
+      "intermediateNotes": "Intermediate releases ({count})",
+      "olderReleasesNotShown": "{count} older release not shown | {count} older releases not shown",
+      "loadingIntermediateNotes": "Loading intermediate releases…"
     },
     "suggestedTag": {
       "badgeText": "おすすめ",

@@ -18,6 +18,7 @@ import {
   attachUpdateEligibility,
   createGetContainersHandler,
 } from './handlers/list.js';
+import { createGetContainerIntermediateReleaseNotesHandler } from './handlers/intermediate-release-notes.js';
 import { createGetContainerReleaseNotesHandler } from './handlers/release-notes.js';
 import { getPathParamValue } from './request-helpers.js';
 import {
@@ -112,6 +113,7 @@ export function createCrudHandlers(dependencies: CrudHandlerDependencies) {
   const context = buildCrudHandlerContext(dependencies);
   const getContainers = createGetContainersHandler(context);
   const getContainerReleaseNotes = createGetContainerReleaseNotesHandler(context);
+  const getContainerIntermediateReleaseNotes = createGetContainerIntermediateReleaseNotesHandler(context);
   const getContainerUpdateOperations = createGetContainerUpdateOperationsHandler(context);
   const watchContainers = createWatchContainersHandler(context);
   const watchContainer = createWatchContainerHandler(context);
@@ -132,6 +134,7 @@ export function createCrudHandlers(dependencies: CrudHandlerDependencies) {
       getContainerHandler(context, req, res);
     },
     getContainerReleaseNotes,
+    getContainerIntermediateReleaseNotes,
     getContainerUpdateOperations,
     deleteContainer(req: Request, res: Response) {
       return deleteContainerHandler(context, req, res);

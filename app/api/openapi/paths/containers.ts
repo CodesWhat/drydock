@@ -372,6 +372,53 @@ export const containerPaths = {
       },
     },
   },
+  '/api/containers/{id}/intermediate-release-notes': {
+    get: {
+      tags: ['Containers'],
+      summary: 'Get intermediate release notes between two image tags',
+      operationId: 'getContainerIntermediateReleaseNotes',
+      parameters: [
+        containerIdPathParam,
+        {
+          name: 'from',
+          in: 'query',
+          required: true,
+          description: 'Current running tag (lower bound, exclusive)',
+          schema: { type: 'string' },
+        },
+        {
+          name: 'to',
+          in: 'query',
+          required: false,
+          description:
+            "Update target tag; defaults to the container's pending update tag when omitted",
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: jsonResponse('Intermediate release notes', {
+          type: 'object',
+          properties: {
+            releaseNotes: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/ReleaseNotesResource' },
+            },
+            hiddenCount: {
+              type: 'integer',
+              minimum: 0,
+            },
+          },
+          required: ['releaseNotes', 'hiddenCount'],
+          additionalProperties: false,
+        }),
+        400: errorResponse("Query parameter 'from' is required"),
+        401: errorResponse('Authentication required'),
+        404: errorResponse('Container not found'),
+        422: errorResponse('Cannot determine target tag'),
+        500: errorResponse('Error retrieving intermediate release notes'),
+      },
+    },
+  },
   '/api/containers/{id}/release-notes': {
     get: {
       tags: ['Containers'],

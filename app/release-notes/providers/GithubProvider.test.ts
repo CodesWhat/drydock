@@ -804,10 +804,10 @@ describe('release-notes/providers/GithubProvider', () => {
   });
 
   // -----------------------------------------------------------------------
-  // L-4 security fix: allowToken option gates token and GHCR fallback
+  // #452 — allowToken now gates ONLY the GHCR PAT fallback; explicit token always forwarded
   // -----------------------------------------------------------------------
 
-  test('fetchByTag with allowToken:false does not attach an explicit token', async () => {
+  test('fetchByTag with allowToken:false still forwards explicit token to GitHub API', async () => {
     const provider = new GithubProvider();
     mockAxiosGet.mockResolvedValueOnce({
       data: {
@@ -822,14 +822,22 @@ describe('release-notes/providers/GithubProvider', () => {
       allowToken: false,
     });
 
+    // Explicit token MUST be sent even when allowToken:false
     expect(mockAxiosGet).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        headers: expect.not.objectContaining({
-          Authorization: expect.any(String),
+        headers: expect.objectContaining({
+          Authorization: 'Bearer explicit-token',
         }),
       }),
     );
+    // Debug log fires to record that the token was forwarded to an untrusted source
+    expect(mockLogDebug).toHaveBeenCalledWith(
+      expect.stringContaining('DD_RELEASE_NOTES_GITHUB_TOKEN forwarded'),
+      expect.any(String),
+    );
+    // GHCR fallback must NOT be called (token is explicit, allowGhcrFallback is false)
+    expect(mockGetGhcrTokenFallback).not.toHaveBeenCalled();
   });
 
   test('fetchByTag with allowToken:false does not attach the GHCR token fallback', async () => {
@@ -884,5 +892,502 @@ describe('release-notes/providers/GithubProvider', () => {
         }),
       }),
     );
+  });
+
+  test('fetchByTag with allowToken:false + explicit token still triggers Configured GITHUB_TOKEN warn on 401', async () => {
+    const provider = new GithubProvider();
+    mockAxiosGet.mockRejectedValueOnce({
+      response: { status: 401, headers: {} },
+      message: 'unauthorized',
+    });
+
+    const result = await provider.fetchByTag(
+      'github.com/acme/service',
+      '1.0.0',
+      'explicit-bad-token',
+      { allowToken: false },
+    );
+
+    expect(result).toBeUndefined();
+    // Token was forwarded → on rejection, logs the configured-token warn
+    expect(mockLogWarn).toHaveBeenCalledWith(
+      expect.stringMatching(/Configured GITHUB_TOKEN rejected/i),
+    );
+  });
+
+  // -----------------------------------------------------------------------
+  // fetchRange
+  // -----------------------------------------------------------------------
+
+  describe('fetchRange', () => {
+    // Helper: build a minimal release record for the GitHub list endpoint
+    function makeRelease(
+      tagName: string,
+      overrides: Record<string, unknown> = {},
+    ): Record<string, unknown> {
+      return {
+        tag_name: tagName,
+        name: `Release ${tagName}`,
+        body: `Notes for ${tagName}`,
+        html_url: `https://github.com/acme/service/releases/tag/${tagName}`,
+        published_at: '2024-01-01T00:00:00Z',
+        ...overrides,
+      };
+    }
+
+    // Helper: build a full page of 100 releases (all outside any typical test range)
+    function makePaddingPage(count = 100): Record<string, unknown>[] {
+      return Array.from({ length: count }, (_, i) => makeRelease(`v0.0.${i + 1}`));
+    }
+
+    test('returns empty without calling API when cooldown is active', async () => {
+      vi.useFakeTimers();
+      const provider = new GithubProvider();
+
+      // Trip the cooldown via fetchByTag
+      mockAxiosGet.mockRejectedValue({
+        response: { status: 403, headers: { 'retry-after': '60' } },
+      });
+      const tripPromise = provider.fetchByTag('github.com/acme/service', '1.0.0');
+      await vi.runAllTimersAsync();
+      await tripPromise;
+
+      mockAxiosGet.mockReset();
+
+      const result = await provider.fetchRange('github.com/acme/service', '1.0.0', '2.0.0');
+      expect(result).toEqual({ notes: [], interrupted: true });
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+
+      vi.useRealTimers();
+    });
+
+    test('returns empty for non-GitHub source repos', async () => {
+      const provider = new GithubProvider();
+      const result = await provider.fetchRange('gitlab.com/acme/service', '1.0.0', '2.0.0');
+      expect(result).toEqual({ notes: [], interrupted: false });
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+    });
+
+    test('returns empty when fromTag is not strict semver', async () => {
+      const provider = new GithubProvider();
+      const result = await provider.fetchRange('github.com/acme/service', 'latest', '2.0.0');
+      expect(result).toEqual({ notes: [], interrupted: false });
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+    });
+
+    test('returns empty when toTag is not strict semver', async () => {
+      const provider = new GithubProvider();
+      const result = await provider.fetchRange('github.com/acme/service', '1.0.0', '2024-01-15');
+      expect(result).toEqual({ notes: [], interrupted: false });
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+    });
+
+    test('returns empty when fromTag and toTag are equal', async () => {
+      const provider = new GithubProvider();
+      const result = await provider.fetchRange('github.com/acme/service', '1.0.0', '1.0.0');
+      expect(result).toEqual({ notes: [], interrupted: false });
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+    });
+
+    test('returns empty when fromTag is greater than toTag (inverted range)', async () => {
+      const provider = new GithubProvider();
+      const result = await provider.fetchRange('github.com/acme/service', '2.0.0', '1.0.0');
+      expect(result).toEqual({ notes: [], interrupted: false });
+      expect(mockAxiosGet).not.toHaveBeenCalled();
+    });
+
+    test('range filtering: fromTag excluded, toTag included, out-of-range skipped, across two pages', async () => {
+      const provider = new GithubProvider();
+
+      // Page 1 (full 100): mix of in-range and out-of-range releases
+      const page1: Record<string, unknown>[] = [
+        // above toTag — excluded
+        makeRelease('v1.3.0'),
+        // equal to toTag — included (toSemver.compare(1.2.0) = 0 >= 0)
+        makeRelease('v1.2.0'),
+        // in range
+        makeRelease('v1.1.5'),
+        // equal to fromTag — excluded (fromSemver.compare(1.0.0) = 0, not < 0)
+        makeRelease('v1.0.0'),
+        // below fromTag — excluded
+        makeRelease('v0.9.0'),
+        // pad to 100
+        ...makePaddingPage(95),
+      ];
+      // Page 2 (partial): one more in-range release
+      const page2 = [makeRelease('v1.1.0')];
+
+      mockAxiosGet.mockResolvedValueOnce({ data: page1 });
+      mockAxiosGet.mockResolvedValueOnce({ data: page2 });
+
+      const result = await provider.fetchRange('github.com/acme/service', '1.0.0', '1.2.0');
+
+      expect(result.interrupted).toBe(false);
+      // Collected: v1.2.0, v1.1.5, v1.1.0 — sorted newest-first
+      expect(result.notes).toHaveLength(3);
+      expect(result.notes[0].title).toBe('Release v1.2.0');
+      expect(result.notes[1].title).toBe('Release v1.1.5');
+      expect(result.notes[2].title).toBe('Release v1.1.0');
+      expect(mockAxiosGet).toHaveBeenCalledTimes(2);
+    });
+
+    test('sorts newest-first even when a backport appears earlier in the feed', async () => {
+      const provider = new GithubProvider();
+
+      // GitHub feed is sorted by created_at, not semver.
+      // A backport (1.0.5) may appear near top of feed (created recently),
+      // but must sort to the end after 1.2.0 and 1.1.0.
+      const page: Record<string, unknown>[] = [
+        makeRelease('v1.0.5'), // backport — low semver but created recently
+        makeRelease('v1.2.0'),
+        makeRelease('v1.1.0'),
+      ];
+
+      mockAxiosGet.mockResolvedValueOnce({ data: page });
+
+      const result = await provider.fetchRange('github.com/acme/service', '1.0.0', '1.2.0');
+
+      expect(result.interrupted).toBe(false);
+      expect(result.notes).toHaveLength(3);
+      // Newest-first by semver, not feed order
+      expect(result.notes[0].title).toBe('Release v1.2.0');
+      expect(result.notes[1].title).toBe('Release v1.1.0');
+      expect(result.notes[2].title).toBe('Release v1.0.5');
+    });
+
+    test('stops pagination when a page returns 0 records', async () => {
+      const provider = new GithubProvider();
+
+      mockAxiosGet
+        .mockResolvedValueOnce({ data: makePaddingPage(100) }) // full page
+        .mockResolvedValueOnce({ data: [] }); // empty → stop
+
+      const result = await provider.fetchRange('github.com/acme/service', '1.0.0', '2.0.0');
+      expect(result).toEqual({ notes: [], interrupted: false });
+      expect(mockAxiosGet).toHaveBeenCalledTimes(2);
+    });
+
+    test('stops pagination when a page returns fewer than 100 records', async () => {
+      const provider = new GithubProvider();
+
+      mockAxiosGet
+        .mockResolvedValueOnce({ data: makePaddingPage(100) }) // full page
+        .mockResolvedValueOnce({ data: makePaddingPage(42) }); // partial → stop
+
+      const result = await provider.fetchRange('github.com/acme/service', '1.0.0', '2.0.0');
+      expect(result).toEqual({ notes: [], interrupted: false });
+      expect(mockAxiosGet).toHaveBeenCalledTimes(2);
+    });
+
+    test('hard cap: stops at MAX_RELEASE_LIST_PAGES (10) even when all pages are full', async () => {
+      const provider = new GithubProvider();
+
+      // 11 full pages — only 10 should be fetched; reaching the cap with a full page
+      // means there may be more data, so interrupted must be true.
+      for (let i = 0; i < 11; i++) {
+        mockAxiosGet.mockResolvedValueOnce({ data: makePaddingPage(100) });
+      }
+
+      const result = await provider.fetchRange('github.com/acme/service', '1.0.0', '2.0.0');
+      expect(result.interrupted).toBe(true);
+      expect(result.notes).toEqual([]);
+      expect(mockAxiosGet).toHaveBeenCalledTimes(10);
+    });
+
+    test('returns empty notes when no releases fall within the range', async () => {
+      const provider = new GithubProvider();
+
+      // Only a release above toTag (3.0.0 > 2.0.0)
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [makeRelease('v3.0.0')],
+      });
+
+      const result = await provider.fetchRange('github.com/acme/service', '1.0.0', '2.0.0');
+      expect(result).toEqual({ notes: [], interrupted: false });
+    });
+
+    test('forwards explicit token even when allowToken:false', async () => {
+      const provider = new GithubProvider();
+      mockAxiosGet.mockResolvedValueOnce({ data: [] });
+
+      await provider.fetchRange('github.com/acme/service', '1.0.0', '2.0.0', 'explicit-token', {
+        allowToken: false,
+      });
+
+      expect(mockAxiosGet).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer explicit-token',
+          }),
+        }),
+      );
+    });
+
+    test('fetchRange logs debug when explicit token forwarded to untrusted source (allowToken:false)', async () => {
+      const provider = new GithubProvider();
+      mockAxiosGet.mockResolvedValueOnce({ data: [] });
+
+      await provider.fetchRange('github.com/acme/untrusted', '1.0.0', '2.0.0', 'explicit-token', {
+        allowToken: false,
+      });
+
+      expect(mockLogDebug).toHaveBeenCalledWith(
+        expect.stringContaining('DD_RELEASE_NOTES_GITHUB_TOKEN forwarded'),
+        'github.com/acme/untrusted',
+      );
+    });
+
+    test('uses GHCR fallback when allowToken:true and no explicit token', async () => {
+      const provider = new GithubProvider();
+      mockGetGhcrTokenFallback.mockReturnValueOnce('ghcr-pat-token');
+      mockAxiosGet.mockResolvedValueOnce({ data: [] });
+
+      await provider.fetchRange('github.com/acme/service', '1.0.0', '2.0.0');
+
+      expect(mockAxiosGet).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer ghcr-pat-token',
+          }),
+        }),
+      );
+    });
+
+    test('does NOT use GHCR fallback when allowToken:false (no explicit token)', async () => {
+      const provider = new GithubProvider();
+      mockGetGhcrTokenFallback.mockReturnValueOnce('ghcr-pat-token');
+      mockAxiosGet.mockResolvedValueOnce({ data: [] });
+
+      await provider.fetchRange('github.com/acme/service', '1.0.0', '2.0.0', undefined, {
+        allowToken: false,
+      });
+
+      expect(mockAxiosGet).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.not.objectContaining({
+            Authorization: expect.any(String),
+          }),
+        }),
+      );
+      expect(mockGetGhcrTokenFallback).not.toHaveBeenCalled();
+    });
+
+    test('skips non-semver tag_name entries without breaking pagination', async () => {
+      const provider = new GithubProvider();
+
+      const page = [
+        { tag_name: 'latest', name: 'Latest', body: '', html_url: '', published_at: '' },
+        { tag_name: '2024-01-15', name: 'Date tag', body: '', html_url: '', published_at: '' },
+        makeRelease('v1.1.0'),
+      ];
+
+      mockAxiosGet.mockResolvedValueOnce({ data: page });
+
+      const result = await provider.fetchRange('github.com/acme/service', '1.0.0', '1.2.0');
+      expect(result.notes).toHaveLength(1);
+      expect(result.notes[0].title).toBe('Release v1.1.0');
+      expect(result.interrupted).toBe(false);
+    });
+
+    test('skips non-record items and records without string tag_name in array', async () => {
+      const provider = new GithubProvider();
+
+      const page = [
+        null, // !isRecord → skip
+        'string-item', // !isRecord → skip
+        { tag_name: 42 }, // tag_name not a string → skip
+        { tag_name: undefined }, // tag_name not a string → skip
+        makeRelease('v1.1.0'), // valid → included
+      ];
+
+      mockAxiosGet.mockResolvedValueOnce({ data: page });
+
+      const result = await provider.fetchRange('github.com/acme/service', '1.0.0', '1.2.0');
+      expect(result.notes).toHaveLength(1);
+      expect(result.notes[0].title).toBe('Release v1.1.0');
+    });
+
+    test('treats non-array API response as empty page and stops', async () => {
+      const provider = new GithubProvider();
+
+      // GitHub shouldn't do this, but guard against it
+      mockAxiosGet.mockResolvedValueOnce({ data: { message: 'Not Found' } });
+
+      const result = await provider.fetchRange('github.com/acme/service', '1.0.0', '2.0.0');
+      expect(result).toEqual({ notes: [], interrupted: false });
+      expect(mockAxiosGet).toHaveBeenCalledTimes(1);
+    });
+
+    test('retries a 429 on a page via withRetry and returns notes on success', async () => {
+      vi.useFakeTimers();
+      const provider = new GithubProvider();
+
+      mockAxiosGet
+        .mockRejectedValueOnce({ response: { status: 429, headers: { 'retry-after': '0' } } })
+        .mockResolvedValueOnce({ data: [makeRelease('v1.1.0')] });
+
+      const promise = provider.fetchRange('github.com/acme/service', '1.0.0', '1.2.0');
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      expect(result.interrupted).toBe(false);
+      expect(result.notes).toHaveLength(1);
+      expect(result.notes[0].title).toBe('Release v1.1.0');
+      expect(mockAxiosGet).toHaveBeenCalledTimes(2);
+
+      vi.useRealTimers();
+    });
+
+    test('secondary-rate-limit 403 after withRetry exhaustion: sets cooldown, interrupted:true, returns partial notes', async () => {
+      vi.useFakeTimers();
+      const provider = new GithubProvider();
+
+      // Page 1: one in-range release + padding to make it a full page
+      const page1 = [
+        makeRelease('v1.1.0'),
+        ...makePaddingPage(99), // padding — all outside test range
+      ];
+      mockAxiosGet.mockResolvedValueOnce({ data: page1 });
+
+      // Page 2: persistent secondary-rate-limit 403 — withRetry exhausts all retries
+      mockAxiosGet.mockRejectedValue({
+        response: { status: 403, headers: { 'retry-after': '0' } },
+      });
+
+      const promise = provider.fetchRange('github.com/acme/service', '1.0.0', '2.0.0');
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      expect(result.interrupted).toBe(true);
+      expect(result.notes).toHaveLength(1);
+      expect(result.notes[0].title).toBe('Release v1.1.0');
+      // No token → unauthenticated
+      expect(mockLogWarn).toHaveBeenCalledWith(
+        expect.stringMatching(/rate-limited \(unauthenticated\).*cooldown/i),
+      );
+
+      vi.useRealTimers();
+    });
+
+    test('secondary-rate-limit 403: warn says authenticated when token is present', async () => {
+      vi.useFakeTimers();
+      const provider = new GithubProvider();
+
+      // All retries exhaust immediately on the first page
+      mockAxiosGet.mockRejectedValue({
+        response: { status: 403, headers: { 'retry-after': '0' } },
+      });
+
+      const promise = provider.fetchRange(
+        'github.com/acme/service',
+        '1.0.0',
+        '2.0.0',
+        'explicit-token',
+      );
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      expect(result.interrupted).toBe(true);
+      expect(result.notes).toEqual([]);
+      expect(mockLogWarn).toHaveBeenCalledWith(
+        expect.stringMatching(/rate-limited \(authenticated\).*cooldown/i),
+      );
+
+      vi.useRealTimers();
+    });
+
+    test('plain 401 with explicit token: interrupted:true + Configured GITHUB_TOKEN rejected warn', async () => {
+      const provider = new GithubProvider();
+      mockAxiosGet.mockRejectedValueOnce({
+        response: { status: 401, headers: {} },
+      });
+
+      const result = await provider.fetchRange(
+        'github.com/acme/service',
+        '1.0.0',
+        '2.0.0',
+        'bad-token',
+      );
+
+      expect(result.interrupted).toBe(true);
+      expect(result.notes).toEqual([]);
+      expect(mockLogWarn).toHaveBeenCalledWith(
+        expect.stringMatching(/Configured GITHUB_TOKEN rejected/i),
+      );
+    });
+
+    test('plain 401 with GHCR fallback: interrupted:true + GHCR token fallback rejected warn', async () => {
+      const provider = new GithubProvider();
+      mockGetGhcrTokenFallback.mockReturnValueOnce('ghcr-token');
+      mockAxiosGet.mockRejectedValueOnce({
+        response: { status: 401, headers: {} },
+      });
+
+      const result = await provider.fetchRange('github.com/acme/service', '1.0.0', '2.0.0');
+
+      expect(result.interrupted).toBe(true);
+      expect(result.notes).toEqual([]);
+      expect(mockLogWarn).toHaveBeenCalledWith(
+        expect.stringMatching(/GHCR token fallback.*rejected/i),
+      );
+    });
+
+    test('plain 403 with no token and no GHCR fallback: interrupted:true, no warn', async () => {
+      const provider = new GithubProvider();
+      mockGetGhcrTokenFallback.mockReturnValueOnce(undefined);
+      mockAxiosGet.mockRejectedValueOnce({
+        response: { status: 403, headers: null },
+      });
+
+      const result = await provider.fetchRange('github.com/acme/service', '1.0.0', '2.0.0');
+
+      expect(result.interrupted).toBe(true);
+      expect(result.notes).toEqual([]);
+      expect(mockLogWarn).not.toHaveBeenCalled();
+      expect(mockLogDebug).not.toHaveBeenCalled();
+    });
+
+    test('generic network error: interrupted:true + debug log', async () => {
+      const provider = new GithubProvider();
+      mockAxiosGet.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+
+      const result = await provider.fetchRange('github.com/acme/service', '1.0.0', '2.0.0');
+
+      expect(result.interrupted).toBe(true);
+      expect(result.notes).toEqual([]);
+      expect(mockLogDebug).toHaveBeenCalledWith(
+        expect.stringContaining('Unable to list GitHub releases'),
+      );
+      expect(mockLogWarn).not.toHaveBeenCalled();
+    });
+
+    test('mapGithubReleaseToNotes fallbacks applied inside fetchRange', async () => {
+      const provider = new GithubProvider();
+
+      // Release with missing/bad fields — same fallbacks as fetchByTag
+      mockAxiosGet.mockResolvedValueOnce({
+        data: [
+          {
+            tag_name: 'v1.1.0',
+            body: null,
+            name: '   ',
+            html_url: '',
+            published_at: 'bad-date',
+          },
+        ],
+      });
+
+      const result = await provider.fetchRange('github.com/acme/service', '1.0.0', '1.2.0');
+      expect(result.notes).toHaveLength(1);
+      const note = result.notes[0];
+      expect(note.title).toBe('v1.1.0'); // tag fallback
+      expect(note.body).toBe('');
+      expect(note.url).toBe('https://github.com/acme/service/releases/tag/v1.1.0');
+      expect(note.publishedAt).toBe(new Date(0).toISOString());
+      expect(note.provider).toBe('github');
+    });
   });
 });

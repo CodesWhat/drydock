@@ -809,6 +809,9 @@ onScopeDispose(() => {
                 :release-notes="c.releaseNotes"
                 :current-release-notes="c.currentReleaseNotes"
                 :release-link="c.releaseLink"
+                :container-id="c.id"
+                :from-tag="c.currentTag"
+                :to-tag="c.newTag"
                 icon-only
                 icon-size="toolbar"
               />
@@ -863,6 +866,9 @@ onScopeDispose(() => {
                 :release-notes="c.releaseNotes"
                 :current-release-notes="c.currentReleaseNotes"
                 :release-link="c.releaseLink"
+                :container-id="c.id"
+                :from-tag="c.currentTag"
+                :to-tag="c.newTag"
                 icon-only
               />
               <ProjectLink v-if="c.sourceRepo" :source-repo="c.sourceRepo" icon-only />
@@ -1145,6 +1151,9 @@ onScopeDispose(() => {
                 :release-notes="c.releaseNotes"
                 :current-release-notes="c.currentReleaseNotes"
                 :release-link="c.releaseLink"
+                :container-id="c.id"
+                :from-tag="c.currentTag"
+                :to-tag="c.newTag"
               />
               <ProjectLink :source-repo="c.sourceRepo" />
             </div>
@@ -1296,6 +1305,9 @@ onScopeDispose(() => {
                 :release-notes="c.releaseNotes"
                 :current-release-notes="c.currentReleaseNotes"
                 :release-link="c.releaseLink"
+                :container-id="c.id"
+                :from-tag="c.currentTag"
+                :to-tag="c.newTag"
               />
               <ProjectLink :source-repo="c.sourceRepo" />
             </div>
