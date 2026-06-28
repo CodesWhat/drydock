@@ -1,6 +1,7 @@
 import { statSync } from "node:fs";
 import { join } from "node:path";
 import type { MetadataRoute } from "next";
+import { getComparisonRouteSlugs } from "@/lib/comparison-route-data";
 import { BASE_URL } from "@/lib/site-config";
 import { source } from "@/lib/source";
 
@@ -23,17 +24,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.7,
   }));
 
-  const comparePages = [
-    "watchtower",
-    "diun",
-    "ouroboros",
-    "wud",
-    "komodo",
-    "dockge",
-    "portainer",
-    "dockhand",
-    "dozzle",
-  ].map((slug) => ({
+  const comparePages = getComparisonRouteSlugs().map((slug) => ({
     url: `${BASE_URL}/compare/${slug}`,
     lastModified: new Date(),
     changeFrequency: "monthly" as const,

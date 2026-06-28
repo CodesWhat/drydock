@@ -1,5 +1,6 @@
 import { ArrowRight, Check, Minus, X } from "lucide-react";
 import Link from "next/link";
+import { ComparisonCellIcon } from "@/components/comparison-cell-icon";
 import { SectionHeading } from "@/components/section-heading";
 import { SITE_CONFIG } from "@/lib/site-config";
 
@@ -41,16 +42,6 @@ const featureRows: FeatureRow[] = [
   { label: "Dry-run + rollback", drydock: "yes", watchtower: "no", diun: "no", portainer: "no" },
   { label: "Distributed agents", drydock: "yes", watchtower: "no", diun: "no", portainer: "no" },
 ];
-
-function FeatureIcon({ value }: { value: FeatureValue }) {
-  if (value === "yes") {
-    return <Check className="mx-auto h-4 w-4 text-emerald-500" aria-label="Yes" />;
-  }
-  if (value === "partial") {
-    return <Minus className="mx-auto h-4 w-4 text-amber-400" aria-label="Partial" />;
-  }
-  return <X className="mx-auto h-4 w-4 text-neutral-400 dark:text-neutral-600" aria-label="No" />;
-}
 
 function ViewAllLink() {
   return (
@@ -139,7 +130,7 @@ export function CompareSection() {
                           tool === SITE_CONFIG.name ? "bg-neutral-900/5 dark:bg-neutral-100/5" : "",
                         ].join(" ")}
                       >
-                        <FeatureIcon value={cellValue(row, tool)} />
+                        <ComparisonCellIcon value={cellValue(row, tool)} />
                       </td>
                     ))}
                   </tr>

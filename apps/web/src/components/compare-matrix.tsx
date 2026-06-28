@@ -1,5 +1,6 @@
 import { ArrowUpRight, Check, Minus, X } from "lucide-react";
 import Link from "next/link";
+import { ComparisonCellIcon } from "@/components/comparison-cell-icon";
 import { SITE_CONFIG } from "@/lib/site-config";
 
 // Full comparison matrix for /compare. Each competitor row links to its
@@ -183,16 +184,6 @@ const TOOLS: Tool[] = [
   },
 ];
 
-function CellIcon({ value }: { value: Cell }) {
-  if (value === "yes") {
-    return <Check className="mx-auto h-4 w-4 text-emerald-500" aria-label="Yes" />;
-  }
-  if (value === "partial") {
-    return <Minus className="mx-auto h-4 w-4 text-amber-400" aria-label="Partial" />;
-  }
-  return <X className="mx-auto h-4 w-4 text-neutral-300 dark:text-neutral-600" aria-label="No" />;
-}
-
 export function CompareMatrix() {
   return (
     <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white/50 backdrop-blur-sm dark:border-neutral-800 dark:bg-neutral-900/50">
@@ -240,7 +231,7 @@ export function CompareMatrix() {
                 </th>
                 {FEATURES.map((f) => (
                   <td key={f.key} className="px-3 py-3 text-center">
-                    <CellIcon value={tool.cells[f.key]} />
+                    <ComparisonCellIcon value={tool.cells[f.key]} />
                   </td>
                 ))}
               </tr>
