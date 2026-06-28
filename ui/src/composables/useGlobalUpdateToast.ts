@@ -249,7 +249,9 @@ export function useGlobalUpdateToast() {
     const name = getDetailString(detail.containerName) ?? 'container';
     const error = getDetailString(detail.error);
     const rollbackReason = getDetailString(detail.rollbackReason);
-    const reason = resolveUpdateFailureReason({ lastError: error, rollbackReason });
+    const reason = resolveUpdateFailureReason({ lastError: error, rollbackReason }, (key: string) =>
+      t(key),
+    );
     const isCancelled =
       rollbackReason === OPERATOR_CANCELLED_ROLLBACK_REASON ||
       error === OPERATOR_CANCELLED_ERROR_MESSAGE;

@@ -354,14 +354,14 @@ function resolveMaintenanceCountdownLabel(
     return '';
   }
   if (maintenanceWindowOpenCount > 0) {
-    return 'Open now';
+    return i18n.global.t('dashboardView.maintenanceWindow.openNow');
   }
   if (!nextMaintenanceWindowAt) {
-    return 'Scheduled';
+    return i18n.global.t('dashboardView.maintenanceWindow.scheduled');
   }
   const remainingMs = nextMaintenanceWindowAt - now;
   if (remainingMs <= 0) {
-    return 'Opening soon';
+    return i18n.global.t('dashboardView.maintenanceWindow.openingSoon');
   }
   return formatMaintenanceDuration(remainingMs);
 }

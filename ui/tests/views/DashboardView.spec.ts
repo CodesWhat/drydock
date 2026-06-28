@@ -1190,7 +1190,7 @@ describe('DashboardView', () => {
       const agents = [{ name: 'offline-agent', connected: false }];
       const wrapper = await mountDashboard([], agents);
       expect(wrapper.text()).toContain('offline-agent');
-      expect(wrapper.text()).toContain('disconnected');
+      expect(wrapper.text()).toContain('Disconnected');
     });
 
     it('shows container counts per server', async () => {

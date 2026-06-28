@@ -53,7 +53,12 @@ function parseRegistryHost(registryUrl?: string): string | undefined {
   }
 }
 
-export function registryLabel(reg: string, registryUrl?: string, registryName?: string) {
+export function registryLabel(
+  reg: string,
+  registryUrl?: string,
+  registryName?: string,
+  t?: (key: string) => string,
+) {
   if (reg === 'dockerhub') return 'Dockerhub';
   if (reg === 'ghcr') return 'GHCR';
   const host = parseRegistryHost(registryUrl);
@@ -64,7 +69,7 @@ export function registryLabel(reg: string, registryUrl?: string, registryName?: 
       return trimmed;
     }
   }
-  return 'Custom';
+  return t ? t('common.display.custom') : 'Custom';
 }
 
 export function registryColorBg(reg: string) {

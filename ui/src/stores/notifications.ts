@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { computed, ref } from 'vue';
+import { i18n } from '@/boot/i18n';
 import { useStorageRef } from '@/composables/useStorageRef';
 import { getAuditLog } from '@/services/audit';
 import type { AuditEntry } from '@/utils/audit-helpers';
@@ -25,6 +26,7 @@ const BELL_REFRESH_EVENTS: SseBusEvent[] = [
 ];
 
 export const useNotificationStore = defineStore('notifications', () => {
+  const t = i18n.global.t;
   const entries = ref<AuditEntry[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
@@ -57,7 +59,7 @@ export const useNotificationStore = defineStore('notifications', () => {
     if (typeof caught === 'string' && caught !== '') {
       return caught;
     }
-    return 'Failed to load notifications';
+    return t('sharedComponents.notifications.loadFailed');
   }
 
   async function fetchEntries(): Promise<void> {

@@ -1,4 +1,5 @@
 import { onMounted, onScopeDispose, onUnmounted, type Ref, type WatchStopHandle, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
   applyUpdateOperationSseToHold,
   type ParsedUpdateOperationSse,
@@ -34,6 +35,7 @@ interface UseContainerSsePatchPipelineInput {
 const DEFERRED_OPERATION_ATTACH_TIMEOUT_MS = 30_000;
 
 export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipelineInput) {
+  const { t } = useI18n();
   const operationStore = useOperationStore();
 
   // Deferred operation re-attach: when dd:container-added arrives before
@@ -422,10 +424,13 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
       // that renames the row post-recreate, so still release the hold even when
       // the row has already fallen out of containers.value.
       onTerminalEvent: ({ container, status }) => {
-        const reason = resolveUpdateFailureReason({
-          lastError: parsed.lastError,
-          rollbackReason: parsed.rollbackReason,
-        });
+        const reason = resolveUpdateFailureReason(
+          {
+            lastError: parsed.lastError,
+            rollbackReason: parsed.rollbackReason,
+          },
+          (key) => t(key),
+        );
         if (container) {
           (container as Container).updateOperation = undefined;
           if (
@@ -433,7 +438,8 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
             (status === 'rolled-back' &&
               parsed.rollbackReason !== OPERATOR_CANCELLED_ROLLBACK_REASON)
           ) {
-            (container as Container).lastUpdateFailureReason = reason ?? 'Update failed';
+            (container as Container).lastUpdateFailureReason =
+              reason ?? t('containerComponents.groupedViews.updateFailed');
             (container as Container).lastUpdateFailureAt = Date.now();
           } else if (status === 'succeeded') {
             (container as Container).lastUpdateFailureReason = undefined;

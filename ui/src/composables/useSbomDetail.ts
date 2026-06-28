@@ -1,4 +1,5 @@
 import { computed, type Ref, ref } from 'vue';
+import { i18n } from '../boot/i18n';
 import { getContainerSbom } from '../services/container';
 import { errorMessage } from '../utils/error';
 import type { SbomFormat } from '../views/security/securityViewTypes';
@@ -98,16 +99,18 @@ async function loadDetailSbomForContainer({
   detailSbomResult,
   detailSbomLoading,
   detailSbomError,
+  t,
 }: {
   containerId: string | undefined;
   selectedSbomFormat: SbomFormat;
   detailSbomResult: Ref<SbomResult>;
   detailSbomLoading: Ref<boolean>;
   detailSbomError: Ref<string | null>;
+  t: (key: string) => string;
 }): Promise<void> {
   if (!containerId) {
     detailSbomResult.value = null;
-    detailSbomError.value = 'No container identifier is available for this image.';
+    detailSbomError.value = t('containerComponents.sbomDetail.noContainerId');
     return;
   }
 
@@ -117,7 +120,7 @@ async function loadDetailSbomForContainer({
     detailSbomResult.value = await getContainerSbom(containerId, selectedSbomFormat);
   } catch (caught: unknown) {
     detailSbomResult.value = null;
-    detailSbomError.value = errorMessage(caught, 'Failed to load SBOM');
+    detailSbomError.value = errorMessage(caught, t('containerComponents.sbomDetail.loadFailed'));
   } finally {
     detailSbomLoading.value = false;
   }
@@ -174,6 +177,7 @@ function triggerBlobDownload(content: string, mimeType: string, filename: string
 }
 
 export function useSbomDetail({ containerIdsByImage }: UseSbomDetailOptions) {
+  const t = i18n.global.t;
   const selectedImage = ref<ImageSummaryWithVulns | null>(null);
   const detailOpen = ref(false);
   const selectedSbomFormat = ref<SbomFormat>('spdx-json');
@@ -209,6 +213,7 @@ export function useSbomDetail({ containerIdsByImage }: UseSbomDetailOptions) {
       detailSbomResult,
       detailSbomLoading,
       detailSbomError,
+      t,
     });
   }
 

@@ -1,3 +1,5 @@
+import type { TranslateFn } from '../types/i18n';
+
 export interface AuditEntry {
   id: string;
   timestamp: string;
@@ -69,36 +71,24 @@ export function targetLabel(
   return action.includes('agent-disconnect') ? 'Agent' : 'Container';
 }
 
-export function timeAgo(isoString: string): string {
+export function timeAgo(isoString: string, locale?: string, t?: TranslateFn): string {
   const now = Date.now();
   const then = new Date(isoString).getTime();
   if (Number.isNaN(then)) return isoString;
   const diffMs = now - then;
-  if (diffMs < 0) return 'just now';
-  const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return 'just now';
+  const diffSec = Math.floor(Math.max(0, diffMs) / 1000);
+  if (diffSec < 60) return t ? t('common.timeAgo.justNow') : 'just now';
+  const resolvedLocale = locale ?? 'en';
+  const rtf = new Intl.RelativeTimeFormat(resolvedLocale, { numeric: 'always', style: 'short' });
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffMin < 60) return rtf.format(-diffMin, 'minute');
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
+  if (diffHr < 24) return rtf.format(-diffHr, 'hour');
   const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 7) return `${diffDay}d ago`;
-  const d = new Date(isoString);
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  return `${months[d.getMonth()]} ${d.getDate()}`;
+  if (diffDay < 7) return rtf.format(-diffDay, 'day');
+  return new Intl.DateTimeFormat(resolvedLocale, { month: 'short', day: 'numeric' }).format(
+    new Date(isoString),
+  );
 }
 
 export function formatAbsoluteTime(isoString: string | null | undefined): string {
@@ -115,12 +105,12 @@ export function formatAbsoluteTime(isoString: string | null | undefined): string
 }
 
 /** Format an ISO timestamp as a compact relative age string (e.g. "3d", "2w", "5mo", "1y"). */
-export function imageAge(isoString: string | undefined): string {
+export function imageAge(isoString: string | undefined, t?: TranslateFn): string {
   if (!isoString) return '\u2014';
   const then = new Date(isoString).getTime();
   if (Number.isNaN(then)) return '\u2014';
   const diffMs = Date.now() - then;
-  if (diffMs < 0) return 'now';
+  if (diffMs < 0) return t ? t('common.imageAge.now') : 'now';
   const diffMin = Math.floor(diffMs / 60_000);
   if (diffMin < 60) return `${Math.max(1, diffMin)}m`;
   const diffHr = Math.floor(diffMin / 60);

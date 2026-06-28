@@ -104,6 +104,23 @@
       "minor": "Minor",
       "patch": "Patch",
       "digest": "Digest"
+    },
+    "maintenanceWindow": {
+      "openNow": "Open now",
+      "scheduled": "Scheduled",
+      "openingSoon": "Opening soon"
+    },
+    "dataLoadFailed": "Failed to load dashboard data",
+    "widgets": {
+      "statContainers": "Containers",
+      "statUpdates": "Updates Available",
+      "statSecurity": "Security Issues",
+      "statRegistries": "Registries",
+      "recentUpdates": "Updates Available",
+      "securityOverview": "Security Overview",
+      "resourceUsage": "Resource Usage",
+      "hostStatus": "Host Status",
+      "updateBreakdown": "Update Breakdown"
     }
   }
 }

@@ -1,4 +1,5 @@
 import { computed, type Ref, ref } from 'vue';
+import { i18n } from '../boot/i18n';
 import { getSecurityVulnerabilityOverview } from '../services/container';
 import type {
   Container,
@@ -383,7 +384,10 @@ function clearVulnerabilityState(state: VulnerabilityStateRefs) {
   state.scannedContainerCount.value = 0;
 }
 
-function createFetchVulnerabilities(state: FetchVulnerabilityStateRefs) {
+function createFetchVulnerabilities(
+  state: FetchVulnerabilityStateRefs,
+  t: (key: string) => string,
+) {
   return async function fetchVulnerabilities() {
     if (state.securityVulnerabilities.value.length === 0) {
       state.loading.value = true;
@@ -394,7 +398,7 @@ function createFetchVulnerabilities(state: FetchVulnerabilityStateRefs) {
       const overview = await getSecurityVulnerabilityOverview();
       applyOverviewToState(overview, state);
     } catch (caught: unknown) {
-      state.error.value = errorMessage(caught, 'Failed to load vulnerability data');
+      state.error.value = errorMessage(caught, t('containerComponents.vulnerabilities.loadFailed'));
       clearVulnerabilityState(state);
     } finally {
       state.loading.value = false;
@@ -407,6 +411,7 @@ export function useVulnerabilities({
   securitySortAsc,
   containers,
 }: UseVulnerabilitiesOptions) {
+  const t = i18n.global.t;
   const loading = ref(true);
   const error = ref<string | null>(null);
   const securityVulnerabilities = ref<Vulnerability[]>([]);
@@ -461,11 +466,14 @@ export function useVulnerabilities({
     scannedContainerCount,
   };
 
-  const fetchVulnerabilities = createFetchVulnerabilities({
-    loading,
-    error,
-    ...vulnerabilityState,
-  });
+  const fetchVulnerabilities = createFetchVulnerabilities(
+    {
+      loading,
+      error,
+      ...vulnerabilityState,
+    },
+    t,
+  );
 
   return {
     loading,

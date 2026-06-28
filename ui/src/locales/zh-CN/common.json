@@ -8,6 +8,25 @@
     "confirm": "确认",
     "close": "关闭",
     "retry": "重试",
-    "unknown": "未知"
+    "unknown": "未知",
+    "errorSummary": {
+      "rateLimitHit": "Registry rate limit hit",
+      "accessDenied": "Registry access denied",
+      "imageNotFound": "Image not found",
+      "authFailed": "Registry authentication failed",
+      "unreachable": "Registry unreachable",
+      "cancelled": "Cancelled",
+      "securityBlocked": "Blocked by security scan",
+      "signatureFailed": "Signature verification failed"
+    },
+    "display": {
+      "custom": "Custom"
+    },
+    "timeAgo": {
+      "justNow": "just now"
+    },
+    "imageAge": {
+      "now": "now"
+    }
   }
 }

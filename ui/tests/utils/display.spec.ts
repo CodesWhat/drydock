@@ -92,6 +92,17 @@ describe('display utilities', () => {
       expect((registryLabel as any)('custom', '   ', ' custom ')).toBe('Custom');
       expect((registryLabel as any)('custom', '/v2/library/nginx', '   ')).toBe('Custom');
     });
+
+    it('uses t for the Custom fallback when provided', () => {
+      const t = (key: string) => `[${key}]`;
+      expect(registryLabel('unknown', undefined, undefined, t)).toBe('[common.display.custom]');
+    });
+
+    it('does not call t for named registries', () => {
+      const t = (key: string) => `[${key}]`;
+      expect(registryLabel('dockerhub', undefined, undefined, t)).toBe('Dockerhub');
+      expect(registryLabel('ghcr', undefined, undefined, t)).toBe('GHCR');
+    });
   });
 
   describe('registryColorBg', () => {

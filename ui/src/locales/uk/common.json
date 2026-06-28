@@ -8,6 +8,25 @@
     "confirm": "Підтвердити",
     "close": "Закрити",
     "retry": "Повторити",
-    "unknown": "невідомо"
+    "unknown": "невідомо",
+    "errorSummary": {
+      "rateLimitHit": "Registry rate limit hit",
+      "accessDenied": "Registry access denied",
+      "imageNotFound": "Image not found",
+      "authFailed": "Registry authentication failed",
+      "unreachable": "Registry unreachable",
+      "cancelled": "Cancelled",
+      "securityBlocked": "Blocked by security scan",
+      "signatureFailed": "Signature verification failed"
+    },
+    "display": {
+      "custom": "Custom"
+    },
+    "timeAgo": {
+      "justNow": "just now"
+    },
+    "imageAge": {
+      "now": "now"
+    }
   }
 }

@@ -69,6 +69,68 @@ describe('summariseUpdateError', () => {
   });
 });
 
+describe('summariseUpdateError with t function', () => {
+  const t = (key: string) => `[${key}]`;
+
+  it('uses t for rate limit', () => {
+    expect(summariseUpdateError('toomanyrequests: rate exceeded', t)).toBe(
+      '[common.errorSummary.rateLimitHit]',
+    );
+  });
+
+  it('uses t for access denied', () => {
+    expect(summariseUpdateError('Forbidden', t)).toBe('[common.errorSummary.accessDenied]');
+  });
+
+  it('uses t for image not found', () => {
+    expect(summariseUpdateError('manifest unknown', t)).toBe('[common.errorSummary.imageNotFound]');
+  });
+
+  it('uses t for auth failed', () => {
+    expect(summariseUpdateError('authentication required', t)).toBe(
+      '[common.errorSummary.authFailed]',
+    );
+  });
+
+  it('uses t for unreachable', () => {
+    expect(summariseUpdateError('connect ECONNREFUSED', t)).toBe(
+      '[common.errorSummary.unreachable]',
+    );
+  });
+
+  it('uses t for cancelled', () => {
+    expect(summariseUpdateError('Cancelled by operator', t)).toBe(
+      '[common.errorSummary.cancelled]',
+    );
+  });
+
+  it('uses t for security blocked', () => {
+    expect(summariseUpdateError('Security scan blocked update', t)).toBe(
+      '[common.errorSummary.securityBlocked]',
+    );
+  });
+
+  it('uses t for signature failed', () => {
+    expect(summariseUpdateError('cosign signature verification failed', t)).toBe(
+      '[common.errorSummary.signatureFailed]',
+    );
+  });
+
+  it('returns undefined for unrecognised errors even with t', () => {
+    expect(summariseUpdateError('something weird', t)).toBeUndefined();
+  });
+});
+
+describe('resolveUpdateFailureReason with t function', () => {
+  const t = (key: string) => `[${key}]`;
+
+  it('passes t to summariseUpdateError', () => {
+    expect(resolveUpdateFailureReason({ lastError: 'toomanyrequests: rate exceeded' }, t)).toBe(
+      '[common.errorSummary.rateLimitHit]',
+    );
+  });
+});
+
 describe('resolveUpdateFailureReason', () => {
   it('prefers the friendly summarised label when the raw error matches a pattern', () => {
     expect(

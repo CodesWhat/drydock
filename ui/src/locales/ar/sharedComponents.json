@@ -60,6 +60,12 @@
       "clearFilters": "مسح جميع الفلاتر",
       "setupGuide": "دليل الإعداد",
       "scanNow": "فحص الآن"
+    },
+    "notifications": {
+      "loadFailed": "Failed to load notifications"
+    },
+    "serverFeatures": {
+      "loadFailed": "Failed to load server feature configuration"
     }
   }
 }

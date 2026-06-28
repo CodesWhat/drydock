@@ -939,7 +939,7 @@ function confirmDashboardUpdateAll() {
             :checked="isWidgetVisible(widget.id)"
             class="shrink-0 w-3.5 h-3.5 dd-rounded-sm cursor-pointer"
             @change="toggleWidgetVisibility(widget.id)" />
-          <span class="flex-1 text-2xs-plus dd-text">{{ widget.label }}</span>
+          <span class="flex-1 text-2xs-plus dd-text">{{ t(widget.labelKey) }}</span>
           <span class="shrink-0 flex items-center gap-0.5">
             <span
               v-for="size in widgetSizes(widget.id)"

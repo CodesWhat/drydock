@@ -864,7 +864,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                     <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.currentLabel') }} <span class="dd-text font-mono">{{ detailPreview.currentImage || '-' }}</span></div>
                     <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.newLabel') }} <span class="dd-text font-mono">{{ detailPreview.newImage || '-' }}</span></div>
                     <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.updateKindLabel') }}
-                      <span class="dd-text font-mono">{{ detailPreview.updateKind?.kind || detailPreview.updateKind || 'unknown' }}</span>
+                      <span class="dd-text font-mono">{{ detailPreview.updateKind?.kind || detailPreview.updateKind || t('common.unknown') }}</span>
                     </div>
                     <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.runningLabel') }}
                       <span class="dd-text">{{ detailPreview.isRunning ? 'yes' : 'no' }}</span>

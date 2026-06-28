@@ -1,10 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 import { loadContainerDetailListState } from '@/views/containers/loadContainerDetailListState';
-import { useContainerBackups } from '@/views/containers/useContainerBackups';
+import { formatTimestamp, useContainerBackups } from '@/views/containers/useContainerBackups';
 import { useContainerPolicy } from '@/views/containers/useContainerPolicy';
 import { useContainerPreview } from '@/views/containers/useContainerPreview';
 import { useContainerTriggers } from '@/views/containers/useContainerTriggers';
+
+describe('formatTimestamp (standalone, no t)', () => {
+  it('returns "Unknown" when timestamp is undefined and t is not provided', () => {
+    expect(formatTimestamp(undefined)).toBe('Unknown');
+  });
+
+  it('returns the i18n key result when timestamp is undefined and t is provided', () => {
+    const mockT = vi.fn().mockReturnValue('Unknown translated');
+    expect(formatTimestamp(undefined, mockT)).toBe('Unknown translated');
+    expect(mockT).toHaveBeenCalledWith('containerComponents.backups.timestampUnknown');
+  });
+});
 
 describe('container action focused composables', () => {
   it('exports policy, preview, triggers, and backups composables', () => {

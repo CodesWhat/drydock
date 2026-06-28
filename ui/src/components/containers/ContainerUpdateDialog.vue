@@ -100,7 +100,7 @@ async function confirm() {
     emit('updated', id);
     emit('update:containerId', null);
   } catch (caught: unknown) {
-    actionError.value = errorMessage(caught, 'Update failed');
+    actionError.value = errorMessage(caught, t('containerComponents.updateDialog.updateFailed'));
     toast.error(t('containersView.toast.updateFailed', { name }), actionError.value);
   } finally {
     inProgress.value = false;

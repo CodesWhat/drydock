@@ -60,6 +60,12 @@
       "clearFilters": "清除所有筛选",
       "setupGuide": "设置指南",
       "scanNow": "立即扫描"
+    },
+    "notifications": {
+      "loadFailed": "Failed to load notifications"
+    },
+    "serverFeatures": {
+      "loadFailed": "Failed to load server feature configuration"
     }
   }
 }

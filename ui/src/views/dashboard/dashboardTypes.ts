@@ -17,7 +17,7 @@ export type DashboardWidgetId = (typeof DASHBOARD_WIDGET_IDS)[number];
 
 interface DashboardWidgetMeta {
   id: DashboardWidgetId;
-  label: string;
+  labelKey: string;
   category: 'stat' | 'widget';
   canStretch: boolean;
   defaultSpan: number;
@@ -26,63 +26,63 @@ interface DashboardWidgetMeta {
 export const DASHBOARD_WIDGET_META: DashboardWidgetMeta[] = [
   {
     id: 'stat-containers',
-    label: 'Containers',
+    labelKey: 'dashboardView.widgets.statContainers',
     category: 'stat',
     canStretch: false,
     defaultSpan: 1,
   },
   {
     id: 'stat-updates',
-    label: 'Updates Available',
+    labelKey: 'dashboardView.widgets.statUpdates',
     category: 'stat',
     canStretch: false,
     defaultSpan: 1,
   },
   {
     id: 'stat-security',
-    label: 'Security Issues',
+    labelKey: 'dashboardView.widgets.statSecurity',
     category: 'stat',
     canStretch: false,
     defaultSpan: 1,
   },
   {
     id: 'stat-registries',
-    label: 'Registries',
+    labelKey: 'dashboardView.widgets.statRegistries',
     category: 'stat',
     canStretch: false,
     defaultSpan: 1,
   },
   {
     id: 'recent-updates',
-    label: 'Updates Available',
+    labelKey: 'dashboardView.widgets.recentUpdates',
     category: 'widget',
     canStretch: true,
     defaultSpan: 2,
   },
   {
     id: 'security-overview',
-    label: 'Security Overview',
+    labelKey: 'dashboardView.widgets.securityOverview',
     category: 'widget',
     canStretch: false,
     defaultSpan: 1,
   },
   {
     id: 'resource-usage',
-    label: 'Resource Usage',
+    labelKey: 'dashboardView.widgets.resourceUsage',
     category: 'widget',
     canStretch: false,
     defaultSpan: 1,
   },
   {
     id: 'host-status',
-    label: 'Host Status',
+    labelKey: 'dashboardView.widgets.hostStatus',
     category: 'widget',
     canStretch: false,
     defaultSpan: 1,
   },
   {
     id: 'update-breakdown',
-    label: 'Update Breakdown',
+    labelKey: 'dashboardView.widgets.updateBreakdown',
     category: 'widget',
     canStretch: true,
     defaultSpan: 2,
