@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1-rc.3] — Unreleased
+
+### Changed
+
+- **Re-synced the UI translation catalogs from Crowdin.** The 16 target-locale `containerComponents.json` files were regenerated from the Crowdin project so their key order tracks the English source catalog, keeping the on-disk catalogs and the translation platform in lockstep as community translations land.
+
 ## [1.5.1-rc.2] — 2026-06-28
 
 ### Changed
