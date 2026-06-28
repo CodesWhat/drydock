@@ -32,7 +32,7 @@ function GithubCta({ label = "Star on GitHub" }: { label?: string }) {
   );
 }
 
-export function StarHistoryVariants() {
+export function StarHistory() {
   return (
     <section className="border-t border-border/60 py-16">
       <div className="mx-auto max-w-4xl px-4">

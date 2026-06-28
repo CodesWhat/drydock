@@ -77,7 +77,7 @@ function cellValue(row: FeatureRow, tool: Tool): FeatureValue {
   return map[tool];
 }
 
-export function CompareVariants() {
+export function CompareSection() {
   return (
     <section className="border-t border-border/60 py-20">
       <div className="mx-auto max-w-4xl px-4">

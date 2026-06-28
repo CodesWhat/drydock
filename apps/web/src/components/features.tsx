@@ -9,7 +9,7 @@ import { categoryLabels, type FeatureCategory, features } from "@/lib/site-conte
 
 const categoryOrder: FeatureCategory[] = ["core", "security", "integrations", "operations"];
 
-export function FeaturesVariants() {
+export function Features() {
   const [query, setQuery] = useState("");
 
   const q = query.toLowerCase().trim();

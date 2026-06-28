@@ -12,7 +12,7 @@ const stats = [
 ] as const;
 
 // Locked: hero variant A — centered, oversized type, whale mascot + badges below.
-export function HeroVariants() {
+export function Hero() {
   return (
     <section className="relative px-4 py-20">
       {/* Background glow */}

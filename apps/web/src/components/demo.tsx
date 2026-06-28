@@ -407,7 +407,7 @@ function DemoFrame({
   );
 }
 
-export function DemoVariants() {
+export function Demo() {
   const [mode, setMode] = useState<DemoMode>("inline");
   const [iframeStatus, setIframeStatus] = useState<IframeStatus>("loading");
   const containerRef = useRef<HTMLDivElement>(null);

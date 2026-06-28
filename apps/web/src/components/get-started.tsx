@@ -107,7 +107,7 @@ function SecureSnippet() {
   );
 }
 
-export function GetStartedSecureToggle() {
+export function GetStarted() {
   const [preset, setPreset] = useState<Preset>("quick");
 
   return (

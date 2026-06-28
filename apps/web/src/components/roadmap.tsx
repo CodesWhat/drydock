@@ -114,7 +114,7 @@ function GitLogRow({ milestone }: { milestone: Milestone }) {
   );
 }
 
-export function RoadmapVariants() {
+export function Roadmap() {
   // Newest-first — planned at the top, shipped history flowing down to the root
   const logOrder = [...roadmap].reverse();
 

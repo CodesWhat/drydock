@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
-import { CompareVariants } from "@/components/lab/compare-variants";
-import { DemoVariants } from "@/components/lab/demo-variants";
-import { EcosystemVariants } from "@/components/lab/ecosystem-variants";
-import { FeaturesVariants } from "@/components/lab/features-variants";
-import { GetStartedSecureToggle } from "@/components/lab/getstarted-secure-toggle";
-import { HeroVariants } from "@/components/lab/hero-variants";
-import { RoadmapVariants } from "@/components/lab/roadmap-variants";
-import { StarHistoryVariants } from "@/components/lab/starhistory-variants";
+import { CompareSection } from "@/components/compare-section";
+import { Demo } from "@/components/demo";
+import { Ecosystem } from "@/components/ecosystem";
+import { Features } from "@/components/features";
+import { GetStarted } from "@/components/get-started";
+import { Hero } from "@/components/hero";
 import { MarketingShell } from "@/components/marketing-shell";
+import { Roadmap } from "@/components/roadmap";
+import { StarHistory } from "@/components/star-history";
 import { BASE_URL, GITHUB_RELEASES_URL, GITHUB_URL, SITE_CONFIG } from "@/lib/site-config";
 
 export const metadata: Metadata = {
@@ -70,27 +70,27 @@ export default function Home() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(websiteJsonLd) }}
       />
       <MarketingShell>
-        <HeroVariants />
+        <Hero />
         <div className="reveal">
-          <FeaturesVariants />
+          <Features />
         </div>
         <div className="reveal">
-          <GetStartedSecureToggle />
+          <GetStarted />
         </div>
         {/* Demo is left unwrapped: its fullscreen expand uses position:fixed,
             which a transformed `.reveal` ancestor would re-anchor and break. */}
-        <DemoVariants />
+        <Demo />
         <div className="reveal">
-          <RoadmapVariants />
+          <Roadmap />
         </div>
         <div className="reveal">
-          <StarHistoryVariants />
+          <StarHistory />
         </div>
         <div className="reveal">
-          <CompareVariants />
+          <CompareSection />
         </div>
         <div className="reveal">
-          <EcosystemVariants />
+          <Ecosystem />
         </div>
       </MarketingShell>
     </>

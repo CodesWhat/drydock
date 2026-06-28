@@ -110,7 +110,7 @@ function Arrow() {
   );
 }
 
-export function EcosystemVariants() {
+export function Ecosystem() {
   return (
     <section className="border-t border-border/60 px-4 py-16">
       <div className="mx-auto max-w-5xl px-4">

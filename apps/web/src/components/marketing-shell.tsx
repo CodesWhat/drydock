@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { FooterVariants } from "@/components/lab/footer-variants";
+import { Footer } from "@/components/footer";
 import { SiteBackground } from "@/components/site-background";
 import { SiteHeader } from "@/components/site-header";
 import { type AuroraPalette, SITE_CONFIG } from "@/lib/site-config";
@@ -26,7 +26,7 @@ export function MarketingShell({
       <div className="relative z-10">
         <SiteHeader />
         <main id="main-content">{children}</main>
-        <FooterVariants />
+        <Footer />
       </div>
     </div>
   );

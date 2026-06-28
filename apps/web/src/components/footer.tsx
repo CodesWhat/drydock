@@ -134,11 +134,7 @@ function LicenseLine({ className }: { className?: string }) {
 
 // ─── Brand-peer band — Drydock left, CodesWhat right ─────────────────────────
 
-export function FooterVariants({
-  maxWidthClassName = "max-w-6xl",
-}: {
-  maxWidthClassName?: string;
-}) {
+export function Footer({ maxWidthClassName = "max-w-6xl" }: { maxWidthClassName?: string }) {
   return (
     <footer className="border-t border-border/60">
       <div className={`mx-auto px-4 py-12 ${maxWidthClassName}`}>

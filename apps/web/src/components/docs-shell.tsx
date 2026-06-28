@@ -1,12 +1,12 @@
 import { DocsLayout } from "fumadocs-ui/layouts/docs";
 import type { ComponentProps, ReactNode } from "react";
-import { FooterVariants } from "@/components/lab/footer-variants";
+import { Footer } from "@/components/footer";
 import { SiteHeader } from "@/components/site-header";
 
 type PageTree = ComponentProps<typeof DocsLayout>["tree"];
 
 // Shared docs chrome — the docs counterpart to MarketingShell. Wraps the fumadocs
-// docs body in the Drydock SiteHeader + FooterVariants (full-width, SWR-style) and
+// docs body in the Drydock SiteHeader + Footer (full-width, SWR-style) and
 // turns off fumadocs' own navbar/theme toggle so the SiteHeader owns nav + dark mode.
 // Reusable across our docs sites: pass each site's own page tree.
 export function DocsShell({ tree, children }: { tree: PageTree; children: ReactNode }) {
@@ -24,7 +24,7 @@ export function DocsShell({ tree, children }: { tree: PageTree; children: ReactN
       >
         {children}
       </DocsLayout>
-      <FooterVariants maxWidthClassName="max-w-[var(--fd-layout-width)]" />
+      <Footer maxWidthClassName="max-w-[var(--fd-layout-width)]" />
     </div>
   );
 }
