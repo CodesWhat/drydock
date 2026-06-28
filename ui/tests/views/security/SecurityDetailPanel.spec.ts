@@ -90,6 +90,10 @@ function factory(overrides: Partial<InstanceType<typeof SecurityDetailPanel>['$p
           template: '<span class="app-icon-stub" :data-icon="name" />',
         }),
         DetailPanel: detailPanelStub,
+        ProjectLink: defineComponent({
+          props: ['sourceRepo', 'iconOnly', 'iconSize'],
+          template: '<span v-if="sourceRepo" class="project-link-stub" />',
+        }),
         ReleaseNotesLink: defineComponent({ template: '<span data-test="release-notes-stub" />' }),
       },
     },
@@ -137,5 +141,85 @@ describe('SecurityDetailPanel', () => {
 
     expect(wrapper.emitted('downloadVulnReport')).toHaveLength(1);
     expect(wrapper.emitted('downloadDetailSbom')).toHaveLength(1);
+  });
+
+  it('renders update button and containers link when selectedImage has hasUpdate', () => {
+    const wrapper = factory();
+    expect(wrapper.find('[data-test="security-detail-update-btn"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="security-detail-containers-link"]').exists()).toBe(true);
+  });
+
+  it('does not render update button when selectedImage has no hasUpdate', () => {
+    const wrapper = factory({
+      selectedImage: { ...selectedImage, hasUpdate: false },
+    });
+    expect(wrapper.find('[data-test="security-detail-update-btn"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="security-detail-containers-link"]').exists()).toBe(false);
+  });
+
+  it('renders ReleaseNotesLink for a no-update image with currentReleaseNotes', () => {
+    const wrapper = factory({
+      selectedImage: {
+        ...selectedImage,
+        hasUpdate: false,
+        currentReleaseNotes: {
+          title: 'v1.25.0',
+          body: 'Running tag notes',
+          url: 'https://github.com/acme/web/releases/tag/v1.25.0',
+          publishedAt: '2025-12-01T00:00:00Z',
+          provider: 'github',
+        },
+      },
+    });
+    expect(wrapper.find('[data-test="security-detail-release-notes"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="security-detail-update-btn"]').exists()).toBe(false);
+  });
+
+  it('renders ProjectLink stub for a no-update image with sourceRepo', () => {
+    const wrapper = factory({
+      selectedImage: {
+        ...selectedImage,
+        hasUpdate: false,
+        sourceRepo: 'github.com/acme/web',
+      },
+    });
+    expect(wrapper.find('.project-link-stub').exists()).toBe(true);
+    expect(wrapper.find('[data-test="security-detail-update-btn"]').exists()).toBe(false);
+  });
+
+  it('renders both ReleaseNotesLink and ProjectLink alongside update buttons when hasUpdate is true', () => {
+    const wrapper = factory({
+      selectedImage: {
+        ...selectedImage,
+        hasUpdate: true,
+        currentReleaseNotes: {
+          title: 'v1.25.0',
+          body: 'Current notes',
+          url: 'https://github.com/acme/web/releases/tag/v1.25.0',
+          publishedAt: '2025-12-01T00:00:00Z',
+          provider: 'github',
+        },
+        sourceRepo: 'github.com/acme/web',
+      },
+    });
+    expect(wrapper.find('[data-test="security-detail-update-btn"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="security-detail-release-notes"]').exists()).toBe(true);
+    expect(wrapper.find('.project-link-stub').exists()).toBe(true);
+  });
+
+  it('does not render the action row when selectedImage has none of the relevant fields', () => {
+    const wrapper = factory({
+      selectedImage: {
+        ...selectedImage,
+        hasUpdate: false,
+        sourceRepo: undefined,
+        releaseNotes: undefined,
+        currentReleaseNotes: undefined,
+        releaseLink: undefined,
+      },
+    });
+    expect(wrapper.find('[data-test="security-detail-update-btn"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="release-notes-stub"]').exists()).toBe(false);
+    expect(wrapper.find('.project-link-stub').exists()).toBe(false);
   });
 });

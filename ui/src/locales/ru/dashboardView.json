@@ -41,7 +41,6 @@
       "widgetAria": "Виджет «Доступные обновления»",
       "updateAll": "Обновить все",
       "noUpdates": "Обновлений нет",
-      "releaseNotes": "Примечания к выпуску",
       "securityBlocked": "Заблокировано безопасностью",
       "updateContainer": "Обновить контейнер",
       "compactSingle": "Доступно {count} обновление",

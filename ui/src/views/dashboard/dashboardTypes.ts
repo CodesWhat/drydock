@@ -1,5 +1,5 @@
 import type { RouteLocationRaw } from 'vue-router';
-import type { Container, UpdateEligibility } from '../../types/container';
+import type { Container, ContainerReleaseNotes, UpdateEligibility } from '../../types/container';
 
 export const DASHBOARD_WIDGET_IDS = [
   'stat-containers',
@@ -141,6 +141,9 @@ export interface RecentUpdateRow {
   oldVer: string;
   newVer: string;
   releaseLink?: string;
+  sourceRepo?: string;
+  releaseNotes?: ContainerReleaseNotes | null;
+  currentReleaseNotes?: ContainerReleaseNotes | null;
   batchId?: string;
   queuePosition?: number;
   queueTotal?: number;

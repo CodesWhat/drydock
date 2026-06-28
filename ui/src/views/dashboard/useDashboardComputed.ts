@@ -652,6 +652,9 @@ function toPendingRecentUpdateCandidate(
       oldVer: deriveCurrentVersion(container),
       newVer: deriveRecentUpdateVersion(container),
       releaseLink: container.releaseLink,
+      sourceRepo: container.sourceRepo,
+      releaseNotes: container.releaseNotes,
+      currentReleaseNotes: container.currentReleaseNotes,
       status: deriveRecentUpdateStatus(
         container,
         context.containers,

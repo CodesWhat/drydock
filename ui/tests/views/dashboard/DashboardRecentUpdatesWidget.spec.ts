@@ -113,6 +113,14 @@ function mountWidget(
             </div>
           `,
         }),
+        ReleaseNotesLink: defineComponent({
+          props: ['releaseNotes', 'currentReleaseNotes', 'releaseLink', 'iconOnly'],
+          template: '<span data-test="release-notes-link-stub" />',
+        }),
+        ProjectLink: defineComponent({
+          props: ['sourceRepo', 'iconOnly'],
+          template: '<span data-test="project-link-stub" />',
+        }),
       },
     },
   });
@@ -269,6 +277,58 @@ describe('DashboardRecentUpdatesWidget', () => {
     const emitted = wrapper.emitted('openContainer');
     expect(emitted).toHaveLength(1);
     expect(emitted?.[0]?.[0]).toEqual(row);
+  });
+
+  it('renders ReleaseNotesLink when row has a releaseLink and no ReleaseNotesLink when it does not', () => {
+    const withLink = mountWidget({
+      recentUpdates: [makeRecentUpdate({ releaseLink: 'https://example.com/releases' })],
+    });
+    expect(withLink.find('[data-test="release-notes-link-stub"]').exists()).toBe(true);
+
+    const withoutLink = mountWidget({
+      recentUpdates: [makeRecentUpdate()],
+    });
+    expect(withoutLink.find('[data-test="release-notes-link-stub"]').exists()).toBe(false);
+  });
+
+  it('renders ReleaseNotesLink when row has structured releaseNotes', () => {
+    const notes = {
+      title: 'v2.0.0',
+      body: 'changes',
+      url: 'https://example.com/v2',
+      publishedAt: '2026-01-01T00:00:00.000Z',
+      provider: 'github',
+    };
+    const wrapper = mountWidget({
+      recentUpdates: [makeRecentUpdate({ releaseNotes: notes })],
+    });
+    expect(wrapper.find('[data-test="release-notes-link-stub"]').exists()).toBe(true);
+  });
+
+  it('renders ProjectLink when row has a sourceRepo and omits it when sourceRepo is absent', () => {
+    const withRepo = mountWidget({
+      recentUpdates: [makeRecentUpdate({ sourceRepo: 'github.com/example/app' })],
+    });
+    expect(withRepo.find('[data-test="project-link-stub"]').exists()).toBe(true);
+
+    const withoutRepo = mountWidget({
+      recentUpdates: [makeRecentUpdate()],
+    });
+    expect(withoutRepo.find('[data-test="project-link-stub"]').exists()).toBe(false);
+  });
+
+  it('renders ReleaseNotesLink when row has only currentReleaseNotes (no releaseNotes or releaseLink)', () => {
+    const currentNotes = {
+      title: 'v1.0.0',
+      body: 'Current release notes',
+      url: 'https://example.com/v1',
+      publishedAt: '2025-12-01T00:00:00Z',
+      provider: 'github',
+    };
+    const wrapper = mountWidget({
+      recentUpdates: [makeRecentUpdate({ currentReleaseNotes: currentNotes })],
+    });
+    expect(wrapper.find('[data-test="release-notes-link-stub"]').exists()).toBe(true);
   });
 
   it('renders persisted backend queue rows with phase-only labels', () => {
