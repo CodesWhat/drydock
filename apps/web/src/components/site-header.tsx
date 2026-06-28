@@ -3,13 +3,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { GithubIcon } from "@/components/github-icon";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { iconButtonCn, navLinkCn } from "@/lib/class-names";
 import { GITHUB_URL, SITE_CONFIG } from "@/lib/site-config";
-
-const navLink =
-  "text-sm text-neutral-600 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100";
-
-const iconButton =
-  "rounded-full p-2 text-neutral-600 transition-colors hover:bg-neutral-200 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100";
 
 export function SiteHeader({
   maxWidthClassName = "max-w-6xl",
@@ -38,14 +33,14 @@ export function SiteHeader({
             <>
               {/* Compact search lives in the header (sidebar search is disabled in DocsShell).
                   Full bar on desktop, icon-only on mobile — both open the fumadocs search dialog. */}
-              <SearchTrigger className={`sm:hidden ${iconButton}`} />
+              <SearchTrigger className={`sm:hidden ${iconButtonCn}`} />
               <FullSearchTrigger className="me-1 hidden h-9 w-44 sm:inline-flex lg:w-56" />
             </>
           )}
-          <Link href="/docs" className={`hidden px-3 py-2 sm:inline-block ${navLink}`}>
+          <Link href="/docs" className={`hidden px-3 py-2 sm:inline-block ${navLinkCn}`}>
             Docs
           </Link>
-          <Link href="/compare" className={`hidden px-3 py-2 sm:inline-block ${navLink}`}>
+          <Link href="/compare" className={`hidden px-3 py-2 sm:inline-block ${navLinkCn}`}>
             Compare
           </Link>
           <a
@@ -53,7 +48,7 @@ export function SiteHeader({
             target="_blank"
             rel="noopener noreferrer"
             aria-label="GitHub"
-            className={iconButton}
+            className={iconButtonCn}
           >
             <GithubIcon className="h-5 w-5" />
           </a>

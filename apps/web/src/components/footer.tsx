@@ -2,6 +2,7 @@ import { ArrowUpRight, BookOpen } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { GithubIcon } from "@/components/github-icon";
+import { iconButtonCn, navLinkCn } from "@/lib/class-names";
 import { DEMO_URL, GITHUB_RELEASES_URL, GITHUB_URL, SITE_CONFIG } from "@/lib/site-config";
 
 // Locked: Footer = brand-peer band — Drydock left, CodesWhat pill right.
@@ -10,12 +11,6 @@ const CODESWHAT = "https://github.com/CodesWhat";
 const YEAR = new Date().getFullYear();
 const BLURB =
   "Open-source Docker container update monitor. Know when your stack needs attention — before it bites you.";
-
-const iconLink =
-  "rounded-full p-2 text-neutral-600 transition-colors hover:bg-neutral-200 hover:text-neutral-900 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-100";
-
-const navLink =
-  "text-sm text-neutral-600 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100";
 
 type FooterLink = { label: string; href: string; external?: boolean };
 
@@ -40,14 +35,14 @@ function FooterLinkEl({ link, className }: { link: FooterLink; className?: strin
         href={link.href}
         target="_blank"
         rel="noopener noreferrer"
-        className={className ?? navLink}
+        className={className ?? navLinkCn}
       >
         {link.label}
       </a>
     );
   }
   return (
-    <Link href={link.href} className={className ?? navLink}>
+    <Link href={link.href} className={className ?? navLinkCn}>
       {link.label}
     </Link>
   );
@@ -73,12 +68,12 @@ function SocialIcons() {
         href={GITHUB_URL}
         target="_blank"
         rel="noopener noreferrer"
-        className={iconLink}
+        className={iconButtonCn}
         aria-label="GitHub"
       >
         <GithubIcon className="h-5 w-5" />
       </a>
-      <Link href="/docs" className={iconLink} aria-label="Documentation">
+      <Link href="/docs" className={iconButtonCn} aria-label="Documentation">
         <BookOpen className="h-5 w-5" />
       </Link>
     </div>

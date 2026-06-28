@@ -15,15 +15,23 @@ export function DocsShell({ tree, children }: { tree: PageTree; children: ReactN
   // Search moves into the SiteHeader (showSearch); the sidebar's own search is disabled.
   return (
     <div className="flex min-h-screen flex-col">
-      <SiteHeader maxWidthClassName="max-w-[var(--fd-layout-width)]" showSearch />
-      <DocsLayout
-        tree={tree}
-        nav={{ enabled: false }}
-        themeSwitch={{ enabled: false }}
-        searchToggle={{ enabled: false }}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:text-neutral-900 focus:shadow-lg dark:focus:bg-neutral-900 dark:focus:text-neutral-100"
       >
-        {children}
-      </DocsLayout>
+        Skip to content
+      </a>
+      <SiteHeader maxWidthClassName="max-w-[var(--fd-layout-width)]" showSearch />
+      <main id="main-content">
+        <DocsLayout
+          tree={tree}
+          nav={{ enabled: false }}
+          themeSwitch={{ enabled: false }}
+          searchToggle={{ enabled: false }}
+        >
+          {children}
+        </DocsLayout>
+      </main>
       <Footer maxWidthClassName="max-w-[var(--fd-layout-width)]" />
     </div>
   );
