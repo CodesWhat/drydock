@@ -141,7 +141,13 @@ describe('createGetContainerIntermediateReleaseNotesHandler', () => {
   test('uses query to param when provided', async () => {
     const container = { id: 'test-id', name: 'test', result: { tag: '3.0.0' } };
     const releaseNotes = [
-      { title: 'v2.0.0', body: 'Major release', url: 'https://example.com', publishedAt: '2024-01-01', provider: 'github' },
+      {
+        title: 'v2.0.0',
+        body: 'Major release',
+        url: 'https://example.com',
+        publishedAt: '2024-01-01',
+        provider: 'github',
+      },
     ];
     mockGetContainerOrNotFound.mockReturnValue(container as never);
     mockGetIntermediateReleaseNotes.mockResolvedValue({ releaseNotes, hiddenCount: 0 });
@@ -176,8 +182,20 @@ describe('createGetContainerIntermediateReleaseNotesHandler', () => {
     const container = { id: 'test-id', name: 'test', result: { tag: '2.0.0' } };
     const resultWithNotes = {
       releaseNotes: [
-        { title: 'v1.5.0', body: 'Patch', url: 'https://example.com/v1.5.0', publishedAt: '2024-03-01', provider: 'github' as const },
-        { title: 'v2.0.0', body: 'Major', url: 'https://example.com/v2.0.0', publishedAt: '2024-06-01', provider: 'github' as const },
+        {
+          title: 'v1.5.0',
+          body: 'Patch',
+          url: 'https://example.com/v1.5.0',
+          publishedAt: '2024-03-01',
+          provider: 'github' as const,
+        },
+        {
+          title: 'v2.0.0',
+          body: 'Major',
+          url: 'https://example.com/v2.0.0',
+          publishedAt: '2024-06-01',
+          provider: 'github' as const,
+        },
       ],
       hiddenCount: 3,
     };

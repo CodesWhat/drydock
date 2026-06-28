@@ -1133,9 +1133,7 @@ describe('Container Service', () => {
         statusText: 'Internal Server Error',
       } as any);
 
-      await expect(
-        getContainerIntermediateReleaseNotes('c1', 'v1.0', 'v2.0'),
-      ).rejects.toThrow(
+      await expect(getContainerIntermediateReleaseNotes('c1', 'v1.0', 'v2.0')).rejects.toThrow(
         'Failed to get intermediate release notes for container c1: Internal Server Error',
       );
     });
