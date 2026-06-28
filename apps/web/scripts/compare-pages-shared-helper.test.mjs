@@ -14,7 +14,7 @@ const compareSlugs = [
   "dockge",
 ];
 
-const comparisonRouteData = new URL("../lib/comparison-route-data.tsx", import.meta.url);
+const comparisonRouteData = new URL("../src/lib/comparison-route-data.tsx", import.meta.url);
 
 function readPage(url) {
   return readFileSync(url, "utf8");
@@ -22,7 +22,7 @@ function readPage(url) {
 
 test("All comparison pages delegate page data to shared comparison-route-data", () => {
   for (const slug of compareSlugs) {
-    const source = readPage(new URL(`../app/compare/${slug}/page.tsx`, import.meta.url));
+    const source = readPage(new URL(`../src/app/compare/${slug}/page.tsx`, import.meta.url));
 
     assert.match(source, /from "@\/lib\/comparison-route-data"/);
     assert.match(source, /from "@\/lib\/comparison-route"/);
