@@ -905,7 +905,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <div class="min-w-0">
                     <div class="font-semibold dd-text truncate">{{ trigger.type }}.{{ trigger.name }}</div>
-                    <div v-if="trigger.agent" class="text-2xs dd-text-muted">agent: {{ trigger.agent }}</div>
+                    <div v-if="trigger.agent" class="text-2xs dd-text-muted">{{ t('containerComponents.triggers.agentLabel') }} {{ trigger.agent }}</div>
                   </div>
                   <AppButton size="xs"
                           :disabled="triggerRunInProgress !== null"

@@ -868,7 +868,7 @@ onUnmounted(() => {
               {{ summary.high }}H
             </AppBadge>
             <AppBadge v-if="summary.fixable > 0" tone="success" size="xs" class="px-1.5 py-0">
-              {{ summary.fixable }} fix
+              {{ t('securityView.fixableBadge', { count: summary.fixable }) }}
             </AppBadge>
             <AppBadge v-if="summary.delta && summary.delta.fixed > 0 && summary.delta.new === 0"
                   tone="success" size="xs" class="px-1.5 py-0">

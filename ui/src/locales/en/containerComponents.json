@@ -465,6 +465,7 @@
       }
     },
     "triggers": {
+      "agentLabel": "agent:",
       "toasts": {
         "ran": "Trigger ran: {key}",
         "ranSuccessfully": "Trigger {key} ran successfully",
