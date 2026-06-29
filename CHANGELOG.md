@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Optional mount-prefix fallback for Docker Compose path matching.** When a watched container's resolved compose file path differs from the trigger's configured compose file only by a mount prefix (common with Portainer and bind-mounted compose files), drydock can now match on the trailing `<project-dir>/<file>` tail instead of skipping the container. Off by default — enable it per trigger with `DD_ACTION_DOCKERCOMPOSE_<name>_MOUNT_PREFIX_FALLBACK=true`. It stays opt-in because tail matching cannot distinguish two stacks that share a project-directory name across environments (e.g. `/prod/myapp` vs `/staging/myapp`). (#365)
 
+- **`$currentReleaseNotes` trigger template variable.** Trigger templates (notification bodies, command arguments, and the like) can now reference `$currentReleaseNotes` to include the release notes for the container's currently running version, alongside the existing variable for the update target's notes. (#295)
+
 ## [1.5.1-rc.3] — 2026-06-28
 
 ### Added

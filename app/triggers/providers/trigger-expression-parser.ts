@@ -373,6 +373,7 @@ export function renderSimple(template: string, container: Container): string {
     container,
     event: event && typeof event === 'object' ? event : {},
     releaseNotes: container.result?.releaseNotes,
+    currentReleaseNotes: container.currentReleaseNotes,
     suggestedTag: container.result?.suggestedTag ?? container.result?.tag ?? '',
     currentTag: container.image?.tag?.value ?? '',
     isDigestUpdate: isDigest,

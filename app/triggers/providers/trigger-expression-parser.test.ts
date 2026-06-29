@@ -113,6 +113,25 @@ describe('trigger-expression-parser', () => {
     expect(output).toBe('Release title');
   });
 
+  test('renderSimple should expose currentReleaseNotes template variable', () => {
+    const output = renderSimple('${currentReleaseNotes.title}', {
+      ...baseContainer,
+      currentReleaseNotes: {
+        title: 'Current title',
+        body: '',
+        url: '',
+        publishedAt: '',
+        provider: 'github',
+      },
+    } as any);
+    expect(output).toBe('Current title');
+  });
+
+  test('renderSimple should return empty string for currentReleaseNotes when not set', () => {
+    const output = renderSimple('${currentReleaseNotes}', baseContainer as any);
+    expect(output).toBe('');
+  });
+
   test('renderSimple should expose currentTag variable from container image tag', () => {
     const output = renderSimple('Tag is ${currentTag}', {
       ...baseContainer,
