@@ -100,6 +100,7 @@
       "volumes": "Volumes",
       "composeFiles": "Compose Files",
       "version": "Version",
+      "softwareVersion": "Software Version",
       "currentLabel": "Current:",
       "latestLabel": "Latest:",
       "digestLabel": "Digest:",
@@ -142,7 +143,9 @@
       "sbomNotAvailable": "SBOM document is not available yet.",
       "noPortsExposed": "No ports exposed",
       "notConfigured": "Not configured",
-      "noVolumesMounted": "No volumes mounted"
+      "noVolumesMounted": "No volumes mounted",
+      "uptime": "Uptime",
+      "uptimeAriaLabel": "Container uptime"
     },
     "containerLogs": {
       "title": "Container Logs",

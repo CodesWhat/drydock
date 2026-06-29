@@ -1017,6 +1017,53 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.text()).toContain('No labels assigned');
   });
 
+  it('shows softwareVersion row in overview when softwareVersion is set', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer({ softwareVersion: '1.25.5' });
+
+    const wrapper = mountComponent();
+
+    const row = wrapper.find('[data-test="container-software-version-detail"]');
+    expect(row.exists()).toBe(true);
+    expect(row.text()).toContain('1.25.5');
+  });
+
+  it('hides softwareVersion row in overview when softwareVersion is absent', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer();
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.find('[data-test="container-software-version-detail"]').exists()).toBe(false);
+  });
+
+  it('shows uptime row in overview when details.startedAt is set', () => {
+    activeDetailTab.value = 'overview';
+    const startedAt = new Date(Date.now() - 30_000).toISOString();
+    selectedContainer.value = makeContainer({
+      details: { ports: [], volumes: [], env: [], labels: [], startedAt },
+    });
+
+    const wrapper = mountComponent();
+
+    const uptimeRow = wrapper
+      .findAll('[data-test="container-full-page-tab-content"] div')
+      .find((el) => el.text().includes('Uptime'));
+    expect(uptimeRow).toBeDefined();
+    expect(wrapper.text()).toContain('Up ');
+  });
+
+  it('hides uptime row in overview when details.startedAt is absent', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer({
+      details: { ports: [], volumes: [], env: [], labels: [] },
+    });
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.text()).not.toContain('Uptime');
+  });
+
   it('renders overview single-compose and empty security/sbom fallback branches', () => {
     activeDetailTab.value = 'overview';
     selectedContainer.value = makeContainer({

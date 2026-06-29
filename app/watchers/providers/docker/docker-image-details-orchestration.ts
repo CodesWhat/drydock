@@ -18,6 +18,7 @@ import {
   canonicalizeContainerName,
   getContainerDisplayName,
   getContainerName,
+  getInspectValueByPath,
   getRepoDigest,
   isDigestToWatch,
   type ResolvedImgset,
@@ -583,6 +584,29 @@ function warnWhenUntrackableImage(
   }
 }
 
+const OCI_VERSION_LABEL = 'org.opencontainers.image.version';
+const OCI_VERSION_INSPECT_PATH = `Config/Labels/${OCI_VERSION_LABEL}`;
+
+/**
+ * Extract the OCI software version label from image inspect labels, with
+ * container inspect as a fallback. Empty strings normalize to undefined.
+ */
+function resolveSoftwareVersion(
+  image: DockerImageInspectPayload,
+  containerInspect: DockerContainerInspectPayload | undefined,
+): string | undefined {
+  const imageVersion = image.Config?.Labels?.[OCI_VERSION_LABEL];
+  const rawVersion =
+    imageVersion !== undefined
+      ? imageVersion
+      : (getInspectValueByPath(containerInspect, OCI_VERSION_INSPECT_PATH) as string | undefined);
+  if (typeof rawVersion !== 'string') {
+    return undefined;
+  }
+  const trimmed = rawVersion.trim();
+  return trimmed !== '' ? trimmed : undefined;
+}
+
 function removeStaleContainerEntriesWithSameName(
   watcher: DockerImageDetailsWatcher,
   containerToReturn: Container,
@@ -735,6 +759,7 @@ export async function addImageDetailsToContainerOrchestration(
       os: image.Os,
       variant: image.Variant,
       created: image.Created,
+      softwareVersion: resolveSoftwareVersion(image, containerInspect),
     },
     labels: containerLabels,
     sourceRepo: detectSourceRepoFromImageMetadata({

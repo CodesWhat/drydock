@@ -35,7 +35,8 @@
       "update": "Update",
       "status": "Status",
       "host": "Host",
-      "registry": "Registry"
+      "registry": "Registry",
+      "uptime": "Uptime"
     },
     "status": {
       "running": "running",

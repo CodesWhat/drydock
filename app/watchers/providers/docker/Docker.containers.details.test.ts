@@ -1373,5 +1373,92 @@ describe('Docker Watcher', () => {
       // Should have fallen through to use RepoTags
       expect(result.image.tag.value).toBe('stable');
     });
+
+    describe('softwareVersion from OCI label', () => {
+      test('should populate softwareVersion from org.opencontainers.image.version label on image inspect', async () => {
+        const container = await setupContainerDetailTest(docker, {
+          container: { Image: 'nginx:latest', Names: ['/nginx'] },
+          imageDetails: {
+            Config: {
+              Labels: { 'org.opencontainers.image.version': '1.25.5' },
+            },
+          },
+        });
+
+        const result = await docker.addImageDetailsToContainer(container);
+
+        expect(result.image.softwareVersion).toBe('1.25.5');
+      });
+
+      test('should leave softwareVersion undefined when OCI label is absent', async () => {
+        const container = await setupContainerDetailTest(docker, {
+          container: { Image: 'nginx:latest', Names: ['/nginx'] },
+          imageDetails: {
+            Config: { Labels: {} },
+          },
+        });
+
+        const result = await docker.addImageDetailsToContainer(container);
+
+        expect(result.image.softwareVersion).toBeUndefined();
+      });
+
+      test('should normalize empty OCI label string to undefined softwareVersion', async () => {
+        const container = await setupContainerDetailTest(docker, {
+          container: { Image: 'nginx:latest', Names: ['/nginx'] },
+          imageDetails: {
+            Config: {
+              Labels: { 'org.opencontainers.image.version': '' },
+            },
+          },
+        });
+
+        const result = await docker.addImageDetailsToContainer(container);
+
+        expect(result.image.softwareVersion).toBeUndefined();
+      });
+
+      test('should fall back to container inspect when image inspect has no OCI version label', async () => {
+        const container = await setupContainerDetailTest(docker, {
+          container: { Image: 'nginx:latest', Names: ['/nginx'] },
+          imageDetails: {
+            Config: { Labels: {} },
+          },
+        });
+        mockContainer.inspect.mockResolvedValue({
+          Config: {
+            Labels: { 'org.opencontainers.image.version': '1.25.5-from-container' },
+          },
+        });
+
+        const result = await docker.addImageDetailsToContainer(container);
+
+        expect(result.image.softwareVersion).toBe('1.25.5-from-container');
+      });
+
+      test('should set softwareVersion and still override tag when dd.inspect.tag.path is configured', async () => {
+        const container = await setupContainerDetailTest(docker, {
+          container: {
+            Image: 'nginx:stable',
+            Names: ['/nginx'],
+            Labels: { 'dd.inspect.tag.path': 'Config/Labels/org.opencontainers.image.version' },
+          },
+          imageDetails: {
+            Config: {
+              Labels: { 'org.opencontainers.image.version': '1.25.5' },
+            },
+          },
+          semverValue: { major: 1, minor: 25, patch: 5, version: '1.25.5' },
+        });
+        hMockTag.transform.mockImplementation((_transform, value) => value);
+
+        const result = await docker.addImageDetailsToContainer(container);
+
+        // tag override from dd.inspect.tag.path is preserved (dual-write, not removed)
+        expect(result.image.tag.value).toBe('1.25.5');
+        // softwareVersion populated from same image label
+        expect(result.image.softwareVersion).toBe('1.25.5');
+      });
+    });
   });
 });

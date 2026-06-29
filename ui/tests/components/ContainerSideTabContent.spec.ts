@@ -716,6 +716,28 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.text()).toContain('{{ .Container.Name }}');
   });
 
+  it('shows softwareVersion row in overview when softwareVersion is set', () => {
+    activeDetailTab.value = 'overview';
+    const withVersion = createSelectedContainer();
+    withVersion.softwareVersion = '1.25.5';
+    selectedContainer.value = withVersion;
+
+    const wrapper = mountComponent();
+
+    const row = wrapper.find('[data-test="container-software-version-side"]');
+    expect(row.exists()).toBe(true);
+    expect(row.text()).toContain('1.25.5');
+  });
+
+  it('hides softwareVersion row in overview when softwareVersion is absent', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = createSelectedContainer();
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.find('[data-test="container-software-version-side"]').exists()).toBe(false);
+  });
+
   it('refreshes security data and SBOM from overview controls', async () => {
     activeDetailTab.value = 'overview';
     vulnerabilityPreview.value = [{ id: 'CVE-2026-0001', severity: 'high' }];

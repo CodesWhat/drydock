@@ -1,6 +1,7 @@
 import { deepMerge } from './deepMerge';
 import {
   CONTAINER_TABLE_COLUMN_KEYS,
+  CONTAINER_TABLE_OPT_IN_COLUMN_KEYS,
   CONTAINER_TABLE_REQUIRED_COLUMN_KEYS,
   CURRENT_SCHEMA_VERSION,
   DASHBOARD_LAYOUT_BREAKPOINTS,
@@ -198,7 +199,11 @@ function sanitizeContainers(data: Record<string, unknown>): void {
         delete c.columns;
       } else {
         const visible = new Set(c.columns);
-        c.columns = CONTAINER_TABLE_COLUMN_KEYS.filter(
+        const allKnownKeys = [
+          ...CONTAINER_TABLE_COLUMN_KEYS,
+          ...CONTAINER_TABLE_OPT_IN_COLUMN_KEYS,
+        ] as readonly string[];
+        c.columns = allKnownKeys.filter(
           (key) =>
             visible.has(key) ||
             (CONTAINER_TABLE_REQUIRED_COLUMN_KEYS as readonly string[]).includes(key),

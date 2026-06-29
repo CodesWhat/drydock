@@ -82,6 +82,7 @@ const DataTableStub = defineComponent({
             <slot name="cell-bouncer" :row="row" />
             <slot name="cell-server" :row="row" />
             <slot name="cell-registry" :row="row" />
+            <slot name="cell-uptime" :row="row" />
             <slot name="actions" :row="row" />
           </div>
         </template>
@@ -2724,5 +2725,79 @@ describe('ContainersGroupedViews', () => {
       const text = rowByName(wrapper, 'alpha').text();
       expect(text).toContain('sha256:');
     });
+  });
+
+  describe('softwareVersion secondary line in version cell', () => {
+    function mountWithSoftwareVersion(softwareVersion?: string) {
+      const container = makeContainer({
+        id: 'c-sv',
+        name: 'alpha',
+        currentTag: 'latest',
+        newTag: null,
+        updateKind: null,
+        status: 'running',
+        bouncer: 'safe',
+        softwareVersion,
+      });
+      const { context } = makeContext();
+      context.containerViewMode.value = 'table';
+      context.filteredContainers.value = [container];
+      context.displayContainers.value = [container];
+      context.renderGroups.value = [
+        {
+          key: 'g',
+          name: 'g',
+          containers: [container],
+          containerCount: 1,
+          updatesAvailable: 0,
+          updatableCount: 0,
+        },
+      ];
+      mocked.context = context;
+      return { wrapper: mountSubject(), container };
+    }
+
+    it('renders softwareVersion secondary line when softwareVersion is set', async () => {
+      const { wrapper } = mountWithSoftwareVersion('1.25.5');
+      const row = rowByName(wrapper, 'alpha');
+      const svLine = row.find('[data-test="container-software-version"]');
+      expect(svLine.exists()).toBe(true);
+      expect(svLine.text()).toBe('1.25.5');
+    });
+
+    it('does not render softwareVersion secondary line when softwareVersion is absent', async () => {
+      const { wrapper } = mountWithSoftwareVersion(undefined);
+      const row = rowByName(wrapper, 'alpha');
+      expect(row.find('[data-test="container-software-version"]').exists()).toBe(false);
+    });
+  });
+
+  it('renders uptime cell using the shared nowMs timer value', async () => {
+    const startedAt = new Date(Date.now() - 30_000).toISOString();
+    const container = makeContainer({
+      id: 'c-uptime',
+      name: 'alpha',
+      status: 'running',
+      details: { ports: [], volumes: [], env: [], labels: [], startedAt },
+    });
+    const { context } = makeContext();
+    context.containerViewMode.value = 'table';
+    context.filteredContainers.value = [container];
+    context.displayContainers.value = [container];
+    context.renderGroups.value = [
+      {
+        key: 'g',
+        name: 'g',
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const row = rowByName(wrapper, 'alpha');
+    expect(row.text()).toContain('Up ');
   });
 });

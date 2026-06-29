@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`$currentReleaseNotes` trigger template variable.** Trigger templates (notification bodies, command arguments, and the like) can now reference `$currentReleaseNotes` to include the release notes for the container's currently running version, alongside the existing variable for the update target's notes. (#295)
 
+- **Container software version in the detail panels.** Drydock now surfaces the application version baked into an image — read from the `org.opencontainers.image.version` OCI label, falling back to the running container's inspect metadata — as `image.softwareVersion`. It appears in the container side panel and the full-page detail view. (#209)
+
+- **Container uptime.** The side panel and full-page detail view now show how long a container has been running (from the Docker `State.StartedAt` timestamp), and a new opt-in **Uptime** column can be enabled in the containers table via the column picker. The value updates live and falls back to an em-dash when the start time is unknown.
+
+### Changed
+
+- **Container validation now tolerates fields written by newer drydock versions.** The store validator no longer rejects unknown keys, so a `dd.json` written by a newer release stays readable after a downgrade. Note: this protects downgrades from v1.5.1 onward — rolling back from v1.5.1 to v1.5.0 (which predates this change) still requires removing the new `details.startedAt` and `image.softwareVersion` fields from `dd.json`, since v1.5.0 rejects them.
+
 ## [1.5.1-rc.3] — 2026-06-28
 
 ### Added

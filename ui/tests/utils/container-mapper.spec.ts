@@ -1186,6 +1186,57 @@ describe('container-mapper', () => {
         { key: 'EMPTY', value: '' },
       ]);
     });
+
+    it('maps startedAt when a valid ISO date string is present', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          details: {
+            ports: [],
+            volumes: [],
+            env: [],
+            startedAt: '2024-06-15T10:00:00.000Z',
+          },
+        }),
+      );
+      expect(c.details.startedAt).toBe('2024-06-15T10:00:00.000Z');
+    });
+
+    it('leaves startedAt undefined when missing from payload', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          details: { ports: [], volumes: [], env: [] },
+        }),
+      );
+      expect(c.details.startedAt).toBeUndefined();
+    });
+
+    it('leaves startedAt undefined when value is not a valid date string', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          details: {
+            ports: [],
+            volumes: [],
+            env: [],
+            startedAt: 'not-a-date',
+          },
+        }),
+      );
+      expect(c.details.startedAt).toBeUndefined();
+    });
+
+    it('leaves startedAt undefined when value is not a string', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          details: {
+            ports: [],
+            volumes: [],
+            env: [],
+            startedAt: 12345,
+          },
+        }),
+      );
+      expect(c.details.startedAt).toBeUndefined();
+    });
   });
 
   describe('mapApiContainers', () => {
@@ -1933,6 +1984,69 @@ describe('container-mapper', () => {
     it('returns unknown for unclassified error messages', () => {
       const c = mapApiContainer(makeApiContainer({ error: { message: 'Something went wrong' } }));
       expect(c.registryErrorKind).toBe('unknown');
+    });
+  });
+
+  describe('softwareVersion', () => {
+    it('maps softwareVersion from image when present', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          image: {
+            registry: { name: 'hub', url: 'https://registry-1.docker.io' },
+            name: 'nginx',
+            tag: { value: '1.25' },
+            softwareVersion: '1.25.5',
+          },
+        }),
+      );
+      expect(c.softwareVersion).toBe('1.25.5');
+    });
+
+    it('returns undefined when softwareVersion is absent', () => {
+      const c = mapApiContainer(makeApiContainer());
+      expect(c.softwareVersion).toBeUndefined();
+    });
+
+    it('returns undefined when softwareVersion is empty string', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          image: {
+            registry: { name: 'hub', url: 'https://registry-1.docker.io' },
+            name: 'nginx',
+            tag: { value: '1.25' },
+            softwareVersion: '',
+          },
+        }),
+      );
+      expect(c.softwareVersion).toBeUndefined();
+    });
+
+    it('returns undefined when softwareVersion is a non-string value', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          image: {
+            registry: { name: 'hub', url: 'https://registry-1.docker.io' },
+            name: 'nginx',
+            tag: { value: '1.25' },
+            softwareVersion: 42,
+          },
+        }),
+      );
+      expect(c.softwareVersion).toBeUndefined();
+    });
+
+    it('trims whitespace-only softwareVersion to undefined', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          image: {
+            registry: { name: 'hub', url: 'https://registry-1.docker.io' },
+            name: 'nginx',
+            tag: { value: '1.25' },
+            softwareVersion: '   ',
+          },
+        }),
+      );
+      expect(c.softwareVersion).toBeUndefined();
     });
   });
 });

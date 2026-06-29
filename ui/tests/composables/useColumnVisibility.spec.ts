@@ -12,18 +12,28 @@ describe('useColumnVisibility', () => {
     return mod;
   }
 
-  it('should include all columns by default', async () => {
+  it('should include all default columns by default (uptime is opt-in and hidden)', async () => {
     const { useColumnVisibility } = await loadColumnVisibility();
     const { allColumns, visibleColumns, activeColumns } = useColumnVisibility();
-    expect(visibleColumns.value.size).toBe(allColumns.length);
-    expect(activeColumns.value).toHaveLength(allColumns.length);
+    // allColumns includes the opt-in uptime column; visible/active only include default columns
+    expect(visibleColumns.value.size).toBe(allColumns.length - 1);
+    expect(activeColumns.value).toHaveLength(allColumns.length - 1);
   });
 
   it('should expose correct column keys', async () => {
     const { useColumnVisibility } = await loadColumnVisibility();
     const { allColumns } = useColumnVisibility();
     const keys = allColumns.map((c) => c.key);
-    expect(keys).toEqual(['icon', 'name', 'version', 'kind', 'status', 'server', 'registry']);
+    expect(keys).toEqual([
+      'icon',
+      'name',
+      'version',
+      'kind',
+      'status',
+      'server',
+      'registry',
+      'uptime',
+    ]);
   });
 
   it('should mark icon and name as required', async () => {
@@ -63,21 +73,24 @@ describe('useColumnVisibility', () => {
 
   it('should ignore unknown column keys', async () => {
     const { useColumnVisibility } = await loadColumnVisibility();
-    const { allColumns, visibleColumns, toggleColumn } = useColumnVisibility();
+    const { visibleColumns, toggleColumn } = useColumnVisibility();
+    const sizeBefore = visibleColumns.value.size;
     toggleColumn('missing-column');
-    expect(visibleColumns.value.size).toBe(allColumns.length);
+    expect(visibleColumns.value.size).toBe(sizeBefore);
   });
 
-  it('should include all columns in activeColumns regardless of external compact state', async () => {
+  it('should include all default columns in activeColumns (uptime is opt-in, not active by default)', async () => {
     const { useColumnVisibility } = await loadColumnVisibility();
     const { allColumns, activeColumns } = useColumnVisibility();
-    expect(activeColumns.value).toHaveLength(allColumns.length);
+    // uptime is opt-in / hidden by default; active = allColumns minus uptime
+    expect(activeColumns.value).toHaveLength(allColumns.length - 1);
     const keys = activeColumns.value.map((c) => c.key);
     expect(keys).toContain('kind');
     expect(keys).toContain('status');
     expect(keys).toContain('server');
     expect(keys).toContain('registry');
     expect(keys).not.toContain('imageAge');
+    expect(keys).not.toContain('uptime');
   });
 
   it('should keep kind and status in activeColumns and allow toggling them off', async () => {
@@ -119,7 +132,8 @@ describe('useColumnVisibility', () => {
     localStorage.setItem('dd-preferences', '{invalid json');
     const { useColumnVisibility } = await loadColumnVisibility();
     const { allColumns, visibleColumns } = useColumnVisibility();
-    expect(visibleColumns.value.size).toBe(allColumns.length);
+    // Default columns exclude the opt-in uptime column (allColumns.length - 1)
+    expect(visibleColumns.value.size).toBe(allColumns.length - 1);
     expect(visibleColumns.value.has('icon')).toBe(true);
     expect(visibleColumns.value.has('name')).toBe(true);
   });
@@ -158,7 +172,8 @@ describe('useColumnVisibility', () => {
     it('returns all preference-visible columns when availableWidth is undefined', async () => {
       const { useColumnVisibility } = await loadColumnVisibility();
       const { allColumns, activeColumns, autoHiddenColumns } = useColumnVisibility(undefined);
-      expect(activeColumns.value).toHaveLength(allColumns.length);
+      // uptime is opt-in / hidden by default, so visible = allColumns - 1
+      expect(activeColumns.value).toHaveLength(allColumns.length - 1);
       expect(autoHiddenColumns.value).toHaveLength(0);
     });
 
@@ -166,7 +181,8 @@ describe('useColumnVisibility', () => {
       const { useColumnVisibility } = await loadColumnVisibility();
       const width = ref(5000);
       const { allColumns, activeColumns, autoHiddenColumns } = useColumnVisibility(width);
-      expect(activeColumns.value).toHaveLength(allColumns.length);
+      // uptime is opt-in / hidden by default, so visible = allColumns - 1
+      expect(activeColumns.value).toHaveLength(allColumns.length - 1);
       expect(autoHiddenColumns.value).toHaveLength(0);
     });
 
@@ -267,7 +283,8 @@ describe('useColumnVisibility', () => {
       const width = ref(5000);
       const { activeColumns, autoHiddenColumns, allColumns } = useColumnVisibility(width);
 
-      expect(activeColumns.value).toHaveLength(allColumns.length);
+      // uptime is opt-in / hidden by default
+      expect(activeColumns.value).toHaveLength(allColumns.length - 1);
       expect(autoHiddenColumns.value).toHaveLength(0);
 
       width.value = 1029;
@@ -277,7 +294,7 @@ describe('useColumnVisibility', () => {
 
       width.value = 5000;
       await nextTick();
-      expect(activeColumns.value).toHaveLength(allColumns.length);
+      expect(activeColumns.value).toHaveLength(allColumns.length - 1);
       expect(autoHiddenColumns.value).toHaveLength(0);
     });
 
@@ -287,7 +304,8 @@ describe('useColumnVisibility', () => {
       const width = computed(() => base.value);
       const { activeColumns, autoHiddenColumns, allColumns } = useColumnVisibility(width);
 
-      expect(activeColumns.value).toHaveLength(allColumns.length);
+      // uptime is opt-in / hidden by default
+      expect(activeColumns.value).toHaveLength(allColumns.length - 1);
       base.value = 1029;
       await nextTick();
       expect(activeColumns.value.map((c) => c.key)).not.toContain('registry');
@@ -308,6 +326,49 @@ describe('useColumnVisibility', () => {
       expect(activeKeys).not.toContain('kind');
       expect(activeKeys).toContain('status');
       expect(autoHiddenColumns.value.map((c) => c.key)).toEqual(['kind']);
+    });
+  });
+
+  describe('uptime column (opt-in)', () => {
+    it('uptime is in allColumns but not in default visible columns', async () => {
+      const { useColumnVisibility } = await loadColumnVisibility();
+      const { allColumns, visibleColumns } = useColumnVisibility();
+      const uptimeInAll = allColumns.some((c) => c.key === 'uptime');
+      expect(uptimeInAll).toBe(true);
+      expect(visibleColumns.value.has('uptime')).toBe(false);
+    });
+
+    it('user can opt in to uptime via toggleColumn', async () => {
+      const { useColumnVisibility } = await loadColumnVisibility();
+      const { visibleColumns, activeColumns, toggleColumn } = useColumnVisibility();
+      expect(visibleColumns.value.has('uptime')).toBe(false);
+
+      toggleColumn('uptime');
+      expect(visibleColumns.value.has('uptime')).toBe(true);
+      expect(activeColumns.value.find((c) => c.key === 'uptime')).toBeDefined();
+    });
+
+    it('uptime column has correct sizing metadata', async () => {
+      const { useColumnVisibility } = await loadColumnVisibility();
+      const { allColumns } = useColumnVisibility();
+      const uptimeCol = allColumns.find((c) => c.key === 'uptime');
+      expect(uptimeCol).toBeDefined();
+      expect(typeof uptimeCol!.size).toBe('number');
+      expect(typeof uptimeCol!.minSize).toBe('number');
+      expect(uptimeCol!.required).toBe(false);
+    });
+
+    it('uptime column is auto-hidden at narrow widths when opted in', async () => {
+      setTestPreferences({
+        containers: {
+          columns: ['icon', 'name', 'version', 'kind', 'status', 'server', 'registry', 'uptime'],
+        },
+      });
+      const { useColumnVisibility } = await loadColumnVisibility();
+      // At a very narrow width uptime should be among the first to be auto-hidden (priority 90)
+      const width = ref(1);
+      const { autoHiddenColumns } = useColumnVisibility(width);
+      expect(autoHiddenColumns.value.map((c) => c.key)).toContain('uptime');
     });
   });
 });

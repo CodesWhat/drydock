@@ -257,6 +257,13 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 <AppIcon name="arrow-right" :size="7" class="dd-text-muted" />
                 <CopyableTag :tag="selectedContainer.newDigest" class="font-semibold" style="color: var(--dd-success);">{{ formatShortDigest(selectedContainer.newDigest) }}</CopyableTag>
               </div>
+              <div v-if="selectedContainer.softwareVersion"
+                   class="mt-1.5 flex items-center gap-2 px-2.5 py-1 dd-rounded text-2xs-plus font-mono"
+                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
+                   data-test="container-software-version-side">
+                <span class="dd-text-secondary shrink-0">{{ t('containerComponents.fullPageOverview.softwareVersion') }}</span>
+                <span class="dd-text-muted truncate" v-tooltip.top="selectedContainer.softwareVersion">{{ selectedContainer.softwareVersion }}</span>
+              </div>
               <NoUpdateReasonBadge
                 v-if="!selectedContainer.newTag && !selectedContainer.newDigest && selectedContainer.noUpdateReason"
                 :reason="selectedContainer.noUpdateReason"

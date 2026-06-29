@@ -96,6 +96,17 @@ const allColumns: ColumnDef[] = [
     priority: 80,
     required: false,
   },
+  {
+    key: 'uptime',
+    label: 'Uptime',
+    labelKey: 'containersView.columns.uptime',
+    px: 'px-3',
+    size: 120,
+    minSize: 100,
+    maxSize: 180,
+    priority: 90,
+    required: false,
+  },
 ];
 
 const visibleColumns = ref<Set<string>>(new Set(preferences.containers.columns));
