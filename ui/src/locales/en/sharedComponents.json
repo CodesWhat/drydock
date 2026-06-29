@@ -65,7 +65,8 @@
       "loadFailed": "Failed to load notifications"
     },
     "serverFeatures": {
-      "loadFailed": "Failed to load server feature configuration"
+      "loadFailed": "Failed to load server feature configuration",
+      "actionsDisabledReason": "Container actions disabled by server configuration"
     }
   }
 }

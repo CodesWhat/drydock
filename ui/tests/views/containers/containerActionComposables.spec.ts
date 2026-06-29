@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ref } from 'vue';
 import { loadContainerDetailListState } from '@/views/containers/loadContainerDetailListState';
-import { formatTimestamp, useContainerBackups } from '@/views/containers/useContainerBackups';
+import {
+  formatOperationPhase,
+  formatOperationStatus,
+  formatRollbackReason,
+  formatTimestamp,
+  useContainerBackups,
+} from '@/views/containers/useContainerBackups';
 import { useContainerPolicy } from '@/views/containers/useContainerPolicy';
 import { useContainerPreview } from '@/views/containers/useContainerPreview';
 import { useContainerTriggers } from '@/views/containers/useContainerTriggers';
@@ -15,6 +21,31 @@ describe('formatTimestamp (standalone, no t)', () => {
     const mockT = vi.fn().mockReturnValue('Unknown translated');
     expect(formatTimestamp(undefined, mockT)).toBe('Unknown translated');
     expect(mockT).toHaveBeenCalledWith('containerComponents.backups.timestampUnknown');
+  });
+});
+
+describe('formatOperationPhase / formatOperationStatus / formatRollbackReason (module-level, no t)', () => {
+  it('returns "unknown" for non-string input when t is not provided', () => {
+    expect(formatOperationPhase(null)).toBe('unknown');
+    expect(formatOperationStatus(undefined)).toBe('unknown');
+    expect(formatRollbackReason(42)).toBe('unknown');
+  });
+
+  it('returns the i18n key result when t is provided and input is non-string', () => {
+    const mockT = vi.fn().mockReturnValue('Unknown translated');
+    expect(formatOperationPhase(null, mockT)).toBe('Unknown translated');
+    expect(mockT).toHaveBeenCalledWith('containerComponents.sideTabContent.unknown');
+    mockT.mockClear();
+    expect(formatOperationStatus(undefined, mockT)).toBe('Unknown translated');
+    expect(mockT).toHaveBeenCalledWith('containerComponents.sideTabContent.unknown');
+    mockT.mockClear();
+    expect(formatRollbackReason(0, mockT)).toBe('Unknown translated');
+    expect(mockT).toHaveBeenCalledWith('containerComponents.sideTabContent.unknown');
+  });
+
+  it('normalizes string values regardless of whether t is provided', () => {
+    expect(formatOperationPhase('IN_PROGRESS')).toBe('in progress');
+    expect(formatOperationStatus('ROLLED-BACK', vi.fn())).toBe('rolled back');
   });
 });
 

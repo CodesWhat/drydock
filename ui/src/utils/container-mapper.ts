@@ -26,6 +26,7 @@ import type {
   UpdateBlockerReason,
   UpdateEligibility,
 } from '../types/container';
+import type { TranslateFn } from '../types/i18n';
 import {
   isActiveContainerUpdateOperationPhaseForStatus,
   isActiveContainerUpdateOperationStatus,
@@ -173,6 +174,7 @@ export interface ApiContainerInput {
   ports?: unknown;
   volumes?: unknown;
   env?: unknown;
+  startedAt?: unknown;
 }
 
 const DOCKERHUB_REGISTRY_HOSTS = new Set(['docker.io', 'registry-1.docker.io', 'index.docker.io']);
@@ -799,7 +801,7 @@ function deriveUpdateOperation(
 }
 
 /** Map a single API container to the UI Container type. */
-export function mapApiContainer(apiContainer: ApiContainerInput): Container {
+export function mapApiContainer(apiContainer: ApiContainerInput, t?: TranslateFn): Container {
   const runtimeDetails = deriveRuntimeDetails(apiContainer);
   const updatePolicyState = deriveUpdatePolicyState(apiContainer);
   const id = asNonEmptyString(apiContainer.id) ?? '';
@@ -834,7 +836,12 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     updateDetectedAt: detectedAt,
     updateOperation: deriveUpdateOperation(apiContainer),
     updateMaturity: getUpdateMaturity(detectedAt, !!apiContainer.updateAvailable),
-    updateMaturityTooltip: formatUpdateAge(detectedAt, !!apiContainer.updateAvailable),
+    updateMaturityTooltip: formatUpdateAge(
+      detectedAt,
+      !!apiContainer.updateAvailable,
+      Date.now(),
+      t,
+    ),
     updateEligibility: deriveUpdateEligibility(apiContainer),
     updatePolicyState,
     suppressedUpdateTag: deriveSuppressedUpdateTag(apiContainer, updatePolicyState),
@@ -875,6 +882,6 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
 }
 
 /** Map an array of API containers to UI containers. */
-export function mapApiContainers(apiContainers: ApiContainerInput[]): Container[] {
-  return apiContainers.map(mapApiContainer);
+export function mapApiContainers(apiContainers: ApiContainerInput[], t?: TranslateFn): Container[] {
+  return apiContainers.map((c) => mapApiContainer(c, t));
 }

@@ -1045,4 +1045,21 @@ describe('AppLayout', () => {
       }
     });
   });
+
+  it('renders search hint footer connector text through i18n keys', async () => {
+    // Un-stub Teleport so the search overlay (teleported to body) actually renders its content.
+    const wrapper = mountLayout({ teleport: false });
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    // Open the search overlay by setting the reactive state directly (deterministic in shallow mount).
+    (wrapper.vm as unknown as { showSearch: boolean }).showSearch = true;
+    await flushPromises();
+
+    // With no scope prefix the v-else branch renders the connector fragments via i18n keys
+    // (slashComma / atOrConnector / hashSemicolon).
+    const rendered = `${document.body.textContent ?? ''}${wrapper.html()}`;
+    expect(rendered).toContain(', or');
+    expect(rendered).toContain('; use');
+  });
 });

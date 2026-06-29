@@ -714,7 +714,7 @@ function summarizeLegacyKeys(keys: string[]): string {
   const previewKeys = keys.slice(0, LEGACY_KEY_PREVIEW_LIMIT);
   const hiddenCount = keys.length - previewKeys.length;
   return hiddenCount > 0
-    ? `${previewKeys.join(', ')} (+${hiddenCount} more)`
+    ? `${previewKeys.join(', ')} ${t('appShell.banners.hiddenMore', { count: hiddenCount })}`
     : previewKeys.join(', ');
 }
 
@@ -1900,9 +1900,9 @@ onUnmounted(() => {
                 <span v-if="scopePrefixLabel">{{ t('appShell.layout.search.prefixScopeHint') }}</span>
                 <span v-else>
                   {{ t('appShell.layout.search.typeHint') }}
-                  <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">/</kbd>,
-                  <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">@</kbd>, or
-                  <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">#</kbd>; use
+                  <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">/</kbd>{{ t('appShell.layout.search.slashComma') }}
+                  <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">@</kbd>{{ t('appShell.layout.search.atOrConnector') }}
+                  <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">#</kbd>{{ t('appShell.layout.search.hashSemicolon') }}
                 </span>
                 <kbd class="px-1 py-0.5 dd-rounded-sm dd-bg-elevated">Tab</kbd>
                 <span>{{ t('appShell.layout.search.useTab') }}</span>

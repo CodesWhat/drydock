@@ -37,10 +37,14 @@ import {
   highestSeverity,
   severityColor,
   severityIcon,
+  severityLabel,
   toSafeExternalUrl,
 } from './security/securityViewUtils';
 
 const { t } = useI18n();
+function localizedSeverity(sev: string): string {
+  return severityLabel(sev, t);
+}
 const router = useRouter();
 
 const updateDialogContainerId = ref<string | null>(null);
@@ -90,7 +94,7 @@ function severityTone(severity: string) {
 async function fetchContainers() {
   try {
     const apiContainers = await getAllContainers();
-    containers.value = mapApiContainers(apiContainers);
+    containers.value = mapApiContainers(apiContainers, t);
   } catch {
     containers.value = [];
   }
@@ -631,7 +635,7 @@ onUnmounted(() => {
           <div class="flex items-center gap-2 min-w-0">
             <AppIcon :name="severityIcon(highestSeverity(row))" :size="13" class="shrink-0 md:!hidden"
                      :style="{ color: severityColor(highestSeverity(row)).text }"
-                     v-tooltip.top="highestSeverity(row)" />
+                     v-tooltip.top="localizedSeverity(highestSeverity(row))" />
             <span class="font-medium dd-text truncate">{{ row.image }}</span>
             <AppBadge v-if="row.delta && row.delta.fixed > 0 && row.delta.new === 0"
                   tone="success" size="xs" class="px-1.5 py-0 shrink-0"
@@ -748,7 +752,7 @@ onUnmounted(() => {
             </div>
             <AppIcon :name="severityIcon(highestSeverity(summary))" :size="16" class="shrink-0 ml-2"
                      :style="{ color: severityColor(highestSeverity(summary)).text }"
-                     v-tooltip.top="highestSeverity(summary)" />
+                     v-tooltip.top="localizedSeverity(highestSeverity(summary))" />
           </div>
           <div class="px-4 py-3">
             <div class="flex items-center gap-1.5 flex-wrap">
@@ -851,7 +855,7 @@ onUnmounted(() => {
         <template #header="{ item: summary }">
           <AppIcon :name="severityIcon(highestSeverity(summary))" :size="13" class="shrink-0"
                    :style="{ color: severityColor(highestSeverity(summary)).text }"
-                   v-tooltip.top="highestSeverity(summary)" />
+                   v-tooltip.top="localizedSeverity(highestSeverity(summary))" />
           <div class="flex-1 min-w-0">
             <div class="text-sm font-semibold truncate dd-text">{{ summary.image }}</div>
             <div class="text-2xs dd-text-muted mt-0.5">{{ summary.total }} {{ t('securityView.card.vulnerabilities') }}</div>

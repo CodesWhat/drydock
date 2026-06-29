@@ -30,23 +30,23 @@ export function formatTimestamp(
   return parsed.toLocaleString();
 }
 
-function formatOperationValue(value: unknown): string {
+function formatOperationValue(value: unknown, t?: (key: string) => string): string {
   if (typeof value !== 'string') {
-    return 'unknown';
+    return t ? t('containerComponents.sideTabContent.unknown') : 'unknown';
   }
   return value.trim().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').toLowerCase();
 }
 
-export function formatOperationPhase(phase: unknown): string {
-  return formatOperationValue(phase);
+export function formatOperationPhase(phase: unknown, t?: (key: string) => string): string {
+  return formatOperationValue(phase, t);
 }
 
-export function formatRollbackReason(reason: unknown): string {
-  return formatOperationValue(reason);
+export function formatRollbackReason(reason: unknown, t?: (key: string) => string): string {
+  return formatOperationValue(reason, t);
 }
 
-export function formatOperationStatus(status: unknown): string {
-  return formatOperationValue(status);
+export function formatOperationStatus(status: unknown, t?: (key: string) => string): string {
+  return formatOperationValue(status, t);
 }
 
 export function getOperationStatusStyle(status: unknown) {
@@ -215,15 +215,24 @@ export function useContainerBackups(input: UseContainerBackupsInput) {
   function formatTimestampLocalized(timestamp: string | undefined): string {
     return formatTimestamp(timestamp, t);
   }
+  function formatOperationPhaseLocalized(phase: unknown): string {
+    return formatOperationPhase(phase, t);
+  }
+  function formatOperationStatusLocalized(status: unknown): string {
+    return formatOperationStatus(status, t);
+  }
+  function formatRollbackReasonLocalized(reason: unknown): string {
+    return formatRollbackReason(reason, t);
+  }
 
   return {
     backupsLoading,
     clearBackupsDetails,
     detailBackups,
     detailUpdateOperations,
-    formatOperationPhase,
-    formatOperationStatus,
-    formatRollbackReason,
+    formatOperationPhase: formatOperationPhaseLocalized,
+    formatOperationStatus: formatOperationStatusLocalized,
+    formatRollbackReason: formatRollbackReasonLocalized,
     formatTimestamp: formatTimestampLocalized,
     getOperationStatusStyle,
     loadDetailBackups,

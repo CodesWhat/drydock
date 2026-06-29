@@ -576,7 +576,7 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.text()).toContain('Compose files:');
     expect(wrapper.text()).toContain('/opt/stack/compose.yml, /opt/stack/compose.override.yml');
     expect(wrapper.text()).toContain('Writes compose file:');
-    expect(wrapper.text()).toContain('no');
+    expect(wrapper.text()).toContain('Writes compose file: no');
     expect(wrapper.text()).toContain('Patch preview:');
 
     const runTriggerButton = findButtonByText(wrapper, 'Run');
@@ -695,11 +695,11 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.text()).toContain('New: -');
     expect(wrapper.text()).toContain('unknown');
     expect(wrapper.text()).toContain('Running:');
-    expect(wrapper.text()).toContain('no');
+    expect(wrapper.text()).toContain('Running: no');
     expect(wrapper.text()).toContain('Networks: -');
     expect(wrapper.text()).toContain('Compose file:');
     expect(wrapper.text()).toContain('Writes compose file:');
-    expect(wrapper.text()).toContain('yes');
+    expect(wrapper.text()).toContain('Writes compose file: yes');
     expect(wrapper.text()).toContain('Rolling...');
     expect(wrapper.text()).toContain('?');
     expect(wrapper.text()).toContain('2.0');

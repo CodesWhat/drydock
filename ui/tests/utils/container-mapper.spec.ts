@@ -1255,6 +1255,51 @@ describe('container-mapper', () => {
     });
   });
 
+  describe('updateMaturityTooltip t() threading', () => {
+    it('uses t() for updateMaturityTooltip when t is provided to mapApiContainer', () => {
+      const mockT = vi.fn((key: string, params?: Record<string, unknown>) =>
+        params ? `t:${key}:${JSON.stringify(params)}` : `t:${key}`,
+      );
+      const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000).toISOString();
+      const c = mapApiContainer(
+        makeApiContainer({
+          updateAvailable: true,
+          updateKind: { kind: 'tag', semverDiff: 'minor' },
+          result: { tag: '2.0.0' },
+          updateDetectedAt: twoDaysAgo,
+        }),
+        mockT,
+      );
+      expect(mockT).toHaveBeenCalledWith('containerComponents.updateAge.availableDaysPlural', {
+        count: 2,
+      });
+      expect(c.updateMaturityTooltip).toBe(
+        't:containerComponents.updateAge.availableDaysPlural:{"count":2}',
+      );
+    });
+
+    it('threads t() to every item via mapApiContainers', () => {
+      const mockT = vi.fn((key: string) => `t:${key}`);
+      const oneHourAgo = new Date(Date.now() - 3_600_000).toISOString();
+      const mapped = mapApiContainers(
+        [
+          makeApiContainer({
+            id: 'c2',
+            updateAvailable: true,
+            updateKind: { kind: 'tag', semverDiff: 'minor' },
+            result: { tag: '2.0' },
+            updateDetectedAt: oneHourAgo,
+          }),
+        ],
+        mockT,
+      );
+      expect(mockT).toHaveBeenCalledWith('containerComponents.updateAge.availableHoursSingular');
+      expect(mapped[0]?.updateMaturityTooltip).toBe(
+        't:containerComponents.updateAge.availableHoursSingular',
+      );
+    });
+  });
+
   describe('deriveUpdateBouncer', () => {
     it('returns undefined when no updateScan exists', () => {
       const c = mapApiContainer(makeApiContainer({ security: { scan: null, updateScan: null } }));

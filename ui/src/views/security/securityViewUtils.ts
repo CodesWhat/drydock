@@ -97,6 +97,14 @@ export function highestSeverity(summary: SeveritySummaryCounts): string {
   return 'LOW';
 }
 
+export function severityLabel(sev: string, t: TranslateFn): string {
+  if (sev === 'CRITICAL') return t('securityView.filters.severityCritical');
+  if (sev === 'HIGH') return t('securityView.filters.severityHigh');
+  if (sev === 'MEDIUM') return t('securityView.filters.severityMedium');
+  if (sev === 'LOW') return t('securityView.filters.severityLow');
+  return sev;
+}
+
 export function toSafeFileName(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]+/g, '-');
 }

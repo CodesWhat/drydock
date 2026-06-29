@@ -1652,4 +1652,17 @@ describe('SecurityView', () => {
       expect(w.find('[data-test="security-update-btn"]').exists()).toBe(false);
     });
   });
+
+  describe('severity tooltip i18n', () => {
+    it('localizedSeverity returns translated label, not raw uppercase string', async () => {
+      mockContainers([makeContainer()]);
+      const w = factory();
+      await flushPromises();
+      const vm = w.vm as any;
+      expect(vm.localizedSeverity('CRITICAL')).toBe('Critical');
+      expect(vm.localizedSeverity('HIGH')).toBe('High');
+      expect(vm.localizedSeverity('MEDIUM')).toBe('Medium');
+      expect(vm.localizedSeverity('LOW')).toBe('Low');
+    });
+  });
 });

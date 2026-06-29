@@ -552,7 +552,8 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.text()).toContain('Compose service:');
     expect(wrapper.text()).toContain('web');
     expect(wrapper.text()).toContain('Writes compose file:');
-    expect(wrapper.text()).toContain('no');
+    expect(wrapper.text()).toContain('Writes compose file: no');
+    expect(wrapper.text()).toContain('Running: yes');
     expect(wrapper.text()).toContain('Patch preview:');
     expect(wrapper.text()).toContain('@@ -1,3 +1,3 @@');
   });
@@ -1033,7 +1034,7 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.text()).toContain('Writable file:');
     expect(wrapper.text()).toContain('/tmp/compose.yml');
     expect(wrapper.text()).toContain('Writes compose file:');
-    expect(wrapper.text()).toContain('yes');
+    expect(wrapper.text()).toContain('Writes compose file: yes');
     expect(wrapper.text()).not.toContain('Compose service:');
     expect(wrapper.text()).not.toContain('Patch preview:');
   });

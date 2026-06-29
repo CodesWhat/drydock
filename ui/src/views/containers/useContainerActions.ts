@@ -28,7 +28,6 @@ import {
   hasTrackedContainerActionOfKind,
 } from '../../utils/container-action-key';
 import {
-  formatContainerUpdateStartedCountMessage,
   getContainerAlreadyUpToDateMessage,
   getContainerUpdateStartedMessage,
   getForceContainerUpdateStartedMessage,
@@ -376,7 +375,12 @@ async function updateAllInGroupState(args: {
     }
     if (acceptedTargetIds.length > 0) {
       toast.success(
-        `${formatContainerUpdateStartedCountMessage(acceptedTargetIds.length, args.t)} in ${args.group.key}`,
+        args.t(
+          acceptedTargetIds.length === 1
+            ? 'containersView.toast.queuedUpdateGroupSingle'
+            : 'containersView.toast.queuedUpdateGroupMultiple',
+          { count: acceptedTargetIds.length, group: args.group.key },
+        ),
       );
     }
   } catch (error: unknown) {

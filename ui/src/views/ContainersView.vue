@@ -231,7 +231,7 @@ function preserveTransientUiFields(prev: Container[], next: Container[]): Contai
 async function loadContainers() {
   try {
     const apiContainers = await getAllContainers();
-    const mappedRaw = mapApiContainers(apiContainers);
+    const mappedRaw = mapApiContainers(apiContainers, t);
     const mapped = preserveTransientUiFields(containers.value, mappedRaw);
     // Skip reactive assignment (and downstream chain re-eval) when incoming
     // data is bit-for-bit identical to the current list. Gate the lookup map
