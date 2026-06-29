@@ -26,6 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Container validation now tolerates fields written by newer drydock versions.** The store validator no longer rejects unknown keys, so a `dd.json` written by a newer release stays readable after a downgrade. Note: this protects downgrades from v1.5.1 onward — rolling back from v1.5.1 to v1.5.0 (which predates this change) still requires removing the new `details.startedAt` and `image.softwareVersion` fields from `dd.json`, since v1.5.0 rejects them.
 
+### Security
+
+- **Base image refreshed to clear 24 container-scan CVEs.** Bumped the pinned `node:24-alpine` base from a stale digest (Node 24.16.0, Alpine 3.21) to the current digest (Node 24.18.0, Alpine 3.24) and added `libexpat` to the targeted `apk upgrade` set. This resolves all 11 Node binary CVEs reported by the image scan — including the one critical (CVE-2026-48930) and four high — plus 13 medium `libexpat` CVEs (now `2.8.2-r0`). A rebuild + rescan confirms zero critical/high/Node/libexpat findings remain. The three `busybox`/`ssl_client` findings (CVE-2025-60876, medium) have no upstream fix in Alpine yet and are tracked for a later base bump. All previously pinned Alpine package versions still resolve on 3.24, so the build is otherwise unchanged.
+
 ## [1.5.1-rc.3] — 2026-06-28
 
 ### Added

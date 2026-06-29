@@ -1,6 +1,6 @@
 # checkov:skip=CKV_DOCKER_3: entrypoint uses su-exec for runtime privilege drop
 # Common Stage
-FROM node:24-alpine@sha256:21f403ab171f2dc89bad4dd69d7721bfd15f084ccb46cdd225f31f2bc59b5c9a AS base
+FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS base
 WORKDIR /home/node/app
 
 LABEL maintainer="CodesWhat"
@@ -34,7 +34,7 @@ RUN apk add --no-cache \
     tzdata=2026b-r0 \
     && apk add --no-cache cosign=3.0.6-r1 \
     && apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing trivy \
-    && apk upgrade --no-cache zlib libcrypto3 libssl3 \
+    && apk upgrade --no-cache zlib libcrypto3 libssl3 libexpat \
     && mkdir /store && chown node:node /store
 
 # Build stage for healthcheck binary (~65KB static binary)
