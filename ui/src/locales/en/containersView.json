@@ -21,6 +21,8 @@
       "alreadyUpToDate": "Already up to date: {name}",
       "queuedUpdateSingle": "Queued update for {count} container",
       "queuedUpdateMultiple": "Queued updates for {count} containers",
+      "queuedUpdateGroupSingle": "Queued update for {count} container in {group}",
+      "queuedUpdateGroupMultiple": "Queued updates for {count} containers in {group}",
       "countAlreadyUpToDateSingle": "{count} container already up to date",
       "countAlreadyUpToDateMultiple": "{count} containers already up to date"
     },
@@ -31,11 +33,14 @@
     },
     "columns": {
       "container": "Container",
+      "tag": "Tag",
       "version": "Version",
       "update": "Update",
+      "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "Status",
       "host": "Host",
-      "registry": "Registry"
+      "registry": "Registry",
+      "uptime": "Uptime"
     },
     "status": {
       "running": "running",

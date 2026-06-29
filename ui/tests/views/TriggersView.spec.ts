@@ -190,6 +190,34 @@ describe('TriggersView', () => {
     expect(wrapper.text()).toContain('3');
   });
 
+  it('status badges render translated text not raw data values', async () => {
+    const wrapper = await mountTriggersView();
+
+    // table view: DataTable stub now exposes #cell-status slot in data-cell="status"
+    expect(wrapper.find('[data-cell="status"]').text()).toContain('Active');
+    expect(wrapper.find('[data-cell="status"]').text()).not.toContain('active');
+
+    // card view: DataCardGrid renders #card slot; badge inside must be translated
+    await wrapper.find('.mode-cards').trigger('click');
+    await flushPromises();
+    const cardGrid = wrapper.find('.data-card-grid');
+    expect(cardGrid.text()).toContain('Active');
+    expect(cardGrid.text()).not.toContain('active');
+
+    // list view: DataListAccordion now exposes #details slot in .list-details
+    await wrapper.find('.mode-list').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.list-details').text()).toContain('Active');
+    expect(wrapper.find('.list-details').text()).not.toContain('active');
+
+    // detail panel subtitle slot — contains the status AppBadge for selectedTrigger
+    await wrapper.find('.mode-table').trigger('click');
+    await flushPromises();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.detail-subtitle').text()).toBe('Active');
+  });
+
   it('opens trigger details from list mode selections', async () => {
     mockGetAllTriggers.mockResolvedValue([
       makeTrigger({

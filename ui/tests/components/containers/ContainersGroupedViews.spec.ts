@@ -77,11 +77,13 @@ const DataTableStub = defineComponent({
             <slot name="cell-icon" :row="row" />
             <slot name="cell-name" :row="row" />
             <slot name="cell-version" :row="row" />
+            <slot name="cell-softwareVersion" :row="row" />
             <slot name="cell-kind" :row="row" />
             <slot name="cell-status" :row="row" />
             <slot name="cell-bouncer" :row="row" />
             <slot name="cell-server" :row="row" />
             <slot name="cell-registry" :row="row" />
+            <slot name="cell-uptime" :row="row" />
             <slot name="actions" :row="row" />
           </div>
         </template>
@@ -209,6 +211,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     confirmStop: vi.fn(),
     startContainer: vi.fn(),
     confirmRestart: vi.fn(),
+    recheckContainer: vi.fn(),
     scanContainer: vi.fn(),
     confirmForceUpdate: vi.fn(),
     skipUpdate: vi.fn(),
@@ -276,6 +279,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     confirmStop: spies.confirmStop,
     startContainer: spies.startContainer,
     confirmRestart: spies.confirmRestart,
+    recheckContainer: spies.recheckContainer,
     scanContainer: spies.scanContainer,
     confirmForceUpdate: spies.confirmForceUpdate,
     skipUpdate: spies.skipUpdate,
@@ -2724,5 +2728,123 @@ describe('ContainersGroupedViews', () => {
       const text = rowByName(wrapper, 'alpha').text();
       expect(text).toContain('sha256:');
     });
+  });
+
+  describe('softwareVersion secondary line in version cell', () => {
+    function mountWithSoftwareVersion(softwareVersion?: string) {
+      const container = makeContainer({
+        id: 'c-sv',
+        name: 'alpha',
+        currentTag: 'latest',
+        newTag: null,
+        updateKind: null,
+        status: 'running',
+        bouncer: 'safe',
+        softwareVersion,
+      });
+      const { context } = makeContext();
+      context.containerViewMode.value = 'table';
+      context.filteredContainers.value = [container];
+      context.displayContainers.value = [container];
+      context.renderGroups.value = [
+        {
+          key: 'g',
+          name: 'g',
+          containers: [container],
+          containerCount: 1,
+          updatesAvailable: 0,
+          updatableCount: 0,
+        },
+      ];
+      mocked.context = context;
+      return { wrapper: mountSubject(), container };
+    }
+
+    it('renders softwareVersion cell with softwareVersion value when present', async () => {
+      const { wrapper } = mountWithSoftwareVersion('1.25.5');
+      const row = rowByName(wrapper, 'alpha');
+      const svCell = row.find('[data-test="container-software-version-col"]');
+      expect(svCell.exists()).toBe(true);
+      expect(svCell.text()).toBe('1.25.5');
+    });
+
+    it('renders softwareVersion cell falling back to currentTag when softwareVersion is absent', async () => {
+      const { wrapper } = mountWithSoftwareVersion(undefined);
+      const row = rowByName(wrapper, 'alpha');
+      const svCell = row.find('[data-test="container-software-version-col"]');
+      expect(svCell.exists()).toBe(true);
+      expect(svCell.text()).toBe('latest');
+    });
+  });
+
+  it('renders uptime cell using the shared nowMs timer value', async () => {
+    const startedAt = new Date(Date.now() - 30_000).toISOString();
+    const container = makeContainer({
+      id: 'c-uptime',
+      name: 'alpha',
+      status: 'running',
+      details: { ports: [], volumes: [], env: [], labels: [], startedAt },
+    });
+    const { context } = makeContext();
+    context.containerViewMode.value = 'table';
+    context.filteredContainers.value = [container];
+    context.displayContainers.value = [container];
+    context.renderGroups.value = [
+      {
+        key: 'g',
+        name: 'g',
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const row = rowByName(wrapper, 'alpha');
+    expect(row.text()).toContain('Up ');
+  });
+
+  it('calls recheckContainer when Recheck for updates menu action is clicked', async () => {
+    const container = makeContainer({
+      id: 'c-recheck',
+      name: 'recheck-me',
+      newTag: '2.0.0',
+      updateKind: 'minor',
+      status: 'running',
+    });
+
+    const { context, refs, spies } = makeContext();
+    context.containerViewMode.value = 'table';
+    context.tableActionStyle.value = 'icons';
+    context.filteredContainers.value = [container];
+    context.displayContainers.value = [container];
+    context.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    refs.openActionsMenu.value = 'c-recheck';
+    await nextTick();
+
+    const recheckButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().trim() === 'Recheck for updates');
+    expect(recheckButton).toBeDefined();
+    await recheckButton!.trigger('click');
+
+    expect(spies.recheckContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-recheck', name: 'recheck-me' }),
+    );
+    expect(spies.closeActionsMenu).toHaveBeenCalled();
   });
 });

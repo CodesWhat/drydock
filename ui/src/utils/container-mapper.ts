@@ -26,6 +26,7 @@ import type {
   UpdateBlockerReason,
   UpdateEligibility,
 } from '../types/container';
+import type { TranslateFn } from '../types/i18n';
 import {
   isActiveContainerUpdateOperationPhaseForStatus,
   isActiveContainerUpdateOperationStatus,
@@ -44,6 +45,7 @@ interface ApiContainerImage {
   name?: unknown;
   variant?: unknown;
   created?: unknown;
+  softwareVersion?: unknown;
   registry?: {
     name?: unknown;
     url?: unknown;
@@ -94,6 +96,7 @@ interface ApiContainerDetails {
   ports?: unknown;
   volumes?: unknown;
   env?: unknown;
+  startedAt?: unknown;
 }
 
 interface ApiContainerSecuritySummary {
@@ -171,6 +174,7 @@ export interface ApiContainerInput {
   ports?: unknown;
   volumes?: unknown;
   env?: unknown;
+  startedAt?: unknown;
 }
 
 const DOCKERHUB_REGISTRY_HOSTS = new Set(['docker.io', 'registry-1.docker.io', 'index.docker.io']);
@@ -646,6 +650,14 @@ function normalizeEnv(values: unknown): { key: string; value: string; sensitive?
     .filter((value) => value.key.length > 0);
 }
 
+function normalizeStartedAt(value: unknown): string | undefined {
+  const str = asNonEmptyString(value);
+  if (!str) return undefined;
+  const parsed = Date.parse(str);
+  if (Number.isNaN(parsed)) return undefined;
+  return str;
+}
+
 function deriveRuntimeDetails(
   apiContainer: ApiContainerInput,
 ): Omit<Container['details'], 'labels'> {
@@ -657,6 +669,7 @@ function deriveRuntimeDetails(
     ports: normalizeStringArray(detailsSource.ports),
     volumes: normalizeStringArray(detailsSource.volumes),
     env: normalizeEnv(detailsSource.env),
+    startedAt: normalizeStartedAt(detailsSource.startedAt),
   };
 }
 
@@ -788,7 +801,7 @@ function deriveUpdateOperation(
 }
 
 /** Map a single API container to the UI Container type. */
-export function mapApiContainer(apiContainer: ApiContainerInput): Container {
+export function mapApiContainer(apiContainer: ApiContainerInput, t?: TranslateFn): Container {
   const runtimeDetails = deriveRuntimeDetails(apiContainer);
   const updatePolicyState = deriveUpdatePolicyState(apiContainer);
   const id = asNonEmptyString(apiContainer.id) ?? '';
@@ -823,7 +836,12 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     updateDetectedAt: detectedAt,
     updateOperation: deriveUpdateOperation(apiContainer),
     updateMaturity: getUpdateMaturity(detectedAt, !!apiContainer.updateAvailable),
-    updateMaturityTooltip: formatUpdateAge(detectedAt, !!apiContainer.updateAvailable),
+    updateMaturityTooltip: formatUpdateAge(
+      detectedAt,
+      !!apiContainer.updateAvailable,
+      Date.now(),
+      t,
+    ),
     updateEligibility: deriveUpdateEligibility(apiContainer),
     updatePolicyState,
     suppressedUpdateTag: deriveSuppressedUpdateTag(apiContainer, updatePolicyState),
@@ -842,6 +860,7 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
     updateSecurityScanState: deriveUpdateSecurityScanState(apiContainer),
     updateSecuritySummary: updateSummary,
     securityDelta: computeSecurityDelta(currentSummary, updateSummary),
+    softwareVersion: asNonEmptyString(apiContainer.image?.softwareVersion),
     imageCreated: deriveImageCreated(apiContainer),
     server: deriveServer(apiContainer),
     includeTags: asNonEmptyString(apiContainer.includeTags),
@@ -857,11 +876,12 @@ export function mapApiContainer(apiContainer: ApiContainerInput): Container {
       volumes: runtimeDetails.volumes,
       env: runtimeDetails.env,
       labels: deriveLabels(apiContainer),
+      startedAt: runtimeDetails.startedAt,
     },
   };
 }
 
 /** Map an array of API containers to UI containers. */
-export function mapApiContainers(apiContainers: ApiContainerInput[]): Container[] {
-  return apiContainers.map(mapApiContainer);
+export function mapApiContainers(apiContainers: ApiContainerInput[], t?: TranslateFn): Container[] {
+  return apiContainers.map((c) => mapApiContainer(c, t));
 }

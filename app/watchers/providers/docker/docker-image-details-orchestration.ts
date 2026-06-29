@@ -18,7 +18,9 @@ import {
   canonicalizeContainerName,
   getContainerDisplayName,
   getContainerName,
+  getInspectValueByPath,
   getRepoDigest,
+  getSemverTagFromInspectPath,
   isDigestToWatch,
   type ResolvedImgset,
   shouldUpdateDisplayNameFromContainerName,
@@ -96,6 +98,7 @@ interface ResolvedContainerLabelOverrides {
   triggerExclude?: string;
   lookupImage?: string;
   inspectTagPath?: string;
+  inspectTagVersionOnly?: string;
 }
 
 interface ResolvedContainerConfig {
@@ -110,6 +113,7 @@ interface ResolvedContainerConfig {
   triggerExclude?: string;
   lookupImage?: string;
   inspectTagPath?: string;
+  inspectTagVersionOnly?: string;
   watchDigest?: string;
 }
 
@@ -167,6 +171,7 @@ interface DockerImageDetailsHelpers {
     inspectTagPath: string | undefined,
     transformTagsFromLabel: string | undefined,
     containerId: string,
+    inspectTagVersionOnly?: boolean,
   ) => string;
   getMatchingImgsetConfiguration: (
     parsedImage: ParsedDockerImageReference,
@@ -525,6 +530,7 @@ function resolveContainerImageState(
     resolvedConfig.inspectTagPath,
     resolvedLabelOverrides.transformTags,
     container.Id,
+    resolvedConfig.inspectTagVersionOnly?.toLowerCase() === 'true',
   );
   const transformedTag = transformTag(resolvedConfig.transformTags, tagName);
   const parsedTag = parseSemver(transformedTag);
@@ -581,6 +587,29 @@ function warnWhenUntrackableImage(
       `Image is not a semver and digest watching is disabled so drydock won't report any update for container "${dockerContainerName}". Please review the configuration to enable digest watching for this container or exclude this container from being watched`,
     );
   }
+}
+
+const OCI_VERSION_LABEL = 'org.opencontainers.image.version';
+const OCI_VERSION_INSPECT_PATH = `Config/Labels/${OCI_VERSION_LABEL}`;
+
+/**
+ * Extract the OCI software version label from image inspect labels, with
+ * container inspect as a fallback. Empty strings normalize to undefined.
+ */
+function resolveSoftwareVersion(
+  image: DockerImageInspectPayload,
+  containerInspect: DockerContainerInspectPayload | undefined,
+): string | undefined {
+  const imageVersion = image.Config?.Labels?.[OCI_VERSION_LABEL];
+  const rawVersion =
+    imageVersion !== undefined
+      ? imageVersion
+      : (getInspectValueByPath(containerInspect, OCI_VERSION_INSPECT_PATH) as string | undefined);
+  if (typeof rawVersion !== 'string') {
+    return undefined;
+  }
+  const trimmed = rawVersion.trim();
+  return trimmed !== '' ? trimmed : undefined;
 }
 
 function removeStaleContainerEntriesWithSameName(
@@ -735,6 +764,17 @@ export async function addImageDetailsToContainerOrchestration(
       os: image.Os,
       variant: image.Variant,
       created: image.Created,
+      softwareVersion: (() => {
+        if (resolvedConfig.inspectTagPath) {
+          const fromInspectPath = getSemverTagFromInspectPath(
+            image,
+            resolvedConfig.inspectTagPath,
+            resolvedConfig.transformTags,
+          );
+          if (fromInspectPath) return fromInspectPath;
+        }
+        return resolveSoftwareVersion(image, containerInspect);
+      })(),
     },
     labels: containerLabels,
     sourceRepo: detectSourceRepoFromImageMetadata({

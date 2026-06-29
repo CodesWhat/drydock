@@ -334,7 +334,7 @@ export function useContainerSsePatchPipeline(input: UseContainerSsePatchPipeline
 
     let mapped: Container;
     try {
-      mapped = mapApiContainer(raw);
+      mapped = mapApiContainer(raw, t);
     } catch {
       void handleSseContainerChanged();
       return;

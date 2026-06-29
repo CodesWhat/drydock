@@ -31,6 +31,7 @@
     },
     "columns": {
       "container": "Container",
+      "tag": "Tag",
       "version": "Versie",
       "update": "Update",
       "status": "Status",

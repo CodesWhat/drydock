@@ -9,6 +9,7 @@ import {
   normalizeSeverityCount,
   severityColor,
   severityIcon,
+  severityLabel,
   statusBadgeTone,
   toSafeExternalUrl,
   toSafeFileName,
@@ -379,6 +380,22 @@ describe('securityViewUtils', () => {
       const parsed = JSON.parse(vulnReportToJson([baseVuln]));
       expect(parsed[0]).not.toHaveProperty('image');
       expect(parsed[0]).not.toHaveProperty('publishedDate');
+    });
+  });
+
+  describe('severityLabel', () => {
+    const t = (key: string) => key;
+
+    it('maps each severity to its i18n key via the translate function', () => {
+      expect(severityLabel('CRITICAL', t)).toBe('securityView.filters.severityCritical');
+      expect(severityLabel('HIGH', t)).toBe('securityView.filters.severityHigh');
+      expect(severityLabel('MEDIUM', t)).toBe('securityView.filters.severityMedium');
+      expect(severityLabel('LOW', t)).toBe('securityView.filters.severityLow');
+    });
+
+    it('passes through unrecognised severity values unchanged', () => {
+      expect(severityLabel('UNKNOWN', t)).toBe('UNKNOWN');
+      expect(severityLabel('', t)).toBe('');
     });
   });
 });

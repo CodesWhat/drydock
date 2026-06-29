@@ -10,6 +10,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1-rc.4] — 2026-06-29
+
+### Added
+
+- **Optional mount-prefix fallback for Docker Compose path matching.** When a watched container's resolved compose file path differs from the trigger's configured compose file only by a mount prefix (common with Portainer and bind-mounted compose files), drydock can now match on the trailing `<project-dir>/<file>` tail instead of skipping the container. Off by default — enable it per trigger with `DD_ACTION_DOCKERCOMPOSE_<name>_MOUNT_PREFIX_FALLBACK=true`. It stays opt-in because tail matching cannot distinguish two stacks that share a project-directory name across environments (e.g. `/prod/myapp` vs `/staging/myapp`). (#365)
+
+- **`$currentReleaseNotes` trigger template variable.** Trigger templates (notification bodies, command arguments, and the like) can now reference `$currentReleaseNotes` to include the release notes for the container's currently running version, alongside the existing variable for the update target's notes. (#295)
+
+- **Container software version in the detail panels and a new Version column in the containers table.** Drydock now surfaces the application version baked into an image — read from the `org.opencontainers.image.version` OCI label, falling back to the running container's inspect metadata — as `image.softwareVersion`. It appears in the container side panel, the full-page detail view, and a new **Version** column in the containers table. The existing **Tag** column (column key `version`, preserved so saved column preferences keep working) continues to show the image tag; the new **Version** column shows `image.softwareVersion`, falling back to the tag when no software version is available. `dd.inspect.tag.path` now dual-writes the extracted value into `image.softwareVersion` as well as overwriting the image tag, so the Version column is populated for inspect-path containers with no label change needed. The Version column is visible by default for new installs; existing users have it inserted into their saved column list automatically on first load after upgrading. (#209)
+
+- **`dd.inspect.tag.version-only` opt-in label.** When `dd.inspect.tag.path` is set, the extracted value normally overwrites the image tag (enabling update detection against the semver embedded in the running container). Setting `dd.inspect.tag.version-only=true` routes the extracted value to `image.softwareVersion` only, leaving the real image tag intact for update detection. This is useful when the inspect path carries a displayable application version that differs in format from the registry tag — the Version column shows it without disrupting how drydock matches updates. The default (tag overwrite) is unchanged when the label is absent. (#209)
+
+- **Container uptime.** The side panel and full-page detail view now show how long a container has been running (from the Docker `State.StartedAt` timestamp), and a new opt-in **Uptime** column can be enabled in the containers table via the column picker. The value updates live and falls back to an em-dash when the start time is unknown.
+
+### Changed
+
+- **Container validation now tolerates fields written by newer drydock versions.** The store validator no longer rejects unknown keys, so a `dd.json` written by a newer release stays readable after a downgrade. Note: this protects downgrades from v1.5.1 onward — rolling back from v1.5.1 to v1.5.0 (which predates this change) still requires removing the new `details.startedAt` and `image.softwareVersion` fields from `dd.json`, since v1.5.0 rejects them.
+
+### Fixed
+
+- **Completed i18n coverage for the last untranslated UI surfaces.** A code-level audit found several strings that still rendered in English for non-English users; they now resolve through the translation catalog: the trigger status badge (`active`/`inactive`), the running/writes-compose `yes`/`no` preview values, the "container actions disabled by server configuration" tooltip, the update-maturity "Available for N days" tooltip (the translate function is now threaded through the container mapper, which previously left the existing catalog keys unused), the grouped "Update All" success toast (which appended a raw English `in <group>` — it now interpolates the group name through a translatable key), the security-view severity tooltips (`CRITICAL`/`HIGH`/`MEDIUM`/`LOW`), the backup operation `unknown` fallback label, and the search-bar hint footer connectors. The new English catalog keys ship now; the 16 community locales fill in through the normal Crowdin sync after release. (#329)
+
+### Security
+
+- **Base image refreshed to clear 24 container-scan CVEs.** Bumped the pinned `node:24-alpine` base from a stale digest (Node 24.16.0, Alpine 3.21) to the current digest (Node 24.18.0, Alpine 3.24) and added `libexpat` to the targeted `apk upgrade` set. This resolves all 11 Node binary CVEs reported by the image scan — including the one critical (CVE-2026-48930) and four high — plus 13 medium `libexpat` CVEs (now `2.8.2-r0`). A rebuild + rescan confirms zero critical/high/Node/libexpat findings remain. The three `busybox`/`ssl_client` findings (CVE-2025-60876, medium) have no upstream fix in Alpine yet and are tracked for a later base bump. All previously pinned Alpine package versions still resolve on 3.24, so the build is otherwise unchanged.
+
 ## [1.5.1-rc.3] — 2026-06-28
 
 ### Added

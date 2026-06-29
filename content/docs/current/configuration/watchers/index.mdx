@@ -717,7 +717,8 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.display.picture` | ⚪ | Custom entity picture URL for Home Assistant MQTT integration. When set to an HTTP/HTTPS URL, overrides the icon-derived `entity_picture` in HASS discovery payloads. | Valid HTTP or HTTPS URL | |
 | `dd.display.name` | ⚪ | Custom display name for the container | Valid String | Container name |
 | `dd.group` | ⚪ | Group name for stack/group views in the UI (falls back to `com.docker.compose.project`, then the Swarm stack label `com.docker.stack.namespace`, if not set) | Valid String | |
-| `dd.inspect.tag.path` | ⚪ | Docker inspect path used to derive a local semver tag | Slash-separated path in `docker inspect` output | |
+| `dd.inspect.tag.path` | ⚪ | Docker inspect path used to derive a local semver tag. The extracted value overwrites the image tag (for update detection) **and** is written to `image.softwareVersion` (for the Version column). Use `dd.inspect.tag.version-only=true` to route it to `image.softwareVersion` only. | Slash-separated path in `docker inspect` output | |
+| `dd.inspect.tag.version-only` | ⚪ | When `dd.inspect.tag.path` is set, route the extracted value to `image.softwareVersion` only instead of overwriting the image tag. Default behavior (tag overwrite) is unchanged when this label is absent or `false`. | `true`, `false` | `false` |
 | `dd.registry.lookup.image` | ⚪ | Alternative image reference used for update lookups | Full image path (for example `library/traefik` or `ghcr.io/traefik/traefik`) | |
 | `dd.link.template` | ⚪ | Browsable link associated to the container version | JS string template with vars `${raw}`, `${original}`, `${transformed}`, `${major}`, `${minor}`, `${patch}`, `${prerelease}` | |
 | `dd.tag.exclude` | ⚪ | Regex to exclude specific tags | Valid JavaScript Regex | |
@@ -748,7 +749,7 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 
 `dd.runtime.entrypoint.origin` and `dd.runtime.cmd.origin` are managed automatically by the Docker trigger during container updates. You only need to set them manually if drydock cannot detect the origin (shows `unknown`) and you want to explicitly pin or release a custom entrypoint/cmd.
 
-<Callout type="warn">`dd.inspect.tag.path` is optional and opt-in. Use it only when your image metadata tracks the running app version reliably; some images set unrelated values. Also note that legacy alias `dd.registry.lookup.url` is still accepted for compatibility, but prefer `dd.registry.lookup.image`.</Callout>
+<Callout type="warn">`dd.inspect.tag.path` is optional and opt-in. Use it only when your image metadata tracks the running app version reliably; some images set unrelated values. By default the extracted value overwrites the image tag (enabling update detection against the embedded semver) and is also written to `image.softwareVersion` (shown in the Version column). Add `dd.inspect.tag.version-only=true` when you want the Version column populated without changing how drydock matches updates. Also note that legacy alias `dd.registry.lookup.url` is still accepted for compatibility, but prefer `dd.registry.lookup.image`.</Callout>
 
 <Callout type="warn" title="dd.tag.transform is validated at startup">`dd.tag.transform` regex patterns are validated at config time. A malformed or oversized regex pattern causes drydock to throw at startup with a descriptive error rather than silently producing broken tag transformations that could generate false positive update detections.</Callout>
 
@@ -873,6 +874,36 @@ services:
 docker run -d \
   --name myapp \
   --label dd.inspect.tag.path=Config/Labels/org.opencontainers.image.version \
+  ghcr.io/example/myapp:latest
+```
+</Tab>
+</Tabs>
+
+### Show the app version from inspect without changing update detection
+
+Use `dd.inspect.tag.version-only=true` when the inspect path value is a display-only version string that would break update detection if used as the image tag (for example when the registry tag and the embedded app version differ in format).
+
+<Tabs items={["Docker Compose (Version Only)", "Docker (Version Only)"]}>
+<Tab value="Docker Compose (Version Only)">
+
+```yaml
+services:
+  myapp:
+    image: ghcr.io/example/myapp:latest
+    labels:
+      - dd.inspect.tag.path=Config/Labels/org.opencontainers.image.version
+      - dd.inspect.tag.version-only=true
+```
+
+The extracted version (e.g. `2.14.3`) appears in the **Version** column. The **Tag** column continues to show `latest` and digest-based update detection is unaffected.
+
+</Tab>
+<Tab value="Docker (Version Only)">
+```bash
+docker run -d \
+  --name myapp \
+  --label dd.inspect.tag.path=Config/Labels/org.opencontainers.image.version \
+  --label dd.inspect.tag.version-only=true \
   ghcr.io/example/myapp:latest
 ```
 </Tab>
@@ -1157,9 +1188,16 @@ drydock classifies each container's tag as `specific` (pinned release, e.g. `1.4
 
 The `tagPrecision` field is computed from the tag name and any active `dd.tag.transform`. You do not need to configure it manually.
 
+### Tag and Version columns
+
+The containers table has two distinct columns for version information:
+
+- **Tag** (column key `version`) — the image tag used for update detection (e.g. `latest`, `1.4.5`). This column was called "Version" in releases before v1.5.1; the column key is unchanged so saved column preferences keep working.
+- **Version** (column key `softwareVersion`) — the application version surfaced from `image.softwareVersion` (the `org.opencontainers.image.version` OCI label, a `dd.inspect.tag.path` extract, or other runtime metadata). Falls back to the image tag when `softwareVersion` is not available. Visible by default for new installs; added automatically to saved column lists on upgrade.
+
 ### Version column display
 
-The Containers list Version column adapts based on `tagPrecision`:
+The **Tag** column adapts based on `tagPrecision`:
 
 - **Floating-tag + digest-watch containers** (e.g. `prom/prometheus:latest`): shows the human-readable tag (not raw SHA). The digest transition is available in the cell tooltip and detail panels.
 - **Digest-pinned containers** (`image.tag.value` starts with `sha256:`): shows the `sha256:abc… → sha256:def…` pair directly in the cell.

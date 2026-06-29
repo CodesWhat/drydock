@@ -12,6 +12,9 @@ import {
   UPDATE_IN_PROGRESS_PHASE_I18N,
 } from '../../utils/container-update';
 import { formatShortDigest } from '../../utils/digest-format';
+import { formatUptimeFromIso } from '../../utils/uptime';
+import { useNow } from '../../composables/useNow';
+import { useColumnVisibility } from '../../composables/useColumnVisibility';
 import {
   getPrimaryHardBlocker,
   getPrimarySoftBlocker,
@@ -55,6 +58,7 @@ const {
   confirmStop,
   startContainer,
   confirmRestart,
+  recheckContainer,
   scanContainer,
   confirmForceUpdate,
   skipUpdate,
@@ -73,6 +77,8 @@ const {
   filterSearch,
   clearFilters,
 } = useContainersViewTemplateContext();
+const { visibleColumns } = useColumnVisibility();
+const nowMs = useNow(30_000, () => visibleColumns.value.has('uptime'));
 const { t, te } = useI18n();
 const { batches, clearBatch, getBatch, incrementSucceeded, incrementFailed } = useUpdateBatches();
 
@@ -702,6 +708,16 @@ onScopeDispose(() => {
             </template>
           </div>
         </template>
+        <!-- Software version (OCI org.opencontainers.image.version or dd.inspect.tag.path value; falls back to image tag) -->
+        <template #cell-softwareVersion="{ row: c }">
+          <div class="text-center">
+            <span class="text-2xs-plus dd-text-secondary truncate max-w-[140px]"
+                  v-tooltip.top="c.softwareVersion ?? c.currentTag"
+                  data-test="container-software-version-col">
+              {{ c.softwareVersion ?? c.currentTag }}
+            </span>
+          </div>
+        </template>
         <!-- Update state -->
         <template #cell-kind="{ row: c }">
           <div
@@ -785,6 +801,12 @@ onScopeDispose(() => {
               <AppIcon name="warning" :size="12" />
             </span>
           </div>
+        </template>
+        <!-- Uptime -->
+        <template #cell-uptime="{ row: c }">
+          <span class="text-2xs-plus dd-text-secondary font-mono">
+            {{ formatUptimeFromIso(c.details?.startedAt, nowMs) }}
+          </span>
         </template>
         <!-- Actions -->
         <template #actions="{ row: c }">
@@ -1416,6 +1438,10 @@ onScopeDispose(() => {
           <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="scanContainer(openActionsContainer); closeActionsMenu()">
             <AppIcon name="security" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-secondary)' }" />
             {{ t('containerComponents.groupedViews.scanAction') }}
+          </AppButton>
+          <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="recheckContainer(openActionsContainer); closeActionsMenu()">
+            <AppIcon name="restart" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
+            {{ t('containerComponents.groupedViews.recheckAction') }}
           </AppButton>
           <!-- Force update for blocked containers (even without newTag) -->
           <template v-if="openActionsContainer.bouncer === 'blocked' && !openActionsContainer.newTag">

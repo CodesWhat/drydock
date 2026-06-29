@@ -3143,6 +3143,80 @@ describe('Dockercompose Trigger', () => {
     );
   });
 
+  test('triggerBatch should use configured path when label path differs only by mount prefix (issue #365)', async () => {
+    // Portainer bind-mounts /drydock/mystack -> /data/compose/mystack inside the container.
+    // The label reflects the in-container path; Drydock's configured path is the host path.
+    trigger.configuration.file = '/drydock/mystack/docker-compose.yml';
+    trigger.configuration.mountPrefixFallback = true;
+    fs.access.mockResolvedValue(undefined);
+
+    const container = {
+      name: 'portainer-app',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/data/compose/mystack/docker-compose.yml' },
+    };
+
+    const processComposeFileSpy = vi.spyOn(trigger, 'processComposeFile').mockResolvedValue();
+
+    await trigger.triggerBatch([container]);
+
+    // Should warn about the mount prefix mismatch (not the "do not match" hard skip)
+    expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('mount prefix'));
+    expect(mockLog.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('do not match configured file'),
+    );
+    // processComposeFile must be called with the Drydock-accessible (configured) path
+    expect(processComposeFileSpy).toHaveBeenCalledWith('/drydock/mystack/docker-compose.yml', [
+      container,
+    ]);
+  });
+
+  test('triggerBatch should hard-skip when tail segments do not match (issue #365 no fallback)', async () => {
+    // stackA vs stackB — different project-dir segment, no tail match even with flag on
+    trigger.configuration.file = '/drydock/stackA/docker-compose.yml';
+    trigger.configuration.mountPrefixFallback = true;
+    fs.access.mockResolvedValue(undefined);
+
+    const container = {
+      name: 'unrelated-app',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/data/compose/stackB/docker-compose.yml' },
+    };
+
+    const processComposeFileSpy = vi.spyOn(trigger, 'processComposeFile').mockResolvedValue();
+
+    await trigger.triggerBatch([container]);
+
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('do not match configured file'),
+    );
+    expect(mockLog.warn).not.toHaveBeenCalledWith(expect.stringContaining('mount prefix'));
+    expect(processComposeFileSpy).not.toHaveBeenCalled();
+  });
+
+  test('triggerBatch should hard-skip when tail matches but mountPrefixFallback is off (default)', async () => {
+    // Same tail (mystack/docker-compose.yml) but flag is NOT set — must hard-skip, not use fallback.
+    trigger.configuration.file = '/drydock/mystack/docker-compose.yml';
+    // mountPrefixFallback is absent from the config (default false)
+    fs.access.mockResolvedValue(undefined);
+
+    const container = {
+      name: 'portainer-app',
+      watcher: 'local',
+      labels: { 'dd.compose.file': '/data/compose/mystack/docker-compose.yml' },
+    };
+
+    const processComposeFileSpy = vi.spyOn(trigger, 'processComposeFile').mockResolvedValue();
+
+    await trigger.triggerBatch([container]);
+
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      expect.stringContaining('do not match configured file'),
+    );
+    expect(mockLog.warn).not.toHaveBeenCalledWith(expect.stringContaining('mount prefix'));
+    expect(processComposeFileSpy).not.toHaveBeenCalled();
+  });
+
   test('triggerBatch should warn when no containers matched any compose file', async () => {
     trigger.configuration.file = undefined;
 

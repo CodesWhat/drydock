@@ -274,4 +274,115 @@ describe('docker runtime details module', () => {
       env: [],
     });
   });
+
+  test('extracts startedAt from inspect State when present and valid', () => {
+    const details = getRuntimeDetailsFromInspect({
+      State: { StartedAt: '2024-06-01T12:00:00Z' },
+    } as any);
+    expect(details.startedAt).toBe('2024-06-01T12:00:00Z');
+  });
+
+  test('omits startedAt when State is missing', () => {
+    const details = getRuntimeDetailsFromInspect({} as any);
+    expect(details.startedAt).toBeUndefined();
+  });
+
+  test('omits startedAt when State.StartedAt is the Docker zero-time sentinel', () => {
+    const details = getRuntimeDetailsFromInspect({
+      State: { StartedAt: '0001-01-01T00:00:00Z' },
+    } as any);
+    expect(details.startedAt).toBeUndefined();
+  });
+
+  test('omits startedAt when State.StartedAt starts with 0001-', () => {
+    const details = getRuntimeDetailsFromInspect({
+      State: { StartedAt: '0001-01-01T00:00:00.000Z' },
+    } as any);
+    expect(details.startedAt).toBeUndefined();
+  });
+
+  test('omits startedAt when State.StartedAt is not a string', () => {
+    const details = getRuntimeDetailsFromInspect({
+      State: { StartedAt: null },
+    } as any);
+    expect(details.startedAt).toBeUndefined();
+  });
+
+  test('omits startedAt when State.StartedAt is an empty string', () => {
+    const details = getRuntimeDetailsFromInspect({
+      State: { StartedAt: '' },
+    } as any);
+    expect(details.startedAt).toBeUndefined();
+  });
+
+  test('merge prefers startedAt from preferred details', () => {
+    const merged = mergeRuntimeDetails(
+      { ports: [], volumes: [], env: [], startedAt: '2024-06-01T12:00:00Z' },
+      { ports: [], volumes: [], env: [], startedAt: '2023-01-01T00:00:00Z' },
+    );
+    expect(merged.startedAt).toBe('2024-06-01T12:00:00Z');
+  });
+
+  test('merge falls back to fallback startedAt when preferred has none', () => {
+    const merged = mergeRuntimeDetails(
+      { ports: [], volumes: [], env: [] },
+      { ports: [], volumes: [], env: [], startedAt: '2023-01-01T00:00:00Z' },
+    );
+    expect(merged.startedAt).toBe('2023-01-01T00:00:00Z');
+  });
+
+  test('merge yields undefined startedAt when neither preferred nor fallback has one', () => {
+    const merged = mergeRuntimeDetails(
+      { ports: [], volumes: [], env: [] },
+      { ports: [], volumes: [], env: [] },
+    );
+    expect(merged.startedAt).toBeUndefined();
+  });
+
+  test('areRuntimeDetailsEqual returns false when startedAt differs', () => {
+    expect(
+      areRuntimeDetailsEqual(
+        { ports: [], volumes: [], env: [], startedAt: '2024-06-01T12:00:00Z' },
+        { ports: [], volumes: [], env: [], startedAt: '2024-06-02T12:00:00Z' },
+      ),
+    ).toBe(false);
+  });
+
+  test('areRuntimeDetailsEqual returns false when one has startedAt and the other does not', () => {
+    expect(
+      areRuntimeDetailsEqual(
+        { ports: [], volumes: [], env: [], startedAt: '2024-06-01T12:00:00Z' },
+        { ports: [], volumes: [], env: [] },
+      ),
+    ).toBe(false);
+  });
+
+  test('areRuntimeDetailsEqual returns true when both have the same startedAt', () => {
+    expect(
+      areRuntimeDetailsEqual(
+        { ports: [], volumes: [], env: [], startedAt: '2024-06-01T12:00:00Z' },
+        { ports: [], volumes: [], env: [], startedAt: '2024-06-01T12:00:00Z' },
+      ),
+    ).toBe(true);
+  });
+
+  test('normalizeRuntimeDetails carries startedAt through', () => {
+    const normalized = normalizeRuntimeDetails({
+      ports: [],
+      volumes: [],
+      env: [],
+      startedAt: '2024-06-01T12:00:00Z',
+    });
+    expect(normalized.startedAt).toBe('2024-06-01T12:00:00Z');
+  });
+
+  test('normalizeRuntimeDetails omits startedAt when not a non-empty string', () => {
+    expect(
+      normalizeRuntimeDetails({ ports: [], volumes: [], env: [], startedAt: '' }).startedAt,
+    ).toBeUndefined();
+    expect(
+      normalizeRuntimeDetails({ ports: [], volumes: [], env: [], startedAt: null }).startedAt,
+    ).toBeUndefined();
+    expect(normalizeRuntimeDetails({ ports: [], volumes: [], env: [] }).startedAt).toBeUndefined();
+  });
 });

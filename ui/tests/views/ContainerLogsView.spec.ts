@@ -158,6 +158,7 @@ describe('ContainerLogsView', () => {
       await flushPromises();
       expect(mocks.mapApiContainer).toHaveBeenCalledWith(
         expect.objectContaining({ id: 'container-1' }),
+        expect.any(Function),
       );
       expect(wrapper.find('[data-test="container-logs-stub"]').exists()).toBe(true);
     });

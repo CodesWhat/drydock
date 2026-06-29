@@ -60,7 +60,9 @@ async function loadServerFeatures(): Promise<void> {
 const containerActionsEnabled = computed(() => isFeatureEnabled('containeractions'));
 const deleteEnabled = computed(() => isFeatureEnabled('delete'));
 const containerActionsDisabledReason = computed(() =>
-  containerActionsEnabled.value ? '' : 'Container actions disabled by server configuration',
+  containerActionsEnabled.value
+    ? ''
+    : i18n.global.t('sharedComponents.serverFeatures.actionsDisabledReason'),
 );
 
 interface UseServerFeaturesOptions {

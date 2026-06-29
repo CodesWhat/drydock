@@ -139,6 +139,8 @@ const updateOperationsLoading = ref(false);
 const detailUpdateOperations = ref<ApiContainerUpdateOperation[]>([]);
 const updateOperationsError = ref<string | null>(null);
 const mockScanContainer = vi.fn();
+const mockRecheckContainer = vi.fn();
+const mockRecheckingContainerId = ref<string | null>(null);
 const mockConfirmUpdate = vi.fn();
 const mockConfirmForceUpdate = vi.fn();
 
@@ -233,6 +235,8 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     formatOperationPhase: (phase: string) => phase,
     formatRollbackReason: (reason: string) => reason,
     updateOperationsError,
+    recheckContainer: mockRecheckContainer,
+    recheckingContainerId: mockRecheckingContainerId,
     scanContainer: mockScanContainer,
     confirmUpdate: mockConfirmUpdate,
     confirmForceUpdate: mockConfirmForceUpdate,
@@ -359,6 +363,8 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     loadDetailSecurityData.mockReset();
     loadDetailSbom.mockReset();
     mockScanContainer.mockReset();
+    mockRecheckContainer.mockReset();
+    mockRecheckingContainerId.value = null;
     mockConfirmUpdate.mockReset();
     mockConfirmForceUpdate.mockReset();
   });
@@ -546,7 +552,8 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.text()).toContain('Compose service:');
     expect(wrapper.text()).toContain('web');
     expect(wrapper.text()).toContain('Writes compose file:');
-    expect(wrapper.text()).toContain('no');
+    expect(wrapper.text()).toContain('Writes compose file: no');
+    expect(wrapper.text()).toContain('Running: yes');
     expect(wrapper.text()).toContain('Patch preview:');
     expect(wrapper.text()).toContain('@@ -1,3 +1,3 @@');
   });
@@ -714,6 +721,28 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.text()).toContain('Entrypoint differs from expected runtime args');
     expect(wrapper.text()).toContain('Abort update when pre-update hook fails');
     expect(wrapper.text()).toContain('{{ .Container.Name }}');
+  });
+
+  it('shows softwareVersion row in overview when softwareVersion is set', () => {
+    activeDetailTab.value = 'overview';
+    const withVersion = createSelectedContainer();
+    withVersion.softwareVersion = '1.25.5';
+    selectedContainer.value = withVersion;
+
+    const wrapper = mountComponent();
+
+    const row = wrapper.find('[data-test="container-software-version-side"]');
+    expect(row.exists()).toBe(true);
+    expect(row.text()).toContain('1.25.5');
+  });
+
+  it('hides softwareVersion row in overview when softwareVersion is absent', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = createSelectedContainer();
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.find('[data-test="container-software-version-side"]').exists()).toBe(false);
   });
 
   it('refreshes security data and SBOM from overview controls', async () => {
@@ -1005,7 +1034,7 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.text()).toContain('Writable file:');
     expect(wrapper.text()).toContain('/tmp/compose.yml');
     expect(wrapper.text()).toContain('Writes compose file:');
-    expect(wrapper.text()).toContain('yes');
+    expect(wrapper.text()).toContain('Writes compose file: yes');
     expect(wrapper.text()).not.toContain('Compose service:');
     expect(wrapper.text()).not.toContain('Patch preview:');
   });
@@ -1114,5 +1143,38 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.text()).not.toContain('Compose file:');
     expect(wrapper.text()).not.toContain('Writes compose file:');
     expect(wrapper.text()).not.toContain('Version:');
+  });
+
+  it('renders and wires the Recheck for Updates button when on actions tab', async () => {
+    activeDetailTab.value = 'actions';
+    const container = createSelectedContainer();
+    container.newTag = '1.25.0';
+    selectedContainer.value = container;
+
+    const wrapper = mountComponent();
+    const recheckButton = wrapper
+      .findAll('button')
+      .find((btn) => btn.text().includes('Recheck for Updates'));
+    expect(recheckButton).toBeDefined();
+    await recheckButton?.trigger('click');
+    expect(mockRecheckContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'container-1', name: 'nginx' }),
+    );
+  });
+
+  it('disables the Recheck for Updates button and shows Rechecking… label while recheck is in progress', () => {
+    activeDetailTab.value = 'actions';
+    const container = createSelectedContainer();
+    container.newTag = '1.25.0';
+    selectedContainer.value = container;
+    mockRecheckingContainerId.value = 'container-1';
+
+    const wrapper = mountComponent();
+    const recheckButton = wrapper
+      .findAll('button')
+      .find((btn) => btn.text().includes('Rechecking'));
+    expect(recheckButton).toBeDefined();
+    expect(recheckButton!.attributes('disabled')).toBeDefined();
+    expect(recheckButton!.text()).toContain('Rechecking');
   });
 });

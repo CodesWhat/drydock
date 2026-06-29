@@ -60,10 +60,14 @@ export function normalizeRuntimeDetails(details: unknown): ContainerRuntimeDetai
   if (!runtimeDetails) {
     return getEmptyRuntimeDetails();
   }
+  const startedAt = isNonEmptyString(runtimeDetails.startedAt)
+    ? runtimeDetails.startedAt
+    : undefined;
   return {
     ports: normalizeRuntimeStringList(runtimeDetails.ports),
     volumes: normalizeRuntimeStringList(runtimeDetails.volumes),
     env: normalizeRuntimeEnvList(runtimeDetails.env),
+    ...(startedAt !== undefined ? { startedAt } : {}),
   };
 }
 
@@ -74,6 +78,9 @@ export function areRuntimeDetailsEqual(
   const normalizedDetailsA = normalizeRuntimeDetails(detailsA);
   const normalizedDetailsB = normalizeRuntimeDetails(detailsB);
 
+  if (normalizedDetailsA.startedAt !== normalizedDetailsB.startedAt) {
+    return false;
+  }
   if (normalizedDetailsA.ports.length !== normalizedDetailsB.ports.length) {
     return false;
   }
@@ -248,11 +255,16 @@ export function getRuntimeDetailsFromInspect(containerInspect: unknown): Contain
   const inspect = asUnknownRecord(containerInspect);
   const networkSettings = asUnknownRecord(inspect?.NetworkSettings);
   const config = asUnknownRecord(inspect?.Config);
+  const state = asUnknownRecord(inspect?.State);
+  const rawStartedAt = state?.StartedAt;
+  const startedAt =
+    isNonEmptyString(rawStartedAt) && !rawStartedAt.startsWith('0001-') ? rawStartedAt : undefined;
 
   return {
     ports: formatContainerPortsFromInspect(networkSettings?.Ports),
     volumes: formatContainerVolumes(inspect?.Mounts),
     env: formatContainerEnv(config?.Env),
+    ...(startedAt !== undefined ? { startedAt } : {}),
   };
 }
 
@@ -269,10 +281,12 @@ export function mergeRuntimeDetails(
   preferredDetails: ContainerRuntimeDetails,
   fallbackDetails: ContainerRuntimeDetails,
 ): ContainerRuntimeDetails {
+  const startedAt = preferredDetails.startedAt ?? fallbackDetails.startedAt;
   return {
     ports: preferredDetails.ports.length > 0 ? preferredDetails.ports : fallbackDetails.ports,
     volumes:
       preferredDetails.volumes.length > 0 ? preferredDetails.volumes : fallbackDetails.volumes,
     env: preferredDetails.env.length > 0 ? preferredDetails.env : fallbackDetails.env,
+    ...(startedAt !== undefined ? { startedAt } : {}),
   };
 }

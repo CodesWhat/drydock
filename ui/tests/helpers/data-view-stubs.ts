@@ -31,6 +31,7 @@ export const dataViewStubs: Record<string, any> = {
            :data-selected-key="selectedKey || activeRow || ''">
         <button v-if="rows?.[0]" class="row-click-first" @click="$emit('row-click', rows[0])">Open 1</button>
         <button v-if="rows?.[1]" class="row-click-second" @click="$emit('row-click', rows[1])">Open 2</button>
+        <div v-if="rows?.[0]" data-cell="status"><slot name="cell-status" :row="rows[0]" /></div>
         <slot name="empty" v-if="!rows || rows.length === 0" />
       </div>
     `,
@@ -51,6 +52,7 @@ export const dataViewStubs: Record<string, any> = {
     template: `
       <div class="data-list-accordion" :data-item-count="items?.length ?? 0">
         <button v-if="items?.[0]" class="list-click-first" @click="$emit('item-click', items[0])">List 1</button>
+        <div v-if="items?.[0]" class="list-details"><slot name="details" :item="items[0]" /></div>
       </div>
     `,
   }),

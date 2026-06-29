@@ -29,6 +29,8 @@ const {
   confirmStop,
   startContainer,
   confirmRestart,
+  recheckContainer,
+  recheckingContainerId,
   scanContainer,
   confirmUpdate,
   confirmForceUpdate,
@@ -225,6 +227,16 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             @click="scanContainer(selectedContainer)">
             <AppIcon :name="isActionInProgress(selectedContainer) ? 'spinner' : 'security'" :size="12" :class="isActionInProgress(selectedContainer) ? 'dd-spin' : ''" />
             {{ t('containerComponents.fullPageDetail.scanButton') }}
+          </AppButton>
+          <AppButton
+            size="md"
+            variant="muted"
+            class="inline-flex items-center gap-1.5"
+            :disabled="recheckingContainerId === selectedContainer.id || isActionBlocked(selectedContainer)"
+            :aria-label="t('containerComponents.fullPageDetail.ariaRecheckContainer')"
+            @click="recheckContainer(selectedContainer)">
+            <AppIcon :name="recheckingContainerId === selectedContainer.id ? 'spinner' : 'restart'" :size="12" :class="recheckingContainerId === selectedContainer.id ? 'dd-spin' : ''" />
+            {{ t('containerComponents.fullPageDetail.recheckButton') }}
           </AppButton>
 	          <AppButton
 	            v-if="selectedContainer.newTag && isUpdateHardBlocked(selectedContainer)"

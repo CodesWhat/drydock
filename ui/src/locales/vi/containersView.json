@@ -31,6 +31,7 @@
     },
     "columns": {
       "container": "Container",
+      "tag": "Tag",
       "version": "Phiên bản",
       "update": "Cập nhật",
       "status": "Trạng thái",

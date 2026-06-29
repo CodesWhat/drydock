@@ -31,6 +31,7 @@
     },
     "columns": {
       "container": "الحاوية",
+      "tag": "Tag",
       "version": "الإصدار",
       "update": "التحديث",
       "status": "الحالة",

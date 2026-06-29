@@ -1373,5 +1373,203 @@ describe('Docker Watcher', () => {
       // Should have fallen through to use RepoTags
       expect(result.image.tag.value).toBe('stable');
     });
+
+    describe('softwareVersion from OCI label', () => {
+      test('should populate softwareVersion from org.opencontainers.image.version label on image inspect', async () => {
+        const container = await setupContainerDetailTest(docker, {
+          container: { Image: 'nginx:latest', Names: ['/nginx'] },
+          imageDetails: {
+            Config: {
+              Labels: { 'org.opencontainers.image.version': '1.25.5' },
+            },
+          },
+        });
+
+        const result = await docker.addImageDetailsToContainer(container);
+
+        expect(result.image.softwareVersion).toBe('1.25.5');
+      });
+
+      test('should leave softwareVersion undefined when OCI label is absent', async () => {
+        const container = await setupContainerDetailTest(docker, {
+          container: { Image: 'nginx:latest', Names: ['/nginx'] },
+          imageDetails: {
+            Config: { Labels: {} },
+          },
+        });
+
+        const result = await docker.addImageDetailsToContainer(container);
+
+        expect(result.image.softwareVersion).toBeUndefined();
+      });
+
+      test('should normalize empty OCI label string to undefined softwareVersion', async () => {
+        const container = await setupContainerDetailTest(docker, {
+          container: { Image: 'nginx:latest', Names: ['/nginx'] },
+          imageDetails: {
+            Config: {
+              Labels: { 'org.opencontainers.image.version': '' },
+            },
+          },
+        });
+
+        const result = await docker.addImageDetailsToContainer(container);
+
+        expect(result.image.softwareVersion).toBeUndefined();
+      });
+
+      test('should fall back to container inspect when image inspect has no OCI version label', async () => {
+        const container = await setupContainerDetailTest(docker, {
+          container: { Image: 'nginx:latest', Names: ['/nginx'] },
+          imageDetails: {
+            Config: { Labels: {} },
+          },
+        });
+        mockContainer.inspect.mockResolvedValue({
+          Config: {
+            Labels: { 'org.opencontainers.image.version': '1.25.5-from-container' },
+          },
+        });
+
+        const result = await docker.addImageDetailsToContainer(container);
+
+        expect(result.image.softwareVersion).toBe('1.25.5-from-container');
+      });
+
+      test('should set softwareVersion and still override tag when dd.inspect.tag.path is configured', async () => {
+        const container = await setupContainerDetailTest(docker, {
+          container: {
+            Image: 'nginx:stable',
+            Names: ['/nginx'],
+            Labels: { 'dd.inspect.tag.path': 'Config/Labels/org.opencontainers.image.version' },
+          },
+          imageDetails: {
+            Config: {
+              Labels: { 'org.opencontainers.image.version': '1.25.5' },
+            },
+          },
+          semverValue: { major: 1, minor: 25, patch: 5, version: '1.25.5' },
+        });
+        hMockTag.transform.mockImplementation((_transform, value) => value);
+
+        const result = await docker.addImageDetailsToContainer(container);
+
+        // tag override from dd.inspect.tag.path is preserved (dual-write, not removed)
+        expect(result.image.tag.value).toBe('1.25.5');
+        // softwareVersion populated from same image label
+        expect(result.image.softwareVersion).toBe('1.25.5');
+      });
+    });
+
+    describe('dd.inspect.tag.version-only opt-in label', () => {
+      test('should populate softwareVersion from inspect path but leave tag unchanged when dd.inspect.tag.version-only=true', async () => {
+        const container = await setupContainerDetailTest(docker, {
+          container: {
+            Image: 'ghcr.io/example/app:stable',
+            Names: ['/app'],
+            Labels: {
+              'dd.inspect.tag.path': 'Config/Labels/my.app.version',
+              'dd.inspect.tag.version-only': 'true',
+            },
+          },
+          imageDetails: {
+            Config: {
+              Labels: { 'my.app.version': '3.14.1' },
+            },
+          },
+          parsedImage: { domain: 'ghcr.io', path: 'example/app', tag: 'stable' },
+          semverValue: { major: 3, minor: 14, patch: 1, version: '3.14.1' },
+        });
+        hMockTag.transform.mockImplementation((_transform, value) => value);
+
+        const result = await docker.addImageDetailsToContainer(container);
+
+        // tag is NOT overwritten when version-only=true
+        expect(result.image.tag.value).toBe('stable');
+        // softwareVersion is populated from the inspect path value
+        expect(result.image.softwareVersion).toBe('3.14.1');
+      });
+
+      test('should fall back to OCI label for softwareVersion when inspect path yields no semver and version-only=true', async () => {
+        const container = await setupContainerDetailTest(docker, {
+          container: {
+            Image: 'ghcr.io/example/app:stable',
+            Names: ['/app'],
+            Labels: {
+              'dd.inspect.tag.path': 'Config/Labels/nonexistent.version',
+              'dd.inspect.tag.version-only': 'true',
+            },
+          },
+          imageDetails: {
+            Config: {
+              Labels: { 'org.opencontainers.image.version': '2.0.0' },
+            },
+          },
+          parsedImage: { domain: 'ghcr.io', path: 'example/app', tag: 'stable' },
+          semverValue: null,
+        });
+
+        const result = await docker.addImageDetailsToContainer(container);
+
+        // tag unchanged since inspect path found no semver
+        expect(result.image.tag.value).toBe('stable');
+        // softwareVersion falls back to OCI label
+        expect(result.image.softwareVersion).toBe('2.0.0');
+      });
+
+      test('should dual-write softwareVersion from inspect path when version-only is absent (default behavior)', async () => {
+        const container = await setupContainerDetailTest(docker, {
+          container: {
+            Image: 'ghcr.io/example/app:stable',
+            Names: ['/app'],
+            Labels: {
+              'dd.inspect.tag.path': 'Config/Labels/org.opencontainers.image.version',
+            },
+          },
+          imageDetails: {
+            Config: {
+              Labels: { 'org.opencontainers.image.version': '1.5.0' },
+            },
+          },
+          parsedImage: { domain: 'ghcr.io', path: 'example/app', tag: 'stable' },
+          semverValue: { major: 1, minor: 5, patch: 0, version: '1.5.0' },
+        });
+        hMockTag.transform.mockImplementation((_transform, value) => value);
+
+        const result = await docker.addImageDetailsToContainer(container);
+
+        // default: tag IS overwritten by inspect path value
+        expect(result.image.tag.value).toBe('1.5.0');
+        // softwareVersion is also populated (dual-write)
+        expect(result.image.softwareVersion).toBe('1.5.0');
+      });
+
+      test('should dual-write softwareVersion when inspect path points to non-OCI label', async () => {
+        const container = await setupContainerDetailTest(docker, {
+          container: {
+            Image: 'ghcr.io/example/app:latest',
+            Names: ['/app'],
+            Labels: {
+              'dd.inspect.tag.path': 'Config/Labels/com.example.version',
+            },
+          },
+          imageDetails: {
+            Config: {
+              Labels: { 'com.example.version': '2.0.0' },
+            },
+          },
+          parsedImage: { domain: 'ghcr.io', path: 'example/app', tag: 'latest' },
+          semverValue: { major: 2, minor: 0, patch: 0, version: '2.0.0' },
+        });
+        hMockTag.transform.mockImplementation((_transform, value) => value);
+
+        const result = await docker.addImageDetailsToContainer(container);
+
+        // tag overwritten by inspect path (default, no version-only)
+        expect(result.image.tag.value).toBe('2.0.0');
+        // softwareVersion populated even though OCI label is absent
+        expect(result.image.softwareVersion).toBe('2.0.0');
+      });
+    });
   });
 });

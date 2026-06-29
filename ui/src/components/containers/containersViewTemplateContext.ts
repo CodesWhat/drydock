@@ -98,6 +98,7 @@ export interface ContainersViewTableColumn {
   autoSize?: 'content' | 'fixed' | 'fill';
   px?: string;
   icon: boolean;
+  headerTooltip?: string;
 }
 
 export interface ContainersViewTemplateContext

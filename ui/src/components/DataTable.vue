@@ -32,6 +32,8 @@ export interface DataTableColumn {
   px?: string;
   /** Narrow icon-only column — no header text, tight padding, vertically centered */
   icon?: boolean;
+  /** Optional tooltip shown on the column header label */
+  headerTooltip?: string;
 }
 
 const props = withDefaults(
@@ -730,7 +732,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
                 :aria-sort="ariaSort(col)"
                 @keydown="handleHeaderKeydown($event, col)"
                 @click="!resizing && isSortableColumn(col) && toggleSort(col.key, sortKey, sortAsc)">
-              {{ col.label }}
+              <span v-tooltip="col.headerTooltip">{{ col.label }}</span>
               <span v-if="sortKey === col.key" class="inline-block ml-0.5 text-4xs">{{ sortAsc ? '\u25B2' : '\u25BC' }}</span>
               <!-- Resize handle -->
               <div v-if="!col.icon"

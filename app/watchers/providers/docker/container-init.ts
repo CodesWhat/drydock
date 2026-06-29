@@ -22,6 +22,7 @@ import {
   ddDisplayIcon,
   ddDisplayName,
   ddInspectTagPath,
+  ddInspectTagVersionOnly,
   ddLinkTemplate,
   ddNotificationExclude,
   ddNotificationInclude,
@@ -64,6 +65,7 @@ interface ResolvedContainerLabelOverrides {
   transformTags?: string;
   tagFamily?: string;
   inspectTagPath?: string;
+  inspectTagVersionOnly?: string;
   linkTemplate?: string;
   displayName?: string;
   displayIcon?: string;
@@ -146,6 +148,12 @@ const containerLabelOverrideMappings = [
     key: 'inspectTagPath',
     ddKey: ddInspectTagPath,
     wudKey: wudInspectTagPath,
+    overrideKey: undefined,
+  },
+  {
+    key: 'inspectTagVersionOnly',
+    ddKey: ddInspectTagVersionOnly,
+    wudKey: undefined,
     overrideKey: undefined,
   },
   {
@@ -693,6 +701,7 @@ export function mergeConfigWithImgset(
       labelOverrides.inspectTagPath,
       matchingImgset?.inspectTagPath,
     ),
+    inspectTagVersionOnly: labelOverrides.inspectTagVersionOnly,
     watchDigest: getContainerConfigValue(
       getLabel(containerLabels, ddWatchDigest, wudWatchDigest),
       matchingImgset?.watchDigest,

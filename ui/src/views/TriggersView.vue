@@ -264,7 +264,7 @@ onMounted(async () => {
                  v-tooltip.top="row.status === 'active' ? t('triggersView.status.active') : t('triggersView.status.inactive')"
                  :style="{ color: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
         <AppBadge :tone="row.status === 'active' ? 'success' : 'danger'" size="xs" class="max-md:!hidden">
-          {{ row.status }}
+          {{ row.status === 'active' ? t('triggersView.status.active') : t('triggersView.status.inactive') }}
         </AppBadge>
       </template>
       <template #empty>
@@ -304,7 +304,7 @@ onMounted(async () => {
                      v-tooltip.top="item.status === 'active' ? t('triggersView.status.active') : t('triggersView.status.inactive')"
                      :style="{ color: item.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)' }" />
             <AppBadge :tone="item.status === 'active' ? 'success' : 'danger'" size="xs" class="max-md:!hidden">
-              {{ item.status }}
+              {{ item.status === 'active' ? t('triggersView.status.active') : t('triggersView.status.inactive') }}
             </AppBadge>
             <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1 px-2 py-1 dd-rounded text-2xs font-bold transition-[color,background-color,border-color,opacity,transform,box-shadow] text-white"
                     :style="{ background: testResult?.id === item.id
@@ -343,7 +343,7 @@ onMounted(async () => {
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
           <DetailField v-for="(val, key) in item.config" :key="key" :label="String(key)" compact mono>{{ val }}</DetailField>
           <DetailField :label="t('triggersView.list.status')" compact>
-            <AppBadge :tone="item.status === 'active' ? 'success' : 'danger'" size="sm">{{ item.status }}</AppBadge>
+            <AppBadge :tone="item.status === 'active' ? 'success' : 'danger'" size="sm">{{ item.status === 'active' ? t('triggersView.status.active') : t('triggersView.status.inactive') }}</AppBadge>
           </DetailField>
         </div>
         <div class="mt-4 pt-3" :style="{ borderTop: '1px solid var(--dd-border)' }">
@@ -393,7 +393,7 @@ onMounted(async () => {
 
         <template #subtitle>
           <AppBadge v-if="selectedTrigger" :tone="selectedTrigger.status === 'active' ? 'success' : 'danger'" size="xs">
-            {{ selectedTrigger.status }}
+            {{ selectedTrigger.status === 'active' ? t('triggersView.status.active') : t('triggersView.status.inactive') }}
           </AppBadge>
         </template>
 
