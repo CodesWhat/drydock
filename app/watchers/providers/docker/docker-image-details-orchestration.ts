@@ -20,6 +20,7 @@ import {
   getContainerName,
   getInspectValueByPath,
   getRepoDigest,
+  getSemverTagFromInspectPath,
   isDigestToWatch,
   type ResolvedImgset,
   shouldUpdateDisplayNameFromContainerName,
@@ -97,6 +98,7 @@ interface ResolvedContainerLabelOverrides {
   triggerExclude?: string;
   lookupImage?: string;
   inspectTagPath?: string;
+  inspectTagVersionOnly?: string;
 }
 
 interface ResolvedContainerConfig {
@@ -111,6 +113,7 @@ interface ResolvedContainerConfig {
   triggerExclude?: string;
   lookupImage?: string;
   inspectTagPath?: string;
+  inspectTagVersionOnly?: string;
   watchDigest?: string;
 }
 
@@ -168,6 +171,7 @@ interface DockerImageDetailsHelpers {
     inspectTagPath: string | undefined,
     transformTagsFromLabel: string | undefined,
     containerId: string,
+    inspectTagVersionOnly?: boolean,
   ) => string;
   getMatchingImgsetConfiguration: (
     parsedImage: ParsedDockerImageReference,
@@ -526,6 +530,7 @@ function resolveContainerImageState(
     resolvedConfig.inspectTagPath,
     resolvedLabelOverrides.transformTags,
     container.Id,
+    resolvedConfig.inspectTagVersionOnly?.toLowerCase() === 'true',
   );
   const transformedTag = transformTag(resolvedConfig.transformTags, tagName);
   const parsedTag = parseSemver(transformedTag);
@@ -759,7 +764,17 @@ export async function addImageDetailsToContainerOrchestration(
       os: image.Os,
       variant: image.Variant,
       created: image.Created,
-      softwareVersion: resolveSoftwareVersion(image, containerInspect),
+      softwareVersion: (() => {
+        if (resolvedConfig.inspectTagPath) {
+          const fromInspectPath = getSemverTagFromInspectPath(
+            image,
+            resolvedConfig.inspectTagPath,
+            resolvedConfig.transformTags,
+          );
+          if (fromInspectPath) return fromInspectPath;
+        }
+        return resolveSoftwareVersion(image, containerInspect);
+      })(),
     },
     labels: containerLabels,
     sourceRepo: detectSourceRepoFromImageMetadata({

@@ -65,12 +65,13 @@ export interface PreferencesSchema {
   };
 }
 
-export const CURRENT_SCHEMA_VERSION = 6;
+export const CURRENT_SCHEMA_VERSION = 7;
 
 export const CONTAINER_TABLE_COLUMN_KEYS = [
   'icon',
   'name',
   'version',
+  'softwareVersion',
   'kind',
   'status',
   'server',

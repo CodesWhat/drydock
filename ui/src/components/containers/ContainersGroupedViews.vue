@@ -706,7 +706,16 @@ onScopeDispose(() => {
               </div>
             </template>
           </div>
-          <div v-if="c.softwareVersion" class="text-2xs mt-0.5 truncate dd-text-muted text-center" v-tooltip.top="c.softwareVersion" data-test="container-software-version">{{ c.softwareVersion }}</div>
+        </template>
+        <!-- Software version (OCI org.opencontainers.image.version or dd.inspect.tag.path value; falls back to image tag) -->
+        <template #cell-softwareVersion="{ row: c }">
+          <div class="text-center">
+            <span class="text-2xs-plus dd-text-secondary truncate max-w-[140px]"
+                  v-tooltip.top="c.softwareVersion ?? c.currentTag"
+                  data-test="container-software-version-col">
+              {{ c.softwareVersion ?? c.currentTag }}
+            </span>
+          </div>
         </template>
         <!-- Update state -->
         <template #cell-kind="{ row: c }">

@@ -77,6 +77,7 @@ const DataTableStub = defineComponent({
             <slot name="cell-icon" :row="row" />
             <slot name="cell-name" :row="row" />
             <slot name="cell-version" :row="row" />
+            <slot name="cell-softwareVersion" :row="row" />
             <slot name="cell-kind" :row="row" />
             <slot name="cell-status" :row="row" />
             <slot name="cell-bouncer" :row="row" />
@@ -2757,18 +2758,20 @@ describe('ContainersGroupedViews', () => {
       return { wrapper: mountSubject(), container };
     }
 
-    it('renders softwareVersion secondary line when softwareVersion is set', async () => {
+    it('renders softwareVersion cell with softwareVersion value when present', async () => {
       const { wrapper } = mountWithSoftwareVersion('1.25.5');
       const row = rowByName(wrapper, 'alpha');
-      const svLine = row.find('[data-test="container-software-version"]');
-      expect(svLine.exists()).toBe(true);
-      expect(svLine.text()).toBe('1.25.5');
+      const svCell = row.find('[data-test="container-software-version-col"]');
+      expect(svCell.exists()).toBe(true);
+      expect(svCell.text()).toBe('1.25.5');
     });
 
-    it('does not render softwareVersion secondary line when softwareVersion is absent', async () => {
+    it('renders softwareVersion cell falling back to currentTag when softwareVersion is absent', async () => {
       const { wrapper } = mountWithSoftwareVersion(undefined);
       const row = rowByName(wrapper, 'alpha');
-      expect(row.find('[data-test="container-software-version"]').exists()).toBe(false);
+      const svCell = row.find('[data-test="container-software-version-col"]');
+      expect(svCell.exists()).toBe(true);
+      expect(svCell.text()).toBe('latest');
     });
   });
 

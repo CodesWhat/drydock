@@ -31,6 +31,7 @@
     },
     "columns": {
       "container": "Conteneur",
+      "tag": "Tag",
       "version": "Version",
       "update": "Mise à jour",
       "status": "État",

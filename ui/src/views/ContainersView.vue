@@ -568,6 +568,7 @@ const VALID_CONTAINER_SORT_KEYS = [
   'bouncer',
   'kind',
   'version',
+  'softwareVersion',
   'imageAge',
 ] as const;
 type ContainerSortKey = (typeof VALID_CONTAINER_SORT_KEYS)[number];
@@ -972,6 +973,9 @@ const sortedContainers = computed(() => {
     } else if (key === 'version') {
       leftValue = left.currentTag;
       rightValue = right.currentTag;
+    } else if (key === 'softwareVersion') {
+      leftValue = left.softwareVersion ?? left.currentTag;
+      rightValue = right.softwareVersion ?? right.currentTag;
     } else if (key === 'imageAge') {
       const leftMs = left.imageCreated ? new Date(left.imageCreated).getTime() : 0;
       const rightMs = right.imageCreated ? new Date(right.imageCreated).getTime() : 0;

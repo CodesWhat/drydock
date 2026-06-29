@@ -159,7 +159,17 @@ const mockWindowNarrow = ref(false);
 const mockWindowWidth = ref(1440);
 
 const mockVisibleColumns = ref(
-  new Set(['icon', 'name', 'version', 'kind', 'status', 'bouncer', 'server', 'registry']),
+  new Set([
+    'icon',
+    'name',
+    'version',
+    'softwareVersion',
+    'kind',
+    'status',
+    'bouncer',
+    'server',
+    'registry',
+  ]),
 );
 const mockShowColumnPicker = ref(false);
 
@@ -168,7 +178,8 @@ vi.mock('@/composables/useColumnVisibility', () => ({
     allColumns: [
       { key: 'icon', label: '', align: 'text-center', required: true },
       { key: 'name', label: 'Container', align: 'text-left', required: true },
-      { key: 'version', label: 'Version', align: 'text-center', required: false },
+      { key: 'version', label: 'Tag', align: 'text-center', required: false },
+      { key: 'softwareVersion', label: 'Version', align: 'text-center', required: false },
       { key: 'kind', label: 'Kind', align: 'text-center', required: false },
       { key: 'status', label: 'Status', align: 'text-center', required: false },
       { key: 'bouncer', label: 'Bouncer', align: 'text-center', required: false },
@@ -2434,6 +2445,7 @@ describe('ContainersView', () => {
           registry: 'dockerhub',
           bouncer: 'safe',
           updateKind: null,
+          softwareVersion: 'v1.0.0',
         }),
         makeContainer({
           id: 'c2',
@@ -2470,7 +2482,16 @@ describe('ContainersView', () => {
       vm.containerSortAsc = false;
       void vm.sortedContainers;
 
-      for (const key of ['image', 'status', 'server', 'registry', 'bouncer', 'kind', 'version']) {
+      for (const key of [
+        'image',
+        'status',
+        'server',
+        'registry',
+        'bouncer',
+        'kind',
+        'version',
+        'softwareVersion',
+      ]) {
         vm.containerSortKey = key;
         void vm.sortedContainers;
       }

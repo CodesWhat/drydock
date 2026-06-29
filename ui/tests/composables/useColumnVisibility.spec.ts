@@ -28,12 +28,35 @@ describe('useColumnVisibility', () => {
       'icon',
       'name',
       'version',
+      'softwareVersion',
       'kind',
       'status',
       'server',
       'registry',
       'uptime',
     ]);
+  });
+
+  it('version column should be labelled Tag', async () => {
+    const { useColumnVisibility } = await loadColumnVisibility();
+    const { allColumns } = useColumnVisibility();
+    const versionCol = allColumns.find((c) => c.key === 'version');
+    expect(versionCol?.label).toBe('Tag');
+    expect(versionCol?.labelKey).toBe('containersView.columns.tag');
+  });
+
+  it('softwareVersion column should be labelled Version', async () => {
+    const { useColumnVisibility } = await loadColumnVisibility();
+    const { allColumns } = useColumnVisibility();
+    const swVerCol = allColumns.find((c) => c.key === 'softwareVersion');
+    expect(swVerCol?.label).toBe('Version');
+    expect(swVerCol?.labelKey).toBe('containersView.columns.version');
+  });
+
+  it('softwareVersion column should be visible by default', async () => {
+    const { useColumnVisibility } = await loadColumnVisibility();
+    const { visibleColumns } = useColumnVisibility();
+    expect(visibleColumns.value.has('softwareVersion')).toBe(true);
   });
 
   it('should mark icon and name as required', async () => {
@@ -188,21 +211,24 @@ describe('useColumnVisibility', () => {
 
     it('drops registry first as width tightens using column min sizes', async () => {
       const { useColumnVisibility } = await loadColumnVisibility();
+      // At 1029 the total min footprint (1036) minus registry+server fits in budget=849;
+      // softwareVersion (priority 5) is droppable but lower priority than server (70).
       const width = ref(1029);
       const { activeColumns, autoHiddenColumns } = useColumnVisibility(width);
       const activeKeys = activeColumns.value.map((c) => c.key);
       expect(activeKeys).not.toContain('registry');
-      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual(['registry']);
+      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual(['registry', 'server']);
     });
 
     it('drops in documented priority order as width tightens further', async () => {
       const { useColumnVisibility } = await loadColumnVisibility();
+      // softwareVersion (priority 5) is droppable but after registry/server/kind/status.
       const width = ref(913);
       const { activeColumns, autoHiddenColumns } = useColumnVisibility(width);
       const activeKeys = activeColumns.value.map((c) => c.key);
       expect(activeKeys).not.toContain('registry');
       expect(activeKeys).not.toContain('server');
-      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual(['registry', 'server']);
+      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual(['registry', 'server', 'kind']);
 
       width.value = 797;
       await nextTick();
@@ -210,7 +236,12 @@ describe('useColumnVisibility', () => {
       expect(activeKeys2).not.toContain('registry');
       expect(activeKeys2).not.toContain('server');
       expect(activeKeys2).not.toContain('kind');
-      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual(['registry', 'server', 'kind']);
+      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual([
+        'registry',
+        'server',
+        'kind',
+        'status',
+      ]);
 
       width.value = 685;
       await nextTick();
@@ -219,6 +250,7 @@ describe('useColumnVisibility', () => {
         'server',
         'kind',
         'status',
+        'softwareVersion',
       ]);
     });
 
@@ -242,12 +274,13 @@ describe('useColumnVisibility', () => {
       expect(activeKeys).toContain('icon');
       expect(activeKeys).toContain('name');
       expect(activeKeys).toContain('version');
-      // All droppable dropped
+      // All droppable columns dropped (softwareVersion priority 5 > 0, so it is droppable)
       expect(autoHiddenColumns.value.map((c) => c.key)).toEqual([
         'registry',
         'server',
         'kind',
         'status',
+        'softwareVersion',
       ]);
     });
 
@@ -272,10 +305,12 @@ describe('useColumnVisibility', () => {
 
     it('autoHiddenColumns lists exactly the dropped columns when some are auto-hidden', async () => {
       const { useColumnVisibility } = await loadColumnVisibility();
+      // At 1029 both registry and server are dropped due to the larger total footprint
       const width = ref(1029);
       const { autoHiddenColumns } = useColumnVisibility(width);
-      expect(autoHiddenColumns.value).toHaveLength(1);
+      expect(autoHiddenColumns.value).toHaveLength(2);
       expect(autoHiddenColumns.value[0].key).toBe('registry');
+      expect(autoHiddenColumns.value[1].key).toBe('server');
     });
 
     it('reactivity: changing availableWidth recomputes activeColumns and autoHiddenColumns', async () => {
@@ -290,7 +325,8 @@ describe('useColumnVisibility', () => {
       width.value = 1029;
       await nextTick();
       expect(activeColumns.value.map((c) => c.key)).not.toContain('registry');
-      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual(['registry']);
+      // At 1029, registry and server are both dropped (total min footprint increased)
+      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual(['registry', 'server']);
 
       width.value = 5000;
       await nextTick();
@@ -309,7 +345,8 @@ describe('useColumnVisibility', () => {
       base.value = 1029;
       await nextTick();
       expect(activeColumns.value.map((c) => c.key)).not.toContain('registry');
-      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual(['registry']);
+      // At 1029, registry and server are both dropped
+      expect(autoHiddenColumns.value.map((c) => c.key)).toEqual(['registry', 'server']);
     });
 
     it('user-hidden plus narrow viewport: only preference-visible columns are candidates', async () => {

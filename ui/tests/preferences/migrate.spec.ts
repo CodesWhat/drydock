@@ -476,6 +476,63 @@ describe('preferences migration', () => {
     });
   });
 
+  describe('schema v6 → v7 migration (softwareVersion column)', () => {
+    it('should add softwareVersion column when migrating from schemaVersion 6', () => {
+      const result = migrate({
+        schemaVersion: 6,
+        containers: {
+          columns: ['icon', 'name', 'version', 'kind', 'status', 'server', 'registry'],
+        },
+      });
+      expect(result.schemaVersion).toBe(DEFAULTS.schemaVersion);
+      const idx = result.containers.columns.indexOf('softwareVersion');
+      expect(idx).toBeGreaterThan(-1);
+      const versionIdx = result.containers.columns.indexOf('version');
+      expect(idx).toBe(versionIdx + 1);
+    });
+
+    it('should not duplicate softwareVersion if already present when migrating from schemaVersion 6', () => {
+      const result = migrate({
+        schemaVersion: 6,
+        containers: {
+          columns: [
+            'icon',
+            'name',
+            'version',
+            'softwareVersion',
+            'kind',
+            'status',
+            'server',
+            'registry',
+          ],
+        },
+      });
+      const occurrences = result.containers.columns.filter((c) => c === 'softwareVersion').length;
+      expect(occurrences).toBe(1);
+    });
+
+    it('should still upgrade to schemaVersion 7 when containers.columns is not a string array', () => {
+      const result = migrate({
+        schemaVersion: 6,
+        containers: { columns: 'name' as any },
+      });
+      expect(result.schemaVersion).toBe(DEFAULTS.schemaVersion);
+    });
+
+    it('should add softwareVersion when version column is absent (appends at end before sanitize)', () => {
+      const result = migrate({
+        schemaVersion: 6,
+        containers: { columns: ['icon', 'name', 'kind', 'status'] },
+      });
+      expect(result.schemaVersion).toBe(DEFAULTS.schemaVersion);
+      expect(result.containers.columns.includes('softwareVersion')).toBe(true);
+    });
+
+    it('DEFAULTS should include softwareVersion in containers.columns', () => {
+      expect(DEFAULTS.containers.columns.includes('softwareVersion')).toBe(true);
+    });
+  });
+
   describe('migrateFromLegacyKeys', () => {
     it('handles localStorage getter failures while reading legacy string keys', () => {
       const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {

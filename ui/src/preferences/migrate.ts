@@ -679,6 +679,20 @@ export function migrate(data: Record<string, unknown>): PreferencesSchema {
     data = { ...data, schemaVersion: CURRENT_SCHEMA_VERSION };
   }
 
+  if (data.schemaVersion === 6) {
+    // Add softwareVersion column for all existing users so they see it immediately.
+    const containers = data.containers;
+    if (isRecord(containers) && isStringArray(containers.columns)) {
+      const cols = containers.columns as string[];
+      if (!cols.includes('softwareVersion')) {
+        const versionIdx = cols.indexOf('version');
+        const insertAt = versionIdx >= 0 ? versionIdx + 1 : cols.length;
+        cols.splice(insertAt, 0, 'softwareVersion');
+      }
+    }
+    data = { ...data, schemaVersion: 7 };
+  }
+
   if (typeof data.schemaVersion === 'number' && data.schemaVersion < CURRENT_SCHEMA_VERSION) {
     data = { ...data, schemaVersion: CURRENT_SCHEMA_VERSION };
   }
