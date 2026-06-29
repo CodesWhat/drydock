@@ -58,6 +58,7 @@ const {
   confirmStop,
   startContainer,
   confirmRestart,
+  recheckContainer,
   scanContainer,
   confirmForceUpdate,
   skipUpdate,
@@ -1437,6 +1438,10 @@ onScopeDispose(() => {
           <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="scanContainer(openActionsContainer); closeActionsMenu()">
             <AppIcon name="security" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-secondary)' }" />
             {{ t('containerComponents.groupedViews.scanAction') }}
+          </AppButton>
+          <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="recheckContainer(openActionsContainer); closeActionsMenu()">
+            <AppIcon name="restart" :size="12" class="w-3 text-center inline-flex justify-center dd-text-muted" />
+            {{ t('containerComponents.groupedViews.recheckAction') }}
           </AppButton>
           <!-- Force update for blocked containers (even without newTag) -->
           <template v-if="openActionsContainer.bouncer === 'blocked' && !openActionsContainer.newTag">

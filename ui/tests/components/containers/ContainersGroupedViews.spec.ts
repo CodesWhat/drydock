@@ -211,6 +211,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     confirmStop: vi.fn(),
     startContainer: vi.fn(),
     confirmRestart: vi.fn(),
+    recheckContainer: vi.fn(),
     scanContainer: vi.fn(),
     confirmForceUpdate: vi.fn(),
     skipUpdate: vi.fn(),
@@ -278,6 +279,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     confirmStop: spies.confirmStop,
     startContainer: spies.startContainer,
     confirmRestart: spies.confirmRestart,
+    recheckContainer: spies.recheckContainer,
     scanContainer: spies.scanContainer,
     confirmForceUpdate: spies.confirmForceUpdate,
     skipUpdate: spies.skipUpdate,
@@ -2802,5 +2804,47 @@ describe('ContainersGroupedViews', () => {
     const wrapper = mountSubject();
     const row = rowByName(wrapper, 'alpha');
     expect(row.text()).toContain('Up ');
+  });
+
+  it('calls recheckContainer when Recheck for updates menu action is clicked', async () => {
+    const container = makeContainer({
+      id: 'c-recheck',
+      name: 'recheck-me',
+      newTag: '2.0.0',
+      updateKind: 'minor',
+      status: 'running',
+    });
+
+    const { context, refs, spies } = makeContext();
+    context.containerViewMode.value = 'table';
+    context.tableActionStyle.value = 'icons';
+    context.filteredContainers.value = [container];
+    context.displayContainers.value = [container];
+    context.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    refs.openActionsMenu.value = 'c-recheck';
+    await nextTick();
+
+    const recheckButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().trim() === 'Recheck for updates');
+    expect(recheckButton).toBeDefined();
+    await recheckButton!.trigger('click');
+
+    expect(spies.recheckContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-recheck', name: 'recheck-me' }),
+    );
+    expect(spies.closeActionsMenu).toHaveBeenCalled();
   });
 });

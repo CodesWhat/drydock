@@ -59,6 +59,22 @@ describe('useColumnVisibility', () => {
     expect(visibleColumns.value.has('softwareVersion')).toBe(true);
   });
 
+  it('kind column has headerTooltipKey for the Update column tooltip', async () => {
+    const { useColumnVisibility } = await loadColumnVisibility();
+    const { allColumns } = useColumnVisibility();
+    const kindCol = allColumns.find((c) => c.key === 'kind');
+    expect(kindCol?.headerTooltipKey).toBe('containersView.columns.updateTooltip');
+  });
+
+  it('other columns do not have a headerTooltipKey', async () => {
+    const { useColumnVisibility } = await loadColumnVisibility();
+    const { allColumns } = useColumnVisibility();
+    const nonKindCols = allColumns.filter((c) => c.key !== 'kind');
+    for (const col of nonKindCols) {
+      expect(col.headerTooltipKey).toBeUndefined();
+    }
+  });
+
   it('should mark icon and name as required', async () => {
     const { useColumnVisibility } = await loadColumnVisibility();
     const { allColumns } = useColumnVisibility();

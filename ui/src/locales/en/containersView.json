@@ -34,6 +34,7 @@
       "tag": "Tag",
       "version": "Version",
       "update": "Update",
+      "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "Status",
       "host": "Host",
       "registry": "Registry",

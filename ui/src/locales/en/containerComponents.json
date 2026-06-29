@@ -8,6 +8,8 @@
       "forceUpdate": "Force Update",
       "updateNow": "Update Now",
       "scanNow": "Scan Now",
+      "recheckNow": "Recheck for Updates",
+      "rechecking": "Rechecking…",
       "skipSnoozeGroup": "Skip & Snooze",
       "skipThisUpdate": "Skip This Update",
       "snooze1d": "Snooze 1d",
@@ -79,6 +81,8 @@
       "startButton": "Start",
       "restartButton": "Restart",
       "scanButton": "Scan",
+      "recheckButton": "Recheck",
+      "ariaRecheckContainer": "Recheck container for updates",
       "blockedButton": "Blocked",
       "updateButton": "Update",
       "deleteButton": "Delete"
@@ -175,6 +179,7 @@
       "startAction": "Start",
       "restartAction": "Restart",
       "scanAction": "Scan",
+      "recheckAction": "Recheck for updates",
       "forceUpdateAction": "Force update",
       "updateAction": "Update",
       "skipUpdateAction": "Skip this update",
@@ -225,6 +230,7 @@
       "startTooltip": "Start",
       "restartTooltip": "Restart",
       "scanTooltip": "Scan",
+      "recheckTooltip": "Recheck for updates",
       "blockedForceUpdateTooltip": "Blocked — Force Update",
       "updateTooltip": "Update",
       "deleteTooltip": "Delete",
@@ -416,7 +422,11 @@
       "cancelOperationNotFound": "Operation not found: {name}",
       "cancelFailed": "Failed to cancel update for {name}",
       "groupUpdateRejected": "Failed to update {name}: {message}",
-      "groupUpdateFailed": "Failed to update {name}"
+      "groupUpdateFailed": "Failed to update {name}",
+      "recheckComplete": "Recheck complete: {name}",
+      "recheckNotFound": "Container not found: {name}",
+      "recheckFailedTitle": "Recheck failed: {name}",
+      "recheckFailedDetail": "Recheck failed for {name}"
     },
     "policy": {
       "entryCountSingular": "{count} entry",

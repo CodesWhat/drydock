@@ -450,6 +450,8 @@ const {
   rollbackMessage,
   rollbackToBackup,
   runAssociatedTrigger,
+  recheckContainer,
+  recheckingContainerId,
   runContainerPreview,
   scanContainer,
   selectedHasMaturityPolicy,
@@ -1226,6 +1228,7 @@ const tableColumns = computed(() =>
     autoSize: column.autoSize,
     px: column.px,
     icon: column.key === 'icon',
+    headerTooltip: column.headerTooltipKey ? t(column.headerTooltipKey) : undefined,
   })),
 );
 
@@ -1498,6 +1501,8 @@ provide(containersViewTemplateContextKey, {
   containerScrollBlocked,
   containerResumeAutoScroll,
   previewLoading,
+  recheckContainer,
+  recheckingContainerId,
   runContainerPreview,
   policyInProgress,
   skipCurrentForSelected,

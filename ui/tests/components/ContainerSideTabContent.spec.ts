@@ -139,6 +139,8 @@ const updateOperationsLoading = ref(false);
 const detailUpdateOperations = ref<ApiContainerUpdateOperation[]>([]);
 const updateOperationsError = ref<string | null>(null);
 const mockScanContainer = vi.fn();
+const mockRecheckContainer = vi.fn();
+const mockRecheckingContainerId = ref<string | null>(null);
 const mockConfirmUpdate = vi.fn();
 const mockConfirmForceUpdate = vi.fn();
 
@@ -233,6 +235,8 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     formatOperationPhase: (phase: string) => phase,
     formatRollbackReason: (reason: string) => reason,
     updateOperationsError,
+    recheckContainer: mockRecheckContainer,
+    recheckingContainerId: mockRecheckingContainerId,
     scanContainer: mockScanContainer,
     confirmUpdate: mockConfirmUpdate,
     confirmForceUpdate: mockConfirmForceUpdate,
@@ -359,6 +363,8 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     loadDetailSecurityData.mockReset();
     loadDetailSbom.mockReset();
     mockScanContainer.mockReset();
+    mockRecheckContainer.mockReset();
+    mockRecheckingContainerId.value = null;
     mockConfirmUpdate.mockReset();
     mockConfirmForceUpdate.mockReset();
   });
@@ -1136,5 +1142,38 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.text()).not.toContain('Compose file:');
     expect(wrapper.text()).not.toContain('Writes compose file:');
     expect(wrapper.text()).not.toContain('Version:');
+  });
+
+  it('renders and wires the Recheck for Updates button when on actions tab', async () => {
+    activeDetailTab.value = 'actions';
+    const container = createSelectedContainer();
+    container.newTag = '1.25.0';
+    selectedContainer.value = container;
+
+    const wrapper = mountComponent();
+    const recheckButton = wrapper
+      .findAll('button')
+      .find((btn) => btn.text().includes('Recheck for Updates'));
+    expect(recheckButton).toBeDefined();
+    await recheckButton?.trigger('click');
+    expect(mockRecheckContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'container-1', name: 'nginx' }),
+    );
+  });
+
+  it('disables the Recheck for Updates button and shows Rechecking… label while recheck is in progress', () => {
+    activeDetailTab.value = 'actions';
+    const container = createSelectedContainer();
+    container.newTag = '1.25.0';
+    selectedContainer.value = container;
+    mockRecheckingContainerId.value = 'container-1';
+
+    const wrapper = mountComponent();
+    const recheckButton = wrapper
+      .findAll('button')
+      .find((btn) => btn.text().includes('Rechecking'));
+    expect(recheckButton).toBeDefined();
+    expect(recheckButton!.attributes('disabled')).toBeDefined();
+    expect(recheckButton!.text()).toContain('Rechecking');
   });
 });

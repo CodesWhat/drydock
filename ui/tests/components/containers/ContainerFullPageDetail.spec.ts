@@ -22,6 +22,8 @@ const confirmStop = vi.fn();
 const startContainer = vi.fn();
 const confirmRestart = vi.fn();
 const scanContainer = vi.fn();
+const recheckContainer = vi.fn();
+const recheckingContainerId = ref<string | null>(null);
 const confirmUpdate = vi.fn();
 const confirmDelete = vi.fn();
 const isContainerUpdateInProgress = vi.fn(() => false);
@@ -35,6 +37,8 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     confirmStop,
     startContainer,
     confirmRestart,
+    recheckContainer,
+    recheckingContainerId,
     scanContainer,
     confirmUpdate,
     confirmDelete,
@@ -227,6 +231,31 @@ describe('ContainerFullPageDetail', () => {
       const wrapper = factory();
       const stopBtn = wrapper.find('button[aria-label="Stop container"]');
       expect(stopBtn.attributes('disabled')).toBeUndefined();
+    });
+  });
+
+  describe('recheck button', () => {
+    it('renders the Recheck button with correct aria-label', () => {
+      const wrapper = factory();
+      const btn = wrapper.find('button[aria-label="Recheck container for updates"]');
+      expect(btn.exists()).toBe(true);
+    });
+
+    it('calls recheckContainer when Recheck button is clicked', async () => {
+      const wrapper = factory();
+      const btn = wrapper.find('button[aria-label="Recheck container for updates"]');
+      await btn.trigger('click');
+      expect(recheckContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'container-1', name: 'nginx' }),
+      );
+    });
+
+    it('disables Recheck button while recheck is in progress', async () => {
+      recheckingContainerId.value = 'container-1';
+      const wrapper = factory();
+      const btn = wrapper.find('button[aria-label="Recheck container for updates"]');
+      expect(btn.attributes('disabled')).toBeDefined();
+      recheckingContainerId.value = null;
     });
   });
 });

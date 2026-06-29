@@ -8,6 +8,7 @@ import { useToast } from '../../composables/useToast';
 import { useUpdateBatches } from '../../composables/useUpdateBatches';
 import {
   deleteContainer as apiDeleteContainer,
+  refreshContainer as apiRefreshContainer,
   scanContainer as apiScanContainer,
 } from '../../services/container';
 import {
@@ -879,6 +880,7 @@ function createContainerActionHandlers(args: {
   inputError: Ref<string | null>;
   markScanStarted: (containerId: string | undefined) => void;
   markScanCompleted: (containerId: string | undefined) => void;
+  recheckingContainerId: Ref<string | null>;
   t: TranslateFn;
 }) {
   async function startContainer(target: ContainerActionTarget) {
@@ -933,6 +935,33 @@ function createContainerActionHandlers(args: {
     }
   }
 
+  async function recheckContainer(target: ContainerActionTarget) {
+    const { containerId, name } = resolveContainerActionTarget(target, args.containerIdMap.value);
+    if (!containerId) {
+      return;
+    }
+    args.recheckingContainerId.value = containerId;
+    args.inputError.value = null;
+    const toast = useToast();
+    try {
+      const result = await apiRefreshContainer(containerId);
+      if (result === undefined) {
+        toast.warning(args.t('containerComponents.actionToasts.recheckNotFound', { name }));
+        return;
+      }
+      toast.success(args.t('containerComponents.actionToasts.recheckComplete', { name }));
+    } catch (e: unknown) {
+      const msg = errorMessage(
+        e,
+        args.t('containerComponents.actionToasts.recheckFailedDetail', { name }),
+      );
+      args.inputError.value = msg;
+      toast.error(args.t('containerComponents.actionToasts.recheckFailedTitle', { name }), msg);
+    } finally {
+      args.recheckingContainerId.value = null;
+    }
+  }
+
   async function skipUpdate(target: ContainerActionTarget) {
     const name = typeof target === 'string' ? target : target.name;
     const targetKey = resolveContainerActionTargetKey(target);
@@ -972,6 +1001,7 @@ function createContainerActionHandlers(args: {
 
   return {
     forceUpdate,
+    recheckContainer,
     scanContainer,
     skipUpdate,
     startContainer,
@@ -1079,6 +1109,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     { immediate: true },
   );
 
+  const recheckingContainerId = ref<string | null>(null);
   const actionInProgress = ref(new Map<string, ContainerActionKind>());
   const actionPending = ref<Map<string, Container>>(new Map());
   const actionPendingStartTimes = ref<Map<string, number>>(new Map());
@@ -1321,22 +1352,29 @@ export function useContainerActions(input: UseContainerActionsInput) {
     });
   }
 
-  const { forceUpdate, scanContainer, skipUpdate, startContainer, updateContainer } =
-    createContainerActionHandlers({
-      executeAction,
-      applyPolicy: policy.applyPolicy,
-      skippedUpdates,
-      selectedContainer: input.selectedContainer,
-      activeDetailTab: input.activeDetailTab,
-      refreshActionTabData,
-      containerIdMap: input.containerIdMap,
-      containerActionsEnabled,
-      containerActionsDisabledReason,
-      inputError: input.error,
-      markScanStarted: scanLifecycle.markScanStarted,
-      markScanCompleted: scanLifecycle.markScanCompleted,
-      t: t as TranslateFn,
-    });
+  const {
+    forceUpdate,
+    recheckContainer,
+    scanContainer,
+    skipUpdate,
+    startContainer,
+    updateContainer,
+  } = createContainerActionHandlers({
+    executeAction,
+    applyPolicy: policy.applyPolicy,
+    skippedUpdates,
+    selectedContainer: input.selectedContainer,
+    activeDetailTab: input.activeDetailTab,
+    refreshActionTabData,
+    containerIdMap: input.containerIdMap,
+    containerActionsEnabled,
+    containerActionsDisabledReason,
+    inputError: input.error,
+    markScanStarted: scanLifecycle.markScanStarted,
+    markScanCompleted: scanLifecycle.markScanCompleted,
+    recheckingContainerId,
+    t: t as TranslateFn,
+  });
 
   async function cancelUpdate(target: Pick<Container, 'id' | 'name' | 'updateOperation'>) {
     const { name } = target;
@@ -1455,6 +1493,8 @@ export function useContainerActions(input: UseContainerActionsInput) {
     rollbackToBackup: backups.rollbackToBackup,
     runAssociatedTrigger: triggers.runAssociatedTrigger,
     runContainerPreview: preview.runContainerPreview,
+    recheckContainer,
+    recheckingContainerId,
     scanContainer,
     selectedHasMaturityPolicy: policy.selectedHasMaturityPolicy,
     selectedMaturityMinAgeDays: policy.selectedMaturityMinAgeDays,

@@ -159,6 +159,8 @@ const mockFormatOperationStatus = vi.fn((status: string) => `status:${status}`);
 const mockFormatOperationPhase = vi.fn((phase: string) => `phase:${phase}`);
 const mockFormatRollbackReason = vi.fn((reason: string) => `reason:${reason}`);
 const mockScanContainer = vi.fn();
+const mockRecheckContainer = vi.fn();
+const mockRecheckingContainerId = ref<string | null>(null);
 const mockConfirmUpdate = vi.fn();
 const mockConfirmForceUpdate = vi.fn();
 
@@ -257,6 +259,8 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     formatOperationPhase: mockFormatOperationPhase,
     formatRollbackReason: mockFormatRollbackReason,
     updateOperationsError,
+    recheckContainer: mockRecheckContainer,
+    recheckingContainerId: mockRecheckingContainerId,
     scanContainer: mockScanContainer,
     confirmUpdate: mockConfirmUpdate,
     confirmForceUpdate: mockConfirmForceUpdate,
@@ -368,6 +372,8 @@ function resetState() {
   mockFormatOperationPhase.mockClear();
   mockFormatRollbackReason.mockClear();
   mockScanContainer.mockReset();
+  mockRecheckContainer.mockReset();
+  mockRecheckingContainerId.value = null;
   mockConfirmUpdate.mockReset();
   mockConfirmForceUpdate.mockReset();
 }
@@ -1165,5 +1171,27 @@ describe('ContainerFullPageTabContent', () => {
     expect(maturitySelect).toBeDefined();
     await maturitySelect?.setValue('mature');
     expect(maturityModeInput.value).toBe('mature');
+  });
+
+  it('renders and clicks the Recheck for Updates button', async () => {
+    const wrapper = mountComponent();
+    const recheckButton = findButtonByText(wrapper, 'Recheck for Updates');
+    expect(recheckButton).toBeDefined();
+    await recheckButton?.trigger('click');
+    expect(mockRecheckContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'container-1', name: 'nginx' }),
+    );
+  });
+
+  it('disables the Recheck for Updates button and shows Rechecking… label while recheck is in progress', () => {
+    mockRecheckingContainerId.value = 'container-1';
+
+    const wrapper = mountComponent();
+    const recheckButton = wrapper
+      .findAll('button')
+      .find((btn) => btn.text().includes('Rechecking'));
+    expect(recheckButton).toBeDefined();
+    expect(recheckButton!.attributes('disabled')).toBeDefined();
+    expect(recheckButton!.text()).toContain('Rechecking');
   });
 });

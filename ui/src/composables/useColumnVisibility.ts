@@ -7,6 +7,7 @@ interface ColumnDef extends ResponsiveSizingColumn {
   key: string;
   label: string;
   labelKey?: string;
+  headerTooltipKey?: string;
   align?: string;
   px: string;
   required: boolean;
@@ -68,6 +69,7 @@ const allColumns: ColumnDef[] = [
     key: 'kind',
     label: 'Update',
     labelKey: 'containersView.columns.update',
+    headerTooltipKey: 'containersView.columns.updateTooltip',
     px: 'px-3',
     size: 128,
     minSize: 116,

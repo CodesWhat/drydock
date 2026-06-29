@@ -37,6 +37,8 @@ const {
   confirmStop,
   startContainer,
   confirmRestart,
+  recheckContainer,
+  recheckingContainerId,
   scanContainer,
   confirmUpdate,
   confirmForceUpdate,
@@ -143,6 +145,14 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             :disabled="isActionBlocked(selectedContainer)"
             :tooltip="t('containerComponents.sideDetail.scanTooltip')"
             @click="scanContainer(selectedContainer)" />
+          <AppIconButton
+            icon="restart"
+            size="xs"
+            variant="secondary"
+            :loading="recheckingContainerId === selectedContainer.id"
+            :disabled="recheckingContainerId === selectedContainer.id || isActionBlocked(selectedContainer)"
+            :tooltip="t('containerComponents.sideDetail.recheckTooltip')"
+            @click="recheckContainer(selectedContainer)" />
 	          <AppIconButton
 	            v-if="selectedContainer.newTag && isUpdateHardBlocked(selectedContainer)"
 	            icon="lock"

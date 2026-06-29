@@ -145,6 +145,8 @@ const {
   formatOperationPhase,
   formatRollbackReason,
   updateOperationsError,
+  recheckContainer,
+  recheckingContainerId,
   scanContainer,
   confirmUpdate,
   confirmForceUpdate,
@@ -693,6 +695,11 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                           :disabled="isActionInProgress(selectedContainer)"
                           @click="scanContainer(selectedContainer)">
                     {{ t('containerComponents.fullPageActions.scanNow') }}
+                  </AppButton>
+                  <AppButton size="sm" variant="outlined"
+                          :disabled="recheckingContainerId === selectedContainer.id || isActionInProgress(selectedContainer)"
+                          @click="recheckContainer(selectedContainer)">
+                    {{ recheckingContainerId === selectedContainer.id ? t('containerComponents.fullPageActions.rechecking') : t('containerComponents.fullPageActions.recheckNow') }}
                   </AppButton>
                 </div>
               </div>

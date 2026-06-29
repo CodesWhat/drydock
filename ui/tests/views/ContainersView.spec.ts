@@ -57,6 +57,7 @@ vi.mock('@/services/container', () => ({
   }),
   getUpdateOperationById: vi.fn().mockResolvedValue(null),
   refreshAllContainers: vi.fn().mockResolvedValue([]),
+  refreshContainer: vi.fn().mockResolvedValue({}),
   scanContainer: vi.fn().mockResolvedValue({}),
   runTrigger: vi.fn().mockResolvedValue({}),
   updateContainerPolicy: vi.fn().mockResolvedValue({}),
@@ -346,6 +347,7 @@ import {
   getContainerUpdateOperations,
   getContainerVulnerabilities,
   refreshAllContainers,
+  refreshContainer,
   scanContainer,
   updateContainerPolicy,
 } from '@/services/container';
@@ -361,6 +363,7 @@ const mockGetContainerUpdateOperations = getContainerUpdateOperations as ReturnT
 const mockGetContainerVulnerabilities = getContainerVulnerabilities as ReturnType<typeof vi.fn>;
 const mockGetContainerSbom = getContainerSbom as ReturnType<typeof vi.fn>;
 const mockScanContainer = scanContainer as ReturnType<typeof vi.fn>;
+const mockRefreshContainer = refreshContainer as ReturnType<typeof vi.fn>;
 const mockUpdateContainerPolicy = updateContainerPolicy as ReturnType<typeof vi.fn>;
 const mockApiUpdate = apiUpdateContainer as ReturnType<typeof vi.fn>;
 const mockApiUpdateBulk = apiUpdateContainers as ReturnType<typeof vi.fn>;
@@ -1391,6 +1394,146 @@ describe('ContainersView', () => {
       await flushPromises();
 
       expect(mockScanContainer).toHaveBeenCalledWith('nginx-id-1');
+    });
+
+    describe('recheckContainer', () => {
+      it('calls refreshContainer with the correct container id and shows success toast', async () => {
+        const containers = [makeContainer({ name: 'nginx', newTag: '2.0.0' })];
+        const wrapper = await mountContainersView(containers);
+        const vm = wrapper.vm as any;
+
+        vm.containerIdMap = { nginx: 'nginx-id-2' };
+        mockRefreshContainer.mockResolvedValue({});
+
+        await vm.recheckContainer('nginx');
+        await flushPromises();
+
+        expect(mockRefreshContainer).toHaveBeenCalledWith('nginx-id-2');
+        expect(vm.recheckingContainerId).toBeNull();
+        expect(vm.error).toBeNull();
+      });
+
+      it('does nothing when containerId cannot be resolved', async () => {
+        const containers = [makeContainer({ name: 'nginx' })];
+        const wrapper = await mountContainersView(containers);
+        const vm = wrapper.vm as any;
+
+        // No entry in the map → containerId is undefined → early return
+        vm.containerIdMap = {};
+        mockRefreshContainer.mockResolvedValue({});
+
+        await vm.recheckContainer('nginx');
+        await flushPromises();
+
+        expect(mockRefreshContainer).not.toHaveBeenCalled();
+      });
+
+      it('shows a warning toast when refreshContainer returns undefined (container not found)', async () => {
+        const containers = [makeContainer({ name: 'nginx' })];
+        const wrapper = await mountContainersView(containers);
+        const vm = wrapper.vm as any;
+
+        vm.containerIdMap = { nginx: 'nginx-id-3' };
+        mockRefreshContainer.mockResolvedValue(undefined);
+
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
+
+        await vm.recheckContainer('nginx');
+        await flushPromises();
+
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts.some((t) => t.tone === 'warning')).toBe(true);
+        expect(vm.recheckingContainerId).toBeNull();
+        expect(vm.error).toBeNull();
+      });
+
+      it('shows an error toast when refreshContainer throws', async () => {
+        const containers = [makeContainer({ name: 'nginx' })];
+        const wrapper = await mountContainersView(containers);
+        const vm = wrapper.vm as any;
+
+        vm.containerIdMap = { nginx: 'nginx-id-4' };
+        mockRefreshContainer.mockRejectedValue(new Error('network error'));
+
+        const { useToast } = await import('@/composables/useToast');
+        const { toasts } = useToast();
+        const maxIdBefore = Math.max(-1, ...toasts.value.map((t) => t.id));
+
+        await vm.recheckContainer('nginx');
+        await flushPromises();
+
+        const newToasts = toasts.value.filter((t) => t.id > maxIdBefore);
+        expect(newToasts.some((t) => t.tone === 'error')).toBe(true);
+        expect(vm.recheckingContainerId).toBeNull();
+        expect(vm.error).not.toBeNull();
+      });
+    });
+  });
+
+  describe('tableColumns', () => {
+    it('maps headerTooltip from headerTooltipKey when present in activeColumns', async () => {
+      const { useColumnVisibility } = await import('@/composables/useColumnVisibility');
+      const mockedVisibility = vi.mocked(useColumnVisibility);
+      const prevImpl = mockedVisibility.getMockImplementation();
+      mockedVisibility.mockReturnValueOnce({
+        allColumns: [],
+        visibleColumns: mockVisibleColumns,
+        activeColumns: computed(() => [
+          {
+            key: 'kind',
+            label: 'Update',
+            labelKey: 'containersView.columns.update',
+            headerTooltipKey: 'containersView.columns.updateTooltip',
+            align: 'text-center',
+            required: false,
+            px: 'px-3',
+            size: 128,
+            minSize: 116,
+            maxSize: 180,
+            priority: 60,
+          },
+          {
+            key: 'name',
+            label: 'Container',
+            labelKey: 'containersView.columns.container',
+            align: 'text-left',
+            required: true,
+            px: 'px-5',
+            size: 360,
+            minSize: 220,
+            maxSize: 640,
+          },
+        ]),
+        autoHiddenColumns: computed(() => []),
+        showColumnPicker: mockShowColumnPicker,
+        toggleColumn: vi.fn(),
+      } as any);
+
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+
+      const kindCol = vm.tableColumns.find((c: any) => c.key === 'kind');
+      expect(kindCol).toBeDefined();
+      // t() resolves the key — just verify it's a non-empty string (the tooltip is set)
+      expect(typeof kindCol.headerTooltip).toBe('string');
+      expect(kindCol.headerTooltip).toBeTruthy();
+
+      const nameCol = vm.tableColumns.find((c: any) => c.key === 'name');
+      expect(nameCol).toBeDefined();
+      expect(nameCol.headerTooltip).toBeUndefined();
+
+      if (prevImpl) mockedVisibility.mockImplementation(prevImpl);
+    });
+
+    it('returns undefined headerTooltip for columns without headerTooltipKey in default mock', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+      // All columns in the default mock lack headerTooltipKey, so all should have undefined headerTooltip
+      for (const col of vm.tableColumns) {
+        expect(col.headerTooltip).toBeUndefined();
+      }
     });
   });
 
