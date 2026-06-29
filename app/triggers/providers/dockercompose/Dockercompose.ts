@@ -49,6 +49,7 @@ interface DockercomposeTriggerConfiguration extends DockerTriggerConfiguration {
   reconciliationMode: 'warn' | 'block' | 'off';
   digestPinning: boolean;
   composeFileOnce: boolean;
+  mountPrefixFallback: boolean;
 }
 
 interface DockerApiLike {
@@ -416,6 +417,7 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         reconciliationMode: this.joi.string().valid('warn', 'block', 'off').default('warn'),
         digestPinning: this.joi.boolean().default(false),
         composeFileOnce: this.joi.boolean().default(false),
+        mountPrefixFallback: this.joi.boolean().default(false),
       })
       .rename('composefilelabel', 'composeFileLabel', {
         ignoreUndefined: true,
@@ -430,6 +432,10 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         override: true,
       })
       .rename('composefileonce', 'composeFileOnce', {
+        ignoreUndefined: true,
+        override: true,
+      })
+      .rename('mountprefixfallback', 'mountPrefixFallback', {
         ignoreUndefined: true,
         override: true,
       });
@@ -1434,6 +1440,21 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     }
 
     if (configuredComposeFilePath && !composeFiles.includes(configuredComposeFilePath)) {
+      if (this.configuration.mountPrefixFallback) {
+        const configuredTail = path.join(
+          path.basename(path.dirname(configuredComposeFilePath)),
+          path.basename(configuredComposeFilePath),
+        );
+        const tailMatch = composeFiles.some(
+          (f) => path.join(path.basename(path.dirname(f)), path.basename(f)) === configuredTail,
+        );
+        if (tailMatch) {
+          this.log.warn(
+            `Container ${container.name} compose file path differs by mount prefix; using configured path ${configuredComposeFilePath} instead of label path(s) ${composeFiles.join(', ')} (issue #365 fallback)`,
+          );
+          return [configuredComposeFilePath];
+        }
+      }
       this.log.warn(
         `Skip container ${container.name} because compose files ${composeFiles.join(', ')} do not match configured file ${configuredComposeFilePath}`,
       );
