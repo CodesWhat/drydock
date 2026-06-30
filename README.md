@@ -360,6 +360,12 @@ High-level themes only — see [CHANGELOG.md](CHANGELOG.md) for per-release deta
 [![Conventional Commits](https://img.shields.io/badge/commits-conventional-fe5196?logo=conventionalcommits&logoColor=fff)](https://www.conventionalcommits.org/)
 [![Keep a Changelog](https://img.shields.io/badge/changelog-Keep%20a%20Changelog-E05735)](https://keepachangelog.com/)
 
+### Community
+
+Questions, feedback, and early support: **[CodesWhat Discord](https://discord.gg/mWHCPJRzSx)**
+
+Please file concrete bugs and feature requests in **[GitHub Issues](https://github.com/CodesWhat/drydock/issues)** so they do not get lost in chat.
+
 ### Community QA
 
 Thanks to the users who helped test v1.4.0 and v1.5.0 release candidates and reported bugs:
