@@ -33,7 +33,7 @@ Container actions can be individually toggled with environment variables:
 
 ## Trigger configuration aliases
 
-Container updates are executed by action triggers (Docker, Docker Compose, Command). These triggers can be configured with three environment variable prefixes that are treated identically:
+Container updates are executed by the Docker and Docker Compose action triggers. The Command trigger is also classified as an action trigger for configuration taxonomy and defaults, but it runs an operator-defined command and does not enter Drydock's Docker update lifecycle queue. These triggers can be configured with three environment variable prefixes that are treated identically:
 
 | Prefix | Status |
 | --- | --- |

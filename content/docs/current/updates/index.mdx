@@ -3,7 +3,29 @@ title: "Updates"
 description: "Release update notes and feature highlights, with direct links to current configuration and API docs."
 ---
 
-## Release Highlights — v1.5.0 (May 2026)
+## Documentation Refresh — v1.5.2
+
+- **Podman and Docker socket security docs refreshed** — The watcher docs now cover Podman's Docker-compatible API path ([#152](https://github.com/CodesWhat/drydock/issues/152)), direct socket vs proxy/TCP caveats, rootful/rootless socket paths, SELinux troubleshooting, remote Docker over TLS, and OIDC remote watcher auth. This is documentation and compatibility guidance; native Podman support remains a future roadmap item.
+  Docs: [Podman Quick Start](/docs/configuration/watchers#podman-quick-start), [Docker Socket Security](/docs/configuration/watchers#docker-socket-security), [Podman FAQ](/docs/faq#podman-api-compatibility-vs-native-podman-support).
+- **Config and API reference parity** — The current docs were reconciled against runtime config schemas, Express routes, and the OpenAPI spec. Configuration tables now match the implemented env vars and defaults more closely, while the API docs cover canonical `/api/v1` routes, authentication component endpoints, registry webhook signature auth, notification outbox actions, bulk container updates, backup listing, and auth status aliases.
+  Docs: [Configuration](/docs/configuration), [REST API](/docs/api), [OpenAPI spec](/docs/api#openapi).
+
+## Release Highlights — v1.5.1-rc.4 (June 29, 2026)
+
+- **Container Version and Uptime fields** — `image.softwareVersion` now powers detail panels and the new **Version** column, while Docker `State.StartedAt` powers detail uptime and the optional **Uptime** column.
+  Docs: [Watcher container runtime details](/docs/configuration/watchers#container-runtime-details), [Tag and Version columns](/docs/configuration/watchers#tag-and-version-columns).
+- **Release notes expanded** — The release-notes popover includes current, available, and intermediate semver releases. Trigger templates can reference `${currentReleaseNotes}` alongside `${releaseNotes}`.
+  Docs: [Release notes popover](/docs/configuration/watchers#labels), [Trigger template variables](/docs/configuration/triggers#template-variable-reference), [Container release-notes API](/docs/api/container#get-intermediate-release-notes).
+- **Docker Compose mount-prefix fallback** — `DD_ACTION_DOCKERCOMPOSE_{name}_MOUNTPREFIXFALLBACK=true` can match compose paths by trailing `<project-dir>/<file>` when bind mounts expose a different prefix inside Drydock.
+  Docs: [Docker Compose trigger — Mount-prefix fallback](/docs/configuration/triggers/docker-compose#mount-prefix-fallback).
+- **Maintenance and maturity gates tightened** — Auto-apply now respects maintenance windows on every detection path, Docker Hub/GHCR publish dates can clear mature updates immediately, and a changed pending tag/digest restarts the soak clock.
+  Docs: [Update eligibility blockers](/docs/configuration/actions/update-eligibility), [Maturity filter configuration](/docs/api/container#maturity-filter-configuration).
+- **Upgrade note for v1.5.1+ stores** — Newer `dd.json` fields are tolerated on later downgrades, but rolling back from v1.5.1 to v1.5.0 still requires removing `details.startedAt` and `image.softwareVersion`.
+  Docs: [Storage](/docs/configuration/storage#downgrade-notes).
+- **One-time mature-update burst** — On the first poll after upgrade, Docker Hub or GHCR updates that are already older than `maturityMinAgeDays` may immediately fire notifications or action triggers.
+  Docs: [Maturity policy gate](/docs/api/container#policy-gate-holds-updates).
+
+## Release Highlights — v1.5.0 (June 22, 2026)
 
 - **Default watcher cron changed to every 6 hours** — The default `DD_WATCHER_{name}_CRON` value changed from `0 * * * *` (hourly) to `0 */6 * * *` (every 6 hours) to stay within anonymous Docker Hub and GHCR rate limits on larger inventories. Deployments that set `DD_WATCHER_{name}_CRON` explicitly are unaffected. To keep near-real-time detection, set `DD_WATCHER_LOCAL_CRON=0 * * * *`.
   Docs: [Watchers configuration](/docs/configuration/watchers).

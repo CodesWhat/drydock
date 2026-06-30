@@ -61,6 +61,7 @@ If the header is missing or does not match the expected token, the API responds 
 | [Containers](/docs/api/container) | `GET /api/v1/containers`, `POST`, `PATCH`, `DELETE` | Container state, actions, update policy, security |
 | [Agents](/docs/api/agent) | `GET /api/v1/agents` | Remote agent status and logs |
 | [Logs](/docs/api/log) | `GET /api/v1/log`, `GET /api/v1/log/entries`, `WS /api/v1/log/stream` | Application logger config, buffered entries, and live stream |
+| [Authentications](/docs/api/authentication) | `GET /api/v1/authentications` | Authentication provider configurations |
 | [Registries](/docs/api/registry) | `GET /api/v1/registries` | Registry configurations |
 | [Store](/docs/api/store) | `GET /api/v1/store` | Data store info |
 | [Triggers](/docs/api/trigger) | `GET /api/v1/triggers` | Trigger configurations |
@@ -88,13 +89,20 @@ If the header is missing or does not match the expected token, the API responds 
 | `/api/v1/update-operations/:id` | `GET` | Single update/rollback operation by ID — SSE-miss fallback (see [Container API](/docs/api/container#get-a-single-update-operation)) |
 | `/api/v1/self-update/:operationId/status` | `GET` | Self-update operation status — unauthenticated; polled by the UI overlay during a self-update (operation UUID acts as the access capability; returns `{ operationId, status, phase, completedAt? }`, 404 when unknown) |
 | `/api/v1/operations/:id/cancel` | `POST` | Cancel a queued or in-progress update operation (see [Container API](/docs/api/container#cancel-an-update-operation)) |
-| `/api/v1/containers/:id/release-notes` | `GET` | GitHub release notes for a container's available update (see [Container API](/docs/api/container)) |
+| `/api/v1/containers/:id/release-notes` | `GET` | Structured release notes for a container's current update target (see [Container API](/docs/api/container#get-container-release-notes)) |
+| `/api/v1/containers/:id/intermediate-release-notes` | `GET` | Semver-only release notes between two tags, with `from` required and `to` defaulting to the pending update target (see [Container API](/docs/api/container#get-intermediate-release-notes)) |
+| `/api/v1/portwing/keys` | `GET`, `POST` | Experimental Portwing edge-agent key registry, available only with `DD_EXPERIMENTAL_PORTWING=true` |
+| `/api/v1/portwing/keys/:keyId` | `DELETE` | Revoke an experimental Portwing Ed25519 public key and disconnect live sessions authenticated with it |
+| `/api/v1/portwing/ws` | `WS` | Experimental Portwing edge-agent WebSocket endpoint using the `portwing/1.0` protocol |
+| `/api/v1/containers/update` | `POST` | Bulk queue updates for multiple containers (see [Container API](/docs/api/container#bulk-update-containers)) |
 | `/api/v1/containers/backups` | `GET` | [All image backups](/docs/api/container#list-all-backups) (optionally filter by `containerName`) |
-| `/api/v1/icons/:source/:name` | `GET` | Proxy and cache registry icon images |
+| `/api/v1/icons/:provider/:slug` | `GET` | Proxy and cache registry icon images |
+| `/api/v1/icons/cache` | `DELETE` | Clear the icon proxy cache |
 | `/api/v1/auth/status` | `GET` | Authentication status check |
 | `/api/v1/webhook/watch` | `POST` | [Webhook](/docs/configuration/webhooks) — trigger watch on all containers |
 | `/api/v1/webhook/watch/:containerName` | `POST` | [Webhook](/docs/configuration/webhooks) — watch specific container |
 | `/api/v1/webhook/update/:containerName` | `POST` | [Webhook](/docs/configuration/webhooks) — update specific container |
+| `/api/v1/webhooks/registry` | `POST` | Signed registry-provider webhook that triggers immediate checks for matching containers |
 | `/api/v1/debug/dump` | `GET` | Download a debug dump JSON file for troubleshooting |
 
 <Callout type="info">See each sub-page for detailed request/response examples.</Callout>
@@ -102,6 +110,30 @@ If the header is missing or does not match the expected token, the API responds 
 ### Command endpoint convention
 
 Some endpoints are intentional action commands and use `POST` under a resource path (for example container watch/scan/reveal). These are RPC-style operations rather than CRUD updates.
+
+## Registry webhook
+
+`POST /api/v1/webhooks/registry` receives registry-provider webhook payloads and immediately checks matching containers.
+
+The endpoint does not use the regular webhook bearer token. It requires an HMAC-SHA256 signature computed with `DD_SERVER_WEBHOOK_SECRET`. Drydock accepts `sha256=<hex>` or raw hex signatures from these headers:
+
+- `x-drydock-signature`
+- `x-hub-signature-256`
+- `x-quay-signature`
+- `x-gitlab-token`
+- `x-ms-signature`
+
+```bash
+payload='{"provider":"dockerhub","repository":"library/nginx"}'
+signature="sha256=$(printf '%s' "$payload" | openssl dgst -sha256 -hmac "$DD_SERVER_WEBHOOK_SECRET" -binary | xxd -p -c 256)"
+
+curl -X POST http://drydock:3000/api/v1/webhooks/registry \
+  -H "Content-Type: application/json" \
+  -H "x-drydock-signature: $signature" \
+  -d "$payload"
+```
+
+Returns `202 Accepted` with registry dispatch counts, `401` for a missing or invalid signature, `403` when registry webhooks are disabled, `429` when rate-limited, or `500` if the endpoint is enabled without a configured secret.
 
 ## Notification rules
 
@@ -188,6 +220,30 @@ The notification outbox stores failed notification delivery attempts so admins c
 
 Outbox API responses expose only a safe payload projection. Full persisted delivery payloads, including full container objects, are not returned by `GET /api/v1/notifications/outbox`.
 
+### List notification outbox entries
+
+```bash
+curl "http://drydock:3000/api/v1/notifications/outbox?status=dead-letter"
+```
+
+Returns 200 with outbox entries, 400 if `status` is invalid, or 401 if authentication is required.
+
+### Retry a notification outbox entry
+
+```bash
+curl -X POST http://drydock:3000/api/v1/notifications/outbox/outbox-entry-id/retry
+```
+
+Returns 200 with the requeued entry, 404 if the entry does not exist or is not in `dead-letter` status, or 500 on an internal error.
+
+### Delete a notification outbox entry
+
+```bash
+curl -X DELETE http://drydock:3000/api/v1/notifications/outbox/outbox-entry-id
+```
+
+Returns 204 on success, 404 if the entry does not exist, or 500 on an internal error.
+
 ## Audit trail
 
 Returns paginated audit log entries for container lifecycle events, updates, rollbacks, webhooks, and more.
@@ -251,7 +307,7 @@ Connection limits: max 10 per IP, max 10 per session. Returns 429 when exceeded.
 
 Each SSE event carries an `id:` field (`<bootId>:<counter>`). On reconnect, browsers automatically send a `Last-Event-ID` header and the server replays any buffered events since that ID. For clients that cannot set custom headers (for example `EventSource` in some environments), pass the same value via the `?last-event-id=` query parameter instead — the server checks both and the header takes precedence.
 
-If the boot ID does not match the server's current boot (server restarted since the last connection), the server cannot replay events from before the restart. The client should treat a reconnect after a reboot as a full re-sync.
+The replay buffer is an in-memory 5-minute ring buffer. If the requested event is older than the buffer, the server sends `dd:resync-required` so the client can refresh full state. If the boot ID does not match the server's current boot (server restarted since the last connection), the server cannot replay events from before the restart; the client should treat that reconnect as a full re-sync.
 
 ### Event types
 
@@ -267,6 +323,7 @@ If the boot ID does not match the server's current boot (server restarted since 
 | `dd:self-update` | `{ "opId": "...", "requiresAck": bool, "ackTimeoutMs": int, "startedAt": "..." }` | Drydock is updating its own container. If `requiresAck` is true, the UI should POST an acknowledgment before the timeout. |
 | `dd:agent-connected` | Agent payload | A remote agent connected to the controller |
 | `dd:agent-disconnected` | Agent payload | A remote agent disconnected |
+| `dd:resync-required` | `{ "reason": "..." }` | Replay could not cover the requested event range; clients should refresh full state |
 
 ### Self-update acknowledgment
 
@@ -385,6 +442,16 @@ curl http://drydock:3000/api/v1/containers/groups
 
 When [authentication](/docs/configuration/authentications) is enabled, these endpoints manage the login flow. Auth routes are mounted at `/auth` (not `/api/auth`).
 
+### Get authentication status
+
+Returns registered authentication providers and startup registration errors. This endpoint is unauthenticated so the login screen can check auth readiness.
+
+```bash
+curl http://drydock:3000/api/v1/auth/status
+```
+
+The same status payload is also available at `GET /auth/status`; `GET /api/auth/status` remains as the unversioned compatibility alias.
+
 ### Get available strategies
 
 Returns the list of configured authentication strategies. This endpoint is unauthenticated so the login screen can render.
@@ -441,4 +508,4 @@ Machine-readable API documentation is available as an OpenAPI 3.1.0 specificatio
 curl http://drydock:3000/api/v1/openapi.json
 ```
 
-The spec covers all API endpoints with request/response schemas. You can import the URL into tools like Swagger UI, Redoc, or Postman for interactive exploration.
+The spec covers HTTP API endpoints with request/response schemas. You can import the URL into tools like Swagger UI, Redoc, or Postman for interactive exploration.

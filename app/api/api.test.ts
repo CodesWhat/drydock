@@ -359,6 +359,25 @@ describe('API Router', () => {
     expect(webhooksRouter.init).toHaveBeenCalled();
   });
 
+  test('should mount backup routes before generic container id routes', async () => {
+    const backupRouter = await import('./backup.js');
+    const containerRouter = await import('./container.js');
+    const backupRouterInstance = vi.mocked(backupRouter.init).mock.results[0]?.value;
+    const containerRouterInstance = vi.mocked(containerRouter.init).mock.results[0]?.value;
+    const useCalls = router.use.mock.calls;
+
+    const backupIndex = useCalls.findIndex(
+      (call) => call[0] === '/containers' && call[1] === backupRouterInstance,
+    );
+    const containerIndex = useCalls.findIndex(
+      (call) => call[0] === '/containers' && call[1] === containerRouterInstance,
+    );
+
+    expect(backupIndex).toBeGreaterThan(-1);
+    expect(containerIndex).toBeGreaterThan(-1);
+    expect(backupIndex).toBeLessThan(containerIndex);
+  });
+
   test('should use requireAuthentication middleware', async () => {
     const auth = await import('./auth.js');
     expect(router.use).toHaveBeenCalledWith(auth.requireAuthentication);

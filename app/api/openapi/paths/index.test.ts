@@ -38,7 +38,7 @@ describe('openApiPaths', () => {
       //        L39:25 ('Actions'), L42:17 ([security]), L42:18 ({webhookBearerAuth}),
       //        L42:39 ([] inner), L43:19 ([params]), L44:18 (responses {}),
       //        L45:47 ({$ref schema}), L46:17 ('WebhookContainerActionResponse ref')
-      expect(openApiPaths['/api/webhook/watch/{containerName}']).toStrictEqual({
+      expect(openApiPaths['/api/v1/webhook/watch/{containerName}']).toStrictEqual({
         post: {
           tags: ['Webhook', 'Actions'],
           summary: 'Trigger watch for a specific container by name',
@@ -61,7 +61,7 @@ describe('openApiPaths', () => {
 
     test('webhook update-container path has exact full structure with different notFoundMessage', () => {
       // Kills the same set of mutants via a different call with a different notFoundMessage
-      expect(openApiPaths['/api/webhook/update/{containerName}']).toStrictEqual({
+      expect(openApiPaths['/api/v1/webhook/update/{containerName}']).toStrictEqual({
         post: {
           tags: ['Webhook', 'Actions'],
           summary: 'Trigger update for a specific container by name',
@@ -109,8 +109,8 @@ describe('openApiPaths', () => {
       });
     });
 
-    test('/api/openapi.json path uses generic object schema', () => {
-      expect(openApiPaths['/api/openapi.json']).toStrictEqual({
+    test('/api/v1/openapi.json path uses generic object schema', () => {
+      expect(openApiPaths['/api/v1/openapi.json']).toStrictEqual({
         get: {
           tags: ['Docs'],
           summary: 'Get OpenAPI document',
@@ -123,8 +123,24 @@ describe('openApiPaths', () => {
       });
     });
 
-    test('/api/webhook/watch path is fully specified', () => {
-      expect(openApiPaths['/api/webhook/watch']).toStrictEqual({
+    test('/api/auth/status compatibility alias is documented', () => {
+      expect(openApiPaths['/api/auth/status']).toStrictEqual({
+        get: {
+          tags: ['Authentication'],
+          summary: 'Get authentication provider registration status (compatibility alias)',
+          operationId: 'getAuthStatusApiAlias',
+          security: [],
+          responses: {
+            200: jsonResponse('Authentication provider status', {
+              $ref: '#/components/schemas/AuthStatusResponse',
+            }),
+          },
+        },
+      });
+    });
+
+    test('/api/v1/webhook/watch path is fully specified', () => {
+      expect(openApiPaths['/api/v1/webhook/watch']).toStrictEqual({
         post: {
           tags: ['Webhook', 'Actions'],
           summary: 'Trigger full watch cycle on all watchers',
@@ -142,8 +158,22 @@ describe('openApiPaths', () => {
       });
     });
 
-    test('/api/events/ui/self-update/{operationId}/ack path is fully specified', () => {
-      expect(openApiPaths['/api/events/ui/self-update/{operationId}/ack']).toStrictEqual({
+    test('/api/v1/webhooks/registry uses registry signature auth', () => {
+      expect(openApiPaths['/api/v1/webhooks/registry']).toMatchObject({
+        post: {
+          security: [{ registryWebhookSignature: [] }],
+          responses: {
+            202: jsonResponse('Registry webhook processed', {
+              $ref: '#/components/schemas/RegistryWebhookResponse',
+            }),
+            401: errorResponse('Missing or invalid registry webhook signature'),
+          },
+        },
+      });
+    });
+
+    test('/api/v1/events/ui/self-update/{operationId}/ack path is fully specified', () => {
+      expect(openApiPaths['/api/v1/events/ui/self-update/{operationId}/ack']).toStrictEqual({
         post: {
           tags: ['Realtime', 'Actions'],
           summary: 'Acknowledge self-update event for this SSE client',
@@ -177,8 +207,8 @@ describe('openApiPaths', () => {
       });
     });
 
-    test('/api/agents/{name}/log/entries path is fully specified', () => {
-      expect(openApiPaths['/api/agents/{name}/log/entries']).toStrictEqual({
+    test('/api/v1/agents/{name}/log/entries path is fully specified', () => {
+      expect(openApiPaths['/api/v1/agents/{name}/log/entries']).toStrictEqual({
         get: {
           tags: ['Agents'],
           summary: 'Get log entries from a connected agent',
@@ -225,8 +255,8 @@ describe('openApiPaths', () => {
       });
     });
 
-    test('/api/icons/{provider}/{slug} path is fully specified', () => {
-      expect(openApiPaths['/api/icons/{provider}/{slug}']).toStrictEqual({
+    test('/api/v1/icons/{provider}/{slug} path is fully specified', () => {
+      expect(openApiPaths['/api/v1/icons/{provider}/{slug}']).toStrictEqual({
         get: {
           tags: ['Icons'],
           summary: 'Get icon from cache, bundled assets, or upstream CDN',
@@ -250,8 +280,8 @@ describe('openApiPaths', () => {
       });
     });
 
-    test('/api/notifications/{id} path is fully specified', () => {
-      expect(openApiPaths['/api/notifications/{id}']).toStrictEqual({
+    test('/api/v1/notifications/{id} path is fully specified', () => {
+      expect(openApiPaths['/api/v1/notifications/{id}']).toStrictEqual({
         patch: {
           tags: ['Notifications'],
           summary: 'Update notification rule',
@@ -289,8 +319,8 @@ describe('openApiPaths', () => {
       });
     });
 
-    test('/api/notifications/outbox GET path is fully specified', () => {
-      expect(openApiPaths['/api/notifications/outbox']).toStrictEqual({
+    test('/api/v1/notifications/outbox GET path is fully specified', () => {
+      expect(openApiPaths['/api/v1/notifications/outbox']).toStrictEqual({
         get: {
           tags: ['Notifications'],
           summary: 'List notification outbox entries',
@@ -318,7 +348,7 @@ describe('openApiPaths', () => {
       });
     });
 
-    test('/api/notifications/outbox/{id}/retry POST path is fully specified', () => {
+    test('/api/v1/notifications/outbox/{id}/retry POST path is fully specified', () => {
       const outboxEntryIdPathParam = {
         name: 'id',
         in: 'path',
@@ -326,7 +356,7 @@ describe('openApiPaths', () => {
         description: 'Outbox entry identifier',
         schema: { type: 'string' },
       };
-      expect(openApiPaths['/api/notifications/outbox/{id}/retry']).toStrictEqual({
+      expect(openApiPaths['/api/v1/notifications/outbox/{id}/retry']).toStrictEqual({
         post: {
           tags: ['Notifications', 'Actions'],
           summary: 'Retry a dead-letter outbox entry',
@@ -344,7 +374,7 @@ describe('openApiPaths', () => {
       });
     });
 
-    test('/api/notifications/outbox/{id} DELETE path is fully specified', () => {
+    test('/api/v1/notifications/outbox/{id} DELETE path is fully specified', () => {
       const outboxEntryIdPathParam = {
         name: 'id',
         in: 'path',
@@ -352,7 +382,7 @@ describe('openApiPaths', () => {
         description: 'Outbox entry identifier',
         schema: { type: 'string' },
       };
-      expect(openApiPaths['/api/notifications/outbox/{id}']).toStrictEqual({
+      expect(openApiPaths['/api/v1/notifications/outbox/{id}']).toStrictEqual({
         delete: {
           tags: ['Notifications', 'Actions'],
           summary: 'Delete a notification outbox entry',
@@ -368,7 +398,7 @@ describe('openApiPaths', () => {
       });
     });
 
-    test('/api/operations/{id}/cancel POST path is fully specified', () => {
+    test('/api/v1/operations/{id}/cancel POST path is fully specified', () => {
       const updateOperationIdPathParam = {
         name: 'id',
         in: 'path',
@@ -376,7 +406,7 @@ describe('openApiPaths', () => {
         description: 'Update operation identifier',
         schema: { type: 'string' },
       };
-      expect(openApiPaths['/api/operations/{id}/cancel']).toStrictEqual({
+      expect(openApiPaths['/api/v1/operations/{id}/cancel']).toStrictEqual({
         post: {
           tags: ['Containers', 'Actions'],
           summary: 'Request cancellation of an active update operation',
@@ -411,7 +441,7 @@ describe('openApiPaths', () => {
       });
     });
 
-    test('/api/update-operations/{id} GET path is fully specified', () => {
+    test('/api/v1/update-operations/{id} GET path is fully specified', () => {
       const updateOperationIdPathParam = {
         name: 'id',
         in: 'path',
@@ -419,7 +449,7 @@ describe('openApiPaths', () => {
         description: 'Update operation identifier',
         schema: { type: 'string' },
       };
-      expect(openApiPaths['/api/update-operations/{id}']).toStrictEqual({
+      expect(openApiPaths['/api/v1/update-operations/{id}']).toStrictEqual({
         get: {
           tags: ['Containers'],
           summary: 'Get a single update operation by id',
@@ -437,8 +467,14 @@ describe('openApiPaths', () => {
       });
     });
 
-    test('/api/self-update/{operationId}/status GET path is fully specified', () => {
-      expect(openApiPaths['/api/self-update/{operationId}/status']).toStrictEqual({
+    test('/api/v1/audit documents single and multi-action filters', () => {
+      const parameterNames = openApiPaths['/api/v1/audit'].get.parameters.map((p) => p.name);
+
+      expect(parameterNames).toEqual(expect.arrayContaining(['action', 'actions']));
+    });
+
+    test('/api/v1/self-update/{operationId}/status GET path is fully specified', () => {
+      expect(openApiPaths['/api/v1/self-update/{operationId}/status']).toStrictEqual({
         get: {
           tags: ['System'],
           summary: 'Get self-update operation status',

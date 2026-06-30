@@ -34,9 +34,9 @@ DD_SECURITY_SCANNER=trivy
 | `DD_SECURITY_SCAN_JITTER` | ⚪ | Random jitter delay (ms) before each scheduled scan starts | integer (`>=0`) | `60000` |
 | `DD_SECURITY_SCAN_CONCURRENCY` | ⚪ | Max digest scans processed in parallel during scheduled scans | integer (`>=1`) | `4` |
 | `DD_SECURITY_SCAN_BATCH_TIMEOUT` | ⚪ | Total scheduled scan batch timeout in milliseconds (`0` disables timeout) | integer (`>=0`) | `1800000` |
-| `DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES` | ⚪ | Max in-memory digest scan cache entries (LRU eviction -- least recently used entries are removed when the limit is reached) | integer (`>0`) | `500` |
+| `DD_SECURITY_SCAN_DIGEST_CACHE_MAX_ENTRIES` | ⚪ | Max in-memory digest scan cache entries (LRU eviction -- least recently used entries are removed when the limit is reached) | integer (`>0`) | `DD_DEFAULT_CACHE_MAX_ENTRIES` (`500`) |
 | `DD_SECURITY_SCAN_NOTIFICATIONS` | ⚪ | When `true`, findings from **scheduled** (cron) scans are routed through notification triggers. On-demand scans always notify. | `true` / `false` | `false` |
-| `DD_SECURITY_GATE_MODE` | ⚪ | Override the security gate globally. `off` disables the gate for all containers (audit row still fires). Per-container label `dd.security.gate=off` also works but only for that container. | `off` | empty (gate enabled) |
+| `DD_SECURITY_GATE_MODE` | ⚪ | Override the security gate globally. `off` disables the gate for all containers (audit row still fires); `on` enables normal gating. Per-container label `dd.security.gate=off` also works but only for that container. | `on`, `off` | `on` |
 | `DD_SECURITY_PRUNE_ONBLOCK` | ⚪ | Prune a pulled candidate image when Update Bouncer blocks it | `true` / `false` | `true` |
 
 ## Trivy modes
@@ -213,6 +213,8 @@ The `cycleId` is used by digest-mode notification triggers to group all findings
 When a newer image is available for a container shown in the Security view, an inline **Update** button appears directly next to the vulnerability data. This lets you apply the update without leaving the security context.
 
 The update button respects eligibility blockers. If a `security-scan-blocked` blocker is active (either the running image scan or the candidate image scan returned blocked-severity vulnerabilities), the button is locked. Use the force-update path to override.
+
+The Security view uses the same release-notes and source-project controls as the Containers view. When Drydock knows the current image's release notes, they are shown even if no update is pending; when source metadata is available, the **View project** link points at the resolved source repository.
 
 ## security-scan-blocked eligibility blocker
 

@@ -273,6 +273,7 @@ Set the "Login outcomes" panel to use the `outcome` label as the legend and colo
 | `DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS` | `25` | many users share one egress IP (NAT, VPN, office proxy) | concentrated brute-force from single IPs |
 | `DD_AUTH_LOCKOUT_WINDOW_MS` | `900000` (15 min) | bursty legitimate retries should not accumulate | attackers spread attempts over time to bypass lockouts |
 | `DD_AUTH_LOCKOUT_DURATION_MS` | `900000` (15 min) | lockouts are too disruptive for operators | attackers resume immediately after lock expires |
+| `DD_AUTH_LOCKOUT_PRUNE_INTERVAL_MS` | `60000` (1 min) | very high login volume makes pruning too frequent | expired lockout state lingers too long for your memory budget |
 | `DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES` | `5000` | many unique client IPs exist (e.g. egress across many subnets) | memory pressure from lockout state storage is a concern |
 
 Operational notes:

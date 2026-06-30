@@ -22,7 +22,7 @@ Three prefixes are supported for trigger configuration:
 
 | Prefix | Status | Example |
 | --- | --- | --- |
-| `DD_ACTION_*` | **Current** | `DD_ACTION_DOCKER_MYSERVER_SOCKETPATH=/var/run/docker.sock` |
+| `DD_ACTION_*` | **Current** | `DD_ACTION_DOCKER_MYSERVER_PRUNE=true` |
 | `DD_NOTIFICATION_*` | **Current** | `DD_NOTIFICATION_SMTP_GMAIL_HOST=smtp.gmail.com` |
 | `DD_TRIGGER_*` | **Deprecated** (removal in v1.7.0) | `DD_TRIGGER_SLACK_MYSLACK_URL=https://...` |
 
@@ -40,7 +40,7 @@ The following example shows a typical before/after migration for a Docker + Slac
 
 ```bash
 # .env — legacy form (deprecated in v1.5.0, removed in v1.7.0)
-DD_TRIGGER_DOCKER_LOCAL_SOCKETPATH=/var/run/docker.sock
+DD_TRIGGER_DOCKER_LOCAL_PRUNE=true
 DD_TRIGGER_SLACK_MYSLACK_URL=https://hooks.slack.com/services/T000/B000/xxxx
 DD_TRIGGER_SMTP_GMAIL_HOST=smtp.gmail.com
 DD_TRIGGER_SMTP_GMAIL_PORT=465
@@ -57,7 +57,7 @@ drydock config migrate --source trigger
 ```bash
 # .env — canonical form
 # Update-action triggers use DD_ACTION_*
-DD_ACTION_DOCKER_LOCAL_SOCKETPATH=/var/run/docker.sock
+DD_ACTION_DOCKER_LOCAL_PRUNE=true
 # Messaging/notification triggers use DD_NOTIFICATION_*
 DD_NOTIFICATION_SLACK_MYSLACK_URL=https://hooks.slack.com/services/T000/B000/xxxx
 DD_NOTIFICATION_SMTP_GMAIL_HOST=smtp.gmail.com
@@ -100,18 +100,18 @@ All implemented triggers, in addition to their specific configuration, also supp
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --------------------------------------------------------- | :--------------: | ----------------------------------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_AUTO` | ⚪ | Controls automatic execution for `update-available` events. `true` — auto-execute for all watched containers. `oninclude` — auto-execute only for containers with an explicit `dd.action.include` or `dd.notification.include` label. `false` — disable automatic `update-available` notifications (manual-only from UI/API). Note: `AUTO=false` does **not** suppress lifecycle notifications (`update-applied`, `update-failed`, `security-alert`, `agent-disconnect`, `agent-reconnect`). | `true`, `false`, `oninclude` | `oninclude` for action triggers (docker, dockercompose, command); `true` for notification triggers |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_AUTO` | ⚪ | Controls automatic execution for `update-available` events. `true` (or legacy `all`) — auto-execute for all watched containers. `oninclude` — auto-execute only for containers with an explicit `dd.action.include` or `dd.notification.include` label. `false` (or legacy `none`) — disable automatic `update-available` notifications (manual-only from UI/API). Note: `AUTO=false` does **not** suppress lifecycle notifications (`update-applied`, `update-failed`, `security-alert`, `agent-disconnect`, `agent-reconnect`). | `true`, `false`, `oninclude`, `all`, `none` | `oninclude` for action triggers (docker, dockercompose, command); `true` for notification triggers |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_BATCHTITLE` | ⚪ | The template to use to render the title of the notification (batch mode) | String template with placeholders `${count}` | `${containers.length} updates available` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_MODE` | ⚪ | Trigger for each container update, trigger once with all available updates as a list, or accumulate updates and send on a schedule | `simple`, `batch`, `digest`, `batch+digest` | `simple` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_DIGESTCRON` | ⚪ | Cron schedule for digest mode flush (only used when `MODE=digest` or `MODE=batch+digest`) | Cron expression | `0 8 * * *` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SECURITYMODE` | ⚪ | How `security-alert` events are delivered: one notification per container (`simple`), all alerts in a cycle batched on completion (`batch`), or one digest per scan cycle (`digest`) | `simple`, `batch`, `digest`, `batch+digest` | `simple` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SECURITYDIGESTTITLE` | ⚪ | The template to use to render the title of the security digest (only used when `SECURITYMODE=digest` or `SECURITYMODE=batch+digest`) | String template with `scan.*` vars | `Security scan complete: ${scan.alertCount} ${scan.containerNoun} with findings` |
-| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SECURITYDIGESTBODY` | ⚪ | The template to use to render the body of the security digest | String template with `scan.*` vars | Severity-grouped list (critical → high → medium → low) |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SECURITYDIGESTBODY` | ⚪ | The template to use to render the body of the security digest | String template with `scan.*` vars | Critical/high severity summary plus scan window |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_ONCE` | ⚪ | Run trigger once (do not repeat previous results) | `true`, `false` | `true` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_ORDER` | ⚪ | Trigger execution order (lower runs first) | Number | `100` |
 | `DD_EVENT_HANDLER_TIMEOUT_MS` | ⚪ | Per-handler execution cap in milliseconds. If a single notification handler (e.g. an SMTP transport stalling on retry) runs longer than this value, it is abandoned and the emit chain continues. Prevents one slow provider from stalling the entire update lifecycle. Applies globally — not per-trigger-name. If the value is absent, zero, or non-numeric it falls back to the default silently. | Positive integer (milliseconds) | `30000` (30 s) |
-| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SIMPLEBODY` | ⚪ | The template to use to render the body of the notification | JS string template with vars `container` | `Container ${container.name} running with ${container.updateKind.kind} ${container.updateKind.localValue} can be updated to ${container.updateKind.kind} ${container.updateKind.remoteValue}${container.result && container.result.link ? "\\n" + container.result.link : ""}` |
-| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SIMPLETITLE` | ⚪ | The template to use to render the title of the notification (simple mode) | JS string template with vars `${container}` | `New ${container.updateKind.kind} found for container ${container.name}` |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SIMPLEBODY` | ⚪ | The template to use to render the body of the notification | JS string template with vars `container` | Agent-prefixed update body with watcher suffix; digest updates say the current tag has a newer image, tag/semver updates show local and remote values, and result links are appended when present |
+| `DD_NOTIFICATION_{trigger_type}_{trigger_name}_SIMPLETITLE` | ⚪ | The template to use to render the title of the notification (simple mode) | JS string template with vars `${container}` | Agent-prefixed update title with watcher suffix; digest updates use `New image available for container ... (tag currentTag)`, other updates use `New {kind} found for container ...` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_THRESHOLD` | ⚪ | The threshold to reach to run the trigger | `all`, `major`, `major-only`, `minor`, `minor-only`, `patch`, `digest`, and `*-no-digest` variants (`major-no-digest`, `major-only-no-digest`, `minor-no-digest`, `minor-only-no-digest`, `patch-no-digest`) | `all` |
 | `DD_NOTIFICATION_{trigger_type}_{trigger_name}_RESOLVENOTIFICATIONS` | ⚪ | Auto-dismiss the notification after the container is successfully updated | `true`, `false` | `false` |
 
@@ -127,7 +127,7 @@ All implemented triggers, in addition to their specific configuration, also supp
 | `patch` | Any semver change that is not major or minor (patch, prerelease) |
 | `digest` | Digest changes only |
 
-Any threshold can be suffixed with `-no-digest` to exclude digest-only updates (e.g. `major-no-digest`, `minor-only-no-digest`). Updates with an `unknown` update kind (e.g. created-date-only changes) are passed through when `threshold=all`, but filtered out for all other threshold values.
+The semver thresholds can be suffixed with `-no-digest` to exclude digest-only updates. Supported no-digest variants are `major-no-digest`, `major-only-no-digest`, `minor-no-digest`, `minor-only-no-digest`, and `patch-no-digest`. Updates with an `unknown` update kind (e.g. created-date-only changes) are passed through when `threshold=all`, but filtered out for all other threshold values.
 
 ### Notes
 
@@ -142,6 +142,7 @@ Any threshold can be suffixed with `-no-digest` to exclude digest-only updates (
 - `MODE=batch+digest` enables both modes simultaneously — immediate batch emails on each scan cycle plus a scheduled digest summary. Requires `DIGESTCRON` to be set.
 - **Note:** Digest and batch modes still depend on the `update-available` notification rule being enabled (see below). If the trigger is excluded from `update-available` routing, no events reach the buffer.
 - `SECURITYMODE` governs `security-alert` delivery independently of `MODE`. A trigger may legitimately want `MODE=batch` for update notifications and `SECURITYMODE=digest` for security findings. Digest and batch+digest modes buffer alerts per-scan-cycle (keyed by `cycleId`) and flush one summary per cycle on completion. Cycles with zero findings never emit. See the [Security Hardening Guide](/docs/guides/security#quiet-scan-notifications-with-digest-mode) for an end-to-end example.
+- `SECURITYDIGESTTITLE` and `SECURITYDIGESTBODY` use the same sandboxed `${...}` template renderer as other trigger templates. They substitute `scan.*` variables and are not evaluated as JavaScript.
 - Scheduled scans do not emit `security-alert` events by default. Set `DD_SECURITY_SCAN_NOTIFICATIONS=true` to opt in. On-demand scans (UI button, `POST /api/v1/containers/:id/scan`, `POST /api/v1/containers/scan-all`) always emit.
 - Notification deduplication (`ONCE=true`) is now persisted in the `notifications_history` store collection, so `once=true` dedup survives restarts. Previously the dedup state was lost on container restart, causing previously-suppressed notifications to re-fire.
 - Digest and batch-retry buffers enforce a **5,000-entry cap** and a **7-day retention** limit. Entries exceeding the cap or age are evicted before the next digest flush.
@@ -196,13 +197,13 @@ Drydock uses a durable **notification outbox** to persist and retry failed notif
 
 | Endpoint | Description |
 | --- | --- |
-| `GET /api/notifications/outbox` | List outbox entries (filter by `status=pending\|delivered\|dead-letter`) |
-| `POST /api/notifications/outbox/:id/retry` | Manually requeue a dead-letter entry |
-| `DELETE /api/notifications/outbox/:id` | Discard an outbox entry |
+| `GET /api/v1/notifications/outbox` | List outbox entries (filter by `status=pending\|delivered\|dead-letter`) |
+| `POST /api/v1/notifications/outbox/:id/retry` | Manually requeue a dead-letter entry |
+| `DELETE /api/v1/notifications/outbox/:id` | Discard an outbox entry |
 
 **UI:** The **Notification Outbox** page (Settings → Notification Outbox, route `/notifications/outbox`) shows tabs for Dead-letter, Pending, and Delivered entries with Retry and Discard actions.
 
-<Callout type="info">The outbox covers all notification trigger types (Slack, SMTP, Discord, etc.). Update-action triggers (Docker, Docker Compose, Command) do not use the outbox — their retries are handled by the update lifecycle itself.</Callout>
+<Callout type="info">The outbox covers all notification trigger types (Slack, SMTP, Discord, etc.). Action triggers do not use the outbox. Docker and Docker Compose retries are handled by the update lifecycle; Command triggers run the configured command directly.</Callout>
 
 ## Template Variable Reference
 
@@ -240,6 +241,8 @@ Template strings use `${expression}` placeholders. Drydock provides two sets of 
 | `container.result.digest` | New digest value from the registry | `sha256:def456...` |
 | `container.result.created` | Creation date of the new image | `2024-02-01T08:00:00Z` |
 | `container.result.link` | Link to the release (when a link template is configured) | `https://github.com/org/repo/releases/tag/v1.25.0` |
+| `releaseNotes` | Structured release notes for the available update target, when available | `{ title, body, url, publishedAt, provider }` |
+| `currentReleaseNotes` | Structured release notes for the currently running tag, when available | `{ title, body, url, publishedAt, provider }` |
 | `container.error.message` | Error message (when an error occurred) | `401 Unauthorized` |
 
 #### Legacy aliases (deprecated)

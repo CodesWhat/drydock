@@ -58,7 +58,7 @@ describe('Backup Router', () => {
     test('should register routes', () => {
       backupRouter.init();
       expect(mockRouter.use).toHaveBeenCalledWith('nocache-middleware');
-      expect(mockRouter.get).toHaveBeenCalledWith('/', expect.any(Function));
+      expect(mockRouter.get).toHaveBeenCalledWith('/backups', expect.any(Function));
       expect(mockRouter.get).toHaveBeenCalledWith('/:id/backups', expect.any(Function));
       expect(mockRouter.post).toHaveBeenCalledWith(
         '/:id/rollback',
@@ -70,7 +70,7 @@ describe('Backup Router', () => {
 
   describe('getBackups', () => {
     test('should return all backups when no containerId filter', () => {
-      const handler = getHandler('get', '/');
+      const handler = getHandler('get', '/backups');
       const allBackups = [
         { id: 'b1', containerId: 'c1' },
         { id: 'b2', containerId: 'c2' },
@@ -87,7 +87,7 @@ describe('Backup Router', () => {
     });
 
     test('should return filtered backups when containerName provided', () => {
-      const handler = getHandler('get', '/');
+      const handler = getHandler('get', '/backups');
       const filtered = [{ id: 'b1', containerName: 'nginx' }];
       mockGetBackupsByName.mockReturnValue(filtered);
 

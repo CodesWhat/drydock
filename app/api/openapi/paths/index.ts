@@ -118,7 +118,7 @@ export const openApiPaths = {
       },
     },
   },
-  '/api/openapi.json': {
+  '/api/v1/openapi.json': {
     get: {
       tags: ['Docs'],
       summary: 'Get OpenAPI document',
@@ -129,18 +129,18 @@ export const openApiPaths = {
       },
     },
   },
-  '/api/app': {
+  '/api/v1/app': {
     get: {
       tags: ['System'],
       summary: 'Get application information',
       operationId: 'getAppInfo',
-      security: [],
       responses: {
         200: jsonResponse('Application metadata', { $ref: '#/components/schemas/AppInfo' }),
+        401: errorResponse('Authentication required'),
       },
     },
   },
-  '/api/webhook/watch': {
+  '/api/v1/webhook/watch': {
     post: {
       tags: ['Webhook', 'Actions'],
       summary: 'Trigger full watch cycle on all watchers',
@@ -156,20 +156,38 @@ export const openApiPaths = {
       },
     },
   },
-  '/api/webhook/watch/{containerName}': createWebhookContainerActionPost({
+  '/api/v1/webhook/watch/{containerName}': createWebhookContainerActionPost({
     summary: 'Trigger watch for a specific container by name',
     operationId: 'webhookWatchContainer',
     successDescription: 'Container watch triggered',
     notFoundMessage: 'Container not found',
   }),
-  '/api/webhook/update/{containerName}': createWebhookContainerActionPost({
+  '/api/v1/webhook/update/{containerName}': createWebhookContainerActionPost({
     summary: 'Trigger update for a specific container by name',
     operationId: 'webhookUpdateContainer',
     successDescription: 'Container update triggered',
     notFoundMessage: 'Container or docker trigger not found',
   }),
+  '/api/v1/webhooks/registry': {
+    post: {
+      tags: ['Webhook', 'Actions'],
+      summary: 'Process a signed registry webhook and trigger matching container checks',
+      operationId: 'processRegistryWebhook',
+      security: [{ registryWebhookSignature: [] }],
+      responses: {
+        202: jsonResponse('Registry webhook processed', {
+          $ref: '#/components/schemas/RegistryWebhookResponse',
+        }),
+        400: errorResponse('Unsupported registry webhook payload'),
+        401: errorResponse('Missing or invalid registry webhook signature'),
+        403: errorResponse('Registry webhooks are disabled'),
+        429: errorResponse('Too many registry webhook requests'),
+        500: errorResponse('Registry webhook secret is not configured'),
+      },
+    },
+  },
   ...authPaths,
-  '/api/events/ui': {
+  '/api/v1/events/ui': {
     get: {
       tags: ['Realtime'],
       summary: 'Open authenticated UI SSE stream',
@@ -188,7 +206,7 @@ export const openApiPaths = {
       },
     },
   },
-  '/api/events/ui/self-update/{operationId}/ack': {
+  '/api/v1/events/ui/self-update/{operationId}/ack': {
     post: {
       tags: ['Realtime', 'Actions'],
       summary: 'Acknowledge self-update event for this SSE client',
@@ -220,7 +238,7 @@ export const openApiPaths = {
       },
     },
   },
-  '/api/log': {
+  '/api/v1/log': {
     get: {
       tags: ['Logs'],
       summary: 'Get current log settings',
@@ -231,7 +249,7 @@ export const openApiPaths = {
       },
     },
   },
-  '/api/log/entries': {
+  '/api/v1/log/entries': {
     get: {
       tags: ['Logs'],
       summary: 'Get buffered log entries',
@@ -269,7 +287,21 @@ export const openApiPaths = {
       },
     },
   },
-  '/api/store': {
+  '/api/v1/log/components': {
+    get: {
+      tags: ['Logs'],
+      summary: 'Get known log component names',
+      operationId: 'getLogComponents',
+      responses: {
+        200: jsonResponse('Log component names', {
+          type: 'array',
+          items: { type: 'string' },
+        }),
+        401: errorResponse('Authentication required'),
+      },
+    },
+  },
+  '/api/v1/store': {
     get: {
       tags: ['System'],
       summary: 'Get storage configuration',
@@ -282,7 +314,7 @@ export const openApiPaths = {
       },
     },
   },
-  '/api/debug/dump': {
+  '/api/v1/debug/dump': {
     get: {
       tags: ['System'],
       summary: 'Download diagnostic debug dump',
@@ -316,7 +348,7 @@ export const openApiPaths = {
       },
     },
   },
-  '/api/server': {
+  '/api/v1/server': {
     get: {
       tags: ['System'],
       summary: 'Get server configuration and compatibility details',
@@ -327,7 +359,7 @@ export const openApiPaths = {
       },
     },
   },
-  '/api/server/security/runtime': {
+  '/api/v1/server/security/runtime': {
     get: {
       tags: ['System'],
       summary: 'Get runtime status of security tooling',
@@ -343,7 +375,7 @@ export const openApiPaths = {
   },
   ...containerPaths,
   ...statsPaths,
-  '/api/operations/{id}/cancel': {
+  '/api/v1/operations/{id}/cancel': {
     post: {
       tags: ['Containers', 'Actions'],
       summary: 'Request cancellation of an active update operation',
@@ -376,7 +408,7 @@ export const openApiPaths = {
       },
     },
   },
-  '/api/update-operations/{id}': {
+  '/api/v1/update-operations/{id}': {
     get: {
       tags: ['Containers'],
       summary: 'Get a single update operation by id',
@@ -392,7 +424,7 @@ export const openApiPaths = {
       },
     },
   },
-  '/api/self-update/{operationId}/status': {
+  '/api/v1/self-update/{operationId}/status': {
     get: {
       tags: ['System'],
       summary: 'Get self-update operation status',
@@ -419,7 +451,7 @@ export const openApiPaths = {
   ...triggerPaths,
   ...portwingPaths,
   ...componentReadPaths,
-  '/api/agents': {
+  '/api/v1/agents': {
     get: {
       tags: ['Agents'],
       summary: 'List known agents with health and inventory stats',
@@ -430,7 +462,7 @@ export const openApiPaths = {
       },
     },
   },
-  '/api/agents/{name}/log/entries': {
+  '/api/v1/agents/{name}/log/entries': {
     get: {
       tags: ['Agents'],
       summary: 'Get log entries from a connected agent',
@@ -472,7 +504,7 @@ export const openApiPaths = {
       },
     },
   },
-  '/api/audit': {
+  '/api/v1/audit': {
     get: {
       tags: ['Audit'],
       summary: 'Get audit entries with pagination and filtering',
@@ -486,6 +518,7 @@ export const openApiPaths = {
           schema: { type: 'integer', minimum: 1, maximum: 200 },
         },
         { name: 'action', in: 'query', required: false, schema: { type: 'string' } },
+        { name: 'actions', in: 'query', required: false, schema: { type: 'string' } },
         { name: 'container', in: 'query', required: false, schema: { type: 'string' } },
         {
           name: 'from',
@@ -507,7 +540,7 @@ export const openApiPaths = {
       },
     },
   },
-  '/api/icons/{provider}/{slug}': {
+  '/api/v1/icons/{provider}/{slug}': {
     get: {
       tags: ['Icons'],
       summary: 'Get icon from cache, bundled assets, or upstream CDN',
@@ -529,7 +562,7 @@ export const openApiPaths = {
       },
     },
   },
-  '/api/icons/cache': {
+  '/api/v1/icons/cache': {
     delete: {
       tags: ['Icons'],
       summary: 'Clear icon cache',
@@ -543,7 +576,7 @@ export const openApiPaths = {
       },
     },
   },
-  '/api/settings': {
+  '/api/v1/settings': {
     get: {
       tags: ['System'],
       summary: 'Get API settings',
@@ -605,7 +638,7 @@ export const openApiPaths = {
       },
     },
   },
-  '/api/notifications': {
+  '/api/v1/notifications': {
     get: {
       tags: ['Notifications'],
       summary: 'List notification rules',
@@ -619,7 +652,7 @@ export const openApiPaths = {
     },
   },
   ...notificationOutboxPaths,
-  '/api/notifications/{id}': {
+  '/api/v1/notifications/{id}': {
     patch: {
       tags: ['Notifications'],
       summary: 'Update notification rule',
@@ -662,7 +695,7 @@ export const openApiPaths = {
       operationId: 'getPrometheusMetrics',
       description:
         'Returns Prometheus metrics. Auth modes: (1) bearer token via DD_SERVER_METRICS_TOKEN (recommended for Prometheus scrapers), (2) session/basic auth fallback when no token is set, (3) no auth when DD_SERVER_METRICS_AUTH=false.',
-      security: [{ metricsBearerAuth: [] }, { sessionAuth: [] }],
+      security: [{ metricsBearerAuth: [] }, { sessionAuth: [] }, {}],
       responses: {
         200: {
           description: 'Prometheus metrics text',

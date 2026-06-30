@@ -497,7 +497,7 @@ describe('Webhook Router', () => {
         result: { watchers: 2 },
       });
       const contractValidation = validateOpenApiJsonResponse({
-        path: '/api/webhook/watch',
+        path: '/api/v1/webhook/watch',
         method: 'post',
         statusCode: '200',
         payload: res.json.mock.calls[0][0],
@@ -520,7 +520,7 @@ describe('Webhook Router', () => {
         result: { watchers: 0 },
       });
       const contractValidation = validateOpenApiJsonResponse({
-        path: '/api/webhook/watch',
+        path: '/api/v1/webhook/watch',
         method: 'post',
         statusCode: '200',
         payload: res.json.mock.calls[0][0],

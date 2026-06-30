@@ -22,6 +22,8 @@ To limit brute-force attempts on `POST /auth/login`, drydock tracks failed login
 | `DD_AUTH_IP_LOCKOUT_MAX_ATTEMPTS` | ⚪ | Max failed login attempts per client IP before temporary lockout | Positive integer (`> 0`) | `25` |
 | `DD_AUTH_LOCKOUT_WINDOW_MS` | ⚪ | Rolling window (milliseconds) used to count failed login attempts | Positive integer (`> 0`) | `900000` |
 | `DD_AUTH_LOCKOUT_DURATION_MS` | ⚪ | Lockout duration (milliseconds) once a threshold is reached | Positive integer (`> 0`) | `900000` |
+| `DD_AUTH_LOCKOUT_PRUNE_INTERVAL_MS` | ⚪ | Interval for pruning expired lockout entries from memory and the persisted lockout sidecar file | Positive integer (`> 0`) | `60000` |
+| `DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES` | ⚪ | Maximum number of unique account/IP identities tracked before older entries are pruned | Positive integer (`> 0`) | `5000` |
 
 If a lockout value is missing or invalid, drydock falls back to the corresponding default.
 

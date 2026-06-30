@@ -1,32 +1,21 @@
-import { statSync } from "node:fs";
-import { join } from "node:path";
 import type { MetadataRoute } from "next";
 import { getComparisonRouteSlugs } from "@/lib/comparison-route-data";
 import { BASE_URL } from "@/lib/site-config";
 import { source } from "@/lib/source";
 
-const contentDir = join(process.cwd(), "content", "docs");
-
-function getFileModifiedDate(page: { absolutePath?: string; path: string }): Date {
-  const filePath = page.absolutePath ?? join(contentDir, page.path);
-  try {
-    return statSync(filePath).mtime;
-  } catch {
-    return new Date();
-  }
-}
-
 export default function sitemap(): MetadataRoute.Sitemap {
+  const generatedAt = new Date();
+
   const docPages = source.getPages().map((page) => ({
     url: `${BASE_URL}${page.url}`,
-    lastModified: getFileModifiedDate(page),
+    lastModified: generatedAt,
     changeFrequency: "weekly" as const,
     priority: 0.7,
   }));
 
   const comparePages = getComparisonRouteSlugs().map((slug) => ({
     url: `${BASE_URL}/compare/${slug}`,
-    lastModified: new Date(),
+    lastModified: generatedAt,
     changeFrequency: "monthly" as const,
     priority: 0.8,
   }));
@@ -34,13 +23,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     {
       url: BASE_URL,
-      lastModified: new Date(),
+      lastModified: generatedAt,
       changeFrequency: "weekly",
       priority: 1,
     },
     {
       url: `${BASE_URL}/compare`,
-      lastModified: new Date(),
+      lastModified: generatedAt,
       changeFrequency: "monthly" as const,
       priority: 0.9,
     },

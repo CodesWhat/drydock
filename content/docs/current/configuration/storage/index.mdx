@@ -13,7 +13,13 @@ If you want the state to persist after the container removal, you need to mount 
 | --- | :---: | --- | --- | --- |
 | `DD_STORE_PATH` | ⚪ | Directory where the database file is stored | directory path | `/store` |
 | `DD_STORE_FILE` | ⚪ | Database filename | filename | `dd.json` |
-| `DD_UPDATE_OPERATION_MAX_ENTRIES` | ⚪ | Max update/rollback operation records to retain (oldest pruned when exceeded) | integer (`>0`) | `500` |
+| `DD_DEFAULT_CACHE_MAX_ENTRIES` | ⚪ | Shared default entry cap used by several in-memory caches when their specific cap is not set | integer (`>0`) | `500` |
+| `DD_CONTAINERS_QUERY_CACHE_MAX_ENTRIES` | ⚪ | Max cached container-list query results retained in memory | integer (`>0`) | `DD_DEFAULT_CACHE_MAX_ENTRIES` (`500`) |
+| `DD_SECURITY_STATE_CACHE_TTL_MS` | ⚪ | Time-to-live for cached per-container security state used to survive short container recreation gaps | integer (`>0`) | `900000` (15 min) |
+| `DD_SECURITY_STATE_CACHE_MAX_ENTRIES` | ⚪ | Max cached per-container security-state entries retained in memory | integer (`>0`) | `DD_DEFAULT_CACHE_MAX_ENTRIES` (`500`) |
+| `DD_UPDATE_LIFECYCLE_CACHE_TTL_MS` | ⚪ | Time-to-live for cached update lifecycle timestamps used while a pending update candidate remains the same | integer (`>0`) | `1800000` (30 min) |
+| `DD_UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES` | ⚪ | Max cached update lifecycle entries retained in memory | integer (`>0`) | `DD_DEFAULT_CACHE_MAX_ENTRIES` (`500`) |
+| `DD_UPDATE_OPERATION_MAX_ENTRIES` | ⚪ | Max update/rollback operation records to retain (oldest pruned when exceeded) | integer (`>0`) | `DD_DEFAULT_CACHE_MAX_ENTRIES` (`500`) |
 | `DD_UPDATE_OPERATION_RETENTION_DAYS` | ⚪ | Days to retain update operation records before pruning | integer (`>0`) | `30` |
 | `DD_UPDATE_OPERATION_ACTIVE_TTL_MS` | ⚪ | Maximum age (ms) an operation may remain in an `active` status (`queued` or `in-progress`) before it is terminalised to the non-notifying `expired` status. Applied at startup and during housekeeping to clear stuck operations left behind by an unclean shutdown; unlike `failed`, an `expired` operation emits no "update failed" notification. | integer (`>0`) | `1800000` (30 min) |
 
@@ -41,3 +47,9 @@ docker run \
 ```
 </Tab>
 </Tabs>
+
+## Downgrade Notes
+
+The `dd.json` store written by v1.5.1 and later tolerates unknown fields, so a later v1.5.x store can usually be read after rolling back to another v1.5.1+ build.
+
+Rolling back from v1.5.1 to v1.5.0 is the exception: v1.5.0 rejects fields added after it shipped. If you must roll back that far, stop Drydock first, back up `/store/dd.json`, then remove `details.startedAt` and `image.softwareVersion` from stored container records before starting v1.5.0.

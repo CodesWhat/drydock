@@ -36,12 +36,12 @@ The unversioned `/api/*` path is a backward-compatible alias for `/api/v1/*`. Bo
 
 ### Implicit wildcard CORS origin {#implicit-wildcard-cors}
 
-When `DD_SERVER_CORS_ENABLED=true` and `DD_SERVER_CORS_ORIGIN` is not set, drydock defaults to `*` (all origins). This implicit wildcard is deprecated.
+Older drydock releases allowed `DD_SERVER_CORS_ENABLED=true` without `DD_SERVER_CORS_ORIGIN` and treated it like `*` (all origins). Current releases fail startup instead; CORS must have an explicit origin.
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.4.0 |
-| **Detection** | Startup log warning when CORS is enabled without an explicit origin |
+| **Detection** | Startup error when CORS is enabled without an explicit origin |
 | **Migration** | Set `DD_SERVER_CORS_ORIGIN` to your trusted origin(s), e.g. `DD_SERVER_CORS_ORIGIN=https://drydock.example.com` |
 
 ### Legacy `WUD_*` environment variables {#legacy-env-vars}

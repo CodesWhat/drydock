@@ -243,7 +243,7 @@ volumes:
   - /path/to/my-stack/compose.yml:/compose/my-stack.yml  # must be writable
 ```
 
-The compose trigger patches the image tag in your compose file and runs `docker compose up -d <service>`, preserving all compose dependencies, networks, and environment.
+The compose trigger patches the image tag in your compose file, then refreshes the service through the Docker Engine API. The `docker compose` / `docker-compose` CLI is not required inside the Drydock container.
 
 <Callout type="warn">The compose file must be mounted **writable** (no `:ro`) — Drydock writes the updated image tag back to it.</Callout>
 

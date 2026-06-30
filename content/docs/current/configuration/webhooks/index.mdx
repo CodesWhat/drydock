@@ -16,12 +16,12 @@ The webhook API lets external systems trigger container watches and updates. Thi
 | --- | :---: | --- | --- | --- |
 | `DD_SERVER_WEBHOOK_ENABLED` | ⚪ | Enable webhook endpoints | `true`, `false` | `false` |
 | `DD_SERVER_WEBHOOK_TOKEN` | ⚪ | Shared Bearer token used by all webhook endpoints (fallback token) | Any string | — |
-| `DD_SERVER_WEBHOOK_TOKENS_WATCHALL` | ⚪ | Endpoint-specific token for `POST /api/v1/webhook/watch` | Any string | — |
-| `DD_SERVER_WEBHOOK_TOKENS_WATCH` | ⚪ | Endpoint-specific token for `POST /api/v1/webhook/watch/:containerName` | Any string | — |
-| `DD_SERVER_WEBHOOK_TOKENS_UPDATE` | ⚪ | Endpoint-specific token for `POST /api/v1/webhook/update/:containerName` | Any string | — |
+| `DD_SERVER_WEBHOOK_TOKENS_WATCHALL` | ⚪ | Endpoint-specific token for `POST /api/v1/webhook/watch`. If any endpoint-specific token is set, all three endpoint-specific tokens must be set. | Any string | — |
+| `DD_SERVER_WEBHOOK_TOKENS_WATCH` | ⚪ | Endpoint-specific token for `POST /api/v1/webhook/watch/:containerName`. If any endpoint-specific token is set, all three endpoint-specific tokens must be set. | Any string | — |
+| `DD_SERVER_WEBHOOK_TOKENS_UPDATE` | ⚪ | Endpoint-specific token for `POST /api/v1/webhook/update/:containerName`. If any endpoint-specific token is set, all three endpoint-specific tokens must be set. | Any string | — |
 | `DD_SERVER_WEBHOOK_SECRET` | ⚪ | HMAC signing secret for verifying registry webhook signatures. Required when receiving push notifications from container registries. | Any string | — |
 
-<Callout type="warn">Webhooks are disabled by default. Set `DD_SERVER_WEBHOOK_ENABLED=true` and provide at least one webhook token (`DD_SERVER_WEBHOOK_TOKEN` or any `DD_SERVER_WEBHOOK_TOKENS_*` value). Requests to endpoints without a configured token are rejected.</Callout>
+<Callout type="warn">Webhooks are disabled by default. Set `DD_SERVER_WEBHOOK_ENABLED=true` and provide either the shared `DD_SERVER_WEBHOOK_TOKEN`, all three endpoint-specific `DD_SERVER_WEBHOOK_TOKENS_*` values, or `DD_SERVER_WEBHOOK_SECRET` for signed registry webhooks. Partial endpoint-specific token sets are rejected at startup.</Callout>
 
 ## Endpoints
 
@@ -57,7 +57,8 @@ Authorization: Bearer your-token-here
 
 Token selection rules:
 
-- If an endpoint-specific token (`DD_SERVER_WEBHOOK_TOKENS_*`) is set for that endpoint, it is required.
+- Endpoint-specific tokens are all-or-none: if any `DD_SERVER_WEBHOOK_TOKENS_*` value is set, `WATCHALL`, `WATCH`, and `UPDATE` must all be configured.
+- If endpoint-specific tokens are configured, the matching token for that endpoint is required.
 - Otherwise, drydock falls back to `DD_SERVER_WEBHOOK_TOKEN`.
 
 <Callout type="info">`/api/v1/webhooks/registry` uses HMAC signature validation (not Bearer token auth). Supported signature headers include `x-registry-signature`, `x-hub-signature-256`, `x-quay-signature`, `x-harbor-signature`, `x-ms-signature`, and `x-drydock-signature`.</Callout>

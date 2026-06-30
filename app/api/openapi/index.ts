@@ -12,7 +12,7 @@ export const openApiDocument = {
   },
   'x-drydock-conventions': {
     actionPostEndpoints:
-      'Side-effecting command operations use action-oriented POST endpoints under resource paths (e.g., POST /api/containers/:id/scan).',
+      'Side-effecting command operations use action-oriented POST endpoints under resource paths (e.g., POST /api/v1/containers/:id/scan).',
   },
   servers: [
     {
@@ -63,6 +63,13 @@ export const openApiDocument = {
         bearerFormat: 'Token',
         description:
           'Bearer token configured via webhook settings (shared token or endpoint-specific webhook tokens).',
+      },
+      registryWebhookSignature: {
+        type: 'apiKey',
+        in: 'header',
+        name: 'x-drydock-signature',
+        description:
+          'HMAC-SHA256 registry webhook signature. The endpoint also accepts provider-specific signature headers such as x-hub-signature-256, x-gitlab-token, x-ms-signature, and x-quay-signature.',
       },
       metricsBearerAuth: {
         type: 'http',

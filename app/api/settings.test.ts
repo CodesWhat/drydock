@@ -57,7 +57,7 @@ describe('Settings Router', () => {
       internetlessMode: false,
     });
     const contractValidation = validateOpenApiJsonResponse({
-      path: '/api/settings',
+      path: '/api/v1/settings',
       method: 'get',
       statusCode: '200',
       payload: res.json.mock.calls[0][0],
@@ -88,7 +88,7 @@ describe('Settings Router', () => {
       internetlessMode: true,
     });
     const contractValidation = validateOpenApiJsonResponse({
-      path: '/api/settings',
+      path: '/api/v1/settings',
       method: 'patch',
       statusCode: '200',
       payload: res.json.mock.calls[0][0],

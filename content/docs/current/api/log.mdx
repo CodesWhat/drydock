@@ -75,7 +75,7 @@ curl http://drydock:3000/api/v1/log/components
 Streams system log entries over WebSocket. The server first sends a filtered backfill from the in-memory buffer, then pushes new entries in real time.
 
 - Canonical endpoint: `WS /api/v1/log/stream`
-- Compatibility alias: `WS /api/log/stream`
+- Deprecated compatibility alias: `WS /api/log/stream` (planned for removal in `v1.6.0`)
 
 ### Query parameters
 

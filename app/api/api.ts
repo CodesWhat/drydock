@@ -131,14 +131,14 @@ export function init(): express.Router {
   // Mount container groups router BEFORE container router (/:id would shadow /groups)
   router.use('/containers', groupRouter.init());
 
+  // Mount backup router BEFORE container router (/:id would shadow /backups)
+  router.use('/containers', backupRouter.init());
+
   // Mount container router
   router.use('/containers', containerRouter.init());
 
   // Mount preview router (container preview/dry-run)
   router.use('/containers', previewRouter.init());
-
-  // Mount backup router (image backup/rollback)
-  router.use('/containers', backupRouter.init());
 
   // Mount container actions router (start/stop/restart)
   router.use('/containers', containerActionsRouter.init());

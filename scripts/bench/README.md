@@ -1,7 +1,8 @@
 # Drydock Benchmark Suite
 
 Standalone microbenchmarks. Run from the repo root with `node scripts/bench/<name>.mjs`.
-All benchmarks require a fresh build: `cd app && npm run build && cd ..`
+Benchmarks that import `app/dist` require a fresh backend build first: `cd app && npm run build && cd ..`.
+Purely synthetic benches, such as `registry-rate.mjs`, can run without building the app.
 
 ## Benches
 

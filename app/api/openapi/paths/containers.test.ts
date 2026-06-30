@@ -16,20 +16,20 @@ describe('containerPaths', () => {
   test('CONTAINER_ACTION_TAGS constant: tags array contains Containers and Actions in order', () => {
     // Kills L16:31 ([] mutation) and L16:32 ("" mutation)
     // These tags appear on every path built with createContainerIdActionPost
-    const startPath = containerPaths['/api/containers/{id}/start'];
+    const startPath = containerPaths['/api/v1/containers/{id}/start'];
     expect(startPath.post.tags).toStrictEqual(['Containers', 'Actions']);
 
-    const stopPath = containerPaths['/api/containers/{id}/stop'];
+    const stopPath = containerPaths['/api/v1/containers/{id}/stop'];
     expect(stopPath.post.tags).toStrictEqual(['Containers', 'Actions']);
 
-    const restartPath = containerPaths['/api/containers/{id}/restart'];
+    const restartPath = containerPaths['/api/v1/containers/{id}/restart'];
     expect(restartPath.post.tags).toStrictEqual(['Containers', 'Actions']);
   });
 
   test('createRuntimeContainerActionPath: builds correct post shape with auth/403/404/500 responses', () => {
     // Kills L74:21 ({} ObjectLiteral), L76:26, L77:26, L78:26 (StringLiterals)
     // These are the hardcoded error responses inside createRuntimeContainerActionPath
-    const startPath = containerPaths['/api/containers/{id}/start'];
+    const startPath = containerPaths['/api/v1/containers/{id}/start'];
     expect(startPath).toStrictEqual({
       post: {
         tags: ['Containers', 'Actions'],
@@ -50,7 +50,7 @@ describe('containerPaths', () => {
   });
 
   test('createRuntimeContainerActionPath: stop container path has correct failure description', () => {
-    const stopPath = containerPaths['/api/containers/{id}/stop'];
+    const stopPath = containerPaths['/api/v1/containers/{id}/stop'];
     expect(stopPath).toStrictEqual({
       post: {
         tags: ['Containers', 'Actions'],
@@ -71,7 +71,7 @@ describe('containerPaths', () => {
   });
 
   test('createRuntimeContainerActionPath: restart container path is fully specified', () => {
-    const restartPath = containerPaths['/api/containers/{id}/restart'];
+    const restartPath = containerPaths['/api/v1/containers/{id}/restart'];
     expect(restartPath).toStrictEqual({
       post: {
         tags: ['Containers', 'Actions'],
@@ -93,7 +93,7 @@ describe('containerPaths', () => {
 
   test('createRuntimeContainerActionPath: update path with additionalErrorResponses and 202 status', () => {
     // Tests that additionalErrorResponses are merged before the standard errors
-    const updatePath = containerPaths['/api/containers/{id}/update'];
+    const updatePath = containerPaths['/api/v1/containers/{id}/update'];
     expect(updatePath).toStrictEqual({
       post: {
         tags: ['Containers', 'Actions'],
@@ -118,7 +118,7 @@ describe('containerPaths', () => {
   });
 
   test('container groups path returns collection result', () => {
-    expect(containerPaths['/api/containers/groups']).toStrictEqual({
+    expect(containerPaths['/api/v1/containers/groups']).toStrictEqual({
       get: {
         tags: ['Containers'],
         summary: 'Get containers grouped by stack/group label',
@@ -134,7 +134,7 @@ describe('containerPaths', () => {
   });
 
   test('container list path includes query parameters', () => {
-    expect(containerPaths['/api/containers']).toStrictEqual({
+    expect(containerPaths['/api/v1/containers']).toStrictEqual({
       get: {
         tags: ['Containers'],
         summary: 'List containers',
@@ -148,8 +148,27 @@ describe('containerPaths', () => {
     });
   });
 
+  test('container list path documents supported server-side filters', () => {
+    const parameterNames = containerPaths['/api/v1/containers'].get.parameters.map((p) => p.name);
+
+    expect(parameterNames).toEqual(
+      expect.arrayContaining([
+        'limit',
+        'offset',
+        'includeVulnerabilities',
+        'sort',
+        'order',
+        'status',
+        'kind',
+        'watcher',
+        'maturity',
+      ]),
+    );
+    expect(parameterNames).not.toContain('containerIds');
+  });
+
   test('delete container path has correct response codes and parameters', () => {
-    expect(containerPaths['/api/containers/{id}']).toStrictEqual({
+    expect(containerPaths['/api/v1/containers/{id}']).toStrictEqual({
       get: {
         tags: ['Containers'],
         summary: 'Get a container by id',
@@ -181,7 +200,7 @@ describe('containerPaths', () => {
   });
 
   test('container update-operations path includes id param and pagination', () => {
-    expect(containerPaths['/api/containers/{id}/update-operations']).toStrictEqual({
+    expect(containerPaths['/api/v1/containers/{id}/update-operations']).toStrictEqual({
       get: {
         tags: ['Containers'],
         summary: 'Get persisted update-operation history for a container',
@@ -198,7 +217,7 @@ describe('containerPaths', () => {
 
   test('container triggers path and run-trigger paths are fully specified', () => {
     expect(
-      containerPaths['/api/containers/{id}/triggers/{triggerType}/{triggerName}'],
+      containerPaths['/api/v1/containers/{id}/triggers/{triggerType}/{triggerName}'],
     ).toStrictEqual({
       post: {
         tags: ['Containers', 'Actions'],
@@ -207,16 +226,20 @@ describe('containerPaths', () => {
         parameters: [containerIdPathParam, triggerTypePathParam, triggerNamePathParam],
         responses: {
           200: jsonResponse('Trigger executed', { $ref: '#/components/schemas/EmptyObject' }),
+          202: jsonResponse('Update operation accepted', {
+            $ref: '#/components/schemas/OperationAcceptedResponse',
+          }),
           400: errorResponse('Invalid trigger request'),
           401: errorResponse('Authentication required'),
           404: errorResponse('Container or trigger not found'),
+          409: errorResponse('Update cannot be queued'),
           500: errorResponse('Trigger execution failed'),
         },
       },
     });
 
     expect(
-      containerPaths['/api/containers/{id}/triggers/{triggerType}/{triggerName}/{triggerAgent}'],
+      containerPaths['/api/v1/containers/{id}/triggers/{triggerType}/{triggerName}/{triggerAgent}'],
     ).toStrictEqual({
       post: {
         tags: ['Containers', 'Actions'],
@@ -230,9 +253,13 @@ describe('containerPaths', () => {
         ],
         responses: {
           200: jsonResponse('Trigger executed', { $ref: '#/components/schemas/EmptyObject' }),
+          202: jsonResponse('Update operation accepted', {
+            $ref: '#/components/schemas/OperationAcceptedResponse',
+          }),
           400: errorResponse('Invalid trigger request'),
           401: errorResponse('Authentication required'),
           404: errorResponse('Container or trigger not found'),
+          409: errorResponse('Update cannot be queued or route agent does not own container'),
           500: errorResponse('Trigger execution failed'),
         },
       },
@@ -240,7 +267,7 @@ describe('containerPaths', () => {
   });
 
   test('createContainerIdActionPost: env reveal path uses correct schema ref', () => {
-    const envRevealPath = containerPaths['/api/containers/{id}/env/reveal'];
+    const envRevealPath = containerPaths['/api/v1/containers/{id}/env/reveal'];
     expect(envRevealPath).toStrictEqual({
       post: {
         tags: ['Containers', 'Actions'],
@@ -261,7 +288,7 @@ describe('containerPaths', () => {
   });
 
   test('intermediate-release-notes path has correct parameters and response codes', () => {
-    const path = containerPaths['/api/containers/{id}/intermediate-release-notes'];
+    const path = containerPaths['/api/v1/containers/{id}/intermediate-release-notes'];
     expect(path).toStrictEqual({
       get: {
         tags: ['Containers'],
@@ -311,8 +338,43 @@ describe('containerPaths', () => {
     });
   });
 
+  test('SBOM path documents scanner configuration failures', () => {
+    const sbomPath = containerPaths['/api/v1/containers/{id}/sbom'];
+    expect(sbomPath.get.responses[503]).toStrictEqual(
+      errorResponse('Security scanner is not configured'),
+    );
+  });
+
+  test('security vulnerability overview documents pagination inputs and metadata', () => {
+    const path = containerPaths['/api/v1/containers/security/vulnerabilities'];
+    const parameterNames = path.get.parameters.map((p) => p.name);
+    const responseSchema = path.get.responses[200].content['application/json'].schema;
+
+    expect(parameterNames).toEqual(expect.arrayContaining(['limit', 'offset']));
+    expect(responseSchema.properties).toEqual(
+      expect.objectContaining({
+        total: { type: 'integer', minimum: 0 },
+        limit: { type: 'integer', minimum: 0 },
+        offset: { type: 'integer', minimum: 0 },
+        hasMore: { type: 'boolean' },
+        _links: { $ref: '#/components/schemas/PaginationLinks' },
+      }),
+    );
+    expect(responseSchema.required).toEqual(
+      expect.arrayContaining(['total', 'limit', 'offset', 'hasMore']),
+    );
+  });
+
+  test('container log download documents timestamps query parameter', () => {
+    const parameterNames = containerPaths['/api/v1/containers/{id}/logs'].get.parameters.map(
+      (p) => p.name,
+    );
+
+    expect(parameterNames).toContain('timestamps');
+  });
+
   test('createContainerIdActionPost: scan path uses ContainerResource schema ref', () => {
-    const scanPath = containerPaths['/api/containers/{id}/scan'];
+    const scanPath = containerPaths['/api/v1/containers/{id}/scan'];
     expect(scanPath).toStrictEqual({
       post: {
         tags: ['Containers', 'Actions'],

@@ -86,6 +86,21 @@ Common fixes:
 
 <Callout type="info">A single reconnect that immediately recovers is expected in many proxy setups. Repeated reconnect failures (not recovering) indicate a real connectivity issue.</Callout>
 
+## Remote watcher auth is blocked because HTTPS is required
+
+Remote Docker API auth (`DD_WATCHER_{name}_AUTH_*`) is fail-closed by default. Basic auth, bearer tokens, and OIDC token auth are only applied to host-based watchers, and production configurations should set `DD_WATCHER_{name}_PROTOCOL=https`.
+
+Mount `DD_WATCHER_{name}_CAFILE`, `DD_WATCHER_{name}_CERTFILE`, and `DD_WATCHER_{name}_KEYFILE` when the HTTPS listener requires mTLS. TLS file settings provide trust/client material and also satisfy the auth safety check, but the Docker client scheme is still controlled by `PROTOCOL`.
+
+If auth is configured on a plain HTTP watcher, Drydock refuses to attach those credentials unless you explicitly set:
+
+```yaml
+environment:
+  - DD_WATCHER_REMOTE_AUTH_INSECURE=true
+```
+
+Use `AUTH_INSECURE=true` only on a trusted, isolated network or while migrating a legacy setup. For production, expose the Docker API over mTLS or behind an HTTPS-authenticated proxy. See [remote watcher auth examples](/docs/configuration/watchers#watch-a-remote-docker-host-behind-https-with-bearer-auth) and [OIDC watcher auth](/docs/configuration/watchers#watch-a-remote-docker-host-behind-https-with-oidc-auth).
+
 ## SELinux blocks Podman socket access (Permission denied)
 
 On RHEL, Rocky Linux, Fedora, and CentOS with SELinux enforcing, you may see `permission denied` or `EACCES` when Drydock tries to connect to the Podman socket. This is caused by SELinux denying the container access to the host socket file.
@@ -102,12 +117,25 @@ services:
 
 <Callout type="info">The `:Z` flag applies a private SELinux label, granting exclusive access to this container. If multiple containers need the same socket, use `:z` (lowercase) for a shared label instead. Check `ausearch -m avc -ts recent` to confirm SELinux denials are the cause.</Callout>
 
+## Podman API compatibility vs native Podman support
+
+Drydock does not have a native Podman provider. It talks to Podman through Podman's Docker-compatible API socket, configured as a Docker watcher.
+
+Direct Unix-socket Podman watchers get the most compatibility handling: Drydock attempts to probe `/version` during startup, pins the Docker API version when Podman reports one, and disables redirect-following behavior that can break on Podman's unversioned paths. Podman behind a socket proxy or TCP endpoint still uses the Docker-compatible HTTP API, but it does not get that direct-socket redirect guard.
+
+If Podman containers are missing or update actions fail:
+
+1. Start with a direct socket mount from [Podman Quick Start](/docs/configuration/watchers#podman-quick-start).
+2. Confirm the socket answers `/version`.
+3. Confirm your application containers have an image name; Podman pod infrastructure containers with an empty `Image` field are skipped intentionally.
+4. Add a Docker trigger for UI actions or updates; there are no Podman-specific trigger env vars.
+
 ## `podman-compose` vs `podman compose` networking
 
 If service-name DNS (e.g. `socket-proxy`) fails between containers, check which compose tool you are using:
 
 - **`podman-compose`** (third-party Python tool) groups containers into a single **pod** where all containers share `localhost`. Service names are not resolvable — containers communicate via `localhost:<port>` instead.
-- **`podman compose`** (Podman 4.0+ built-in) uses proper container networking with service-name DNS, matching Docker Compose behavior.
+- **`podman compose`** (Podman 4.0+ built-in) generally follows Docker Compose-style networking more closely, including service-name DNS inside the same project network.
 
 **Recommendation:** Use `podman compose` (built-in, Podman 4.0+) or Docker Compose with the Podman socket for proper service-name DNS resolution. If you must use `podman-compose`, replace hostname references like `socket-proxy` with `localhost` and ensure port mappings are correct.
 
@@ -161,6 +189,7 @@ There are no Podman-specific trigger variables in v1.5. Trigger setup is the sam
 
 - Add a Docker trigger (`DD_ACTION_DOCKER_{name}_AUTO=false` or `true`).
 - If using socket proxy, include `POST=1` and `NETWORKS=1` on the proxy.
+- The Docker Compose trigger (`DD_ACTION_DOCKERCOMPOSE_*`) is not a native `podman compose` executor; it depends on Docker Compose labels and compose files being visible inside Drydock.
 
 Without a Docker trigger, UI actions show `No docker trigger found for this container`.
 See [Socket proxy permissions](/docs/configuration/watchers#proxy-permissions-by-feature) for the required proxy env vars.

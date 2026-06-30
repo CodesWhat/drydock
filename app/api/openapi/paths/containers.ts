@@ -82,7 +82,7 @@ function createRuntimeContainerActionPath({
 }
 
 export const containerPaths = {
-  '/api/containers/groups': {
+  '/api/v1/containers/groups': {
     get: {
       tags: ['Containers'],
       summary: 'Get containers grouped by stack/group label',
@@ -95,7 +95,7 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers': {
+  '/api/v1/containers': {
     get: {
       tags: ['Containers'],
       summary: 'List containers',
@@ -107,7 +107,7 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/watch': {
+  '/api/v1/containers/watch': {
     post: {
       tags: ['Containers', 'Actions'],
       summary: 'Trigger watch cycle for all watchers and return containers',
@@ -129,7 +129,7 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/update': {
+  '/api/v1/containers/update': {
     post: {
       tags: ['Containers', 'Actions'],
       summary: 'Request updates for multiple containers',
@@ -163,7 +163,7 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/scan-all': {
+  '/api/v1/containers/scan-all': {
     post: {
       tags: ['Containers', 'Actions'],
       summary: 'Trigger a bulk security scan for all or a subset of containers',
@@ -217,7 +217,7 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/summary': {
+  '/api/v1/containers/summary': {
     get: {
       tags: ['Containers'],
       summary: 'Get lightweight container/security summary',
@@ -230,7 +230,7 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/recent-status': {
+  '/api/v1/containers/recent-status': {
     get: {
       tags: ['Containers'],
       summary: 'Get recent update status by container',
@@ -243,11 +243,12 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/security/vulnerabilities': {
+  '/api/v1/containers/security/vulnerabilities': {
     get: {
       tags: ['Containers'],
       summary: 'Get aggregated vulnerability data grouped by image',
       operationId: 'getContainerSecurityVulnerabilities',
+      parameters: paginationQueryParams,
       responses: {
         200: jsonResponse('Security vulnerability overview', {
           type: 'object',
@@ -255,6 +256,11 @@ export const containerPaths = {
             totalContainers: { type: 'integer', minimum: 0 },
             scannedContainers: { type: 'integer', minimum: 0 },
             latestScannedAt: { type: ['string', 'null'] },
+            total: { type: 'integer', minimum: 0 },
+            limit: { type: 'integer', minimum: 0 },
+            offset: { type: 'integer', minimum: 0 },
+            hasMore: { type: 'boolean' },
+            _links: { $ref: '#/components/schemas/PaginationLinks' },
             images: {
               type: 'array',
               items: {
@@ -301,14 +307,23 @@ export const containerPaths = {
               },
             },
           },
-          required: ['totalContainers', 'scannedContainers', 'latestScannedAt', 'images'],
+          required: [
+            'totalContainers',
+            'scannedContainers',
+            'latestScannedAt',
+            'total',
+            'limit',
+            'offset',
+            'hasMore',
+            'images',
+          ],
           additionalProperties: false,
         }),
         401: errorResponse('Authentication required'),
       },
     },
   },
-  '/api/containers/{id}/stats': {
+  '/api/v1/containers/{id}/stats': {
     get: {
       tags: ['Containers'],
       summary: 'Get latest resource metrics for a single container',
@@ -323,7 +338,7 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/{id}/stats/stream': {
+  '/api/v1/containers/{id}/stats/stream': {
     get: {
       tags: ['Containers'],
       summary: 'Stream live resource metrics for a single container via SSE',
@@ -343,7 +358,7 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/{id}': {
+  '/api/v1/containers/{id}': {
     get: {
       tags: ['Containers'],
       summary: 'Get a container by id',
@@ -372,7 +387,7 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/{id}/intermediate-release-notes': {
+  '/api/v1/containers/{id}/intermediate-release-notes': {
     get: {
       tags: ['Containers'],
       summary: 'Get intermediate release notes between two image tags',
@@ -419,7 +434,7 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/{id}/release-notes': {
+  '/api/v1/containers/{id}/release-notes': {
     get: {
       tags: ['Containers'],
       summary: 'Get full release notes for the current update target',
@@ -434,7 +449,7 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/{id}/update-operations': {
+  '/api/v1/containers/{id}/update-operations': {
     get: {
       tags: ['Containers'],
       summary: 'Get persisted update-operation history for a container',
@@ -447,7 +462,7 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/{id}/triggers': {
+  '/api/v1/containers/{id}/triggers': {
     get: {
       tags: ['Containers'],
       summary: 'Get triggers associated to a container',
@@ -460,7 +475,7 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/{id}/triggers/{triggerType}/{triggerName}': {
+  '/api/v1/containers/{id}/triggers/{triggerType}/{triggerName}': {
     post: {
       tags: ['Containers', 'Actions'],
       summary: 'Run a local trigger for a container',
@@ -468,14 +483,18 @@ export const containerPaths = {
       parameters: [containerIdPathParam, triggerTypePathParam, triggerNamePathParam],
       responses: {
         200: jsonResponse('Trigger executed', { $ref: '#/components/schemas/EmptyObject' }),
+        202: jsonResponse('Update operation accepted', {
+          $ref: '#/components/schemas/OperationAcceptedResponse',
+        }),
         400: errorResponse('Invalid trigger request'),
         401: errorResponse('Authentication required'),
         404: errorResponse('Container or trigger not found'),
+        409: errorResponse('Update cannot be queued'),
         500: errorResponse('Trigger execution failed'),
       },
     },
   },
-  '/api/containers/{id}/triggers/{triggerType}/{triggerName}/{triggerAgent}': {
+  '/api/v1/containers/{id}/triggers/{triggerType}/{triggerName}/{triggerAgent}': {
     post: {
       tags: ['Containers', 'Actions'],
       summary: 'Run a remote trigger for a container',
@@ -488,14 +507,18 @@ export const containerPaths = {
       ],
       responses: {
         200: jsonResponse('Trigger executed', { $ref: '#/components/schemas/EmptyObject' }),
+        202: jsonResponse('Update operation accepted', {
+          $ref: '#/components/schemas/OperationAcceptedResponse',
+        }),
         400: errorResponse('Invalid trigger request'),
         401: errorResponse('Authentication required'),
         404: errorResponse('Container or trigger not found'),
+        409: errorResponse('Update cannot be queued or route agent does not own container'),
         500: errorResponse('Trigger execution failed'),
       },
     },
   },
-  '/api/containers/{id}/update-policy': {
+  '/api/v1/containers/{id}/update-policy': {
     patch: {
       tags: ['Containers'],
       summary: 'Patch update policy for a container',
@@ -544,7 +567,7 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/{id}/watch': {
+  '/api/v1/containers/{id}/watch': {
     post: {
       tags: ['Containers', 'Actions'],
       summary: 'Watch a specific container',
@@ -560,7 +583,7 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/{id}/vulnerabilities': {
+  '/api/v1/containers/{id}/vulnerabilities': {
     get: {
       tags: ['Containers'],
       summary: 'Get vulnerability scan result for a container',
@@ -575,7 +598,7 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/{id}/sbom': {
+  '/api/v1/containers/{id}/sbom': {
     get: {
       tags: ['Containers'],
       summary: 'Get or generate SBOM for a container image',
@@ -600,11 +623,12 @@ export const containerPaths = {
         400: errorResponse('Unsupported SBOM format'),
         401: errorResponse('Authentication required'),
         404: errorResponse('Container not found'),
+        503: errorResponse('Security scanner is not configured'),
         500: errorResponse('SBOM generation failed'),
       },
     },
   },
-  '/api/containers/{id}/env/reveal': createContainerIdActionPost({
+  '/api/v1/containers/{id}/env/reveal': createContainerIdActionPost({
     summary: 'Reveal unredacted environment variables for a container',
     operationId: 'revealContainerEnv',
     successDescription: 'Container environment variables',
@@ -616,7 +640,7 @@ export const containerPaths = {
       501: errorResponse('Endpoint unavailable'),
     },
   }),
-  '/api/containers/{id}/scan': createContainerIdActionPost({
+  '/api/v1/containers/{id}/scan': createContainerIdActionPost({
     summary: 'Run on-demand security scan for a container image',
     operationId: 'scanContainer',
     successDescription: 'Updated container with security state',
@@ -629,7 +653,7 @@ export const containerPaths = {
       500: errorResponse('Security scan failed'),
     },
   }),
-  '/api/containers/{id}/logs': {
+  '/api/v1/containers/{id}/logs': {
     get: {
       tags: ['Logs'],
       summary: 'Download container logs',
@@ -665,6 +689,12 @@ export const containerPaths = {
             ],
           },
         },
+        {
+          name: 'timestamps',
+          in: 'query',
+          required: false,
+          schema: { type: 'boolean' },
+        },
       ],
       responses: {
         200: {
@@ -687,7 +717,7 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/{id}/preview': {
+  '/api/v1/containers/{id}/preview': {
     post: {
       tags: ['Containers', 'Actions'],
       summary: 'Preview container update actions',
@@ -705,7 +735,27 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/{id}/backups': {
+  '/api/v1/containers/backups': {
+    get: {
+      tags: ['Containers'],
+      summary: 'List all image backups',
+      operationId: 'listBackups',
+      parameters: [
+        {
+          name: 'containerName',
+          in: 'query',
+          required: false,
+          description: 'Optional container name filter',
+          schema: { type: 'string' },
+        },
+      ],
+      responses: {
+        200: jsonResponse('Image backups', { $ref: '#/components/schemas/CollectionResult' }),
+        401: errorResponse('Authentication required'),
+      },
+    },
+  },
+  '/api/v1/containers/{id}/backups': {
     get: {
       tags: ['Containers'],
       summary: 'Get backups for a container',
@@ -718,7 +768,7 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/{id}/rollback': {
+  '/api/v1/containers/{id}/rollback': {
     post: {
       tags: ['Containers', 'Actions'],
       summary: 'Rollback container to backup image',
@@ -749,25 +799,25 @@ export const containerPaths = {
       },
     },
   },
-  '/api/containers/{id}/start': createRuntimeContainerActionPath({
+  '/api/v1/containers/{id}/start': createRuntimeContainerActionPath({
     summary: 'Start container',
     operationId: 'startContainer',
     successDescription: 'Container started',
     failureDescription: 'Container start failed',
   }),
-  '/api/containers/{id}/stop': createRuntimeContainerActionPath({
+  '/api/v1/containers/{id}/stop': createRuntimeContainerActionPath({
     summary: 'Stop container',
     operationId: 'stopContainer',
     successDescription: 'Container stopped',
     failureDescription: 'Container stop failed',
   }),
-  '/api/containers/{id}/restart': createRuntimeContainerActionPath({
+  '/api/v1/containers/{id}/restart': createRuntimeContainerActionPath({
     summary: 'Restart container',
     operationId: 'restartContainer',
     successDescription: 'Container restarted',
     failureDescription: 'Container restart failed',
   }),
-  '/api/containers/{id}/update': createRuntimeContainerActionPath({
+  '/api/v1/containers/{id}/update': createRuntimeContainerActionPath({
     summary: 'Update container to latest available image',
     operationId: 'updateContainer',
     successDescription: 'Container update accepted',

@@ -17,6 +17,8 @@ The `quay` registry lets you configure [QUAY](https://quay.io/) integration.
 | `DD_REGISTRY_QUAY_{REGISTRY_NAME}_ACCOUNT` | ⚪ | Quay account (required for private images) | | |
 | `DD_REGISTRY_QUAY_{REGISTRY_NAME}_TOKEN` | ⚪ | Quay token (required for private images) | | |
 
+Drydock follows Quay pagination for large repositories, including standard RFC 5988 `Link` headers and Quay's `next_page` cursor format. If a large repository appears to stop early, check the logs for Quay auth or rate-limit errors before narrowing tag filters.
+
 ## Examples
 
 ### Configure to access private images

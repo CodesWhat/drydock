@@ -10,13 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- **Podman and Docker socket security docs refreshed.** Added the v1.5.2 guidance for Podman's Docker-compatible API path ([#152](https://github.com/CodesWhat/drydock/issues/152)), clarified direct socket vs proxy/TCP behavior, documented remote TLS/OIDC watcher auth, and tightened the Docker socket security/FAQ/security-guide cross-links without claiming native Podman support has shipped.
+
+- **Documentation parity audits completed.** Reconciled the current configuration/env-var reference tables against runtime schemas and refreshed the API/OpenAPI/docs contract for the canonical `/api/v1` surface. The API docs now cover the recently added authentication component endpoints, registry webhook signature auth, notification outbox actions, bulk container updates, backup listing, auth status aliases, and container summary/update-response details; the OpenAPI spec now matches the route security modes and response codes for those surfaces.
+
 ## [1.5.1-rc.4] — 2026-06-29
 
 ### Added
 
-- **Optional mount-prefix fallback for Docker Compose path matching.** When a watched container's resolved compose file path differs from the trigger's configured compose file only by a mount prefix (common with Portainer and bind-mounted compose files), drydock can now match on the trailing `<project-dir>/<file>` tail instead of skipping the container. Off by default — enable it per trigger with `DD_ACTION_DOCKERCOMPOSE_<name>_MOUNT_PREFIX_FALLBACK=true`. It stays opt-in because tail matching cannot distinguish two stacks that share a project-directory name across environments (e.g. `/prod/myapp` vs `/staging/myapp`). (#365)
+- **Optional mount-prefix fallback for Docker Compose path matching.** When a watched container's resolved compose file path differs from the trigger's configured compose file only by a mount prefix (common with Portainer and bind-mounted compose files), drydock can now match on the trailing `<project-dir>/<file>` tail instead of skipping the container. Off by default — enable it per trigger with `DD_ACTION_DOCKERCOMPOSE_<name>_MOUNTPREFIXFALLBACK=true`. It stays opt-in because tail matching cannot distinguish two stacks that share a project-directory name across environments (e.g. `/prod/myapp` vs `/staging/myapp`). (#365)
 
-- **`$currentReleaseNotes` trigger template variable.** Trigger templates (notification bodies, command arguments, and the like) can now reference `$currentReleaseNotes` to include the release notes for the container's currently running version, alongside the existing variable for the update target's notes. (#295)
+- **`${currentReleaseNotes}` trigger template variable.** Trigger templates (notification bodies, command arguments, and the like) can now reference `${currentReleaseNotes}` to include the release notes for the container's currently running version, alongside the existing variable for the update target's notes. (#295)
 
 - **Container software version in the detail panels and a new Version column in the containers table.** Drydock now surfaces the application version baked into an image — read from the `org.opencontainers.image.version` OCI label, falling back to the running container's inspect metadata — as `image.softwareVersion`. It appears in the container side panel, the full-page detail view, and a new **Version** column in the containers table. The existing **Tag** column (column key `version`, preserved so saved column preferences keep working) continues to show the image tag; the new **Version** column shows `image.softwareVersion`, falling back to the tag when no software version is available. `dd.inspect.tag.path` now dual-writes the extracted value into `image.softwareVersion` as well as overwriting the image tag, so the Version column is populated for inspect-path containers with no label change needed. The Version column is visible by default for new installs; existing users have it inserted into their saved column list automatically on first load after upgrading. (#209)
 
@@ -1082,7 +1088,7 @@ scheme restriction) live in `UPGRADE-NOTES.md` and are auto-appended to every
 - **Remember-me authentication** — Persistent login sessions via remember-me checkbox on the login form.
 - **Docker Compose trigger** — Refresh compose services via Docker Compose CLI when updates are detected.
 - **Advisory-only security scanning** — `DD_SECURITY_BLOCK_SEVERITY=NONE` runs vulnerability scans without blocking updates. Scan results remain visible in the Security view and audit log.
-- **OpenAPI 3.1.0 specification and endpoint** — Machine-readable API documentation available at `GET /api/openapi.json`, covering all v1.4 endpoints with request/response schemas.
+- **OpenAPI 3.1.0 specification and endpoint** — Machine-readable API documentation originally shipped on the unversioned OpenAPI route, covering all v1.4 endpoints with request/response schemas. Current releases expose the canonical spec at `GET /api/v1/openapi.json`.
 - **Watcher agent support initialization** — Watchers now initialize agent support on startup for distributed monitoring readiness.
 - **Security vulnerability overview endpoint** — New `GET /api/containers/security/vulnerabilities` returns pre-aggregated vulnerability data grouped by image with severity summaries, so the Security view no longer needs to load all containers.
 - **MQTT attribute filtering for Home Assistant** — MQTT trigger supports attribute-based filtering for Home Assistant integration, allowing selective publishing based on container attributes.
@@ -1765,7 +1771,11 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.1-rc.4...HEAD
+[1.5.1-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.5.1-rc.3...v1.5.1-rc.4
+[1.5.1-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.5.1-rc.2...v1.5.1-rc.3
+[1.5.1-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.5.1-rc.1...v1.5.1-rc.2
+[1.5.1-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.5.0...v1.5.1-rc.1
 [1.5.0]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.38...v1.5.0
 [1.5.0-rc.38]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.37...v1.5.0-rc.38
 [1.5.0-rc.37]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.36...v1.5.0-rc.37

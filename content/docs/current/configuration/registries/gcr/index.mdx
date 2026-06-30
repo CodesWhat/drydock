@@ -21,6 +21,8 @@ The `gcr` registry lets you configure [GCR](https://cloud.google.com/artifact-re
 | `DD_REGISTRY_GCR_{REGISTRY_NAME}_CLIENTEMAIL` | ⚪ | Service Account Client Email (required for private images access) | See [Service Account credentials](https://cloud.google.com/container-registry/docs/advanced-authentication#json-key) | |
 | `DD_REGISTRY_GCR_{REGISTRY_NAME}_PRIVATEKEY` | ⚪ | Service Account Private Key (required for private images access) | See [Service Account credentials](https://cloud.google.com/container-registry/docs/advanced-authentication#json-key) | |
 
+Docker and Docker Compose action triggers use this same service-account configuration when they pull private GCR images during an update. No separate action-trigger auth setting is required.
+
 ## Examples
 
 ### Configure for authenticated access

@@ -10,7 +10,8 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_PUBLIC_URL` | ⚪ | Public-facing URL for OIDC callbacks and links (auto-detected from request if not set) | URL (e.g., `https://drydock.example.com`) | auto-detected |
+| `DD_VERSION` | ⚪ | Runtime version metadata shown in the API, debug dump, startup banner, and self-update checks. Official images set this at build time; override only for custom builds or tests. | Non-empty string (`unknown` is ignored) | package version, then `unknown` |
+| `DD_PUBLIC_URL` | ⚪ | Public-facing URL for absolute links and OIDC callbacks. Required when any OIDC authentication provider is configured; other links fall back to request-based detection when unset. | URL (e.g., `https://drydock.example.com`) | auto-detected for non-OIDC request links |
 | `DD_SERVER_NAME` | ⚪ | Server name used in notifications to identify this instance (useful in multi-server setups with agents) | Any string | `os.hostname()` |
 | `DD_SERVER_ENABLED` | ⚪ | If REST API must be exposed | `true`, `false` | `true` |
 | `DD_SERVER_UI_ENABLED` | ⚪ | Serve the web UI (set to `false` for headless/API-only mode) | `true`, `false` | `true` |
@@ -33,6 +34,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 | `DD_SERVER_SESSION_MAXCONCURRENTSESSIONS` | ⚪ | Maximum concurrent authenticated sessions per user (oldest sessions are revoked first at login when limit is reached) | integer (`>=1`) | `5` |
 | `DD_SERVER_RATELIMIT_IDENTITYKEYING` | ⚪ | Key authenticated-route rate limits by session/username instead of IP (prevents collisions for multiple users behind shared proxies) | `true`, `false` | `false` |
 | `DD_AUTH_LOCKOUT_MAX_TRACKED_IDENTITIES` | ⚪ | Maximum number of unique client identities held in the auth lockout state. Older entries are pruned when the cap is reached. | integer (`>0`) | `5000` |
+| `DD_AUTH_LOCKOUT_PRUNE_INTERVAL_MS` | ⚪ | Interval for pruning expired auth lockout entries from memory and the persisted lockout sidecar file | integer (`>0`) | `60000` |
 | `DD_SSE_MAX_CLIENTS` | ⚪ | Maximum total concurrent SSE connections across all sessions (global cap; individual sessions are also capped at 10). Connections beyond this limit receive a `429 Too Many Requests` response. | integer (`>0`) | `500` |
 | `DD_RUN_AS_ROOT` | ⚪ | Request break-glass root mode (requires `DD_ALLOW_INSECURE_ROOT=true`) | `true`, `false` | `false` |
 | `DD_ALLOW_INSECURE_ROOT` | ⚪ | Explicit acknowledgment for break-glass root mode | `true`, `false` | `false` |
@@ -191,13 +193,18 @@ Your proxy must forward the `X-Forwarded-Proto` header so drydock knows whether 
 
 ## Advanced Tuning
 
-These variables control the icon proxy cache used to serve container icons. Defaults are suitable for most deployments.
+These variables control outbound HTTP calls, the icon proxy cache used to serve container icons, and fleet-stat aggregation. Defaults are suitable for most deployments.
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
+| `DD_OUTBOUND_HTTP_TIMEOUT_MS` | ⚪ | Default timeout for outbound registry, trigger, and provider HTTP requests that do not set a narrower provider-specific timeout | integer (`>0`) | `30000` |
 | `DD_ICON_CACHE_TTL_MS` | ⚪ | TTL for cached icon files on disk | integer (ms) | `2592000000` (30 days) |
 | `DD_ICON_CACHE_MAX_FILES` | ⚪ | Maximum number of icon files in cache | integer (`>0`) | `5000` |
 | `DD_ICON_CACHE_MAX_BYTES` | ⚪ | Maximum total size of icon cache in bytes | integer (`>0`) | `104857600` (100 MB) |
+| `DD_ICON_CACHE_ENFORCEMENT_INTERVAL_MS` | ⚪ | Interval for enforcing icon cache file/count/byte limits | integer (`>0`) | `10000` |
+| `DD_ICON_IN_FLIGHT_TIMEOUT_MS` | ⚪ | Timeout for coalesced in-flight icon fetches before another request may retry | integer (`>0`) | `15000` |
+| `DD_ICON_PROXY_RATE_LIMIT_WINDOW_MS` | ⚪ | Sliding window for icon proxy request rate limiting | integer (`>0`) | `60000` |
+| `DD_ICON_PROXY_RATE_LIMIT_MAX` | ⚪ | Maximum icon proxy requests allowed per rate-limit window | integer (`>0`) | `100` |
 | `DD_STATS_INTERVAL` | ⚪ | Stats aggregator poll cycle in seconds — how often the fleet-stats snapshot is refreshed | integer (`>0`) | `10` |
 | `DD_STATS_HISTORY_SIZE` | ⚪ | Number of historical fleet-stat snapshots retained per container (older snapshots are evicted when the cap is exceeded) | integer (`>0`) | `60` |
 
@@ -215,16 +222,16 @@ services:
     ...
     environment:
       - DD_SERVER_WEBHOOK_TOKEN__FILE=/run/secrets/webhook_token
-      - DD_SERVER_WEBHOOK_TOKENS_UPDATE__FILE=/run/secrets/webhook_update_token
+      - DD_SESSION_SECRET__FILE=/run/secrets/session_secret
     secrets:
       - webhook_token
-      - webhook_update_token
+      - session_secret
 
 secrets:
   webhook_token:
     file: ./webhook_token.txt
-  webhook_update_token:
-    file: ./webhook_update_token.txt
+  session_secret:
+    file: ./session_secret.txt
 ```
 
 </Tab>
@@ -232,11 +239,18 @@ secrets:
 ```bash
 docker run \
   -e DD_SERVER_WEBHOOK_TOKEN__FILE=/run/secrets/webhook_token \
-  -e DD_SERVER_WEBHOOK_TOKENS_UPDATE__FILE=/run/secrets/webhook_update_token \
+  -e DD_SESSION_SECRET__FILE=/run/secrets/session_secret \
   -v ./webhook_token.txt:/run/secrets/webhook_token:ro \
-  -v ./webhook_update_token.txt:/run/secrets/webhook_update_token:ro \
+  -v ./session_secret.txt:/run/secrets/session_secret:ro \
   ...
   codeswhat/drydock
 ```
 </Tab>
 </Tabs>
+
+File-sourced secrets follow the common Docker `*_FILE` convention:
+
+- If both `DD_FOO` and `DD_FOO__FILE` are set, the file value wins.
+- Trailing whitespace is trimmed, so secrets created with `echo` or an editor do not include accidental trailing newlines.
+- On Unix-like systems, Drydock logs a non-fatal warning when a secret file is readable by group or others. Use `chmod 600 <secret-file>` where possible. The permission check is skipped on Windows because POSIX mode bits are not meaningful there.
+- `DD_SESSION_SECRET__FILE` is supported and uses the same rules as other `DD_*__FILE` secrets.

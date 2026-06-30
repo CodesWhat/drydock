@@ -1,6 +1,6 @@
 # Drydock E2E Tests
 
-Cucumber-based end-to-end tests and Artillery load tests for Drydock.
+Cucumber, Playwright, and Artillery load tests for Drydock.
 
 ## Setup
 
@@ -11,9 +11,11 @@ npm install
 ## Running E2E Tests
 
 ```bash
-npm run test:local     # Full E2E suite against a running Drydock instance
-npm run test:setup     # Set up test containers only
-npm run test:cleanup   # Clean up test containers
+npm run test:local          # Full E2E suite against a running Drydock instance
+npm run test:playwright     # Playwright browser tests
+npm run test:playwright:ui # Headed Playwright browser tests
+npm run test:setup          # Set up test containers only
+npm run test:cleanup        # Clean up test containers
 ```
 
 ## Load Tests

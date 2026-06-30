@@ -63,6 +63,8 @@ When a hook runs, drydock injects environment variables describing the update:
 | `DD_UPDATE_FROM` | Current tag or digest | `1.2.3` |
 | `DD_UPDATE_TO` | New tag or digest | `1.3.0` |
 
+Injected hook environment values are sanitized before execution. Control characters and shell metacharacters `` ` ``, `$`, `;`, `&`, `|`, `<`, `>`, `(`, and `)` are replaced with `_`, matching the command trigger's environment hardening. This protects hook scripts that expand Drydock-provided values but does not make arbitrary hook commands safe; keep hook commands trusted and quote variables in your scripts.
+
 ## Command validation
 
 Hook commands are validated against a restricted shell-safe grammar. Commands containing any of the following are rejected when the hook runs, with a clear error:

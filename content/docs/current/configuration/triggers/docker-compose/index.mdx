@@ -36,12 +36,13 @@ The trigger will:
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_RECONCILIATIONMODE` | ⚪ | Compose/runtime reconciliation mode before lifecycle (`warn`, `block`, or `off`) | `warn`, `block`, `off` | `warn` |
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_DIGESTPINNING` | ⚪ | Write digest-pinned compose image references when a digest is available | `true`, `false` | `false` |
 | `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_COMPOSEFILEONCE` | ⚪ | Batch compose runtime refresh to one grouped pull/up pass per compose stack/file | `true`, `false` | `false` |
+| `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_MOUNTPREFIXFALLBACK` | ⚪ | Allow compose file matching by trailing project-directory/file path when the Docker label/inspect path and trigger `FILE` differ only by host/container mount prefix | `true`, `false` | `false` |
 
 This trigger also supports the [common configuration variables](/docs/configuration/triggers/#common-trigger-configuration), but only supports the `batch` mode.
 
 **Notes:**
 
-- The env var keys for `COMPOSEFILEONCE`, `COMPOSEFILELABEL`, `RECONCILIATIONMODE`, and `DIGESTPINNING` are case-insensitive — both the lowercased form (e.g. `composefileonce`) and the camelCase form (e.g. `composeFileOnce`) are accepted.
+- The env var keys for `COMPOSEFILEONCE`, `COMPOSEFILELABEL`, `RECONCILIATIONMODE`, `DIGESTPINNING`, and `MOUNTPREFIXFALLBACK` are case-insensitive — both the lowercased form (e.g. `composefileonce`) and the camelCase form (e.g. `composeFileOnce`) are accepted.
 - Legacy compatibility: compose file label fallback `wud.compose.file` is still accepted when `dd.compose.file` is not present. Prefer `dd.compose.file` for new configs, and use `node dist/index.js config migrate` to rewrite existing labels.
 
 ## Auto-detection
@@ -54,6 +55,20 @@ When no explicit `FILE` env var or `dd.compose.file` label is set, Drydock auto-
 4. **Trigger-level `FILE` configuration** — the `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_FILE` env var, used as a last resort default.
 
 Most Docker Compose users do not need to configure the file path at all. As long as containers were started with `docker compose up`, the `config_files` label is present and Drydock resolves the path automatically.
+
+## Mount-prefix fallback
+
+Some stack managers or bind mounts expose the same compose file under different prefixes inside Drydock than the path recorded on the running container. For example, the container can report `/opt/stacks/app/compose.yaml` while Drydock has the file mounted as `/drydock/stacks/app/compose.yaml`.
+
+The default behavior is strict: Drydock only updates a compose file when the discovered path and configured path match through normal label/inspect resolution. If your paths differ only by host/container mount prefix, opt in to trailing path matching:
+
+```yaml
+environment:
+  - DD_ACTION_DOCKERCOMPOSE_MYSTACK_FILE=/drydock/stacks/app/compose.yaml
+  - DD_ACTION_DOCKERCOMPOSE_MYSTACK_MOUNTPREFIXFALLBACK=true
+```
+
+When enabled, Drydock compares the trailing `<project-directory>/<compose-file>` path after strict matching fails. Keep this disabled unless those path tails are unique across your mounted stacks; ambiguous layouts should use explicit `dd.compose.file` labels instead.
 
 <Callout type="warn">This trigger will only work with locally watched containers.</Callout>
 
@@ -92,6 +107,10 @@ Before lifecycle execution, Drydock checks the running container image against t
 - `RECONCILIATIONMODE=warn` (default): log a reconciliation warning and continue.
 - `RECONCILIATIONMODE=block`: fail the update before write/runtime steps.
 - `RECONCILIATIONMODE=off`: skip reconciliation checks.
+
+## Failure safety
+
+Before removing the running container, Drydock verifies that the target image can run on the daemon architecture. During recreate, it captures enough of the original container specification to restore the previous container if the replacement fails before the update is finalized. This does not replace a service-level health check, but it prevents common compose update failures from leaving the service absent.
 
 ## Compose-file-once mode
 

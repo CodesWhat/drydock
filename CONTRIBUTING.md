@@ -22,7 +22,7 @@ Drydock moves fast — open issues tend to get fixed quickly. The best way to fi
 
 - **Open a [Discussion](https://github.com/CodesWhat/drydock/discussions)** and say what you're interested in. We'll scope something that fits your experience level.
 - **Browse the [Ideas category](https://github.com/CodesWhat/drydock/discussions/categories/ideas)** — feature requests from users that haven't been built yet.
-- **Add a new trigger provider** — the `app/triggers/providers/` directory has 20 examples to follow. Adding support for a new notification service (Pushbullet, Gotify, etc.) is self-contained and well-patterned.
+- **Add a new trigger provider** — the `app/triggers/providers/` directory has many examples to follow. Adding support for a new notification service (Pushbullet, Gotify, etc.) is self-contained and well-patterned.
 - **Documentation** — improvements to `content/docs/` are always welcome and need zero backend knowledge.
 - **Check for [`good first issue`](https://github.com/CodesWhat/drydock/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)** labels when they exist, but don't wait for them.
 
@@ -39,7 +39,7 @@ Drydock moves fast — open issues tend to get fixed quickly. The best way to fi
 
    ```bash
    cd app && npm install
-   cd ui && npm install
+   cd ../ui && npm install
    ```
 
 4. **Create a branch** from the appropriate base:
@@ -81,8 +81,8 @@ Drydock is a Docker container update manager with a dynamic component registry:
 ```text
 app/                        # Backend (TypeScript, Express, LokiJS)
 ├── watchers/providers/     # Monitor containers (Docker socket)
-├── registries/providers/   # Query image registries (23 providers)
-├── triggers/providers/     # Send notifications / actions (20 providers)
+├── registries/providers/   # Query image registries
+├── triggers/providers/     # Send notifications / actions
 ├── api/                    # REST API + SSE
 ├── store/                  # LokiJS in-memory database
 ├── model/                  # TypeScript interfaces
@@ -204,13 +204,18 @@ By contributing, you agree that your contributions will be licensed under the [G
 | 2 | `ts-nocheck` | Checks for `@ts-nocheck` directives | Fail |
 | 3 | `biome check` | Linting and formatting | Fail |
 | 4 | `qlty` | Static analysis (medium+ severity gate) | Fail |
-| 5 | `coverage` | Sharded app+ui parallel vitest with 100% threshold | Fail |
-| 6 | `build` | Sharded app+ui parallel tsc/vite (no tests) | Fail |
-| 7 | `e2e` | End-to-end Cucumber tests | Fail |
-| 8 | `e2e-playwright` | Playwright browser tests | Fail |
-| 9 | `zizmor` | GitHub Actions security scanning | Fail |
+| 5 | `scripts-test` | Repository maintenance script tests | Fail |
+| 6 | `workflow-tests` | GitHub Actions workflow invariant tests | Fail |
+| 7 | `typecheck-ui` | Vue/TypeScript type checking | Fail |
+| 8 | `web-scripts-test` | Marketing/docs site script tests when site files change | Fail |
+| 9 | `coverage` | Sharded app+ui parallel vitest with 100% threshold | Fail |
+| 10 | `build` | Sharded app+ui parallel tsc/vite (no tests) | Fail |
+| 11 | `docker-build` | Optional Docker image build when `DD_LOCAL_DOCKER=1` | Fail |
+| 12 | `zizmor` | GitHub Actions security scanning when available | Fail |
 
 The `pre-commit` hook runs a scoped `vitest --changed` on staged workspaces for fast feedback. Full 100% coverage enforcement happens in the pre-push `coverage` step; on failure it writes `.coverage-gaps.json` with per-file metrics plus uncovered line numbers and branch ids parsed from `lcov.info`.
+
+E2E Cucumber and Playwright browser tests are intentionally not part of the local pre-push hook; they run in CI on the same commit.
 
 ### Coverage policy
 

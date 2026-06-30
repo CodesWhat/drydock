@@ -1,7 +1,7 @@
 import { errorResponse, jsonResponse } from '../common.js';
 
 export const statsPaths = {
-  '/api/stats/summary': {
+  '/api/v1/stats/summary': {
     get: {
       tags: ['Containers'],
       summary: 'Get fleet-wide resource metrics summary',
@@ -14,7 +14,7 @@ export const statsPaths = {
       },
     },
   },
-  '/api/stats/summary/stream': {
+  '/api/v1/stats/summary/stream': {
     get: {
       tags: ['Containers'],
       summary: 'Stream live fleet resource metrics summary via SSE',

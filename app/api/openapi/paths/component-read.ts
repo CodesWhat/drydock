@@ -65,21 +65,21 @@ function createComponentReadOperations(options: {
 
 export const componentReadPaths = {
   ...createComponentReadOperations({
-    basePath: '/api/watchers',
+    basePath: '/api/v1/watchers',
     tag: 'Watchers',
     nounPlural: 'watchers',
     nounSingular: 'watcher',
     operationPrefix: 'watcher',
   }),
   ...createComponentReadOperations({
-    basePath: '/api/registries',
+    basePath: '/api/v1/registries',
     tag: 'Registries',
     nounPlural: 'registries',
     nounSingular: 'registry',
     operationPrefix: 'registry',
   }),
   ...createComponentReadOperations({
-    basePath: '/api/authentications',
+    basePath: '/api/v1/authentications',
     tag: 'Authentications',
     nounPlural: 'authentications',
     nounSingular: 'authentication',

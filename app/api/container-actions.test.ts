@@ -153,7 +153,7 @@ describe('Container Actions Router', () => {
         result: expect.any(Object),
       });
       const contractValidation = validateOpenApiJsonResponse({
-        path: '/api/containers/{id}/start',
+        path: '/api/v1/containers/{id}/start',
         method: 'post',
         statusCode: '200',
         payload: res.json.mock.calls[0][0],
@@ -486,7 +486,7 @@ describe('Container Actions Router', () => {
         }),
       );
       const contractValidation = validateOpenApiJsonResponse({
-        path: '/api/containers/{id}/update',
+        path: '/api/v1/containers/{id}/update',
         method: 'post',
         statusCode: '202',
         payload: accepted,

@@ -13,7 +13,7 @@
 </div>
 
 <p align="center">
-  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.5.0-blue" alt="Version"></a>
+  <a href="https://github.com/CodesWhat/drydock/releases"><img src="https://img.shields.io/badge/version-1.5.1--rc.4-blue" alt="Version"></a>
   <a href="https://github.com/orgs/CodesWhat/packages/container/package/drydock"><img src="https://img.shields.io/badge/platforms-amd64%20%7C%20arm64-informational?logo=linux&logoColor=white" alt="Multi-arch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-C9A227" alt="License AGPL-3.0"></a>
   <br>
@@ -131,16 +131,14 @@ See the [Quick Start guide](https://getdrydock.com/docs/quickstart) for Docker C
 <h2 align="center" id="recent-updates">🆕 Recent Updates</h2>
 
 <details>
-<summary><strong>v1.5.0 highlights</strong></summary>
+<summary><strong>v1.5.1-rc.4 highlights</strong></summary>
 
-- **17 UI locales** — English, Simplified & Traditional Chinese, German, French, Spanish, Italian, Dutch, Polish, Turkish, Brazilian Portuguese, Japanese, Korean, Russian, Vietnamese, Ukrainian, and Arabic. Switch in **Config > Appearance**. ([PR #344](https://github.com/CodesWhat/drydock/pull/344))
-- **Update eligibility blockers** — Container rows surface pre-flight blockers inline (maturity hold, security block, maintenance window, policy exclusion, pinned version) so you can see why an update is disabled without opening the detail panel.
-- **Security scan digest mode** — `SECURITYMODE=digest` sends one severity-grouped summary per scan cycle instead of one notification per container. ([#300](https://github.com/CodesWhat/drydock/discussions/300))
-- **Backend-driven update queue** — Updates queue server-side with per-trigger concurrency limits; UI shows Queued → Updating → Updated. Configurable via `DD_UPDATE_MAX_CONCURRENT`.
-- **Unified update-completion toasts** — All terminal toasts fire from a single global handler with SSE-gated emission; missed events replay from the server-side ring buffer on reconnect. ([#289](https://github.com/CodesWhat/drydock/issues/289), [#290](https://github.com/CodesWhat/drydock/issues/290), [#291](https://github.com/CodesWhat/drydock/issues/291))
-- **Notification dropdown rework** — Per-row ✕ dismiss, bulk **Clear**, split footer (Mark all read / Open audit log). ([#267](https://github.com/CodesWhat/drydock/discussions/267))
-- **Multi-server notification identification** — Notifications auto-prefix `[server-name]` when agents are registered. Configurable via `DD_SERVER_NAME`.
-- **SSE reconnect performance** — On reconnect, views patch the container array in place and skip already-fresh endpoints, eliminating post-reconnect flicker on large inventories. ([#301](https://github.com/CodesWhat/drydock/issues/301))
+- **Version and Uptime visibility** — Containers now surface `image.softwareVersion` in detail views and the new **Version** column, plus live runtime uptime from Docker `State.StartedAt`.
+- **Release notes coverage** — Trigger templates can use `${currentReleaseNotes}`, container rows show current and available release notes, and intermediate semver release notes are lazy-loaded with `DD_RELEASE_NOTES_MAX_INTERMEDIATE`.
+- **Docker Compose mount-prefix fallback** — `DD_ACTION_DOCKERCOMPOSE_<name>_MOUNTPREFIXFALLBACK=true` handles Portainer/bind-mount path-prefix mismatches while staying opt-in to avoid ambiguous stack matches.
+- **Maintenance and maturity fixes** — Maintenance windows now gate auto-apply on every detection path, maturity gates use trusted Docker Hub/GHCR publish dates, and changed candidates restart the soak clock.
+- **Security hardening** — Registry TLS applies end to end, GCR/GAR action pulls use the correct `_json_key` auth, hook env values are sanitized, secret-file handling warns on unsafe permissions, and debug dumps redact more credential shapes.
+- **v1.5.2 docs refresh** — Podman Docker-compatible API guidance, Docker socket security docs, remote TLS/OIDC watcher auth docs, config/env-var parity, and API/OpenAPI parity are staged for the next release.
 
 Full history in [CHANGELOG.md](./CHANGELOG.md).
 
@@ -198,13 +196,13 @@ Most tools force a tradeoff. The auto-updaters (Watchtower, Ouroboros) pull and 
 | ↩️ | **Image Backup & Auto Rollback** | Pre-update image snapshots with configurable retention, automatic rollback on health-check failure, and one-click manual rollback from the UI. |
 | 🪝 | **Lifecycle Hooks** | Pre and post-update shell commands via container labels, with per-hook timeouts and abort-on-failure control. |
 | 🗂️ | **Docker Compose Updates** | Pull and recreate Compose services through the Docker Engine API with YAML-preserving image patching. |
-| 🎛️ | **Per-Container Policy** | Regex tag include/exclude/transform, maturity gating, maintenance windows, plus skip, snooze, and pin. All driven by `dd.*` labels. |
+| 🎛️ | **Per-Container Policy** | Regex tag rules and trigger routing use `dd.*` labels; maturity gates, skip/snooze/pin, and maintenance windows are stored via UI/API or watcher configuration. |
 | 🛰️ | **Distributed Agents** | Monitor remote Docker hosts over SSE. Edge agents behind NAT dial out over WebSocket with Ed25519 key auth, no inbound port required (`DD_EXPERIMENTAL_PORTWING=true`). |
 | 🖥️ | **Web Dashboard** | Vue 3 UI with card, table, and grouped-by-stack views, live SSE updates, and per-container detail, logs, and stats. |
 | 🔗 | **REST API & Webhooks** | Token-authenticated endpoints for CI/CD watch and update triggers, plus signed registry webhook ingestion for push events. |
 | 🔐 | **OIDC Authentication** | Secure the dashboard with OpenID Connect (Authelia, Auth0, Authentik). All auth flows fail closed by default. |
 | 📈 | **Prometheus Metrics** | Built-in `/metrics` endpoint with optional auth bypass for Prometheus and Grafana monitoring stacks. |
-| 🌍 | **17 UI Locales** | Fully localized interface, from English and German to Japanese, Korean, and Arabic, switchable in Config. |
+| 🌍 | **17 UI Locales** | Fully wired translation system with English complete and 16 community-maintained locales synced through Crowdin, switchable in Config. |
 | 🔒 | **ReDoS-Immune Regex** | Every user-supplied tag pattern compiles via re2js (a pure-JS RE2 port) for linear-time matching that can't be stalled by a catastrophic-backtracking pattern. |
 
 <hr>
@@ -307,11 +305,12 @@ High-level themes only — see [CHANGELOG.md](CHANGELOG.md) for per-release deta
 | **v1.3.x** ✅ | Security & Stability | Trivy scanning, Update Bouncer, SBOM, 7 new registries, 4 new triggers, re2js regex engine |
 | **v1.4.x** ✅ | UI Modernization & Hardening | Tailwind 4 + custom components, 6 themes, Cmd/K palette, OpenAPI 3.1, compose-native YAML updates, dual-slot scanning, OIDC hardening |
 | **v1.5.0** ✅ | Observability & i18n | trigger taxonomy split (`DD_ACTION_*`/`DD_NOTIFICATION_*`), WebSocket log viewer, dashboard customization, resource monitoring, notification outbox + DLQ, security scan digest, 17 locales, SSE Last-Event-ID replay, edge agent dial-out with Ed25519 auth (experimental, `DD_EXPERIMENTAL_PORTWING=true`) |
-| **v1.5.1** | Security & Maintenance | GCR/GAR pull-auth fix, registry TLS completion (M-2), hook env-var injection hardening, `DD_SESSION_SECRET__FILE` support, debug-dump credential redaction, secret-file permission check, maturity gate deadlock fix, full UI translatability + community translations, maintenance-window auto-apply gate, container uptime display, Tag/Version column split surfacing software version (OCI label, with `dd.inspect.tag.path` dual-write + opt-in `dd.inspect.tag.version-only` routing), opt-in compose mount-prefix matching, `$currentReleaseNotes` template var |
+| **v1.5.1** | Security & Maintenance | GCR/GAR pull-auth fix, registry TLS completion (M-2), hook env-var injection hardening, `DD_SESSION_SECRET__FILE` support, debug-dump credential redaction, secret-file permission check, maturity gate deadlock fix, full UI translatability + community translations, maintenance-window auto-apply gate, container uptime display, Tag/Version column split surfacing software version (OCI label, with `dd.inspect.tag.path` dual-write + opt-in `dd.inspect.tag.version-only` routing), opt-in compose mount-prefix matching, `${currentReleaseNotes}` template var |
+| **v1.5.2** | Docs Refresh & API Hygiene | Podman Docker-compatible API guidance ([#152](https://github.com/CodesWhat/drydock/issues/152)), Docker socket security hardening docs, remote TLS/OIDC watcher auth docs, config/env-var reference parity, API/OpenAPI/docs parity |
 | **v1.6.0** | Scanner Decoupling & Release Intel | Backend-based scanner + Grype, notification templates, declarative update policy, table-only UI, SBOM off-heap storage |
 | **v1.7.0** | Smart Updates & UX | Dependency-aware ordering, image prune, static image monitoring, keyboard shortcuts, PWA |
 | **v1.8.0** | Fleet Management & Live Config | YAML config, live UI config, volume browser, parallel updates, SQLite store migration |
-| **v2.0+** | Platform Expansion & Beyond | Swarm/Kubernetes watchers, GitOps, health gates, canary deploys, web terminal, RBAC, LDAP/AD, Podman, CLI, Wolfi hardened image, socket proxy |
+| **v2.0+** | Platform Expansion & Beyond | Swarm/Kubernetes watchers, GitOps, health gates, canary deploys, web terminal, RBAC, LDAP/AD, native Podman provider beyond the Docker-compatible API, CLI, Wolfi hardened image, socket proxy |
 
 </details>
 
@@ -349,7 +348,7 @@ High-level themes only — see [CHANGELOG.md](CHANGELOG.md) for per-release deta
 
 ### Built With
 
-[![TypeScript](https://img.shields.io/badge/TypeScript_5.9-3178C6?logo=typescript&logoColor=fff)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript_6.0-3178C6?logo=typescript&logoColor=fff)](https://www.typescriptlang.org/)
 [![Vue 3](https://img.shields.io/badge/Vue_3-42b883?logo=vuedotjs&logoColor=fff)](https://vuejs.org/)
 [![Express 5](https://img.shields.io/badge/Express_5-000?logo=express&logoColor=fff)](https://expressjs.com/)
 [![Vitest](https://img.shields.io/badge/Vitest_4-6E9F18?logo=vitest&logoColor=fff)](https://vitest.dev/)

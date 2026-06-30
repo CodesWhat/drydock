@@ -10,7 +10,7 @@ import { triggerPaths } from './triggers.js';
 
 describe('triggerPaths', () => {
   test('local trigger execution documents synchronous and update-accepted responses', () => {
-    expect(triggerPaths['/api/triggers/{type}/{name}'].post.responses).toStrictEqual({
+    expect(triggerPaths['/api/v1/triggers/{type}/{name}'].post.responses).toStrictEqual({
       200: jsonResponse('Trigger executed', { $ref: '#/components/schemas/EmptyObject' }),
       202: jsonResponse('Update operation accepted', {
         $ref: '#/components/schemas/OperationAcceptedResponse',
@@ -24,7 +24,7 @@ describe('triggerPaths', () => {
   });
 
   test('remote trigger execution documents update-accepted and ownership conflict responses', () => {
-    expect(triggerPaths['/api/triggers/{type}/{name}/{agent}'].post).toMatchObject({
+    expect(triggerPaths['/api/v1/triggers/{type}/{name}/{agent}'].post).toMatchObject({
       tags: ['Triggers', 'Actions'],
       summary: 'Run remote trigger for a provided container payload',
       operationId: 'runRemoteTrigger',

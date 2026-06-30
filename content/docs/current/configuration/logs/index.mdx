@@ -23,6 +23,8 @@ Set `DD_LOG_BUFFER_ENABLED=false` to disable the in-memory ring buffer (reduces 
 
 By default, SSE connect/disconnect and per-IP rate-limit log lines include the internal client ID (for lifecycle correlation) and a short hashed identifier for the client's IP address. The hash is derived from a random salt generated at process start, so hashes cannot be correlated across restarts and the raw IP is never written to logs. Set `DD_SSE_DEBUG_LOG_IP=true` only during short-lived troubleshooting to temporarily log raw IPs.
 
+On interactive terminals, Drydock prints a color startup banner with the version and mode. The banner is automatically suppressed when stderr is not a TTY and when `NO_COLOR` is set to a non-empty value, so structured logs and piped output stay clean.
+
 ### Examples
 
 #### Set debug level

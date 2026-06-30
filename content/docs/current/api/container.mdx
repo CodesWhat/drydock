@@ -39,7 +39,6 @@ curl "http://drydock:3000/api/v1/containers?limit=25&offset=0"
 | `kind` | string | | Filter by update kind or watched state: `major`, `minor`, `patch`, `digest`, `watched`, `unwatched`, `all` |
 | `watcher` | string | | Filter by watcher name |
 | `maturity` | string | | Filter by update maturity: `hot`, `mature`, `established`. The `hot`/`mature` boundary is controlled by `DD_UI_MATURITY_THRESHOLD_DAYS` (default 7 days); updates older than 30 days are always `established`. |
-| `containerIds` | string | | Comma-separated list of container IDs to pre-filter results to a specific set. Used by the Security view Update action and dashboard row navigation. |
 
 ### Maturity filter configuration
 
@@ -51,7 +50,7 @@ The display badge labels each pending update as `hot`, `mature`, or `established
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_UI_MATURITY_THRESHOLD_DAYS` | ⚪ | Age threshold (days) that separates `hot` updates from `mature` updates. Updates younger than this value are classified `hot`; updates at or older than this value (up to 30 days) are classified `mature`; updates older than 30 days are always `established`. | integer (`>0`) | `7` |
+| `DD_UI_MATURITY_THRESHOLD_DAYS` | ⚪ | Age threshold (days) that separates `hot` updates from `mature` updates. Updates younger than this value are classified `hot`; updates at or older than this value (up to 30 days) are classified `mature`; updates older than 30 days are always `established`. | integer (`1` to `365`) | `7` |
 
 Display age is computed as `now − min(firstSeenAt, result.publishedAt)`. For Docker Hub and GHCR registries `publishedAt` is the real push date, so an image that shipped days ago can arrive already-`mature`. For all other registries `publishedAt` is the OCI image build date (see the table below), which may be older or pinned to an epoch date, meaning the badge can read older than the actual push date.
 
@@ -72,7 +71,7 @@ The gate clock starts from the **earliest point** at which the update is known t
 - Otherwise, the clock starts from `updateDetectedAt` — Drydock's own wall-clock time when it first recorded the pending update.
 - If the trusted publish date fails to parse or lies in the future (clock-skew protection), it is discarded and the gate falls back to `updateDetectedAt`.
 
-The gate clock survives container recreation. A Portainer stack redeploy or `docker compose down && up` gives the container a new Docker ID, but Drydock carries the maturity clock forward via the container's stable identity as long as the same update is still pending.
+The gate clock survives container recreation. A Portainer stack redeploy or `docker compose down && up` gives the container a new Docker ID, but Drydock carries the maturity clock forward via the container's stable identity as long as the same update is still pending. If a different pending tag or digest appears while the previous candidate is still soaking, the clock resets for the new candidate.
 
 When the gate blocks an update the blocker reason is `maturity-not-reached`. The dialog shows days remaining and a `liftableAt` timestamp computed from whichever start timestamp applies.
 
@@ -105,11 +104,14 @@ curl http://drydock:3000/api/v1/containers/summary
   "containers": {
     "total": 12,
     "running": 10,
-    "stopped": 2
+    "stopped": 2,
+    "updatesAvailable": 4
   },
   "security": {
     "issues": 3
-  }
+  },
+  "hotUpdates": 1,
+  "matureUpdates": 3
 }
 ```
 
@@ -120,6 +122,7 @@ curl http://drydock:3000/api/v1/containers/summary
 | `containers.total` | integer | Total number of watched containers |
 | `containers.running` | integer | Number of running containers |
 | `containers.stopped` | integer | Number of stopped containers |
+| `containers.updatesAvailable` | integer | Number of containers with an available update |
 | `security.issues` | integer | Number of containers with critical or high vulnerabilities |
 | `hotUpdates` | integer | Number of containers whose `updateMaturityLevel` is `hot` |
 | `matureUpdates` | integer | Number of containers whose `updateMaturityLevel` is `mature` or `established` |
@@ -333,6 +336,18 @@ Example success response:
 curl -X POST http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update
 ```
 
+## Bulk update containers
+
+Queues updates for multiple containers in one request. Each accepted container returns an operation id; rejected entries include the container id/name, status code, and message.
+
+```bash
+curl -X POST http://drydock:3000/api/v1/containers/update \
+  -H 'Content-Type: application/json' \
+  -d '{"containerIds":["31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816"]}'
+```
+
+Returns 200 with `accepted` and `rejected` arrays, 400 when `containerIds` is missing or empty, 403 if container actions are disabled, or 500 if the update requests cannot be accepted.
+
 ## Update container update policy (skip/snooze)
 
 This operation lets you control per-container update suppression policy (stored in drydock DB):
@@ -395,7 +410,28 @@ Used by the Security view to display vulnerability summaries without loading eve
 curl http://drydock:3000/api/v1/containers/security/vulnerabilities
 ```
 
-The response includes total and scanned container counts, the latest scan timestamp, and an `images` array where each entry groups vulnerabilities by image name with container IDs and an optional update severity summary.
+### Query parameters
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `limit` | integer | `0` | Maximum number of vulnerability rows to return before regrouping them by image (`0` means unbounded; max `200`) |
+| `offset` | integer | `0` | Number of vulnerability rows to skip before regrouping them by image |
+
+The response includes total and scanned container counts, the latest scan timestamp, pagination metadata, and an `images` array where each entry groups vulnerabilities by image name with container IDs and an optional update severity summary.
+
+### Response fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `totalContainers` | integer | Total number of containers considered for the overview |
+| `scannedContainers` | integer | Number of containers with a persisted vulnerability scan |
+| `latestScannedAt` | string \| null | Latest scan timestamp across scanned containers |
+| `total` | integer | Total number of vulnerability rows before pagination |
+| `limit` | integer | Effective vulnerability-row page size (`0` when unbounded) |
+| `offset` | integer | Vulnerability-row offset applied before regrouping |
+| `hasMore` | boolean | Whether another page is available |
+| `_links` | object | Pagination links, present when `limit` is greater than `0` |
+| `images` | array | Vulnerabilities grouped back under image names after pagination |
 
 ## Get latest vulnerability scan result
 
@@ -517,7 +553,7 @@ WebSocket connections are rate-limited to 1,000 connections per 15-minute window
 
 ## Reveal container environment variables
 
-Returns the full (unredacted) runtime environment variables for a container. Environment values in the standard container response are redacted to `***` for sensitive keys. This endpoint reveals the actual values and creates an audit trail entry.
+Returns the full (unredacted) runtime environment variables for a container. Environment values in the standard container response are redacted to `[REDACTED]` for sensitive keys, including names containing `PASSWORD`, `PASSWD`, `SECRET`, `TOKEN`, `API_KEY`, `APIKEY`, `PRIVATE_KEY`, `CREDENTIAL`, `AUTH`, `ACCESS_KEY`, or an exact `PASS` segment. This endpoint reveals the actual values and creates an audit trail entry recording how many sensitive variables were revealed.
 
 Rate-limited to 10 requests per minute.
 
@@ -843,7 +879,48 @@ The `data` payload shape is identical to the `data` field from `GET /api/v1/stat
 
 `GET /api/v1/containers/:id/release-notes`
 
-Returns GitHub release notes for the container's available update, if available.
+Returns structured release notes for the container's current update target, if available. The response shape is:
+
+```json
+{
+  "title": "v1.25.0",
+  "body": "...",
+  "url": "https://github.com/org/repo/releases/tag/v1.25.0",
+  "publishedAt": "2026-06-01T12:00:00.000Z",
+  "provider": "github"
+}
+```
+
+Returns 404 when release notes are not available for that container.
+
+## Get intermediate release notes
+
+`GET /api/v1/containers/:id/intermediate-release-notes?from=<tag>&to=<tag>`
+
+Returns the release notes between the running tag (`from`, exclusive) and the target tag (`to`, inclusive). `from` is required. `to` is optional and defaults to the container's pending update tag.
+
+This endpoint is best-effort and semver-only: both tags must be strict semver, with a leading `v` accepted. Date tags and rolling tags such as `latest` or `stable` return an empty list rather than a guessed range.
+
+```bash
+curl "http://drydock:3000/api/v1/containers/31a61a8305ef/intermediate-release-notes?from=v1.22.0&to=v1.25.0"
+```
+
+```json
+{
+  "releaseNotes": [
+    {
+      "title": "v1.23.0",
+      "body": "...",
+      "url": "https://github.com/org/repo/releases/tag/v1.23.0",
+      "publishedAt": "2026-05-01T12:00:00.000Z",
+      "provider": "github"
+    }
+  ],
+  "hiddenCount": 0
+}
+```
+
+Returns 400 when `from` is missing, 404 when the container is not found, and 422 when `to` is omitted and the container has no pending update target.
 
 ## Delete a Container
 

@@ -127,6 +127,34 @@ export const openApiSchemas = {
     required: ['message', 'operationId', 'result'],
     additionalProperties: false,
   },
+  RegistryWebhookResponse: {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+      result: {
+        type: 'object',
+        properties: {
+          provider: { type: 'string' },
+          referencesMatched: { type: 'integer', minimum: 0 },
+          containersMatched: { type: 'integer', minimum: 0 },
+          checksTriggered: { type: 'integer', minimum: 0 },
+          checksFailed: { type: 'integer', minimum: 0 },
+          watchersMissing: { type: 'integer', minimum: 0 },
+        },
+        required: [
+          'provider',
+          'referencesMatched',
+          'containersMatched',
+          'checksTriggered',
+          'checksFailed',
+          'watchersMissing',
+        ],
+        additionalProperties: false,
+      },
+    },
+    required: ['message', 'result'],
+    additionalProperties: false,
+  },
   AuthUser: {
     type: 'object',
     properties: {
@@ -134,6 +162,41 @@ export const openApiSchemas = {
     },
     required: ['username'],
     additionalProperties: true,
+  },
+  AuthStatusResponse: {
+    type: 'object',
+    properties: {
+      providers: {
+        type: 'array',
+        items: { type: 'object', additionalProperties: true },
+      },
+      errors: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            provider: { type: 'string' },
+            error: { type: 'string' },
+          },
+          required: ['provider', 'error'],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ['providers', 'errors'],
+    additionalProperties: false,
+  },
+  AuthStrategiesResponse: {
+    type: 'object',
+    properties: {
+      strategies: {
+        type: 'array',
+        items: { type: 'object', additionalProperties: true },
+      },
+      warnings: { type: 'array', items: { type: 'string' } },
+    },
+    required: ['strategies', 'warnings'],
+    additionalProperties: false,
   },
   RememberMeResponse: {
     type: 'object',
@@ -146,7 +209,7 @@ export const openApiSchemas = {
   LogoutResponse: {
     type: 'object',
     properties: {
-      logoutUrl: { type: 'string' },
+      logoutUrl: { type: ['string', 'null'] },
     },
     additionalProperties: false,
   },
@@ -333,8 +396,10 @@ export const openApiSchemas = {
         required: ['issues'],
         additionalProperties: false,
       },
+      hotUpdates: { type: 'integer', minimum: 0 },
+      matureUpdates: { type: 'integer', minimum: 0 },
     },
-    required: ['containers', 'security'],
+    required: ['containers', 'security', 'hotUpdates', 'matureUpdates'],
     additionalProperties: false,
   },
   ContainerRecentStatusResponse: {

@@ -844,7 +844,7 @@ describe('Container Router', () => {
         },
       });
       const contractValidation = validateOpenApiJsonResponse({
-        path: '/api/containers/recent-status',
+        path: '/api/v1/containers/recent-status',
         method: 'get',
         statusCode: '200',
         payload: res.json.mock.calls[0][0],
@@ -941,7 +941,7 @@ describe('Container Router', () => {
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1', name: 'test' }));
       const contractValidation = validateOpenApiJsonResponse({
-        path: '/api/containers/{id}',
+        path: '/api/v1/containers/{id}',
         method: 'get',
         statusCode: '200',
         payload: res.json.mock.calls[0][0],

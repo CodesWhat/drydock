@@ -16,6 +16,27 @@ The Controller connects to one or more Agents via HTTP/HTTPS. The Agent pushes r
 
 <Callout type="info">**The controller dials out to each agent — the agent does not need to know where the controller is.** Only the controller side gets `DD_AGENT_{name}_HOST`. The agent just needs its port reachable from the controller. (Both ends share the same secret so they trust each other.)</Callout>
 
+## Experimental edge-agent dial-out (Portwing)
+
+When an agent is behind NAT or a firewall and cannot accept inbound controller requests, Drydock can accept an experimental Portwing edge-agent WebSocket instead. Enable the controller endpoint with:
+
+```yaml
+environment:
+  - DD_EXPERIMENTAL_PORTWING=true
+```
+
+The WebSocket endpoint is `WS /api/v1/portwing/ws` (compatibility alias: `/api/portwing/ws`) and speaks `portwing/1.0`. Authentication uses Ed25519 public-key challenge-response, not the shared `DD_AGENT_SECRET` token. Register authorized agent keys through the authenticated API:
+
+| Endpoint | Description |
+| --- | --- |
+| `GET /api/v1/portwing/keys` | List active and revoked edge-agent keys |
+| `POST /api/v1/portwing/keys` | Register `{ "pubkeyBase64": "...", "label": "edge-nas" }`; the public key must decode to 32 raw Ed25519 bytes |
+| `DELETE /api/v1/portwing/keys/:keyId` | Revoke a key and disconnect live sessions authenticated with it |
+
+You can also preload keys at startup with `DD_PORTWING_AUTHORIZED_KEYS=/path/to/authorized_keys`. The file format is `ed25519 <base64-raw-pubkey> [comment]`, and the file must not be world-readable.
+
+<Callout type="warn">Portwing support is experimental. Its REST API and wire protocol may change before it is promoted out of `DD_EXPERIMENTAL_PORTWING=true`.</Callout>
+
 ## Quickstart
 
 A minimal two-host setup: one agent watching a remote host, one controller aggregating it.
@@ -286,7 +307,7 @@ When the Docker watcher on an agent fails to enumerate containers (e.g. a brief 
 
 ### Container list payload
 
-When the controller proxies an update to an agent, it posts to the agent's `POST /api/triggers/{type}/{name}` route (or `…/batch` for batch updates). For single-update calls on `docker` and `dockercompose` triggers it sends only `{ id, name }` (plus an `operationId` when one is in flight) rather than the full container object, which prevents HTTP 413 errors where full payloads exceeded the agent's 256 KB body cap. Batch update calls (`…/batch`) still send the full container per item, so a very large fleet updated in one batch can still approach that cap.
+When the controller proxies an update to an agent, it posts to the agent-local `POST /api/triggers/{type}/{name}` route (or `…/batch` for batch updates). Agent-local routes are intentionally unversioned and authenticated with `X-Dd-Agent-Secret`; controller API clients should continue to use the canonical `/api/v1/*` routes. For single-update calls on `docker` and `dockercompose` triggers the controller sends only `{ id, name }` (plus an `operationId` when one is in flight) rather than the full container object, which prevents HTTP 413 errors where full payloads exceeded the agent's 256 KB body cap. Batch update calls (`…/batch`) still send the full container per item, so a very large fleet updated in one batch can still approach that cap.
 
 ## Features in Agent Mode
 

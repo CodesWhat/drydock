@@ -175,10 +175,9 @@ export const roadmap: Milestone[] = [
     dotColor:
       "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
     items: [
-      "TypeScript migration (app + UI)",
-      "ReDoS & XSS security hardening",
-      "Jest → Vitest test migration",
-      "872 total tests across app and UI",
+      "TypeScript app foundation",
+      "ReDoS and XSS hardening",
+      "Vitest migration and broader coverage",
     ],
   },
   {
@@ -188,11 +187,7 @@ export const roadmap: Milestone[] = [
     status: "released",
     dotColor:
       "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
-    items: [
-      "Application log viewer with level filtering",
-      "Agent log source selector",
-      "Container log viewer",
-    ],
+    items: ["Application log viewer", "Agent log source selector", "Container log access"],
   },
   {
     version: "v1.2.0",
@@ -202,12 +197,10 @@ export const roadmap: Milestone[] = [
     dotColor:
       "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
     items: [
-      "Audit log & REST API",
-      "Image backup & rollback",
-      "Container actions",
-      "Webhook API for CI/CD",
-      "Lifecycle hooks & maintenance windows",
-      "Grafana dashboard template",
+      "Audit log and REST API",
+      "Image backup and rollback",
+      "Container actions and webhooks",
+      "Lifecycle hooks, maintenance windows, and metrics",
     ],
   },
   {
@@ -219,9 +212,9 @@ export const roadmap: Milestone[] = [
       "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
     items: [
       "Trivy vulnerability scanning",
-      "🥊 Update Bouncer (block vulnerable deploys)",
-      "SBOM generation (CycloneDX, SPDX)",
-      "Image signing verification (cosign)",
+      "Update Bouncer deployment gate",
+      "SBOM generation",
+      "Cosign signature verification",
     ],
   },
   {
@@ -232,15 +225,10 @@ export const roadmap: Milestone[] = [
     dotColor:
       "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
     items: [
-      "Tailwind CSS 4 + custom component library, 4 themes, 7 icon libraries",
-      "Cmd/K command palette with scope filtering",
+      "Modern UI shell and command palette",
       "Compose-native YAML-preserving updates",
-      "Rename-first rollback with health gates",
-      "Self-update controller with SSE ack flow",
-      "Fail-closed auth enforcement across watchers, registries, and triggers",
-      "Tag-family semver, notification rules, container grouping by stack",
-      "Dual-slot security scanning, scheduled scans, audit history view",
-      "WUD migration CLI, bundled offline icons, dashboard drag-reorder",
+      "Compose-safe updates and stronger rollback flows",
+      "Self-update controller and dashboard customization",
     ],
   },
   {
@@ -250,55 +238,59 @@ export const roadmap: Milestone[] = [
     status: "released",
     dotColor:
       "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
-    items: [
-      "Headless mode (API-only, no UI serving)",
-      "Maturity-based update policy (NEW/MATURE badges)",
-      "URL param groupByStack, agent handshake fix, login error surfacing",
-    ],
+    items: ["Headless mode", "Maturity-based update policy", "Agent and login polish"],
   },
   {
     version: "v1.5.0",
-    title: "Observability & User-Requested Features",
+    title: "Observability & Localization",
     emoji: "\u{26A1}",
     status: "released",
     dotColor:
       "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
     items: [
-      "Real-time WebSocket log viewer with ANSI colors + JSON syntax highlighting",
-      "Diagnostic debug dump with automatic redaction",
-      "Dashboard customization with drag-to-reorder and per-widget toggles",
-      "Resource usage dashboard widget",
-      "Trigger environment variable aliases (DD_ACTION_*/DD_NOTIFICATION_*)",
-      "Security scan digest (SECURITYMODE=digest) — one notification per scan cycle (#300)",
-      "POST /containers/scan-all bulk scan endpoint with 1 req/60s rate limit",
-      "Backend-driven update queue with Queued → Updating → Updated state progression",
-      "Update eligibility blockers surfaced on container rows",
-      "Floating tag detection with auto-enable digest watch for mutable aliases",
-      "Notification bell rework — actionable alerts only, per-entry dismiss, zebra stripes",
-      "Notification history store — once=true dedup survives restarts",
-      "Metrics bearer token auth (DD_SERVER_METRICS_TOKEN)",
-      "Design system overhaul — shared components, semantic typography, WCAG touch targets",
-      "Container source project shortcut link from OCI labels (#295)",
-      "Watcher next-run column with absolute-timestamp tooltip (#288)",
-      "Actionable deprecation banners with inline migration guidance (#214)",
+      "Live observability and notification workflows",
+      "Dashboard customization and design-system refresh",
+      "Localized UI and edge-agent foundation",
+      "Bulk scan and update eligibility workflows",
+    ],
+  },
+  {
+    version: "v1.5.1-rc",
+    title: "Security & Maintenance",
+    emoji: "\u{1F527}",
+    status: "released",
+    dotColor:
+      "border-emerald-500 bg-emerald-500 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-neutral-900",
+    items: [
+      "Security, registry, and secret-handling fixes",
+      "Maturity gate and maintenance-window reliability",
+      "Container detail polish and final i18n coverage",
+    ],
+  },
+  {
+    version: "v1.5.2",
+    title: "Docs Refresh & API Hygiene",
+    emoji: "\u{1F6E1}️",
+    status: "next",
+    dotColor:
+      "border-orange-400 bg-orange-50 text-orange-500 dark:border-orange-500 dark:bg-orange-950 dark:text-orange-400",
+    items: [
+      "Podman Docker-compatible API guidance",
+      "Docker socket and remote watcher security docs",
+      "Config, API, and OpenAPI reference parity",
     ],
   },
   {
     version: "v1.6.0",
-    title: "Scanner Decoupling, Notifications & Release Intel",
+    title: "Scanner & Policy Foundations",
     emoji: "\u{1F4E8}",
     status: "planned",
     dotColor:
       "border-orange-400 bg-orange-50 text-orange-500 dark:border-orange-500 dark:bg-orange-950 dark:text-orange-400",
     items: [
-      "Backend-based scanner execution (docker/remote)",
-      "Grype scanner provider",
-      "Scanner asset lifecycle management",
-      "Custom zero-dependency dashboard grid (replaces grid-layout-plus, #281)",
-      "Fixed-height Containers table redesign with explicit column widths, overflow handling, and safe virtualization re-enable",
-      "Notification templates",
-      "Notification preferences UI",
-      "Deprecation removals",
+      "Decoupled scanner and provider model",
+      "Notification templates and preferences",
+      "Inventory table and dashboard usability pass",
     ],
   },
   {
@@ -309,10 +301,9 @@ export const roadmap: Milestone[] = [
     dotColor:
       "border-pink-400 bg-pink-50 text-pink-500 dark:border-pink-500 dark:bg-pink-950 dark:text-pink-400",
     items: [
-      "Dependency-aware update ordering",
-      "Clickable port links",
-      "Image prune from UI",
-      "Static image monitoring",
+      "Dependency-aware update flows",
+      "Image cleanup and static-image monitoring",
+      "Operator quality-of-life workflows",
     ],
   },
   {
@@ -323,11 +314,9 @@ export const roadmap: Milestone[] = [
     dotColor:
       "border-amber-400 bg-amber-50 text-amber-500 dark:border-amber-500 dark:bg-amber-950 dark:text-amber-400",
     items: [
-      "YAML config file & Config API",
-      "Live UI configuration panels",
-      "Volume browser & parallel updates",
-      "SQLite store migration",
-      "i18n framework setup",
+      "Live configuration surfaces",
+      "Config file and API foundation",
+      "Fleet-scale operations and storage path",
     ],
   },
   {
@@ -338,23 +327,19 @@ export const roadmap: Milestone[] = [
     dotColor:
       "border-rose-400 bg-rose-50 text-rose-500 dark:border-rose-500 dark:bg-rose-950 dark:text-rose-400",
     items: [
-      "Docker Swarm native support",
-      "Kubernetes watcher & triggers",
-      "Basic Git-based stack deployment",
+      "Additional orchestrator support",
+      "Stack deployment workflows",
+      "Native Podman provider direction",
     ],
   },
   {
     version: "v2.1.0",
-    title: "Advanced Deployment Patterns",
+    title: "Progressive Delivery",
     emoji: "\u{1F3AF}",
     status: "planned",
     dotColor:
       "border-indigo-400 bg-indigo-50 text-indigo-500 dark:border-indigo-500 dark:bg-indigo-950 dark:text-indigo-400",
-    items: [
-      "Health check gate with auto-rollback",
-      "Canary deployments (Kubernetes)",
-      "Durable self-update controller",
-    ],
+    items: ["Health-gated rollouts", "Canary-style deployments", "Durable self-update flows"],
   },
   {
     version: "v2.2.0",
@@ -364,10 +349,9 @@ export const roadmap: Milestone[] = [
     dotColor:
       "border-teal-400 bg-teal-50 text-teal-500 dark:border-teal-500 dark:bg-teal-950 dark:text-teal-400",
     items: [
-      "Web terminal / container shell",
-      "Container file browser",
-      "Image building & registry push",
-      "Basic Podman support",
+      "Container shell and file workflows",
+      "Image build and publish workflows",
+      "Day-two container maintenance tools",
     ],
   },
   {
@@ -378,10 +362,9 @@ export const roadmap: Milestone[] = [
     dotColor:
       "border-cyan-400 bg-cyan-50 text-cyan-500 dark:border-cyan-500 dark:bg-cyan-950 dark:text-cyan-400",
     items: [
-      "API keys & passkey auth (WebAuthn)",
-      "TOTP two-factor authentication",
-      "OpenAPI / Swagger docs",
-      "TypeScript scripting & Drydock CLI",
+      "Stronger operator authentication",
+      "API key and scripting workflows",
+      "CLI and developer tooling",
     ],
   },
   {
@@ -391,7 +374,7 @@ export const roadmap: Milestone[] = [
     status: "planned",
     dotColor:
       "border-lime-400 bg-lime-50 text-lime-500 dark:border-lime-500 dark:bg-lime-950 dark:text-lime-400",
-    items: ["Scheduled automated backups", "Compose templates library", "Secret management"],
+    items: ["Scheduled backup workflows", "Reusable stack templates", "Secret management"],
   },
   {
     version: "v3.0.0",
@@ -400,11 +383,7 @@ export const roadmap: Milestone[] = [
     status: "planned",
     dotColor:
       "border-fuchsia-400 bg-fuchsia-50 text-fuchsia-500 dark:border-fuchsia-500 dark:bg-fuchsia-950 dark:text-fuchsia-400",
-    items: [
-      "Network topology visualization",
-      "GPU monitoring (NVIDIA/AMD)",
-      "Multi-language / i18n (full translations)",
-    ],
+    items: ["Infrastructure visualization", "Specialized hardware monitoring"],
   },
   {
     version: "v3.1.0",
@@ -414,11 +393,9 @@ export const roadmap: Milestone[] = [
     dotColor:
       "border-violet-400 bg-violet-50 text-violet-500 dark:border-violet-500 dark:bg-violet-950 dark:text-violet-400",
     items: [
-      "RBAC (role-based access control)",
-      "LDAP / Active Directory integration",
-      "Environment-scoped permissions",
-      "Audit logging & compliance",
-      "Hardened container image (Wolfi)",
+      "Role and environment-scoped permissions",
+      "Directory and identity-provider integration",
+      "Compliance posture and hardened image options",
     ],
   },
 ];

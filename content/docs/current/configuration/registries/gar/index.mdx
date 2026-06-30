@@ -14,6 +14,8 @@ The `gar` registry lets you configure [Google Artifact Registry](https://cloud.g
 | `DD_REGISTRY_GAR_{REGISTRY_NAME}_CLIENTEMAIL` | ⚪ | Service Account Client Email (required for private images access) | See [Service Account credentials](https://cloud.google.com/iam/docs/keys-create-delete) | |
 | `DD_REGISTRY_GAR_{REGISTRY_NAME}_PRIVATEKEY` | ⚪ | Service Account Private Key (required for private images access) | See [Service Account credentials](https://cloud.google.com/iam/docs/keys-create-delete) | |
 
+Docker and Docker Compose action triggers use this same service-account configuration when they pull private GAR images during an update. No separate action-trigger auth setting is required.
+
 ## Examples
 
 ### Configure for authenticated access

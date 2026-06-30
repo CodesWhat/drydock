@@ -8,7 +8,7 @@ import {
 } from '../common.js';
 
 export const triggerPaths = {
-  '/api/triggers': {
+  '/api/v1/triggers': {
     get: {
       tags: ['Triggers'],
       summary: 'List triggers',
@@ -20,7 +20,7 @@ export const triggerPaths = {
       },
     },
   },
-  '/api/triggers/{type}/{name}': {
+  '/api/v1/triggers/{type}/{name}': {
     get: {
       tags: ['Triggers'],
       summary: 'Get trigger by type and name',
@@ -62,7 +62,7 @@ export const triggerPaths = {
       },
     },
   },
-  '/api/triggers/{type}/{name}/{agent}': {
+  '/api/v1/triggers/{type}/{name}/{agent}': {
     get: {
       tags: ['Triggers'],
       summary: 'Get remote trigger by type, name, and agent',
