@@ -74,12 +74,14 @@ export function buildComparisonMetadata({
       siteName: SITE_CONFIG.name,
       locale: SITE_CONFIG.locale,
       type: "website",
+      images: [{ url: SITE_CONFIG.ogImage, width: 1200, height: 630, alt: title }],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description: twitterDescription,
       creator: SITE_CONFIG.twitterCreator,
+      images: [SITE_CONFIG.ogImage],
     },
     alternates: {
       canonical: `${BASE_URL}/compare/${slug}`,

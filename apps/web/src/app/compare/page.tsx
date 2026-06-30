@@ -25,12 +25,21 @@ export const metadata: Metadata = {
     siteName: SITE_CONFIG.name,
     locale: SITE_CONFIG.locale,
     type: "website",
+    images: [
+      {
+        url: SITE_CONFIG.ogImage,
+        width: 1200,
+        height: 630,
+        alt: "Drydock vs Alternatives — Container Update Tool Comparisons",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "Drydock vs Alternatives — Container Update Tool Comparisons",
     description: "Compare Drydock to Watchtower, Portainer, Diun, and more.",
     creator: SITE_CONFIG.twitterCreator,
+    images: [SITE_CONFIG.ogImage],
   },
   alternates: {
     canonical: `${BASE_URL}/compare`,

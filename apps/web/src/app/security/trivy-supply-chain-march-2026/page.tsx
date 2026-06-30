@@ -15,6 +15,14 @@ export const metadata: Metadata = {
     siteName: SITE_CONFIG.name,
     locale: SITE_CONFIG.locale,
     type: "article",
+    images: [
+      {
+        url: SITE_CONFIG.ogImage,
+        width: 1200,
+        height: 630,
+        alt: "Trivy Supply Chain Compromise - Drydock Security Advisory",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
@@ -22,6 +30,7 @@ export const metadata: Metadata = {
     description:
       "Analysis of the March 2026 Trivy supply chain breach (GHSA-69fq-xp46-6x23). Drydock is not affected. Full audit and recommendations for users.",
     creator: SITE_CONFIG.twitterCreator,
+    images: [SITE_CONFIG.ogImage],
   },
   alternates: {
     canonical: `${BASE_URL}/security/trivy-supply-chain-march-2026`,

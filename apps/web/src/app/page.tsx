@@ -90,28 +90,28 @@ export default function Home() {
       />
       <MarketingShell>
         <Hero />
-        <div className="reveal">
+        <div className="reveal" suppressHydrationWarning>
           <Features />
         </div>
-        <div className="reveal">
+        <div className="reveal" suppressHydrationWarning>
           <GetStarted />
         </div>
         {/* Demo is left unwrapped: its fullscreen expand uses position:fixed,
             which a transformed `.reveal` ancestor would re-anchor and break. */}
         <Demo />
-        <div className="reveal">
+        <div className="reveal" suppressHydrationWarning>
           <Roadmap />
         </div>
-        <div className="reveal">
+        <div className="reveal" suppressHydrationWarning>
           <StarHistory />
         </div>
-        <div className="reveal">
+        <div className="reveal" suppressHydrationWarning>
           <CompareSection />
         </div>
-        <div className="reveal">
+        <div className="reveal" suppressHydrationWarning>
           <Ecosystem />
         </div>
-        <div className="reveal">
+        <div className="reveal" suppressHydrationWarning>
           <FAQ />
         </div>
       </MarketingShell>
