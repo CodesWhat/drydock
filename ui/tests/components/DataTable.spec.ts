@@ -766,4 +766,149 @@ describe('DataTable', () => {
       expect(dataRows).toHaveLength(2);
     });
   });
+
+  describe('mobile - sticky identity column', () => {
+    it('first non-icon column header carries sticky left-0 z-[15] classes', () => {
+      // Default columns: [name, status, icon] — name is the first non-icon column
+      const w = factory();
+      const nameHeader = w.findAll('thead th')[0];
+      expect(nameHeader.classes()).toContain('sticky');
+      expect(nameHeader.classes()).toContain('left-0');
+      expect(nameHeader.classes()).toContain('z-[15]');
+      expect(nameHeader.classes()).toContain('dd-sticky-col-left');
+    });
+
+    it('first non-icon column data cells carry sticky left-0 z-[15] classes', () => {
+      const w = factory();
+      const firstRowFirstCell = w.findAll('tbody tr')[0].findAll('td')[0];
+      expect(firstRowFirstCell.classes()).toContain('sticky');
+      expect(firstRowFirstCell.classes()).toContain('left-0');
+      expect(firstRowFirstCell.classes()).toContain('z-[15]');
+      expect(firstRowFirstCell.classes()).toContain('dd-sticky-col-left');
+    });
+
+    it('sticky-left header carries a background-color style for opaque stacking', () => {
+      const w = factory();
+      const nameHeader = w.findAll('thead th')[0];
+      expect(nameHeader.attributes('style')).toContain('background-color');
+    });
+
+    it('skips sticky-left on an icon column and applies it to the first non-icon column', () => {
+      const iconFirstCols = [
+        { key: 'icon', label: '', icon: true },
+        { key: 'name', label: 'Name' },
+        { key: 'status', label: 'Status' },
+      ];
+      const w = mount(DataTable, {
+        props: { columns: iconFirstCols, rows, rowKey: 'id' },
+        global: { stubs: { AppIcon: { template: '<span />' } } },
+      });
+      const ths = w.findAll('thead th');
+      // icon column (index 0) must NOT be sticky
+      expect(ths[0].classes()).not.toContain('sticky');
+      // name column (index 1) — first non-icon — must be sticky
+      expect(ths[1].classes()).toContain('sticky');
+      expect(ths[1].classes()).toContain('left-0');
+      expect(ths[1].classes()).toContain('dd-sticky-col-left');
+    });
+
+    it('applies sticky-left to all data cells in the first non-icon column, not just the first row', () => {
+      const w = factory();
+      const trs = w.findAll('tbody tr');
+      for (const tr of trs) {
+        const cells = tr.findAll('td');
+        expect(cells[0].classes()).toContain('sticky');
+      }
+    });
+
+    it('non-first non-icon columns do not carry sticky-left', () => {
+      const w = factory();
+      // status column is index 1 (second non-icon)
+      const statusHeader = w.findAll('thead th')[1];
+      expect(statusHeader.classes()).not.toContain('sticky');
+      const statusCell = w.findAll('tbody tr')[0].findAll('td')[1];
+      expect(statusCell.classes()).not.toContain('sticky');
+    });
+  });
+
+  describe('mobile - touch targets', () => {
+    it('interactive data rows carry min-h-[44px]', () => {
+      const w = factory();
+      const trs = w.findAll('tbody tr');
+      for (const tr of trs) {
+        expect(tr.classes()).toContain('min-h-[44px]');
+      }
+    });
+
+    it('non-interactive rows (via rowInteractive) do not carry min-h-[44px]', () => {
+      const mixedRows = [
+        { id: 'group-a', name: 'Group A', status: 'meta', kind: 'group' },
+        ...rows,
+      ];
+      const w = factory({
+        rows: mixedRows,
+        rowInteractive: (row: { kind?: string }) => row.kind !== 'group',
+      });
+      const trs = w.findAll('tbody tr');
+      expect(trs[0].classes()).not.toContain('min-h-[44px]');
+      expect(trs[1].classes()).toContain('min-h-[44px]');
+      expect(trs[2].classes()).toContain('min-h-[44px]');
+      expect(trs[3].classes()).toContain('min-h-[44px]');
+    });
+
+    it('full-width group rows (fullWidthRow) do not carry min-h-[44px]', () => {
+      const mixedRows = [
+        { id: 'group-b', name: 'Group B', status: 'meta', kind: 'group' },
+        ...rows,
+      ];
+      const w = factory({
+        rows: mixedRows,
+        fullWidthRow: (row: { kind?: string }) => row.kind === 'group',
+      });
+      const trs = w.findAll('tbody tr');
+      expect(trs[0].classes()).not.toContain('min-h-[44px]');
+      expect(trs[1].classes()).toContain('min-h-[44px]');
+    });
+  });
+
+  describe('mobile - isMobile prop / resize handle', () => {
+    it('shows resize handles by default (isMobile defaults to false)', () => {
+      const w = factory({
+        columns: [
+          { key: 'name', label: 'Name' },
+          { key: 'status', label: 'Status' },
+        ],
+      });
+      expect(w.find('[role="separator"]').exists()).toBe(true);
+    });
+
+    it('hides all resize handles when isMobile is true', () => {
+      const w = factory({
+        columns: [
+          { key: 'name', label: 'Name' },
+          { key: 'status', label: 'Status' },
+        ],
+        isMobile: true,
+      });
+      expect(w.find('[role="separator"]').exists()).toBe(false);
+    });
+
+    it('shows resize handles when isMobile is explicitly false', () => {
+      const w = factory({
+        columns: [
+          { key: 'name', label: 'Name' },
+          { key: 'status', label: 'Status' },
+        ],
+        isMobile: false,
+      });
+      expect(w.find('[role="separator"]').exists()).toBe(true);
+    });
+
+    it('icon columns never have a resize handle regardless of isMobile', () => {
+      const w = factory({ isMobile: false });
+      // default columns has icon column at index 2 — it never gets a separator
+      const iconHeader = w.findAll('thead th')[2];
+      expect(iconHeader.find('[role="separator"]').exists()).toBe(false);
+    });
+  });
 });

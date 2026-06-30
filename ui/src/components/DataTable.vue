@@ -64,6 +64,8 @@ const props = withDefaults(
     fullWidthRow?: (row: Record<string, unknown>) => boolean;
     /** Optional function controlling whether a row should behave like a clickable/selectable data row */
     rowInteractive?: (row: Record<string, unknown>) => boolean;
+    /** When true, hides column resize handles for touch-only interaction */
+    isMobile?: boolean;
   }>(),
   {
     showActions: false,
@@ -74,6 +76,7 @@ const props = withDefaults(
     virtualRowHeight: 56,
     virtualOverscan: 6,
     virtualMaxHeight: '70vh',
+    isMobile: false,
   },
 );
 
@@ -253,6 +256,11 @@ const resolvedColumns = computed<ResolvedDataTableColumn[]>(() =>
 
 const allResolvedColumns = computed(() =>
   props.showActions ? [...resolvedColumns.value, actionsColumn.value] : resolvedColumns.value,
+);
+
+/** Key of the first non-icon column — this column is pinned sticky-left for mobile scroll. */
+const firstNonIconColKey = computed<string | null>(
+  () => resolvedColumns.value.find((col) => !col.icon)?.key ?? null,
 );
 
 const rowOverlayWidth = computed(() =>
@@ -727,7 +735,9 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
                   'whitespace-nowrap py-2.5 font-semibold uppercase tracking-wider text-2xs select-none transition-colors relative',
                   isSortableColumn(col) ? 'cursor-pointer' : '',
                   sortKey === col.key ? 'dd-text-secondary' : 'dd-text-muted hover:dd-text-secondary',
+                  col.key === firstNonIconColKey ? ['sticky', 'left-0', 'z-[15]', 'dd-sticky-col-left'] : '',
                 ]"
+                :style="col.key === firstNonIconColKey ? { backgroundColor: 'var(--dd-bg-inset)' } : undefined"
                 :tabindex="isSortableColumn(col) ? 0 : undefined"
                 :aria-sort="ariaSort(col)"
                 @keydown="handleHeaderKeydown($event, col)"
@@ -735,7 +745,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
               <span v-tooltip="col.headerTooltip">{{ col.label }}</span>
               <span v-if="sortKey === col.key" class="inline-block ml-0.5 text-4xs">{{ sortAsc ? '\u25B2' : '\u25BC' }}</span>
               <!-- Resize handle -->
-              <div v-if="!col.icon"
+              <div v-if="!col.icon && !isMobile"
                    role="separator"
                    :aria-label="t('sharedComponents.dataTable.resizeColumn')"
                    aria-orientation="vertical"
@@ -770,7 +780,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
           <tr v-for="(row, i) in visibleRows" :key="getRowKey(row, rowKey)"
               :class="[
                 'dd-data-table-row',
-                isInteractiveRow(row) ? 'cursor-pointer transition-colors dd-data-table-row-hoverable' : '',
+                isInteractiveRow(row) ? 'cursor-pointer transition-colors dd-data-table-row-hoverable min-h-[44px]' : '',
                 isInteractiveRow(row) && isSelectedRow(row)
                   ? 'dd-data-table-row-selected'
                   : '',
@@ -796,6 +806,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
                   :class="[
                     colIndex === 0 ? 'dd-data-table-row-overlay-host' : '',
                     col.icon ? 'text-center pl-5 pr-0' : ['overflow-hidden', col.align ?? 'text-center', col.px ?? 'px-5'],
+                    col.key === firstNonIconColKey ? ['sticky', 'left-0', 'z-[15]', 'dd-sticky-col-left'] : '',
                   ]">
                 <div v-if="!col.icon" :class="cellContentClass(col)">
                   <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
@@ -863,5 +874,13 @@ tbody tr.dd-data-table-row-selected > td.dd-data-table-cell:last-child {
     inset -1px 0 0 var(--dd-primary),
     inset 0 1px 0 var(--dd-primary),
     inset 0 -1px 0 var(--dd-primary);
+}
+
+th.dd-sticky-col-left {
+  box-shadow: 1px 0 0 0 rgba(128, 128, 128, 0.2);
+}
+
+td.dd-sticky-col-left {
+  box-shadow: 1px 0 0 0 rgba(128, 128, 128, 0.15);
 }
 </style>
