@@ -31,7 +31,7 @@ import {
 } from '../filters.js';
 import { parseBooleanQueryParam } from '../request-helpers.js';
 
-export type ContainerListBasePath = '/api/containers' | '/api/containers/watch';
+export type ContainerListBasePath = '/api/v1/containers' | '/api/v1/containers/watch';
 
 function parsePositiveInteger(value: unknown): number | undefined {
   if (typeof value === 'number') {
@@ -515,7 +515,7 @@ export function buildContainerListResponse(
 export function createGetContainersHandler(context: CrudHandlerContext) {
   return function getContainers(req: Request, res: Response) {
     try {
-      res.status(200).json(buildContainerListResponse(context, req.query, '/api/containers'));
+      res.status(200).json(buildContainerListResponse(context, req.query, '/api/v1/containers'));
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Invalid request';
       sendErrorResponse(res, 400, message);

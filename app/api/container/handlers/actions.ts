@@ -144,7 +144,7 @@ export function createGetContainerUpdateOperationsHandler(context: CrudHandlerCo
     const data = paginateCollection(operations, pagination);
     const hasMore = pagination.limit > 0 && pagination.offset + data.length < operations.length;
     const links = buildPaginationLinks({
-      basePath: `/api/containers/${id}/update-operations`,
+      basePath: `/api/v1/containers/${id}/update-operations`,
       query: req.query,
       limit: pagination.limit,
       offset: pagination.offset,
@@ -194,7 +194,9 @@ export function createWatchContainersHandler(context: CrudHandlerContext) {
         await Promise.all(Object.values(watcherMap).map((watcher) => watcher.watch()));
       }
 
-      res.status(200).json(buildContainerListResponse(context, req.query, '/api/containers/watch'));
+      res
+        .status(200)
+        .json(buildContainerListResponse(context, req.query, '/api/v1/containers/watch'));
     } catch (error: unknown) {
       sendErrorResponse(res, 500, `Error when watching images (${context.getErrorMessage(error)})`);
     }

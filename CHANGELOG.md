@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`GET /api/v1/containers/backups` (list all backups) is now reachable.** The route was previously registered as `router.get('/', getBackups)` in the backup router, which was mounted at `/containers` after the container router — so the container router's own `GET /` handler shadowed it and the list-backups endpoint was never reachable. The route is now `router.get('/backups', getBackups)` and the backup router is mounted before the container router, making `GET /api/v1/containers/backups` accessible. The per-container backup endpoints (`GET /api/v1/containers/:id/backups`) were not affected.
+
 ### Documentation
 
 - **Podman and Docker socket security docs refreshed.** Added the v1.5.2 guidance for Podman's Docker-compatible API path ([#152](https://github.com/CodesWhat/drydock/issues/152)), clarified direct socket vs proxy/TCP behavior, documented remote TLS/OIDC watcher auth, and tightened the Docker socket security/FAQ/security-guide cross-links without claiming native Podman support has shipped.

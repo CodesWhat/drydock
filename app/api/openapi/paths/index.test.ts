@@ -158,15 +158,22 @@ describe('openApiPaths', () => {
       });
     });
 
-    test('/api/v1/webhooks/registry uses registry signature auth', () => {
-      expect(openApiPaths['/api/v1/webhooks/registry']).toMatchObject({
+    test('/api/v1/webhooks/registry path is fully specified', () => {
+      expect(openApiPaths['/api/v1/webhooks/registry']).toStrictEqual({
         post: {
+          tags: ['Webhook', 'Actions'],
+          summary: 'Process a signed registry webhook and trigger matching container checks',
+          operationId: 'processRegistryWebhook',
           security: [{ registryWebhookSignature: [] }],
           responses: {
             202: jsonResponse('Registry webhook processed', {
               $ref: '#/components/schemas/RegistryWebhookResponse',
             }),
+            400: errorResponse('Unsupported registry webhook payload'),
             401: errorResponse('Missing or invalid registry webhook signature'),
+            403: errorResponse('Registry webhooks are disabled'),
+            429: errorResponse('Too many registry webhook requests'),
+            500: errorResponse('Registry webhook secret is not configured'),
           },
         },
       });
@@ -343,6 +350,7 @@ describe('openApiPaths', () => {
             }),
             400: errorResponse('Invalid status query parameter'),
             401: errorResponse('Authentication required'),
+            500: errorResponse('Internal server error'),
           },
         },
       });
@@ -471,6 +479,45 @@ describe('openApiPaths', () => {
       const parameterNames = openApiPaths['/api/v1/audit'].get.parameters.map((p) => p.name);
 
       expect(parameterNames).toEqual(expect.arrayContaining(['action', 'actions']));
+    });
+
+    test('/api/v1/log/components path is fully specified', () => {
+      expect(openApiPaths['/api/v1/log/components']).toStrictEqual({
+        get: {
+          tags: ['Logs'],
+          summary: 'Get known log component names',
+          operationId: 'getLogComponents',
+          responses: {
+            200: jsonResponse('Log component names', {
+              type: 'array',
+              items: { type: 'string' },
+            }),
+            401: errorResponse('Authentication required'),
+          },
+        },
+      });
+    });
+
+    test('/auth/status root alias is public with correct operationId', () => {
+      expect(openApiPaths['/auth/status']).toStrictEqual({
+        get: {
+          tags: ['Authentication'],
+          summary: 'Get authentication provider registration status (root auth route)',
+          operationId: 'getAuthStatusRoot',
+          security: [],
+          responses: {
+            200: jsonResponse('Authentication provider status', {
+              $ref: '#/components/schemas/AuthStatusResponse',
+            }),
+          },
+        },
+      });
+    });
+
+    test('/api/v1/app requires auth (no security override) and documents 401', () => {
+      const appPath = openApiPaths['/api/v1/app'];
+      expect((appPath.get as Record<string, unknown>).security).toBeUndefined();
+      expect(appPath.get.responses[401]).toStrictEqual(errorResponse('Authentication required'));
     });
 
     test('/api/v1/self-update/{operationId}/status GET path is fully specified', () => {

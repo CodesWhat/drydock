@@ -613,8 +613,8 @@ describe('Container Router', () => {
         offset: 1,
         hasMore: true,
         _links: {
-          self: '/api/containers?watcher=docker&includeVulnerabilities=false&limit=1&offset=1',
-          next: '/api/containers?watcher=docker&includeVulnerabilities=false&limit=1&offset=2',
+          self: '/api/v1/containers?watcher=docker&includeVulnerabilities=false&limit=1&offset=1',
+          next: '/api/v1/containers?watcher=docker&includeVulnerabilities=false&limit=1&offset=2',
         },
       });
     });
@@ -1088,8 +1088,8 @@ describe('Container Router', () => {
         offset: 1,
         hasMore: true,
         _links: {
-          self: '/api/containers/c1/update-operations?limit=1&offset=1',
-          next: '/api/containers/c1/update-operations?limit=1&offset=2',
+          self: '/api/v1/containers/c1/update-operations?limit=1&offset=1',
+          next: '/api/v1/containers/c1/update-operations?limit=1&offset=2',
         },
       });
     });

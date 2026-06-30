@@ -69,7 +69,7 @@ export const openApiDocument = {
         in: 'header',
         name: 'x-drydock-signature',
         description:
-          'HMAC-SHA256 registry webhook signature. The endpoint also accepts provider-specific signature headers such as x-hub-signature-256, x-gitlab-token, x-ms-signature, and x-quay-signature.',
+          'HMAC-SHA256 registry webhook signature (x-drydock-signature). The endpoint also accepts provider-specific signature headers: x-registry-signature, x-hub-signature-256, x-quay-signature, x-harbor-signature, and x-ms-signature.',
       },
       metricsBearerAuth: {
         type: 'http',

@@ -76,8 +76,8 @@ describe('api/container/security-overview', () => {
       offset: 1,
       hasMore: true,
       _links: {
-        self: '/api/containers/security/vulnerabilities?limit=1&offset=1',
-        next: '/api/containers/security/vulnerabilities?limit=1&offset=2',
+        self: '/api/v1/containers/security/vulnerabilities?limit=1&offset=1',
+        next: '/api/v1/containers/security/vulnerabilities?limit=1&offset=2',
       },
       images: [
         {

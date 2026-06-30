@@ -421,8 +421,8 @@ describe('api/container/crud', () => {
         offset: 1,
         hasMore: true,
         _links: {
-          self: '/api/containers?watcher=local&includeVulnerabilities=false&limit=1&offset=1',
-          next: '/api/containers?watcher=local&includeVulnerabilities=false&limit=1&offset=2',
+          self: '/api/v1/containers?watcher=local&includeVulnerabilities=false&limit=1&offset=1',
+          next: '/api/v1/containers?watcher=local&includeVulnerabilities=false&limit=1&offset=2',
         },
       });
     });
@@ -452,7 +452,7 @@ describe('api/container/crud', () => {
         offset: 0,
         hasMore: false,
         _links: {
-          self: '/api/containers?limit=10&offset=0',
+          self: '/api/v1/containers?limit=10&offset=0',
         },
       });
     });
@@ -510,8 +510,8 @@ describe('api/container/crud', () => {
         offset: 1,
         hasMore: true,
         _links: {
-          self: '/api/containers?watcher=local&limit=1&offset=1',
-          next: '/api/containers?watcher=local&limit=1&offset=2',
+          self: '/api/v1/containers?watcher=local&limit=1&offset=1',
+          next: '/api/v1/containers?watcher=local&limit=1&offset=2',
         },
       });
     });
@@ -533,8 +533,8 @@ describe('api/container/crud', () => {
         offset: 0,
         hasMore: true,
         _links: {
-          self: '/api/containers?limit=200&offset=0',
-          next: '/api/containers?limit=200&offset=200',
+          self: '/api/v1/containers?limit=200&offset=0',
+          next: '/api/v1/containers?limit=200&offset=200',
         },
       });
       expect(Array.isArray(payload.data)).toBe(true);
@@ -1940,8 +1940,8 @@ describe('api/container/crud', () => {
         offset: 1,
         hasMore: true,
         _links: {
-          self: '/api/containers/security/vulnerabilities?limit=1&offset=1',
-          next: '/api/containers/security/vulnerabilities?limit=1&offset=2',
+          self: '/api/v1/containers/security/vulnerabilities?limit=1&offset=1',
+          next: '/api/v1/containers/security/vulnerabilities?limit=1&offset=2',
         },
         images: [
           {
@@ -2117,7 +2117,7 @@ describe('api/container/crud', () => {
         offset: 0,
         hasMore: false,
         _links: {
-          self: '/api/containers/security/vulnerabilities?limit=2&offset=0',
+          self: '/api/v1/containers/security/vulnerabilities?limit=2&offset=0',
         },
       });
       expect(payload.images).toEqual([
@@ -2215,7 +2215,7 @@ describe('api/container/crud', () => {
           offset: 0,
           hasMore: false,
           _links: {
-            self: '/api/containers/security/vulnerabilities?limit=1&offset=0',
+            self: '/api/v1/containers/security/vulnerabilities?limit=1&offset=0',
           },
           images: [],
         });
@@ -2652,8 +2652,8 @@ describe('api/container/crud', () => {
         offset: 1,
         hasMore: true,
         _links: {
-          self: '/api/containers/c1/update-operations?limit=1&offset=1',
-          next: '/api/containers/c1/update-operations?limit=1&offset=2',
+          self: '/api/v1/containers/c1/update-operations?limit=1&offset=1',
+          next: '/api/v1/containers/c1/update-operations?limit=1&offset=2',
         },
       });
     });

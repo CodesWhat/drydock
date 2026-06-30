@@ -209,7 +209,7 @@ export const openApiSchemas = {
   LogoutResponse: {
     type: 'object',
     properties: {
-      logoutUrl: { type: ['string', 'null'] },
+      logoutUrl: { type: 'string' },
     },
     additionalProperties: false,
   },
@@ -810,6 +810,61 @@ export const openApiSchemas = {
       data: { $ref: '#/components/schemas/FleetStatsSummary' },
     },
     required: ['data'],
+    additionalProperties: false,
+  },
+  NotificationOutboxEntry: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      eventName: { type: 'string' },
+      payload: { type: 'object', additionalProperties: true },
+      triggerId: { type: 'string' },
+      containerId: { type: 'string' },
+      attempts: { type: 'integer', minimum: 0 },
+      maxAttempts: { type: 'integer', minimum: 0 },
+      nextAttemptAt: { type: 'string', format: 'date-time' },
+      status: {
+        type: 'string',
+        enum: ['pending', 'delivered', 'dead-letter'],
+      },
+      lastError: { type: 'string' },
+      createdAt: { type: 'string', format: 'date-time' },
+      deliveredAt: { type: 'string', format: 'date-time' },
+      failedAt: { type: 'string', format: 'date-time' },
+    },
+    required: [
+      'id',
+      'eventName',
+      'payload',
+      'triggerId',
+      'attempts',
+      'maxAttempts',
+      'nextAttemptAt',
+      'status',
+      'createdAt',
+    ],
+    additionalProperties: false,
+  },
+  NotificationOutboxResult: {
+    type: 'object',
+    properties: {
+      data: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/NotificationOutboxEntry' },
+      },
+      total: { type: 'integer', minimum: 0 },
+      counts: {
+        type: 'object',
+        properties: {
+          pending: { type: 'integer', minimum: 0 },
+          delivered: { type: 'integer', minimum: 0 },
+          deadLetter: { type: 'integer', minimum: 0 },
+        },
+        required: ['pending', 'delivered', 'deadLetter'],
+        additionalProperties: false,
+      },
+    },
+    required: ['data', 'total', 'counts'],
     additionalProperties: false,
   },
   UpdateOperation: {

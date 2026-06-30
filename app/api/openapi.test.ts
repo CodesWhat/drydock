@@ -3,6 +3,43 @@ import { errorResponse, jsonResponse, paginationQueryParams } from './openapi/co
 import { openApiDocument as openApiDocumentFromIndex } from './openapi/index.js';
 import { openApiDocument } from './openapi.js';
 
+/**
+ * Walks the document recursively and returns every $ref value that points at
+ * #/components/schemas/<Name> where <Name> is not present in the provided
+ * schemas set. Used to catch dangling schema references before they reach
+ * validators, Swagger UI, or code generators.
+ */
+function collectSchemaDanglingRefs(document: unknown): string[] {
+  const schemas = new Set(
+    Object.keys(
+      (document as { components?: { schemas?: Record<string, unknown> } }).components?.schemas ??
+        {},
+    ),
+  );
+  const unresolved: string[] = [];
+
+  function walk(value: unknown): void {
+    if (value === null || typeof value !== 'object') return;
+    if (Array.isArray(value)) {
+      for (const item of value) walk(item);
+      return;
+    }
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      if (key === '$ref' && typeof val === 'string' && val.startsWith('#/components/schemas/')) {
+        const name = val.slice('#/components/schemas/'.length);
+        if (!schemas.has(name)) {
+          unresolved.push(val);
+        }
+      } else {
+        walk(val);
+      }
+    }
+  }
+
+  walk(document);
+  return unresolved;
+}
+
 describe('OpenAPI document', () => {
   test('should expose the same OpenAPI document through the decomposed module entrypoint', () => {
     expect(openApiDocumentFromIndex).toBe(openApiDocument);
@@ -64,7 +101,7 @@ describe('OpenAPI document', () => {
     );
     expect(openApiDocument.components.schemas.LogoutResponse).toMatchObject({
       properties: {
-        logoutUrl: { type: ['string', 'null'] },
+        logoutUrl: { type: 'string' },
       },
     });
   });
@@ -124,6 +161,33 @@ describe('OpenAPI document', () => {
           },
           required: ['container'],
           additionalProperties: false,
+        },
+      },
+      required: ['message', 'result'],
+    });
+
+    expect(openApiDocument.components.schemas.RegistryWebhookResponse).toMatchObject({
+      type: 'object',
+      properties: {
+        message: { type: 'string' },
+        result: {
+          type: 'object',
+          properties: {
+            provider: { type: 'string' },
+            referencesMatched: { type: 'integer', minimum: 0 },
+            containersMatched: { type: 'integer', minimum: 0 },
+            checksTriggered: { type: 'integer', minimum: 0 },
+            checksFailed: { type: 'integer', minimum: 0 },
+            watchersMissing: { type: 'integer', minimum: 0 },
+          },
+          required: [
+            'provider',
+            'referencesMatched',
+            'containersMatched',
+            'checksTriggered',
+            'checksFailed',
+            'watchersMissing',
+          ],
         },
       },
       required: ['message', 'result'],
@@ -440,5 +504,30 @@ describe('OpenAPI document', () => {
     expect(openApiDocument.paths['/api/v1/update-operations/{id}']?.get?.operationId).toBe(
       'getUpdateOperationById',
     );
+  });
+
+  test('collectSchemaDanglingRefs helper: detects missing refs and ignores resolved ones', () => {
+    const fakeDoc = {
+      components: { schemas: { KnownSchema: {} } },
+      paths: {
+        '/test': {
+          get: {
+            responses: {
+              200: { $ref: '#/components/schemas/KnownSchema' },
+              500: { $ref: '#/components/schemas/MissingSchema' },
+            },
+          },
+          tags: ['example'],
+          extra: null,
+        },
+      },
+    };
+    const result = collectSchemaDanglingRefs(fakeDoc);
+    expect(result).toStrictEqual(['#/components/schemas/MissingSchema']);
+  });
+
+  test('should have no dangling $ref pointers to #/components/schemas/* in the assembled document', () => {
+    const unresolved = collectSchemaDanglingRefs(openApiDocument);
+    expect(unresolved).toStrictEqual([]);
   });
 });

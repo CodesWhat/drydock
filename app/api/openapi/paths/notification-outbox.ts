@@ -32,6 +32,7 @@ export const notificationOutboxPaths = {
         }),
         400: errorResponse('Invalid status query parameter'),
         401: errorResponse('Authentication required'),
+        500: errorResponse('Internal server error'),
       },
     },
   },

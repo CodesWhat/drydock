@@ -456,7 +456,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect((context.updateOperationStore as any).listActiveOperations).toHaveBeenCalledTimes(1);
@@ -508,7 +508,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.updateOperation?.id).toBe('op-1');
@@ -574,7 +574,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.updateOperation?.id).toBe('op-agent-a');
@@ -623,7 +623,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.updateOperation?.id).toBe('op-agent-a');
@@ -665,7 +665,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(Object.getOwnPropertyDescriptor(response.data[0]!, 'updateOperation')).toEqual({
@@ -703,7 +703,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.updateOperation?.id).toBe('op-legacy');
@@ -745,7 +745,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.updateOperation).toEqual({
@@ -785,7 +785,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.updateOperation).toEqual({
@@ -829,7 +829,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(context.updateOperationStore.getActiveOperationByContainerId).toHaveBeenCalledWith('c1');
@@ -858,7 +858,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(context.getContainersFromStore).toHaveBeenCalledWith(
@@ -871,7 +871,7 @@ describe('buildContainerListResponse', () => {
     expect(response.data).toHaveLength(2);
     expect(response.hasMore).toBe(false);
     expect(response._links).toEqual({
-      self: '/api/containers?limit=10&offset=0',
+      self: '/api/v1/containers?limit=10&offset=0',
     });
   });
 
@@ -900,7 +900,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.security?.scan?.vulnerabilities).toEqual([]);
@@ -932,7 +932,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { includeVulnerabilities: 'true', limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.security?.scan?.vulnerabilities).toEqual(['v1']);
@@ -970,7 +970,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.security?.scan?.vulnerabilities).toEqual([]);
@@ -1007,7 +1007,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.id).toBe('c1');
@@ -1039,7 +1039,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { kind: 'all', limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(context.getContainersFromStore).toHaveBeenCalledWith(
@@ -1065,12 +1065,12 @@ describe('buildContainerListResponse', () => {
     buildContainerListResponse(
       context,
       { status: 'update-available', watcher: 'local', limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
     buildContainerListResponse(
       context,
       { status: 'running', limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(context.getContainersFromStore).toHaveBeenNthCalledWith(
@@ -1100,7 +1100,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '0', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(context.getContainersFromStore).toHaveBeenCalledWith(
@@ -1128,7 +1128,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { sort: 'name', limit: '1', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(context.getContainersFromStore).toHaveBeenCalledWith(
@@ -1156,7 +1156,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { sort: 'name', limit: '0', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(context.getContainersFromStore).toHaveBeenCalledWith(
@@ -1200,7 +1200,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.security?.sbom).toBeUndefined();
@@ -1245,7 +1245,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { includeVulnerabilities: 'true', limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     // Vulnerabilities are preserved when explicitly opted in
@@ -1270,7 +1270,7 @@ describe('buildContainerListResponse', () => {
     const response = buildContainerListResponse(
       context,
       { limit: '10', offset: '0' } as any,
-      '/api/containers',
+      '/api/v1/containers',
     );
 
     expect(response.data[0]?.security).toBeUndefined();
@@ -1295,7 +1295,7 @@ describe('buildContainerListResponse', () => {
       redactContainersRuntimeEnv: vi.fn((items: Container[]) => items),
     };
 
-    buildContainerListResponse(context, { limit: '10', offset: '0' } as any, '/api/containers');
+    buildContainerListResponse(context, { limit: '10', offset: '0' } as any, '/api/v1/containers');
 
     // The underlying store container must not be mutated
     expect((container.security as any).sbom).toBe(sbomDoc);

@@ -259,7 +259,7 @@ describe('containerPaths', () => {
           400: errorResponse('Invalid trigger request'),
           401: errorResponse('Authentication required'),
           404: errorResponse('Container or trigger not found'),
-          409: errorResponse('Update cannot be queued or route agent does not own container'),
+          409: errorResponse('Cannot update temporary rollback container'),
           500: errorResponse('Trigger execution failed'),
         },
       },
