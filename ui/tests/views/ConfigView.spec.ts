@@ -329,11 +329,11 @@ describe('ConfigView', () => {
 
       const text = w.text();
       expect(text).toContain('Webhook API');
-      expect(text).toContain('POST /api/webhook/watch');
-      expect(text).toContain('POST /api/webhook/watch/:name');
-      expect(text).toContain('POST /api/webhook/update/:name');
+      expect(text).toContain('POST /api/v1/webhook/watch');
+      expect(text).toContain('POST /api/v1/webhook/watch/:name');
+      expect(text).toContain('POST /api/v1/webhook/update/:name');
       expect(text).toContain('curl -X POST');
-      expect(text).toContain('/api/webhook/watch');
+      expect(text).toContain('/api/v1/webhook/watch');
       expect(text).toContain('Authorization: Bearer YOUR_TOKEN');
     });
 
@@ -355,11 +355,11 @@ describe('ConfigView', () => {
 
       const text = w.text();
       expect(text).toContain('Webhook API is disabled');
-      expect(text).toContain('POST /api/webhook/watch');
-      expect(text).toContain('POST /api/webhook/watch/:name');
-      expect(text).toContain('POST /api/webhook/update/:name');
+      expect(text).toContain('POST /api/v1/webhook/watch');
+      expect(text).toContain('POST /api/v1/webhook/watch/:name');
+      expect(text).toContain('POST /api/v1/webhook/update/:name');
       expect(text).toContain('curl -X POST');
-      expect(text).toContain('/api/webhook/watch');
+      expect(text).toContain('/api/v1/webhook/watch');
       expect(text).toContain('Authorization: Bearer YOUR_TOKEN');
     });
 

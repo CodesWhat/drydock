@@ -133,15 +133,15 @@ const serverError = ref('');
 const webhookEnabled = ref(false);
 const webhookEndpoints = computed(() => [
   {
-    endpoint: 'POST /api/webhook/watch',
+    endpoint: 'POST /api/v1/webhook/watch',
     description: t('configView.general.webhookApi.endpoints.watchAll'),
   },
   {
-    endpoint: 'POST /api/webhook/watch/:name',
+    endpoint: 'POST /api/v1/webhook/watch/:name',
     description: t('configView.general.webhookApi.endpoints.watchOne'),
   },
   {
-    endpoint: 'POST /api/webhook/update/:name',
+    endpoint: 'POST /api/v1/webhook/update/:name',
     description: t('configView.general.webhookApi.endpoints.updateOne'),
   },
 ]);
@@ -153,7 +153,7 @@ const webhookBaseUrl = computed(() => {
 });
 const webhookExample = computed(
   () =>
-    `curl -X POST ${webhookBaseUrl.value}/api/webhook/watch \\\n  -H "Authorization: Bearer YOUR_TOKEN"`,
+    `curl -X POST ${webhookBaseUrl.value}/api/v1/webhook/watch \\\n  -H "Authorization: Bearer YOUR_TOKEN"`,
 );
 
 // Settings state
