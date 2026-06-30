@@ -204,14 +204,15 @@ By contributing, you agree that your contributions will be licensed under the [G
 | 2 | `ts-nocheck` | Checks for `@ts-nocheck` directives | Fail |
 | 3 | `biome check` | Linting and formatting | Fail |
 | 4 | `qlty` | Static analysis (medium+ severity gate) | Fail |
-| 5 | `scripts-test` | Repository maintenance script tests | Fail |
-| 6 | `workflow-tests` | GitHub Actions workflow invariant tests | Fail |
-| 7 | `typecheck-ui` | Vue/TypeScript type checking | Fail |
-| 8 | `web-scripts-test` | Marketing/docs site script tests when site files change | Fail |
-| 9 | `coverage` | Sharded app+ui parallel vitest with 100% threshold | Fail |
-| 10 | `build` | Sharded app+ui parallel tsc/vite (no tests) | Fail |
-| 11 | `docker-build` | Optional Docker image build when `DD_LOCAL_DOCKER=1` | Fail |
-| 12 | `zizmor` | GitHub Actions security scanning when available | Fail |
+| 5 | `qlty-smells` | Code smell advisory scan (non-blocking) | Advisory |
+| 6 | `scripts-test` | Repository maintenance script tests | Fail |
+| 7 | `workflow-tests` | GitHub Actions workflow invariant tests | Fail |
+| 8 | `typecheck-ui` | Vue/TypeScript type checking | Fail |
+| 9 | `web-scripts-test` | Marketing/docs site script tests when site files change | Fail |
+| 10 | `coverage` | Sharded app+ui parallel vitest with 100% threshold | Fail |
+| 11 | `build` | Sharded app+ui parallel tsc/vite (no tests) | Fail |
+| 12 | `docker-build` | Optional Docker image build when `DD_LOCAL_DOCKER=1` | Fail |
+| 13 | `zizmor` | GitHub Actions security scanning when available | Fail |
 
 The `pre-commit` hook runs a scoped `vitest --changed` on staged workspaces for fast feedback. Full 100% coverage enforcement happens in the pre-push `coverage` step; on failure it writes `.coverage-gaps.json` with per-file metrics plus uncovered line numbers and branch ids parsed from `lcov.info`.
 

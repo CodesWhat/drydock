@@ -35,6 +35,20 @@ test("rewriteDocsLinksForVersion handles docs root and hash links", () => {
   );
 });
 
+test("rewriteDocsLinksForVersion leaves bare /docs/assets unchanged", () => {
+  assert.equal(
+    rewriteDocsLinksForVersion("[Assets](/docs/assets)", "v1.5"),
+    "[Assets](/docs/assets)",
+  );
+});
+
+test("rewriteDocsLinksForVersion handles single-quoted HTML attributes", () => {
+  assert.equal(
+    rewriteDocsLinksForVersion("<a href='/docs/api'>API</a>", "v1.5"),
+    "<a href='/docs/v1.5/api'>API</a>",
+  );
+});
+
 test("rewriteChangelogLinksForVersion points deprecation links at the docs page", () => {
   assert.equal(
     rewriteChangelogLinksForVersion(
