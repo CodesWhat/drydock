@@ -350,39 +350,6 @@ describe('WatchersView', () => {
     expect(wrapper.text()).toContain('30s');
   });
 
-  it('opens watcher details from cards mode selections', async () => {
-    mockGetAllWatchers.mockResolvedValue([
-      {
-        id: 'watcher-alpha',
-        name: 'Alpha Watcher',
-        type: 'docker',
-        configuration: { cron: '*/5 * * * *' },
-      },
-    ]);
-    mockGetWatcher.mockResolvedValue({
-      id: 'watcher-alpha',
-      name: 'Alpha Watcher',
-      type: 'docker',
-      configuration: { cron: '*/1 * * * *', grace: '30s' },
-    });
-
-    const wrapper = await mountWatchersView();
-
-    await wrapper.find('.mode-cards').trigger('click');
-    await flushPromises();
-    await wrapper.find('.card-click-first').trigger('click');
-    await flushPromises();
-
-    expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
-    expect(mockGetWatcher).toHaveBeenCalledWith({
-      type: 'docker',
-      name: 'Alpha Watcher',
-      agent: undefined,
-    });
-    expect(wrapper.text()).toContain('*/1 * * * *');
-    expect(wrapper.text()).toContain('30s');
-  });
-
   it('reads containers total from metadata (issue #301)', async () => {
     mockGetAllWatchers.mockResolvedValue([
       {
@@ -436,88 +403,6 @@ describe('WatchersView', () => {
         stubs: { ...dataViewStubs, DataTable: dualStatusTableStub },
       },
     });
-    await flushPromises();
-
-    const badges = wrapper.findAll('span.badge');
-    expect(badges.some((b) => b.text().trim() === 'Watching')).toBe(true);
-    expect(badges.some((b) => b.text().trim() === 'Paused')).toBe(true);
-  });
-
-  it('card badge shows translated watching/paused labels', async () => {
-    mockGetAllWatchers.mockResolvedValue([
-      {
-        id: 'watcher-alpha',
-        name: 'Alpha Watcher',
-        type: 'docker',
-        configuration: { cron: '*/5 * * * *' },
-      },
-    ]);
-
-    // Stub renders card slot with both a watching (real) and paused (injected) item
-    const dualStatusCardStub = defineComponent({
-      props: ['items', 'itemKey', 'selectedKey'],
-      emits: ['item-click'],
-      template: `
-        <div class="data-card-grid" :data-item-count="items?.length ?? 0">
-          <slot v-if="items?.[0]" name="card" :item="items[0]" />
-          <slot name="card" :item="{ status: 'paused', name: 'Paused', cron: '', containers: 0, lastRun: '—', nextRun: '—', config: {} }" />
-        </div>
-      `,
-    });
-
-    const wrapper = mountWithPlugins(WatchersView, {
-      global: {
-        stubs: {
-          ...dataViewStubs,
-          DataTable: richDataTableStub,
-          DataCardGrid: dualStatusCardStub,
-        },
-      },
-    });
-    await flushPromises();
-    await wrapper.find('.mode-cards').trigger('click');
-    await flushPromises();
-
-    const badges = wrapper.findAll('span.badge');
-    expect(badges.some((b) => b.text().trim() === 'Watching')).toBe(true);
-    expect(badges.some((b) => b.text().trim() === 'Paused')).toBe(true);
-  });
-
-  it('list accordion header badge shows translated watching/paused labels', async () => {
-    mockGetAllWatchers.mockResolvedValue([
-      {
-        id: 'watcher-alpha',
-        name: 'Alpha Watcher',
-        type: 'docker',
-        configuration: { cron: '*/5 * * * *' },
-      },
-    ]);
-
-    // Stub renders header slot with both a watching (real) and paused (injected) item
-    const dualStatusListStub = defineComponent({
-      props: ['items', 'itemKey', 'selectedKey'],
-      emits: ['item-click'],
-      template: `
-        <div class="data-list-accordion" :data-item-count="items?.length ?? 0">
-          <template v-for="item in items" :key="item[itemKey || 'id']">
-            <slot name="header" :item="item" />
-          </template>
-          <slot name="header" :item="{ status: 'paused', name: 'Paused', cron: '', containers: 0, config: {} }" />
-        </div>
-      `,
-    });
-
-    const wrapper = mountWithPlugins(WatchersView, {
-      global: {
-        stubs: {
-          ...dataViewStubs,
-          DataTable: richDataTableStub,
-          DataListAccordion: dualStatusListStub,
-        },
-      },
-    });
-    await flushPromises();
-    await wrapper.find('.mode-list').trigger('click');
     await flushPromises();
 
     const badges = wrapper.findAll('span.badge');

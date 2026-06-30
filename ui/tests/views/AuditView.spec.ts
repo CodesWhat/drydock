@@ -60,24 +60,6 @@ const stubs: Record<string, any> = {
       </div>
     `,
   }),
-  DataCardGrid: defineComponent({
-    props: ['items', 'itemKey', 'selectedKey'],
-    emits: ['item-click'],
-    template: `
-      <div class="data-card-grid" :data-item-count="items.length">
-        <button v-if="items[0]" class="card-click-first" @click="$emit('item-click', items[0])">Card 1</button>
-      </div>
-    `,
-  }),
-  DataListAccordion: defineComponent({
-    props: ['items', 'itemKey', 'selectedKey'],
-    emits: ['item-click'],
-    template: `
-      <div class="data-list-accordion" :data-item-count="items.length">
-        <button v-if="items[0]" class="list-click-first" @click="$emit('item-click', items[0])">List 1</button>
-      </div>
-    `,
-  }),
   DetailPanel: defineComponent({
     props: ['open', 'isMobile', 'showSizeControls', 'showFullPage'],
     emits: ['update:open'],
@@ -144,7 +126,6 @@ describe('AuditView', () => {
   describe('routing', () => {
     it('loads using route query values for view, page, action, and search', async () => {
       mockRoute.query = {
-        view: 'cards',
         page: '2',
         action: 'update-failed',
         q: 'redis',
@@ -164,8 +145,6 @@ describe('AuditView', () => {
         limit: 50,
         action: 'update-failed',
       });
-      expect(wrapper.find('.data-card-grid').exists()).toBe(true);
-      expect(wrapper.find('.data-card-grid').attributes('data-item-count')).toBe('1');
       expect((wrapper.find('input').element as HTMLInputElement).value).toBe('redis');
       expect(wrapper.get('[aria-haspopup="listbox"]').text()).toContain('Update Failed');
     });
@@ -694,34 +673,6 @@ describe('AuditView', () => {
 
       expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('false');
       expect(wrapper.find('.data-table').attributes('data-active-row')).toBe('');
-    });
-
-    it('opens detail panel from cards and list interactions', async () => {
-      mockGetAuditLog.mockResolvedValue({
-        entries: [makeEntry({ id: 'e1', containerName: 'nginx' })],
-        total: 1,
-      });
-      const wrapper = await mountAuditView();
-
-      await wrapper.find('.mode-cards').trigger('click');
-      await flushPromises();
-      expect(wrapper.find('.data-card-grid').exists()).toBe(true);
-
-      await wrapper.find('.card-click-first').trigger('click');
-      await flushPromises();
-      expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
-
-      await wrapper.find('.close-detail').trigger('click');
-      await flushPromises();
-      expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('false');
-
-      await wrapper.find('.mode-list').trigger('click');
-      await flushPromises();
-      expect(wrapper.find('.data-list-accordion').exists()).toBe(true);
-
-      await wrapper.find('.list-click-first').trigger('click');
-      await flushPromises();
-      expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
     });
   });
 });

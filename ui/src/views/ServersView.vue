@@ -4,7 +4,6 @@ import { useI18n } from 'vue-i18n';
 import AppBadge from '@/components/AppBadge.vue';
 import DetailField from '@/components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
-import { useViewMode } from '../preferences/useViewMode';
 import { getAgents } from '../services/agent';
 import { getServer } from '../services/server';
 import { getAllWatchers } from '../services/watcher';
@@ -21,7 +20,6 @@ interface ServerEntry {
 }
 
 const { t } = useI18n();
-const serversViewMode = useViewMode('servers');
 const loading = ref(true);
 const error = ref<string | null>(null);
 const servers = ref<ServerEntry[]>([]);
@@ -217,7 +215,6 @@ onMounted(fetchServers);
 
     <!-- Filter bar -->
     <DataFilterBar
-      v-model="serversViewMode"
       v-model:showFilters="showFilters"
       :filtered-count="filteredServers.length"
       :total-count="servers.length"
@@ -238,7 +235,7 @@ onMounted(fetchServers);
 
         <!-- Table view -->
         <DataTable
-          v-if="serversViewMode === 'table' && filteredServers.length > 0 && !loading"
+          v-if="filteredServers.length > 0 && !loading"
           :columns="tableColumns"
           storage-key="servers"
           :rows="filteredServers"
@@ -281,101 +278,6 @@ onMounted(fetchServers);
             </span>
           </template>
         </DataTable>
-
-        <!-- Card view -->
-        <DataCardGrid
-          v-if="serversViewMode === 'cards' && !loading"
-          :items="filteredServers"
-          item-key="id"
-          :selected-key="selectedServer?.id"
-          @item-click="openDetail($event)"
-        >
-          <template #card="{ item: server }">
-            <div class="px-4 pt-4 pb-2 flex items-start justify-between">
-              <div class="flex items-center gap-2.5 min-w-0">
-                <AppIcon name="servers" :size="14" class="dd-text-secondary shrink-0 mt-1" />
-                <div class="min-w-0">
-                  <div class="text-sm-plus font-semibold truncate dd-text">{{ server.name }}</div>
-                  <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono"
-                       :title="server.host"
-                       v-tooltip.top="server.host">
-                    {{ server.host }}
-                  </div>
-                </div>
-              </div>
-              <AppBadge :tone="server.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 shrink-0 ml-2 md:!hidden" v-tooltip.top="serverStatusLabel(server.status)">
-                <AppIcon :name="server.status === 'connected' ? 'check' : 'xmark'" :size="12" />
-              </AppBadge>
-              <AppBadge :tone="server.status === 'connected' ? 'success' : 'danger'" size="xs" class="shrink-0 ml-2 max-md:!hidden">
-                {{ serverStatusLabel(server.status) }}
-              </AppBadge>
-            </div>
-            <div class="px-4 py-3">
-              <div class="grid grid-cols-2 gap-2 text-2xs-plus">
-                <div>
-                  <span class="dd-text-muted">{{ t('serversView.card.containers') }}</span>
-                  <span class="ml-1 font-semibold dd-text">{{ server.containers.total }}</span>
-                </div>
-                <div>
-                  <span class="dd-text-muted">{{ t('serversView.card.running') }}</span>
-                  <span class="ml-1 font-semibold" :style="{ color: server.containers.running > 0 ? 'var(--dd-success)' : 'var(--dd-text-muted)' }">
-                    {{ server.containers.running }}
-                  </span>
-                </div>
-                <div>
-                  <span class="dd-text-muted">{{ t('serversView.card.images') }}</span>
-                  <span class="ml-1 font-semibold dd-text">{{ server.images }}</span>
-                </div>
-                <div>
-                  <span class="dd-text-muted">{{ t('serversView.card.lastSeen') }}</span>
-                  <span class="ml-1 font-semibold" :class="server.status === 'connected' ? 'dd-text' : 'dd-text-danger'">
-                    {{ server.lastSeen }}
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div class="px-4 py-2.5 mt-auto"
-                 :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
-              <span class="text-2xs"
-                    :style="{ color: server.containers.running > 0 ? 'var(--dd-success)' : 'var(--dd-text-muted)' }">
-                {{ server.containers.running }}/{{ server.containers.total }} {{ t('serversView.detail.running') }}
-              </span>
-            </div>
-          </template>
-        </DataCardGrid>
-
-        <!-- List view -->
-        <DataListAccordion
-          v-if="serversViewMode === 'list' && !loading"
-          :items="filteredServers"
-          item-key="id"
-          :selected-key="selectedServer?.id"
-          @item-click="openDetail($event)"
-        >
-          <template #header="{ item: server }">
-          <AppIcon name="servers" :size="14" class="dd-text-secondary" />
-          <div class="flex-1 min-w-0">
-            <div class="text-sm font-semibold truncate dd-text">{{ server.name }}</div>
-            <div class="text-2xs font-mono dd-text-muted truncate mt-0.5"
-                 :title="server.host"
-                 v-tooltip.top="server.host">
-              {{ server.host }}
-            </div>
-          </div>
-            <div class="flex items-center gap-3 shrink-0">
-              <span class="text-2xs-plus dd-text-muted hidden md:inline">
-                <span class="font-semibold dd-text">{{ server.containers.total }}</span> {{ t('serversView.list.containers') }}
-              </span>
-              <span class="text-2xs-plus hidden md:inline"
-                    :class="server.status === 'connected' ? 'dd-text-muted' : 'dd-text-danger'">
-                {{ server.lastSeen }}
-              </span>
-              <AppBadge :tone="server.status === 'connected' ? 'success' : 'danger'" size="xs" class="hidden md:inline-flex">
-                {{ serverStatusLabel(server.status) }}
-              </AppBadge>
-            </div>
-          </template>
-        </DataListAccordion>
 
         <!-- Empty state -->
         <EmptyState

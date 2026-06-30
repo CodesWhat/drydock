@@ -6,7 +6,6 @@ import AppBadge from '../components/AppBadge.vue';
 import AppIconButton from '../components/AppIconButton.vue';
 import DetailField from '../components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
-import { useViewMode } from '../preferences/useViewMode';
 import { getAuditLog } from '../services/audit';
 import type { AuditEntry } from '../utils/audit-helpers';
 import {
@@ -16,8 +15,6 @@ import {
   statusColor,
   targetLabel,
 } from '../utils/audit-helpers';
-import { resolveAuditViewModeFromQuery } from './auditViewMode';
-
 const { t, te } = useI18n();
 
 const actionTypes = [
@@ -94,14 +91,6 @@ function parseDateQuery(value: unknown): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : '';
 }
 
-const persistedAuditView = useViewMode('audit');
-// URL query takes precedence over localStorage
-const auditViewMode = ref<'table' | 'cards' | 'list'>(
-  resolveAuditViewModeFromQuery(persistedAuditView.value, route.query.view),
-);
-watch(auditViewMode, (v) => {
-  persistedAuditView.value = v;
-});
 const selectedEntry = ref<AuditEntry | null>(null);
 const detailOpen = ref(false);
 
@@ -270,16 +259,14 @@ watch(
     route.query.action,
     route.query.actions,
     route.query.q,
-    route.query.view,
     route.query.container,
     route.query.from,
     route.query.to,
   ],
-  ([nextPage, nextAction, nextActions, nextSearch, nextView, nextContainer, nextFrom, nextTo]) => {
+  ([nextPage, nextAction, nextActions, nextSearch, nextContainer, nextFrom, nextTo]) => {
     page.value = parsePageQuery(nextPage);
     actionFilter.value = parseActionsQuery(nextActions, nextAction);
     searchQuery.value = firstQueryValue(nextSearch) ?? '';
-    auditViewMode.value = resolveAuditViewModeFromQuery(auditViewMode.value, nextView);
     containerFilter.value = parseContainerQuery(nextContainer);
     fromDateFilter.value = parseDateQuery(nextFrom);
     toDateFilter.value = parseDateQuery(nextTo);
@@ -318,7 +305,6 @@ onUnmounted(() => {
 
     <!-- Filter bar -->
     <DataFilterBar
-      v-model="auditViewMode"
       v-model:showFilters="showFilters"
       :filtered-count="filteredEntries.length"
       :total-count="total"
@@ -402,7 +388,7 @@ onUnmounted(() => {
 
     <!-- Table view -->
     <DataTable
-      v-if="auditViewMode === 'table' && filteredEntries.length > 0 && !loading"
+      v-if="filteredEntries.length > 0 && !loading"
       :columns="tableColumns"
       storage-key="audit"
       :rows="filteredEntries"
@@ -444,82 +430,6 @@ onUnmounted(() => {
         <span v-else class="dd-text-muted">—</span>
       </template>
     </DataTable>
-
-    <!-- Card view -->
-    <DataCardGrid
-      v-if="auditViewMode === 'cards' && !loading"
-      :items="filteredEntries"
-      item-key="id"
-      :selected-key="selectedEntry?.id"
-      @item-click="openDetail($event)"
-    >
-      <template #card="{ item: entry }">
-        <div class="px-4 pt-4 pb-2 flex items-start justify-between">
-          <div class="flex items-center gap-2.5 min-w-0">
-            <AppIcon :name="actionIcon(entry.action)" :size="14" class="dd-text-secondary shrink-0 mt-0.5" />
-            <div class="min-w-0">
-              <div class="text-sm font-semibold truncate dd-text">{{ actionLabel(entry.action, { t, te }) }}</div>
-              <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono">{{ entry.containerName }}</div>
-            </div>
-          </div>
-          <AppBadge :custom="{ bg: statusBg(entry.status), text: statusColor(entry.status) }" size="xs" class="shrink-0 ml-2">
-            {{ entry.status }}
-          </AppBadge>
-        </div>
-        <div class="px-4 py-3">
-          <div class="grid grid-cols-2 gap-2 text-2xs-plus">
-            <div>
-              <span class="dd-text-muted">{{ t('auditView.card.time') }}</span>
-              <span class="ml-1 font-semibold dd-text">{{ formatTimestamp(entry.timestamp) }}</span>
-            </div>
-            <div v-if="entry.fromVersion || entry.toVersion">
-              <span class="dd-text-muted">{{ t('auditView.card.version') }}</span>
-              <span
-                class="ml-1 max-w-[180px] truncate font-mono dd-text inline-block"
-                v-tooltip.top="`${entry.fromVersion || '—'} → ${entry.toVersion || '—'}`"
-              >
-                {{ entry.fromVersion || '—' }} → {{ entry.toVersion || '—' }}
-              </span>
-            </div>
-          </div>
-        </div>
-        <div class="px-4 py-2.5 mt-auto"
-             :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
-          <span class="text-2xs dd-text-muted font-mono">{{ formatTimestamp(entry.timestamp) }}</span>
-        </div>
-      </template>
-    </DataCardGrid>
-
-    <!-- List view (accordion) -->
-    <DataListAccordion
-      v-if="auditViewMode === 'list' && !loading"
-      :items="filteredEntries"
-      item-key="id"
-      :selected-key="selectedEntry?.id"
-      @item-click="openDetail($event)"
-    >
-      <template #header="{ item: entry }">
-        <AppIcon :name="actionIcon(entry.action)" :size="14" class="dd-text-secondary shrink-0" />
-        <div class="flex-1 min-w-0">
-          <div class="text-sm font-semibold truncate dd-text">{{ actionLabel(entry.action, { t, te }) }}</div>
-          <div class="text-2xs font-mono dd-text-muted truncate mt-0.5">{{ entry.containerName }}</div>
-        </div>
-        <span class="text-2xs font-mono dd-text-muted shrink-0 hidden md:inline">{{ formatTimestamp(entry.timestamp) }}</span>
-        <AppBadge :custom="{ bg: statusBg(entry.status), text: statusColor(entry.status) }" size="xs" class="shrink-0">
-          {{ entry.status }}
-        </AppBadge>
-      </template>
-      <template #details="{ item: entry }">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 mt-2">
-          <DetailField :label="t('auditView.detail.timestamp')" mono compact>{{ formatTimestamp(entry.timestamp) }}</DetailField>
-          <DetailField :label="targetLabel(entry.action, { t, te })" mono compact>{{ entry.containerName }}</DetailField>
-          <DetailField v-if="entry.containerImage" :label="t('auditView.detail.image')" mono compact>{{ entry.containerImage }}</DetailField>
-          <DetailField v-if="entry.fromVersion" :label="t('auditView.detail.fromVersion')" mono compact>{{ entry.fromVersion }}</DetailField>
-          <DetailField v-if="entry.toVersion" :label="t('auditView.detail.toVersion')" mono compact>{{ entry.toVersion }}</DetailField>
-          <DetailField v-if="entry.details" :label="t('auditView.detail.details')" mono compact>{{ entry.details }}</DetailField>
-        </div>
-      </template>
-    </DataListAccordion>
 
     <!-- Pagination -->
     <div v-if="total > limit" class="flex items-center justify-between px-4 py-2.5"

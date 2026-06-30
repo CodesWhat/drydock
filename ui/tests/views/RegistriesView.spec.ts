@@ -140,44 +140,6 @@ describe('RegistriesView', () => {
     expect(wrapper.text()).toContain('team-a');
   });
 
-  it('opens registry details from list mode selections', async () => {
-    mockGetAllRegistries.mockResolvedValue([
-      makeRegistry({
-        id: 'registry-1',
-        name: 'AWS ECR',
-        type: 'ecr',
-        configuration: { url: 'https://list.example' },
-      }),
-    ]);
-    mockGetRegistry.mockResolvedValue(
-      makeRegistry({
-        id: 'registry-1',
-        name: 'AWS ECR',
-        type: 'ecr',
-        configuration: {
-          url: 'https://123456789012.dkr.ecr.us-east-1.amazonaws.com',
-          region: 'us-east-1',
-        },
-      }),
-    );
-
-    const wrapper = await mountRegistriesView();
-
-    await wrapper.find('.mode-list').trigger('click');
-    await flushPromises();
-    await wrapper.find('.list-click-first').trigger('click');
-    await flushPromises();
-
-    expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
-    expect(mockGetRegistry).toHaveBeenCalledWith({
-      type: 'ecr',
-      name: 'AWS ECR',
-      agent: undefined,
-    });
-    expect(wrapper.text()).toContain('us-east-1');
-    expect(wrapper.text()).toContain('123456789012.dkr.ecr.us-east-1.amazonaws.com');
-  });
-
   it('caps long registry URLs in compact table and detail surfaces', async () => {
     const longUrl =
       'https://registry.example.internal/company/team/service/component/releases/2026/04/with-an-extra-long-path';

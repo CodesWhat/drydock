@@ -285,23 +285,6 @@ describe('ServersView', () => {
     expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('false');
   });
 
-  it('opens the detail panel from cards mode selections', async () => {
-    mockGetAgents.mockResolvedValue([
-      { name: 'Edge-1', connected: true, host: '10.0.0.21', port: 2376 },
-    ]);
-
-    const wrapper = await mountServersView();
-
-    await wrapper.find('.mode-cards').trigger('click');
-    await flushPromises();
-    await wrapper.find('.card-click-first').trigger('click');
-    await nextTick();
-
-    expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
-    expect(wrapper.text()).toContain('Refresh');
-    expect(wrapper.text()).toContain('unix:///var/run/docker.sock');
-  });
-
   it('caps long host values in compact table and detail surfaces', async () => {
     const longHost =
       'https://very-long-edge-hostname.example.internal:2376/with/a/path/that/should/not/reflow';
