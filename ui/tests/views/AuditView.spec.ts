@@ -27,13 +27,10 @@ const stubs: Record<string, any> = {
     template: '<div class="data-view-layout"><slot /><slot name="panel" /></div>',
   }),
   DataFilterBar: defineComponent({
-    props: ['modelValue', 'showFilters', 'filteredCount', 'totalCount', 'activeFilterCount'],
-    emits: ['update:modelValue', 'update:showFilters'],
+    props: ['showFilters', 'filteredCount', 'totalCount', 'activeFilterCount'],
+    emits: ['update:showFilters'],
     template: `
       <div class="data-filter-bar">
-        <button class="mode-table" @click="$emit('update:modelValue', 'table')">Table</button>
-        <button class="mode-cards" @click="$emit('update:modelValue', 'cards')">Cards</button>
-        <button class="mode-list" @click="$emit('update:modelValue', 'list')">List</button>
         <slot name="filters" />
       </div>
     `,
