@@ -295,7 +295,7 @@ describe('DataTable', () => {
           'dd-data-table-cell',
           'dd-data-table-actions-cell',
           'sticky',
-          'right-0',
+          'end-0',
         ]),
       );
       expect(actionsCell.attributes('style') ?? '').not.toContain('background-color');
@@ -381,13 +381,13 @@ describe('DataTable', () => {
       expect(actionsHeader.find('[role="separator"]').exists()).toBe(false);
     });
 
-    it('keeps the shared actions column sticky to the right edge', () => {
+    it('keeps the shared actions column sticky to the inline-end edge', () => {
       const w = factory({ showActions: true }, { actions: '<span class="action-btn">Act</span>' });
       const actionsHeader = w.findAll('thead th')[3];
       const actionsCell = w.findAll('tbody tr')[0].findAll('td')[3];
 
-      expect(actionsHeader.classes()).toEqual(expect.arrayContaining(['sticky', 'right-0']));
-      expect(actionsCell.classes()).toEqual(expect.arrayContaining(['sticky', 'right-0']));
+      expect(actionsHeader.classes()).toEqual(expect.arrayContaining(['sticky', 'end-0']));
+      expect(actionsCell.classes()).toEqual(expect.arrayContaining(['sticky', 'end-0']));
       expect(actionsCell.classes()).toContain('dd-data-table-actions-cell');
       expect(actionsCell.attributes('style') ?? '').not.toContain('background-color');
     });
@@ -554,7 +554,7 @@ describe('DataTable', () => {
 
       const actionsHeader = w.find('thead th[data-col-key="__actions__"]');
       expect(actionsHeader.exists()).toBe(true);
-      expect(actionsHeader.classes()).toEqual(expect.arrayContaining(['sticky', 'right-0']));
+      expect(actionsHeader.classes()).toEqual(expect.arrayContaining(['sticky', 'end-0']));
       expect(actionsHeader.find('[role="separator"]').exists()).toBe(false);
       expect(w.find('colgroup col[data-col-key="status"]').attributes('style')).toContain(
         'width: 100px',
@@ -768,23 +768,31 @@ describe('DataTable', () => {
   });
 
   describe('mobile - sticky identity column', () => {
-    it('first non-icon column header carries sticky left-0 z-[15] classes', () => {
+    it('first non-icon column header carries sticky start-0 z-20 classes', () => {
       // Default columns: [name, status, icon] — name is the first non-icon column
       const w = factory();
       const nameHeader = w.findAll('thead th')[0];
       expect(nameHeader.classes()).toContain('sticky');
-      expect(nameHeader.classes()).toContain('left-0');
-      expect(nameHeader.classes()).toContain('z-[15]');
+      expect(nameHeader.classes()).toContain('start-0');
+      expect(nameHeader.classes()).toContain('z-20');
       expect(nameHeader.classes()).toContain('dd-sticky-col-left');
     });
 
-    it('first non-icon column data cells carry sticky left-0 z-[15] classes', () => {
+    it('first non-icon column data cells carry sticky start-0 z-10 classes', () => {
       const w = factory();
       const firstRowFirstCell = w.findAll('tbody tr')[0].findAll('td')[0];
       expect(firstRowFirstCell.classes()).toContain('sticky');
-      expect(firstRowFirstCell.classes()).toContain('left-0');
-      expect(firstRowFirstCell.classes()).toContain('z-[15]');
+      expect(firstRowFirstCell.classes()).toContain('start-0');
+      expect(firstRowFirstCell.classes()).toContain('z-10');
       expect(firstRowFirstCell.classes()).toContain('dd-sticky-col-left');
+    });
+
+    it('header sticky cell out-stacks the body sticky cell (z-20 > z-10)', () => {
+      const w = factory();
+      const nameHeader = w.findAll('thead th')[0];
+      const firstRowFirstCell = w.findAll('tbody tr')[0].findAll('td')[0];
+      expect(nameHeader.classes()).not.toContain('z-10');
+      expect(firstRowFirstCell.classes()).not.toContain('z-20');
     });
 
     it('sticky-left header carries a background-color style for opaque stacking', () => {
@@ -808,7 +816,7 @@ describe('DataTable', () => {
       expect(ths[0].classes()).not.toContain('sticky');
       // name column (index 1) — first non-icon — must be sticky
       expect(ths[1].classes()).toContain('sticky');
-      expect(ths[1].classes()).toContain('left-0');
+      expect(ths[1].classes()).toContain('start-0');
       expect(ths[1].classes()).toContain('dd-sticky-col-left');
     });
 
@@ -832,15 +840,15 @@ describe('DataTable', () => {
   });
 
   describe('mobile - touch targets', () => {
-    it('interactive data rows carry min-h-[44px]', () => {
+    it('interactive data rows carry min-h-[48px]', () => {
       const w = factory();
       const trs = w.findAll('tbody tr');
       for (const tr of trs) {
-        expect(tr.classes()).toContain('min-h-[44px]');
+        expect(tr.classes()).toContain('min-h-[48px]');
       }
     });
 
-    it('non-interactive rows (via rowInteractive) do not carry min-h-[44px]', () => {
+    it('non-interactive rows (via rowInteractive) do not carry min-h-[48px]', () => {
       const mixedRows = [
         { id: 'group-a', name: 'Group A', status: 'meta', kind: 'group' },
         ...rows,
@@ -850,13 +858,13 @@ describe('DataTable', () => {
         rowInteractive: (row: { kind?: string }) => row.kind !== 'group',
       });
       const trs = w.findAll('tbody tr');
-      expect(trs[0].classes()).not.toContain('min-h-[44px]');
-      expect(trs[1].classes()).toContain('min-h-[44px]');
-      expect(trs[2].classes()).toContain('min-h-[44px]');
-      expect(trs[3].classes()).toContain('min-h-[44px]');
+      expect(trs[0].classes()).not.toContain('min-h-[48px]');
+      expect(trs[1].classes()).toContain('min-h-[48px]');
+      expect(trs[2].classes()).toContain('min-h-[48px]');
+      expect(trs[3].classes()).toContain('min-h-[48px]');
     });
 
-    it('full-width group rows (fullWidthRow) do not carry min-h-[44px]', () => {
+    it('full-width group rows (fullWidthRow) do not carry min-h-[48px]', () => {
       const mixedRows = [
         { id: 'group-b', name: 'Group B', status: 'meta', kind: 'group' },
         ...rows,
@@ -866,8 +874,36 @@ describe('DataTable', () => {
         fullWidthRow: (row: { kind?: string }) => row.kind === 'group',
       });
       const trs = w.findAll('tbody tr');
-      expect(trs[0].classes()).not.toContain('min-h-[44px]');
-      expect(trs[1].classes()).toContain('min-h-[44px]');
+      expect(trs[0].classes()).not.toContain('min-h-[48px]');
+      expect(trs[1].classes()).toContain('min-h-[48px]');
+    });
+  });
+
+  describe('accessibility - scroll container and header scope', () => {
+    it('scroll container has overscroll-x-contain to prevent scroll chaining', () => {
+      const w = factory();
+      const scrollContainer = w.find('.overflow-x-auto');
+      expect(scrollContainer.classes()).toContain('overscroll-x-contain');
+    });
+
+    it('scroll container does not carry a tabindex (preserves Android TalkBack table detection)', () => {
+      const w = factory();
+      const scrollContainer = w.find('.overflow-x-auto');
+      expect(scrollContainer.attributes('tabindex')).toBeUndefined();
+    });
+
+    it('every data column header carries scope="col"', () => {
+      const w = factory();
+      const ths = w.findAll('thead th');
+      for (const th of ths) {
+        expect(th.attributes('scope')).toBe('col');
+      }
+    });
+
+    it('the actions header carries scope="col"', () => {
+      const w = factory({ showActions: true });
+      const actionsHeader = w.findAll('thead th')[3];
+      expect(actionsHeader.attributes('scope')).toBe('col');
     });
   });
 

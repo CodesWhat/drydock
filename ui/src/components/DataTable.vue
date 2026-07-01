@@ -704,7 +704,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
        :style="{ backgroundColor: 'var(--dd-bg-card)' }">
     <div
       ref="scrollViewportRef"
-      class="overflow-x-auto"
+      class="overflow-x-auto overscroll-x-contain"
       :class="virtualScroll || maxHeight ? 'overflow-y-auto' : 'overflow-y-visible'"
       :data-test="virtualScroll ? 'data-table-scroll' : undefined"
       :style="virtualScroll ? { maxHeight: virtualMaxHeight } : maxHeight ? { maxHeight } : {}"
@@ -730,12 +730,13 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
           <tr :style="{ backgroundColor: 'var(--dd-bg-inset)', borderBottom: 'none' }">
             <th v-for="col in resolvedColumns" :key="col.key"
                 :data-col-key="col.key"
+                scope="col"
                 :class="[
                   col.icon ? 'text-center pl-5 pr-0' : [col.align ?? 'text-center', col.px ?? 'px-5'],
                   'whitespace-nowrap py-2.5 font-semibold uppercase tracking-wider text-2xs select-none transition-colors relative',
                   isSortableColumn(col) ? 'cursor-pointer' : '',
                   sortKey === col.key ? 'dd-text-secondary' : 'dd-text-muted hover:dd-text-secondary',
-                  col.key === firstNonIconColKey ? ['sticky', 'left-0', 'z-[15]', 'dd-sticky-col-left'] : '',
+                  col.key === firstNonIconColKey ? ['sticky', 'start-0', 'z-20', 'dd-sticky-col-left'] : '',
                 ]"
                 :style="col.key === firstNonIconColKey ? { backgroundColor: 'var(--dd-bg-inset)' } : undefined"
                 :tabindex="isSortableColumn(col) ? 0 : undefined"
@@ -764,7 +765,8 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
             </th>
             <th v-if="showActions"
                 :data-col-key="ACTIONS_COLUMN_KEY"
-                class="sticky right-0 z-20 text-right px-3 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative"
+                scope="col"
+                class="sticky end-0 z-20 text-right px-3 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative"
                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
               {{ t('sharedComponents.dataTable.actions') }}
             </th>
@@ -780,7 +782,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
           <tr v-for="(row, i) in visibleRows" :key="getRowKey(row, rowKey)"
               :class="[
                 'dd-data-table-row',
-                isInteractiveRow(row) ? 'cursor-pointer transition-colors dd-data-table-row-hoverable min-h-[44px]' : '',
+                isInteractiveRow(row) ? 'cursor-pointer transition-colors dd-data-table-row-hoverable min-h-[48px]' : '',
                 isInteractiveRow(row) && isSelectedRow(row)
                   ? 'dd-data-table-row-selected'
                   : '',
@@ -806,7 +808,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
                   :class="[
                     colIndex === 0 ? 'dd-data-table-row-overlay-host' : '',
                     col.icon ? 'text-center pl-5 pr-0' : ['overflow-hidden', col.align ?? 'text-center', col.px ?? 'px-5'],
-                    col.key === firstNonIconColKey ? ['sticky', 'left-0', 'z-[15]', 'dd-sticky-col-left'] : '',
+                    col.key === firstNonIconColKey ? ['sticky', 'start-0', 'z-10', 'dd-sticky-col-left'] : '',
                   ]">
                 <div v-if="!col.icon" :class="cellContentClass(col)">
                   <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
@@ -822,7 +824,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
               <td
                 v-if="showActions"
                 :data-col-key="ACTIONS_COLUMN_KEY"
-                class="dd-data-table-cell dd-data-table-actions-cell sticky right-0 z-10 px-3 py-3 text-right whitespace-nowrap relative"
+                class="dd-data-table-cell dd-data-table-actions-cell sticky end-0 z-10 px-3 py-3 text-right whitespace-nowrap relative"
               >
                 <slot name="actions" :row="row" />
               </td>
@@ -876,11 +878,8 @@ tbody tr.dd-data-table-row-selected > td.dd-data-table-cell:last-child {
     inset 0 -1px 0 var(--dd-primary);
 }
 
-th.dd-sticky-col-left {
-  box-shadow: 1px 0 0 0 rgba(128, 128, 128, 0.2);
-}
-
+th.dd-sticky-col-left,
 td.dd-sticky-col-left {
-  box-shadow: 1px 0 0 0 rgba(128, 128, 128, 0.15);
+  border-inline-end: 1px solid var(--dd-sticky-separator);
 }
 </style>
