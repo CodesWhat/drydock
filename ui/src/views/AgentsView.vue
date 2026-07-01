@@ -9,12 +9,10 @@ import AgentDetailOverviewTab from '../components/agents/AgentDetailOverviewTab.
 import AppBadge from '../components/AppBadge.vue';
 import AppTabBar from '../components/AppTabBar.vue';
 import AppIconButton from '../components/AppIconButton.vue';
-import DetailField from '../components/DetailField.vue';
 import StatusDot from '../components/StatusDot.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
-import { useViewMode } from '../preferences/useViewMode';
 import { getAgents } from '../services/agent';
 import { getLogEntries } from '../services/log';
 import { getAllTriggers } from '../services/trigger';
@@ -280,9 +278,6 @@ const filteredAgents = computed(() => {
   return agentsData.value.filter((item) => item.name.toLowerCase().includes(q));
 });
 
-// -- View mode --
-const agentViewMode = useViewMode('agents');
-
 // -- Sorting --
 const agentSortKey = usePreference(
   () => preferences.views.agents.sortKey,
@@ -538,7 +533,6 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
 
           <!-- Filter bar -->
           <DataFilterBar
-            v-model="agentViewMode"
             v-model:showFilters="showFilters"
             :filtered-count="filteredAgents.length"
             :total-count="agentsData.length"
@@ -555,7 +549,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
               </AppButton>
             </template>
             <template #extra-buttons>
-              <div v-if="agentViewMode === 'table'">
+              <div>
                 <AppIconButton icon="config" size="toolbar" variant="plain" class="text-2xs-plus"
                         :class="showAgentColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
                         :aria-label="t('agentsView.list.toggleColumns')"
@@ -587,7 +581,7 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
           </div>
 
           <!-- Table view -->
-          <DataTable v-if="agentViewMode === 'table' && !loading"
+          <DataTable v-if="!loading"
                      :columns="agentActiveColumns"
                      storage-key="agents"
                      :rows="sortedAgents"
@@ -650,130 +644,6 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                           @clear="searchQuery = ''" />
             </template>
           </DataTable>
-
-          <!-- Card view -->
-          <DataCardGrid v-if="agentViewMode === 'cards' && !loading"
-                        :items="sortedAgents"
-                        item-key="id"
-                        :selected-key="selectedAgent?.id ?? null"
-                        @item-click="selectAgent($event)">
-            <template #card="{ item: agent }">
-              <!-- Card header -->
-              <div class="px-4 pt-4 pb-2 flex items-start justify-between">
-                <div class="flex items-center gap-2.5 min-w-0">
-                  <StatusDot :status="agent.status" size="lg" class="mt-1" v-tooltip.top="agent.status === 'connected' ? t('agentsView.list.status.connected') : t('agentsView.list.status.disconnected')" />
-                  <div class="min-w-0">
-                    <div class="text-sm-plus font-semibold truncate dd-text">{{ agent.name }}</div>
-                    <div class="text-2xs-plus truncate mt-0.5 dd-text-muted">{{ agent.host }}</div>
-                  </div>
-                </div>
-                <AppBadge :tone="agent.status === 'connected' ? 'success' : 'danger'" size="xs" class="tracking-wide shrink-0 ml-2 hidden md:inline-flex">
-                  {{ agent.status }}
-                </AppBadge>
-              </div>
-              <!-- Card body -->
-              <div class="px-4 py-3">
-                <div class="grid grid-cols-2 gap-2 text-2xs-plus">
-                  <div>
-                    <span class="dd-text-muted">{{ t('agentsView.detail.fields.docker') }}</span>
-                    <span class="ml-1 font-semibold" :class="agent.dockerVersion ? 'dd-text' : 'dd-text-muted'">{{ agent.dockerVersion ?? '—' }}</span>
-                  </div>
-                  <div>
-                    <span class="dd-text-muted">{{ t('agentsView.detail.fields.os') }}</span>
-                    <span class="ml-1 font-semibold" :class="agent.os ? 'dd-text' : 'dd-text-muted'">{{ agent.os ?? '—' }}</span>
-                  </div>
-                  <div>
-                    <span class="dd-text-muted">{{ t('agentsView.detail.fields.architecture') }}</span>
-                    <span class="ml-1 font-semibold" :class="agent.arch ? 'dd-text' : 'dd-text-muted'">{{ agent.arch ?? '—' }}</span>
-                  </div>
-                  <div>
-                    <span class="dd-text-muted">{{ t('agentsView.detail.fields.agent') }}</span>
-                    <span class="ml-1 font-semibold" :class="agent.version ? 'dd-text' : 'dd-text-muted'">{{ agent.version ? `v${agent.version}` : '—' }}</span>
-                  </div>
-                </div>
-              </div>
-              <!-- Card footer -->
-              <div class="px-4 py-2.5 flex items-center justify-between mt-auto"
-                   :style="{
-                     borderTop: '1px solid var(--dd-border)',
-                     backgroundColor: 'var(--dd-bg-elevated)',
-                   }">
-                <div class="flex items-center gap-3 text-2xs-plus">
-                  <span>
-                    <span class="font-bold" style="color: var(--dd-success);">{{ agent.containers.running }}</span>
-                    <span class="dd-text-muted"> {{ t('agentsView.list.card.running') }}</span>
-                  </span>
-                  <span v-if="agent.containers.stopped > 0">
-                    <span class="font-bold" style="color: var(--dd-danger);">{{ agent.containers.stopped }}</span>
-                    <span class="dd-text-muted"> {{ t('agentsView.list.card.stopped') }}</span>
-                  </span>
-                </div>
-                <span class="text-2xs dd-text-muted">{{ agent.lastSeen }}</span>
-              </div>
-            </template>
-          </DataCardGrid>
-
-          <!-- List view -->
-          <DataListAccordion v-if="agentViewMode === 'list' && !loading"
-                             :items="sortedAgents"
-                             item-key="id"
-                             :selected-key="selectedAgent?.id ?? null">
-            <template #header="{ item: agent }">
-              <StatusDot :status="agent.status" size="lg" v-tooltip.top="agent.status === 'connected' ? t('agentsView.list.status.connected') : t('agentsView.list.status.disconnected')" />
-              <div class="min-w-0 flex-1">
-                <div class="text-sm font-semibold truncate dd-text">{{ agent.name }}</div>
-                <div class="text-2xs mt-0.5 truncate dd-text-muted">{{ agent.host }}</div>
-              </div>
-              <div class="flex items-center gap-1.5 shrink-0">
-                <AppBadge :tone="agent.status === 'connected' ? 'success' : 'danger'" size="xs" class="hidden md:inline-flex">
-                  {{ agent.status }}
-                </AppBadge>
-                <span class="text-2xs dd-text-secondary">
-                  {{ agent.containers.running }}/{{ agent.containers.total }}
-                </span>
-                <span class="text-2xs dd-text-muted">{{ agent.lastSeen }}</span>
-              </div>
-            </template>
-            <template #details="{ item: agent }">
-              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 mt-2">
-                <DetailField :label="t('agentsView.detail.fields.docker')" mono compact>
-                  <span :class="agent.dockerVersion ? '' : 'dd-text-muted'">{{ agent.dockerVersion ?? '—' }}</span>
-                </DetailField>
-                <DetailField :label="t('agentsView.detail.fields.os')" compact>
-                  <span :class="agent.os ? '' : 'dd-text-muted'">{{ agent.os ?? '—' }}</span>
-                </DetailField>
-                <DetailField :label="t('agentsView.detail.fields.architecture')" compact>
-                  <span :class="agent.arch ? '' : 'dd-text-muted'">{{ agent.arch ?? '—' }}</span>
-                </DetailField>
-                <DetailField :label="t('agentsView.detail.fields.agent')" mono compact>
-                  <span :class="agent.version ? '' : 'dd-text-muted'">{{ agent.version ? `v${agent.version}` : '—' }}</span>
-                </DetailField>
-                <DetailField :label="t('agentsView.detail.fields.uptime')" compact>
-                  <span :class="agent.uptime ? '' : 'dd-text-muted'">{{ agent.uptime ?? '—' }}</span>
-                </DetailField>
-                <DetailField :label="t('agentsView.detail.overview.containers')" compact>
-                  <span class="font-bold" style="color: var(--dd-success);">{{ agent.containers.running }}</span>
-                  <span class="dd-text-muted"> {{ t('agentsView.list.card.running') }} / </span>
-                  <span>{{ agent.containers.total }}</span>
-                </DetailField>
-              </div>
-              <!-- Action buttons -->
-              <div class="mt-4 pt-3 flex items-center gap-2" :style="{ borderTop: '1px solid var(--dd-border)' }">
-                <AppButton size="none" variant="plain" weight="none" class="inline-flex items-center gap-1.5 px-3 py-1.5 dd-rounded text-2xs-plus font-medium transition-colors dd-text-secondary hover:dd-text hover:dd-bg-elevated"
-                        @click.stop="selectAgent(agent)">
-                  <AppIcon name="info" :size="11" />
-                  {{ t('agentsView.detail.listView.details') }}
-                </AppButton>
-              </div>
-            </template>
-          </DataListAccordion>
-
-          <!-- Empty state (when no data at all, not filtered) -->
-          <EmptyState v-if="!loading && sortedAgents.length === 0 && agentViewMode !== 'table'"
-                      icon="filter"
-                      :message="t('agentsView.list.emptyFiltered')"
-                      :show-clear="activeFilterCount > 0"
-                      @clear="searchQuery = ''" />
 
     <template #panel>
         <!-- Detail panel -->

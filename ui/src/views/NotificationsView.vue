@@ -7,7 +7,6 @@ import ToggleSwitch from '../components/ToggleSwitch.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 
 const { t, te } = useI18n();
-import { useViewMode } from '../preferences/useViewMode';
 import type { NotificationRule, NotificationRuleUpdate } from '../services/notification';
 import { getAllNotificationRules, updateNotificationRule } from '../services/notification';
 import { getAllTriggers } from '../services/trigger';
@@ -36,7 +35,6 @@ function ruleDisplayDescription(rule: { id: string; description: string }): stri
   return te(key) ? t(key) : rule.description;
 }
 
-const notificationsViewMode = useViewMode('notifications');
 const loading = ref(true);
 const error = ref('');
 const saveError = ref('');
@@ -51,8 +49,6 @@ const compactTriggerBadgeClass = 'shrink-0';
 const compactTriggerBadgeLabelClass = 'block max-w-[160px] truncate';
 const compactTriggerRowClass =
   'flex min-w-0 max-w-full flex-nowrap items-center justify-end gap-1 overflow-x-auto';
-const compactTriggerListRowClass =
-  'flex min-w-0 max-w-[320px] flex-nowrap items-center justify-end gap-1 overflow-x-auto';
 
 const selectedRuleId = ref<string | null>(null);
 const detailOpen = ref(false);
@@ -369,7 +365,6 @@ onMounted(async () => {
     </div>
 
     <DataFilterBar
-      v-model="notificationsViewMode"
       v-model:showFilters="showFilters"
       :filtered-count="filteredNotifications.length"
       :total-count="notificationsData.length"
@@ -390,7 +385,7 @@ onMounted(async () => {
     <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('notificationsView.loadingRules') }}</div>
 
     <DataTable
-      v-if="notificationsViewMode === 'table' && !loading"
+      v-if="!loading"
       :columns="tableColumns"
       storage-key="notifications"
       :rows="filteredNotifications"
@@ -441,98 +436,6 @@ onMounted(async () => {
                     @clear="clearFilters" />
       </template>
     </DataTable>
-
-    <DataCardGrid
-      v-if="notificationsViewMode === 'cards' && !loading && filteredNotifications.length > 0"
-      :items="filteredNotifications"
-      item-key="id"
-      :selected-key="selectedRule?.id"
-      @item-click="openDetail($event)">
-      <template #card="{ item: notif }">
-        <div class="px-4 pt-4 pb-2 flex items-start justify-between gap-3">
-          <div class="min-w-0 flex-1">
-            <div class="text-sm-plus font-semibold truncate dd-text" :title="ruleDisplayName(notif)" v-tooltip.top="ruleDisplayName(notif)">{{ ruleDisplayName(notif) }}</div>
-            <div class="text-2xs-plus mt-0.5 dd-text-muted truncate"
-                 :title="ruleDisplayDescription(notif)"
-                 v-tooltip.top="ruleDisplayDescription(notif)">
-              {{ ruleDisplayDescription(notif) }}
-            </div>
-          </div>
-          <ToggleSwitch
-            :model-value="notif.enabled"
-            size="sm"
-            class="shrink-0"
-            :disabled="savingRuleId === notif.id"
-            :aria-label="t('notificationsView.toggleAriaLabel')"
-            on-color="var(--dd-success)"
-            off-color="var(--dd-border-strong)"
-            @click.stop
-            @update:model-value="toggleNotification(notif.id)"
-          />
-        </div>
-        <div :class="['px-4 py-2.5 mt-auto', compactTriggerRowClass]"
-             :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
-          <AppBadge v-for="triggerId in notif.triggers" :key="triggerId"
-                    :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }"
-                    size="xs"
-                    :uppercase="false"
-                    :title="triggerNameById(triggerId)"
-                    v-tooltip.top="triggerNameById(triggerId)"
-                    :class="compactTriggerBadgeClass">
-            <span :class="compactTriggerBadgeLabelClass">{{ triggerNameById(triggerId) }}</span>
-          </AppBadge>
-          <span v-if="triggerAssignmentSummary(notif)" class="text-2xs italic dd-text-muted shrink-0 whitespace-nowrap">
-            {{ triggerAssignmentSummary(notif) }}
-          </span>
-        </div>
-      </template>
-    </DataCardGrid>
-
-    <DataListAccordion
-      v-if="notificationsViewMode === 'list' && !loading && filteredNotifications.length > 0"
-      :items="filteredNotifications"
-      item-key="id"
-      :selected-key="selectedRule?.id"
-      @item-click="openDetail($event)">
-      <template #header="{ item: notif }">
-        <ToggleSwitch
-          :model-value="notif.enabled"
-          size="sm"
-          class="shrink-0"
-          :disabled="savingRuleId === notif.id"
-          :aria-label="t('notificationsView.toggleAriaLabel')"
-          on-color="var(--dd-success)"
-          off-color="var(--dd-border-strong)"
-          @click.stop
-          @update:model-value="toggleNotification(notif.id)"
-        />
-        <span class="text-sm font-semibold flex-1 min-w-0 truncate dd-text">{{ ruleDisplayName(notif) }}</span>
-        <div :class="compactTriggerListRowClass">
-          <AppBadge v-for="triggerId in notif.triggers" :key="triggerId"
-                    :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }"
-                    size="xs"
-                    :uppercase="false"
-                    :title="triggerNameById(triggerId)"
-                    v-tooltip.top="triggerNameById(triggerId)"
-                    :class="compactTriggerBadgeClass">
-            <span :class="compactTriggerBadgeLabelClass">{{ triggerNameById(triggerId) }}</span>
-          </AppBadge>
-          <span v-if="triggerAssignmentSummary(notif)" class="text-2xs italic dd-text-muted shrink-0 whitespace-nowrap">
-            {{ triggerAssignmentSummary(notif) }}
-          </span>
-        </div>
-      </template>
-      <template #details="{ item: notif }">
-        <div class="text-2xs-plus dd-text-muted">{{ ruleDisplayDescription(notif) }}</div>
-      </template>
-    </DataListAccordion>
-
-    <EmptyState
-      v-if="(notificationsViewMode === 'cards' || notificationsViewMode === 'list') && !loading && filteredNotifications.length === 0"
-      icon="notifications"
-      :message="t('notificationsView.emptyFiltered')"
-      :show-clear="activeFilterCount > 0"
-      @clear="clearFilters" />
 
     <template #panel>
       <DetailPanel

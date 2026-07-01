@@ -104,7 +104,7 @@ describe('NotificationsView', () => {
     expect(wrapper.text()).not.toContain('Docker Policy');
   });
 
-  it('truncates compact notification surfaces across table, cards, and list modes', async () => {
+  it('truncates compact notification surfaces in table mode', async () => {
     const longRuleName = 'Security Alert With A Very Long Name That Should Not Expand Compact Rows';
     const longDescription =
       'This description is intentionally long enough to verify compact notification rows stay one line.';
@@ -138,26 +138,6 @@ describe('NotificationsView', () => {
           </div>
         `,
       }),
-      DataCardGrid: defineComponent({
-        props: ['items', 'itemKey', 'selectedKey'],
-        emits: ['item-click'],
-        template: `
-          <div class="data-card-grid" :data-item-count="items?.length ?? 0">
-            <button v-if="items?.[0]" class="card-click-first" @click="$emit('item-click', items[0])">Card 1</button>
-            <slot name="card" v-if="items?.[0]" :item="items[0]" />
-          </div>
-        `,
-      }),
-      DataListAccordion: defineComponent({
-        props: ['items', 'itemKey', 'selectedKey'],
-        emits: ['item-click'],
-        template: `
-          <div class="data-list-accordion" :data-item-count="items?.length ?? 0">
-            <button v-if="items?.[0]" class="list-click-first" @click="$emit('item-click', items[0])">List 1</button>
-            <slot name="header" v-if="items?.[0]" :item="items[0]" />
-          </div>
-        `,
-      }),
     });
 
     const tableName = wrapper.get('.data-table .font-medium.truncate.dd-text');
@@ -172,22 +152,6 @@ describe('NotificationsView', () => {
     expect(tableBadge.classes()).toContain('shrink-0');
     expect(tableBadge.attributes('title')).toBe(longTriggerName);
     expect(tableBadge.get('span').classes()).toEqual(expect.arrayContaining(['block', 'truncate']));
-
-    await wrapper.find('.mode-cards').trigger('click');
-    await flushPromises();
-
-    const cardBadge = wrapper.get('.data-card-grid .badge');
-    expect(cardBadge.classes()).toContain('shrink-0');
-    expect(cardBadge.attributes('title')).toBe(longTriggerName);
-    expect(cardBadge.get('span').classes()).toEqual(expect.arrayContaining(['block', 'truncate']));
-
-    await wrapper.find('.mode-list').trigger('click');
-    await flushPromises();
-
-    const listBadge = wrapper.get('.data-list-accordion .badge');
-    expect(listBadge.classes()).toContain('shrink-0');
-    expect(listBadge.attributes('title')).toBe(longTriggerName);
-    expect(listBadge.get('span').classes()).toEqual(expect.arrayContaining(['block', 'truncate']));
   });
 
   it('saves trigger assignment changes from the detail panel', async () => {
@@ -233,13 +197,7 @@ describe('NotificationsView', () => {
 
     const wrapper = await mountNotificationsView();
 
-    await wrapper.find('.mode-cards').trigger('click');
-    await flushPromises();
-
-    expect(wrapper.text()).toContain('All notification triggers');
-    expect(wrapper.text()).not.toContain('No triggers');
-
-    await wrapper.find('.card-click-first').trigger('click');
+    await wrapper.find('.row-click-first').trigger('click');
     await flushPromises();
 
     expect(wrapper.text()).toContain(
@@ -260,12 +218,7 @@ describe('NotificationsView', () => {
 
     const wrapper = await mountNotificationsView();
 
-    await wrapper.find('.mode-cards').trigger('click');
-    await flushPromises();
-
-    expect(wrapper.text()).toContain('No triggers');
-
-    await wrapper.find('.card-click-first').trigger('click');
+    await wrapper.find('.row-click-first').trigger('click');
     await flushPromises();
 
     expect(wrapper.text()).toContain(
@@ -276,7 +229,7 @@ describe('NotificationsView', () => {
     );
   });
 
-  it('renders shared switch controls in table, cards, list, and detail contexts', async () => {
+  it('renders shared switch controls in table and detail contexts', async () => {
     const wrapper = await mountNotificationsView({
       DataTable: defineComponent({
         props: ['rows', 'rowKey', 'activeRow', 'selectedKey', 'sortKey', 'sortAsc'],
@@ -288,16 +241,6 @@ describe('NotificationsView', () => {
             <button v-if="rows?.[0]" class="row-click-first" @click="$emit('row-click', rows[0])">Open 1</button>
             <slot name="cell-enabled" v-if="rows?.[0]" :row="rows[0]" />
             <slot name="empty" v-if="!rows || rows.length === 0" />
-          </div>
-        `,
-      }),
-      DataListAccordion: defineComponent({
-        props: ['items', 'itemKey', 'selectedKey'],
-        emits: ['item-click'],
-        template: `
-          <div class="data-list-accordion" :data-item-count="items?.length ?? 0">
-            <button v-if="items?.[0]" class="list-click-first" @click="$emit('item-click', items[0])">List 1</button>
-            <slot name="header" v-if="items?.[0]" :item="items[0]" />
           </div>
         `,
       }),
@@ -314,20 +257,6 @@ describe('NotificationsView', () => {
     const detailSwitch = wrapper.find('button[aria-label="Rule status"]');
     expect(detailSwitch.exists()).toBe(true);
     expect(detailSwitch.classes()).toEqual(expect.arrayContaining(['w-10', 'h-5']));
-
-    await wrapper.find('.mode-cards').trigger('click');
-    await flushPromises();
-    expect(wrapper.findAll('button[role="switch"]')).toHaveLength(2);
-
-    const cardsRuleSwitch = wrapper.find('button[aria-label="Toggle notification rule"]');
-    expect(cardsRuleSwitch.classes()).toEqual(expect.arrayContaining(['w-8', 'h-4']));
-
-    await wrapper.find('.mode-list').trigger('click');
-    await flushPromises();
-    expect(wrapper.findAll('button[role="switch"]')).toHaveLength(2);
-
-    const listRuleSwitch = wrapper.find('button[aria-label="Toggle notification rule"]');
-    expect(listRuleSwitch.classes()).toEqual(expect.arrayContaining(['w-8', 'h-4']));
   });
 
   it('shows an inline error when rules fail to load', async () => {

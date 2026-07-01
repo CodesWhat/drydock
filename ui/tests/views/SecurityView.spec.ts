@@ -60,7 +60,6 @@ vi.mock('@/views/security/securityViewUtils', async () => {
 });
 
 import { mount } from '@vue/test-utils';
-import { preferences, resetPreferences } from '@/preferences/store';
 import { clearIconCache, updateSettings } from '@/services/settings';
 import SecurityView from '@/views/SecurityView.vue';
 
@@ -116,17 +115,6 @@ const stubs: Record<string, any> = {
     props: ['columns', 'rows', 'rowKey', 'sortKey', 'sortAsc', 'selectedKey'],
     emits: ['update:sortKey', 'update:sortAsc', 'row-click'],
     template: '<div class="dt" :data-rows="rows.length"><slot name="empty" /></div>',
-  }),
-  DataCardGrid: defineComponent({
-    props: ['items', 'itemKey', 'minWidth', 'selectedKey'],
-    emits: ['item-click'],
-    template:
-      '<div class="dcg" :data-items="items.length"><div v-for="item in items" :key="item[itemKey]" class="dcg-card"><slot name="card" :item="item" /></div></div>',
-  }),
-  DataListAccordion: defineComponent({
-    props: ['items', 'itemKey', 'selectedKey'],
-    emits: ['item-click'],
-    template: '<div class="dla" :data-items="items.length" />',
   }),
   DetailPanel: defineComponent({
     props: ['open', 'isMobile', 'showSizeControls', 'showFullPage'],
@@ -1596,60 +1584,6 @@ describe('SecurityView', () => {
         path: '/containers',
         query: { containerIds: 'c1,c2' },
       });
-    });
-  });
-
-  describe('cards view', () => {
-    afterEach(() => {
-      resetPreferences();
-    });
-
-    it('card footer shows ReleaseNotesLink and ProjectLink for a no-update image with currentReleaseNotes and sourceRepo', async () => {
-      mockContainers([
-        makeContainer({
-          id: 'c1',
-          name: 'nginx',
-          displayName: 'nginx',
-          security: {
-            scan: {
-              vulnerabilities: [{ id: 'CVE-1', severity: 'HIGH', packageName: 'openssl' }],
-            },
-          },
-        }),
-      ]);
-      mockGetAllContainers.mockResolvedValue([
-        {
-          id: 'c1',
-          name: 'nginx',
-          displayName: 'nginx',
-          image: { name: 'nginx', tag: { value: '1.25' } },
-          newTag: null,
-          status: 'running',
-          registry: 'dockerhub',
-          updateKind: null,
-          updateMaturity: null,
-          bouncer: 'safe',
-          server: 'Local',
-          sourceRepo: 'github.com/nginx/nginx',
-          currentReleaseNotes: {
-            title: 'v1.25.0',
-            body: 'Current notes',
-            url: 'https://github.com/nginx/nginx/releases/tag/v1.25.0',
-            publishedAt: '2025-12-01T00:00:00Z',
-            provider: 'github',
-          },
-        },
-      ]);
-
-      preferences.views.security.mode = 'cards';
-
-      const w = factory();
-      await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
-      await flushPromises();
-
-      expect(w.find('[data-test="security-release-notes"]').exists()).toBe(true);
-      expect(w.find('[data-test="security-project-link"]').exists()).toBe(true);
-      expect(w.find('[data-test="security-update-btn"]').exists()).toBe(false);
     });
   });
 

@@ -16,7 +16,6 @@ import { useScanProgress } from '../composables/useScanProgress';
 import { useVulnerabilities, type ImageSummary } from '../composables/useVulnerabilities';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
-import { useViewMode } from '../preferences/useViewMode';
 import { getAllContainers } from '../services/container';
 import { getSecurityRuntime } from '../services/server';
 import type { Container, UpdateEligibility } from '../types/container';
@@ -148,8 +147,6 @@ async function fetchSecurityRuntimeStatus() {
     runtimeLoading.value = false;
   }
 }
-
-const securityViewMode = useViewMode('security');
 
 const securitySortField = usePreference(
   () => preferences.views.security.sortField,
@@ -519,7 +516,6 @@ onUnmounted(() => {
 
       <!-- Filter bar -->
       <DataFilterBar
-        v-model="securityViewMode"
         v-model:showFilters="showSecFilters"
         :filtered-count="displayFilteredCount"
         :total-count="displayTotalCount"
@@ -622,7 +618,7 @@ onUnmounted(() => {
       <ScanProgressBanner v-if="scanning" :progress="scanProgress" />
 
       <!-- Table view — grouped by image -->
-      <DataTable v-if="securityViewMode === 'table' && !loading"
+      <DataTable v-if="!loading"
                  :columns="tableColumns"
                  storage-key="security"
                  :rows="filteredSummaries"
@@ -736,168 +732,6 @@ onUnmounted(() => {
           />
         </template>
       </DataTable>
-
-      <!-- Card view — one card per image -->
-      <DataCardGrid v-if="securityViewMode === 'cards' && !loading"
-                    :items="filteredSummaries"
-                    item-key="image"
-                    :selected-key="selectedImage?.image"
-                    min-width="280px"
-                    @item-click="openDetail($event)">
-        <template #card="{ item: summary }">
-          <div class="px-4 pt-4 pb-2 flex items-start justify-between">
-            <div class="min-w-0">
-              <div class="text-sm font-semibold truncate dd-text">{{ summary.image }}</div>
-              <div class="text-2xs mt-0.5 dd-text-muted">{{ summary.total }} {{ t('securityView.card.vulnerabilities') }}</div>
-            </div>
-            <AppIcon :name="severityIcon(highestSeverity(summary))" :size="16" class="shrink-0 ml-2"
-                     :style="{ color: severityColor(highestSeverity(summary)).text }"
-                     v-tooltip.top="localizedSeverity(highestSeverity(summary))" />
-          </div>
-          <div class="px-4 py-3">
-            <div class="flex items-center gap-1.5 flex-wrap">
-              <AppBadge v-if="summary.critical > 0" tone="danger" size="xs">
-                {{ summary.critical }} {{ t('securityView.badge.critical') }}
-              </AppBadge>
-              <AppBadge v-if="summary.high > 0" tone="warning" size="xs">
-                {{ summary.high }} {{ t('securityView.badge.high') }}
-              </AppBadge>
-              <AppBadge v-if="summary.medium > 0" tone="caution" size="xs">
-                {{ summary.medium }} {{ t('securityView.badge.medium') }}
-              </AppBadge>
-              <AppBadge v-if="summary.low > 0" tone="info" size="xs">
-                {{ summary.low }} {{ t('securityView.badge.low') }}
-              </AppBadge>
-            </div>
-          </div>
-          <div v-if="summary.delta && (summary.delta.fixed > 0 || summary.delta.new > 0)"
-               class="px-4 py-2 flex items-center gap-1.5"
-               :style="{ borderTop: '1px solid var(--dd-border)' }">
-            <AppBadge v-if="summary.delta.fixed > 0" tone="success" size="xs" class="px-1.5 py-0">
-              {{ t('securityView.delta.fixed', { count: summary.delta.fixed }) }}
-            </AppBadge>
-            <AppBadge v-if="summary.delta.new > 0" tone="warning" size="xs" class="px-1.5 py-0">
-              {{ t('securityView.delta.new', { count: summary.delta.new }) }}
-            </AppBadge>
-            <span class="text-3xs dd-text-muted ml-auto">{{ t('securityView.card.vsUpdate') }}</span>
-          </div>
-          <div class="px-4 py-2.5 flex items-center justify-between gap-2 mt-auto"
-               :style="{ borderTop: '1px solid var(--dd-border)', backgroundColor: 'var(--dd-bg-elevated)' }">
-            <span v-if="summary.fixable > 0" class="text-2xs-plus font-medium flex items-center gap-1"
-                  :style="{ color: fixableColor(summary.fixable, summary.total) }">
-              <AppIcon name="check" :size="11" />
-              {{ fixablePercent(summary.fixable, summary.total) }}% {{ t('securityView.card.fixable') }}
-            </span>
-            <span v-else class="text-2xs-plus dd-text-muted">{{ t('securityView.card.noFixesAvailable') }}</span>
-            <div class="flex items-center gap-2 flex-wrap">
-              <template v-if="summary.hasUpdate">
-                <AppButton
-                  size="xs"
-                  :variant="isSummaryUpdateBlocked(summary) ? 'danger-subtle' : 'info-subtle'"
-                  weight="semibold"
-                  class="inline-flex items-center gap-1 uppercase tracking-wide"
-                  :class="isSummaryUpdateBlocked(summary) ? 'opacity-60 cursor-not-allowed' : ''"
-                  data-test="security-update-btn"
-                  :disabled="isSummaryUpdateBlocked(summary)"
-                  @click.stop="openUpdateAction(summary)">
-                  <AppIcon :name="isSummaryUpdateBlocked(summary) ? 'lock' : 'cloud-download'" :size="9" />
-                  {{ t('securityView.update') }}
-                </AppButton>
-                <AppButton
-                  size="xs"
-                  variant="text-secondary"
-                  weight="medium"
-                  class="inline-flex items-center gap-1"
-                  data-test="security-containers-link"
-                  @click.stop="navigateToContainerUpdate(summary)">
-                  {{ t('securityView.viewInContainers') }}
-                </AppButton>
-              </template>
-              <span v-else class="text-2xs dd-text-muted">{{ summary.total }} {{ t('securityView.card.total') }}</span>
-              <ReleaseNotesLink
-                v-if="summary.releaseNotes || summary.currentReleaseNotes || summary.releaseLink"
-                :release-notes="summary.releaseNotes"
-                :current-release-notes="summary.currentReleaseNotes"
-                :release-link="summary.releaseLink"
-                data-test="security-release-notes" />
-              <ProjectLink
-                v-if="summary.sourceRepo"
-                :source-repo="summary.sourceRepo"
-                data-test="security-project-link" />
-            </div>
-          </div>
-        </template>
-      </DataCardGrid>
-
-      <!-- Empty state for cards -->
-      <SecurityEmptyState
-        v-if="securityViewMode === 'cards' && filteredSummaries.length === 0 && !loading"
-        :has-vulnerability-data="securityVulnerabilities.length > 0"
-        :scanner-setup-needed="scannerSetupNeeded"
-        :scanner-message="runtimeStatus?.scanner.message"
-        :active-filter-count="activeSecFilterCount"
-        :scan-disabled-reason="scanDisabledReason"
-        :scanning="scanning"
-        :runtime-loading="runtimeLoading"
-        :scanner-ready="scannerReady"
-        :scan-progress="scanProgress"
-        :boxed="true"
-        @clear-filters="clearSecFilters"
-        @scan-now="scanAllContainers"
-      />
-
-      <!-- List view — one row per image, expandable -->
-      <DataListAccordion v-if="securityViewMode === 'list' && !loading"
-                         :items="filteredSummaries"
-                         item-key="image"
-                         :selected-key="selectedImage?.image"
-                         @item-click="openDetail($event)">
-        <template #header="{ item: summary }">
-          <AppIcon :name="severityIcon(highestSeverity(summary))" :size="13" class="shrink-0"
-                   :style="{ color: severityColor(highestSeverity(summary)).text }"
-                   v-tooltip.top="localizedSeverity(highestSeverity(summary))" />
-          <div class="flex-1 min-w-0">
-            <div class="text-sm font-semibold truncate dd-text">{{ summary.image }}</div>
-            <div class="text-2xs dd-text-muted mt-0.5">{{ summary.total }} {{ t('securityView.card.vulnerabilities') }}</div>
-          </div>
-          <div class="flex items-center gap-1.5 shrink-0">
-            <AppBadge v-if="summary.critical > 0" tone="danger" size="xs" class="px-1.5 py-0">
-              {{ summary.critical }}C
-            </AppBadge>
-            <AppBadge v-if="summary.high > 0" tone="warning" size="xs" class="px-1.5 py-0">
-              {{ summary.high }}H
-            </AppBadge>
-            <AppBadge v-if="summary.fixable > 0" tone="success" size="xs" class="px-1.5 py-0">
-              {{ t('securityView.fixableBadge', { count: summary.fixable }) }}
-            </AppBadge>
-            <AppBadge v-if="summary.delta && summary.delta.fixed > 0 && summary.delta.new === 0"
-                  tone="success" size="xs" class="px-1.5 py-0">
-              {{ t('securityView.delta.fixed', { count: summary.delta.fixed }) }}
-            </AppBadge>
-            <AppBadge v-else-if="summary.delta && summary.delta.new > 0"
-                  tone="warning" size="xs" class="px-1.5 py-0">
-              {{ t('securityView.delta.new', { count: summary.delta.new }) }}
-            </AppBadge>
-          </div>
-        </template>
-      </DataListAccordion>
-
-      <!-- Empty state for list -->
-      <SecurityEmptyState
-        v-if="securityViewMode === 'list' && filteredSummaries.length === 0 && !loading"
-        :has-vulnerability-data="securityVulnerabilities.length > 0"
-        :scanner-setup-needed="scannerSetupNeeded"
-        :scanner-message="runtimeStatus?.scanner.message"
-        :active-filter-count="activeSecFilterCount"
-        :scan-disabled-reason="scanDisabledReason"
-        :scanning="scanning"
-        :runtime-loading="runtimeLoading"
-        :scanner-ready="scannerReady"
-        :scan-progress="scanProgress"
-        :boxed="true"
-        @clear-filters="clearSecFilters"
-        @scan-now="scanAllContainers"
-      />
 
     <template #panel>
       <SecurityDetailPanel

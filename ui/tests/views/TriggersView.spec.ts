@@ -1,4 +1,5 @@
 import { flushPromises } from '@vue/test-utils';
+import { defineComponent } from 'vue';
 import { resetPreferences } from '@/preferences/store';
 import { getAllTriggers, getTrigger, runTrigger } from '@/services/trigger';
 import TriggersView from '@/views/TriggersView.vue';
@@ -193,66 +194,73 @@ describe('TriggersView', () => {
   it('status badges render translated text not raw data values', async () => {
     const wrapper = await mountTriggersView();
 
-    // table view: DataTable stub now exposes #cell-status slot in data-cell="status"
+    // table view: DataTable stub exposes #cell-status slot in data-cell="status"
     expect(wrapper.find('[data-cell="status"]').text()).toContain('Active');
     expect(wrapper.find('[data-cell="status"]').text()).not.toContain('active');
 
-    // card view: DataCardGrid renders #card slot; badge inside must be translated
-    await wrapper.find('.mode-cards').trigger('click');
-    await flushPromises();
-    const cardGrid = wrapper.find('.data-card-grid');
-    expect(cardGrid.text()).toContain('Active');
-    expect(cardGrid.text()).not.toContain('active');
-
-    // list view: DataListAccordion now exposes #details slot in .list-details
-    await wrapper.find('.mode-list').trigger('click');
-    await flushPromises();
-    expect(wrapper.find('.list-details').text()).toContain('Active');
-    expect(wrapper.find('.list-details').text()).not.toContain('active');
-
     // detail panel subtitle slot — contains the status AppBadge for selectedTrigger
-    await wrapper.find('.mode-table').trigger('click');
-    await flushPromises();
     await wrapper.find('.row-click-first').trigger('click');
     await flushPromises();
     expect(wrapper.find('.detail-subtitle').text()).toBe('Active');
   });
 
-  it('opens trigger details from list mode selections', async () => {
-    mockGetAllTriggers.mockResolvedValue([
-      makeTrigger({
-        id: 'trigger:webhook-fanout',
-        name: 'Webhook Fanout',
-        type: 'http',
-        configuration: { endpoint: 'https://ops.example.com/hooks/list' },
-      }),
-    ]);
-    mockGetTrigger.mockResolvedValue(
-      makeTrigger({
-        id: 'trigger:webhook-fanout',
-        name: 'Webhook Fanout',
-        type: 'http',
-        configuration: {
-          method: 'POST',
-          endpoint: 'https://ops.example.com/hooks/drydock',
+  it('test button in DataTable actions column fires runTrigger', async () => {
+    mockGetAllTriggers.mockResolvedValue([makeTrigger()]);
+
+    const wrapper = mountWithPlugins(TriggersView, {
+      global: {
+        stubs: {
+          ...dataViewStubs,
+          DataTable: defineComponent({
+            props: [
+              'columns',
+              'rows',
+              'rowKey',
+              'activeRow',
+              'selectedKey',
+              'sortKey',
+              'sortAsc',
+              'showActions',
+            ],
+            emits: ['row-click', 'update:sort-key', 'update:sort-asc'],
+            template: `
+              <div class="data-table"
+                   :data-row-count="rows?.length ?? 0"
+                   :data-selected-key="selectedKey || activeRow || ''"
+                   :data-show-actions="showActions">
+                <button v-if="rows?.[0]" class="row-click-first" @click="$emit('row-click', rows[0])">Open 1</button>
+                <div v-if="rows?.[0]" class="actions-cell"><slot name="actions" :row="rows[0]" /></div>
+                <slot name="empty" v-if="!rows || rows.length === 0" />
+              </div>
+            `,
+          }),
+          AppIconButton: defineComponent({
+            props: ['icon', 'size', 'variant', 'ariaLabel', 'disabled'],
+            emits: ['click'],
+            template:
+              '<button class="app-icon-button-stub" :data-icon="icon" :aria-label="ariaLabel" :disabled="disabled" @click="$emit(\'click\', $event)"><slot /></button>',
+          }),
         },
+      },
+    });
+    await flushPromises();
+
+    const actionsCell = wrapper.find('.actions-cell');
+    expect(actionsCell.exists()).toBe(true);
+
+    const testButton = actionsCell.find('.app-icon-button-stub');
+    expect(testButton.exists()).toBe(true);
+    expect(testButton.attributes('data-icon')).toBe('play');
+
+    await testButton.trigger('click');
+    await flushPromises();
+
+    expect(mockRunTrigger).toHaveBeenCalledTimes(1);
+    expect(mockRunTrigger).toHaveBeenCalledWith(
+      expect.objectContaining({
+        triggerType: 'slack',
+        triggerName: 'Slack Alerts',
       }),
     );
-
-    const wrapper = await mountTriggersView();
-
-    await wrapper.find('.mode-list').trigger('click');
-    await flushPromises();
-    await wrapper.find('.list-click-first').trigger('click');
-    await flushPromises();
-
-    expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('true');
-    expect(mockGetTrigger).toHaveBeenCalledWith({
-      type: 'http',
-      name: 'Webhook Fanout',
-      agent: undefined,
-    });
-    expect(wrapper.text()).toContain('method');
-    expect(wrapper.text()).toContain('https://ops.example.com/hooks/drydock');
   });
 });

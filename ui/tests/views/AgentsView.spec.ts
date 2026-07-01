@@ -272,6 +272,15 @@ describe('AgentsView', () => {
     });
   });
 
+  it('DataTable empty slot renders when no agents are present', async () => {
+    mockGetAgents.mockResolvedValue([]);
+
+    const wrapper = await mountAgentsView();
+
+    expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('0');
+    expect(wrapper.find('.empty-state').exists()).toBe(true);
+  });
+
   it('hides unknown runtime fields when API only returns base agent connectivity fields', async () => {
     mockGetAgents.mockResolvedValue([
       {
