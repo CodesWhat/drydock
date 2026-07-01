@@ -1,31 +1,13 @@
 import {
   isValidFontSize,
   isValidScale,
-  isViewMode,
   RADIUS_PRESETS,
   TABLE_ACTIONS,
   THEME_FAMILIES,
   THEME_VARIANTS,
-  VIEW_MODES,
 } from '@/preferences/validators';
 
 describe('validators', () => {
-  describe('VIEW_MODES', () => {
-    it('should contain table, cards, and list', () => {
-      expect(VIEW_MODES.has('table')).toBe(true);
-      expect(VIEW_MODES.has('cards')).toBe(true);
-      expect(VIEW_MODES.has('list')).toBe(true);
-    });
-
-    it('should have exactly 3 members', () => {
-      expect(VIEW_MODES.size).toBe(3);
-    });
-
-    it('should not contain unknown values', () => {
-      expect(VIEW_MODES.has('grid' as any)).toBe(false);
-    });
-  });
-
   describe('THEME_FAMILIES', () => {
     it('should contain all supported families', () => {
       expect(THEME_FAMILIES.has('one-dark')).toBe(true);
@@ -91,29 +73,6 @@ describe('validators', () => {
 
     it('should not contain unknown presets', () => {
       expect(RADIUS_PRESETS.has('pill')).toBe(false);
-    });
-  });
-
-  describe('isViewMode', () => {
-    it('should return true for valid view modes', () => {
-      expect(isViewMode('table')).toBe(true);
-      expect(isViewMode('cards')).toBe(true);
-      expect(isViewMode('list')).toBe(true);
-    });
-
-    it('should return false for invalid strings', () => {
-      expect(isViewMode('grid')).toBe(false);
-      expect(isViewMode('')).toBe(false);
-      expect(isViewMode('TABLE')).toBe(false);
-    });
-
-    it('should return false for non-string values', () => {
-      expect(isViewMode(null)).toBe(false);
-      expect(isViewMode(undefined)).toBe(false);
-      expect(isViewMode(42)).toBe(false);
-      expect(isViewMode(true)).toBe(false);
-      expect(isViewMode({})).toBe(false);
-      expect(isViewMode([])).toBe(false);
     });
   });
 

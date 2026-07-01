@@ -2,8 +2,6 @@ import { DEFAULT_LOCALE, type SupportedLocale } from '../i18n/locales';
 import type { ThemeFamily } from '../theme/palettes';
 import type { RadiusPresetId } from './radius';
 
-export type ViewMode = 'table' | 'cards' | 'list';
-
 export const DASHBOARD_LAYOUT_BREAKPOINTS = ['xxs', 'xs', 'sm', 'md', 'lg'] as const;
 export type DashboardLayoutBreakpoint = (typeof DASHBOARD_LAYOUT_BREAKPOINTS)[number];
 

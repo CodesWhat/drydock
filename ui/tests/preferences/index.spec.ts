@@ -12,7 +12,6 @@ describe('preferences index exports', () => {
     expect(typeof preferencesModule.resetPreferences).toBe('function');
     expect(preferencesModule.preferences).toBeDefined();
     expect(typeof preferencesModule.usePreference).toBe('function');
-    expect(typeof preferencesModule.isViewMode).toBe('function');
     expect(typeof preferencesModule.isValidScale).toBe('function');
   });
 });
