@@ -6,7 +6,6 @@ import type { useContainerFilters } from '../../composables/useContainerFilters'
 import type { useDetailPanel } from '../../composables/useDetailPanel';
 import type { LogAutoFetchIntervalOption } from '../../composables/useLogViewerBehavior';
 import type { PreferencesSchema } from '../../preferences/schema';
-import type { useViewMode } from '../../preferences/useViewMode';
 import type { Container } from '../../types/container';
 import type {
   maturityColor,
@@ -111,7 +110,6 @@ export interface ContainersViewTemplateContext
   error: Ref<string | null>;
   loading: Ref<boolean>;
   containers: Ref<Container[]>;
-  containerViewMode: ReturnType<typeof useViewMode>;
   serverNames: ComputedRef<string[]>;
   toggleColumnPicker: (event: MouseEvent) => void;
   columnPickerStyle: Ref<Record<string, string>>;

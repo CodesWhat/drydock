@@ -66,30 +66,6 @@ const DataTableStub = defineComponent({
   `,
 });
 
-const DataCardGridStub = defineComponent({
-  props: ['items'],
-  emits: ['item-click'],
-  template: `
-    <div class="data-card-grid-stub">
-      <div v-for="item in items" :key="item.name" class="card-item-stub">
-        <slot name="card" :item="item" />
-      </div>
-    </div>
-  `,
-});
-
-const DataListAccordionStub = defineComponent({
-  props: ['items'],
-  emits: ['item-click'],
-  template: `
-    <div class="data-list-accordion-stub">
-      <div v-for="item in items" :key="item.name" class="list-item-stub">
-        <slot name="header" :item="item" />
-      </div>
-    </div>
-  `,
-});
-
 // ---------------------------------------------------------------------------
 // Hoisted mock — must match the import used by ContainersGroupedViews.vue
 // ---------------------------------------------------------------------------
@@ -146,7 +122,6 @@ function makeContext(overrides: Record<string, unknown> = {}) {
   const groupUpdateQueue = ref(new Set<string>());
   const containerActionsEnabled = ref(true);
   const actionInProgress = ref(new Map<string, 'update' | 'scan' | 'lifecycle' | 'delete'>());
-  const containerViewMode = ref<'table' | 'cards' | 'list'>('table');
   const tableColumns = ref([
     { key: 'icon', label: '', align: 'text-center' },
     { key: 'name', label: 'Container', align: 'text-left' },
@@ -209,7 +184,6 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     getContainerUpdateSequenceLabel: () => null,
     updateAllInGroup: vi.fn(),
     tt: (label: string) => ({ value: label, showDelay: 400 }),
-    containerViewMode,
     tableColumns,
     containerSortKey,
     containerSortAsc,
@@ -260,7 +234,6 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       groupByStack,
       groupUpdateInProgress,
       groupUpdateQueue,
-      containerViewMode,
       tableActionStyle,
       openActionsMenu,
       displayContainers,
@@ -283,8 +256,6 @@ function mountSubject() {
     global: {
       stubs: {
         DataTable: DataTableStub,
-        DataCardGrid: DataCardGridStub,
-        DataListAccordion: DataListAccordionStub,
         EmptyState: {
           props: ['showClear'],
           template: '<div class="empty-state-stub" />',
@@ -306,11 +277,9 @@ function rowByName(wrapper: any, name: string) {
 
 function mountWithSingleContainer(
   container: Container,
-  viewMode: 'table' | 'cards' = 'table',
   actionStyle: 'icons' | 'buttons' = 'icons',
 ) {
   const { context, refs, spies } = makeContext();
-  refs.containerViewMode.value = viewMode;
   refs.tableActionStyle.value = actionStyle;
   refs.filteredContainers.value = [container];
   refs.displayContainers.value = [container];
@@ -351,7 +320,7 @@ describe('ContainersGroupedViews — update button states', () => {
         { reason: 'agent-mismatch', message: 'Agent version mismatch.', actionable: false },
       ]),
     });
-    const { wrapper } = mountWithSingleContainer(container, 'table', 'icons');
+    const { wrapper } = mountWithSingleContainer(container, 'icons');
     const row = rowByName(wrapper, 'alpha');
     expect(row.find('[data-icon="lock"]').exists()).toBe(true);
     expect(row.find('[data-icon="cloud-download"]').exists()).toBe(false);
@@ -372,7 +341,7 @@ describe('ContainersGroupedViews — update button states', () => {
         { reason: 'trigger-not-included', message: 'Trigger not included.', actionable: false },
       ]),
     });
-    const { wrapper } = mountWithSingleContainer(container, 'table', 'icons');
+    const { wrapper } = mountWithSingleContainer(container, 'icons');
     const row = rowByName(wrapper, 'alpha');
     const cloudBtn = row
       .findAll('button')
@@ -392,7 +361,7 @@ describe('ContainersGroupedViews — update button states', () => {
         { reason: 'trigger-not-included', message: 'Trigger not included.', actionable: false },
       ]),
     });
-    const { wrapper } = mountWithSingleContainer(container, 'table', 'icons');
+    const { wrapper } = mountWithSingleContainer(container, 'icons');
     const row = rowByName(wrapper, 'alpha');
     const cloudBtn = row
       .findAll('button')
@@ -412,7 +381,7 @@ describe('ContainersGroupedViews — update button states', () => {
         { reason: 'trigger-not-included', message: 'Trigger not included.', actionable: false },
       ]),
     });
-    const { wrapper, spies } = mountWithSingleContainer(container, 'table', 'icons');
+    const { wrapper, spies } = mountWithSingleContainer(container, 'icons');
     const row = rowByName(wrapper, 'alpha');
     const cloudBtn = row
       .findAll('button')
@@ -433,7 +402,7 @@ describe('ContainersGroupedViews — update button states', () => {
       name: 'alpha',
       newTag: '2.0.0',
     });
-    const { wrapper } = mountWithSingleContainer(container, 'table', 'icons');
+    const { wrapper } = mountWithSingleContainer(container, 'icons');
     const row = rowByName(wrapper, 'alpha');
     const cloudBtn = row
       .findAll('button')
@@ -454,7 +423,7 @@ describe('ContainersGroupedViews — update button states', () => {
       newTag: null,
       status: 'running',
     });
-    const { wrapper } = mountWithSingleContainer(container, 'table', 'icons');
+    const { wrapper } = mountWithSingleContainer(container, 'icons');
     const row = rowByName(wrapper, 'alpha');
     expect(row.find('[data-icon="cloud-download"]').exists()).toBe(false);
     expect(row.find('[data-icon="lock"]').exists()).toBe(false);
@@ -475,7 +444,7 @@ describe('ContainersGroupedViews — update button states', () => {
         { reason: 'trigger-not-included', message: 'Trigger not included.', actionable: false },
       ]),
     });
-    const { wrapper, refs } = mountWithSingleContainer(container, 'table', 'icons');
+    const { wrapper, refs } = mountWithSingleContainer(container, 'icons');
     refs.actionInProgress.value = new Map([['c-in-progress', 'update']]);
     await nextTick();
 
@@ -501,7 +470,7 @@ describe('ContainersGroupedViews — update button states', () => {
         { reason: 'trigger-not-included', message: 'Trigger not included.', actionable: false },
       ]),
     });
-    const { wrapper } = mountWithSingleContainer(container, 'table', 'buttons');
+    const { wrapper } = mountWithSingleContainer(container, 'buttons');
     await nextTick();
 
     // The soft split-button div has style containing dd-warning border
@@ -520,7 +489,7 @@ describe('ContainersGroupedViews — update button states', () => {
         { reason: 'trigger-not-included', message: 'Trigger not included.', actionable: false },
       ]),
     });
-    const { wrapper, spies } = mountWithSingleContainer(container, 'table', 'buttons');
+    const { wrapper, spies } = mountWithSingleContainer(container, 'buttons');
     await nextTick();
 
     const row = rowByName(wrapper, 'alpha');
@@ -542,7 +511,7 @@ describe('ContainersGroupedViews — update button states', () => {
         { reason: 'agent-mismatch', message: 'Agent mismatch.', actionable: false },
       ]),
     });
-    const { wrapper } = mountWithSingleContainer(container, 'table', 'buttons');
+    const { wrapper } = mountWithSingleContainer(container, 'buttons');
     await nextTick();
 
     const row = rowByName(wrapper, 'alpha');
@@ -556,115 +525,11 @@ describe('ContainersGroupedViews — update button states', () => {
       name: 'alpha',
       newTag: '2.0.0',
     });
-    const { wrapper } = mountWithSingleContainer(container, 'table', 'buttons');
+    const { wrapper } = mountWithSingleContainer(container, 'buttons');
     await nextTick();
 
     const row = rowByName(wrapper, 'alpha');
     expect(row.find('[data-icon="cloud-download"]').exists()).toBe(true);
     expect(row.find('[data-icon="lock"]').exists()).toBe(false);
-  });
-
-  // -------------------------------------------------------------------------
-  // cards mode — soft blocker → variant="warning"
-  // -------------------------------------------------------------------------
-
-  it('cards mode: soft blocker renders cloud-download with warning variant', async () => {
-    const container = makeContainer({
-      id: 'c-soft-card',
-      name: 'alpha',
-      newTag: '2.0.0',
-      status: 'running',
-      updateEligibility: makeEligibility([
-        { reason: 'trigger-not-included', message: 'Trigger not included.', actionable: false },
-      ]),
-    });
-    const { wrapper } = mountWithSingleContainer(container, 'cards', 'icons');
-    await nextTick();
-
-    const cards = wrapper.findAll('.card-item-stub');
-    expect(cards).toHaveLength(1);
-    const card = cards[0]!;
-    const cloudBtn = card
-      .findAll('button')
-      .find((b: any) => b.find('[data-icon="cloud-download"]').exists());
-    expect(cloudBtn).toBeDefined();
-    expect(cloudBtn?.classes()).toContain('dd-text-warning');
-    expect(card.find('[data-icon="lock"]').exists()).toBe(false);
-  });
-
-  it('cards mode: hard blocker renders lock icon (disabled)', async () => {
-    const container = makeContainer({
-      id: 'c-hard-card',
-      name: 'alpha',
-      newTag: '2.0.0',
-      status: 'running',
-      updateEligibility: makeEligibility([
-        { reason: 'agent-mismatch', message: 'Agent mismatch.', actionable: false },
-      ]),
-    });
-    const { wrapper } = mountWithSingleContainer(container, 'cards', 'icons');
-    await nextTick();
-
-    const card = wrapper.findAll('.card-item-stub')[0]!;
-    expect(card.find('[data-icon="lock"]').exists()).toBe(true);
-    expect(card.find('[data-icon="cloud-download"]').exists()).toBe(false);
-  });
-
-  it('cards mode: ready (no blockers) renders cloud-download without warning variant', async () => {
-    const container = makeContainer({
-      id: 'c-ready-card',
-      name: 'alpha',
-      newTag: '2.0.0',
-      status: 'running',
-    });
-    const { wrapper } = mountWithSingleContainer(container, 'cards', 'icons');
-    await nextTick();
-
-    const card = wrapper.findAll('.card-item-stub')[0]!;
-    const cloudBtn = card
-      .findAll('button')
-      .find((b: any) => b.find('[data-icon="cloud-download"]').exists());
-    expect(cloudBtn).toBeDefined();
-    expect(cloudBtn?.classes()).not.toContain('dd-text-warning');
-  });
-
-  it('cards mode: no newTag renders no cloud-download or lock button', async () => {
-    const container = makeContainer({
-      id: 'c-none-card',
-      name: 'alpha',
-      newTag: null,
-      status: 'running',
-    });
-    const { wrapper } = mountWithSingleContainer(container, 'cards', 'icons');
-    await nextTick();
-
-    const card = wrapper.findAll('.card-item-stub')[0]!;
-    expect(card.find('[data-icon="cloud-download"]').exists()).toBe(false);
-    expect(card.find('[data-icon="lock"]').exists()).toBe(false);
-  });
-
-  it('cards mode: active operation suppresses soft to ready (no warning tint)', async () => {
-    const container = makeContainer({
-      id: 'c-in-progress-card',
-      name: 'alpha',
-      newTag: '2.0.0',
-      status: 'running',
-      updateEligibility: makeEligibility([
-        { reason: 'trigger-not-included', message: 'Trigger not included.', actionable: false },
-      ]),
-    });
-    const { wrapper, refs } = mountWithSingleContainer(container, 'cards', 'icons');
-    refs.actionInProgress.value = new Map([['c-in-progress-card', 'update']]);
-    await nextTick();
-
-    const card = wrapper.findAll('.card-item-stub')[0]!;
-    const warningBtns = card
-      .findAll('button')
-      .filter(
-        (b: any) =>
-          b.find('[data-icon="cloud-download"]').exists() &&
-          b.classes().includes('dd-text-warning'),
-      );
-    expect(warningBtns).toHaveLength(0);
   });
 });

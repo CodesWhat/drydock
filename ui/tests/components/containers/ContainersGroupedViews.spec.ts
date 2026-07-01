@@ -92,32 +92,6 @@ const DataTableStub = defineComponent({
   `,
 });
 
-const DataCardGridStub = defineComponent({
-  props: ['items'],
-  emits: ['item-click'],
-  template: `
-    <div class="data-card-grid-stub">
-      <div v-for="item in items" :key="item.name" class="card-item-stub">
-        <button class="emit-card-click" @click="$emit('item-click', item)">emit-card-click</button>
-        <slot name="card" :item="item" />
-      </div>
-    </div>
-  `,
-});
-
-const DataListAccordionStub = defineComponent({
-  props: ['items'],
-  emits: ['item-click'],
-  template: `
-    <div class="data-list-accordion-stub">
-      <div v-for="item in items" :key="item.name" class="list-item-stub">
-        <button class="emit-list-click" @click="$emit('item-click', item)">emit-list-click</button>
-        <slot name="header" :item="item" />
-      </div>
-    </div>
-  `,
-});
-
 type DisplayContainer = Container & { _pending?: true };
 
 function makeContainer(overrides: Partial<Container> & { _pending?: true } = {}): DisplayContainer {
@@ -156,7 +130,6 @@ function makeContext(overrides: Record<string, unknown> = {}) {
   const groupUpdateQueue = ref(new Set<string>());
   const containerActionsEnabled = ref(true);
   const actionInProgress = ref(new Map<string, 'update' | 'scan' | 'lifecycle' | 'delete'>());
-  const containerViewMode = ref<'table' | 'cards' | 'list'>('table');
   const tableColumns = ref([
     { key: 'icon', label: '', align: 'text-center' },
     { key: 'name', label: 'Container', align: 'text-left' },
@@ -264,7 +237,6 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     getContainerUpdateSequenceLabel: () => null,
     updateAllInGroup: spies.updateAllInGroup,
     tt: (label: string) => ({ value: label, showDelay: 400 }),
-    containerViewMode,
     tableColumns,
     containerSortKey,
     containerSortAsc,
@@ -327,7 +299,6 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       groupByStack,
       groupUpdateInProgress,
       groupUpdateQueue,
-      containerViewMode,
       tableActionStyle,
       openActionsMenu,
       displayContainers,
@@ -364,8 +335,6 @@ function mountSubject() {
     global: {
       stubs: {
         DataTable: DataTableStub,
-        DataCardGrid: DataCardGridStub,
-        DataListAccordion: DataListAccordionStub,
         EmptyState: {
           props: ['showClear'],
           template:
@@ -442,7 +411,6 @@ describe('ContainersGroupedViews', () => {
     const { context, spies } = makeContext();
     const containers = [blocked, updatable, runningNoUpdate, stoppedNoUpdate];
     context.groupByStack.value = true;
-    context.containerViewMode.value = 'table';
     context.tableActionStyle.value = 'icons';
     context.filteredContainers.value = containers;
     context.displayContainers.value = containers;
@@ -540,7 +508,6 @@ describe('ContainersGroupedViews', () => {
     const { context, spies } = makeContext();
     const containers = [blockedNewTag, safeNewTag, runningNoTag, stoppedNoTag];
     context.groupByStack.value = true;
-    context.containerViewMode.value = 'table';
     context.tableActionStyle.value = 'buttons';
     context.filteredContainers.value = containers;
     context.displayContainers.value = containers;
@@ -608,7 +575,6 @@ describe('ContainersGroupedViews', () => {
 
     const { context } = makeContext();
     context.groupByStack.value = true;
-    context.containerViewMode.value = 'table';
     context.filteredContainers.value = [container];
     context.displayContainers.value = [container];
     context.renderGroups.value = [
@@ -642,18 +608,6 @@ describe('ContainersGroupedViews', () => {
       );
     expect(tableRegistry).toBeDefined();
     expect(tableRegistry?.classes()).toContain('truncate');
-
-    context.containerViewMode.value = 'cards';
-    await nextTick();
-
-    const cardRegistry = wrapper
-      .findAll('span')
-      .find(
-        (candidate) =>
-          candidate.text().trim() === longRegistry && candidate.classes().includes('max-w-[140px]'),
-      );
-    expect(cardRegistry).toBeDefined();
-    expect(cardRegistry?.classes()).toContain('truncate');
   });
 
   it('renders normal table metadata quietly and uses concise update labels', async () => {
@@ -680,7 +634,6 @@ describe('ContainersGroupedViews', () => {
 
     const { context, refs } = makeContext();
     const containers = [current, minor];
-    refs.containerViewMode.value = 'table';
     refs.filteredContainers.value = containers;
     refs.displayContainers.value = containers;
     refs.renderGroups.value = [
@@ -711,98 +664,6 @@ describe('ContainersGroupedViews', () => {
     expect(minorUpdateState.text()).not.toContain('Minor update');
   });
 
-  it('renders normal card and list metadata quietly with concise update labels', async () => {
-    const current = makeContainer({
-      id: 'c-quiet-card-current',
-      name: 'alpha',
-      newTag: null,
-      updateKind: null,
-      status: 'running',
-      server: 'local-main',
-      registry: 'dockerhub',
-    });
-    const minor = makeContainer({
-      id: 'c-quiet-card-minor',
-      name: 'beta',
-      currentTag: '1.0.0',
-      newTag: '1.1.0',
-      updateKind: 'minor',
-      updateMaturity: 'fresh',
-      status: 'running',
-      server: 'local-main',
-      registry: 'dockerhub',
-    });
-
-    const { context, refs } = makeContext();
-    const containers = [current, minor];
-    refs.containerViewMode.value = 'cards';
-    refs.filteredContainers.value = containers;
-    refs.displayContainers.value = containers;
-    refs.renderGroups.value = [
-      {
-        key: '__flat__',
-        name: null,
-        containers,
-        containerCount: containers.length,
-        updatesAvailable: 1,
-        updatableCount: 1,
-      },
-    ];
-    mocked.context = context;
-
-    const wrapper = mountSubject();
-
-    const currentCard = wrapper
-      .findAll('.card-item-stub')
-      .find((candidate) => candidate.text().includes('alpha'));
-    expect(currentCard).toBeDefined();
-    expect(currentCard!.get('[data-test="container-card-update-state"]').text()).toContain(
-      'Current',
-    );
-    expect(currentCard!.get('[data-test="container-card-runtime-status"]').text()).toContain(
-      'running',
-    );
-    expect(currentCard!.get('[data-test="container-card-server-text"]').text()).toContain('Local');
-    expect(currentCard!.get('[data-test="container-card-registry-text"]').text()).toBe('dockerhub');
-    expect(currentCard!.find('[data-test="container-card-runtime-status"] .badge').exists()).toBe(
-      false,
-    );
-
-    const minorCardUpdate = wrapper
-      .findAll('.card-item-stub')
-      .find((candidate) => candidate.text().includes('beta'))!
-      .get('[data-test="container-card-update-state"]');
-    expect(minorCardUpdate.text()).toContain('Minor');
-    expect(minorCardUpdate.text()).not.toContain('Minor update');
-
-    refs.containerViewMode.value = 'list';
-    await nextTick();
-
-    const currentListItem = wrapper
-      .findAll('.list-item-stub')
-      .find((candidate) => candidate.text().includes('alpha'));
-    expect(currentListItem).toBeDefined();
-    expect(currentListItem!.get('[data-test="container-list-update-state"]').text()).toContain(
-      'Current',
-    );
-    expect(currentListItem!.get('[data-test="container-list-runtime-status"]').text()).toContain(
-      'running',
-    );
-    expect(currentListItem!.get('[data-test="container-list-server-text"]').text()).toContain(
-      'Local',
-    );
-    expect(
-      currentListItem!.find('[data-test="container-list-runtime-status"] .badge').exists(),
-    ).toBe(false);
-
-    const minorListUpdate = wrapper
-      .findAll('.list-item-stub')
-      .find((candidate) => candidate.text().includes('beta'))!
-      .get('[data-test="container-list-update-state"]');
-    expect(minorListUpdate.text()).toContain('Minor');
-    expect(minorListUpdate.text()).not.toContain('Minor update');
-  });
-
   it('covers dropdown menu actions across blocked/updateable states', async () => {
     const blockedNoTag = makeContainer({
       id: 'c-m1',
@@ -822,7 +683,6 @@ describe('ContainersGroupedViews', () => {
 
     const { context, refs, spies } = makeContext();
     const containers = [blockedNoTag, blockedWithTag];
-    context.containerViewMode.value = 'table';
     context.tableActionStyle.value = 'icons';
     context.filteredContainers.value = containers;
     context.displayContainers.value = containers;
@@ -904,7 +764,6 @@ describe('ContainersGroupedViews', () => {
     });
 
     const { context, refs, spies } = makeContext();
-    context.containerViewMode.value = 'table';
     context.tableActionStyle.value = 'icons';
     context.filteredContainers.value = [hardBlocked];
     context.displayContainers.value = [hardBlocked];
@@ -955,7 +814,6 @@ describe('ContainersGroupedViews', () => {
 
     const { context, refs } = makeContext();
     context.groupByStack.value = true;
-    context.containerViewMode.value = 'table';
     context.tableActionStyle.value = 'buttons';
     context.filteredContainers.value = [alpha, beta];
     context.displayContainers.value = [alpha, beta];
@@ -1007,7 +865,6 @@ describe('ContainersGroupedViews', () => {
 
     const { context } = makeContext();
     context.groupByStack.value = true;
-    context.containerViewMode.value = 'table';
     context.filteredContainers.value = [alpha, beta];
     context.displayContainers.value = [alpha, beta];
     context.renderGroups.value = [
@@ -1051,7 +908,6 @@ describe('ContainersGroupedViews', () => {
 
     const { context } = makeContext();
     context.groupByStack.value = true;
-    context.containerViewMode.value = 'table';
     context.filteredContainers.value = [normalRow];
     context.displayContainers.value = [normalRow];
     context.renderGroups.value = [
@@ -1074,86 +930,6 @@ describe('ContainersGroupedViews', () => {
     expect(dataTable.props('virtualMaxHeight')).toBeUndefined();
     expect(dataTable.props('maxHeight')).toBeUndefined();
     expect(dataTable.props('rowHeight')).toBeUndefined();
-  });
-
-  it('covers card/list view events and footer action handlers', async () => {
-    const running = makeContainer({
-      id: 'c-card-1',
-      name: 'alpha',
-      newTag: '2.0.0',
-      updateKind: 'major',
-      updateMaturity: 'fresh',
-      status: 'running',
-      bouncer: 'safe',
-      registryError: 'timeout',
-      server: 'local-main',
-    });
-    const stoppedWithReason = makeContainer({
-      id: 'c-card-2',
-      name: 'beta',
-      newTag: null,
-      status: 'stopped',
-      bouncer: 'unsafe',
-      noUpdateReason: 'Image pinned',
-      server: 'remote-east',
-    });
-    const stoppedPolicy = makeContainer({
-      id: 'c-card-3',
-      name: 'gamma',
-      newTag: null,
-      status: 'stopped',
-      bouncer: 'safe',
-      noUpdateReason: undefined,
-    });
-    const stoppedClean = makeContainer({
-      id: 'c-card-4',
-      name: 'delta',
-      newTag: null,
-      status: 'stopped',
-      bouncer: 'safe',
-      noUpdateReason: undefined,
-    });
-
-    const { context, refs, spies } = makeContext();
-    const containers = [running, stoppedWithReason, stoppedPolicy, stoppedClean];
-    context.containerViewMode.value = 'cards';
-    context.filteredContainers.value = containers;
-    context.displayContainers.value = containers;
-    context.renderGroups.value = [
-      {
-        key: '__flat__',
-        name: null,
-        containers,
-        containerCount: containers.length,
-        updatesAvailable: 1,
-        updatableCount: 1,
-      },
-    ];
-    mocked.context = context;
-
-    const wrapper = mountSubject();
-
-    await wrapper.find('.emit-card-click').trigger('click');
-    await iconButtons(wrapper, 'stop')[0].trigger('click');
-    await iconButtons(wrapper, 'play')[0].trigger('click');
-    await iconButtons(wrapper, 'restart')[0].trigger('click');
-    await iconButtons(wrapper, 'security')[0].trigger('click');
-    await iconButtons(wrapper, 'cloud-download')[0].trigger('click');
-
-    refs.containerViewMode.value = 'list';
-    await nextTick();
-    await wrapper.find('.emit-list-click').trigger('click');
-
-    expect(spies.selectContainer).toHaveBeenCalled();
-    expect(spies.confirmStop).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'c-card-1', name: 'alpha' }),
-    );
-    expect(spies.startContainer).toHaveBeenCalled();
-    expect(spies.confirmRestart).toHaveBeenCalled();
-    expect(spies.scanContainer).toHaveBeenCalled();
-    expect(spies.confirmUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'c-card-1', name: 'alpha' }),
-    );
   });
 
   it('shows empty state and clears filters', async () => {
@@ -1179,7 +955,6 @@ describe('ContainersGroupedViews', () => {
       status: 'running',
     });
     const { context, refs } = makeContext();
-    refs.containerViewMode.value = 'table';
     refs.filteredContainers.value = [maturityBlocked];
     refs.displayContainers.value = [maturityBlocked];
     refs.renderGroups.value = [
@@ -1317,7 +1092,6 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 2,
       },
     ];
-    refs.containerViewMode.value = 'table';
     refs.tableActionStyle.value = 'icons';
     refs.actionInProgress.value = new Map([['c-local', 'update']]);
     mocked.context = context;
@@ -1375,7 +1149,6 @@ describe('ContainersGroupedViews', () => {
 
     const { context, refs } = makeContext();
     const containers = [majorBlocked, minorUnsafe, patchSafe, digestSafe];
-    refs.containerViewMode.value = 'table';
     refs.isCompact.value = true;
     refs.filteredContainers.value = containers;
     refs.displayContainers.value = containers;
@@ -1436,7 +1209,6 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 1,
       },
     ];
-    refs.containerViewMode.value = 'table';
     refs.tableActionStyle.value = 'buttons';
     refs.actionInProgress.value = new Map([['c-progress-1', 'update']]);
     mocked.context = context;
@@ -1477,7 +1249,6 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 1,
       },
     ];
-    refs.containerViewMode.value = 'table';
     refs.actionInProgress.value = new Map([['c-progress-1', 'update']]);
     mocked.context = context;
 
@@ -1510,7 +1281,6 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 0,
       },
     ];
-    refs.containerViewMode.value = 'table';
     refs.actionInProgress.value = new Map([['c-scan-1', 'scan']]);
     mocked.context = context;
 
@@ -1545,7 +1315,6 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 1,
       },
     ];
-    refs.containerViewMode.value = 'table';
     refs.actionInProgress.value = new Map([['c-both-1', 'update']]);
     mocked.context = context;
 
@@ -1579,7 +1348,6 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 0,
       },
     ];
-    refs.containerViewMode.value = 'table';
     refs.actionInProgress.value = new Map();
     mocked.context = context;
 
@@ -1613,7 +1381,6 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 0,
       },
     ];
-    refs.containerViewMode.value = 'table';
     mocked.context = context;
 
     const wrapper = mountSubject();
@@ -1645,7 +1412,6 @@ describe('ContainersGroupedViews', () => {
         updatableCount: 1,
       },
     ];
-    refs.containerViewMode.value = 'table';
     refs.groupUpdateQueue.value = new Set(['c-queued-1']);
     mocked.context = context;
 
@@ -1807,194 +1573,6 @@ describe('ContainersGroupedViews', () => {
     expect(batch?.succeededCount).toBe(0);
   });
 
-  it('covers card and list pending/disabled/update-kind branches', async () => {
-    const pendingCard = makeContainer({
-      id: 'c-card-pending',
-      name: 'alpha',
-      newTag: null,
-      status: 'running',
-      bouncer: 'safe',
-      _pending: true as any,
-    });
-    const runningCard = makeContainer({
-      id: 'c-card-running',
-      name: 'beta',
-      newTag: '2.0.0',
-      updateKind: 'major',
-      updateMaturity: 'settled',
-      status: 'running',
-      bouncer: 'unsafe',
-    });
-    const minorList = makeContainer({
-      id: 'c-list-minor',
-      name: 'gamma',
-      newTag: '1.1.0',
-      updateKind: 'minor',
-      updateMaturity: 'settled',
-      status: 'stopped',
-      bouncer: 'safe',
-    });
-    const patchList = makeContainer({
-      id: 'c-list-patch',
-      name: 'delta',
-      newTag: '1.0.1',
-      updateKind: 'patch',
-      updateMaturity: 'settled',
-      status: 'running',
-      bouncer: 'safe',
-    });
-    const digestList = makeContainer({
-      id: 'c-list-digest',
-      name: 'epsilon',
-      newTag: 'sha256:aaa',
-      updateKind: 'digest',
-      updateMaturity: 'settled',
-      status: 'stopped',
-      bouncer: 'safe',
-    });
-
-    const { context, refs } = makeContext();
-    const containers = [pendingCard, runningCard, minorList, patchList, digestList];
-    refs.containerViewMode.value = 'cards';
-    refs.filteredContainers.value = containers;
-    refs.displayContainers.value = containers;
-    refs.renderGroups.value = [
-      {
-        key: '__flat__',
-        name: null,
-        containers,
-        containerCount: containers.length,
-        updatesAvailable: 4,
-        updatableCount: 4,
-      },
-    ];
-    refs.actionInProgress.value = new Map([['c-card-running', 'update']]);
-    mocked.context = context;
-
-    const wrapper = mountSubject();
-
-    refs.actionInProgress.value = new Map([['c-list-minor', 'update']]);
-    await nextTick();
-
-    refs.containerActionsEnabled.value = false;
-    refs.actionInProgress.value = new Map();
-    await nextTick();
-    const cardLockButtons = wrapper
-      .findAll('button[disabled]')
-      .filter((b) => b.classes().includes('w-10') || b.classes().includes('w-8'));
-    const cardLockBtn = cardLockButtons[0];
-    expect(cardLockBtn).toBeDefined();
-    (cardLockBtn!.element as HTMLButtonElement).disabled = false;
-    await cardLockBtn!.trigger('click');
-
-    refs.containerViewMode.value = 'list';
-    refs.containerActionsEnabled.value = true;
-    await nextTick();
-    await wrapper.find('.emit-list-click').trigger('click');
-  });
-
-  it('renders dimmed card overlay with updating and queued labels for the cards view', async () => {
-    const updatingCard = makeContainer({
-      id: 'c-card-updating',
-      name: 'alpha',
-      newTag: '2.0.0',
-      updateKind: 'major',
-      status: 'running',
-      bouncer: 'safe',
-      updateOperation: {
-        id: 'op-updating',
-        status: 'in-progress',
-        phase: 'pulling',
-        updatedAt: '2026-04-12T00:00:00.000Z',
-      },
-    });
-    const queuedCard = makeContainer({
-      id: 'c-card-queued',
-      name: 'beta',
-      newTag: '2.1.0',
-      updateKind: 'minor',
-      status: 'running',
-      bouncer: 'safe',
-      updateOperation: {
-        id: 'op-queued',
-        status: 'queued',
-        phase: 'queued',
-        updatedAt: '2026-04-12T00:00:00.000Z',
-      },
-    });
-
-    const { context, refs } = makeContext();
-    const containers = [updatingCard, queuedCard];
-    refs.containerViewMode.value = 'cards';
-    refs.filteredContainers.value = containers;
-    refs.displayContainers.value = containers;
-    refs.renderGroups.value = [
-      {
-        key: '__flat__',
-        name: null,
-        containers,
-        containerCount: containers.length,
-        updatesAvailable: 2,
-        updatableCount: 2,
-      },
-    ];
-    mocked.context = context;
-
-    const wrapper = mountSubject();
-    await nextTick();
-
-    const cards = wrapper.findAll('.card-item-stub');
-    expect(cards).toHaveLength(2);
-
-    const updatingWrapper = cards[0]!.find('.transition-opacity');
-    expect(updatingWrapper.classes()).toContain('opacity-30');
-    const updatingOverlay = cards[0]!.find('.absolute.inset-0');
-    expect(updatingOverlay.exists()).toBe(true);
-    expect(updatingOverlay.text()).toBe('Pulling…');
-
-    const queuedWrapper = cards[1]!.find('.transition-opacity');
-    expect(queuedWrapper.classes()).toContain('opacity-30');
-    const queuedOverlay = cards[1]!.find('.absolute.inset-0');
-    expect(queuedOverlay.exists()).toBe(true);
-    expect(queuedOverlay.text()).toBe('Queued');
-  });
-
-  it('renders ReleaseNotesLink and ProjectLink in the list view when the container exposes them (#295)', async () => {
-    // rc.10 wired project/release-notes links into the cards view only. Users on
-    // the list accordion view (the default on many installs) never saw the new
-    // links. Assert the list view renders both when sourceRepo / releaseLink
-    // are populated.
-    const container = makeContainer({
-      id: 'c-list-links',
-      name: 'grafana',
-      newTag: '12.3.3',
-      updateKind: 'patch',
-      sourceRepo: 'github.com/grafana/grafana',
-      releaseLink: 'https://github.com/grafana/grafana/releases/tag/v12.3.3',
-    });
-    const { context, refs } = makeContext();
-    refs.containerViewMode.value = 'list';
-    refs.filteredContainers.value = [container];
-    refs.displayContainers.value = [container];
-    refs.renderGroups.value = [
-      {
-        key: '__flat__',
-        name: null,
-        containers: [container],
-        containerCount: 1,
-        updatesAvailable: 1,
-        updatableCount: 1,
-      },
-    ];
-    mocked.context = context;
-
-    const wrapper = mountSubject();
-    await nextTick();
-
-    expect(wrapper.find('[data-test="project-link"]').exists()).toBe(true);
-    expect(wrapper.find('[data-test="release-link"]').exists()).toBe(true);
-  });
-
   it('renders icon-only ReleaseNotesLink and ProjectLink inside the table actions column (#295)', async () => {
     // rc.10 wired project/release-notes links into the cards + detail panel
     // only. Table rows never showed them. We surface them as icon-style
@@ -2009,7 +1587,6 @@ describe('ContainersGroupedViews', () => {
       releaseLink: 'https://github.com/grafana/grafana/releases/tag/v12.3.3',
     });
     const { context, refs } = makeContext();
-    refs.containerViewMode.value = 'table';
     refs.filteredContainers.value = [container];
     refs.displayContainers.value = [container];
     refs.renderGroups.value = [
@@ -2043,7 +1620,6 @@ describe('ContainersGroupedViews', () => {
     const containerA = makeContainer({ id: 'c-a', name: 'alpha' });
     const containerB = makeContainer({ id: 'c-b', name: 'beta' });
     const { context, refs } = makeContext();
-    refs.containerViewMode.value = 'table';
     refs.groupByStack.value = false;
     // renderGroups holds only containerA
     refs.renderGroups.value = [
@@ -2072,7 +1648,6 @@ describe('ContainersGroupedViews', () => {
   it('tableRows falls back to displayContainers when renderGroups is empty', async () => {
     const oneContainer = makeContainer({ id: 'c-only', name: 'only' });
     const { context, refs } = makeContext();
-    refs.containerViewMode.value = 'table';
     refs.groupByStack.value = false;
     // renderGroups is empty — flat branch falls back to displayContainers
     refs.renderGroups.value = [];
@@ -2241,7 +1816,6 @@ describe('ContainersGroupedViews', () => {
           updatableCount: 1,
         },
       ];
-      refs.containerViewMode.value = 'table';
       mocked.context = context;
       return mountSubject();
     }
@@ -2313,7 +1887,6 @@ describe('ContainersGroupedViews', () => {
         ...digestOverrides,
       });
       const { context } = makeContext(contextOverrides);
-      context.containerViewMode.value = 'table';
       context.filteredContainers.value = [container];
       context.displayContainers.value = [container];
       context.renderGroups.value = [
@@ -2403,7 +1976,6 @@ describe('ContainersGroupedViews', () => {
         bouncer: 'safe',
       });
       const { context } = makeContext();
-      context.containerViewMode.value = 'table';
       context.filteredContainers.value = [container];
       context.displayContainers.value = [container];
       context.renderGroups.value = [
@@ -2437,7 +2009,6 @@ describe('ContainersGroupedViews', () => {
         registryErrorKind: 'rate-limited',
       } as any);
       const { context } = makeContext();
-      context.containerViewMode.value = 'table';
       context.filteredContainers.value = [container];
       context.displayContainers.value = [container];
       context.renderGroups.value = [
@@ -2454,79 +2025,6 @@ describe('ContainersGroupedViews', () => {
       const wrapper = mountSubject();
       const row = rowByName(wrapper, 'alpha');
       expect(row.text()).toContain('Rate limited');
-    });
-
-    it('renders the human-readable tag in the card body for a hybrid tag+digest update (fix #356, #370)', async () => {
-      const container = makeContainer({
-        id: 'c-card-hybrid-digest',
-        name: 'alpha',
-        currentTag: '14-vectorchord0.4.3-pgvectors0.2.0',
-        newTag: '14-vectorchord0.4.3-pgvectors0.2.0',
-        updateKind: 'digest',
-        currentDigest: digestLocal,
-        newDigest: digestRemote,
-        isDigestPinned: false,
-        status: 'running',
-        bouncer: 'safe',
-      });
-      const { context } = makeContext();
-      context.containerViewMode.value = 'cards';
-      context.filteredContainers.value = [container];
-      context.displayContainers.value = [container];
-      context.renderGroups.value = [
-        {
-          key: 'g',
-          name: null,
-          containers: [container],
-          containerCount: 1,
-          updatesAvailable: 1,
-          updatableCount: 1,
-        },
-      ];
-      mocked.context = context;
-      const wrapper = mountSubject();
-      const card = wrapper.findAll('.card-item-stub').find((c) => c.text().includes('alpha'));
-      expect(card).toBeDefined();
-      const text = card!.text();
-      expect(text).toContain('14-vectorchord0.4.3-pgvectors0.2.0');
-      expect(text).not.toContain('sha256:bcf6335aabbb…');
-      expect(text).not.toContain('sha256:deadbeefcafe…');
-    });
-
-    it('renders digest-pinned update in the card body (pure-digest, regression for #342 fix)', async () => {
-      const container = makeContainer({
-        id: 'c-card-pure-digest',
-        name: 'alpha',
-        currentTag: digestLocal,
-        newTag: digestLocal,
-        updateKind: 'digest',
-        currentDigest: digestLocal,
-        newDigest: digestRemote,
-        isDigestPinned: true,
-        status: 'running',
-        bouncer: 'safe',
-      });
-      const { context } = makeContext();
-      context.containerViewMode.value = 'cards';
-      context.filteredContainers.value = [container];
-      context.displayContainers.value = [container];
-      context.renderGroups.value = [
-        {
-          key: 'g',
-          name: null,
-          containers: [container],
-          containerCount: 1,
-          updatesAvailable: 1,
-          updatableCount: 1,
-        },
-      ];
-      mocked.context = context;
-      const wrapper = mountSubject();
-      const card = wrapper.findAll('.card-item-stub').find((c) => c.text().includes('alpha'));
-      expect(card).toBeDefined();
-      const text = card!.text();
-      expect(text).toContain('sha256:bcf6335aabbb…');
-      expect(text).toContain('sha256:deadbeefcafe…');
     });
 
     it('renders the human-readable currentTag for a hybrid both-halves-change row (fix #356, #370)', async () => {
@@ -2576,7 +2074,6 @@ describe('ContainersGroupedViews', () => {
         registryErrorKind: 'rate-limited',
       } as any);
       const { context } = makeContext();
-      context.containerViewMode.value = 'table';
       context.filteredContainers.value = [container];
       context.displayContainers.value = [container];
       context.renderGroups.value = [
@@ -2617,10 +2114,7 @@ describe('ContainersGroupedViews', () => {
     const digestLocal = 'sha256:bcf6335aabbb1234567890abcdef1234567890abcdef1234567890abcdef12';
     const digestRemote = 'sha256:deadbeefcafe1234567890abcdef1234567890abcdef1234567890abcdef12';
 
-    function mountGuardContainer(
-      overrides: Partial<Container> = {},
-      viewMode: 'table' | 'cards' = 'table',
-    ) {
+    function mountGuardContainer(overrides: Partial<Container> = {}) {
       const container = makeContainer({
         id: 'c-guard',
         name: 'alpha',
@@ -2633,13 +2127,12 @@ describe('ContainersGroupedViews', () => {
         ...overrides,
       });
       const { context } = makeContext();
-      context.containerViewMode.value = viewMode;
       context.filteredContainers.value = [container];
       context.displayContainers.value = [container];
       context.renderGroups.value = [
         {
           key: 'g',
-          name: viewMode === 'table' ? 'g' : null,
+          name: 'g',
           containers: [container],
           containerCount: 1,
           updatesAvailable: 1,
@@ -2662,34 +2155,21 @@ describe('ContainersGroupedViews', () => {
       currentTag,
       newTag,
     }) => {
-      const { wrapper } = mountGuardContainer({ currentTag, newTag }, 'table');
+      const { wrapper } = mountGuardContainer({ currentTag, newTag });
       const text = rowByName(wrapper, 'alpha').text();
       expect(text).toContain(currentTag);
       expect(text).not.toContain('sha256:');
     });
 
     it('table view — hybrid both-halves change (1.2.3 → 1.2.4, digest also changes) shows currentTag, never sha256', async () => {
-      const { wrapper } = mountGuardContainer(
-        { currentTag: '1.2.3', newTag: '1.2.4', updateKind: 'digest', isDigestPinned: false },
-        'table',
-      );
+      const { wrapper } = mountGuardContainer({
+        currentTag: '1.2.3',
+        newTag: '1.2.4',
+        updateKind: 'digest',
+        isDigestPinned: false,
+      });
       const text = rowByName(wrapper, 'alpha').text();
       expect(text).toContain('1.2.3');
-      expect(text).not.toContain('sha256:');
-    });
-
-    it.each([
-      { label: 'floating tag `latest`', currentTag: 'latest', newTag: 'latest' },
-      { label: 'specific tag `v8.13.2`', currentTag: 'v8.13.2', newTag: 'v8.13.2' },
-    ])('card view — $label shows human-readable tag, never sha256 (non-pinned digest)', async ({
-      currentTag,
-      newTag,
-    }) => {
-      const { wrapper } = mountGuardContainer({ currentTag, newTag }, 'cards');
-      const card = wrapper.findAll('.card-item-stub').find((c) => c.text().includes('alpha'));
-      expect(card).toBeDefined();
-      const text = card!.text();
-      expect(text).toContain(currentTag);
       expect(text).not.toContain('sha256:');
     });
 
@@ -2710,7 +2190,6 @@ describe('ContainersGroupedViews', () => {
         bouncer: 'safe',
       });
       const { context } = makeContext();
-      context.containerViewMode.value = 'table';
       context.filteredContainers.value = [container];
       context.displayContainers.value = [container];
       context.renderGroups.value = [
@@ -2743,7 +2222,6 @@ describe('ContainersGroupedViews', () => {
         softwareVersion,
       });
       const { context } = makeContext();
-      context.containerViewMode.value = 'table';
       context.filteredContainers.value = [container];
       context.displayContainers.value = [container];
       context.renderGroups.value = [
@@ -2786,7 +2264,6 @@ describe('ContainersGroupedViews', () => {
       details: { ports: [], volumes: [], env: [], labels: [], startedAt },
     });
     const { context } = makeContext();
-    context.containerViewMode.value = 'table';
     context.filteredContainers.value = [container];
     context.displayContainers.value = [container];
     context.renderGroups.value = [
@@ -2816,7 +2293,6 @@ describe('ContainersGroupedViews', () => {
     });
 
     const { context, refs, spies } = makeContext();
-    context.containerViewMode.value = 'table';
     context.tableActionStyle.value = 'icons';
     context.filteredContainers.value = [container];
     context.displayContainers.value = [container];

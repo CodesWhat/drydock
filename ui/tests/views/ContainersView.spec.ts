@@ -296,22 +296,6 @@ const childStubs = {
       </div>
     `,
   }),
-  DataCardGrid: defineComponent({
-    props: ['items', 'itemKey', 'selectedKey'],
-    template: `
-      <div class="data-card-grid">
-        <slot v-if="items?.[0]" name="card" :item="items[0]" />
-      </div>
-    `,
-  }),
-  DataListAccordion: defineComponent({
-    props: ['items', 'itemKey', 'selectedKey'],
-    template: `
-      <div class="data-list-accordion">
-        <slot v-if="items?.[0]" name="header" :item="items[0]" />
-      </div>
-    `,
-  }),
   DetailPanel: {
     template: '<div class="detail-panel"><slot name="header" /><slot /></div>',
     props: ['open', 'isMobile', 'size', 'showSizeControls', 'showFullPage'],
@@ -1040,30 +1024,6 @@ describe('ContainersView', () => {
       const wrapper = await mountContainersView([c]);
 
       expect(wrapper.find('.data-table [aria-label="Registry error"]').exists()).toBe(true);
-    });
-
-    it('shows registry error indicator in card rows', async () => {
-      const c = makeContainer() as Container & { registryError?: string };
-      c.registryError = 'Registry request failed: unauthorized';
-      const wrapper = await mountContainersView([c]);
-
-      (wrapper.vm as any).containerViewMode = 'cards';
-      await flushPromises();
-
-      expect(wrapper.find('.data-card-grid [aria-label="Registry error"]').exists()).toBe(true);
-    });
-
-    it('shows registry error indicator in list rows', async () => {
-      const c = makeContainer() as Container & { registryError?: string };
-      c.registryError = 'Registry request failed: unauthorized';
-      const wrapper = await mountContainersView([c]);
-
-      (wrapper.vm as any).containerViewMode = 'list';
-      await flushPromises();
-
-      expect(wrapper.find('.data-list-accordion [aria-label="Registry error"]').exists()).toBe(
-        true,
-      );
     });
 
     it('shows no-update reason icon badge in table version cell', async () => {

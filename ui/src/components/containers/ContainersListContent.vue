@@ -14,7 +14,6 @@ const { t } = useI18n();
 const {
   error,
   loading,
-  containerViewMode,
   showFilters,
   filteredContainers,
   containers,
@@ -111,7 +110,6 @@ const activeFilterChips = computed(() => {
     <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('containerComponents.listContent.loadingContainers') }}</div>
 
     <DataFilterBar
-      v-model="containerViewMode"
       v-model:showFilters="showFilters"
       :filtered-count="filteredContainers.length"
       :total-count="containers.length"
@@ -185,7 +183,7 @@ const activeFilterChips = computed(() => {
         </AppButton>
       </template>
       <template #extra-buttons>
-        <div v-if="containerViewMode === 'table'" class="relative inline-flex items-center">
+        <div class="relative inline-flex items-center">
           <AppIconButton icon="config" size="toolbar" variant="secondary"
             :class="showColumnPicker ? 'dd-text dd-bg-elevated' : ''"
             :tooltip="tt(t('containerComponents.listContent.toggleColumnsTooltip'))"

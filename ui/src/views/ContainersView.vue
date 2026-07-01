@@ -15,7 +15,6 @@ import { useOperationDisplayHold } from '../composables/useOperationDisplayHold'
 import { useToast } from '../composables/useToast';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
-import { useViewMode } from '../preferences/useViewMode';
 import type { ContainerGroup } from '../services/container';
 import { getAllContainers, getContainerGroups, refreshAllContainers } from '../services/container';
 import type { Container, ContainerUpdateOperation } from '../types/container';
@@ -493,7 +492,6 @@ const {
   selectedContainerId,
 });
 
-const containerViewMode = useViewMode('containers');
 const tableActionStyle = usePreference(
   () => preferences.containers.tableActions,
   (value) => {
@@ -1389,7 +1387,6 @@ provide(containersViewTemplateContextKey, {
   error,
   loading,
   containers,
-  containerViewMode,
   showFilters,
   filteredContainers,
   activeFilterCount,

@@ -11,7 +11,6 @@ function makeTemplateContext(): ContainersViewTemplateContext {
   return {
     error: ref(null),
     loading: ref(false),
-    containerViewMode: ref('table') as any,
     showFilters: ref(false),
     filteredContainers: ref([]),
     containers: ref([]),

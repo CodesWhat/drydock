@@ -283,14 +283,6 @@ const childStubs = {
       'rowClass',
     ],
   },
-  DataCardGrid: {
-    template: '<div class="data-card-grid"></div>',
-    props: ['items', 'itemKey', 'selectedKey'],
-  },
-  DataListAccordion: {
-    template: '<div class="data-list-accordion"></div>',
-    props: ['items', 'itemKey', 'selectedKey'],
-  },
   DetailPanel: {
     template: '<div class="detail-panel"><slot name="header" /><slot /></div>',
     props: ['open', 'isMobile', 'size', 'showSizeControls', 'showFullPage'],
