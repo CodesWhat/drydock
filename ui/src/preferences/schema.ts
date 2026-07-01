@@ -28,7 +28,6 @@ export interface PreferencesSchema {
   appearance: { radius: RadiusPresetId; fontSize: number };
   layout: { sidebarCollapsed: boolean };
   containers: {
-    viewMode: ViewMode;
     tableActions: 'icons' | 'buttons';
     groupByStack: boolean;
     sort: { key: string; asc: boolean };
@@ -53,19 +52,19 @@ export interface PreferencesSchema {
   };
   views: {
     logs: { newestFirst: boolean };
-    security: { mode: ViewMode; sortField: string; sortAsc: boolean };
-    audit: { mode: ViewMode };
-    agents: { mode: ViewMode; sortKey: string; sortAsc: boolean };
-    triggers: { mode: ViewMode };
-    watchers: { mode: ViewMode };
-    servers: { mode: ViewMode };
-    registries: { mode: ViewMode };
-    notifications: { mode: ViewMode };
-    auth: { mode: ViewMode };
+    security: { sortField: string; sortAsc: boolean };
+    audit: Record<string, never>;
+    agents: { sortKey: string; sortAsc: boolean };
+    triggers: Record<string, never>;
+    watchers: Record<string, never>;
+    servers: Record<string, never>;
+    registries: Record<string, never>;
+    notifications: Record<string, never>;
+    auth: Record<string, never>;
   };
 }
 
-export const CURRENT_SCHEMA_VERSION = 7;
+export const CURRENT_SCHEMA_VERSION = 8;
 
 export const CONTAINER_TABLE_COLUMN_KEYS = [
   'icon',
@@ -91,7 +90,6 @@ export const DEFAULTS: PreferencesSchema = {
   appearance: { radius: 'sharp', fontSize: 1 },
   layout: { sidebarCollapsed: false },
   containers: {
-    viewMode: 'table',
     tableActions: 'icons',
     groupByStack: false,
     sort: { key: 'name', asc: true },
@@ -132,14 +130,14 @@ export const DEFAULTS: PreferencesSchema = {
   },
   views: {
     logs: { newestFirst: false },
-    security: { mode: 'table', sortField: 'critical', sortAsc: false },
-    audit: { mode: 'table' },
-    agents: { mode: 'table', sortKey: 'name', sortAsc: true },
-    triggers: { mode: 'table' },
-    watchers: { mode: 'table' },
-    servers: { mode: 'table' },
-    registries: { mode: 'table' },
-    notifications: { mode: 'table' },
-    auth: { mode: 'table' },
+    security: { sortField: 'critical', sortAsc: false },
+    audit: {},
+    agents: { sortKey: 'name', sortAsc: true },
+    triggers: {},
+    watchers: {},
+    servers: {},
+    registries: {},
+    notifications: {},
+    auth: {},
   },
 };

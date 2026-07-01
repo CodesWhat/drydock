@@ -15,7 +15,6 @@ import {
   isValidFontSize,
   isValidLocale,
   isValidScale,
-  isViewMode,
   RADIUS_PRESETS,
   TABLE_ACTIONS,
   THEME_FAMILIES,
@@ -191,7 +190,6 @@ function sanitizeContainers(data: Record<string, unknown>): void {
   const containers = data.containers;
   if (containers && typeof containers === 'object') {
     const c = containers as Record<string, unknown>;
-    if ('viewMode' in c && !isViewMode(c.viewMode)) delete c.viewMode;
     deleteIfInvalid(c, 'tableActions', TABLE_ACTIONS);
 
     if ('columns' in c) {
@@ -368,14 +366,6 @@ function scheduleLegacyKeyCleanup(): void {
 }
 
 const LEGACY_FILTER_KEYS = ['status', 'registry', 'bouncer', 'server', 'kind'] as const;
-const SIMPLE_VIEW_MODE_KEYS = [
-  ['triggers', 'dd-triggers-view-v1'],
-  ['watchers', 'dd-watchers-view-v1'],
-  ['servers', 'dd-servers-view-v1'],
-  ['registries', 'dd-registries-view-v1'],
-  ['notifications', 'dd-notifications-view-v1'],
-  ['auth', 'dd-auth-view-v1'],
-] as const;
 
 function migrateThemePreference(): Record<string, string> | undefined {
   const family = readString('drydock-theme-family-v1');
@@ -465,11 +455,6 @@ function migrateContainerFilters(): Record<string, string> | undefined {
 function migrateContainersPreference(): Record<string, unknown> | undefined {
   const containers: Record<string, unknown> = {};
 
-  const containerView = readString('dd-containers-view-v1');
-  if (containerView && isViewMode(containerView)) {
-    containers.viewMode = containerView;
-  }
-
   const tableActions = readString('dd-table-actions-v1');
   if (tableActions && TABLE_ACTIONS.has(tableActions)) {
     containers.tableActions = tableActions;
@@ -507,22 +492,17 @@ function migrateDashboardPreference(): { widgetOrder: string[] } | undefined {
 }
 
 function migrateSortableViewPreference(args: {
-  viewKey: string;
   sortFieldKey: string;
   sortFieldOutputKey: string;
   sortAscKey: string;
 }): Record<string, unknown> | undefined {
-  const view = readString(args.viewKey);
   const sortField = readString(args.sortFieldKey);
   const sortAsc = readJSON(args.sortAscKey, isBoolean);
-  if (!view && sortField === undefined && sortAsc === undefined) {
+  if (sortField === undefined && sortAsc === undefined) {
     return undefined;
   }
 
   const preference: Record<string, unknown> = {};
-  if (view && isViewMode(view)) {
-    preference.mode = view;
-  }
   if (sortField !== undefined) {
     preference[args.sortFieldOutputKey] = sortField;
   }
@@ -530,44 +510,23 @@ function migrateSortableViewPreference(args: {
     preference.sortAsc = sortAsc;
   }
 
-  return Object.keys(preference).length > 0 ? preference : undefined;
+  return preference;
 }
 
 function migrateSecurityViewPreference(): Record<string, unknown> | undefined {
   return migrateSortableViewPreference({
-    viewKey: 'dd-security-view-v1',
     sortFieldKey: 'dd-security-sort-field-v1',
     sortFieldOutputKey: 'sortField',
     sortAscKey: 'dd-security-sort-asc-v1',
   });
 }
 
-function migrateAuditViewPreference(): { mode: string } | undefined {
-  const auditView = readString('dd-audit-view-v1');
-  if (auditView && isViewMode(auditView)) {
-    return { mode: auditView };
-  }
-  return undefined;
-}
-
 function migrateAgentsViewPreference(): Record<string, unknown> | undefined {
   return migrateSortableViewPreference({
-    viewKey: 'dd-agents-view-v1',
     sortFieldKey: 'dd-agents-sort-key-v1',
     sortFieldOutputKey: 'sortKey',
     sortAscKey: 'dd-agents-sort-asc-v1',
   });
-}
-
-function migrateSimpleViewModePreferences(): Record<string, { mode: string }> {
-  const views: Record<string, { mode: string }> = {};
-  for (const [key, viewKey] of SIMPLE_VIEW_MODE_KEYS) {
-    const mode = readString(viewKey);
-    if (mode && isViewMode(mode)) {
-      views[key] = { mode };
-    }
-  }
-  return views;
 }
 
 function migrateViewsPreference(): Record<string, unknown> | undefined {
@@ -578,17 +537,10 @@ function migrateViewsPreference(): Record<string, unknown> | undefined {
     views.security = security;
   }
 
-  const audit = migrateAuditViewPreference();
-  if (audit) {
-    views.audit = audit;
-  }
-
   const agents = migrateAgentsViewPreference();
   if (agents) {
     views.agents = agents;
   }
-
-  Object.assign(views, migrateSimpleViewModePreferences());
 
   return Object.keys(views).length > 0 ? views : undefined;
 }

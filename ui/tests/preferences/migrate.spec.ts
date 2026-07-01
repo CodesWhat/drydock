@@ -65,9 +65,8 @@ describe('preferences migration', () => {
     });
 
     it('should fill missing nested keys with defaults', () => {
-      const result = mergeDefaults({ containers: { viewMode: 'cards' } });
-      expect(result.containers.viewMode).toBe('cards');
-      expect(result.containers.tableActions).toBe('icons');
+      const result = mergeDefaults({ containers: { tableActions: 'buttons' } });
+      expect(result.containers.tableActions).toBe('buttons');
       expect(result.containers.groupByStack).toBe(false);
       expect(result.containers.sort).toEqual({ key: 'name', asc: true });
     });
@@ -79,7 +78,6 @@ describe('preferences migration', () => {
       expect(result.schemaVersion).toBe(DEFAULTS.schemaVersion);
       expect(result.theme.family).toBe('dracula');
       expect(result.theme.variant).toBe('dark');
-      expect(result.containers.viewMode).toBe('table');
     });
 
     it('should fill missing fields from defaults', () => {
@@ -263,9 +261,9 @@ describe('preferences migration', () => {
       expect(result.locale.language).toBe(DEFAULTS.locale.language);
     });
 
-    it('should replace invalid container viewMode with default', () => {
+    it('should drop unknown container fields (viewMode was removed in v8)', () => {
       const result = migrate({ schemaVersion: 1, containers: { viewMode: 'timeline' } });
-      expect(result.containers.viewMode).toBe(DEFAULTS.containers.viewMode);
+      expect((result.containers as any).viewMode).toBeUndefined();
     });
 
     it('should replace invalid tableActions with default', () => {
@@ -412,7 +410,7 @@ describe('preferences migration', () => {
         font: { family: 'jetbrains-mono' },
         icons: { library: 'tabler', scale: 1.2 },
         appearance: { radius: 'round', fontSize: 1.15 },
-        containers: { viewMode: 'cards', tableActions: 'buttons' },
+        containers: { tableActions: 'buttons' },
       };
       const result = migrate(input);
       expect(result.theme).toEqual({ family: 'catppuccin', variant: 'light' });
@@ -420,7 +418,6 @@ describe('preferences migration', () => {
       expect(result.icons).toEqual({ library: 'tabler', scale: 1.2 });
       expect(result.appearance.radius).toBe('round');
       expect(result.appearance.fontSize).toBe(1.15);
-      expect(result.containers.viewMode).toBe('cards');
       expect(result.containers.tableActions).toBe('buttons');
     });
 
@@ -428,7 +425,7 @@ describe('preferences migration', () => {
       const result = migrate({ schemaVersion: 1, views: { triggers: { mode: 'cards' } } });
 
       expect(result.views.logs.newestFirst).toBe(DEFAULTS.views.logs.newestFirst);
-      expect(result.views.triggers.mode).toBe('cards');
+      expect(result.views.triggers).toEqual({});
     });
 
     it('should preserve the shared log sort preference in current schema data', () => {
@@ -676,18 +673,6 @@ describe('preferences migration', () => {
     });
 
     describe('container migration', () => {
-      it('should migrate container view mode', () => {
-        localStorage.setItem('dd-containers-view-v1', 'cards');
-        const result = migrateFromLegacyKeys();
-        expect(result.containers.viewMode).toBe('cards');
-      });
-
-      it('should ignore invalid container view mode', () => {
-        localStorage.setItem('dd-containers-view-v1', 'invalid');
-        const result = migrateFromLegacyKeys();
-        expect(result.containers.viewMode).toBe(DEFAULTS.containers.viewMode);
-      });
-
       it('should migrate table actions', () => {
         localStorage.setItem('dd-table-actions-v1', 'buttons');
         const result = migrateFromLegacyKeys();
@@ -795,30 +780,6 @@ describe('preferences migration', () => {
       });
     });
 
-    describe('view mode migration', () => {
-      it.each([
-        ['security', 'dd-security-view-v1'],
-        ['audit', 'dd-audit-view-v1'],
-        ['agents', 'dd-agents-view-v1'],
-        ['triggers', 'dd-triggers-view-v1'],
-        ['watchers', 'dd-watchers-view-v1'],
-        ['servers', 'dd-servers-view-v1'],
-        ['registries', 'dd-registries-view-v1'],
-        ['notifications', 'dd-notifications-view-v1'],
-        ['auth', 'dd-auth-view-v1'],
-      ] as const)('should migrate %s view mode', (viewName, legacyKey) => {
-        localStorage.setItem(legacyKey, 'cards');
-        const result = migrateFromLegacyKeys();
-        expect(result.views[viewName].mode).toBe('cards');
-      });
-
-      it('should ignore invalid view modes for views', () => {
-        localStorage.setItem('dd-triggers-view-v1', 'invalid');
-        const result = migrateFromLegacyKeys();
-        expect(result.views.triggers.mode).toBe(DEFAULTS.views.triggers.mode);
-      });
-    });
-
     describe('security sort migration', () => {
       it('should migrate security sort field', () => {
         localStorage.setItem('dd-security-sort-field-v1', 'high');
@@ -836,12 +797,6 @@ describe('preferences migration', () => {
         localStorage.setItem('dd-security-sort-asc-v1', JSON.stringify(false));
         const result = migrateFromLegacyKeys();
         expect(result.views.security.sortAsc).toBe(false);
-      });
-
-      it('should ignore security migration when only an invalid security view mode is present', () => {
-        localStorage.setItem('dd-security-view-v1', 'invalid');
-        const result = migrateFromLegacyKeys();
-        expect(result.views.security).toEqual(DEFAULTS.views.security);
       });
     });
 
@@ -863,22 +818,16 @@ describe('preferences migration', () => {
         const result = migrateFromLegacyKeys();
         expect(result.views.agents.sortAsc).toBe(false);
       });
-
-      it('should ignore agents migration when only an invalid agents view mode is present', () => {
-        localStorage.setItem('dd-agents-view-v1', 'invalid');
-        const result = migrateFromLegacyKeys();
-        expect(result.views.agents).toEqual(DEFAULTS.views.agents);
-      });
     });
 
     describe('partial migration', () => {
       it('should handle only some legacy keys present', () => {
         localStorage.setItem('drydock-theme-family-v1', 'dracula');
-        localStorage.setItem('dd-containers-view-v1', 'list');
+        localStorage.setItem('dd-table-actions-v1', 'buttons');
         // All other keys absent
         const result = migrateFromLegacyKeys();
         expect(result.theme.family).toBe('dracula');
-        expect(result.containers.viewMode).toBe('list');
+        expect(result.containers.tableActions).toBe('buttons');
         // Defaults for everything else
         expect(result.theme.variant).toBe('dark');
         expect(result.font.family).toBe('ibm-plex-mono');
@@ -991,8 +940,8 @@ describe('preferences migration', () => {
     describe('idempotency', () => {
       it('should produce the same result when run twice', () => {
         localStorage.setItem('drydock-theme-family-v1', 'github');
-        localStorage.setItem('dd-containers-view-v1', 'list');
-        localStorage.setItem('dd-audit-view-v1', 'cards');
+        localStorage.setItem('dd-table-actions-v1', 'buttons');
+        localStorage.setItem('dd-security-sort-field-v1', 'high');
         const first = migrateFromLegacyKeys();
 
         // Legacy keys were deleted. Running again with no legacy keys should give defaults.
@@ -1000,8 +949,8 @@ describe('preferences migration', () => {
         // Reset to simulate a fresh run with the same legacy data:
         localStorage.clear();
         localStorage.setItem('drydock-theme-family-v1', 'github');
-        localStorage.setItem('dd-containers-view-v1', 'list');
-        localStorage.setItem('dd-audit-view-v1', 'cards');
+        localStorage.setItem('dd-table-actions-v1', 'buttons');
+        localStorage.setItem('dd-security-sort-field-v1', 'high');
         const second = migrateFromLegacyKeys();
 
         expect(first).toEqual(second);
@@ -1011,6 +960,38 @@ describe('preferences migration', () => {
         const result = migrateFromLegacyKeys();
         expect(result).toEqual(DEFAULTS);
       });
+    });
+  });
+
+  describe('v7 -> v8 migration', () => {
+    it('should drop viewMode from containers and mode from views, preserving sort fields', () => {
+      const result = migrate({
+        schemaVersion: 7,
+        containers: { viewMode: 'cards' },
+        views: {
+          security: { mode: 'list', sortField: 'name', sortAsc: true },
+          audit: { mode: 'cards' },
+        },
+      });
+      expect(result.schemaVersion).toBe(8);
+      expect((result.containers as any).viewMode).toBeUndefined();
+      expect((result.views.security as any).mode).toBeUndefined();
+      expect(result.views.security.sortField).toBe('name');
+      expect(result.views.security.sortAsc).toBe(true);
+      expect(result.views.audit).toEqual({});
+    });
+
+    it('should be idempotent: running migrate on a v8 result leaves schemaVersion 8 and no mode fields', () => {
+      const first = migrate({
+        schemaVersion: 7,
+        containers: { viewMode: 'cards' },
+        views: { security: { mode: 'list', sortField: 'name', sortAsc: true } },
+      });
+      expect(first.schemaVersion).toBe(8);
+      const second = migrate(first as unknown as Record<string, unknown>);
+      expect(second.schemaVersion).toBe(8);
+      expect((second.containers as any).viewMode).toBeUndefined();
+      expect((second.views.security as any).mode).toBeUndefined();
     });
   });
 });

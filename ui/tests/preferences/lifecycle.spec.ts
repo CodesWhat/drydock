@@ -27,7 +27,7 @@ describe('preferences lifecycle integration', () => {
     const migrateModule = await import('@/preferences/migrate');
     const migrated = migrateModule.migrateFromLegacyKeys();
 
-    expect(migrated.views.triggers.mode).toBe('cards');
+    expect(migrated.theme.family).toBe('github');
     expect(localStorage.getItem('dd-triggers-view-v1')).toBeNull();
     expect(localStorage.getItem('drydock-theme-family-v1')).toBeNull();
 
@@ -36,14 +36,12 @@ describe('preferences lifecycle integration', () => {
     const { preferences, flushPreferences } = await import('@/preferences/store');
 
     expect(migrateSpy).toHaveBeenCalledTimes(1);
-    expect(preferences.views.triggers.mode).toBe('cards');
     expect(preferences.theme.family).toBe('github');
 
     flushPreferences();
 
     const persisted = JSON.parse(localStorage.getItem('dd-preferences') ?? '{}');
     expect(persisted.theme.family).toBe('github');
-    expect(persisted.views.triggers.mode).toBe('cards');
 
     migrateSpy.mockRestore();
   });
