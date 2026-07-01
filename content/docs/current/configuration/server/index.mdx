@@ -191,6 +191,46 @@ docker run \
 
 Your proxy must forward the `X-Forwarded-Proto` header so drydock knows whether the original request used HTTPS. Most proxies (Traefik, Caddy, NGINX Proxy Manager) do this by default. For Nginx, add `proxy_set_header X-Forwarded-Proto $scheme;` to your location block. See the [FAQ](/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy) for complete Traefik and Nginx examples.
 
+### Reverse proxy caching (blank page after an update)
+
+After you upgrade drydock, the dashboard can come up as a blank white page on some devices (a phone is the classic case) while a desktop hitting the same reverse proxy loads fine. A hard refresh or clearing the site's data on the affected device fixes it.
+
+Here's why: drydock's UI is a single-page app, and its JS/CSS bundles are content-hashed, so the filenames change with every release and the previous release's files are removed from the image. drydock serves the HTML document itself with `Cache-Control: no-store`, and serves the hashed files under `/assets/` with a long-lived `immutable` cache, which is correct and intentional. If something ignores `no-store` and hands back a stale copy of the HTML, that page references bundle files that no longer exist, so the browser has nothing to run and you get a blank page. Most reverse proxies don't cache responses unless you've explicitly turned caching on, so the usual culprits are either a proxy cache you enabled, or the device just holding on to an old copy.
+
+**Immediate recovery:** clear the browser's site data (or hard-reload) on the affected device. If you've added drydock to a phone's home screen, remove it and re-add it. If your proxy has caching enabled, purge its cache too.
+
+**Prevention:** make sure whatever sits in front of drydock doesn't cache the HTML document, or that it honors the upstream `Cache-Control: no-store`. Caching `/assets/*` is fine, in fact it's the point, those filenames are unique per build so they're safe to cache forever.
+
+<Tabs items={["Nginx / Nginx Proxy Manager", "Caddy", "Traefik"]}>
+<Tab value="Nginx / Nginx Proxy Manager">
+
+If you've turned on `proxy_cache` for drydock, exclude the HTML document from it. The simplest fix is to not enable caching on drydock's location at all and let Nginx forward drydock's own `Cache-Control` header, which it does by default:
+
+```nginx
+location / {
+    proxy_pass http://drydock:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    # no proxy_cache directive here — drydock's own
+    # Cache-Control headers control caching
+}
+```
+
+</Tab>
+<Tab value="Caddy">
+
+Caddy's `reverse_proxy` doesn't cache responses on its own, so there's nothing to configure. If you've added a caching plugin or directive in front of drydock, exclude `Content-Type: text/html` from it.
+
+</Tab>
+<Tab value="Traefik">
+
+Traefik doesn't cache HTTP responses by default either, so no action is needed out of the box. If you've added a caching middleware or plugin, exclude the HTML document from it there too.
+
+</Tab>
+</Tabs>
+
+<Callout type="info">drydock already sends `Cache-Control: no-store` on the HTML document, and as of v1.6 returns a clean 404 for a hashed asset that no longer exists, so a stale page fails fast instead of rendering a blank screen. A caching layer that overrides `no-store` can still serve a stale page though, which is why this ultimately comes down to your proxy's (or device's) cache configuration.</Callout>
+
 ## Advanced Tuning
 
 These variables control outbound HTTP calls, the icon proxy cache used to serve container icons, and fleet-stat aggregation. Defaults are suitable for most deployments.

@@ -61,10 +61,44 @@ describe('UI Router', () => {
     const catchAllHandler = mockRouter.get.mock.calls.find((c) => c[0] === '/{*path}')[2];
 
     const res = { sendFile: vi.fn(), set: vi.fn() };
-    catchAllHandler({}, res);
+    catchAllHandler({ path: '/' }, res);
 
     expect(res.set).toHaveBeenCalledWith('Cache-Control', 'no-store');
     expect(res.sendFile).toHaveBeenCalledWith(expect.stringContaining('index.html'));
+  });
+
+  test('catch-all should return a clean 404 for missing hashed assets', () => {
+    uiRouter.init();
+    const catchAllHandler = mockRouter.get.mock.calls.find((c) => c[0] === '/{*path}')[2];
+
+    const res = {
+      sendFile: vi.fn(),
+      set: vi.fn(),
+      status: vi.fn().mockReturnThis(),
+      end: vi.fn(),
+    };
+    catchAllHandler({ path: '/assets/index-abc123.js' }, res);
+
+    expect(res.set).toHaveBeenCalledWith('Cache-Control', 'no-store');
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.end).toHaveBeenCalled();
+    expect(res.sendFile).not.toHaveBeenCalled();
+  });
+
+  test('catch-all should send index.html for app routes outside /assets/', () => {
+    uiRouter.init();
+    const catchAllHandler = mockRouter.get.mock.calls.find((c) => c[0] === '/{*path}')[2];
+
+    const res = {
+      sendFile: vi.fn(),
+      set: vi.fn(),
+      status: vi.fn().mockReturnThis(),
+      end: vi.fn(),
+    };
+    catchAllHandler({ path: '/containers' }, res);
+
+    expect(res.sendFile).toHaveBeenCalledWith(expect.stringContaining('index.html'));
+    expect(res.status).not.toHaveBeenCalledWith(404);
   });
 
   test('should disable caching for html documents served statically', () => {
