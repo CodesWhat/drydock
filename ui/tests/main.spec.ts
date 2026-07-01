@@ -104,8 +104,6 @@ describe('main bootstrap', {
     expect(mocks.app.component).toHaveBeenCalledWith('ToggleSwitch', expect.anything());
     expect(mocks.app.component).toHaveBeenCalledWith('DataFilterBar', expect.anything());
     expect(mocks.app.component).toHaveBeenCalledWith('DataTable', expect.anything());
-    expect(mocks.app.component).toHaveBeenCalledWith('DataCardGrid', expect.anything());
-    expect(mocks.app.component).toHaveBeenCalledWith('DataListAccordion', expect.anything());
     expect(mocks.app.component).toHaveBeenCalledWith('DataViewLayout', expect.anything());
     expect(mocks.app.component).toHaveBeenCalledWith('DetailPanel', expect.anything());
     expect(mocks.app.component).toHaveBeenCalledWith('EmptyState', expect.anything());

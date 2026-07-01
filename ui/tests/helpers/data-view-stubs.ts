@@ -36,26 +36,6 @@ export const dataViewStubs: Record<string, any> = {
       </div>
     `,
   }),
-  DataCardGrid: defineComponent({
-    props: ['items', 'itemKey', 'selectedKey'],
-    emits: ['item-click'],
-    template: `
-      <div class="data-card-grid" :data-item-count="items?.length ?? 0">
-        <button v-if="items?.[0]" class="card-click-first" @click="$emit('item-click', items[0])">Card 1</button>
-        <slot name="card" v-if="items?.[0]" :item="items[0]" />
-      </div>
-    `,
-  }),
-  DataListAccordion: defineComponent({
-    props: ['items', 'itemKey', 'selectedKey'],
-    emits: ['item-click'],
-    template: `
-      <div class="data-list-accordion" :data-item-count="items?.length ?? 0">
-        <button v-if="items?.[0]" class="list-click-first" @click="$emit('item-click', items[0])">List 1</button>
-        <div v-if="items?.[0]" class="list-details"><slot name="details" :item="items[0]" /></div>
-      </div>
-    `,
-  }),
   DetailPanel: defineComponent({
     props: ['open', 'isMobile', 'size', 'showSizeControls', 'showFullPage'],
     emits: ['update:open'],
