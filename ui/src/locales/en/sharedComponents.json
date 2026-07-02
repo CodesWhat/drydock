@@ -1,5 +1,11 @@
 {
   "sharedComponents": {
+    "columnPicker": {
+      "toggleTooltip": "Toggle columns",
+      "heading": "Columns",
+      "reset": "Reset",
+      "hiddenBadgeTooltip": "{count} columns hidden"
+    },
     "confirmDialog": {
       "cancel": "Cancel",
       "confirm": "Confirm"

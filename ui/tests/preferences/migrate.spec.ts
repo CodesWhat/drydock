@@ -978,7 +978,7 @@ describe('preferences migration', () => {
       expect((result.views.security as any).mode).toBeUndefined();
       expect(result.views.security.sortField).toBe('name');
       expect(result.views.security.sortAsc).toBe(true);
-      expect(result.views.audit).toEqual({});
+      expect(result.views.audit).toEqual({ hiddenColumns: [] });
     });
 
     it('should be idempotent: running migrate on a v8 result leaves schemaVersion 8 and no mode fields', () => {
@@ -992,6 +992,119 @@ describe('preferences migration', () => {
       expect(second.schemaVersion).toBe(8);
       expect((second.containers as any).viewMode).toBeUndefined();
       expect((second.views.security as any).mode).toBeUndefined();
+    });
+  });
+
+  describe('view hiddenColumns (security/watchers/servers/audit/agents)', () => {
+    it('DEFAULTS should default hiddenColumns to an empty array for each view', () => {
+      expect(DEFAULTS.views.security.hiddenColumns).toEqual([]);
+      expect(DEFAULTS.views.watchers.hiddenColumns).toEqual([]);
+      expect(DEFAULTS.views.servers.hiddenColumns).toEqual([]);
+      expect(DEFAULTS.views.audit.hiddenColumns).toEqual([]);
+      expect(DEFAULTS.views.agents.hiddenColumns).toEqual([]);
+    });
+
+    it('backfills hiddenColumns as [] for views missing the field in a legacy persisted blob', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          security: { sortField: 'critical', sortAsc: false },
+          watchers: {},
+          servers: {},
+          audit: {},
+          agents: { sortKey: 'name', sortAsc: true },
+        },
+      });
+      expect(result.views.security.hiddenColumns).toEqual([]);
+      expect(result.views.watchers.hiddenColumns).toEqual([]);
+      expect(result.views.servers.hiddenColumns).toEqual([]);
+      expect(result.views.audit.hiddenColumns).toEqual([]);
+      expect(result.views.agents.hiddenColumns).toEqual([]);
+    });
+
+    it('backfills hiddenColumns as [] when the views object is entirely absent', () => {
+      const result = migrate({ schemaVersion: DEFAULTS.schemaVersion });
+      expect(result.views.security.hiddenColumns).toEqual([]);
+      expect(result.views.watchers.hiddenColumns).toEqual([]);
+      expect(result.views.servers.hiddenColumns).toEqual([]);
+      expect(result.views.audit.hiddenColumns).toEqual([]);
+      expect(result.views.agents.hiddenColumns).toEqual([]);
+    });
+
+    it('clamps non-array/non-string hiddenColumns garbage to an empty array for each view', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          security: { hiddenColumns: 'not-an-array' as any },
+          watchers: { hiddenColumns: 42 as any },
+          servers: { hiddenColumns: null as any },
+          audit: { hiddenColumns: {} as any },
+          agents: { hiddenColumns: false as any },
+        },
+      });
+      expect(result.views.security.hiddenColumns).toEqual([]);
+      expect(result.views.watchers.hiddenColumns).toEqual([]);
+      expect(result.views.servers.hiddenColumns).toEqual([]);
+      expect(result.views.audit.hiddenColumns).toEqual([]);
+      expect(result.views.agents.hiddenColumns).toEqual([]);
+    });
+
+    it('drops unknown column keys from persisted hiddenColumns', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          security: { hiddenColumns: ['critical', 'bogus-key'] },
+        },
+      });
+      expect(result.views.security.hiddenColumns).toEqual(['critical']);
+    });
+
+    it('drops required column keys from persisted hiddenColumns so a required column can never persist hidden', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          security: { hiddenColumns: ['image', 'critical'] },
+          watchers: { hiddenColumns: ['name', 'status'] },
+          servers: { hiddenColumns: ['name', 'host'] },
+          audit: { hiddenColumns: ['containerName', 'action'] },
+          agents: { hiddenColumns: ['name', 'status'] },
+        },
+      });
+      expect(result.views.security.hiddenColumns).toEqual(['critical']);
+      expect(result.views.watchers.hiddenColumns).toEqual(['status']);
+      expect(result.views.servers.hiddenColumns).toEqual(['host']);
+      expect(result.views.audit.hiddenColumns).toEqual(['action']);
+      expect(result.views.agents.hiddenColumns).toEqual(['status']);
+    });
+
+    it('preserves valid hiddenColumns as-is', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          watchers: { hiddenColumns: ['cron', 'lastRun'] },
+        },
+      });
+      expect(result.views.watchers.hiddenColumns).toEqual(['cron', 'lastRun']);
+    });
+
+    it('resets a non-record view to defaults during sanitization', () => {
+      const result = migrate({
+        schemaVersion: DEFAULTS.schemaVersion,
+        views: {
+          watchers: 'invalid' as any,
+        },
+      });
+      expect(result.views.watchers).toEqual(DEFAULTS.views.watchers);
+    });
+
+    it('deletes a non-record view during sanitization of legacy schema data', () => {
+      const result = migrate({
+        schemaVersion: 1,
+        views: {
+          servers: 42 as any,
+        },
+      });
+      expect(result.views.servers).toEqual(DEFAULTS.views.servers);
     });
   });
 });

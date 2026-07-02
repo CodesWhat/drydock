@@ -50,12 +50,12 @@ export interface PreferencesSchema {
   };
   views: {
     logs: { newestFirst: boolean };
-    security: { sortField: string; sortAsc: boolean };
-    audit: Record<string, never>;
-    agents: { sortKey: string; sortAsc: boolean };
+    security: { sortField: string; sortAsc: boolean; hiddenColumns: string[] };
+    audit: { hiddenColumns: string[] };
+    agents: { sortKey: string; sortAsc: boolean; hiddenColumns: string[] };
     triggers: Record<string, never>;
-    watchers: Record<string, never>;
-    servers: Record<string, never>;
+    watchers: { hiddenColumns: string[] };
+    servers: { hiddenColumns: string[] };
     registries: Record<string, never>;
     notifications: Record<string, never>;
     auth: Record<string, never>;
@@ -63,6 +63,30 @@ export interface PreferencesSchema {
 }
 
 export const CURRENT_SCHEMA_VERSION = 8;
+
+/**
+ * Table-mode column keys for the five views that share the `DataTableColumnPicker`
+ * infrastructure. Persisted preferences store the HIDDEN set (not the visible set) —
+ * see `VIEW_TABLE_REQUIRED_COLUMN_KEYS` and `sanitizeViews` in `migrate.ts` — so a
+ * column added in a future release is automatically visible for existing users.
+ */
+export const VIEW_TABLE_COLUMN_KEYS = {
+  security: ['image', 'critical', 'high', 'medium', 'low', 'fixable', 'total'],
+  watchers: ['name', 'status', 'containers', 'cron', 'nextRun', 'lastRun'],
+  servers: ['name', 'host', 'status', 'containers', 'lastSeen'],
+  audit: ['timestamp', 'action', 'containerName', 'status', 'details'],
+  agents: ['name', 'status', 'containers', 'docker', 'os', 'version', 'lastSeen'],
+} as const;
+
+export type ViewTableColumnKey = keyof typeof VIEW_TABLE_COLUMN_KEYS;
+
+export const VIEW_TABLE_REQUIRED_COLUMN_KEYS = {
+  security: ['image'],
+  watchers: ['name'],
+  servers: ['name'],
+  audit: ['containerName'],
+  agents: ['name'],
+} as const;
 
 export const CONTAINER_TABLE_COLUMN_KEYS = [
   'icon',
@@ -128,12 +152,12 @@ export const DEFAULTS: PreferencesSchema = {
   },
   views: {
     logs: { newestFirst: false },
-    security: { sortField: 'critical', sortAsc: false },
-    audit: {},
-    agents: { sortKey: 'name', sortAsc: true },
+    security: { sortField: 'critical', sortAsc: false, hiddenColumns: [] },
+    audit: { hiddenColumns: [] },
+    agents: { sortKey: 'name', sortAsc: true, hiddenColumns: [] },
     triggers: {},
-    watchers: {},
-    servers: {},
+    watchers: { hiddenColumns: [] },
+    servers: { hiddenColumns: [] },
     registries: {},
     notifications: {},
     auth: {},

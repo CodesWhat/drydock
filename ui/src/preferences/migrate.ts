@@ -8,6 +8,9 @@ import {
   type DashboardLayoutBreakpoint,
   DEFAULTS,
   type PreferencesSchema,
+  VIEW_TABLE_COLUMN_KEYS,
+  VIEW_TABLE_REQUIRED_COLUMN_KEYS,
+  type ViewTableColumnKey,
 } from './schema';
 import {
   FONT_FAMILIES,
@@ -246,6 +249,31 @@ function sanitizeTables(data: Record<string, unknown>): void {
   }
 }
 
+const VIEW_KEYS_WITH_HIDDEN_COLUMNS = Object.keys(VIEW_TABLE_COLUMN_KEYS) as ViewTableColumnKey[];
+
+/**
+ * Clamp a single view's persisted `hiddenColumns` to a known-safe array: non-array/
+ * non-string-array garbage resets to `[]`, unknown keys are dropped, and required
+ * columns (which must never persist as hidden) are dropped.
+ */
+function sanitizeViewHiddenColumns(
+  view: Record<string, unknown>,
+  viewKey: ViewTableColumnKey,
+): void {
+  if (!('hiddenColumns' in view)) {
+    return;
+  }
+  if (!isStringArray(view.hiddenColumns)) {
+    view.hiddenColumns = [];
+    return;
+  }
+  const allowedKeys = VIEW_TABLE_COLUMN_KEYS[viewKey] as readonly string[];
+  const requiredKeys = VIEW_TABLE_REQUIRED_COLUMN_KEYS[viewKey] as readonly string[];
+  view.hiddenColumns = view.hiddenColumns.filter(
+    (key) => allowedKeys.includes(key) && !requiredKeys.includes(key),
+  );
+}
+
 function sanitizeViews(data: Record<string, unknown>): void {
   const views = data.views;
   if (views && typeof views === 'object') {
@@ -258,6 +286,16 @@ function sanitizeViews(data: Record<string, unknown>): void {
         if ('newestFirst' in logs && !isBoolean(logs.newestFirst)) {
           delete logs.newestFirst;
         }
+      }
+    }
+    for (const viewKey of VIEW_KEYS_WITH_HIDDEN_COLUMNS) {
+      if (!(viewKey in v)) {
+        continue;
+      }
+      if (!isRecord(v[viewKey])) {
+        delete v[viewKey];
+      } else {
+        sanitizeViewHiddenColumns(v[viewKey] as Record<string, unknown>, viewKey);
       }
     }
   }
