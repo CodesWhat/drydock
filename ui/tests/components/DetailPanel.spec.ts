@@ -1,4 +1,5 @@
 import { mount } from '@vue/test-utils';
+import { nextTick } from 'vue';
 import DetailPanel from '@/components/DetailPanel.vue';
 
 const mountedWrappers: Array<ReturnType<typeof mount>> = [];
@@ -7,6 +8,10 @@ function factory(props: Record<string, any> = {}, slots: Record<string, any> = {
   const wrapper = mount(DetailPanel, {
     props: { open: true, isMobile: false, ...props },
     slots,
+    // Attached to the document so focus-trap assertions against
+    // document.activeElement behave the way they do in a real browser —
+    // jsdom only tracks activeElement for connected elements.
+    attachTo: document.body,
     global: {
       stubs: { AppIcon: { template: '<span class="app-icon-stub" />', props: ['name', 'size'] } },
     },
@@ -61,6 +66,13 @@ describe('DetailPanel', () => {
       const w = factory({ open: true, isMobile: false });
       expect(w.find('aside').classes()).toContain('sticky');
     });
+
+    it('uses the logical end-0 offset on mobile (RTL-safe) instead of right-0', () => {
+      const w = factory({ open: true, isMobile: true });
+      const classes = w.find('aside').classes();
+      expect(classes).toContain('end-0');
+      expect(classes).not.toContain('right-0');
+    });
   });
 
   describe('close button', () => {
@@ -110,6 +122,71 @@ describe('DetailPanel', () => {
         .findAll('button')
         .find((b) => b.attributes('aria-label') === 'Close details panel');
       expect(closeBtn).toBeDefined();
+    });
+
+    it('carries tabindex="-1" so the panel can receive programmatic focus', () => {
+      const w = factory();
+      expect(w.find('aside').attributes('tabindex')).toBe('-1');
+    });
+  });
+
+  describe('focus management', () => {
+    it('moves focus to the panel when opened on mobile (modal)', async () => {
+      const w = factory({ open: true, isMobile: true });
+      await nextTick();
+      expect(document.activeElement).toBe(w.find('aside').element);
+    });
+
+    it('restores focus to the previously focused element when the mobile panel closes', async () => {
+      const trigger = document.createElement('button');
+      document.body.appendChild(trigger);
+      trigger.focus();
+      expect(document.activeElement).toBe(trigger);
+
+      const w = factory({ open: true, isMobile: true });
+      await nextTick();
+      expect(document.activeElement).toBe(w.find('aside').element);
+
+      await w.setProps({ open: false });
+      await nextTick();
+      expect(document.activeElement).toBe(trigger);
+
+      trigger.remove();
+    });
+
+    it('does not move focus when opened on desktop (non-modal sidebar)', async () => {
+      const trigger = document.createElement('button');
+      document.body.appendChild(trigger);
+      trigger.focus();
+      expect(document.activeElement).toBe(trigger);
+
+      const w = factory({ open: true, isMobile: false });
+      await nextTick();
+
+      expect(document.activeElement).toBe(trigger);
+      expect(document.activeElement).not.toBe(w.find('aside').element);
+
+      trigger.remove();
+    });
+
+    it('does not steal focus back when switching between rows on desktop', async () => {
+      const w = factory({ open: true, isMobile: false });
+      await nextTick();
+
+      const otherRow = document.createElement('button');
+      document.body.appendChild(otherRow);
+      otherRow.focus();
+      expect(document.activeElement).toBe(otherRow);
+
+      // Re-opening (e.g. selecting a different row) must not pull focus
+      // back into the desktop panel — it stays non-modal.
+      await w.setProps({ open: false });
+      await w.setProps({ open: true });
+      await nextTick();
+
+      expect(document.activeElement).toBe(otherRow);
+
+      otherRow.remove();
     });
   });
 
