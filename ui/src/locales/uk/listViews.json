@@ -22,10 +22,6 @@
       "status": "Статус",
       "details": "Деталі"
     },
-    "card": {
-      "time": "Час",
-      "version": "Версія"
-    },
     "detail": {
       "timestamp": "Часова мітка",
       "event": "Подія",
@@ -156,10 +152,6 @@
       "total": "Всього"
     },
     "card": {
-      "vulnerabilities": "вразливостей",
-      "vsUpdate": "порівняно з оновленням",
-      "fixable": "виправлено",
-      "noFixesAvailable": "Виправлень немає",
       "total": "всього"
     },
     "badge": {
@@ -253,10 +245,6 @@
       "private": "Приватний",
       "public": "Публічний"
     },
-    "card": {
-      "auth": "Автентифікація",
-      "status": "Статус"
-    },
     "status": {
       "connected": "Підключено",
       "error": "Помилка",
@@ -288,15 +276,6 @@
       "status": "Статус",
       "containers": "Контейнери",
       "lastSeen": "Остання активність"
-    },
-    "card": {
-      "containers": "Контейнери",
-      "running": "Запущено",
-      "images": "Образи",
-      "lastSeen": "Остання активність"
-    },
-    "list": {
-      "containers": "контейнерів"
     },
     "detail": {
       "containers": "Контейнери",
@@ -339,9 +318,6 @@
       "status": "Статус",
       "refreshing": "Оновлення даних тригера...",
       "noConfig": "Немає властивостей конфігурації"
-    },
-    "list": {
-      "status": "Статус"
     }
   },
   "watchersView": {
@@ -362,12 +338,6 @@
     "status": {
       "watching": "Спостерігає",
       "paused": "Призупинено"
-    },
-    "card": {
-      "containers": "Контейнери",
-      "nextRun": "Наступний запуск",
-      "lastRun": "Останній запуск",
-      "containersWatched": "{count} контейнерів під спостереженням"
     },
     "badge": {
       "maint": "Обслуговування"

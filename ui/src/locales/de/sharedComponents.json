@@ -8,23 +8,9 @@
       "copied": "Kopiert!",
       "clickToCopy": "Zum Kopieren klicken"
     },
-    "dataCardGrid": {
-      "selectItem": "{name} auswählen"
-    },
     "dataFilterBar": {
       "filters": "Filter",
-      "toggleFilters": "Filter umschalten",
-      "viewMode": "Ansichtsmodus",
-      "viewModeLabel": "{label}-Ansicht",
-      "viewModes": {
-        "table": "Table",
-        "cards": "Cards",
-        "list": "List"
-      }
-    },
-    "dataListAccordion": {
-      "toggleDetails": "Details für {name} umschalten",
-      "selectItem": "{name} auswählen"
+      "toggleFilters": "Filter umschalten"
     },
     "dataTable": {
       "actions": "Aktionen",

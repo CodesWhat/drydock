@@ -8,23 +8,9 @@
       "copied": "Скопировано!",
       "clickToCopy": "Нажмите для копирования"
     },
-    "dataCardGrid": {
-      "selectItem": "Выбрать {name}"
-    },
     "dataFilterBar": {
       "filters": "Фильтры",
-      "toggleFilters": "Переключить фильтры",
-      "viewMode": "Режим просмотра",
-      "viewModeLabel": "Вид {label}",
-      "viewModes": {
-        "table": "Table",
-        "cards": "Cards",
-        "list": "List"
-      }
-    },
-    "dataListAccordion": {
-      "toggleDetails": "Переключить детали {name}",
-      "selectItem": "Выбрать {name}"
+      "toggleFilters": "Переключить фильтры"
     },
     "dataTable": {
       "actions": "Действия",

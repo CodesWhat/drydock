@@ -14,23 +14,9 @@
       "copied": "Copied!",
       "clickToCopy": "Click to copy"
     },
-    "dataCardGrid": {
-      "selectItem": "Select {name}"
-    },
     "dataFilterBar": {
       "filters": "Filters",
-      "toggleFilters": "Toggle filters",
-      "viewMode": "View mode",
-      "viewModeLabel": "{label} view",
-      "viewModes": {
-        "table": "Table",
-        "cards": "Cards",
-        "list": "List"
-      }
-    },
-    "dataListAccordion": {
-      "toggleDetails": "Toggle {name} details",
-      "selectItem": "Select {name}"
+      "toggleFilters": "Toggle filters"
     },
     "dataTable": {
       "actions": "Actions",

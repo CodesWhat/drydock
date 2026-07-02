@@ -8,23 +8,9 @@
       "copied": "Скопійовано!",
       "clickToCopy": "Натисніть для копіювання"
     },
-    "dataCardGrid": {
-      "selectItem": "Вибрати {name}"
-    },
     "dataFilterBar": {
       "filters": "Фільтри",
-      "toggleFilters": "Показати/приховати фільтри",
-      "viewMode": "Вигляд",
-      "viewModeLabel": "Вигляд {label}",
-      "viewModes": {
-        "table": "Table",
-        "cards": "Cards",
-        "list": "List"
-      }
-    },
-    "dataListAccordion": {
-      "toggleDetails": "Показати/приховати деталі {name}",
-      "selectItem": "Вибрати {name}"
+      "toggleFilters": "Показати/приховати фільтри"
     },
     "dataTable": {
       "actions": "Дії",

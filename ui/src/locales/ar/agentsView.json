@@ -18,10 +18,6 @@
         "os": "OS",
         "version": "الإصدار",
         "lastSeen": "آخر ظهور"
-      },
-      "card": {
-        "running": "تعمل",
-        "stopped": "متوقفة"
       }
     },
     "detail": {
@@ -80,9 +76,6 @@
         "dockerSocket": "مقبس Docker",
         "lastSeen": "آخر ظهور",
         "never": "أبداً"
-      },
-      "listView": {
-        "details": "التفاصيل"
       }
     }
   }

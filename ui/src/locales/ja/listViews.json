@@ -22,10 +22,6 @@
       "status": "ステータス",
       "details": "詳細"
     },
-    "card": {
-      "time": "時刻",
-      "version": "バージョン"
-    },
     "detail": {
       "timestamp": "タイムスタンプ",
       "event": "イベント",
@@ -156,10 +152,6 @@
       "total": "合計"
     },
     "card": {
-      "vulnerabilities": "件の脆弱性",
-      "vsUpdate": "更新との比較",
-      "fixable": "修正可能",
-      "noFixesAvailable": "修正はありません",
       "total": "合計"
     },
     "badge": {
@@ -253,10 +245,6 @@
       "private": "プライベート",
       "public": "パブリック"
     },
-    "card": {
-      "auth": "認証",
-      "status": "ステータス"
-    },
     "status": {
       "connected": "接続済み",
       "error": "エラー",
@@ -288,15 +276,6 @@
       "status": "ステータス",
       "containers": "コンテナ",
       "lastSeen": "最終確認"
-    },
-    "card": {
-      "containers": "コンテナ",
-      "running": "稼働中",
-      "images": "イメージ",
-      "lastSeen": "最終確認"
-    },
-    "list": {
-      "containers": "コンテナ"
     },
     "detail": {
       "containers": "コンテナ",
@@ -339,9 +318,6 @@
       "status": "ステータス",
       "refreshing": "トリガーの詳細を更新中...",
       "noConfig": "設定プロパティがありません"
-    },
-    "list": {
-      "status": "ステータス"
     }
   },
   "watchersView": {
@@ -362,12 +338,6 @@
     "status": {
       "watching": "監視中",
       "paused": "一時停止"
-    },
-    "card": {
-      "containers": "コンテナ",
-      "nextRun": "次回実行",
-      "lastRun": "前回実行",
-      "containersWatched": "{count} 件のコンテナを監視中"
     },
     "badge": {
       "maint": "メンテナンス"

@@ -18,10 +18,6 @@
         "os": "作業系統",
         "version": "版本",
         "lastSeen": "最後活躍"
-      },
-      "card": {
-        "running": "執行中",
-        "stopped": "已停止"
       }
     },
     "detail": {
@@ -80,9 +76,6 @@
         "dockerSocket": "Docker Socket",
         "lastSeen": "最後活躍",
         "never": "從未"
-      },
-      "listView": {
-        "details": "詳情"
       }
     }
   }

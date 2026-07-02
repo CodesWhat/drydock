@@ -22,10 +22,6 @@
       "status": "Status",
       "details": "Details"
     },
-    "card": {
-      "time": "Time",
-      "version": "Version"
-    },
     "detail": {
       "timestamp": "Timestamp",
       "event": "Event",
@@ -156,10 +152,6 @@
       "total": "Total"
     },
     "card": {
-      "vulnerabilities": "vulnerabilities",
-      "vsUpdate": "vs update",
-      "fixable": "fixable",
-      "noFixesAvailable": "No fixes available",
       "total": "total"
     },
     "badge": {
@@ -254,10 +246,6 @@
       "private": "Private",
       "public": "Public"
     },
-    "card": {
-      "auth": "Auth",
-      "status": "Status"
-    },
     "status": {
       "connected": "Connected",
       "error": "Error",
@@ -289,15 +277,6 @@
       "status": "Status",
       "containers": "Containers",
       "lastSeen": "Last Seen"
-    },
-    "card": {
-      "containers": "Containers",
-      "running": "Running",
-      "images": "Images",
-      "lastSeen": "Last seen"
-    },
-    "list": {
-      "containers": "containers"
     },
     "detail": {
       "containers": "Containers",
@@ -340,9 +319,6 @@
       "status": "Status",
       "refreshing": "Refreshing trigger details...",
       "noConfig": "No configuration properties"
-    },
-    "list": {
-      "status": "Status"
     }
   },
   "watchersView": {
@@ -363,12 +339,6 @@
     "status": {
       "watching": "Watching",
       "paused": "Paused"
-    },
-    "card": {
-      "containers": "Containers",
-      "nextRun": "Next run",
-      "lastRun": "Last run",
-      "containersWatched": "{count} containers watched"
     },
     "badge": {
       "maint": "Maint"

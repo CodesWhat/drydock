@@ -18,10 +18,6 @@
         "os": "SO",
         "version": "Versão",
         "lastSeen": "Última atividade"
-      },
-      "card": {
-        "running": "em execução",
-        "stopped": "parados"
       }
     },
     "detail": {
@@ -80,9 +76,6 @@
         "dockerSocket": "Socket Docker",
         "lastSeen": "Última atividade",
         "never": "nunca"
-      },
-      "listView": {
-        "details": "Detalhes"
       }
     }
   }

@@ -22,10 +22,6 @@
       "status": "الحالة",
       "details": "التفاصيل"
     },
-    "card": {
-      "time": "الوقت",
-      "version": "الإصدار"
-    },
     "detail": {
       "timestamp": "الطابع الزمني",
       "event": "الحدث",
@@ -156,10 +152,6 @@
       "total": "الإجمالي"
     },
     "card": {
-      "vulnerabilities": "ثغرة",
-      "vsUpdate": "مقابل التحديث",
-      "fixable": "قابلة للإصلاح",
-      "noFixesAvailable": "لا تتوفر إصلاحات",
       "total": "الإجمالي"
     },
     "badge": {
@@ -253,10 +245,6 @@
       "private": "خاص",
       "public": "عام"
     },
-    "card": {
-      "auth": "المصادقة",
-      "status": "الحالة"
-    },
     "status": {
       "connected": "متصل",
       "error": "خطأ",
@@ -288,15 +276,6 @@
       "status": "الحالة",
       "containers": "الحاويات",
       "lastSeen": "آخر ظهور"
-    },
-    "card": {
-      "containers": "الحاويات",
-      "running": "تعمل",
-      "images": "الصور",
-      "lastSeen": "آخر ظهور"
-    },
-    "list": {
-      "containers": "حاوية"
     },
     "detail": {
       "containers": "الحاويات",
@@ -339,9 +318,6 @@
       "status": "الحالة",
       "refreshing": "جارٍ تحديث تفاصيل المشغّل...",
       "noConfig": "لا توجد خصائص إعداد"
-    },
-    "list": {
-      "status": "الحالة"
     }
   },
   "watchersView": {
@@ -362,12 +338,6 @@
     "status": {
       "watching": "يراقب",
       "paused": "متوقف مؤقتاً"
-    },
-    "card": {
-      "containers": "الحاويات",
-      "nextRun": "التشغيل التالي",
-      "lastRun": "آخر تشغيل",
-      "containersWatched": "{count} حاوية تحت المراقبة"
     },
     "badge": {
       "maint": "صيانة"

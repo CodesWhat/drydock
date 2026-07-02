@@ -22,10 +22,6 @@
       "status": "状态",
       "details": "详情"
     },
-    "card": {
-      "time": "时间",
-      "version": "版本"
-    },
     "detail": {
       "timestamp": "时间戳",
       "event": "事件",
@@ -156,10 +152,6 @@
       "total": "总计"
     },
     "card": {
-      "vulnerabilities": "个漏洞",
-      "vsUpdate": "对比更新",
-      "fixable": "可修复",
-      "noFixesAvailable": "没有可用修复",
       "total": "总计"
     },
     "badge": {
@@ -253,10 +245,6 @@
       "private": "私有",
       "public": "公开"
     },
-    "card": {
-      "auth": "认证",
-      "status": "状态"
-    },
     "status": {
       "connected": "已连接",
       "error": "错误",
@@ -288,15 +276,6 @@
       "status": "状态",
       "containers": "容器",
       "lastSeen": "最后活跃"
-    },
-    "card": {
-      "containers": "容器",
-      "running": "运行中",
-      "images": "镜像",
-      "lastSeen": "最后活跃"
-    },
-    "list": {
-      "containers": "个容器"
     },
     "detail": {
       "containers": "容器",
@@ -339,9 +318,6 @@
       "status": "状态",
       "refreshing": "正在刷新触发器详情...",
       "noConfig": "无配置属性"
-    },
-    "list": {
-      "status": "状态"
     }
   },
   "watchersView": {
@@ -362,12 +338,6 @@
     "status": {
       "watching": "监视中",
       "paused": "已暂停"
-    },
-    "card": {
-      "containers": "容器",
-      "nextRun": "下次运行",
-      "lastRun": "上次运行",
-      "containersWatched": "监视 {count} 个容器"
     },
     "badge": {
       "maint": "维护"

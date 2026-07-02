@@ -22,10 +22,6 @@
       "status": "Trạng thái",
       "details": "Chi tiết"
     },
-    "card": {
-      "time": "Thời gian",
-      "version": "Phiên bản"
-    },
     "detail": {
       "timestamp": "Dấu thời gian",
       "event": "Sự kiện",
@@ -156,10 +152,6 @@
       "total": "Tổng cộng"
     },
     "card": {
-      "vulnerabilities": "lỗ hổng",
-      "vsUpdate": "so với bản cập nhật",
-      "fixable": "có thể vá",
-      "noFixesAvailable": "Không có bản vá",
       "total": "tổng cộng"
     },
     "badge": {
@@ -253,10 +245,6 @@
       "private": "Riêng tư",
       "public": "Công khai"
     },
-    "card": {
-      "auth": "Xác thực",
-      "status": "Trạng thái"
-    },
     "status": {
       "connected": "Đã kết nối",
       "error": "Lỗi",
@@ -288,15 +276,6 @@
       "status": "Trạng thái",
       "containers": "Container",
       "lastSeen": "Lần cuối thấy"
-    },
-    "card": {
-      "containers": "Container",
-      "running": "Đang chạy",
-      "images": "Image",
-      "lastSeen": "Lần cuối thấy"
-    },
-    "list": {
-      "containers": "container"
     },
     "detail": {
       "containers": "Container",
@@ -339,9 +318,6 @@
       "status": "Trạng thái",
       "refreshing": "Đang làm mới thông tin trigger...",
       "noConfig": "Không có thuộc tính cấu hình"
-    },
-    "list": {
-      "status": "Trạng thái"
     }
   },
   "watchersView": {
@@ -362,12 +338,6 @@
     "status": {
       "watching": "Đang theo dõi",
       "paused": "Tạm dừng"
-    },
-    "card": {
-      "containers": "Container",
-      "nextRun": "Lần chạy tiếp",
-      "lastRun": "Lần chạy cuối",
-      "containersWatched": "{count} container đang theo dõi"
     },
     "badge": {
       "maint": "Bảo trì"

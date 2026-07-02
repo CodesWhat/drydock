@@ -8,23 +8,9 @@
       "copied": "تم النسخ!",
       "clickToCopy": "انقر للنسخ"
     },
-    "dataCardGrid": {
-      "selectItem": "تحديد {name}"
-    },
     "dataFilterBar": {
       "filters": "الفلاتر",
-      "toggleFilters": "تبديل الفلاتر",
-      "viewMode": "وضع العرض",
-      "viewModeLabel": "عرض {label}",
-      "viewModes": {
-        "table": "Table",
-        "cards": "Cards",
-        "list": "List"
-      }
-    },
-    "dataListAccordion": {
-      "toggleDetails": "تبديل تفاصيل {name}",
-      "selectItem": "تحديد {name}"
+      "toggleFilters": "تبديل الفلاتر"
     },
     "dataTable": {
       "actions": "الإجراءات",

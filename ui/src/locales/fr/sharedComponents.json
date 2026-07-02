@@ -8,23 +8,9 @@
       "copied": "Copié !",
       "clickToCopy": "Cliquer pour copier"
     },
-    "dataCardGrid": {
-      "selectItem": "Sélectionner {name}"
-    },
     "dataFilterBar": {
       "filters": "Filtres",
-      "toggleFilters": "Afficher/masquer les filtres",
-      "viewMode": "Mode d'affichage",
-      "viewModeLabel": "Vue {label}",
-      "viewModes": {
-        "table": "Table",
-        "cards": "Cards",
-        "list": "List"
-      }
-    },
-    "dataListAccordion": {
-      "toggleDetails": "Afficher/masquer les détails de {name}",
-      "selectItem": "Sélectionner {name}"
+      "toggleFilters": "Afficher/masquer les filtres"
     },
     "dataTable": {
       "actions": "Actions",

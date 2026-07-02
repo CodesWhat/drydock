@@ -8,23 +8,9 @@
       "copied": "已复制！",
       "clickToCopy": "点击复制"
     },
-    "dataCardGrid": {
-      "selectItem": "选择 {name}"
-    },
     "dataFilterBar": {
       "filters": "筛选",
-      "toggleFilters": "切换筛选",
-      "viewMode": "视图模式",
-      "viewModeLabel": "{label} 视图",
-      "viewModes": {
-        "table": "表",
-        "cards": "卡片",
-        "list": "列表"
-      }
-    },
-    "dataListAccordion": {
-      "toggleDetails": "切换 {name} 详情",
-      "selectItem": "选择 {name}"
+      "toggleFilters": "切换筛选"
     },
     "dataTable": {
       "actions": "操作",
