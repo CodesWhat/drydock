@@ -173,6 +173,19 @@ describe('useColumnVisibility', () => {
     }
   });
 
+  it('sizes the icon column to fit its 32px ContainerIcon plus pl-5 padding (>= 52px)', async () => {
+    // Regression guard: the icon cell renders a 32px ContainerIcon (ContainersGroupedViews.vue)
+    // inside `pl-5` (20px) padding. DataTable's icon cells have `overflow-hidden`, so if this
+    // column's size/minSize ever shrinks back below 52 (32 + 20), the icon silently clips again
+    // instead of just hanging unseen past the cell edge like it used to.
+    const { useColumnVisibility } = await loadColumnVisibility();
+    const { allColumns } = useColumnVisibility();
+    const iconCol = allColumns.find((c) => c.key === 'icon');
+    const ICON_PLUS_PADDING_PX = 52;
+    expect(iconCol?.size).toBeGreaterThanOrEqual(ICON_PLUS_PADDING_PX);
+    expect(iconCol?.minSize).toBeGreaterThanOrEqual(ICON_PLUS_PADDING_PX);
+  });
+
   it('keeps host names with numeric suffixes readable by default', async () => {
     const { useColumnVisibility } = await loadColumnVisibility();
     const { allColumns } = useColumnVisibility();
@@ -244,8 +257,8 @@ describe('useColumnVisibility', () => {
 
     it('drops registry first as width tightens using column min sizes', async () => {
       const { useColumnVisibility } = await loadColumnVisibility();
-      // At 1029 the total min footprint (1036) minus registry+server fits in budget=849;
-      // softwareVersion (priority 5) is droppable but lower priority than server (70).
+      // At 1029 the total min footprint (1052, icon's minSize is 56) minus registry+server fits
+      // in budget=849; softwareVersion (priority 5) is droppable but lower priority than server (70).
       const width = ref(1029);
       const { hiddenColumnKeys, autoHiddenColumns } = useColumnVisibility(width);
       expect(hiddenColumnKeys.value).toContain('registry');

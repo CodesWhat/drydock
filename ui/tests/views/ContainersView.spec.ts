@@ -250,9 +250,10 @@ vi.mock('@/composables/useDetailPanel', () => ({
 
 // --- Stub child components ---
 const childStubs = {
-  DataViewLayout: {
+  DataViewLayout: defineComponent({
+    emits: ['content-width'],
     template: '<div class="data-view-layout"><slot /><slot name="panel" /></div>',
-  },
+  }),
   DataFilterBar: {
     template:
       '<div class="data-filter-bar"><slot v-if="showFilters" name="filters" /><slot name="extra-buttons" /><slot name="left" /><slot name="center" /></div>',
@@ -1520,6 +1521,53 @@ describe('ContainersView', () => {
       expect(serverCol.priority).toBe(70);
 
       if (prevImpl) mockedVisibility.mockImplementation(prevImpl);
+    });
+  });
+
+  describe('availableContentWidth', () => {
+    it('falls back to the sidebar/panel estimate before any content-width measurement arrives', async () => {
+      mockWindowWidth.value = 1440;
+      mockDetailPanelOpen.value = false;
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+      // sidebarPx=240 (desktop, sidebar not collapsed by default) + contentPx=48, panel closed.
+      expect(vm.availableContentWidth).toBe(1440 - 240 - 48);
+    });
+
+    it.each([
+      'sm',
+      'md',
+      'lg',
+    ] as const)('uses the real DataViewLayout measurement once emitted, regardless of panelSize=%s', async (size) => {
+      mockDetailPanelOpen.value = true;
+      mockPanelSize.value = size;
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+
+      const layout = wrapper.findComponent(childStubs.DataViewLayout as any);
+      layout.vm.$emit('content-width', 905);
+      await flushPromises();
+
+      // The old hand-rolled formula subtracted a fixed PANEL_WIDTH_PX[panelSize] (sm=420,
+      // md=560, lg=720) and was ~23px too generous versus the real box. Once a real
+      // measurement has been emitted, availableContentWidth must equal it exactly — the same
+      // number for every panelSize — because DataViewLayout's ResizeObserver already accounts
+      // for the actual panel width, the flexbox gap, and the panel's own margins.
+      expect(vm.availableContentWidth).toBe(905);
+    });
+
+    it('prefers the latest measurement over the fallback once one has arrived', async () => {
+      mockWindowWidth.value = 1440;
+      mockDetailPanelOpen.value = false;
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+      expect(vm.availableContentWidth).toBe(1440 - 240 - 48);
+
+      const layout = wrapper.findComponent(childStubs.DataViewLayout as any);
+      layout.vm.$emit('content-width', 1111);
+      await flushPromises();
+
+      expect(vm.availableContentWidth).toBe(1111);
     });
   });
 

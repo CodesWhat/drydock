@@ -1195,12 +1195,31 @@ const renderGroups = computed<RenderGroup[]>(() => {
   return groupedContainers.value;
 });
 
-const availableContentWidth = computed(() => {
+// Real measurement from DataViewLayout's ResizeObserver (see @content-width below) — the source
+// of truth for how much horizontal room the table actually has. `measuredContentWidth` starts at
+// 0 (nothing measured yet, pre-mount) and is only ever written to a positive value.
+const measuredContentWidth = ref(0);
+
+function handleContentWidth(width: number): void {
+  measuredContentWidth.value = width;
+}
+
+// Pre-mount fallback ONLY: used for the single frame before DataViewLayout's ResizeObserver
+// delivers its first real measurement, so auto-hide has something reasonable to work with
+// instead of flashing a too-wide layout. Once a real measurement arrives, `availableContentWidth`
+// never consults this again. Do not use this as a substitute for the real measurement — it was
+// the hand-rolled estimate that caused the original ~23px drift (this formula can't see the
+// flexbox gap between the content column and the detail panel, or the panel's own margins).
+const fallbackContentWidth = computed(() => {
   const sidebarPx = isMobile.value ? 0 : preferences.layout.sidebarCollapsed ? 56 : 240;
   const contentPx = 48;
   const panelPx = detailPanelOpen.value ? PANEL_WIDTH_PX[panelSize.value] : 0;
   return Math.max(0, windowWidth.value - sidebarPx - contentPx - panelPx);
 });
+
+const availableContentWidth = computed(() =>
+  measuredContentWidth.value > 0 ? measuredContentWidth.value : fallbackContentWidth.value,
+);
 
 const { allColumns, visibleColumns, hiddenColumnKeys, toggleColumn, resetColumns } =
   useColumnVisibility(availableContentWidth);
@@ -1534,7 +1553,7 @@ provide(containersViewTemplateContextKey, {
 </script>
 
 <template>
-  <DataViewLayout v-if="!containerFullPage">
+  <DataViewLayout v-if="!containerFullPage" @content-width="handleContentWidth">
     <ContainersListContent />
     <template #panel>
       <ContainerSideDetail />

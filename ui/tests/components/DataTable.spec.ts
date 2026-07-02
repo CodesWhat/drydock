@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import DataTable from '@/components/DataTable.vue';
+import { useColumnVisibility } from '@/composables/useColumnVisibility';
 
 const columns = [
   { key: 'name', label: 'Name', sortable: true },
@@ -714,6 +715,104 @@ describe('DataTable', () => {
     });
   });
 
+  describe('sticky separator + actions-column overflow gating', () => {
+    let originalClientWidthDescriptor: PropertyDescriptor | undefined;
+    let mockedClientWidth = 0;
+
+    beforeEach(() => {
+      mockedClientWidth = 0;
+      originalClientWidthDescriptor = Object.getOwnPropertyDescriptor(
+        HTMLElement.prototype,
+        'clientWidth',
+      );
+      Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+        configurable: true,
+        get() {
+          return mockedClientWidth;
+        },
+      });
+    });
+
+    afterEach(() => {
+      if (originalClientWidthDescriptor) {
+        Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidthDescriptor);
+      } else {
+        delete (HTMLElement.prototype as any).clientWidth;
+      }
+    });
+
+    async function mountAtWidth(
+      width: number,
+      props: Record<string, any> = {},
+      slots: Record<string, any> = {},
+    ) {
+      mockedClientWidth = width;
+      const w = factory(props, slots);
+      await nextTick();
+      return w;
+    }
+
+    // Mirrors the regressionColumns fixture above (#467): 1484px declared-size-sum / 1136px
+    // minSize-sum, so a 1000px viewport sits below the minSize-sum entirely — every shrinkable
+    // column bottoms out at minSize and the table legitimately keeps overflowing.
+    const regressionColumns = [
+      { key: 'icon', label: '', icon: true, size: 40, minSize: 40, maxSize: 40 },
+      { key: 'name', label: 'Container', size: 360, minSize: 220, maxSize: 640, flex: 1 },
+      { key: 'version', label: 'Tag', size: 220, minSize: 150, maxSize: 320 },
+      { key: 'softwareVersion', label: 'Version', size: 220, minSize: 150, maxSize: 320 },
+      { key: 'kind', label: 'Update', size: 128, minSize: 116, maxSize: 180 },
+      { key: 'status', label: 'Status', size: 118, minSize: 112, maxSize: 160 },
+      { key: 'server', label: 'Host', size: 152, minSize: 132, maxSize: 240 },
+      { key: 'registry', label: 'Registry', size: 126, minSize: 116, maxSize: 180 },
+      { key: 'uptime', label: 'Uptime', size: 120, minSize: 100, maxSize: 180 },
+    ];
+
+    const roomyColumns = [
+      { key: 'name', label: 'Name', size: 300, minSize: 200, maxSize: 640, flex: 1 },
+      { key: 'status', label: 'Status', size: 120, minSize: 100, maxSize: 200 },
+    ];
+
+    it('does not add the overflow modifier class when columns comfortably fit the viewport', async () => {
+      const w = await mountAtWidth(720, { columns: roomyColumns, rows: [] });
+      const scrollContainer = w.find('.dd-data-table-scroll');
+      expect(scrollContainer.classes()).not.toContain('dd-table-has-overflow');
+    });
+
+    it('adds the overflow modifier class once every column has shrunk to minSize and the table still overflows', async () => {
+      const w = await mountAtWidth(1000, { columns: regressionColumns, rows: [] });
+      const scrollContainer = w.find('.dd-data-table-scroll');
+      expect(scrollContainer.classes()).toContain('dd-table-has-overflow');
+    });
+
+    it('keeps the actions column sticky to the inline-end edge (header + body) when the table fits the viewport', async () => {
+      const w = await mountAtWidth(720, { columns: roomyColumns, rows, showActions: true });
+
+      const actionsHeader = w.find('thead th[data-col-key="__actions__"]');
+      expect(actionsHeader.classes()).toEqual(expect.arrayContaining(['sticky', 'end-0', 'z-20']));
+
+      const actionsCell = w.findAll('tbody tr')[0].find('td[data-col-key="__actions__"]');
+      expect(actionsCell.classes()).toEqual(expect.arrayContaining(['sticky', 'end-0', 'z-10']));
+    });
+
+    it('drops sticky/end-0 from the actions column (header + body) when total resolved width overflows the viewport', async () => {
+      // Same 1000px minSize-floor overflow case as above: `position: sticky; end-0` here would
+      // pull the actions column left of its natural grid position by the overflow amount,
+      // painting it on top of the last data column. Falling back to normal in-flow position
+      // keeps it reachable by horizontal scroll instead of overlapping anything.
+      const w = await mountAtWidth(1000, { columns: regressionColumns, rows, showActions: true });
+
+      const actionsHeader = w.find('thead th[data-col-key="__actions__"]');
+      expect(actionsHeader.classes()).not.toContain('sticky');
+      expect(actionsHeader.classes()).not.toContain('end-0');
+      expect(actionsHeader.classes()).not.toContain('z-20');
+
+      const actionsCell = w.findAll('tbody tr')[0].find('td[data-col-key="__actions__"]');
+      expect(actionsCell.classes()).not.toContain('sticky');
+      expect(actionsCell.classes()).not.toContain('end-0');
+      expect(actionsCell.classes()).not.toContain('z-10');
+    });
+  });
+
   describe('column resize performance', () => {
     it('renders resize movement through colgroup instead of header width attributes', async () => {
       const resizeColumns = [
@@ -787,6 +886,136 @@ describe('DataTable', () => {
       dispatchPointer(document, 'pointerup', { pointerId: 1 });
       await nextTick();
       expect(document.body.classList.contains('dd-col-resizing')).toBe(false);
+    });
+  });
+
+  describe('viewport-width sync performance', () => {
+    let originalClientWidthDescriptor: PropertyDescriptor | undefined;
+    let mockedClientWidth = 0;
+    let capturedResizeCallback: ResizeObserverCallback | undefined;
+    const originalResizeObserver = globalThis.ResizeObserver;
+
+    class CapturingResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        capturedResizeCallback = callback;
+      }
+      observe() {
+        // No-op — tests fire the captured callback directly.
+      }
+      unobserve() {
+        // No-op for tests.
+      }
+      disconnect() {
+        // No-op for tests.
+      }
+    }
+
+    function fireResizeObserver() {
+      capturedResizeCallback?.([] as ResizeObserverEntry[], {} as ResizeObserver);
+    }
+
+    beforeEach(() => {
+      mockedClientWidth = 0;
+      capturedResizeCallback = undefined;
+      originalClientWidthDescriptor = Object.getOwnPropertyDescriptor(
+        HTMLElement.prototype,
+        'clientWidth',
+      );
+      Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+        configurable: true,
+        get() {
+          return mockedClientWidth;
+        },
+      });
+      Object.defineProperty(globalThis, 'ResizeObserver', {
+        value: CapturingResizeObserver,
+        configurable: true,
+        writable: true,
+      });
+    });
+
+    afterEach(() => {
+      if (originalClientWidthDescriptor) {
+        Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidthDescriptor);
+      } else {
+        delete (HTMLElement.prototype as any).clientWidth;
+      }
+      Object.defineProperty(globalThis, 'ResizeObserver', {
+        value: originalResizeObserver,
+        configurable: true,
+        writable: true,
+      });
+    });
+
+    const resizeColumns = [
+      { key: 'name', label: 'Name', size: 300, minSize: 200, maxSize: 640, flex: 1 },
+      { key: 'status', label: 'Status', size: 100, minSize: 80, maxSize: 200 },
+    ];
+
+    it('ignores a sub-pixel ResizeObserver delta (epsilon guard)', async () => {
+      mockedClientWidth = 700;
+      const w = mount(DataTable, {
+        props: { columns: resizeColumns, rows: [], rowKey: 'id' },
+        global: { stubs: { AppIcon: { template: '<span />' } } },
+      });
+      await nextTick();
+      expect(w.find('colgroup col[data-col-key="name"]').attributes('style')).toContain(
+        'width: 600px',
+      );
+
+      // Sub-pixel jitter (< 1px delta) — the epsilon guard must skip the write entirely, so the
+      // flex-redistributed width stays exactly as it was.
+      mockedClientWidth = 700.9;
+      fireResizeObserver();
+      await nextTick();
+
+      expect(w.find('colgroup col[data-col-key="name"]').attributes('style')).toContain(
+        'width: 600px',
+      );
+    });
+
+    it('applies a >=1px ResizeObserver delta normally', async () => {
+      mockedClientWidth = 700;
+      const w = mount(DataTable, {
+        props: { columns: resizeColumns, rows: [], rowKey: 'id' },
+        global: { stubs: { AppIcon: { template: '<span />' } } },
+      });
+      await nextTick();
+      expect(w.find('colgroup col[data-col-key="name"]').attributes('style')).toContain(
+        'width: 600px',
+      );
+
+      mockedClientWidth = 701;
+      fireResizeObserver();
+      await nextTick();
+
+      expect(w.find('colgroup col[data-col-key="name"]').attributes('style')).toContain(
+        'width: 601px',
+      );
+    });
+
+    it('does not resync viewport width from a plain window resize event (redundant listener removed)', async () => {
+      mockedClientWidth = 700;
+      const w = mount(DataTable, {
+        props: { columns: resizeColumns, rows: [], rowKey: 'id' },
+        global: { stubs: { AppIcon: { template: '<span />' } } },
+      });
+      await nextTick();
+      expect(w.find('colgroup col[data-col-key="name"]').attributes('style')).toContain(
+        'width: 600px',
+      );
+
+      // Simulate a real resize by changing the mocked clientWidth, but only dispatch the window
+      // 'resize' event — never fire the ResizeObserver. Before this fix, a second unthrottled
+      // `resize` listener drove `syncTableViewportWidth` directly; now the ResizeObserver is the
+      // sole width source, so this must be a no-op.
+      mockedClientWidth = 1000;
+      globalThis.dispatchEvent(new Event('resize'));
+      await nextTick();
+
+      expect(w.find('colgroup col[data-col-key="name"]').attributes('style')).toContain(
+        'width: 600px',
+      );
     });
   });
 
@@ -917,23 +1146,24 @@ describe('DataTable', () => {
   });
 
   describe('mobile - sticky identity column', () => {
-    it('first non-icon column header carries sticky start-0 z-20 classes', () => {
-      // Default columns: [name, status, icon] — name is the first non-icon column
+    it('first non-icon column header carries a sticky z-20 class with inset-inline-start: 0px', () => {
+      // Default columns: [name, status, icon] — name is the first non-icon column, and nothing
+      // precedes it (icon is declared last), so its pinned offset is 0.
       const w = factory();
       const nameHeader = w.findAll('thead th')[0];
       expect(nameHeader.classes()).toContain('sticky');
-      expect(nameHeader.classes()).toContain('start-0');
       expect(nameHeader.classes()).toContain('z-20');
       expect(nameHeader.classes()).toContain('dd-sticky-col-left');
+      expect(nameHeader.attributes('style')).toContain('inset-inline-start: 0px');
     });
 
-    it('first non-icon column data cells carry sticky start-0 z-10 classes', () => {
+    it('first non-icon column data cells carry a sticky z-10 class with inset-inline-start: 0px', () => {
       const w = factory();
       const firstRowFirstCell = w.findAll('tbody tr')[0].findAll('td')[0];
       expect(firstRowFirstCell.classes()).toContain('sticky');
-      expect(firstRowFirstCell.classes()).toContain('start-0');
       expect(firstRowFirstCell.classes()).toContain('z-10');
       expect(firstRowFirstCell.classes()).toContain('dd-sticky-col-left');
+      expect(firstRowFirstCell.attributes('style')).toContain('inset-inline-start: 0px');
     });
 
     it('header sticky cell out-stacks the body sticky cell (z-20 > z-10)', () => {
@@ -950,7 +1180,7 @@ describe('DataTable', () => {
       expect(nameHeader.attributes('style')).toContain('background-color');
     });
 
-    it('skips sticky-left on an icon column and applies it to the first non-icon column', () => {
+    it('pins a leading icon column sticky-left alongside the first non-icon column, offset by the icon width', () => {
       const iconFirstCols = [
         { key: 'icon', label: '', icon: true },
         { key: 'name', label: 'Name' },
@@ -961,12 +1191,70 @@ describe('DataTable', () => {
         global: { stubs: { AppIcon: { template: '<span />' } } },
       });
       const ths = w.findAll('thead th');
-      // icon column (index 0) must NOT be sticky
-      expect(ths[0].classes()).not.toContain('sticky');
-      // name column (index 1) — first non-icon — must be sticky
+      // icon column (index 0): pinned sticky at offset 0, but never the border-carrying column —
+      // an icon can no longer scroll out from under the opaque name column (it's pinned too).
+      expect(ths[0].classes()).toContain('sticky');
+      expect(ths[0].classes()).toContain('z-20');
+      expect(ths[0].classes()).not.toContain('dd-sticky-col-left');
+      expect(ths[0].attributes('style')).toContain('inset-inline-start: 0px');
+
+      // name column (index 1) — first non-icon — is pinned right after the icon column, offset
+      // by the icon's resolved width (40px, the default icon column size). It's the only column
+      // carrying the separator border class.
       expect(ths[1].classes()).toContain('sticky');
-      expect(ths[1].classes()).toContain('start-0');
       expect(ths[1].classes()).toContain('dd-sticky-col-left');
+      expect(ths[1].attributes('style')).toContain('inset-inline-start: 40px');
+
+      const firstRowCells = w.findAll('tbody tr')[0].findAll('td');
+      expect(firstRowCells[0].classes()).toContain('sticky');
+      expect(firstRowCells[0].classes()).not.toContain('dd-sticky-col-left');
+      expect(firstRowCells[0].attributes('style')).toContain('inset-inline-start: 0px');
+      expect(firstRowCells[1].classes()).toContain('sticky');
+      expect(firstRowCells[1].classes()).toContain('dd-sticky-col-left');
+      expect(firstRowCells[1].attributes('style')).toContain('inset-inline-start: 40px');
+    });
+
+    it('contains icon column content so it cannot overflow into the neighboring sticky column', () => {
+      const iconFirstCols = [
+        { key: 'icon', label: '', icon: true },
+        { key: 'name', label: 'Name' },
+      ];
+      const w = mount(DataTable, {
+        props: { columns: iconFirstCols, rows, rowKey: 'id' },
+        global: { stubs: { AppIcon: { template: '<span />' } } },
+      });
+      const iconHeader = w.findAll('thead th')[0];
+      const iconCell = w.findAll('tbody tr')[0].findAll('td')[0];
+      expect(iconHeader.classes()).toContain('overflow-hidden');
+      expect(iconCell.classes()).toContain('overflow-hidden');
+    });
+
+    it("resolves the real containers icon column's content box wide enough for its 32px icon (not just overflow-hidden)", () => {
+      // `overflow-hidden` on the icon cell (added above) only stops clipped content from
+      // spilling into the neighboring sticky column — it says nothing about whether the icon
+      // itself still fits. This asserts the actual geometry: the icon column's resolved content
+      // box (resolvedWidth minus the `pl-5` left padding DataTable hardcodes for icon columns)
+      // must be >= the 32px ContainerIcon rendered in ContainersGroupedViews.vue. Sourced from
+      // the real useColumnVisibility catalog so a future icon-size bump or column shrink there
+      // fails this test instead of silently clipping in production.
+      const { allColumns } = useColumnVisibility();
+      const iconColumn = allColumns.find((c) => c.key === 'icon');
+      expect(iconColumn).toBeDefined();
+
+      const w = mount(DataTable, {
+        props: { columns: [iconColumn, { key: 'name', label: 'Name' }], rows, rowKey: 'id' },
+        global: { stubs: { AppIcon: { template: '<span />' } } },
+      });
+
+      const iconCol = w.find('colgroup col[data-col-key="icon"]');
+      const match = (iconCol.attributes('style') ?? '').match(/width:\s*([0-9.]+)px/);
+      const resolvedWidth = match ? Number.parseFloat(match[1]) : 0;
+
+      const ICON_CELL_LEFT_PADDING_PX = 20; // pl-5, hardcoded by DataTable for icon columns
+      const CONTAINER_ICON_SIZE_PX = 32; // ContainersGroupedViews.vue: <ContainerIcon :size="32" />
+      expect(resolvedWidth - ICON_CELL_LEFT_PADDING_PX).toBeGreaterThanOrEqual(
+        CONTAINER_ICON_SIZE_PX,
+      );
     });
 
     it('applies sticky-left to all data cells in the first non-icon column, not just the first row', () => {
@@ -1722,13 +2010,15 @@ describe('DataTable', () => {
 
         const statusHeader = w.find('thead th[data-col-key="status"]');
         expect(statusHeader.classes()).toEqual(
-          expect.arrayContaining(['sticky', 'start-0', 'dd-sticky-col-left']),
+          expect.arrayContaining(['sticky', 'dd-sticky-col-left']),
         );
+        expect(statusHeader.attributes('style')).toContain('inset-inline-start: 0px');
 
         const statusCell = w.findAll('tbody tr')[0].find('td[data-col-key="status"]');
         expect(statusCell.classes()).toEqual(
-          expect.arrayContaining(['sticky', 'start-0', 'dd-sticky-col-left']),
+          expect.arrayContaining(['sticky', 'dd-sticky-col-left']),
         );
+        expect(statusCell.attributes('style')).toContain('inset-inline-start: 0px');
       });
 
       it('shrinks the colspan of full-width and spacer rows when a column is hidden', () => {

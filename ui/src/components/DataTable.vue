@@ -362,8 +362,58 @@ const firstNonIconColKey = computed<string | null>(
   () => resolvedColumns.value.find((col) => !col.icon)?.key ?? null,
 );
 
+/**
+ * Cumulative `insetInlineStart` offset (px) for every column in the leading identity cluster:
+ * the icon column(s) immediately preceding `firstNonIconColKey`, plus `firstNonIconColKey`
+ * itself. Because `firstNonIconColKey` is by definition the FIRST non-icon column, every
+ * `resolvedColumns` entry before it is guaranteed to be an icon column — so a single
+ * left-to-right walk up to (and including) the target key both identifies the pinned cluster
+ * and accumulates each member's offset. Columns are pinned as a whole cluster so an icon column
+ * can never scroll out from under its opaque sticky neighbor (icon logos clipping/overlapping
+ * mid-scroll) — only `firstNonIconColKey` keeps the `dd-sticky-col-left` separator class.
+ */
+const pinnedColumnOffsets = computed<Map<string, number>>(() => {
+  const map = new Map<string, number>();
+  const targetKey = firstNonIconColKey.value;
+  if (targetKey === null) {
+    return map;
+  }
+  let offset = 0;
+  for (const col of resolvedColumns.value) {
+    map.set(col.key, offset);
+    if (col.key === targetKey) {
+      break;
+    }
+    offset += col.resolvedWidth;
+  }
+  return map;
+});
+
+function pinnedInsetStyle(colKey: string): Record<string, string> | undefined {
+  const offset = pinnedColumnOffsets.value.get(colKey);
+  return offset === undefined ? undefined : { insetInlineStart: `${Math.round(offset)}px` };
+}
+
 const rowOverlayWidth = computed(() =>
   viewportWidth.value > 0 ? `${Math.round(viewportWidth.value)}px` : '100%',
+);
+
+// Two uses, both gated on genuine horizontal overflow:
+//  1. The `dd-sticky-col-left` separator border (see <style> below) — the border only makes
+//     sense when there's real horizontal overflow to scroll through. With columns picker-hidden
+//     or auto-hidden down to a near-empty layout, the identity cluster's border otherwise floats
+//     as a stray full-height line over columns that never actually scroll underneath it.
+//  2. The sticky-right ACTIONS column (below): when the auto-hide budget disagrees with the
+//     real container width, or a live/persisted column drag-width is invisible to that budget,
+//     total resolved width can exceed the viewport even though DataTable itself renders fine.
+//     `position: sticky; end-0` at scrollLeft 0 then pulls the actions column left of its natural
+//     grid position by the overflow amount, painting it on top of the last data column. Dropping
+//     sticky/end-0/z-index in that case falls the actions column back to normal in-flow
+//     position — reachable by horizontal scroll, never overlapping.
+const hasHorizontalOverflow = computed(
+  () =>
+    viewportWidth.value > 0 &&
+    allResolvedColumns.value.reduce((acc, col) => acc + col.resolvedWidth, 0) > viewportWidth.value,
 );
 
 // -- Card mode (container width < 640px) --
@@ -414,8 +464,17 @@ function syncViewportHeight() {
   virtualViewportHeight.value = measured > 0 ? measured : fallbackViewportHeight();
 }
 
+// Epsilon-guarded: the ResizeObserver fires on sub-pixel jitter (fractional layout rounding,
+// scrollbar show/hide, etc.) with no useful change in the actual measured width. Writing
+// `viewportWidth` unconditionally forces a full column-width recompute + row re-render (and
+// re-runs every per-cell v-tooltip directive's `updated()` hook) on every such tick — skip the
+// write when the delta is sub-pixel, mirroring the rAF-gating spirit of useBreakpoints.ts.
 function syncTableViewportWidth() {
-  viewportWidth.value = scrollViewportRef.value?.clientWidth ?? 0;
+  const next = scrollViewportRef.value?.clientWidth ?? 0;
+  if (Math.abs(next - viewportWidth.value) < 1) {
+    return;
+  }
+  viewportWidth.value = next;
 }
 
 // Prefix sums over caller-estimated row heights so the visible window and spacers can be
@@ -527,8 +586,10 @@ onMounted(() => {
     tableResizeObserver = new ResizeObserver(syncTableViewportWidth);
     tableResizeObserver.observe(scrollViewportRef.value);
   }
+  // No separate window resize listener for width: the ResizeObserver above already fires on
+  // every layout change that affects scrollViewportRef's box (including window resizes), so a
+  // second unthrottled listener driving the same sync function was pure redundant overhead.
   globalThis.addEventListener('resize', syncViewportHeight);
-  globalThis.addEventListener('resize', syncTableViewportWidth);
 });
 
 onUnmounted(() => {
@@ -541,7 +602,6 @@ onUnmounted(() => {
   tableResizeObserver?.disconnect();
   tableResizeObserver = null;
   globalThis.removeEventListener('resize', syncViewportHeight);
-  globalThis.removeEventListener('resize', syncTableViewportWidth);
 });
 
 function handleVirtualScroll(event: Event) {
@@ -900,7 +960,10 @@ function handleCardSortChange(event: Event): void {
     <div
       ref="scrollViewportRef"
       class="overflow-x-auto overscroll-x-contain dd-data-table-scroll"
-      :class="virtualScroll || maxHeight ? 'overflow-y-auto' : 'overflow-y-visible'"
+      :class="[
+        virtualScroll || maxHeight ? 'overflow-y-auto' : 'overflow-y-visible',
+        hasHorizontalOverflow ? 'dd-table-has-overflow' : '',
+      ]"
       :data-test="virtualScroll ? 'data-table-scroll' : undefined"
       :style="virtualScroll ? { maxHeight: virtualMaxHeight } : maxHeight ? { maxHeight } : {}"
       @scroll="handleVirtualScroll">
@@ -1018,13 +1081,14 @@ function handleCardSortChange(event: Event): void {
                 :data-col-key="col.key"
                 scope="col"
                 :class="[
-                  col.icon ? 'text-center pl-5 pr-0' : [col.align ?? 'text-center', col.px ?? 'px-5'],
+                  col.icon ? 'text-center pl-5 pr-0 overflow-hidden' : [col.align ?? 'text-center', col.px ?? 'px-5'],
                   'whitespace-nowrap py-2.5 font-semibold uppercase tracking-wider text-2xs select-none transition-colors relative',
                   isSortableColumn(col) ? 'cursor-pointer' : '',
                   sortKey === col.key ? 'dd-text-secondary' : 'dd-text-muted hover:dd-text-secondary',
-                  col.key === firstNonIconColKey ? ['sticky', 'start-0', 'z-20', 'dd-sticky-col-left'] : '',
+                  pinnedColumnOffsets.has(col.key) ? ['sticky', 'z-20'] : '',
+                  col.key === firstNonIconColKey ? 'dd-sticky-col-left' : '',
                 ]"
-                :style="col.key === firstNonIconColKey ? { backgroundColor: 'var(--dd-bg-inset)' } : undefined"
+                :style="pinnedColumnOffsets.has(col.key) ? { backgroundColor: 'var(--dd-bg-inset)', ...pinnedInsetStyle(col.key) } : undefined"
                 :tabindex="isSortableColumn(col) ? 0 : undefined"
                 :aria-sort="ariaSort(col)"
                 @keydown="handleHeaderKeydown($event, col)"
@@ -1052,7 +1116,10 @@ function handleCardSortChange(event: Event): void {
             <th v-if="showActions"
                 :data-col-key="ACTIONS_COLUMN_KEY"
                 scope="col"
-                class="sticky end-0 z-20 text-right px-3 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative"
+                :class="[
+                  'text-right px-3 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative',
+                  hasHorizontalOverflow ? '' : ['sticky', 'end-0', 'z-20'],
+                ]"
                 :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
               {{ t('sharedComponents.dataTable.actions') }}
             </th>
@@ -1093,9 +1160,11 @@ function handleCardSortChange(event: Event): void {
                   class="dd-data-table-cell py-3 align-middle"
                   :class="[
                     colIndex === 0 ? 'dd-data-table-row-overlay-host' : '',
-                    col.icon ? 'text-center pl-5 pr-0' : ['overflow-hidden', col.align ?? 'text-center', col.px ?? 'px-5'],
-                    col.key === firstNonIconColKey ? ['sticky', 'start-0', 'z-10', 'dd-sticky-col-left'] : '',
-                  ]">
+                    col.icon ? 'text-center pl-5 pr-0 overflow-hidden' : ['overflow-hidden', col.align ?? 'text-center', col.px ?? 'px-5'],
+                    pinnedColumnOffsets.has(col.key) ? ['sticky', 'z-10'] : '',
+                    col.key === firstNonIconColKey ? 'dd-sticky-col-left' : '',
+                  ]"
+                  :style="pinnedInsetStyle(col.key)">
                 <div v-if="!col.icon" :class="cellContentClass(col)">
                   <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
                     {{ row[col.key] }}
@@ -1110,7 +1179,8 @@ function handleCardSortChange(event: Event): void {
               <td
                 v-if="showActions"
                 :data-col-key="ACTIONS_COLUMN_KEY"
-                class="dd-data-table-cell dd-data-table-actions-cell sticky end-0 z-10 px-3 py-3 text-right whitespace-nowrap relative"
+                class="dd-data-table-cell dd-data-table-actions-cell px-3 py-3 text-right whitespace-nowrap relative"
+                :class="hasHorizontalOverflow ? '' : ['sticky', 'end-0', 'z-10']"
               >
                 <slot name="actions" :row="row" />
               </td>
@@ -1165,8 +1235,11 @@ tbody tr.dd-data-table-row-selected > td.dd-data-table-cell:last-child {
     inset 0 -1px 0 var(--dd-primary);
 }
 
-th.dd-sticky-col-left,
-td.dd-sticky-col-left {
+/* Only draw the separator when the table actually has horizontal overflow to scroll through
+   (see `hasHorizontalOverflow` in <script>) — otherwise it's a stray full-height line floating
+   over a near-empty layout with nothing left to separate. */
+.dd-table-has-overflow th.dd-sticky-col-left,
+.dd-table-has-overflow td.dd-sticky-col-left {
   border-inline-end: 1px solid var(--dd-sticky-separator);
 }
 

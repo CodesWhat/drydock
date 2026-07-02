@@ -26,9 +26,13 @@ const allColumns: ColumnDef[] = [
     key: 'icon',
     label: '',
     px: 'px-0',
-    size: 40,
-    minSize: 40,
-    maxSize: 40,
+    // 56 = 32px ContainerIcon (ContainersGroupedViews.vue) + 20px pl-5 padding + 4px breathing
+    // room. Was 40 until the icon cell gained `overflow-hidden`: that class made the pre-existing
+    // ~11.9px overflow (32px icon inside a 20px content box) visibly clip instead of silently
+    // hanging past the cell edge. Keep this >= 52 (icon + padding) or the clip comes back.
+    size: 56,
+    minSize: 56,
+    maxSize: 56,
     autoSize: 'fixed',
     required: true,
     icon: true,
