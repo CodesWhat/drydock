@@ -892,6 +892,12 @@ describe('DataTable', () => {
       expect(scrollContainer.attributes('tabindex')).toBeUndefined();
     });
 
+    it('scroll container carries dd-data-table-scroll so print styles can un-clip it', () => {
+      const w = factory();
+      const scrollContainer = w.find('.overflow-x-auto');
+      expect(scrollContainer.classes()).toContain('dd-data-table-scroll');
+    });
+
     it('every data column header carries scope="col"', () => {
       const w = factory();
       const ths = w.findAll('thead th');
@@ -1295,6 +1301,14 @@ describe('DataTable', () => {
         );
         expect(w.find('[data-test="dd-card-sort-select"]').exists()).toBe(false);
         expect(w.find('.empty-msg').exists()).toBe(true);
+      });
+
+      it('marks the sort bar wrapper with dd-data-table-card-sort-bar so print styles can hide it', async () => {
+        const w = await mountAtWidth(500, { columns: sortColumns, rows: sortRows });
+        expect(w.find('.dd-data-table-card-sort-bar').exists()).toBe(true);
+        expect(
+          w.find('.dd-data-table-card-sort-bar [data-test="dd-card-sort-select"]').exists(),
+        ).toBe(true);
       });
     });
 

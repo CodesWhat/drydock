@@ -769,14 +769,14 @@ function handleCardSortChange(event: Event): void {
        :style="{ backgroundColor: 'var(--dd-bg-card)' }">
     <div
       ref="scrollViewportRef"
-      class="overflow-x-auto overscroll-x-contain"
+      class="overflow-x-auto overscroll-x-contain dd-data-table-scroll"
       :class="virtualScroll || maxHeight ? 'overflow-y-auto' : 'overflow-y-visible'"
       :data-test="virtualScroll ? 'data-table-scroll' : undefined"
       :style="virtualScroll ? { maxHeight: virtualMaxHeight } : maxHeight ? { maxHeight } : {}"
       @scroll="handleVirtualScroll">
       <template v-if="isCardMode">
         <div v-if="rows.length > 0 && sortableCardColumns.length > 0"
-             class="flex items-center gap-2 px-3 pt-3 pb-2">
+             class="dd-data-table-card-sort-bar flex items-center gap-2 px-3 pt-3 pb-2">
           <select
             data-test="dd-card-sort-select"
             class="flex-1 min-h-[44px] min-w-0 px-3 py-2 dd-rounded dd-bg-inset dd-text border dd-border-strong outline-none cursor-pointer text-2xs-plus"
@@ -1057,5 +1057,22 @@ td.dd-sticky-col-left {
 .dd-data-table-card-selected {
   border-color: var(--dd-primary);
   box-shadow: 0 0 0 1px var(--dd-primary);
+}
+
+/* Print: keep cards intact across page breaks, drop interactive sort chrome that means
+   nothing on paper, and un-clip the table's horizontal scroll container so every column
+   prints instead of being cut off at the viewport edge. */
+@media print {
+  .dd-data-table-card {
+    break-inside: avoid;
+  }
+
+  .dd-data-table-card-sort-bar {
+    display: none;
+  }
+
+  .dd-data-table-scroll {
+    overflow: visible;
+  }
 }
 </style>
