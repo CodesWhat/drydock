@@ -109,7 +109,8 @@ test("homepage renders FAQ section after Ecosystem", () => {
 });
 
 test("FAQ section is wrapped in a reveal div", () => {
-  // Find the reveal wrapper that contains FAQ
-  const revealFaqMatch = homepageSource.match(/<div className="reveal">\s*<FAQ \/>/);
+  // Find the reveal wrapper that contains FAQ (tolerate extra attributes
+  // like suppressHydrationWarning on the wrapper)
+  const revealFaqMatch = homepageSource.match(/<div className="reveal"[^>]*>\s*<FAQ \/>/);
   assert.ok(revealFaqMatch !== null, "<FAQ /> must be wrapped in a reveal div");
 });
