@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1-rc.5] — 2026-07-02
+
+### Fixed
+
+- **Grouped "Update All" buttons could scroll out of view after upgrading to rc.4.** The new Version column added in rc.4 widened the containers table for existing users, and at moderate desktop widths the table overflowed horizontally in a way its responsive column-hiding never accounted for: columns were only ever laid out at their preferred widths, so the per-stack **Update All** button — positioned at the far end of the group header row — ended up past the visible edge while everything else looked normal. Tables now shrink columns proportionally toward their minimum widths when space is tight (matching the widths the responsive logic already budgets for), and the group header's Update All button is additionally pinned to the visible edge, so it stays reachable even when a table legitimately overflows. (#467)
+
 ## [1.5.1-rc.4] — 2026-06-29
 
 ### Added

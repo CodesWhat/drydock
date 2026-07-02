@@ -87,4 +87,18 @@ describe('ContainersGroupHeader', () => {
     expect(wrapper.text()).toContain('Update all');
     expect(wrapper.text()).not.toContain('Updating stack');
   });
+
+  // #467: on rc.4, existing users' default column set overflows the table at moderate desktop
+  // widths (see DataTable.spec.ts "column width shrink-to-fit (#467)"), and the group header's
+  // full-row <td> renders as wide as the overflowing row. Without sticky positioning, the
+  // "Update all" button scrolls out of the visible area. Pin it to the logical end edge (RTL
+  // safe) so it stays reachable regardless of overflow.
+  it('pins the update-all action to the end edge so it stays visible when the row overflows (#467)', () => {
+    const wrapper = mountHeader();
+    const sticky = wrapper.find('[data-test="group-header-update-all-sticky"]');
+
+    expect(sticky.exists()).toBe(true);
+    expect(sticky.classes()).toEqual(expect.arrayContaining(['sticky', 'end-0']));
+    expect(sticky.find('button').exists()).toBe(true);
+  });
 });

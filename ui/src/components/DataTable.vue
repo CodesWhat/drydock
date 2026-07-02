@@ -193,8 +193,64 @@ const normalizedColumns = computed(() =>
   })),
 );
 
+interface ColumnWidthEntry {
+  key: string;
+  width: number;
+  sizing: NormalizedTableColumnSizing;
+}
+
+// Shrinks columns proportionally toward (never below) their minSize using water-filling: on
+// each pass, the deficit is distributed across still-shrinkable columns weighted by remaining
+// headroom (width - minSize). Columns whose proportional share would take them past their floor
+// are clamped to minSize and dropped from the pool; whatever they couldn't absorb is
+// redistributed among the columns that still have headroom left. This guarantees resolved
+// widths never fall below minSize while eliminating the overflow whenever total headroom covers
+// the deficit (see #467 — rendered widths must agree with the auto-hide budget's minSize-based
+// "fits" decision). When total headroom is smaller than the deficit, every shrinkable column
+// bottoms out at minSize and the remaining overflow is left for auto-hide to resolve.
+function shrinkColumnWidthsToFit(
+  base: ColumnWidthEntry[],
+  widthMap: Record<string, number>,
+  deficit: number,
+): void {
+  const widths = new Map(base.map((entry) => [entry.key, entry.width]));
+  let shrinkable = base.filter((entry) => entry.width > entry.sizing.minSize);
+  let remainingDeficit = deficit;
+
+  while (remainingDeficit > 0.5 && shrinkable.length > 0) {
+    const totalHeadroom = shrinkable.reduce(
+      (acc, entry) => acc + ((widths.get(entry.key) ?? 0) - entry.sizing.minSize),
+      0,
+    );
+    if (totalHeadroom <= 0) {
+      break;
+    }
+
+    let absorbed = 0;
+    const stillShrinkable: ColumnWidthEntry[] = [];
+    for (const entry of shrinkable) {
+      const width = widths.get(entry.key) ?? 0;
+      const headroom = width - entry.sizing.minSize;
+      const shrinkBy = Math.min(remainingDeficit * (headroom / totalHeadroom), headroom);
+      const nextWidth = width - shrinkBy;
+      widths.set(entry.key, nextWidth);
+      absorbed += shrinkBy;
+      if (nextWidth - entry.sizing.minSize > 0.5) {
+        stillShrinkable.push(entry);
+      }
+    }
+    remainingDeficit -= absorbed;
+    shrinkable = stillShrinkable;
+  }
+
+  for (const entry of base) {
+    const width = widths.get(entry.key) ?? entry.width;
+    widthMap[entry.key] = Math.max(entry.sizing.minSize, Math.floor(width));
+  }
+}
+
 function resolveColumnWidths(): Record<string, number> {
-  const base = normalizedColumns.value.map(({ column, sizing }) => {
+  const base: ColumnWidthEntry[] = normalizedColumns.value.map(({ column, sizing }) => {
     const manual = liveColumnWidths[column.key];
     const persisted = getPersistedColumnWidth(column.key);
     const width = manual ?? persisted ?? sizing.size;
@@ -207,15 +263,21 @@ function resolveColumnWidths(): Record<string, number> {
 
   const widthMap = Object.fromEntries(base.map((entry) => [entry.key, entry.width]));
   const available = viewportWidth.value;
-  const flexColumns = base.filter((entry) => entry.sizing.flex > 0);
-  if (available <= 0 || flexColumns.length === 0) {
+  if (available <= 0) {
     return widthMap;
   }
 
   const actionsWidth = props.showActions ? actionsColumn.value.resolvedWidth : 0;
   const totalBaseWidth = base.reduce((acc, entry) => acc + entry.width, 0) + actionsWidth;
   const extra = available - totalBaseWidth;
-  if (extra <= 0) {
+
+  if (extra < 0) {
+    shrinkColumnWidthsToFit(base, widthMap, -extra);
+    return widthMap;
+  }
+
+  const flexColumns = base.filter((entry) => entry.sizing.flex > 0);
+  if (extra <= 0 || flexColumns.length === 0) {
     return widthMap;
   }
 
