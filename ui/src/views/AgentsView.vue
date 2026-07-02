@@ -8,9 +8,10 @@ import AgentDetailLogsTab from '../components/agents/AgentDetailLogsTab.vue';
 import AgentDetailOverviewTab from '../components/agents/AgentDetailOverviewTab.vue';
 import AppBadge from '../components/AppBadge.vue';
 import AppTabBar from '../components/AppTabBar.vue';
-import AppIconButton from '../components/AppIconButton.vue';
+import DataTableColumnPicker from '../components/DataTableColumnPicker.vue';
 import StatusDot from '../components/StatusDot.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
 import { getAgents } from '../services/agent';
@@ -378,35 +379,37 @@ const agentAllColumns = computed(() => [
   },
 ]);
 
-const agentVisibleColumns = ref<Set<string>>(
-  new Set(['name', 'status', 'containers', 'docker', 'os', 'version', 'lastSeen']),
+const pickerColumns = computed<PickerColumn[]>(() =>
+  agentAllColumns.value.map((column) => ({
+    key: column.key,
+    label: column.label,
+    required: 'required' in column ? column.required : undefined,
+  })),
 );
-const showAgentColumnPicker = ref(false);
-const agentColumnPickerStyle = ref<Record<string, string>>({});
-function toggleAgentColumnPicker(event: MouseEvent) {
-  showAgentColumnPicker.value = !showAgentColumnPicker.value;
-  if (showAgentColumnPicker.value) {
-    const button = event.currentTarget as HTMLElement;
-    const rect = button.getBoundingClientRect();
-    agentColumnPickerStyle.value = {
-      position: 'fixed',
-      top: `${rect.bottom + 4}px`,
-      left: `${rect.left}px`,
-    };
-  }
-}
 
-function toggleAgentColumn(key: string) {
-  const col = agentAllColumns.value.find((c) => c.key === key);
-  if (col?.required) return;
-  if (agentVisibleColumns.value.has(key)) agentVisibleColumns.value.delete(key);
-  else agentVisibleColumns.value.add(key);
-}
+const {
+  hiddenColumnKeys: pickerHiddenColumnKeys,
+  toggleColumn,
+  resetColumns,
+} = useViewColumnVisibility('agents', pickerColumns);
 
-const agentActiveColumns = computed(() =>
-  agentAllColumns.value.filter(
-    (c) => agentVisibleColumns.value.has(c.key) && (!isCompact.value || c.required),
-  ),
+/**
+ * Compact mode (< 1024px) used to swap the active column set down to just the required
+ * columns. Now `agentAllColumns` always returns the full 7-column set (so card mode can
+ * surface the `status` cardPriority annotation on mobile), and the non-required columns are
+ * force-hidden here instead — the union of the picker's hidden set with every non-required
+ * column key. The picker itself is hidden in compact mode (see template) so a user can never
+ * toggle back on a column this override is about to re-hide anyway.
+ */
+const hiddenColumnKeys = computed(() =>
+  isCompact.value
+    ? [
+        ...new Set([
+          ...pickerHiddenColumnKeys.value,
+          ...agentAllColumns.value.filter((c) => !c.required).map((c) => c.key),
+        ]),
+      ]
+    : pickerHiddenColumnKeys.value,
 );
 
 // -- Detail panel --
@@ -552,46 +555,25 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
               </AppButton>
             </template>
             <template #extra-buttons>
-              <div>
-                <AppIconButton icon="config" size="toolbar" variant="plain" class="text-2xs-plus"
-                        :class="showAgentColumnPicker ? 'dd-text dd-bg-elevated' : 'dd-text-secondary hover:dd-text hover:dd-bg-elevated'"
-                        :aria-label="t('agentsView.list.toggleColumns')"
-                        v-tooltip.top="t('agentsView.list.toggleColumns')"
-                        @click.stop="toggleAgentColumnPicker" />
-              </div>
+              <DataTableColumnPicker
+                v-if="!isCompact"
+                :columns="pickerColumns"
+                :hidden-keys="pickerHiddenColumnKeys"
+                @toggle="toggleColumn"
+                @reset="resetColumns" />
             </template>
           </DataFilterBar>
 
-          <!-- Column picker popover (rendered outside DataFilterBar to avoid overflow clipping) -->
-          <div v-if="showAgentColumnPicker" @click.stop
-               class="min-w-[160px] py-1.5 dd-rounded shadow-lg"
-               :style="{
-                 ...agentColumnPickerStyle,
-                 zIndex: 'var(--z-popover)',
-                 backgroundColor: 'var(--dd-bg-card)',
-                 border: '1px solid var(--dd-border-strong)',
-                 boxShadow: 'var(--dd-shadow-tooltip)',
-               }">
-            <div class="px-3 py-1 text-3xs font-bold uppercase tracking-wider dd-text-muted">{{ t('agentsView.list.columnPickerHeading') }}</div>
-            <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2" v-for="col in agentAllColumns" :key="col.key"
-
-                    :class="col.required ? 'dd-text-muted cursor-not-allowed' : 'dd-text'"
-                    @click="toggleAgentColumn(col.key)">
-              <AppIcon :name="agentVisibleColumns.has(col.key) ? 'check' : 'square'" :size="10"
-                       :style="agentVisibleColumns.has(col.key) ? { color: 'var(--dd-primary)' } : {}" />
-              {{ col.label }}
-            </AppButton>
-          </div>
-
           <!-- Table view -->
           <DataTable v-if="!loading"
-                     :columns="agentActiveColumns"
+                     :columns="agentAllColumns"
                      storage-key="agents"
                      :rows="sortedAgents"
                      row-key="id"
                      :sort-key="agentSortKey"
                      :sort-asc="agentSortAsc"
                      :selected-key="selectedAgent?.id ?? null"
+                     :hidden-column-keys="hiddenColumnKeys"
                      @update:sort-key="agentSortKey = $event"
                      @update:sort-asc="agentSortAsc = $event"
                      @row-click="selectAgent($event)">

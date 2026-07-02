@@ -1,4 +1,7 @@
 import { flushPromises } from '@vue/test-utils';
+import { defineComponent, nextTick, ref } from 'vue';
+import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
+import { preferences, resetPreferences } from '@/preferences/store';
 import { getAgents } from '@/services/agent';
 import { getLogEntries } from '@/services/log';
 import { getAllTriggers } from '@/services/trigger';
@@ -11,6 +14,12 @@ const { mockRoute } = vi.hoisted(() => ({
   mockRoute: { query: {} as Record<string, unknown> },
 }));
 
+// Real refs (not plain `{ value }` objects) — the component's template uses bare
+// `isCompact` (no `.value`) in `v-if` bindings, which only auto-unwraps for genuine
+// Vue refs. A plain object would be constant-truthy there.
+const mockIsMobile = ref(false);
+const mockWindowNarrow = ref(false);
+
 vi.mock('vue-router', () => ({
   useRoute: () => mockRoute,
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -18,8 +27,8 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/composables/useBreakpoints', () => ({
   useBreakpoints: () => ({
-    isMobile: { value: false },
-    windowNarrow: { value: false },
+    isMobile: mockIsMobile,
+    windowNarrow: mockWindowNarrow,
   }),
 }));
 
@@ -67,16 +76,42 @@ function makeAgent(overrides: Record<string, any> = {}) {
   };
 }
 
+// Renders column headers (filtered by hiddenColumnKeys, like the real DataTable) and, per
+// row, only the cell slots for columns that survive that same filter — so the compact-mode
+// badge folded into `cell-name` is the only place row data resurfaces once the other
+// columns are force-hidden.
+const richDataTableStub = defineComponent({
+  props: ['columns', 'rows', 'rowKey', 'sortKey', 'sortAsc', 'selectedKey', 'hiddenColumnKeys'],
+  emits: ['row-click', 'update:sort-key', 'update:sort-asc'],
+  template: `
+    <div class="data-table" :data-row-count="rows?.length ?? 0" :data-selected-key="selectedKey || ''">
+      <div
+        v-for="col in (columns || []).filter((c) => !(hiddenColumnKeys || []).includes(c.key))"
+        :key="col.key"
+        class="dt-header"
+        :data-col-key="col.key">
+        {{ col.label }}
+      </div>
+      <button v-if="rows?.[0]" class="row-click-first" @click="$emit('row-click', rows[0])">Open 1</button>
+      <button v-if="rows?.[1]" class="row-click-second" @click="$emit('row-click', rows[1])">Open 2</button>
+      <div v-for="row in rows" :key="row[rowKey || 'id']" class="data-table-row">
+        <template
+          v-for="col in (columns || []).filter((c) => !(hiddenColumnKeys || []).includes(c.key))"
+          :key="col.key">
+          <slot :name="'cell-' + col.key" :row="row" />
+        </template>
+      </div>
+      <slot name="empty" v-if="!rows || rows.length === 0" />
+    </div>
+  `,
+});
+
 async function mountAgentsView() {
   const wrapper = mountWithPlugins(AgentsView, {
     global: {
       stubs: {
         ...dataViewStubs,
-        AppIconButton: {
-          props: ['icon', 'variant', 'tooltip', 'ariaLabel', 'size'],
-          template:
-            '<button class="app-icon-button-stub" v-bind="$attrs" :data-icon="icon" :data-variant="variant" :data-size="size" :aria-label="ariaLabel"><slot /></button>',
-        },
+        DataTable: richDataTableStub,
       },
     },
   });
@@ -88,7 +123,10 @@ async function mountAgentsView() {
 describe('AgentsView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetPreferences();
     mockRoute.query = {};
+    mockIsMobile.value = false;
+    mockWindowNarrow.value = false;
     mockGetAgents.mockResolvedValue([makeAgent()]);
     mockGetLogEntries.mockResolvedValue([]);
     mockGetAllWatchers.mockResolvedValue([]);
@@ -112,6 +150,75 @@ describe('AgentsView', () => {
       expect(dockerCol.cardPriority).toBe(-1);
       expect(osCol.cardPriority).toBe(-1);
     });
+  });
+
+  describe('column picker', () => {
+    it('agentAllColumns keys match VIEW_TABLE_COLUMN_KEYS.agents (schema/view sync guard)', async () => {
+      const wrapper = await mountAgentsView();
+      const vm = wrapper.vm as any;
+      const keys = new Set(vm.agentAllColumns.map((c: any) => c.key));
+      expect(keys).toEqual(new Set(VIEW_TABLE_COLUMN_KEYS.agents));
+    });
+
+    it('marks the name column as required', async () => {
+      const wrapper = await mountAgentsView();
+      const vm = wrapper.vm as any;
+      const nameCol = vm.agentAllColumns.find((c: any) => c.key === 'name');
+      expect(nameCol.required).toBe(true);
+    });
+
+    it('renders the column picker in the filter bar when not compact', async () => {
+      const wrapper = await mountAgentsView();
+      expect(wrapper.find('[data-test="data-table-column-picker"]').exists()).toBe(true);
+    });
+
+    it('passes only the picker-hidden set to DataTable when not compact', async () => {
+      const wrapper = await mountAgentsView();
+
+      expect(wrapper.find('[data-col-key="status"]').exists()).toBe(true);
+      await wrapper.find('[data-test="column-picker-toggle-status"]').trigger('click');
+      await nextTick();
+
+      expect(wrapper.find('[data-col-key="status"]').exists()).toBe(false);
+    });
+
+    it('toggling a column via the picker persists the key to preferences.views.agents.hiddenColumns', async () => {
+      const wrapper = await mountAgentsView();
+
+      await wrapper.find('[data-test="column-picker-toggle-status"]').trigger('click');
+      await nextTick();
+
+      expect(preferences.views.agents.hiddenColumns).toContain('status');
+    });
+
+    it('hides the picker and unions the picker-hidden set with every non-required column when compact', async () => {
+      mockWindowNarrow.value = true;
+      const wrapper = await mountAgentsView();
+
+      expect(wrapper.find('[data-test="data-table-column-picker"]').exists()).toBe(false);
+      expect(wrapper.find('[data-col-key="name"]').exists()).toBe(true);
+      expect(
+        ['status', 'containers', 'docker', 'os', 'version', 'lastSeen'].every(
+          (key) => !wrapper.find(`[data-col-key="${key}"]`).exists(),
+        ),
+      ).toBe(true);
+    });
+  });
+
+  it('renders the compact badge row inside the name cell when compact', async () => {
+    mockWindowNarrow.value = true;
+    const wrapper = await mountAgentsView();
+
+    const badgeRow = wrapper.find('.flex.items-center.gap-1\\.5.mt-1\\.5');
+    expect(badgeRow.exists()).toBe(true);
+    expect(badgeRow.text()).toContain('10/12');
+    expect(badgeRow.text()).toContain('Just now');
+  });
+
+  it('does not render the compact badge row inside the name cell when not compact', async () => {
+    const wrapper = await mountAgentsView();
+    expect(wrapper.find('.flex.items-center.gap-1\\.5.mt-1\\.5').exists()).toBe(false);
+    expect(wrapper.find('[data-col-key="containers"]').exists()).toBe(true);
   });
 
   it('successful load renders agent rows', async () => {
@@ -171,16 +278,6 @@ describe('AgentsView', () => {
 
     expect(wrapper.text()).toContain('boom');
     expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('0');
-  });
-
-  it('renders the table column picker as an AppIconButton', async () => {
-    const wrapper = await mountAgentsView();
-
-    const columnPicker = wrapper.find('.app-icon-button-stub[aria-label="Toggle columns"]');
-    expect(columnPicker.exists()).toBe(true);
-    expect(columnPicker.attributes('data-icon')).toBe('config');
-    expect(columnPicker.attributes('data-variant')).toBe('plain');
-    expect(columnPicker.attributes('data-size')).toBe('toolbar');
   });
 
   it('refreshes agents when agent status SSE event is received', async () => {
@@ -308,9 +405,12 @@ describe('AgentsView', () => {
     await wrapper.find('.row-click-first').trigger('click');
     await flushPromises();
 
-    expect(wrapper.text()).not.toContain('CPUs');
-    expect(wrapper.text()).not.toContain('Memory');
-    expect(wrapper.text()).not.toContain('Architecture');
-    expect(wrapper.text()).not.toContain('Docker');
+    // Scoped to the detail panel body — the table's own "Docker" column header text
+    // (now rendered by the richer DataTable stub) would otherwise collide.
+    const detailContent = wrapper.find('.detail-content').text();
+    expect(detailContent).not.toContain('CPUs');
+    expect(detailContent).not.toContain('Memory');
+    expect(detailContent).not.toContain('Architecture');
+    expect(detailContent).not.toContain('Docker');
   });
 });

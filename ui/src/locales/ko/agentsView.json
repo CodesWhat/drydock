@@ -5,8 +5,6 @@
       "filterPlaceholder": "이름으로 필터...",
       "clearFilter": "초기화",
       "emptyFiltered": "필터와 일치하는 에이전트가 없습니다",
-      "toggleColumns": "열 표시/숨기기",
-      "columnPickerHeading": "열",
       "loadError": "에이전트를 불러오지 못했습니다",
       "status": {
         "connected": "연결됨",

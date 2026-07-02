@@ -5,8 +5,6 @@
       "filterPlaceholder": "Filtruj według nazwy...",
       "clearFilter": "Wyczyść",
       "emptyFiltered": "Żaden agent nie pasuje do Twoich filtrów",
-      "toggleColumns": "Przełącz kolumny",
-      "columnPickerHeading": "Kolumny",
       "loadError": "Nie udało się załadować agentów",
       "status": {
         "connected": "Połączono",

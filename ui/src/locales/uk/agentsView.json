@@ -5,8 +5,6 @@
       "filterPlaceholder": "Фільтр за назвою...",
       "clearFilter": "Очистити",
       "emptyFiltered": "Жоден агент не відповідає вашим фільтрам",
-      "toggleColumns": "Показати/приховати стовпці",
-      "columnPickerHeading": "Стовпці",
       "loadError": "Не вдалося завантажити агентів",
       "status": {
         "connected": "Підключено",

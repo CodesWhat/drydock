@@ -5,8 +5,6 @@
       "filterPlaceholder": "Nach Name filtern...",
       "clearFilter": "Löschen",
       "emptyFiltered": "Keine Agents passen zu deinen Filtern",
-      "toggleColumns": "Spalten umschalten",
-      "columnPickerHeading": "Spalten",
       "loadError": "Agents konnten nicht geladen werden",
       "status": {
         "connected": "Verbunden",

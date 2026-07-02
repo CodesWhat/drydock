@@ -5,8 +5,6 @@
       "filterPlaceholder": "名前で絞り込む...",
       "clearFilter": "クリア",
       "emptyFiltered": "フィルターに一致するエージェントがありません",
-      "toggleColumns": "列の表示切替",
-      "columnPickerHeading": "列",
       "loadError": "エージェントの読み込みに失敗しました",
       "status": {
         "connected": "接続済み",

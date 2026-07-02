@@ -5,8 +5,6 @@
       "filterPlaceholder": "Lọc theo tên...",
       "clearFilter": "Xóa",
       "emptyFiltered": "Không có agent nào khớp với bộ lọc của bạn",
-      "toggleColumns": "Bật/tắt cột",
-      "columnPickerHeading": "Cột",
       "loadError": "Không thể tải agent",
       "status": {
         "connected": "Đã kết nối",

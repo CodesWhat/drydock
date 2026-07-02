@@ -5,8 +5,6 @@
       "filterPlaceholder": "Filter op naam...",
       "clearFilter": "Wissen",
       "emptyFiltered": "Er zijn geen agenten die overeenkomen met uw filters",
-      "toggleColumns": "Kolommen wisselen",
-      "columnPickerHeading": "Kolommen",
       "loadError": "Kan agenten niet laden",
       "status": {
         "connected": "Verbonden",

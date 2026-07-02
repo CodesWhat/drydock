@@ -5,8 +5,6 @@
       "filterPlaceholder": "Ada göre filtrele...",
       "clearFilter": "Temizle",
       "emptyFiltered": "Filtrelerinizle eşleşen aracı yok",
-      "toggleColumns": "Sütunları değiştir",
-      "columnPickerHeading": "Sütunlar",
       "loadError": "Aracılar yüklenemedi",
       "status": {
         "connected": "Bağlı",

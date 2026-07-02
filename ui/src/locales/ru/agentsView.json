@@ -5,8 +5,6 @@
       "filterPlaceholder": "Фильтр по имени...",
       "clearFilter": "Очистить",
       "emptyFiltered": "Нет агентов, соответствующих фильтрам",
-      "toggleColumns": "Управление столбцами",
-      "columnPickerHeading": "Столбцы",
       "loadError": "Не удалось загрузить агентов",
       "status": {
         "connected": "Подключён",

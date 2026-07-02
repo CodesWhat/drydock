@@ -5,8 +5,6 @@
       "filterPlaceholder": "تصفية حسب الاسم...",
       "clearFilter": "مسح",
       "emptyFiltered": "لا يوجد وكلاء يطابقون عوامل التصفية",
-      "toggleColumns": "تبديل الأعمدة",
-      "columnPickerHeading": "الأعمدة",
       "loadError": "فشل تحميل الوكلاء",
       "status": {
         "connected": "متصل",

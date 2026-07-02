@@ -5,8 +5,6 @@
       "filterPlaceholder": "按名称筛选...",
       "clearFilter": "清除",
       "emptyFiltered": "没有代理匹配您的筛选条件",
-      "toggleColumns": "切换列",
-      "columnPickerHeading": "列",
       "loadError": "无法加载代理",
       "status": {
         "connected": "已连接",

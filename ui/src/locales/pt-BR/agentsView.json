@@ -5,8 +5,6 @@
       "filterPlaceholder": "Filtrar por nome...",
       "clearFilter": "Limpar",
       "emptyFiltered": "Nenhum agente corresponde aos filtros",
-      "toggleColumns": "Alternar colunas",
-      "columnPickerHeading": "Colunas",
       "loadError": "Falha ao carregar agentes",
       "status": {
         "connected": "Conectado",
