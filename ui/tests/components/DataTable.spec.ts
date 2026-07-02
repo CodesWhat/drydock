@@ -1488,4 +1488,218 @@ describe('DataTable', () => {
       });
     });
   });
+
+  describe('hiddenColumnKeys (table mode only)', () => {
+    let originalClientWidthDescriptor: PropertyDescriptor | undefined;
+    let mockedClientWidth = 0;
+
+    beforeEach(() => {
+      mockedClientWidth = 0;
+      originalClientWidthDescriptor = Object.getOwnPropertyDescriptor(
+        HTMLElement.prototype,
+        'clientWidth',
+      );
+      Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+        configurable: true,
+        get() {
+          return mockedClientWidth;
+        },
+      });
+    });
+
+    afterEach(() => {
+      if (originalClientWidthDescriptor) {
+        Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidthDescriptor);
+      } else {
+        delete (HTMLElement.prototype as any).clientWidth;
+      }
+    });
+
+    async function mountAtWidth(
+      width: number,
+      props: Record<string, any> = {},
+      slots: Record<string, any> = {},
+    ) {
+      mockedClientWidth = width;
+      const w = factory(props, slots);
+      await nextTick();
+      return w;
+    }
+
+    describe('table mode', () => {
+      it("omits a hidden column's th, td, and colgroup entries while rendering the rest", () => {
+        const w = factory({ hiddenColumnKeys: ['status'] });
+        const ths = w.findAll('thead th');
+        expect(ths.map((th) => th.attributes('data-col-key'))).toEqual(['name', 'icon']);
+        expect(w.find('thead th[data-col-key="status"]').exists()).toBe(false);
+        expect(w.find('colgroup col[data-col-key="status"]').exists()).toBe(false);
+        expect(w.find('colgroup col[data-col-key="name"]').exists()).toBe(true);
+        expect(w.find('colgroup col[data-col-key="icon"]').exists()).toBe(true);
+
+        const firstRowCells = w.findAll('tbody tr')[0].findAll('td');
+        expect(firstRowCells.map((td) => td.attributes('data-col-key'))).toEqual(['name', 'icon']);
+      });
+
+      it("excludes a hidden column's width footprint from flex redistribution", async () => {
+        const flexColumns = [
+          { key: 'name', label: 'Name', size: 100, flex: 1 },
+          { key: 'status', label: 'Status', size: 200 },
+        ];
+
+        const visible = await mountAtWidth(640, { columns: flexColumns });
+        expect(visible.find('colgroup col[data-col-key="name"]').attributes('style')).toContain(
+          'width: 440px',
+        );
+        expect(visible.find('colgroup col[data-col-key="status"]').attributes('style')).toContain(
+          'width: 200px',
+        );
+
+        const hidden = await mountAtWidth(640, {
+          columns: flexColumns,
+          hiddenColumnKeys: ['status'],
+        });
+        expect(hidden.find('colgroup col[data-col-key="status"]').exists()).toBe(false);
+        // With status excluded from the base-width calculation, the flex column absorbs the
+        // extra 200px that status would otherwise have claimed (440px -> 640px).
+        expect(hidden.find('colgroup col[data-col-key="name"]').attributes('style')).toContain(
+          'width: 640px',
+        );
+      });
+
+      it('moves the sticky identity column to the next visible non-icon column when the first is hidden', () => {
+        const w = factory({ hiddenColumnKeys: ['name'] });
+        const ths = w.findAll('thead th');
+        expect(ths.map((th) => th.attributes('data-col-key'))).toEqual(['status', 'icon']);
+
+        const statusHeader = w.find('thead th[data-col-key="status"]');
+        expect(statusHeader.classes()).toEqual(
+          expect.arrayContaining(['sticky', 'start-0', 'dd-sticky-col-left']),
+        );
+
+        const statusCell = w.findAll('tbody tr')[0].find('td[data-col-key="status"]');
+        expect(statusCell.classes()).toEqual(
+          expect.arrayContaining(['sticky', 'start-0', 'dd-sticky-col-left']),
+        );
+      });
+
+      it('shrinks the colspan of full-width and spacer rows when a column is hidden', () => {
+        const mixedRows = [
+          { id: 'group-a', name: 'Group A', status: 'meta', kind: 'group' },
+          ...rows,
+        ];
+        const w = factory(
+          {
+            rows: mixedRows,
+            hiddenColumnKeys: ['status'],
+            fullWidthRow: (row: { kind?: string }) => row.kind === 'group',
+          },
+          { 'full-row': ({ row }: any) => `<div class="full-row">Header: ${row.name}</div>` },
+        );
+        const firstRow = w.findAll('tbody tr')[0];
+        // Only 2 visible columns remain (name, icon) with status hidden and no actions column.
+        expect(firstRow.find('td').attributes('colspan')).toBe('2');
+      });
+    });
+
+    describe('card mode', () => {
+      it('still renders a table-hidden column in the card body (card mode ignores hiddenColumnKeys)', async () => {
+        const cols = [
+          { key: 'name', label: 'Name' },
+          { key: 'status', label: 'Status' },
+          { key: 'notes', label: 'Notes' },
+        ];
+        const notesRows = [
+          { id: '1', name: 'Alpha', status: 'running', notes: 'confidential-note' },
+        ];
+        const w = await mountAtWidth(500, {
+          columns: cols,
+          rows: notesRows,
+          hiddenColumnKeys: ['notes'],
+        });
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        const body = firstCard.find('[data-test="dd-card-body"]');
+        expect(body.exists()).toBe(true);
+        expect(body.findAll('dt').map((dt) => dt.text())).toEqual(['Notes']);
+        expect(body.findAll('dd')[0].text()).toContain('confidential-note');
+      });
+
+      it('keeps the card title fallback on the first non-icon column even when it is table-hidden', async () => {
+        const w = await mountAtWidth(500, { hiddenColumnKeys: ['name'] });
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        expect(firstCard.find('[data-test="dd-card-title"]').text()).toBe('Alpha');
+      });
+
+      it('leaves cardPriority subtitle promotion unaffected by table-hidden columns', async () => {
+        const prioritizedColumns = [
+          { key: 'name', label: 'Name' },
+          { key: 'status', label: 'Status', cardPriority: 5 },
+          { key: 'host', label: 'Host', cardPriority: 10 },
+        ];
+        const prioritizedRows = [{ id: '1', name: 'Alpha', status: 'running', host: 'node-1' }];
+        const w = await mountAtWidth(500, {
+          columns: prioritizedColumns,
+          rows: prioritizedRows,
+          hiddenColumnKeys: ['host'],
+        });
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        // host has the highest cardPriority and still wins the subtitle slot even though it's
+        // hidden from the table.
+        expect(firstCard.find('[data-test="dd-card-subtitle"]').text()).toBe('node-1');
+      });
+
+      it('does not remove a table-hidden column from the card sort select', async () => {
+        const sortCols = [
+          { key: 'name', label: 'Name', sortable: true },
+          { key: 'status', label: 'Status', sortable: true },
+        ];
+        const w = await mountAtWidth(500, {
+          columns: sortCols,
+          rows: [{ id: '1', name: 'Alpha', status: 'running' }],
+          hiddenColumnKeys: ['status'],
+        });
+        const options = w
+          .find('[data-test="dd-card-sort-select"]')
+          .findAll('option:not([disabled])');
+        expect(options.map((o) => o.attributes('value'))).toEqual(['name', 'status']);
+      });
+    });
+
+    describe('composition with cardPriority', () => {
+      it('a column both table-hidden and cardPriority-demoted appears in neither mode', async () => {
+        const cols = [
+          { key: 'name', label: 'Name' },
+          { key: 'status', label: 'Status' },
+          { key: 'secret', label: 'Secret', cardPriority: -1 },
+        ];
+        const compRows = [{ id: '1', name: 'Alpha', status: 'running', secret: 'shh-classified' }];
+
+        const tableView = await mountAtWidth(800, {
+          columns: cols,
+          rows: compRows,
+          hiddenColumnKeys: ['secret'],
+        });
+        expect(tableView.find('thead th[data-col-key="secret"]').exists()).toBe(false);
+        expect(tableView.find('tbody td[data-col-key="secret"]').exists()).toBe(false);
+
+        const cardView = await mountAtWidth(500, {
+          columns: cols,
+          rows: compRows,
+          hiddenColumnKeys: ['secret'],
+        });
+        const firstCard = cardView.findAll('[data-test="dd-card"]')[0];
+        // Demoted via cardPriority: -1 in card mode; hiddenColumnKeys plays no role there
+        // since card mode ignores it entirely — the demotion is what keeps it out.
+        expect(firstCard.text()).not.toContain('shh-classified');
+      });
+    });
+
+    it('is a no-op when hiddenColumnKeys is omitted or empty', () => {
+      const wOmitted = factory();
+      const wEmpty = factory({ hiddenColumnKeys: [] });
+      for (const w of [wOmitted, wEmpty]) {
+        expect(w.findAll('thead th')).toHaveLength(3);
+        expect(w.find('colgroup col[data-col-key="status"]').exists()).toBe(true);
+      }
+    });
+  });
 });

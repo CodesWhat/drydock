@@ -82,6 +82,14 @@ const props = withDefaults(
     rowInteractive?: (row: Record<string, unknown>) => boolean;
     /** When true, hides column resize handles for touch-only interaction */
     isMobile?: boolean;
+    /**
+     * Column keys hidden by a user-driven column picker — TABLE MODE ONLY. Card mode
+     * (< 640px) deliberately ignores this: mobile has no picker to un-hide a column, so
+     * every non-demoted column must stay reachable there. Orthogonal to `cardPriority`
+     * (static per-column card demotion, applies in card mode) and to the responsive
+     * auto-hide driven by `priority`/viewport width (a distinct, automatic mechanism).
+     */
+    hiddenColumnKeys?: string[];
   }>(),
   {
     showActions: false,
@@ -93,6 +101,7 @@ const props = withDefaults(
     virtualOverscan: 6,
     virtualMaxHeight: '70vh',
     isMobile: false,
+    hiddenColumnKeys: () => [],
   },
 );
 
@@ -205,11 +214,16 @@ const actionsColumn = computed<ResolvedDataTableColumn>(() => {
   };
 });
 
+/** Table-mode-only hide set, sourced from `hiddenColumnKeys`. Card mode never consults this. */
+const hiddenColumnKeySet = computed(() => new Set(props.hiddenColumnKeys));
+
 const normalizedColumns = computed(() =>
-  props.columns.map((column) => ({
-    column,
-    sizing: normalizeTableColumnSizing(column),
-  })),
+  props.columns
+    .filter((column) => !hiddenColumnKeySet.value.has(column.key))
+    .map((column) => ({
+      column,
+      sizing: normalizeTableColumnSizing(column),
+    })),
 );
 
 function resolveColumnWidths(): Record<string, number> {
@@ -274,7 +288,12 @@ const allResolvedColumns = computed(() =>
   props.showActions ? [...resolvedColumns.value, actionsColumn.value] : resolvedColumns.value,
 );
 
-/** Key of the first non-icon column — this column is pinned sticky-left for mobile scroll. */
+/**
+ * Key of the first non-icon column in the FILTERED (table-visible, `hiddenColumnKeys`-aware)
+ * column set — this column is pinned sticky-left for mobile scroll. TABLE MODE ONLY: card mode
+ * uses the separate `cardFirstNonIconColKey` (declared below, over the unfiltered column set)
+ * for its title fallback.
+ */
 const firstNonIconColKey = computed<string | null>(
   () => resolvedColumns.value.find((col) => !col.icon)?.key ?? null,
 );
@@ -308,7 +327,7 @@ function parsePixelHeight(value: string): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-const totalColumnCount = computed(() => props.columns.length + (props.showActions ? 1 : 0));
+const totalColumnCount = computed(() => resolvedColumns.value.length + (props.showActions ? 1 : 0));
 const normalizedRowHeight = computed(() => Math.max(24, props.virtualRowHeight));
 const normalizedOverscan = computed(() => Math.max(0, props.virtualOverscan));
 const virtualizationEnabled = computed(() => props.virtualScroll && props.rows.length > 0);
@@ -727,24 +746,46 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
 }
 
 // -- Card mode layout helpers --
+// Card mode deliberately reads from the UNFILTERED column set (props.columns), not the
+// table's `hiddenColumnKeys`-filtered `resolvedColumns` — mobile has no column picker to
+// un-hide a column, so every non-`cardPriority`-demoted column must still surface here.
+// Resolved *widths* are meaningless off the table grid, so this just carries `sizing` through
+// (for `cellContentClass()`'s `sizing.overflow` read) without running flex redistribution.
+const cardResolvedColumns = computed<ResolvedDataTableColumn[]>(() =>
+  props.columns.map((column) => {
+    const sizing = normalizeTableColumnSizing(column);
+    return {
+      ...column,
+      resolvedWidth: sizing.size,
+      sizing,
+    };
+  }),
+);
+
+/** Card-mode counterpart to `firstNonIconColKey`, over the unfiltered column set. */
+const cardFirstNonIconColKey = computed<string | null>(
+  () => cardResolvedColumns.value.find((col) => !col.icon)?.key ?? null,
+);
+
 // Icon columns (e.g. status dot) render inline beside the title — there can be more than one.
-const cardIconColumns = computed(() => resolvedColumns.value.filter((col) => col.icon));
+const cardIconColumns = computed(() => cardResolvedColumns.value.filter((col) => col.icon));
 
 // Card title key: the first non-icon column explicitly flagged `cardTitle`, else the same
-// "first non-icon column" identity used for the table's sticky column. Table mode is always
-// unaffected by `cardTitle` — it keeps using `firstNonIconColKey` directly.
+// "first non-icon column" identity used for the table's sticky column (but over the unfiltered
+// set — see `cardFirstNonIconColKey`). Table mode is always unaffected by `cardTitle` — it
+// keeps using `firstNonIconColKey` directly.
 const cardTitleColumnKey = computed<string | null>(() => {
-  const flagged = resolvedColumns.value.find((col) => !col.icon && col.cardTitle === true);
-  return flagged?.key ?? firstNonIconColKey.value;
+  const flagged = cardResolvedColumns.value.find((col) => !col.icon && col.cardTitle === true);
+  return flagged?.key ?? cardFirstNonIconColKey.value;
 });
 
 const cardTitleColumn = computed<ResolvedDataTableColumn | null>(
-  () => resolvedColumns.value.find((col) => col.key === cardTitleColumnKey.value) ?? null,
+  () => cardResolvedColumns.value.find((col) => col.key === cardTitleColumnKey.value) ?? null,
 );
 
 // Subtitle/body candidates: every non-icon column except the title.
 const cardBodyCandidates = computed(() =>
-  resolvedColumns.value.filter((col) => !col.icon && col.key !== cardTitleColumnKey.value),
+  cardResolvedColumns.value.filter((col) => !col.icon && col.key !== cardTitleColumnKey.value),
 );
 
 // Card subtitle: highest `cardPriority` (> 0) among candidates, ties broken by declared order.
