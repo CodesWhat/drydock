@@ -565,6 +565,155 @@ describe('DataTable', () => {
     });
   });
 
+  describe('column width shrink-to-fit (#467)', () => {
+    let originalClientWidthDescriptor: PropertyDescriptor | undefined;
+    let mockedClientWidth = 0;
+
+    beforeEach(() => {
+      mockedClientWidth = 0;
+      originalClientWidthDescriptor = Object.getOwnPropertyDescriptor(
+        HTMLElement.prototype,
+        'clientWidth',
+      );
+      Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+        configurable: true,
+        get() {
+          return mockedClientWidth;
+        },
+      });
+    });
+
+    afterEach(() => {
+      if (originalClientWidthDescriptor) {
+        Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidthDescriptor);
+      } else {
+        delete (HTMLElement.prototype as any).clientWidth;
+      }
+    });
+
+    async function mountAtWidth(
+      width: number,
+      props: Record<string, any> = {},
+      slots: Record<string, any> = {},
+    ) {
+      mockedClientWidth = width;
+      const w = factory(props, slots);
+      await nextTick();
+      return w;
+    }
+
+    function columnWidths(w: ReturnType<typeof mount>): Record<string, number> {
+      const widths: Record<string, number> = {};
+      for (const col of w.findAll('colgroup col')) {
+        const key = col.attributes('data-col-key');
+        const match = (col.attributes('style') ?? '').match(/width:\s*([0-9.]+)px/);
+        if (key && match) {
+          widths[key] = Number.parseFloat(match[1]);
+        }
+      }
+      return widths;
+    }
+
+    // Mirrors the rc.4 default containers column set after the v6->v7 preferences migration
+    // force-adds `softwareVersion` (220 size / 150 minSize) to every existing user's column
+    // set: default-size sum grows from 1264px to 1484px while the minSize sum stays 1136px.
+    const regressionColumns = [
+      { key: 'icon', label: '', icon: true, size: 40, minSize: 40, maxSize: 40 },
+      { key: 'name', label: 'Container', size: 360, minSize: 220, maxSize: 640, flex: 1 },
+      { key: 'version', label: 'Tag', size: 220, minSize: 150, maxSize: 320 },
+      { key: 'softwareVersion', label: 'Version', size: 220, minSize: 150, maxSize: 320 },
+      { key: 'kind', label: 'Update', size: 128, minSize: 116, maxSize: 180 },
+      { key: 'status', label: 'Status', size: 118, minSize: 112, maxSize: 160 },
+      { key: 'server', label: 'Host', size: 152, minSize: 132, maxSize: 240 },
+      { key: 'registry', label: 'Registry', size: 126, minSize: 116, maxSize: 180 },
+      { key: 'uptime', label: 'Uptime', size: 120, minSize: 100, maxSize: 180 },
+    ];
+
+    it('shrinks columns to fit when size-sum overflows the available width but minSize-sum still fits (#467)', async () => {
+      // available (1300) sits inside the 1136 (minSize-sum) .. 1484 (size-sum) overflow band —
+      // the exact divergence window where rc.4 rendered wider than the auto-hide budget allowed.
+      const available = 1300;
+      const w = await mountAtWidth(available, { columns: regressionColumns, rows: [] });
+
+      const widths = columnWidths(w);
+      const total = Object.values(widths).reduce((sum, width) => sum + width, 0);
+
+      expect(total).toBeLessThanOrEqual(available);
+      for (const col of regressionColumns) {
+        expect(widths[col.key]).toBeGreaterThanOrEqual(col.minSize);
+      }
+      // Confirms shrink actually engaged rather than silently no-op'ing.
+      expect(widths.softwareVersion).toBeLessThan(220);
+      expect(widths.name).toBeLessThan(360);
+    });
+
+    it('floors shrunk columns at minSize and leaves the remainder for auto-hide when available is below the minSize-sum (#467)', async () => {
+      // available (1000) is below the 1136px minSize-sum entirely, so every shrinkable column
+      // must bottom out at exactly minSize — no negative or sub-minSize widths — and the table
+      // legitimately keeps overflowing; resolving that residual overflow is auto-hide's job, not
+      // DataTable's.
+      const available = 1000;
+      const w = await mountAtWidth(available, { columns: regressionColumns, rows: [] });
+
+      const widths = columnWidths(w);
+      const total = Object.values(widths).reduce((sum, width) => sum + width, 0);
+
+      for (const col of regressionColumns) {
+        expect(widths[col.key]).toBe(col.minSize);
+      }
+      expect(total).toBeGreaterThan(available);
+    });
+
+    it('distributes extra space across flex columns exactly as before when the layout has room to expand', async () => {
+      // available (720) must clear the 640px card-mode threshold (#242) so this stays in table
+      // mode: below 640px, isCardMode is true and DataTable never calls resolveColumnWidths() at
+      // all (card mode ignores column widths entirely — see "card mode" suite below). Within
+      // table mode: totalBaseWidth = 300 + 120 = 420; extra = 720 - 420 = 300, all absorbed by
+      // the sole flex column exactly as resolveColumnWidths() distributed it before the #467
+      // shrink path existed.
+      const w = await mountAtWidth(720, {
+        columns: [
+          { key: 'name', label: 'Name', size: 300, minSize: 200, maxSize: 640, flex: 1 },
+          { key: 'status', label: 'Status', size: 120, minSize: 100, maxSize: 200 },
+        ],
+        rows: [],
+      });
+
+      const widths = columnWidths(w);
+      expect(widths.name).toBe(600);
+      expect(widths.status).toBe(120);
+    });
+
+    // #242 interaction: hiddenColumnKeys filters a column out of normalizedColumns before
+    // resolveColumnWidths() ever builds its `base` array, so a table-hidden column must not
+    // count toward the shrink deficit (or the expansion headroom) at all — the same way it
+    // already doesn't count toward flex redistribution (see "hiddenColumnKeys" suite below).
+    it('excludes a table-hidden column from the shrink/expand math entirely', async () => {
+      // Same 1300px viewport as the shrink-band regression above, which needs to shrink because
+      // softwareVersion's 220px counts toward the 1484px size-sum. Hiding softwareVersion drops
+      // the size-sum to 1264px — below 1300 — flipping this viewport from the shrink band into
+      // the expand band. This only holds if resolveColumnWidths() builds `base` from the
+      // hiddenColumnKeys-filtered normalizedColumns, not from props.columns directly.
+      const w = await mountAtWidth(1300, {
+        columns: regressionColumns,
+        rows: [],
+        hiddenColumnKeys: ['softwareVersion'],
+      });
+
+      expect(w.find('colgroup col[data-col-key="softwareVersion"]').exists()).toBe(false);
+      const widths = columnWidths(w);
+      // No shrink engaged: every non-flex column keeps its declared base size...
+      expect(widths.version).toBe(220);
+      expect(widths.kind).toBe(128);
+      expect(widths.status).toBe(118);
+      expect(widths.server).toBe(152);
+      expect(widths.registry).toBe(126);
+      expect(widths.uptime).toBe(120);
+      // ...and the sole flex column (name) absorbs the leftover 36px (1300 - 1264) instead.
+      expect(widths.name).toBe(396);
+    });
+  });
+
   describe('column resize performance', () => {
     it('renders resize movement through colgroup instead of header width attributes', async () => {
       const resizeColumns = [
