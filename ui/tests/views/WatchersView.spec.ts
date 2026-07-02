@@ -1,6 +1,7 @@
 import { flushPromises } from '@vue/test-utils';
-import { defineComponent } from 'vue';
-import { resetPreferences } from '@/preferences/store';
+import { defineComponent, nextTick } from 'vue';
+import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
+import { preferences, resetPreferences } from '@/preferences/store';
 import { getAllWatchers, getWatcher } from '@/services/watcher';
 import WatchersView from '@/views/WatchersView.vue';
 import { dataViewStubs } from '../helpers/data-view-stubs';
@@ -39,10 +40,17 @@ function withStats(total: number) {
 }
 
 const richDataTableStub = defineComponent({
-  props: ['columns', 'rows', 'rowKey', 'activeRow'],
+  props: ['columns', 'rows', 'rowKey', 'activeRow', 'hiddenColumnKeys'],
   emits: ['row-click'],
   template: `
     <div class="data-table" :data-row-count="rows?.length ?? 0" :data-active-row="activeRow || ''">
+      <div
+        v-for="col in (columns || []).filter((c) => !(hiddenColumnKeys || []).includes(c.key))"
+        :key="col.key"
+        class="dt-header"
+        :data-col-key="col.key">
+        {{ col.label }}
+      </div>
       <div v-for="row in rows" :key="row[rowKey || 'id']" class="data-table-row">
         <button v-if="row" class="row-click-first" @click="$emit('row-click', row)">Open</button>
         <slot name="cell-name" :row="row" />
@@ -98,6 +106,64 @@ describe('WatchersView', () => {
       const columns = table.props('columns') as Array<{ key: string; cardPriority?: number }>;
       const cronCol = columns.find((c) => c.key === 'cron');
       expect(cronCol?.cardPriority).toBe(-1);
+    });
+  });
+
+  describe('column picker', () => {
+    it('tableColumns keys match VIEW_TABLE_COLUMN_KEYS.watchers (schema/view sync guard)', async () => {
+      mockGetAllWatchers.mockResolvedValue([
+        { id: 'watcher-alpha', name: 'Alpha Watcher', type: 'docker', configuration: {} },
+      ]);
+      const wrapper = await mountWatchersView();
+      const table = wrapper.findComponent(richDataTableStub);
+      const keys = new Set((table.props('columns') as Array<{ key: string }>).map((c) => c.key));
+      expect(keys).toEqual(new Set(VIEW_TABLE_COLUMN_KEYS.watchers));
+    });
+
+    it('marks the name column as required', async () => {
+      mockGetAllWatchers.mockResolvedValue([
+        { id: 'watcher-alpha', name: 'Alpha Watcher', type: 'docker', configuration: {} },
+      ]);
+      const wrapper = await mountWatchersView();
+      const table = wrapper.findComponent(richDataTableStub);
+      const nameCol = (table.props('columns') as Array<{ key: string; required?: boolean }>).find(
+        (c) => c.key === 'name',
+      );
+      expect(nameCol?.required).toBe(true);
+    });
+
+    it('renders the column picker in the filter bar', async () => {
+      mockGetAllWatchers.mockResolvedValue([]);
+      const wrapper = await mountWatchersView();
+      expect(wrapper.find('[data-test="data-table-column-picker"]').exists()).toBe(true);
+    });
+
+    it('toggling a column via the picker removes its header from the table', async () => {
+      mockGetAllWatchers.mockResolvedValue([
+        {
+          id: 'watcher-alpha',
+          name: 'Alpha Watcher',
+          type: 'docker',
+          configuration: { cron: '*/5 * * * *' },
+        },
+      ]);
+      const wrapper = await mountWatchersView();
+      expect(wrapper.find('[data-col-key="cron"]').exists()).toBe(true);
+
+      await wrapper.find('[data-test="column-picker-toggle-cron"]').trigger('click');
+      await nextTick();
+
+      expect(wrapper.find('[data-col-key="cron"]').exists()).toBe(false);
+    });
+
+    it('toggling a column via the picker persists the key to preferences.views.watchers.hiddenColumns', async () => {
+      mockGetAllWatchers.mockResolvedValue([]);
+      const wrapper = await mountWatchersView();
+
+      await wrapper.find('[data-test="column-picker-toggle-cron"]').trigger('click');
+      await nextTick();
+
+      expect(preferences.views.watchers.hiddenColumns).toContain('cron');
     });
   });
 

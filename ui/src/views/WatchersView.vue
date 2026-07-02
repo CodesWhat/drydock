@@ -3,9 +3,11 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import AppBadge from '@/components/AppBadge.vue';
+import DataTableColumnPicker from '@/components/DataTableColumnPicker.vue';
 import DetailField from '@/components/DetailField.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
 import { getAllWatchers, getWatcher } from '../services/watcher';
 import type { ApiComponent } from '../types/api';
 import { ROUTES } from '../router/routes';
@@ -84,6 +86,7 @@ const tableColumns = computed(() => [
     maxSize: 360,
     flex: 1,
     sortable: false,
+    required: true,
   },
   {
     key: 'status',
@@ -128,6 +131,19 @@ const tableColumns = computed(() => [
     sortable: false,
   },
 ]);
+
+const pickerColumns = computed<PickerColumn[]>(() =>
+  tableColumns.value.map((column) => ({
+    key: column.key,
+    label: column.label,
+    required: 'required' in column ? column.required : undefined,
+  })),
+);
+
+const { hiddenColumnKeys, toggleColumn, resetColumns } = useViewColumnVisibility(
+  'watchers',
+  pickerColumns,
+);
 
 function readWatcherContainerTotal(metadata: unknown): number {
   if (!metadata || typeof metadata !== 'object') return 0;
@@ -236,6 +252,13 @@ onMounted(async () => {
           {{ t('watchersView.clear') }}
         </AppButton>
       </template>
+      <template #extra-buttons>
+        <DataTableColumnPicker
+          :columns="pickerColumns"
+          :hidden-keys="hiddenColumnKeys"
+          @toggle="toggleColumn"
+          @reset="resetColumns" />
+      </template>
     </DataFilterBar>
 
     <!-- Table view -->
@@ -245,6 +268,7 @@ onMounted(async () => {
       storage-key="watchers"
       :rows="filteredWatchers"
       row-key="id"
+      :hidden-column-keys="hiddenColumnKeys"
       :active-row="selectedWatcher?.id"
       @row-click="openDetail($event)"
     >

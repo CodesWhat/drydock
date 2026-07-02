@@ -1,6 +1,7 @@
 import { flushPromises } from '@vue/test-utils';
 import { defineComponent, nextTick, ref } from 'vue';
-import { resetPreferences } from '@/preferences/store';
+import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
+import { preferences, resetPreferences } from '@/preferences/store';
 import { getAgents } from '@/services/agent';
 import { getServer } from '@/services/server';
 import { getAllWatchers } from '@/services/watcher';
@@ -31,10 +32,17 @@ const mockGetAgents = getAgents as ReturnType<typeof vi.fn>;
 const mockGetAllWatchers = getAllWatchers as ReturnType<typeof vi.fn>;
 
 const richDataTableStub = defineComponent({
-  props: ['columns', 'rows', 'rowKey', 'activeRow'],
+  props: ['columns', 'rows', 'rowKey', 'activeRow', 'hiddenColumnKeys'],
   emits: ['row-click'],
   template: `
     <div class="data-table" :data-row-count="rows?.length ?? 0" :data-active-row="activeRow || ''">
+      <div
+        v-for="col in (columns || []).filter((c) => !(hiddenColumnKeys || []).includes(c.key))"
+        :key="col.key"
+        class="dt-header"
+        :data-col-key="col.key">
+        {{ col.label }}
+      </div>
       <div v-for="row in rows" :key="row[rowKey || 'id']" class="data-table-row">
         <button v-if="row" class="row-click-first" @click="$emit('row-click', row)">Open</button>
         <slot name="cell-name" :row="row" />
@@ -100,6 +108,48 @@ describe('ServersView', () => {
       const columns = table.props('columns') as Array<{ key: string; cardPriority?: number }>;
       const statusCol = columns.find((c) => c.key === 'status');
       expect(statusCol?.cardPriority).toBe(1);
+    });
+  });
+
+  describe('column picker', () => {
+    it('tableColumns keys match VIEW_TABLE_COLUMN_KEYS.servers (schema/view sync guard)', async () => {
+      const wrapper = await mountServersView();
+      const table = wrapper.findComponent(richDataTableStub as any);
+      const keys = new Set((table.props('columns') as Array<{ key: string }>).map((c) => c.key));
+      expect(keys).toEqual(new Set(VIEW_TABLE_COLUMN_KEYS.servers));
+    });
+
+    it('marks the name column as required', async () => {
+      const wrapper = await mountServersView();
+      const table = wrapper.findComponent(richDataTableStub as any);
+      const nameCol = (table.props('columns') as Array<{ key: string; required?: boolean }>).find(
+        (c) => c.key === 'name',
+      );
+      expect(nameCol?.required).toBe(true);
+    });
+
+    it('renders the column picker in the filter bar', async () => {
+      const wrapper = await mountServersView();
+      expect(wrapper.find('[data-test="data-table-column-picker"]').exists()).toBe(true);
+    });
+
+    it('toggling a column via the picker removes its header from the table', async () => {
+      const wrapper = await mountServersView();
+      expect(wrapper.find('[data-col-key="host"]').exists()).toBe(true);
+
+      await wrapper.find('[data-test="column-picker-toggle-host"]').trigger('click');
+      await nextTick();
+
+      expect(wrapper.find('[data-col-key="host"]').exists()).toBe(false);
+    });
+
+    it('toggling a column via the picker persists the key to preferences.views.servers.hiddenColumns', async () => {
+      const wrapper = await mountServersView();
+
+      await wrapper.find('[data-test="column-picker-toggle-host"]').trigger('click');
+      await nextTick();
+
+      expect(preferences.views.servers.hiddenColumns).toContain('host');
     });
   });
 

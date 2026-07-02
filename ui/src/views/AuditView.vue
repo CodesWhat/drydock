@@ -4,8 +4,10 @@ import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import AppBadge from '../components/AppBadge.vue';
 import AppIconButton from '../components/AppIconButton.vue';
+import DataTableColumnPicker from '../components/DataTableColumnPicker.vue';
 import DetailField from '../components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
 import { getAuditLog } from '../services/audit';
 import type { AuditEntry } from '../utils/audit-helpers';
 import {
@@ -211,6 +213,7 @@ const tableColumns = computed(() => [
     flex: 1,
     sortable: false,
     cardTitle: true,
+    required: true,
   },
   {
     key: 'status',
@@ -231,6 +234,19 @@ const tableColumns = computed(() => [
     sortable: false,
   },
 ]);
+
+const pickerColumns = computed<PickerColumn[]>(() =>
+  tableColumns.value.map((column) => ({
+    key: column.key,
+    label: column.label,
+    required: 'required' in column ? column.required : undefined,
+  })),
+);
+
+const { hiddenColumnKeys, toggleColumn, resetColumns } = useViewColumnVisibility(
+  'audit',
+  pickerColumns,
+);
 
 async function fetchAudit() {
   loading.value = true;
@@ -386,6 +402,13 @@ onUnmounted(() => {
           {{ t('auditView.clear') }}
         </AppButton>
       </template>
+      <template #extra-buttons>
+        <DataTableColumnPicker
+          :columns="pickerColumns"
+          :hidden-keys="hiddenColumnKeys"
+          @toggle="toggleColumn"
+          @reset="resetColumns" />
+      </template>
     </DataFilterBar>
 
     <!-- Table view -->
@@ -395,6 +418,7 @@ onUnmounted(() => {
       storage-key="audit"
       :rows="filteredEntries"
       row-key="id"
+      :hidden-column-keys="hiddenColumnKeys"
       :active-row="selectedEntry?.id"
       @row-click="openDetail($event)"
     >

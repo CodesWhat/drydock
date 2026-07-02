@@ -6,6 +6,7 @@ import AppBadge from '../components/AppBadge.vue';
 import AppIconButton from '../components/AppIconButton.vue';
 import AppStatusIndicator from '../components/AppStatusIndicator.vue';
 import ContainerUpdateDialog from '../components/containers/ContainerUpdateDialog.vue';
+import DataTableColumnPicker from '../components/DataTableColumnPicker.vue';
 import ProjectLink from '../components/containers/ProjectLink.vue';
 import ReleaseNotesLink from '../components/containers/ReleaseNotesLink.vue';
 import ScanProgressBanner from '../components/ScanProgressBanner.vue';
@@ -14,6 +15,7 @@ import { useBreakpoints } from '../composables/useBreakpoints';
 import { useSbomDetail } from '../composables/useSbomDetail';
 import { useScanProgress } from '../composables/useScanProgress';
 import { useVulnerabilities, type ImageSummary } from '../composables/useVulnerabilities';
+import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
 import { getAllContainers } from '../services/container';
@@ -391,89 +393,97 @@ async function scanAllContainers() {
   await fetchVulnerabilities();
 }
 
-const tableColumns = computed(() => {
-  if (isCompact.value) {
-    return [
-      {
-        key: 'image',
-        label: t('securityView.columns.image'),
-        align: 'text-left',
-        size: 320,
-        minSize: 220,
-        maxSize: 720,
-        flex: 1,
-      },
-      {
-        key: 'total',
-        label: t('securityView.columns.total'),
-        sortable: true,
-        size: 96,
-        minSize: 80,
-        maxSize: 120,
-      },
-    ];
-  }
-  return [
-    {
-      key: 'image',
-      label: t('securityView.columns.image'),
-      align: 'text-left',
-      size: 360,
-      minSize: 240,
-      maxSize: 760,
-      flex: 1,
-    },
-    {
-      key: 'critical',
-      label: t('securityView.columns.critical'),
-      sortable: true,
-      size: 96,
-      minSize: 84,
-      maxSize: 120,
-      cardPriority: 5,
-    },
-    {
-      key: 'high',
-      label: t('securityView.columns.high'),
-      sortable: true,
-      size: 96,
-      minSize: 84,
-      maxSize: 120,
-    },
-    {
-      key: 'medium',
-      label: t('securityView.columns.medium'),
-      sortable: true,
-      size: 96,
-      minSize: 84,
-      maxSize: 120,
-    },
-    {
-      key: 'low',
-      label: t('securityView.columns.low'),
-      sortable: true,
-      size: 96,
-      minSize: 84,
-      maxSize: 120,
-    },
-    {
-      key: 'fixable',
-      label: t('securityView.columns.fixable'),
-      sortable: true,
-      size: 110,
-      minSize: 92,
-      maxSize: 140,
-    },
-    {
-      key: 'total',
-      label: t('securityView.columns.total'),
-      sortable: true,
-      size: 96,
-      minSize: 84,
-      maxSize: 120,
-    },
-  ];
-});
+const tableColumns = computed(() => [
+  {
+    key: 'image',
+    label: t('securityView.columns.image'),
+    align: 'text-left',
+    size: 360,
+    minSize: 240,
+    maxSize: 760,
+    flex: 1,
+    required: true,
+  },
+  {
+    key: 'critical',
+    label: t('securityView.columns.critical'),
+    sortable: true,
+    size: 96,
+    minSize: 84,
+    maxSize: 120,
+    cardPriority: 5,
+  },
+  {
+    key: 'high',
+    label: t('securityView.columns.high'),
+    sortable: true,
+    size: 96,
+    minSize: 84,
+    maxSize: 120,
+  },
+  {
+    key: 'medium',
+    label: t('securityView.columns.medium'),
+    sortable: true,
+    size: 96,
+    minSize: 84,
+    maxSize: 120,
+  },
+  {
+    key: 'low',
+    label: t('securityView.columns.low'),
+    sortable: true,
+    size: 96,
+    minSize: 84,
+    maxSize: 120,
+  },
+  {
+    key: 'fixable',
+    label: t('securityView.columns.fixable'),
+    sortable: true,
+    size: 110,
+    minSize: 92,
+    maxSize: 140,
+  },
+  {
+    key: 'total',
+    label: t('securityView.columns.total'),
+    sortable: true,
+    size: 96,
+    minSize: 84,
+    maxSize: 120,
+  },
+]);
+
+const pickerColumns = computed<PickerColumn[]>(() =>
+  tableColumns.value.map((column) => ({
+    key: column.key,
+    label: column.label,
+    required: 'required' in column ? column.required : undefined,
+  })),
+);
+
+const {
+  hiddenColumnKeys: pickerHiddenColumnKeys,
+  toggleColumn,
+  resetColumns,
+} = useViewColumnVisibility('security', pickerColumns);
+
+/**
+ * Compact mode (< 1024px) used to swap `tableColumns` down to just [image, total]. Now
+ * `tableColumns` always returns the full 7-column set (so card mode can surface the
+ * `critical` cardPriority annotation on mobile), and the severity breakdown columns are
+ * force-hidden here instead — the union of the picker's hidden set with the compact-only
+ * forced-hidden set. The picker itself is hidden in compact mode (see template) so a user
+ * can never toggle back on a column this override is about to re-hide anyway.
+ */
+const COMPACT_FORCED_HIDDEN_COLUMN_KEYS = ['critical', 'high', 'medium', 'low', 'fixable'];
+
+const hiddenColumnKeys = computed(() =>
+  isCompact.value
+    ? [...new Set([...pickerHiddenColumnKeys.value, ...COMPACT_FORCED_HIDDEN_COLUMN_KEYS])]
+    : pickerHiddenColumnKeys.value,
+);
 
 function handleSseReconnected() {
   void fetchContainers();
@@ -545,6 +555,14 @@ onUnmounted(() => {
                   @click="clearSecFilters">
             {{ t('securityView.filters.clearAll') }}
           </AppButton>
+        </template>
+        <template #extra-buttons>
+          <DataTableColumnPicker
+            v-if="!isCompact"
+            :columns="pickerColumns"
+            :hidden-keys="pickerHiddenColumnKeys"
+            @toggle="toggleColumn"
+            @reset="resetColumns" />
         </template>
         <template #left>
           <template v-if="runtimeStatus">
@@ -624,6 +642,7 @@ onUnmounted(() => {
                  storage-key="security"
                  :rows="filteredSummaries"
                  row-key="image"
+                 :hidden-column-keys="hiddenColumnKeys"
                  :selected-key="selectedImage?.image"
                  v-model:sort-key="securitySortField"
                  v-model:sort-asc="securitySortAsc"

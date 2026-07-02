@@ -20,7 +20,16 @@ export const dataViewStubs: Record<string, any> = {
     `,
   }),
   DataTable: defineComponent({
-    props: ['columns', 'rows', 'rowKey', 'activeRow', 'selectedKey', 'sortKey', 'sortAsc'],
+    props: [
+      'columns',
+      'rows',
+      'rowKey',
+      'activeRow',
+      'selectedKey',
+      'sortKey',
+      'sortAsc',
+      'hiddenColumnKeys',
+    ],
     emits: ['row-click', 'update:sort-key', 'update:sort-asc'],
     template: `
       <div class="data-table"
@@ -30,6 +39,25 @@ export const dataViewStubs: Record<string, any> = {
         <button v-if="rows?.[1]" class="row-click-second" @click="$emit('row-click', rows[1])">Open 2</button>
         <div v-if="rows?.[0]" data-cell="status"><slot name="cell-status" :row="rows[0]" /></div>
         <slot name="empty" v-if="!rows || rows.length === 0" />
+      </div>
+    `,
+  }),
+  DataTableColumnPicker: defineComponent({
+    props: ['columns', 'hiddenKeys'],
+    emits: ['toggle', 'reset'],
+    template: `
+      <div data-test="data-table-column-picker">
+        <button
+          v-for="column in columns"
+          :key="column.key"
+          type="button"
+          :data-test="'column-picker-toggle-' + column.key"
+          @click="$emit('toggle', column.key)">
+          {{ column.label }}
+        </button>
+        <button type="button" data-test="data-table-column-picker-reset" @click="$emit('reset')">
+          Reset
+        </button>
       </div>
     `,
   }),

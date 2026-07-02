@@ -2,8 +2,10 @@
 import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import AppBadge from '@/components/AppBadge.vue';
+import DataTableColumnPicker from '@/components/DataTableColumnPicker.vue';
 import DetailField from '@/components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
 import { getAgents } from '../services/agent';
 import { getServer } from '../services/server';
 import { getAllWatchers } from '../services/watcher';
@@ -59,6 +61,7 @@ const tableColumns = computed(() => [
     maxSize: 360,
     flex: 1,
     sortable: false,
+    required: true,
   },
   {
     key: 'host',
@@ -96,6 +99,19 @@ const tableColumns = computed(() => [
     sortable: false,
   },
 ]);
+
+const pickerColumns = computed<PickerColumn[]>(() =>
+  tableColumns.value.map((column) => ({
+    key: column.key,
+    label: column.label,
+    required: 'required' in column ? column.required : undefined,
+  })),
+);
+
+const { hiddenColumnKeys, toggleColumn, resetColumns } = useViewColumnVisibility(
+  'servers',
+  pickerColumns,
+);
 
 interface WatcherContainerCounts {
   total: number;
@@ -232,6 +248,13 @@ onMounted(fetchServers);
           {{ t('serversView.clear') }}
         </AppButton>
       </template>
+      <template #extra-buttons>
+        <DataTableColumnPicker
+          :columns="pickerColumns"
+          :hidden-keys="hiddenColumnKeys"
+          @toggle="toggleColumn"
+          @reset="resetColumns" />
+      </template>
     </DataFilterBar>
 
         <!-- Table view -->
@@ -241,6 +264,7 @@ onMounted(fetchServers);
           storage-key="servers"
           :rows="filteredServers"
           row-key="id"
+          :hidden-column-keys="hiddenColumnKeys"
           :active-row="selectedServer?.id"
           @row-click="openDetail($event)"
         >

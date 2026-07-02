@@ -1,7 +1,10 @@
 import { flushPromises } from '@vue/test-utils';
-import { defineComponent } from 'vue';
+import { defineComponent, nextTick } from 'vue';
+import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
+import { preferences, resetPreferences } from '@/preferences/store';
 import { getAuditLog } from '@/services/audit';
 import AuditView from '@/views/AuditView.vue';
+import { dataViewStubs } from '../helpers/data-view-stubs';
 import { mountWithPlugins } from '../helpers/mount';
 
 const { mockRoute } = vi.hoisted(() => ({
@@ -32,14 +35,22 @@ const stubs: Record<string, any> = {
     template: `
       <div class="data-filter-bar">
         <slot name="filters" />
+        <slot name="extra-buttons" />
       </div>
     `,
   }),
   DataTable: defineComponent({
-    props: ['columns', 'rows', 'rowKey', 'activeRow'],
+    props: ['columns', 'rows', 'rowKey', 'activeRow', 'hiddenColumnKeys'],
     emits: ['row-click'],
     template: `
       <div class="data-table" :data-row-count="rows.length" :data-active-row="activeRow || ''">
+        <div
+          v-for="col in (columns || []).filter((c) => !(hiddenColumnKeys || []).includes(c.key))"
+          :key="col.key"
+          class="dt-header"
+          :data-col-key="col.key">
+          {{ col.label }}
+        </div>
         <div v-for="(row, index) in rows" :key="row.id" class="data-table-row">
           <button
             v-if="row"
@@ -57,6 +68,7 @@ const stubs: Record<string, any> = {
       </div>
     `,
   }),
+  DataTableColumnPicker: dataViewStubs.DataTableColumnPicker,
   DetailPanel: defineComponent({
     props: ['open', 'isMobile', 'showSizeControls', 'showFullPage'],
     emits: ['update:open'],
@@ -116,6 +128,7 @@ function findButtonByIcon(wrapper: any, icon: string) {
 describe('AuditView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetPreferences();
     mockRoute.query = {};
     mockGetAuditLog.mockResolvedValue({ entries: [], total: 0, page: 1, limit: 50 });
   });
@@ -128,6 +141,47 @@ describe('AuditView', () => {
       const actionCol = vm.tableColumns.find((c: any) => c.key === 'action');
       expect(containerNameCol.cardTitle).toBe(true);
       expect(actionCol.cardPriority).toBe(1);
+    });
+  });
+
+  describe('column picker', () => {
+    it('tableColumns keys match VIEW_TABLE_COLUMN_KEYS.audit (schema/view sync guard)', async () => {
+      const wrapper = await mountAuditView();
+      const vm = wrapper.vm as any;
+      const keys = new Set(vm.tableColumns.map((c: any) => c.key));
+      expect(keys).toEqual(new Set(VIEW_TABLE_COLUMN_KEYS.audit));
+    });
+
+    it('marks the containerName column as required', async () => {
+      const wrapper = await mountAuditView();
+      const vm = wrapper.vm as any;
+      const containerNameCol = vm.tableColumns.find((c: any) => c.key === 'containerName');
+      expect(containerNameCol.required).toBe(true);
+    });
+
+    it('renders the column picker in the filter bar', async () => {
+      const wrapper = await mountAuditView();
+      expect(wrapper.find('[data-test="data-table-column-picker"]').exists()).toBe(true);
+    });
+
+    it('toggling a column via the picker removes its header from the table', async () => {
+      mockGetAuditLog.mockResolvedValue({ entries: [makeEntry()], total: 1 });
+      const wrapper = await mountAuditView();
+      expect(wrapper.find('[data-col-key="details"]').exists()).toBe(true);
+
+      await wrapper.find('[data-test="column-picker-toggle-details"]').trigger('click');
+      await nextTick();
+
+      expect(wrapper.find('[data-col-key="details"]').exists()).toBe(false);
+    });
+
+    it('toggling a column via the picker persists the key to preferences.views.audit.hiddenColumns', async () => {
+      const wrapper = await mountAuditView();
+
+      await wrapper.find('[data-test="column-picker-toggle-details"]').trigger('click');
+      await nextTick();
+
+      expect(preferences.views.audit.hiddenColumns).toContain('details');
     });
   });
 

@@ -1,5 +1,5 @@
 import { flushPromises } from '@vue/test-utils';
-import { defineComponent, nextTick } from 'vue';
+import { defineComponent, nextTick, ref } from 'vue';
 
 const mockGetSecurityVulnerabilityOverview = vi.fn();
 const mockScanContainer = vi.fn();
@@ -7,8 +7,11 @@ const mockGetContainerSbom = vi.fn();
 const mockGetSecurityRuntime = vi.fn();
 const mockGetAllContainers = vi.fn();
 const mockRouterPush = vi.fn().mockResolvedValue(undefined);
-const mockIsMobile = { value: false };
-const mockWindowNarrow = { value: false };
+// Real refs (not plain `{ value }` objects) — the component's template uses bare
+// `isCompact`/`isMobile` (no `.value`) in several `v-if`/prop bindings, which only
+// auto-unwraps for genuine Vue refs. A plain object would be constant-truthy there.
+const mockIsMobile = ref(false);
+const mockWindowNarrow = ref(false);
 const { mockComputeSecurityDelta, mockToSafeExternalUrl } = vi.hoisted(() => ({
   mockComputeSecurityDelta: vi.fn(),
   mockToSafeExternalUrl: vi.fn(),
@@ -60,6 +63,8 @@ vi.mock('@/views/security/securityViewUtils', async () => {
 });
 
 import { mount } from '@vue/test-utils';
+import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
+import { preferences, resetPreferences } from '@/preferences/store';
 import { clearIconCache, updateSettings } from '@/services/settings';
 import SecurityView from '@/views/SecurityView.vue';
 
@@ -103,7 +108,26 @@ const stubs: Record<string, any> = {
     ],
     emits: ['update:modelValue', 'update:showFilters'],
     template:
-      '<div class="dfb"><slot name="filters" /><slot name="left" /><slot name="center" /></div>',
+      '<div class="dfb"><slot name="extra-buttons" /><slot name="filters" /><slot name="left" /><slot name="center" /></div>',
+  }),
+  DataTableColumnPicker: defineComponent({
+    props: ['columns', 'hiddenKeys'],
+    emits: ['toggle', 'reset'],
+    template: `
+      <div data-test="data-table-column-picker">
+        <button
+          v-for="column in columns"
+          :key="column.key"
+          type="button"
+          :data-test="'column-picker-toggle-' + column.key"
+          @click="$emit('toggle', column.key)">
+          {{ column.label }}
+        </button>
+        <button type="button" data-test="data-table-column-picker-reset" @click="$emit('reset')">
+          Reset
+        </button>
+      </div>
+    `,
   }),
   AppIconButton: defineComponent({
     inheritAttrs: false,
@@ -112,9 +136,20 @@ const stubs: Record<string, any> = {
       '<button class="app-icon-button-stub" v-bind="$attrs" :data-icon="icon" :data-size="size" :data-variant="variant" :data-loading="String(loading)" :aria-label="ariaLabel" :disabled="disabled"><slot /></button>',
   }),
   DataTable: defineComponent({
-    props: ['columns', 'rows', 'rowKey', 'sortKey', 'sortAsc', 'selectedKey'],
+    props: ['columns', 'rows', 'rowKey', 'sortKey', 'sortAsc', 'selectedKey', 'hiddenColumnKeys'],
     emits: ['update:sortKey', 'update:sortAsc', 'row-click'],
-    template: '<div class="dt" :data-rows="rows.length"><slot name="empty" /></div>',
+    template: `
+      <div class="dt" :data-rows="rows.length" :data-hidden-keys="JSON.stringify(hiddenColumnKeys || [])">
+        <div
+          v-for="col in (columns || []).filter((c) => !(hiddenColumnKeys || []).includes(c.key))"
+          :key="col.key"
+          class="dt-header"
+          :data-col-key="col.key">
+          {{ col.label }}
+        </div>
+        <slot name="empty" />
+      </div>
+    `,
   }),
   DetailPanel: defineComponent({
     props: ['open', 'isMobile', 'showSizeControls', 'showFullPage'],
@@ -278,6 +313,7 @@ function mockContainers(containers: any[]) {
 describe('SecurityView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetPreferences();
     containerIdCounter = 0;
     mockIsMobile.value = false;
     mockWindowNarrow.value = false;
@@ -296,15 +332,85 @@ describe('SecurityView', () => {
       expect(criticalCol?.cardPriority).toBe(5);
     });
 
-    it('leaves the compact column set unchanged (no critical column, no cardPriority)', async () => {
+    it('always returns the full 7-column set, even when compact (severity columns are hidden via hiddenColumnKeys, not dropped from tableColumns)', async () => {
       mockWindowNarrow.value = true;
       const w = factory();
       await flushPromises();
       const vm = w.vm as any;
-      expect(vm.tableColumns.find((c: any) => c.key === 'critical')).toBeUndefined();
-      for (const col of vm.tableColumns) {
-        expect(col.cardPriority).toBeUndefined();
-      }
+      const criticalCol = vm.tableColumns.find((c: any) => c.key === 'critical');
+      expect(criticalCol).toBeDefined();
+      expect(criticalCol?.cardPriority).toBe(5);
+      expect(vm.tableColumns).toHaveLength(7);
+    });
+  });
+
+  describe('column picker', () => {
+    it('tableColumns keys match VIEW_TABLE_COLUMN_KEYS.security (schema/view sync guard)', async () => {
+      const w = factory();
+      await flushPromises();
+      const vm = w.vm as any;
+      const keys = new Set(vm.tableColumns.map((c: any) => c.key));
+      expect(keys).toEqual(new Set(VIEW_TABLE_COLUMN_KEYS.security));
+    });
+
+    it('marks the image column as required', async () => {
+      const w = factory();
+      await flushPromises();
+      const vm = w.vm as any;
+      const imageCol = vm.tableColumns.find((c: any) => c.key === 'image');
+      expect(imageCol.required).toBe(true);
+    });
+
+    it('renders the picker and passes only the picker-hidden set to DataTable when not compact', async () => {
+      mockWindowNarrow.value = false;
+      mockContainers([makeContainer()]);
+      const w = factory();
+      await flushPromises();
+
+      expect(w.find('[data-test="data-table-column-picker"]').exists()).toBe(true);
+      await w.find('[data-test="column-picker-toggle-fixable"]').trigger('click');
+      await nextTick();
+
+      const hiddenKeys = JSON.parse(w.find('.dt').attributes('data-hidden-keys') ?? '[]');
+      expect(hiddenKeys).toEqual(['fixable']);
+    });
+
+    it('hides the picker and unions the picker-hidden set with the compact-forced-hidden columns when compact', async () => {
+      mockWindowNarrow.value = true;
+      mockContainers([makeContainer()]);
+      const w = factory();
+      await flushPromises();
+
+      expect(w.find('[data-test="data-table-column-picker"]').exists()).toBe(false);
+      const hiddenKeys = JSON.parse(w.find('.dt').attributes('data-hidden-keys') ?? '[]');
+      expect([...hiddenKeys].sort()).toEqual(
+        ['critical', 'fixable', 'high', 'low', 'medium'].sort(),
+      );
+    });
+
+    it('toggling a column via the picker removes its header from the table', async () => {
+      mockWindowNarrow.value = false;
+      mockContainers([makeContainer()]);
+      const w = factory();
+      await flushPromises();
+
+      expect(w.find('[data-col-key="critical"]').exists()).toBe(true);
+      await w.find('[data-test="column-picker-toggle-critical"]').trigger('click');
+      await nextTick();
+
+      expect(w.find('[data-col-key="critical"]').exists()).toBe(false);
+    });
+
+    it('toggling a column via the picker persists the key to preferences.views.security.hiddenColumns', async () => {
+      mockWindowNarrow.value = false;
+      mockContainers([makeContainer()]);
+      const w = factory();
+      await flushPromises();
+
+      await w.find('[data-test="column-picker-toggle-critical"]').trigger('click');
+      await nextTick();
+
+      expect(preferences.views.security.hiddenColumns).toContain('critical');
     });
   });
 
