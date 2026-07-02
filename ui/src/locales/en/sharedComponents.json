@@ -28,7 +28,10 @@
     },
     "dataTable": {
       "actions": "Actions",
-      "resizeColumn": "Resize column"
+      "resizeColumn": "Resize column",
+      "sortBy": "Sort by",
+      "sortDirectionAscending": "Sort direction: ascending",
+      "sortDirectionDescending": "Sort direction: descending"
     },
     "detailPanel": {
       "openFullPage": "Open full page view",

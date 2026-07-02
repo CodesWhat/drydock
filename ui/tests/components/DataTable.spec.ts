@@ -219,13 +219,13 @@ describe('DataTable', () => {
     it('shows ascending indicator when sortAsc is true', () => {
       const w = factory({ sortKey: 'name', sortAsc: true });
       const nameTh = w.findAll('thead th')[0];
-      expect(nameTh.text()).toContain('\u25B2');
+      expect(nameTh.text()).toContain('▲');
     });
 
     it('shows descending indicator when sortAsc is false', () => {
       const w = factory({ sortKey: 'name', sortAsc: false });
       const nameTh = w.findAll('thead th')[0];
-      expect(nameTh.text()).toContain('\u25BC');
+      expect(nameTh.text()).toContain('▼');
     });
 
     it('does not emit sort events when clicking an icon column', async () => {
@@ -945,6 +945,432 @@ describe('DataTable', () => {
       // default columns has icon column at index 2 — it never gets a separator
       const iconHeader = w.findAll('thead th')[2];
       expect(iconHeader.find('[role="separator"]').exists()).toBe(false);
+    });
+  });
+
+  describe('card mode (container width < 640px)', () => {
+    let originalClientWidthDescriptor: PropertyDescriptor | undefined;
+    let mockedClientWidth = 0;
+
+    beforeEach(() => {
+      mockedClientWidth = 0;
+      originalClientWidthDescriptor = Object.getOwnPropertyDescriptor(
+        HTMLElement.prototype,
+        'clientWidth',
+      );
+      Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+        configurable: true,
+        get() {
+          return mockedClientWidth;
+        },
+      });
+    });
+
+    afterEach(() => {
+      if (originalClientWidthDescriptor) {
+        Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidthDescriptor);
+      } else {
+        delete (HTMLElement.prototype as any).clientWidth;
+      }
+    });
+
+    // `viewportWidth` is only assigned inside onMounted (via the ResizeObserver-backed
+    // syncTableViewportWidth), so the isCardMode-dependent re-render is scheduled on the
+    // next microtask tick rather than landing synchronously in mount(). Every caller must
+    // await this helper before asserting on card-mode DOM.
+    async function mountAtWidth(
+      width: number,
+      props: Record<string, any> = {},
+      slots: Record<string, any> = {},
+    ) {
+      mockedClientWidth = width;
+      const w = factory(props, slots);
+      await nextTick();
+      return w;
+    }
+
+    describe('mode switch', () => {
+      it('stays in table mode when viewport width is 0 (pre-measurement)', async () => {
+        const w = await mountAtWidth(0);
+        expect(w.find('table').exists()).toBe(true);
+        expect(w.find('ul[role="list"]').exists()).toBe(false);
+      });
+
+      it('stays in table mode when viewport width is >= 640', async () => {
+        const w = await mountAtWidth(800);
+        expect(w.find('table').exists()).toBe(true);
+        expect(w.find('ul[role="list"]').exists()).toBe(false);
+      });
+
+      it('switches to card mode when 0 < viewport width < 640', async () => {
+        const w = await mountAtWidth(500);
+        expect(w.find('table').exists()).toBe(false);
+        expect(w.find('ul[role="list"]').exists()).toBe(true);
+      });
+    });
+
+    describe('card title + icon columns', () => {
+      it('renders the first non-icon column as the card title via its cell slot', async () => {
+        const w = await mountAtWidth(
+          500,
+          {},
+          { 'cell-name': ({ row }: any) => `Custom: ${row.name}` },
+        );
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        expect(firstCard.find('[data-test="dd-card-title"]').text()).toContain('Custom: Alpha');
+      });
+
+      it('falls back to the raw row value when no cell slot is provided', async () => {
+        const w = await mountAtWidth(500);
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        expect(firstCard.find('[data-test="dd-card-title"]').text()).toBe('Alpha');
+      });
+
+      it('renders icon columns inline in the title row', async () => {
+        const w = await mountAtWidth(
+          500,
+          {},
+          { 'cell-icon': '<span class="icon-mark">ICON</span>' },
+        );
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        const titleRow = firstCard.find('[data-test="dd-card-title-row"]');
+        expect(titleRow.find('.icon-mark').exists()).toBe(true);
+        expect(titleRow.text()).toContain('ICON');
+      });
+
+      it('does not render a title block when every column is an icon column', async () => {
+        const iconOnlyColumns = [{ key: 'icon', label: '', icon: true }];
+        const w = await mountAtWidth(500, { columns: iconOnlyColumns });
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        expect(firstCard.find('[data-test="dd-card-title"]').exists()).toBe(false);
+      });
+    });
+
+    describe('card subtitle', () => {
+      it('falls back to the 2nd non-icon column by order when no priority is set', async () => {
+        const w = await mountAtWidth(500);
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        expect(firstCard.find('[data-test="dd-card-subtitle"]').text()).toBe('running');
+      });
+
+      it('uses the highest-priority non-icon, non-title column when priorities are set', async () => {
+        const prioritizedColumns = [
+          { key: 'name', label: 'Name' },
+          { key: 'status', label: 'Status', priority: 5 },
+          { key: 'host', label: 'Host', priority: 10 },
+          { key: 'region', label: 'Region', priority: 3 },
+        ];
+        const prioritizedRows = [
+          { id: '1', name: 'Alpha', status: 'running', host: 'node-1', region: 'us-east' },
+        ];
+        const w = await mountAtWidth(500, { columns: prioritizedColumns, rows: prioritizedRows });
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        expect(firstCard.find('[data-test="dd-card-subtitle"]').text()).toBe('node-1');
+      });
+
+      it('does not render a subtitle block when there is no non-title non-icon column', async () => {
+        const soleColumn = [{ key: 'name', label: 'Name' }];
+        const w = await mountAtWidth(500, { columns: soleColumn });
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        expect(firstCard.find('[data-test="dd-card-subtitle"]').exists()).toBe(false);
+      });
+    });
+
+    describe('card body', () => {
+      it('renders remaining non-icon columns as dt/dd pairs using cell slots and cellContentClass', async () => {
+        const columnsWithWrap = [
+          { key: 'name', label: 'Name' },
+          { key: 'status', label: 'Status' },
+          { key: 'notes', label: 'Notes', overflow: 'wrap' as const },
+          { key: 'icon', label: '', icon: true },
+        ];
+        const rowsWithNotes = [{ id: '1', name: 'Alpha', status: 'running', notes: 'Some notes' }];
+        const w = await mountAtWidth(
+          500,
+          { columns: columnsWithWrap, rows: rowsWithNotes },
+          { 'cell-notes': ({ value }: any) => `Notes: ${value}` },
+        );
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        const body = firstCard.find('[data-test="dd-card-body"]');
+        expect(body.exists()).toBe(true);
+        const dts = body.findAll('dt');
+        const dds = body.findAll('dd');
+        expect(dts).toHaveLength(1);
+        expect(dts[0].text()).toBe('Notes');
+        expect(dds[0].text()).toContain('Notes: Some notes');
+        expect(dds[0].classes()).toContain('whitespace-normal');
+      });
+
+      it('does not render a body dl when no columns remain after title and subtitle', async () => {
+        const twoColumns = [
+          { key: 'name', label: 'Name' },
+          { key: 'status', label: 'Status' },
+        ];
+        const w = await mountAtWidth(500, { columns: twoColumns });
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        expect(firstCard.find('[data-test="dd-card-body"]').exists()).toBe(false);
+      });
+    });
+
+    describe('card actions', () => {
+      it('renders the actions slot in a footer region when showActions is true', async () => {
+        const w = await mountAtWidth(
+          500,
+          { showActions: true },
+          { actions: '<button class="act">Act</button>' },
+        );
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        const actions = firstCard.find('[data-test="dd-card-actions"]');
+        expect(actions.exists()).toBe(true);
+        expect(actions.find('.act').exists()).toBe(true);
+      });
+
+      it('does not render a footer region when showActions is false', async () => {
+        const w = await mountAtWidth(500, { showActions: false });
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        expect(firstCard.find('[data-test="dd-card-actions"]').exists()).toBe(false);
+      });
+    });
+
+    describe('interactivity + selection', () => {
+      it('gives interactive cards a tabindex and emits row-click on click', async () => {
+        const w = await mountAtWidth(500);
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        expect(firstCard.attributes('tabindex')).toBe('0');
+        await firstCard.trigger('click');
+        expect(w.emitted('row-click')?.[0]).toEqual([rows[0]]);
+      });
+
+      it('emits row-click on Enter and Space keydown for interactive cards', async () => {
+        const w = await mountAtWidth(500);
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        await firstCard.trigger('keydown', { key: 'Enter' });
+        expect(w.emitted('row-click')?.[0]).toEqual([rows[0]]);
+        await firstCard.trigger('keydown', { key: ' ' });
+        expect(w.emitted('row-click')?.[1]).toEqual([rows[0]]);
+      });
+
+      it('does not set tabindex or emit row-click for non-interactive rows', async () => {
+        const mixedRows = [
+          { id: 'group-a', name: 'Group A', status: 'meta', kind: 'group' },
+          ...rows,
+        ];
+        const w = await mountAtWidth(500, {
+          rows: mixedRows,
+          rowInteractive: (row: { kind?: string }) => row.kind !== 'group',
+        });
+        const cards = w.findAll('[data-test="dd-card"]');
+        expect(cards[0].attributes('tabindex')).toBeUndefined();
+        await cards[0].trigger('click');
+        expect(w.emitted('row-click')).toBeUndefined();
+      });
+
+      it('renders the full-row slot for fullWidthRow rows instead of a card', async () => {
+        const mixedRows = [
+          { id: 'group-a', name: 'Group A', status: 'meta', kind: 'group' },
+          ...rows,
+        ];
+        const w = await mountAtWidth(
+          500,
+          { rows: mixedRows, fullWidthRow: (row: { kind?: string }) => row.kind === 'group' },
+          { 'full-row': ({ row }: any) => `<div class="full-row">Header: ${row.name}</div>` },
+        );
+        const listItems = w.findAll('ul[role="list"] > li');
+        // First li is the group row rendered via the full-row slot (not a .dd-card).
+        expect(listItems[0].text()).toContain('Header: Group A');
+        expect(listItems[0].find('[data-test="dd-card"]').exists()).toBe(false);
+        expect(w.findAll('[data-test="dd-card"]')).toHaveLength(rows.length);
+      });
+
+      it('applies the selected-state class when selectedKey matches the row', async () => {
+        const w = await mountAtWidth(500, { selectedKey: '2' });
+        const cards = w.findAll('[data-test="dd-card"]');
+        expect(cards[1].classes()).toContain('dd-data-table-card-selected');
+        expect(cards[0].classes()).not.toContain('dd-data-table-card-selected');
+      });
+    });
+
+    describe('sort controls', () => {
+      const sortColumns = [
+        { key: 'name', label: 'Name', sortable: true },
+        { key: 'status', label: 'Status', sortable: true },
+        { key: 'icon', label: '', icon: true },
+        { key: 'notSortable', label: 'Fixed', sortable: false },
+      ];
+      const sortRows = [{ id: '1', name: 'Alpha', status: 'running', notSortable: 'x' }];
+
+      it('lists only sortable, non-icon columns as options', async () => {
+        const w = await mountAtWidth(500, {
+          columns: sortColumns,
+          rows: sortRows,
+          sortKey: 'name',
+          sortAsc: true,
+        });
+        const options = w
+          .find('[data-test="dd-card-sort-select"]')
+          .findAll('option:not([disabled])');
+        expect(options.map((o) => o.attributes('value'))).toEqual(['name', 'status']);
+      });
+
+      it('reflects sortKey as the selected value', async () => {
+        const w = await mountAtWidth(500, {
+          columns: sortColumns,
+          rows: sortRows,
+          sortKey: 'status',
+          sortAsc: true,
+        });
+        const select = w.find('[data-test="dd-card-sort-select"]');
+        expect((select.element as HTMLSelectElement).value).toBe('status');
+      });
+
+      it('emits update:sortKey and update:sortAsc(true) when a new column is selected', async () => {
+        const w = await mountAtWidth(500, {
+          columns: sortColumns,
+          rows: sortRows,
+          sortKey: 'name',
+          sortAsc: false,
+        });
+        const select = w.find('[data-test="dd-card-sort-select"]');
+        await select.setValue('status');
+        expect(w.emitted('update:sortKey')?.[0]).toEqual(['status']);
+        expect(w.emitted('update:sortAsc')?.[0]).toEqual([true]);
+      });
+
+      it('does nothing when re-selecting the current sortKey', async () => {
+        const w = await mountAtWidth(500, {
+          columns: sortColumns,
+          rows: sortRows,
+          sortKey: 'name',
+          sortAsc: true,
+        });
+        const select = w.find('[data-test="dd-card-sort-select"]');
+        await select.setValue('name');
+        expect(w.emitted('update:sortKey')).toBeUndefined();
+        expect(w.emitted('update:sortAsc')).toBeUndefined();
+      });
+
+      it('ignores an empty selection value', async () => {
+        const w = await mountAtWidth(500, {
+          columns: sortColumns,
+          rows: sortRows,
+          sortKey: 'name',
+          sortAsc: true,
+        });
+        const select = w.find('[data-test="dd-card-sort-select"]').element as HTMLSelectElement;
+        select.value = '';
+        await select.dispatchEvent(new Event('change'));
+        expect(w.emitted('update:sortKey')).toBeUndefined();
+      });
+
+      it('flips sortAsc via the direction toggle button', async () => {
+        const w = await mountAtWidth(500, {
+          columns: sortColumns,
+          rows: sortRows,
+          sortKey: 'name',
+          sortAsc: true,
+        });
+        const button = w.find('[data-test="dd-card-sort-direction"]');
+        await button.trigger('click');
+        expect(w.emitted('update:sortAsc')?.[0]).toEqual([false]);
+        expect(w.emitted('update:sortKey')).toBeUndefined();
+      });
+
+      it('disables the direction toggle button when no sortKey is set', async () => {
+        const w = await mountAtWidth(500, { columns: sortColumns, rows: sortRows });
+        const button = w.find('[data-test="dd-card-sort-direction"]');
+        expect(button.attributes('disabled')).toBeDefined();
+      });
+
+      it('does not render sort controls when there are no sortable columns', async () => {
+        const noSortCols = [{ key: 'name', label: 'Name', sortable: false }];
+        const w = await mountAtWidth(500, { columns: noSortCols });
+        expect(w.find('[data-test="dd-card-sort-select"]').exists()).toBe(false);
+      });
+
+      it('does not render sort controls when rows are empty', async () => {
+        const w = await mountAtWidth(
+          500,
+          { columns: sortColumns, rows: [] },
+          { empty: '<div class="empty-msg">No data</div>' },
+        );
+        expect(w.find('[data-test="dd-card-sort-select"]').exists()).toBe(false);
+        expect(w.find('.empty-msg').exists()).toBe(true);
+      });
+    });
+
+    describe('virtual scroll spacers', () => {
+      function makeRows(count: number) {
+        return Array.from({ length: count }, (_, i) => ({
+          id: `${i + 1}`,
+          name: `Container ${i + 1}`,
+          status: i % 2 === 0 ? 'running' : 'stopped',
+        }));
+      }
+
+      it('renders a top spacer <li> in card mode once virtual scroll windowing skips rows', async () => {
+        const manyRows = makeRows(200);
+        const w = await mountAtWidth(500, {
+          rows: manyRows,
+          virtualScroll: true,
+          virtualRowHeight: 40,
+          virtualMaxHeight: '120px',
+        });
+
+        expect(w.find('[data-test="dd-card-top-spacer"]').exists()).toBe(false);
+        // 200 rows never fit in a 120px window, so trailing rows are windowed out from the start.
+        expect(w.find('[data-test="dd-card-bottom-spacer"]').exists()).toBe(true);
+
+        const scrollViewport = w.find('[data-test="data-table-scroll"]');
+        (scrollViewport.element as HTMLElement).scrollTop = 1200;
+        await scrollViewport.trigger('scroll');
+
+        expect(w.find('[data-test="dd-card-top-spacer"]').exists()).toBe(true);
+        expect(w.find('[data-test="dd-card-bottom-spacer"]').exists()).toBe(true);
+      });
+    });
+
+    describe('touch targets + logical (RTL-safe) properties', () => {
+      it('interactive cards and sort controls carry >=44px touch target classes', async () => {
+        const w = await mountAtWidth(
+          500,
+          { showActions: true, sortKey: 'name' },
+          { actions: '<button>Act</button>' },
+        );
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        expect(firstCard.classes()).toContain('min-h-[48px]');
+        expect(w.find('[data-test="dd-card-sort-select"]').classes()).toContain('min-h-[44px]');
+        // Direction toggle renders via AppButton size="icon-md", which is a 44x44px (w-11 h-11) target.
+        expect(w.find('[data-test="dd-card-sort-direction"]').classes()).toEqual(
+          expect.arrayContaining(['w-11', 'h-11']),
+        );
+        expect(w.find('[data-test="dd-card-actions"]').classes()).toContain('min-h-[44px]');
+      });
+
+      it('uses only logical (start/end) properties, never physical left/right classes', async () => {
+        const w = await mountAtWidth(
+          500,
+          { showActions: true, sortKey: 'name' },
+          { actions: '<button>Act</button>' },
+        );
+        const html = w.html();
+        expect(html).not.toMatch(/\bleft-0\b/);
+        expect(html).not.toMatch(/\bright-0\b/);
+        expect(html).not.toMatch(/\bpl-\d/);
+        expect(html).not.toMatch(/\bpr-\d/);
+        expect(html).not.toMatch(/\bml-\d/);
+        expect(html).not.toMatch(/\bmr-\d/);
+      });
+    });
+
+    describe('empty state', () => {
+      it('still renders the empty slot in card mode when rows is empty', async () => {
+        const w = await mountAtWidth(
+          500,
+          { rows: [] },
+          { empty: '<div class="empty-msg">No data</div>' },
+        );
+        expect(w.find('.empty-msg').exists()).toBe(true);
+      });
     });
   });
 });

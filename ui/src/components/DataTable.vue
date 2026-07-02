@@ -267,6 +267,18 @@ const rowOverlayWidth = computed(() =>
   viewportWidth.value > 0 ? `${Math.round(viewportWidth.value)}px` : '100%',
 );
 
+// -- Card mode (container width < 640px) --
+// This is a CONTAINER-width breakpoint (measured off scrollViewportRef via ResizeObserver),
+// deliberately separate from `props.isMobile` (a caller-supplied WINDOW-width (768px) signal
+// that only controls whether column-resize handles are shown). A narrow container can appear
+// inside a wide window (e.g. a split DetailPanel), and vice versa — do not merge these two
+// switches. While viewportWidth is 0 (pre-measurement) isCardMode stays false so the table
+// renders first, then self-corrects once onMounted's syncTableViewportWidth() measures it.
+const CARD_MODE_MAX_WIDTH = 640;
+const isCardMode = computed(
+  () => viewportWidth.value > 0 && viewportWidth.value < CARD_MODE_MAX_WIDTH,
+);
+
 function resolvedColumn(colKey: string): ResolvedDataTableColumn | undefined {
   return allResolvedColumns.value.find((column) => column.key === colKey);
 }
@@ -697,6 +709,59 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
     toggleSort(col.key, props.sortKey, props.sortAsc);
   }
 }
+
+// -- Card mode layout helpers --
+// Icon columns (e.g. status dot) render inline beside the title — there can be more than one.
+const cardIconColumns = computed(() => resolvedColumns.value.filter((col) => col.icon));
+
+// Card heading: reuses the same "first non-icon column" identity used for the table's sticky
+// column, so title selection stays consistent between the two render modes.
+const cardTitleColumn = computed<ResolvedDataTableColumn | null>(
+  () => resolvedColumns.value.find((col) => col.key === firstNonIconColKey.value) ?? null,
+);
+
+// Card subtitle: highest-priority non-icon, non-title column. No caller sets `priority` yet,
+// so this falls back to the 2nd non-icon column by declared order.
+const cardSubtitleColumn = computed<ResolvedDataTableColumn | null>(() => {
+  const candidates = resolvedColumns.value.filter(
+    (col) => !col.icon && col.key !== firstNonIconColKey.value,
+  );
+  if (candidates.length === 0) {
+    return null;
+  }
+  const prioritized = candidates.filter(
+    (col) => typeof col.priority === 'number' && col.priority > 0,
+  );
+  if (prioritized.length === 0) {
+    return candidates[0];
+  }
+  return prioritized.reduce((best, col) =>
+    (col.priority as number) > (best.priority as number) ? col : best,
+  );
+});
+
+// Everything else (not title, not subtitle, not icon) renders as a dt/dd field in column order.
+const cardBodyColumns = computed(() =>
+  resolvedColumns.value.filter(
+    (col) =>
+      !col.icon &&
+      col.key !== firstNonIconColKey.value &&
+      col.key !== cardSubtitleColumn.value?.key,
+  ),
+);
+
+const sortableCardColumns = computed(() => props.columns.filter(isSortableColumn));
+
+// Selecting a *different* key always resets to ascending. Re-selecting the current key is a
+// no-op here — direction changes go through the dedicated toggle button, not this handler.
+function handleCardSortChange(event: Event): void {
+  const key = (event.target as HTMLSelectElement).value;
+  if (!key || key === props.sortKey) {
+    return;
+  }
+  emit('update:sortKey', key);
+  emit('update:sortAsc', true);
+}
 </script>
 
 <template>
@@ -709,6 +774,97 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
       :data-test="virtualScroll ? 'data-table-scroll' : undefined"
       :style="virtualScroll ? { maxHeight: virtualMaxHeight } : maxHeight ? { maxHeight } : {}"
       @scroll="handleVirtualScroll">
+      <template v-if="isCardMode">
+        <div v-if="rows.length > 0 && sortableCardColumns.length > 0"
+             class="flex items-center gap-2 px-3 pt-3 pb-2">
+          <select
+            data-test="dd-card-sort-select"
+            class="flex-1 min-h-[44px] min-w-0 px-3 py-2 dd-rounded dd-bg-inset dd-text border dd-border-strong outline-none cursor-pointer text-2xs-plus"
+            :aria-label="t('sharedComponents.dataTable.sortBy')"
+            :value="sortKey ?? ''"
+            @change="handleCardSortChange">
+            <option value="" disabled hidden>{{ t('sharedComponents.dataTable.sortBy') }}</option>
+            <option v-for="col in sortableCardColumns" :key="col.key" :value="col.key">{{ col.label }}</option>
+          </select>
+          <AppButton
+            data-test="dd-card-sort-direction"
+            type="button"
+            size="icon-md"
+            variant="outlined"
+            :disabled="!sortKey"
+            :aria-pressed="!!sortKey && sortAsc !== false"
+            :aria-label="sortAsc === false
+              ? t('sharedComponents.dataTable.sortDirectionDescending')
+              : t('sharedComponents.dataTable.sortDirectionAscending')"
+            @click="sortKey && toggleSort(sortKey, sortKey, sortAsc)">
+            <span aria-hidden="true">{{ sortAsc === false ? '▼' : '▲' }}</span>
+          </AppButton>
+        </div>
+        <ul role="list" class="flex flex-col gap-2 px-3 pb-3">
+          <li
+            v-if="topSpacerHeight > 0"
+            aria-hidden="true"
+            data-test="dd-card-top-spacer"
+            :style="{ height: `${topSpacerHeight}px` }" />
+          <li v-for="(row, i) in visibleRows" :key="getRowKey(row, rowKey)">
+            <template v-if="isFullWidthRow(row)">
+              <slot name="full-row" :row="row" :index="rowAbsoluteIndex(i)" />
+            </template>
+            <div v-else
+                 data-test="dd-card"
+                 class="dd-data-table-card dd-rounded border dd-border-strong p-4 flex flex-col gap-3 transition-colors"
+                 :class="[
+                   isInteractiveRow(row) ? 'cursor-pointer min-h-[48px] dd-data-table-card-hoverable' : '',
+                   isInteractiveRow(row) && isSelectedRow(row) ? 'dd-data-table-card-selected' : '',
+                   rowClass?.(row) ?? '',
+                 ]"
+                 :style="{ '--dd-data-table-row-bg': rowBackgroundColor(row, i) }"
+                 :tabindex="isInteractiveRow(row) ? 0 : undefined"
+                 @keydown="isInteractiveRow(row) && handleRowKeydown($event, row)"
+                 @click="isInteractiveRow(row) && emit('row-click', row)">
+              <div class="flex items-center gap-2 min-w-0" data-test="dd-card-title-row">
+                <template v-for="iconCol in cardIconColumns" :key="iconCol.key">
+                  <slot :name="'cell-' + iconCol.key" :row="row" :value="row[iconCol.key]">
+                    {{ row[iconCol.key] }}
+                  </slot>
+                </template>
+                <div v-if="cardTitleColumn" data-test="dd-card-title" class="text-sm font-semibold dd-text truncate min-w-0 flex-1">
+                  <slot :name="'cell-' + cardTitleColumn.key" :row="row" :value="row[cardTitleColumn.key]">
+                    {{ row[cardTitleColumn.key] }}
+                  </slot>
+                </div>
+              </div>
+              <div v-if="cardSubtitleColumn" data-test="dd-card-subtitle" class="text-2xs-plus dd-text-muted -mt-2">
+                <slot :name="'cell-' + cardSubtitleColumn.key" :row="row" :value="row[cardSubtitleColumn.key]">
+                  {{ row[cardSubtitleColumn.key] }}
+                </slot>
+              </div>
+              <dl v-if="cardBodyColumns.length > 0" data-test="dd-card-body" class="flex flex-col gap-2">
+                <div v-for="col in cardBodyColumns" :key="col.key"
+                     class="field flex items-baseline justify-between gap-3">
+                  <dt class="dd-text-label dd-text-muted shrink-0">{{ col.label }}</dt>
+                  <dd class="text-2xs-plus dd-text text-end" :class="cellContentClass(col)">
+                    <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
+                      {{ row[col.key] }}
+                    </slot>
+                  </dd>
+                </div>
+              </dl>
+              <div v-if="showActions"
+                   data-test="dd-card-actions"
+                   class="flex items-center justify-end gap-2 pt-2 mt-1 border-t dd-border min-h-[44px]">
+                <slot name="actions" :row="row" />
+              </div>
+            </div>
+          </li>
+          <li
+            v-if="bottomSpacerHeight > 0"
+            aria-hidden="true"
+            data-test="dd-card-bottom-spacer"
+            :style="{ height: `${bottomSpacerHeight}px` }" />
+        </ul>
+      </template>
+      <template v-else>
       <table
         ref="tableRef"
         class="w-full text-xs isolate"
@@ -838,6 +994,7 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
           </tr>
         </tbody>
       </table>
+      </template>
     </div>
     <!-- Empty state -->
     <slot v-if="rows.length === 0" name="empty" />
@@ -881,5 +1038,24 @@ tbody tr.dd-data-table-row-selected > td.dd-data-table-cell:last-child {
 th.dd-sticky-col-left,
 td.dd-sticky-col-left {
   border-inline-end: 1px solid var(--dd-sticky-separator);
+}
+
+/* Card mode (< 640px container width) — same custom-property indirection as the table rows
+   above, so :hover can override the inline zebra/selected background. */
+.dd-data-table-card {
+  background-color: var(--dd-data-table-row-bg);
+  transition:
+    background-color var(--dd-duration-enter),
+    box-shadow var(--dd-duration-enter),
+    border-color var(--dd-duration-enter);
+}
+
+.dd-data-table-card-hoverable:not(.dd-data-table-card-selected):hover {
+  background-color: var(--dd-hover-overlay);
+}
+
+.dd-data-table-card-selected {
+  border-color: var(--dd-primary);
+  box-shadow: 0 0 0 1px var(--dd-primary);
 }
 </style>
