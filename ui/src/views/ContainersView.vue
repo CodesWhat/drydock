@@ -1202,17 +1202,11 @@ const availableContentWidth = computed(() => {
   return Math.max(0, windowWidth.value - sidebarPx - contentPx - panelPx);
 });
 
-const {
-  allColumns,
-  visibleColumns,
-  activeColumns,
-  autoHiddenColumns,
-  showColumnPicker,
-  toggleColumn,
-} = useColumnVisibility(availableContentWidth);
+const { allColumns, visibleColumns, hiddenColumnKeys, toggleColumn, resetColumns } =
+  useColumnVisibility(availableContentWidth);
 
 const tableColumns = computed(() =>
-  activeColumns.value.map((column) => ({
+  allColumns.map((column) => ({
     key: column.key,
     label: column.labelKey ? t(column.labelKey) : column.label,
     align: column.align,
@@ -1258,7 +1252,6 @@ const actionsMenuStyle = ref<Record<string, string>>({});
 // available room below the viewport is shorter than the menu would render at.
 // Slightly generous to bias toward correct behavior on the boundary.
 const ACTIONS_MENU_ESTIMATED_HEIGHT_PX = 320;
-const COLUMN_PICKER_ESTIMATED_HEIGHT_PX = 360;
 const POPOVER_GAP_PX = 4;
 
 type PopoverHorizontalAnchor = { right: number } | { left: number };
@@ -1300,32 +1293,18 @@ function closeActionsMenu() {
   openActionsMenu.value = null;
 }
 
-const columnPickerStyle = ref<Record<string, string>>({});
-function toggleColumnPicker(event: MouseEvent) {
-  showColumnPicker.value = !showColumnPicker.value;
-  if (showColumnPicker.value) {
-    const button = event.currentTarget as HTMLElement;
-    const rect = button.getBoundingClientRect();
-    columnPickerStyle.value = buildPopoverStyle(
-      rect,
-      { left: rect.left },
-      COLUMN_PICKER_ESTIMATED_HEIGHT_PX,
-    );
-  }
-}
-
 function handleGlobalClick() {
   openActionsMenu.value = null;
-  showColumnPicker.value = false;
 }
 
 // Popovers are position:fixed and anchored at click-time via getBoundingClientRect;
 // scrolling moves the trigger button while the popover stays put. Close on scroll
-// to keep the popover from drifting away from its visual anchor.
+// to keep the popover from drifting away from its visual anchor. (The column picker
+// manages its own open/close + scroll/click-outside handling internally — see
+// DataTableColumnPicker.vue — so only the actions menu needs to be tracked here.)
 function handleGlobalScroll() {
-  if (openActionsMenu.value !== null || showColumnPicker.value) {
+  if (openActionsMenu.value !== null) {
     openActionsMenu.value = null;
-    showColumnPicker.value = false;
   }
 }
 
@@ -1400,13 +1379,11 @@ provide(containersViewTemplateContextKey, {
   filterKind,
   filterHidePinned,
   clearFilters,
-  showColumnPicker,
-  toggleColumnPicker,
-  columnPickerStyle,
   allColumns,
   toggleColumn,
   visibleColumns,
-  autoHiddenColumns,
+  hiddenColumnKeys,
+  resetColumns,
   tt,
   groupByStack,
   rechecking,

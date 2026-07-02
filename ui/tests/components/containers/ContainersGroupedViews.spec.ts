@@ -15,6 +15,8 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
 
 const DataTableStub = defineComponent({
   props: [
+    'columns',
+    'hiddenColumnKeys',
     'rows',
     'rowClass',
     'rowClickable',
@@ -61,7 +63,7 @@ const DataTableStub = defineComponent({
     };
   },
   template: `
-    <div class="data-table-stub">
+    <div class="data-table-stub" :data-hidden-column-keys="JSON.stringify(hiddenColumnKeys || [])">
       <div
         v-for="row in rows"
         :key="keyFor(row)"
@@ -134,6 +136,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     { key: 'icon', label: '', align: 'text-center' },
     { key: 'name', label: 'Container', align: 'text-left' },
   ]);
+  const hiddenColumnKeys = ref<string[]>([]);
   const containerSortKey = ref('name');
   const containerSortAsc = ref(true);
   const selectedContainer = ref<Container | null>(null);
@@ -238,6 +241,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     updateAllInGroup: spies.updateAllInGroup,
     tt: (label: string) => ({ value: label, showDelay: 400 }),
     tableColumns,
+    hiddenColumnKeys,
     containerSortKey,
     containerSortAsc,
     selectedContainer,
@@ -364,6 +368,33 @@ describe('ContainersGroupedViews', () => {
     vi.clearAllMocks();
     useUpdateBatches().batches.value = new Map();
     useToast().toasts.value = [];
+  });
+
+  it('passes tableColumns and hiddenColumnKeys straight through to DataTable', () => {
+    const container = makeContainer({ id: 'c-wiring', name: 'alpha' });
+    const { context } = makeContext();
+    context.filteredContainers.value = [container];
+    context.displayContainers.value = [container];
+    context.renderGroups.value = [
+      {
+        key: 'g',
+        name: 'g',
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    context.hiddenColumnKeys.value = ['registry', 'uptime'];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const dataTable = wrapper.find('.data-table-stub');
+
+    expect(JSON.parse(dataTable.attributes('data-hidden-column-keys')!)).toEqual([
+      'registry',
+      'uptime',
+    ]);
   });
 
   it('covers grouped table interactions in icon action mode', async () => {

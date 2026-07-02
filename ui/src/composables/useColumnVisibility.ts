@@ -1,5 +1,6 @@
 import type { ComputedRef, Ref } from 'vue';
 import { computed, ref, watch } from 'vue';
+import { CONTAINER_TABLE_COLUMN_KEYS } from '../preferences/schema';
 import { preferences } from '../preferences/store';
 import { type ResponsiveSizingColumn, responsiveAutoHiddenColumns } from '../utils/table-sizing';
 
@@ -141,14 +142,17 @@ watch(
   { deep: true },
 );
 
-const showColumnPicker = ref(false);
-
 function toggleColumn(key: string) {
   const col = allColumns.find((c) => c.key === key);
   if (!col) return;
   if (col?.required) return;
   if (visibleColumns.value.has(key)) visibleColumns.value.delete(key);
   else visibleColumns.value.add(key);
+}
+
+/** Resets picker-driven visibility back to the shipped default (opt-in columns stay hidden). */
+function resetColumns() {
+  visibleColumns.value = new Set(CONTAINER_TABLE_COLUMN_KEYS);
 }
 
 export function useColumnVisibility(availableWidth?: Ref<number> | ComputedRef<number>) {
@@ -164,20 +168,26 @@ export function useColumnVisibility(availableWidth?: Ref<number> | ComputedRef<n
     ),
   );
 
-  const activeColumns = computed(() => {
-    const prefVisible = allColumns.filter((c) => visibleColumns.value.has(c.key));
-    const width = availableWidth?.value;
-    if (!width || width <= 0) return prefVisible;
-    const dropped = new Set(autoHiddenColumns.value.map((column) => column.key));
-    return prefVisible.filter((c) => !dropped.has(c.key));
+  /**
+   * Full DataTable-facing hidden set: catalog keys the user picker-hid, unioned with
+   * width-driven auto-hidden keys. Table mode (DataTable `hiddenColumnKeys` prop) honors
+   * both; card mode (< 640px) ignores this entirely by design — see DataTable.vue. Always
+   * derived from the FULL `allColumns` catalog (not a pre-filtered subset) so card mode can
+   * still see every column object, including opt-in ones the user never enabled.
+   */
+  const hiddenColumnKeys = computed<string[]>(() => {
+    const autoHidden = new Set(autoHiddenColumns.value.map((column) => column.key));
+    return allColumns
+      .filter((column) => !visibleColumns.value.has(column.key) || autoHidden.has(column.key))
+      .map((column) => column.key);
   });
 
   return {
     allColumns,
     visibleColumns,
-    activeColumns,
     autoHiddenColumns,
-    showColumnPicker,
+    hiddenColumnKeys,
     toggleColumn,
+    resetColumns,
   };
 }

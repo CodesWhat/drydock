@@ -37,7 +37,7 @@ type ContainerFiltersContext = Pick<
 
 type ColumnVisibilityContext = Pick<
   ReturnType<typeof useColumnVisibility>,
-  'showColumnPicker' | 'allColumns' | 'toggleColumn' | 'visibleColumns' | 'autoHiddenColumns'
+  'allColumns' | 'toggleColumn' | 'visibleColumns' | 'hiddenColumnKeys' | 'resetColumns'
 >;
 
 type DetailPanelContext = Pick<
@@ -111,8 +111,6 @@ export interface ContainersViewTemplateContext
   loading: Ref<boolean>;
   containers: Ref<Container[]>;
   serverNames: ComputedRef<string[]>;
-  toggleColumnPicker: (event: MouseEvent) => void;
-  columnPickerStyle: Ref<Record<string, string>>;
   tt: (label: string) => { value: string; showDelay: number };
   groupByStack: WritableComputedRef<boolean>;
   rechecking: Ref<boolean>;

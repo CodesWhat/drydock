@@ -7,7 +7,29 @@ import {
 } from '@/components/containers/containersViewTemplateContext';
 import { mountWithPlugins } from '../../helpers/mount';
 
-function makeTemplateContext(): ContainersViewTemplateContext {
+const DataTableColumnPickerStub = defineComponent({
+  props: ['columns', 'hiddenKeys'],
+  emits: ['toggle', 'reset'],
+  template: `
+    <div data-test="data-table-column-picker">
+      <button
+        v-for="column in columns"
+        :key="column.key"
+        type="button"
+        :data-test="'column-picker-toggle-' + column.key"
+        @click="$emit('toggle', column.key)">
+        {{ column.label }}
+      </button>
+      <button type="button" data-test="data-table-column-picker-reset" @click="$emit('reset')">
+        Reset
+      </button>
+    </div>
+  `,
+});
+
+function makeTemplateContext(
+  overrides: Partial<ContainersViewTemplateContext> = {},
+): ContainersViewTemplateContext {
   return {
     error: ref(null),
     loading: ref(false),
@@ -24,20 +46,25 @@ function makeTemplateContext(): ContainersViewTemplateContext {
     filterKind: ref('all'),
     filterHidePinned: ref(false),
     clearFilters: vi.fn(),
-    showColumnPicker: ref(true),
-    toggleColumnPicker: vi.fn(),
-    columnPickerStyle: ref({
-      position: 'fixed',
-      top: '48px',
-      left: '16px',
-    }),
     allColumns: [
-      { key: 'name', label: 'Container', required: true },
-      { key: 'status', label: 'Status' },
+      {
+        key: 'name',
+        label: 'Container',
+        labelKey: 'containersView.columns.container',
+        required: true,
+      },
+      {
+        key: 'status',
+        label: 'Status',
+        labelKey: 'containersView.columns.status',
+        required: false,
+      },
+      { key: 'icon', label: '', required: true },
     ] as any,
     toggleColumn: vi.fn(),
-    visibleColumns: ref(new Set(['name', 'status'])),
-    autoHiddenColumns: computed(() => []),
+    visibleColumns: ref(new Set(['name', 'status', 'icon'])),
+    hiddenColumnKeys: computed(() => []),
+    resetColumns: vi.fn(),
     tt: (label: string) => ({ value: label, showDelay: 0 }),
     groupByStack: ref(false) as any,
     rechecking: ref(false),
@@ -47,26 +74,19 @@ function makeTemplateContext(): ContainersViewTemplateContext {
     allGroupsCollapsed: computed(() => false),
     filterContainerIds: ref(new Set()),
     clearContainerIdsFilter: vi.fn(),
+    ...overrides,
   } as unknown as ContainersViewTemplateContext;
 }
 
 describe('ContainersListContent', () => {
-  let host: HTMLElement | null = null;
   let wrapper: VueWrapper | null = null;
 
   afterEach(() => {
     wrapper?.unmount();
     wrapper = null;
-    host?.remove();
-    host = null;
-    document
-      .querySelectorAll('[data-test="containers-column-picker"]')
-      .forEach((element) => element.remove());
   });
 
-  it('renders the column picker outside the list content stacking context', () => {
-    const context = makeTemplateContext();
-
+  function mountWithContext(context: ContainersViewTemplateContext) {
     const Parent = defineComponent({
       setup() {
         provide(containersViewTemplateContextKey, context);
@@ -74,10 +94,7 @@ describe('ContainersListContent', () => {
       },
     });
 
-    host = document.createElement('div');
-    document.body.appendChild(host);
-    wrapper = mountWithPlugins(Parent, {
-      attachTo: host,
+    return mountWithPlugins(Parent, {
       global: {
         stubs: {
           AppIconButton: {
@@ -93,17 +110,54 @@ describe('ContainersListContent', () => {
             template:
               '<div data-test="data-filter-bar"><slot name="extra-buttons" /><slot name="left" /><slot name="center" /><slot name="filters" /></div>',
           },
+          DataTableColumnPicker: DataTableColumnPickerStub,
         },
       },
     });
+  }
 
-    const columnPicker = document.body.querySelector<HTMLElement>(
-      '[data-test="containers-column-picker"]',
-    );
+  it('renders the shared column picker in the extra-buttons slot', () => {
+    const context = makeTemplateContext();
+    wrapper = mountWithContext(context);
 
-    expect(columnPicker).not.toBeNull();
-    expect(columnPicker?.parentElement).toBe(document.body);
-    expect(columnPicker?.style.position).toBe('fixed');
-    expect(wrapper.element.contains(columnPicker as HTMLElement)).toBe(false);
+    expect(wrapper.find('[data-test="data-table-column-picker"]').exists()).toBe(true);
+  });
+
+  it('passes only labelled catalog columns (translated) to the picker', () => {
+    const context = makeTemplateContext();
+    wrapper = mountWithContext(context);
+
+    // icon has no labelKey, so it is excluded from the picker's toggleable columns.
+    expect(wrapper.find('[data-test="column-picker-toggle-icon"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="column-picker-toggle-name"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="column-picker-toggle-status"]').exists()).toBe(true);
+  });
+
+  it('passes the picker-hidden set only — a column hidden by preference is reflected as hidden', () => {
+    const context = makeTemplateContext({
+      visibleColumns: ref(new Set(['name', 'icon'])),
+    });
+    wrapper = mountWithContext(context);
+
+    const picker = wrapper.findComponent(DataTableColumnPickerStub);
+    expect(picker.props('hiddenKeys')).toEqual(['status']);
+  });
+
+  it('emits toggleColumn via the picker toggle event', async () => {
+    const context = makeTemplateContext();
+    wrapper = mountWithContext(context);
+
+    await wrapper.find('[data-test="column-picker-toggle-status"]').trigger('click');
+
+    expect(context.toggleColumn).toHaveBeenCalledWith('status');
+  });
+
+  it('calls resetColumns via the picker reset event', async () => {
+    const context = makeTemplateContext();
+    wrapper = mountWithContext(context);
+
+    await wrapper.find('[data-test="data-table-column-picker-reset"]').trigger('click');
+
+    expect(context.resetColumns).toHaveBeenCalledOnce();
   });
 });

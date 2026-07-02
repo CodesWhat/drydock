@@ -172,7 +172,6 @@ const mockVisibleColumns = ref(
     'registry',
   ]),
 );
-const mockShowColumnPicker = ref(false);
 
 vi.mock('@/composables/useColumnVisibility', () => ({
   useColumnVisibility: vi.fn(() => ({
@@ -188,14 +187,10 @@ vi.mock('@/composables/useColumnVisibility', () => ({
       { key: 'registry', label: 'Registry', align: 'text-center', required: false },
     ],
     visibleColumns: mockVisibleColumns,
-    activeColumns: computed(() => [
-      { key: 'icon', label: '', align: 'text-center' },
-      { key: 'name', label: 'Container', align: 'text-left' },
-      { key: 'status', label: 'Status', align: 'text-center' },
-    ]),
     autoHiddenColumns: computed(() => []),
-    showColumnPicker: mockShowColumnPicker,
+    hiddenColumnKeys: computed(() => []),
     toggleColumn: vi.fn(),
+    resetColumns: vi.fn(),
   })),
 }));
 
@@ -1433,14 +1428,12 @@ describe('ContainersView', () => {
   });
 
   describe('tableColumns', () => {
-    it('maps headerTooltip from headerTooltipKey when present in activeColumns', async () => {
+    it('maps headerTooltip from headerTooltipKey when present in allColumns', async () => {
       const { useColumnVisibility } = await import('@/composables/useColumnVisibility');
       const mockedVisibility = vi.mocked(useColumnVisibility);
       const prevImpl = mockedVisibility.getMockImplementation();
       mockedVisibility.mockReturnValueOnce({
-        allColumns: [],
-        visibleColumns: mockVisibleColumns,
-        activeColumns: computed(() => [
+        allColumns: [
           {
             key: 'kind',
             label: 'Update',
@@ -1465,10 +1458,12 @@ describe('ContainersView', () => {
             minSize: 220,
             maxSize: 640,
           },
-        ]),
+        ],
+        visibleColumns: mockVisibleColumns,
         autoHiddenColumns: computed(() => []),
-        showColumnPicker: mockShowColumnPicker,
+        hiddenColumnKeys: computed(() => []),
         toggleColumn: vi.fn(),
+        resetColumns: vi.fn(),
       } as any);
 
       const wrapper = await mountContainersView([makeContainer()]);
@@ -1496,21 +1491,21 @@ describe('ContainersView', () => {
       }
     });
 
-    it('forwards cardPriority from activeColumns without touching priority', async () => {
+    it('forwards cardPriority from allColumns without touching priority', async () => {
       const { useColumnVisibility } = await import('@/composables/useColumnVisibility');
       const mockedVisibility = vi.mocked(useColumnVisibility);
       const prevImpl = mockedVisibility.getMockImplementation();
       mockedVisibility.mockReturnValueOnce({
-        allColumns: [],
-        visibleColumns: mockVisibleColumns,
-        activeColumns: computed(() => [
+        allColumns: [
           { key: 'name', label: 'Container', align: 'text-left', required: true },
           { key: 'kind', label: 'Update', align: 'text-center', priority: 60, cardPriority: 10 },
           { key: 'server', label: 'Host', align: 'text-center', priority: 70, cardPriority: -1 },
-        ]),
+        ],
+        visibleColumns: mockVisibleColumns,
         autoHiddenColumns: computed(() => []),
-        showColumnPicker: mockShowColumnPicker,
+        hiddenColumnKeys: computed(() => []),
         toggleColumn: vi.fn(),
+        resetColumns: vi.fn(),
       } as any);
 
       const wrapper = await mountContainersView([makeContainer()]);
@@ -2845,7 +2840,7 @@ describe('ContainersView', () => {
       expect(vm.panelSize).toBe('lg');
     });
 
-    it('covers menu/picker/global/sse handlers and registry fallback tooltip', async () => {
+    it('covers menu/global/sse handlers and registry fallback tooltip', async () => {
       vi.useFakeTimers();
       try {
         const c = makeContainer({ id: 'c1', name: 'nginx' });
@@ -2870,18 +2865,10 @@ describe('ContainersView', () => {
         vm.closeActionsMenu();
         expect(vm.openActionsMenu).toBeNull();
 
-        vm.toggleColumnPicker(event);
-        expect(vm.showColumnPicker).toBe(true);
-        expect(vm.columnPickerStyle.left).toBe('80px');
-        vm.toggleColumnPicker(event);
-        expect(vm.showColumnPicker).toBe(false);
-
         vm.openActionsMenu = 'nginx';
-        vm.showColumnPicker = true;
         document.dispatchEvent(new MouseEvent('click'));
         await flushPromises();
         expect(vm.openActionsMenu).toBeNull();
-        expect(vm.showColumnPicker).toBe(false);
 
         vm.selectedContainer = null;
         globalThis.dispatchEvent(new Event('dd:sse-scan-completed'));
@@ -3071,29 +3058,6 @@ describe('ContainersView', () => {
       expect(vm.actionsMenuStyle.top).toBeUndefined();
     });
 
-    it('column picker flips up when trigger is near the bottom of the viewport', async () => {
-      const c = makeContainer({ id: 'c1', name: 'nginx' });
-      const wrapper = await mountContainersView(
-        [c],
-        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
-      );
-      const vm = wrapper.vm as any;
-
-      // bottom: 700, top: 680 → spaceBelow = 68 < 360 (COLUMN_PICKER_ESTIMATED_HEIGHT_PX)
-      // spaceAbove = 680 > 68 → flip up
-      // bottom style = 768 - 680 + 4 = 92px
-      const event = {
-        currentTarget: {
-          getBoundingClientRect: () => ({ bottom: 700, top: 680, right: 400, left: 80 }),
-        },
-      } as unknown as MouseEvent;
-
-      vm.toggleColumnPicker(event);
-      expect(vm.showColumnPicker).toBe(true);
-      expect(vm.columnPickerStyle.bottom).toBe('92px');
-      expect(vm.columnPickerStyle.top).toBeUndefined();
-    });
-
     it('global scroll closes the actions menu', async () => {
       const c = makeContainer({ id: 'c1', name: 'nginx' });
       const wrapper = await mountContainersView(
@@ -3108,20 +3072,6 @@ describe('ContainersView', () => {
       expect(vm.openActionsMenu).toBeNull();
     });
 
-    it('global scroll closes the column picker', async () => {
-      const c = makeContainer({ id: 'c1', name: 'nginx' });
-      const wrapper = await mountContainersView(
-        [c],
-        [{ id: 'c1', name: 'nginx', displayName: 'nginx' }],
-      );
-      const vm = wrapper.vm as any;
-
-      vm.showColumnPicker = true;
-      document.dispatchEvent(new Event('scroll', { bubbles: false }));
-      await flushPromises();
-      expect(vm.showColumnPicker).toBe(false);
-    });
-
     it('global scroll is a no-op when nothing is open', async () => {
       const c = makeContainer({ id: 'c1', name: 'nginx' });
       const wrapper = await mountContainersView(
@@ -3131,12 +3081,10 @@ describe('ContainersView', () => {
       const vm = wrapper.vm as any;
 
       expect(vm.openActionsMenu).toBeNull();
-      expect(vm.showColumnPicker).toBe(false);
       // Dispatching scroll when nothing is open should not throw or change state
       document.dispatchEvent(new Event('scroll', { bubbles: false }));
       await flushPromises();
       expect(vm.openActionsMenu).toBeNull();
-      expect(vm.showColumnPicker).toBe(false);
     });
 
     it('scroll listener is removed on unmount', async () => {

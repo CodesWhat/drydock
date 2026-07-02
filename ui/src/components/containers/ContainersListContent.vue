@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
+import type { PickerColumn } from '../../composables/useViewColumnVisibility';
 import AppIconButton from '../AppIconButton.vue';
+import DataTableColumnPicker from '../DataTableColumnPicker.vue';
 import ContainersGroupedViews from './ContainersGroupedViews.vue';
 import {
   type ContainersViewTemplateContext,
@@ -27,13 +29,10 @@ const {
   filterKind,
   filterHidePinned,
   clearFilters,
-  showColumnPicker,
-  toggleColumnPicker,
-  columnPickerStyle,
   allColumns,
   toggleColumn,
   visibleColumns,
-  autoHiddenColumns,
+  resetColumns,
   tt,
   groupByStack,
   rechecking,
@@ -44,6 +43,25 @@ const {
   filterContainerIds,
   clearContainerIdsFilter,
 } = templateContext;
+
+// Only catalog entries with a labelKey are user-toggleable table columns (matches the
+// picker's previous bespoke-popover filter — the icon column has no labelKey and is
+// `required` besides).
+const pickerColumns = computed<PickerColumn[]>(() =>
+  allColumns
+    .filter((column) => column.labelKey)
+    .map((column) => ({
+      key: column.key,
+      label: column.labelKey ? t(column.labelKey) : column.label,
+      required: column.required,
+    })),
+);
+
+// Picker-hidden only (user choices) — deliberately excludes the width-driven auto-hidden
+// set, which is a separate, self-explanatory mechanism the picker doesn't need to reflect.
+const pickerHiddenColumnKeys = computed(() =>
+  pickerColumns.value.filter((column) => !visibleColumns.value.has(column.key)).map((c) => c.key),
+);
 
 const activeFilterChips = computed(() => {
   const chips: string[] = [];
@@ -183,18 +201,11 @@ const activeFilterChips = computed(() => {
         </AppButton>
       </template>
       <template #extra-buttons>
-        <div class="relative inline-flex items-center">
-          <AppIconButton icon="config" size="toolbar" variant="secondary"
-            :class="showColumnPicker ? 'dd-text dd-bg-elevated' : ''"
-            :tooltip="tt(t('containerComponents.listContent.toggleColumnsTooltip'))"
-            @click.stop="toggleColumnPicker($event)" />
-          <span
-            v-if="autoHiddenColumns.length > 0"
-            class="absolute -top-1 -right-1 pointer-events-none text-3xs font-bold px-1 dd-rounded dd-text-muted dd-bg-elevated leading-tight"
-            v-tooltip="t('containerComponents.listContent.autoHiddenBadgeTooltip', { count: autoHiddenColumns.length })">
-            +{{ autoHiddenColumns.length }}
-          </span>
-        </div>
+        <DataTableColumnPicker
+          :columns="pickerColumns"
+          :hidden-keys="pickerHiddenColumnKeys"
+          @toggle="toggleColumn"
+          @reset="resetColumns" />
       </template>
       <template #left>
         <AppIconButton icon="stack" size="toolbar" variant="secondary"
@@ -252,40 +263,6 @@ const activeFilterChips = computed(() => {
         </div>
       </template>
     </DataFilterBar>
-
-    <Teleport to="body">
-      <div
-        v-if="showColumnPicker"
-        data-test="containers-column-picker"
-        class="min-w-[160px] py-1.5 dd-rounded shadow-lg"
-        :style="{
-          ...columnPickerStyle,
-          zIndex: 'var(--z-popover)',
-          backgroundColor: 'var(--dd-bg-card)',
-          border: '1px solid var(--dd-border-strong)',
-          boxShadow: 'var(--dd-shadow-tooltip)',
-        }"
-        @click.stop>
-        <div class="px-3 py-1 text-3xs font-bold uppercase tracking-wider dd-text-muted">{{ t('containerComponents.listContent.columnsHeader') }}</div>
-        <AppButton
-          v-for="column in allColumns.filter((columnItem) => columnItem.labelKey)"
-          :key="column.key"
-          size="md"
-          variant="plain"
-          weight="medium"
-          class="w-full text-left flex items-center gap-2 hover:dd-bg-elevated"
-          :class="column.required ? 'dd-text-muted cursor-not-allowed' : 'dd-text'"
-          @click="toggleColumn(column.key)">
-          <AppIcon
-            :name="visibleColumns.has(column.key) ? 'check' : 'square'"
-            :size="13"
-            :style="visibleColumns.has(column.key) ? { color: 'var(--dd-primary)' } : {}" />
-          {{ column.labelKey ? t(column.labelKey) : column.label }}<em
-            v-if="visibleColumns.has(column.key) && autoHiddenColumns.some((c) => c.key === column.key)"
-            class="not-italic dd-text-muted"> {{ t('containerComponents.listContent.narrowViewportSuffix') }}</em>
-        </AppButton>
-      </div>
-    </Teleport>
 
     <ContainersGroupedViews />
   </div>

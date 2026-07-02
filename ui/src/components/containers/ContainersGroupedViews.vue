@@ -43,6 +43,7 @@ const {
   updateAllInGroup,
   tt,
   tableColumns,
+  hiddenColumnKeys,
   containerSortKey,
   containerSortAsc,
   selectedContainer,
@@ -517,6 +518,7 @@ onScopeDispose(() => {
     <template v-if="filteredContainers.length > 0">
       <DataTable
         :columns="tableColumns"
+        :hidden-column-keys="hiddenColumnKeys"
         storage-key="containers"
         :fixed-layout="true"
         :rows="tableRows"
