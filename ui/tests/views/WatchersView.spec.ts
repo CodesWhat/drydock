@@ -82,6 +82,25 @@ describe('WatchersView', () => {
     });
   });
 
+  describe('tableColumns (card-mode annotations)', () => {
+    it('demotes cron out of the card body with a negative cardPriority', async () => {
+      mockGetAllWatchers.mockResolvedValue([
+        {
+          id: 'watcher-alpha',
+          name: 'Alpha Watcher',
+          type: 'docker',
+          configuration: { cron: '*/5 * * * *' },
+          ...withStats(1),
+        },
+      ]);
+      const wrapper = await mountWatchersView();
+      const table = wrapper.findComponent(richDataTableStub);
+      const columns = table.props('columns') as Array<{ key: string; cardPriority?: number }>;
+      const cronCol = columns.find((c) => c.key === 'cron');
+      expect(cronCol?.cardPriority).toBe(-1);
+    });
+  });
+
   it('successful load combines watcher + container counts into rendered rows', async () => {
     mockGetAllWatchers.mockResolvedValue([
       {

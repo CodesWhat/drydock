@@ -93,6 +93,16 @@ describe('ServersView', () => {
     ]);
   });
 
+  describe('tableColumns (card-mode annotations)', () => {
+    it('flags status with cardPriority so it wins the card subtitle over the mono host address', async () => {
+      const wrapper = await mountServersView();
+      const table = wrapper.findComponent(richDataTableStub as any);
+      const columns = table.props('columns') as Array<{ key: string; cardPriority?: number }>;
+      const statusCol = columns.find((c) => c.key === 'status');
+      expect(statusCol?.cardPriority).toBe(1);
+    });
+  });
+
   it('loads Local and remote agent rows on successful fetch', async () => {
     mockGetAgents.mockResolvedValue([
       {

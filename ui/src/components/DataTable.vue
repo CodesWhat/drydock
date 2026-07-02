@@ -34,6 +34,22 @@ export interface DataTableColumn {
   icon?: boolean;
   /** Optional tooltip shown on the column header label */
   headerTooltip?: string;
+  /**
+   * Card mode (< 640px): force this column to be the card title, overriding the
+   * first-non-icon-column fallback. Table mode is unaffected — the sticky identity column
+   * always uses the first-non-icon-column rule regardless of `cardTitle`.
+   */
+  cardTitle?: boolean;
+  /**
+   * Card mode (< 640px): controls subtitle selection and body inclusion. Distinct from
+   * `priority` (used by auto-hide/responsive column sizing, where higher = dropped first) —
+   * do not reuse that field for cards. Positive values compete for the card subtitle slot
+   * (highest wins, ties broken by declared order). Negative values demote the column out of
+   * the card entirely (it's still reachable via the DetailPanel tap-through) and can never be
+   * chosen as the subtitle fallback. Zero/unset is a neutral body column and is eligible for
+   * the default subtitle fallback (first candidate by declared order).
+   */
+  cardPriority?: number;
 }
 
 const props = withDefaults(
@@ -714,39 +730,48 @@ function handleHeaderKeydown(event: KeyboardEvent, col: DataTableColumn) {
 // Icon columns (e.g. status dot) render inline beside the title — there can be more than one.
 const cardIconColumns = computed(() => resolvedColumns.value.filter((col) => col.icon));
 
-// Card heading: reuses the same "first non-icon column" identity used for the table's sticky
-// column, so title selection stays consistent between the two render modes.
+// Card title key: the first non-icon column explicitly flagged `cardTitle`, else the same
+// "first non-icon column" identity used for the table's sticky column. Table mode is always
+// unaffected by `cardTitle` — it keeps using `firstNonIconColKey` directly.
+const cardTitleColumnKey = computed<string | null>(() => {
+  const flagged = resolvedColumns.value.find((col) => !col.icon && col.cardTitle === true);
+  return flagged?.key ?? firstNonIconColKey.value;
+});
+
 const cardTitleColumn = computed<ResolvedDataTableColumn | null>(
-  () => resolvedColumns.value.find((col) => col.key === firstNonIconColKey.value) ?? null,
+  () => resolvedColumns.value.find((col) => col.key === cardTitleColumnKey.value) ?? null,
 );
 
-// Card subtitle: highest-priority non-icon, non-title column. No caller sets `priority` yet,
-// so this falls back to the 2nd non-icon column by declared order.
+// Subtitle/body candidates: every non-icon column except the title.
+const cardBodyCandidates = computed(() =>
+  resolvedColumns.value.filter((col) => !col.icon && col.key !== cardTitleColumnKey.value),
+);
+
+// Card subtitle: highest `cardPriority` (> 0) among candidates, ties broken by declared order.
+// Falls back to the first candidate by order whose `cardPriority` is not negative — a negative
+// `cardPriority` (demoted out of the card body) can never become the subtitle via fallback
+// either. `priority` (auto-hide/responsive column sizing) is a distinct field and has no
+// bearing on card composition.
 const cardSubtitleColumn = computed<ResolvedDataTableColumn | null>(() => {
-  const candidates = resolvedColumns.value.filter(
-    (col) => !col.icon && col.key !== firstNonIconColKey.value,
-  );
+  const candidates = cardBodyCandidates.value;
   if (candidates.length === 0) {
     return null;
   }
-  const prioritized = candidates.filter(
-    (col) => typeof col.priority === 'number' && col.priority > 0,
-  );
-  if (prioritized.length === 0) {
-    return candidates[0];
+  const prioritized = candidates.filter((col) => (col.cardPriority ?? 0) > 0);
+  if (prioritized.length > 0) {
+    return prioritized.reduce((best, col) =>
+      (col.cardPriority as number) > (best.cardPriority as number) ? col : best,
+    );
   }
-  return prioritized.reduce((best, col) =>
-    (col.priority as number) > (best.priority as number) ? col : best,
-  );
+  return candidates.find((col) => (col.cardPriority ?? 0) >= 0) ?? null;
 });
 
-// Everything else (not title, not subtitle, not icon) renders as a dt/dd field in column order.
+// Everything else (not title, not subtitle, not icon, not demoted) renders as a dt/dd field in
+// column order. A negative `cardPriority` removes a column from the card entirely — the data
+// remains reachable via the DetailPanel tap-through.
 const cardBodyColumns = computed(() =>
-  resolvedColumns.value.filter(
-    (col) =>
-      !col.icon &&
-      col.key !== firstNonIconColKey.value &&
-      col.key !== cardSubtitleColumn.value?.key,
+  cardBodyCandidates.value.filter(
+    (col) => col.key !== cardSubtitleColumn.value?.key && (col.cardPriority ?? 0) >= 0,
   ),
 );
 

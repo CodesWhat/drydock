@@ -89,6 +89,21 @@ describe('NotificationsView', () => {
     );
   });
 
+  describe('tableColumns (card-mode annotations)', () => {
+    it('flags name as the card title and triggers as the card subtitle priority', async () => {
+      const wrapper = await mountNotificationsView();
+      const vm = wrapper.vm as any;
+      const nameCol = vm.tableColumns.find((c: any) => c.key === 'name');
+      const triggersCol = vm.tableColumns.find((c: any) => c.key === 'triggers');
+      const enabledCol = vm.tableColumns.find((c: any) => c.key === 'enabled');
+      expect(nameCol.cardTitle).toBe(true);
+      expect(triggersCol.cardPriority).toBe(1);
+      // enabled keeps the default so it renders as a card body row with its ToggleSwitch.
+      expect(enabledCol.cardTitle).toBeUndefined();
+      expect(enabledCol.cardPriority).toBeUndefined();
+    });
+  });
+
   it('loads rules and filters trigger assignments to notification trigger types', async () => {
     const wrapper = await mountNotificationsView();
 

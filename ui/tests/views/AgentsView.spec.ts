@@ -101,6 +101,19 @@ describe('AgentsView', () => {
     }
   });
 
+  describe('agentAllColumns (card-mode annotations)', () => {
+    it('flags status with cardPriority and demotes docker + os out of the card body', async () => {
+      const wrapper = await mountAgentsView();
+      const vm = wrapper.vm as any;
+      const statusCol = vm.agentAllColumns.find((c: any) => c.key === 'status');
+      const dockerCol = vm.agentAllColumns.find((c: any) => c.key === 'docker');
+      const osCol = vm.agentAllColumns.find((c: any) => c.key === 'os');
+      expect(statusCol.cardPriority).toBe(5);
+      expect(dockerCol.cardPriority).toBe(-1);
+      expect(osCol.cardPriority).toBe(-1);
+    });
+  });
+
   it('successful load renders agent rows', async () => {
     mockGetAgents.mockResolvedValue([
       makeAgent({ name: 'edge-1' }),

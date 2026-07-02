@@ -1495,6 +1495,37 @@ describe('ContainersView', () => {
         expect(col.headerTooltip).toBeUndefined();
       }
     });
+
+    it('forwards cardPriority from activeColumns without touching priority', async () => {
+      const { useColumnVisibility } = await import('@/composables/useColumnVisibility');
+      const mockedVisibility = vi.mocked(useColumnVisibility);
+      const prevImpl = mockedVisibility.getMockImplementation();
+      mockedVisibility.mockReturnValueOnce({
+        allColumns: [],
+        visibleColumns: mockVisibleColumns,
+        activeColumns: computed(() => [
+          { key: 'name', label: 'Container', align: 'text-left', required: true },
+          { key: 'kind', label: 'Update', align: 'text-center', priority: 60, cardPriority: 10 },
+          { key: 'server', label: 'Host', align: 'text-center', priority: 70, cardPriority: -1 },
+        ]),
+        autoHiddenColumns: computed(() => []),
+        showColumnPicker: mockShowColumnPicker,
+        toggleColumn: vi.fn(),
+      } as any);
+
+      const wrapper = await mountContainersView([makeContainer()]);
+      const vm = wrapper.vm as any;
+
+      const kindCol = vm.tableColumns.find((c: any) => c.key === 'kind');
+      expect(kindCol.cardPriority).toBe(10);
+      expect(kindCol.priority).toBe(60);
+
+      const serverCol = vm.tableColumns.find((c: any) => c.key === 'server');
+      expect(serverCol.cardPriority).toBe(-1);
+      expect(serverCol.priority).toBe(70);
+
+      if (prevImpl) mockedVisibility.mockImplementation(prevImpl);
+    });
   });
 
   describe('detail panel', () => {

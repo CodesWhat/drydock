@@ -108,6 +108,7 @@ const tableColumns = computed(() => [
     minSize: 130,
     maxSize: 280,
     sortable: false,
+    cardPriority: -1,
   },
   {
     key: 'nextRun',

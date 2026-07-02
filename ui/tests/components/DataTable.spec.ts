@@ -1050,21 +1050,46 @@ describe('DataTable', () => {
         const firstCard = w.findAll('[data-test="dd-card"]')[0];
         expect(firstCard.find('[data-test="dd-card-title"]').exists()).toBe(false);
       });
+
+      it('uses the column flagged cardTitle as the card title, overriding declared order', async () => {
+        const flaggedColumns = [
+          { key: 'icon', label: '', icon: true },
+          { key: 'first', label: 'First' },
+          { key: 'name', label: 'Name', cardTitle: true },
+        ];
+        const flaggedRows = [{ id: '1', first: 'F1', name: 'Alpha' }];
+        const w = await mountAtWidth(500, { columns: flaggedColumns, rows: flaggedRows });
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        expect(firstCard.find('[data-test="dd-card-title"]').text()).toBe('Alpha');
+      });
+
+      it('table mode ignores cardTitle and keeps the sticky column at the first non-icon column', async () => {
+        const flaggedColumns = [
+          { key: 'icon', label: '', icon: true },
+          { key: 'first', label: 'First' },
+          { key: 'name', label: 'Name', cardTitle: true },
+        ];
+        const w = await mountAtWidth(800, { columns: flaggedColumns });
+        const stickyHeader = w
+          .findAll('thead th')
+          .find((th) => th.classes().includes('dd-sticky-col-left'));
+        expect(stickyHeader?.attributes('data-col-key')).toBe('first');
+      });
     });
 
     describe('card subtitle', () => {
-      it('falls back to the 2nd non-icon column by order when no priority is set', async () => {
+      it('falls back to the 2nd non-icon column by order when no cardPriority is set', async () => {
         const w = await mountAtWidth(500);
         const firstCard = w.findAll('[data-test="dd-card"]')[0];
         expect(firstCard.find('[data-test="dd-card-subtitle"]').text()).toBe('running');
       });
 
-      it('uses the highest-priority non-icon, non-title column when priorities are set', async () => {
+      it('uses the highest-cardPriority non-icon, non-title column when cardPriority is set', async () => {
         const prioritizedColumns = [
           { key: 'name', label: 'Name' },
-          { key: 'status', label: 'Status', priority: 5 },
-          { key: 'host', label: 'Host', priority: 10 },
-          { key: 'region', label: 'Region', priority: 3 },
+          { key: 'status', label: 'Status', cardPriority: 5 },
+          { key: 'host', label: 'Host', cardPriority: 10 },
+          { key: 'region', label: 'Region', cardPriority: 3 },
         ];
         const prioritizedRows = [
           { id: '1', name: 'Alpha', status: 'running', host: 'node-1', region: 'us-east' },
@@ -1074,11 +1099,56 @@ describe('DataTable', () => {
         expect(firstCard.find('[data-test="dd-card-subtitle"]').text()).toBe('node-1');
       });
 
+      it('breaks cardPriority ties by declared order', async () => {
+        const tiedColumns = [
+          { key: 'name', label: 'Name' },
+          { key: 'status', label: 'Status', cardPriority: 5 },
+          { key: 'host', label: 'Host', cardPriority: 5 },
+        ];
+        const tiedRows = [{ id: '1', name: 'Alpha', status: 'running', host: 'node-1' }];
+        const w = await mountAtWidth(500, { columns: tiedColumns, rows: tiedRows });
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        expect(firstCard.find('[data-test="dd-card-subtitle"]').text()).toBe('running');
+      });
+
       it('does not render a subtitle block when there is no non-title non-icon column', async () => {
         const soleColumn = [{ key: 'name', label: 'Name' }];
         const w = await mountAtWidth(500, { columns: soleColumn });
         const firstCard = w.findAll('[data-test="dd-card"]')[0];
         expect(firstCard.find('[data-test="dd-card-subtitle"]').exists()).toBe(false);
+      });
+
+      it('excludes a negative cardPriority column from the subtitle fallback', async () => {
+        const demotedColumns = [
+          { key: 'name', label: 'Name' },
+          { key: 'server', label: 'Server', cardPriority: -1 },
+          { key: 'status', label: 'Status' },
+        ];
+        const demotedRows = [{ id: '1', name: 'Alpha', server: 'srv-1', status: 'running' }];
+        const w = await mountAtWidth(500, { columns: demotedColumns, rows: demotedRows });
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        // Fallback skips the negative-priority column and lands on the next candidate by order.
+        expect(firstCard.find('[data-test="dd-card-subtitle"]').text()).toBe('running');
+      });
+
+      it('ignores the priority field for card composition (auto-hide priority is not card priority)', async () => {
+        const legacyPriorityColumns = [
+          { key: 'name', label: 'Name' },
+          { key: 'status', label: 'Status', priority: 5 },
+          { key: 'host', label: 'Host', priority: 10 },
+          { key: 'region', label: 'Region', priority: 3 },
+        ];
+        const legacyPriorityRows = [
+          { id: '1', name: 'Alpha', status: 'running', host: 'node-1', region: 'us-east' },
+        ];
+        const w = await mountAtWidth(500, {
+          columns: legacyPriorityColumns,
+          rows: legacyPriorityRows,
+        });
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        // `priority` alone no longer selects the subtitle — falls back to the first candidate
+        // by declared order (status), not the highest `priority` value (host).
+        expect(firstCard.find('[data-test="dd-card-subtitle"]').text()).toBe('running');
       });
     });
 
@@ -1115,6 +1185,24 @@ describe('DataTable', () => {
         const w = await mountAtWidth(500, { columns: twoColumns });
         const firstCard = w.findAll('[data-test="dd-card"]')[0];
         expect(firstCard.find('[data-test="dd-card-body"]').exists()).toBe(false);
+      });
+
+      it('excludes a negative cardPriority column from the card body while keeping other body columns', async () => {
+        const demotedColumns = [
+          { key: 'name', label: 'Name' },
+          { key: 'status', label: 'Status', cardPriority: 1 },
+          { key: 'server', label: 'Server', cardPriority: -1 },
+          { key: 'notes', label: 'Notes' },
+        ];
+        const demotedRows = [
+          { id: '1', name: 'Alpha', status: 'running', server: 'srv-1', notes: 'ok' },
+        ];
+        const w = await mountAtWidth(500, { columns: demotedColumns, rows: demotedRows });
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        expect(firstCard.find('[data-test="dd-card-subtitle"]').text()).toBe('running');
+        const body = firstCard.find('[data-test="dd-card-body"]');
+        const dts = body.findAll('dt');
+        expect(dts.map((dt) => dt.text())).toEqual(['Notes']);
       });
     });
 
@@ -1216,6 +1304,19 @@ describe('DataTable', () => {
           .find('[data-test="dd-card-sort-select"]')
           .findAll('option:not([disabled])');
         expect(options.map((o) => o.attributes('value'))).toEqual(['name', 'status']);
+      });
+
+      it('keeps a negative-cardPriority column in the sort select even though it is demoted from the card', async () => {
+        const demotedSortColumns = [
+          { key: 'name', label: 'Name', sortable: true },
+          { key: 'server', label: 'Server', cardPriority: -1, sortable: true },
+        ];
+        const demotedSortRows = [{ id: '1', name: 'Alpha', server: 'srv-1' }];
+        const w = await mountAtWidth(500, { columns: demotedSortColumns, rows: demotedSortRows });
+        const options = w
+          .find('[data-test="dd-card-sort-select"]')
+          .findAll('option:not([disabled])');
+        expect(options.map((o) => o.attributes('value'))).toEqual(['name', 'server']);
       });
 
       it('reflects sortKey as the selected value', async () => {

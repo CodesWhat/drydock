@@ -1222,6 +1222,7 @@ const tableColumns = computed(() =>
     maxSize: column.maxSize,
     flex: column.flex,
     priority: column.priority,
+    cardPriority: column.cardPriority,
     overflow: column.overflow,
     autoSize: column.autoSize,
     px: column.px,

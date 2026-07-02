@@ -200,6 +200,7 @@ const tableColumns = computed(() => [
     minSize: 150,
     maxSize: 280,
     sortable: false,
+    cardPriority: 1,
   },
   {
     key: 'containerName',
@@ -209,6 +210,7 @@ const tableColumns = computed(() => [
     maxSize: 420,
     flex: 1,
     sortable: false,
+    cardTitle: true,
   },
   {
     key: 'status',

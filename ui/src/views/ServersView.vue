@@ -76,6 +76,7 @@ const tableColumns = computed(() => [
     minSize: 96,
     maxSize: 150,
     sortable: false,
+    cardPriority: 1,
   },
   {
     key: 'containers',

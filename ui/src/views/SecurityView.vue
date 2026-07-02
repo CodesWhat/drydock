@@ -430,6 +430,7 @@ const tableColumns = computed(() => {
       size: 96,
       minSize: 84,
       maxSize: 120,
+      cardPriority: 5,
     },
     {
       key: 'high',

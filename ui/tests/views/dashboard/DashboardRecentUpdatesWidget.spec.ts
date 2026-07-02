@@ -7,6 +7,14 @@ import type {
 } from '@/views/dashboard/dashboardTypes';
 import { mountWithPlugins } from '../../helpers/mount';
 
+const { mockIsMobile } = vi.hoisted(() => ({
+  mockIsMobile: { value: false },
+}));
+
+vi.mock('@/composables/useBreakpoints', () => ({
+  useBreakpoints: () => ({ isMobile: mockIsMobile }),
+}));
+
 let resizeObserverCallback: ResizeObserverCallback | undefined;
 const originalResizeObserver = globalThis.ResizeObserver;
 const mountedWrappers: VueWrapper[] = [];
@@ -147,6 +155,17 @@ describe('DashboardRecentUpdatesWidget', () => {
       configurable: true,
       writable: true,
     });
+    mockIsMobile.value = false;
+  });
+
+  it('uses the i18n type/actions labels for mobile columns instead of empty strings', () => {
+    mockIsMobile.value = true;
+    const wrapper = mountWidget();
+    const vm = wrapper.vm as any;
+    const typeCol = vm.tableColumns.find((c: any) => c.key === 'type');
+    const actionsCol = vm.tableColumns.find((c: any) => c.key === 'actions');
+    expect(typeCol.label).toBe('Type');
+    expect(actionsCol.label).toBe('Actions');
   });
 
   it('shows the compact edit-mode layout when resized below 200px', async () => {

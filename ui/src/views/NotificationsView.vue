@@ -198,6 +198,7 @@ const tableColumns = computed(() => [
     minSize: 220,
     maxSize: 560,
     flex: 1,
+    cardTitle: true,
   },
   {
     key: 'triggers',
@@ -207,6 +208,7 @@ const tableColumns = computed(() => [
     size: 260,
     minSize: 180,
     maxSize: 420,
+    cardPriority: 1,
   },
 ]);
 

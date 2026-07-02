@@ -120,6 +120,17 @@ describe('AuditView', () => {
     mockGetAuditLog.mockResolvedValue({ entries: [], total: 0, page: 1, limit: 50 });
   });
 
+  describe('tableColumns (card-mode annotations)', () => {
+    it('flags containerName as the card title and action as the card subtitle priority', async () => {
+      const wrapper = await mountAuditView();
+      const vm = wrapper.vm as any;
+      const containerNameCol = vm.tableColumns.find((c: any) => c.key === 'containerName');
+      const actionCol = vm.tableColumns.find((c: any) => c.key === 'action');
+      expect(containerNameCol.cardTitle).toBe(true);
+      expect(actionCol.cardPriority).toBe(1);
+    });
+  });
+
   describe('routing', () => {
     it('loads using route query values for view, page, action, and search', async () => {
       mockRoute.query = {

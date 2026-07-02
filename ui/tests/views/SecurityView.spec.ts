@@ -286,6 +286,28 @@ describe('SecurityView', () => {
     mockRouterPush.mockResolvedValue(undefined);
   });
 
+  describe('tableColumns (card-mode annotations)', () => {
+    it('flags critical with cardPriority in the wide (non-compact) column set', async () => {
+      mockWindowNarrow.value = false;
+      const w = factory();
+      await flushPromises();
+      const vm = w.vm as any;
+      const criticalCol = vm.tableColumns.find((c: any) => c.key === 'critical');
+      expect(criticalCol?.cardPriority).toBe(5);
+    });
+
+    it('leaves the compact column set unchanged (no critical column, no cardPriority)', async () => {
+      mockWindowNarrow.value = true;
+      const w = factory();
+      await flushPromises();
+      const vm = w.vm as any;
+      expect(vm.tableColumns.find((c: any) => c.key === 'critical')).toBeUndefined();
+      for (const col of vm.tableColumns) {
+        expect(col.cardPriority).toBeUndefined();
+      }
+    });
+  });
+
   describe('data loading', () => {
     it('loads security runtime status on mount', async () => {
       mockContainers([makeContainer()]);

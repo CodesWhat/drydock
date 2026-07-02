@@ -207,6 +207,44 @@ describe('useColumnVisibility', () => {
     expect(CONTAINER_TABLE_ACTIONS_SIZE).toBe(180);
   });
 
+  describe('cardPriority (card mode, distinct from priority auto-hide)', () => {
+    it('sets kind cardPriority to 10 so it wins the card subtitle slot', async () => {
+      const { useColumnVisibility } = await loadColumnVisibility();
+      const { allColumns } = useColumnVisibility();
+      const kindCol = allColumns.find((c) => c.key === 'kind');
+      expect(kindCol?.cardPriority).toBe(10);
+    });
+
+    it('demotes server, registry, and uptime out of the card body with a negative cardPriority', async () => {
+      const { useColumnVisibility } = await loadColumnVisibility();
+      const { allColumns } = useColumnVisibility();
+      for (const key of ['server', 'registry', 'uptime']) {
+        const col = allColumns.find((c) => c.key === key);
+        expect(col?.cardPriority).toBe(-1);
+      }
+    });
+
+    it('leaves version, softwareVersion, and status cardPriority unset (card body, declared order)', async () => {
+      const { useColumnVisibility } = await loadColumnVisibility();
+      const { allColumns } = useColumnVisibility();
+      for (const key of ['version', 'softwareVersion', 'status']) {
+        const col = allColumns.find((c) => c.key === key);
+        expect(col?.cardPriority).toBeUndefined();
+      }
+    });
+
+    it('does not change the existing auto-hide priority values', async () => {
+      const { useColumnVisibility } = await loadColumnVisibility();
+      const { allColumns } = useColumnVisibility();
+      const byKey = Object.fromEntries(allColumns.map((c) => [c.key, c.priority]));
+      expect(byKey.kind).toBe(60);
+      expect(byKey.status).toBe(50);
+      expect(byKey.server).toBe(70);
+      expect(byKey.registry).toBe(80);
+      expect(byKey.uptime).toBe(90);
+    });
+  });
+
   describe('responsive auto-hide', () => {
     it('returns all preference-visible columns when availableWidth is undefined', async () => {
       const { useColumnVisibility } = await loadColumnVisibility();

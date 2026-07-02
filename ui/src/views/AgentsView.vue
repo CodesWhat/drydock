@@ -326,6 +326,7 @@ const agentAllColumns = computed(() => [
     maxSize: 150,
     sortable: true,
     required: false,
+    cardPriority: 5,
   },
   {
     key: 'containers',
@@ -344,6 +345,7 @@ const agentAllColumns = computed(() => [
     maxSize: 190,
     sortable: true,
     required: false,
+    cardPriority: -1,
   },
   {
     key: 'os',
@@ -353,6 +355,7 @@ const agentAllColumns = computed(() => [
     maxSize: 180,
     sortable: true,
     required: false,
+    cardPriority: -1,
   },
   {
     key: 'version',
