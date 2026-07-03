@@ -115,6 +115,35 @@ test('getExperimentalPortwingEnabled should return false for non-"true" values',
   delete configuration.ddEnvVars.DD_EXPERIMENTAL_PORTWING;
 });
 
+test('getWudCardCompatEnabled should default to false', () => {
+  delete configuration.ddEnvVars.DD_COMPAT_WUDCARD;
+  expect(configuration.getWudCardCompatEnabled()).toStrictEqual(false);
+});
+
+test('getWudCardCompatEnabled should return true when set to "true"', () => {
+  configuration.ddEnvVars.DD_COMPAT_WUDCARD = 'true';
+  expect(configuration.getWudCardCompatEnabled()).toStrictEqual(true);
+  delete configuration.ddEnvVars.DD_COMPAT_WUDCARD;
+});
+
+test('getWudCardCompatEnabled should normalize casing', () => {
+  configuration.ddEnvVars.DD_COMPAT_WUDCARD = 'TRUE';
+  expect(configuration.getWudCardCompatEnabled()).toStrictEqual(true);
+  delete configuration.ddEnvVars.DD_COMPAT_WUDCARD;
+});
+
+test('getWudCardCompatEnabled should trim whitespace before comparing', () => {
+  configuration.ddEnvVars.DD_COMPAT_WUDCARD = '  true  ';
+  expect(configuration.getWudCardCompatEnabled()).toStrictEqual(true);
+  delete configuration.ddEnvVars.DD_COMPAT_WUDCARD;
+});
+
+test('getWudCardCompatEnabled should return false for non-"true" values', () => {
+  configuration.ddEnvVars.DD_COMPAT_WUDCARD = '1';
+  expect(configuration.getWudCardCompatEnabled()).toStrictEqual(false);
+  delete configuration.ddEnvVars.DD_COMPAT_WUDCARD;
+});
+
 test('getDnsMode should default to ipv4first', () => {
   delete configuration.ddEnvVars.DD_DNS_MODE;
   expect(configuration.getDnsMode()).toBe('ipv4first');

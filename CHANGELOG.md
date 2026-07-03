@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Opt-in wud-card compatibility endpoints.** The unversioned `/api/*` alias is being removed in v1.6.0 ([DEPRECATIONS.md](./DEPRECATIONS.md)), but the Home Assistant [wud-card](https://github.com/angryvoegi/wud-card) integration only speaks that unversioned, WUD-shaped surface. Setting `DD_COMPAT_WUDCARD=true` (default `false`) mounts a narrow, structurally independent compatibility layer at `/api/*` that serves exactly the four endpoints wud-card calls (`GET /containers`, `GET /containers/:id/triggers`, `POST /containers/watch`, `POST /containers/:id/triggers/:triggerType/:triggerName`) with WUD's bare-array response shape instead of drydock v1's `{ data, total, limit, offset, hasMore, _links }` envelope. Everything else under `/api/*` still falls through to the deprecated alias today and will 404 once it's removed. Off by default, subject to the same authentication and rate limiting as the rest of the API, and best-effort with no compatibility guarantee. ([Discussion #469](https://github.com/CodesWhat/drydock/discussions/469))
+
 ### Fixed
 
 - **`GET /api/v1/containers/backups` (list all backups) is now reachable.** The route was previously registered as `router.get('/', getBackups)` in the backup router, which was mounted at `/containers` after the container router — so the container router's own `GET /` handler shadowed it and the list-backups endpoint was never reachable. The route is now `router.get('/backups', getBackups)` and the backup router is mounted before the container router, making `GET /api/v1/containers/backups` accessible. The per-container backup endpoints (`GET /api/v1/containers/:id/backups`) were not affected.

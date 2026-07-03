@@ -14,11 +14,13 @@ import {
   ddEnvVars,
   getExperimentalPortwingEnabled,
   getServerConfiguration,
+  getWudCardCompatEnabled,
 } from '../configuration/index.js';
 import * as settingsStore from '../store/settings.js';
 import * as apiRouter from './api.js';
 import * as auth from './auth.js';
 import { getAllIds } from './auth-strategies.js';
+import * as wudCardCompatRouter from './compat/wudcard.js';
 import { attachContainerLogStreamWebSocketServer } from './container/log-stream.js';
 import { sendErrorResponse } from './error-response.js';
 import * as healthRouter from './health.js';
@@ -136,6 +138,10 @@ function registerRoutes(app) {
   log.warn(
     'Unversioned /api/* path is deprecated and will be removed in v1.6.0. Use /api/v1/* instead.',
   );
+  if (getWudCardCompatEnabled()) {
+    log.info('wud-card compatibility enabled at /api (DD_COMPAT_WUDCARD=true)');
+    app.use('/api', wudCardCompatRouter.init());
+  }
   app.use('/api', apiRouter.init());
   app.use('/metrics', prometheusRouter.init());
   if (configuration.ui?.enabled !== false) {

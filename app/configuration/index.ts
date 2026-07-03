@@ -201,6 +201,15 @@ export function getExperimentalPortwingEnabled() {
 }
 
 /**
+ * Return whether the wud-card compatibility mount (a narrow, opt-in shim
+ * that serves WUD-shaped responses for the Home Assistant "wud-card"
+ * integration at /api) is enabled. Defaults to false/OFF.
+ */
+export function getWudCardCompatEnabled() {
+  return envFlagEnabled(ddEnvVars.DD_COMPAT_WUDCARD);
+}
+
+/**
  * Return the path configured via DD_PORTWING_AUTHORIZED_KEYS, or undefined if unset.
  * When set, drydock loads this authorized_keys file at startup to pre-populate
  * the agent-key registry without requiring one-by-one REST API registration.

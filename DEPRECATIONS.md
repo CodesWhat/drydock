@@ -81,6 +81,8 @@ Setting `DD_SERVER_CORS_ENABLED=true` without specifying `DD_SERVER_CORS_ORIGIN`
 
 **Migration:** Update all API calls to use the `/api/v1/` prefix (e.g., `/api/v1/containers` instead of `/api/containers`).
 
+**Exception:** the opt-in wud-card compatibility endpoints (`DD_COMPAT_WUDCARD`, default `false`) remain mounted at `/api/*` after the alias removal. They exist solely to keep the Home Assistant [wud-card](https://github.com/angryvoegi/wud-card) integration working, are off by default, and are best-effort with no compatibility guarantee — see [Server configuration](https://getdrydock.com/docs/configuration/server) for details.
+
 ---
 
 ### Legacy `wud.*` Docker labels

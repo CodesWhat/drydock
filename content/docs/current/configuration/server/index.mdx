@@ -23,6 +23,7 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 | `DD_SERVER_CORS_ENABLED` | ⚪ | Enable [CORS](https://developer.mozilla.org/fr/docs/Web/HTTP/CORS) Requests | `true`, `false` | `false` |
 | `DD_SERVER_CORS_ORIGIN` | 🔴 (when CORS enabled) | Allowed CORS origin — **required** when `DD_SERVER_CORS_ENABLED=true`; startup will abort if CORS is enabled but this is unset | `*` or a single origin URL (for example `https://drydock.example.com`) | — |
 | `DD_SERVER_CORS_METHODS` | ⚪ | Supported CORS methods | Comma separated list of valid HTTP verbs | `GET,HEAD,PUT,PATCH,POST,DELETE` |
+| `DD_COMPAT_WUDCARD` | ⚪ | Mount the opt-in [wud-card compatibility endpoints](#wud-card-compatibility) at the unversioned `/api/*` path | `true`, `false` | `false` |
 | `DD_SERVER_COMPRESSION_ENABLED` | ⚪ | Enable gzip response compression (SSE responses are excluded automatically) | `true`, `false` | `true` |
 | `DD_SERVER_COMPRESSION_THRESHOLD` | ⚪ | Minimum response size in bytes before compression is applied | integer (`>=0`) | `1024` |
 | `DD_SERVER_FEATURE_CONTAINERACTIONS` | ⚪ | Enable start, stop, restart, and update actions via API and UI | `true`, `false` | `true` |
@@ -49,6 +50,14 @@ For production deployments, set a specific trusted origin:
 
 - `DD_SERVER_CORS_ORIGIN=https://drydock.example.com`
 - `DD_SERVER_CORS_ORIGIN=https://ops.example.com`
+
+## wud-card Compatibility
+
+The unversioned `/api/*` alias is deprecated and is being removed in v1.6.0 — see [Deprecations](https://getdrydock.com/docs/deprecations). Setting `DD_COMPAT_WUDCARD=true` opts back in to a narrow slice of that surface: the four endpoints the Home Assistant [wud-card](https://github.com/angryvoegi/wud-card) integration calls, returned in the bare-array shape that card expects instead of drydock's `{ data, total, limit, offset, hasMore, _links }` envelope. It exists purely to keep wud-card working against drydock and is off by default. Every other route under `/api/*` is unaffected by this flag and still follows the deprecation timeline.
+
+This is a best-effort compatibility shim, not a supported integration surface — it carries no compatibility guarantee and may change or be removed without the usual deprecation window. Requests through it are authenticated and rate-limited exactly like the rest of the API; there is no security bypass.
+
+If Home Assistant runs on a different origin than drydock, pair `DD_COMPAT_WUDCARD=true` with the CORS settings above: set `DD_SERVER_CORS_ENABLED=true` and `DD_SERVER_CORS_ORIGIN` to the Home Assistant frontend's origin (for example `https://homeassistant.example.com`), not drydock's own address.
 
 ## Container Healthcheck
 

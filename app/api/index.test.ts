@@ -59,6 +59,7 @@ const mockAttachContainerLogStreamWebSocketServer = vi.hoisted(() => vi.fn());
 const mockAttachSystemLogStreamWebSocketServer = vi.hoisted(() => vi.fn());
 const mockAttachPortwingWsServer = vi.hoisted(() => vi.fn());
 const mockGetExperimentalPortwingEnabled = vi.hoisted(() => vi.fn(() => false));
+const mockGetWudCardCompatEnabled = vi.hoisted(() => vi.fn(() => false));
 
 vi.mock('node:fs', () => ({
   default: mockFs,
@@ -107,6 +108,10 @@ vi.mock('./api', () => ({
   init: vi.fn(() => 'api-router'),
 }));
 
+vi.mock('./compat/wudcard', () => ({
+  init: vi.fn(() => 'wudcard-compat-router'),
+}));
+
 vi.mock('./ui', () => ({
   init: vi.fn(() => 'ui-router'),
 }));
@@ -143,6 +148,7 @@ vi.mock('../configuration', () => ({
   getServerConfiguration: mockGetServerConfiguration,
   ddEnvVars: mockDdEnvVars,
   getExperimentalPortwingEnabled: mockGetExperimentalPortwingEnabled,
+  getWudCardCompatEnabled: mockGetWudCardCompatEnabled,
 }));
 
 vi.mock('../store/settings', () => ({
@@ -168,6 +174,7 @@ function mockActualApiRouterStatsLifecycle() {
     getServerConfiguration: mockGetServerConfiguration,
     ddEnvVars: mockDdEnvVars,
     getExperimentalPortwingEnabled: mockGetExperimentalPortwingEnabled,
+    getWudCardCompatEnabled: mockGetWudCardCompatEnabled,
   }));
   vi.doMock('../stats/aggregator.js', () => ({
     createContainerStatsAggregator: mockCreateContainerStatsAggregator,
@@ -265,6 +272,7 @@ describe('API Index', () => {
     mockAttachSystemLogStreamWebSocketServer.mockClear();
     mockAttachPortwingWsServer.mockClear();
     mockGetExperimentalPortwingEnabled.mockReturnValue(false);
+    mockGetWudCardCompatEnabled.mockReturnValue(false);
     Object.keys(mockDdEnvVars).forEach((key) => delete mockDdEnvVars[key]);
   });
 
@@ -509,6 +517,58 @@ describe('API Index', () => {
     expect(mockApp.use).toHaveBeenCalledWith('/api', 'api-router');
     expect(mockApp.use).toHaveBeenCalledWith('/metrics', 'prometheus-router');
     expect(mockApp.use).toHaveBeenCalledWith('/', 'ui-router');
+  });
+
+  test('should NOT mount the wud-card compat router when DD_COMPAT_WUDCARD is disabled (default)', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    mockGetWudCardCompatEnabled.mockReturnValue(false);
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockApp.use).not.toHaveBeenCalledWith('/api', 'wudcard-compat-router');
+    expect(mockLog.info).not.toHaveBeenCalledWith(
+      expect.stringContaining('wud-card compatibility enabled'),
+    );
+    // Flag off: /api mounting behavior is byte-for-byte identical to today —
+    // exactly one '/api' mount, the deprecated alias, nothing else.
+    const apiMountCalls = mockApp.use.mock.calls.filter((call) => call[0] === '/api');
+    expect(apiMountCalls).toEqual([['/api', 'api-router']]);
+  });
+
+  test('should mount the wud-card compat router at /api before the deprecated alias when DD_COMPAT_WUDCARD is enabled', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    mockGetWudCardCompatEnabled.mockReturnValue(true);
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    expect(mockApp.use).toHaveBeenCalledWith('/api', 'wudcard-compat-router');
+    expect(mockLog.info).toHaveBeenCalledWith(
+      'wud-card compatibility enabled at /api (DD_COMPAT_WUDCARD=true)',
+    );
+
+    const apiMountCalls = mockApp.use.mock.calls.filter(
+      (call) => call[0] === '/api' && typeof call[1] === 'string',
+    );
+    // Compat router mounts before the deprecated alias so the whitelisted
+    // routes get reshaped before falling through to the alias handlers.
+    expect(apiMountCalls).toEqual([
+      ['/api', 'wudcard-compat-router'],
+      ['/api', 'api-router'],
+    ]);
   });
 
   test('should skip mounting UI router when DD_SERVER_UI_ENABLED=false', async () => {
