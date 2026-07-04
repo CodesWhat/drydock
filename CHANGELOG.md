@@ -18,9 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`GET /api/auth/methods`.** This unversioned alias for `GET /auth/strategies` had zero documentation and emitted no deprecation signal at all. It now logs "GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /auth/strategies instead." on every request, and is documented in [DEPRECATIONS.md](./DEPRECATIONS.md) — deprecated in v1.6.0, removed in v1.7.0.
 
+- **Legacy auth strategies response shape (`GET /auth/strategies`).** This endpoint's older `{ strategies, warnings }` response shape is superseded by `GET /api/v1/auth/status`'s `{ providers, errors }` shape, which adds structured startup registration errors instead of ad hoc warning strings. Unlike other deprecations, this one currently emits no deprecation signal at all for the response shape itself — no log warning, no `Deprecation`/`Sunset` header, no Prometheus counter, no UI banner — so usage is invisible until removal; it's documented in [DEPRECATIONS.md](./DEPRECATIONS.md) — deprecated in v1.6.0, removed in v1.8.0.
+
 ### Removed
 
 - **Unversioned `/api/*` alias removed.** Deprecated since v1.4.0, the unversioned `/api/*` prefix now returns `410 Gone` with a JSON body pointing callers at the `/api/v1/` equivalent instead of serving the request. **This is a breaking change for the Home Assistant [wud-card](https://github.com/angryvoegi/wud-card) integration and Homepage's native `whatsupdocker` widget** — both hardcode the unversioned `/api/*` base path with no way to configure a different one, so they start getting 410s the moment they hit drydock v1.6.0. Their supported path forward is `DD_COMPAT_WUDCARD=true` (default `false`), which mounts a narrow, self-sufficient compatibility layer serving exactly the four endpoints those integrations call (see the Added section above and [DEPRECATIONS.md](./DEPRECATIONS.md)). Everyone else migrates to `/api/v1/*`. `GET /api/auth/methods` is **not** part of this removal — it's mounted directly on the app, ahead of the `/api/*` mounts, and stays on its own separate deprecation schedule (removed in v1.7.0).
+
+- **Unversioned WebSocket alias `WS /api/log/stream` removed.** Same removal as the REST `/api/*` alias above, applied to the log-stream upgrade: connecting to the unversioned path now fails fast with a 410-style upgrade rejection instead of completing the WebSocket handshake. Use the canonical `WS /api/v1/log/stream` endpoint.
 
 ### Fixed
 
@@ -32,11 +36,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **A stale cached page no longer white-screens after an upgrade.** The UI's SPA history-mode fallback used to return `index.html` (an HTML `200`) for *any* unmatched path, including a request for a content-hashed `/assets/*.js` bundle that a previous version referenced but the upgrade deleted. Browsers refuse to run a module script served as `text/html`, so a page cached from the old build (typically by a reverse proxy that ignores the HTML's `Cache-Control: no-store`) painted nothing, and caching proxies could poison the asset URL with that HTML. Requests under `/assets/` that miss now return a clean `404` (with `no-store`) instead of the shell, so a stale page fails fast rather than blank. A new **Reverse proxy caching** docs section covers the browser/proxy cache settings that avoid this. This does not require a stale entry-script to recover on its own — clearing the browser/proxy cache is still the fix for an already-blank page — but it stops drydock from turning a missing bundle into a silent white screen. (#466)
 
+- **Responsive containers table: sticky columns and auto-hide column budget corrected.** The auto-hide column budget now measures the table's real available width (`ResizeObserver` + content-box measurement) instead of an estimate that ran ~23px too generous whenever the detail panel was open, so columns no longer hide too aggressively or too little. The icon and name columns are now pinned together as a single sticky-left cluster so the icon can no longer scroll out from under the name column, the sticky separator border only appears on genuine horizontal overflow, and the sticky actions column no longer paints on top of the last data column when a table legitimately overflows.
+
+- **Icon column no longer clips container icons.** The icon column was 40px wide with 20px of padding, leaving only ~20px of content box for the 32px container icon — about 11.9px of every icon silently hung past the cell edge. The column is now sized (40→56px) to actually fit the icon.
+
 ### Documentation
 
 - **Podman and Docker socket security docs refreshed.** Added the v1.5.2 guidance for Podman's Docker-compatible API path ([#152](https://github.com/CodesWhat/drydock/issues/152)), clarified direct socket vs proxy/TCP behavior, documented remote TLS/OIDC watcher auth, and tightened the Docker socket security/FAQ/security-guide cross-links without claiming native Podman support has shipped.
 
 - **Documentation parity audits completed.** Reconciled the current configuration/env-var reference tables against runtime schemas and refreshed the API/OpenAPI/docs contract for the canonical `/api/v1` surface. The API docs now cover the recently added authentication component endpoints, registry webhook signature auth, notification outbox actions, bulk container updates, backup listing, auth status aliases, and container summary/update-response details; the OpenAPI spec now matches the route security modes and response codes for those surfaces.
+
+## [1.5.1-rc.5] — 2026-07-02
+
+### Fixed
+
+- **Grouped "Update All" buttons could scroll out of view after upgrading to rc.4.** The new Version column added in rc.4 widened the containers table for existing users, and at moderate desktop widths the table overflowed horizontally in a way its responsive column-hiding never accounted for: columns were only ever laid out at their preferred widths, so the per-stack **Update All** button — positioned at the far end of the group header row — ended up past the visible edge while everything else looked normal. Tables now shrink columns proportionally toward their minimum widths when space is tight (matching the widths the responsive logic already budgets for), and the group header's Update All button is additionally pinned to the visible edge, so it stays reachable even when a table legitimately overflows. (#467)
 
 ## [1.5.1-rc.4] — 2026-06-29
 

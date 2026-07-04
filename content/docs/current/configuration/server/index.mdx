@@ -59,7 +59,7 @@ The same flag also covers [Homepage](https://gethomepage.dev/)'s native `whatsup
 
 This is a best-effort compatibility shim, not a supported integration surface — it carries no compatibility guarantee and may change or be removed without the usual deprecation window. Requests through it are authenticated and rate-limited exactly like the rest of the API; there is no security bypass.
 
-If Home Assistant runs on a different origin than drydock, pair `DD_COMPAT_WUDCARD=true` with the CORS settings above: set `DD_SERVER_CORS_ENABLED=true` and `DD_SERVER_CORS_ORIGIN` to the Home Assistant frontend's origin (for example `https://homeassistant.example.com`), not drydock's own address.
+If Home Assistant runs on a different origin than drydock, pair `DD_COMPAT_WUDCARD=true` with the CORS settings above: set `DD_SERVER_CORS_ENABLED=true` and `DD_SERVER_CORS_ORIGIN` to the Home Assistant frontend's origin (for example `https://homeassistant.example.com`), not drydock's own address. CORS headers alone do not make session-cookie login work across origins — drydock's CORS middleware never sends `Access-Control-Allow-Credentials`, and wud-card's `fetch()` calls never request credentials either, so the session cookie is never sent cross-origin. The instance must be reachable either with no authentication configured or via [HTTP Basic auth](/docs/configuration/authentications/basic), the only auth mode that actually completes cross-origin. wud-card also offers a Bearer-token auth option, but drydock has no static API token equivalent yet, so that option will silently fail — configure wud-card for Basic auth (or an auth-less instance) instead.
 
 ## Container Healthcheck
 

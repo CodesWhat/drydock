@@ -253,5 +253,5 @@ Drydock provides multiple channels for discovering deprecated feature usage:
 | **Startup log warnings** | All runtime-detectable deprecations |
 | **UI deprecation banners** | Legacy config, legacy API paths, OIDC HTTP, legacy password hashes, detected curl healthcheck overrides |
 | **Prometheus counters** | `dd_legacy_input_total{source,key}` for env vars, labels, and API paths |
-| **HTTP response headers** | `Deprecation` and `Sunset` on `PUT /api/settings` |
+| **HTTP response headers** | `Deprecation` and `Sunset` on `PUT /api/settings` and `GET /api/auth/methods` |
 | **Migration CLI** | `node dist/index.js config migrate --dry-run` previews all env var and label renames |
