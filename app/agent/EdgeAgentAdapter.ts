@@ -20,6 +20,10 @@ const MAX_PENDING_REQUESTS = 100;
 const PING_INTERVAL_MS = 30_000;
 const REQUEST_TIMEOUT_MS = 30_000;
 const CONTAINER_SYNC_WARN_MS = 30_000;
+// Number of consecutive server-initiated ping cycles that may pass without a
+// pong reply before the connection is considered dead. 2 cycles × 30s = 60s,
+// matching portwing's own readDeadline of max(2*heartbeat, 60s) for symmetry.
+const PONG_MISS_THRESHOLD = 2;
 
 export interface HelloMessage {
   version: string;
@@ -97,6 +101,7 @@ export class EdgeAgentAdapter {
   private pingInterval: ReturnType<typeof setInterval> | undefined;
   private containerSyncWarnTimer: ReturnType<typeof setTimeout> | undefined;
   private connected = false;
+  private lastPongAt = 0;
 
   constructor(client: AgentClient, ws: WebSocketLike) {
     this.client = client;
@@ -112,13 +117,10 @@ export class EdgeAgentAdapter {
    */
   activate(): void {
     addAgent(this.client);
+    this.lastPongAt = Date.now();
 
     this.pingInterval = setInterval(() => {
-      try {
-        this.ws.send(JSON.stringify({ type: 'ping', data: { timestamp: Date.now() } }));
-      } catch {
-        // connection may already be closing
-      }
+      this.checkLivenessAndPing();
     }, PING_INTERVAL_MS);
 
     // Warn if container_sync does not arrive within 30 seconds
@@ -143,6 +145,35 @@ export class EdgeAgentAdapter {
       log.error(`WebSocket error on ${this.agentName}: ${getErrorMessage(err)}`);
       void this.onDisconnect();
     });
+  }
+
+  /**
+   * Runs every PING_INTERVAL_MS. If no pong has been received within
+   * PONG_MISS_THRESHOLD ping cycles, the connection is considered dead: force
+   * close it and run the same cleanup path a real 'close' event would trigger
+   * so the agent slot is freed immediately rather than left dangling until the
+   * underlying transport eventually notices. Otherwise, send the next ping.
+   */
+  private checkLivenessAndPing(): void {
+    const staleMs = Date.now() - this.lastPongAt;
+    if (staleMs >= PING_INTERVAL_MS * PONG_MISS_THRESHOLD) {
+      log.warn(
+        `Edge agent ${this.agentName} missed ${PONG_MISS_THRESHOLD} pong cycles (${staleMs}ms); closing connection`,
+      );
+      try {
+        this.ws.close(1001, 'ping timeout');
+      } catch {
+        // connection may already be closing
+      }
+      void this.onDisconnect();
+      return;
+    }
+
+    try {
+      this.ws.send(JSON.stringify({ type: 'ping', data: { timestamp: Date.now() } }));
+    } catch {
+      // connection may already be closing
+    }
   }
 
   private async onMessage(raw: unknown): Promise<void> {
@@ -177,7 +208,7 @@ export class EdgeAgentAdapter {
         this.handlePing(data);
         return;
       case 'pong':
-        // no-op — reply to server-initiated ping
+        this.handlePong();
         return;
       case 'dd:watch_response':
         log.debug(`${this.agentName}: dd:watch_response (no-op in M5)`);
@@ -295,6 +326,11 @@ export class EdgeAgentAdapter {
     } catch {
       // connection may be closing
     }
+  }
+
+  /** Reply to our own server-initiated ping — marks the connection as alive. */
+  private handlePong(): void {
+    this.lastPongAt = Date.now();
   }
 
   private handleContainerLogResponse(data: Record<string, unknown>): void {

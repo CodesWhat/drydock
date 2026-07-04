@@ -2068,3 +2068,41 @@ describe('EdgeAgentAdapter — false-branch coverage for ternary fallbacks', () 
     expect(ws.close).not.toHaveBeenCalled();
   });
 });
+
+describe('EdgeAgentAdapter — ping/pong liveness', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('closes the connection and frees the agent slot after missing pong for 2 ping cycles (60s)', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    // Agent never replies with 'pong'. Two 30s ping cycles elapse with no pong.
+    vi.advanceTimersByTime(30_000 * 2);
+
+    expect(ws.close).toHaveBeenCalledWith(1001, 'ping timeout');
+    expect(manager.removeAgent).toHaveBeenCalledWith(client.name);
+
+    vi.useRealTimers();
+  });
+
+  test('does not close the connection when the agent replies with pong every cycle', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Simulate 4 healthy ping/pong cycles (well past the 2-cycle timeout threshold
+    // if pongs were not being tracked).
+    for (let i = 0; i < 4; i++) {
+      vi.advanceTimersByTime(30_000);
+      sendFrame(ws, 'pong', { timestamp: Date.now() });
+    }
+
+    expect(ws.close).not.toHaveBeenCalled();
+    expect(manager.removeAgent).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+});
