@@ -81,6 +81,7 @@ The `PUT` method on `/api/settings` is a compatibility alias for `PATCH`. Respon
 | | |
 | --- | --- |
 | **Deprecated since** | v1.4.0 |
+| **Removal** | Deferred to API v2 — `/api/v1` is frozen, so the method cannot be dropped from the versioned surface; the `Sunset` header advertises the earliest retirement instant |
 | **Detection** | Log warning on each `PUT` request; `Deprecation` and `Sunset` response headers |
 | **Migration** | Change `PUT /api/settings` to `PATCH /api/settings` |
 
