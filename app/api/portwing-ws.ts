@@ -41,6 +41,10 @@ const HELLO_TIMEOUT_MS = 30_000;
 const NONCE_PATTERN = /^[0-9a-f]{32}$/;
 // Key IDs are hex(SHA-256(raw32Bytes)[:8]) → exactly 16 lowercase hex chars.
 const KEY_ID_PATTERN = /^[0-9a-f]{16}$/;
+// Upper bound on the raw (pre-sanitize) hello.agentName string. computeAgentName()
+// slices its OUTPUT to 63 chars, but an attacker-supplied multi-megabyte string
+// would still be copied/regex-processed before that slice runs; this caps the input.
+const MAX_AGENT_NAME_INPUT_LENGTH = 256;
 const MAX_CLOCK_SKEW_SECONDS = 60;
 const MAX_PAYLOAD_BYTES = 16 * 1024 * 1024; // 16 MB — matches the agent conn.SetReadLimit
 
@@ -83,6 +87,47 @@ let noncePruneInterval: ReturnType<typeof setInterval> | undefined;
 // agentId will hit this Set rather than both slipping through.
 const inFlightAgents = new Set<string>();
 
+// Identity binding: agentName → pubKeyId of the key that first registered it.
+// Squat/theft prevention (see computeAgentName + processHello Step 10): the
+// sanitized/fallback display name has no cryptographic meaning on its own, so
+// without this binding any holder of ANY valid registered key could claim a
+// name already in use by a different agent. Bound on first successful hello;
+// a later hello reusing the same name is only admitted if it authenticated
+// under the SAME pubKeyId. Released when the owning key is revoked (see
+// disconnectByKeyId) so a legitimately re-provisioned agent can reclaim its name.
+//
+// Unlike liveSessionsByKeyId/inFlightAgents, a binding is NOT released on plain
+// disconnect — the whole point is that the name stays claimed while its key is
+// still valid, even between reconnects. Left uncapped, a single never-revoked
+// key could grow this map without bound by reconnecting under a fresh
+// agentId/agentName every time (nothing but the 200/60s per-key nonce-admission
+// limit throttles that, which still permits ~288k new bindings/day/key). Bound
+// memory the same way nonceCache is bounded: a hard size cap plus periodic
+// pruning of bindings that are both stale (idle past NAME_BINDING_STALE_MS) and
+// not currently backing a live connection (checked via getAgent so an active
+// agent's own binding is never evicted out from under it).
+const nameToKeyId = new Map<string, { keyId: string; lastSeenAt: number }>();
+// Hard cap on distinct name bindings, matching nonceCache's cap in spirit.
+const MAX_NAME_BINDINGS = 10_000;
+// A binding idle longer than this (no hello seen under its name) becomes
+// eligible for eviction once the map is at/over MAX_NAME_BINDINGS, provided the
+// name isn't currently backing a live connection.
+const NAME_BINDING_STALE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Evict name bindings that are both idle past NAME_BINDING_STALE_MS and not
+ * currently backing a live agent connection. Called opportunistically when a
+ * new binding would push the map over MAX_NAME_BINDINGS, and periodically
+ * alongside nonce pruning so long-idle bindings don't just wait for a cap hit.
+ */
+function pruneStaleNameBindings(nowMs: number): void {
+  for (const [name, binding] of nameToKeyId.entries()) {
+    if (nowMs - binding.lastSeenAt > NAME_BINDING_STALE_MS && !getAgent(name)) {
+      nameToKeyId.delete(name);
+    }
+  }
+}
+
 function startNoncePruning(): void {
   if (noncePruneInterval !== undefined) {
     return;
@@ -96,6 +141,8 @@ function startNoncePruning(): void {
     }
     // Reset per-key admission counters each pruning cycle (every 60 s).
     noncesPerKey.clear();
+    // Bound nameToKeyId growth the same cycle — see pruneStaleNameBindings.
+    pruneStaleNameBindings(Date.now());
   }, 60_000);
   /* v8 ignore next */
   if (typeof noncePruneInterval.unref === 'function') {
@@ -109,6 +156,7 @@ export function clearNonceCacheForTesting(): void {
   noncesPerKey.clear();
   inFlightAgents.clear();
   liveSessionsByKeyId.clear();
+  nameToKeyId.clear();
   if (noncePruneInterval !== undefined) {
     clearInterval(noncePruneInterval);
     noncePruneInterval = undefined;
@@ -126,6 +174,14 @@ export function clearLiveSessionsForTesting(): void {
  * Returns the number of connections closed.
  */
 export function disconnectByKeyId(keyId: string): number {
+  // Release any agent-name bindings claimed by this key, live session or not,
+  // so a name is never permanently stranded once its owning key is revoked.
+  for (const [name, binding] of nameToKeyId.entries()) {
+    if (binding.keyId === keyId) {
+      nameToKeyId.delete(name);
+    }
+  }
+
   const sessions = liveSessionsByKeyId.get(keyId);
   if (!sessions || sessions.size === 0) {
     return 0;
@@ -151,6 +207,24 @@ export function fillNoncesPerKeyForTesting(perKey: Map<string, number>): void {
   for (const [k, v] of perKey) {
     noncesPerKey.set(k, v);
   }
+}
+
+/**
+ * Exposed for tests to pre-fill the name→key binding map (e.g. to test the
+ * MAX_NAME_BINDINGS cap and pruneStaleNameBindings without opening 10,000
+ * real connections).
+ */
+export function fillNameBindingsForTesting(
+  bindings: Map<string, { keyId: string; lastSeenAt: number }>,
+): void {
+  for (const [name, binding] of bindings) {
+    nameToKeyId.set(name, binding);
+  }
+}
+
+/** Exposed for tests: current size of the name→key binding map. */
+export function nameBindingsSizeForTesting(): number {
+  return nameToKeyId.size;
 }
 
 function sendErrorAndClose(
@@ -214,13 +288,44 @@ function verifyHelloSignature(
 }
 
 /**
+ * Validates the raw hello.agentName field's type and length before anything
+ * (computeAgentName, logs) touches it. The HelloMessage TS type declares
+ * agentName as a required string, but that is a lie at runtime: the value comes
+ * straight out of JSON.parse via an `as unknown as HelloMessage` cast, so a
+ * number/boolean/array/object survives to here with no compiler help.
+ *
+ * Returns a human-readable rejection reason when the field is present but
+ * malformed; returns null when it is safe to hand to computeAgentName()
+ * (including when the field is absent/null, which computeAgentName treats as
+ * "no name supplied" and falls back to the agentId-derived default).
+ */
+function validateAgentNameField(hello: HelloMessage): string | null {
+  const { agentName } = hello;
+  if (agentName === undefined || agentName === null) {
+    return null;
+  }
+  if (typeof agentName !== 'string') {
+    return 'agentName must be a string';
+  }
+  if (agentName.length > MAX_AGENT_NAME_INPUT_LENGTH) {
+    return 'agentName exceeds maximum length';
+  }
+  return null;
+}
+
+/**
  * Compute the agent's display/registry name from the hello frame.
  * hello.agentName is sanitized to a safe slug (lowercase, alphanumeric + hyphen,
  * max 63 chars); an empty, missing, or all-invalid-chars name falls back to
  * `portwing-edge-<agentId>` — the pre-existing unconditional name.
+ *
+ * Callers MUST run validateAgentNameField() first and reject malformed hellos
+ * rather than relying on this function alone; the explicit typeof check below
+ * is defense-in-depth so this can never throw even if that invariant is ever
+ * violated (a non-string agentName silently falls back instead of crashing).
  */
 function computeAgentName(hello: HelloMessage): string {
-  const rawName = hello.agentName?.trim();
+  const rawName = typeof hello.agentName === 'string' ? hello.agentName.trim() : '';
   const sanitized = rawName
     ? rawName
         .toLowerCase()
@@ -360,6 +465,15 @@ async function processHello(
     !/^[a-zA-Z0-9_-]+$/.test(hello.agentId)
   ) {
     sendErrorAndClose(ws, 'parse-error', 'Invalid agentId', 1008);
+    return;
+  }
+
+  // Step 2b: Validate agentName's type/length before it reaches computeAgentName,
+  // logs, or the registry. A malformed (non-string) agentName must fail this
+  // connection with a clear error frame, never throw — see validateAgentNameField().
+  const agentNameError = validateAgentNameField(hello);
+  if (agentNameError) {
+    sendErrorAndClose(ws, 'invalid-agent-name', agentNameError, 1008);
     return;
   }
 
@@ -523,11 +637,43 @@ async function processHello(
   // safe slug); collisions on the sanitized name are still caught by this same
   // reservation logic, same as the portwing-edge-<agentId> fallback.
   const agentName = computeAgentName(hello);
+
+  // Step 10a: Name→key identity binding. computeAgentName()'s output (explicit
+  // or fallback) is otherwise pure attacker-controlled/derived data with zero tie
+  // to the Ed25519 key that just authenticated — without this check, any holder
+  // of ANY valid registered key could squat or steal another agent's name (the
+  // registry itself is keyed purely by name string; see app/agent/manager.ts).
+  // Bind on first use; a name already bound to a DIFFERENT key is rejected.
+  // A key that already owns the name (reconnect) is always admitted.
+  const existingBinding = nameToKeyId.get(agentName);
+  if (existingBinding !== undefined && existingBinding.keyId !== pubKeyId) {
+    sendErrorAndClose(
+      ws,
+      'agent-name-claimed',
+      `Agent name ${agentName} is registered to a different key`,
+      1008,
+    );
+    return;
+  }
+
+  // Step 10b: Bound the binding map itself. Only a brand-new name (no existing
+  // binding) grows nameToKeyId; a reconnect under an already-owned name reuses
+  // its entry. Try pruning idle/dead bindings before refusing outright — this
+  // mirrors the nonceCache "evict expired, recheck, then reject" pattern above.
+  if (existingBinding === undefined && nameToKeyId.size >= MAX_NAME_BINDINGS) {
+    pruneStaleNameBindings(Date.now());
+    if (nameToKeyId.size >= MAX_NAME_BINDINGS) {
+      sendErrorAndClose(ws, 'registry-full', 'Agent name registry is full; try again later', 1008);
+      return;
+    }
+  }
+
   if (getAgent(agentName) || inFlightAgents.has(agentName)) {
     sendErrorAndClose(ws, 'agent-already-connected', `Agent ${agentName} already connected`, 1008);
     return;
   }
   inFlightAgents.add(agentName);
+  nameToKeyId.set(agentName, { keyId: pubKeyId, lastSeenAt: Date.now() });
 
   // Step 11: Send WELCOME
   const pollInterval = 300;

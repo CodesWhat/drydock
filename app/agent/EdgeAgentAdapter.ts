@@ -13,7 +13,7 @@ import type { Container } from '../model/container.js';
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
 import type { AgentClient, AgentClientConfig } from './AgentClient.js';
-import { addAgent, removeAgent } from './index.js';
+import { addAgent, getAgent, removeAgent } from './index.js';
 
 const MAX_EXEC_SESSIONS = 100;
 const MAX_PENDING_REQUESTS = 100;
@@ -102,6 +102,29 @@ export class EdgeAgentAdapter {
   private containerSyncWarnTimer: ReturnType<typeof setTimeout> | undefined;
   private connected = false;
   private lastPongAt = 0;
+  // Idempotency guard (Bug 3, leg 1): onDisconnect() can legitimately be invoked
+  // more than once for the same adapter instance — a forced close in
+  // checkLivenessAndPing() runs it synchronously, and (absent leg 2, kept as
+  // defense-in-depth) the underlying transport's real 'close'/'error' event can
+  // still fire afterwards and run it again. Without this guard the second run
+  // would re-execute cleanup (including the registry removal below) a second
+  // time for what may by then be a totally different agent occupying this name.
+  private disconnected = false;
+  // Track FIFO order of in-flight requestContainerLogs()/deleteContainer() calls
+  // per containerId (Bug 4). portwing's dd:container_log_response /
+  // dd:container_delete_response frames only echo back containerId, never a
+  // request id, so — even though each request now gets its own unique
+  // pendingRequests entry — a response can only be correlated to "the oldest
+  // still-outstanding request for this containerId", not to a specific one.
+  // Keyed the same way pendingRequests used to be (`log:${containerId}` /
+  // `delete:${containerId}`); values are ordered arrays of the corresponding
+  // unique pendingRequests keys.
+  private readonly containerRequestQueues: Map<string, string[]>;
+  // Bound listener references (Bug 3, leg 2) so checkLivenessAndPing() can
+  // detach them from the real WebSocket before forcing a close — see there.
+  private readonly messageListener: (raw: unknown) => void;
+  private readonly closeListener: () => void;
+  private readonly errorListener: (err: unknown) => void;
 
   constructor(client: AgentClient, ws: WebSocketLike) {
     this.client = client;
@@ -109,6 +132,20 @@ export class EdgeAgentAdapter {
     this.agentName = client.name;
     this.execSessions = new Map();
     this.pendingRequests = new Map();
+    this.containerRequestQueues = new Map();
+
+    this.messageListener = (raw: unknown): void => {
+      void this.onMessage(raw).catch((err: unknown) => {
+        log.error(`Frame handling error on ${this.agentName}: ${getErrorMessage(err)}`);
+      });
+    };
+    this.closeListener = (): void => {
+      void this.onDisconnect();
+    };
+    this.errorListener = (err: unknown): void => {
+      log.error(`WebSocket error on ${this.agentName}: ${getErrorMessage(err)}`);
+      void this.onDisconnect();
+    };
   }
 
   /**
@@ -131,20 +168,9 @@ export class EdgeAgentAdapter {
       }
     }, CONTAINER_SYNC_WARN_MS);
 
-    this.ws.on('message', (raw: unknown) => {
-      void this.onMessage(raw).catch((err: unknown) => {
-        log.error(`Frame handling error on ${this.agentName}: ${getErrorMessage(err)}`);
-      });
-    });
-
-    this.ws.on('close', () => {
-      void this.onDisconnect();
-    });
-
-    this.ws.on('error', (err: unknown) => {
-      log.error(`WebSocket error on ${this.agentName}: ${getErrorMessage(err)}`);
-      void this.onDisconnect();
-    });
+    this.ws.on('message', this.messageListener);
+    this.ws.on('close', this.closeListener);
+    this.ws.on('error', this.errorListener);
   }
 
   /**
@@ -160,6 +186,15 @@ export class EdgeAgentAdapter {
       log.warn(
         `Edge agent ${this.agentName} missed ${PONG_MISS_THRESHOLD} pong cycles (${staleMs}ms); closing connection`,
       );
+      // Bug 3, leg 2: detach the close/error listeners BEFORE forcing the close
+      // below. We are about to run onDisconnect() synchronously ourselves; the
+      // underlying transport's real 'close' (and possibly 'error') event still
+      // fires once ws.close() completes, and without detaching first that event
+      // would run onDisconnect() a second time on a connection this adapter has
+      // already torn down. The idempotency guard in onDisconnect() covers any
+      // WebSocketLike implementation that doesn't support `off`.
+      this.ws.off?.('close', this.closeListener);
+      this.ws.off?.('error', this.errorListener);
       try {
         this.ws.close(1001, 'ping timeout');
       } catch {
@@ -335,26 +370,89 @@ export class EdgeAgentAdapter {
     this.lastPongAt = Date.now();
   }
 
-  private handleContainerLogResponse(data: Record<string, unknown>): void {
-    // Resolve any pending log request keyed by containerId
-    const containerId = typeof data.containerId === 'string' ? data.containerId : undefined;
-    if (!containerId) {
-      return;
-    }
-    const pending = this.pendingRequests.get(`log:${containerId}`);
-    if (pending) {
-      clearTimeout(pending.timer);
-      this.pendingRequests.delete(`log:${containerId}`);
-      pending.resolve(data.logs);
+  /**
+   * Registers a new in-flight requestContainerLogs()/deleteContainer() call in
+   * the FIFO queue for its containerId (Bug 4). See containerRequestQueues.
+   */
+  private enqueueContainerRequest(queueKey: string, pendingKey: string): void {
+    const queue = this.containerRequestQueues.get(queueKey);
+    if (queue) {
+      queue.push(pendingKey);
+    } else {
+      this.containerRequestQueues.set(queueKey, [pendingKey]);
     }
   }
 
-  private handleContainerDeleteResponse(data: Record<string, unknown>): void {
+  /**
+   * Removes and returns the OLDEST pendingRequests key queued for queueKey, or
+   * undefined if none are outstanding. Used when a response frame arrives —
+   * portwing's response frames only carry containerId, so the oldest
+   * still-outstanding request is the best available correlation.
+   */
+  private dequeueOldestContainerRequest(queueKey: string): string | undefined {
+    const queue = this.containerRequestQueues.get(queueKey);
+    if (!queue || queue.length === 0) {
+      return undefined;
+    }
+    const pendingKey = queue.shift();
+    if (queue.length === 0) {
+      this.containerRequestQueues.delete(queueKey);
+    }
+    return pendingKey;
+  }
+
+  /**
+   * Removes one specific pendingKey from queueKey's queue without disturbing
+   * the FIFO order of the rest. Used when a request's own timeout fires before
+   * any response arrives, so it doesn't leave a dangling reference that would
+   * cause a later response to be matched to the wrong (already-timed-out) slot.
+   */
+  private removeContainerRequestFromQueue(queueKey: string, pendingKey: string): void {
+    const queue = this.containerRequestQueues.get(queueKey);
+    if (!queue) {
+      return;
+    }
+    const index = queue.indexOf(pendingKey);
+    if (index !== -1) {
+      queue.splice(index, 1);
+    }
+    if (queue.length === 0) {
+      this.containerRequestQueues.delete(queueKey);
+    }
+  }
+
+  private handleContainerLogResponse(data: Record<string, unknown>): void {
+    // Resolve the oldest pending log request for this containerId (Bug 4: the
+    // dd:container_log_response wire frame only carries containerId, never a
+    // request id, so multiple concurrent requests for the same container can
+    // only be correlated in FIFO order — see containerRequestQueues).
     const containerId = typeof data.containerId === 'string' ? data.containerId : undefined;
     if (!containerId) {
       return;
     }
-    const pendingKey = `delete:${containerId}`;
+    const pendingKey = this.dequeueOldestContainerRequest(`log:${containerId}`);
+    if (!pendingKey) {
+      return;
+    }
+    const pending = this.pendingRequests.get(pendingKey);
+    if (!pending) {
+      return;
+    }
+    clearTimeout(pending.timer);
+    this.pendingRequests.delete(pendingKey);
+    pending.resolve(data.logs);
+  }
+
+  private handleContainerDeleteResponse(data: Record<string, unknown>): void {
+    // Same FIFO correlation caveat as handleContainerLogResponse (Bug 4).
+    const containerId = typeof data.containerId === 'string' ? data.containerId : undefined;
+    if (!containerId) {
+      return;
+    }
+    const pendingKey = this.dequeueOldestContainerRequest(`delete:${containerId}`);
+    if (!pendingKey) {
+      return;
+    }
     const pending = this.pendingRequests.get(pendingKey);
     if (!pending) {
       return;
@@ -542,21 +640,49 @@ export class EdgeAgentAdapter {
   /**
    * Request container logs from the edge agent.
    * Returns a promise that resolves with the log text, or rejects after 30s.
-   * The pending entry is keyed as `log:${containerId}` to match the
-   * dd:container_log_response handler.
+   *
+   * Bug 4: a unique per-call requestId is embedded in the pendingRequests key
+   * (`log:${containerId}:${requestId}`) so a second concurrent request for the
+   * same containerId gets its own entry instead of clobbering the first's. The
+   * requestId is also sent on the wire (harmless extra field portwing ignores
+   * today — see adapter.go's json.Unmarshal, which drops unknown fields), so
+   * this is forward-compatible if portwing ever starts echoing it back.
+   * portwing's dd:container_log_response frame currently only carries
+   * containerId, though, so the response is still only correlated to the
+   * OLDEST outstanding request for that containerId (FIFO, via
+   * containerRequestQueues) — genuine out-of-order resolution between two
+   * concurrent requests for the same container is not distinguishable until
+   * portwing's wire format grows a requestId/echo field.
+   *
+   * Punch-list #5: `until` and `follow` are accepted here (portwing's
+   * protocol.DDContainerLogRequestMessage has matching fields) but no current
+   * drydock caller populates them — AgentClient.getContainerLogs() only ever
+   * forwards `tail`/`since`. Also note portwing's own handler
+   * (handleContainerLogRequest in internal/adapter/drydock/adapter.go) accepts
+   * `follow` on the wire but never reads it, always calling
+   * dockerClient.GetContainerLogs(..., follow=false, ...) — so `follow`
+   * requests would be silently dropped server-side even if a caller sent one.
+   * There is no `timestamps` field on the wire message at all (see
+   * AgentClient.getContainerLogs() for that gap). Real support for
+   * timestamps/until/follow over the edge path needs coordinated protocol
+   * work with portwing, not a drydock-only fix.
    */
   requestContainerLogs(
     containerId: string,
     options: { tail?: number; since?: string; until?: string; follow?: boolean } = {},
   ): Promise<string> {
-    const pendingKey = `log:${containerId}`;
     if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) {
       return Promise.reject(new Error('concurrent request limit reached'));
     }
 
+    const requestId = uuidv7();
+    const queueKey = `log:${containerId}`;
+    const pendingKey = `${queueKey}:${requestId}`;
+
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingRequests.delete(pendingKey);
+        this.removeContainerRequestFromQueue(queueKey, pendingKey);
         reject(
           new Error(
             `Container log request for ${containerId} timed out after ${REQUEST_TIMEOUT_MS}ms`,
@@ -569,17 +695,19 @@ export class EdgeAgentAdapter {
         reject,
         timer,
       });
+      this.enqueueContainerRequest(queueKey, pendingKey);
 
       try {
         this.ws.send(
           JSON.stringify({
             type: 'dd:container_log_request',
-            data: { containerId, ...options },
+            data: { containerId, requestId, ...options },
           }),
         );
       } catch (err: unknown) {
         clearTimeout(timer);
         this.pendingRequests.delete(pendingKey);
+        this.removeContainerRequestFromQueue(queueKey, pendingKey);
         reject(err);
       }
     });
@@ -588,18 +716,25 @@ export class EdgeAgentAdapter {
   /**
    * Delete a container on the edge agent.
    * Returns a promise that resolves once the agent confirms deletion, or
-   * rejects after 30s / on an error response. The pending entry is keyed as
-   * `delete:${containerId}` to match the dd:container_delete_response handler.
+   * rejects after 30s / on an error response.
+   *
+   * Bug 4: same unique-requestId-per-call + FIFO containerId correlation as
+   * requestContainerLogs() above — see that doc comment for the full
+   * explanation and the portwing wire-format limitation it works around.
    */
   deleteContainer(containerId: string): Promise<void> {
-    const pendingKey = `delete:${containerId}`;
     if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) {
       return Promise.reject(new Error('concurrent request limit reached'));
     }
 
+    const requestId = uuidv7();
+    const queueKey = `delete:${containerId}`;
+    const pendingKey = `${queueKey}:${requestId}`;
+
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingRequests.delete(pendingKey);
+        this.removeContainerRequestFromQueue(queueKey, pendingKey);
         reject(
           new Error(
             `Container delete request for ${containerId} timed out after ${REQUEST_TIMEOUT_MS}ms`,
@@ -612,17 +747,19 @@ export class EdgeAgentAdapter {
         reject,
         timer,
       });
+      this.enqueueContainerRequest(queueKey, pendingKey);
 
       try {
         this.ws.send(
           JSON.stringify({
             type: 'dd:container_delete_request',
-            data: { containerId },
+            data: { containerId, requestId },
           }),
         );
       } catch (err: unknown) {
         clearTimeout(timer);
         this.pendingRequests.delete(pendingKey);
+        this.removeContainerRequestFromQueue(queueKey, pendingKey);
         reject(err);
       }
     });
@@ -830,6 +967,12 @@ export class EdgeAgentAdapter {
   }
 
   async onDisconnect(): Promise<void> {
+    // Bug 3, leg 1: idempotency guard — see the `disconnected` field comment.
+    if (this.disconnected) {
+      return;
+    }
+    this.disconnected = true;
+
     if (this.pingInterval !== undefined) {
       clearInterval(this.pingInterval);
       this.pingInterval = undefined;
@@ -845,6 +988,7 @@ export class EdgeAgentAdapter {
       pending.reject(new Error('connection closed'));
       this.pendingRequests.delete(requestId);
     }
+    this.containerRequestQueues.clear();
 
     // Close all exec sessions — session.close() sends exec_end before deleting (O5)
     for (const session of this.execSessions.values()) {
@@ -856,7 +1000,15 @@ export class EdgeAgentAdapter {
     this.connected = false;
     this.client.isConnected = false;
 
-    removeAgent(this.agentName);
+    // Bug 3, leg 3: instance-checked removal. manager.removeAgent() matches
+    // purely by name string and removes every registry entry with that name —
+    // if a newly-reconnected agent has already re-registered under this same
+    // (stable, identity-derived) name, a blind removeAgent(name) here would
+    // evict it too. Only remove when the registry's current entry for this
+    // name is still THIS adapter's own client instance.
+    if (getAgent(this.agentName) === this.client) {
+      removeAgent(this.agentName);
+    }
 
     if (wasConnected) {
       void emitAgentDisconnected({

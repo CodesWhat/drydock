@@ -28,12 +28,30 @@ vi.mock('../event/index.js', () => ({
   emitSecurityAlert: vi.fn().mockResolvedValue(undefined),
   emitSecurityScanCycleComplete: vi.fn().mockResolvedValue(undefined),
 }));
-vi.mock('./manager.js', () => ({
-  addAgent: vi.fn(),
-  removeAgent: vi.fn(),
-  getAgent: vi.fn(() => undefined),
-  getAgents: vi.fn(() => []),
-}));
+// Stateful mock: mirrors the real manager.ts single-registry-slot-per-name
+// semantics closely enough for onDisconnect()'s instance-checked removal
+// (Bug 3, leg 3) to be exercised realistically. `current` tracks whichever
+// client was most recently addAgent()-ed; getAgent() only returns it while its
+// name matches, so a test that constructs a second adapter for the same name
+// (simulating a reconnect) makes the first adapter's own instance check fail,
+// exactly like the real registry would once the reconnected client displaces it.
+vi.mock('./manager.js', () => {
+  let current: { name: string } | undefined;
+  return {
+    addAgent: vi.fn((client: { name: string }) => {
+      current = client;
+    }),
+    removeAgent: vi.fn((name: string) => {
+      if (current?.name === name) {
+        current = undefined;
+        return true;
+      }
+      return false;
+    }),
+    getAgent: vi.fn((name: string) => (current?.name === name ? current : undefined)),
+    getAgents: vi.fn(() => (current ? [current] : [])),
+  };
+});
 
 // Mock AgentClient to avoid real SSE/HTTP calls — use vi.hoisted so the class
 // is available when vi.mock factory runs (factories are hoisted to top of file).
@@ -86,7 +104,20 @@ function createMockWs(): WebSocketLike & {
       existing.push(listener);
       listeners.set(event, existing);
     }),
-    off: vi.fn(),
+    // Real (not a no-op stub): removes the listener from `listeners` so tests
+    // can verify Bug 3 leg 2 — that checkLivenessAndPing() detaches 'close'/
+    // 'error' before forcing a close, so a subsequently-emitted real 'close'
+    // event does not re-invoke onDisconnect().
+    off: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+      const existing = listeners.get(event);
+      if (!existing) {
+        return;
+      }
+      const index = existing.indexOf(listener);
+      if (index !== -1) {
+        existing.splice(index, 1);
+      }
+    }),
     emit: (event: string, ...args: unknown[]) => {
       const eventListeners = listeners.get(event) ?? [];
       for (const listener of eventListeners) {
@@ -1499,16 +1530,19 @@ describe('EdgeAgentAdapter — branch coverage for uncovered paths', () => {
     expect(ws.close).not.toHaveBeenCalled();
   });
 
-  test('onDisconnect when pingInterval is already undefined (called twice)', async () => {
+  test('onDisconnect when called twice is idempotent (Bug 3 regression)', async () => {
     const { adapter } = createAdapter();
     adapter.activate();
 
-    // First call — clears pingInterval (sets to undefined)
+    // First call — clears pingInterval, removes the agent from the registry.
     await adapter.onDisconnect();
-    // Second call — pingInterval is already undefined, covers the false branch
+    // Second call (e.g. a stale forced-close's synchronous onDisconnect()
+    // followed by the real transport's delayed 'close' event still firing)
+    // must be a no-op: cleanup — including the registry removal — must not
+    // run twice for the same adapter instance.
     await adapter.onDisconnect();
 
-    expect(manager.removeAgent).toHaveBeenCalledTimes(2);
+    expect(manager.removeAgent).toHaveBeenCalledTimes(1);
   });
 
   test('exec_output to session without outputHandler is a no-op (no crash)', async () => {
@@ -2100,5 +2134,230 @@ describe('EdgeAgentAdapter — ping/pong liveness', () => {
     expect(manager.removeAgent).not.toHaveBeenCalled();
 
     vi.useRealTimers();
+  });
+});
+
+describe('EdgeAgentAdapter — Bug 3 regressions (double onDisconnect / stale eviction)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('forced close from checkLivenessAndPing detaches close/error listeners so a delayed real close event does not double-fire onDisconnect', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    // Agent never replies with 'pong'. After 2 missed 30s cycles (60s) the
+    // adapter force-closes the connection and runs onDisconnect() itself.
+    vi.advanceTimersByTime(30_000 * 2);
+
+    expect(ws.close).toHaveBeenCalledWith(1001, 'ping timeout');
+    expect(manager.removeAgent).toHaveBeenCalledTimes(1);
+    expect(manager.removeAgent).toHaveBeenCalledWith(client.name);
+
+    // Simulate the underlying transport still emitting a real 'close' event
+    // after ws.close() completes, as a genuine WebSocket would. Bug 3 leg 2
+    // (detaching the 'close'/'error' listeners before the forced close) means
+    // this must be a no-op: onDisconnect() must not run a second time.
+    ws.emit('close');
+    await Promise.resolve();
+
+    expect(manager.removeAgent).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
+  });
+
+  test('onDisconnect called twice directly is idempotent even without listener detachment', async () => {
+    const { adapter, client } = createAdapter();
+    adapter.activate();
+
+    await adapter.onDisconnect();
+    await adapter.onDisconnect();
+
+    expect(manager.removeAgent).toHaveBeenCalledTimes(1);
+    expect(manager.removeAgent).toHaveBeenCalledWith(client.name);
+  });
+
+  test('onDisconnect on a never-activated adapter is a no-op that still completes (pingInterval never set)', async () => {
+    // Covers the false branch of `if (this.pingInterval !== undefined)`: with
+    // the idempotency guard in place, the only way to reach onDisconnect()
+    // with pingInterval still undefined is a first-ever call, since a second
+    // call now short-circuits before that check.
+    const { adapter } = createAdapter();
+
+    await expect(adapter.onDisconnect()).resolves.toBeUndefined();
+  });
+
+  test('a stale adapter delayed onDisconnect must not evict a reconnected agent with the same name', async () => {
+    // Two independent adapter instances that share the same agentId, and
+    // therefore the same (stable, identity-derived) agent name — simulating a
+    // stale connection whose cleanup is delayed past a legitimate reconnect.
+    const stale = createAdapter();
+    stale.adapter.activate();
+
+    const reconnected = createAdapter();
+    reconnected.adapter.activate();
+    expect(reconnected.client.name).toBe(stale.client.name);
+
+    vi.clearAllMocks(); // isolate the assertions below to what happens next
+
+    // The stale connection's delayed real close event fires. manager.removeAgent()
+    // matches purely by name — without the instance check (Bug 3 leg 3) this
+    // would evict the reconnected agent's live registry entry.
+    await stale.adapter.onDisconnect();
+
+    expect(manager.removeAgent).not.toHaveBeenCalled();
+
+    // The reconnected agent's own disconnect still works normally afterwards.
+    await reconnected.adapter.onDisconnect();
+
+    expect(manager.removeAgent).toHaveBeenCalledWith(reconnected.client.name);
+  });
+});
+
+describe('EdgeAgentAdapter — Bug 4 regressions (concurrent per-container requests)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('two concurrent requestContainerLogs calls for the same container both resolve', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-concurrent-logs';
+    const first = adapter.requestContainerLogs(containerId, { tail: 10 });
+    const second = adapter.requestContainerLogs(containerId, { tail: 20 });
+
+    // Each call gets its own unique requestId/pendingRequests entry — the old
+    // bug overwrote the first entry with the second under the shared
+    // `log:${containerId}` key.
+    const sentFrames = ws.sentMessages.map(
+      (m) => JSON.parse(m) as { data: { containerId: string; requestId: string } },
+    );
+    expect(sentFrames).toHaveLength(2);
+    expect(sentFrames[0].data.requestId).toBeTruthy();
+    expect(sentFrames[0].data.requestId).not.toBe(sentFrames[1].data.requestId);
+
+    // portwing's dd:container_log_response frame carries no requestId, so
+    // responses are correlated in FIFO order — the fix under test is that
+    // BOTH resolve, not that either is silently dropped as a spurious timeout.
+    sendFrame(ws, 'dd:container_log_response', { containerId, logs: 'first-response' });
+    await new Promise((r) => setTimeout(r, 0));
+    sendFrame(ws, 'dd:container_log_response', { containerId, logs: 'second-response' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    await expect(first).resolves.toBe('first-response');
+    await expect(second).resolves.toBe('second-response');
+  });
+
+  test('a timed-out requestContainerLogs does not drop a concurrent second request for the same container', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-timeout-mix';
+    const first = adapter.requestContainerLogs(containerId).catch((err: Error) => err.message);
+
+    // Second request starts 1s later — both in flight for the same container.
+    vi.advanceTimersByTime(1_000);
+    const second = adapter.requestContainerLogs(containerId);
+
+    // Advance to exactly the first request's 30s deadline (t=30_000). Its
+    // timer fires and rejects it. Under the old bug this delete()'d the
+    // shared `log:${containerId}` key out from under the second request too.
+    vi.advanceTimersByTime(29_000);
+    expect(await first).toMatch(/timed out/);
+
+    // The second request must still be alive and resolve on its own response.
+    sendFrame(ws, 'dd:container_log_response', { containerId, logs: 'still-alive' });
+
+    await expect(second).resolves.toBe('still-alive');
+
+    vi.useRealTimers();
+  });
+
+  test('two concurrent deleteContainer calls for the same container both resolve/reject independently', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-concurrent-delete';
+    const first = adapter.deleteContainer(containerId).catch((err: Error) => err.message);
+    const second = adapter.deleteContainer(containerId);
+
+    const sentFrames = ws.sentMessages.map((m) => JSON.parse(m) as { data: { requestId: string } });
+    expect(sentFrames[0].data.requestId).not.toBe(sentFrames[1].data.requestId);
+
+    sendFrame(ws, 'dd:container_delete_response', {
+      containerId,
+      success: false,
+      error: 'first failed',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    sendFrame(ws, 'dd:container_delete_response', { containerId, success: true });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(await first).toBe('first failed');
+    await expect(second).resolves.toBeUndefined();
+  });
+
+  test('removeContainerRequestFromQueue no-ops when no queue exists for the key (defensive branch)', () => {
+    const { adapter } = createAdapter();
+    const adapterInternal = adapter as unknown as {
+      removeContainerRequestFromQueue: (queueKey: string, pendingKey: string) => void;
+    };
+
+    expect(() =>
+      adapterInternal.removeContainerRequestFromQueue('log:no-such-queue', 'log:no-such-queue:x'),
+    ).not.toThrow();
+  });
+
+  test('removeContainerRequestFromQueue no-ops when the queue exists but does not contain the key (defensive branch)', () => {
+    const { adapter } = createAdapter();
+    const adapterInternal = adapter as unknown as {
+      containerRequestQueues: Map<string, string[]>;
+      removeContainerRequestFromQueue: (queueKey: string, pendingKey: string) => void;
+    };
+    adapterInternal.containerRequestQueues.set('log:partial', ['log:partial:kept']);
+
+    adapterInternal.removeContainerRequestFromQueue('log:partial', 'log:partial:not-present');
+
+    // The unrelated entry must be untouched.
+    expect(adapterInternal.containerRequestQueues.get('log:partial')).toEqual(['log:partial:kept']);
+  });
+
+  test('handleContainerLogResponse is a no-op if the queue references a pendingRequests key that is gone (defensive branch)', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Force the desync case the dequeue-then-lookup pattern defends against:
+    // a queue entry exists, but nothing in pendingRequests matches its key.
+    const adapterInternal = adapter as unknown as {
+      containerRequestQueues: Map<string, string[]>;
+    };
+    adapterInternal.containerRequestQueues.set('log:desync', ['log:desync:ghost-id']);
+
+    expect(() =>
+      sendFrame(ws, 'dd:container_log_response', { containerId: 'desync', logs: 'x' }),
+    ).not.toThrow();
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('handleContainerDeleteResponse is a no-op if the queue references a pendingRequests key that is gone (defensive branch)', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const adapterInternal = adapter as unknown as {
+      containerRequestQueues: Map<string, string[]>;
+    };
+    adapterInternal.containerRequestQueues.set('delete:desync', ['delete:desync:ghost-id']);
+
+    expect(() =>
+      sendFrame(ws, 'dd:container_delete_response', { containerId: 'desync', success: true }),
+    ).not.toThrow();
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
   });
 });

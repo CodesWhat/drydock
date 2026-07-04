@@ -3617,6 +3617,13 @@ describe('AgentClient', () => {
       });
 
       expect(result).toBe('log line 1\nlog line 2\n');
+      // Punch-list #5 (documented, not a bug to fix here): `timestamps: true` is
+      // NOT forwarded even though the caller requested it — portwing's
+      // dd:container_log_request wire message has no `timestamps` field and its
+      // handler always fetches with timestamps=false, so there'd be nothing to
+      // honor it on the other end. See the comment at the call site in
+      // AgentClient.getContainerLogs() and
+      // content/docs/current/configuration/agents/index.mdx.
       expect(edgeAdapter.requestContainerLogs).toHaveBeenCalledWith('c1', {
         tail: 100,
         since: '0',

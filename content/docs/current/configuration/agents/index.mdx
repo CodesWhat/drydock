@@ -74,6 +74,8 @@ Generate the agent's keypair with `portwing keygen -comment "edge-host-01"`, the
 
 <Callout type="warn">Portwing support is experimental. Its REST API and wire protocol may change before it is promoted out of `DD_EXPERIMENTAL_PORTWING=true`.</Callout>
 
+<Callout type="info">**Container log downloads from an edge (Portwing) agent never include timestamps, and don't support `until`/`follow`.** The `timestamps` query parameter on the [container logs endpoint](/docs/api/container#download-container-logs) is honored for regular (HTTP/SSE) agents but silently ignored when the container lives on an edge agent — the `dd:container_log_request` wire message Portwing accepts has no `timestamps` field, and Portwing's handler always fetches logs with follow and timestamps both off. Requesting `until`/tail-follow behavior isn't wired up either. This is a known gap tracked for a future joint protocol update, not a bug you can work around from the Drydock side today.</Callout>
+
 ## Quickstart
 
 A minimal two-host setup: one agent watching a remote host, one controller aggregating it.
