@@ -653,6 +653,19 @@ export class EdgeAgentAdapter {
    * containerRequestQueues) — genuine out-of-order resolution between two
    * concurrent requests for the same container is not distinguishable until
    * portwing's wire format grows a requestId/echo field.
+   *
+   * Punch-list #5: `until` and `follow` are accepted here (portwing's
+   * protocol.DDContainerLogRequestMessage has matching fields) but no current
+   * drydock caller populates them — AgentClient.getContainerLogs() only ever
+   * forwards `tail`/`since`. Also note portwing's own handler
+   * (handleContainerLogRequest in internal/adapter/drydock/adapter.go) accepts
+   * `follow` on the wire but never reads it, always calling
+   * dockerClient.GetContainerLogs(..., follow=false, ...) — so `follow`
+   * requests would be silently dropped server-side even if a caller sent one.
+   * There is no `timestamps` field on the wire message at all (see
+   * AgentClient.getContainerLogs() for that gap). Real support for
+   * timestamps/until/follow over the edge path needs coordinated protocol
+   * work with portwing, not a drydock-only fix.
    */
   requestContainerLogs(
     containerId: string,
