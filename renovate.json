@@ -20,14 +20,6 @@
       "matchPackageNames": ["@playwright/test", "mcr.microsoft.com/playwright"],
       "groupName": "playwright test runner and container",
       "groupSlug": "playwright"
-    },
-    {
-      "description": "Auto-merge patch updates",
-      "matchManagers": ["github-actions"],
-      "matchUpdateTypes": ["patch"],
-      "automerge": true,
-      "automergeType": "pr",
-      "platformAutomerge": true
     }
   ],
   "customManagers": [
