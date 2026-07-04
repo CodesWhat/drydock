@@ -209,6 +209,39 @@ describe('auth-lockout', () => {
     );
   });
 
+  test('locks account without throwing when res has no setHeader function (setRetryAfterHeader false branch)', () => {
+    // Regression guard for setRetryAfterHeader (auth-lockout.ts:445): some
+    // callers hand authenticateLogin a minimal res stand-in with no
+    // setHeader function at all. The Retry-After header must be skipped
+    // silently rather than throwing, and the 423 lockout response must
+    // still complete.
+    makePassportInvalidCredentials();
+    const req = {
+      body: { username: 'lock-user-no-setheader' },
+      ip: '203.0.113.98',
+    } as any;
+    const next = vi.fn();
+
+    for (let index = 0; index < 4; index += 1) {
+      authenticateLogin(req, createResponse() as any, next);
+    }
+
+    const resWithoutSetHeader = {
+      status: vi.fn().mockReturnThis(),
+      json: vi.fn().mockReturnThis(),
+      // Deliberately no setHeader.
+    };
+
+    expect(() => authenticateLogin(req, resWithoutSetHeader as any, next)).not.toThrow();
+
+    expect(mockRecordAuthLogin).toHaveBeenCalledWith('locked', 'basic');
+    expect(mockSendErrorResponse).toHaveBeenCalledWith(
+      resWithoutSetHeader,
+      423,
+      'Account temporarily locked due to repeated failed login attempts',
+    );
+  });
+
   test('rejects already-locked identities before invoking passport', () => {
     makePassportInvalidCredentials();
     const req = {
