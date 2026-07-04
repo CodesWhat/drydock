@@ -34,9 +34,7 @@
     {
       "customType": "regex",
       "description": "Update the Playwright Docker image pinned in the E2E workflow",
-      "managerFilePatterns": [
-        "/^\\.github/workflows/e2e-playwright\\.yml$/"
-      ],
+      "managerFilePatterns": ["/^\\.github/workflows/e2e-playwright\\.yml$/"],
       "matchStrings": [
         "PLAYWRIGHT_IMAGE:\\s+(?<depName>mcr\\.microsoft\\.com/playwright):(?<currentValue>v\\d+\\.\\d+\\.\\d+-noble)"
       ],
