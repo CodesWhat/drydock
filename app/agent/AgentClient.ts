@@ -11,7 +11,6 @@ import type {
   SecurityAlertSummary,
   SecurityScanCycleCompleteEventPayload,
 } from '../event/index.js';
-import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
 import {
   emitAgentConnected,
   emitAgentDisconnected,
@@ -48,6 +47,7 @@ import * as updateOperationStore from '../store/update-operation.js';
 import { getRequestedOperationId } from '../triggers/providers/docker/update-runtime-context.js';
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
+import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
 
 export interface AgentClientConfig {
   host: string;

@@ -844,9 +844,7 @@ describe('EdgeAgentAdapter — deleteContainer', () => {
     const { adapter } = createAdapter();
     adapter.activate();
 
-    const deletePromise = adapter
-      .deleteContainer('c-disc')
-      .catch((err: Error) => err.message);
+    const deletePromise = adapter.deleteContainer('c-disc').catch((err: Error) => err.message);
 
     await adapter.onDisconnect();
 
@@ -899,9 +897,7 @@ describe('EdgeAgentAdapter — deleteContainer limit and send error', () => {
       });
     }
 
-    await expect(adapter.deleteContainer('c-overflow')).rejects.toThrow(
-      /concurrent request limit/,
-    );
+    await expect(adapter.deleteContainer('c-overflow')).rejects.toThrow(/concurrent request limit/);
 
     // Clean up timers
     for (const [, pending] of adapterInternal.pendingRequests) {

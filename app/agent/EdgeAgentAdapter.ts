@@ -601,7 +601,9 @@ export class EdgeAgentAdapter {
       const timer = setTimeout(() => {
         this.pendingRequests.delete(pendingKey);
         reject(
-          new Error(`Container delete request for ${containerId} timed out after ${REQUEST_TIMEOUT_MS}ms`),
+          new Error(
+            `Container delete request for ${containerId} timed out after ${REQUEST_TIMEOUT_MS}ms`,
+          ),
         );
       }, REQUEST_TIMEOUT_MS);
 

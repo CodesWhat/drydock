@@ -999,10 +999,7 @@ describe('hello verification — agentName sanitization', () => {
       Buffer.alloc(0),
     );
     const ws = getUpgradedWs()!;
-    sendMessageToGateway(
-      ws,
-      buildHello(keyId, ts, nonce, sig, { agentId, ...agentNameOverride }),
-    );
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig, { agentId, ...agentNameOverride }));
     await new Promise((r) => setTimeout(r, 10));
     return getLastAgentClientInstance();
   }
