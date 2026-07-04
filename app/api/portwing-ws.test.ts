@@ -966,6 +966,79 @@ describe('edgeAdapter wiring', () => {
   });
 });
 
+describe('hello verification — agentName sanitization', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearNonceCacheForTesting();
+  });
+
+  async function helloWithAgentName(
+    agentId: string,
+    nonce: string,
+    agentNameOverride: Record<string, unknown>,
+  ) {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const sig = signHello(privateKey, ts, nonce);
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(
+      ws,
+      buildHello(keyId, ts, nonce, sig, { agentId, ...agentNameOverride }),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    return getLastAgentClientInstance();
+  }
+
+  test('a clean agentName is used verbatim, lowercased', async () => {
+    const client = await helloWithAgentName('agent-clean-1', 'a1000000000000000000000000000001', {
+      agentName: 'Clean-Name',
+    });
+    expect(client?.name).toBe('clean-name');
+  });
+
+  test('an agentName with invalid characters is sanitized to a safe slug', async () => {
+    const client = await helloWithAgentName('agent-dirty-1', 'a1000000000000000000000000000002', {
+      agentName: 'My Agent!!formatted_Name日本語',
+    });
+    expect(client?.name).toBe('my-agent-formatted-name');
+  });
+
+  test('an empty agentName falls back to portwing-edge-<agentId>', async () => {
+    const client = await helloWithAgentName('agent-empty-1', 'a1000000000000000000000000000003', {
+      agentName: '',
+    });
+    expect(client?.name).toBe('portwing-edge-agent-empty-1');
+  });
+
+  test('an agentName that sanitizes to empty falls back to portwing-edge-<agentId>', async () => {
+    const client = await helloWithAgentName('agent-allbad-1', 'a1000000000000000000000000000004', {
+      agentName: '###',
+    });
+    expect(client?.name).toBe('portwing-edge-agent-allbad-1');
+  });
+
+  test('an omitted agentName falls back to portwing-edge-<agentId> without crashing', async () => {
+    const client = await helloWithAgentName('agent-none-1', 'a1000000000000000000000000000005', {
+      agentName: undefined,
+    });
+    expect(client?.name).toBe('portwing-edge-agent-none-1');
+  });
+});
+
 describe('version handshake', () => {
   beforeEach(() => {
     vi.clearAllMocks();

@@ -213,6 +213,25 @@ function verifyHelloSignature(
   return cryptoVerify(null, canonical, pubKey, sigBuf);
 }
 
+/**
+ * Compute the agent's display/registry name from the hello frame.
+ * hello.agentName is sanitized to a safe slug (lowercase, alphanumeric + hyphen,
+ * max 63 chars); an empty, missing, or all-invalid-chars name falls back to
+ * `portwing-edge-<agentId>` — the pre-existing unconditional name.
+ */
+function computeAgentName(hello: HelloMessage): string {
+  const rawName = hello.agentName?.trim();
+  const sanitized = rawName
+    ? rawName
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 63)
+    : '';
+  return sanitized || `portwing-edge-${hello.agentId}`;
+}
+
 interface PortwingWsGatewayDependencies {
   webSocketServer?: {
     handleUpgrade: (
@@ -498,7 +517,10 @@ async function processHello(
 
   // Step 10: Prevent duplicate agent names — atomic check/reserve with inFlightAgents
   // so that concurrent hellos cannot both pass before either calls activate().
-  const agentName = `portwing-edge-${hello.agentId}`;
+  // The friendly name is derived from hello.agentName when present (sanitized to a
+  // safe slug); collisions on the sanitized name are still caught by this same
+  // reservation logic, same as the portwing-edge-<agentId> fallback.
+  const agentName = computeAgentName(hello);
   if (getAgent(agentName) || inFlightAgents.has(agentName)) {
     sendErrorAndClose(ws, 'agent-already-connected', `Agent ${agentName} already connected`, 1008);
     return;
