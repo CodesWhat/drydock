@@ -95,7 +95,38 @@ const inFlightAgents = new Set<string>();
 // a later hello reusing the same name is only admitted if it authenticated
 // under the SAME pubKeyId. Released when the owning key is revoked (see
 // disconnectByKeyId) so a legitimately re-provisioned agent can reclaim its name.
-const nameToKeyId = new Map<string, string>();
+//
+// Unlike liveSessionsByKeyId/inFlightAgents, a binding is NOT released on plain
+// disconnect — the whole point is that the name stays claimed while its key is
+// still valid, even between reconnects. Left uncapped, a single never-revoked
+// key could grow this map without bound by reconnecting under a fresh
+// agentId/agentName every time (nothing but the 200/60s per-key nonce-admission
+// limit throttles that, which still permits ~288k new bindings/day/key). Bound
+// memory the same way nonceCache is bounded: a hard size cap plus periodic
+// pruning of bindings that are both stale (idle past NAME_BINDING_STALE_MS) and
+// not currently backing a live connection (checked via getAgent so an active
+// agent's own binding is never evicted out from under it).
+const nameToKeyId = new Map<string, { keyId: string; lastSeenAt: number }>();
+// Hard cap on distinct name bindings, matching nonceCache's cap in spirit.
+const MAX_NAME_BINDINGS = 10_000;
+// A binding idle longer than this (no hello seen under its name) becomes
+// eligible for eviction once the map is at/over MAX_NAME_BINDINGS, provided the
+// name isn't currently backing a live connection.
+const NAME_BINDING_STALE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Evict name bindings that are both idle past NAME_BINDING_STALE_MS and not
+ * currently backing a live agent connection. Called opportunistically when a
+ * new binding would push the map over MAX_NAME_BINDINGS, and periodically
+ * alongside nonce pruning so long-idle bindings don't just wait for a cap hit.
+ */
+function pruneStaleNameBindings(nowMs: number): void {
+  for (const [name, binding] of nameToKeyId.entries()) {
+    if (nowMs - binding.lastSeenAt > NAME_BINDING_STALE_MS && !getAgent(name)) {
+      nameToKeyId.delete(name);
+    }
+  }
+}
 
 function startNoncePruning(): void {
   if (noncePruneInterval !== undefined) {
@@ -110,6 +141,8 @@ function startNoncePruning(): void {
     }
     // Reset per-key admission counters each pruning cycle (every 60 s).
     noncesPerKey.clear();
+    // Bound nameToKeyId growth the same cycle — see pruneStaleNameBindings.
+    pruneStaleNameBindings(Date.now());
   }, 60_000);
   /* v8 ignore next */
   if (typeof noncePruneInterval.unref === 'function') {
@@ -143,8 +176,8 @@ export function clearLiveSessionsForTesting(): void {
 export function disconnectByKeyId(keyId: string): number {
   // Release any agent-name bindings claimed by this key, live session or not,
   // so a name is never permanently stranded once its owning key is revoked.
-  for (const [name, boundKeyId] of nameToKeyId.entries()) {
-    if (boundKeyId === keyId) {
+  for (const [name, binding] of nameToKeyId.entries()) {
+    if (binding.keyId === keyId) {
       nameToKeyId.delete(name);
     }
   }
@@ -174,6 +207,24 @@ export function fillNoncesPerKeyForTesting(perKey: Map<string, number>): void {
   for (const [k, v] of perKey) {
     noncesPerKey.set(k, v);
   }
+}
+
+/**
+ * Exposed for tests to pre-fill the name→key binding map (e.g. to test the
+ * MAX_NAME_BINDINGS cap and pruneStaleNameBindings without opening 10,000
+ * real connections).
+ */
+export function fillNameBindingsForTesting(
+  bindings: Map<string, { keyId: string; lastSeenAt: number }>,
+): void {
+  for (const [name, binding] of bindings) {
+    nameToKeyId.set(name, binding);
+  }
+}
+
+/** Exposed for tests: current size of the name→key binding map. */
+export function nameBindingsSizeForTesting(): number {
+  return nameToKeyId.size;
 }
 
 function sendErrorAndClose(
@@ -594,8 +645,8 @@ async function processHello(
   // registry itself is keyed purely by name string; see app/agent/manager.ts).
   // Bind on first use; a name already bound to a DIFFERENT key is rejected.
   // A key that already owns the name (reconnect) is always admitted.
-  const boundKeyId = nameToKeyId.get(agentName);
-  if (boundKeyId !== undefined && boundKeyId !== pubKeyId) {
+  const existingBinding = nameToKeyId.get(agentName);
+  if (existingBinding !== undefined && existingBinding.keyId !== pubKeyId) {
     sendErrorAndClose(
       ws,
       'agent-name-claimed',
@@ -605,12 +656,24 @@ async function processHello(
     return;
   }
 
+  // Step 10b: Bound the binding map itself. Only a brand-new name (no existing
+  // binding) grows nameToKeyId; a reconnect under an already-owned name reuses
+  // its entry. Try pruning idle/dead bindings before refusing outright — this
+  // mirrors the nonceCache "evict expired, recheck, then reject" pattern above.
+  if (existingBinding === undefined && nameToKeyId.size >= MAX_NAME_BINDINGS) {
+    pruneStaleNameBindings(Date.now());
+    if (nameToKeyId.size >= MAX_NAME_BINDINGS) {
+      sendErrorAndClose(ws, 'registry-full', 'Agent name registry is full; try again later', 1008);
+      return;
+    }
+  }
+
   if (getAgent(agentName) || inFlightAgents.has(agentName)) {
     sendErrorAndClose(ws, 'agent-already-connected', `Agent ${agentName} already connected`, 1008);
     return;
   }
   inFlightAgents.add(agentName);
-  nameToKeyId.set(agentName, pubKeyId);
+  nameToKeyId.set(agentName, { keyId: pubKeyId, lastSeenAt: Date.now() });
 
   // Step 11: Send WELCOME
   const pollInterval = 300;

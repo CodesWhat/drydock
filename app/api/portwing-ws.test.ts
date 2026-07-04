@@ -12,9 +12,11 @@ import {
   clearNonceCacheForTesting,
   createPortwingWsGateway,
   disconnectByKeyId,
+  fillNameBindingsForTesting,
   fillNonceCacheForTesting,
   fillNoncesPerKeyForTesting,
   injectDrydockVersionForTesting,
+  nameBindingsSizeForTesting,
   PORTWING_WS_ROUTE_PATTERN,
 } from './portwing-ws.js';
 
@@ -1380,6 +1382,180 @@ describe('identity binding — agentName bound to authenticating pubKeyId (Bug 2
       data: { code: string };
     };
     expect(errorFrame.data.code).toBe('agent-name-claimed');
+  });
+});
+
+describe('name binding registry cap (memory-exhaustion regression)', () => {
+  // Regression coverage for: nameToKeyId had no size cap, TTL, or pruning, so a
+  // single already-authenticated, never-revoked key could grow it without bound
+  // by reconnecting under a fresh agentName every time. Fixed by capping the
+  // map at MAX_NAME_BINDINGS (10,000, mirroring nonceCache) and pruning entries
+  // that are both idle past NAME_BINDING_STALE_MS and not backing a live agent.
+  beforeEach(() => {
+    vi.resetAllMocks();
+    clearNonceCacheForTesting();
+    clearLiveSessionsForTesting();
+  });
+
+  async function helloAsNewAgent(nonce: string, agentName: string, agentId: string) {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+    const ts = Math.floor(Date.now() / 1000);
+    const sig = signHello(privateKey, ts, nonce);
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig, { agentId, agentName }));
+    await new Promise((r) => setTimeout(r, 10));
+    return ws;
+  }
+
+  function fillBindingsAtCap(lastSeenAt: number): void {
+    const bindings = new Map<string, { keyId: string; lastSeenAt: number }>();
+    for (let i = 0; i < 10_000; i++) {
+      bindings.set(`filler-agent-${i}`, { keyId: `filler-key-${i}`, lastSeenAt });
+    }
+    fillNameBindingsForTesting(bindings);
+  }
+
+  test('rejects a brand-new name with registry-full when the cap is full of fresh (non-prunable) bindings', async () => {
+    fillBindingsAtCap(Date.now());
+    expect(nameBindingsSizeForTesting()).toBe(10_000);
+
+    const ws = await helloAsNewAgent(
+      'c0000000000000000000000000000001',
+      'brand-new-agent',
+      'brand-new-agent-id',
+    );
+
+    const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame.type).toBe('error');
+    expect(errorFrame.data.code).toBe('registry-full');
+    expect(ws.close).toHaveBeenCalledWith(1008, 'registry-full');
+  });
+
+  test('evicts idle bindings past the cap and admits a new name once space is freed', async () => {
+    // 24h + 1s in the past — past NAME_BINDING_STALE_MS and not backing a live
+    // agent (getAgent defaults to () => undefined in this file's manager mock).
+    fillBindingsAtCap(Date.now() - (24 * 60 * 60 * 1000 + 1_000));
+    expect(nameBindingsSizeForTesting()).toBe(10_000);
+
+    const ws = await helloAsNewAgent(
+      'c0000000000000000000000000000002',
+      'freshly-admitted-agent',
+      'freshly-admitted-agent-id',
+    );
+
+    const welcome = JSON.parse(ws.sentMessages[0]) as { type: string };
+    expect(welcome.type).toBe('welcome');
+    // The idle fillers were pruned, freeing room for exactly the one new binding.
+    expect(nameBindingsSizeForTesting()).toBe(1);
+  });
+
+  test('does not evict idle-by-timestamp bindings that are still backing a live agent', async () => {
+    // Stale by lastSeenAt, but getAgent() returns truthy for every one of them —
+    // simulating agents that are still connected and simply haven't sent
+    // another hello recently. None of these should be evicted.
+    fillBindingsAtCap(Date.now() - (24 * 60 * 60 * 1000 + 1_000));
+    const { getAgent } = await import('../agent/manager.js');
+    vi.mocked(getAgent).mockReturnValue({ name: 'still-connected' } as unknown as ReturnType<
+      typeof getAgent
+    >);
+
+    const ws = await helloAsNewAgent(
+      'c0000000000000000000000000000003',
+      'yet-another-new-agent',
+      'yet-another-new-agent-id',
+    );
+
+    const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame.data.code).toBe('registry-full');
+    expect(nameBindingsSizeForTesting()).toBe(10_000);
+  });
+
+  test('a reconnect under an already-owned name is admitted even while the registry is at cap', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    // Fill the cap, including this exact key's own existing binding — a
+    // reconnect reuses that entry rather than growing the map, so the cap
+    // check (which only guards brand-new names) must not block it.
+    const bindings = new Map<string, { keyId: string; lastSeenAt: number }>();
+    for (let i = 0; i < 9_999; i++) {
+      bindings.set(`filler-agent-${i}`, { keyId: `filler-key-${i}`, lastSeenAt: Date.now() });
+    }
+    bindings.set('owned-agent', { keyId, lastSeenAt: Date.now() - 1_000 });
+    fillNameBindingsForTesting(bindings);
+    expect(nameBindingsSizeForTesting()).toBe(10_000);
+
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'c0000000000000000000000000000004';
+    const sig = signHello(privateKey, ts, nonce);
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(
+      ws,
+      buildHello(keyId, ts, nonce, sig, {
+        agentId: 'reconnect-agent-id',
+        agentName: 'owned-agent',
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+
+    const welcome = JSON.parse(ws.sentMessages[0]) as { type: string };
+    expect(welcome.type).toBe('welcome');
+    expect(nameBindingsSizeForTesting()).toBe(10_000);
+  });
+});
+
+describe('startNoncePruning — also prunes idle name bindings', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    clearNonceCacheForTesting();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test('prunes idle, non-live name bindings after 60s but leaves live ones intact', () => {
+    vi.useFakeTimers();
+    createGateway();
+
+    fillNameBindingsForTesting(
+      new Map([
+        [
+          'idle-agent',
+          { keyId: 'idle-key', lastSeenAt: Date.now() - (24 * 60 * 60 * 1000 + 1_000) },
+        ],
+      ]),
+    );
+    expect(nameBindingsSizeForTesting()).toBe(1);
+
+    vi.advanceTimersByTime(61_000);
+
+    expect(nameBindingsSizeForTesting()).toBe(0);
   });
 });
 
