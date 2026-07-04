@@ -22,6 +22,7 @@ import { getAgent } from '../agent/manager.js';
 import { getServerConfiguration } from '../configuration/index.js';
 import logger from '../log/index.js';
 import * as agentKeys from '../store/agent-keys.js';
+import * as nameBindingsStore from '../store/name-bindings.js';
 import { getErrorMessage } from '../util/error.js';
 import {
   getDefaultRateLimitKey,
@@ -96,6 +97,14 @@ const inFlightAgents = new Set<string>();
 // under the SAME pubKeyId. Released when the owning key is revoked (see
 // disconnectByKeyId) so a legitimately re-provisioned agent can reclaim its name.
 //
+// This Map is a read-optimized in-memory mirror of the durable
+// app/store/name-bindings.ts collection, not the source of truth: every write
+// here (bind, prune, revoke-release) is write-through'd to that store, and
+// rehydrateNameBindings() reloads this Map from the store once at startup
+// (see createPortwingWsGateway()). Without the durable backing, a process
+// restart — including the restart that deploys this very protection — would
+// wipe the map and reopen the squat window until every agent reconnects.
+//
 // Unlike liveSessionsByKeyId/inFlightAgents, a binding is NOT released on plain
 // disconnect — the whole point is that the name stays claimed while its key is
 // still valid, even between reconnects. Left uncapped, a single never-revoked
@@ -119,12 +128,37 @@ const NAME_BINDING_STALE_MS = 24 * 60 * 60 * 1000;
  * currently backing a live agent connection. Called opportunistically when a
  * new binding would push the map over MAX_NAME_BINDINGS, and periodically
  * alongside nonce pruning so long-idle bindings don't just wait for a cap hit.
+ * Every eviction here is also write-through'd to the durable store so the two
+ * never drift.
  */
 function pruneStaleNameBindings(nowMs: number): void {
   for (const [name, binding] of nameToKeyId.entries()) {
     if (nowMs - binding.lastSeenAt > NAME_BINDING_STALE_MS && !getAgent(name)) {
       nameToKeyId.delete(name);
+      nameBindingsStore.deleteBinding(name);
     }
+  }
+}
+
+/**
+ * Reload nameToKeyId from the durable name-bindings store. Called once from
+ * createPortwingWsGateway() so a restarted server knows which key owns which
+ * name before any agent reconnects — see the nameToKeyId doc comment above.
+ *
+ * Only evaluates staleness against the records it just loaded (not the whole
+ * map — that's pruneStaleNameBindings()'s job on its own cadence) so a
+ * binding that was already past NAME_BINDING_STALE_MS before the restart
+ * doesn't get a fresh 24h lease purely from being reloaded, while a genuinely
+ * fresh binding is admitted as-is.
+ */
+function rehydrateNameBindings(): void {
+  const nowMs = Date.now();
+  for (const record of nameBindingsStore.listBindings()) {
+    if (nowMs - record.lastSeenAt > NAME_BINDING_STALE_MS && !getAgent(record.agentName)) {
+      nameBindingsStore.deleteBinding(record.agentName);
+      continue;
+    }
+    nameToKeyId.set(record.agentName, { keyId: record.keyId, lastSeenAt: record.lastSeenAt });
   }
 }
 
@@ -176,6 +210,10 @@ export function clearLiveSessionsForTesting(): void {
 export function disconnectByKeyId(keyId: string): number {
   // Release any agent-name bindings claimed by this key, live session or not,
   // so a name is never permanently stranded once its owning key is revoked.
+  // Purge the durable store first so a crash between the two purges still
+  // leaves the persisted view at least as permissive as (never more locked
+  // down than) the in-memory one after a restart.
+  nameBindingsStore.deleteBindingsForKey(keyId);
   for (const [name, binding] of nameToKeyId.entries()) {
     if (binding.keyId === keyId) {
       nameToKeyId.delete(name);
@@ -361,6 +399,10 @@ export function createPortwingWsGateway(dependencies: PortwingWsGatewayDependenc
   } = dependencies;
 
   startNoncePruning();
+  // Reload any bindings persisted by a previous process instance before this
+  // gateway accepts its first connection — see the nameToKeyId doc comment.
+  // Idempotent: safe to run every time a gateway is (re-)created.
+  rehydrateNameBindings();
 
   return {
     handleUpgrade(request: IncomingMessage, socket: Socket, head: Buffer): void {
@@ -673,7 +715,11 @@ async function processHello(
     return;
   }
   inFlightAgents.add(agentName);
-  nameToKeyId.set(agentName, { keyId: pubKeyId, lastSeenAt: Date.now() });
+  const bindingSeenAt = Date.now();
+  nameToKeyId.set(agentName, { keyId: pubKeyId, lastSeenAt: bindingSeenAt });
+  // Write-through to the durable store so this binding survives a restart —
+  // see the nameToKeyId doc comment and rehydrateNameBindings().
+  nameBindingsStore.upsertBinding(agentName, pubKeyId, bindingSeenAt);
 
   // Step 11: Send WELCOME
   const pollInterval = 300;

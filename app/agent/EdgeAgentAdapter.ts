@@ -187,15 +187,23 @@ export class EdgeAgentAdapter {
       log.warn(
         `Edge agent ${this.agentName} missed ${PONG_MISS_THRESHOLD} pong cycles (${staleMs}ms); closing connection`,
       );
-      // Bug 3, leg 2: detach the close/error listeners BEFORE forcing the close
-      // below. We are about to run onDisconnect() synchronously ourselves; the
-      // underlying transport's real 'close' (and possibly 'error') event still
-      // fires once ws.close() completes, and without detaching first that event
-      // would run onDisconnect() a second time on a connection this adapter has
-      // already torn down. The idempotency guard in onDisconnect() covers any
+      // Bug 3, leg 2: detach the close/error/message listeners BEFORE forcing
+      // the close below. We are about to run onDisconnect() synchronously
+      // ourselves; the underlying transport's real 'close' (and possibly
+      // 'error') event still fires once ws.close() completes, and without
+      // detaching first that event would run onDisconnect() a second time on
+      // a connection this adapter has already torn down. The idempotency
+      // guard in onDisconnect() covers any WebSocketLike implementation that
+      // doesn't support `off`. The message listener is detached for the same
+      // reason: a frame already in flight when we call ws.close() can still
+      // be delivered in the close window, and without detaching it that frame
+      // would be parsed/dispatched by onMessage() on an adapter that is about
+      // to be (or already is) torn down — the this.disconnected guard at the
+      // top of onMessage() is the second, defense-in-depth layer for any
       // WebSocketLike implementation that doesn't support `off`.
       this.ws.off?.('close', this.closeListener);
       this.ws.off?.('error', this.errorListener);
+      this.ws.off?.('message', this.messageListener);
       try {
         this.ws.close(1001, 'ping timeout');
       } catch {
@@ -213,6 +221,18 @@ export class EdgeAgentAdapter {
   }
 
   private async onMessage(raw: unknown): Promise<void> {
+    // Bug 3, leg 1 (frame dispatch): a torn-down adapter must be inert even if
+    // a frame arrives after onDisconnect() has already run — e.g. one buffered
+    // in the close window of the forced-disconnect path in
+    // checkLivenessAndPing(), or delivered by a WebSocketLike that doesn't
+    // support `off` at all. Without this guard the frame would still be
+    // parsed/dispatched (and could resurrect connected state — see the guard
+    // in handleContainerSync()) on an adapter this name may no longer even
+    // own.
+    if (this.disconnected) {
+      return;
+    }
+
     let frame: PortwingFrame;
     try {
       frame = JSON.parse(String(raw)) as PortwingFrame;
@@ -301,6 +321,27 @@ export class EdgeAgentAdapter {
 
     const containers = Array.isArray(data.containers) ? (data.containers as Container[]) : [];
     await this.client.handleContainerSync(containers);
+
+    // Bug 3, leg 1 (post-await resurrection): the ping timer can force-close
+    // and tear down this adapter (onDisconnect() sets disconnected=true and
+    // connected=false) while the await above is still pending. Without this
+    // guard, resuming here would see `!this.connected` (true, since
+    // onDisconnect() just cleared it), flip connected/isConnected back to
+    // true, and re-emit agentConnected for a session that is already dead.
+    //
+    // Scope: this guards the connection-state resurrection only. The container
+    // store write itself already happened inside the awaited
+    // client.handleContainerSync() above, so a force-close that lands mid-await
+    // still lets that final snapshot through. That residual write is benign and
+    // deliberately left as-is: it is the dying session's own containers under a
+    // name its key still legitimately owns (the binding is not released on a
+    // plain disconnect), and the next live session re-syncs over it. Gating the
+    // store write on liveness would mean threading cancellation through
+    // AgentClient's shared sync path — out of scope here, and not a regression
+    // (that write was already unconditional before this change).
+    if (this.disconnected) {
+      return;
+    }
 
     if (!this.connected) {
       this.connected = true;

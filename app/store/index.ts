@@ -14,6 +14,7 @@ import * as app from './app.js';
 import * as audit from './audit.js';
 import * as backup from './backup.js';
 import * as container from './container.js';
+import * as nameBindings from './name-bindings.js';
 import * as notification from './notification.js';
 import * as notificationHistory from './notification-history.js';
 import * as notificationOutbox from './notification-outbox.js';
@@ -46,6 +47,7 @@ function createCollections() {
   audit.createCollections(db);
   backup.createCollections(db);
   container.createCollections(db);
+  nameBindings.createCollections(db);
   notification.createCollections(db);
   notificationHistory.createCollections(db);
   notificationOutbox.createCollections(db);

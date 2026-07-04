@@ -80,6 +80,7 @@ const {
     vi.doMock('./audit', createCollectionsMock);
     vi.doMock('./backup', createCollectionsMock);
     vi.doMock('./container', createCollectionsMock);
+    vi.doMock('./name-bindings', createCollectionsMock);
     vi.doMock('./notification', createCollectionsMock);
     vi.doMock('./notification-history', createCollectionsMock);
     vi.doMock('./notification-outbox', createCollectionsMock);
@@ -113,6 +114,7 @@ vi.mock('./app', createCollectionsMock);
 vi.mock('./audit', createCollectionsMock);
 vi.mock('./backup', createCollectionsMock);
 vi.mock('./container', createCollectionsMock);
+vi.mock('./name-bindings', createCollectionsMock);
 vi.mock('./notification', createCollectionsMock);
 vi.mock('./notification-history', createCollectionsMock);
 vi.mock('./agent-keys', createAgentKeysMock);
@@ -515,6 +517,7 @@ describe('Store Module', () => {
     vi.doMock('./audit', createCollectionsMock);
     vi.doMock('./backup', createCollectionsMock);
     vi.doMock('./container', createCollectionsMock);
+    vi.doMock('./name-bindings', createCollectionsMock);
     vi.doMock('./notification', createCollectionsMock);
     vi.doMock('./notification-history', createCollectionsMock);
     vi.doMock('./notification-outbox', createCollectionsMock);

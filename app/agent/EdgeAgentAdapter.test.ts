@@ -2215,6 +2215,92 @@ describe('EdgeAgentAdapter — Bug 3 regressions (double onDisconnect / stale ev
   });
 });
 
+describe('EdgeAgentAdapter — torn-down adapter inertness regressions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('a frame delivered directly to onMessage after teardown is inert (dispatch guard)', async () => {
+    // Bypasses listener detachment entirely (calls the private dispatch method
+    // directly) so this exercises the this.disconnected guard itself, not the
+    // (separately covered) listener-detachment path — the guard is the
+    // defense-in-depth layer for any WebSocketLike that doesn't support `off`.
+    const { adapter, client } = createAdapter();
+    adapter.activate();
+    await adapter.onDisconnect();
+    vi.clearAllMocks();
+
+    const adapterInternal = adapter as unknown as {
+      onMessage: (raw: unknown) => Promise<void>;
+    };
+    await adapterInternal.onMessage(
+      JSON.stringify({ type: 'dd:container_sync', data: { containers: [] } }),
+    );
+
+    expect(
+      (client as unknown as { handleContainerSync: ReturnType<typeof vi.fn> }).handleContainerSync,
+    ).not.toHaveBeenCalled();
+    expect(emitAgentConnected).not.toHaveBeenCalled();
+  });
+
+  test('forced close from checkLivenessAndPing detaches the message listener so a frame arriving in the close window is not dispatched', () => {
+    vi.useFakeTimers();
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    // Agent never replies with 'pong'. After 2 missed 30s cycles (60s) the
+    // adapter force-closes the connection, detaching message/close/error
+    // listeners before running onDisconnect() itself.
+    vi.advanceTimersByTime(30_000 * 2);
+    expect(ws.close).toHaveBeenCalledWith(1001, 'ping timeout');
+
+    // A frame already in flight when ws.close() was called still arrives on
+    // the underlying transport. Before the fix, the message listener was
+    // never detached (only close/error were), so this frame would still be
+    // parsed/dispatched on an adapter that has already torn itself down.
+    sendFrame(ws, 'dd:container_sync', { containers: [] });
+
+    expect(
+      (client as unknown as { handleContainerSync: ReturnType<typeof vi.fn> }).handleContainerSync,
+    ).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+
+  test('handleContainerSync resolving after a forced disconnect does not resurrect connected state or re-emit agentConnected', async () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    // Make the first container_sync's await hang so we can force a disconnect
+    // while it's still in flight — mirrors the ping timer firing mid-sync.
+    let resolveSync: () => void = () => {};
+    const pendingSync = new Promise<void>((resolve) => {
+      resolveSync = resolve;
+    });
+    const handleContainerSyncMock = (
+      client as unknown as { handleContainerSync: ReturnType<typeof vi.fn> }
+    ).handleContainerSync;
+    handleContainerSyncMock.mockReturnValueOnce(pendingSync);
+
+    sendFrame(ws, 'dd:container_sync', { containers: [] });
+    // handleContainerSync() has been called synchronously and is now awaiting
+    // pendingSync — this.connected is still false at this point.
+    expect(handleContainerSyncMock).toHaveBeenCalledTimes(1);
+
+    // Force-disconnect the adapter while the sync above is still pending.
+    await adapter.onDisconnect();
+    expect((client as unknown as { isConnected: boolean }).isConnected).toBe(false);
+
+    // Now let the original container_sync's await resolve.
+    resolveSync();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(emitAgentConnected).not.toHaveBeenCalled();
+    expect((client as unknown as { isConnected: boolean }).isConnected).toBe(false);
+    expect((adapter as unknown as { connected: boolean }).connected).toBe(false);
+  });
+});
+
 describe('EdgeAgentAdapter — Bug 4 regressions (concurrent per-container requests)', () => {
   beforeEach(() => {
     vi.clearAllMocks();

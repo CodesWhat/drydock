@@ -6,6 +6,8 @@ import { createHash, sign as cryptoSign, generateKeyPairSync } from 'node:crypto
 import type { IncomingMessage } from 'node:http';
 import type { Socket } from 'node:net';
 import type { AgentKeyRecord } from '../store/agent-keys.js';
+import type { NameBindingRecord } from '../store/name-bindings.js';
+import * as nameBindingsStore from '../store/name-bindings.js';
 import {
   attachPortwingWsServer,
   clearLiveSessionsForTesting,
@@ -2801,5 +2803,256 @@ describe('disconnectByKeyId', () => {
 
     // The session is gone; disconnectByKeyId returns 0
     expect(disconnectByKeyId(keyId)).toBe(0);
+  });
+});
+
+describe('name-bindings persistence (identity binding survives a restart)', () => {
+  // Regression coverage for: nameToKeyId was a bare in-memory Map, wiped on
+  // every process restart — including the restart that deploys this very
+  // protection — which reopens the exact name-squatting window it exists to
+  // close until every agent happens to reconnect. Fixed by write-through'ing
+  // every bind/prune/release to app/store/name-bindings.ts's durable LokiJS
+  // collection and reloading it into the map once at gateway creation (see
+  // rehydrateNameBindings() in portwing-ws.ts).
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearNonceCacheForTesting();
+    clearLiveSessionsForTesting();
+  });
+
+  afterEach(() => {
+    // nameBindingCollection is a module-level singleton in
+    // app/store/name-bindings.ts — reset it so later test files that import
+    // this store (and every other describe block above, which never
+    // initializes it) keep seeing the uninitialized/no-op behavior they were
+    // written against.
+    nameBindingsStore.clearCollectionForTesting();
+  });
+
+  /**
+   * A LokiJS-shaped mock db backed by a plain array that outlives any single
+   * createCollections() call — mirrors how a real Loki instance reloads the
+   * same on-disk documents into a fresh collection object after a restart.
+   * Re-invoking createCollections(db) against the SAME returned db object is
+   * exactly "re-init the collection from the same db" for a simulated reload.
+   */
+  function createPersistentMockDb() {
+    const docs: NameBindingRecord[] = [];
+    const matches = (doc: NameBindingRecord, query: Record<string, unknown>) =>
+      Object.entries(query).every(([k, v]) => (doc as unknown as Record<string, unknown>)[k] === v);
+    const collection = {
+      findOne: vi.fn(
+        (query: Record<string, unknown>) => docs.find((doc) => matches(doc, query)) ?? null,
+      ),
+      find: vi.fn((query?: Record<string, unknown>) =>
+        query ? docs.filter((doc) => matches(doc, query)) : [...docs],
+      ),
+      insert: vi.fn((doc: NameBindingRecord) => {
+        docs.push(doc);
+      }),
+      update: vi.fn(),
+      remove: vi.fn((doc: NameBindingRecord) => {
+        const index = docs.indexOf(doc);
+        if (index !== -1) {
+          docs.splice(index, 1);
+        }
+      }),
+    };
+    const db = {
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(() => collection),
+    };
+    return { db, docs };
+  }
+
+  function makeKeyRecord(keyId: string, pubkeyBase64: string): AgentKeyRecord {
+    return {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+  }
+
+  test('a binding survives a simulated process restart and still rejects a different key', async () => {
+    const { db, docs } = createPersistentMockDb();
+
+    // "Boot 1": wire the durable store and let the owner claim a name.
+    nameBindingsStore.createCollections(db);
+
+    const owner = generateKeyPair();
+    const ownerRecord = makeKeyRecord(owner.keyId, owner.pubkeyBase64);
+
+    const ts1 = Math.floor(Date.now() / 1000);
+    const nonce1 = 'd0000000000000000000000000000001';
+    const sig1 = signHello(owner.privateKey, ts1, nonce1);
+    const { gateway: gw1, getUpgradedWs: getWs1 } = createGateway(ownerRecord);
+    gw1.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws1 = getWs1()!;
+    sendMessageToGateway(
+      ws1,
+      buildHello(owner.keyId, ts1, nonce1, sig1, {
+        agentId: 'owner-agent-id',
+        agentName: 'edge-node-restart-test',
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    expect((JSON.parse(ws1.sentMessages[0]) as { type: string }).type).toBe('welcome');
+
+    // The binding was write-through'd to the durable store, not just the map.
+    expect(docs).toHaveLength(1);
+    expect(docs[0]).toMatchObject({ agentName: 'edge-node-restart-test', keyId: owner.keyId });
+
+    // Simulate a process restart: wipe every in-memory cache (this is exactly
+    // what a fresh process would start with)...
+    clearNonceCacheForTesting();
+    clearLiveSessionsForTesting();
+
+    // ...then re-init the collection from the SAME db (a real restart reloads
+    // the same on-disk JSON) and create a fresh gateway, exactly like a real
+    // server boot (store.init() → attachPortwingWsServer()).
+    nameBindingsStore.createCollections(db);
+    expect(nameBindingsSizeForTesting()).toBe(0); // map really was wiped
+
+    const attacker = generateKeyPair();
+    const attackerRecord = makeKeyRecord(attacker.keyId, attacker.pubkeyBase64);
+    const ts2 = Math.floor(Date.now() / 1000);
+    const nonce2 = 'd0000000000000000000000000000002';
+    const sig2 = signHello(attacker.privateKey, ts2, nonce2);
+    const { gateway: gw2, getUpgradedWs: getWs2 } = createGateway(attackerRecord);
+    gw2.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws2 = getWs2()!;
+    sendMessageToGateway(
+      ws2,
+      buildHello(attacker.keyId, ts2, nonce2, sig2, {
+        agentId: 'attacker-agent-id',
+        agentName: 'edge-node-restart-test',
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+
+    // The binding survived the restart: a different key is still rejected.
+    const errorFrame = JSON.parse(ws2.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame.type).toBe('error');
+    expect(errorFrame.data.code).toBe('agent-name-claimed');
+  });
+
+  test('revoking a key releases its persisted binding too, so a successor can claim the name after a restart', async () => {
+    const { db, docs } = createPersistentMockDb();
+    nameBindingsStore.createCollections(db);
+
+    const owner = generateKeyPair();
+    const ownerRecord = makeKeyRecord(owner.keyId, owner.pubkeyBase64);
+    const ts1 = Math.floor(Date.now() / 1000);
+    const nonce1 = 'd1000000000000000000000000000001';
+    const sig1 = signHello(owner.privateKey, ts1, nonce1);
+    const { gateway: gw1, getUpgradedWs: getWs1 } = createGateway(ownerRecord);
+    gw1.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws1 = getWs1()!;
+    sendMessageToGateway(
+      ws1,
+      buildHello(owner.keyId, ts1, nonce1, sig1, {
+        agentId: 'decommissioned-agent',
+        agentName: 'edge-node-revoke-test',
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    expect(docs).toHaveLength(1);
+
+    // Revoke the owner's key — must release the PERSISTED binding, not just
+    // the in-memory one.
+    disconnectByKeyId(owner.keyId);
+    expect(docs).toHaveLength(0);
+
+    // Simulate a restart with the successor connecting fresh.
+    clearNonceCacheForTesting();
+    clearLiveSessionsForTesting();
+    nameBindingsStore.createCollections(db);
+
+    const successor = generateKeyPair();
+    const successorRecord = makeKeyRecord(successor.keyId, successor.pubkeyBase64);
+    const ts2 = Math.floor(Date.now() / 1000);
+    const nonce2 = 'd1000000000000000000000000000002';
+    const sig2 = signHello(successor.privateKey, ts2, nonce2);
+    const { gateway: gw2, getUpgradedWs: getWs2 } = createGateway(successorRecord);
+    gw2.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws2 = getWs2()!;
+    sendMessageToGateway(
+      ws2,
+      buildHello(successor.keyId, ts2, nonce2, sig2, {
+        agentId: 'replacement-agent',
+        agentName: 'edge-node-revoke-test',
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+
+    const welcome = JSON.parse(ws2.sentMessages[0]) as { type: string };
+    expect(welcome.type).toBe('welcome');
+  });
+
+  test('a stale persisted binding is pruned on reload (load-time pruning), same as the periodic sweep', async () => {
+    const { db, docs } = createPersistentMockDb();
+    nameBindingsStore.createCollections(db);
+
+    // Seed the durable store directly with a binding that was already idle
+    // past NAME_BINDING_STALE_MS (24h) before the "restart" below — as if it
+    // had been written well before the process stopped.
+    const staleOwner = generateKeyPair();
+    nameBindingsStore.upsertBinding(
+      'long-idle-agent',
+      staleOwner.keyId,
+      Date.now() - (24 * 60 * 60 * 1000 + 1_000),
+    );
+    expect(docs).toHaveLength(1);
+
+    // "Restart": wipe in-memory state, re-init the collection from the same
+    // db, and create a fresh gateway — rehydrateNameBindings() checks each
+    // loaded record's own staleness before adding it back to the map.
+    clearNonceCacheForTesting();
+    clearLiveSessionsForTesting();
+    nameBindingsStore.createCollections(db);
+
+    const newcomer = generateKeyPair();
+    const newcomerRecord = makeKeyRecord(newcomer.keyId, newcomer.pubkeyBase64);
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'd2000000000000000000000000000001';
+    const sig = signHello(newcomer.privateKey, ts, nonce);
+    const { gateway, getUpgradedWs } = createGateway(newcomerRecord);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(
+      ws,
+      buildHello(newcomer.keyId, ts, nonce, sig, {
+        agentId: 'newcomer-agent',
+        agentName: 'long-idle-agent',
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+
+    // The stale binding was pruned on load, so a brand-new key can claim the
+    // name — and the persisted store no longer carries the pruned entry.
+    const welcome = JSON.parse(ws.sentMessages[0]) as { type: string };
+    expect(welcome.type).toBe('welcome');
   });
 });
