@@ -9,14 +9,14 @@ By default, the API is enabled and exposed on port `3000`. You can override this
 
 ## API Versioning
 
-Starting in v1.4.0, the canonical API base path is `/api/v1/*`. The unversioned `/api/*` path remains as a backward-compatible alias during migration.
+Starting in v1.4.0, the canonical API base path is `/api/v1/*`. The unversioned `/api/*` path was a backward-compatible alias during migration; it was removed in v1.6.0.
 
 | Path | Status | Description |
 | --- | --- | --- |
 | `/api/v1/*` | **Canonical** | Versioned API path — use this for new integrations |
-| `/api/*` | Deprecated alias | Planned for removal in v1.6.0 |
+| `/api/*` | Removed in v1.6.0 | Returns `410 Gone` with a JSON body pointing at the `/api/v1/` equivalent |
 
-Both paths return identical responses, except when `DD_COMPAT_WUDCARD=true` reshapes three of the four whitelisted [wud-card compatibility](/docs/configuration/server#wud-card-compatibility) endpoints into a bare-array shape. Third-party integrations should migrate to `/api/v1/*` at their convenience.
+The four whitelisted [wud-card compatibility](/docs/configuration/server#wud-card-compatibility) endpoints keep responding at `/api/*` when `DD_COMPAT_WUDCARD=true` (three reshaped into a bare-array shape, the fourth unmodified), served by their own router rather than by falling through to the removed alias. Two standalone auth aliases, `GET /api/auth/methods` and `GET /api/auth/status`, are also unaffected — unconditionally, not behind any flag — because both are registered directly on the app rather than through the removed alias router; see [Authentication routes](#authentication-routes) below. Everything else under `/api/*` now returns `410 Gone`; use `/api/v1/*`. See [Deprecations](/docs/deprecations#unversioned-api-paths) for details.
 
 ## Error Contract
 

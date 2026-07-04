@@ -11,21 +11,21 @@ import * as apiRouter from '../api.js';
  * Gated by DD_COMPAT_WUDCARD (see getWudCardCompatEnabled(), default OFF).
  *
  * Genuinely self-sufficient: init() builds its own internal apiRouter.init()
- * instance (index.ts already mounts two independent instances of the API
- * router today — one for /api/v1, one for the deprecated /api alias — this
- * is a third) and, for the narrow whitelist of endpoints the card actually
- * calls, dispatches the request directly into that internal instance
- * (patching res.json first to unwrap drydock's list envelope into a bare
- * array when the matched route needs it). That internal instance runs the
- * exact same route handlers the /api alias uses today, so auth, rate
- * limiting, and behavior are identical — no security bypass — but the
- * response is produced by this module itself, not by falling through to
- * whatever happens to be mounted after it. Every other request calls
- * next() immediately and is left completely untouched, falling through to
- * whatever is mounted after this router (the deprecated /api alias today).
- * Because whitelisted requests never depend on that fallthrough, this
- * module keeps working unchanged once the deprecated /api alias is
- * eventually removed.
+ * instance (index.ts mounts exactly one apiRouter instance, at /api/v1 —
+ * this is a second, independent instance for the unversioned /api/* mount)
+ * and, for the narrow whitelist of endpoints the card actually calls,
+ * dispatches the request directly into that internal instance (patching
+ * res.json first to unwrap drydock's list envelope into a bare array when
+ * the matched route needs it). That internal instance runs the exact same
+ * route handlers /api/v1 uses, so auth, rate limiting, and behavior are
+ * identical — no security bypass — but the response is produced by this
+ * module itself, not by falling through to whatever happens to be mounted
+ * after it. Every other request calls next() immediately and is left
+ * completely untouched, falling through to whatever is mounted after this
+ * router (the 410 tombstone for the removed unversioned /api/* alias,
+ * sendUnversionedApiTombstone in index.ts). Because whitelisted requests
+ * never depend on that fallthrough, this module keeps working unchanged
+ * regardless of what is mounted after it.
  */
 
 interface CollectionEnvelope {
@@ -118,8 +118,8 @@ function findWhitelistMatch(method: string, path: string): WhitelistEntry | unde
  * needs its collection envelope unwrapped) — this module never depends on
  * anything mounted after it to serve those responses. Non-whitelisted
  * requests call next() immediately and are left completely untouched, so
- * they fall through to whatever is mounted after this router (the
- * deprecated /api alias today).
+ * they fall through to whatever is mounted after this router (the 410
+ * tombstone for the removed unversioned /api/* alias today).
  */
 export function createWudCardCompatMiddleware(
   internalApiRouter: express.Router,
@@ -140,8 +140,8 @@ export function createWudCardCompatMiddleware(
 /**
  * Init the wud-card compat router. Owns its own internal apiRouter.init()
  * instance so the whitelisted endpoints are served directly by this
- * module, with no dependency on the deprecated unversioned /api alias
- * mounted after it.
+ * module, with no dependency on whatever is mounted after it (the 410
+ * tombstone for the removed unversioned /api/* alias).
  * @returns {*|Router}
  */
 export function init(): express.Router {

@@ -125,17 +125,18 @@ function configurePermissionsPolicy(app) {
   });
 }
 
-// Unversioned /api/* alias deprecation (DEPRECATIONS.md) — track real usage
-// through the same compatibility/legacyInputs mechanism the WUD_* env/label
-// sources use (recordLegacyInput + dd_legacy_input_total), so the UI
-// deprecation banner reflects live traffic instead of never firing. Mounted
-// only on the deprecated alias mount below (not on /api/v1), and mounted
-// BEFORE the (optional) wud-card compat router so every request under the
-// unversioned /api prefix is counted. This ordering matters now: the
-// compat router owns its own internal apiRouter instance and answers its
-// whitelisted requests directly, without calling next() into the alias
-// router beneath it — so if this tracking middleware were mounted after
-// the compat router instead, whitelisted requests would never reach it.
+// Unversioned /api/* alias removal (v1.6.0, DEPRECATIONS.md) — track real
+// usage through the same compatibility/legacyInputs mechanism the WUD_*
+// env/label sources use (recordLegacyInput + dd_legacy_input_total), so the
+// UI deprecation banner keeps reflecting live traffic against the removed
+// path instead of going dark the moment it starts 410ing. Mounted only on
+// the former alias mount below (not on /api/v1), and mounted BEFORE the
+// (optional) wud-card compat router so every request under the unversioned
+// /api prefix is counted. This ordering matters now: the compat router owns
+// its own internal apiRouter instance and answers its whitelisted requests
+// directly, without calling next() into anything mounted after it — so if
+// this tracking middleware were mounted after the compat router instead,
+// whitelisted requests would never reach it.
 //
 // The v1 router's catch-all (app/api/api.ts) is GET-only, so a non-GET
 // request to an unmatched /api/v1/* path never resolves inside that router
@@ -155,7 +156,11 @@ function configurePermissionsPolicy(app) {
 // reading them once the response has finished reliably yields the literal
 // `:param` template the request resolved to, capping the key space at the
 // size of the API surface (same order of magnitude as the fixed env/label
-// name sets those other legacy-input sources use).
+// name sets those other legacy-input sources use). Now that the real alias
+// router is gone, req.route is only ever set for the compat router's four
+// whitelisted routes (when DD_COMPAT_WUDCARD is enabled) — every other hit
+// falls straight through to the tombstone below without matching a route,
+// so getLegacyApiAliasRouteKey's 'unmatched' fallback is the common case.
 function trackLegacyApiAliasUsage(req, res, next) {
   if (req.path === '/v1' || req.path.startsWith('/v1/')) {
     next();
@@ -171,6 +176,39 @@ function getLegacyApiAliasRouteKey(req) {
   return req.route ? `${req.baseUrl}${req.route.path}` : 'unmatched';
 }
 
+// Tombstone for the removed unversioned /api/* alias (removed in v1.6.0 —
+// see DEPRECATIONS.md). Mounted last in the '/api' chain, after the legacy
+// usage tracker and the optional wud-card compat router, so it only ever
+// answers requests neither of those handled. A plain function mounted via
+// app.use('/api', ...) — rather than a Router with its own catch-all route —
+// matches every method and every subpath beneath /api (including /api
+// itself), exactly like the apiRouter mount it replaces.
+//
+// Needs the same /v1 fallthrough guard as trackLegacyApiAliasUsage above, for
+// the same reason: the v1 router's catch-all (app/api/api.ts) is GET-only, so
+// a non-GET request to an otherwise-valid /api/v1/* path that only defines a
+// GET handler (e.g. DELETE /api/v1/app) never resolves inside the /api/v1
+// mount and falls through into this '/api'-mounted chain with req.path like
+// '/v1/app'. Without the guard this middleware would answer that fallthrough
+// with a false "unversioned alias removed" 410 instead of letting it continue
+// past this mount to Express's own 404 handling, exactly like it did before
+// this middleware existed.
+function sendUnversionedApiTombstone(req, res, next) {
+  if (req.path === '/v1' || req.path.startsWith('/v1/')) {
+    next();
+    return;
+  }
+  sendErrorResponse(res, 410, {
+    message: 'The unversioned /api/* path was removed in v1.6.0. Use /api/v1/* instead.',
+    details: {
+      canonicalBasePath: '/api/v1',
+      compat:
+        'WUD-era clients (wud-card, Homepage whatsupdocker widget) can enable DD_COMPAT_WUDCARD',
+      docs: 'https://getdrydock.com/docs/deprecations#unversioned-api-paths',
+    },
+  });
+}
+
 function registerRoutes(app) {
   // Wire the health readiness gate before auth.init() so that /health
   // returns 503 if somehow a request arrives before passport strategies
@@ -182,15 +220,12 @@ function registerRoutes(app) {
   auth.init(app);
   app.use('/health', healthRouter.init());
   app.use('/api/v1', apiRouter.init());
-  log.warn(
-    'Unversioned /api/* path is deprecated and will be removed in v1.6.0. Use /api/v1/* instead.',
-  );
   app.use('/api', trackLegacyApiAliasUsage);
   if (getWudCardCompatEnabled()) {
     log.info('wud-card compatibility enabled at /api (DD_COMPAT_WUDCARD=true)');
     app.use('/api', wudCardCompatRouter.init());
   }
-  app.use('/api', apiRouter.init());
+  app.use('/api', sendUnversionedApiTombstone);
   app.use('/metrics', prometheusRouter.init());
   if (configuration.ui?.enabled !== false) {
     app.use('/', uiRouter.init());

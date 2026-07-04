@@ -154,7 +154,7 @@
     "banners": {
       "legacyConfigTitleSingular": "Виявлено {total} застарілий псевдонім конфігурації",
       "legacyConfigTitlePlural": "Виявлено {total} застарілих псевдоніми конфігурації",
-      "legacyApiPathTitle": "Виявлено {total} застарілих шляхів API",
+      "legacyApiPathTitle": "{total} requests to the removed API path detected",
       "dontShowAgain": "Більше не показувати",
       "oidcHttpTitle": "Виявлено HTTP OIDC discovery",
       "legacyHashTitle": "Виявлено застарілий хеш пароля",
@@ -166,7 +166,7 @@
       "oidcHttpBody": "One or more OIDC providers use an insecure {httpCode} discovery URL. HTTP discovery is deprecated and will be removed in v1.6.0. Update your Identity Provider to serve its discovery endpoint over {httpsCode}, then update the {discoveryEnv} environment variable to match.",
       "legacyHashBody": "Your basic authentication uses a legacy password hash format. Legacy v1.3.9 formats are deprecated and will be removed in v1.6.0. Re-hash your admin password with {argon} (see the migration guide for the one-liner).",
       "legacyConfigBody": "Deprecated configuration aliases are in use. Rename {wudEnv} env vars to {ddEnv} and {wudLabel} Docker labels to {ddLabel}. {triggerEnv} variables should also migrate to {actionEnv} or {notificationEnv} (see the migration guide for the full rename map).",
-      "legacyApiBody": "Unversioned API paths are deprecated. Update API clients to the {v1Prefix} prefix. Unversioned {oldPrefix} aliases are removed in v1.6.0.",
+      "legacyApiBody": "Clients on this instance recently called the removed unversioned {oldPrefix} path and are receiving {statusCode} errors. Migrate them to the {v1Prefix} prefix. WUD-era integrations like wud-card or Homepage's whatsupdocker widget can set {compatFlag} instead of migrating.",
       "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains available for backward compatibility in v1.5.x and v1.6.x; v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Prefer the built-in image healthcheck, or update your override to {bin}."
     }
   }

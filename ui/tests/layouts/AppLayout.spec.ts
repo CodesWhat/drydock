@@ -698,10 +698,12 @@ describe('AppLayout', () => {
 
     const banner = wrapper.find('[data-testid="legacy-api-path-deprecation-banner"]');
     expect(banner.exists()).toBe(true);
-    expect(banner.text()).toContain('7 legacy API paths detected');
+    expect(banner.text()).toContain('7 requests to the removed API path detected');
     expect(banner.text()).toContain('/api/containers');
+    expect(banner.text()).toContain('/api/*');
+    expect(banner.text()).toContain('410');
     expect(banner.text()).toContain('/api/v1/*');
-    expect(banner.text()).toContain('v1.6.0');
+    expect(banner.text()).toContain('DD_COMPAT_WUDCARD=true');
     expect(banner.text()).toContain('View migration guide');
 
     const link = wrapper.find('[data-testid="legacy-api-path-deprecation-banner-link"]');

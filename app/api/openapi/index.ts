@@ -8,7 +8,7 @@ export const openApiDocument = {
     title: 'Drydock API',
     version: getVersion(),
     description:
-      'Machine-readable API specification for Drydock. Canonical API base path is /api/v1, with /api available as a compatibility alias. Authentication defaults to session cookie auth. Mutating requests using session auth must also satisfy same-origin CSRF checks.',
+      'Machine-readable API specification for Drydock. Canonical API base path is /api/v1 — the unversioned /api/* alias was removed in v1.6.0 (see DEPRECATIONS.md) and now returns 410 Gone, aside from the flag-gated wud-card compatibility endpoints and a small set of standalone auth aliases documented individually below. Authentication defaults to session cookie auth. Mutating requests using session auth must also satisfy same-origin CSRF checks.',
   },
   'x-drydock-conventions': {
     actionPostEndpoints:

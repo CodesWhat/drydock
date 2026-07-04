@@ -1,7 +1,7 @@
 Feature: Drydock Authentications API Exposure
 
   Scenario: Drydock must allow to get all Authentications state
-    When I GET /api/authentications
+    When I GET /api/v1/authentications
     Then response code should be 200
     And response body should be valid json
     And response body path $.data should be of type array with length 1
@@ -12,7 +12,7 @@ Feature: Drydock Authentications API Exposure
     And response body path $.data[0].configuration.hash should be [REDACTED]
 
   Scenario: Drydock must allow to get specific Authentication state
-    When I GET /api/authentications/basic/john
+    When I GET /api/v1/authentications/basic/john
     Then response code should be 200
     And response body should be valid json
     And response body path $.id should be basic.john

@@ -8,13 +8,13 @@ Feature: Drydock Trigger API Exposure
   # endpoint returns both triggers with the right shape.
 
   Scenario: Drydock must allow to get all Triggers state
-    When I GET /api/triggers
+    When I GET /api/v1/triggers
     Then response code should be 200
     And response body should be valid json
     And response body path $.data should be of type array with minimum length 2
 
   Scenario: Drydock must allow to get specific Triggers state
-    When I GET /api/triggers/mock/example
+    When I GET /api/v1/triggers/mock/example
     Then response code should be 200
     And response body should be valid json
     And response body path $.id should be mock.example

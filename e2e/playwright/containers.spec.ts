@@ -185,7 +185,7 @@ test.describe('Containers', () => {
       .count();
     expect(updateNowCount + forceUpdateCount).toBeGreaterThan(0);
 
-    const serverResponse = await page.request.get('/api/server');
+    const serverResponse = await page.request.get('/api/v1/server');
     let actionsEnabled = true;
     if (serverResponse.ok()) {
       actionsEnabled = readContainerActionsFeatureFlag(await serverResponse.json()) ?? true;

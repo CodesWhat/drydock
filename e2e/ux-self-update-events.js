@@ -58,9 +58,12 @@ const { loadSelfUpdatePayload } = require('./self-update-payload');
     await page.waitForTimeout(5000);
 
     try {
-      const resp = await context.request.post('http://localhost:3333/api/triggers/docker/local', {
-        data: payload,
-      });
+      const resp = await context.request.post(
+        'http://localhost:3333/api/v1/triggers/docker/local',
+        {
+          data: payload,
+        },
+      );
       out.triggerStatus = resp.status();
     } catch (err) {
       out.triggerError = String(err && err.message ? err.message : err);

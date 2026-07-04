@@ -484,7 +484,7 @@ describe('API Index', () => {
     expect(mockApp.use).toHaveBeenCalledWith('cors-middleware');
   });
 
-  test('should warn about deprecated unversioned /api/* path at startup', async () => {
+  test('should NOT log the removed "Unversioned /api/* path is deprecated" startup warning (removed in v1.6.0)', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,
       port: 3000,
@@ -498,8 +498,8 @@ describe('API Index', () => {
     const indexRouter = await import('./index.js');
     await indexRouter.init();
 
-    expect(mockLog.warn).toHaveBeenCalledWith(
-      'Unversioned /api/* path is deprecated and will be removed in v1.6.0. Use /api/v1/* instead.',
+    expect(mockLog.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('Unversioned /api/* path is deprecated'),
     );
   });
 
@@ -517,9 +517,16 @@ describe('API Index', () => {
 
     expect(mockApp.use).toHaveBeenCalledWith('/health', 'health-router');
     expect(mockApp.use).toHaveBeenCalledWith('/api/v1', 'api-router');
-    expect(mockApp.use).toHaveBeenCalledWith('/api', 'api-router');
     expect(mockApp.use).toHaveBeenCalledWith('/metrics', 'prometheus-router');
     expect(mockApp.use).toHaveBeenCalledWith('/', 'ui-router');
+    // The removed unversioned /api/* alias is no longer mounted as a router
+    // — only the legacy-usage tracker and the 410 tombstone (both plain
+    // functions) mount at '/api'.
+    expect(mockApp.use).not.toHaveBeenCalledWith('/api', 'api-router');
+    const apiFunctionMountCalls = mockApp.use.mock.calls.filter(
+      (call) => call[0] === '/api' && typeof call[1] === 'function',
+    );
+    expect(apiFunctionMountCalls).toHaveLength(2);
   });
 
   test('should NOT mount the wud-card compat router when DD_COMPAT_WUDCARD is disabled (default)', async () => {
@@ -539,14 +546,18 @@ describe('API Index', () => {
     expect(mockLog.info).not.toHaveBeenCalledWith(
       expect.stringContaining('wud-card compatibility enabled'),
     );
-    // Flag off: /api router mounting behavior is byte-for-byte identical to
-    // today — exactly one '/api' router mount, the deprecated alias, nothing
-    // else. (The legacy-alias usage tracking middleware also mounts at
-    // '/api' — asserted separately below — but is not itself a router.)
+    // Flag off: no router (string mock return value) is ever mounted at
+    // '/api' anymore — just the legacy-alias usage tracker and the 410
+    // tombstone, both plain functions.
     const apiRouterMountCalls = mockApp.use.mock.calls.filter(
       (call) => call[0] === '/api' && typeof call[1] === 'string',
     );
-    expect(apiRouterMountCalls).toEqual([['/api', 'api-router']]);
+    expect(apiRouterMountCalls).toEqual([]);
+    const apiCallsInOrder = mockApp.use.mock.calls.filter((call) => call[0] === '/api');
+    expect(apiCallsInOrder).toEqual([
+      ['/api', expect.any(Function)],
+      ['/api', expect.any(Function)],
+    ]);
   });
 
   test('should track unversioned /api/* alias usage keyed by the bounded route pattern, not the raw path', async () => {
@@ -684,7 +695,7 @@ describe('API Index', () => {
     expect(summary.api.keys).not.toContain('/v1');
   });
 
-  test('should mount the wud-card compat router at /api before the deprecated alias when DD_COMPAT_WUDCARD is enabled', async () => {
+  test('should mount the wud-card compat router at /api before the removed-alias tombstone when DD_COMPAT_WUDCARD is enabled', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,
       port: 3000,
@@ -705,25 +716,22 @@ describe('API Index', () => {
     const apiMountCalls = mockApp.use.mock.calls.filter(
       (call) => call[0] === '/api' && typeof call[1] === 'string',
     );
-    // Compat router mounts before the deprecated alias so the whitelisted
+    // Compat router mounts before the 410 tombstone so the whitelisted
     // routes are answered by its own internal apiRouter instance instead of
-    // falling through to the alias handlers.
-    expect(apiMountCalls).toEqual([
-      ['/api', 'wudcard-compat-router'],
-      ['/api', 'api-router'],
-    ]);
+    // falling through to the tombstone.
+    expect(apiMountCalls).toEqual([['/api', 'wudcard-compat-router']]);
 
     // The legacy-alias usage tracking middleware mounts BEFORE the compat
-    // router (not between it and the alias): the compat router now answers
-    // its whitelisted requests itself, via its own internal apiRouter
-    // instance, without calling next() into the alias router beneath it —
-    // so tracking has to run first for every /api request, whitelisted or
-    // not, to still be counted.
+    // router (not between it and the tombstone): the compat router now
+    // answers its whitelisted requests itself, via its own internal
+    // apiRouter instance, without calling next() into anything mounted
+    // after it — so tracking has to run first for every /api request,
+    // whitelisted or not, to still be counted.
     const apiCallsInOrder = mockApp.use.mock.calls.filter((call) => call[0] === '/api');
     expect(apiCallsInOrder).toEqual([
       ['/api', expect.any(Function)],
       ['/api', 'wudcard-compat-router'],
-      ['/api', 'api-router'],
+      ['/api', expect.any(Function)],
     ]);
   });
 
@@ -830,6 +838,328 @@ describe('API Index', () => {
     }
   });
 
+  test('real Express: a non-whitelisted /api/* request returns 410 JSON (not 404, not SPA HTML) when DD_COMPAT_WUDCARD is disabled', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    mockGetWudCardCompatEnabled.mockReturnValue(false);
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const apiFunctionCalls = mockApp.use.mock.calls.filter(
+      (call) => call[0] === '/api' && typeof call[1] === 'function',
+    );
+    expect(apiFunctionCalls).toHaveLength(2);
+    const tombstone = apiFunctionCalls[apiFunctionCalls.length - 1][1];
+
+    const realExpress = (await vi.importActual('express')) as typeof import('express');
+    const app = realExpress.default();
+    app.use('/api', tombstone);
+
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => {
+      server.listen(0, resolve);
+    });
+    const address = server.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+    const expectedBody = {
+      error: 'The unversioned /api/* path was removed in v1.6.0. Use /api/v1/* instead.',
+      details: {
+        canonicalBasePath: '/api/v1',
+        compat:
+          'WUD-era clients (wud-card, Homepage whatsupdocker widget) can enable DD_COMPAT_WUDCARD',
+        docs: 'https://getdrydock.com/docs/deprecations#unversioned-api-paths',
+      },
+    };
+
+    try {
+      const getRes = await fetch(`${baseUrl}/api/containers`);
+      expect(getRes.status).toBe(410);
+      expect(getRes.headers.get('content-type')).toMatch(/application\/json/);
+      expect(await getRes.json()).toEqual(expectedBody);
+
+      const postRes = await fetch(`${baseUrl}/api/containers`, { method: 'POST' });
+      expect(postRes.status).toBe(410);
+      expect(await postRes.json()).toEqual(expectedBody);
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
+  });
+
+  test('real Express: whitelisted wud-card endpoints still serve via the compat router while a non-whitelisted /api route still 410s when DD_COMPAT_WUDCARD is enabled', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    mockGetWudCardCompatEnabled.mockReturnValue(true);
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const apiFunctionCalls = mockApp.use.mock.calls.filter(
+      (call) => call[0] === '/api' && typeof call[1] === 'function',
+    );
+    expect(apiFunctionCalls).toHaveLength(2);
+    const tombstone = apiFunctionCalls[apiFunctionCalls.length - 1][1];
+
+    // Real wud-card compat middleware (unmocked — this file mocks
+    // './compat/wudcard' file-wide) bound to a minimal stand-in internal
+    // router, exactly like compat/wudcard.ts's own init() binds it to a
+    // real apiRouter.init() instance.
+    const realWudcard = (await vi.importActual(
+      './compat/wudcard.js',
+    )) as typeof import('./compat/wudcard.js');
+    const realExpress = (await vi.importActual('express')) as typeof import('express');
+    const internalApiRouter = realExpress.Router();
+    internalApiRouter.get('/containers', (_req, res) => {
+      res.json({ data: ['whitelisted-hit'], total: 1 });
+    });
+    const compatMiddleware = realWudcard.createWudCardCompatMiddleware(internalApiRouter);
+
+    const app = realExpress.default();
+    app.use('/api', compatMiddleware);
+    app.use('/api', tombstone);
+
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => {
+      server.listen(0, resolve);
+    });
+    const address = server.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      // GET /containers is on the wud-card whitelist and gets reshaped to a
+      // bare array — answered by the compat router, never reaching the
+      // tombstone.
+      const whitelistedRes = await fetch(`${baseUrl}/api/containers`);
+      expect(whitelistedRes.status).toBe(200);
+      expect(await whitelistedRes.json()).toEqual(['whitelisted-hit']);
+
+      // GET /registries is not on the wud-card whitelist, so it falls
+      // through the compat router and hits the 410 tombstone.
+      const nonWhitelistedRes = await fetch(`${baseUrl}/api/registries`);
+      expect(nonWhitelistedRes.status).toBe(410);
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
+  });
+
+  test('real Express: GET /api/auth/methods (registered directly on the app before the /api mounts) is never shadowed by the removed-alias tombstone', async () => {
+    // Regression trap: app/api/auth.ts:419 registers this route directly on
+    // the app via auth.init(app), which registerRoutes() calls BEFORE any
+    // /api mount. Express tries middleware/routes in registration order, so
+    // as long as that ordering holds, this exact route always wins over
+    // anything mounted at '/api' afterward — including the 410 tombstone.
+    // This alias is on its own, separate deprecation schedule (removal in
+    // v1.7.0, see DEPRECATIONS.md) and must keep working through v1.6.0.
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    mockGetWudCardCompatEnabled.mockReturnValue(false);
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const apiFunctionCalls = mockApp.use.mock.calls.filter(
+      (call) => call[0] === '/api' && typeof call[1] === 'function',
+    );
+    const tombstone = apiFunctionCalls[apiFunctionCalls.length - 1][1];
+
+    const realExpress = (await vi.importActual('express')) as typeof import('express');
+    const app = realExpress.default();
+    // Mirrors the real, standalone registration in app/api/auth.ts:419.
+    app.get('/api/auth/methods', (_req, res) => {
+      res.status(200).json({ strategies: ['local'], warnings: [] });
+    });
+    app.use('/api', tombstone);
+
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => {
+      server.listen(0, resolve);
+    });
+    const address = server.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const res = await fetch(`${baseUrl}/api/auth/methods`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ strategies: ['local'], warnings: [] });
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
+  });
+
+  test('real Express: /api/v1/* traffic is never reached by the removed-alias tombstone mounted at /api', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    mockGetWudCardCompatEnabled.mockReturnValue(false);
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const apiFunctionCalls = mockApp.use.mock.calls.filter(
+      (call) => call[0] === '/api' && typeof call[1] === 'function',
+    );
+    const tombstone = apiFunctionCalls[apiFunctionCalls.length - 1][1];
+
+    const realExpress = (await vi.importActual('express')) as typeof import('express');
+    const v1Router = realExpress.Router();
+    v1Router.get('/containers', (_req, res) => {
+      res.json({ data: [], total: 0 });
+    });
+
+    const app = realExpress.default();
+    app.use('/api/v1', v1Router);
+    app.use('/api', tombstone);
+
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => {
+      server.listen(0, resolve);
+    });
+    const address = server.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const res = await fetch(`${baseUrl}/api/v1/containers`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ data: [], total: 0 });
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
+  });
+
+  test('real Express: a non-GET request to a GET-only /api/v1/* route falls through the tombstone to a 404, not a false 410', async () => {
+    // Regression trap: app/api/api.ts's catch-all is GET-only, and dozens of
+    // real v1 endpoints (e.g. app/api/app.ts's GET /) only register a single
+    // HTTP verb. A DELETE (or any unsupported method) to such a route never
+    // resolves inside the /api/v1 mount and falls through into the '/api'
+    // chain with req.path like '/v1/app' — that must reach a genuine 404,
+    // never the removed-unversioned-alias 410.
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    mockGetWudCardCompatEnabled.mockReturnValue(false);
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    await indexRouter.init();
+
+    const apiFunctionCalls = mockApp.use.mock.calls.filter(
+      (call) => call[0] === '/api' && typeof call[1] === 'function',
+    );
+    const tombstone = apiFunctionCalls[apiFunctionCalls.length - 1][1];
+
+    const realExpress = (await vi.importActual('express')) as typeof import('express');
+    const v1Router = realExpress.Router();
+    // Mirrors app/api/app.ts registering only `router.get('/', getAppInfos)`.
+    v1Router.get('/app', (_req, res) => {
+      res.json({ version: '1.6.0' });
+    });
+
+    const app = realExpress.default();
+    app.use('/api/v1', v1Router);
+    app.use('/api', tombstone);
+
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => {
+      server.listen(0, resolve);
+    });
+    const address = server.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const res = await fetch(`${baseUrl}/api/v1/app`, { method: 'DELETE' });
+      expect(res.status).toBe(404);
+      expect(res.status).not.toBe(410);
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
+  });
+
+  test('real Express: the legacy-alias usage tracker still records a hit for a request the tombstone answers with 410', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    mockGetWudCardCompatEnabled.mockReturnValue(false);
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    const compatibility = await import('../prometheus/compatibility.js');
+    await indexRouter.init();
+
+    const apiFunctionCalls = mockApp.use.mock.calls.filter(
+      (call) => call[0] === '/api' && typeof call[1] === 'function',
+    );
+    const tracking = apiFunctionCalls[0][1];
+    const tombstone = apiFunctionCalls[apiFunctionCalls.length - 1][1];
+
+    const realExpress = (await vi.importActual('express')) as typeof import('express');
+    const app = realExpress.default();
+    app.use('/api', tracking);
+    app.use('/api', tombstone);
+
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => {
+      server.listen(0, resolve);
+    });
+    const address = server.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const res = await fetch(`${baseUrl}/api/containers`);
+      expect(res.status).toBe(410);
+
+      // res.on('finish') fires once the response is fully flushed, which
+      // can land a tick after fetch() resolves — poll briefly instead of
+      // asserting immediately.
+      let summary = compatibility.getLegacyInputSummary();
+      for (let attempt = 0; attempt < 20 && summary.api.total < 1; attempt += 1) {
+        await new Promise((resolve) => {
+          setTimeout(resolve, 25);
+        });
+        summary = compatibility.getLegacyInputSummary();
+      }
+      expect(summary.api.total).toBeGreaterThanOrEqual(1);
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
+  });
+
   test('should skip mounting UI router when DD_SERVER_UI_ENABLED=false', async () => {
     mockGetServerConfiguration.mockReturnValue({
       enabled: true,
@@ -845,7 +1175,7 @@ describe('API Index', () => {
 
     expect(mockApp.use).toHaveBeenCalledWith('/health', 'health-router');
     expect(mockApp.use).toHaveBeenCalledWith('/api/v1', 'api-router');
-    expect(mockApp.use).toHaveBeenCalledWith('/api', 'api-router');
+    expect(mockApp.use).not.toHaveBeenCalledWith('/api', 'api-router');
     expect(mockApp.use).toHaveBeenCalledWith('/metrics', 'prometheus-router');
     expect(mockApp.use).not.toHaveBeenCalledWith('/', 'ui-router');
   });

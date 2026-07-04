@@ -1725,8 +1725,10 @@ onUnmounted(() => {
           @dismiss="legacyApiPathDeprecationBanner.dismissForSession"
           @dismiss-permanent="legacyApiPathDeprecationBanner.dismissPermanently">
           <i18n-t keypath="appShell.banners.legacyApiBody" tag="span">
-            <template #v1Prefix><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/v1/*</code></template>
             <template #oldPrefix><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/*</code></template>
+            <template #statusCode><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">410</code></template>
+            <template #v1Prefix><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/api/v1/*</code></template>
+            <template #compatFlag><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_COMPAT_WUDCARD=true</code></template>
           </i18n-t>
           <span v-if="legacyApiPathKeysPreview" class="block mt-1 truncate">
             {{ t('appShell.banners.apiPathsLabel', { count: legacyInputSummary?.api?.total, keys: legacyApiPathKeysPreview }) }}

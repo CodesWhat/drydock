@@ -36,13 +36,13 @@ Older drydock releases allowed `DD_SERVER_CORS_ENABLED=true` without `DD_SERVER_
 
 ### Unversioned API paths (`/api/*`) {#unversioned-api-paths}
 
-The unversioned `/api/*` path is a backward-compatible alias for `/api/v1/*`. Both return identical responses, except when `DD_COMPAT_WUDCARD=true`: three of the four whitelisted [wud-card compatibility](/docs/configuration/server#wud-card-compatibility) endpoints then return WUD's bare-array response shape instead of drydock's envelope (the fourth passes through unmodified). Those endpoints remain mounted at `/api/*` even after this alias is removed.
+The unversioned `/api/*` path was a backward-compatible alias for `/api/v1/*`. As of v1.6.0, `/api/*` requests return **`410 Gone`** with a JSON body pointing at the `/api/v1/` equivalent, except the four whitelisted [wud-card compatibility](/docs/configuration/server#wud-card-compatibility) endpoints — those keep working at `/api/*` when `DD_COMPAT_WUDCARD=true`, served by their own router rather than by falling through to the removed alias, so they're unaffected by this removal (three return WUD's bare-array response shape instead of drydock's envelope; the fourth passes through unmodified). Two standalone auth aliases are unaffected for the same reason, unconditionally: [`GET /api/auth/methods`](#api-auth-methods) (registered directly on the app, removed on its own v1.7.0 timeline) and `GET /api/auth/status` (also registered directly on the app, a permanent compatibility alias for `GET /api/v1/auth/status` with no removal scheduled).
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.4.0 |
-| **Detection** | Startup log warning; UI deprecation banner when legacy API paths are detected |
-| **Migration** | Replace `/api/` with `/api/v1/` in all integrations |
+| **Removed since** | v1.6.0 |
+| **Migration** | Replace `/api/` with `/api/v1/` in all integrations. If you depend on wud-card or Homepage's `whatsupdocker` widget and can't change their base path, set `DD_COMPAT_WUDCARD=true` |
 
 ### Legacy `WUD_*` environment variables {#legacy-env-vars}
 
@@ -188,12 +188,12 @@ In v1.5.x, the `trigger-not-included` and `trigger-excluded` eligibility reasons
 
 ### Unversioned `GET /api/auth/methods` alias {#api-auth-methods}
 
-`GET /api/auth/methods` is a legacy, unversioned alias for `GET /auth/strategies`, kept unauthenticated so the login screen can render before a session exists.
+`GET /api/auth/methods` is a legacy, unversioned alias for `GET /auth/strategies`, kept unauthenticated so the login screen can render before a session exists. It's registered directly on the app, ahead of the `/api` mounts, so it survived the [`/api/*` path removal](#unversioned-api-paths) in v1.6.0 and keeps working on its own separate v1.7.0 timeline.
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.6.0 |
-| **Detection** | Log warning on each request: "GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /auth/strategies instead." |
+| **Detection** | Log warning on each request ("GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /auth/strategies instead.") plus RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers |
 | **Migration** | Replace `GET /api/auth/methods` with `GET /auth/strategies` |
 
 ### Agent-less Home Assistant MQTT topic layout (multi-agent) {#hass-agent-topic-layout}

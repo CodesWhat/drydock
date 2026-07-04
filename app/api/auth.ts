@@ -48,6 +48,8 @@ const LOGIN_SESSION_ERROR_RESPONSE = 'Unable to establish session';
 const LOGIN_SUCCESS_AUDIT_MESSAGE = 'Login succeeded';
 const DEPRECATED_AUTH_METHODS_WARNING =
   'GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /auth/strategies instead.';
+const DEPRECATED_AUTH_METHODS_DEPRECATION = '@1814400000';
+const DEPRECATED_AUTH_METHODS_SUNSET = 'Thu, 01 Jul 2027 00:00:00 GMT';
 let sessionMiddleware: ReturnType<typeof session> | undefined;
 
 type LoginFinish = () => void;
@@ -294,13 +296,17 @@ function logout(req: AuthRequest, res: Response): void {
 
 /**
  * Return auth strategies via the deprecated, unversioned /api/auth/methods
- * alias. Logs a deprecation warning on every request per DEPRECATIONS.md,
- * then delegates to getStrategies for the actual (unchanged) response body.
+ * alias. Logs a deprecation warning on every request per DEPRECATIONS.md and
+ * sets the RFC 9745 Deprecation / RFC 8594 Sunset headers (same treatment as
+ * PUT /api/settings), then delegates to getStrategies for the actual
+ * (unchanged) response body.
  * @param req
  * @param res
  */
 function getStrategiesDeprecatedMethodsAlias(req: Request, res: Response): void {
   log.warn(DEPRECATED_AUTH_METHODS_WARNING);
+  res.setHeader('Deprecation', DEPRECATED_AUTH_METHODS_DEPRECATION);
+  res.setHeader('Sunset', DEPRECATED_AUTH_METHODS_SUNSET);
   getStrategies(req, res);
 }
 

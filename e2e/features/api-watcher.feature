@@ -1,7 +1,7 @@
 Feature: Drydock Watcher API Exposure
 
   Scenario: Drydock must allow to get all Watchers state
-    When I GET /api/watchers
+    When I GET /api/v1/watchers
     Then response code should be 200
     And response body should be valid json
     And response body path $.data should be of type array with length 1
@@ -13,7 +13,7 @@ Feature: Drydock Watcher API Exposure
     And response body path $.data[0].configuration.watchbydefault should be false
 
   Scenario: Drydock must allow to get specific Watcher state
-    When I GET /api/watchers/docker/local
+    When I GET /api/v1/watchers/docker/local
     Then response code should be 200
     And response body should be valid json
     And response body path $.id should be docker.local

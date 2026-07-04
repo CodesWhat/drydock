@@ -134,6 +134,7 @@ function createApp() {
 function createResponse() {
   return {
     set: vi.fn().mockReturnThis(),
+    setHeader: vi.fn(),
     status: vi.fn().mockReturnThis(),
     json: vi.fn(),
     sendStatus: vi.fn(),
@@ -1354,6 +1355,8 @@ describe('Auth Router', () => {
       expect(log.warn).toHaveBeenCalledWith(
         'GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /auth/strategies instead.',
       );
+      expect(res.setHeader).toHaveBeenCalledWith('Deprecation', '@1814400000');
+      expect(res.setHeader).toHaveBeenCalledWith('Sunset', 'Thu, 01 Jul 2027 00:00:00 GMT');
       expect(res.json).toHaveBeenCalledWith({ strategies: [], warnings: [] });
 
       log.warn.mockClear();
