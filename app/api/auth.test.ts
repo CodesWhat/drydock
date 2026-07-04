@@ -1355,9 +1355,24 @@ describe('Auth Router', () => {
       expect(log.warn).toHaveBeenCalledWith(
         'GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /auth/strategies instead.',
       );
-      expect(res.setHeader).toHaveBeenCalledWith('Deprecation', '@1814400000');
+      expect(res.setHeader).toHaveBeenCalledWith('Deprecation', '@1783123200');
       expect(res.setHeader).toHaveBeenCalledWith('Sunset', 'Thu, 01 Jul 2027 00:00:00 GMT');
       expect(res.json).toHaveBeenCalledWith({ strategies: [], warnings: [] });
+
+      // RFC 9745: Deprecation is the instant the resource BECAME deprecated
+      // (past/current), never the same instant as the future Sunset removal
+      // date.
+      const deprecationEpochMs =
+        Number(
+          (
+            res.setHeader.mock.calls.find((call: unknown[]) => call[0] === 'Deprecation') as [
+              string,
+              string,
+            ]
+          )[1].replace('@', ''),
+        ) * 1000;
+      const sunsetEpochMs = Date.parse('Thu, 01 Jul 2027 00:00:00 GMT');
+      expect(deprecationEpochMs).toBeLessThan(sunsetEpochMs);
 
       log.warn.mockClear();
       res.json.mockClear();

@@ -1,6 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
 import express from 'express';
-import * as apiRouter from '../api.js';
 
 /**
  * Compatibility shim for the Home Assistant "wud-card" integration
@@ -10,19 +9,21 @@ import * as apiRouter from '../api.js';
  *
  * Gated by DD_COMPAT_WUDCARD (see getWudCardCompatEnabled(), default OFF).
  *
- * Genuinely self-sufficient: init() builds its own internal apiRouter.init()
- * instance (index.ts mounts exactly one apiRouter instance, at /api/v1 —
- * this is a second, independent instance for the unversioned /api/* mount)
- * and, for the narrow whitelist of endpoints the card actually calls,
- * dispatches the request directly into that internal instance (patching
- * res.json first to unwrap drydock's list envelope into a bare array when
- * the matched route needs it). That internal instance runs the exact same
- * route handlers /api/v1 uses, so auth, rate limiting, and behavior are
- * identical — no security bypass — but the response is produced by this
- * module itself, not by falling through to whatever happens to be mounted
- * after it. Every other request calls next() immediately and is left
- * completely untouched, falling through to whatever is mounted after this
- * router (the 410 tombstone for the removed unversioned /api/* alias,
+ * Genuinely self-sufficient: init() is handed the SAME apiRouter.init()
+ * instance index.ts already built and mounted at /api/v1 (index.ts builds
+ * exactly one apiRouter instance and passes it to both mounts — see
+ * registerRoutes() there) rather than constructing a second, independent
+ * one. For the narrow whitelist of endpoints the card actually calls, the
+ * compat middleware dispatches the request directly into that shared
+ * instance (patching res.json first to unwrap drydock's list envelope into
+ * a bare array when the matched route needs it). Because it is the exact
+ * same object — not a second instance running identical-but-separate route
+ * handlers — every stateful middleware inside it, including the rate
+ * limiter, is shared too: whitelisted compat requests draw down the same
+ * request budget /api/v1 traffic does, instead of getting an independent
+ * one. Every other request calls next() immediately and is left completely
+ * untouched, falling through to whatever is mounted after this router (the
+ * 410 tombstone for the removed unversioned /api/* alias,
  * sendUnversionedApiTombstone in index.ts). Because whitelisted requests
  * never depend on that fallthrough, this module keeps working unchanged
  * regardless of what is mounted after it.
@@ -138,14 +139,17 @@ export function createWudCardCompatMiddleware(
 }
 
 /**
- * Init the wud-card compat router. Owns its own internal apiRouter.init()
- * instance so the whitelisted endpoints are served directly by this
- * module, with no dependency on whatever is mounted after it (the 410
- * tombstone for the removed unversioned /api/* alias).
+ * Init the wud-card compat router, bound to the SAME apiRouter.init()
+ * instance the caller already mounted at /api/v1 — not a second,
+ * independently-constructed one — so the whitelisted endpoints share auth,
+ * rate limiting, and every other stateful middleware with /api/v1 instead
+ * of getting their own separate budget. The endpoints are served directly
+ * by this module, with no dependency on whatever is mounted after it (the
+ * 410 tombstone for the removed unversioned /api/* alias).
+ * @param internalApiRouter the same apiRouter.init() instance mounted at /api/v1
  * @returns {*|Router}
  */
-export function init(): express.Router {
-  const internalApiRouter = apiRouter.init();
+export function init(internalApiRouter: express.Router): express.Router {
   const router = express.Router();
   router.use(createWudCardCompatMiddleware(internalApiRouter));
   return router;

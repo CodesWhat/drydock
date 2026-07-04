@@ -3,18 +3,7 @@ import type { AddressInfo } from 'node:net';
 import express from 'express';
 import { createMockRequest, createMockResponse } from '../../test/helpers.js';
 
-const mockApiRouterInit = vi.hoisted(() => vi.fn());
-
-vi.mock('../api.js', () => ({
-  init: mockApiRouterInit,
-}));
-
 import { createWudCardCompatMiddleware, init } from './wudcard.js';
-
-beforeEach(() => {
-  mockApiRouterInit.mockReset();
-  mockApiRouterInit.mockReturnValue(vi.fn());
-});
 
 function runMiddleware(method: string, path: string, internalApiRouter = vi.fn()) {
   const req = createMockRequest({ method, path });
@@ -23,6 +12,15 @@ function runMiddleware(method: string, path: string, internalApiRouter = vi.fn()
   const middleware = createWudCardCompatMiddleware(internalApiRouter);
   middleware(req, res, next);
   return { req, res, next, internalApiRouter };
+}
+
+async function startServer(app: express.Express) {
+  const server = http.createServer(app);
+  await new Promise<void>((resolve) => {
+    server.listen(0, resolve);
+  });
+  const address = server.address() as AddressInfo;
+  return { server, baseUrl: `http://127.0.0.1:${address.port}` };
 }
 
 describe('wud-card compat middleware', () => {
@@ -163,27 +161,79 @@ describe('wud-card compat middleware', () => {
 });
 
 describe('wud-card compat router init', () => {
-  test('builds its own internal apiRouter instance and mounts the compat middleware bound to it', () => {
+  test('mounts the compat middleware bound to the SAME apiRouter instance passed in, not a second/independent one', () => {
     const internalRouterStub = vi.fn();
-    mockApiRouterInit.mockReturnValue(internalRouterStub);
 
-    const router = init();
+    const router = init(internalRouterStub);
 
-    expect(mockApiRouterInit).toHaveBeenCalledOnce();
     // Real Express Router: a callable function with exactly one middleware
-    // layer registered — the compat middleware bound to our internal
-    // apiRouter instance.
+    // layer registered — the compat middleware bound to the internal
+    // apiRouter instance we passed in.
     expect(typeof router).toBe('function');
     expect(router.stack).toHaveLength(1);
 
     // Dispatch a whitelisted request through the returned layer to prove the
-    // mounted middleware is genuinely bound to OUR internal apiRouter
-    // instance (not some other/unbound one).
+    // mounted middleware is genuinely bound to the exact instance we passed
+    // in (not some other/unbound/newly-constructed one).
     const req = createMockRequest({ method: 'GET', path: '/containers' });
     const res = createMockResponse();
     const next = vi.fn();
     router.stack[0].handle(req, res, next);
     expect(internalRouterStub).toHaveBeenCalledWith(req, res, next);
+  });
+});
+
+describe('wud-card compat router shares rate limiting with /api/v1 (no independent budget)', () => {
+  function buildRateLimitedInternalApiRouter(budget: { remaining: number }): express.Router {
+    const router = express.Router();
+    // Stand-in for the real apiLimiter (express-rate-limit) mounted inside
+    // apiRouter.init() (app/api/api.ts) — a stateful middleware whose
+    // consumed budget must be shared, not duplicated, between /api/v1 and
+    // the wud-card compat mount.
+    router.use((_req, res, next) => {
+      if (budget.remaining <= 0) {
+        res.status(429).json({ error: 'Too Many Requests' });
+        return;
+      }
+      budget.remaining -= 1;
+      next();
+    });
+    router.get('/containers', (_req, res) => {
+      res.json({ data: [{ id: 'c1' }], total: 1 });
+    });
+    return router;
+  }
+
+  test('a request against a whitelisted compat route consumes the same limiter budget as /api/v1, exhausting it for both', async () => {
+    const budget = { remaining: 2 };
+    const sharedApiRouter = buildRateLimitedInternalApiRouter(budget);
+
+    const app = express();
+    // Mirrors index.ts: apiRouter.init() built exactly once...
+    app.use('/api/v1', sharedApiRouter);
+    // ...and that SAME instance handed to the compat router (init's new
+    // parameter), instead of building a second, independent one.
+    app.use('/api', init(sharedApiRouter));
+
+    const { server, baseUrl } = await startServer(app);
+    try {
+      const v1Res = await fetch(`${baseUrl}/api/v1/containers`);
+      expect(v1Res.status).toBe(200);
+
+      const compatRes = await fetch(`${baseUrl}/api/containers`);
+      expect(compatRes.status).toBe(200);
+      expect(await compatRes.json()).toEqual([{ id: 'c1' }]);
+
+      // The budget of 2 is now exhausted by one /api/v1 request plus one
+      // compat-route request — proving both mounts draw from the exact same
+      // limiter state instead of each getting an independent budget.
+      const exhaustedRes = await fetch(`${baseUrl}/api/v1/containers`);
+      expect(exhaustedRes.status).toBe(429);
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
   });
 });
 
@@ -208,24 +258,13 @@ describe('wud-card compat router topology (self-sufficiency without the deprecat
     return router;
   }
 
-  async function startServer(app: express.Express) {
-    const server = http.createServer(app);
-    await new Promise<void>((resolve) => {
-      server.listen(0, resolve);
-    });
-    const address = server.address() as AddressInfo;
-    return { server, baseUrl: `http://127.0.0.1:${address.port}` };
-  }
-
   test('the 4 whitelisted endpoints keep working with no /api alias mounted, and a non-whitelisted /api route 404s as JSON, not the SPA', async () => {
-    mockApiRouterInit.mockReturnValue(buildStubInternalApiRouter());
-
     const app = express();
     app.use(express.json());
     // Compat router mounted alone at /api — deliberately no
     // app.use('/api', apiRouter.init()) alias mount behind it, simulating
     // the world after the deprecated alias is eventually removed.
-    app.use('/api', init());
+    app.use('/api', init(buildStubInternalApiRouter()));
     // A generic API 404 (JSON), standing in for whatever the real
     // post-alias-removal API surface keeps for genuinely unmatched /api/*
     // routes — proving non-whitelisted requests still fall through past the

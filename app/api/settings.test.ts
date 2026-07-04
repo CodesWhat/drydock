@@ -1,7 +1,7 @@
 import { createMockResponse } from '../test/helpers.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
-const deprecatedPutDeprecation = '@1798761600';
+const deprecatedPutDeprecation = '@1772236800';
 const deprecatedPutSunset = 'Fri, 01 Jan 2027 00:00:00 GMT';
 
 const { mockRouter, mockGetSettings, mockUpdateSettings, mockLogWarn } = vi.hoisted(() => ({
@@ -161,6 +161,13 @@ describe('Settings Router', () => {
     expect(mockLogWarn).toHaveBeenCalledWith(
       'PUT /api/settings is deprecated and will be removed in v1.6.0. Use PATCH /api/settings instead.',
     );
+
+    // RFC 9745: Deprecation is the instant the resource BECAME deprecated
+    // (past/current), never the same instant as the future Sunset removal
+    // date.
+    const deprecationEpochMs = Number(deprecatedPutDeprecation.replace('@', '')) * 1000;
+    const sunsetEpochMs = Date.parse(deprecatedPutSunset);
+    expect(deprecationEpochMs).toBeLessThan(sunsetEpochMs);
   });
 
   test('should not return deprecation headers on PATCH', () => {

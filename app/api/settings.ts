@@ -10,7 +10,12 @@ const router = express.Router();
 const log = logger.child({ component: 'settings' });
 const deprecatedPutWarning =
   'PUT /api/settings is deprecated and will be removed in v1.6.0. Use PATCH /api/settings instead.';
-const deprecatedPutDeprecation = '@1798761600';
+// '@1772236800' = 2026-02-28T00:00:00Z, the v1.4.0 GA date (see CHANGELOG.md
+// and the "PUT /api/settings" entry in DEPRECATIONS.md) — the date this
+// route actually became deprecated. Per RFC 9745 the Deprecation value must
+// be the instant the resource became deprecated, a past/current date, never
+// the same instant as the future Sunset removal date below.
+const deprecatedPutDeprecation = '@1772236800';
 const deprecatedPutSunset = 'Fri, 01 Jan 2027 00:00:00 GMT';
 
 const settingsSchema = joi

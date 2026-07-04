@@ -717,22 +717,47 @@ describe('API Index', () => {
       (call) => call[0] === '/api' && typeof call[1] === 'string',
     );
     // Compat router mounts before the 410 tombstone so the whitelisted
-    // routes are answered by its own internal apiRouter instance instead of
+    // routes are answered by the shared apiRouter instance instead of
     // falling through to the tombstone.
     expect(apiMountCalls).toEqual([['/api', 'wudcard-compat-router']]);
 
     // The legacy-alias usage tracking middleware mounts BEFORE the compat
     // router (not between it and the tombstone): the compat router now
-    // answers its whitelisted requests itself, via its own internal
-    // apiRouter instance, without calling next() into anything mounted
-    // after it — so tracking has to run first for every /api request,
-    // whitelisted or not, to still be counted.
+    // answers its whitelisted requests itself, via the shared apiRouter
+    // instance, without calling next() into anything mounted after it — so
+    // tracking has to run first for every /api request, whitelisted or not,
+    // to still be counted.
     const apiCallsInOrder = mockApp.use.mock.calls.filter((call) => call[0] === '/api');
     expect(apiCallsInOrder).toEqual([
       ['/api', expect.any(Function)],
       ['/api', 'wudcard-compat-router'],
       ['/api', expect.any(Function)],
     ]);
+  });
+
+  test('mounts the wud-card compat router with the SAME apiRouter instance used at /api/v1, not a second/independent one (shared rate limiter)', async () => {
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    mockGetWudCardCompatEnabled.mockReturnValue(true);
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    const apiRouter = await import('./api.js');
+    const wudCardCompatRouter = await import('./compat/wudcard.js');
+    await indexRouter.init();
+
+    // apiRouter.init() is called exactly once — index.ts builds a single
+    // instance and reuses it for both mounts, instead of the compat router
+    // building a second, independent one internally.
+    expect(apiRouter.init).toHaveBeenCalledOnce();
+    const versionedApiRouter = (apiRouter.init as ReturnType<typeof vi.fn>).mock.results[0].value;
+
+    expect(mockApp.use).toHaveBeenCalledWith('/api/v1', versionedApiRouter);
+    expect(wudCardCompatRouter.init).toHaveBeenCalledWith(versionedApiRouter);
   });
 
   test('should still record legacy-alias usage for whitelisted wud-card requests when DD_COMPAT_WUDCARD is enabled', async () => {

@@ -417,36 +417,47 @@ describe('api/log-stream', () => {
       expect(socket.write).not.toHaveBeenCalled();
     });
 
-    test('matches deprecated unversioned path /api/log/stream', async () => {
-      const ws = new EventEmitter() as EventEmitter & {
-        send: ReturnType<typeof vi.fn>;
-        close: ReturnType<typeof vi.fn>;
-      };
-      ws.send = vi.fn();
-      ws.close = vi.fn();
-
+    test('rejects the removed unversioned alias /api/log/stream with 410 Gone', async () => {
+      const handleUpgrade = vi.fn();
       const gateway = createSystemLogStreamGateway({
         sessionMiddleware: authenticatingSessionMiddleware,
-        webSocketServer: {
-          handleUpgrade: vi.fn((_req, _socket, _head, callback: (socket: unknown) => void) =>
-            callback(ws),
-          ),
-        },
+        webSocketServer: { handleUpgrade },
         isRateLimited: vi.fn(() => false),
-        getBackfillEntries: vi.fn(() => []),
-        subscribeToEntries: vi.fn(() => () => {}),
       });
+      const socket = createUpgradeSocket();
 
-      const upgradePromise = gateway.handleUpgrade(
+      await gateway.handleUpgrade(
         createUpgradeRequest('/api/log/stream') as any,
-        createUpgradeSocket() as any,
+        socket as any,
         Buffer.alloc(0),
       );
 
-      await new Promise((resolve) => setImmediate(resolve));
-      expect(ws.send).not.toHaveBeenCalled();
-      ws.emit('close');
-      await upgradePromise;
+      expect(socket.write).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '410 The unversioned /api/log/stream path was removed in v1.6.0. Use /api/v1/log/stream instead.',
+        ),
+      );
+      expect(socket.destroy).toHaveBeenCalled();
+      expect(handleUpgrade).not.toHaveBeenCalled();
+    });
+
+    test('ignores unrelated unversioned /api paths (not the removed log/stream alias, not the v1 route)', async () => {
+      const handleUpgrade = vi.fn();
+      const gateway = createSystemLogStreamGateway({
+        sessionMiddleware: authenticatingSessionMiddleware,
+        webSocketServer: { handleUpgrade },
+        isRateLimited: vi.fn(() => false),
+      });
+      const socket = createUpgradeSocket();
+
+      await gateway.handleUpgrade(
+        createUpgradeRequest('/api/containers/c1/logs/stream') as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+
+      expect(socket.write).not.toHaveBeenCalled();
+      expect(handleUpgrade).not.toHaveBeenCalled();
     });
 
     test('sends backfill entries on connect', async () => {

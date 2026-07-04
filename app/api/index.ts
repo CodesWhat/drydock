@@ -219,11 +219,17 @@ function registerRoutes(app) {
   healthRouter.setAuthReadyFn(() => getAllIds().length > 0);
   auth.init(app);
   app.use('/health', healthRouter.init());
-  app.use('/api/v1', apiRouter.init());
+  // Built exactly once and reused for both mounts below (rather than calling
+  // apiRouter.init() a second time for the wud-card compat router) so the
+  // whitelisted compat endpoints share the exact same rate limiter — and
+  // every other stateful middleware — that /api/v1 uses, instead of getting
+  // an independent budget. See compat/wudcard.ts's module doc comment.
+  const versionedApiRouter = apiRouter.init();
+  app.use('/api/v1', versionedApiRouter);
   app.use('/api', trackLegacyApiAliasUsage);
   if (getWudCardCompatEnabled()) {
     log.info('wud-card compatibility enabled at /api (DD_COMPAT_WUDCARD=true)');
-    app.use('/api', wudCardCompatRouter.init());
+    app.use('/api', wudCardCompatRouter.init(versionedApiRouter));
   }
   app.use('/api', sendUnversionedApiTombstone);
   app.use('/metrics', prometheusRouter.init());

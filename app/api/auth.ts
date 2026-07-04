@@ -48,7 +48,12 @@ const LOGIN_SESSION_ERROR_RESPONSE = 'Unable to establish session';
 const LOGIN_SUCCESS_AUDIT_MESSAGE = 'Login succeeded';
 const DEPRECATED_AUTH_METHODS_WARNING =
   'GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /auth/strategies instead.';
-const DEPRECATED_AUTH_METHODS_DEPRECATION = '@1814400000';
+// '@1783123200' = 2026-07-04T00:00:00Z, the date this endpoint actually
+// started sending the deprecation signal (v1.6.0) — the RFC 9745
+// Deprecation value must be the instant the resource became deprecated, a
+// past/current date, never the same instant as the future Sunset removal
+// date below.
+const DEPRECATED_AUTH_METHODS_DEPRECATION = '@1783123200';
 const DEPRECATED_AUTH_METHODS_SUNSET = 'Thu, 01 Jul 2027 00:00:00 GMT';
 let sessionMiddleware: ReturnType<typeof session> | undefined;
 
