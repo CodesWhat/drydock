@@ -2732,3 +2732,90 @@ describe('EdgeAgentAdapter — requestId echo correlation', () => {
     await expect(third).resolves.toBe('third-logs');
   });
 });
+
+describe('EdgeAgentAdapter — terminate (Fix 2: revoke-path zombie frame)', () => {
+  // Regression coverage for: disconnectByKeyId (portwing-ws.ts) revoked a key
+  // by sending an error frame and calling ws.close() directly, but never tore
+  // down the corresponding adapter synchronously — its message listener
+  // stayed attached and `disconnected` stayed false until the real
+  // 'close'/'error' event eventually fired. A frame already buffered in the
+  // transport when the key was revoked could still reach onMessage() and
+  // mutate client/container/metrics state under a key that was, by the time
+  // the frame was dispatched, no longer valid. terminate() reuses the same
+  // synchronous teardown checkLivenessAndPing() already uses for ping
+  // timeouts (detach listeners -> ws.close() -> onDisconnect()) to close that
+  // window for revocation too.
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('sends an error frame with the given code/message and closes with the given close code', () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    adapter.terminate('unknown-key', 'key revoked', 1008);
+
+    const errorFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      type: string;
+      data: { code: string; message: string };
+    };
+    expect(errorFrame.type).toBe('error');
+    expect(errorFrame.data.code).toBe('unknown-key');
+    expect(errorFrame.data.message).toBe('key revoked');
+    expect(ws.close).toHaveBeenCalledWith(1008, 'unknown-key');
+  });
+
+  test('runs onDisconnect synchronously, freeing the agent slot immediately', () => {
+    const { adapter, client } = createAdapter();
+    adapter.activate();
+
+    adapter.terminate('unknown-key', 'key revoked', 1008);
+
+    expect(manager.removeAgent).toHaveBeenCalledWith(client.name);
+  });
+
+  test('detaches the message listener so a frame buffered in the close window is inert (revoke inertness)', () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    adapter.terminate('unknown-key', 'key revoked', 1008);
+
+    // Simulate a frame that was already in flight on the wire when the key
+    // was revoked — must be inert: the message listener was detached and
+    // this.disconnected flipped true by the synchronous teardown above.
+    sendFrame(ws, 'dd:container_sync', { containers: [] });
+
+    expect(
+      (client as unknown as { handleContainerSync: ReturnType<typeof vi.fn> }).handleContainerSync,
+    ).not.toHaveBeenCalled();
+  });
+
+  test('a delayed real close event after terminate does not double-fire onDisconnect', async () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    adapter.terminate('unknown-key', 'key revoked', 1008);
+    expect(manager.removeAgent).toHaveBeenCalledTimes(1);
+
+    // The underlying transport still emits its real 'close' event after
+    // ws.close() completes, as a genuine WebSocket would. Listener detachment
+    // (shared with the ping-timeout teardown) means this is a no-op.
+    ws.emit('close');
+    await Promise.resolve();
+
+    expect(manager.removeAgent).toHaveBeenCalledTimes(1);
+    expect(manager.removeAgent).toHaveBeenCalledWith(client.name);
+  });
+
+  test('a ws.send failure while sending the error frame does not prevent teardown', () => {
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+    (ws.send as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+      throw new Error('socket already closing');
+    });
+
+    expect(() => adapter.terminate('unknown-key', 'key revoked', 1008)).not.toThrow();
+    expect(ws.close).toHaveBeenCalledWith(1008, 'unknown-key');
+    expect(manager.removeAgent).toHaveBeenCalledWith(client.name);
+  });
+});

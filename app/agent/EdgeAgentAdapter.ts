@@ -175,6 +175,38 @@ export class EdgeAgentAdapter {
   }
 
   /**
+   * Shared teardown for any path that force-ends a session out-of-band from a
+   * real 'close'/'error' event: detach the message/close/error listeners this
+   * adapter registered in activate(), force-close the underlying socket, and
+   * run onDisconnect() synchronously rather than waiting for the transport's
+   * own event. Used by both the ping-timeout path (checkLivenessAndPing,
+   * below) and terminate() (key revocation — see there).
+   *
+   * Detaching listeners BEFORE closing matters for two reasons (Bug 3, leg
+   * 2): the underlying transport's real 'close' (and possibly 'error') event
+   * still fires once ws.close() completes, and without detaching first that
+   * event would run onDisconnect() a second time on a connection this adapter
+   * has already torn down (the idempotency guard in onDisconnect() covers any
+   * WebSocketLike implementation that doesn't support `off`); and a frame
+   * already in flight when ws.close() is called can still be delivered in the
+   * close window — detaching the message listener first (rather than relying
+   * solely on the `this.disconnected` guard at the top of onMessage()) keeps
+   * that frame from ever reaching dispatch for any WebSocketLike that
+   * supports `off`.
+   */
+  private teardown(closeCode: number, closeReason: string): void {
+    this.ws.off?.('close', this.closeListener);
+    this.ws.off?.('error', this.errorListener);
+    this.ws.off?.('message', this.messageListener);
+    try {
+      this.ws.close(closeCode, closeReason);
+    } catch {
+      // connection may already be closing
+    }
+    void this.onDisconnect();
+  }
+
+  /**
    * Runs every PING_INTERVAL_MS. If no pong has been received within
    * PONG_MISS_THRESHOLD ping cycles, the connection is considered dead: force
    * close it and run the same cleanup path a real 'close' event would trigger
@@ -187,29 +219,7 @@ export class EdgeAgentAdapter {
       log.warn(
         `Edge agent ${this.agentName} missed ${PONG_MISS_THRESHOLD} pong cycles (${staleMs}ms); closing connection`,
       );
-      // Bug 3, leg 2: detach the close/error/message listeners BEFORE forcing
-      // the close below. We are about to run onDisconnect() synchronously
-      // ourselves; the underlying transport's real 'close' (and possibly
-      // 'error') event still fires once ws.close() completes, and without
-      // detaching first that event would run onDisconnect() a second time on
-      // a connection this adapter has already torn down. The idempotency
-      // guard in onDisconnect() covers any WebSocketLike implementation that
-      // doesn't support `off`. The message listener is detached for the same
-      // reason: a frame already in flight when we call ws.close() can still
-      // be delivered in the close window, and without detaching it that frame
-      // would be parsed/dispatched by onMessage() on an adapter that is about
-      // to be (or already is) torn down — the this.disconnected guard at the
-      // top of onMessage() is the second, defense-in-depth layer for any
-      // WebSocketLike implementation that doesn't support `off`.
-      this.ws.off?.('close', this.closeListener);
-      this.ws.off?.('error', this.errorListener);
-      this.ws.off?.('message', this.messageListener);
-      try {
-        this.ws.close(1001, 'ping timeout');
-      } catch {
-        // connection may already be closing
-      }
-      void this.onDisconnect();
+      this.teardown(1001, 'ping timeout');
       return;
     }
 
@@ -218,6 +228,31 @@ export class EdgeAgentAdapter {
     } catch {
       // connection may already be closing
     }
+  }
+
+  /**
+   * Forcibly terminate this session out-of-band — e.g. its authenticating
+   * Ed25519 key was just revoked (see disconnectByKeyId in portwing-ws.ts).
+   * Sends an error frame on the wire (same shape as sendErrorAndClose there:
+   * `{ type: 'error', data: { message, code } }`), then reuses teardown()'s
+   * synchronous close path: detach the message/close/error listeners,
+   * force-close the socket, and run onDisconnect() synchronously instead of
+   * waiting for a real 'close'/'error' event.
+   *
+   * This closes the same zombie-frame window Bug 3 leg 2 closed for ping
+   * timeouts, but for revocation: without a synchronous teardown here, a
+   * frame already buffered in the transport when the key is revoked would
+   * still reach onMessage() (this.disconnected still false, the message
+   * listener still attached) and mutate client/container/metrics state under
+   * a key that is, by the time the frame is dispatched, no longer valid.
+   */
+  terminate(errorCode: string, message: string, closeCode: number): void {
+    try {
+      this.ws.send(JSON.stringify({ type: 'error', data: { message, code: errorCode } }));
+    } catch {
+      // connection may already be closing
+    }
+    this.teardown(closeCode, errorCode);
   }
 
   private async onMessage(raw: unknown): Promise<void> {

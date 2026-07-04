@@ -22,6 +22,7 @@ import { getAgent } from '../agent/manager.js';
 import { getServerConfiguration } from '../configuration/index.js';
 import logger from '../log/index.js';
 import * as agentKeys from '../store/agent-keys.js';
+import { save as saveStore } from '../store/index.js';
 import * as nameBindingsStore from '../store/name-bindings.js';
 import { getErrorMessage } from '../util/error.js';
 import {
@@ -62,6 +63,20 @@ const ED25519_SPKI_HEADER = Buffer.from('302a300506032b6570032100', 'hex');
 // completed a successful hello under that key.  Used by DELETE /keys/:keyId
 // to disconnect all live sessions immediately on revocation.
 const liveSessionsByKeyId = new Map<string, Set<WebSocketLike>>();
+
+// Parallel registry: pubKeyId → Map of WebSocket → the EdgeAgentAdapter that
+// owns it. Populated/depopulated in lockstep with liveSessionsByKeyId (same
+// registration site in processHello, same deregister closure) so revocation
+// can synchronously tear down each session's adapter — not just close its raw
+// ws — via EdgeAgentAdapter.terminate(). That closes the zombie-frame window
+// a bare ws.close() leaves open: a frame already buffered in the transport
+// when the key is revoked would otherwise still reach the adapter's
+// onMessage() (see disconnectByKeyId). Keyed by ws (not a bare
+// Set<EdgeAgentAdapter>) so disconnectByKeyId can correlate each live session
+// to its own adapter and fall back to a direct sendErrorAndClose() for the
+// (should-never-happen-post-hello) case of a session with no registered
+// adapter.
+const liveAdaptersByKeyId = new Map<string, Map<WebSocketLike, EdgeAgentAdapter>>();
 
 // Global nonce cache: nonce → Unix second when accepted.
 // NOT per-connection — prevents replay across connections.
@@ -190,6 +205,7 @@ export function clearNonceCacheForTesting(): void {
   noncesPerKey.clear();
   inFlightAgents.clear();
   liveSessionsByKeyId.clear();
+  liveAdaptersByKeyId.clear();
   nameToKeyId.clear();
   if (noncePruneInterval !== undefined) {
     clearInterval(noncePruneInterval);
@@ -200,6 +216,7 @@ export function clearNonceCacheForTesting(): void {
 /** Exposed for tests to reset the live-session registry. */
 export function clearLiveSessionsForTesting(): void {
   liveSessionsByKeyId.clear();
+  liveAdaptersByKeyId.clear();
 }
 
 /**
@@ -219,14 +236,50 @@ export function disconnectByKeyId(keyId: string): number {
       nameToKeyId.delete(name);
     }
   }
+  // Fail-safe flush (Fix 1): persist the release immediately so a hard-kill
+  // right after revocation can't resurrect a binding to the now-dead key on
+  // restart. Best-effort/not awaited: disconnectByKeyId is called
+  // synchronously (and un-awaited) from the DELETE /keys/:keyId route
+  // (app/api/portwing.ts) and from many synchronous test call sites, so
+  // making this async would ripple across both for no matching benefit — a
+  // missed flush here only denies a name temporarily and self-heals via
+  // pruneStaleNameBindings()/rehydrateNameBindings()'s stale-lease check,
+  // unlike the NEW-BIND flush in processHello() below, which must be a hard,
+  // awaited failure because it is the only guard against a genuine squat.
+  // Wrapped defensively: Promise.resolve(...) guards against saveStore() ever
+  // not returning a genuine thenable (the real store/index.ts save() always
+  // does, being declared `async function`), and the outer try/catch guards
+  // against a synchronous throw from the call itself. Neither this
+  // fire-and-forget flush nor the synchronous revocation path around it may
+  // ever throw.
+  try {
+    void Promise.resolve(saveStore()).catch(() => {});
+  } catch {
+    // best-effort — see above
+  }
 
   const sessions = liveSessionsByKeyId.get(keyId);
+  const adapters = liveAdaptersByKeyId.get(keyId);
+  liveAdaptersByKeyId.delete(keyId);
   if (!sessions || sessions.size === 0) {
     return 0;
   }
   let count = 0;
   for (const ws of sessions) {
-    sendErrorAndClose(ws, 'unknown-key', 'key revoked', 1008);
+    const adapter = adapters?.get(ws);
+    if (adapter) {
+      // Synchronous teardown (Fix 2): detaches the message listener and
+      // flips disconnected=true immediately, so a frame already buffered in
+      // the close window can't be dispatched under a just-revoked key — see
+      // EdgeAgentAdapter.terminate().
+      adapter.terminate('unknown-key', 'key revoked', 1008);
+    } else {
+      // Defensive fallback: shouldn't happen post-hello (every live session
+      // gets an adapter registered alongside it in processHello), but never
+      // leave a session open just because the adapter registry somehow
+      // desynced from the session registry.
+      sendErrorAndClose(ws, 'unknown-key', 'key revoked', 1008);
+    }
     count++;
   }
   liveSessionsByKeyId.delete(keyId);
@@ -721,6 +774,30 @@ async function processHello(
   // see the nameToKeyId doc comment and rehydrateNameBindings().
   nameBindingsStore.upsertBinding(agentName, pubKeyId, bindingSeenAt);
 
+  // Step 10c: Flush the binding to disk NOW, but only for a brand-new binding
+  // (existingBinding === undefined) — a reconnect under an already-owned name
+  // only bumps lastSeenAt, which is not security-critical and must not force
+  // a disk write on every reconnect. Without this, the binding above only
+  // lives in Loki's in-memory collection until the next autosave (5 minutes)
+  // or graceful shutdown; a hard-kill/OOM/power-loss in between loses it, and
+  // a restarted server rehydrates from the stale on-disk file believing the
+  // name unbound — reopening the exact squat window this binding exists to
+  // close. Awaited so the name's ownership is durable before the agent is
+  // told it's welcome; on failure, roll back every bit of in-memory state
+  // this hello reserved so the name stays claimable and no slot leaks.
+  if (existingBinding === undefined) {
+    try {
+      await saveStore();
+    } catch (err: unknown) {
+      log.error(`Failed to persist name binding for ${agentName}: ${getErrorMessage(err)}`);
+      nameToKeyId.delete(agentName);
+      nameBindingsStore.deleteBinding(agentName);
+      inFlightAgents.delete(agentName);
+      sendErrorAndClose(ws, 'internal-error', 'could not persist name binding', 1011);
+      return;
+    }
+  }
+
   // Step 11: Send WELCOME
   const pollInterval = 300;
   const welcome = {
@@ -769,13 +846,28 @@ async function processHello(
   sessions.add(ws);
   liveSessionsByKeyId.set(pubKeyId, sessions);
 
-  // Deregister on disconnect so the Set doesn't grow unboundedly.
+  // Register the adapter alongside it (Fix 2) so disconnectByKeyId can
+  // synchronously terminate() this session's adapter — not just close its raw
+  // ws — on revocation. See the liveAdaptersByKeyId doc comment.
+  const adaptersForKey =
+    liveAdaptersByKeyId.get(pubKeyId) ?? new Map<WebSocketLike, EdgeAgentAdapter>();
+  adaptersForKey.set(ws, adapter);
+  liveAdaptersByKeyId.set(pubKeyId, adaptersForKey);
+
+  // Deregister on disconnect so the Set/Map don't grow unboundedly.
   const deregister = () => {
     const s = liveSessionsByKeyId.get(pubKeyId);
     if (s) {
       s.delete(ws);
       if (s.size === 0) {
         liveSessionsByKeyId.delete(pubKeyId);
+      }
+    }
+    const a = liveAdaptersByKeyId.get(pubKeyId);
+    if (a) {
+      a.delete(ws);
+      if (a.size === 0) {
+        liveAdaptersByKeyId.delete(pubKeyId);
       }
     }
   };
