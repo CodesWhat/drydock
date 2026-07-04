@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import express from 'express';
+import * as apiRouter from '../api.js';
 
 /**
  * Compatibility shim for the Home Assistant "wud-card" integration
@@ -8,15 +9,23 @@ import express from 'express';
  * collection envelope.
  *
  * Gated by DD_COMPAT_WUDCARD (see getWudCardCompatEnabled(), default OFF).
- * Structurally independent of the deprecated unversioned /api alias so
- * that alias can be removed later without touching this module.
  *
- * For the narrow whitelist of endpoints the card actually calls, this
- * middleware patches res.json once to unwrap drydock's list envelope into
- * a bare array, then calls next() so the request is handled by the exact
- * same route handlers the /api alias uses today (identical auth, rate
- * limiting, and behavior — no security bypass). Every other request calls
- * next() immediately and is left completely untouched.
+ * Genuinely self-sufficient: init() builds its own internal apiRouter.init()
+ * instance (index.ts already mounts two independent instances of the API
+ * router today — one for /api/v1, one for the deprecated /api alias — this
+ * is a third) and, for the narrow whitelist of endpoints the card actually
+ * calls, dispatches the request directly into that internal instance
+ * (patching res.json first to unwrap drydock's list envelope into a bare
+ * array when the matched route needs it). That internal instance runs the
+ * exact same route handlers the /api alias uses today, so auth, rate
+ * limiting, and behavior are identical — no security bypass — but the
+ * response is produced by this module itself, not by falling through to
+ * whatever happens to be mounted after it. Every other request calls
+ * next() immediately and is left completely untouched, falling through to
+ * whatever is mounted after this router (the deprecated /api alias today).
+ * Because whitelisted requests never depend on that fallthrough, this
+ * module keeps working unchanged once the deprecated /api alias is
+ * eventually removed.
  */
 
 interface CollectionEnvelope {
@@ -103,25 +112,41 @@ function findWhitelistMatch(method: string, path: string): WhitelistEntry | unde
 }
 
 /**
- * Single middleware applied to every request that reaches the compat
- * mount. Non-whitelisted requests are unaffected — next() is called
- * immediately so they fall through to whatever is mounted after (the
+ * Build the compat middleware bound to a specific internal apiRouter
+ * instance. Whitelisted requests are answered by dispatching them directly
+ * into internalApiRouter (patching res.json first when the matched route
+ * needs its collection envelope unwrapped) — this module never depends on
+ * anything mounted after it to serve those responses. Non-whitelisted
+ * requests call next() immediately and are left completely untouched, so
+ * they fall through to whatever is mounted after this router (the
  * deprecated /api alias today).
  */
-export function wudCardCompatMiddleware(req: Request, res: Response, next: NextFunction): void {
-  const match = findWhitelistMatch(req.method, req.path);
-  if (match?.reshape) {
-    unwrapEnvelopeOnResponse(res);
-  }
-  next();
+export function createWudCardCompatMiddleware(
+  internalApiRouter: express.Router,
+): (req: Request, res: Response, next: NextFunction) => void {
+  return function wudCardCompatMiddleware(req: Request, res: Response, next: NextFunction): void {
+    const match = findWhitelistMatch(req.method, req.path);
+    if (!match) {
+      next();
+      return;
+    }
+    if (match.reshape) {
+      unwrapEnvelopeOnResponse(res);
+    }
+    internalApiRouter(req, res, next);
+  };
 }
 
 /**
- * Init the wud-card compat router.
+ * Init the wud-card compat router. Owns its own internal apiRouter.init()
+ * instance so the whitelisted endpoints are served directly by this
+ * module, with no dependency on the deprecated unversioned /api alias
+ * mounted after it.
  * @returns {*|Router}
  */
 export function init(): express.Router {
+  const internalApiRouter = apiRouter.init();
   const router = express.Router();
-  router.use(wudCardCompatMiddleware);
+  router.use(createWudCardCompatMiddleware(internalApiRouter));
   return router;
 }

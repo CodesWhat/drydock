@@ -16,7 +16,7 @@ Starting in v1.4.0, the canonical API base path is `/api/v1/*`. The unversioned 
 | `/api/v1/*` | **Canonical** | Versioned API path — use this for new integrations |
 | `/api/*` | Deprecated alias | Planned for removal in v1.6.0 |
 
-Both paths return identical responses. Third-party integrations should migrate to `/api/v1/*` at their convenience.
+Both paths return identical responses, except when `DD_COMPAT_WUDCARD=true` reshapes three of the four whitelisted [wud-card compatibility](/docs/configuration/server#wud-card-compatibility) endpoints into a bare-array shape. Third-party integrations should migrate to `/api/v1/*` at their convenience.
 
 ## Error Contract
 
@@ -461,7 +461,7 @@ Returns the list of configured authentication strategies. This endpoint is unaut
 curl http://drydock:3000/auth/strategies
 ```
 
-A legacy alias is available at `GET /api/auth/methods` (rate-limited).
+A legacy alias is available at `GET /api/auth/methods` (rate-limited), deprecated and scheduled for removal in v1.7.0 — see [Deprecations](/docs/deprecations#api-auth-methods).
 
 ### Login
 

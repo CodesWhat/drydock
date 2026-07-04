@@ -46,6 +46,8 @@ const router = express.Router();
 const AUTH_USER_CACHE_CONTROL = 'private, no-cache, no-store, must-revalidate';
 const LOGIN_SESSION_ERROR_RESPONSE = 'Unable to establish session';
 const LOGIN_SUCCESS_AUDIT_MESSAGE = 'Login succeeded';
+const DEPRECATED_AUTH_METHODS_WARNING =
+  'GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /auth/strategies instead.';
 let sessionMiddleware: ReturnType<typeof session> | undefined;
 
 type LoginFinish = () => void;
@@ -290,6 +292,18 @@ function logout(req: AuthRequest, res: Response): void {
   });
 }
 
+/**
+ * Return auth strategies via the deprecated, unversioned /api/auth/methods
+ * alias. Logs a deprecation warning on every request per DEPRECATIONS.md,
+ * then delegates to getStrategies for the actual (unchanged) response body.
+ * @param req
+ * @param res
+ */
+function getStrategiesDeprecatedMethodsAlias(req: Request, res: Response): void {
+  log.warn(DEPRECATED_AUTH_METHODS_WARNING);
+  getStrategies(req, res);
+}
+
 function isTrustProxyEnabled(trustproxy: boolean | number | string): boolean {
   if (trustproxy === true) {
     return true;
@@ -401,7 +415,8 @@ export function init(app: Application): void {
 
   // Compatibility alias for clients that still call the legacy API path.
   // This endpoint must stay unauthenticated so the login screen can render.
-  app.get('/api/auth/methods', authLimiter, getStrategies);
+  // Deprecated in v1.6.0, scheduled for removal in v1.7.0 — see DEPRECATIONS.md.
+  app.get('/api/auth/methods', authLimiter, getStrategiesDeprecatedMethodsAlias);
   app.get('/api/v1/auth/status', authLimiter, getAuthStatus);
   app.get('/api/auth/status', authLimiter, getAuthStatus);
 

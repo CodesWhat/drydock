@@ -1340,6 +1340,30 @@ describe('Auth Router', () => {
       expect(app.get).toHaveBeenCalledWith('/api/auth/methods', authLimiter, expect.any(Function));
     });
 
+    test('should log a deprecation warning on every legacy auth methods request and still return strategies', () => {
+      registry.getState.mockReturnValue({ authentication: {} });
+      const app = createApp();
+      auth.init(app);
+
+      const call = app.get.mock.calls.find((c) => c[0] === '/api/auth/methods');
+      const handler = call[call.length - 1];
+      const res = createResponse();
+
+      handler({}, res);
+
+      expect(log.warn).toHaveBeenCalledWith(
+        'GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /auth/strategies instead.',
+      );
+      expect(res.json).toHaveBeenCalledWith({ strategies: [], warnings: [] });
+
+      log.warn.mockClear();
+      res.json.mockClear();
+      handler({}, res);
+
+      expect(log.warn).toHaveBeenCalledTimes(1);
+      expect(res.json).toHaveBeenCalledWith({ strategies: [], warnings: [] });
+    });
+
     test('should register public auth status endpoints for login-time diagnostics', () => {
       const app = createApp();
       auth.init(app);

@@ -36,7 +36,7 @@ Older drydock releases allowed `DD_SERVER_CORS_ENABLED=true` without `DD_SERVER_
 
 ### Unversioned API paths (`/api/*`) {#unversioned-api-paths}
 
-The unversioned `/api/*` path is a backward-compatible alias for `/api/v1/*`. Both return identical responses.
+The unversioned `/api/*` path is a backward-compatible alias for `/api/v1/*`. Both return identical responses, except when `DD_COMPAT_WUDCARD=true`: three of the four whitelisted [wud-card compatibility](/docs/configuration/server#wud-card-compatibility) endpoints then return WUD's bare-array response shape instead of drydock's envelope (the fourth passes through unmodified). Those endpoints remain mounted at `/api/*` even after this alias is removed.
 
 | | |
 | --- | --- |
@@ -186,6 +186,16 @@ In v1.5.x, the `trigger-not-included` and `trigger-excluded` eligibility reasons
 | **Detection** | UI eligibility pill on container row; confirmation modal warning |
 | **Migration** | If you rely on manual updates bypassing an action trigger's include/exclude filter, either (a) remove the `dd.action.exclude` / `dd.trigger.exclude` label, (b) add the trigger to the container's `dd.action.include` / `dd.trigger.include` list, or (c) configure a separate action trigger that the labels permit. The eligibility pill on the row identifies the exact trigger / label combination in conflict |
 
+### Unversioned `GET /api/auth/methods` alias {#api-auth-methods}
+
+`GET /api/auth/methods` is a legacy, unversioned alias for `GET /auth/strategies`, kept unauthenticated so the login screen can render before a session exists.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.6.0 |
+| **Detection** | Log warning on each request: "GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /auth/strategies instead." |
+| **Migration** | Replace `GET /api/auth/methods` with `GET /auth/strategies` |
+
 ### Agent-less Home Assistant MQTT topic layout (multi-agent) {#hass-agent-topic-layout}
 
 The current Home Assistant MQTT topic layout (`<topic>/<watcher>/<container>` and the watcher-level sensor topics) has no agent segment. In a multi-agent deployment where the controller and one or more agents all use the default watcher name `local`, two containers with the same name on different agents publish to — and overwrite — the same MQTT topic, and watcher-level sensor counts sum across all agents.
@@ -201,13 +211,13 @@ The current Home Assistant MQTT topic layout (`<topic>/<watcher>/<container>` an
 
 ### Legacy auth strategies response shape {#legacy-auth-strategies-shape}
 
-`GET /auth/strategies` and its unversioned, rate-limited alias `GET /api/auth/methods` return the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }` — the same provider list plus structured startup registration errors.
+`GET /auth/strategies` returns the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }` — the same provider list plus structured startup registration errors. Its unversioned alias, `GET /api/auth/methods`, is removed outright in v1.7.0 (see above), ahead of this response-shape migration deadline.
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.6.0 |
-| **Detection** | None currently — this pair does not yet emit a warning, header, counter, or banner |
-| **Migration** | Read `providers`/`errors` from `GET /api/v1/auth/status` instead of `strategies`/`warnings` from `GET /auth/strategies` or `GET /api/auth/methods` |
+| **Detection** | None currently — `GET /auth/strategies` does not yet emit a warning, header, counter, or banner for its response shape |
+| **Migration** | Read `providers`/`errors` from `GET /api/v1/auth/status` instead of `strategies`/`warnings` from `GET /auth/strategies` |
 
 ## Enforced security changes (no deprecation window)
 

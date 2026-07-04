@@ -2,6 +2,8 @@
 
 Active deprecations and their removal timeline. Each entry includes the version it was deprecated, the version it will be removed, and migration guidance.
 
+**API versioning policy:** `/api/v1` is the frozen, canonical API contract. Breaking response-shape changes are never made to `/api/v1` — they only ever land as a new `/api/v2`. The unversioned `/api` alias is removed in v1.6.0. The flag-gated wud-card compatibility endpoints (see the Unversioned `/api/*` path entry below) are the sole exception and continue to be served after that removal.
+
 ## Active
 
 ### HTTP OIDC Discovery URLs
@@ -67,21 +69,35 @@ docker run --rm codeswhat/drydock node -e '
 
 **Migration:** Update all API calls to use the `/api/v1/` prefix (e.g., `/api/v1/containers` instead of `/api/containers`).
 
-**Exception:** the opt-in wud-card compatibility endpoints (`DD_COMPAT_WUDCARD`, default `false`) remain mounted at `/api/*` after the alias removal. They exist solely to keep the Home Assistant [wud-card](https://github.com/angryvoegi/wud-card) integration working, are off by default, and are best-effort with no compatibility guarantee — see [Server configuration](https://getdrydock.com/docs/configuration/server) for details.
+**Exception:** the opt-in wud-card compatibility endpoints (`DD_COMPAT_WUDCARD`, default `false`) remain mounted at `/api/*` after the alias removal — the compat router serves its four whitelisted routes off its own internal API router instance rather than by falling through to the deprecated `/api` alias, so removing the alias does not affect them. They exist solely to keep the Home Assistant [wud-card](https://github.com/angryvoegi/wud-card) integration (and Homepage's native `whatsupdocker` widget, which expects the same bare-array shape) working, are off by default, and are best-effort with no compatibility guarantee — see [Server configuration](https://getdrydock.com/docs/configuration/server) for details.
 
 ---
 
-### Legacy auth strategies response shape (`GET /auth/strategies`, `GET /api/auth/methods`)
+### Unversioned `GET /api/auth/methods` alias
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.6.0 |
+| **Removed in** | v1.7.0 |
+| **Affects** | API consumers using `GET /api/auth/methods` |
+
+`GET /api/auth/methods` is a legacy, unversioned alias for `GET /auth/strategies` (`app/api/auth.ts`), kept unauthenticated so the login screen can render before a session exists. It logs a deprecation warning on each request: "GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /auth/strategies instead."
+
+**Migration:** Replace `GET /api/auth/methods` with `GET /auth/strategies`.
+
+---
+
+### Legacy auth strategies response shape (`GET /auth/strategies`)
 
 | | |
 | --- | --- |
 | **Deprecated in** | v1.6.0 |
 | **Removed in** | v1.8.0 |
-| **Affects** | Clients reading `{ strategies, warnings }` from `GET /auth/strategies` or its unversioned compatibility alias `GET /api/auth/methods` |
+| **Affects** | Clients reading `{ strategies, warnings }` from `GET /auth/strategies` |
 
-`GET /auth/strategies` and its rate-limited `/api/auth/methods` alias (kept only for clients still calling the legacy unversioned path) return the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }` — the same provider list plus structured startup registration errors instead of ad hoc warning strings. Unlike other entries in this file, this pair currently emits no deprecation signal at all — no log warning, no `Deprecation`/`Sunset` header, no Prometheus counter, no UI banner — so usage is invisible until removal.
+`GET /auth/strategies` returns the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }` — the same provider list plus structured startup registration errors instead of ad hoc warning strings. Its unversioned alias, `GET /api/auth/methods` (see above), is deprecated on a separate, earlier timeline and is removed outright in v1.7.0, ahead of this response-shape migration deadline. Unlike other entries in this file, `GET /auth/strategies` currently emits no deprecation signal for its response shape — no log warning, no `Deprecation`/`Sunset` header, no Prometheus counter, no UI banner — so usage is invisible until removal.
 
-**Migration:** Read `providers`/`errors` from `GET /api/v1/auth/status` instead of `strategies`/`warnings` from `GET /auth/strategies` or `GET /api/auth/methods`.
+**Migration:** Read `providers`/`errors` from `GET /api/v1/auth/status` instead of `strategies`/`warnings` from `GET /auth/strategies`.
 
 ---
 

@@ -129,11 +129,13 @@ function configurePermissionsPolicy(app) {
 // through the same compatibility/legacyInputs mechanism the WUD_* env/label
 // sources use (recordLegacyInput + dd_legacy_input_total), so the UI
 // deprecation banner reflects live traffic instead of never firing. Mounted
-// only on the deprecated alias mount below (not on /api/v1). The wud-card
-// compat router, when enabled, is mounted before this middleware but always
-// calls next() for every request — it never terminates a response — so
-// requests it reshapes still reach this middleware and the alias router
-// beneath it, and are correctly counted as legacy-alias usage too.
+// only on the deprecated alias mount below (not on /api/v1), and mounted
+// BEFORE the (optional) wud-card compat router so every request under the
+// unversioned /api prefix is counted. This ordering matters now: the
+// compat router owns its own internal apiRouter instance and answers its
+// whitelisted requests directly, without calling next() into the alias
+// router beneath it — so if this tracking middleware were mounted after
+// the compat router instead, whitelisted requests would never reach it.
 //
 // The v1 router's catch-all (app/api/api.ts) is GET-only, so a non-GET
 // request to an unmatched /api/v1/* path never resolves inside that router
@@ -183,11 +185,11 @@ function registerRoutes(app) {
   log.warn(
     'Unversioned /api/* path is deprecated and will be removed in v1.6.0. Use /api/v1/* instead.',
   );
+  app.use('/api', trackLegacyApiAliasUsage);
   if (getWudCardCompatEnabled()) {
     log.info('wud-card compatibility enabled at /api (DD_COMPAT_WUDCARD=true)');
     app.use('/api', wudCardCompatRouter.init());
   }
-  app.use('/api', trackLegacyApiAliasUsage);
   app.use('/api', apiRouter.init());
   app.use('/metrics', prometheusRouter.init());
   if (configuration.ui?.enabled !== false) {

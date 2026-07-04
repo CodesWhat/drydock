@@ -449,3 +449,7 @@ docker exec drydock node dist/index.js config migrate --file /path/to/compose.ym
 ```
 
 See the [Quick start](/docs/quickstart) for the recommended `DD_*` / `dd.*` configuration format.
+
+## Home Assistant wud-card or Homepage widget shows no data
+
+The Home Assistant [wud-card](https://github.com/angryvoegi/wud-card) and Homepage's native `whatsupdocker` widget both speak WUD's old unversioned, bare-array API shape rather than drydock's `/api/v1` envelope. Set `DD_COMPAT_WUDCARD=true` (default `false`) to reshape the handful of endpoints those integrations call back into the shape they expect — see [wud-card compatibility](/docs/configuration/server#wud-card-compatibility) for details, including the CORS setup needed if Home Assistant runs on a different origin than drydock. Homepage doesn't need CORS configuration, since it proxies the request server-side.

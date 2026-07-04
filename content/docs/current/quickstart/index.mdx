@@ -118,6 +118,8 @@ docker exec -it drydock node dist/index.js config migrate --file .env --file com
 
 `config migrate` reads/writes only local files in your deployment. It does not send usage data to external services.
 
+If you use the Home Assistant [wud-card](https://github.com/angryvoegi/wud-card) or Homepage's native `whatsupdocker` widget against your old WUD instance, set `DD_COMPAT_WUDCARD=true` to keep them working against drydock — see [wud-card compatibility](/docs/configuration/server#wud-card-compatibility).
+
 ## Open the UI
 
 [Open the UI](http://localhost:3000) in a browser and check that everything is working as expected.

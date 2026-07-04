@@ -1,3 +1,6 @@
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
+
 const {
   mockApp,
   mockRouter,
@@ -703,22 +706,128 @@ describe('API Index', () => {
       (call) => call[0] === '/api' && typeof call[1] === 'string',
     );
     // Compat router mounts before the deprecated alias so the whitelisted
-    // routes get reshaped before falling through to the alias handlers.
+    // routes are answered by its own internal apiRouter instance instead of
+    // falling through to the alias handlers.
     expect(apiMountCalls).toEqual([
       ['/api', 'wudcard-compat-router'],
       ['/api', 'api-router'],
     ]);
 
-    // The legacy-alias usage tracking middleware mounts between the two —
-    // after the wud-card compat router (which always calls next() and never
-    // terminates a response) and before the alias router, so every request
-    // that reaches the alias — wud-card-whitelisted or not — is counted.
+    // The legacy-alias usage tracking middleware mounts BEFORE the compat
+    // router (not between it and the alias): the compat router now answers
+    // its whitelisted requests itself, via its own internal apiRouter
+    // instance, without calling next() into the alias router beneath it —
+    // so tracking has to run first for every /api request, whitelisted or
+    // not, to still be counted.
     const apiCallsInOrder = mockApp.use.mock.calls.filter((call) => call[0] === '/api');
     expect(apiCallsInOrder).toEqual([
-      ['/api', 'wudcard-compat-router'],
       ['/api', expect.any(Function)],
+      ['/api', 'wudcard-compat-router'],
       ['/api', 'api-router'],
     ]);
+  });
+
+  test('should still record legacy-alias usage for whitelisted wud-card requests when DD_COMPAT_WUDCARD is enabled', async () => {
+    // Requirement: the tracking middleware, mounted before the compat
+    // router, must still fire for requests the compat router will go on to
+    // answer itself (it registers its res.on('finish') listener and calls
+    // next() unconditionally, before the compat router ever sees the
+    // request) — those requests must not silently escape the legacy-input
+    // counter just because they're wud-card-whitelisted.
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    mockGetWudCardCompatEnabled.mockReturnValue(true);
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    const compatibility = await import('../prometheus/compatibility.js');
+    await indexRouter.init();
+
+    const apiCallsInOrder = mockApp.use.mock.calls.filter((call) => call[0] === '/api');
+    const trackLegacyApiAliasUsage = apiCallsInOrder[0][1];
+    expect(typeof trackLegacyApiAliasUsage).toBe('function');
+
+    const finishHandlers = [];
+    const res = {
+      on: vi.fn((event, cb) => {
+        if (event === 'finish') finishHandlers.push(cb);
+      }),
+    };
+    const req = {
+      path: '/containers',
+      baseUrl: '/api/containers',
+      route: { path: '/' },
+    };
+    const next = vi.fn();
+    trackLegacyApiAliasUsage(req, res, next);
+    expect(next).toHaveBeenCalled();
+
+    finishHandlers.forEach((cb) => cb());
+
+    const summary = compatibility.getLegacyInputSummary();
+    expect(summary.api.keys).toContain('/api/containers/');
+  });
+
+  test('real Express /api/v1 isolation: a fully-handled /api/v1 request never reaches a router mounted at /api afterward', async () => {
+    // This file mocks 'express' file-wide for the tests above (they assert
+    // *mount order* via the mock's recorded calls). That leaves the actual
+    // claim those tests rely on — that Express's own prefix routing stops
+    // trying later-mounted routers once an earlier one fully answers a
+    // request — resting on manual reasoning rather than an executed
+    // assertion. Prove it here with the real, unmocked express package,
+    // mirroring registerRoutes()'s real mount order (/api/v1 before /api,
+    // which is where the wud-card compat router mounts when the flag is
+    // ON): a router mounted at /api afterward must never even see traffic
+    // that /api/v1 fully handles.
+    const realExpress = (await vi.importActual('express')) as typeof import('express');
+
+    const containerEnvelope = {
+      data: [{ id: 'c1' }],
+      total: 1,
+      limit: 0,
+      offset: 0,
+      hasMore: false,
+    };
+    const v1Router = realExpress.Router();
+    v1Router.get('/containers', (_req, res) => {
+      res.json(containerEnvelope);
+    });
+
+    const apiMountSpy = vi.fn();
+    const apiMountedRouter = realExpress.Router();
+    apiMountedRouter.use((req, _res, next) => {
+      apiMountSpy(req.method, req.path);
+      next();
+    });
+    apiMountedRouter.get('/containers', (_req, res) => {
+      res.json(['should-never-be-reached']);
+    });
+
+    const app = realExpress.default();
+    app.use('/api/v1', v1Router);
+    app.use('/api', apiMountedRouter);
+
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) => {
+      server.listen(0, resolve);
+    });
+    const address = server.address() as AddressInfo;
+    const baseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const v1Res = await fetch(`${baseUrl}/api/v1/containers`);
+      expect(v1Res.status).toBe(200);
+      expect(await v1Res.json()).toEqual(containerEnvelope);
+      expect(apiMountSpy).not.toHaveBeenCalled();
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
   });
 
   test('should skip mounting UI router when DD_SERVER_UI_ENABLED=false', async () => {
