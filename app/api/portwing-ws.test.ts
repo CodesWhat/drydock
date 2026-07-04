@@ -37,12 +37,15 @@ vi.mock('../log/index.js', () => ({
 // works in portwing-ws.ts. Arrow-factory implementations are not usable as
 // constructors in newer Vitest versions — use vi.hoisted() exactly like
 // EdgeAgentAdapter.test.ts does.
-const { MockAgentClient, MockEdgeAgentAdapter } = vi.hoisted(() => {
+const { MockAgentClient, MockEdgeAgentAdapter, getLastAgentClientInstance } = vi.hoisted(() => {
+  let lastInstance: InstanceType<typeof _MockAgentClient> | undefined;
+
   class _MockAgentClient {
     name: string;
     config: { host: string; port: number; secret: string };
     isConnected = false;
     info: Record<string, unknown> = {};
+    edgeAdapter?: unknown;
     handleEvent = vi.fn().mockResolvedValue(undefined);
     handleContainerSync = vi.fn().mockResolvedValue(undefined);
     handleComponentSync = vi.fn().mockResolvedValue(undefined);
@@ -52,6 +55,7 @@ const { MockAgentClient, MockEdgeAgentAdapter } = vi.hoisted(() => {
     constructor(name: string) {
       this.name = name;
       this.config = { host: 'http://edge-agent-placeholder', port: 0, secret: '' };
+      lastInstance = this;
     }
   }
 
@@ -60,7 +64,11 @@ const { MockAgentClient, MockEdgeAgentAdapter } = vi.hoisted(() => {
     onDisconnect = vi.fn().mockResolvedValue(undefined);
   }
 
-  return { MockAgentClient: _MockAgentClient, MockEdgeAgentAdapter: _MockEdgeAgentAdapter };
+  return {
+    MockAgentClient: _MockAgentClient,
+    MockEdgeAgentAdapter: _MockEdgeAgentAdapter,
+    getLastAgentClientInstance: () => lastInstance,
+  };
 });
 
 vi.mock('../agent/AgentClient.js', () => ({
@@ -920,6 +928,41 @@ describe('hello verification — happy path', () => {
     };
     expect(welcome.type).toBe('welcome');
     expect(welcome.data.config.supportedProtocols).toBe('portwing/1.0');
+  });
+});
+
+describe('edgeAdapter wiring', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearNonceCacheForTesting();
+  });
+
+  test('client.edgeAdapter is set after a successful hello handshake', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'f1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+    const sig = signHello(privateKey, ts, nonce);
+
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
+    await new Promise((r) => setTimeout(r, 10));
+
+    const client = getLastAgentClientInstance();
+    expect(client?.edgeAdapter).toBeInstanceOf(MockEdgeAgentAdapter);
   });
 });
 

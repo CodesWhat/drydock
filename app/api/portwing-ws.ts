@@ -541,6 +541,11 @@ async function processHello(
   // activate() calls addAgent() — release the in-flight reservation immediately
   // after so the slot is held by the manager instead.
   adapter.activate();
+  // Route handlers only ever look up the client via getAgent(name); wire the
+  // adapter onto the client so getContainerLogs()/deleteContainer() can reach
+  // the WS-tunnel methods instead of falling through to the (nonexistent)
+  // edge-agent-placeholder host.
+  client.edgeAdapter = adapter;
   inFlightAgents.delete(agentName);
 
   // Register this session under pubKeyId so it can be disconnected on key revocation.

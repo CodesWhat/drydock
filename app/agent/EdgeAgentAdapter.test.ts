@@ -770,6 +770,157 @@ describe('EdgeAgentAdapter — requestContainerLogs', () => {
   });
 });
 
+describe('EdgeAgentAdapter — deleteContainer', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('sends dd:container_delete_request frame and resolves on success response', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-abc';
+    const deletePromise = adapter.deleteContainer(containerId);
+
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      type: string;
+      data: { containerId: string };
+    };
+    expect(sentFrame.type).toBe('dd:container_delete_request');
+    expect(sentFrame.data.containerId).toBe(containerId);
+
+    sendFrame(ws, 'dd:container_delete_response', { containerId, success: true });
+    await new Promise((r) => setTimeout(r, 0));
+
+    await expect(deletePromise).resolves.toBeUndefined();
+  });
+
+  test('rejects with the agent-provided error message on failure response', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-fail';
+    // Attach the rejection handler immediately (same tick) so the rejection
+    // triggered synchronously by sendFrame below is never briefly unhandled.
+    const deletePromise = adapter.deleteContainer(containerId).catch((err: Error) => err.message);
+
+    sendFrame(ws, 'dd:container_delete_response', {
+      containerId,
+      success: false,
+      error: 'container is running',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(await deletePromise).toBe('container is running');
+  });
+
+  test('rejects with a fallback message when failure response omits error', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-fail-no-msg';
+    const deletePromise = adapter.deleteContainer(containerId).catch((err: Error) => err.message);
+
+    sendFrame(ws, 'dd:container_delete_response', { containerId, success: false });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(await deletePromise).toBe('delete failed');
+  });
+
+  test('deleteContainer rejects after 30s timeout', async () => {
+    vi.useFakeTimers();
+    const { adapter } = createAdapter();
+    adapter.activate();
+
+    const deletePromise = adapter.deleteContainer('c-timeout');
+
+    vi.advanceTimersByTime(31_000);
+    await expect(deletePromise).rejects.toThrow(/timed out/);
+
+    vi.useRealTimers();
+  });
+
+  test('onDisconnect rejects pending delete request', async () => {
+    const { adapter } = createAdapter();
+    adapter.activate();
+
+    const deletePromise = adapter
+      .deleteContainer('c-disc')
+      .catch((err: Error) => err.message);
+
+    await adapter.onDisconnect();
+
+    expect(await deletePromise).toMatch(/connection closed/);
+  });
+
+  test('handleContainerDeleteResponse with no containerId is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    expect(() => sendFrame(ws, 'dd:container_delete_response', { success: true })).not.toThrow();
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('dd:container_delete_response with unknown containerId is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    sendFrame(ws, 'dd:container_delete_response', {
+      containerId: 'unknown-container',
+      success: true,
+    });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+});
+
+describe('EdgeAgentAdapter — deleteContainer limit and send error', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('rejects immediately when pending request limit is reached', async () => {
+    const { adapter } = createAdapter();
+    adapter.activate();
+
+    const adapterInternal = adapter as unknown as {
+      pendingRequests: Map<string, unknown>;
+    };
+
+    // Fill to limit
+    for (let i = 0; i < 100; i++) {
+      adapterInternal.pendingRequests.set(`req-${i}`, {
+        resolve: () => {},
+        reject: () => {},
+        timer: setTimeout(() => {}, 99_999),
+      });
+    }
+
+    await expect(adapter.deleteContainer('c-overflow')).rejects.toThrow(
+      /concurrent request limit/,
+    );
+
+    // Clean up timers
+    for (const [, pending] of adapterInternal.pendingRequests) {
+      clearTimeout((pending as { timer: ReturnType<typeof setTimeout> }).timer);
+    }
+  });
+
+  test('rejects when ws.send throws during deleteContainer', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    (ws.send as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+      throw new Error('send failed');
+    });
+
+    await expect(adapter.deleteContainer('c-throw')).rejects.toThrow('send failed');
+  });
+});
+
 describe('buildEdgeSentinelConfig', () => {
   test('returns correct sentinel config for a given agentId', () => {
     const config = buildEdgeSentinelConfig('my-agent');

@@ -191,6 +191,9 @@ export class EdgeAgentAdapter {
       case 'dd:container_log_response':
         this.handleContainerLogResponse(data);
         return;
+      case 'dd:container_delete_response':
+        this.handleContainerDeleteResponse(data);
+        return;
       case 'response':
         this.handleResponse(data);
         return;
@@ -305,6 +308,25 @@ export class EdgeAgentAdapter {
       clearTimeout(pending.timer);
       this.pendingRequests.delete(`log:${containerId}`);
       pending.resolve(data.logs);
+    }
+  }
+
+  private handleContainerDeleteResponse(data: Record<string, unknown>): void {
+    const containerId = typeof data.containerId === 'string' ? data.containerId : undefined;
+    if (!containerId) {
+      return;
+    }
+    const pendingKey = `delete:${containerId}`;
+    const pending = this.pendingRequests.get(pendingKey);
+    if (!pending) {
+      return;
+    }
+    clearTimeout(pending.timer);
+    this.pendingRequests.delete(pendingKey);
+    if (data.success === true) {
+      pending.resolve(undefined);
+    } else {
+      pending.reject(new Error(typeof data.error === 'string' ? data.error : 'delete failed'));
     }
   }
 
@@ -515,6 +537,47 @@ export class EdgeAgentAdapter {
           JSON.stringify({
             type: 'dd:container_log_request',
             data: { containerId, ...options },
+          }),
+        );
+      } catch (err: unknown) {
+        clearTimeout(timer);
+        this.pendingRequests.delete(pendingKey);
+        reject(err);
+      }
+    });
+  }
+
+  /**
+   * Delete a container on the edge agent.
+   * Returns a promise that resolves once the agent confirms deletion, or
+   * rejects after 30s / on an error response. The pending entry is keyed as
+   * `delete:${containerId}` to match the dd:container_delete_response handler.
+   */
+  deleteContainer(containerId: string): Promise<void> {
+    const pendingKey = `delete:${containerId}`;
+    if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) {
+      return Promise.reject(new Error('concurrent request limit reached'));
+    }
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingRequests.delete(pendingKey);
+        reject(
+          new Error(`Container delete request for ${containerId} timed out after ${REQUEST_TIMEOUT_MS}ms`),
+        );
+      }, REQUEST_TIMEOUT_MS);
+
+      this.pendingRequests.set(pendingKey, {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+        timer,
+      });
+
+      try {
+        this.ws.send(
+          JSON.stringify({
+            type: 'dd:container_delete_request',
+            data: { containerId },
           }),
         );
       } catch (err: unknown) {

@@ -11,6 +11,7 @@ import type {
   SecurityAlertSummary,
   SecurityScanCycleCompleteEventPayload,
 } from '../event/index.js';
+import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
 import {
   emitAgentConnected,
   emitAgentDisconnected,
@@ -198,6 +199,13 @@ export class AgentClient {
   private readonly watcherSnapshotCache: Map<string, WatcherSnapshotCacheEntry>;
   private statsChangedTimer: ReturnType<typeof setTimeout> | undefined;
   private handshakeInProgress: Promise<void> | null = null;
+  /**
+   * Set by portwing-ws.ts immediately after EdgeAgentAdapter.activate() for
+   * edge-mode connections. When present, container-op methods that have a
+   * WS-tunnel equivalent delegate to it instead of making an axios call
+   * against the (nonexistent) edge-agent-placeholder host.
+   */
+  public edgeAdapter?: EdgeAgentAdapter;
 
   constructor(name: string, config: AgentClientConfig) {
     this.name = name;
@@ -1543,6 +1551,12 @@ export class AgentClient {
     containerId: string,
     options: { tail: number; since: number; timestamps: boolean },
   ) {
+    if (this.edgeAdapter) {
+      return this.edgeAdapter.requestContainerLogs(containerId, {
+        tail: options.tail,
+        since: String(options.since),
+      });
+    }
     try {
       const response = await axios.get(
         `${this.baseUrl}/api/containers/${encodeURIComponent(containerId)}/logs?tail=${options.tail}&since=${options.since}&timestamps=${options.timestamps}`,
@@ -1556,6 +1570,9 @@ export class AgentClient {
   }
 
   async deleteContainer(containerId: string) {
+    if (this.edgeAdapter) {
+      return this.edgeAdapter.deleteContainer(containerId);
+    }
     try {
       this.log.debug(`Deleting container ${sanitizeLogParam(containerId)} on agent`);
       await axios.delete(
