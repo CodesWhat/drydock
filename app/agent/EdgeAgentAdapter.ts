@@ -304,7 +304,9 @@ export class EdgeAgentAdapter {
 
     this.client.info = {
       ...this.client.info,
-      memoryGb: memoryTotal > 0 ? memoryTotal / 1e9 : this.client.info.memoryGb,
+      // GiB (1024^3), matching portwing's canonical MemoryTotalGB() definition
+      // (internal/metrics/collector.go) — not decimal GB (1e9).
+      memoryGb: memoryTotal > 0 ? memoryTotal / 1024 ** 3 : this.client.info.memoryGb,
       uptimeSeconds: uptime > 0 ? uptime : this.client.info.uptimeSeconds,
       lastSeen: new Date().toISOString(),
       ...(cpuUsage !== undefined ? { cpuUsage } : {}),

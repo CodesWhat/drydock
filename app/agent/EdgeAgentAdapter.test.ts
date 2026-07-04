@@ -228,7 +228,7 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
     sendFrame(ws, 'metrics', {
       cpuUsage: 0.5,
       cpuCores: 4,
-      memoryTotal: 8 * 1e9,
+      memoryTotal: 8 * 1024 ** 3,
       memoryUsed: 4 * 1e9,
       uptime: 3600,
     });
@@ -1714,7 +1714,7 @@ describe('EdgeAgentAdapter — O7: metrics reads all 11 fields', () => {
     sendFrame(ws, 'metrics', {
       cpuUsage: 0.75,
       cpuCores: 8,
-      memoryTotal: 16 * 1e9,
+      memoryTotal: 16 * 1024 ** 3,
       memoryUsed: 8 * 1e9,
       memoryFree: 8 * 1e9,
       diskTotal: 500 * 1e9,
