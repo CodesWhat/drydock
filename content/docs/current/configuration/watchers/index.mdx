@@ -399,7 +399,7 @@ The `:ro` (read-only) flag on the Docker socket mount is omitted intentionally. 
 
 [Tecnativa/docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy) is the most widely used option, but any HAProxy or nginx-based Docker socket proxy that filters by HTTP method and path will work. The key requirement is that the proxy exposes the Docker Engine API endpoints listed in the permissions table above and blocks everything else (especially `exec`, `build`, and `swarm` endpoints).
 
-Other compatible proxies include [linuxserver/docker-socket-proxy](https://github.com/linuxserver/docker-socket-proxy) (a fork with additional features).
+Other compatible proxies include [linuxserver/docker-socket-proxy](https://github.com/linuxserver/docker-socket-proxy) (a fork with additional features) and [sockguard](https://github.com/CodesWhat/sockguard), a default-deny allowlist filter from the same CodesWhat ecosystem as Drydock, with a preset built specifically for Drydock (see the [Security Hardening Guide](/docs/guides/security#isolate-the-docker-socket)).
 
 ### Option 2: Remote Docker over TLS
 

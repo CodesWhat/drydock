@@ -35,6 +35,43 @@ The WebSocket endpoint is `WS /api/v1/portwing/ws` (compatibility alias: `/api/p
 
 You can also preload keys at startup with `DD_PORTWING_AUTHORIZED_KEYS=/path/to/authorized_keys`. The file format is `ed25519 <base64-raw-pubkey> [comment]`, and the file must not be world-readable.
 
+### Edge-agent example (Docker Compose)
+
+A [Portwing](https://github.com/CodesWhat/portwing) edge agent runs on the remote/NAT'd host and dials out — no inbound ports need to be published on that side:
+
+```yaml
+services:
+  portwing:
+    image: ghcr.io/codeswhat/portwing:latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - DRYDOCK_URL=https://drydock.example.com
+      - PRIVATE_KEY_FILE=/run/secrets/portwing_key
+      - AGENT_NAME=edge-host-01
+    secrets:
+      - portwing_key
+
+secrets:
+  portwing_key:
+    file: ./portwing_ed25519.pem
+```
+
+The Drydock controller enables the endpoint with `DD_EXPERIMENTAL_PORTWING=true` and needs the agent's public key registered before it connects:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    ports:
+      - "3000:3000"
+    environment:
+      - DD_EXPERIMENTAL_PORTWING=true
+```
+
+Generate the agent's keypair with `portwing keygen -comment "edge-host-01"`, then register the printed public key with the controller (`POST /api/v1/portwing/keys`, or preload it via `DD_PORTWING_AUTHORIZED_KEYS`) before starting the agent — see the REST API table above.
+
 <Callout type="warn">Portwing support is experimental. Its REST API and wire protocol may change before it is promoted out of `DD_EXPERIMENTAL_PORTWING=true`.</Callout>
 
 ## Quickstart
