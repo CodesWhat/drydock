@@ -59,6 +59,46 @@ describe('getPreferredLabelValue', () => {
     expect(recordLegacyInput).toHaveBeenCalledWith('label', 'wud.watch');
   });
 
+  test('treats an explicit empty dd value as present (default) and returns it as-is', () => {
+    vi.clearAllMocks();
+
+    expect(
+      getPreferredLabelValue(
+        { 'dd.compose.file': '', 'wud.compose.file': 'legacy.yml' },
+        'dd.compose.file',
+        'wud.compose.file',
+      ),
+    ).toBe('');
+    expect(recordLegacyInput).not.toHaveBeenCalled();
+  });
+
+  test('falls back to wud value when dd value is an explicit empty string and treatEmptyAsAbsent is set', () => {
+    vi.clearAllMocks();
+    const warn = vi.fn();
+
+    expect(
+      getPreferredLabelValue(
+        { 'dd.compose.file': '', 'wud.compose.file': 'legacy.yml' },
+        'dd.compose.file',
+        'wud.compose.file',
+        { warn, treatEmptyAsAbsent: true },
+      ),
+    ).toBe('legacy.yml');
+    expect(recordLegacyInput).toHaveBeenCalledWith('label', 'wud.compose.file');
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  test('returns undefined when dd value is an explicit empty string, treatEmptyAsAbsent is set, and there is no wud fallback value', () => {
+    vi.clearAllMocks();
+
+    expect(
+      getPreferredLabelValue({ 'dd.compose.file': '' }, 'dd.compose.file', 'wud.compose.file', {
+        treatEmptyAsAbsent: true,
+      }),
+    ).toBeUndefined();
+    expect(recordLegacyInput).not.toHaveBeenCalled();
+  });
+
   test('uses shared fallback warning registry when warnedFallbacks is not provided', () => {
     vi.clearAllMocks();
     const warn = vi.fn();

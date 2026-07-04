@@ -914,6 +914,46 @@ describe('request-update', () => {
       expect(accepted.operationId).toBeDefined();
       expect(mockInsertOperation).toHaveBeenCalled();
     });
+
+    test('allows manual update when only soft blockers (trigger-excluded) are present', async () => {
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+        agent: undefined,
+        configuration: { threshold: 'all' },
+        getId: () => 'docker.update',
+        isTriggerIncluded: () => true,
+        isTriggerExcluded: () => true,
+      };
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger } });
+
+      const accepted = await enqueueContainerUpdate(
+        createContainerWithRawUpdate({ triggerExclude: 'nginx' }),
+        { trigger: { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) } },
+      );
+      expect(accepted.operationId).toBeDefined();
+      expect(mockInsertOperation).toHaveBeenCalled();
+    });
+
+    test('allows manual update when only soft blockers (trigger-not-included) are present', async () => {
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+        agent: undefined,
+        configuration: { threshold: 'all' },
+        getId: () => 'docker.update',
+        isTriggerIncluded: () => false,
+        isTriggerExcluded: () => false,
+      };
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger } });
+
+      const accepted = await enqueueContainerUpdate(
+        createContainerWithRawUpdate({ triggerInclude: 'other-app' }),
+        { trigger: { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) } },
+      );
+      expect(accepted.operationId).toBeDefined();
+      expect(mockInsertOperation).toHaveBeenCalled();
+    });
   });
 
   test('dispatchAccepted logs bulk context when multiple accepted entries fail', async () => {

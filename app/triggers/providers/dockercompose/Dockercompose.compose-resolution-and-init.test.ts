@@ -1,6 +1,7 @@
 import { watch } from 'node:fs';
 import fs from 'node:fs/promises';
 import yaml from 'yaml';
+import * as compatibility from '../../../prometheus/compatibility.js';
 import { getState } from '../../../registry/index.js';
 import Dockercompose, {
   testable_hasExplicitRegistryHost,
@@ -123,6 +124,7 @@ describe('Dockercompose Trigger', () => {
   });
 
   test('getComposeFileForContainer should use wud fallback label', () => {
+    const recordLegacyInputSpy = vi.spyOn(compatibility, 'recordLegacyInput');
     const container = {
       labels: { 'wud.compose.file': '/opt/wud-compose.yml' },
     };
@@ -130,6 +132,35 @@ describe('Dockercompose Trigger', () => {
     const result = trigger.getComposeFileForContainer(container);
 
     expect(result).toBe('/opt/wud-compose.yml');
+    expect(recordLegacyInputSpy).toHaveBeenCalledWith('label', 'wud.compose.file');
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      'Legacy Docker label "wud.compose.file" is deprecated. Please migrate to "dd.compose.file" before removal in v1.6.0.',
+    );
+  });
+
+  test('getComposeFileForContainer should fall through to the wud label when the dd label is an explicit empty string', () => {
+    // Use a dedicated label pair so the shared legacy-label warned-fallback
+    // registry (deduped per key) doesn't swallow the warn assertion because
+    // an earlier test in this file already warned about wud.compose.file.
+    trigger.configuration.composeFileLabel = 'dd.empty-string-fallback.compose.file';
+    const recordLegacyInputSpy = vi.spyOn(compatibility, 'recordLegacyInput');
+    const container = {
+      labels: {
+        'dd.empty-string-fallback.compose.file': '',
+        'wud.empty-string-fallback.compose.file': '/opt/wud-compose.yml',
+      },
+    };
+
+    const result = trigger.getComposeFileForContainer(container);
+
+    expect(result).toBe('/opt/wud-compose.yml');
+    expect(recordLegacyInputSpy).toHaveBeenCalledWith(
+      'label',
+      'wud.empty-string-fallback.compose.file',
+    );
+    expect(mockLog.warn).toHaveBeenCalledWith(
+      'Legacy Docker label "wud.empty-string-fallback.compose.file" is deprecated. Please migrate to "dd.empty-string-fallback.compose.file" before removal in v1.6.0.',
+    );
   });
 
   test('getComposeFileForContainer should use the first compose config file from compose labels', () => {

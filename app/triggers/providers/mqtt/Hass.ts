@@ -1,4 +1,5 @@
 import { getVersion } from '../../../configuration/index.js';
+import { getPreferredLabelValue } from '../../../docker/legacy-label.js';
 import {
   registerContainerAdded,
   registerContainerRemoved,
@@ -49,8 +50,15 @@ function normalizeAgentValue(agent: unknown): string | undefined {
   return agent === '' ? undefined : agent;
 }
 
+// Deprecation: "Agent-less Home Assistant MQTT topic layout (multi-agent)"
+// (DEPRECATIONS.md) — warn once per watcher name when the agent-less layout
+// is actually in collision (>1 distinct agent sharing the watcher name)
+// rather than on every use, since single-node deployments are unaffected.
+const warnedAgentlessHassTopicLayoutWatchers = new Set<string>();
+
 interface HassLogger {
   info: (message: string) => void;
+  warn: (message: string) => void;
 }
 
 /**
@@ -136,14 +144,25 @@ function resolveEntityPicture(icon?: string): string {
   return `${cdn.base}/${slug}.${cdn.ext}`;
 }
 
-function resolveEntityPictureOverride(container: {
-  displayPicture?: string;
-  labels?: Record<string, string>;
-}): string | undefined {
+function resolveEntityPictureOverride(
+  container: {
+    displayPicture?: string;
+    labels?: Record<string, string>;
+  },
+  warn?: (message: string) => void,
+): string | undefined {
+  // This call site previously read `dd.display.picture || wud.display.picture`,
+  // which falls through to the wud.* label on an explicit empty dd.* value
+  // (e.g. an unset compose-file env-substitution default), not just when
+  // dd.* is absent. treatEmptyAsAbsent preserves that behavior so a
+  // container that still relies on wud.display.picture doesn't silently
+  // lose it.
   const configuredPicture =
     container.displayPicture ||
-    container.labels?.['dd.display.picture'] ||
-    container.labels?.['wud.display.picture'];
+    getPreferredLabelValue(container.labels, 'dd.display.picture', 'wud.display.picture', {
+      warn,
+      treatEmptyAsAbsent: true,
+    });
   if (typeof configuredPicture !== 'string') {
     return undefined;
   }
@@ -408,12 +427,40 @@ class Hass {
     this.containerStateTopicById.delete(containerId);
   }
 
+  // #386 / DEPRECATIONS.md "Agent-less Home Assistant MQTT topic layout" —
+  // warn once per watcher name the first time we observe more than one
+  // distinct agent sharing it while the corrected (agent-segmented) layout
+  // is not enabled, since that is exactly the case where topics/sensors
+  // collide across agents.
+  private warnIfAgentlessHassTopicLayoutCollides(container: { watcher?: unknown }) {
+    if (this.configuration.hass.agenttopicsegment) {
+      return;
+    }
+    const watcherName = typeof container?.watcher === 'string' ? container.watcher : '';
+    if (!watcherName || warnedAgentlessHassTopicLayoutWatchers.has(watcherName)) {
+      return;
+    }
+    const distinctAgents = new Set(
+      containerStore
+        .getContainers({ watcher: watcherName })
+        .map((c) => normalizeAgentValue(c.agent) ?? ''),
+    );
+    if (distinctAgents.size <= 1) {
+      return;
+    }
+    warnedAgentlessHassTopicLayoutWatchers.add(watcherName);
+    this.log.warn(
+      `Multiple agents share watcher name "${watcherName}" but the Home Assistant MQTT topic layout has no agent segment, so their topics/sensors will collide. Set DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true to opt into the corrected layout before it becomes the default in v1.7.0.`,
+    );
+  }
+
   /**
    * Add container sensor.
    * @param container
    * @returns {Promise<void>}
    */
   async addContainerSensor(container) {
+    this.warnIfAgentlessHassTopicLayoutCollides(container);
     const containerStateSensor = {
       kind: 'update',
       topic: this.getContainerStateTopic({ container }),
@@ -422,7 +469,9 @@ class Hass {
       container,
       currentStateTopic: containerStateSensor.topic,
     });
-    const entityPictureOverride = resolveEntityPictureOverride(container);
+    const entityPictureOverride = resolveEntityPictureOverride(container, (message) =>
+      this.log.warn(message),
+    );
     this.log.info(`Add hass container update sensor [${containerStateSensor.topic}]`);
     if (this.configuration.hass.discovery) {
       await this.removeDiscoveryTopics({

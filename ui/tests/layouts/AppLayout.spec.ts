@@ -410,7 +410,8 @@ describe('AppLayout', () => {
     const banner = wrapper.find('[data-testid="oidc-http-compat-banner"]');
     expect(banner.exists()).toBe(true);
     expect(banner.text()).toContain('View migration guide');
-    expect(banner.text()).toContain('DD_AUTH_OIDC_{name}_ALLOW_INSECURE_HTTP=true');
+    expect(banner.text()).toContain('https://');
+    expect(banner.text()).toContain('DD_AUTH_OIDC_<name>_DISCOVERY');
 
     const link = wrapper.find('[data-testid="oidc-http-compat-banner-link"]');
     expect(link.attributes('href')).toBe(
@@ -732,7 +733,7 @@ describe('AppLayout', () => {
     expect(banner.exists()).toBe(true);
     expect(banner.text()).toContain('custom curl-based healthcheck override');
     expect(banner.text()).toContain('v1.7.0');
-    expect(banner.text()).toContain('wget');
+    expect(banner.text()).toContain('/bin/healthcheck');
     expect(banner.text()).toContain('View migration guide');
 
     const link = wrapper.find('[data-testid="curl-healthcheck-deprecation-banner-link"]');

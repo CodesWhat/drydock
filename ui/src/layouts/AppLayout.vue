@@ -1667,7 +1667,8 @@ onUnmounted(() => {
           @dismiss-permanent="dismissOidcHttpBannerPermanently">
           <i18n-t keypath="appShell.banners.oidcHttpBody" tag="span">
             <template #httpCode><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">http://</code></template>
-            <template #envVar><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_AUTH_OIDC_{name}_ALLOW_INSECURE_HTTP=true</code></template>
+            <template #httpsCode><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">https://</code></template>
+            <template #discoveryEnv><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_AUTH_OIDC_&lt;name&gt;_DISCOVERY</code></template>
           </i18n-t>
         </AnnouncementBanner>
 
@@ -1743,8 +1744,7 @@ onUnmounted(() => {
           @dismiss="curlHealthcheckDeprecationBanner.dismissForSession"
           @dismiss-permanent="curlHealthcheckDeprecationBanner.dismissPermanently">
           <i18n-t keypath="appShell.banners.curlHealthcheckBody" tag="span">
-            <template #envVar><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">DD_DISABLE_WGET_HEALTHCHECK=true</code></template>
-            <template #bin><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/bin/healthcheck</code></template>
+            <template #bin><code class="px-1 py-0.5 dd-rounded-sm" :style="{ backgroundColor: 'var(--dd-bg)', color: 'var(--dd-warning)' }">/bin/healthcheck ${DD_SERVER_PORT:-3000}</code></template>
           </i18n-t>
           <span v-if="curlHealthcheckOverrideSummary?.commandPreview" class="block mt-1 truncate">
             {{ t('appShell.banners.healthcheckCommandLabel', { command: curlHealthcheckOverrideSummary.commandPreview }) }}

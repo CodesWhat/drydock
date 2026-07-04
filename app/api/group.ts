@@ -1,6 +1,10 @@
 import express, { type Request, type Response } from 'express';
 import nocache from 'nocache';
+import { getPreferredLabelValue } from '../docker/legacy-label.js';
+import logger from '../log/index.js';
 import * as storeContainer from '../store/container.js';
+
+const log = logger.child({ component: 'group' });
 
 const router = express.Router();
 
@@ -25,8 +29,9 @@ function getGroups(req: Request, res: Response) {
 
   for (const container of containers) {
     const groupName =
-      container.labels?.['dd.group'] ??
-      container.labels?.['wud.group'] ??
+      getPreferredLabelValue(container.labels, 'dd.group', 'wud.group', {
+        warn: (message) => log.warn(message),
+      }) ??
       container.labels?.['com.docker.compose.project'] ??
       container.labels?.['com.docker.stack.namespace'] ??
       null;

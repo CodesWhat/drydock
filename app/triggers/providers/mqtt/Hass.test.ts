@@ -6,6 +6,7 @@ import {
   registerWatcherStop,
 } from '../../../event/index.js';
 import log from '../../../log/index.js';
+import * as compatibility from '../../../prometheus/compatibility.js';
 import * as containerStore from '../../../store/container.js';
 import Hass, { HASS_CONTAINER_STATE_TOPIC_TRACK_LIMIT } from './Hass.js';
 
@@ -341,6 +342,97 @@ test('addContainerSensor should prefer dd.display.picture over icon-derived enti
   const discoveryCall = mqttClientMock.publish.mock.calls[0];
   const discoveryPayload = JSON.parse(discoveryCall[1]);
   expect(discoveryPayload.entity_picture).toBe('https://images.example.com/nextcloud.png');
+});
+
+test('addContainerSensor should fall back to wud.display.picture and warn about the legacy label', async () => {
+  const recordLegacyInputSpy = vi.spyOn(compatibility, 'recordLegacyInput');
+  const logWarnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+  await hass.addContainerSensor({
+    name: 'container-name',
+    watcher: 'watcher-name',
+    displayIcon: 'sh:nextcloud',
+    labels: {
+      'wud.display.picture': 'https://images.example.com/legacy-nextcloud.png',
+    },
+  });
+
+  const discoveryCall = mqttClientMock.publish.mock.calls[0];
+  const discoveryPayload = JSON.parse(discoveryCall[1]);
+  expect(discoveryPayload.entity_picture).toBe('https://images.example.com/legacy-nextcloud.png');
+  expect(recordLegacyInputSpy).toHaveBeenCalledWith('label', 'wud.display.picture');
+  expect(logWarnSpy).toHaveBeenCalledWith(
+    'Legacy Docker label "wud.display.picture" is deprecated. Please migrate to "dd.display.picture" before removal in v1.6.0.',
+  );
+});
+
+test('addContainerSensor should fall through to wud.display.picture when dd.display.picture is an explicit empty string', async () => {
+  // This call site previously read `dd.display.picture || wud.display.picture`,
+  // which falls through to the wud.* label on an explicit empty dd.* value
+  // (e.g. an unset compose-file env-substitution default), not just when
+  // dd.* is absent. treatEmptyAsAbsent preserves that behavior so a
+  // container that still relies on wud.display.picture doesn't silently
+  // lose it. (The warn-message assertion is covered by the preceding test —
+  // the legacy-label warned-fallback registry is deduped per key, so
+  // asserting it again here would be order-dependent.)
+  const recordLegacyInputSpy = vi.spyOn(compatibility, 'recordLegacyInput');
+
+  await hass.addContainerSensor({
+    name: 'container-name',
+    watcher: 'watcher-name',
+    displayIcon: 'sh:nextcloud',
+    labels: {
+      'dd.display.picture': '',
+      'wud.display.picture': 'https://images.example.com/legacy-nextcloud.png',
+    },
+  });
+
+  const discoveryCall = mqttClientMock.publish.mock.calls[0];
+  const discoveryPayload = JSON.parse(discoveryCall[1]);
+  expect(discoveryPayload.entity_picture).toBe('https://images.example.com/legacy-nextcloud.png');
+  expect(recordLegacyInputSpy).toHaveBeenCalledWith('label', 'wud.display.picture');
+});
+
+test('addContainerSensor should warn once when multiple agents share a watcher name and the agent segment flag is disabled', async () => {
+  const logWarnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+  vi.spyOn(containerStore, 'getContainers').mockReturnValue([
+    { id: 'c1', watcher: 'collision-watcher', agent: 'ml' },
+    { id: 'c2', watcher: 'collision-watcher' },
+  ] as any);
+
+  await hass.addContainerSensor({
+    name: 'nginx',
+    watcher: 'collision-watcher',
+    displayIcon: 'mdi:docker',
+  });
+
+  expect(logWarnSpy).toHaveBeenCalledWith(
+    'Multiple agents share watcher name "collision-watcher" but the Home Assistant MQTT topic layout has no agent segment, so their topics/sensors will collide. Set DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true to opt into the corrected layout before it becomes the default in v1.7.0.',
+  );
+
+  logWarnSpy.mockClear();
+  await hass.addContainerSensor({
+    name: 'nginx',
+    watcher: 'collision-watcher',
+    displayIcon: 'mdi:docker',
+  });
+  expect(logWarnSpy).not.toHaveBeenCalled();
+});
+
+test('addContainerSensor should not warn when a watcher name has only one distinct agent', async () => {
+  const logWarnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+  vi.spyOn(containerStore, 'getContainers').mockReturnValue([
+    { id: 'c1', watcher: 'single-agent-watcher', agent: 'ml' },
+    { id: 'c2', watcher: 'single-agent-watcher', agent: 'ml' },
+  ] as any);
+
+  await hass.addContainerSensor({
+    name: 'nginx',
+    watcher: 'single-agent-watcher',
+    displayIcon: 'mdi:docker',
+  });
+
+  expect(logWarnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Multiple agents share'));
 });
 
 test.each(

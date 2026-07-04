@@ -627,7 +627,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     const watchAtStartEnvKey = `DD_WATCHER_${this.name.toUpperCase()}_WATCHATSTART`;
     if (Object.hasOwn(ddEnvVars, watchAtStartEnvKey)) {
       this.log.warn(
-        `${watchAtStartEnvKey} environment variable is deprecated and will be removed in v1.6.0. Drydock watches at startup by default.`,
+        `${watchAtStartEnvKey} environment variable is deprecated and will be removed in v1.6.0. Drydock watches at startup by default. If you need to delay the first scan, use DD_WATCHER_${this.name.toUpperCase()}_CRON to control the schedule.`,
       );
     }
     this.log.info(`Cron scheduled (${this.configuration.cron})`);

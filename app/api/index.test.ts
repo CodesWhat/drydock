@@ -536,10 +536,149 @@ describe('API Index', () => {
     expect(mockLog.info).not.toHaveBeenCalledWith(
       expect.stringContaining('wud-card compatibility enabled'),
     );
-    // Flag off: /api mounting behavior is byte-for-byte identical to today —
-    // exactly one '/api' mount, the deprecated alias, nothing else.
-    const apiMountCalls = mockApp.use.mock.calls.filter((call) => call[0] === '/api');
-    expect(apiMountCalls).toEqual([['/api', 'api-router']]);
+    // Flag off: /api router mounting behavior is byte-for-byte identical to
+    // today — exactly one '/api' router mount, the deprecated alias, nothing
+    // else. (The legacy-alias usage tracking middleware also mounts at
+    // '/api' — asserted separately below — but is not itself a router.)
+    const apiRouterMountCalls = mockApp.use.mock.calls.filter(
+      (call) => call[0] === '/api' && typeof call[1] === 'string',
+    );
+    expect(apiRouterMountCalls).toEqual([['/api', 'api-router']]);
+  });
+
+  test('should track unversioned /api/* alias usage keyed by the bounded route pattern, not the raw path', async () => {
+    // recordLegacyInput('api', <key>) MUST use a bounded route *template*
+    // (e.g. '/api/containers/:id/stats'), never the raw request path — every
+    // dynamic route beneath the alias embeds a live identifier (container
+    // id, operation id, agent name...), so keying by req.path would grow the
+    // legacy-input map/Prometheus series unboundedly, one entry per distinct
+    // id ever seen through the deprecated alias.
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    mockGetWudCardCompatEnabled.mockReturnValue(false);
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    const compatibility = await import('../prometheus/compatibility.js');
+    await indexRouter.init();
+
+    // Middleware mounted at '/api' (the deprecated alias), not '/api/v1'.
+    const aliasTrackingCall = mockApp.use.mock.calls.find(
+      (call) => call[0] === '/api' && typeof call[1] === 'function',
+    );
+    expect(aliasTrackingCall).toBeDefined();
+    const trackLegacyApiAliasUsage = aliasTrackingCall[1];
+
+    // Express sets req.route/req.baseUrl synchronously the instant a route
+    // matches, before the handler runs, and they persist for the life of the
+    // response — simulate that plus the 'finish' event the fix listens for.
+    const finishHandlers = [];
+    const res = {
+      on: vi.fn((event, cb) => {
+        if (event === 'finish') finishHandlers.push(cb);
+      }),
+    };
+    const req = {
+      path: '/containers/abc123/stats',
+      baseUrl: '/api/containers',
+      route: { path: '/:id/stats' },
+    };
+    const next = vi.fn();
+    trackLegacyApiAliasUsage(req, res, next);
+    expect(next).toHaveBeenCalled();
+    expect(res.on).toHaveBeenCalledWith('finish', expect.any(Function));
+
+    // Recording only happens once the response actually completes.
+    const summaryBeforeFinish = compatibility.getLegacyInputSummary();
+    expect(summaryBeforeFinish.api.keys).toHaveLength(0);
+
+    finishHandlers.forEach((cb) => cb());
+
+    const summary = compatibility.getLegacyInputSummary();
+    expect(summary.api.keys).toContain('/api/containers/:id/stats');
+    expect(summary.api.keys).not.toContain('/containers/abc123/stats');
+    expect(summary.api.total).toBeGreaterThanOrEqual(1);
+  });
+
+  test('should record a bounded "unmatched" key when the response finishes without ever reaching a matched route', async () => {
+    // e.g. blocked by auth/rate-limit/CSRF middleware before any Route layer
+    // matched — req.route is never set in that case. Must still fall back to
+    // a fixed, bounded key rather than the raw (unbounded) path.
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    mockGetWudCardCompatEnabled.mockReturnValue(false);
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    const compatibility = await import('../prometheus/compatibility.js');
+    await indexRouter.init();
+
+    const aliasTrackingCall = mockApp.use.mock.calls.find(
+      (call) => call[0] === '/api' && typeof call[1] === 'function',
+    );
+    const trackLegacyApiAliasUsage = aliasTrackingCall[1];
+
+    const finishHandlers = [];
+    const res = {
+      on: vi.fn((event, cb) => {
+        if (event === 'finish') finishHandlers.push(cb);
+      }),
+    };
+    const req = { path: '/containers/abc123', baseUrl: '/api' };
+    const next = vi.fn();
+    trackLegacyApiAliasUsage(req, res, next);
+    finishHandlers.forEach((cb) => cb());
+
+    const summary = compatibility.getLegacyInputSummary();
+    expect(summary.api.keys).toContain('unmatched');
+    expect(summary.api.keys).not.toContain('/containers/abc123');
+  });
+
+  test('should NOT record /api/v1/* fallthrough (unmatched method/path in the v1 router) as legacy-alias usage', async () => {
+    // The v1 router's catch-all is GET-only, so a non-GET request to an
+    // unmatched /api/v1/* path never resolves inside the /api/v1 mount at
+    // all — Express falls through past it and back into this '/api'-mounted
+    // middleware with req.path rewritten relative to the '/api' mount point
+    // (e.g. '/v1/bogus'). That must never be recorded as unversioned-alias
+    // usage — it's real /api/v1 traffic, just an unmatched verb/path.
+    mockGetServerConfiguration.mockReturnValue({
+      enabled: true,
+      port: 3000,
+      cors: {},
+      tls: {},
+    });
+    mockGetWudCardCompatEnabled.mockReturnValue(false);
+
+    vi.resetModules();
+    const indexRouter = await import('./index.js');
+    const compatibility = await import('../prometheus/compatibility.js');
+    await indexRouter.init();
+
+    const aliasTrackingCall = mockApp.use.mock.calls.find(
+      (call) => call[0] === '/api' && typeof call[1] === 'function',
+    );
+    expect(aliasTrackingCall).toBeDefined();
+    const trackLegacyApiAliasUsage = aliasTrackingCall[1];
+
+    const next = vi.fn();
+    trackLegacyApiAliasUsage({ path: '/v1/bogus' }, {}, next);
+    expect(next).toHaveBeenCalled();
+
+    const nextForBareV1 = vi.fn();
+    trackLegacyApiAliasUsage({ path: '/v1' }, {}, nextForBareV1);
+    expect(nextForBareV1).toHaveBeenCalled();
+
+    const summary = compatibility.getLegacyInputSummary();
+    expect(summary.api.keys).not.toContain('/v1/bogus');
+    expect(summary.api.keys).not.toContain('/v1');
   });
 
   test('should mount the wud-card compat router at /api before the deprecated alias when DD_COMPAT_WUDCARD is enabled', async () => {
@@ -567,6 +706,17 @@ describe('API Index', () => {
     // routes get reshaped before falling through to the alias handlers.
     expect(apiMountCalls).toEqual([
       ['/api', 'wudcard-compat-router'],
+      ['/api', 'api-router'],
+    ]);
+
+    // The legacy-alias usage tracking middleware mounts between the two —
+    // after the wud-card compat router (which always calls next() and never
+    // terminates a response) and before the alias router, so every request
+    // that reaches the alias — wud-card-whitelisted or not — is counted.
+    const apiCallsInOrder = mockApp.use.mock.calls.filter((call) => call[0] === '/api');
+    expect(apiCallsInOrder).toEqual([
+      ['/api', 'wudcard-compat-router'],
+      ['/api', expect.any(Function)],
       ['/api', 'api-router'],
     ]);
   });

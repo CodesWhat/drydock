@@ -30,7 +30,7 @@ All three prefixes are interchangeable -- they configure the same triggers. Use 
 
 When the same trigger property is set under multiple prefixes, the merge priority is `DD_NOTIFICATION_*` > `DD_ACTION_*` > `DD_TRIGGER_*` (highest wins).
 
-<Callout type="info">A built-in migration CLI can rewrite your config files from `DD_TRIGGER_*` to `DD_ACTION_*` automatically: `drydock config migrate --source trigger`. Use `--dry-run` to preview changes before applying. Note that the CLI always emits `DD_ACTION_*` for every trigger type — if you use messaging providers (Slack, SMTP, Discord, ntfy, and others), you may prefer to rename those to `DD_NOTIFICATION_*` manually to match the canonical prefix for your provider category.</Callout>
+<Callout type="info">A built-in migration CLI can rewrite your config files from `DD_TRIGGER_*` to `DD_ACTION_*` automatically: `node dist/index.js config migrate --source trigger`. Use `--dry-run` to preview changes before applying. Note that the CLI always emits `DD_ACTION_*` for every trigger type — if you use messaging providers (Slack, SMTP, Discord, ntfy, and others), you may prefer to rename those to `DD_NOTIFICATION_*` manually to match the canonical prefix for your provider category.</Callout>
 
 ### Migrating trigger prefixes
 
@@ -49,7 +49,7 @@ DD_TRIGGER_SMTP_GMAIL_PORT=465
 Run the migration (add `--dry-run` to preview without writing):
 
 ```bash
-drydock config migrate --source trigger
+node dist/index.js config migrate --source trigger
 ```
 
 **After** (canonical prefixes):

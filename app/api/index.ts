@@ -16,6 +16,7 @@ import {
   getServerConfiguration,
   getWudCardCompatEnabled,
 } from '../configuration/index.js';
+import { recordLegacyInput } from '../prometheus/compatibility.js';
 import * as settingsStore from '../store/settings.js';
 import * as apiRouter from './api.js';
 import * as auth from './auth.js';
@@ -124,6 +125,50 @@ function configurePermissionsPolicy(app) {
   });
 }
 
+// Unversioned /api/* alias deprecation (DEPRECATIONS.md) — track real usage
+// through the same compatibility/legacyInputs mechanism the WUD_* env/label
+// sources use (recordLegacyInput + dd_legacy_input_total), so the UI
+// deprecation banner reflects live traffic instead of never firing. Mounted
+// only on the deprecated alias mount below (not on /api/v1). The wud-card
+// compat router, when enabled, is mounted before this middleware but always
+// calls next() for every request — it never terminates a response — so
+// requests it reshapes still reach this middleware and the alias router
+// beneath it, and are correctly counted as legacy-alias usage too.
+//
+// The v1 router's catch-all (app/api/api.ts) is GET-only, so a non-GET
+// request to an unmatched /api/v1/* path never resolves inside that router
+// at all — Express falls through past the /api/v1 mount and back into this
+// '/api'-mounted middleware, arriving with req.path like '/v1/bogus'. Guard
+// explicitly against that so genuine /api/v1/* traffic (any method) is never
+// misrecorded as unversioned-alias usage.
+//
+// The recorded key MUST be a bounded route *pattern* (e.g.
+// "/api/containers/:id/stats"), never the raw request path — every dynamic
+// route beneath the alias embeds a live identifier (container id, operation
+// id, agent name, trigger name...), so keying by req.path would grow the
+// legacyInputCounts map and the dd_legacy_input_total series unboundedly,
+// one entry per distinct id ever seen. Express's router sets req.route and
+// req.baseUrl synchronously the instant a route matches — before the
+// handler runs — and they persist on the request for its lifetime, so
+// reading them once the response has finished reliably yields the literal
+// `:param` template the request resolved to, capping the key space at the
+// size of the API surface (same order of magnitude as the fixed env/label
+// name sets those other legacy-input sources use).
+function trackLegacyApiAliasUsage(req, res, next) {
+  if (req.path === '/v1' || req.path.startsWith('/v1/')) {
+    next();
+    return;
+  }
+  res.on('finish', () => {
+    recordLegacyInput('api', getLegacyApiAliasRouteKey(req));
+  });
+  next();
+}
+
+function getLegacyApiAliasRouteKey(req) {
+  return req.route ? `${req.baseUrl}${req.route.path}` : 'unmatched';
+}
+
 function registerRoutes(app) {
   // Wire the health readiness gate before auth.init() so that /health
   // returns 503 if somehow a request arrives before passport strategies
@@ -142,6 +187,7 @@ function registerRoutes(app) {
     log.info('wud-card compatibility enabled at /api (DD_COMPAT_WUDCARD=true)');
     app.use('/api', wudCardCompatRouter.init());
   }
+  app.use('/api', trackLegacyApiAliasUsage);
   app.use('/api', apiRouter.init());
   app.use('/metrics', prometheusRouter.init());
   if (configuration.ui?.enabled !== false) {

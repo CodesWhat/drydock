@@ -34,6 +34,8 @@ const LEGACY_LABEL_MAPPINGS = [
   ['wud.rollback.window', 'dd.rollback.window'],
   ['wud.rollback.interval', 'dd.rollback.interval'],
   ['wud.compose.file', 'dd.compose.file'],
+  ['wud.webhook.enabled', 'dd.webhook.enabled'],
+  ['wud.display.picture', 'dd.display.picture'],
 ] as const;
 
 const WATCHTOWER_LABEL_MAPPINGS = [['com.centurylinklabs.watchtower.enable', 'dd.watch']] as const;
@@ -257,7 +259,7 @@ export function migrateLegacyConfigContent(
 }
 
 function printHelp(io: MigrateCliIo) {
-  io.out('Usage: drydock config migrate [--file <path>] [--dry-run] [--source <name>]');
+  io.out('Usage: node dist/index.js config migrate [--file <path>] [--dry-run] [--source <name>]');
   io.out('');
   io.out('Migrates legacy config inputs from supported source platforms to drydock format.');
   io.out('');

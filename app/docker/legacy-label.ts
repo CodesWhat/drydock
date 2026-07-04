@@ -3,6 +3,11 @@ import { recordLegacyInput } from '../prometheus/compatibility.js';
 interface PreferredLabelValueOptions {
   warnedFallbacks?: Set<string>;
   warn?: (message: string) => void;
+  // Callers migrated from `dd.* || wud.*` (which also falls through to the
+  // wud.* value on an explicit empty string) need that same behavior here,
+  // not the default `??`-style "only fall through when absent" semantics.
+  // Off by default so every other call site keeps its original behavior.
+  treatEmptyAsAbsent?: boolean;
 }
 
 const warnedLegacyLabelFallbacks = new Set<string>();
@@ -14,7 +19,8 @@ export function getPreferredLabelValue(
   options: PreferredLabelValueOptions = {},
 ): string | undefined {
   const ddValue = labels?.[ddKey];
-  if (ddValue !== undefined || !wudKey) {
+  const ddIsAbsent = ddValue === undefined || (options.treatEmptyAsAbsent && ddValue === '');
+  if (!ddIsAbsent || !wudKey) {
     return ddValue;
   }
 

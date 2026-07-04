@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
 
-const { mockRouter, mockGetContainers } = vi.hoisted(() => ({
+const { mockRouter, mockGetContainers, mockLogWarn, mockRecordLegacyInput } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), get: vi.fn() },
   mockGetContainers: vi.fn(),
+  mockLogWarn: vi.fn(),
+  mockRecordLegacyInput: vi.fn(),
 }));
 
 vi.mock('express', () => ({
@@ -16,8 +18,12 @@ vi.mock('../store/container', () => ({
   getContainers: mockGetContainers,
 }));
 
-vi.mock('../log', () => ({
-  default: { child: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn() })) },
+vi.mock('../log/index.js', () => ({
+  default: { child: vi.fn(() => ({ info: vi.fn(), warn: mockLogWarn, debug: vi.fn() })) },
+}));
+
+vi.mock('../prometheus/compatibility.js', () => ({
+  recordLegacyInput: mockRecordLegacyInput,
 }));
 
 import * as groupRouter from './group.js';
@@ -106,6 +112,10 @@ describe('Group Router', () => {
       expect(total).toBe(1);
       expect(groups[0].name).toBe('legacy-stack');
       expect(groups[0].containerCount).toBe(2);
+      expect(mockRecordLegacyInput).toHaveBeenCalledWith('label', 'wud.group');
+      expect(mockLogWarn).toHaveBeenCalledWith(
+        'Legacy Docker label "wud.group" is deprecated. Please migrate to "dd.group" before removal in v1.6.0.',
+      );
     });
 
     test('should auto-detect com.docker.compose.project as group', () => {

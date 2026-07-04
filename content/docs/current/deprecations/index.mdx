@@ -17,10 +17,20 @@ This page lists every deprecated feature, the version it will be removed in, and
 
 | | |
 | --- | --- |
-| **Deprecated since** | v1.5.0-rc.29 |
-| **Removed since** | v1.5.0-rc.29 |
+| **Deprecated since** | v1.5.0-rc.17 |
+| **Removed since** | v1.5.0-rc.17 |
 | **Compatibility response since** | v1.5.0-rc.34 |
 | **Migration** | Use `GET /api/v1/stats/summary` or `GET /api/v1/stats/summary/stream` for aggregate stats; use `GET /api/v1/containers/:id/stats` for one container |
+
+### Implicit wildcard CORS origin {#implicit-wildcard-cors}
+
+Older drydock releases allowed `DD_SERVER_CORS_ENABLED=true` without `DD_SERVER_CORS_ORIGIN` and treated it like `*` (all origins). Since v1.5.0-rc.9, drydock fails closed instead: startup throws an error and the server does not start.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.4.0 |
+| **Removed since** | v1.5.0-rc.9 |
+| **Migration** | Set `DD_SERVER_CORS_ORIGIN` to your trusted origin(s), e.g. `DD_SERVER_CORS_ORIGIN=https://drydock.example.com` |
 
 ## Removal in v1.6.0
 
@@ -34,16 +44,6 @@ The unversioned `/api/*` path is a backward-compatible alias for `/api/v1/*`. Bo
 | **Detection** | Startup log warning; UI deprecation banner when legacy API paths are detected |
 | **Migration** | Replace `/api/` with `/api/v1/` in all integrations |
 
-### Implicit wildcard CORS origin {#implicit-wildcard-cors}
-
-Older drydock releases allowed `DD_SERVER_CORS_ENABLED=true` without `DD_SERVER_CORS_ORIGIN` and treated it like `*` (all origins). Current releases fail startup instead; CORS must have an explicit origin.
-
-| | |
-| --- | --- |
-| **Deprecated since** | v1.4.0 |
-| **Detection** | Startup error when CORS is enabled without an explicit origin |
-| **Migration** | Set `DD_SERVER_CORS_ORIGIN` to your trusted origin(s), e.g. `DD_SERVER_CORS_ORIGIN=https://drydock.example.com` |
-
 ### Legacy `WUD_*` environment variables {#legacy-env-vars}
 
 `WUD_*` prefixed environment variables (from the upstream WUD project) are accepted as fallbacks for their `DD_*` equivalents.
@@ -52,17 +52,17 @@ Older drydock releases allowed `DD_SERVER_CORS_ENABLED=true` without `DD_SERVER_
 | --- | --- |
 | **Deprecated since** | v1.4.0 |
 | **Detection** | Startup console warning; Prometheus counter `dd_legacy_input_total{source="env"}`; UI deprecation banner |
-| **Migration** | Rename all `WUD_*` vars to `DD_*`. Run `drydock config migrate --dry-run` to preview changes |
+| **Migration** | Rename all `WUD_*` vars to `DD_*`. Run `node dist/index.js config migrate --dry-run` to preview changes |
 
 ### Legacy `wud.*` container labels {#legacy-labels}
 
-`wud.*` prefixed Docker labels are accepted as fallbacks for their `dd.*` equivalents (22 labels total including `wud.watch`, `wud.tag.include`, `wud.tag.exclude`, etc.).
+`wud.*` prefixed Docker labels are accepted as fallbacks for their `dd.*` equivalents (24 labels total including `wud.watch`, `wud.tag.include`, `wud.tag.exclude`, etc.).
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.4.0 |
 | **Detection** | Per-label log warning on container init; Prometheus counter `dd_legacy_input_total{source="label"}`; UI deprecation banner |
-| **Migration** | Rename all `wud.*` labels to `dd.*` in your compose files. Run `drydock config migrate --file /path/to/compose.yml` |
+| **Migration** | Rename all `wud.*` labels to `dd.*` in your compose files. Run `node dist/index.js config migrate --file /path/to/compose.yml` |
 
 ### Legacy template variable aliases {#legacy-template-variables}
 
@@ -126,13 +126,13 @@ Per-watcher digest watching via environment variable is deprecated.
 
 ### `DD_WATCHER_*_WATCHATSTART` environment variable {#watchatstart}
 
-This variable is a no-op — watching at startup has been the default since v1.3.
+Redundant when `true` or unset — watching at startup has been the default since v1.3. An explicit `false` still suppresses the initial startup scan today, but that will stop working once this variable is removed.
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.4.0 |
 | **Detection** | Startup log warning |
-| **Migration** | Remove the variable from your configuration |
+| **Migration** | Remove the variable from your configuration. If you need to delay the first scan, use `DD_WATCHER_{name}_CRON` to control the schedule instead |
 
 ### Registry `PUBLIC_TOKEN` configuration {#registry-public-token}
 
@@ -142,7 +142,7 @@ Token-based authentication for public registries has been replaced by password-b
 | --- | --- |
 | **Deprecated since** | v1.4.0 |
 | **Detection** | Startup log warning when fallback to anonymous is triggered |
-| **Migration** | Replace `DD_REGISTRY_HUB_PUBLIC_TOKEN` with `DD_REGISTRY_HUB_PUBLIC_PASSWORD`. Replace `DD_REGISTRY_DHI_TOKEN` with `DD_REGISTRY_DHI_PASSWORD` |
+| **Migration** | Replace `DD_REGISTRY_HUB_PUBLIC_TOKEN` with `DD_REGISTRY_HUB_PUBLIC_PASSWORD`. Replace `DD_REGISTRY_DHI_PUBLIC_TOKEN` with `DD_REGISTRY_DHI_PUBLIC_PASSWORD` |
 
 ## Removal in v1.7.0
 
@@ -164,7 +164,7 @@ The `DD_TRIGGER_*` prefix is being replaced by semantic prefixes that distinguis
 | --- | --- |
 | **Deprecated since** | v1.5.0 |
 | **Detection** | Startup log warning; Prometheus counter `dd_legacy_input_total`; UI deprecation banner |
-| **Migration** | Rename `DD_TRIGGER_*` to `DD_ACTION_*` (for Docker/Compose/Command triggers) or `DD_NOTIFICATION_*` (for Slack/email/Pushover/etc.). Run `drydock config migrate --source trigger` to auto-rewrite. See [Triggers](/docs/configuration/triggers) |
+| **Migration** | Rename `DD_TRIGGER_*` to `DD_ACTION_*` (for Docker/Compose/Command triggers) or `DD_NOTIFICATION_*` (for Slack/email/Pushover/etc.). Run `node dist/index.js config migrate --source trigger` to auto-rewrite. See [Triggers](/docs/configuration/triggers) |
 
 ### `dd.trigger.include` / `dd.trigger.exclude` container labels {#legacy-trigger-labels}
 
@@ -186,6 +186,54 @@ In v1.5.x, the `trigger-not-included` and `trigger-excluded` eligibility reasons
 | **Detection** | UI eligibility pill on container row; confirmation modal warning |
 | **Migration** | If you rely on manual updates bypassing an action trigger's include/exclude filter, either (a) remove the `dd.action.exclude` / `dd.trigger.exclude` label, (b) add the trigger to the container's `dd.action.include` / `dd.trigger.include` list, or (c) configure a separate action trigger that the labels permit. The eligibility pill on the row identifies the exact trigger / label combination in conflict |
 
+### Agent-less Home Assistant MQTT topic layout (multi-agent) {#hass-agent-topic-layout}
+
+The current Home Assistant MQTT topic layout (`<topic>/<watcher>/<container>` and the watcher-level sensor topics) has no agent segment. In a multi-agent deployment where the controller and one or more agents all use the default watcher name `local`, two containers with the same name on different agents publish to — and overwrite — the same MQTT topic, and watcher-level sensor counts sum across all agents.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.5.0 |
+| **Default flips in** | v1.7.0 |
+| **Detection** | Manual — affects multi-agent Home Assistant MQTT deployments where more than one node uses the default watcher name `local` |
+| **Migration** | Set `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true` and re-point any affected Home Assistant references before v1.7.0 makes it the default. See [MQTT trigger](/docs/configuration/triggers/mqtt) |
+
+## Removal in v1.8.0
+
+### Legacy auth strategies response shape {#legacy-auth-strategies-shape}
+
+`GET /auth/strategies` and its unversioned, rate-limited alias `GET /api/auth/methods` return the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }` — the same provider list plus structured startup registration errors.
+
+| | |
+| --- | --- |
+| **Deprecated since** | v1.6.0 |
+| **Detection** | None currently — this pair does not yet emit a warning, header, counter, or banner |
+| **Migration** | Read `providers`/`errors` from `GET /api/v1/auth/status` instead of `strategies`/`warnings` from `GET /auth/strategies` or `GET /api/auth/methods` |
+
+## Enforced security changes (no deprecation window)
+
+These behaviors were removed immediately rather than going through a grace period, because the deprecated behavior was itself the vulnerability. They're listed here for upgrade visibility, not because they're still active.
+
+### Implicit reverse-proxy header trust for CSRF origin checks {#csrf-proxy-trust}
+
+| | |
+| --- | --- |
+| **Removed since** | v1.5.0-rc.30 |
+| **Migration** | Set `DD_SERVER_TRUSTPROXY` to the number of proxy hops in front of Drydock (e.g. `1`) if you terminate TLS at a reverse proxy. See the [FAQ](/docs/faq#csrf-validation-failed-403-behind-a-reverse-proxy) |
+
+### Command trigger process-environment inheritance {#command-trigger-env-inheritance}
+
+| | |
+| --- | --- |
+| **Removed since** | v1.5.0-rc.35 |
+| **Migration** | Scripts that need additional variables from the drydock process name them explicitly with `DD_ACTION_COMMAND_{name}_ENV` (comma-separated). See [Command trigger](/docs/configuration/triggers/command) |
+
+### HTTP trigger requests to cloud metadata endpoints {#http-metadata-ssrf}
+
+| | |
+| --- | --- |
+| **Removed since** | v1.5.0-rc.35 |
+| **Migration** | A deployment that genuinely needs a link-local target sets `DD_NOTIFICATION_HTTP_{name}_ALLOWMETADATA=true` on that trigger. See [HTTP trigger](/docs/configuration/triggers/http) |
+
 ## Detection summary
 
 Drydock provides multiple channels for discovering deprecated feature usage:
@@ -196,4 +244,4 @@ Drydock provides multiple channels for discovering deprecated feature usage:
 | **UI deprecation banners** | Legacy config, legacy API paths, OIDC HTTP, legacy password hashes, detected curl healthcheck overrides |
 | **Prometheus counters** | `dd_legacy_input_total{source,key}` for env vars, labels, and API paths |
 | **HTTP response headers** | `Deprecation` and `Sunset` on `PUT /api/settings` |
-| **Migration CLI** | `drydock config migrate --dry-run` previews all env var and label renames |
+| **Migration CLI** | `node dist/index.js config migrate --dry-run` previews all env var and label renames |

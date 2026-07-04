@@ -11,7 +11,7 @@ const log = logger.child({ component: 'settings' });
 const deprecatedPutWarning =
   'PUT /api/settings is deprecated and will be removed in v1.6.0. Use PATCH /api/settings instead.';
 const deprecatedPutDeprecation = '@1798761600';
-const deprecatedPutSunset = 'Wed, 01 Jan 2027 00:00:00 GMT';
+const deprecatedPutSunset = 'Fri, 01 Jan 2027 00:00:00 GMT';
 
 const settingsSchema = joi
   .object({

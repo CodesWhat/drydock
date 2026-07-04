@@ -16,8 +16,10 @@ const {
   mockTimingSafeEqual,
   mockLogWarn,
   mockResolveWatcherIdForContainer,
+  mockRecordLegacyInput,
 } = vi.hoisted(() => ({
   mockRouter: { use: vi.fn(), post: vi.fn() },
+  mockRecordLegacyInput: vi.fn(),
   mockGetWebhookConfiguration: vi.fn(() => ({
     enabled: true,
     token: 'test-token',
@@ -110,6 +112,10 @@ vi.mock('../prometheus/audit.js', () => ({
 
 vi.mock('../prometheus/webhook.js', () => ({
   getWebhookCounter: mockGetWebhookCounter,
+}));
+
+vi.mock('../prometheus/compatibility.js', () => ({
+  recordLegacyInput: mockRecordLegacyInput,
 }));
 
 vi.mock('../log/index.js', () => ({
@@ -714,6 +720,10 @@ describe('Webhook Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(403);
+      expect(mockRecordLegacyInput).toHaveBeenCalledWith('label', 'wud.webhook.enabled');
+      expect(mockLogWarn).toHaveBeenCalledWith(
+        'Legacy Docker label "wud.webhook.enabled" is deprecated. Please migrate to "dd.webhook.enabled" before removal in v1.6.0.',
+      );
     });
 
     test('should allow watch when dd.webhook.enabled=true', async () => {
@@ -1205,6 +1215,7 @@ describe('Webhook Router', () => {
       await handler(req, res);
 
       expect(res.status).toHaveBeenCalledWith(403);
+      expect(mockRecordLegacyInput).toHaveBeenCalledWith('label', 'wud.webhook.enabled');
     });
 
     test('should return 404 when no docker trigger found', async () => {

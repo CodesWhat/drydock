@@ -610,6 +610,11 @@ describe('Docker Watcher', () => {
             'DD_WATCHER_TEST_WATCHATSTART environment variable is deprecated',
           ),
         );
+        expect(mockLog.warn).toHaveBeenCalledWith(
+          expect.stringContaining(
+            'If you need to delay the first scan, use DD_WATCHER_TEST_CRON to control the schedule.',
+          ),
+        );
       } finally {
         delete mockDdEnvVars.DD_WATCHER_TEST_WATCHATSTART;
       }

@@ -3,6 +3,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
 import { getWebhookConfiguration } from '../configuration/index.js';
+import { getPreferredLabelValue } from '../docker/legacy-label.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { getWebhookCounter } from '../prometheus/webhook.js';
@@ -185,7 +186,9 @@ const CONTAINER_WEBHOOK_DISABLED_ERROR = 'Webhooks are disabled for this contain
 function isWebhookEnabledForContainer(container: StoreContainer): boolean {
   const labels = container.labels;
   if (!labels) return true;
-  const value = labels[ddWebhookEnabled] ?? labels[wudWebhookEnabled];
+  const value = getPreferredLabelValue(labels, ddWebhookEnabled, wudWebhookEnabled, {
+    warn: (message) => log.warn(message),
+  });
   if (value === undefined) return true;
   return value.toLowerCase() !== 'false';
 }

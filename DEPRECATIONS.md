@@ -55,20 +55,6 @@ docker run --rm codeswhat/drydock node -e '
 
 ---
 
-### CORS without explicit origin
-
-| | |
-| --- | --- |
-| **Deprecated in** | v1.4.0 |
-| **Removed in** | v1.6.0 |
-| **Affects** | `DD_SERVER_CORS_ENABLED=true` without `DD_SERVER_CORS_ORIGIN` |
-
-Setting `DD_SERVER_CORS_ENABLED=true` without specifying `DD_SERVER_CORS_ORIGIN` currently falls back to `*`. This implicit wildcard is deprecated.
-
-**Migration:** Set `DD_SERVER_CORS_ORIGIN` explicitly. Use a specific origin (e.g., `https://myapp.example.com`) or `*` if you intentionally want to allow all origins.
-
----
-
 ### Unversioned `/api/*` path
 
 | | |
@@ -82,6 +68,20 @@ Setting `DD_SERVER_CORS_ENABLED=true` without specifying `DD_SERVER_CORS_ORIGIN`
 **Migration:** Update all API calls to use the `/api/v1/` prefix (e.g., `/api/v1/containers` instead of `/api/containers`).
 
 **Exception:** the opt-in wud-card compatibility endpoints (`DD_COMPAT_WUDCARD`, default `false`) remain mounted at `/api/*` after the alias removal. They exist solely to keep the Home Assistant [wud-card](https://github.com/angryvoegi/wud-card) integration working, are off by default, and are best-effort with no compatibility guarantee — see [Server configuration](https://getdrydock.com/docs/configuration/server) for details.
+
+---
+
+### Legacy auth strategies response shape (`GET /auth/strategies`, `GET /api/auth/methods`)
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.6.0 |
+| **Removed in** | v1.8.0 |
+| **Affects** | Clients reading `{ strategies, warnings }` from `GET /auth/strategies` or its unversioned compatibility alias `GET /api/auth/methods` |
+
+`GET /auth/strategies` and its rate-limited `/api/auth/methods` alias (kept only for clients still calling the legacy unversioned path) return the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }` — the same provider list plus structured startup registration errors instead of ad hoc warning strings. Unlike other entries in this file, this pair currently emits no deprecation signal at all — no log warning, no `Deprecation`/`Sunset` header, no Prometheus counter, no UI banner — so usage is invisible until removal.
+
+**Migration:** Read `providers`/`errors` from `GET /api/v1/auth/status` instead of `strategies`/`warnings` from `GET /auth/strategies` or `GET /api/auth/methods`.
 
 ---
 
@@ -231,11 +231,11 @@ Kafka trigger configuration now uses `clientid` (lowercase) as the canonical key
 | --- | --- |
 | **Deprecated in** | v1.4.0 |
 | **Removed in** | v1.6.0 |
-| **Affects** | `DD_REGISTRY_HUB_PUBLIC_TOKEN`, `DD_REGISTRY_DHI_TOKEN`, and similar token-auth env vars |
+| **Affects** | `DD_REGISTRY_HUB_PUBLIC_TOKEN`, `DD_REGISTRY_DHI_PUBLIC_TOKEN`, and similar token-auth env vars |
 
 Token-based authentication for public registries has been replaced by password-based authentication for consistency.
 
-**Migration:** Replace `DD_REGISTRY_HUB_PUBLIC_TOKEN` with `DD_REGISTRY_HUB_PUBLIC_PASSWORD`. Replace `DD_REGISTRY_DHI_TOKEN` with `DD_REGISTRY_DHI_PASSWORD`.
+**Migration:** Replace `DD_REGISTRY_HUB_PUBLIC_TOKEN` with `DD_REGISTRY_HUB_PUBLIC_PASSWORD`. Replace `DD_REGISTRY_DHI_PUBLIC_TOKEN` with `DD_REGISTRY_DHI_PUBLIC_PASSWORD`. Both registries require the instance-name segment (`PUBLIC` in these examples) between the provider and the credential key.
 
 ---
 
@@ -261,14 +261,28 @@ Setting `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true` opts into the 
 
 | | |
 | --- | --- |
-| **Deprecated in** | v1.5.0-rc.29 |
-| **Removed in** | v1.5.0-rc.29 |
+| **Deprecated in** | v1.5.0-rc.17 |
+| **Removed in** | v1.5.0-rc.17 |
 | **Compatibility response added in** | v1.5.0-rc.34 |
 | **Affects** | API consumers using `GET /api/v1/containers/stats` for fleet-level CPU/memory summaries |
 
 The legacy aggregate endpoint `GET /api/v1/containers/stats` was removed when fleet-level stats moved to the dedicated stats API. Since v1.5.0-rc.34, the old path returns **410 Gone** with migration targets instead of falling through to the `/:id` container route as container id `stats`.
 
 **Migration:** Replace aggregate reads with `GET /api/v1/stats/summary` or `GET /api/v1/stats/summary/stream`. Use `GET /api/v1/containers/:id/stats` only for per-container stats.
+
+---
+
+### CORS without an explicit origin
+
+| | |
+| --- | --- |
+| **Deprecated in** | v1.4.0 |
+| **Removed in** | v1.5.0-rc.9 |
+| **Affects** | `DD_SERVER_CORS_ENABLED=true` without `DD_SERVER_CORS_ORIGIN` |
+
+Setting `DD_SERVER_CORS_ENABLED=true` without specifying `DD_SERVER_CORS_ORIGIN` used to fall back to `*` (all origins). Since v1.5.0-rc.9, drydock fails closed instead: startup throws `DD_SERVER_CORS_ORIGIN must be configured when CORS is enabled` and the server does not start.
+
+**Migration:** Set `DD_SERVER_CORS_ORIGIN` explicitly. Use a specific origin (e.g., `https://myapp.example.com`) or `*` if you intentionally want to allow all origins.
 
 ## Enforced security changes (no deprecation window)
 

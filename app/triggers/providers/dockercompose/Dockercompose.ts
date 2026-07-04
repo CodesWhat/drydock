@@ -2,6 +2,7 @@ import { constants as fsConstants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import yaml from 'yaml';
+import { getPreferredLabelValue } from '../../../docker/legacy-label.js';
 import type { ContainerImage } from '../../../model/container.js';
 import type Registry from '../../../registries/Registry.js';
 import { getState } from '../../../registry/index.js';
@@ -618,7 +619,20 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
     // Check if container has a compose file label (dd.* primary, wud.* fallback)
     const composeFileLabel = this.configuration.composeFileLabel;
     const wudFallbackLabel = composeFileLabel.replace(/^dd\./, 'wud.');
-    const labelValue = container.labels?.[composeFileLabel] || container.labels?.[wudFallbackLabel];
+    // This call site previously read `dd.* || wud.*`, which falls through to
+    // the wud.* label on an explicit empty dd.* value (e.g. an unset
+    // compose-file env-substitution default), not just when dd.* is absent.
+    // treatEmptyAsAbsent preserves that behavior so a container that still
+    // relies on wud.compose.file doesn't silently lose it.
+    const labelValue = getPreferredLabelValue(
+      container.labels,
+      composeFileLabel,
+      wudFallbackLabel,
+      {
+        warn: (message) => this.log.warn(message),
+        treatEmptyAsAbsent: true,
+      },
+    );
     if (labelValue) {
       try {
         return this.resolveComposeFilePath(labelValue, {

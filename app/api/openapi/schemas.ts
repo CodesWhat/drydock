@@ -275,8 +275,9 @@ export const openApiSchemas = {
       total: { type: 'integer', minimum: 0 },
       env: { $ref: '#/components/schemas/LegacyInputSourceSummary' },
       label: { $ref: '#/components/schemas/LegacyInputSourceSummary' },
+      api: { $ref: '#/components/schemas/LegacyInputSourceSummary' },
     },
-    required: ['total', 'env', 'label'],
+    required: ['total', 'env', 'label', 'api'],
     additionalProperties: false,
   },
   CurlHealthcheckOverrideCompatibility: {
