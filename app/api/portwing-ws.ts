@@ -381,7 +381,9 @@ async function processHello(
   } else {
     const majorVersion = parseInt(drydockCompat.split('.')[0], 10);
     const serverMajor = parseInt(SERVER_COMPAT_LEVEL.split('.')[0], 10);
-    if (majorVersion > serverMajor) {
+    // Any major-version mismatch (either direction) is diagnostic-only — the wire
+    // connection is still accepted; this warns operators to check the compat matrix.
+    if (majorVersion !== serverMajor) {
       log.warn(
         `Edge agent requires drydockCompat ${drydockCompat} but server implements ${SERVER_COMPAT_LEVEL}`,
       );

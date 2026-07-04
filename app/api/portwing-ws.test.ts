@@ -22,14 +22,18 @@ vi.mock('../configuration/index.js', () => ({
   getServerConfiguration: vi.fn(() => ({})),
 }));
 
+// Hoisted so tests can assert on log calls (e.g. the compat-level mismatch
+// warning) — the module-level `log` in portwing-ws.ts is `logger.child(...)`,
+// called once at import time, so it always returns this same singleton.
+const mockLogChild = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
 vi.mock('../log/index.js', () => ({
   default: {
-    child: vi.fn(() => ({
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      debug: vi.fn(),
-    })),
+    child: vi.fn(() => mockLogChild),
   },
 }));
 
@@ -1379,6 +1383,41 @@ describe('hello verification — drydockCompat version warning', () => {
 
     const firstFrame = JSON.parse(ws.sentMessages[0]) as { type: string };
     expect(firstFrame.type).toBe('welcome');
+  });
+
+  test('warns when drydockCompat majorVersion is LOWER than server (sends welcome)', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'ac000000000000000000000000000002';
+    const sig = signHello(privateKey, ts, nonce);
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    // drydockCompat '0.9.0' has majorVersion=0, server implements '1.4.0' (major=1).
+    // Previously only the higher-than-server direction warned; now any mismatch does.
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig, { drydockCompat: '0.9.0' }));
+    await new Promise((r) => setTimeout(r, 10));
+
+    const firstFrame = JSON.parse(ws.sentMessages[0]) as { type: string };
+    expect(firstFrame.type).toBe('welcome');
+    expect(mockLogChild.warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Edge agent requires drydockCompat 0.9.0 but server implements 1.4.0',
+      ),
+    );
   });
 });
 
