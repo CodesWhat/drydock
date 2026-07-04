@@ -51,52 +51,57 @@ const emit = defineEmits<{
     <AppBadge v-if="group.updatesAvailable > 0" tone="success" size="xs">
       {{ group.updatesAvailable }} {{ group.updatesAvailable === 1 ? t('containerComponents.groupHeader.updateSingular') : t('containerComponents.groupHeader.updatePlural') }}
     </AppBadge>
-    <AppButton
+    <div
       v-if="group.updatesAvailable > 0 || !containerActionsEnabled"
-      size="compact"
-      :variant="
-        !containerActionsEnabled || group.updatableCount === 0 || inProgress
-          ? 'muted-subtle'
-          : 'success'
-      "
-      weight="semibold"
-      class="ml-auto inline-flex items-center justify-center"
-      :class="
-        !containerActionsEnabled || inProgress
-          ? 'cursor-not-allowed'
-          : ''
-      "
-      :disabled="!containerActionsEnabled || group.updatableCount === 0 || inProgress"
-      v-tooltip.top="
-        tt(
-          !containerActionsEnabled
-            ? containerActionsDisabledReason
-            : group.updatableCount === 0
-              ? t('containerComponents.groupHeader.allBlockedTooltip')
-              : t('containerComponents.groupHeader.updateAllInGroupTooltip'),
-        )
-      "
-      @click.stop="emit('updateAll', group)"
+      data-test="group-header-update-all-sticky"
+      class="ms-auto sticky end-0 z-10 flex items-center"
     >
-      <AppIcon
-        :name="
-          !containerActionsEnabled || group.updatableCount === 0
-            ? 'lock'
-            : inProgress
-              ? 'spinner'
-              : 'cloud-download'
+      <AppButton
+        size="compact"
+        :variant="
+          !containerActionsEnabled || group.updatableCount === 0 || inProgress
+            ? 'muted-subtle'
+            : 'success'
         "
-        :size="14"
-        class="mr-1"
-        :class="!containerActionsEnabled ? '' : inProgress ? 'dd-spin' : ''"
-      />
-      {{
-        !containerActionsEnabled
-          ? t('containerComponents.groupHeader.actionsDisabled')
-          : inProgress && frozenTotal !== undefined && doneCount !== undefined && frozenTotal >= 2
-            ? t('containerComponents.groupHeader.updatingStack', { done: doneCount, total: frozenTotal })
-            : t('containerComponents.groupHeader.updateAll')
-      }}
-    </AppButton>
+        weight="semibold"
+        class="inline-flex items-center justify-center"
+        :class="
+          !containerActionsEnabled || inProgress
+            ? 'cursor-not-allowed'
+            : ''
+        "
+        :disabled="!containerActionsEnabled || group.updatableCount === 0 || inProgress"
+        v-tooltip.top="
+          tt(
+            !containerActionsEnabled
+              ? containerActionsDisabledReason
+              : group.updatableCount === 0
+                ? t('containerComponents.groupHeader.allBlockedTooltip')
+                : t('containerComponents.groupHeader.updateAllInGroupTooltip'),
+          )
+        "
+        @click.stop="emit('updateAll', group)"
+      >
+        <AppIcon
+          :name="
+            !containerActionsEnabled || group.updatableCount === 0
+              ? 'lock'
+              : inProgress
+                ? 'spinner'
+                : 'cloud-download'
+          "
+          :size="14"
+          class="mr-1"
+          :class="!containerActionsEnabled ? '' : inProgress ? 'dd-spin' : ''"
+        />
+        {{
+          !containerActionsEnabled
+            ? t('containerComponents.groupHeader.actionsDisabled')
+            : inProgress && frozenTotal !== undefined && doneCount !== undefined && frozenTotal >= 2
+              ? t('containerComponents.groupHeader.updatingStack', { done: doneCount, total: frozenTotal })
+              : t('containerComponents.groupHeader.updateAll')
+        }}
+      </AppButton>
+    </div>
   </div>
 </template>

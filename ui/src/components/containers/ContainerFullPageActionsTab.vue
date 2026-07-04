@@ -263,7 +263,7 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
                 <span class="dd-text font-mono">{{ detailPreview.updateKind?.kind || detailPreview.updateKind || t('common.unknown') }}</span>
               </div>
               <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.runningLabel') }}
-                <span class="dd-text">{{ detailPreview.isRunning ? 'yes' : 'no' }}</span>
+                <span class="dd-text">{{ detailPreview.isRunning ? t('common.yes') : t('common.no') }}</span>
               </div>
               <div v-if="Array.isArray(detailPreview.networks)" class="dd-text-muted">
                 {{ t('containerComponents.fullPageActions.networksLabel') }} <span class="dd-text font-mono">{{ detailPreview.networks.join(', ') || '-' }}</span>
@@ -282,7 +282,7 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
               </div>
               <div v-if="typeof detailComposePreview?.willWrite === 'boolean'" class="dd-text-muted">
                 {{ t('containerComponents.fullPageActions.writesComposeFileLabel') }}
-                <span class="dd-text">{{ detailComposePreview.willWrite ? 'yes' : 'no' }}</span>
+                <span class="dd-text">{{ detailComposePreview.willWrite ? t('common.yes') : t('common.no') }}</span>
               </div>
               <div v-if="detailComposePreview?.patch" class="dd-text-muted">
                 {{ t('containerComponents.fullPageActions.patchPreviewLabel') }}
@@ -314,7 +314,7 @@ function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility 
                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
               <div class="min-w-0">
                 <div class="text-xs font-semibold dd-text truncate">{{ trigger.type }}.{{ trigger.name }}</div>
-                <div v-if="trigger.agent" class="text-2xs-plus dd-text-muted">agent: {{ trigger.agent }}</div>
+                <div v-if="trigger.agent" class="text-2xs-plus dd-text-muted">{{ t('containerComponents.triggers.agentLabel') }} {{ trigger.agent }}</div>
               </div>
               <AppButton size="md" variant="outlined" :disabled="triggerRunInProgress !== null"
                       @click="runAssociatedTrigger(trigger)">

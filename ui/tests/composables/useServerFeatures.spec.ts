@@ -1,3 +1,5 @@
+import { i18n } from '@/boot/i18n';
+
 const mockGetServer = vi.fn();
 
 vi.mock('@/services/server', () => ({
@@ -51,7 +53,7 @@ describe('useServerFeatures', () => {
     expect(features.containerActionsEnabled.value).toBe(false);
     expect(features.deleteEnabled.value).toBe(false);
     expect(features.containerActionsDisabledReason.value).toBe(
-      'Container actions disabled by server configuration',
+      i18n.global.t('sharedComponents.serverFeatures.actionsDisabledReason'),
     );
     expect(features.featureFlags.value).toEqual({});
     expect(features.error.value).toBe('server unavailable');

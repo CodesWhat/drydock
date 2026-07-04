@@ -231,7 +231,7 @@ function preserveTransientUiFields(prev: Container[], next: Container[]): Contai
 async function loadContainers() {
   try {
     const apiContainers = await getAllContainers();
-    const mappedRaw = mapApiContainers(apiContainers);
+    const mappedRaw = mapApiContainers(apiContainers, t);
     const mapped = preserveTransientUiFields(containers.value, mappedRaw);
     // Skip reactive assignment (and downstream chain re-eval) when incoming
     // data is bit-for-bit identical to the current list. Gate the lookup map
@@ -450,6 +450,8 @@ const {
   rollbackMessage,
   rollbackToBackup,
   runAssociatedTrigger,
+  recheckContainer,
+  recheckingContainerId,
   runContainerPreview,
   scanContainer,
   selectedHasMaturityPolicy,
@@ -568,6 +570,7 @@ const VALID_CONTAINER_SORT_KEYS = [
   'bouncer',
   'kind',
   'version',
+  'softwareVersion',
   'imageAge',
 ] as const;
 type ContainerSortKey = (typeof VALID_CONTAINER_SORT_KEYS)[number];
@@ -972,6 +975,9 @@ const sortedContainers = computed(() => {
     } else if (key === 'version') {
       leftValue = left.currentTag;
       rightValue = right.currentTag;
+    } else if (key === 'softwareVersion') {
+      leftValue = left.softwareVersion ?? left.currentTag;
+      rightValue = right.softwareVersion ?? right.currentTag;
     } else if (key === 'imageAge') {
       const leftMs = left.imageCreated ? new Date(left.imageCreated).getTime() : 0;
       const rightMs = right.imageCreated ? new Date(right.imageCreated).getTime() : 0;
@@ -1222,6 +1228,7 @@ const tableColumns = computed(() =>
     autoSize: column.autoSize,
     px: column.px,
     icon: column.key === 'icon',
+    headerTooltip: column.headerTooltipKey ? t(column.headerTooltipKey) : undefined,
   })),
 );
 
@@ -1494,6 +1501,8 @@ provide(containersViewTemplateContextKey, {
   containerScrollBlocked,
   containerResumeAutoScroll,
   previewLoading,
+  recheckContainer,
+  recheckingContainerId,
   runContainerPreview,
   policyInProgress,
   skipCurrentForSelected,

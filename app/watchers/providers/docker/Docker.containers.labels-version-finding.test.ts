@@ -880,4 +880,15 @@ describe('Docker Watcher', () => {
       expect(result).toEqual({ tag: 'latest' });
     });
   });
+
+  describe('dd.inspect.tag.version-only label', () => {
+    test('testable_getLabel returns the value when dd.inspect.tag.version-only is present', () => {
+      const labels = { 'dd.inspect.tag.version-only': 'true' };
+      expect(testable_getLabel(labels, 'dd.inspect.tag.version-only')).toBe('true');
+    });
+
+    test('testable_getLabel returns undefined when dd.inspect.tag.version-only is absent', () => {
+      expect(testable_getLabel({}, 'dd.inspect.tag.version-only')).toBeUndefined();
+    });
+  });
 });

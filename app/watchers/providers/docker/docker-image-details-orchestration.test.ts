@@ -922,6 +922,7 @@ describe('docker image details orchestration module', () => {
       'Config/Labels/org.opencontainers.image.version',
       's/v//',
       'container-1',
+      false,
     );
     expect(watcher.log.debug).toHaveBeenCalledWith(
       'Apply imgset "preferred" to container container-1',
@@ -1474,5 +1475,77 @@ describe('docker image details orchestration module', () => {
     );
 
     expect(containerInStore.sourceRepo).toBeUndefined();
+  });
+
+  test('calls resolveTagName with inspectTagVersionOnly=true when label is set', async () => {
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined as any);
+
+    const { watcher } = createWatcher();
+    const resolveTagNameMock = vi.fn().mockReturnValue('stable');
+    const helpers = createHelpers({
+      resolveTagName: resolveTagNameMock,
+      mergeConfigWithImgset: vi.fn(() => ({
+        includeTags: undefined,
+        excludeTags: undefined,
+        transformTags: undefined,
+        tagFamily: undefined,
+        linkTemplate: undefined,
+        displayName: undefined,
+        displayIcon: undefined,
+        triggerInclude: undefined,
+        triggerExclude: undefined,
+        watchDigest: undefined,
+        inspectTagPath: 'Config/Labels/app.version',
+        inspectTagVersionOnly: 'true',
+        lookupImage: undefined,
+      })),
+    });
+
+    await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({
+        Labels: {
+          'dd.inspect.tag.path': 'Config/Labels/app.version',
+          'dd.inspect.tag.version-only': 'true',
+        },
+      }),
+      {},
+      helpers as any,
+    );
+
+    expect(resolveTagNameMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'Config/Labels/app.version',
+      undefined,
+      'container-1',
+      true,
+    );
+  });
+
+  test('calls resolveTagName with inspectTagVersionOnly=false when label is absent', async () => {
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined as any);
+
+    const { watcher } = createWatcher();
+    const resolveTagNameMock = vi.fn().mockReturnValue('1.2.3');
+    const helpers = createHelpers({
+      resolveTagName: resolveTagNameMock,
+    });
+
+    await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({ Labels: {} }),
+      {},
+      helpers as any,
+    );
+
+    expect(resolveTagNameMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      undefined,
+      'container-1',
+      false,
+    );
   });
 });

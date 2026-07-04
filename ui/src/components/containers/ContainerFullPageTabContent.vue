@@ -21,6 +21,8 @@ import { getPrimaryHardBlocker } from '../../utils/update-eligibility';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 import { formatShortDigest } from '../../utils/digest-format';
 import { imageAge } from '../../utils/audit-helpers';
+import { useNow } from '../../composables/useNow';
+import { formatUptimeFromIso } from '../../utils/uptime';
 
 interface RevealEnvResponse {
   env?: Array<{ key: string; value: string }>;
@@ -149,6 +151,8 @@ const {
   formatOperationPhase,
   formatRollbackReason,
   updateOperationsError,
+  recheckContainer,
+  recheckingContainerId,
   scanContainer,
   confirmUpdate,
   confirmForceUpdate,
@@ -157,6 +161,12 @@ const {
   registryLabel,
   updateKindColor,
 } = useContainersViewTemplateContext();
+
+const nowMs = useNow(1_000, () => !!selectedContainer.value?.details?.startedAt);
+
+const uptimeString = computed(() =>
+  formatUptimeFromIso(selectedContainer.value?.details?.startedAt, nowMs.value),
+);
 
 const { t } = useI18n();
 
@@ -271,6 +281,13 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 <span class="dd-text-secondary">{{ t('containerComponents.fullPageOverview.currentLabel') }}</span>
                 <CopyableTag :tag="selectedContainer.isDigestPinned && selectedContainer.currentDigest ? selectedContainer.currentDigest : selectedContainer.currentTag"
                              class="font-bold dd-text">{{ selectedContainer.isDigestPinned && selectedContainer.currentDigest ? formatShortDigest(selectedContainer.currentDigest) : selectedContainer.currentTag }}</CopyableTag>
+              </div>
+              <div v-if="selectedContainer.softwareVersion"
+                    class="flex items-center gap-3 px-3 py-2 dd-rounded text-xs font-mono"
+                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
+                    data-test="container-software-version-detail">
+                <span class="dd-text-secondary">{{ t('containerComponents.fullPageOverview.softwareVersion') }}</span>
+                <span class="font-mono dd-text-muted" v-tooltip.top="selectedContainer.softwareVersion">{{ selectedContainer.softwareVersion }}</span>
               </div>
               <div v-if="selectedContainer.isDigestPinned && selectedContainer.updateKind === 'digest' && selectedContainer.newDigest && selectedContainer.currentDigest"
                    class="flex items-center gap-3 px-3 py-2 dd-rounded text-xs font-mono"
@@ -424,6 +441,16 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 <span class="badge text-2xs font-bold uppercase"
                       :style="runtimeOriginStyle(selectedRuntimeOrigins.cmd)">
                   {{ runtimeOriginLabel(selectedRuntimeOrigins.cmd) }}
+                </span>
+              </div>
+              <div v-if="selectedContainer.details.startedAt"
+                    class="flex items-center justify-between gap-3 px-3 py-2 dd-rounded text-xs"
+                    :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                <span class="dd-text-secondary" :aria-label="t('containerComponents.fullPageOverview.uptimeAriaLabel')">
+                  {{ t('containerComponents.fullPageOverview.uptime') }}
+                </span>
+                <span class="font-mono dd-text" v-tooltip.top="selectedContainer.details.startedAt">
+                  {{ uptimeString }}
                 </span>
               </div>
               <div v-if="selectedRuntimeDriftWarnings.length > 0" class="space-y-1.5">
@@ -719,6 +746,11 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                             @click="scanContainer(selectedContainer)">
                       {{ t('containerComponents.fullPageActions.scanNow') }}
                     </AppButton>
+                    <AppButton size="md" variant="outlined"
+                            :disabled="recheckingContainerId === selectedContainer.id || isActionInProgress(selectedContainer)"
+                            @click="recheckContainer(selectedContainer)">
+                      {{ recheckingContainerId === selectedContainer.id ? t('containerComponents.fullPageActions.rechecking') : t('containerComponents.fullPageActions.recheckNow') }}
+                    </AppButton>
                   </div>
                 </div>
                 <!-- Skip & Snooze group -->
@@ -921,7 +953,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                        :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                     <div class="min-w-0">
                       <div class="text-xs font-semibold dd-text truncate">{{ trigger.type }}.{{ trigger.name }}</div>
-                      <div v-if="trigger.agent" class="text-2xs-plus dd-text-muted">agent: {{ trigger.agent }}</div>
+                      <div v-if="trigger.agent" class="text-2xs-plus dd-text-muted">{{ t('containerComponents.triggers.agentLabel') }} {{ trigger.agent }}</div>
                     </div>
                     <AppButton size="md" variant="outlined" :disabled="triggerRunInProgress !== null"
                             @click="runAssociatedTrigger(trigger)">

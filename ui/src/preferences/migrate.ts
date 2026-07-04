@@ -1,6 +1,7 @@
 import { deepMerge } from './deepMerge';
 import {
   CONTAINER_TABLE_COLUMN_KEYS,
+  CONTAINER_TABLE_OPT_IN_COLUMN_KEYS,
   CONTAINER_TABLE_REQUIRED_COLUMN_KEYS,
   CURRENT_SCHEMA_VERSION,
   DASHBOARD_LAYOUT_BREAKPOINTS,
@@ -198,7 +199,11 @@ function sanitizeContainers(data: Record<string, unknown>): void {
         delete c.columns;
       } else {
         const visible = new Set(c.columns);
-        c.columns = CONTAINER_TABLE_COLUMN_KEYS.filter(
+        const allKnownKeys = [
+          ...CONTAINER_TABLE_COLUMN_KEYS,
+          ...CONTAINER_TABLE_OPT_IN_COLUMN_KEYS,
+        ] as readonly string[];
+        c.columns = allKnownKeys.filter(
           (key) =>
             visible.has(key) ||
             (CONTAINER_TABLE_REQUIRED_COLUMN_KEYS as readonly string[]).includes(key),
@@ -672,6 +677,20 @@ export function migrate(data: Record<string, unknown>): PreferencesSchema {
 
   if (data.schemaVersion === 3) {
     data = { ...data, schemaVersion: CURRENT_SCHEMA_VERSION };
+  }
+
+  if (data.schemaVersion === 6) {
+    // Add softwareVersion column for all existing users so they see it immediately.
+    const containers = data.containers;
+    if (isRecord(containers) && isStringArray(containers.columns)) {
+      const cols = containers.columns as string[];
+      if (!cols.includes('softwareVersion')) {
+        const versionIdx = cols.indexOf('version');
+        const insertAt = versionIdx >= 0 ? versionIdx + 1 : cols.length;
+        cols.splice(insertAt, 0, 'softwareVersion');
+      }
+    }
+    data = { ...data, schemaVersion: 7 };
   }
 
   if (typeof data.schemaVersion === 'number' && data.schemaVersion < CURRENT_SCHEMA_VERSION) {

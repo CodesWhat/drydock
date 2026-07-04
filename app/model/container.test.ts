@@ -904,10 +904,94 @@ test('model should accept details with empty env values', async () => {
   ]);
 });
 
+test('model should accept details with startedAt iso date', async () => {
+  const containerValidated = container.validate({
+    id: 'container-startedat-test',
+    name: 'startedat-test',
+    watcher: 'test',
+    image: {
+      id: 'image-startedat-test',
+      registry: { name: 'hub', url: 'https://hub' },
+      name: 'organization/image',
+      tag: { value: '1.0.0', semver: true },
+      digest: { watch: false },
+      architecture: 'arch',
+      os: 'os',
+    },
+    details: {
+      ports: [],
+      volumes: [],
+      env: [],
+      startedAt: '2024-06-01T12:00:00.000Z',
+    },
+  });
+  expect(containerValidated.details.startedAt).toBe('2024-06-01T12:00:00.000Z');
+});
+
+test('model should accept details without startedAt', async () => {
+  const containerValidated = container.validate({
+    id: 'container-no-startedat',
+    name: 'no-startedat',
+    watcher: 'test',
+    image: {
+      id: 'image-no-startedat',
+      registry: { name: 'hub', url: 'https://hub' },
+      name: 'organization/image',
+      tag: { value: '1.0.0', semver: true },
+      digest: { watch: false },
+      architecture: 'arch',
+      os: 'os',
+    },
+    details: {
+      ports: [],
+      volumes: [],
+      env: [],
+    },
+  });
+  expect(containerValidated.details.startedAt).toBeUndefined();
+});
+
+test('model should reject details with non-ISO startedAt', async () => {
+  expect(() => {
+    container.validate({
+      id: 'container-bad-startedat',
+      name: 'bad-startedat',
+      watcher: 'test',
+      image: {
+        id: 'image-bad-startedat',
+        registry: { name: 'hub', url: 'https://hub' },
+        name: 'organization/image',
+        tag: { value: '1.0.0', semver: true },
+        digest: { watch: false },
+        architecture: 'arch',
+        os: 'os',
+      },
+      details: {
+        ports: [],
+        volumes: [],
+        env: [],
+        startedAt: 'not-a-date',
+      },
+    });
+  }).toThrow('"details.startedAt" must be in iso format');
+});
+
 test('model should reject empty error message', async () => {
   expect(() => {
     container.validate(createContainerWithError(''));
   }).toThrow('ValidationError: "error.message" is not allowed to be empty');
+});
+
+test('validate should allow and preserve unknown future fields (forward compatibility)', () => {
+  const input = {
+    ...createValidContainer(),
+    someFutureField: 'x',
+  };
+  let result: unknown;
+  expect(() => {
+    result = container.validate(input);
+  }).not.toThrow();
+  expect((result as Record<string, unknown>).someFutureField).toBe('x');
 });
 
 test.each([

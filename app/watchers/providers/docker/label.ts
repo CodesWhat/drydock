@@ -38,6 +38,12 @@ export const ddInspectTagPath = 'dd.inspect.tag.path';
 export const wudInspectTagPath = 'wud.inspect.tag.path';
 
 /**
+ * When set to 'true', routes dd.inspect.tag.path to image.softwareVersion
+ * only, preserving the real image tag for update detection. Default: off.
+ */
+export const ddInspectTagVersionOnly = 'dd.inspect.tag.version-only';
+
+/**
  * Optional image reference to use for update lookups.
  */
 export const ddRegistryLookupImage = 'dd.registry.lookup.image';

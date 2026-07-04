@@ -7,6 +7,7 @@ interface ColumnDef extends ResponsiveSizingColumn {
   key: string;
   label: string;
   labelKey?: string;
+  headerTooltipKey?: string;
   align?: string;
   px: string;
   required: boolean;
@@ -42,8 +43,8 @@ const allColumns: ColumnDef[] = [
   },
   {
     key: 'version',
-    label: 'Version',
-    labelKey: 'containersView.columns.version',
+    label: 'Tag',
+    labelKey: 'containersView.columns.tag',
     px: 'px-5',
     size: 220,
     minSize: 150,
@@ -53,9 +54,22 @@ const allColumns: ColumnDef[] = [
     required: false,
   },
   {
+    key: 'softwareVersion',
+    label: 'Version',
+    labelKey: 'containersView.columns.version',
+    px: 'px-5',
+    size: 220,
+    minSize: 150,
+    maxSize: 320,
+    priority: 5,
+    overflow: 'truncate',
+    required: false,
+  },
+  {
     key: 'kind',
     label: 'Update',
     labelKey: 'containersView.columns.update',
+    headerTooltipKey: 'containersView.columns.updateTooltip',
     px: 'px-3',
     size: 128,
     minSize: 116,
@@ -94,6 +108,17 @@ const allColumns: ColumnDef[] = [
     minSize: 116,
     maxSize: 180,
     priority: 80,
+    required: false,
+  },
+  {
+    key: 'uptime',
+    label: 'Uptime',
+    labelKey: 'containersView.columns.uptime',
+    px: 'px-3',
+    size: 120,
+    minSize: 100,
+    maxSize: 180,
+    priority: 90,
     required: false,
   },
 ];

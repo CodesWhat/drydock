@@ -70,6 +70,7 @@ export interface ContainerImage {
   os: string;
   variant?: string;
   created?: string;
+  softwareVersion?: string;
 }
 
 export interface ContainerResult {
@@ -136,6 +137,7 @@ export interface ContainerRuntimeDetails {
   ports: string[];
   volumes: string[];
   env: ContainerRuntimeEnv[];
+  startedAt?: string;
 }
 
 export interface ContainerUpdateOperationState {
@@ -328,6 +330,7 @@ const schema = joi.object({
       os: joi.string().min(1).required(),
       variant: joi.string(),
       created: joi.string().isoDate(),
+      softwareVersion: joi.string(),
     })
     .required(),
   result: joi.object({
@@ -385,6 +388,7 @@ const schema = joi.object({
         }),
       )
       .required(),
+    startedAt: joi.string().isoDate().optional(),
   }),
 });
 
@@ -811,7 +815,7 @@ function addResultChangedFunction(container: Container) {
  * @returns {*}
  */
 export function validate(container: unknown): Container {
-  const validation = schema.validate(container);
+  const validation = schema.validate(container, { allowUnknown: true });
   if (validation.error) {
     throw new Error(`Error when validating container properties ${validation.error}`);
   }

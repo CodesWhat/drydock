@@ -159,6 +159,8 @@ const mockFormatOperationStatus = vi.fn((status: string) => `status:${status}`);
 const mockFormatOperationPhase = vi.fn((phase: string) => `phase:${phase}`);
 const mockFormatRollbackReason = vi.fn((reason: string) => `reason:${reason}`);
 const mockScanContainer = vi.fn();
+const mockRecheckContainer = vi.fn();
+const mockRecheckingContainerId = ref<string | null>(null);
 const mockConfirmUpdate = vi.fn();
 const mockConfirmForceUpdate = vi.fn();
 
@@ -257,6 +259,8 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     formatOperationPhase: mockFormatOperationPhase,
     formatRollbackReason: mockFormatRollbackReason,
     updateOperationsError,
+    recheckContainer: mockRecheckContainer,
+    recheckingContainerId: mockRecheckingContainerId,
     scanContainer: mockScanContainer,
     confirmUpdate: mockConfirmUpdate,
     confirmForceUpdate: mockConfirmForceUpdate,
@@ -368,6 +372,8 @@ function resetState() {
   mockFormatOperationPhase.mockClear();
   mockFormatRollbackReason.mockClear();
   mockScanContainer.mockReset();
+  mockRecheckContainer.mockReset();
+  mockRecheckingContainerId.value = null;
   mockConfirmUpdate.mockReset();
   mockConfirmForceUpdate.mockReset();
 }
@@ -570,7 +576,7 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.text()).toContain('Compose files:');
     expect(wrapper.text()).toContain('/opt/stack/compose.yml, /opt/stack/compose.override.yml');
     expect(wrapper.text()).toContain('Writes compose file:');
-    expect(wrapper.text()).toContain('no');
+    expect(wrapper.text()).toContain('Writes compose file: no');
     expect(wrapper.text()).toContain('Patch preview:');
 
     const runTriggerButton = findButtonByText(wrapper, 'Run');
@@ -689,11 +695,11 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.text()).toContain('New: -');
     expect(wrapper.text()).toContain('unknown');
     expect(wrapper.text()).toContain('Running:');
-    expect(wrapper.text()).toContain('no');
+    expect(wrapper.text()).toContain('Running: no');
     expect(wrapper.text()).toContain('Networks: -');
     expect(wrapper.text()).toContain('Compose file:');
     expect(wrapper.text()).toContain('Writes compose file:');
-    expect(wrapper.text()).toContain('yes');
+    expect(wrapper.text()).toContain('Writes compose file: yes');
     expect(wrapper.text()).toContain('Rolling...');
     expect(wrapper.text()).toContain('?');
     expect(wrapper.text()).toContain('2.0');
@@ -1017,6 +1023,53 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.text()).toContain('No labels assigned');
   });
 
+  it('shows softwareVersion row in overview when softwareVersion is set', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer({ softwareVersion: '1.25.5' });
+
+    const wrapper = mountComponent();
+
+    const row = wrapper.find('[data-test="container-software-version-detail"]');
+    expect(row.exists()).toBe(true);
+    expect(row.text()).toContain('1.25.5');
+  });
+
+  it('hides softwareVersion row in overview when softwareVersion is absent', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer();
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.find('[data-test="container-software-version-detail"]').exists()).toBe(false);
+  });
+
+  it('shows uptime row in overview when details.startedAt is set', () => {
+    activeDetailTab.value = 'overview';
+    const startedAt = new Date(Date.now() - 30_000).toISOString();
+    selectedContainer.value = makeContainer({
+      details: { ports: [], volumes: [], env: [], labels: [], startedAt },
+    });
+
+    const wrapper = mountComponent();
+
+    const uptimeRow = wrapper
+      .findAll('[data-test="container-full-page-tab-content"] div')
+      .find((el) => el.text().includes('Uptime'));
+    expect(uptimeRow).toBeDefined();
+    expect(wrapper.text()).toContain('Up ');
+  });
+
+  it('hides uptime row in overview when details.startedAt is absent', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer({
+      details: { ports: [], volumes: [], env: [], labels: [] },
+    });
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.text()).not.toContain('Uptime');
+  });
+
   it('renders overview single-compose and empty security/sbom fallback branches', () => {
     activeDetailTab.value = 'overview';
     selectedContainer.value = makeContainer({
@@ -1118,5 +1171,27 @@ describe('ContainerFullPageTabContent', () => {
     expect(maturitySelect).toBeDefined();
     await maturitySelect?.setValue('mature');
     expect(maturityModeInput.value).toBe('mature');
+  });
+
+  it('renders and clicks the Recheck for Updates button', async () => {
+    const wrapper = mountComponent();
+    const recheckButton = findButtonByText(wrapper, 'Recheck for Updates');
+    expect(recheckButton).toBeDefined();
+    await recheckButton?.trigger('click');
+    expect(mockRecheckContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'container-1', name: 'nginx' }),
+    );
+  });
+
+  it('disables the Recheck for Updates button and shows Rechecking… label while recheck is in progress', () => {
+    mockRecheckingContainerId.value = 'container-1';
+
+    const wrapper = mountComponent();
+    const recheckButton = wrapper
+      .findAll('button')
+      .find((btn) => btn.text().includes('Rechecking'));
+    expect(recheckButton).toBeDefined();
+    expect(recheckButton!.attributes('disabled')).toBeDefined();
+    expect(recheckButton!.text()).toContain('Rechecking');
   });
 });

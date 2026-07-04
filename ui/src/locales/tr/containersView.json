@@ -31,6 +31,7 @@
     },
     "columns": {
       "container": "Kapsayıcı",
+      "tag": "Tag",
       "version": "Sürüm",
       "update": "Güncelle",
       "status": "Durum",

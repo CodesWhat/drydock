@@ -54,6 +54,7 @@ export interface ContainerDetails {
   volumes: string[];
   env: { key: string; value: string; sensitive?: boolean }[];
   labels: string[];
+  startedAt?: string;
 }
 
 export interface ContainerSecuritySummary {
@@ -155,6 +156,7 @@ export interface Container {
   updateSecurityScanState?: 'scanned' | 'not-scanned';
   updateSecuritySummary?: ContainerSecuritySummary;
   securityDelta?: ContainerSecurityDelta;
+  softwareVersion?: string;
   imageCreated?: string;
   server: string;
   includeTags?: string;

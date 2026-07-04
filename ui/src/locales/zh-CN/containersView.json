@@ -31,6 +31,7 @@
     },
     "columns": {
       "container": "容器",
+      "tag": "Tag",
       "version": "版本",
       "update": "更新",
       "status": "状态",

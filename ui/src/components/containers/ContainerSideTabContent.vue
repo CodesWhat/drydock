@@ -145,6 +145,8 @@ const {
   formatOperationPhase,
   formatRollbackReason,
   updateOperationsError,
+  recheckContainer,
+  recheckingContainerId,
   scanContainer,
   confirmUpdate,
   confirmForceUpdate,
@@ -256,6 +258,13 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 <CopyableTag :tag="selectedContainer.currentDigest" class="dd-text-muted">{{ formatShortDigest(selectedContainer.currentDigest) }}</CopyableTag>
                 <AppIcon name="arrow-right" :size="7" class="dd-text-muted" />
                 <CopyableTag :tag="selectedContainer.newDigest" class="font-semibold" style="color: var(--dd-success);">{{ formatShortDigest(selectedContainer.newDigest) }}</CopyableTag>
+              </div>
+              <div v-if="selectedContainer.softwareVersion"
+                   class="mt-1.5 flex items-center gap-2 px-2.5 py-1 dd-rounded text-2xs-plus font-mono"
+                   :style="{ backgroundColor: 'var(--dd-bg-inset)' }"
+                   data-test="container-software-version-side">
+                <span class="dd-text-secondary shrink-0">{{ t('containerComponents.fullPageOverview.softwareVersion') }}</span>
+                <span class="dd-text-muted truncate" v-tooltip.top="selectedContainer.softwareVersion">{{ selectedContainer.softwareVersion }}</span>
               </div>
               <NoUpdateReasonBadge
                 v-if="!selectedContainer.newTag && !selectedContainer.newDigest && selectedContainer.noUpdateReason"
@@ -687,6 +696,11 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                           @click="scanContainer(selectedContainer)">
                     {{ t('containerComponents.fullPageActions.scanNow') }}
                   </AppButton>
+                  <AppButton size="sm" variant="outlined"
+                          :disabled="recheckingContainerId === selectedContainer.id || isActionInProgress(selectedContainer)"
+                          @click="recheckContainer(selectedContainer)">
+                    {{ recheckingContainerId === selectedContainer.id ? t('containerComponents.fullPageActions.rechecking') : t('containerComponents.fullPageActions.recheckNow') }}
+                  </AppButton>
                 </div>
               </div>
               <!-- Skip & Snooze group -->
@@ -846,7 +860,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                       <span class="dd-text font-mono">{{ detailPreview.updateKind?.kind || detailPreview.updateKind || t('common.unknown') }}</span>
                     </div>
                     <div class="dd-text-muted">{{ t('containerComponents.fullPageActions.runningLabel') }}
-                      <span class="dd-text">{{ detailPreview.isRunning ? 'yes' : 'no' }}</span>
+                      <span class="dd-text">{{ detailPreview.isRunning ? t('common.yes') : t('common.no') }}</span>
                     </div>
                     <div v-if="Array.isArray(detailPreview.networks)" class="dd-text-muted">
                       {{ t('containerComponents.fullPageActions.networksLabel') }} <span class="dd-text font-mono">{{ detailPreview.networks.join(', ') || '-' }}</span>
@@ -865,7 +879,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                     </div>
                     <div v-if="typeof detailComposePreview?.willWrite === 'boolean'" class="dd-text-muted">
                       {{ t('containerComponents.fullPageActions.writesComposeFileLabel') }}
-                      <span class="dd-text">{{ detailComposePreview.willWrite ? 'yes' : 'no' }}</span>
+                      <span class="dd-text">{{ detailComposePreview.willWrite ? t('common.yes') : t('common.no') }}</span>
                     </div>
                     <div v-if="detailComposePreview?.patch" class="dd-text-muted">
                       {{ t('containerComponents.fullPageActions.patchPreviewLabel') }}
@@ -891,7 +905,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <div class="min-w-0">
                     <div class="font-semibold dd-text truncate">{{ trigger.type }}.{{ trigger.name }}</div>
-                    <div v-if="trigger.agent" class="text-2xs dd-text-muted">agent: {{ trigger.agent }}</div>
+                    <div v-if="trigger.agent" class="text-2xs dd-text-muted">{{ t('containerComponents.triggers.agentLabel') }} {{ trigger.agent }}</div>
                   </div>
                   <AppButton size="xs"
                           :disabled="triggerRunInProgress !== null"

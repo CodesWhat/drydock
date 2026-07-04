@@ -24,6 +24,8 @@ const confirmStop = vi.fn();
 const startContainer = vi.fn();
 const confirmRestart = vi.fn();
 const scanContainer = vi.fn();
+const recheckContainer = vi.fn();
+const recheckingContainerId = ref<string | null>(null);
 const confirmUpdate = vi.fn();
 const confirmDelete = vi.fn();
 const isContainerUpdateInProgress = vi.fn(() => false);
@@ -44,6 +46,8 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     confirmStop,
     startContainer,
     confirmRestart,
+    recheckContainer,
+    recheckingContainerId,
     scanContainer,
     confirmUpdate,
     confirmDelete,
@@ -75,6 +79,8 @@ describe('ContainerSideDetail', () => {
     startContainer.mockReset();
     confirmRestart.mockReset();
     scanContainer.mockReset();
+    recheckContainer.mockReset();
+    recheckingContainerId.value = null;
     confirmUpdate.mockReset();
     confirmDelete.mockReset();
     isContainerUpdateInProgress.mockReset();
@@ -312,5 +318,59 @@ describe('ContainerSideDetail', () => {
     });
 
     expect(wrapper.text()).toContain('Queued');
+  });
+
+  it('renders the recheck icon button and calls recheckContainer on click', async () => {
+    const wrapper = mount(ContainerSideDetail, {
+      global: {
+        components: { DetailPanel },
+        stubs: {
+          AppIcon: { template: '<span class="app-icon-stub" />' },
+          ContainerSideTabContent: { template: '<div class="side-tab-content-stub" />' },
+        },
+        directives: { tooltip: {} },
+      },
+    });
+
+    // The recheck AppIconButton renders as a button element
+    // Find buttons that have the recheck tooltip bound
+    const buttons = wrapper.findAll('button');
+    expect(buttons.length).toBeGreaterThan(0);
+    // Click all buttons to verify recheckContainer is eventually called
+    // (The recheck button is the one with the restart icon after scan)
+    let recheckCalled = false;
+    for (const btn of buttons) {
+      await btn.trigger('click');
+      if (recheckContainer.mock.calls.length > 0) {
+        recheckCalled = true;
+        break;
+      }
+    }
+    expect(recheckCalled).toBe(true);
+    expect(recheckContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'container-1', name: 'nginx' }),
+    );
+  });
+
+  it('disables recheck button while recheck is in progress', () => {
+    recheckingContainerId.value = 'container-1';
+
+    const wrapper = mount(ContainerSideDetail, {
+      global: {
+        components: { DetailPanel },
+        stubs: {
+          AppIcon: { template: '<span class="app-icon-stub" />' },
+          ContainerSideTabContent: { template: '<div class="side-tab-content-stub" />' },
+        },
+        directives: { tooltip: {} },
+      },
+    });
+
+    const buttons = wrapper.findAll('button');
+    const recheckBtn = buttons.find(
+      (btn) => btn.attributes('aria-label') === 'Recheck for updates',
+    );
+    expect(recheckBtn).toBeDefined();
+    expect(recheckBtn!.attributes('disabled')).toBeDefined();
   });
 });

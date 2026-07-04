@@ -212,7 +212,7 @@ function applyDashboardContainerPatch(
 
   let mapped: Container;
   try {
-    mapped = mapApiContainer(raw);
+    mapped = mapApiContainer(raw, i18n.global.t);
   } catch {
     fallback();
     return;
@@ -268,7 +268,7 @@ function applyDashboardOperationPatch(state: DashboardStateRefs, event: Event): 
 }
 
 function applyFetchedDashboardData(state: DashboardStateRefs, response: DashboardDataResponse) {
-  state.containers.value = mapApiContainers(response.containersRes);
+  state.containers.value = mapApiContainers(response.containersRes, i18n.global.t);
   state.containerSummary.value = buildContainerSummaryFromContainers(state.containers.value);
   if (response.serverRes !== undefined) {
     state.serverInfo.value = response.serverRes;

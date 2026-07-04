@@ -29,7 +29,7 @@ async function loadContainer() {
     const all = await getAllContainers();
     const match = all.find((c) => c.id === containerId.value || c.name === containerId.value);
     if (match) {
-      container.value = mapApiContainer(match);
+      container.value = mapApiContainer(match, t);
     } else {
       error.value = t('containerLogs.notFound', { name: containerId.value });
     }

@@ -1437,6 +1437,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
           inspectTagPath: string | undefined,
           transformTagsFromLabel: string | undefined,
           containerId: string,
+          inspectTagVersionOnly?: boolean,
         ) =>
           this.resolveTagName(
             parsedImage,
@@ -1444,6 +1445,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
             inspectTagPath,
             transformTagsFromLabel,
             containerId,
+            inspectTagVersionOnly,
           ),
         getMatchingImgsetConfiguration: (
           parsedImage: Parameters<typeof getMatchingImgsetConfigurationState>[0],
@@ -1510,6 +1512,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     inspectTagPath: string | undefined,
     transformTagsFromLabel: string | undefined,
     containerId: string,
+    inspectTagVersionOnly?: boolean,
   ) {
     let tagName = parsedImage.tag || 'latest';
     if (inspectTagPath) {
@@ -1519,7 +1522,10 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         transformTagsFromLabel,
       );
       if (semverTagFromInspect) {
-        tagName = semverTagFromInspect;
+        if (!inspectTagVersionOnly) {
+          tagName = semverTagFromInspect; // default: overwrite tag (behavior unchanged)
+        }
+        // dual-write happens in orchestration.ts softwareVersion field, not here
       } else {
         this.ensureLogger();
         this.log.debug(
