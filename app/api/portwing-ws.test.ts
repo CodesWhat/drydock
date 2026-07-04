@@ -22,14 +22,18 @@ vi.mock('../configuration/index.js', () => ({
   getServerConfiguration: vi.fn(() => ({})),
 }));
 
+// Hoisted so tests can assert on log calls (e.g. the compat-level mismatch
+// warning) — the module-level `log` in portwing-ws.ts is `logger.child(...)`,
+// called once at import time, so it always returns this same singleton.
+const mockLogChild = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
 vi.mock('../log/index.js', () => ({
   default: {
-    child: vi.fn(() => ({
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-      debug: vi.fn(),
-    })),
+    child: vi.fn(() => mockLogChild),
   },
 }));
 
@@ -37,12 +41,15 @@ vi.mock('../log/index.js', () => ({
 // works in portwing-ws.ts. Arrow-factory implementations are not usable as
 // constructors in newer Vitest versions — use vi.hoisted() exactly like
 // EdgeAgentAdapter.test.ts does.
-const { MockAgentClient, MockEdgeAgentAdapter } = vi.hoisted(() => {
+const { MockAgentClient, MockEdgeAgentAdapter, getLastAgentClientInstance } = vi.hoisted(() => {
+  let lastInstance: InstanceType<typeof _MockAgentClient> | undefined;
+
   class _MockAgentClient {
     name: string;
     config: { host: string; port: number; secret: string };
     isConnected = false;
     info: Record<string, unknown> = {};
+    edgeAdapter?: unknown;
     handleEvent = vi.fn().mockResolvedValue(undefined);
     handleContainerSync = vi.fn().mockResolvedValue(undefined);
     handleComponentSync = vi.fn().mockResolvedValue(undefined);
@@ -52,6 +59,7 @@ const { MockAgentClient, MockEdgeAgentAdapter } = vi.hoisted(() => {
     constructor(name: string) {
       this.name = name;
       this.config = { host: 'http://edge-agent-placeholder', port: 0, secret: '' };
+      lastInstance = this;
     }
   }
 
@@ -60,7 +68,11 @@ const { MockAgentClient, MockEdgeAgentAdapter } = vi.hoisted(() => {
     onDisconnect = vi.fn().mockResolvedValue(undefined);
   }
 
-  return { MockAgentClient: _MockAgentClient, MockEdgeAgentAdapter: _MockEdgeAgentAdapter };
+  return {
+    MockAgentClient: _MockAgentClient,
+    MockEdgeAgentAdapter: _MockEdgeAgentAdapter,
+    getLastAgentClientInstance: () => lastInstance,
+  };
 });
 
 vi.mock('../agent/AgentClient.js', () => ({
@@ -923,6 +935,114 @@ describe('hello verification — happy path', () => {
   });
 });
 
+describe('edgeAdapter wiring', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearNonceCacheForTesting();
+  });
+
+  test('client.edgeAdapter is set after a successful hello handshake', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'f1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+    const sig = signHello(privateKey, ts, nonce);
+
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig));
+    await new Promise((r) => setTimeout(r, 10));
+
+    const client = getLastAgentClientInstance();
+    expect(client?.edgeAdapter).toBeInstanceOf(MockEdgeAgentAdapter);
+  });
+});
+
+describe('hello verification — agentName sanitization', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearNonceCacheForTesting();
+  });
+
+  async function helloWithAgentName(
+    agentId: string,
+    nonce: string,
+    agentNameOverride: Record<string, unknown>,
+  ) {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const sig = signHello(privateKey, ts, nonce);
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(
+      ws,
+      buildHello(keyId, ts, nonce, sig, { agentId, ...agentNameOverride }),
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    return getLastAgentClientInstance();
+  }
+
+  test('a clean agentName is used verbatim, lowercased', async () => {
+    const client = await helloWithAgentName('agent-clean-1', 'a1000000000000000000000000000001', {
+      agentName: 'Clean-Name',
+    });
+    expect(client?.name).toBe('clean-name');
+  });
+
+  test('an agentName with invalid characters is sanitized to a safe slug', async () => {
+    const client = await helloWithAgentName('agent-dirty-1', 'a1000000000000000000000000000002', {
+      agentName: 'My Agent!!formatted_Name日本語',
+    });
+    expect(client?.name).toBe('my-agent-formatted-name');
+  });
+
+  test('an empty agentName falls back to portwing-edge-<agentId>', async () => {
+    const client = await helloWithAgentName('agent-empty-1', 'a1000000000000000000000000000003', {
+      agentName: '',
+    });
+    expect(client?.name).toBe('portwing-edge-agent-empty-1');
+  });
+
+  test('an agentName that sanitizes to empty falls back to portwing-edge-<agentId>', async () => {
+    const client = await helloWithAgentName('agent-allbad-1', 'a1000000000000000000000000000004', {
+      agentName: '###',
+    });
+    expect(client?.name).toBe('portwing-edge-agent-allbad-1');
+  });
+
+  test('an omitted agentName falls back to portwing-edge-<agentId> without crashing', async () => {
+    const client = await helloWithAgentName('agent-none-1', 'a1000000000000000000000000000005', {
+      agentName: undefined,
+    });
+    expect(client?.name).toBe('portwing-edge-agent-none-1');
+  });
+});
+
 describe('version handshake', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1263,6 +1383,41 @@ describe('hello verification — drydockCompat version warning', () => {
 
     const firstFrame = JSON.parse(ws.sentMessages[0]) as { type: string };
     expect(firstFrame.type).toBe('welcome');
+  });
+
+  test('warns when drydockCompat majorVersion is LOWER than server (sends welcome)', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const ts = Math.floor(Date.now() / 1000);
+    const nonce = 'ac000000000000000000000000000002';
+    const sig = signHello(privateKey, ts, nonce);
+    const record: AgentKeyRecord = {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+
+    // drydockCompat '0.9.0' has majorVersion=0, server implements '1.4.0' (major=1).
+    // Previously only the higher-than-server direction warned; now any mismatch does.
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig, { drydockCompat: '0.9.0' }));
+    await new Promise((r) => setTimeout(r, 10));
+
+    const firstFrame = JSON.parse(ws.sentMessages[0]) as { type: string };
+    expect(firstFrame.type).toBe('welcome');
+    expect(mockLogChild.warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Edge agent requires drydockCompat 0.9.0 but server implements 1.4.0',
+      ),
+    );
   });
 });
 

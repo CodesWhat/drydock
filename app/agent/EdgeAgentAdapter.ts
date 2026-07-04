@@ -20,6 +20,10 @@ const MAX_PENDING_REQUESTS = 100;
 const PING_INTERVAL_MS = 30_000;
 const REQUEST_TIMEOUT_MS = 30_000;
 const CONTAINER_SYNC_WARN_MS = 30_000;
+// Number of consecutive server-initiated ping cycles that may pass without a
+// pong reply before the connection is considered dead. 2 cycles × 30s = 60s,
+// matching portwing's own readDeadline of max(2*heartbeat, 60s) for symmetry.
+const PONG_MISS_THRESHOLD = 2;
 
 export interface HelloMessage {
   version: string;
@@ -97,6 +101,7 @@ export class EdgeAgentAdapter {
   private pingInterval: ReturnType<typeof setInterval> | undefined;
   private containerSyncWarnTimer: ReturnType<typeof setTimeout> | undefined;
   private connected = false;
+  private lastPongAt = 0;
 
   constructor(client: AgentClient, ws: WebSocketLike) {
     this.client = client;
@@ -112,13 +117,10 @@ export class EdgeAgentAdapter {
    */
   activate(): void {
     addAgent(this.client);
+    this.lastPongAt = Date.now();
 
     this.pingInterval = setInterval(() => {
-      try {
-        this.ws.send(JSON.stringify({ type: 'ping', data: { timestamp: Date.now() } }));
-      } catch {
-        // connection may already be closing
-      }
+      this.checkLivenessAndPing();
     }, PING_INTERVAL_MS);
 
     // Warn if container_sync does not arrive within 30 seconds
@@ -143,6 +145,35 @@ export class EdgeAgentAdapter {
       log.error(`WebSocket error on ${this.agentName}: ${getErrorMessage(err)}`);
       void this.onDisconnect();
     });
+  }
+
+  /**
+   * Runs every PING_INTERVAL_MS. If no pong has been received within
+   * PONG_MISS_THRESHOLD ping cycles, the connection is considered dead: force
+   * close it and run the same cleanup path a real 'close' event would trigger
+   * so the agent slot is freed immediately rather than left dangling until the
+   * underlying transport eventually notices. Otherwise, send the next ping.
+   */
+  private checkLivenessAndPing(): void {
+    const staleMs = Date.now() - this.lastPongAt;
+    if (staleMs >= PING_INTERVAL_MS * PONG_MISS_THRESHOLD) {
+      log.warn(
+        `Edge agent ${this.agentName} missed ${PONG_MISS_THRESHOLD} pong cycles (${staleMs}ms); closing connection`,
+      );
+      try {
+        this.ws.close(1001, 'ping timeout');
+      } catch {
+        // connection may already be closing
+      }
+      void this.onDisconnect();
+      return;
+    }
+
+    try {
+      this.ws.send(JSON.stringify({ type: 'ping', data: { timestamp: Date.now() } }));
+    } catch {
+      // connection may already be closing
+    }
   }
 
   private async onMessage(raw: unknown): Promise<void> {
@@ -177,7 +208,7 @@ export class EdgeAgentAdapter {
         this.handlePing(data);
         return;
       case 'pong':
-        // no-op — reply to server-initiated ping
+        this.handlePong();
         return;
       case 'dd:watch_response':
         log.debug(`${this.agentName}: dd:watch_response (no-op in M5)`);
@@ -190,6 +221,9 @@ export class EdgeAgentAdapter {
         return;
       case 'dd:container_log_response':
         this.handleContainerLogResponse(data);
+        return;
+      case 'dd:container_delete_response':
+        this.handleContainerDeleteResponse(data);
         return;
       case 'response':
         this.handleResponse(data);
@@ -270,7 +304,9 @@ export class EdgeAgentAdapter {
 
     this.client.info = {
       ...this.client.info,
-      memoryGb: memoryTotal > 0 ? memoryTotal / 1e9 : this.client.info.memoryGb,
+      // GiB (1024^3), matching portwing's canonical MemoryTotalGB() definition
+      // (internal/metrics/collector.go) — not decimal GB (1e9).
+      memoryGb: memoryTotal > 0 ? memoryTotal / 1024 ** 3 : this.client.info.memoryGb,
       uptimeSeconds: uptime > 0 ? uptime : this.client.info.uptimeSeconds,
       lastSeen: new Date().toISOString(),
       ...(cpuUsage !== undefined ? { cpuUsage } : {}),
@@ -294,6 +330,11 @@ export class EdgeAgentAdapter {
     }
   }
 
+  /** Reply to our own server-initiated ping — marks the connection as alive. */
+  private handlePong(): void {
+    this.lastPongAt = Date.now();
+  }
+
   private handleContainerLogResponse(data: Record<string, unknown>): void {
     // Resolve any pending log request keyed by containerId
     const containerId = typeof data.containerId === 'string' ? data.containerId : undefined;
@@ -305,6 +346,25 @@ export class EdgeAgentAdapter {
       clearTimeout(pending.timer);
       this.pendingRequests.delete(`log:${containerId}`);
       pending.resolve(data.logs);
+    }
+  }
+
+  private handleContainerDeleteResponse(data: Record<string, unknown>): void {
+    const containerId = typeof data.containerId === 'string' ? data.containerId : undefined;
+    if (!containerId) {
+      return;
+    }
+    const pendingKey = `delete:${containerId}`;
+    const pending = this.pendingRequests.get(pendingKey);
+    if (!pending) {
+      return;
+    }
+    clearTimeout(pending.timer);
+    this.pendingRequests.delete(pendingKey);
+    if (data.success === true) {
+      pending.resolve(undefined);
+    } else {
+      pending.reject(new Error(typeof data.error === 'string' ? data.error : 'delete failed'));
     }
   }
 
@@ -515,6 +575,47 @@ export class EdgeAgentAdapter {
           JSON.stringify({
             type: 'dd:container_log_request',
             data: { containerId, ...options },
+          }),
+        );
+      } catch (err: unknown) {
+        clearTimeout(timer);
+        this.pendingRequests.delete(pendingKey);
+        reject(err);
+      }
+    });
+  }
+
+  /**
+   * Delete a container on the edge agent.
+   * Returns a promise that resolves once the agent confirms deletion, or
+   * rejects after 30s / on an error response. The pending entry is keyed as
+   * `delete:${containerId}` to match the dd:container_delete_response handler.
+   */
+  deleteContainer(containerId: string): Promise<void> {
+    const pendingKey = `delete:${containerId}`;
+    if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) {
+      return Promise.reject(new Error('concurrent request limit reached'));
+    }
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingRequests.delete(pendingKey);
+        reject(
+          new Error(`Container delete request for ${containerId} timed out after ${REQUEST_TIMEOUT_MS}ms`),
+        );
+      }, REQUEST_TIMEOUT_MS);
+
+      this.pendingRequests.set(pendingKey, {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+        timer,
+      });
+
+      try {
+        this.ws.send(
+          JSON.stringify({
+            type: 'dd:container_delete_request',
+            data: { containerId },
           }),
         );
       } catch (err: unknown) {

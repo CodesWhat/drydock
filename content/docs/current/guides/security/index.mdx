@@ -20,6 +20,9 @@ Before you run Drydock, verify the image or archive you downloaded. See [Verify 
 
 The Docker socket gives full control over the host's containers. Never mount it directly in production — use a socket proxy to expose only the API endpoints Drydock needs.
 
+<Tabs items={["Tecnativa", "sockguard"]}>
+<Tab value="Tecnativa">
+
 ```yaml
 services:
   socket-proxy:
@@ -54,6 +57,42 @@ services:
 ```
 
 The proxy's environment variables (`CONTAINERS=1`, `EVENTS=1`, etc.) are the security boundary — they control which Docker API endpoints are forwarded. Everything else is blocked.
+
+</Tab>
+<Tab value="sockguard">
+
+[sockguard](https://github.com/CodesWhat/sockguard) is a default-deny Docker socket filter from the same CodesWhat ecosystem as Drydock and portwing. Instead of an allowlist of environment flags, it ships a YAML preset built for this exact use case — see [`examples/compose/portwing/`](https://github.com/CodesWhat/sockguard/tree/dev/v1.5/examples/compose/portwing) for a runnable compose stack and the [`portwing.yaml`](https://github.com/CodesWhat/sockguard/blob/dev/v1.5/app/configs/portwing.yaml) preset it's built from.
+
+```yaml
+services:
+  sockguard:
+    image: codeswhat/sockguard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./sockguard.yaml:/etc/sockguard/config.yaml:ro
+    environment:
+      - SOCKGUARD_CONFIG_FILE=/etc/sockguard/config.yaml
+    healthcheck:
+      test: wget --spider http://localhost:2375/version || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  drydock:
+    image: codeswhat/drydock
+    depends_on:
+      sockguard:
+        condition: service_healthy
+    environment:
+      - DD_WATCHER_LOCAL_HOST=sockguard
+      - DD_WATCHER_LOCAL_PORT=2375
+```
+
+The preset's allow-rules are the security boundary, in the same spirit as the proxy's environment flags — everything not explicitly allowed is denied.
+
+</Tab>
+</Tabs>
 
 **Other options:** If a socket proxy doesn't fit your environment, Drydock also supports remote Docker over mTLS, rootless Docker, and Podman through Podman's Docker-compatible API socket. See the [full comparison table](/docs/configuration/watchers#docker-socket-security) and [Podman Quick Start](/docs/configuration/watchers#podman-quick-start) for trade-offs.
 

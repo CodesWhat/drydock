@@ -90,6 +90,46 @@ services:
 ```
 
 <details>
+<summary>Alternative: <a href="https://github.com/CodesWhat/sockguard">sockguard</a> socket proxy</summary>
+
+[sockguard](https://github.com/CodesWhat/sockguard) is a default-deny Docker socket filter from the same CodesWhat ecosystem, with a preset built for drydock:
+
+```yaml
+services:
+  drydock:
+    image: codeswhat/drydock
+    depends_on:
+      sockguard:
+        condition: service_healthy
+    environment:
+      - DD_WATCHER_LOCAL_HOST=sockguard
+      - DD_WATCHER_LOCAL_PORT=2375
+      - DD_AUTH_BASIC_ADMIN_USER=admin
+      - "DD_AUTH_BASIC_ADMIN_HASH=<paste-argon2id-hash>"
+    ports:
+      - 3000:3000
+
+  sockguard:
+    image: codeswhat/sockguard
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./sockguard.yaml:/etc/sockguard/config.yaml:ro
+    environment:
+      - SOCKGUARD_CONFIG_FILE=/etc/sockguard/config.yaml
+    healthcheck:
+      test: wget --spider http://localhost:2375/version || exit 1
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+```
+
+See sockguard's [`app/configs/portwing.yaml`](https://github.com/CodesWhat/sockguard/blob/dev/v1.5/app/configs/portwing.yaml) preset for a starting `sockguard.yaml` (the same preset portwing ships in its own examples).
+
+</details>
+
+<details>
 <summary>Alternative: quick start with direct socket mount</summary>
 
 ```bash
@@ -382,6 +422,8 @@ Thanks to the users who helped test v1.4.0 and v1.5.0 release candidates and rep
 </table>
 
 These three tools are designed to layer: sockguard filters the socket, portwing exposes it remotely, and drydock monitors and acts on container state.
+
+See [portwing's COMPATIBILITY.md](https://github.com/CodesWhat/portwing/blob/main/COMPATIBILITY.md) for the full compatibility matrix across all three tools.
 
 ---
 

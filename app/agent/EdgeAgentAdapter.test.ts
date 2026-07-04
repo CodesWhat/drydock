@@ -228,7 +228,7 @@ describe('EdgeAgentAdapter — frame dispatch', () => {
     sendFrame(ws, 'metrics', {
       cpuUsage: 0.5,
       cpuCores: 4,
-      memoryTotal: 8 * 1e9,
+      memoryTotal: 8 * 1024 ** 3,
       memoryUsed: 4 * 1e9,
       uptime: 3600,
     });
@@ -767,6 +767,157 @@ describe('EdgeAgentAdapter — requestContainerLogs', () => {
     await adapter.onDisconnect();
 
     expect(await logPromise).toMatch(/connection closed/);
+  });
+});
+
+describe('EdgeAgentAdapter — deleteContainer', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('sends dd:container_delete_request frame and resolves on success response', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-abc';
+    const deletePromise = adapter.deleteContainer(containerId);
+
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      type: string;
+      data: { containerId: string };
+    };
+    expect(sentFrame.type).toBe('dd:container_delete_request');
+    expect(sentFrame.data.containerId).toBe(containerId);
+
+    sendFrame(ws, 'dd:container_delete_response', { containerId, success: true });
+    await new Promise((r) => setTimeout(r, 0));
+
+    await expect(deletePromise).resolves.toBeUndefined();
+  });
+
+  test('rejects with the agent-provided error message on failure response', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-fail';
+    // Attach the rejection handler immediately (same tick) so the rejection
+    // triggered synchronously by sendFrame below is never briefly unhandled.
+    const deletePromise = adapter.deleteContainer(containerId).catch((err: Error) => err.message);
+
+    sendFrame(ws, 'dd:container_delete_response', {
+      containerId,
+      success: false,
+      error: 'container is running',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(await deletePromise).toBe('container is running');
+  });
+
+  test('rejects with a fallback message when failure response omits error', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-fail-no-msg';
+    const deletePromise = adapter.deleteContainer(containerId).catch((err: Error) => err.message);
+
+    sendFrame(ws, 'dd:container_delete_response', { containerId, success: false });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(await deletePromise).toBe('delete failed');
+  });
+
+  test('deleteContainer rejects after 30s timeout', async () => {
+    vi.useFakeTimers();
+    const { adapter } = createAdapter();
+    adapter.activate();
+
+    const deletePromise = adapter.deleteContainer('c-timeout');
+
+    vi.advanceTimersByTime(31_000);
+    await expect(deletePromise).rejects.toThrow(/timed out/);
+
+    vi.useRealTimers();
+  });
+
+  test('onDisconnect rejects pending delete request', async () => {
+    const { adapter } = createAdapter();
+    adapter.activate();
+
+    const deletePromise = adapter
+      .deleteContainer('c-disc')
+      .catch((err: Error) => err.message);
+
+    await adapter.onDisconnect();
+
+    expect(await deletePromise).toMatch(/connection closed/);
+  });
+
+  test('handleContainerDeleteResponse with no containerId is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    expect(() => sendFrame(ws, 'dd:container_delete_response', { success: true })).not.toThrow();
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+
+  test('dd:container_delete_response with unknown containerId is a no-op', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    sendFrame(ws, 'dd:container_delete_response', {
+      containerId: 'unknown-container',
+      success: true,
+    });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(ws.close).not.toHaveBeenCalled();
+  });
+});
+
+describe('EdgeAgentAdapter — deleteContainer limit and send error', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('rejects immediately when pending request limit is reached', async () => {
+    const { adapter } = createAdapter();
+    adapter.activate();
+
+    const adapterInternal = adapter as unknown as {
+      pendingRequests: Map<string, unknown>;
+    };
+
+    // Fill to limit
+    for (let i = 0; i < 100; i++) {
+      adapterInternal.pendingRequests.set(`req-${i}`, {
+        resolve: () => {},
+        reject: () => {},
+        timer: setTimeout(() => {}, 99_999),
+      });
+    }
+
+    await expect(adapter.deleteContainer('c-overflow')).rejects.toThrow(
+      /concurrent request limit/,
+    );
+
+    // Clean up timers
+    for (const [, pending] of adapterInternal.pendingRequests) {
+      clearTimeout((pending as { timer: ReturnType<typeof setTimeout> }).timer);
+    }
+  });
+
+  test('rejects when ws.send throws during deleteContainer', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    (ws.send as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+      throw new Error('send failed');
+    });
+
+    await expect(adapter.deleteContainer('c-throw')).rejects.toThrow('send failed');
   });
 });
 
@@ -1563,7 +1714,7 @@ describe('EdgeAgentAdapter — O7: metrics reads all 11 fields', () => {
     sendFrame(ws, 'metrics', {
       cpuUsage: 0.75,
       cpuCores: 8,
-      memoryTotal: 16 * 1e9,
+      memoryTotal: 16 * 1024 ** 3,
       memoryUsed: 8 * 1e9,
       memoryFree: 8 * 1e9,
       diskTotal: 500 * 1e9,
@@ -1915,5 +2066,43 @@ describe('EdgeAgentAdapter — false-branch coverage for ternary fallbacks', () 
     await new Promise((r) => setTimeout(r, 10));
 
     expect(ws.close).not.toHaveBeenCalled();
+  });
+});
+
+describe('EdgeAgentAdapter — ping/pong liveness', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('closes the connection and frees the agent slot after missing pong for 2 ping cycles (60s)', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws, client } = createAdapter();
+    adapter.activate();
+
+    // Agent never replies with 'pong'. Two 30s ping cycles elapse with no pong.
+    vi.advanceTimersByTime(30_000 * 2);
+
+    expect(ws.close).toHaveBeenCalledWith(1001, 'ping timeout');
+    expect(manager.removeAgent).toHaveBeenCalledWith(client.name);
+
+    vi.useRealTimers();
+  });
+
+  test('does not close the connection when the agent replies with pong every cycle', async () => {
+    vi.useFakeTimers();
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    // Simulate 4 healthy ping/pong cycles (well past the 2-cycle timeout threshold
+    // if pongs were not being tracked).
+    for (let i = 0; i < 4; i++) {
+      vi.advanceTimersByTime(30_000);
+      sendFrame(ws, 'pong', { timestamp: Date.now() });
+    }
+
+    expect(ws.close).not.toHaveBeenCalled();
+    expect(manager.removeAgent).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
   });
 });

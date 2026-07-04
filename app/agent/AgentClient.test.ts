@@ -3602,6 +3602,53 @@ describe('AgentClient', () => {
     });
   });
 
+  describe('edgeAdapter delegation', () => {
+    test('getContainerLogs delegates to edgeAdapter.requestContainerLogs instead of axios', async () => {
+      const edgeAdapter = {
+        requestContainerLogs: vi.fn().mockResolvedValue('log line 1\nlog line 2\n'),
+        deleteContainer: vi.fn(),
+      };
+      client.edgeAdapter = edgeAdapter;
+
+      const result = await client.getContainerLogs('c1', {
+        tail: 100,
+        since: 0,
+        timestamps: true,
+      });
+
+      expect(result).toBe('log line 1\nlog line 2\n');
+      expect(edgeAdapter.requestContainerLogs).toHaveBeenCalledWith('c1', {
+        tail: 100,
+        since: '0',
+      });
+      expect(axios.get).not.toHaveBeenCalled();
+    });
+
+    test('deleteContainer delegates to edgeAdapter.deleteContainer instead of axios', async () => {
+      const edgeAdapter = {
+        requestContainerLogs: vi.fn(),
+        deleteContainer: vi.fn().mockResolvedValue(undefined),
+      };
+      client.edgeAdapter = edgeAdapter;
+
+      await client.deleteContainer('c1');
+
+      expect(edgeAdapter.deleteContainer).toHaveBeenCalledWith('c1');
+      expect(axios.delete).not.toHaveBeenCalled();
+    });
+
+    test('deleteContainer propagates edgeAdapter rejection', async () => {
+      const edgeAdapter = {
+        requestContainerLogs: vi.fn(),
+        deleteContainer: vi.fn().mockRejectedValue(new Error('delete failed')),
+      };
+      client.edgeAdapter = edgeAdapter;
+
+      await expect(client.deleteContainer('c1')).rejects.toThrow('delete failed');
+      expect(axios.delete).not.toHaveBeenCalled();
+    });
+  });
+
   describe('watcher snapshot cache', () => {
     test('getWatcherSnapshot returns undefined before handshake or SSE event fires', () => {
       expect(client.getWatcherSnapshot('docker', 'remote')).toBeUndefined();

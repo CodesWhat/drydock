@@ -213,6 +213,25 @@ function verifyHelloSignature(
   return cryptoVerify(null, canonical, pubKey, sigBuf);
 }
 
+/**
+ * Compute the agent's display/registry name from the hello frame.
+ * hello.agentName is sanitized to a safe slug (lowercase, alphanumeric + hyphen,
+ * max 63 chars); an empty, missing, or all-invalid-chars name falls back to
+ * `portwing-edge-<agentId>` — the pre-existing unconditional name.
+ */
+function computeAgentName(hello: HelloMessage): string {
+  const rawName = hello.agentName?.trim();
+  const sanitized = rawName
+    ? rawName
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 63)
+    : '';
+  return sanitized || `portwing-edge-${hello.agentId}`;
+}
+
 interface PortwingWsGatewayDependencies {
   webSocketServer?: {
     handleUpgrade: (
@@ -362,7 +381,9 @@ async function processHello(
   } else {
     const majorVersion = parseInt(drydockCompat.split('.')[0], 10);
     const serverMajor = parseInt(SERVER_COMPAT_LEVEL.split('.')[0], 10);
-    if (majorVersion > serverMajor) {
+    // Any major-version mismatch (either direction) is diagnostic-only — the wire
+    // connection is still accepted; this warns operators to check the compat matrix.
+    if (majorVersion !== serverMajor) {
       log.warn(
         `Edge agent requires drydockCompat ${drydockCompat} but server implements ${SERVER_COMPAT_LEVEL}`,
       );
@@ -498,7 +519,10 @@ async function processHello(
 
   // Step 10: Prevent duplicate agent names — atomic check/reserve with inFlightAgents
   // so that concurrent hellos cannot both pass before either calls activate().
-  const agentName = `portwing-edge-${hello.agentId}`;
+  // The friendly name is derived from hello.agentName when present (sanitized to a
+  // safe slug); collisions on the sanitized name are still caught by this same
+  // reservation logic, same as the portwing-edge-<agentId> fallback.
+  const agentName = computeAgentName(hello);
   if (getAgent(agentName) || inFlightAgents.has(agentName)) {
     sendErrorAndClose(ws, 'agent-already-connected', `Agent ${agentName} already connected`, 1008);
     return;
@@ -541,6 +565,11 @@ async function processHello(
   // activate() calls addAgent() — release the in-flight reservation immediately
   // after so the slot is held by the manager instead.
   adapter.activate();
+  // Route handlers only ever look up the client via getAgent(name); wire the
+  // adapter onto the client so getContainerLogs()/deleteContainer() can reach
+  // the WS-tunnel methods instead of falling through to the (nonexistent)
+  // edge-agent-placeholder host.
+  client.edgeAdapter = adapter;
   inFlightAgents.delete(agentName);
 
   // Register this session under pubKeyId so it can be disconnected on key revocation.
