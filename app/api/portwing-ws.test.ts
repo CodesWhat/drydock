@@ -1038,6 +1038,80 @@ describe('hello verification — agentName sanitization', () => {
     });
     expect(client?.name).toBe('portwing-edge-agent-none-1');
   });
+
+  test('a null agentName falls back to portwing-edge-<agentId> without crashing', async () => {
+    const client = await helloWithAgentName('agent-null-1', 'a1000000000000000000000000000006', {
+      agentName: null,
+    });
+    expect(client?.name).toBe('portwing-edge-agent-null-1');
+  });
+});
+
+describe('hello verification — agentName type validation (Bug 1 regression)', () => {
+  // Regression coverage for: computeAgentName() called hello.agentName?.trim() with
+  // no type check, so a number/boolean/array/object agentName threw a TypeError
+  // (unhandled promise rejection from processHello). Non-string agentName values
+  // must now be rejected gracefully via an 'invalid-agent-name' error frame + 1008
+  // close, never throw.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearNonceCacheForTesting();
+  });
+
+  // Type validation (Step 2b) runs before protocol/auth checks, so no real
+  // Ed25519 key material is needed to reach it — a syntactically-complete but
+  // otherwise-unauthenticated hello is enough to exercise the rejection path.
+  function sendHelloWithAgentName(agentName: unknown) {
+    const { gateway, getUpgradedWs } = createGateway(null);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(ws, {
+      type: 'hello',
+      data: {
+        version: '0.2.0',
+        protocol: 'portwing/1.0',
+        agentId: 'agentname-type-test',
+        agentName,
+        dockerVersion: '27.0.0',
+        hostname: 'test-host',
+        capabilities: [],
+        pubKeyId: 'deadbeefdeadbeef',
+        timestamp: Math.floor(Date.now() / 1000),
+        nonce: makeNonce(),
+        signature: 'x'.repeat(86),
+      },
+    });
+    return ws;
+  }
+
+  test.each([
+    ['number', 42],
+    ['boolean', true],
+    ['array', ['a', 'b']],
+    ['object', { evil: true }],
+  ])('rejects a %s agentName with invalid-agent-name instead of throwing', async (_label, badValue) => {
+    const ws = sendHelloWithAgentName(badValue);
+    await new Promise((r) => setTimeout(r, 0));
+
+    const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame.type).toBe('error');
+    expect(errorFrame.data.code).toBe('invalid-agent-name');
+    expect(ws.close).toHaveBeenCalledWith(1008, 'invalid-agent-name');
+  });
+
+  test('rejects an agentName exceeding the maximum input length', async () => {
+    // MAX_AGENT_NAME_INPUT_LENGTH in portwing-ws.ts is 256; 257 chars must be rejected.
+    const ws = sendHelloWithAgentName('a'.repeat(257));
+    await new Promise((r) => setTimeout(r, 0));
+
+    const errorFrame = JSON.parse(ws.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame.data.code).toBe('invalid-agent-name');
+    expect(ws.close).toHaveBeenCalledWith(1008, 'invalid-agent-name');
+  });
 });
 
 describe('version handshake', () => {
@@ -1147,6 +1221,165 @@ describe('duplicate-agent guard', () => {
     };
     expect(lastMsg.data.code).toBe('agent-already-connected');
     expect(ws.close).toHaveBeenCalledWith(1008, 'agent-already-connected');
+  });
+});
+
+describe('identity binding — agentName bound to authenticating pubKeyId (Bug 2 regression)', () => {
+  // Regression coverage for: the sanitized hello.agentName became the sole
+  // registry/display identity with zero binding to the Ed25519 pubKeyId that
+  // authenticated the connection, so any holder of ANY valid registered key
+  // could squat or steal another agent's name. Fix binds name -> pubKeyId on
+  // first use (see nameToKeyId in portwing-ws.ts).
+  beforeEach(() => {
+    // resetAllMocks (not clearAllMocks): the preceding 'duplicate-agent guard'
+    // describe leaves getAgent's mockReturnValue overridden to a truthy stub;
+    // clearAllMocks only clears call history, not that implementation override.
+    vi.resetAllMocks();
+    clearNonceCacheForTesting();
+    clearLiveSessionsForTesting();
+  });
+
+  function makeRecord(keyId: string, pubkeyBase64: string): AgentKeyRecord {
+    return {
+      keyId,
+      pubkey: pubkeyBase64,
+      label: 'test',
+      createdAt: new Date().toISOString(),
+      revokedAt: null,
+    };
+  }
+
+  async function helloAs(
+    record: AgentKeyRecord,
+    privateKey: import('node:crypto').KeyObject,
+    keyId: string,
+    nonce: string,
+    overrides: Record<string, unknown>,
+  ) {
+    const ts = Math.floor(Date.now() / 1000);
+    const sig = signHello(privateKey, ts, nonce);
+    const { gateway, getUpgradedWs } = createGateway(record);
+    gateway.handleUpgrade(
+      createRequest('/api/portwing/ws'),
+      createMockSocket() as unknown as Socket,
+      Buffer.alloc(0),
+    );
+    const ws = getUpgradedWs()!;
+    sendMessageToGateway(ws, buildHello(keyId, ts, nonce, sig, overrides));
+    await new Promise((r) => setTimeout(r, 10));
+    return ws;
+  }
+
+  test('the same key reconnecting under the same agentName is admitted', async () => {
+    const { privateKey, pubkeyBase64, keyId } = generateKeyPair();
+    const record = makeRecord(keyId, pubkeyBase64);
+
+    const ws1 = await helloAs(record, privateKey, keyId, 'b0000000000000000000000000000001', {
+      agentId: 'reconnect-agent',
+      agentName: 'shared-fleet-agent',
+    });
+    const welcome1 = JSON.parse(ws1.sentMessages[0]) as { type: string };
+    expect(welcome1.type).toBe('welcome');
+
+    // Same key, same claimed name, fresh connection (e.g. after a network blip).
+    const ws2 = await helloAs(record, privateKey, keyId, 'b0000000000000000000000000000002', {
+      agentId: 'reconnect-agent',
+      agentName: 'shared-fleet-agent',
+    });
+    const welcome2 = JSON.parse(ws2.sentMessages[0]) as { type: string };
+    expect(welcome2.type).toBe('welcome');
+  });
+
+  test('a different key claiming an in-use agentName is rejected as a squat attempt', async () => {
+    const owner = generateKeyPair();
+    const attacker = generateKeyPair();
+    const ownerRecord = makeRecord(owner.keyId, owner.pubkeyBase64);
+    const attackerRecord = makeRecord(attacker.keyId, attacker.pubkeyBase64);
+
+    const ws1 = await helloAs(
+      ownerRecord,
+      owner.privateKey,
+      owner.keyId,
+      'b1000000000000000000000000000001',
+      { agentId: 'owner-agent', agentName: 'production-worker' },
+    );
+    const welcome1 = JSON.parse(ws1.sentMessages[0]) as { type: string };
+    expect(welcome1.type).toBe('welcome');
+
+    // A different, otherwise-valid key tries to register under the same name.
+    const ws2 = await helloAs(
+      attackerRecord,
+      attacker.privateKey,
+      attacker.keyId,
+      'b1000000000000000000000000000002',
+      { agentId: 'attacker-agent', agentName: 'production-worker' },
+    );
+    const errorFrame = JSON.parse(ws2.sentMessages[0]) as { type: string; data: { code: string } };
+    expect(errorFrame.type).toBe('error');
+    expect(errorFrame.data.code).toBe('agent-name-claimed');
+    expect(ws2.close).toHaveBeenCalledWith(1008, 'agent-name-claimed');
+  });
+
+  test('revoking a key releases only ITS name binding, leaving other bindings intact', async () => {
+    const owner = generateKeyPair();
+    const successor = generateKeyPair();
+    const bystander = generateKeyPair();
+    const attacker = generateKeyPair();
+    const ownerRecord = makeRecord(owner.keyId, owner.pubkeyBase64);
+    const successorRecord = makeRecord(successor.keyId, successor.pubkeyBase64);
+    const bystanderRecord = makeRecord(bystander.keyId, bystander.pubkeyBase64);
+    const attackerRecord = makeRecord(attacker.keyId, attacker.pubkeyBase64);
+
+    const ws1 = await helloAs(
+      ownerRecord,
+      owner.privateKey,
+      owner.keyId,
+      'b2000000000000000000000000000001',
+      { agentId: 'decommissioned-agent', agentName: 'edge-node-7' },
+    );
+    expect((JSON.parse(ws1.sentMessages[0]) as { type: string }).type).toBe('welcome');
+
+    // A second, unrelated agent under a different key — its binding must survive
+    // the owner's revocation below (exercises the non-matching-entry loop branch
+    // in disconnectByKeyId's nameToKeyId purge).
+    const wsBystander = await helloAs(
+      bystanderRecord,
+      bystander.privateKey,
+      bystander.keyId,
+      'b2000000000000000000000000000002',
+      { agentId: 'bystander-agent', agentName: 'edge-node-8' },
+    );
+    expect((JSON.parse(wsBystander.sentMessages[0]) as { type: string }).type).toBe('welcome');
+
+    // Operator revokes the old key; disconnectByKeyId is called from the
+    // revocation route (app/api/portwing.ts) and must free only its own binding.
+    disconnectByKeyId(owner.keyId);
+
+    // A newly-provisioned key can now claim the freed name.
+    const ws2 = await helloAs(
+      successorRecord,
+      successor.privateKey,
+      successor.keyId,
+      'b2000000000000000000000000000003',
+      { agentId: 'replacement-agent', agentName: 'edge-node-7' },
+    );
+    const welcome2 = JSON.parse(ws2.sentMessages[0]) as { type: string };
+    expect(welcome2.type).toBe('welcome');
+
+    // The bystander's binding was untouched by the owner's revocation — a third
+    // key still cannot squat its name.
+    const wsAttacker = await helloAs(
+      attackerRecord,
+      attacker.privateKey,
+      attacker.keyId,
+      'b2000000000000000000000000000004',
+      { agentId: 'squatter-agent', agentName: 'edge-node-8' },
+    );
+    const errorFrame = JSON.parse(wsAttacker.sentMessages[0]) as {
+      type: string;
+      data: { code: string };
+    };
+    expect(errorFrame.data.code).toBe('agent-name-claimed');
   });
 });
 
