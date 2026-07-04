@@ -168,6 +168,26 @@ describe('DashboardRecentUpdatesWidget', () => {
     expect(actionsCol.label).toBe('Actions');
   });
 
+  it("resolves the icon column's content box wide enough for its 28px icon (not just overflow-hidden)", () => {
+    // DataTable hardcodes `pl-5` (20px) left padding on icon cells and clips overflow via
+    // `overflow-hidden` (see DataTable.vue) — that only stops clipped content from spilling into
+    // the neighboring column, it says nothing about whether the icon itself still fits. This
+    // asserts the actual geometry: the icon column's fixed width minus that 20px padding must be
+    // >= the 28px ContainerIcon this widget renders in its `cell-icon` slot. Mirrors the
+    // Containers icon-column regression test in DataTable.spec.ts, adapted to this widget's own
+    // column definition.
+    const wrapper = mountWidget();
+    const vm = wrapper.vm as any;
+    const iconCol = vm.tableColumns.find((c: any) => c.key === 'icon');
+    expect(iconCol).toBeDefined();
+
+    const ICON_CELL_LEFT_PADDING_PX = 20; // pl-5, hardcoded by DataTable for icon columns
+    const WIDGET_ICON_SIZE_PX = 28; // <ContainerIcon :icon="row.icon" :size="28" /> in cell-icon slot
+    expect(iconCol.size - ICON_CELL_LEFT_PADDING_PX).toBeGreaterThanOrEqual(WIDGET_ICON_SIZE_PX);
+    expect(iconCol.minSize - ICON_CELL_LEFT_PADDING_PX).toBeGreaterThanOrEqual(WIDGET_ICON_SIZE_PX);
+    expect(iconCol.maxSize - ICON_CELL_LEFT_PADDING_PX).toBeGreaterThanOrEqual(WIDGET_ICON_SIZE_PX);
+  });
+
   it('shows the compact edit-mode layout when resized below 200px', async () => {
     const wrapper = mountWidget({
       editMode: true,

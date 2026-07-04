@@ -39,6 +39,7 @@ const emit = defineEmits<{
 
 const contentRef = ref<HTMLDivElement | null>(null);
 let contentResizeObserver: ResizeObserver | null = null;
+let lastEmittedContentWidth = -1;
 
 // Content-box width: clientWidth (padding box) minus this element's own computed left/right
 // padding. Reading the real computed padding — rather than hardcoding the `pl-*`/`pr-*` Tailwind
@@ -55,11 +56,22 @@ function measureContentWidth(): number {
   return Math.max(0, el.clientWidth - paddingLeft - paddingRight);
 }
 
+// Epsilon-guarded: the ResizeObserver fires on sub-pixel jitter (fractional layout rounding,
+// scrollbar show/hide, etc.) with no useful change in the actual measured width. Emitting on
+// every such tick forces consumers (e.g. ContainersView's useColumnVisibility auto-hide) to
+// recompute on noise — skip the emit when the delta from the last emitted value is sub-pixel,
+// mirroring the same guard on DataTable's own viewport-width sync (DataTable.vue,
+// syncTableViewportWidth).
 function syncContentWidth() {
   const width = measureContentWidth();
-  if (width > 0) {
-    emit('content-width', width);
+  if (width <= 0) {
+    return;
   }
+  if (Math.abs(width - lastEmittedContentWidth) < 1) {
+    return;
+  }
+  lastEmittedContentWidth = width;
+  emit('content-width', width);
 }
 
 onMounted(() => {

@@ -242,6 +242,30 @@ describe('DataViewLayout content-width measurement', () => {
     expect(wrapper.emitted('content-width')?.at(-1)).toEqual([640]);
   });
 
+  it('applies an epsilon guard to content-width emission: sub-pixel RO deltas emit once, a real change emits again', async () => {
+    mockedClientWidth = 900;
+    const wrapper = mount(DataViewLayout, { slots: { default: '<p>Content</p>' } });
+    await nextTick();
+    expect(wrapper.emitted('content-width')).toHaveLength(1);
+    expect(wrapper.emitted('content-width')?.at(-1)).toEqual([900]);
+
+    // Two RO callbacks with sub-epsilon deltas relative to the last emitted value — no new emit.
+    mockedClientWidth = 900.4;
+    capturedResizeCallback?.([] as ResizeObserverEntry[], {} as ResizeObserver);
+    await nextTick();
+    mockedClientWidth = 900.7;
+    capturedResizeCallback?.([] as ResizeObserverEntry[], {} as ResizeObserver);
+    await nextTick();
+    expect(wrapper.emitted('content-width')).toHaveLength(1);
+
+    // A delta at/above the epsilon threshold emits again.
+    mockedClientWidth = 902;
+    capturedResizeCallback?.([] as ResizeObserverEntry[], {} as ResizeObserver);
+    await nextTick();
+    expect(wrapper.emitted('content-width')).toHaveLength(2);
+    expect(wrapper.emitted('content-width')?.at(-1)).toEqual([902]);
+  });
+
   it('disconnects the ResizeObserver on unmount', async () => {
     const disconnectSpy = vi.spyOn(CapturingResizeObserver.prototype, 'disconnect');
     mockedClientWidth = 900;

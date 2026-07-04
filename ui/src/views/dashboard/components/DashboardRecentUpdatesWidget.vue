@@ -51,7 +51,20 @@ const tableColumns = computed(() =>
         },
       ]
     : [
-        { key: 'icon', label: '', icon: true, size: 42, minSize: 42, maxSize: 42 },
+        {
+          key: 'icon',
+          label: '',
+          icon: true,
+          // 52 = 28px ContainerIcon (rendered in the `cell-icon` slot below via
+          // <ContainerIcon :icon="row.icon" :size="28" />) + 20px pl-5 padding DataTable
+          // hardcodes for icon columns + 4px breathing room. Was 42 until the icon cell gained
+          // `overflow-hidden` (commit 9b017a99): a 42-20=22px content box clipped the 28px icon
+          // ~6px. Same formula as the Containers icon column fix in useColumnVisibility.ts
+          // (56 = 32px icon + 20px + 4px) — this icon is 28px, not 32px, so the total is smaller.
+          size: 52,
+          minSize: 52,
+          maxSize: 52,
+        },
         {
           key: 'container',
           label: t('dashboardView.recentUpdates.columns.container'),
