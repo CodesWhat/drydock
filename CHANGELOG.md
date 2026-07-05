@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **"Click to copy" did nothing and logged a TypeError on deployments served over plain HTTP** (the common self-hosted LAN setup), because the browser Clipboard API only exists in secure contexts. Copying now falls back to the legacy execCommand technique when the API is missing or rejects, covers the log viewer's Copy button too, and shows a "Copy failed" state instead of failing silently when no copy mechanism works at all. (#472)
+
 ## [1.5.1-rc.5] — 2026-07-02
 
 ### Fixed

@@ -7,13 +7,13 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
-const { copyToClipboard, isCopied } = useClipboard();
+const { copyToClipboard, isCopied, isFailed } = useClipboard();
 </script>
 
 <template>
   <span
     class="cursor-pointer hover:underline"
-    v-tooltip.top="isCopied(props.tag) ? t('sharedComponents.copyableTag.copied') : t('sharedComponents.copyableTag.clickToCopy')"
+    v-tooltip.top="isFailed(props.tag) ? t('sharedComponents.copyableTag.failed') : isCopied(props.tag) ? t('sharedComponents.copyableTag.copied') : t('sharedComponents.copyableTag.clickToCopy')"
     @click.stop="copyToClipboard(props.tag)"
-  ><slot>{{ props.tag }}</slot></span>
+  ><span :style="isFailed(props.tag) ? { color: 'var(--dd-danger)' } : undefined"><slot>{{ props.tag }}</slot></span></span>
 </template>

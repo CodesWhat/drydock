@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, ref, shallowRef, triggerRef, watch } fro
 import { useI18n } from 'vue-i18n';
 import AppIconButton from '@/components/AppIconButton.vue';
 import StatusDot from '@/components/StatusDot.vue';
+import { writeToClipboard } from '../composables/useClipboard';
 import { useLogSearch } from '../composables/useLogSearch';
 import type { AppLogEntry } from '../types/log-entry';
 import type { AnsiColor, AnsiTextSegment } from '../utils/container-logs';
@@ -47,6 +48,7 @@ const { t } = useI18n();
 const lineElements = new Map<number, HTMLElement>();
 const logViewport = ref<HTMLElement | null>(null);
 const copySuccess = ref(false);
+const copyFailed = ref(false);
 
 function isNearEdge(element: HTMLElement): boolean {
   if (props.newestFirst) {
@@ -391,14 +393,17 @@ async function copyLogs(): Promise<void> {
     })
     .join('\n');
 
-  try {
-    await navigator.clipboard.writeText(text);
-    copySuccess.value = true;
+  const succeeded = await writeToClipboard(text);
+  copySuccess.value = succeeded;
+  copyFailed.value = !succeeded;
+  if (succeeded) {
     setTimeout(() => {
       copySuccess.value = false;
     }, 2000);
-  } catch {
-    // Clipboard API may not be available in all contexts.
+  } else {
+    setTimeout(() => {
+      copyFailed.value = false;
+    }, 2000);
   }
 }
 
@@ -516,10 +521,11 @@ function toggleSortOrder(): void {
 
     <div class="relative flex-1 min-h-[120px] flex flex-col">
       <AppIconButton
-        :icon="copySuccess ? 'check' : 'copy'"
+        :icon="copyFailed ? 'xmark' : copySuccess ? 'check' : 'copy'"
         size="xs"
         data-test="container-log-copy"
-        :tooltip="copySuccess ? t('appShell.logViewer.search.copied') : t('appShell.logViewer.search.copyLogs')"
+        :variant="copyFailed ? 'danger' : 'muted'"
+        :tooltip="copyFailed ? t('sharedComponents.copyableTag.failed') : copySuccess ? t('appShell.logViewer.search.copied') : t('appShell.logViewer.search.copyLogs')"
         class="absolute top-2 right-2 z-10 opacity-50 hover:opacity-100"
         @click="copyLogs"
       />
