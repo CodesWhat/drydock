@@ -1,15 +1,54 @@
-# CodeRabbit configuration — drydock
+# CodeRabbit configuration: drydock
 language: en-US
+early_access: true
+enable_free_tier: true
+
+tone_instructions: >-
+  Reviewing AI-agent TypeScript code. Terse and direct. State problem and fix
+  with code. Skip praise and rhetoric. Flag provider-pattern divergence,
+  missed conventions, existing utilities, DRY violations. Only actionable
+  feedback.
 
 reviews:
   profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  high_level_summary_instructions: >-
+    This summary will be read by an AI coding agent (Claude Code), not a human.
+    Be direct and structured. Use a changelog with emojis: ✨ Added, 🔧 Changed,
+    🐛 Fixed, 🗑️ Removed, ⚠️ Breaking, 🔒 Security. After the changelog, list
+    any concerns or issues the agent should address as a flat bullet list — no
+    prose, no praise, no context the agent already knows from the diff.
+  high_level_summary_placeholder: "@coderabbitai summary"
+  high_level_summary_in_walkthrough: false
+  collapse_walkthrough: true
+  changed_files_summary: false
+  sequence_diagrams: false
+  estimate_code_review_effort: false
+  review_details: false
+  review_status: true
+  commit_status: true
+  fail_commit_status: false
+  poem: false
+  in_progress_fortune: false
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: true
+  suggested_labels: false
+  auto_apply_labels: false
+  suggested_reviewers: false
+  auto_assign_reviewers: false
+  enable_prompt_for_ai_agents: true
+  abort_on_close: true
+
   auto_review:
     enabled: true
-  high_level_summary: true
-  collapse_walkthrough: false
-  review_status: true
-  poem: false
-  request_changes_workflow: false
+    auto_incremental_review: true
+    drafts: false
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT MERGE"
+      - "[skip review]"
 
   path_filters:
     - "!**/node_modules/**"
@@ -45,6 +84,45 @@ reviews:
       instructions: |
         Documentation content. Review for accuracy against the code, not prose style.
 
+  finishing_touches:
+    docstrings:
+      enabled: true
+    unit_tests:
+      enabled: true
+
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+    title:
+      mode: "off"
+    description:
+      mode: "off"
+    issue_assessment:
+      mode: "warning"
+
+  tools:
+    biome:
+      enabled: true
+    shellcheck:
+      enabled: true
+    hadolint:
+      enabled: true
+    markdownlint:
+      enabled: true
+    yamllint:
+      enabled: true
+    gitleaks:
+      enabled: true
+    actionlint:
+      enabled: true
+    ast-grep:
+      essential_rules: true
+    github-checks:
+      enabled: true
+      timeout_ms: 90000
+    languagetool:
+      enabled: false
+
 knowledge_base:
   opt_out: false
   learnings:
@@ -61,3 +139,4 @@ knowledge_base:
 
 chat:
   auto_reply: true
+  art: false
