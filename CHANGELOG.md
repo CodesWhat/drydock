@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1-rc.6] — 2026-07-05
+
 ### Fixed
 
 - **Home Assistant-style PEP 440 nightly tags (and other lossy version formats) no longer masquerade as a stable "suggested pin".** Tag suggestions for `latest`/untagged containers relied on `semver.coerce()` as a last-resort parser, which silently drops any suffix it doesn't understand — a PEP 440 dev/post release (`2026.8.0.dev202607050315`, `1.2.3.post1`), an OS-variant suffix (`3.11-bullseye`), or a hyphenated CalVer date (`2024-01-15`) all coerced down to a bare `major.minor.patch` and got offered as "stable". Suggestions now reject any candidate tag that required this lossy coercion unless the raw tag is itself a bare numeric version (optionally `v`-prefixed, 1-3 dot-separated groups) that provably lost nothing. The containers table also now renders the suggested-tag hint through the existing `SuggestedTagBadge` component (labeled "Suggested" with a tooltip) instead of an unlabeled raw string next to the Digest/NEW badges. (#473)
