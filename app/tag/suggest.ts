@@ -1,4 +1,5 @@
 import { RE2JS } from 're2js';
+import semver from 'semver';
 import type { Container } from '../model/container.js';
 import { parse as parseSemver } from './index.js';
 
@@ -20,8 +21,6 @@ interface StableSemverCandidate {
 interface MessageLikeError {
   message: string;
 }
-
-const PRERELEASE_LABEL_PATTERN = /(?:^|[+._-])(alpha|beta|rc|dev|nightly|canary)(?:$|[+._-])/i;
 
 function isMessageLikeError(error: unknown): error is MessageLikeError {
   if (typeof error !== 'object' || error === null) {
@@ -95,19 +94,44 @@ function isLatestOrUntagged(tagValue: string | undefined): boolean {
   return normalizedTag === '' || normalizedTag === 'latest';
 }
 
+// semver.coerce() (parse()'s last-resort fallback in app/tag/index.ts) can
+// only emit a bare "major.minor.patch", silently discarding any suffix it
+// didn't understand — a PEP 440 dev/post release ("2026.8.0.dev202607050315",
+// "1.2.3.post1"), an OS-variant suffix ("3.11-bullseye"), or a CalVer date
+// ("2024-01-15"). When coercion was required, the only raw shapes that
+// provably lost nothing are an optional "v" plus 1-3 dot-separated numeric
+// groups; anything else must not be offered as a stable pin target. See #473.
+const BARE_NUMERIC_VERSION_PATTERN = /^v?\d+(?:\.\d+){0,2}$/i;
+
+// NOTE: parse() in app/tag/index.ts also has a normalizeNumericMultiSegmentTag
+// branch in its fallback chain, checked before the semver.clean/semver.parse
+// steps mirrored here. That branch only matches tags with 4+ dot-separated
+// numeric groups and always rewrites them to "major.minor.patch-<rest>", so
+// any tag that hits it always comes back with a non-empty prerelease array
+// and is already rejected by the prerelease check above before this guard
+// runs. If that branch's behavior changes upstream, re-verify this invariant
+// still holds.
+function requiredCoercionFallback(tag: string): boolean {
+  const cleaned = semver.clean(tag, { loose: true });
+  return semver.parse(cleaned ?? tag) === null;
+}
+
+function isBareNumericVersion(tag: string): boolean {
+  return BARE_NUMERIC_VERSION_PATTERN.test(tag.trim());
+}
+
 function isStableSemverCandidate(tag: string): StableSemverCandidate | null {
   const parsed = parseSemver(tag);
   if (!parsed) {
     return null;
   }
 
-  // Defensive exclusion for prerelease-like labels that can be lost by coercion.
-  if (PRERELEASE_LABEL_PATTERN.test(tag)) {
+  const prerelease = Array.isArray(parsed.prerelease) ? parsed.prerelease : [];
+  if (prerelease.length > 0) {
     return null;
   }
 
-  const prerelease = Array.isArray(parsed.prerelease) ? parsed.prerelease : [];
-  if (prerelease.length > 0) {
+  if (requiredCoercionFallback(tag) && !isBareNumericVersion(tag)) {
     return null;
   }
 

@@ -165,4 +165,86 @@ describe('tag/suggest', () => {
       parseSpy.mockRestore();
     }
   });
+
+  test('should suggest the latest stable release when a PEP 440 dev nightly is present (regression #473)', () => {
+    const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+    const suggestedTag = suggest(container as any, ['2026.7.1', '2026.8.0.dev202607050315']);
+
+    expect(suggestedTag).toBe('2026.7.1');
+  });
+
+  test('should reject a PEP 440 post-release suffix that would be lost by coercion', () => {
+    const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+    const suggestedTag = suggest(container as any, ['1.2.2', '1.2.3.post1']);
+
+    expect(suggestedTag).toBe('1.2.2');
+  });
+
+  test('should reject a dotted dev suffix without trailing digits', () => {
+    const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+    const suggestedTag = suggest(container as any, ['1.2.2', '1.2.3.dev']);
+
+    expect(suggestedTag).toBe('1.2.2');
+  });
+
+  test('should return null when only coercion-lossy OS-variant tags are available', () => {
+    const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+    const suggestedTag = suggest(container as any, ['3.11-bullseye', '3.11.4-bullseye']);
+
+    expect(suggestedTag).toBeNull();
+  });
+
+  test('should still accept a bare two-part numeric version', () => {
+    const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+    expect(suggest(container as any, ['13.4'])).toBe('13.4');
+  });
+
+  test('should still accept a v-prefixed zero-padded version', () => {
+    const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+    expect(suggest(container as any, ['v01.2.3'])).toBe('v01.2.3');
+  });
+
+  test('should still accept a stable version with build metadata', () => {
+    const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+    expect(suggest(container as any, ['1.2.3+build.5'])).toBe('1.2.3+build.5');
+  });
+
+  test('should reject a hyphenated CalVer date that only parses via coercion', () => {
+    const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+    expect(suggest(container as any, ['2024-01-15'])).toBeNull();
+  });
+
+  test('should prefer the higher patch version when major and minor are tied', () => {
+    const container = createContainer({ image: { tag: { value: 'latest' } } });
+
+    expect(suggest(container as any, ['2.5.1', '2.5.9'])).toBe('2.5.9');
+  });
+
+  test('should drop candidates with non-integer semver components when coercion was not required', () => {
+    const parseSpy = vi.spyOn(semver, 'parse').mockImplementation((tag: string) => {
+      if (tag === '9.9.9') {
+        return {
+          major: 9.5,
+          minor: 0,
+          patch: 0,
+        } as any;
+      }
+      return null;
+    });
+
+    try {
+      const container = createContainer({ image: { tag: { value: 'latest' } } });
+      expect(suggest(container as any, ['9.9.9'])).toBeNull();
+    } finally {
+      parseSpy.mockRestore();
+    }
+  });
 });

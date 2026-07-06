@@ -747,9 +747,7 @@ onScopeDispose(() => {
             >
               {{ getUpdateMaturityLabel(c.updateMaturity) }}
             </span>
-            <span v-if="c.suggestedTag" class="text-2xs dd-text-muted truncate max-w-[110px]">
-              {{ c.suggestedTag }}
-            </span>
+            <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
           </div>
         </template>
         <!-- Status -->
