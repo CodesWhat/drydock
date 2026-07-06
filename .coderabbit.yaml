@@ -1,0 +1,63 @@
+# CodeRabbit configuration — drydock
+language: en-US
+
+reviews:
+  profile: chill
+  auto_review:
+    enabled: true
+  high_level_summary: true
+  collapse_walkthrough: false
+  review_status: true
+  poem: false
+  request_changes_workflow: false
+
+  path_filters:
+    - "!**/node_modules/**"
+    - "!**/dist/**"
+    - "!**/build/**"
+    - "!**/.next/**"
+    - "!**/coverage/**"
+    - "!**/*.min.js"
+    - "!**/*.min.css"
+    - "!**/package-lock.json"
+    - "!**/pnpm-lock.yaml"
+    - "!**/*.lock"
+    - "!**/*.generated.*"
+    - "!CHANGELOG.md"
+
+  path_instructions:
+    - path: "app/registries/**"
+      instructions: |
+        Registry providers follow a shared provider pattern. New registries should mirror the structure and error handling of existing ones — flag divergence.
+    - path: "app/triggers/**"
+      instructions: |
+        Notification trigger providers follow a shared provider pattern. Flag divergence from existing triggers and any secret handling in logs.
+    - path: "app/api/**"
+      instructions: |
+        API layer. Auth is enforced in middleware — don't flag missing auth checks in individual handlers.
+    - path: "ui/tests/**"
+      instructions: |
+        UI test suite. Don't suggest error handling or refactors in test code.
+    - path: "**/*.test.*"
+      instructions: |
+        Test files. Don't suggest error handling or null checks in test code.
+    - path: "content/docs/**"
+      instructions: |
+        Documentation content. Review for accuracy against the code, not prose style.
+
+knowledge_base:
+  opt_out: false
+  learnings:
+    scope: local
+  issues:
+    scope: local
+  # Default filePatterns already cover CLAUDE.md / AGENTS.md / .cursorrules
+  code_guidelines:
+    enabled: true
+  web_search:
+    enabled: true
+  pull_requests:
+    scope: local
+
+chat:
+  auto_reply: true
