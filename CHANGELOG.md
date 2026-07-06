@@ -20,6 +20,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Edge agents can choose their own display name via `hello.agentName`.** Previously every edge agent was named `portwing-edge-<agentId>` unconditionally. A supplied name is now sanitized to a safe slug (lowercase, alphanumeric + hyphen, max 63 chars) and used as the registry/display name, falling back to the old `portwing-edge-<agentId>` form when absent or empty. The name is bound to the authenticating Ed25519 key on first use — a later `hello` reusing the same name is only admitted under the same key (rejected with an `agent-name-claimed` error otherwise), and the binding is released when its owning key is revoked — so one registered key can no longer squat or steal another agent's chosen name. (#470)
 
+### Changed
+
+- **Base image bumped to Alpine 3.24.** The `healthcheck-build` stage in the `Dockerfile` moves from `alpine:3.21` to `alpine:3.24`.
+
 ### Deprecated
 
 - **`GET /api/auth/methods`.** This unversioned alias for `GET /auth/strategies` had zero documentation and emitted no deprecation signal at all. It now logs "GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /auth/strategies instead." on every request, and is documented in [DEPRECATIONS.md](./DEPRECATIONS.md) — deprecated in v1.6.0, removed in v1.7.0.
