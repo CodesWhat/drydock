@@ -541,6 +541,38 @@ describe('image-comparison', () => {
     expect(getImageManifestDigest).toHaveBeenCalled();
   });
 
+  test('suggests the real stable tag alongside a PEP 440 nightly without disturbing the digest path (#473)', async () => {
+    const actualSuggest =
+      await vi.importActual<typeof import('../../../tag/suggest.js')>('../../../tag/suggest.js');
+    mockSuggestTag.mockImplementation(actualSuggest.suggest);
+    const getImageManifestDigest = createManifestLookup();
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['2026.7.1', '2026.8.0.dev202607050315']),
+          getImageManifestDigest,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+    const container = {
+      image: {
+        id: 'image-1',
+        registry: { name: 'hub' },
+        name: 'library/homeassistant',
+        tag: { value: 'latest', semver: false },
+        digest: { watch: true, repo: 'sha256:local' },
+      },
+    };
+    const result = await findNewVersion(container as never, log);
+    // The real suggest() must reject the coercion-lossy nightly and offer the stable release.
+    expect(result.suggestedTag).toBe('2026.7.1');
+    // The suggested-tag hint is independent of the digest-comparison path: tag stays 'latest'.
+    expect(result.tag).toBe('latest');
+    expect(getImageManifestDigest).toHaveBeenCalled();
+  });
+
   test('publishedTag falls back to container.image.tag.value when result.tag is falsy', async () => {
     const getImagePublishedAt = vi.fn().mockResolvedValue('2026-04-01T00:00:00.000Z');
     mockGetState.mockReturnValue({
