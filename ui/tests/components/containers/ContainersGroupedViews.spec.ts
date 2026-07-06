@@ -705,10 +705,57 @@ describe('ContainersGroupedViews', () => {
     expect(currentRow.find('[data-test="container-runtime-status"] .badge').exists()).toBe(false);
     expect(currentRow.find('[data-test="container-server-text"] .badge').exists()).toBe(false);
     expect(currentRow.find('[data-test="container-registry-text"] .badge').exists()).toBe(false);
+    // No suggestedTag on either fixture — no suggested-tag badge should render (#473).
+    expect(
+      currentRow
+        .find('[data-test="container-update-state"] [data-test="suggested-tag-badge"]')
+        .exists(),
+    ).toBe(false);
 
     const minorUpdateState = rowByName(wrapper, 'beta').get('[data-test="container-update-state"]');
     expect(minorUpdateState.text()).toContain('Minor');
     expect(minorUpdateState.text()).not.toContain('Minor update');
+    expect(minorUpdateState.find('[data-test="suggested-tag-badge"]').exists()).toBe(false);
+  });
+
+  it('renders the labeled suggested-tag badge for a latest-pinned container with a suggestion (#473)', async () => {
+    const suggested = makeContainer({
+      id: 'c-suggested',
+      name: 'alpha',
+      currentTag: 'latest',
+      newTag: null,
+      updateKind: null,
+      status: 'running',
+      server: 'local-main',
+      registry: 'dockerhub',
+      suggestedTag: 'v1.3.0',
+    });
+
+    const { context, refs } = makeContext();
+    const containers = [suggested];
+    refs.containerViewMode.value = 'table';
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    const updateState = rowByName(wrapper, 'alpha').get('[data-test="container-update-state"]');
+    const badge = updateState.get('[data-test="suggested-tag-badge"]');
+    expect(badge.text()).toBe('Suggested');
+    // The raw tag value must only surface via the badge's tooltip binding, never as
+    // bare unlabeled text alongside the Digest/NEW badges.
+    expect(updateState.text()).not.toContain('v1.3.0');
   });
 
   it('renders normal card and list metadata quietly with concise update labels', async () => {
