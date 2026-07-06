@@ -28,7 +28,7 @@ interface CrowdinConfig {
 
 const workflowPath = fileURLToPath(new URL('../workflows/i18n-crowdin.yml', import.meta.url));
 const crowdinConfigPath = fileURLToPath(new URL('../../crowdin.yml', import.meta.url));
-const crowdinActionRef = 'crowdin/github-action@8868a33591d21088edfc398968173a3b98d51706';
+const crowdinActionRef = 'crowdin/github-action@52aa776766211d83d975df51f3b9c53c2f8ba35f';
 
 function loadCrowdinWorkflowStep(): WorkflowStep {
   const workflow = yaml.parse(readFileSync(workflowPath, 'utf8')) as WorkflowDefinition;
