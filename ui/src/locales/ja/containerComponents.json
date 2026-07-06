@@ -8,6 +8,8 @@
       "forceUpdate": "強制更新",
       "updateNow": "今すぐ更新",
       "scanNow": "今すぐスキャン",
+      "recheckNow": "Recheck for Updates",
+      "rechecking": "Rechecking…",
       "skipSnoozeGroup": "スキップ＆スヌーズ",
       "skipThisUpdate": "この更新をスキップ",
       "snooze1d": "1 日スヌーズ",
@@ -79,6 +81,8 @@
       "startButton": "起動",
       "restartButton": "再起動",
       "scanButton": "スキャン",
+      "recheckButton": "Recheck",
+      "ariaRecheckContainer": "Recheck container for updates",
       "blockedButton": "ブロック済み",
       "updateButton": "更新",
       "deleteButton": "削除"
@@ -100,6 +104,7 @@
       "volumes": "ボリューム",
       "composeFiles": "Compose ファイル",
       "version": "バージョン",
+      "softwareVersion": "Software Version",
       "currentLabel": "現在：",
       "latestLabel": "最新：",
       "digestLabel": "ダイジェスト：",
@@ -142,7 +147,9 @@
       "sbomNotAvailable": "SBOM ドキュメントはまだ利用できません。",
       "noPortsExposed": "公開ポートがありません",
       "notConfigured": "未設定",
-      "noVolumesMounted": "マウント済みボリュームがありません"
+      "noVolumesMounted": "マウント済みボリュームがありません",
+      "uptime": "Uptime",
+      "uptimeAriaLabel": "Container uptime"
     },
     "containerLogs": {
       "title": "コンテナログ",
@@ -172,6 +179,7 @@
       "startAction": "起動",
       "restartAction": "再起動",
       "scanAction": "スキャン",
+      "recheckAction": "Recheck for updates",
       "forceUpdateAction": "強制更新",
       "updateAction": "更新",
       "skipUpdateAction": "この更新をスキップ",
@@ -222,6 +230,7 @@
       "startTooltip": "起動",
       "restartTooltip": "再起動",
       "scanTooltip": "スキャン",
+      "recheckTooltip": "Recheck for updates",
       "blockedForceUpdateTooltip": "ブロック済み — 強制更新",
       "updateTooltip": "更新",
       "deleteTooltip": "削除",
@@ -409,7 +418,11 @@
       "cancelOperationNotFound": "Operation not found: {name}",
       "cancelFailed": "Failed to cancel update for {name}",
       "groupUpdateRejected": "Failed to update {name}: {message}",
-      "groupUpdateFailed": "Failed to update {name}"
+      "groupUpdateFailed": "Failed to update {name}",
+      "recheckComplete": "Recheck complete: {name}",
+      "recheckNotFound": "Container not found: {name}",
+      "recheckFailedTitle": "Recheck failed: {name}",
+      "recheckFailedDetail": "Recheck failed for {name}"
     },
     "policy": {
       "entryCountSingular": "{count} entry",
@@ -448,6 +461,7 @@
       }
     },
     "triggers": {
+      "agentLabel": "agent:",
       "toasts": {
         "ran": "Trigger ran: {key}",
         "ranSuccessfully": "Trigger {key} ran successfully",

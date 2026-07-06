@@ -53,7 +53,7 @@
       "update-failed": "Actualización fallida",
       "auto-update-blocked": "Actualización automática bloqueada",
       "auto-rollback": "Rollback automático",
-      "rollback": "Rollback",
+      "rollback": "Revertir",
       "preview": "Vista previa",
       "agent-disconnect": "Desconexión de agente",
       "notification-delivery-failed": "Fallo al entregar notificación",
@@ -164,6 +164,7 @@
       "images": "images",
       "scanned": "scanned"
     },
+    "fixableBadge": "{count} fix",
     "delta": {
       "fixed": "{count} fixed",
       "new": "{count} new",

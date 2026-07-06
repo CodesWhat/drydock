@@ -8,6 +8,8 @@
       "forceUpdate": "Wymuś aktualizację",
       "updateNow": "Zaktualizuj teraz",
       "scanNow": "Skanuj teraz",
+      "recheckNow": "Recheck for Updates",
+      "rechecking": "Rechecking…",
       "skipSnoozeGroup": "Pomiń i odłóż",
       "skipThisUpdate": "Pomiń tę aktualizację",
       "snooze1d": "Odłóż 1 dzień",
@@ -79,6 +81,8 @@
       "startButton": "Uruchom",
       "restartButton": "Uruchom ponownie",
       "scanButton": "Skanuj",
+      "recheckButton": "Recheck",
+      "ariaRecheckContainer": "Recheck container for updates",
       "blockedButton": "Zablokowano",
       "updateButton": "Zaktualizuj",
       "deleteButton": "Usuń"
@@ -100,6 +104,7 @@
       "volumes": "Woluminy",
       "composeFiles": "Pliki Compose",
       "version": "Wersja",
+      "softwareVersion": "Software Version",
       "currentLabel": "Aktualne:",
       "latestLabel": "Najnowsze:",
       "digestLabel": "Skrót:",
@@ -142,7 +147,9 @@
       "sbomNotAvailable": "Dokument SBOM nie jest jeszcze dostępny.",
       "noPortsExposed": "Żadne porty nie są odsłonięte",
       "notConfigured": "Nie skonfigurowano",
-      "noVolumesMounted": "Nie zamontowano żadnych woluminów"
+      "noVolumesMounted": "Nie zamontowano żadnych woluminów",
+      "uptime": "Uptime",
+      "uptimeAriaLabel": "Container uptime"
     },
     "containerLogs": {
       "title": "Dzienniki kontenerów",
@@ -172,6 +179,7 @@
       "startAction": "Uruchom",
       "restartAction": "Uruchom ponownie",
       "scanAction": "Skanuj",
+      "recheckAction": "Recheck for updates",
       "forceUpdateAction": "Wymuś aktualizację",
       "updateAction": "Zaktualizuj",
       "skipUpdateAction": "Pomiń tę aktualizację",
@@ -222,6 +230,7 @@
       "startTooltip": "Uruchom",
       "restartTooltip": "Uruchom ponownie",
       "scanTooltip": "Skanuj",
+      "recheckTooltip": "Recheck for updates",
       "blockedForceUpdateTooltip": "Zablokowano — wymuś aktualizację",
       "updateTooltip": "Zaktualizuj",
       "deleteTooltip": "Usuń",
@@ -409,7 +418,11 @@
       "cancelOperationNotFound": "Operation not found: {name}",
       "cancelFailed": "Failed to cancel update for {name}",
       "groupUpdateRejected": "Failed to update {name}: {message}",
-      "groupUpdateFailed": "Failed to update {name}"
+      "groupUpdateFailed": "Failed to update {name}",
+      "recheckComplete": "Recheck complete: {name}",
+      "recheckNotFound": "Container not found: {name}",
+      "recheckFailedTitle": "Recheck failed: {name}",
+      "recheckFailedDetail": "Recheck failed for {name}"
     },
     "policy": {
       "entryCountSingular": "{count} entry",
@@ -448,6 +461,7 @@
       }
     },
     "triggers": {
+      "agentLabel": "agent:",
       "toasts": {
         "ran": "Trigger ran: {key}",
         "ranSuccessfully": "Trigger {key} ran successfully",

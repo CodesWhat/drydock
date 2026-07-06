@@ -21,6 +21,8 @@
       "alreadyUpToDate": "Już aktualne: {name}",
       "queuedUpdateSingle": "Zakolejkowano aktualizację dla {count} kontenera",
       "queuedUpdateMultiple": "Zakolejkowano aktualizacje dla {count} kontenerów",
+      "queuedUpdateGroupSingle": "Queued update for {count} container in {group}",
+      "queuedUpdateGroupMultiple": "Queued updates for {count} containers in {group}",
       "countAlreadyUpToDateSingle": "{count} kontener już aktualny",
       "countAlreadyUpToDateMultiple": "{count} kontenerów już aktualnych"
     },
@@ -34,9 +36,11 @@
       "tag": "Tag",
       "version": "Wersja",
       "update": "Aktualizacja",
+      "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "Stan",
       "host": "Host",
-      "registry": "Rejestr"
+      "registry": "Rejestr",
+      "uptime": "Uptime"
     },
     "status": {
       "running": "działa",

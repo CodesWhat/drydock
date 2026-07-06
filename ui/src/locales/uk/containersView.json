@@ -21,6 +21,8 @@
       "alreadyUpToDate": "Вже актуально: {name}",
       "queuedUpdateSingle": "В черзі оновлення для {count} контейнера",
       "queuedUpdateMultiple": "В черзі оновлення для {count} контейнерів",
+      "queuedUpdateGroupSingle": "Queued update for {count} container in {group}",
+      "queuedUpdateGroupMultiple": "Queued updates for {count} containers in {group}",
       "countAlreadyUpToDateSingle": "{count} контейнер вже актуальний",
       "countAlreadyUpToDateMultiple": "{count} контейнерів вже актуальні"
     },
@@ -34,9 +36,11 @@
       "tag": "Tag",
       "version": "Версія",
       "update": "Оновлення",
+      "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "Статус",
       "host": "Хост",
-      "registry": "Реєстр"
+      "registry": "Реєстр",
+      "uptime": "Uptime"
     },
     "status": {
       "running": "працює",

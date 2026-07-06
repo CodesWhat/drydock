@@ -69,7 +69,7 @@
         "os": "SO",
         "architecture": "Arquitectura",
         "agent": "Agente",
-        "host": "Host",
+        "host": "Servidor",
         "agentVersion": "Versión del agente",
         "logLevel": "Nivel de registro",
         "pollInterval": "Intervalo de sondeo",

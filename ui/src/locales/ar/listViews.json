@@ -164,6 +164,7 @@
       "images": "images",
       "scanned": "scanned"
     },
+    "fixableBadge": "{count} fix",
     "delta": {
       "fixed": "{count} fixed",
       "new": "{count} new",

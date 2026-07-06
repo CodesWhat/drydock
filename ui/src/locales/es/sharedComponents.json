@@ -6,7 +6,8 @@
     },
     "copyableTag": {
       "copied": "¡Copiado!",
-      "clickToCopy": "Clic para copiar"
+      "clickToCopy": "Clic para copiar",
+      "failed": "Copy failed"
     },
     "dataFilterBar": {
       "filters": "Filtros",
@@ -48,10 +49,11 @@
       "scanNow": "Escanear ahora"
     },
     "notifications": {
-      "loadFailed": "Failed to load notifications"
+      "loadFailed": "Error al cargar las notificaciones"
     },
     "serverFeatures": {
-      "loadFailed": "Failed to load server feature configuration"
+      "loadFailed": "Failed to load server feature configuration",
+      "actionsDisabledReason": "Container actions disabled by server configuration"
     }
   }
 }

@@ -9,6 +9,8 @@
     "close": "关闭",
     "retry": "重试",
     "unknown": "未知",
+    "yes": "yes",
+    "no": "no",
     "errorSummary": {
       "rateLimitHit": "Registry rate limit hit",
       "accessDenied": "Registry access denied",

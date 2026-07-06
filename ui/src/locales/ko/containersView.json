@@ -21,6 +21,8 @@
       "alreadyUpToDate": "이미 최신 버전: {name}",
       "queuedUpdateSingle": "{count}개 컨테이너 업데이트 대기 중",
       "queuedUpdateMultiple": "{count}개 컨테이너 업데이트 대기 중",
+      "queuedUpdateGroupSingle": "Queued update for {count} container in {group}",
+      "queuedUpdateGroupMultiple": "Queued updates for {count} containers in {group}",
       "countAlreadyUpToDateSingle": "{count}개 컨테이너 이미 최신 버전",
       "countAlreadyUpToDateMultiple": "{count}개 컨테이너 이미 최신 버전"
     },
@@ -34,9 +36,11 @@
       "tag": "Tag",
       "version": "버전",
       "update": "업데이트",
+      "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "상태",
       "host": "호스트",
-      "registry": "레지스트리"
+      "registry": "레지스트리",
+      "uptime": "Uptime"
     },
     "status": {
       "running": "실행 중",
