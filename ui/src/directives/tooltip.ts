@@ -1,11 +1,11 @@
 import type { DirectiveBinding, ObjectDirective } from 'vue';
 
-interface TooltipBinding {
+export interface TooltipBinding {
   value: string;
   showDelay?: number;
 }
 
-type BindingValue = string | TooltipBinding;
+export type BindingValue = string | TooltipBinding;
 
 interface TooltipState {
   text: string;

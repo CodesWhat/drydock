@@ -95,4 +95,54 @@ describe('CopyableTag', () => {
     expect(innerSpan.exists()).toBe(true);
     expect(innerSpan.attributes('style')).toContain('color: var(--dd-danger)');
   });
+
+  it('shows the default clickToCopy text in the idle state when idleTooltip is not provided', () => {
+    const { tooltipValues } = mountTag({ tag: 'no-idle-tooltip' });
+    expect(tooltipValues.at(-1)).toBe('Click to copy');
+  });
+
+  it('shows idleTooltip in the idle state when provided', () => {
+    const { tooltipValues } = mountTag({
+      tag: 'v1.2.3',
+      idleTooltip: 'v1.2.3 — sha256:abc… → sha256:def…',
+    });
+    expect(tooltipValues.at(-1)).toBe('v1.2.3 — sha256:abc… → sha256:def…');
+  });
+
+  it('passes an object idleTooltip straight through to the tooltip binding in the idle state', () => {
+    const objectTooltip = { value: 'digest delta', showDelay: 300 };
+    const { tooltipValues } = mountTag({
+      tag: 'v1.2.3',
+      idleTooltip: objectTooltip,
+    });
+    expect(tooltipValues.at(-1)).toEqual(objectTooltip);
+  });
+
+  it('still shows the Copied! text when idleTooltip is set but the tag was just copied', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    const { wrapper, tooltipValues } = mountTag({
+      tag: 'copied-with-idle-tooltip',
+      idleTooltip: 'informative text',
+    });
+    await wrapper.trigger('click');
+    await flushPromises();
+
+    expect(tooltipValues.at(-1)).toBe('Copied!');
+  });
+
+  it('still shows the Copy failed text when idleTooltip is set but the copy failed', async () => {
+    Object.assign(navigator, { clipboard: undefined });
+    document.execCommand = vi.fn().mockReturnValue(false);
+
+    const { wrapper, tooltipValues } = mountTag({
+      tag: 'failed-with-idle-tooltip',
+      idleTooltip: 'informative text',
+    });
+    await wrapper.trigger('click');
+    await flushPromises();
+
+    expect(tooltipValues.at(-1)).toBe('Copy failed');
+  });
 });
