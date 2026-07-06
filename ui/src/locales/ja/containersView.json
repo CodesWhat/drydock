@@ -21,6 +21,8 @@
       "alreadyUpToDate": "すでに最新です：{name}",
       "queuedUpdateSingle": "{count} 件のコンテナの更新をキューに追加しました",
       "queuedUpdateMultiple": "{count} 件のコンテナの更新をキューに追加しました",
+      "queuedUpdateGroupSingle": "Queued update for {count} container in {group}",
+      "queuedUpdateGroupMultiple": "Queued updates for {count} containers in {group}",
       "countAlreadyUpToDateSingle": "{count} 件のコンテナはすでに最新です",
       "countAlreadyUpToDateMultiple": "{count} 件のコンテナはすでに最新です"
     },
@@ -34,9 +36,11 @@
       "tag": "Tag",
       "version": "バージョン",
       "update": "更新",
+      "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "ステータス",
       "host": "ホスト",
-      "registry": "レジストリ"
+      "registry": "レジストリ",
+      "uptime": "Uptime"
     },
     "status": {
       "running": "稼働中",

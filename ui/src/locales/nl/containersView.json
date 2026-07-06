@@ -21,6 +21,8 @@
       "alreadyUpToDate": "Al up-to-date: {name}",
       "queuedUpdateSingle": "Update in de wachtrij voor {count} container",
       "queuedUpdateMultiple": "Updates in de wachtrij voor {count} containers",
+      "queuedUpdateGroupSingle": "Queued update for {count} container in {group}",
+      "queuedUpdateGroupMultiple": "Queued updates for {count} containers in {group}",
       "countAlreadyUpToDateSingle": "{count} container al up-to-date",
       "countAlreadyUpToDateMultiple": "{count} containers al up-to-date"
     },
@@ -34,9 +36,11 @@
       "tag": "Tag",
       "version": "Versie",
       "update": "Update",
+      "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "Status",
       "host": "Host",
-      "registry": "Register"
+      "registry": "Register",
+      "uptime": "Uptime"
     },
     "status": {
       "running": "actief",

@@ -21,6 +21,8 @@
       "alreadyUpToDate": "Đã cập nhật rồi: {name}",
       "queuedUpdateSingle": "Đã xếp hàng cập nhật cho {count} container",
       "queuedUpdateMultiple": "Đã xếp hàng cập nhật cho {count} container",
+      "queuedUpdateGroupSingle": "Queued update for {count} container in {group}",
+      "queuedUpdateGroupMultiple": "Queued updates for {count} containers in {group}",
       "countAlreadyUpToDateSingle": "{count} container đã cập nhật rồi",
       "countAlreadyUpToDateMultiple": "{count} container đã cập nhật rồi"
     },
@@ -34,9 +36,11 @@
       "tag": "Tag",
       "version": "Phiên bản",
       "update": "Cập nhật",
+      "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "Trạng thái",
       "host": "Máy chủ",
-      "registry": "Registry"
+      "registry": "Registry",
+      "uptime": "Uptime"
     },
     "status": {
       "running": "đang chạy",

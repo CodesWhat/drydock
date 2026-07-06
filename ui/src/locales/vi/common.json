@@ -9,6 +9,8 @@
     "close": "Đóng",
     "retry": "Thử lại",
     "unknown": "không xác định",
+    "yes": "yes",
+    "no": "no",
     "errorSummary": {
       "rateLimitHit": "Registry rate limit hit",
       "accessDenied": "Registry access denied",

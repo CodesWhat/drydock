@@ -21,6 +21,8 @@
       "alreadyUpToDate": "Zaten güncel: {name}",
       "queuedUpdateSingle": "{count} konteyner için güncelleme sıraya alındı",
       "queuedUpdateMultiple": "{count} konteyner için güncellemeler sıraya alındı",
+      "queuedUpdateGroupSingle": "Queued update for {count} container in {group}",
+      "queuedUpdateGroupMultiple": "Queued updates for {count} containers in {group}",
       "countAlreadyUpToDateSingle": "{count} konteyner zaten güncel",
       "countAlreadyUpToDateMultiple": "{count} konteyner zaten güncel"
     },
@@ -34,9 +36,11 @@
       "tag": "Tag",
       "version": "Sürüm",
       "update": "Güncelle",
+      "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "Durum",
       "host": "Sunucu",
-      "registry": "Kayıt Defteri"
+      "registry": "Kayıt Defteri",
+      "uptime": "Uptime"
     },
     "status": {
       "running": "çalışıyor",

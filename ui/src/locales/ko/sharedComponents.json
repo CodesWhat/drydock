@@ -6,7 +6,8 @@
     },
     "copyableTag": {
       "copied": "복사됨!",
-      "clickToCopy": "클릭하여 복사"
+      "clickToCopy": "클릭하여 복사",
+      "failed": "Copy failed"
     },
     "dataCardGrid": {
       "selectItem": "{name} 선택"
@@ -65,7 +66,8 @@
       "loadFailed": "Failed to load notifications"
     },
     "serverFeatures": {
-      "loadFailed": "Failed to load server feature configuration"
+      "loadFailed": "Failed to load server feature configuration",
+      "actionsDisabledReason": "Container actions disabled by server configuration"
     }
   }
 }

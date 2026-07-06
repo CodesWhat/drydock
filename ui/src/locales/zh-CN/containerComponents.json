@@ -8,6 +8,8 @@
       "forceUpdate": "强制更新",
       "updateNow": "立即更新",
       "scanNow": "立即扫描",
+      "recheckNow": "Recheck for Updates",
+      "rechecking": "Rechecking…",
       "skipSnoozeGroup": "跳过和推迟",
       "skipThisUpdate": "跳过此次更新",
       "snooze1d": "推迟 1 天",
@@ -79,6 +81,8 @@
       "startButton": "启动",
       "restartButton": "重启",
       "scanButton": "扫描",
+      "recheckButton": "Recheck",
+      "ariaRecheckContainer": "Recheck container for updates",
       "blockedButton": "已阻止",
       "updateButton": "更新",
       "deleteButton": "删除"
@@ -100,6 +104,7 @@
       "volumes": "卷",
       "composeFiles": "Compose 文件",
       "version": "版本",
+      "softwareVersion": "Software Version",
       "currentLabel": "当前：",
       "latestLabel": "最新：",
       "digestLabel": "摘要：",
@@ -142,7 +147,9 @@
       "sbomNotAvailable": "SBOM 文档尚不可用。",
       "noPortsExposed": "未暴露端口",
       "notConfigured": "未配置",
-      "noVolumesMounted": "未挂载卷"
+      "noVolumesMounted": "未挂载卷",
+      "uptime": "Uptime",
+      "uptimeAriaLabel": "Container uptime"
     },
     "containerLogs": {
       "title": "容器日志",
@@ -172,6 +179,7 @@
       "startAction": "启动",
       "restartAction": "重启",
       "scanAction": "扫描",
+      "recheckAction": "Recheck for updates",
       "forceUpdateAction": "强制更新",
       "updateAction": "更新",
       "skipUpdateAction": "跳过此次更新",
@@ -222,6 +230,7 @@
       "startTooltip": "启动",
       "restartTooltip": "重启",
       "scanTooltip": "扫描",
+      "recheckTooltip": "Recheck for updates",
       "blockedForceUpdateTooltip": "已阻止 — 强制更新",
       "updateTooltip": "更新",
       "deleteTooltip": "删除",
@@ -413,7 +422,11 @@
       "cancelOperationNotFound": "Operation not found: {name}",
       "cancelFailed": "Failed to cancel update for {name}",
       "groupUpdateRejected": "Failed to update {name}: {message}",
-      "groupUpdateFailed": "Failed to update {name}"
+      "groupUpdateFailed": "Failed to update {name}",
+      "recheckComplete": "Recheck complete: {name}",
+      "recheckNotFound": "Container not found: {name}",
+      "recheckFailedTitle": "Recheck failed: {name}",
+      "recheckFailedDetail": "Recheck failed for {name}"
     },
     "policy": {
       "entryCountSingular": "{count} entry",
@@ -452,6 +465,7 @@
       }
     },
     "triggers": {
+      "agentLabel": "agent:",
       "toasts": {
         "ran": "Trigger ran: {key}",
         "ranSuccessfully": "Trigger {key} ran successfully",

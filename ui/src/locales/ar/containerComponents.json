@@ -8,6 +8,8 @@
       "forceUpdate": "فرض التحديث",
       "updateNow": "تحديث الآن",
       "scanNow": "فحص الآن",
+      "recheckNow": "Recheck for Updates",
+      "rechecking": "Rechecking…",
       "skipSnoozeGroup": "تخطي وتأجيل",
       "skipThisUpdate": "تخطي هذا التحديث",
       "snooze1d": "تأجيل يوماً",
@@ -79,6 +81,8 @@
       "startButton": "تشغيل",
       "restartButton": "إعادة التشغيل",
       "scanButton": "فحص",
+      "recheckButton": "Recheck",
+      "ariaRecheckContainer": "Recheck container for updates",
       "blockedButton": "محظور",
       "updateButton": "تحديث",
       "deleteButton": "حذف"
@@ -100,6 +104,7 @@
       "volumes": "وحدات التخزين",
       "composeFiles": "ملفات Compose",
       "version": "الإصدار",
+      "softwareVersion": "Software Version",
       "currentLabel": "الحالي:",
       "latestLabel": "الأحدث:",
       "digestLabel": "الملخص:",
@@ -142,7 +147,9 @@
       "sbomNotAvailable": "مستند SBOM غير متاح بعد.",
       "noPortsExposed": "لا توجد منافذ مكشوفة",
       "notConfigured": "غير مُعدّ",
-      "noVolumesMounted": "لم تُركَّب وحدات تخزين"
+      "noVolumesMounted": "لم تُركَّب وحدات تخزين",
+      "uptime": "Uptime",
+      "uptimeAriaLabel": "Container uptime"
     },
     "containerLogs": {
       "title": "سجلات الحاوية",
@@ -172,6 +179,7 @@
       "startAction": "تشغيل",
       "restartAction": "إعادة التشغيل",
       "scanAction": "فحص",
+      "recheckAction": "Recheck for updates",
       "forceUpdateAction": "فرض التحديث",
       "updateAction": "تحديث",
       "skipUpdateAction": "تخطي هذا التحديث",
@@ -222,6 +230,7 @@
       "startTooltip": "تشغيل",
       "restartTooltip": "إعادة التشغيل",
       "scanTooltip": "فحص",
+      "recheckTooltip": "Recheck for updates",
       "blockedForceUpdateTooltip": "محظور — فرض التحديث",
       "updateTooltip": "تحديث",
       "deleteTooltip": "حذف",
@@ -413,7 +422,11 @@
       "cancelOperationNotFound": "Operation not found: {name}",
       "cancelFailed": "Failed to cancel update for {name}",
       "groupUpdateRejected": "Failed to update {name}: {message}",
-      "groupUpdateFailed": "Failed to update {name}"
+      "groupUpdateFailed": "Failed to update {name}",
+      "recheckComplete": "Recheck complete: {name}",
+      "recheckNotFound": "Container not found: {name}",
+      "recheckFailedTitle": "Recheck failed: {name}",
+      "recheckFailedDetail": "Recheck failed for {name}"
     },
     "policy": {
       "entryCountSingular": "{count} entry",
@@ -452,6 +465,7 @@
       }
     },
     "triggers": {
+      "agentLabel": "agent:",
       "toasts": {
         "ran": "Trigger ran: {key}",
         "ranSuccessfully": "Trigger {key} ran successfully",

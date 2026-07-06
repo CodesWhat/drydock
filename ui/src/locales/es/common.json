@@ -9,24 +9,26 @@
     "close": "Cerrar",
     "retry": "Reintentar",
     "unknown": "desconocido",
+    "yes": "sí",
+    "no": "no",
     "errorSummary": {
       "rateLimitHit": "Registry rate limit hit",
       "accessDenied": "Registry access denied",
-      "imageNotFound": "Image not found",
+      "imageNotFound": "Imagen no encontrada",
       "authFailed": "Registry authentication failed",
       "unreachable": "Registry unreachable",
-      "cancelled": "Cancelled",
-      "securityBlocked": "Blocked by security scan",
+      "cancelled": "Cancelado",
+      "securityBlocked": "Actualización bloqueada por escaneo de seguridad",
       "signatureFailed": "Signature verification failed"
     },
     "display": {
       "custom": "Custom"
     },
     "timeAgo": {
-      "justNow": "just now"
+      "justNow": "ahora mismo"
     },
     "imageAge": {
-      "now": "now"
+      "now": "ahora"
     }
   }
 }

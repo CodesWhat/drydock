@@ -21,6 +21,8 @@
       "alreadyUpToDate": "{name} 已是最新",
       "queuedUpdateSingle": "已為 {count} 個容器排隊更新",
       "queuedUpdateMultiple": "已為 {count} 個容器排隊更新",
+      "queuedUpdateGroupSingle": "Queued update for {count} container in {group}",
+      "queuedUpdateGroupMultiple": "Queued updates for {count} containers in {group}",
       "countAlreadyUpToDateSingle": "{count} 個容器已是最新",
       "countAlreadyUpToDateMultiple": "{count} 個容器已是最新"
     },
@@ -34,9 +36,11 @@
       "tag": "Tag",
       "version": "版本",
       "update": "更新",
+      "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "狀態",
       "host": "主機",
-      "registry": "倉庫"
+      "registry": "倉庫",
+      "uptime": "Uptime"
     },
     "status": {
       "running": "執行中",

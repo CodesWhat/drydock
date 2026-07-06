@@ -9,6 +9,8 @@
     "close": "닫기",
     "retry": "재시도",
     "unknown": "알 수 없음",
+    "yes": "yes",
+    "no": "no",
     "errorSummary": {
       "rateLimitHit": "Registry rate limit hit",
       "accessDenied": "Registry access denied",
