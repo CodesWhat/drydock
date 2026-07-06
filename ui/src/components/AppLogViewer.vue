@@ -49,6 +49,7 @@ const lineElements = new Map<number, HTMLElement>();
 const logViewport = ref<HTMLElement | null>(null);
 const copySuccess = ref(false);
 const copyFailed = ref(false);
+let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
 
 function isNearEdge(element: HTMLElement): boolean {
   if (props.newestFirst) {
@@ -396,15 +397,13 @@ async function copyLogs(): Promise<void> {
   const succeeded = await writeToClipboard(text);
   copySuccess.value = succeeded;
   copyFailed.value = !succeeded;
-  if (succeeded) {
-    setTimeout(() => {
-      copySuccess.value = false;
-    }, 2000);
-  } else {
-    setTimeout(() => {
-      copyFailed.value = false;
-    }, 2000);
-  }
+
+  if (copyResetTimer) clearTimeout(copyResetTimer);
+  copyResetTimer = setTimeout(() => {
+    copySuccess.value = false;
+    copyFailed.value = false;
+    copyResetTimer = null;
+  }, 2000);
 }
 
 function toggleSortOrder(): void {

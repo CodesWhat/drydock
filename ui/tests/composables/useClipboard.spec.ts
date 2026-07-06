@@ -3,7 +3,7 @@ import { useClipboard } from '@/composables/useClipboard';
 describe('useClipboard', () => {
   let writeTextMock: ReturnType<typeof vi.fn>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers();
     writeTextMock = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, {
@@ -11,7 +11,7 @@ describe('useClipboard', () => {
     });
     // Flush any lingering state from a previous test
     const { copyToClipboard } = useClipboard();
-    copyToClipboard('__reset__');
+    await copyToClipboard('__reset__');
     vi.advanceTimersByTime(1500);
     writeTextMock.mockClear();
   });
