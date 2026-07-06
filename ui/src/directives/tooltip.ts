@@ -1,11 +1,11 @@
 import type { DirectiveBinding, ObjectDirective } from 'vue';
 
-interface TooltipBinding {
+export interface TooltipBinding {
   value: string;
   showDelay?: number;
 }
 
-type BindingValue = string | TooltipBinding;
+export type BindingValue = string | TooltipBinding;
 
 interface TooltipState {
   text: string;
@@ -15,8 +15,9 @@ interface TooltipState {
   originalTitle: string | null;
   fallbackTitle: string | null;
   titleSuppressed: boolean;
-  show: () => void;
-  hide: () => void;
+  pointerInside: boolean;
+  show: (event?: Event) => void;
+  hide: (event?: Event) => void;
 }
 
 // ── Shared singleton tooltip element ──────────────────────────────
@@ -115,8 +116,11 @@ function parse(binding: DirectiveBinding<BindingValue>): { text: string; delay: 
   return { text: value.value ?? '', delay: value.showDelay ?? 0 };
 }
 
-function makeShow(el: HTMLElement, state: TooltipState): () => void {
-  return () => {
+function makeShow(el: HTMLElement, state: TooltipState): (event?: Event) => void {
+  return (event?: Event) => {
+    if (event?.type === 'mouseenter') {
+      state.pointerInside = true;
+    }
     if (!state.text) return;
 
     if (state.timer != null) {
@@ -140,8 +144,11 @@ function makeShow(el: HTMLElement, state: TooltipState): () => void {
   };
 }
 
-function makeHide(_el: HTMLElement, state: TooltipState): () => void {
-  return () => {
+function makeHide(_el: HTMLElement, state: TooltipState): (event?: Event) => void {
+  return (event?: Event) => {
+    if (event?.type === 'mouseleave') {
+      state.pointerInside = false;
+    }
     if (state.timer != null) {
       clearTimeout(state.timer);
       state.timer = null;
@@ -167,6 +174,7 @@ function bind(el: HTMLElement, binding: DirectiveBinding<BindingValue>) {
     originalTitle,
     fallbackTitle: originalTitle ?? (text || null),
     titleSuppressed: false,
+    pointerInside: false,
     show: undefined as unknown as () => void,
     hide: undefined as unknown as () => void,
   };
@@ -214,6 +222,7 @@ export const tooltip: ObjectDirective<HTMLElement, BindingValue> = {
     }
 
     const { text, delay } = parse(binding);
+    const previousText = state.text;
     state.text = text;
     state.delay = delay;
     const currentTitle = el.getAttribute('title');
@@ -226,9 +235,19 @@ export const tooltip: ObjectDirective<HTMLElement, BindingValue> = {
       state.fallbackTitle = text || null;
     }
 
-    // Update live tooltip text if currently showing for this anchor
-    if (activeAnchor === el && sharedTip) {
-      sharedTip.textContent = text;
+    // Live-update a tooltip that's already showing for this anchor, or
+    // re-show immediately (bypassing any showDelay) when the pointer never
+    // left the anchor — e.g. a click-triggered title change like the copy
+    // button's "Copied" confirmation.
+    if (text && text !== previousText) {
+      if (activeAnchor === el && sharedTip) {
+        sharedTip.textContent = text;
+        positionTooltip(el, sharedTip);
+      } else if (state.pointerInside) {
+        state.titleSuppressed = true;
+        syncTitle(el, state);
+        showTooltip(el, state);
+      }
     }
 
     if (!text) {
