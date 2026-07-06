@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **"Click to copy" did nothing and logged a TypeError on deployments served over plain HTTP** (the common self-hosted LAN setup), because the browser Clipboard API only exists in secure contexts. Copying now falls back to the legacy execCommand technique when the API is missing or rejects, covers the log viewer's Copy button too, and shows a "Copy failed" state instead of failing silently when no copy mechanism works at all. (#472)
+- **An open tooltip whose text changed — like the copy button's "Copied" confirmation — stayed stuck on the old text until you moved the mouse away and back.** Clicking to copy hid the tooltip outright, so the "Copied"/"Copy failed" state never appeared until a re-hover. Tooltips now update their text in place while open, reposition themselves for the new content, and reappear immediately if the pointer never left. (#472)
 
 ## [1.5.1-rc.5] — 2026-07-02
 

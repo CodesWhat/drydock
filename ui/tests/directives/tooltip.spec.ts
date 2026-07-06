@@ -376,4 +376,92 @@ describe('tooltip directive', () => {
     um?.(el);
     vi.useFakeTimers();
   });
+
+  it('repositions the shared tip when its bound text changes while visible', () => {
+    const el = createAnchor();
+    const rectSpy = vi.spyOn(el, 'getBoundingClientRect');
+    mounted?.(el, binding('Short'));
+
+    el.dispatchEvent(new Event('mouseenter'));
+    const tip = getTooltipEl()!;
+    expect(tip.textContent).toBe('Short');
+    const callsAfterShow = rectSpy.mock.calls.length;
+
+    updated?.(el, binding('A much longer replacement label'));
+
+    expect(tip.textContent).toBe('A much longer replacement label');
+    // positionTooltip() re-measures the anchor to re-center the resized tip
+    expect(rectSpy.mock.calls.length).toBeGreaterThan(callsAfterShow);
+
+    rectSpy.mockRestore();
+    beforeUnmount?.(el);
+  });
+
+  it('re-shows immediately with the new text after a click hid the tooltip while the pointer stayed put', () => {
+    const el = createAnchor();
+    mounted?.(el, binding('Copy'));
+
+    el.dispatchEvent(new Event('mouseenter'));
+    expect(getTooltipEl()!.textContent).toBe('Copy');
+
+    el.dispatchEvent(new Event('mousedown'));
+    expect(getTooltipEl()).toBeNull();
+
+    updated?.(el, binding('Copied'));
+
+    expect(getTooltipEl()).not.toBeNull();
+    expect(getTooltipEl()!.textContent).toBe('Copied');
+
+    beforeUnmount?.(el);
+  });
+
+  it('does not resurrect the tooltip when its text changes after the pointer has left', () => {
+    const el = createAnchor();
+    mounted?.(el, binding('Copy'));
+
+    el.dispatchEvent(new Event('mouseenter'));
+    el.dispatchEvent(new Event('mouseleave'));
+    expect(getTooltipEl()).toBeNull();
+
+    updated?.(el, binding('Copied'));
+
+    expect(getTooltipEl()).toBeNull();
+
+    beforeUnmount?.(el);
+  });
+
+  it('does not reappear on a re-render that leaves the text unchanged', () => {
+    const el = createAnchor();
+    mounted?.(el, binding('Copy'));
+
+    el.dispatchEvent(new Event('mouseenter'));
+    el.dispatchEvent(new Event('mousedown'));
+    expect(getTooltipEl()).toBeNull();
+
+    updated?.(el, binding('Copy'));
+
+    expect(getTooltipEl()).toBeNull();
+
+    beforeUnmount?.(el);
+  });
+
+  it('bypasses the show delay when re-showing after a content change with the pointer still present', () => {
+    const el = createAnchor();
+    mounted?.(el, binding({ value: 'Copy', showDelay: 200 }));
+
+    el.dispatchEvent(new Event('mouseenter'));
+    vi.advanceTimersByTime(200);
+    expect(getTooltipEl()!.textContent).toBe('Copy');
+
+    el.dispatchEvent(new Event('mousedown'));
+    expect(getTooltipEl()).toBeNull();
+
+    updated?.(el, binding({ value: 'Copied', showDelay: 200 }));
+
+    // Reappears immediately — no timer advance needed, unlike the initial show.
+    expect(getTooltipEl()).not.toBeNull();
+    expect(getTooltipEl()!.textContent).toBe('Copied');
+
+    beforeUnmount?.(el);
+  });
 });
