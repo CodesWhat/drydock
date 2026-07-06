@@ -6,7 +6,8 @@
     },
     "copyableTag": {
       "copied": "已复制！",
-      "clickToCopy": "点击复制"
+      "clickToCopy": "点击复制",
+      "failed": "Copy failed"
     },
     "dataCardGrid": {
       "selectItem": "选择 {name}"
@@ -65,7 +66,8 @@
       "loadFailed": "Failed to load notifications"
     },
     "serverFeatures": {
-      "loadFailed": "Failed to load server feature configuration"
+      "loadFailed": "Failed to load server feature configuration",
+      "actionsDisabledReason": "Container actions disabled by server configuration"
     }
   }
 }

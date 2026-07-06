@@ -122,7 +122,7 @@
     },
     "profile": {
       "loading": "Cargando perfil",
-      "unknownUser": "Unknown User",
+      "unknownUser": "Usuario desconocido",
       "fields": {
         "username": "Usuario",
         "email": "Email",
@@ -136,8 +136,8 @@
       "loading": "Cargando registros...",
       "emptyMessage": "No se encontraron entradas de registro para los filtros actuales.",
       "status": {
-        "paused": "Paused",
-        "offline": "Offline"
+        "paused": "Pausado",
+        "offline": "Desconectado"
       },
       "toolbar": {
         "live": "En vivo",

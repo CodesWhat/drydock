@@ -8,6 +8,8 @@
       "forceUpdate": "Forzar actualización",
       "updateNow": "Actualizar ahora",
       "scanNow": "Escanear ahora",
+      "recheckNow": "Recheck for Updates",
+      "rechecking": "Rechecking…",
       "skipSnoozeGroup": "Omitir y posponer",
       "skipThisUpdate": "Omitir esta actualización",
       "snooze1d": "Posponer 1 d",
@@ -79,6 +81,8 @@
       "startButton": "Iniciar",
       "restartButton": "Reiniciar",
       "scanButton": "Escanear",
+      "recheckButton": "Recheck",
+      "ariaRecheckContainer": "Recheck container for updates",
       "blockedButton": "Bloqueado",
       "updateButton": "Actualizar",
       "deleteButton": "Eliminar"
@@ -100,6 +104,7 @@
       "volumes": "Volúmenes",
       "composeFiles": "Archivos compose",
       "version": "Versión",
+      "softwareVersion": "Software Version",
       "currentLabel": "Actual:",
       "latestLabel": "Última:",
       "digestLabel": "Digest:",
@@ -142,7 +147,9 @@
       "sbomNotAvailable": "El documento SBOM aún no está disponible.",
       "noPortsExposed": "No hay puertos expuestos",
       "notConfigured": "No configurado",
-      "noVolumesMounted": "No hay volúmenes montados"
+      "noVolumesMounted": "No hay volúmenes montados",
+      "uptime": "Uptime",
+      "uptimeAriaLabel": "Container uptime"
     },
     "containerLogs": {
       "title": "Registros del contenedor",
@@ -172,6 +179,7 @@
       "startAction": "Iniciar",
       "restartAction": "Reiniciar",
       "scanAction": "Escanear",
+      "recheckAction": "Recheck for updates",
       "forceUpdateAction": "Forzar actualización",
       "updateAction": "Actualizar",
       "skipUpdateAction": "Omitir esta actualización",
@@ -200,12 +208,12 @@
       "blockedTagWithCriticalsCVEs": "Bloqueado: {tag} ({count} CVEs críticos)",
       "manualUpdateOnly": "Solo actualización manual",
       "manualUpdateOnlyWithMessage": "Solo actualización manual — {message}",
-      "updateBtnTooltipDefault": "Update",
+      "updateBtnTooltipDefault": "Actualizar",
       "cancelButton": "Cancel",
       "blockedButton": "Blocked",
       "updateButton": "Update",
       "moreButton": "More",
-      "cancelUpdateTooltip": "Cancel update"
+      "cancelUpdateTooltip": "Cancelar actualización"
     },
     "groupHeader": {
       "ungrouped": "Sin agrupar",
@@ -222,6 +230,7 @@
       "startTooltip": "Iniciar",
       "restartTooltip": "Reiniciar",
       "scanTooltip": "Escanear",
+      "recheckTooltip": "Recheck for updates",
       "blockedForceUpdateTooltip": "Bloqueado - Forzar actualización",
       "updateTooltip": "Actualizar",
       "deleteTooltip": "Eliminar",
@@ -300,13 +309,13 @@
     },
     "updateDialog": {
       "title": "Actualizar contenedor",
-      "thisContainer": "this container",
+      "thisContainer": "este contenedor",
       "confirmTagChange": "¿Actualizar {name}? Esto cambiará el tag de imagen de :{currentTag} a :{newTag}{kind}.",
       "confirmDigestChange": "¿Actualizar {name}? Hay una build más reciente de :{currentTag} disponible (cambio de digest).",
       "confirmLatest": "¿Actualizar {name} ahora? Se aplicará la imagen más reciente detectada.",
       "updating": "Actualizando...",
       "update": "Actualizar",
-      "updateFailed": "Update failed"
+      "updateFailed": "Actualización fallida"
     },
     "floatingTag": {
       "badgeText": "tag flotante",
@@ -344,7 +353,7 @@
       "agentMismatch": "Agente distinto",
       "noTrigger": "Sin trigger",
       "selfUpdateUnavailable": "Self-update unavailable",
-      "liftsLabel": "Levanta:"
+      "liftsLabel": "Se libera el:"
     },
     "maturityBadge": {
       "new": "NUEVA",
@@ -355,9 +364,9 @@
     "confirmDialogs": {
       "cancel": "Cancel",
       "stop": {
-        "header": "Stop Container",
+        "header": "Detener contenedor",
         "message": "Stop {name}?",
-        "acceptLabel": "Stop",
+        "acceptLabel": "Detener",
         "successMessage": "Stopped: {name}"
       },
       "restart": {
@@ -413,7 +422,11 @@
       "cancelOperationNotFound": "Operation not found: {name}",
       "cancelFailed": "Failed to cancel update for {name}",
       "groupUpdateRejected": "Failed to update {name}: {message}",
-      "groupUpdateFailed": "Failed to update {name}"
+      "groupUpdateFailed": "Failed to update {name}",
+      "recheckComplete": "Recheck complete: {name}",
+      "recheckNotFound": "Container not found: {name}",
+      "recheckFailedTitle": "Recheck failed: {name}",
+      "recheckFailedDetail": "Recheck failed for {name}"
     },
     "policy": {
       "entryCountSingular": "{count} entry",
@@ -421,7 +434,7 @@
       "tooltips": {
         "snoozedUntil": "Updates snoozed until {date}",
         "snoozed": "Updates snoozed",
-        "maturityBlockedSingular": "Mature-only policy blocks updates younger than {days} day",
+        "maturityBlockedSingular": "La política de Mature-only bloquea actualizaciones menores de {days} día",
         "maturityBlockedPlural": "Mature-only policy blocks updates younger than {days} days",
         "maturityActiveSingular": "Mature-only policy active ({days} day minimum age)",
         "maturityActivePlural": "Mature-only policy active ({days} days minimum age)",
@@ -452,6 +465,7 @@
       }
     },
     "triggers": {
+      "agentLabel": "agent:",
       "toasts": {
         "ran": "Trigger ran: {key}",
         "ranSuccessfully": "Trigger {key} ran successfully",

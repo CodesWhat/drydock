@@ -21,6 +21,8 @@
       "alreadyUpToDate": "محدّث بالفعل: {name}",
       "queuedUpdateSingle": "تم وضع تحديث {count} حاوية في قائمة الانتظار",
       "queuedUpdateMultiple": "تم وضع تحديثات {count} حاوية في قائمة الانتظار",
+      "queuedUpdateGroupSingle": "Queued update for {count} container in {group}",
+      "queuedUpdateGroupMultiple": "Queued updates for {count} containers in {group}",
       "countAlreadyUpToDateSingle": "{count} حاوية محدّثة بالفعل",
       "countAlreadyUpToDateMultiple": "{count} حاويات محدّثة بالفعل"
     },
@@ -34,9 +36,11 @@
       "tag": "Tag",
       "version": "الإصدار",
       "update": "التحديث",
+      "updateTooltip": "Type of update available: major, minor, patch, or digest.",
       "status": "الحالة",
       "host": "المضيف",
-      "registry": "السجل"
+      "registry": "السجل",
+      "uptime": "Uptime"
     },
     "status": {
       "running": "تعمل",

@@ -9,6 +9,8 @@
     "close": "Fechar",
     "retry": "Tentar novamente",
     "unknown": "desconhecido",
+    "yes": "yes",
+    "no": "no",
     "errorSummary": {
       "rateLimitHit": "Registry rate limit hit",
       "accessDenied": "Registry access denied",

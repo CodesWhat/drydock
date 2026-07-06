@@ -106,6 +106,9 @@
         "hint": "Tippe, um Seiten, Container, Agents, Trigger, Watcher und Einstellungen zu suchen.",
         "prefixScopeHint": "Präfix-Bereich aktiv; verwende ",
         "typeHint": "Tippe",
+        "slashComma": ",",
+        "atOrConnector": ", or",
+        "hashSemicolon": "; use",
         "useTab": " zum Wechseln des Bereichs",
         "moveHint": "bewegen",
         "openHint": "öffnen",
@@ -167,7 +170,8 @@
       "legacyHashBody": "Your basic authentication uses a legacy password hash format. Legacy v1.3.9 formats are deprecated and will be removed in v1.6.0. Re-hash your admin password with {argon} (see the migration guide for the one-liner).",
       "legacyConfigBody": "Deprecated configuration aliases are in use. Rename {wudEnv} env vars to {ddEnv} and {wudLabel} Docker labels to {ddLabel}. {triggerEnv} variables should also migrate to {actionEnv} or {notificationEnv} (see the migration guide for the full rename map).",
       "legacyApiBody": "Unversioned API paths are deprecated. Update API clients to the {v1Prefix} prefix. Unversioned {oldPrefix} aliases are removed in v1.6.0.",
-      "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains supported for backward compatibility in v1.5.x. v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Remove the {envVar} override; the image now uses wget and curl is no longer bundled. Prefer the built-in image healthcheck or {bin} for custom intervals."
+      "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains supported for backward compatibility in v1.5.x. v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Remove the {envVar} override; the image now uses wget and curl is no longer bundled. Prefer the built-in image healthcheck or {bin} for custom intervals.",
+      "hiddenMore": "(+{count} more)"
     }
   }
 }

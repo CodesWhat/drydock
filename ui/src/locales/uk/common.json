@@ -9,6 +9,8 @@
     "close": "Закрити",
     "retry": "Повторити",
     "unknown": "невідомо",
+    "yes": "yes",
+    "no": "no",
     "errorSummary": {
       "rateLimitHit": "Registry rate limit hit",
       "accessDenied": "Registry access denied",

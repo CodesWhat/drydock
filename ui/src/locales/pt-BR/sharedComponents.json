@@ -6,7 +6,8 @@
     },
     "copyableTag": {
       "copied": "Copiado!",
-      "clickToCopy": "Clique para copiar"
+      "clickToCopy": "Clique para copiar",
+      "failed": "Copy failed"
     },
     "dataCardGrid": {
       "selectItem": "Selecionar {name}"
@@ -65,7 +66,8 @@
       "loadFailed": "Failed to load notifications"
     },
     "serverFeatures": {
-      "loadFailed": "Failed to load server feature configuration"
+      "loadFailed": "Failed to load server feature configuration",
+      "actionsDisabledReason": "Container actions disabled by server configuration"
     }
   }
 }

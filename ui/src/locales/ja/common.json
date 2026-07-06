@@ -9,6 +9,8 @@
     "close": "閉じる",
     "retry": "再試行",
     "unknown": "不明",
+    "yes": "yes",
+    "no": "no",
     "errorSummary": {
       "rateLimitHit": "Registry rate limit hit",
       "accessDenied": "Registry access denied",
