@@ -11,7 +11,13 @@
     },
     "dataFilterBar": {
       "filters": "Filters",
-      "toggleFilters": "Schakel tussen filters"
+      "toggleFilters": "Schakel tussen filters",
+      "viewMode": "Bekijk modus",
+      "viewModeLabel": "{label} weergave",
+      "viewModes": {
+        "table": "Table",
+        "cards": "Cards"
+      }
     },
     "dataTable": {
       "actions": "Acties",

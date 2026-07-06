@@ -90,6 +90,12 @@ const props = withDefaults(
      * auto-hide driven by `priority`/viewport width (a distinct, automatic mechanism).
      */
     hiddenColumnKeys?: string[];
+    /**
+     * Desktop view-mode toggle: force card rendering at >=640px container width. The
+     * automatic <640px reflow (`CARD_MODE_MAX_WIDTH`) always wins regardless of this prop —
+     * it only ever forces cards on at wider widths, never forces the table on below 640px.
+     */
+    preferCards?: boolean;
   }>(),
   {
     showActions: false,
@@ -102,6 +108,7 @@ const props = withDefaults(
     virtualMaxHeight: '70vh',
     isMobile: false,
     hiddenColumnKeys: () => [],
+    preferCards: false,
   },
 );
 
@@ -416,16 +423,18 @@ const hasHorizontalOverflow = computed(
     allResolvedColumns.value.reduce((acc, col) => acc + col.resolvedWidth, 0) > viewportWidth.value,
 );
 
-// -- Card mode (container width < 640px) --
+// -- Card mode (container width < 640px, or `preferCards` toggle at wider widths) --
 // This is a CONTAINER-width breakpoint (measured off scrollViewportRef via ResizeObserver),
 // deliberately separate from `props.isMobile` (a caller-supplied WINDOW-width (768px) signal
 // that only controls whether column-resize handles are shown). A narrow container can appear
 // inside a wide window (e.g. a split DetailPanel), and vice versa — do not merge these two
 // switches. While viewportWidth is 0 (pre-measurement) isCardMode stays false so the table
 // renders first, then self-corrects once onMounted's syncTableViewportWidth() measures it.
+// `preferCards` (desktop table/cards toggle) only ever forces cards ON at >=640px — the
+// automatic <640px reflow always wins regardless of the toggle's value.
 const CARD_MODE_MAX_WIDTH = 640;
 const isCardMode = computed(
-  () => viewportWidth.value > 0 && viewportWidth.value < CARD_MODE_MAX_WIDTH,
+  () => viewportWidth.value > 0 && (viewportWidth.value < CARD_MODE_MAX_WIDTH || props.preferCards),
 );
 
 function resolvedColumn(colKey: string): ResolvedDataTableColumn | undefined {
@@ -850,6 +859,12 @@ function isSelectedRow(row: Record<string, unknown>): boolean {
 }
 
 function rowBackgroundColor(row: Record<string, unknown>, localIndex: number): string {
+  // Card mode never zebra-stripes or elevates on selection — cards are flat
+  // `var(--dd-bg-card)`, selection is communicated purely via the border (see
+  // `.dd-data-table-card-selected` below). Table mode keeps zebra + elevated-on-select.
+  if (isCardMode.value) {
+    return 'var(--dd-bg-card)';
+  }
   if (isFullWidthRow(row)) {
     return 'transparent';
   }
@@ -1001,53 +1016,63 @@ function handleCardSortChange(event: Event): void {
             :style="{ height: `${topSpacerHeight}px` }" />
           <li v-for="(row, i) in visibleRows" :key="getRowKey(row, rowKey)">
             <template v-if="isFullWidthRow(row)">
-              <slot name="full-row" :row="row" :index="rowAbsoluteIndex(i)" />
+              <slot name="full-row" :row="row" :index="rowAbsoluteIndex(i)" :card-mode="true" />
             </template>
             <div v-else
                  data-test="dd-card"
-                 class="dd-data-table-card dd-rounded border dd-border-strong p-4 flex flex-col gap-3 transition-colors"
+                 class="dd-data-table-card dd-rounded flex flex-col transition-colors"
                  :class="[
                    isInteractiveRow(row) ? 'cursor-pointer min-h-[48px] dd-data-table-card-hoverable' : '',
                    isInteractiveRow(row) && isSelectedRow(row) ? 'dd-data-table-card-selected' : '',
                    rowClass?.(row) ?? '',
+                   $slots.card ? 'overflow-hidden' : 'p-4 gap-3',
                  ]"
                  :style="{ '--dd-data-table-row-bg': rowBackgroundColor(row, i) }"
                  :tabindex="isInteractiveRow(row) ? 0 : undefined"
                  @keydown="isInteractiveRow(row) && handleRowKeydown($event, row)"
                  @click="isInteractiveRow(row) && emit('row-click', row)">
-              <div class="flex items-center gap-2 min-w-0" data-test="dd-card-title-row">
-                <template v-for="iconCol in cardIconColumns" :key="iconCol.key">
-                  <slot :name="'cell-' + iconCol.key" :row="row" :value="row[iconCol.key]">
-                    {{ row[iconCol.key] }}
-                  </slot>
-                </template>
-                <div v-if="cardTitleColumn" data-test="dd-card-title" class="text-sm font-semibold dd-text truncate min-w-0 flex-1">
-                  <slot :name="'cell-' + cardTitleColumn.key" :row="row" :value="row[cardTitleColumn.key]">
-                    {{ row[cardTitleColumn.key] }}
-                  </slot>
-                </div>
-              </div>
-              <div v-if="cardSubtitleColumn" data-test="dd-card-subtitle" class="text-2xs-plus dd-text-muted -mt-2">
-                <slot :name="'cell-' + cardSubtitleColumn.key" :row="row" :value="row[cardSubtitleColumn.key]">
-                  {{ row[cardSubtitleColumn.key] }}
-                </slot>
-              </div>
-              <dl v-if="cardBodyColumns.length > 0" data-test="dd-card-body" class="flex flex-col gap-2">
-                <div v-for="col in cardBodyColumns" :key="col.key"
-                     class="field flex items-baseline justify-between gap-3">
-                  <dt class="dd-text-label dd-text-muted shrink-0">{{ col.label }}</dt>
-                  <dd class="text-2xs-plus dd-text text-end" :class="cellContentClass(col)">
-                    <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
-                      {{ row[col.key] }}
+              <template v-if="$slots.card">
+                <slot
+                  name="card"
+                  :row="row"
+                  :index="rowAbsoluteIndex(i)"
+                  :selected="isInteractiveRow(row) && isSelectedRow(row)" />
+              </template>
+              <template v-else>
+                <div class="flex items-center gap-2 min-w-0" data-test="dd-card-title-row">
+                  <template v-for="iconCol in cardIconColumns" :key="iconCol.key">
+                    <slot :name="'cell-' + iconCol.key" :row="row" :value="row[iconCol.key]" :card-mode="true">
+                      {{ row[iconCol.key] }}
                     </slot>
-                  </dd>
+                  </template>
+                  <div v-if="cardTitleColumn" data-test="dd-card-title" class="text-sm font-semibold dd-text truncate min-w-0 flex-1">
+                    <slot :name="'cell-' + cardTitleColumn.key" :row="row" :value="row[cardTitleColumn.key]" :card-mode="true">
+                      {{ row[cardTitleColumn.key] }}
+                    </slot>
+                  </div>
                 </div>
-              </dl>
-              <div v-if="showActions"
-                   data-test="dd-card-actions"
-                   class="flex items-center justify-end gap-2 pt-2 mt-1 border-t dd-border min-h-[44px]">
-                <slot name="actions" :row="row" />
-              </div>
+                <div v-if="cardSubtitleColumn" data-test="dd-card-subtitle" class="text-2xs-plus dd-text-muted -mt-2">
+                  <slot :name="'cell-' + cardSubtitleColumn.key" :row="row" :value="row[cardSubtitleColumn.key]" :card-mode="true">
+                    {{ row[cardSubtitleColumn.key] }}
+                  </slot>
+                </div>
+                <dl v-if="cardBodyColumns.length > 0" data-test="dd-card-body" class="flex flex-col gap-2">
+                  <div v-for="col in cardBodyColumns" :key="col.key"
+                       class="field flex items-baseline justify-between gap-3">
+                    <dt class="dd-text-label dd-text-muted shrink-0">{{ col.label }}</dt>
+                    <dd class="text-2xs-plus dd-text" :class="cellContentClass(col)">
+                      <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]" :card-mode="true">
+                        {{ row[col.key] }}
+                      </slot>
+                    </dd>
+                  </div>
+                </dl>
+                <div v-if="showActions"
+                     data-test="dd-card-actions"
+                     class="flex items-center justify-end gap-2 pt-2 mt-1 border-t dd-border min-h-[44px]">
+                  <slot name="actions" :row="row" :card-mode="true" />
+                </div>
+              </template>
             </div>
           </li>
           <li
@@ -1151,7 +1176,7 @@ function handleCardSortChange(event: Event): void {
               @click="isInteractiveRow(row) && emit('row-click', row)">
             <template v-if="isFullWidthRow(row)">
               <td :colspan="totalColumnCount" class="dd-data-table-cell p-0 border-0">
-                <slot name="full-row" :row="row" :index="rowAbsoluteIndex(i)" />
+                <slot name="full-row" :row="row" :index="rowAbsoluteIndex(i)" :card-mode="false" />
               </td>
             </template>
             <template v-else>
@@ -1166,12 +1191,12 @@ function handleCardSortChange(event: Event): void {
                   ]"
                   :style="pinnedInsetStyle(col.key)">
                 <div v-if="!col.icon" :class="cellContentClass(col)">
-                  <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
+                  <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]" :card-mode="false">
                     {{ row[col.key] }}
                   </slot>
                 </div>
                 <template v-else>
-                  <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]">
+                  <slot :name="'cell-' + col.key" :row="row" :value="row[col.key]" :card-mode="false">
                     {{ row[col.key] }}
                   </slot>
                 </template>
@@ -1182,7 +1207,7 @@ function handleCardSortChange(event: Event): void {
                 class="dd-data-table-cell dd-data-table-actions-cell px-3 py-3 text-right whitespace-nowrap relative"
                 :class="hasHorizontalOverflow ? '' : ['sticky', 'end-0', 'z-10']"
               >
-                <slot name="actions" :row="row" />
+                <slot name="actions" :row="row" :card-mode="false" />
               </td>
             </template>
           </tr>
@@ -1247,6 +1272,7 @@ tbody tr.dd-data-table-row-selected > td.dd-data-table-cell:last-child {
    above, so :hover can override the inline zebra/selected background. */
 .dd-data-table-card {
   background-color: var(--dd-data-table-row-bg);
+  border: 1.5px solid transparent;
   transition:
     background-color var(--dd-duration-enter),
     box-shadow var(--dd-duration-enter),

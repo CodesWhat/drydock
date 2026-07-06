@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils';
-import { nextTick } from 'vue';
+import { h, nextTick } from 'vue';
 import DataTable from '@/components/DataTable.vue';
 import { useColumnVisibility } from '@/composables/useColumnVisibility';
 
@@ -1445,8 +1445,20 @@ describe('DataTable', () => {
         expect(w.find('ul[role="list"]').exists()).toBe(false);
       });
 
+      it('forces card rendering at wide widths when preferCards is true', async () => {
+        const w = await mountAtWidth(800, { preferCards: true });
+        expect(w.find('table').exists()).toBe(false);
+        expect(w.find('ul[role="list"]').exists()).toBe(true);
+      });
+
       it('switches to card mode when 0 < viewport width < 640', async () => {
         const w = await mountAtWidth(500);
+        expect(w.find('table').exists()).toBe(false);
+        expect(w.find('ul[role="list"]').exists()).toBe(true);
+      });
+
+      it('still renders cards below 640px when preferCards is false', async () => {
+        const w = await mountAtWidth(500, { preferCards: false });
         expect(w.find('table').exists()).toBe(false);
         expect(w.find('ul[role="list"]').exists()).toBe(true);
       });
@@ -1663,6 +1675,82 @@ describe('DataTable', () => {
       });
     });
 
+    describe('card slot override', () => {
+      it('renders custom card content inside the same interactive wrapper', async () => {
+        const w = await mountAtWidth(
+          800,
+          { preferCards: true, selectedKey: '1' },
+          {
+            card: ({ row, index, selected }: any) =>
+              h(
+                'section',
+                {
+                  class: 'custom-card',
+                  'data-index': String(index),
+                  'data-selected': String(selected),
+                },
+                `Custom ${row.name}`,
+              ),
+          },
+        );
+
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        expect(firstCard.find('.custom-card').exists()).toBe(true);
+        expect(firstCard.find('.custom-card').attributes('data-index')).toBe('0');
+        expect(firstCard.find('.custom-card').attributes('data-selected')).toBe('true');
+        expect(firstCard.find('[data-test="dd-card-title-row"]').exists()).toBe(false);
+        expect(firstCard.find('[data-test="dd-card-body"]').exists()).toBe(false);
+        expect(firstCard.classes()).toContain('dd-data-table-card-selected');
+        expect(firstCard.attributes('tabindex')).toBe('0');
+
+        await firstCard.trigger('click');
+        await firstCard.trigger('keydown', { key: 'Enter' });
+
+        expect(w.emitted('row-click')?.[0]).toEqual([rows[0]]);
+        expect(w.emitted('row-click')?.[1]).toEqual([rows[0]]);
+      });
+    });
+
+    describe('slot cardMode prop', () => {
+      it('passes false from table cell/actions slots and true from card cell/actions slots', async () => {
+        const tableCell = vi.fn(({ cardMode }: any) => `table-cell-${String(cardMode)}`);
+        const tableActions = vi.fn(({ cardMode }: any) => `table-actions-${String(cardMode)}`);
+        await mountAtWidth(
+          800,
+          { showActions: true },
+          { 'cell-name': tableCell, actions: tableActions },
+        );
+
+        expect(tableCell).toHaveBeenCalled();
+        expect(tableActions).toHaveBeenCalled();
+        expect(tableCell.mock.calls.every(([slotProps]) => slotProps.cardMode === false)).toBe(
+          true,
+        );
+        expect(tableActions.mock.calls.every(([slotProps]) => slotProps.cardMode === false)).toBe(
+          true,
+        );
+
+        const cardCell = vi.fn(({ cardMode }: any) => `card-cell-${String(cardMode)}`);
+        const cardActions = vi.fn(({ cardMode }: any) => `card-actions-${String(cardMode)}`);
+        const cardWrapper = await mountAtWidth(
+          500,
+          { showActions: true },
+          { 'cell-name': cardCell, actions: cardActions },
+        );
+        cardCell.mockClear();
+        cardActions.mockClear();
+        await cardWrapper.setProps({ selectedKey: '1' });
+        await nextTick();
+
+        expect(cardCell).toHaveBeenCalled();
+        expect(cardActions).toHaveBeenCalled();
+        expect(cardCell.mock.calls.every(([slotProps]) => slotProps.cardMode === true)).toBe(true);
+        expect(cardActions.mock.calls.every(([slotProps]) => slotProps.cardMode === true)).toBe(
+          true,
+        );
+      });
+    });
+
     describe('interactivity + selection', () => {
       it('gives interactive cards a tabindex and emits row-click on click', async () => {
         const w = await mountAtWidth(500);
@@ -1718,6 +1806,41 @@ describe('DataTable', () => {
         const cards = w.findAll('[data-test="dd-card"]');
         expect(cards[1].classes()).toContain('dd-data-table-card-selected');
         expect(cards[0].classes()).not.toContain('dd-data-table-card-selected');
+      });
+    });
+
+    describe('card chrome', () => {
+      function dataTableStyleText(): string {
+        return Array.from(document.querySelectorAll('style'))
+          .map((style) => style.textContent ?? '')
+          .join('\n');
+      }
+
+      it('uses transparent card borders until selection switches the border to primary', async () => {
+        const w = await mountAtWidth(500, { selectedKey: '2' });
+        const cards = w.findAll('[data-test="dd-card"]');
+
+        expect(cards[0].classes()).not.toContain('border');
+        expect(cards[0].classes()).not.toContain('dd-border-strong');
+        expect(cards[0].classes()).not.toContain('dd-data-table-card-selected');
+        expect(cards[1].classes()).toContain('dd-data-table-card-selected');
+
+        const styleText = dataTableStyleText();
+        expect(styleText).toContain('border: 1.5px solid transparent');
+        expect(styleText).toContain('border-color: var(--dd-primary)');
+      });
+
+      it('uses the same flat card background for every row instead of zebra striping', async () => {
+        const w = await mountAtWidth(500);
+        const cardStyles = w
+          .findAll('[data-test="dd-card"]')
+          .map((card) => card.attributes('style') ?? '');
+
+        expect(cardStyles).toHaveLength(rows.length);
+        expect(
+          cardStyles.every((style) => style.includes('--dd-data-table-row-bg: var(--dd-bg-card)')),
+        ).toBe(true);
+        expect(cardStyles.some((style) => style.includes('--dd-bg-inset'))).toBe(false);
       });
     });
 

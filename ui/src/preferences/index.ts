@@ -4,4 +4,5 @@ export { mergeDefaults, migrate, migrateFromLegacyKeys } from './migrate';
 export { DEFAULTS } from './schema';
 export { flushPreferences, preferences, resetPreferences } from './store';
 export { usePreference } from './usePreference';
-export { isValidLocale, isValidScale } from './validators';
+export { useViewMode } from './useViewMode';
+export { isValidLocale, isValidScale, isViewMode } from './validators';

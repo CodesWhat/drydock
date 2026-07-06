@@ -1,5 +1,5 @@
 import { mergeDefaults, migrate, migrateFromLegacyKeys } from '@/preferences/migrate';
-import { DEFAULTS } from '@/preferences/schema';
+import { CURRENT_SCHEMA_VERSION, DEFAULTS } from '@/preferences/schema';
 
 const LEGACY_KEYS = [
   'drydock-theme-family-v1',
@@ -261,9 +261,10 @@ describe('preferences migration', () => {
       expect(result.locale.language).toBe(DEFAULTS.locale.language);
     });
 
-    it('should drop unknown container fields (viewMode was removed in v8)', () => {
-      const result = migrate({ schemaVersion: 1, containers: { viewMode: 'timeline' } });
-      expect((result.containers as any).viewMode).toBeUndefined();
+    it('should add the container view mode preference with a table default', () => {
+      const result = migrate({ schemaVersion: 1, containers: { tableActions: 'buttons' } });
+      expect(result.containers.viewMode).toBe('table');
+      expect(result.containers.tableActions).toBe('buttons');
     });
 
     it('should replace invalid tableActions with default', () => {
@@ -421,11 +422,11 @@ describe('preferences migration', () => {
       expect(result.containers.tableActions).toBe('buttons');
     });
 
-    it('should add the shared log sort preference when migrating older schema data', () => {
-      const result = migrate({ schemaVersion: 1, views: { triggers: { mode: 'cards' } } });
+    it('should add the shared log sort preference and default trigger mode when migrating older schema data', () => {
+      const result = migrate({ schemaVersion: 1, views: { triggers: {} } });
 
       expect(result.views.logs.newestFirst).toBe(DEFAULTS.views.logs.newestFirst);
-      expect(result.views.triggers).toEqual({});
+      expect(result.views.triggers.mode).toBe('table');
     });
 
     it('should preserve the shared log sort preference in current schema data', () => {
@@ -963,35 +964,55 @@ describe('preferences migration', () => {
     });
   });
 
-  describe('v7 -> v8 migration', () => {
-    it('should drop viewMode from containers and mode from views, preserving sort fields', () => {
+  describe('v8 -> v9 migration', () => {
+    it('should bump schema v8 preferences to v9 and backfill table modes', () => {
       const result = migrate({
-        schemaVersion: 7,
-        containers: { viewMode: 'cards' },
+        schemaVersion: 8,
+        containers: { tableActions: 'buttons' },
         views: {
-          security: { mode: 'list', sortField: 'name', sortAsc: true },
-          audit: { mode: 'cards' },
+          agents: { sortKey: 'status', sortAsc: false, hiddenColumns: ['status'] },
+          notifications: {},
+          security: { sortField: 'name', sortAsc: true, hiddenColumns: ['critical'] },
+          triggers: {},
         },
       });
-      expect(result.schemaVersion).toBe(8);
-      expect((result.containers as any).viewMode).toBeUndefined();
-      expect((result.views.security as any).mode).toBeUndefined();
+      expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      expect(result.schemaVersion).toBe(9);
+      expect(result.containers.viewMode).toBe('table');
+      expect(result.views.agents.mode).toBe('table');
+      expect(result.views.notifications.mode).toBe('table');
+      expect(result.views.security.mode).toBe('table');
+      expect(result.views.triggers.mode).toBe('table');
+      expect(result.containers.tableActions).toBe('buttons');
+      expect(result.views.agents.sortKey).toBe('status');
+      expect(result.views.agents.sortAsc).toBe(false);
+      expect(result.views.agents.hiddenColumns).toEqual(['status']);
       expect(result.views.security.sortField).toBe('name');
       expect(result.views.security.sortAsc).toBe(true);
-      expect(result.views.audit).toEqual({ hiddenColumns: [] });
+      expect(result.views.security.hiddenColumns).toEqual(['critical']);
     });
 
-    it('should be idempotent: running migrate on a v8 result leaves schemaVersion 8 and no mode fields', () => {
+    it('should upgrade a stored v8 payload with no mode keys without an explicit transform block', () => {
       const first = migrate({
-        schemaVersion: 7,
-        containers: { viewMode: 'cards' },
-        views: { security: { mode: 'list', sortField: 'name', sortAsc: true } },
+        schemaVersion: 8,
+        containers: { groupByStack: true },
+        views: {
+          agents: { sortKey: 'lastSeen', sortAsc: false },
+          security: { sortField: 'high', sortAsc: false },
+        },
       });
-      expect(first.schemaVersion).toBe(8);
       const second = migrate(first as unknown as Record<string, unknown>);
-      expect(second.schemaVersion).toBe(8);
-      expect((second.containers as any).viewMode).toBeUndefined();
-      expect((second.views.security as any).mode).toBeUndefined();
+
+      expect(first.schemaVersion).toBe(9);
+      expect(first.containers.viewMode).toBe('table');
+      expect(first.views.agents.mode).toBe('table');
+      expect(first.views.notifications.mode).toBe('table');
+      expect(first.views.security.mode).toBe('table');
+      expect(first.views.triggers.mode).toBe('table');
+      expect(first.containers.groupByStack).toBe(true);
+      expect(first.views.agents.sortKey).toBe('lastSeen');
+      expect(first.views.security.sortField).toBe('high');
+      expect(second).toEqual(first);
     });
   });
 

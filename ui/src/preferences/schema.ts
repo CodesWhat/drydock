@@ -2,6 +2,9 @@ import { DEFAULT_LOCALE, type SupportedLocale } from '../i18n/locales';
 import type { ThemeFamily } from '../theme/palettes';
 import type { RadiusPresetId } from './radius';
 
+/** Table/cards view-mode switch. `'list'` (the old 3-way `DataListAccordion` mode) is gone for good. */
+export type ViewMode = 'table' | 'cards';
+
 export const DASHBOARD_LAYOUT_BREAKPOINTS = ['xxs', 'xs', 'sm', 'md', 'lg'] as const;
 export type DashboardLayoutBreakpoint = (typeof DASHBOARD_LAYOUT_BREAKPOINTS)[number];
 
@@ -26,6 +29,7 @@ export interface PreferencesSchema {
   appearance: { radius: RadiusPresetId; fontSize: number };
   layout: { sidebarCollapsed: boolean };
   containers: {
+    viewMode: ViewMode;
     tableActions: 'icons' | 'buttons';
     groupByStack: boolean;
     sort: { key: string; asc: boolean };
@@ -50,19 +54,19 @@ export interface PreferencesSchema {
   };
   views: {
     logs: { newestFirst: boolean };
-    security: { sortField: string; sortAsc: boolean; hiddenColumns: string[] };
+    security: { mode: ViewMode; sortField: string; sortAsc: boolean; hiddenColumns: string[] };
     audit: { hiddenColumns: string[] };
-    agents: { sortKey: string; sortAsc: boolean; hiddenColumns: string[] };
-    triggers: Record<string, never>;
+    agents: { mode: ViewMode; sortKey: string; sortAsc: boolean; hiddenColumns: string[] };
+    triggers: { mode: ViewMode };
     watchers: { hiddenColumns: string[] };
     servers: { hiddenColumns: string[] };
     registries: Record<string, never>;
-    notifications: Record<string, never>;
+    notifications: { mode: ViewMode };
     auth: Record<string, never>;
   };
 }
 
-export const CURRENT_SCHEMA_VERSION = 8;
+export const CURRENT_SCHEMA_VERSION = 9;
 
 /**
  * Table-mode column keys for the five views that share the `DataTableColumnPicker`
@@ -112,6 +116,7 @@ export const DEFAULTS: PreferencesSchema = {
   appearance: { radius: 'sharp', fontSize: 1 },
   layout: { sidebarCollapsed: false },
   containers: {
+    viewMode: 'table',
     tableActions: 'icons',
     groupByStack: false,
     sort: { key: 'name', asc: true },
@@ -152,14 +157,14 @@ export const DEFAULTS: PreferencesSchema = {
   },
   views: {
     logs: { newestFirst: false },
-    security: { sortField: 'critical', sortAsc: false, hiddenColumns: [] },
+    security: { mode: 'table', sortField: 'critical', sortAsc: false, hiddenColumns: [] },
     audit: { hiddenColumns: [] },
-    agents: { sortKey: 'name', sortAsc: true, hiddenColumns: [] },
-    triggers: {},
+    agents: { mode: 'table', sortKey: 'name', sortAsc: true, hiddenColumns: [] },
+    triggers: { mode: 'table' },
     watchers: { hiddenColumns: [] },
     servers: { hiddenColumns: [] },
     registries: {},
-    notifications: {},
+    notifications: { mode: 'table' },
     auth: {},
   },
 };

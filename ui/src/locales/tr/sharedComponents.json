@@ -11,7 +11,13 @@
     },
     "dataFilterBar": {
       "filters": "Filtreler",
-      "toggleFilters": "Filtreleri değiştir"
+      "toggleFilters": "Filtreleri değiştir",
+      "viewMode": "Görünüm modu",
+      "viewModeLabel": "{label} görünümü",
+      "viewModes": {
+        "table": "Table",
+        "cards": "Cards"
+      }
     },
     "dataTable": {
       "actions": "Eylemler",

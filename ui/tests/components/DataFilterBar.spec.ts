@@ -120,6 +120,59 @@ describe('DataFilterBar', () => {
     });
   });
 
+  describe('view mode buttons', () => {
+    function viewModeButtons(wrapper: ReturnType<typeof factory>) {
+      return wrapper
+        .findAll('button')
+        .filter((button) => button.attributes('aria-label')?.endsWith('view'));
+    }
+
+    it('renders no view mode switcher when modelValue is undefined', () => {
+      const w = factory();
+      expect(viewModeButtons(w)).toHaveLength(0);
+      expect(w.find('[role="group"][aria-label="View mode"]').exists()).toBe(false);
+    });
+
+    it('renders default table/cards view mode buttons when modelValue is provided', () => {
+      const w = factory({ modelValue: 'table' });
+      const buttons = viewModeButtons(w);
+
+      expect(buttons).toHaveLength(2);
+      expect(buttons[0].attributes('aria-label')).toBe('Table view');
+      expect(buttons[0].attributes('aria-pressed')).toBe('true');
+      expect(buttons[0].attributes('data-icon')).toBe('table');
+      expect(buttons[1].attributes('aria-label')).toBe('Cards view');
+      expect(buttons[1].attributes('aria-pressed')).toBe('false');
+      expect(buttons[1].attributes('data-icon')).toBe('grid');
+    });
+
+    it('renders custom view modes when provided', () => {
+      const customModes = [
+        { id: 'table', icon: 'table' },
+        { id: 'cards', icon: 'grid' },
+      ];
+      const w = factory({ modelValue: 'cards', viewModes: customModes });
+      const buttons = viewModeButtons(w);
+
+      expect(buttons).toHaveLength(2);
+      expect(buttons[0].attributes('aria-label')).toBe('Table view');
+      expect(buttons[1].attributes('aria-label')).toBe('Cards view');
+      expect(buttons[1].attributes('aria-pressed')).toBe('true');
+    });
+
+    it('emits update:modelValue when a view mode is clicked', async () => {
+      const w = factory({ modelValue: 'table' });
+      const cardBtn = viewModeButtons(w).find(
+        (button) => button.attributes('aria-label') === 'Cards view',
+      );
+      expect(cardBtn).toBeDefined();
+
+      await cardBtn?.trigger('click');
+
+      expect(w.emitted('update:modelValue')?.[0]).toEqual(['cards']);
+    });
+  });
+
   describe('accessibility', () => {
     it('sets aria-expanded on the filter toggle button', () => {
       const w = factory({ showFilters: false });
@@ -131,6 +184,18 @@ describe('DataFilterBar', () => {
       const w = factory({ showFilters: true });
       const filterBtn = w.find('button[aria-label="Toggle filters"]');
       expect(filterBtn.attributes('aria-expanded')).toBe('true');
+    });
+
+    it('sets aria-label on each view mode button', () => {
+      const w = factory({ modelValue: 'table' });
+      const viewBtns = w
+        .findAll('button')
+        .filter((button) => button.attributes('aria-label')?.endsWith('view'));
+
+      expect(viewBtns.map((button) => button.attributes('aria-label'))).toEqual([
+        'Table view',
+        'Cards view',
+      ]);
     });
   });
 
@@ -188,6 +253,23 @@ describe('DataFilterBar', () => {
       expect(tip).not.toBeNull();
       expect(tip!.textContent).toBe('Filters');
       filterControl?.dispatchEvent(new MouseEvent('mouseleave', { bubbles: false }));
+      expect(getTooltipPopup()).toBeNull();
+      w.unmount();
+    });
+
+    it('shows tooltip for view mode icon buttons', async () => {
+      const w = factoryWithTooltip({ modelValue: 'table' });
+      const cardsButton = w
+        .findAll('button')
+        .find((button) => button.attributes('aria-label') === 'Cards view');
+      expect(cardsButton).toBeDefined();
+
+      await cardsButton?.trigger('mouseenter');
+      const tip = getTooltipPopup();
+      expect(tip).not.toBeNull();
+      expect(tip!.textContent).toBe('Cards view');
+
+      await cardsButton?.trigger('mouseleave');
       expect(getTooltipPopup()).toBeNull();
       w.unmount();
     });

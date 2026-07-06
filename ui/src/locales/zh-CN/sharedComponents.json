@@ -11,7 +11,13 @@
     },
     "dataFilterBar": {
       "filters": "筛选",
-      "toggleFilters": "切换筛选"
+      "toggleFilters": "切换筛选",
+      "viewMode": "视图模式",
+      "viewModeLabel": "{label} 视图",
+      "viewModes": {
+        "table": "表",
+        "cards": "卡片"
+      }
     },
     "dataTable": {
       "actions": "操作",

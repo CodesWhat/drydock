@@ -11,7 +11,13 @@
     },
     "dataFilterBar": {
       "filters": "Фільтри",
-      "toggleFilters": "Показати/приховати фільтри"
+      "toggleFilters": "Показати/приховати фільтри",
+      "viewMode": "Вигляд",
+      "viewModeLabel": "Вигляд {label}",
+      "viewModes": {
+        "table": "Table",
+        "cards": "Cards"
+      }
     },
     "dataTable": {
       "actions": "Дії",

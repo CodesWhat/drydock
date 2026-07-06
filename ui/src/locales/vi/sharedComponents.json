@@ -11,7 +11,13 @@
     },
     "dataFilterBar": {
       "filters": "Bộ lọc",
-      "toggleFilters": "Bật/tắt bộ lọc"
+      "toggleFilters": "Bật/tắt bộ lọc",
+      "viewMode": "Chế độ xem",
+      "viewModeLabel": "Chế độ xem {label}",
+      "viewModes": {
+        "table": "Table",
+        "cards": "Cards"
+      }
     },
     "dataTable": {
       "actions": "Thao tác",

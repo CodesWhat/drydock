@@ -11,7 +11,13 @@
     },
     "dataFilterBar": {
       "filters": "필터",
-      "toggleFilters": "필터 표시/숨기기"
+      "toggleFilters": "필터 표시/숨기기",
+      "viewMode": "보기 모드",
+      "viewModeLabel": "{label} 보기",
+      "viewModes": {
+        "table": "Table",
+        "cards": "Cards"
+      }
     },
     "dataTable": {
       "actions": "작업",
