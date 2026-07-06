@@ -17,14 +17,9 @@ function loadRenovateConfig(): RenovateConfig {
   return JSON.parse(readFileSync(renovatePath, 'utf8')) as RenovateConfig;
 }
 
-test('patch automerge is scoped to GitHub Actions updates only', () => {
+test('renovate never automerges: it scans and feeds the dependency dashboard only', () => {
   const config = loadRenovateConfig();
-  const patchAutomergeRules = (config.packageRules ?? []).filter(
-    (rule) => rule.automerge === true && rule.matchUpdateTypes?.includes('patch'),
-  );
+  const automergeRules = (config.packageRules ?? []).filter((rule) => rule.automerge === true);
 
-  expect(patchAutomergeRules).not.toStrictEqual([]);
-  for (const rule of patchAutomergeRules) {
-    expect(rule.matchManagers).toStrictEqual(['github-actions']);
-  }
+  expect(automergeRules).toStrictEqual([]);
 });
