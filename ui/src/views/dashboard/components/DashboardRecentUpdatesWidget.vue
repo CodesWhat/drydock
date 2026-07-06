@@ -402,14 +402,14 @@ function updateKindInitial(kind?: string): string {
               </CopyableTag>
             </div>
             <div class="flex sm:hidden flex-col items-center gap-0.5 min-w-0 max-w-full">
-              <CopyableTag :tag="row.oldVer" class="text-3xs dd-text-secondary truncate max-w-full leading-tight" v-tooltip.top="row.oldVer">
+              <CopyableTag :tag="row.oldVer" class="text-3xs dd-text-secondary truncate max-w-full leading-tight" :idle-tooltip="row.oldVer">
                 {{ row.oldVer }}
               </CopyableTag>
               <CopyableTag
                 :tag="row.newVer"
                 class="text-3xs font-semibold truncate max-w-full leading-tight"
                 :style="{ color: getUpdateKindColor(row.updateKind) }"
-                v-tooltip.top="row.newVer">
+                :idle-tooltip="row.newVer">
                 {{ row.newVer }}
               </CopyableTag>
             </div>

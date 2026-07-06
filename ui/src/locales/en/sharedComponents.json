@@ -12,7 +12,8 @@
     },
     "copyableTag": {
       "copied": "Copied!",
-      "clickToCopy": "Click to copy"
+      "clickToCopy": "Click to copy",
+      "failed": "Copy failed"
     },
     "dataFilterBar": {
       "filters": "Filters",

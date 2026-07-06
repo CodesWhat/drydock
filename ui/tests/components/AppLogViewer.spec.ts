@@ -351,6 +351,87 @@ describe('AppLogViewer', () => {
     expect(copyBtn.props('icon')).toBe('copy');
   });
 
+  it('shows a temporary failed state when the clipboard write does not succeed', async () => {
+    vi.useFakeTimers();
+
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: undefined,
+    });
+    document.execCommand = vi.fn().mockReturnValue(false);
+
+    const wrapper = mountViewer({
+      entries: [makeEntry(1, { plainLine: 'boom' })],
+    });
+
+    await wrapper.get('[data-test="container-log-copy"]').trigger('click');
+    await flushPromises();
+
+    const copyBtn = wrapper
+      .findAllComponents({ name: 'AppIconButton' })
+      .find((component) => component.attributes('data-test') === 'container-log-copy');
+    if (!copyBtn) {
+      throw new Error('Copy button component not found');
+    }
+    expect(copyBtn.props('icon')).toBe('xmark');
+    expect(copyBtn.props('variant')).toBe('danger');
+    expect(copyBtn.props('tooltip')).toBe('Copy failed');
+
+    vi.advanceTimersByTime(2000);
+    await nextTick();
+
+    expect(copyBtn.props('icon')).toBe('copy');
+    expect(copyBtn.props('variant')).toBe('muted');
+
+    delete (document as any).execCommand;
+  });
+
+  it('keeps the success indicator visible through a rapid second copy instead of letting the first timer clear it early', async () => {
+    vi.useFakeTimers();
+
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: {
+        writeText,
+      },
+    });
+
+    const wrapper = mountViewer({
+      entries: [makeEntry(1, { plainLine: 'ready' })],
+    });
+
+    const copyBtn = wrapper
+      .findAllComponents({ name: 'AppIconButton' })
+      .find((component) => component.attributes('data-test') === 'container-log-copy');
+    if (!copyBtn) {
+      throw new Error('Copy button component not found');
+    }
+
+    await wrapper.get('[data-test="container-log-copy"]').trigger('click');
+    await flushPromises();
+    expect(copyBtn.props('icon')).toBe('check');
+
+    // Second click 1000ms later should cancel the first timer and reset the
+    // 2s window from this click instead.
+    vi.advanceTimersByTime(1000);
+    await wrapper.get('[data-test="container-log-copy"]').trigger('click');
+    await flushPromises();
+    expect(copyBtn.props('icon')).toBe('check');
+
+    // Advance past where the FIRST timer would have fired (1000ms + 1000ms = 2000ms
+    // from the first click) — the indicator must still be set because the
+    // second click's timer replaced it.
+    vi.advanceTimersByTime(1000);
+    await nextTick();
+    expect(copyBtn.props('icon')).toBe('check');
+
+    // Advance the remaining time for the second click's own 2s window.
+    vi.advanceTimersByTime(1000);
+    await nextTick();
+    expect(copyBtn.props('icon')).toBe('copy');
+  });
+
   describe('search filter mode', () => {
     it('shows all entries in highlight mode (default)', async () => {
       const wrapper = mountViewer({
