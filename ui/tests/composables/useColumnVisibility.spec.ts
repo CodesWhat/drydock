@@ -200,32 +200,11 @@ describe('useColumnVisibility', () => {
     expect(CONTAINER_TABLE_ACTIONS_SIZE).toBe(180);
   });
 
-  describe('cardPriority (card mode, distinct from priority auto-hide)', () => {
-    it('sets kind cardPriority to 10 so it wins the card subtitle slot', async () => {
-      const { useColumnVisibility } = await loadColumnVisibility();
-      const { allColumns } = useColumnVisibility();
-      const kindCol = allColumns.find((c) => c.key === 'kind');
-      expect(kindCol?.cardPriority).toBe(10);
-    });
-
-    it('demotes server, registry, and uptime out of the card body with a negative cardPriority', async () => {
-      const { useColumnVisibility } = await loadColumnVisibility();
-      const { allColumns } = useColumnVisibility();
-      for (const key of ['server', 'registry', 'uptime']) {
-        const col = allColumns.find((c) => c.key === key);
-        expect(col?.cardPriority).toBe(-1);
-      }
-    });
-
-    it('leaves version, softwareVersion, and status cardPriority unset (card body, declared order)', async () => {
-      const { useColumnVisibility } = await loadColumnVisibility();
-      const { allColumns } = useColumnVisibility();
-      for (const key of ['version', 'softwareVersion', 'status']) {
-        const col = allColumns.find((c) => c.key === key);
-        expect(col?.cardPriority).toBeUndefined();
-      }
-    });
-
+  // `cardPriority` per-column annotations were removed from ColumnDef: containers now ships a
+  // hand-authored #card template (ContainersGroupedViews.vue) instead of DataTable's generic
+  // cardPriority-driven card composition, so the annotations would be inert. See
+  // ContainersGroupedViews.spec.ts for card-mode coverage instead.
+  describe('auto-hide priority (unaffected by cardPriority removal)', () => {
     it('does not change the existing auto-hide priority values', async () => {
       const { useColumnVisibility } = await loadColumnVisibility();
       const { allColumns } = useColumnVisibility();

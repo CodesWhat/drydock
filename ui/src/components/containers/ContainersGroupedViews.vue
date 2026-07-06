@@ -32,6 +32,7 @@ const {
   filteredContainers,
   renderGroups,
   groupByStack,
+  containerViewMode,
   toggleGroupCollapse,
   collapsedGroups,
   containerActionsEnabled,
@@ -529,6 +530,7 @@ onScopeDispose(() => {
         :show-actions="true"
         actions-width="180px"
         :virtual-scroll="false"
+        :prefer-cards="containerViewMode === 'cards'"
         :full-width-row="isTableRowFullWidth"
         :row-interactive="isTableRowInteractive"
         :row-class="tableRowClass"
@@ -749,7 +751,7 @@ onScopeDispose(() => {
           </span>
         </template>
         <!-- Actions -->
-        <template #actions="{ row: c }">
+        <template #actions="{ row: c, cardMode }">
           <template v-if="!containerActionsEnabled">
             <div class="flex items-center justify-end gap-2">
               <span class="text-2xs dd-text-muted">{{ t('containerComponents.groupedViews.actionsDisabled') }}</span>
@@ -760,10 +762,11 @@ onScopeDispose(() => {
                 @click.stop />
             </div>
           </template>
-          <!-- Icon-style actions (compact). Each AppIconButton is `toolbar`
+          <!-- Icon-style actions (compact). In table mode each AppIconButton is `toolbar`
                size (w-8=32px) so all icons share the same fixed width and
                justify-end pins them to consistent X positions across rows,
-               while still fitting the 180px actions column. -->
+               while still fitting the 180px actions column. In card mode (cardMode=true)
+               they size up to `sm` (44px) touch targets — same buttons, same handlers. -->
           <template v-else-if="tableActionStyle === 'icons'">
             <div class="flex items-center justify-end gap-0.5">
               <ReleaseNotesLink
@@ -775,42 +778,42 @@ onScopeDispose(() => {
                 :from-tag="c.currentTag"
                 :to-tag="c.newTag"
                 icon-only
-                icon-size="toolbar"
+                :icon-size="cardMode ? undefined : 'toolbar'"
               />
               <ProjectLink
                 v-if="c.sourceRepo"
                 :source-repo="c.sourceRepo"
                 icon-only
-                icon-size="toolbar"
+                :icon-size="cardMode ? undefined : 'toolbar'"
               />
-              <AppIconButton v-if="updateBtnState(c) === 'hard'" icon="lock" size="toolbar" variant="muted"
+              <AppIconButton v-if="updateBtnState(c) === 'hard'" icon="lock" :size="cardMode ? 'sm' : 'toolbar'" variant="muted"
                       class="cursor-not-allowed opacity-50"
                       :disabled="true"
                       :tooltip="tt(updateBtnTooltip(c))" @click.stop />
-              <AppIconButton v-else-if="updateBtnState(c) === 'soft'" icon="cloud-download" size="toolbar" variant="warning"
+              <AppIconButton v-else-if="updateBtnState(c) === 'soft'" icon="cloud-download" :size="cardMode ? 'sm' : 'toolbar'" variant="warning"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-bg-hover hover:scale-110 active:scale-95'"
                       :disabled="isRowLocked(c)"
                       :tooltip="tt(updateBtnTooltip(c))" @click.stop="confirmUpdate(c)" />
-              <AppIconButton v-else-if="updateBtnState(c) === 'ready'" icon="cloud-download" size="toolbar" variant="muted"
+              <AppIconButton v-else-if="updateBtnState(c) === 'ready'" icon="cloud-download" :size="cardMode ? 'sm' : 'toolbar'" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
                       :disabled="isRowLocked(c)"
                       :tooltip="tt(updateBtnTooltip(c))" @click.stop="confirmUpdate(c)" />
-              <AppIconButton v-else-if="c.status === 'running'" icon="stop" size="toolbar" variant="muted"
+              <AppIconButton v-else-if="c.status === 'running'" icon="stop" :size="cardMode ? 'sm' : 'toolbar'" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95'"
                       :disabled="isRowLocked(c)"
                       :tooltip="tt(t('containerComponents.groupedViews.stopAction'))" @click.stop="confirmStop(c)" />
-              <AppIconButton v-else icon="play" size="toolbar" variant="muted"
+              <AppIconButton v-else icon="play" :size="cardMode ? 'sm' : 'toolbar'" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
                       :disabled="isRowLocked(c)"
                       :tooltip="tt(t('containerComponents.groupedViews.startAction'))" @click.stop="startContainer(c)" />
-              <AppIconButton v-if="canCancelUpdate(c)" icon="x" size="toolbar" variant="danger"
+              <AppIconButton v-if="canCancelUpdate(c)" icon="x" :size="cardMode ? 'sm' : 'toolbar'" variant="danger"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow] hover:dd-bg-hover hover:scale-110 active:scale-95"
                       :tooltip="tt(t('containerComponents.groupedViews.cancelUpdateTooltip'))" @click.stop="cancelUpdate(c)" />
-              <AppIconButton icon="more" size="toolbar" variant="muted"
+              <AppIconButton icon="more" :size="cardMode ? 'sm' : 'toolbar'" variant="muted"
                       class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
                       :class="[
                         isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95',
@@ -918,6 +921,314 @@ onScopeDispose(() => {
             </div>
             </div>
           </template>
+        </template>
+
+        <!-- Card view -->
+        <template #card="{ row: c, selected }">
+          <!-- `selected` (the outer DataTable wrapper already draws the selection border/ring
+               via its own scoped `.dd-data-table-card-selected` class) is intentionally unused
+               here — this slot's content only owns the interior, never the card's own chrome. -->
+          <div
+            class="relative flex flex-col flex-1 transition-opacity"
+            :class="{ 'opacity-30': isRowLocked(c) }"
+          >
+          <!-- Card header -->
+          <div class="px-4 pt-4 pb-2 flex items-start justify-between">
+            <div class="flex items-center gap-3 min-w-0">
+              <ContainerIcon :icon="c.icon" :size="44" class="shrink-0" />
+              <div class="min-w-0">
+                <div class="text-sm-plus font-semibold truncate dd-text">
+                  {{ c.name }}
+                </div>
+                <div class="text-2xs-plus truncate mt-0.5 dd-text-muted">
+                  {{ c.image }}:{{ c.currentTag }} <span class="dd-text-secondary">&middot;</span>
+                  <span data-test="container-card-server-text">{{ parseServer(c.server).name }}</span><template v-if="parseServer(c.server).env"> <span class="dd-text-secondary">({{ parseServer(c.server).env }})</span></template>
+                </div>
+              </div>
+            </div>
+            <!-- Registry + policy-state icon row, ported as-is from the pre-demolition card -->
+            <div class="flex items-center gap-1.5 shrink-0 ml-2">
+              <span
+                data-test="container-card-registry-text"
+                class="block max-w-[140px] truncate text-2xs-plus dd-text-secondary"
+                v-tooltip.top="tt(registryLabel(c.registry, c.registryUrl, c.registryName))"
+              >
+                {{ registryLabel(c.registry, c.registryUrl, c.registryName) }}
+              </span>
+              <span v-if="hasRegistryError(c)"
+                    class="inline-flex items-center justify-center"
+                    style="color: var(--dd-danger);"
+                    :aria-label="t('containerComponents.groupedViews.ariaRegistryError')"
+                    v-tooltip.top="tt(registryErrorTooltip(c))">
+                <AppIcon name="warning" :size="12" />
+              </span>
+              <span v-if="getContainerListPolicyState(c).snoozed"
+                    class="inline-flex items-center justify-center"
+                    style="color: var(--dd-info);"
+                    :aria-label="t('containerComponents.groupedViews.ariaSnoozedUpdates')"
+                    v-tooltip.top="tt(containerPolicyTooltip(c, 'snoozed'))">
+                <AppIcon name="pause" :size="12" />
+              </span>
+              <span v-if="getContainerListPolicyState(c).skipped"
+                    class="inline-flex items-center justify-center"
+                    style="color: var(--dd-warning);"
+                    :aria-label="t('containerComponents.groupedViews.ariaSkippedUpdates')"
+                    v-tooltip.top="tt(containerPolicyTooltip(c, 'skipped'))">
+                <AppIcon name="skip-forward" :size="12" />
+              </span>
+              <span v-if="getContainerListPolicyState(c).maturityBlocked"
+                    class="inline-flex items-center justify-center"
+                    style="color: var(--dd-primary);"
+                    :aria-label="t('containerComponents.groupedViews.ariaMaturityBlocked')"
+                    v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
+                <AppIcon name="clock" :size="12" />
+              </span>
+            </div>
+          </div>
+
+          <!-- Card body -- inline Current / Latest. Structured per branch (rather than one
+               shared "Current" tag reused across branches) so the #356/#370 guard branch can
+               match the table's #cell-version cell EXACTLY: non-digest-pinned containers show
+               the tag ONLY, with the digest delta folded into the tag's own :idle-tooltip —
+               never a visible sha256 pair. Do NOT collapse this back into a single shared
+               "Current" tag with a tooltip on the state badge; that regressed twice (#356, #370). -->
+          <div class="px-4 py-3 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap min-w-0">
+              <span class="text-2xs-plus dd-text-muted shrink-0">{{ t('containerComponents.groupedViews.currentLabel') }}</span>
+
+              <template v-if="c.isDigestPinned && c.updateKind === 'digest' && c.newDigest && c.currentDigest">
+                <CopyableTag :tag="c.currentDigest" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
+                  {{ formatShortDigest(c.currentDigest) }}
+                </CopyableTag>
+                <span class="text-2xs-plus ml-1 dd-text-muted shrink-0">{{ t('containerComponents.groupedViews.latestLabel') }}</span>
+                <CopyableTag :tag="c.newDigest" class="text-xs font-bold truncate max-w-[140px]"
+                      :style="{ color: updateKindColor(c.updateKind).text }" @click.stop>
+                  {{ formatShortDigest(c.newDigest) }}
+                </CopyableTag>
+                <span
+                  data-test="container-card-update-state"
+                  class="inline-flex items-center gap-1.5 text-2xs-plus font-semibold"
+                  :style="{ color: getContainerUpdateStateColor(c) }"
+                >
+                  <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: getContainerUpdateStateColor(c) }"></span>
+                  {{ getContainerUpdateStateLabel(c) }}
+                </span>
+                <span v-if="c.updateMaturity" class="text-2xs dd-text-muted">{{ getUpdateMaturityLabel(c.updateMaturity) }}</span>
+              </template>
+              <!-- #356 / #370 regression guard — mirrors the table's #cell-version guard branch
+                   exactly: TAG ONLY, digest delta in the CopyableTag's :idle-tooltip. -->
+              <template v-else-if="c.updateKind === 'digest' && c.newDigest && c.currentDigest">
+                <CopyableTag :tag="c.currentTag" class="text-xs font-bold truncate max-w-[140px]"
+                      :style="{ color: updateKindColor(c.updateKind).text }"
+                      :idle-tooltip="tt(`${c.currentTag} — ${formatShortDigest(c.currentDigest)} → ${formatShortDigest(c.newDigest)}`)"
+                      @click.stop>
+                  {{ c.currentTag }}
+                </CopyableTag>
+                <span
+                  data-test="container-card-update-state"
+                  class="inline-flex items-center gap-1.5 ml-1 text-2xs-plus font-semibold"
+                  :style="{ color: getContainerUpdateStateColor(c) }"
+                >
+                  <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: getContainerUpdateStateColor(c) }"></span>
+                  {{ getContainerUpdateStateLabel(c) }}
+                </span>
+                <span v-if="c.updateMaturity" class="text-2xs dd-text-muted">{{ getUpdateMaturityLabel(c.updateMaturity) }}</span>
+              </template>
+              <template v-else-if="c.newTag">
+                <CopyableTag :tag="c.currentTag" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
+                  {{ c.currentTag }}
+                </CopyableTag>
+                <span class="text-2xs-plus ml-1 dd-text-muted shrink-0">{{ t('containerComponents.groupedViews.latestLabel') }}</span>
+                <CopyableTag :tag="c.newTag" class="text-xs font-bold truncate max-w-[140px]"
+                      :style="{ color: updateKindColor(c.updateKind).text }" @click.stop>
+                  {{ c.newTag }}
+                </CopyableTag>
+                <span
+                  data-test="container-card-update-state"
+                  class="inline-flex items-center gap-1.5 text-2xs-plus font-semibold"
+                  :style="{ color: getContainerUpdateStateColor(c) }"
+                >
+                  <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: getContainerUpdateStateColor(c) }"></span>
+                  {{ getContainerUpdateStateLabel(c) }}
+                </span>
+                <span v-if="c.updateMaturity" class="text-2xs dd-text-muted">{{ getUpdateMaturityLabel(c.updateMaturity) }}</span>
+              </template>
+              <template v-else>
+                <CopyableTag :tag="c.currentTag" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
+                  {{ c.currentTag }}
+                </CopyableTag>
+                <span v-if="c.registryError" class="inline-flex items-center gap-1 ml-1 px-1.5 py-0.5 dd-rounded" style="background-color: var(--dd-danger-muted);" v-tooltip.top="tt(registryErrorTooltip(c))">
+                  <AppIcon name="warning" :size="10" style="color: var(--dd-danger);" class="shrink-0" />
+                  <span class="text-2xs-plus font-medium" style="color: var(--dd-danger);">{{ registryErrorPillLabel(c) }}</span>
+                </span>
+                <template v-else>
+                  <NoUpdateReasonBadge v-if="c.noUpdateReason" :reason="c.noUpdateReason" class="ml-1" />
+                  <template v-else-if="getContainerListPolicyState(c).snoozed || getContainerListPolicyState(c).skipped || getContainerListPolicyState(c).maturityBlocked">
+                    <span v-if="getContainerListPolicyState(c).snoozed"
+                          class="inline-flex items-center justify-center ml-1"
+                          style="color: var(--dd-info);"
+                          :aria-label="t('containerComponents.groupedViews.ariaSnoozedUpdates')"
+                          v-tooltip.top="tt(containerPolicyTooltip(c, 'snoozed'))">
+                      <AppIcon name="pause" :size="13" />
+                    </span>
+                    <span v-if="getContainerListPolicyState(c).skipped"
+                          class="inline-flex items-center justify-center"
+                          style="color: var(--dd-warning);"
+                          :aria-label="t('containerComponents.groupedViews.ariaSkippedUpdates')"
+                          v-tooltip.top="tt(containerPolicyTooltip(c, 'skipped'))">
+                      <AppIcon name="skip-forward" :size="13" />
+                    </span>
+                    <span v-if="getContainerListPolicyState(c).maturityBlocked"
+                          class="inline-flex items-center justify-center"
+                          style="color: var(--dd-primary);"
+                          :aria-label="t('containerComponents.groupedViews.ariaMaturityBlocked')"
+                          v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
+                      <AppIcon name="clock" :size="13" />
+                    </span>
+                  </template>
+                  <span
+                    v-else
+                    data-test="container-card-update-state"
+                    class="inline-flex items-center gap-1.5 text-2xs-plus font-semibold"
+                    :style="{ color: getContainerUpdateStateColor(c) }"
+                    v-tooltip.top="tt(t('containerComponents.groupedViews.upToDateTooltip'))"
+                  >
+                    <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: getContainerUpdateStateColor(c) }"></span>
+                    {{ getContainerUpdateStateLabel(c) }}
+                  </span>
+                </template>
+              </template>
+            </div>
+            <div v-if="c.suggestedTag || c.releaseNotes || c.currentReleaseNotes || c.releaseLink || c.sourceRepo" class="flex items-center gap-2 flex-wrap mt-2">
+              <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
+              <ReleaseNotesLink
+                :release-notes="c.releaseNotes"
+                :current-release-notes="c.currentReleaseNotes"
+                :release-link="c.releaseLink"
+                :container-id="c.id"
+                :from-tag="c.currentTag"
+                :to-tag="c.newTag"
+              />
+              <ProjectLink :source-repo="c.sourceRepo" />
+            </div>
+          </div>
+
+          <!-- Card footer -->
+          <div class="px-4 py-2.5 flex items-center justify-between mt-auto"
+               :style="{
+                 borderTop: '1px solid var(--dd-border)',
+                 backgroundColor: 'var(--dd-bg-elevated)',
+               }">
+            <span
+              data-test="container-card-runtime-status"
+              class="inline-flex items-center gap-1.5 text-2xs-plus font-semibold"
+              :style="{ color: getContainerStatusColor(c) }"
+              v-tooltip.top="tt(getContainerStatusLabel(c))"
+            >
+              <AppIcon
+                v-if="isContainerUpdating(c) || isContainerScanning(c) || isContainerQueued(c)"
+                :name="getContainerStatusIcon(c)"
+                :size="12"
+                :class="isContainerUpdating(c) || isContainerScanning(c) ? 'dd-spin' : ''"
+              />
+              <span v-else class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: getContainerStatusColor(c) }"></span>
+              {{ getContainerStatusLabel(c) }}
+            </span>
+
+            <!-- Card actions: the same icon-style action row as the table's #actions slot
+                 above (same buttons/handlers/conditions — stop/start/restart/scan/update/
+                 more-kebab, recheck reachable via the kebab's toggleActionsMenu), reused here
+                 rather than a separate hand-rolled footer button set. DataTable's own #card
+                 slot fully replaces its generic composition (which is where #actions would
+                 otherwise be invoked in card mode), so this row is written out again with
+                 sizes fixed at the card's `sm` (44px) touch target instead of table's
+                 `toolbar` (32px). -->
+            <div class="flex items-center gap-1.5">
+              <template v-if="!containerActionsEnabled">
+                <span class="text-2xs dd-text-muted">{{ t('containerComponents.groupedViews.actionsDisabled') }}</span>
+                <AppIconButton icon="lock" size="sm" variant="muted"
+                  class="cursor-not-allowed opacity-60"
+                  :disabled="true"
+                  :tooltip="tt(containerActionsDisabledReason)"
+                  @click.stop />
+              </template>
+              <template v-else>
+                <ReleaseNotesLink
+                  v-if="c.releaseNotes?.url || c.currentReleaseNotes?.url || c.releaseLink"
+                  :release-notes="c.releaseNotes"
+                  :current-release-notes="c.currentReleaseNotes"
+                  :release-link="c.releaseLink"
+                  :container-id="c.id"
+                  :from-tag="c.currentTag"
+                  :to-tag="c.newTag"
+                  icon-only
+                />
+                <ProjectLink
+                  v-if="c.sourceRepo"
+                  :source-repo="c.sourceRepo"
+                  icon-only
+                />
+                <AppIconButton v-if="updateBtnState(c) === 'hard'" icon="lock" size="sm" variant="muted"
+                        class="cursor-not-allowed opacity-50"
+                        :disabled="true"
+                        :tooltip="tt(updateBtnTooltip(c))" @click.stop />
+                <AppIconButton v-else-if="updateBtnState(c) === 'soft'" icon="cloud-download" size="sm" variant="warning"
+                        class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+                        :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                        :disabled="isRowLocked(c)"
+                        :tooltip="tt(updateBtnTooltip(c))" @click.stop="confirmUpdate(c)" />
+                <AppIconButton v-else-if="updateBtnState(c) === 'ready'" icon="cloud-download" size="sm" variant="muted"
+                        class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+                        :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                        :disabled="isRowLocked(c)"
+                        :tooltip="tt(updateBtnTooltip(c))" @click.stop="confirmUpdate(c)" />
+                <AppIconButton v-else-if="c.status === 'running'" icon="stop" size="sm" variant="muted"
+                        class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+                        :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-danger hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                        :disabled="isRowLocked(c)"
+                        :tooltip="tt(t('containerComponents.groupedViews.stopAction'))" @click.stop="confirmStop(c)" />
+                <AppIconButton v-else icon="play" size="sm" variant="muted"
+                        class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+                        :class="isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text-success hover:dd-bg-hover hover:scale-110 active:scale-95'"
+                        :disabled="isRowLocked(c)"
+                        :tooltip="tt(t('containerComponents.groupedViews.startAction'))" @click.stop="startContainer(c)" />
+                <AppIconButton v-if="canCancelUpdate(c)" icon="x" size="sm" variant="danger"
+                        class="transition-[color,background-color,border-color,opacity,transform,box-shadow] hover:dd-bg-hover hover:scale-110 active:scale-95"
+                        :tooltip="tt(t('containerComponents.groupedViews.cancelUpdateTooltip'))" @click.stop="cancelUpdate(c)" />
+                <AppIconButton icon="more" size="sm" variant="muted"
+                        class="transition-[color,background-color,border-color,opacity,transform,box-shadow]"
+                        :class="[
+                          isRowLocked(c) ? 'opacity-50 cursor-not-allowed' : 'hover:dd-text hover:dd-bg-hover hover:scale-110 active:scale-95',
+                          openActionsMenu === c.id && !isRowLocked(c) ? 'dd-bg-elevated dd-text' : '',
+                        ]"
+                        :disabled="isRowLocked(c)"
+                        :tooltip="tt(t('containerComponents.groupedViews.moreButton'))" @click.stop="toggleActionsMenu(c.id, $event)" />
+              </template>
+            </div>
+          </div>
+
+          <!-- In-progress overlay -->
+          <div
+            v-if="isContainerScanning(c) || isContainerUpdating(c) || isContainerQueued(c)"
+            class="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
+          >
+            <div
+              class="flex items-center gap-2 px-4 py-2 dd-rounded text-sm font-bold uppercase tracking-wider shadow-lg"
+              :style="{
+                backgroundColor: 'var(--dd-bg-elevated)',
+                border: '1px solid var(--dd-border)',
+                color: 'var(--dd-text)',
+              }"
+            >
+              <AppIcon
+                :name="isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? 'clock' : 'spinner'"
+                :size="18"
+                :class="isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? '' : 'dd-spin'"
+              />
+              <span>{{ isContainerQueued(c) && !isContainerUpdating(c) && !isContainerScanning(c) ? t('containerComponents.groupedViews.statusQueued') : isContainerScanning(c) && !isContainerUpdating(c) ? t('containerComponents.groupedViews.statusScanning') : getInProgressBadgeLabel(c) }}</span>
+            </div>
+          </div>
+          </div>
         </template>
       </DataTable>
 

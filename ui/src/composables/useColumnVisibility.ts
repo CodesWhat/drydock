@@ -12,11 +12,6 @@ interface ColumnDef extends ResponsiveSizingColumn {
   align?: string;
   px: string;
   required: boolean;
-  /**
-   * Card mode (DataTable < 640px) subtitle/body placement. Distinct from `priority`, which
-   * drives responsive auto-hide (higher = dropped first) — do not conflate the two.
-   */
-  cardPriority?: number;
 }
 
 export const CONTAINER_TABLE_ACTIONS_SIZE = 180;
@@ -85,7 +80,6 @@ const allColumns: ColumnDef[] = [
     minSize: 116,
     maxSize: 180,
     priority: 60,
-    cardPriority: 10,
     required: false,
   },
   {
@@ -108,7 +102,6 @@ const allColumns: ColumnDef[] = [
     minSize: 132,
     maxSize: 240,
     priority: 70,
-    cardPriority: -1,
     required: false,
   },
   {
@@ -120,7 +113,6 @@ const allColumns: ColumnDef[] = [
     minSize: 116,
     maxSize: 180,
     priority: 80,
-    cardPriority: -1,
     required: false,
   },
   {
@@ -132,10 +124,12 @@ const allColumns: ColumnDef[] = [
     minSize: 100,
     maxSize: 180,
     priority: 90,
-    cardPriority: -1,
     required: false,
   },
 ];
+// Containers no longer carries per-column `cardPriority` annotations: this view ships a
+// hand-authored `#card` template (ContainersGroupedViews.vue) instead of DataTable's generic
+// cardPriority-driven card composition, so those annotations would be inert and misleading.
 
 const visibleColumns = ref<Set<string>>(new Set(preferences.containers.columns));
 watch(

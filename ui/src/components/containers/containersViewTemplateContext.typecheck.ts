@@ -1,4 +1,5 @@
-import type { ComputedRef, Ref } from 'vue';
+import type { ComputedRef, Ref, WritableComputedRef } from 'vue';
+import type { ViewMode } from '../../preferences/schema';
 import type { Container } from '../../types/container';
 import type {
   ContainersViewRenderGroup,
@@ -11,6 +12,7 @@ declare const context: ContainersViewTemplateContext;
 const errorRef: Ref<string | null> = context.error;
 const loadingRef: Ref<boolean> = context.loading;
 const containersRef: Ref<Container[]> = context.containers;
+const viewMode: WritableComputedRef<ViewMode> = context.containerViewMode;
 const filterSearch: Ref<string> = context.filterSearch;
 const renderGroups: ComputedRef<ContainersViewRenderGroup[]> = context.renderGroups;
 const tableColumns: ComputedRef<ContainersViewTableColumn[]> = context.tableColumns;
@@ -23,6 +25,7 @@ const unknownKey = context.thisKeyShouldNotExist;
 void errorRef;
 void loadingRef;
 void containersRef;
+void viewMode;
 void filterSearch;
 void renderGroups;
 void tableColumns;

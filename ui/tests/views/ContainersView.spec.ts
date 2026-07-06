@@ -254,11 +254,24 @@ const childStubs = {
     emits: ['content-width'],
     template: '<div class="data-view-layout"><slot /><slot name="panel" /></div>',
   }),
-  DataFilterBar: {
-    template:
-      '<div class="data-filter-bar"><slot v-if="showFilters" name="filters" /><slot name="extra-buttons" /><slot name="left" /><slot name="center" /></div>',
+  DataFilterBar: defineComponent({
     props: ['modelValue', 'showFilters', 'filteredCount', 'totalCount', 'activeFilterCount'],
-  },
+    emits: ['update:modelValue', 'update:showFilters'],
+    template: `
+      <div class="data-filter-bar" :data-model-value="modelValue">
+        <button type="button" data-test="set-container-view-cards" @click="$emit('update:modelValue', 'cards')">
+          Cards
+        </button>
+        <button type="button" data-test="set-container-view-table" @click="$emit('update:modelValue', 'table')">
+          Table
+        </button>
+        <slot v-if="showFilters" name="filters" />
+        <slot name="extra-buttons" />
+        <slot name="left" />
+        <slot name="center" />
+      </div>
+    `,
+  }),
   DataTable: defineComponent({
     props: [
       'columns',
@@ -276,9 +289,10 @@ const childStubs = {
       'fullWidthRow',
       'rowInteractive',
       'rowClass',
+      'preferCards',
     ],
     template: `
-      <div class="data-table">
+      <div class="data-table" :data-prefer-cards="String(preferCards)">
         <div v-for="row in rows" :key="rowKey ? (typeof rowKey === 'function' ? rowKey(row) : row[rowKey]) : row.id ?? row.name">
           <slot v-if="typeof fullWidthRow === 'function' && fullWidthRow(row)" name="full-row" :row="row" />
           <div v-else class="data-table-first-row">
@@ -1014,6 +1028,29 @@ describe('ContainersView', () => {
       expect(wrapper.find('.data-filter-bar').exists()).toBe(true);
     });
 
+    it('provides containerViewMode to the list content and forwards it to DataTable preferCards', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      const dataTable = () => wrapper.findComponent(childStubs.DataTable as any);
+
+      expect(wrapper.find('.data-filter-bar').attributes('data-model-value')).toBe('table');
+      expect((wrapper.vm as any).containerViewMode).toBe('table');
+      expect(dataTable().props('preferCards')).toBe(false);
+
+      await wrapper.find('[data-test="set-container-view-cards"]').trigger('click');
+      await flushPromises();
+
+      expect(wrapper.find('.data-filter-bar').attributes('data-model-value')).toBe('cards');
+      expect((wrapper.vm as any).containerViewMode).toBe('cards');
+      expect(dataTable().props('preferCards')).toBe(true);
+
+      await wrapper.find('[data-test="set-container-view-table"]').trigger('click');
+      await flushPromises();
+
+      expect(wrapper.find('.data-filter-bar').attributes('data-model-value')).toBe('table');
+      expect((wrapper.vm as any).containerViewMode).toBe('table');
+      expect(dataTable().props('preferCards')).toBe(false);
+    });
+
     it('shows registry error indicator in table rows', async () => {
       const c = makeContainer() as Container & { registryError?: string };
       c.registryError = 'Registry request failed: unauthorized';
@@ -1492,7 +1529,7 @@ describe('ContainersView', () => {
       }
     });
 
-    it('forwards cardPriority from allColumns without touching priority', async () => {
+    it('omits inert cardPriority metadata while preserving auto-hide priority', async () => {
       const { useColumnVisibility } = await import('@/composables/useColumnVisibility');
       const mockedVisibility = vi.mocked(useColumnVisibility);
       const prevImpl = mockedVisibility.getMockImplementation();
@@ -1513,11 +1550,11 @@ describe('ContainersView', () => {
       const vm = wrapper.vm as any;
 
       const kindCol = vm.tableColumns.find((c: any) => c.key === 'kind');
-      expect(kindCol.cardPriority).toBe(10);
+      expect(kindCol).not.toHaveProperty('cardPriority');
       expect(kindCol.priority).toBe(60);
 
       const serverCol = vm.tableColumns.find((c: any) => c.key === 'server');
-      expect(serverCol.cardPriority).toBe(-1);
+      expect(serverCol).not.toHaveProperty('cardPriority');
       expect(serverCol.priority).toBe(70);
 
       if (prevImpl) mockedVisibility.mockImplementation(prevImpl);

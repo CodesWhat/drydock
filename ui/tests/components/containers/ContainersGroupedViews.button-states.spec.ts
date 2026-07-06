@@ -10,7 +10,9 @@
  * asserts the DOM reflects the expected visual treatment.
  */
 import { defineComponent, nextTick, onMounted, ref } from 'vue';
+import CopyableTag from '@/components/CopyableTag.vue';
 import ContainersGroupedViews from '@/components/containers/ContainersGroupedViews.vue';
+import DataTable from '@/components/DataTable.vue';
 import { useUpdateBatches } from '@/composables/useUpdateBatches';
 import type { Container, UpdateEligibility } from '@/types/container';
 import { mountWithPlugins } from '../../helpers/mount';
@@ -122,6 +124,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
   const groupUpdateQueue = ref(new Set<string>());
   const containerActionsEnabled = ref(true);
   const actionInProgress = ref(new Map<string, 'update' | 'scan' | 'lifecycle' | 'delete'>());
+  const containerViewMode = ref<'table' | 'cards'>('table');
   const tableColumns = ref([
     { key: 'icon', label: '', align: 'text-center' },
     { key: 'name', label: 'Container', align: 'text-left' },
@@ -146,6 +149,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     filteredContainers,
     renderGroups,
     groupByStack,
+    containerViewMode,
     toggleGroupCollapse: vi.fn(),
     collapsedGroups,
     groupUpdateInProgress,
@@ -234,6 +238,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       groupByStack,
       groupUpdateInProgress,
       groupUpdateQueue,
+      containerViewMode,
       tableActionStyle,
       openActionsMenu,
       displayContainers,
@@ -256,6 +261,47 @@ function mountSubject() {
     global: {
       stubs: {
         DataTable: DataTableStub,
+        EmptyState: {
+          props: ['showClear'],
+          template: '<div class="empty-state-stub" />',
+        },
+        Teleport: true,
+      },
+    },
+  });
+}
+
+let restoreClientWidthMock: (() => void) | null = null;
+
+function mockElementClientWidth(width: number) {
+  if (!restoreClientWidthMock) {
+    const originalDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'clientWidth',
+    );
+    restoreClientWidthMock = () => {
+      if (originalDescriptor) {
+        Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalDescriptor);
+      } else {
+        delete (HTMLElement.prototype as any).clientWidth;
+      }
+      restoreClientWidthMock = null;
+    };
+  }
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+    configurable: true,
+    get() {
+      return width;
+    },
+  });
+}
+
+function mountSubjectWithRealDataTable(width = 800) {
+  mockElementClientWidth(width);
+  return mountWithPlugins(ContainersGroupedViews, {
+    global: {
+      components: { CopyableTag, DataTable },
+      stubs: {
         EmptyState: {
           props: ['showClear'],
           template: '<div class="empty-state-stub" />',
@@ -297,6 +343,45 @@ function mountWithSingleContainer(
   return { wrapper: mountSubject(), refs, spies };
 }
 
+async function mountCardsWithContainers(containers: Container[]) {
+  const { context, refs, spies } = makeContext();
+  refs.containerViewMode.value = 'cards';
+  refs.filteredContainers.value = containers;
+  refs.displayContainers.value = containers;
+  refs.renderGroups.value = [
+    {
+      key: '__flat__',
+      name: null,
+      containers,
+      containerCount: containers.length,
+      updatesAvailable: containers.filter((container) => Boolean(container.newTag)).length,
+      updatableCount: containers.filter((container) => Boolean(container.newTag)).length,
+    },
+  ];
+  mocked.context = context;
+  const wrapper = mountSubjectWithRealDataTable();
+  await nextTick();
+  return { wrapper, refs, spies };
+}
+
+function cardByName(wrapper: any, name: string) {
+  const card = wrapper
+    .findAll('[data-test="dd-card"]')
+    .find((candidate: any) => candidate.text().includes(name));
+  expect(card).toBeDefined();
+  return card!;
+}
+
+function cardIconButton(card: any, icon: string) {
+  const matches = card
+    .findAll('button, a')
+    .filter((candidate: any) => candidate.find(`[data-icon="${icon}"]`).exists());
+  const button =
+    matches.find((candidate: any) => candidate.classes().includes('min-w-8')) ?? matches[0];
+  expect(button).toBeDefined();
+  return button!;
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -305,6 +390,10 @@ describe('ContainersGroupedViews — update button states', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useUpdateBatches().batches.value = new Map();
+  });
+
+  afterEach(() => {
+    restoreClientWidthMock?.();
   });
 
   // -------------------------------------------------------------------------
@@ -531,5 +620,63 @@ describe('ContainersGroupedViews — update button states', () => {
     const row = rowByName(wrapper, 'alpha');
     expect(row.find('[data-icon="cloud-download"]').exists()).toBe(true);
     expect(row.find('[data-icon="lock"]').exists()).toBe(false);
+  });
+
+  // -------------------------------------------------------------------------
+  // cards mode — same state machine, 44px icon targets in the custom #card footer
+  // -------------------------------------------------------------------------
+
+  it('cards mode: renders hard, soft, ready, and no-update action states with sm targets', async () => {
+    const hard = makeContainer({
+      id: 'c-card-hard',
+      name: 'hard',
+      newTag: '2.0.0',
+      status: 'stopped',
+      updateEligibility: makeEligibility([
+        { reason: 'agent-mismatch', message: 'Agent version mismatch.', actionable: false },
+      ]),
+    });
+    const soft = makeContainer({
+      id: 'c-card-soft',
+      name: 'soft',
+      newTag: '2.0.0',
+      status: 'stopped',
+      updateEligibility: makeEligibility([
+        { reason: 'trigger-not-included', message: 'Trigger not included.', actionable: false },
+      ]),
+    });
+    const ready = makeContainer({
+      id: 'c-card-ready',
+      name: 'ready',
+      newTag: '2.0.0',
+      status: 'stopped',
+    });
+    const running = makeContainer({
+      id: 'c-card-running',
+      name: 'running',
+      newTag: null,
+      status: 'running',
+    });
+
+    const { wrapper, spies } = await mountCardsWithContainers([hard, soft, ready, running]);
+
+    const hardLock = cardIconButton(cardByName(wrapper, 'hard'), 'lock');
+    expect(hardLock.attributes('disabled')).toBeDefined();
+    expect(hardLock.classes()).toEqual(expect.arrayContaining(['w-11', 'h-11']));
+
+    const softUpdate = cardIconButton(cardByName(wrapper, 'soft'), 'cloud-download');
+    expect(softUpdate.classes()).toContain('dd-text-warning');
+    expect(softUpdate.classes()).toEqual(expect.arrayContaining(['w-11', 'h-11']));
+    await softUpdate.trigger('click');
+    expect(spies.confirmUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-card-soft' }),
+    );
+
+    const readyUpdate = cardIconButton(cardByName(wrapper, 'ready'), 'cloud-download');
+    expect(readyUpdate.classes()).not.toContain('dd-text-warning');
+    expect(readyUpdate.classes()).toEqual(expect.arrayContaining(['w-11', 'h-11']));
+
+    const stopButton = cardIconButton(cardByName(wrapper, 'running'), 'stop');
+    expect(stopButton.classes()).toEqual(expect.arrayContaining(['w-11', 'h-11']));
   });
 });

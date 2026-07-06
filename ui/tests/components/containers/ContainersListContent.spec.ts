@@ -1,5 +1,5 @@
 import type { VueWrapper } from '@vue/test-utils';
-import { computed, defineComponent, h, provide, ref } from 'vue';
+import { computed, defineComponent, h, nextTick, provide, ref } from 'vue';
 import ContainersListContent from '@/components/containers/ContainersListContent.vue';
 import {
   type ContainersViewTemplateContext,
@@ -27,12 +27,32 @@ const DataTableColumnPickerStub = defineComponent({
   `,
 });
 
+const DataFilterBarStub = defineComponent({
+  props: ['modelValue', 'showFilters', 'filteredCount', 'totalCount', 'activeFilterCount'],
+  emits: ['update:modelValue', 'update:showFilters'],
+  template: `
+    <div data-test="data-filter-bar" :data-model-value="modelValue">
+      <button type="button" data-test="set-view-table" @click="$emit('update:modelValue', 'table')">
+        Table
+      </button>
+      <button type="button" data-test="set-view-cards" @click="$emit('update:modelValue', 'cards')">
+        Cards
+      </button>
+      <slot name="extra-buttons" />
+      <slot name="left" />
+      <slot name="center" />
+      <slot name="filters" />
+    </div>
+  `,
+});
+
 function makeTemplateContext(
   overrides: Partial<ContainersViewTemplateContext> = {},
 ): ContainersViewTemplateContext {
   return {
     error: ref(null),
     loading: ref(false),
+    containerViewMode: ref('table'),
     showFilters: ref(false),
     filteredContainers: ref([]),
     containers: ref([]),
@@ -106,10 +126,7 @@ describe('ContainersListContent', () => {
           ContainersGroupedViews: {
             template: '<div data-test="grouped-views-stub" />',
           },
-          DataFilterBar: {
-            template:
-              '<div data-test="data-filter-bar"><slot name="extra-buttons" /><slot name="left" /><slot name="center" /><slot name="filters" /></div>',
-          },
+          DataFilterBar: DataFilterBarStub,
           DataTableColumnPicker: DataTableColumnPickerStub,
         },
       },
@@ -121,6 +138,36 @@ describe('ContainersListContent', () => {
     wrapper = mountWithContext(context);
 
     expect(wrapper.find('[data-test="data-table-column-picker"]').exists()).toBe(true);
+  });
+
+  it('hides the column picker in cards mode and shows it in table mode', async () => {
+    const context = makeTemplateContext({
+      containerViewMode: ref('cards'),
+    });
+    wrapper = mountWithContext(context);
+
+    expect(wrapper.find('[data-test="data-table-column-picker"]').exists()).toBe(false);
+
+    context.containerViewMode.value = 'table';
+    await nextTick();
+
+    expect(wrapper.find('[data-test="data-table-column-picker"]').exists()).toBe(true);
+  });
+
+  it('wires containerViewMode through the DataFilterBar v-model', async () => {
+    const context = makeTemplateContext();
+    wrapper = mountWithContext(context);
+
+    const bar = wrapper.findComponent(DataFilterBarStub);
+    expect(bar.props('modelValue')).toBe('table');
+
+    await wrapper.find('[data-test="set-view-cards"]').trigger('click');
+    expect(context.containerViewMode.value).toBe('cards');
+    await nextTick();
+    expect(bar.props('modelValue')).toBe('cards');
+
+    await wrapper.find('[data-test="set-view-table"]').trigger('click');
+    expect(context.containerViewMode.value).toBe('table');
   });
 
   it('passes only labelled catalog columns (translated) to the picker', () => {
