@@ -255,16 +255,24 @@ const childStubs = {
     template: '<div class="data-view-layout"><slot /><slot name="panel" /></div>',
   }),
   DataFilterBar: defineComponent({
-    props: ['modelValue', 'showFilters', 'filteredCount', 'totalCount', 'activeFilterCount'],
+    props: [
+      'modelValue',
+      'showFilters',
+      'filteredCount',
+      'totalCount',
+      'activeFilterCount',
+      'hideViewToggle',
+    ],
     emits: ['update:modelValue', 'update:showFilters'],
     template: `
-      <div class="data-filter-bar" :data-model-value="modelValue">
+      <div class="data-filter-bar" :data-model-value="modelValue" :data-hide-view-toggle="String(!!hideViewToggle)">
         <button type="button" data-test="set-container-view-cards" @click="$emit('update:modelValue', 'cards')">
           Cards
         </button>
         <button type="button" data-test="set-container-view-table" @click="$emit('update:modelValue', 'table')">
           Table
         </button>
+        <slot name="sort" />
         <slot v-if="showFilters" name="filters" />
         <slot name="extra-buttons" />
         <slot name="left" />
@@ -290,9 +298,11 @@ const childStubs = {
       'rowInteractive',
       'rowClass',
       'preferCards',
+      'hoistCardSort',
     ],
+    emits: ['update:card-reflow-forced'],
     template: `
-      <div class="data-table" :data-prefer-cards="String(preferCards)">
+      <div class="data-table" :data-prefer-cards="String(preferCards)" :data-hoist-card-sort="String(!!hoistCardSort)">
         <div v-for="row in rows" :key="rowKey ? (typeof rowKey === 'function' ? rowKey(row) : row[rowKey]) : row.id ?? row.name">
           <slot v-if="typeof fullWidthRow === 'function' && fullWidthRow(row)" name="full-row" :row="row" />
           <div v-else class="data-table-first-row">
@@ -1049,6 +1059,22 @@ describe('ContainersView', () => {
       expect(wrapper.find('.data-filter-bar').attributes('data-model-value')).toBe('table');
       expect((wrapper.vm as any).containerViewMode).toBe('table');
       expect(dataTable().props('preferCards')).toBe(false);
+    });
+
+    it('wires measured card reflow from DataTable into the toolbar and hoisted card sorting', async () => {
+      const wrapper = await mountContainersView([makeContainer()]);
+      const dataTable = () => wrapper.findComponent(childStubs.DataTable as any);
+
+      expect(wrapper.find('.data-filter-bar').attributes('data-hide-view-toggle')).toBe('false');
+      expect(dataTable().props('hoistCardSort')).toBe(false);
+      expect(wrapper.find('[data-test="dd-toolbar-sort-select"]').exists()).toBe(false);
+
+      dataTable().vm.$emit('update:card-reflow-forced', true);
+      await flushPromises();
+
+      expect(wrapper.find('.data-filter-bar').attributes('data-hide-view-toggle')).toBe('true');
+      expect(dataTable().props('hoistCardSort')).toBe(true);
+      expect(wrapper.find('[data-test="dd-toolbar-sort-select"]').exists()).toBe(true);
     });
 
     it('shows registry error indicator in table rows', async () => {

@@ -29,8 +29,9 @@ const DataTableStub = defineComponent({
     'rowHeight',
     'maxHeight',
     'preferCards',
+    'hoistCardSort',
   ],
-  emits: ['update:sort-key', 'update:sort-asc', 'row-click'],
+  emits: ['update:sort-key', 'update:sort-asc', 'update:card-reflow-forced', 'row-click'],
   setup(props, { emit }) {
     const isFullWidth = (row: Record<string, unknown>) =>
       typeof props.fullWidthRow === 'function' ? props.fullWidthRow(row) : false;
@@ -136,6 +137,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
   const containerActionsEnabled = ref(true);
   const actionInProgress = ref(new Map<string, 'update' | 'scan' | 'lifecycle' | 'delete'>());
   const containerViewMode = ref<'table' | 'cards'>('table');
+  const containerCardReflowForced = ref(false);
   const tableColumns = ref([
     { key: 'icon', label: '', align: 'text-center' },
     { key: 'name', label: 'Container', align: 'text-left' },
@@ -207,6 +209,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     renderGroups,
     groupByStack,
     containerViewMode,
+    containerCardReflowForced,
     toggleGroupCollapse: spies.toggleGroupCollapse,
     collapsedGroups,
     groupUpdateInProgress,
@@ -309,6 +312,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       groupUpdateInProgress,
       groupUpdateQueue,
       containerViewMode,
+      containerCardReflowForced,
       tableActionStyle,
       openActionsMenu,
       displayContainers,
@@ -490,6 +494,42 @@ describe('ContainersGroupedViews', () => {
     ]);
   });
 
+  it('hoists card sorting when cards are selected or measured card reflow is forced', async () => {
+    const container = makeContainer({ id: 'c-hoist', name: 'alpha' });
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [container];
+    refs.displayContainers.value = [container];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const dataTable = wrapper.findComponent(DataTableStub);
+
+    expect(dataTable.props('hoistCardSort')).toBe(false);
+
+    dataTable.vm.$emit('update:card-reflow-forced', true);
+    await nextTick();
+
+    expect(refs.containerCardReflowForced.value).toBe(true);
+    expect(wrapper.findComponent(DataTableStub).props('hoistCardSort')).toBe(true);
+
+    dataTable.vm.$emit('update:card-reflow-forced', false);
+    refs.containerViewMode.value = 'cards';
+    await nextTick();
+
+    expect(refs.containerCardReflowForced.value).toBe(false);
+    expect(wrapper.findComponent(DataTableStub).props('hoistCardSort')).toBe(true);
+  });
+
   it('renders container cards through DataTable preferCards at wide container widths', async () => {
     const container = makeContainer({ id: 'c-card-path', name: 'alpha', newTag: '1.1.0' });
 
@@ -664,6 +704,97 @@ describe('ContainersGroupedViews', () => {
     expect(spies.recheckContainer).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'c-linked-card' }),
     );
+  });
+
+  it('keeps registry in the card subtitle, moves update state to the header, and leaves release/project links in the footer', async () => {
+    const linked = makeContainer({
+      id: 'c-card-body-layout',
+      name: 'linked',
+      currentTag: 'latest',
+      newTag: '1.2.0',
+      updateKind: 'minor',
+      updateMaturity: 'fresh',
+      registry: 'custom',
+      registryName: 'Private Registry',
+      releaseLink: 'https://example.test/releases/1.2.0',
+      sourceRepo: 'github.com/example/project',
+      suggestedTag: '1.2.0',
+    });
+
+    const { wrapper } = await mountCardsWithContainers([linked], 800);
+    const card = cardByName(wrapper, 'linked');
+    const header = card.get('.px-4.pt-4.pb-2');
+    const body = card.get('.px-4.py-3.min-w-0');
+    const footer = card.get('.mt-auto');
+
+    expect(header.get('[data-test="container-card-registry-text"]').text()).toBe(
+      'Private Registry',
+    );
+    expect(header.get('[data-test="container-card-update-state"]').text()).toContain('Minor');
+    expect(body.text()).toContain('latest');
+    expect(body.text()).toContain('→');
+    expect(body.text()).toContain('1.2.0');
+    expect(body.text()).not.toContain('Current');
+    expect(body.text()).not.toContain('Latest');
+    expect(body.find('[data-test="suggested-tag-badge"]').exists()).toBe(true);
+    expect(body.find('[data-test="release-link"]').exists()).toBe(false);
+    expect(body.find('[data-test="project-link"]').exists()).toBe(false);
+    expect(footer.find('[data-test="release-link"]').exists()).toBe(true);
+    expect(footer.find('[data-test="project-link"]').exists()).toBe(true);
+  });
+
+  it('suppresses the header update-state badge when the registry is in error', async () => {
+    const registryError = makeContainer({
+      id: 'c-card-registry-error',
+      name: 'registry-error',
+      registryError: '401 unauthorized',
+    });
+
+    const { wrapper } = await mountCardsWithContainers([registryError], 800);
+    const card = cardByName(wrapper, 'registry-error');
+    const header = card.get('.px-4.pt-4.pb-2');
+
+    expect(header.find('[data-test="container-card-update-state"]').exists()).toBe(false);
+    expect(header.find('[aria-label="Registry error"]').exists()).toBe(true);
+  });
+
+  it('renders grouped card headers as full-width rows spanning the card grid', async () => {
+    const alpha = makeContainer({ id: 'c-group-card-a', name: 'alpha', newTag: '2.0.0' });
+    const beta = makeContainer({ id: 'c-group-card-b', name: 'beta', newTag: '1.1.0' });
+    const { context, refs } = makeContext();
+    refs.groupByStack.value = true;
+    refs.containerViewMode.value = 'cards';
+    refs.filteredContainers.value = [alpha, beta];
+    refs.displayContainers.value = [alpha, beta];
+    refs.renderGroups.value = [
+      {
+        key: 'stack-a',
+        name: 'stack-a',
+        containers: [alpha],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+      {
+        key: 'stack-b',
+        name: 'stack-b',
+        containers: [beta],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubjectWithRealDataTable(800);
+    await nextTick();
+
+    const listItems = wrapper.findAll('ul[role="list"] > li');
+    expect(listItems[0].attributes('style')).toContain('grid-column: 1 / -1');
+    expect(listItems[0].text()).toContain('stack-a');
+    expect(listItems[2].attributes('style')).toContain('grid-column: 1 / -1');
+    expect(listItems[2].text()).toContain('stack-b');
+    expect(wrapper.findAll('[data-test="dd-card"]')).toHaveLength(2);
   });
 
   it('covers grouped table interactions in icon action mode', async () => {

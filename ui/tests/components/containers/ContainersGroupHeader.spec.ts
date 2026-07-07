@@ -101,4 +101,16 @@ describe('ContainersGroupHeader', () => {
     expect(sticky.classes()).toEqual(expect.arrayContaining(['sticky', 'end-0']));
     expect(sticky.find('button').exists()).toBe(true);
   });
+
+  it('uses tighter spacing for the first group and looser spacing for later groups', async () => {
+    const wrapper = mountHeader({ isFirst: true });
+
+    expect(wrapper.classes()).toContain('mt-2');
+    expect(wrapper.classes()).not.toContain('mt-9');
+
+    await wrapper.setProps({ isFirst: false });
+
+    expect(wrapper.classes()).toContain('mt-9');
+    expect(wrapper.classes()).not.toContain('mt-2');
+  });
 });

@@ -133,6 +133,13 @@ describe('DataFilterBar', () => {
       expect(w.find('[role="group"][aria-label="View mode"]').exists()).toBe(false);
     });
 
+    it('hides the view mode switcher when hideViewToggle is true even with modelValue bound', () => {
+      const w = factory({ modelValue: 'table', hideViewToggle: true });
+
+      expect(viewModeButtons(w)).toHaveLength(0);
+      expect(w.find('[role="group"][aria-label="View mode"]').exists()).toBe(false);
+    });
+
     it('renders default table/cards view mode buttons when modelValue is provided', () => {
       const w = factory({ modelValue: 'table' });
       const buttons = viewModeButtons(w);
@@ -231,6 +238,13 @@ describe('DataFilterBar', () => {
     it('renders center slot', () => {
       const w = factory({}, { center: '<button class="center-content">Scan Now</button>' });
       expect(w.find('.center-content').exists()).toBe(true);
+    });
+
+    it('renders the sort slot in the right-side toolbar controls', () => {
+      const w = factory({}, { sort: '<span data-test="sort-slot">Sort control</span>' });
+
+      expect(w.find('[data-test="sort-slot"]').exists()).toBe(true);
+      expect(w.text()).toContain('Sort control');
     });
   });
 
