@@ -1,6 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
-import { defineComponent } from 'vue';
-import { resetPreferences } from '@/preferences/store';
+import { defineComponent, nextTick } from 'vue';
+import { preferences, resetPreferences } from '@/preferences/store';
 import { getAllTriggers, getTrigger, runTrigger } from '@/services/trigger';
 import TriggersView from '@/views/TriggersView.vue';
 import { dataViewStubs } from '../helpers/data-view-stubs';
@@ -50,6 +50,94 @@ async function mountTriggersView() {
 
 function findButtonByText(wrapper: any, label: string) {
   return wrapper.findAll('button').find((button: any) => button.text().includes(label));
+}
+
+const triggerCardFilterBarStub = defineComponent({
+  props: [
+    'modelValue',
+    'viewModes',
+    'showFilters',
+    'filteredCount',
+    'totalCount',
+    'activeFilterCount',
+    'hideViewToggle',
+  ],
+  emits: ['update:modelValue', 'update:showFilters'],
+  template: `
+    <div
+      class="data-filter-bar trigger-card-filter"
+      :data-mode="modelValue"
+      :data-hide-view-toggle="String(hideViewToggle)">
+      <button
+        v-for="mode in (viewModes || [{ id: 'table' }, { id: 'cards' }])"
+        :key="mode.id"
+        :class="'mode-' + mode.id"
+        :data-active="String(modelValue === mode.id)"
+        @click="$emit('update:modelValue', mode.id)">
+        {{ mode.id }}
+      </button>
+      <slot name="filters" />
+    </div>
+  `,
+});
+
+const triggerCardDataTableStub = defineComponent({
+  props: [
+    'columns',
+    'rows',
+    'rowKey',
+    'activeRow',
+    'selectedKey',
+    'sortKey',
+    'sortAsc',
+    'preferCards',
+    'showActions',
+  ],
+  emits: ['row-click', 'update:cardReflowForced'],
+  template: `
+    <div
+      class="data-table trigger-card-table"
+      :data-row-count="rows?.length ?? 0"
+      :data-prefer-cards="String(preferCards)"
+      :data-selected-key="selectedKey || activeRow || ''">
+      <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
+        Force cards
+      </button>
+      <button class="clear-card-reflow" @click="$emit('update:cardReflowForced', false)">
+        Clear cards
+      </button>
+      <article
+        v-for="row in rows || []"
+        :key="row[rowKey || 'id']"
+        class="trigger-card"
+        :data-card-id="row[rowKey || 'id']">
+        <slot name="card" :row="row" />
+      </article>
+      <slot name="empty" v-if="!rows || rows.length === 0" />
+    </div>
+  `,
+});
+
+const appIconButtonStub = defineComponent({
+  props: ['icon', 'size', 'variant', 'ariaLabel', 'disabled'],
+  emits: ['click'],
+  template:
+    '<button class="app-icon-button-stub" :data-icon="icon" :data-size="size" :aria-label="ariaLabel" :disabled="disabled" @click="$emit(\'click\', $event)"><slot /></button>',
+});
+
+async function mountTriggersCardView() {
+  const wrapper = mountWithPlugins(TriggersView, {
+    global: {
+      stubs: {
+        ...dataViewStubs,
+        DataFilterBar: triggerCardFilterBarStub,
+        DataTable: triggerCardDataTableStub,
+        AppIconButton: appIconButtonStub,
+      },
+    },
+  });
+  await flushPromises();
+  return wrapper;
 }
 
 describe('TriggersView', () => {
@@ -260,6 +348,71 @@ describe('TriggersView', () => {
       expect.objectContaining({
         triggerType: 'slack',
         triggerName: 'Slack Alerts',
+      }),
+    );
+  });
+
+  it('renders trigger cards and wires the card-mode reflow controls', async () => {
+    preferences.views.triggers.mode = 'cards';
+    mockGetAllTriggers.mockResolvedValue([
+      makeTrigger({
+        id: 'trigger:slack-alerts',
+        name: 'Slack Alerts',
+        type: 'slack',
+        agent: 'edge-1',
+      }),
+      makeTrigger({
+        id: 'trigger:http-alerts',
+        name: 'HTTP Alerts',
+        type: 'http',
+      }),
+    ]);
+
+    const wrapper = await mountTriggersCardView();
+
+    expect(wrapper.get('.trigger-card-table').attributes('data-prefer-cards')).toBe('true');
+    expect(wrapper.get('.trigger-card-filter').attributes('data-mode')).toBe('cards');
+    expect(wrapper.get('.trigger-card-filter').attributes('data-hide-view-toggle')).toBe('false');
+
+    const slackCard = wrapper.get('[data-card-id="trigger:slack-alerts"]');
+    expect(slackCard.text()).toContain('Slack Alerts');
+    expect(slackCard.text()).toContain('edge-1');
+    expect(slackCard.text()).toContain('Active');
+    expect(slackCard.text()).toContain('Slack');
+    expect(slackCard.get('.app-icon-button-stub').attributes('data-icon')).toBe('play');
+    expect(slackCard.get('.app-icon-button-stub').attributes('data-size')).toBe('sm');
+
+    await wrapper.get('.force-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.trigger-card-filter').attributes('data-hide-view-toggle')).toBe('true');
+
+    await wrapper.get('.clear-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.trigger-card-filter').attributes('data-hide-view-toggle')).toBe('false');
+
+    (wrapper.vm as any).triggersData = [
+      {
+        id: 'trigger:http-alerts',
+        name: 'HTTP Alerts',
+        type: 'http',
+        status: 'inactive',
+        config: {},
+      },
+    ];
+    await nextTick();
+
+    const inactiveCard = wrapper.get('[data-card-id="trigger:http-alerts"]');
+    expect(inactiveCard.text()).toContain('HTTP Alerts');
+    expect(inactiveCard.text()).toContain('Inactive');
+    expect(inactiveCard.text()).toContain('HTTP');
+
+    await inactiveCard.get('.app-icon-button-stub').trigger('click');
+    await flushPromises();
+
+    expect(mockRunTrigger).toHaveBeenCalledWith(
+      expect.objectContaining({
+        triggerType: 'http',
+        triggerName: 'HTTP Alerts',
       }),
     );
   });

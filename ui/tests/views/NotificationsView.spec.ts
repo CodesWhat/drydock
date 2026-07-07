@@ -1,6 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
-import { defineComponent } from 'vue';
-import { resetPreferences } from '@/preferences/store';
+import { defineComponent, nextTick } from 'vue';
+import { preferences, resetPreferences } from '@/preferences/store';
 import {
   getAllNotificationRules,
   type NotificationRule,
@@ -61,6 +61,88 @@ async function mountNotificationsView(stubs: Record<string, any> = {}) {
   await flushPromises();
   return wrapper;
 }
+
+const notificationCardFilterBarStub = defineComponent({
+  props: [
+    'modelValue',
+    'viewModes',
+    'showFilters',
+    'filteredCount',
+    'totalCount',
+    'activeFilterCount',
+    'hideViewToggle',
+  ],
+  emits: ['update:modelValue', 'update:showFilters'],
+  template: `
+    <div
+      class="data-filter-bar notification-card-filter"
+      :data-mode="modelValue"
+      :data-hide-view-toggle="String(hideViewToggle)">
+      <button
+        v-for="mode in (viewModes || [{ id: 'table' }, { id: 'cards' }])"
+        :key="mode.id"
+        :class="'mode-' + mode.id"
+        :data-active="String(modelValue === mode.id)"
+        @click="$emit('update:modelValue', mode.id)">
+        {{ mode.id }}
+      </button>
+      <slot name="filters" />
+    </div>
+  `,
+});
+
+const notificationCardDataTableStub = defineComponent({
+  props: [
+    'columns',
+    'rows',
+    'rowKey',
+    'activeRow',
+    'selectedKey',
+    'sortKey',
+    'sortAsc',
+    'preferCards',
+  ],
+  emits: ['row-click', 'update:cardReflowForced'],
+  template: `
+    <div
+      class="data-table notification-card-table"
+      :data-row-count="rows?.length ?? 0"
+      :data-prefer-cards="String(preferCards)"
+      :data-selected-key="selectedKey || activeRow || ''">
+      <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
+        Force cards
+      </button>
+      <button class="clear-card-reflow" @click="$emit('update:cardReflowForced', false)">
+        Clear cards
+      </button>
+      <article
+        v-for="row in rows || []"
+        :key="row[rowKey || 'id']"
+        class="notification-card"
+        :data-card-id="row[rowKey || 'id']">
+        <slot name="card" :row="row" />
+      </article>
+      <slot name="empty" v-if="!rows || rows.length === 0" />
+    </div>
+  `,
+});
+
+const notificationToggleSwitchStub = defineComponent({
+  props: ['modelValue', 'size', 'disabled', 'ariaLabel'],
+  emits: ['click', 'update:modelValue'],
+  template: `
+    <button
+      class="toggle-switch-stub"
+      role="switch"
+      :aria-checked="String(modelValue)"
+      :aria-label="ariaLabel"
+      :disabled="disabled"
+      :data-size="size"
+      @click="$emit('click', $event); $emit('update:modelValue', !modelValue)">
+      {{ modelValue ? 'on' : 'off' }}
+    </button>
+  `,
+});
 
 describe('NotificationsView', () => {
   beforeEach(() => {
@@ -294,5 +376,80 @@ describe('NotificationsView', () => {
 
     expect((wrapper.find('input[type="text"]').element as HTMLInputElement).value).toBe('security');
     expect(wrapper.find('.data-table').attributes('data-row-count')).toBe('1');
+  });
+
+  it('renders notification cards and wires the footer toggle plus card reflow state', async () => {
+    preferences.views.notifications.mode = 'cards';
+    mockGetAllNotificationRules.mockResolvedValue([
+      makeRule({
+        id: 'security-alert',
+        enabled: true,
+        triggers: ['trigger:slack-alerts', 'trigger:smtp-gmail'],
+      }),
+      makeRule({
+        id: 'agent-disconnect',
+        name: 'Agent Disconnect',
+        description: 'Remote agent disconnected',
+        enabled: false,
+        triggers: [],
+      }),
+    ]);
+    mockGetAllTriggers.mockResolvedValue([
+      { id: 'trigger:slack-alerts', name: 'Slack Alerts', type: 'slack' },
+      { id: 'trigger:smtp-gmail', name: 'SMTP Gmail', type: 'smtp' },
+    ]);
+    mockUpdateNotificationRule.mockResolvedValueOnce(
+      makeRule({
+        id: 'security-alert',
+        enabled: false,
+        triggers: ['trigger:slack-alerts', 'trigger:smtp-gmail'],
+      }),
+    );
+
+    const wrapper = await mountNotificationsView({
+      DataFilterBar: notificationCardFilterBarStub,
+      DataTable: notificationCardDataTableStub,
+      ToggleSwitch: notificationToggleSwitchStub,
+    });
+
+    expect(wrapper.get('.notification-card-table').attributes('data-prefer-cards')).toBe('true');
+    expect(wrapper.get('.notification-card-filter').attributes('data-mode')).toBe('cards');
+    expect(wrapper.get('.notification-card-filter').attributes('data-hide-view-toggle')).toBe(
+      'false',
+    );
+
+    const enabledCard = wrapper.get('[data-card-id="security-alert"]');
+    expect(enabledCard.text()).toContain('Security Alert');
+    expect(enabledCard.text()).toContain('Critical/High vulnerability detected');
+    expect(enabledCard.text()).toContain('enabled');
+    expect(enabledCard.text()).toContain('Slack Alerts');
+    expect(enabledCard.text()).toContain('SMTP Gmail');
+    expect(enabledCard.get('.toggle-switch-stub').attributes('aria-checked')).toBe('true');
+
+    const disabledCard = wrapper.get('[data-card-id="agent-disconnect"]');
+    expect(disabledCard.text()).toContain('Agent Disconnected');
+    expect(disabledCard.text()).toContain('When a remote agent loses connection');
+    expect(disabledCard.text()).toContain('disabled');
+    expect(disabledCard.text()).toContain('No triggers');
+    expect(disabledCard.get('.toggle-switch-stub').attributes('aria-checked')).toBe('false');
+
+    await wrapper.get('.force-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.notification-card-filter').attributes('data-hide-view-toggle')).toBe(
+      'true',
+    );
+
+    await wrapper.get('.clear-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.notification-card-filter').attributes('data-hide-view-toggle')).toBe(
+      'false',
+    );
+
+    await enabledCard.get('.toggle-switch-stub').trigger('click');
+    await flushPromises();
+
+    expect(mockUpdateNotificationRule).toHaveBeenCalledWith('security-alert', {
+      enabled: false,
+    });
   });
 });

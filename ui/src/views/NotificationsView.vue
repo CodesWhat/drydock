@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router';
 import AppBadge from '../components/AppBadge.vue';
 import ToggleSwitch from '../components/ToggleSwitch.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { useViewMode } from '../preferences/useViewMode';
 
 const { t, te } = useI18n();
 import type { NotificationRule, NotificationRuleUpdate } from '../services/notification';
@@ -157,6 +158,10 @@ const detailSaving = computed(
 
 const searchQuery = ref('');
 const showFilters = ref(false);
+const notificationViewMode = useViewMode('notifications');
+// Set by DataTable's measured-width reflow (< 640px): hides the table/cards toggle when the
+// width has already forced cards, so the switcher isn't a dead control at that size.
+const cardReflowForced = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
 function applySearchFromQuery(queryValue: unknown) {
@@ -367,10 +372,12 @@ onMounted(async () => {
     </div>
 
     <DataFilterBar
+      v-model="notificationViewMode"
       v-model:showFilters="showFilters"
       :filtered-count="filteredNotifications.length"
       :total-count="notificationsData.length"
-      :active-filter-count="activeFilterCount">
+      :active-filter-count="activeFilterCount"
+      :hide-view-toggle="cardReflowForced">
       <template #filters>
         <input v-model="searchQuery"
                type="text"
@@ -393,6 +400,8 @@ onMounted(async () => {
       :rows="filteredNotifications"
       row-key="id"
       :active-row="selectedRule?.id"
+      :prefer-cards="notificationViewMode === 'cards'"
+      @update:card-reflow-forced="cardReflowForced = $event"
       @row-click="openDetail($event)">
       <template #cell-enabled="{ row }">
         <ToggleSwitch
@@ -429,6 +438,57 @@ onMounted(async () => {
           <span v-if="triggerAssignmentSummary(row)" class="text-2xs italic dd-text-muted shrink-0 whitespace-nowrap">
             {{ triggerAssignmentSummary(row) }}
           </span>
+        </div>
+      </template>
+      <template #card="{ row }">
+        <div class="relative flex flex-col flex-1">
+          <!-- Header: rule name/description + enabled state badge top-right -->
+          <div class="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="text-sm-plus font-semibold truncate dd-text">{{ ruleDisplayName(row) }}</div>
+              <div v-if="ruleDisplayDescription(row)" class="text-2xs-plus truncate mt-0.5 dd-text-muted">{{ ruleDisplayDescription(row) }}</div>
+            </div>
+            <span
+              class="inline-flex items-center gap-1.5 shrink-0 text-2xs-plus font-semibold"
+              :style="{ color: row.enabled ? 'var(--dd-success)' : 'var(--dd-text-muted)' }"
+            >
+              <span class="h-2 w-2 shrink-0 rounded-full"
+                    :style="{ backgroundColor: row.enabled ? 'var(--dd-success)' : 'var(--dd-text-muted)' }"></span>
+              {{ row.enabled ? t('notificationsView.detail.enabled') : t('notificationsView.detail.disabled') }}
+            </span>
+          </div>
+          <!-- Body: trigger chips (mirrors #cell-triggers) -->
+          <div class="px-4 py-3">
+            <div :class="compactTriggerRowClass">
+              <AppBadge v-for="triggerId in row.triggers" :key="triggerId"
+                        :custom="{ bg: 'var(--dd-neutral-muted)', text: 'var(--dd-text-secondary)' }"
+                        size="xs"
+                        :uppercase="false"
+                        :title="triggerNameById(triggerId)"
+                        v-tooltip.top="triggerNameById(triggerId)"
+                        :class="compactTriggerBadgeClass">
+                <span :class="compactTriggerBadgeLabelClass">{{ triggerNameById(triggerId) }}</span>
+              </AppBadge>
+              <span v-if="triggerAssignmentSummary(row)" class="text-2xs italic dd-text-muted shrink-0 whitespace-nowrap">
+                {{ triggerAssignmentSummary(row) }}
+              </span>
+            </div>
+          </div>
+          <!-- Footer: enabled toggle (mirrors #cell-enabled) -->
+          <div class="px-4 py-2.5 flex items-center justify-end mt-auto"
+               :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+            <ToggleSwitch
+              :model-value="row.enabled"
+              size="sm"
+              class="shrink-0"
+              :disabled="savingRuleId === row.id"
+              :aria-label="t('notificationsView.toggleAriaLabel')"
+              on-color="var(--dd-success)"
+              off-color="var(--dd-border-strong)"
+              @click.stop
+              @update:model-value="toggleNotification(row.id)"
+            />
+          </div>
         </div>
       </template>
       <template #empty>

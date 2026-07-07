@@ -8,12 +8,14 @@ import AgentDetailLogsTab from '../components/agents/AgentDetailLogsTab.vue';
 import AgentDetailOverviewTab from '../components/agents/AgentDetailOverviewTab.vue';
 import AppBadge from '../components/AppBadge.vue';
 import AppTabBar from '../components/AppTabBar.vue';
+import DataSortControl from '../components/DataSortControl.vue';
 import DataTableColumnPicker from '../components/DataTableColumnPicker.vue';
 import StatusDot from '../components/StatusDot.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
+import { useViewMode } from '../preferences/useViewMode';
 import { getAgents } from '../services/agent';
 import { getLogEntries } from '../services/log';
 import { getAllTriggers } from '../services/trigger';
@@ -260,6 +262,10 @@ onUnmounted(() => {
 // -- Search filter --
 const searchQuery = ref('');
 const showFilters = ref(false);
+const agentViewMode = useViewMode('agents');
+// Set by DataTable's measured-width reflow (< 640px): hides the table/cards toggle when the
+// width has already forced cards, so the switcher isn't a dead control at that size.
+const cardReflowForced = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
 function applySearchFromQuery(queryValue: unknown) {
@@ -385,6 +391,17 @@ const pickerColumns = computed<PickerColumn[]>(() =>
     label: column.label,
     required: 'required' in column ? column.required : undefined,
   })),
+);
+
+// Cards are showing when the user toggled to them OR the width forced the reflow.
+const inCardMode = computed(() => cardReflowForced.value || agentViewMode.value === 'cards');
+
+// Card-mode sort options, hoisted into the filter bar (table mode sorts via headers).
+// (No icon-only columns exist in this view's column set, unlike containers'.)
+const sortableColumns = computed(() =>
+  agentAllColumns.value
+    .filter((column) => column.sortable)
+    .map((column) => ({ key: column.key, label: column.label })),
 );
 
 const {
@@ -539,10 +556,20 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
 
           <!-- Filter bar -->
           <DataFilterBar
+            v-model="agentViewMode"
             v-model:showFilters="showFilters"
             :filtered-count="filteredAgents.length"
             :total-count="agentsData.length"
-            :active-filter-count="activeFilterCount">
+            :active-filter-count="activeFilterCount"
+            :hide-view-toggle="cardReflowForced">
+            <template v-if="inCardMode && sortableColumns.length > 0" #sort>
+              <DataSortControl
+                :columns="sortableColumns"
+                :sort-key="agentSortKey"
+                :sort-asc="agentSortAsc"
+                @update:sort-key="agentSortKey = $event"
+                @update:sort-asc="agentSortAsc = $event" />
+            </template>
             <template #filters>
               <input v-model="searchQuery"
                      type="text"
@@ -574,8 +601,11 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
                      :sort-asc="agentSortAsc"
                      :selected-key="selectedAgent?.id ?? null"
                      :hidden-column-keys="hiddenColumnKeys"
+                     :prefer-cards="agentViewMode === 'cards'"
+                     :hoist-card-sort="inCardMode"
                      @update:sort-key="agentSortKey = $event"
                      @update:sort-asc="agentSortAsc = $event"
+                     @update:card-reflow-forced="cardReflowForced = $event"
                      @row-click="selectAgent($event)">
             <template #cell-name="{ row }">
               <div class="flex items-start gap-2 min-w-0">
@@ -621,6 +651,57 @@ function getConfigFields(agent: Agent): AgentDetailField[] {
             </template>
             <template #cell-lastSeen="{ row }">
               <span class="dd-text-muted">{{ row.lastSeen }}</span>
+            </template>
+            <template #card="{ row }">
+              <div class="relative flex flex-col flex-1">
+                <!-- Header: status dot + name/host left, connection status badge top-right -->
+                <div class="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+                  <div class="flex items-start gap-2 min-w-0">
+                    <StatusDot :status="row.status" size="md" class="mt-1.5" v-tooltip.top="row.status === 'connected' ? t('agentsView.list.status.connected') : t('agentsView.list.status.disconnected')" />
+                    <div class="min-w-0">
+                      <div class="text-sm-plus font-semibold truncate dd-text">{{ row.name }}</div>
+                      <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono">{{ row.host }}</div>
+                    </div>
+                  </div>
+                  <span
+                    class="inline-flex items-center gap-1.5 shrink-0 text-2xs-plus font-semibold"
+                    :style="{ color: row.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }"
+                  >
+                    <span class="h-2 w-2 shrink-0 rounded-full"
+                          :style="{ backgroundColor: row.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }"></span>
+                    {{ row.status === 'connected' ? t('agentsView.list.status.connected') : t('agentsView.list.status.disconnected') }}
+                  </span>
+                </div>
+                <!-- Body: compact facts list -->
+                <div class="px-4 py-3 flex flex-col gap-2">
+                  <div class="field flex items-baseline justify-between gap-3">
+                    <span class="dd-text-label dd-text-muted shrink-0">{{ t('agentsView.list.columns.containers') }}</span>
+                    <span class="text-2xs-plus">
+                      <span class="font-bold" style="color: var(--dd-success);">{{ row.containers.running }}</span><span class="dd-text-muted">/{{ row.containers.total }}</span>
+                    </span>
+                  </div>
+                  <div class="field flex items-baseline justify-between gap-3">
+                    <span class="dd-text-label dd-text-muted shrink-0">{{ t('agentsView.list.columns.version') }}</span>
+                    <span v-if="!row.version" class="text-2xs-plus dd-text-muted">-</span>
+                    <span v-else class="px-1.5 py-0.5 dd-rounded-sm text-2xs font-medium dd-bg-elevated dd-text-secondary">
+                      v{{ row.version }}
+                    </span>
+                  </div>
+                  <div class="field flex items-baseline justify-between gap-3">
+                    <span class="dd-text-label dd-text-muted shrink-0">{{ t('agentsView.list.columns.docker') }}</span>
+                    <span class="text-2xs-plus font-mono" :class="row.dockerVersion ? 'dd-text-secondary' : 'dd-text-muted'">{{ row.dockerVersion ?? '—' }}</span>
+                  </div>
+                  <div class="field flex items-baseline justify-between gap-3">
+                    <span class="dd-text-label dd-text-muted shrink-0">{{ t('agentsView.list.columns.os') }}</span>
+                    <span class="text-2xs-plus" :class="row.os ? 'dd-text-secondary' : 'dd-text-muted'">{{ row.os ?? '—' }}</span>
+                  </div>
+                </div>
+                <!-- Footer: last-seen timestamp (agents have no per-row actions) -->
+                <div class="px-4 py-2.5 flex items-center justify-start mt-auto"
+                     :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+                  <span class="text-2xs-plus dd-text-muted">{{ row.lastSeen }}</span>
+                </div>
+              </div>
             </template>
             <template #empty>
               <EmptyState icon="filter"

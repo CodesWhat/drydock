@@ -158,7 +158,8 @@
       "critical": "Critical",
       "high": "High",
       "medium": "Medium",
-      "low": "Low"
+      "low": "Low",
+      "clean": "Clean"
     },
     "countLabel": {
       "images": "images",

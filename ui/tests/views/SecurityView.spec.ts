@@ -1,5 +1,5 @@
 import { flushPromises } from '@vue/test-utils';
-import { defineComponent, nextTick, ref } from 'vue';
+import { computed, defineComponent, nextTick, ref } from 'vue';
 
 const mockGetSecurityVulnerabilityOverview = vi.fn();
 const mockScanContainer = vi.fn();
@@ -199,8 +199,133 @@ const stubs: Record<string, any> = {
   }),
 };
 
-function factory() {
-  return mount(SecurityView, { global: { stubs }, shallow: false });
+const securityCardFilterBarStub = defineComponent({
+  props: [
+    'modelValue',
+    'showFilters',
+    'filteredCount',
+    'totalCount',
+    'activeFilterCount',
+    'countLabel',
+    'hideViewToggle',
+  ],
+  emits: ['update:modelValue', 'update:showFilters'],
+  template: `
+    <div
+      class="dfb security-card-filter"
+      :data-mode="modelValue"
+      :data-hide-view-toggle="String(hideViewToggle)">
+      <button class="mode-table" @click="$emit('update:modelValue', 'table')">table</button>
+      <button class="mode-cards" @click="$emit('update:modelValue', 'cards')">cards</button>
+      <slot name="sort" />
+      <slot name="extra-buttons" />
+      <slot name="filters" />
+      <slot name="left" />
+      <slot name="center" />
+    </div>
+  `,
+});
+
+const securityDataSortControlStub = defineComponent({
+  props: ['columns', 'sortKey', 'sortAsc'],
+  emits: ['update:sortKey', 'update:sortAsc'],
+  template: `
+    <div
+      class="security-sort-control"
+      :data-columns="columns.map((column) => column.key).join(',')"
+      :data-sort-key="sortKey"
+      :data-sort-asc="String(sortAsc)">
+      <button class="sort-by-high" @click="$emit('update:sortKey', 'high')">Sort high</button>
+      <button class="sort-asc" @click="$emit('update:sortAsc', true)">Asc</button>
+    </div>
+  `,
+});
+
+function makeSecurityCardDataTableStub(extraRows: any[] = []) {
+  return defineComponent({
+    props: [
+      'columns',
+      'rows',
+      'rowKey',
+      'sortKey',
+      'sortAsc',
+      'selectedKey',
+      'hiddenColumnKeys',
+      'preferCards',
+      'hoistCardSort',
+    ],
+    emits: ['update:sortKey', 'update:sortAsc', 'row-click', 'update:cardReflowForced'],
+    setup(props) {
+      const renderedRows = computed(() => [...((props.rows as any[]) || []), ...extraRows]);
+      return { renderedRows };
+    },
+    template: `
+      <div
+        class="dt security-card-table"
+        :data-rows="rows?.length ?? 0"
+        :data-sort-key="sortKey"
+        :data-sort-asc="String(sortAsc)"
+        :data-prefer-cards="String(preferCards)"
+        :data-hoist-card-sort="String(hoistCardSort)"
+        :data-hidden-keys="JSON.stringify(hiddenColumnKeys || [])">
+        <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
+          Force cards
+        </button>
+        <button class="clear-card-reflow" @click="$emit('update:cardReflowForced', false)">
+          Clear cards
+        </button>
+        <article
+          v-for="row in renderedRows"
+          :key="row[rowKey || 'image']"
+          class="security-card"
+          :data-card-id="row[rowKey || 'image']">
+          <slot name="card" :row="row" />
+        </article>
+        <slot name="empty" v-if="!rows || rows.length === 0" />
+      </div>
+    `,
+  });
+}
+
+const releaseNotesLinkStub = defineComponent({
+  inheritAttrs: false,
+  props: ['releaseNotes', 'currentReleaseNotes', 'releaseLink', 'iconOnly', 'iconSize'],
+  template: '<a class="release-notes-link-stub" v-bind="$attrs">Release notes</a>',
+});
+
+const projectLinkStub = defineComponent({
+  inheritAttrs: false,
+  props: ['sourceRepo', 'iconOnly', 'iconSize'],
+  template: '<a class="project-link-stub" v-bind="$attrs">{{ sourceRepo }}</a>',
+});
+
+const securityCardAppButtonStub = defineComponent({
+  inheritAttrs: false,
+  props: ['size', 'variant', 'disabled'],
+  emits: ['click'],
+  template:
+    '<button class="app-button-stub" v-bind="$attrs" :disabled="disabled" @click="$emit(\'click\', $event)"><slot /></button>',
+});
+
+const containerUpdateDialogStub = defineComponent({
+  props: ['containerId'],
+  template: '<div v-if="containerId" data-test="container-update-dialog-stub" />',
+});
+
+function securityCardStubs(extraRows: any[] = []) {
+  return {
+    DataFilterBar: securityCardFilterBarStub,
+    DataSortControl: securityDataSortControlStub,
+    DataTable: makeSecurityCardDataTableStub(extraRows),
+    ReleaseNotesLink: releaseNotesLinkStub,
+    ProjectLink: projectLinkStub,
+    AppButton: securityCardAppButtonStub,
+    ContainerUpdateDialog: containerUpdateDialogStub,
+  };
+}
+
+function factory(extraStubs: Record<string, any> = {}) {
+  return mount(SecurityView, { global: { stubs: { ...stubs, ...extraStubs } }, shallow: false });
 }
 
 function readyRuntimeStatus() {
@@ -1712,6 +1837,213 @@ describe('SecurityView', () => {
         path: '/containers',
         query: { containerIds: 'c1,c2' },
       });
+    });
+  });
+
+  describe('card mode', () => {
+    const cardBranchRows = [
+      {
+        image: 'redis',
+        critical: 0,
+        high: 2,
+        medium: 0,
+        low: 0,
+        unknown: 0,
+        total: 2,
+        fixable: 1,
+        delta: { fixed: 1, new: 0, unchanged: 1 },
+      },
+      {
+        image: 'api',
+        critical: 0,
+        high: 0,
+        medium: 3,
+        low: 0,
+        unknown: 0,
+        total: 3,
+        fixable: 0,
+        delta: { fixed: 0, new: 2, unchanged: 1 },
+      },
+      {
+        image: 'worker',
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 4,
+        unknown: 0,
+        total: 4,
+        fixable: 2,
+        delta: { fixed: 1, new: 1, unchanged: 2 },
+      },
+      {
+        image: 'clean-image',
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+        unknown: 0,
+        total: 0,
+        fixable: 0,
+      },
+    ];
+
+    it('renders security cards with severity, delta, update, and link affordances', async () => {
+      preferences.views.security.mode = 'cards';
+      mockContainers([
+        makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          security: {
+            scan: {
+              vulnerabilities: [
+                {
+                  id: 'CVE-critical',
+                  severity: 'CRITICAL',
+                  packageName: 'openssl',
+                  fixedVersion: '3.0.1',
+                },
+                {
+                  id: 'CVE-high',
+                  severity: 'HIGH',
+                  packageName: 'curl',
+                  fixedVersion: '8.0.1',
+                },
+                {
+                  id: 'CVE-medium',
+                  severity: 'MEDIUM',
+                  packageName: 'zlib',
+                  fixedVersion: null,
+                },
+                {
+                  id: 'CVE-low',
+                  severity: 'LOW',
+                  packageName: 'busybox',
+                  fixedVersion: null,
+                },
+              ],
+            },
+          },
+        }),
+      ]);
+      mockGetAllContainers.mockResolvedValue([
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          image: { name: 'nginx', tag: { value: '1.25' } },
+          newTag: '1.26',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'patch',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+          sourceRepo: 'github.com/nginx/nginx',
+          releaseLink: 'https://github.com/nginx/nginx/releases',
+          releaseNotes: {
+            title: 'v1.26.0',
+            body: 'Security and bug fixes',
+            url: 'https://github.com/nginx/nginx/releases/tag/v1.26.0',
+            publishedAt: '2026-04-01T00:00:00Z',
+            provider: 'github',
+          },
+        },
+      ]);
+
+      const w = factory(securityCardStubs(cardBranchRows));
+      await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(mockGetAllContainers).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      const table = w.get('.security-card-table');
+      expect(table.attributes('data-prefer-cards')).toBe('true');
+      expect(table.attributes('data-hoist-card-sort')).toBe('true');
+      expect(table.attributes('data-sort-key')).toBe('critical');
+      expect(table.attributes('data-sort-asc')).toBe('false');
+      expect(w.get('.security-card-filter').attributes('data-mode')).toBe('cards');
+      expect(w.get('.security-card-filter').attributes('data-hide-view-toggle')).toBe('false');
+
+      const sort = w.get('.security-sort-control');
+      expect(sort.attributes('data-columns')).toBe('critical,high,medium,low,fixable,total');
+      await sort.get('.sort-by-high').trigger('click');
+      await nextTick();
+      expect(preferences.views.security.sortField).toBe('high');
+      expect(w.get('.security-card-table').attributes('data-sort-key')).toBe('high');
+
+      await w.get('.security-sort-control .sort-asc').trigger('click');
+      await nextTick();
+      expect(preferences.views.security.sortAsc).toBe(true);
+      expect(w.get('.security-card-table').attributes('data-sort-asc')).toBe('true');
+
+      const nginxCard = w.get('[data-card-id="nginx"]');
+      expect(nginxCard.text()).toContain('nginx');
+      expect(nginxCard.text()).toContain('github.com');
+      expect(nginxCard.text()).toContain('Critical');
+      expect(nginxCard.text()).toContain('1 Critical');
+      expect(nginxCard.text()).toContain('1 High');
+      expect(nginxCard.text()).toContain('1 Medium');
+      expect(nginxCard.text()).toContain('1 Low');
+      expect(nginxCard.text()).toContain('4 total');
+      expect(nginxCard.text()).toContain('50%');
+      expect(nginxCard.find('[data-test="security-card-update-btn"]').exists()).toBe(true);
+      expect(nginxCard.find('[data-test="security-card-containers-link"]').exists()).toBe(true);
+      expect(nginxCard.find('[data-test="security-card-release-notes"]').exists()).toBe(true);
+      expect(nginxCard.find('[data-test="security-card-project-link"]').exists()).toBe(true);
+
+      await nginxCard.get('[data-test="security-card-update-btn"]').trigger('click');
+      await nextTick();
+      expect((w.vm as any).updateDialogContainerId).toBe('c1');
+
+      await nginxCard.get('[data-test="security-card-containers-link"]').trigger('click');
+      await nextTick();
+      expect(mockRouterPush).toHaveBeenCalledWith({
+        path: '/containers',
+        query: { containerIds: 'c1' },
+      });
+
+      expect(w.get('[data-card-id="redis"]').text()).toContain('High');
+      expect(w.get('[data-card-id="redis"]').text()).toContain('1 fixed');
+      expect(w.get('[data-card-id="api"]').text()).toContain('Medium');
+      expect(w.get('[data-card-id="api"]').text()).toContain('2 new');
+      expect(w.get('[data-card-id="worker"]').text()).toContain('Low');
+      expect(w.get('[data-card-id="worker"]').text()).toContain('1 fixed, 1 new');
+
+      const cleanCard = w.get('[data-card-id="clean-image"]');
+      expect(cleanCard.text()).toContain('Clean');
+      expect(cleanCard.text()).toContain('0 total');
+      expect(cleanCard.text()).toContain('0%');
+      expect(cleanCard.find('[data-test="security-card-update-btn"]').exists()).toBe(false);
+      expect(cleanCard.find('[data-test="security-card-release-notes"]').exists()).toBe(false);
+      expect(cleanCard.find('[data-test="security-card-project-link"]').exists()).toBe(false);
+    });
+
+    it('hoists security sorting when card reflow is forced in table mode', async () => {
+      mockContainers([makeContainer()]);
+
+      const w = factory(securityCardStubs());
+      await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      expect(w.find('.security-sort-control').exists()).toBe(false);
+      expect(w.get('.security-card-table').attributes('data-prefer-cards')).toBe('false');
+      expect(w.get('.security-card-table').attributes('data-hoist-card-sort')).toBe('false');
+      expect(w.get('.security-card-filter').attributes('data-hide-view-toggle')).toBe('false');
+
+      await w.get('.force-card-reflow').trigger('click');
+      await nextTick();
+
+      expect(w.get('.security-sort-control').exists()).toBe(true);
+      expect(w.get('.security-card-table').attributes('data-prefer-cards')).toBe('false');
+      expect(w.get('.security-card-table').attributes('data-hoist-card-sort')).toBe('true');
+      expect(w.get('.security-card-filter').attributes('data-hide-view-toggle')).toBe('true');
+
+      await w.get('.clear-card-reflow').trigger('click');
+      await nextTick();
+
+      expect(w.find('.security-sort-control').exists()).toBe(false);
+      expect(w.get('.security-card-table').attributes('data-hoist-card-sort')).toBe('false');
+      expect(w.get('.security-card-filter').attributes('data-hide-view-toggle')).toBe('false');
     });
   });
 
