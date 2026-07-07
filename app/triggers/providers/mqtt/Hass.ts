@@ -16,8 +16,15 @@ const HASS_DEVICE_ID = 'drydock';
 const HASS_DEVICE_NAME = 'drydock';
 const HASS_MANUFACTURER = 'drydock';
 const HASS_ENTITY_VALUE_TEMPLATE = '{{ value_json.image_tag_value }}';
+// Newest version. When no update is pending, container.result is absent, so
+// result_tag/result_digest never appear in the flattened payload. Fall back to
+// the installed tag (image_tag_value) so HA resolves latest == installed ("up to
+// date") instead of rendering an empty string — which HA silently discards,
+// leaving both "Newest version" and the entity state permanently Unknown (#491).
+// The `if value_json.result_digest` guard also avoids the `Undefined[:15]` slice
+// error HA's Jinja throws when a digest-kind report carries no result_digest.
 const HASS_LATEST_VERSION_TEMPLATE =
-  '{% if value_json.update_kind_kind == "digest" %}{{ value_json.result_digest[:15] }}{% else %}{{ value_json.result_tag }}{% endif %}';
+  '{% if value_json.update_kind_kind == "digest" %}{{ value_json.result_digest[:15] if value_json.result_digest else value_json.image_tag_value }}{% else %}{{ value_json.result_tag if value_json.result_tag else value_json.image_tag_value }}{% endif %}';
 const HASS_DEFAULT_ENTITY_PICTURE =
   'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png';
 export const HASS_CONTAINER_STATE_TOPIC_TRACK_LIMIT = 10_000;

@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Home Assistant `update.*` entities showed "Unknown" for both Installed and Newest version on up-to-date containers.** The MQTT HASS discovery `latest_version` template rendered an empty string whenever a container had no pending update (no `result` in the payload). Home Assistant silently discards an empty render, so the "Newest version" attribute stayed unset and, because HA blanks the whole entity state when either version is missing, the entity read `Unknown` forever instead of resolving to "up to date". The template now falls back to the installed image tag when no update result is present, and guards the digest slice so a digest-kind report that carries no digest no longer throws in HA's template engine. (#491)
+
 ## [1.5.1-rc.6] — 2026-07-05
 
 ### Fixed

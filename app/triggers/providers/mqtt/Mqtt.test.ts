@@ -6,7 +6,7 @@ import {
   emitContainerUpdated,
 } from '../../../event/index.js';
 import log from '../../../log/index.js';
-import { flatten } from '../../../model/container.js';
+import { flatten, validate } from '../../../model/container.js';
 
 vi.mock('mqtt');
 vi.mock('node:fs/promises', () => ({
@@ -233,6 +233,92 @@ test.each(containerData)('trigger should format json message payload as expected
   expect(mqtt.client.publish).toHaveBeenCalledWith(data.topic, JSON.stringify(flatten(container)), {
     retain: true,
   });
+});
+
+// Regression guard for #491: the HA latest_version_template reads result_tag /
+// result_digest / image_tag_value from the flattened MQTT state payload. Lock the
+// shape the template depends on — an up-to-date container carries image_tag_value
+// but NO result_* keys (the case that used to render an empty "Newest version"),
+// while tag/digest updates carry the matching result_* field.
+test('trigger should publish latest-version source fields for current, tag, and digest states', async () => {
+  mqtt.configuration = {
+    topic: 'dd/container',
+    exclude: '',
+    hass: {
+      attributes: 'full',
+      filter: {
+        include: '',
+        exclude: '',
+      },
+    },
+  };
+
+  const installedDigest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+  const remoteDigest = 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+
+  const buildContainer = ({ id, name, digestWatch = false, result }) =>
+    validate({
+      id,
+      name,
+      watcher: 'local',
+      image: {
+        id: 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+        registry: {
+          name: 'docker.io',
+          url: 'docker.io',
+        },
+        name: 'library/test',
+        tag: {
+          value: '1.25.0',
+          semver: true,
+        },
+        digest: {
+          watch: digestWatch,
+          value: installedDigest,
+        },
+        architecture: 'amd64',
+        os: 'linux',
+      },
+      ...(result ? { result } : {}),
+    });
+
+  const publishContainer = async (container) => {
+    mqtt.client.publish.mockClear();
+    await mqtt.trigger(container);
+    expect(mqtt.client.publish).toHaveBeenCalledTimes(1);
+    return JSON.parse(mqtt.client.publish.mock.calls[0][1]);
+  };
+
+  const upToDatePayload = await publishContainer(
+    buildContainer({ id: 'container-current', name: 'current' }),
+  );
+  expect(upToDatePayload).toHaveProperty('update_available', false);
+  expect(upToDatePayload).toHaveProperty('image_tag_value', '1.25.0');
+  expect(upToDatePayload).not.toHaveProperty('result_tag');
+  expect(upToDatePayload).not.toHaveProperty('result_digest');
+
+  const tagUpdatePayload = await publishContainer(
+    buildContainer({
+      id: 'container-tag-update',
+      name: 'tag-update',
+      result: { tag: '1.26.0' },
+    }),
+  );
+  expect(tagUpdatePayload).toHaveProperty('update_available', true);
+  expect(tagUpdatePayload).toHaveProperty('update_kind_kind', 'tag');
+  expect(tagUpdatePayload).toHaveProperty('result_tag', '1.26.0');
+
+  const digestUpdatePayload = await publishContainer(
+    buildContainer({
+      id: 'container-digest-update',
+      name: 'digest-update',
+      digestWatch: true,
+      result: { digest: remoteDigest },
+    }),
+  );
+  expect(digestUpdatePayload).toHaveProperty('update_available', true);
+  expect(digestUpdatePayload).toHaveProperty('update_kind_kind', 'digest');
+  expect(digestUpdatePayload).toHaveProperty('result_digest', remoteDigest);
 });
 
 test('trigger should normalize recreated alias-prefixed container names to their base topic', async () => {
