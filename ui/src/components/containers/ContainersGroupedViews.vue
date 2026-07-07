@@ -33,6 +33,7 @@ const {
   renderGroups,
   groupByStack,
   containerViewMode,
+  containerCardReflowForced,
   toggleGroupCollapse,
   collapsedGroups,
   containerActionsEnabled,
@@ -531,11 +532,13 @@ onScopeDispose(() => {
         actions-width="180px"
         :virtual-scroll="false"
         :prefer-cards="containerViewMode === 'cards'"
+        :hoist-card-sort="containerCardReflowForced || containerViewMode === 'cards'"
         :full-width-row="isTableRowFullWidth"
         :row-interactive="isTableRowInteractive"
         :row-class="tableRowClass"
         @update:sort-key="containerSortKey = $event"
         @update:sort-asc="containerSortAsc = $event"
+        @update:card-reflow-forced="containerCardReflowForced = $event"
         @row-click="selectTableRow($event)"
       >
         <template #full-row="{ row }">
@@ -943,17 +946,24 @@ onScopeDispose(() => {
                 <div class="text-2xs-plus truncate mt-0.5 dd-text-muted">
                   {{ c.image }}:{{ c.currentTag }} <span class="dd-text-secondary">&middot;</span>
                   <span data-test="container-card-server-text">{{ parseServer(c.server).name }}</span><template v-if="parseServer(c.server).env"> <span class="dd-text-secondary">({{ parseServer(c.server).env }})</span></template>
+                  <span class="dd-text-secondary">&middot;</span>
+                  <span data-test="container-card-registry-text">{{ registryLabel(c.registry, c.registryUrl, c.registryName) }}</span>
                 </div>
               </div>
             </div>
-            <!-- Registry + policy-state icon row, ported as-is from the pre-demolition card -->
+            <!-- Update-state badge (the card's primary at-a-glance signal) + policy-state icons.
+                 Registry moved down to the subtitle line — it's secondary metadata, not the
+                 headline. The badge is suppressed on a registry error so the red error icon
+                 below isn't contradicted by a green "Current". -->
             <div class="flex items-center gap-1.5 shrink-0 ml-2">
               <span
-                data-test="container-card-registry-text"
-                class="block max-w-[140px] truncate text-2xs-plus dd-text-secondary"
-                v-tooltip.top="tt(registryLabel(c.registry, c.registryUrl, c.registryName))"
+                v-if="!hasRegistryError(c)"
+                data-test="container-card-update-state"
+                class="inline-flex items-center gap-1.5 shrink-0 text-2xs-plus font-semibold"
+                :style="{ color: getContainerUpdateStateColor(c) }"
               >
-                {{ registryLabel(c.registry, c.registryUrl, c.registryName) }}
+                <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: getContainerUpdateStateColor(c) }"></span>
+                {{ getContainerUpdateStateLabel(c) }}
               </span>
               <span v-if="hasRegistryError(c)"
                     class="inline-flex items-center justify-center"
@@ -994,25 +1004,15 @@ onScopeDispose(() => {
                "Current" tag with a tooltip on the state badge; that regressed twice (#356, #370). -->
           <div class="px-4 py-3 min-w-0">
             <div class="flex items-center gap-2 flex-wrap min-w-0">
-              <span class="text-2xs-plus dd-text-muted shrink-0">{{ t('containerComponents.groupedViews.currentLabel') }}</span>
-
               <template v-if="c.isDigestPinned && c.updateKind === 'digest' && c.newDigest && c.currentDigest">
                 <CopyableTag :tag="c.currentDigest" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
                   {{ formatShortDigest(c.currentDigest) }}
                 </CopyableTag>
-                <span class="text-2xs-plus ml-1 dd-text-muted shrink-0">{{ t('containerComponents.groupedViews.latestLabel') }}</span>
+                <span class="text-2xs-plus mx-0.5 dd-text-muted shrink-0" aria-hidden="true">&rarr;</span>
                 <CopyableTag :tag="c.newDigest" class="text-xs font-bold truncate max-w-[140px]"
                       :style="{ color: updateKindColor(c.updateKind).text }" @click.stop>
                   {{ formatShortDigest(c.newDigest) }}
                 </CopyableTag>
-                <span
-                  data-test="container-card-update-state"
-                  class="inline-flex items-center gap-1.5 text-2xs-plus font-semibold"
-                  :style="{ color: getContainerUpdateStateColor(c) }"
-                >
-                  <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: getContainerUpdateStateColor(c) }"></span>
-                  {{ getContainerUpdateStateLabel(c) }}
-                </span>
                 <span v-if="c.updateMaturity" class="text-2xs dd-text-muted">{{ getUpdateMaturityLabel(c.updateMaturity) }}</span>
               </template>
               <!-- #356 / #370 regression guard — mirrors the table's #cell-version guard branch
@@ -1024,33 +1024,17 @@ onScopeDispose(() => {
                       @click.stop>
                   {{ c.currentTag }}
                 </CopyableTag>
-                <span
-                  data-test="container-card-update-state"
-                  class="inline-flex items-center gap-1.5 ml-1 text-2xs-plus font-semibold"
-                  :style="{ color: getContainerUpdateStateColor(c) }"
-                >
-                  <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: getContainerUpdateStateColor(c) }"></span>
-                  {{ getContainerUpdateStateLabel(c) }}
-                </span>
                 <span v-if="c.updateMaturity" class="text-2xs dd-text-muted">{{ getUpdateMaturityLabel(c.updateMaturity) }}</span>
               </template>
               <template v-else-if="c.newTag">
                 <CopyableTag :tag="c.currentTag" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
                   {{ c.currentTag }}
                 </CopyableTag>
-                <span class="text-2xs-plus ml-1 dd-text-muted shrink-0">{{ t('containerComponents.groupedViews.latestLabel') }}</span>
+                <span class="text-2xs-plus mx-0.5 dd-text-muted shrink-0" aria-hidden="true">&rarr;</span>
                 <CopyableTag :tag="c.newTag" class="text-xs font-bold truncate max-w-[140px]"
                       :style="{ color: updateKindColor(c.updateKind).text }" @click.stop>
                   {{ c.newTag }}
                 </CopyableTag>
-                <span
-                  data-test="container-card-update-state"
-                  class="inline-flex items-center gap-1.5 text-2xs-plus font-semibold"
-                  :style="{ color: getContainerUpdateStateColor(c) }"
-                >
-                  <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: getContainerUpdateStateColor(c) }"></span>
-                  {{ getContainerUpdateStateLabel(c) }}
-                </span>
                 <span v-if="c.updateMaturity" class="text-2xs dd-text-muted">{{ getUpdateMaturityLabel(c.updateMaturity) }}</span>
               </template>
               <template v-else>
@@ -1061,62 +1045,21 @@ onScopeDispose(() => {
                   <AppIcon name="warning" :size="10" style="color: var(--dd-danger);" class="shrink-0" />
                   <span class="text-2xs-plus font-medium" style="color: var(--dd-danger);">{{ registryErrorPillLabel(c) }}</span>
                 </span>
-                <template v-else>
-                  <NoUpdateReasonBadge v-if="c.noUpdateReason" :reason="c.noUpdateReason" class="ml-1" />
-                  <template v-else-if="getContainerListPolicyState(c).snoozed || getContainerListPolicyState(c).skipped || getContainerListPolicyState(c).maturityBlocked">
-                    <span v-if="getContainerListPolicyState(c).snoozed"
-                          class="inline-flex items-center justify-center ml-1"
-                          style="color: var(--dd-info);"
-                          :aria-label="t('containerComponents.groupedViews.ariaSnoozedUpdates')"
-                          v-tooltip.top="tt(containerPolicyTooltip(c, 'snoozed'))">
-                      <AppIcon name="pause" :size="13" />
-                    </span>
-                    <span v-if="getContainerListPolicyState(c).skipped"
-                          class="inline-flex items-center justify-center"
-                          style="color: var(--dd-warning);"
-                          :aria-label="t('containerComponents.groupedViews.ariaSkippedUpdates')"
-                          v-tooltip.top="tt(containerPolicyTooltip(c, 'skipped'))">
-                      <AppIcon name="skip-forward" :size="13" />
-                    </span>
-                    <span v-if="getContainerListPolicyState(c).maturityBlocked"
-                          class="inline-flex items-center justify-center"
-                          style="color: var(--dd-primary);"
-                          :aria-label="t('containerComponents.groupedViews.ariaMaturityBlocked')"
-                          v-tooltip.top="tt(containerPolicyTooltip(c, 'maturity'))">
-                      <AppIcon name="clock" :size="13" />
-                    </span>
-                  </template>
-                  <span
-                    v-else
-                    data-test="container-card-update-state"
-                    class="inline-flex items-center gap-1.5 text-2xs-plus font-semibold"
-                    :style="{ color: getContainerUpdateStateColor(c) }"
-                    v-tooltip.top="tt(t('containerComponents.groupedViews.upToDateTooltip'))"
-                  >
-                    <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: getContainerUpdateStateColor(c) }"></span>
-                    {{ getContainerUpdateStateLabel(c) }}
-                  </span>
-                </template>
+                <NoUpdateReasonBadge v-else-if="c.noUpdateReason" :reason="c.noUpdateReason" class="ml-1" />
               </template>
             </div>
-            <div v-if="c.suggestedTag || c.releaseNotes || c.currentReleaseNotes || c.releaseLink || c.sourceRepo" class="flex items-center gap-2 flex-wrap mt-2">
+            <!-- Release notes + project links live in the footer as compact icon-only popovers
+                 (see the footer actions row below); rendering the full non-icon-only
+                 ReleaseNotesLink inline here dumped the entire intermediate-release tree into the
+                 card and blew its height out. Body keeps only the small suggested-tag pill. -->
+            <div v-if="c.suggestedTag" class="flex items-center gap-2 flex-wrap mt-2">
               <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
-              <ReleaseNotesLink
-                :release-notes="c.releaseNotes"
-                :current-release-notes="c.currentReleaseNotes"
-                :release-link="c.releaseLink"
-                :container-id="c.id"
-                :from-tag="c.currentTag"
-                :to-tag="c.newTag"
-              />
-              <ProjectLink :source-repo="c.sourceRepo" />
             </div>
           </div>
 
           <!-- Card footer -->
           <div class="px-4 py-2.5 flex items-center justify-between mt-auto"
                :style="{
-                 borderTop: '1px solid var(--dd-border)',
                  backgroundColor: 'var(--dd-bg-elevated)',
                }">
             <span

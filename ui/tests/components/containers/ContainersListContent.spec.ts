@@ -2,9 +2,11 @@ import type { VueWrapper } from '@vue/test-utils';
 import { computed, defineComponent, h, nextTick, provide, ref } from 'vue';
 import ContainersListContent from '@/components/containers/ContainersListContent.vue';
 import {
+  type ContainersViewTableColumn,
   type ContainersViewTemplateContext,
   containersViewTemplateContextKey,
 } from '@/components/containers/containersViewTemplateContext';
+import type { ViewMode } from '@/preferences/schema';
 import { mountWithPlugins } from '../../helpers/mount';
 
 const DataTableColumnPickerStub = defineComponent({
@@ -28,7 +30,14 @@ const DataTableColumnPickerStub = defineComponent({
 });
 
 const DataFilterBarStub = defineComponent({
-  props: ['modelValue', 'showFilters', 'filteredCount', 'totalCount', 'activeFilterCount'],
+  props: [
+    'modelValue',
+    'showFilters',
+    'filteredCount',
+    'totalCount',
+    'activeFilterCount',
+    'hideViewToggle',
+  ],
   emits: ['update:modelValue', 'update:showFilters'],
   template: `
     <div data-test="data-filter-bar" :data-model-value="modelValue">
@@ -38,6 +47,7 @@ const DataFilterBarStub = defineComponent({
       <button type="button" data-test="set-view-cards" @click="$emit('update:modelValue', 'cards')">
         Cards
       </button>
+      <slot name="sort" />
       <slot name="extra-buttons" />
       <slot name="left" />
       <slot name="center" />
@@ -52,7 +62,15 @@ function makeTemplateContext(
   return {
     error: ref(null),
     loading: ref(false),
-    containerViewMode: ref('table'),
+    containerViewMode: ref<ViewMode>('table'),
+    containerCardReflowForced: ref(false),
+    containerSortKey: ref('name'),
+    containerSortAsc: ref(true),
+    tableColumns: computed<ContainersViewTableColumn[]>(() => [
+      { key: 'icon', label: '', sortable: false, icon: true },
+      { key: 'name', label: 'Container', sortable: true, icon: false },
+      { key: 'status', label: 'Status', sortable: true, icon: false },
+    ]),
     showFilters: ref(false),
     filteredContainers: ref([]),
     containers: ref([]),
@@ -142,7 +160,7 @@ describe('ContainersListContent', () => {
 
   it('hides the column picker in cards mode and shows it in table mode', async () => {
     const context = makeTemplateContext({
-      containerViewMode: ref('cards'),
+      containerViewMode: ref<ViewMode>('cards'),
     });
     wrapper = mountWithContext(context);
 

@@ -96,6 +96,20 @@ const props = withDefaults(
      * it only ever forces cards on at wider widths, never forces the table on below 640px.
      */
     preferCards?: boolean;
+    /**
+     * Suppress the built-in card-mode sort bar because an ancestor toolbar (DataFilterBar)
+     * is hosting the sort control instead. Views that render a DataSortControl in their
+     * filter bar set this so sorting isn't duplicated. Leave false when DataTable is the
+     * only place a card-mode sort affordance can live (e.g. views with no filter bar).
+     */
+    hoistCardSort?: boolean;
+    /**
+     * Card-mode grid: minimum width of a card before the row wraps to another column.
+     * Cards lay out as `repeat(auto-fill, minmax(cardMinWidth, 1fr))`, so wide viewports pack
+     * several cards per row and narrow ones collapse to a single column. Ignored while
+     * `virtualScroll` is on (virtualization needs a single-column vertical flow for its spacers).
+     */
+    cardMinWidth?: string;
   }>(),
   {
     showActions: false,
@@ -109,6 +123,8 @@ const props = withDefaults(
     isMobile: false,
     hiddenColumnKeys: () => [],
     preferCards: false,
+    hoistCardSort: false,
+    cardMinWidth: '320px',
   },
 );
 
@@ -116,6 +132,12 @@ const emit = defineEmits<{
   'update:sortKey': [key: string];
   'update:sortAsc': [asc: boolean];
   'row-click': [row: Record<string, unknown>];
+  /**
+   * Fires when the measured-width card reflow (< 640px container) toggles. Distinct from
+   * `preferCards` (the desktop toggle): this is true ONLY when the width forces cards, so an
+   * ancestor can hide a table/cards switch that would be a dead control at this width.
+   */
+  'update:cardReflowForced': [value: boolean];
 }>();
 
 function getRowKey(
@@ -436,6 +458,12 @@ const CARD_MODE_MAX_WIDTH = 640;
 const isCardMode = computed(
   () => viewportWidth.value > 0 && (viewportWidth.value < CARD_MODE_MAX_WIDTH || props.preferCards),
 );
+// True only when the measured width (not the desktop toggle) forces cards. Surfaced so an
+// ancestor toolbar can hide a table/cards switch that can't do anything at this width.
+const cardReflowForced = computed(
+  () => viewportWidth.value > 0 && viewportWidth.value < CARD_MODE_MAX_WIDTH,
+);
+watch(cardReflowForced, (value) => emit('update:cardReflowForced', value), { immediate: true });
 
 function resolvedColumn(colKey: string): ResolvedDataTableColumn | undefined {
   return allResolvedColumns.value.find((column) => column.key === colKey);
@@ -847,6 +875,19 @@ function isFullWidthRow(row: Record<string, unknown>): boolean {
   return props.fullWidthRow?.(row) ?? false;
 }
 
+// True when the row list carries group-header (full-width) rows, i.e. the view is grouped.
+// In card mode this flips the grid off uniform-height rows: group headers must keep their
+// natural height and span every column instead of being stretched into a tall single cell.
+const hasFullWidthRows = computed(() => props.rows.some((row) => isFullWidthRow(row)));
+
+// Grouped table view floats each stack on the page background (the gaps between stacks ARE the
+// app bg), so the sort header needs its own fill to still read as a distinct bar — it uses the
+// raised `--dd-bg-elevated` (matching the group title bars). Ungrouped tables keep the recessed
+// `--dd-bg-inset` header on their card surface.
+const tableHeaderBg = computed(() =>
+  hasFullWidthRows.value ? 'var(--dd-bg-elevated)' : 'var(--dd-bg-inset)',
+);
+
 function isInteractiveRow(row: Record<string, unknown>): boolean {
   if (props.rowInteractive) {
     return props.rowInteractive(row);
@@ -870,6 +911,13 @@ function rowBackgroundColor(row: Record<string, unknown>, localIndex: number): s
   }
   if (isSelectedRow(row)) {
     return 'var(--dd-bg-elevated)';
+  }
+  // Grouped table view floats each stack as a solid `--dd-bg-card` block on the darker
+  // `--dd-bg-inset` ground the wrapper paints, so drop zebra striping — an odd (inset) row at
+  // a stack's bottom edge would otherwise blend into the inset gap below it and smear the
+  // separation the grouping is trying to create.
+  if (hasFullWidthRows.value) {
+    return 'var(--dd-bg-card)';
   }
   return rowAbsoluteIndex(localIndex) % 2 === 0 ? 'var(--dd-bg-card)' : 'var(--dd-bg-inset)';
 }
@@ -971,7 +1019,7 @@ function handleCardSortChange(event: Event): void {
 
 <template>
   <div class="dd-rounded overflow-hidden"
-       :style="{ backgroundColor: 'var(--dd-bg-card)' }">
+       :style="{ backgroundColor: isCardMode ? 'transparent' : (hasFullWidthRows ? 'var(--dd-bg)' : 'var(--dd-bg-card)') }">
     <div
       ref="scrollViewportRef"
       class="overflow-x-auto overscroll-x-contain dd-data-table-scroll"
@@ -983,7 +1031,7 @@ function handleCardSortChange(event: Event): void {
       :style="virtualScroll ? { maxHeight: virtualMaxHeight } : maxHeight ? { maxHeight } : {}"
       @scroll="handleVirtualScroll">
       <template v-if="isCardMode">
-        <div v-if="rows.length > 0 && sortableCardColumns.length > 0"
+        <div v-if="rows.length > 0 && sortableCardColumns.length > 0 && !hoistCardSort"
              class="dd-data-table-card-sort-bar flex items-center gap-2 px-3 pt-3 pb-2">
           <select
             data-test="dd-card-sort-select"
@@ -1008,13 +1056,17 @@ function handleCardSortChange(event: Event): void {
             <span aria-hidden="true">{{ sortAsc === false ? '▼' : '▲' }}</span>
           </AppButton>
         </div>
-        <ul role="list" class="flex flex-col gap-2 px-3 pb-3">
+        <ul role="list"
+            class="gap-3 pb-3"
+            :class="virtualScroll ? 'flex flex-col' : 'grid'"
+            :style="virtualScroll ? undefined : { gridTemplateColumns: `repeat(auto-fill, minmax(${cardMinWidth}, 1fr))`, gridAutoRows: hasFullWidthRows ? 'auto' : '1fr' }">
           <li
             v-if="topSpacerHeight > 0"
             aria-hidden="true"
             data-test="dd-card-top-spacer"
             :style="{ height: `${topSpacerHeight}px` }" />
-          <li v-for="(row, i) in visibleRows" :key="getRowKey(row, rowKey)">
+          <li v-for="(row, i) in visibleRows" :key="getRowKey(row, rowKey)"
+              :style="!virtualScroll && isFullWidthRow(row) ? { gridColumn: '1 / -1' } : undefined">
             <template v-if="isFullWidthRow(row)">
               <slot name="full-row" :row="row" :index="rowAbsoluteIndex(i)" :card-mode="true" />
             </template>
@@ -1026,6 +1078,7 @@ function handleCardSortChange(event: Event): void {
                    isInteractiveRow(row) && isSelectedRow(row) ? 'dd-data-table-card-selected' : '',
                    rowClass?.(row) ?? '',
                    $slots.card ? 'overflow-hidden' : 'p-4 gap-3',
+                   virtualScroll ? '' : 'h-full',
                  ]"
                  :style="{ '--dd-data-table-row-bg': rowBackgroundColor(row, i) }"
                  :tabindex="isInteractiveRow(row) ? 0 : undefined"
@@ -1101,7 +1154,7 @@ function handleCardSortChange(event: Event): void {
           />
         </colgroup>
         <thead>
-          <tr :style="{ backgroundColor: 'var(--dd-bg-inset)', borderBottom: 'none' }">
+          <tr :style="{ backgroundColor: tableHeaderBg, borderBottom: 'none' }">
             <th v-for="col in resolvedColumns" :key="col.key"
                 :data-col-key="col.key"
                 scope="col"
@@ -1113,7 +1166,7 @@ function handleCardSortChange(event: Event): void {
                   pinnedColumnOffsets.has(col.key) ? ['sticky', 'z-20'] : '',
                   col.key === firstNonIconColKey ? 'dd-sticky-col-left' : '',
                 ]"
-                :style="pinnedColumnOffsets.has(col.key) ? { backgroundColor: 'var(--dd-bg-inset)', ...pinnedInsetStyle(col.key) } : undefined"
+                :style="pinnedColumnOffsets.has(col.key) ? { backgroundColor: tableHeaderBg, ...pinnedInsetStyle(col.key) } : undefined"
                 :tabindex="isSortableColumn(col) ? 0 : undefined"
                 :aria-sort="ariaSort(col)"
                 @keydown="handleHeaderKeydown($event, col)"
@@ -1145,7 +1198,7 @@ function handleCardSortChange(event: Event): void {
                   'text-right px-3 py-2.5 font-semibold uppercase tracking-wider text-2xs whitespace-nowrap dd-text-muted relative',
                   hasHorizontalOverflow ? '' : ['sticky', 'end-0', 'z-20'],
                 ]"
-                :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
+                :style="{ backgroundColor: tableHeaderBg }">
               {{ t('sharedComponents.dataTable.actions') }}
             </th>
           </tr>

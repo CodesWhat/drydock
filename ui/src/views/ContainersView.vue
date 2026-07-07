@@ -494,6 +494,9 @@ const {
 });
 
 const containerViewMode = useViewMode('containers');
+// Set by the DataTable's measured-width reflow (< 640px); hides the table/cards toggle and
+// keeps the sort control in the toolbar when the width forces cards.
+const containerCardReflowForced = ref(false);
 
 const tableActionStyle = usePreference(
   () => preferences.containers.tableActions,
@@ -1388,6 +1391,7 @@ function registryErrorTooltip(container: Container): string {
 }
 
 provide(containersViewTemplateContextKey, {
+  containerCardReflowForced,
   error,
   loading,
   containers,

@@ -19,6 +19,11 @@ defineProps<{
   viewModes?: Array<{ id: string; icon: string }>;
   showColumnPicker?: boolean;
   hideFilter?: boolean;
+  /**
+   * Hide the table/cards switcher even when `modelValue` is bound. Used when the width forces
+   * cards (mobile reflow): the switcher would be a dead control there, so it's just cards.
+   */
+  hideViewToggle?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -80,7 +85,9 @@ function viewModeLabel(id: string): string {
           <span class="text-2xs font-semibold tabular-nums shrink-0 px-2 py-1 dd-rounded dd-text-muted dd-bg-card">
             {{ filteredCount }}/{{ totalCount }}<template v-if="countLabel"> {{ countLabel }}</template>
           </span>
-          <div v-if="modelValue !== undefined"
+          <!-- Sort control (card mode only — table mode sorts via column headers) -->
+          <slot name="sort" />
+          <div v-if="modelValue !== undefined && !hideViewToggle"
                class="flex items-center dd-rounded overflow-hidden"
                role="group"
                :aria-label="t('sharedComponents.dataFilterBar.viewMode')">

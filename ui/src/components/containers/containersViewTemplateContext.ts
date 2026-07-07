@@ -112,6 +112,8 @@ export interface ContainersViewTemplateContext
   loading: Ref<boolean>;
   containers: Ref<Container[]>;
   containerViewMode: ReturnType<typeof useViewMode>;
+  /** True when the DataTable's measured width (< 640px) forces card reflow. */
+  containerCardReflowForced: Ref<boolean>;
   serverNames: ComputedRef<string[]>;
   tt: (label: string) => { value: string; showDelay: number };
   groupByStack: WritableComputedRef<boolean>;
