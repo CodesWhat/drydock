@@ -177,6 +177,8 @@ These labels are being replaced by semantic equivalents.
 | **Detection** | Log warning during container initialization |
 | **Migration** | Replace `dd.trigger.include` with `dd.action.include` or `dd.notification.include`. Replace `dd.trigger.exclude` with `dd.action.exclude` or `dd.notification.exclude` |
 
+A legacy label applies to both trigger categories, but only as a fallback: for a given category it is consulted only when that category's own scoped label is absent from the container. It is never merged with a scoped label that is present. So `dd.action.include=docker` plus `dd.trigger.include=slack` filters action triggers by `docker` and notification triggers by `slack`.
+
 ### Manual updates bypass `dd.action.include` / `dd.action.exclude` {#action-include-exclude-soft-blocker}
 
 In v1.5.x, the `trigger-not-included` and `trigger-excluded` eligibility reasons are **soft** blockers: the UI shows a *Trigger filtered* / *Trigger excluded* pill, but clicking the per-row Update button still queues the update after a confirmation step. In v1.7.0 these reasons become **hard** blockers and the Update button is locked when the labels filter out the action trigger.

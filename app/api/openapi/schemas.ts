@@ -447,6 +447,42 @@ export const openApiSchemas = {
       identityKey: { type: 'string' },
       updateAvailable: { type: 'boolean' },
       image: { ...genericObjectSchema },
+      actionTriggerInclude: {
+        type: 'string',
+        example: 'dockercompose.local:minor',
+        description:
+          'Comma-separated action trigger ids or names, each with an optional :threshold, that may fire for this container. From the dd.action.include label, falling back to the deprecated dd.trigger.include. Applies only to action triggers (docker, dockercompose, command).',
+      },
+      actionTriggerExclude: {
+        type: 'string',
+        example: 'docker.local',
+        description:
+          'Comma-separated action trigger ids or names that must not fire for this container. From the dd.action.exclude label, falling back to the deprecated dd.trigger.exclude. Applies only to action triggers.',
+      },
+      notificationTriggerInclude: {
+        type: 'string',
+        example: 'smtp.gmail,slack.alerts:major',
+        description:
+          'Comma-separated notification trigger ids or names, each with an optional :threshold, that may fire for this container. From the dd.notification.include label, falling back to the deprecated dd.trigger.include. Applies only to notification triggers.',
+      },
+      notificationTriggerExclude: {
+        type: 'string',
+        example: 'pushover.mobile',
+        description:
+          'Comma-separated notification trigger ids or names that must not fire for this container. From the dd.notification.exclude label, falling back to the deprecated dd.trigger.exclude. Applies only to notification triggers.',
+      },
+      triggerInclude: {
+        type: 'string',
+        deprecated: true,
+        description:
+          'Deprecated compat mirror of actionTriggerInclude/notificationTriggerInclude, kept for old API/agent consumers. Matching code no longer reads this field — use actionTriggerInclude/notificationTriggerInclude.',
+      },
+      triggerExclude: {
+        type: 'string',
+        deprecated: true,
+        description:
+          'Deprecated compat mirror of actionTriggerExclude/notificationTriggerExclude, kept for old API/agent consumers. Matching code no longer reads this field — use actionTriggerExclude/notificationTriggerExclude.',
+      },
     },
     required: ['id', 'name'],
     additionalProperties: true,

@@ -27,6 +27,10 @@ import {
   enqueueContainerUpdates,
   UpdateRequestError,
 } from '../../updates/request-update.js';
+import {
+  getContainerTriggerFiltersForCategory,
+  getTriggerCategoryForType,
+} from '../trigger-category.js';
 import { BatchDispatcher } from './trigger-batch-dispatcher.js';
 import { OneShotKeyTracker, RecentSignatureSuppressor } from './trigger-deduplicator.js';
 import { DigestBuffer } from './trigger-digest-buffer.js';
@@ -191,26 +195,11 @@ export const BUFFER_ENTRY_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
  * and therefore must NOT be routed through the admission/accept queue.
  *
  * If you add a new update-executing type here, also add it to
- * `ACTION_TRIGGER_TYPES` below so the category taxonomy stays in sync.
+ * `ACTION_TRIGGER_TYPES` in `triggers/trigger-category.ts` so the category
+ * taxonomy stays in sync. That module owns the action/notification split; this
+ * set is the narrower "actually runs the Docker update lifecycle" subset.
  */
 const UPDATE_ACTION_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
-
-/**
- * Trigger types classified as "action" triggers for configuration-taxonomy
- * purposes. Determines:
- *   - The default `auto` value (`'oninclude'` instead of `true`/`'all'`).
- *   - The `category` metadata field returned by `getMetadata()`.
- *
- * This is a strict superset of `UPDATE_ACTION_TRIGGER_TYPES`. The only
- * additional member is `'command'`: a command trigger is an "action" in the
- * sense that it executes something on the host, but it does NOT implement the
- * Docker update lifecycle and must NOT enter the admission queue — so it must
- * not appear in `UPDATE_ACTION_TRIGGER_TYPES`.
- *
- * Derived from `UPDATE_ACTION_TRIGGER_TYPES` plus `'command'` so the two sets
- * cannot silently diverge if a new update-executing type is added.
- */
-const ACTION_TRIGGER_TYPES = new Set([...UPDATE_ACTION_TRIGGER_TYPES, 'command']);
 
 function getContainerNotificationKey(
   container: Pick<Container, 'id' | 'name' | 'watcher'> | undefined,
@@ -744,7 +733,7 @@ class Trigger<
   }
 
   private getCategory() {
-    return ACTION_TRIGGER_TYPES.has(this.type.toLowerCase()) ? 'action' : 'notification';
+    return getTriggerCategoryForType(this.type);
   }
 
   private getAutoMode() {
@@ -1649,14 +1638,16 @@ class Trigger<
       };
     }
 
-    const { triggerInclude, triggerExclude } = containerResult;
+    const category = this.getCategory();
+    const { include: triggerInclude, exclude: triggerExclude } =
+      getContainerTriggerFiltersForCategory(containerResult, category);
     const included = this.isTriggerIncluded(containerResult, triggerInclude);
     const excluded = this.isTriggerExcluded(containerResult, triggerExclude);
 
     if (!included || excluded) {
       return {
         allowed: false,
-        reason: `triggerInclude=${triggerInclude ?? '<none>'}, triggerExclude=${triggerExclude ?? '<none>'}, included=${included}, excluded=${excluded}`,
+        reason: `category=${category}, triggerInclude=${triggerInclude ?? '<none>'}, triggerExclude=${triggerExclude ?? '<none>'}, included=${included}, excluded=${excluded}`,
       };
     }
 

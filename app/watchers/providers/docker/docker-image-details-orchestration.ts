@@ -13,6 +13,7 @@ import {
   getDockerWatcherRegistryId,
   getDockerWatcherSourceKey,
   isDockerWatcher,
+  warnTriggerCategoryScopeChangeIfNeeded,
 } from './container-init.js';
 import {
   canonicalizeContainerName,
@@ -41,7 +42,13 @@ export interface ContainerLabelOverrides {
   linkTemplate?: string;
   displayName?: string;
   displayIcon?: string;
+  actionTriggerInclude?: string;
+  actionTriggerExclude?: string;
+  notificationTriggerInclude?: string;
+  notificationTriggerExclude?: string;
+  /** @deprecated compat mirror — see Container.triggerInclude/triggerExclude. */
   triggerInclude?: string;
+  /** @deprecated compat mirror. */
   triggerExclude?: string;
   registryLookupImage?: string;
   registryLookupUrl?: string;
@@ -94,6 +101,10 @@ interface ResolvedContainerLabelOverrides {
   linkTemplate?: string;
   displayName?: string;
   displayIcon?: string;
+  actionTriggerInclude?: string;
+  actionTriggerExclude?: string;
+  notificationTriggerInclude?: string;
+  notificationTriggerExclude?: string;
   triggerInclude?: string;
   triggerExclude?: string;
   lookupImage?: string;
@@ -109,6 +120,10 @@ interface ResolvedContainerConfig {
   linkTemplate?: string;
   displayName?: string;
   displayIcon?: string;
+  actionTriggerInclude?: string;
+  actionTriggerExclude?: string;
+  notificationTriggerInclude?: string;
+  notificationTriggerExclude?: string;
   triggerInclude?: string;
   triggerExclude?: string;
   lookupImage?: string;
@@ -719,6 +734,7 @@ export async function addImageDetailsToContainerOrchestration(
     containerInspect,
   );
   warnWhenUntrackableImage(watcher, dockerContainerName, isSemver, watchDigest, tagPrecision);
+  warnTriggerCategoryScopeChangeIfNeeded(dockerContainerName, resolvedConfig);
 
   const containerToReturn = helpers.normalizeContainer({
     id: containerId,
@@ -736,6 +752,10 @@ export async function addImageDetailsToContainerOrchestration(
       resolvedConfig.displayName,
     ),
     displayIcon: resolvedConfig.displayIcon,
+    actionTriggerInclude: resolvedConfig.actionTriggerInclude,
+    actionTriggerExclude: resolvedConfig.actionTriggerExclude,
+    notificationTriggerInclude: resolvedConfig.notificationTriggerInclude,
+    notificationTriggerExclude: resolvedConfig.notificationTriggerExclude,
     triggerInclude: resolvedConfig.triggerInclude,
     triggerExclude: resolvedConfig.triggerExclude,
     image: {

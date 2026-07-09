@@ -906,7 +906,7 @@ describe('computeUpdateEligibility', () => {
         isTriggerIncluded: () => true,
       });
       const container = makeContainerWithTagUpdate({
-        triggerExclude: 'docker.update',
+        actionTriggerExclude: 'docker.update',
       });
       const result = computeUpdateEligibility(
         container,
@@ -919,6 +919,29 @@ describe('computeUpdateEligibility', () => {
       expect(blocker).toBeDefined();
       expect(blocker?.details?.triggerExclude).toBe('docker.update');
     });
+
+    test('reads the action-scoped exclude, never the deprecated mirror (#494)', () => {
+      const isTriggerExcluded = vi.fn().mockReturnValue(false);
+      const trigger = makeTrigger({
+        isTriggerExcluded,
+        isTriggerIncluded: () => true,
+      });
+      const container = makeContainerWithTagUpdate({
+        triggerExclude: 'docker.update',
+        notificationTriggerExclude: 'docker.update',
+      });
+
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({
+          triggers: { 'docker.update': trigger as never },
+          now: FIXED_NOW,
+        }),
+      );
+
+      expect(isTriggerExcluded).toHaveBeenCalledWith(container, undefined);
+      expect(result.blockers.find((b) => b.reason === 'trigger-excluded')).toBeUndefined();
+    });
   });
 
   describe('trigger-not-included', () => {
@@ -928,7 +951,7 @@ describe('computeUpdateEligibility', () => {
         isTriggerIncluded: () => false,
       });
       const container = makeContainerWithTagUpdate({
-        triggerInclude: 'other.trigger',
+        actionTriggerInclude: 'other.trigger',
       });
       const result = computeUpdateEligibility(
         container,
@@ -940,6 +963,29 @@ describe('computeUpdateEligibility', () => {
       const blocker = result.blockers.find((b) => b.reason === 'trigger-not-included');
       expect(blocker).toBeDefined();
       expect(blocker?.details?.triggerInclude).toBe('other.trigger');
+    });
+
+    test('reads the action-scoped include, never the deprecated mirror (#494)', () => {
+      const isTriggerIncluded = vi.fn().mockReturnValue(true);
+      const trigger = makeTrigger({
+        isTriggerExcluded: () => false,
+        isTriggerIncluded,
+      });
+      const container = makeContainerWithTagUpdate({
+        triggerInclude: 'slack.alert',
+        notificationTriggerInclude: 'slack.alert',
+      });
+
+      const result = computeUpdateEligibility(
+        container,
+        makeContext({
+          triggers: { 'docker.update': trigger as never },
+          now: FIXED_NOW,
+        }),
+      );
+
+      expect(isTriggerIncluded).toHaveBeenCalledWith(container, undefined);
+      expect(result.blockers.find((b) => b.reason === 'trigger-not-included')).toBeUndefined();
     });
 
     test('trigger-excluded takes precedence over trigger-not-included', () => {

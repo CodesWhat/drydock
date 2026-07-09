@@ -154,6 +154,8 @@ export interface ContainerUpdateOperationState {
   targetImage?: string;
 }
 
+export type TriggerCategory = 'action' | 'notification';
+
 export interface Container {
   id: string;
   name: string;
@@ -169,7 +171,13 @@ export interface Container {
   tagFamily?: string;
   linkTemplate?: string;
   link?: string;
+  actionTriggerInclude?: string;
+  actionTriggerExclude?: string;
+  notificationTriggerInclude?: string;
+  notificationTriggerExclude?: string;
+  /** @deprecated compat mirror for /api/v1, persisted store, and mixed-version agents. */
   triggerInclude?: string;
+  /** @deprecated compat mirror. */
   triggerExclude?: string;
   tagPinned?: boolean;
   updatePolicy?: ContainerUpdatePolicy;
@@ -272,6 +280,10 @@ const schema = joi.object({
   tagFamily: joi.string(),
   linkTemplate: joi.string(),
   link: joi.string(),
+  actionTriggerInclude: joi.string(),
+  actionTriggerExclude: joi.string(),
+  notificationTriggerInclude: joi.string(),
+  notificationTriggerExclude: joi.string(),
   triggerInclude: joi.string(),
   triggerExclude: joi.string(),
   tagPinned: joi.boolean(),

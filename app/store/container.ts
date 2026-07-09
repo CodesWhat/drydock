@@ -13,6 +13,7 @@ const { validate: validateContainer } = container;
 
 import { emitContainerAdded, emitContainerRemoved, emitContainerUpdated } from '../event/index.js';
 import { hasRawUpdate, isRollbackContainerName } from '../model/container.js';
+import { resolveTriggerLabelValuesPure } from '../watchers/providers/docker/trigger-label-resolution.js';
 import { initCollection } from './util.js';
 
 let containers: ReturnType<typeof initCollection> | undefined;
@@ -744,6 +745,46 @@ export function createCollections(db) {
 }
 
 /**
+ * Normalize the four category-scoped trigger label fields (#494). Applied on
+ * every insert/update so incoming agent snapshots are repaired too, not only
+ * rows touched by store/migrate.ts's startup migration. Never overwrites an
+ * already-populated scoped field, and never touches the mirror itself.
+ *
+ * Resolved per direction. When the labels carry any trigger label for that
+ * direction, the scoped values win and the deprecated
+ * triggerInclude/triggerExclude mirror is NOT consulted — falling back to it
+ * would re-collapse a lone `dd.action.include` onto the notification field and
+ * undo the category scoping. The mirror is only a fallback for a container
+ * whose labels say nothing about that direction: a pre-1.6 stored row, or an
+ * old-agent snapshot carrying the mirror but no labels.
+ */
+function normalizeContainerTriggerLabelFields<T extends Partial<container.Container>>(
+  containerToNormalize: T,
+): T {
+  const { labels } = containerToNormalize;
+  const include = labels ? resolveTriggerLabelValuesPure(labels, 'include') : {};
+  const exclude = labels ? resolveTriggerLabelValuesPure(labels, 'exclude') : {};
+
+  if (include.mirror !== undefined) {
+    containerToNormalize.actionTriggerInclude ??= include.action;
+    containerToNormalize.notificationTriggerInclude ??= include.notification;
+  } else {
+    containerToNormalize.actionTriggerInclude ??= containerToNormalize.triggerInclude;
+    containerToNormalize.notificationTriggerInclude ??= containerToNormalize.triggerInclude;
+  }
+
+  if (exclude.mirror !== undefined) {
+    containerToNormalize.actionTriggerExclude ??= exclude.action;
+    containerToNormalize.notificationTriggerExclude ??= exclude.notification;
+  } else {
+    containerToNormalize.actionTriggerExclude ??= containerToNormalize.triggerExclude;
+    containerToNormalize.notificationTriggerExclude ??= containerToNormalize.triggerExclude;
+  }
+
+  return containerToNormalize;
+}
+
+/**
  * Insert new Container.
  * @param container
  */
@@ -787,6 +828,7 @@ export function insertContainer(container) {
     }
   }
   const containerToSave = validateContainer(container);
+  normalizeContainerTriggerLabelFields(containerToSave);
   containerToSave.updateDetectedAt = getUpdateDetectedAt(undefined, containerToSave);
   containerToSave.firstSeenAt = getFirstSeenAt(undefined, containerToSave);
   storeContainerSecurityStateHash(containerToSave);
@@ -833,6 +875,7 @@ export function updateContainer(container) {
         : containerCurrent?.details,
   };
   const containerToReturn = validateContainer(containerMerged);
+  normalizeContainerTriggerLabelFields(containerToReturn);
   containerToReturn.updateDetectedAt = getUpdateDetectedAt(containerCurrent, containerToReturn);
   containerToReturn.firstSeenAt = getFirstSeenAt(containerCurrent, containerToReturn);
   const containerCurrentSecurityHash = getStoredContainerSecurityStateHash(containerCurrent);

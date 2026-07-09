@@ -469,7 +469,9 @@ export function computeUpdateEligibility(
     }
 
     // 8. trigger-excluded / 9. trigger-not-included
-    const { triggerInclude, triggerExclude } = container;
+    // Action admission reads the action-scoped labels explicitly, never the deprecated mirror.
+    const { actionTriggerInclude: triggerInclude, actionTriggerExclude: triggerExclude } =
+      container;
     const included = t.isTriggerIncluded(container, triggerInclude);
     const excluded = t.isTriggerExcluded(container, triggerExclude);
 

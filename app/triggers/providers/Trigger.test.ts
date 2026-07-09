@@ -1014,7 +1014,7 @@ test('mustTrigger should accept trigger name-only include filters', async () => 
 
   expect(
     trigger.mustTrigger({
-      triggerInclude: 'update:minor',
+      actionTriggerInclude: 'update:minor',
       updateKind: {
         kind: 'tag',
         semverDiff: 'minor',
@@ -1029,7 +1029,7 @@ test('mustTrigger should accept trigger name-only exclude filters', async () => 
 
   expect(
     trigger.mustTrigger({
-      triggerExclude: 'update',
+      actionTriggerExclude: 'update',
       updateKind: {
         kind: 'tag',
         semverDiff: 'patch',
@@ -1090,11 +1090,51 @@ test('mustTrigger should fire with include label when auto is oninclude', () => 
 
   expect(
     trigger.mustTrigger({
-      triggerInclude: 'update:minor',
+      actionTriggerInclude: 'update:minor',
       updateKind: {
         kind: 'tag',
         semverDiff: 'minor',
       },
+    }),
+  ).toBe(true);
+});
+
+test('mustTrigger reads only the filters scoped to its own category (#494)', () => {
+  const dockerTrigger = new Trigger();
+  dockerTrigger.log = log;
+  dockerTrigger.configuration = { ...configurationValid, auto: true };
+  dockerTrigger.type = 'docker';
+  dockerTrigger.name = 'update';
+
+  const slackTrigger = new Trigger();
+  slackTrigger.log = log;
+  slackTrigger.configuration = { ...configurationValid, auto: true };
+  slackTrigger.type = 'slack';
+  slackTrigger.name = 'update';
+
+  // The action label excludes the action trigger and leaves the notification one alone.
+  const container = {
+    actionTriggerExclude: 'update',
+    updateKind: { kind: 'tag', semverDiff: 'minor' },
+  };
+
+  expect(dockerTrigger.mustTrigger(container)).toBe(false);
+  expect(slackTrigger.mustTrigger(container)).toBe(true);
+});
+
+test('mustTrigger never falls back to the deprecated triggerInclude/triggerExclude mirror (#494)', () => {
+  const slackTrigger = new Trigger();
+  slackTrigger.log = log;
+  slackTrigger.configuration = { ...configurationValid, auto: true };
+  slackTrigger.type = 'slack';
+  slackTrigger.name = 'update';
+
+  // Pre-v1.6 stores carry the mirror. A notification trigger must ignore it entirely.
+  expect(
+    slackTrigger.mustTrigger({
+      triggerExclude: 'update',
+      actionTriggerExclude: 'update',
+      updateKind: { kind: 'tag', semverDiff: 'minor' },
     }),
   ).toBe(true);
 });
@@ -1116,8 +1156,8 @@ test('doesReferenceMatchId should be case-insensitive', async () => {
 });
 
 test('mustTrigger should exclude multiple trigger types by name-only', async () => {
-  // When a container has triggerExclude='update', ALL triggers named 'update'
-  // should be excluded regardless of provider type
+  // Excluding 'update' across categories takes both scoped labels since v1.6 (#494):
+  // ALL triggers named 'update' are excluded regardless of provider type.
   const dockerTrigger = new Trigger();
   dockerTrigger.log = log;
   dockerTrigger.configuration = { ...configurationValid };
@@ -1131,7 +1171,8 @@ test('mustTrigger should exclude multiple trigger types by name-only', async () 
   discordTrigger.name = 'update';
 
   const container = {
-    triggerExclude: 'update',
+    actionTriggerExclude: 'update',
+    notificationTriggerExclude: 'update',
     updateKind: { kind: 'tag', semverDiff: 'minor' },
   };
 
@@ -1160,7 +1201,8 @@ test('mustTrigger should include multiple trigger types by name-only', async () 
   slackNotify.name = 'notify';
 
   const container = {
-    triggerInclude: 'update:minor',
+    actionTriggerInclude: 'update:minor',
+    notificationTriggerInclude: 'update:minor',
     updateKind: { kind: 'tag', semverDiff: 'minor' },
   };
 
@@ -1186,11 +1228,13 @@ test('mustTrigger should support name-only include with threshold for hybrid tri
 
   // Include 'update' triggers only for minor (excludes major)
   const containerMinor = {
-    triggerInclude: 'update:minor',
+    actionTriggerInclude: 'update:minor',
+    notificationTriggerInclude: 'update:minor',
     updateKind: { kind: 'tag', semverDiff: 'minor' },
   };
   const containerMajor = {
-    triggerInclude: 'update:minor',
+    actionTriggerInclude: 'update:minor',
+    notificationTriggerInclude: 'update:minor',
     updateKind: { kind: 'tag', semverDiff: 'major' },
   };
 
@@ -3336,7 +3380,7 @@ test('handleContainerUpdateFailedEvent should skip when mustTrigger returns fals
     watcher: 'local',
     name: 'container1',
     updateAvailable: true,
-    triggerExclude: 'update',
+    notificationTriggerExclude: 'update',
     updateKind: { kind: 'tag', semverDiff: 'major' },
   };
   trigger.configuration.mode = 'simple';
@@ -4169,7 +4213,7 @@ test('handleContainerReport should debug log when mustTrigger returns false', as
     container: {
       name: 'container1',
       updateAvailable: true,
-      triggerExclude: 'update',
+      actionTriggerExclude: 'update',
       updateKind: { kind: 'tag', semverDiff: 'major' },
     },
   });
@@ -4191,13 +4235,13 @@ test('handleContainerReport should include trigger filter context when mustTrigg
       watcher: 'local',
       name: 'container1',
       updateAvailable: true,
-      triggerExclude: 'mobile',
+      notificationTriggerExclude: 'mobile',
       updateKind: { kind: 'tag', semverDiff: 'major' },
     },
   });
 
   expect(debugSpy).toHaveBeenCalledWith(
-    'Trigger conditions not met => ignore (triggerInclude=<none>, triggerExclude=mobile, included=true, excluded=true)',
+    'Trigger conditions not met => ignore (category=notification, triggerInclude=<none>, triggerExclude=mobile, included=true, excluded=true)',
   );
 });
 

@@ -2379,13 +2379,16 @@ describe('Container Router', () => {
       expect(res.json).toHaveBeenCalledWith({ data: expect.any(Array), total: 1 });
     });
 
-    test('should filter triggers with triggerInclude', async () => {
+    test('should filter triggers with notificationTriggerInclude', async () => {
       Trigger.parseIncludeOrIncludeTriggerString.mockReturnValue({ id: 'slack.default' });
       Trigger.doesReferenceMatchId.mockImplementation((ref, id) => ref === id);
-      const res = await callGetContainerTriggers({ id: 'c1', triggerInclude: 'slack.default' }, [
-        { type: 'slack', name: 'default', configuration: {} },
-        { type: 'email', name: 'default', configuration: {} },
-      ]);
+      const res = await callGetContainerTriggers(
+        { id: 'c1', notificationTriggerInclude: 'slack.default' },
+        [
+          { type: 'slack', name: 'default', configuration: {} },
+          { type: 'email', name: 'default', configuration: {} },
+        ],
+      );
 
       expect(res.status).toHaveBeenCalledWith(200);
       const triggers = getTriggersFromResponse(res);
@@ -2393,13 +2396,16 @@ describe('Container Router', () => {
       expect(triggers[0].type).toBe('slack');
     });
 
-    test('should filter triggers with triggerExclude', async () => {
+    test('should filter triggers with notificationTriggerExclude', async () => {
       Trigger.parseIncludeOrIncludeTriggerString.mockReturnValue({ id: 'slack.default' });
       Trigger.doesReferenceMatchId.mockImplementation((ref, id) => ref === id);
-      const res = await callGetContainerTriggers({ id: 'c1', triggerExclude: 'slack.default' }, [
-        { type: 'slack', name: 'default', configuration: {} },
-        { type: 'email', name: 'default', configuration: {} },
-      ]);
+      const res = await callGetContainerTriggers(
+        { id: 'c1', notificationTriggerExclude: 'slack.default' },
+        [
+          { type: 'slack', name: 'default', configuration: {} },
+          { type: 'email', name: 'default', configuration: {} },
+        ],
+      );
 
       expect(res.status).toHaveBeenCalledWith(200);
       const triggers = getTriggersFromResponse(res);
@@ -2429,7 +2435,7 @@ describe('Container Router', () => {
       });
       Trigger.doesReferenceMatchId.mockReturnValue(true);
       const res = await callGetContainerTriggers(
-        { id: 'c1', triggerInclude: 'slack.default(all)' },
+        { id: 'c1', notificationTriggerInclude: 'slack.default(all)' },
         [{ type: 'slack', name: 'default', configuration: {} }],
       );
 

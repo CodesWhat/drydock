@@ -47,6 +47,7 @@ import {
   mergeConfigWithImgset,
   pruneOldContainers,
   resolveLabelsFromContainer,
+  resolveTriggerLabelOverrides,
 } from './container-init.js';
 import {
   mapContainerToContainerReport as mapContainerToContainerReportState,
@@ -112,8 +113,6 @@ import {
   ddTagFamily,
   ddTagInclude,
   ddTagTransform,
-  ddTriggerExclude,
-  ddTriggerInclude,
   ddWatch,
   wudDisplayIcon,
   wudDisplayName,
@@ -123,8 +122,6 @@ import {
   wudTagExclude,
   wudTagInclude,
   wudTagTransform,
-  wudTriggerExclude,
-  wudTriggerInclude,
   wudWatch,
 } from './label.js';
 import { getNextMaintenanceWindow, isInMaintenanceWindow } from './maintenance.js';
@@ -1275,8 +1272,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         linkTemplate: getLabel(container.Labels, ddLinkTemplate, wudLinkTemplate),
         displayName: getLabel(container.Labels, ddDisplayName, wudDisplayName),
         displayIcon: getLabel(container.Labels, ddDisplayIcon, wudDisplayIcon),
-        triggerInclude: getLabel(container.Labels, ddTriggerInclude, wudTriggerInclude),
-        triggerExclude: getLabel(container.Labels, ddTriggerExclude, wudTriggerExclude),
+        ...resolveTriggerLabelOverrides(container.Labels),
         registryLookupImage: getLabel(
           container.Labels,
           ddRegistryLookupImage,

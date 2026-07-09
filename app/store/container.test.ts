@@ -123,6 +123,100 @@ test('updateContainer should update doc and emit an event', async () => {
   expect(spyEvent).toHaveBeenCalled();
 });
 
+describe('category-scoped trigger label normalization (#494)', () => {
+  function saveAndCapture(overrides) {
+    const collection = { findOne: () => {}, insert: () => {} };
+    const db = { getCollection: () => collection, addCollection: () => null };
+    container.createCollections(db);
+    return container.insertContainer({ ...createContainerFixture(), ...overrides });
+  }
+
+  test('derives both scoped fields independently from both labels', () => {
+    const saved = saveAndCapture({
+      labels: { 'dd.action.include': 'docker', 'dd.notification.include': 'slack' },
+      triggerInclude: 'docker',
+    });
+
+    expect(saved.actionTriggerInclude).toBe('docker');
+    expect(saved.notificationTriggerInclude).toBe('slack');
+  });
+
+  test('a lone action label does not leak onto the notification field via the mirror', () => {
+    const saved = saveAndCapture({
+      labels: { 'dd.action.include': 'docker' },
+      triggerInclude: 'docker',
+    });
+
+    expect(saved.actionTriggerInclude).toBe('docker');
+    expect(saved.notificationTriggerInclude).toBeUndefined();
+  });
+
+  test('a lone notification label does not leak onto the action field via the mirror', () => {
+    const saved = saveAndCapture({
+      labels: { 'dd.notification.exclude': 'slack' },
+      triggerExclude: 'slack',
+    });
+
+    expect(saved.notificationTriggerExclude).toBe('slack');
+    expect(saved.actionTriggerExclude).toBeUndefined();
+  });
+
+  test('recovers the notification value the old collapsed mirror discarded', () => {
+    const saved = saveAndCapture({
+      labels: { 'dd.action.include': 'docker', 'dd.notification.include': 'slack' },
+      triggerInclude: 'docker',
+      actionTriggerInclude: undefined,
+      notificationTriggerInclude: undefined,
+    });
+
+    expect(saved.notificationTriggerInclude).toBe('slack');
+  });
+
+  test('falls back to the mirror for both categories when the container has no labels', () => {
+    const saved = saveAndCapture({
+      labels: undefined,
+      triggerInclude: 'docker',
+      triggerExclude: 'compose',
+    });
+
+    expect(saved.actionTriggerInclude).toBe('docker');
+    expect(saved.notificationTriggerInclude).toBe('docker');
+    expect(saved.actionTriggerExclude).toBe('compose');
+    expect(saved.notificationTriggerExclude).toBe('compose');
+  });
+
+  test('falls back to the mirror for a direction the labels say nothing about', () => {
+    const saved = saveAndCapture({
+      labels: { 'dd.action.include': 'docker' },
+      triggerInclude: 'docker',
+      triggerExclude: 'compose',
+    });
+
+    expect(saved.notificationTriggerInclude).toBeUndefined();
+    expect(saved.actionTriggerExclude).toBe('compose');
+    expect(saved.notificationTriggerExclude).toBe('compose');
+  });
+
+  test('never overwrites an already-populated scoped field', () => {
+    const saved = saveAndCapture({
+      labels: { 'dd.action.include': 'docker' },
+      actionTriggerInclude: 'explicit',
+      triggerInclude: 'docker',
+    });
+
+    expect(saved.actionTriggerInclude).toBe('explicit');
+  });
+
+  test('preserves the deprecated mirror untouched', () => {
+    const saved = saveAndCapture({
+      labels: { 'dd.action.include': 'docker', 'dd.notification.include': 'slack' },
+      triggerInclude: 'docker',
+    });
+
+    expect(saved.triggerInclude).toBe('docker');
+  });
+});
+
 test('updateContainer should use collection update when available for existing containers', async () => {
   const existingContainer = {
     data: createContainerFixture({

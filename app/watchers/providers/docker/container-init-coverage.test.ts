@@ -1,9 +1,12 @@
 import { describe, expect, test, vi } from 'vitest';
+import log from '../../../log/index.js';
+import { recordLegacyInput } from '../../../prometheus/compatibility.js';
 import {
   applyDerivedLabelFieldsToContainer,
   filterRecreatedContainerAliases,
-  getLabel,
   getMatchingImgsetConfiguration,
+  resolveTriggerLabelOverrides,
+  warnTriggerCategoryScopeChangeIfNeeded,
 } from './container-init.js';
 
 vi.mock('../../../log/index.js', () => ({
@@ -29,6 +32,12 @@ vi.mock('../../../store/container.js', () => ({
 
 vi.mock('../../../prometheus/compatibility.js', () => ({
   recordLegacyInput: vi.fn(),
+}));
+
+const mockGetState = vi.hoisted(() => vi.fn(() => ({ trigger: {} })));
+
+vi.mock('../../../registry/index.js', () => ({
+  getState: mockGetState,
 }));
 
 describe('container-init coverage', () => {
@@ -224,35 +233,197 @@ describe('container-init coverage', () => {
     ]);
   });
 
-  test.each([
-    {
-      ddKey: 'dd.trigger.include',
-      aliasKey: 'dd.action.include',
-      aliasValue: 'action-include',
-      legacyValue: 'legacy-include',
-      fallbackKey: 'wud.trigger.include',
-    },
-    {
-      ddKey: 'dd.trigger.exclude',
-      aliasKey: 'dd.notification.exclude',
-      aliasValue: 'notification-exclude',
-      fallbackKey: 'wud.trigger.exclude',
-    },
-  ])('getLabel prefers $aliasKey over $ddKey', ({
-    aliasKey,
-    aliasValue,
-    ddKey,
-    fallbackKey,
-    legacyValue,
-  }) => {
-    const labels: Record<string, string> = {
-      [aliasKey]: aliasValue,
-    };
-    if (legacyValue) {
-      labels[ddKey] = legacyValue;
-    }
+  describe('resolveTriggerLabelOverrides', () => {
+    test('resolves both categories independently (#494)', () => {
+      expect(
+        resolveTriggerLabelOverrides({
+          'dd.action.include': 'docker',
+          'dd.notification.include': 'slack',
+          'dd.action.exclude': 'compose',
+          'dd.notification.exclude': 'ntfy',
+        }),
+      ).toEqual({
+        actionTriggerInclude: 'docker',
+        actionTriggerExclude: 'compose',
+        notificationTriggerInclude: 'slack',
+        notificationTriggerExclude: 'ntfy',
+        triggerInclude: 'docker',
+        triggerExclude: 'compose',
+      });
+    });
 
-    expect(getLabel(labels, ddKey, fallbackKey)).toBe(aliasValue);
+    test('a lone scoped label leaves the other category unset (strict scoping)', () => {
+      const resolved = resolveTriggerLabelOverrides({ 'dd.action.include': 'docker' });
+
+      expect(resolved.actionTriggerInclude).toBe('docker');
+      expect(resolved.notificationTriggerInclude).toBeUndefined();
+      expect(resolved.triggerInclude).toBe('docker');
+    });
+
+    test('the deprecated label fills only the categories without a scoped label, warns once, and records the legacy input', () => {
+      const warn = vi.fn();
+      const warnedLegacyTriggerLabels = new Set<string>();
+      const labels = { 'dd.action.include': 'docker', 'dd.trigger.include': 'both' };
+
+      const first = resolveTriggerLabelOverrides(labels, {}, { warn, warnedLegacyTriggerLabels });
+      expect(first.actionTriggerInclude).toBe('docker');
+      expect(first.notificationTriggerInclude).toBe('both');
+      expect(first.triggerInclude).toBe('docker');
+
+      resolveTriggerLabelOverrides(labels, {}, { warn, warnedLegacyTriggerLabels });
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain('dd.trigger.include');
+      expect(recordLegacyInput).toHaveBeenCalledWith('label', 'dd.trigger.include');
+    });
+
+    test('warns naming the exclude aliases for a deprecated dd.trigger.exclude label', () => {
+      const warn = vi.fn();
+
+      const resolved = resolveTriggerLabelOverrides(
+        { 'dd.trigger.exclude': 'both' },
+        {},
+        { warn, warnedLegacyTriggerLabels: new Set() },
+      );
+
+      expect(resolved.actionTriggerExclude).toBe('both');
+      expect(resolved.notificationTriggerExclude).toBe('both');
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain('dd.action.exclude');
+      expect(warn.mock.calls[0][0]).toContain('dd.notification.exclude');
+    });
+
+    test('falls back to the wud.* label for both categories when no dd.* trigger label is present', () => {
+      const resolved = resolveTriggerLabelOverrides(
+        { 'wud.trigger.exclude': 'legacy' },
+        {},
+        { warn: vi.fn() },
+      );
+
+      expect(resolved.actionTriggerExclude).toBe('legacy');
+      expect(resolved.notificationTriggerExclude).toBe('legacy');
+      expect(resolved.triggerExclude).toBe('legacy');
+    });
+
+    test('explicit overrides take priority over the labels', () => {
+      const resolved = resolveTriggerLabelOverrides(
+        { 'dd.action.include': 'docker', 'dd.notification.include': 'slack' },
+        { actionTriggerInclude: 'override', notificationTriggerExclude: 'override-exclude' },
+      );
+
+      expect(resolved.actionTriggerInclude).toBe('override');
+      expect(resolved.notificationTriggerInclude).toBe('slack');
+      expect(resolved.notificationTriggerExclude).toBe('override-exclude');
+    });
+
+    test('yields all-undefined fields when there are no trigger labels', () => {
+      expect(resolveTriggerLabelOverrides({ 'dd.watch': 'true' })).toEqual({
+        actionTriggerInclude: undefined,
+        actionTriggerExclude: undefined,
+        notificationTriggerInclude: undefined,
+        notificationTriggerExclude: undefined,
+        triggerInclude: undefined,
+        triggerExclude: undefined,
+      });
+    });
+  });
+
+  describe('warnTriggerCategoryScopeChangeIfNeeded', () => {
+    test('warns once when a lone action label no longer gates a configured notification trigger', () => {
+      const warn = vi.fn();
+      const warnedContainerNames = new Set<string>();
+      const resolved = { actionTriggerInclude: 'docker' };
+      const options = {
+        warn,
+        warnedContainerNames,
+        hasConfiguredTriggerOfCategory: () => true,
+      };
+
+      warnTriggerCategoryScopeChangeIfNeeded('nginx', resolved, options);
+      warnTriggerCategoryScopeChangeIfNeeded('nginx', resolved, options);
+
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain('dd.action.include');
+      expect(warn.mock.calls[0][0]).toContain('dd.notification.include');
+      expect(warn.mock.calls[0][0]).toContain('no longer filters notification triggers');
+    });
+
+    test('warns for a lone notification exclude when an action trigger is configured', () => {
+      const warn = vi.fn();
+
+      warnTriggerCategoryScopeChangeIfNeeded(
+        'nginx',
+        { notificationTriggerExclude: 'ntfy' },
+        { warn, warnedContainerNames: new Set(), hasConfiguredTriggerOfCategory: () => true },
+      );
+
+      expect(warn.mock.calls[0][0]).toContain('dd.notification.exclude');
+      expect(warn.mock.calls[0][0]).toContain('no longer filters action triggers');
+    });
+
+    test('stays quiet when the other category has no configured trigger', () => {
+      const warn = vi.fn();
+
+      warnTriggerCategoryScopeChangeIfNeeded(
+        'nginx',
+        { actionTriggerInclude: 'docker' },
+        { warn, warnedContainerNames: new Set(), hasConfiguredTriggerOfCategory: () => false },
+      );
+
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    test('stays quiet when both categories are scoped, and when neither is', () => {
+      const warn = vi.fn();
+      const options = {
+        warn,
+        warnedContainerNames: new Set<string>(),
+        hasConfiguredTriggerOfCategory: () => true,
+      };
+
+      warnTriggerCategoryScopeChangeIfNeeded(
+        'nginx',
+        { actionTriggerInclude: 'docker', notificationTriggerInclude: 'slack' },
+        options,
+      );
+      warnTriggerCategoryScopeChangeIfNeeded('redis', {}, options);
+
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    test('ignores a container with no name', () => {
+      const warn = vi.fn();
+
+      warnTriggerCategoryScopeChangeIfNeeded(
+        '',
+        { actionTriggerInclude: 'docker' },
+        { warn, warnedContainerNames: new Set(), hasConfiguredTriggerOfCategory: () => true },
+      );
+
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    test('reads the configured triggers from the registry and logs via the default logger', () => {
+      mockGetState.mockReturnValue({ trigger: { 'slack.notify': { type: 'slack' } } });
+
+      warnTriggerCategoryScopeChangeIfNeeded('registry-backed', { actionTriggerInclude: 'docker' });
+
+      expect(mockGetState).toHaveBeenCalled();
+      expect(log.warn).toHaveBeenCalledWith(
+        expect.stringContaining('no longer filters notification triggers'),
+      );
+    });
+
+    test('stays quiet when the registry has no trigger of the other category', () => {
+      vi.mocked(log.warn).mockClear();
+      mockGetState.mockReturnValue({ trigger: { 'docker.local': { type: 'docker' } } });
+
+      warnTriggerCategoryScopeChangeIfNeeded('registry-backed-quiet', {
+        actionTriggerInclude: 'docker',
+      });
+
+      expect(log.warn).not.toHaveBeenCalled();
+    });
   });
 
   test('getMatchingImgsetConfiguration returns undefined for missing configs and picks the best match', () => {

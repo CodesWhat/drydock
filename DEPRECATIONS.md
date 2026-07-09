@@ -153,6 +153,8 @@ The official Docker image keeps `curl` available in v1.5.x and v1.6.x for backwa
 
 Legacy trigger prefixes are accepted as compatibility aliases while the trigger taxonomy moves to action/notification prefixes.
 
+The `dd.trigger.include` / `dd.trigger.exclude` labels apply to both trigger categories as a shared fallback beneath `dd.action.include` / `dd.action.exclude` and `dd.notification.include` / `dd.notification.exclude`: for a given category, the legacy label is only consulted when that category's own scoped label is absent from the container. It is not merged with a scoped label that is present.
+
 **Migration:** Prefer `DD_ACTION_*` / `DD_NOTIFICATION_*` and `dd.action.*` / `dd.notification.*`.
 
 The migration CLI can rewrite legacy trigger prefixes for you:
