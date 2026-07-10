@@ -55,7 +55,7 @@ import { loadEd25519PrivateKey, signRequest } from './ed25519-signer.js';
 export interface AgentClientConfig {
   host: string;
   port: number;
-  // Required when authMode is 'token' (the default).
+  // Required when authmode is 'token' (the default).
   secret: string;
   cafile?: string;
   certfile?: string;
@@ -64,11 +64,11 @@ export interface AgentClientConfig {
   // (X-Dd-Agent-Secret header, unchanged). 'ed25519' signs each request with
   // the four X-Portwing-* headers per Portwing's verifier instead — see
   // app/agent/ed25519-signer.ts and app/agent/components/Agent.ts.
-  authMode?: AgentAuthMode;
-  // Required when authMode is 'ed25519'.
-  signingKeyId?: string;
-  // Required when authMode is 'ed25519': PEM-encoded PKCS#8 Ed25519 private key.
-  signingKey?: string;
+  authmode?: AgentAuthMode;
+  // Required when authmode is 'ed25519'.
+  signingkeyid?: string;
+  // Required when authmode is 'ed25519': PEM-encoded PKCS#8 Ed25519 private key.
+  signingkey?: string;
 }
 
 interface AgentClientRuntimeInfo {
@@ -201,7 +201,7 @@ export class AgentClient {
   private readonly log: Logger;
   private readonly baseUrl: string;
   private readonly axiosOptions: AxiosRequestConfig;
-  // Parsed once at construction when authMode is 'ed25519'; undefined in token mode.
+  // Parsed once at construction when authmode is 'ed25519'; undefined in token mode.
   private readonly ed25519PrivateKey?: KeyObject;
   public isConnected: boolean;
   public info: AgentClientRuntimeInfo;
@@ -230,7 +230,7 @@ export class AgentClient {
     this.baseUrl = parsedBaseUrl.origin;
     this.rejectSecretConfiguredOverHttp(parsedBaseUrl.protocol);
     this.axiosOptions = this.buildAxiosOptions();
-    if (this.config.authMode === 'ed25519') {
+    if (this.config.authmode === 'ed25519') {
       this.ed25519PrivateKey = this.loadSigningKey();
     }
 
@@ -299,7 +299,7 @@ export class AgentClient {
     // Token mode (default): static X-Dd-Agent-Secret header, unchanged from
     // pre-ed25519 behavior. Ed25519 mode signs each request individually (see
     // buildRequestConfig) and sends no token header at all.
-    if (this.config.authMode !== 'ed25519') {
+    if (this.config.authmode !== 'ed25519') {
       options.headers = {
         'X-Dd-Agent-Secret': this.config.secret,
       };
@@ -319,16 +319,16 @@ export class AgentClient {
    * unsigned or malformed requests.
    */
   private loadSigningKey(): KeyObject {
-    if (!this.config.signingKeyId || !this.config.signingKey) {
+    if (!this.config.signingkeyid || !this.config.signingkey) {
       throw new Error(
-        `Agent ${this.name} has authMode 'ed25519' but is missing signingKeyId/signingKey`,
+        `Agent ${this.name} has authmode 'ed25519' but is missing signingkeyid/signingkey`,
       );
     }
     try {
-      return loadEd25519PrivateKey(this.config.signingKey);
+      return loadEd25519PrivateKey(this.config.signingkey);
     } catch (error: unknown) {
       throw new Error(
-        `Agent ${this.name} has an invalid Ed25519 signingKey: ${getErrorMessage(error)}`,
+        `Agent ${this.name} has an invalid Ed25519 signingkey: ${getErrorMessage(error)}`,
       );
     }
   }
@@ -358,14 +358,14 @@ export class AgentClient {
    * In token mode this just returns the static axiosOptions, unchanged.
    */
   private buildRequestConfig(method: string, path: string, data?: unknown): AxiosRequestConfig {
-    if (!this.ed25519PrivateKey || !this.config.signingKeyId) {
+    if (!this.ed25519PrivateKey || !this.config.signingkeyid) {
       return this.axiosOptions;
     }
     const signedHeaders = signRequest({
       method,
       path,
       body: this.serializeBodyForSigning(data),
-      keyId: this.config.signingKeyId,
+      keyId: this.config.signingkeyid,
       privateKey: this.ed25519PrivateKey,
     });
     return {

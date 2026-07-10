@@ -60,7 +60,7 @@ export function loadEd25519PrivateKey(pem: string): KeyObject {
   const keyObject = createPrivateKey(pem);
   if (keyObject.asymmetricKeyType !== 'ed25519') {
     throw new Error(
-      `Expected an Ed25519 private key, got asymmetricKeyType=${keyObject.asymmetricKeyType ?? 'unknown'}`,
+      `Expected an Ed25519 private key, got asymmetricKeyType=${keyObject.asymmetricKeyType}`,
     );
   }
   return keyObject;

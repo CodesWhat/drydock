@@ -1,0 +1,247 @@
+---
+title: "Portwing Edge API"
+description: "Ed25519 agent-key registry and the portwing/1.0 WebSocket edge endpoint for firewall-traversing agents."
+---
+
+import { Callout } from 'fumadocs-ui/components/callout';
+
+<Callout type="warn">Portwing support is experimental. Both the WebSocket gateway and the key-registry REST API below only exist when the server is started with `DD_EXPERIMENTAL_PORTWING=true` — the wire protocol and REST shapes may still change before this graduates out of the flag.</Callout>
+
+Edge mode inverts the normal drydock connection model. In the standard setup the controller dials out to each remote agent. Edge mode is for agents that sit behind NAT or a firewall and cannot accept inbound connections: the `portwing` agent dials **out** to drydock over an encrypted WebSocket (`wss://`), and drydock registers the connection as if the agent had been reached normally. No inbound port on the agent host is needed. The chain is `sockguard → portwing (edge client) → drydock (this endpoint)`.
+
+> For agents that accept inbound connections from the controller, see the [Agent API](/docs/api/agent).
+
+---
+
+## Ed25519 authentication model
+
+Edge connections use public-key authentication; no session cookie or shared secret is involved.
+
+1. The operator generates an Ed25519 keypair on the agent host and registers the **public key** with drydock via the [key registry REST API](#key-registry) below (or preloads it at startup — see [preloading keys](#preloading-keys-at-startup)).
+2. drydock stores the raw 32-byte public key (as standard base64) and derives a **key ID**: `hex(SHA-256(raw 32-byte pubkey)[0:8])`, yielding exactly 16 lowercase hex characters.
+3. When the agent connects it sends a signed **hello frame** as the first WebSocket message. The frame includes the `pubKeyId`, a Unix timestamp (seconds), a random 32-hex-char nonce, and an Ed25519 signature.
+4. drydock verifies the timestamp is within **±60 seconds** of server time and that the nonce has not been seen before in that window. Both checks guard against replay attacks.
+5. Only after a successful signature verification is the nonce committed to the replay cache.
+
+The signature is computed over a canonical, newline-joined message (SigV4-style), so the agent and server derive the identical bytes independently:
+
+```text
+GET
+/api/portwing/ws
+<SHA-256 hex of the empty request body>
+<unix-timestamp-seconds>
+<nonce>
+```
+
+The body hash is the SHA-256 of an empty body (`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`), and the path segment is always the literal `/api/portwing/ws` — see [the WebSocket endpoint](#websocket-endpoint) note on the versioned alias.
+
+---
+
+## Key registry
+
+The key registry is mounted at `/api/v1/portwing/keys`. Unlike the WebSocket endpoint below, there's no unversioned alias here: the bare `/api/*` prefix was removed in v1.6.0 — the unversioned path now fails fast with a 410-style rejection instead of routing anywhere (see [Deprecations](/docs/deprecations#unversioned-api-paths)). All routes require an authenticated drydock session (same-origin or equivalent).
+
+### List keys
+
+Returns all registered keys — both active and revoked.
+
+```bash
+curl http://drydock:3000/api/v1/portwing/keys
+
+[
+  {
+    "keyId": "3f8a1c2e9b047d56",
+    "pubkey": "kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE=",
+    "label": "prod-agent-us-east",
+    "createdAt": "2026-05-01T09:00:00.000Z",
+    "revokedAt": null
+  }
+]
+```
+
+Each record has the shape:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `keyId` | string | 16 lowercase hex chars — `hex(SHA-256(raw pubkey)[0:8])` |
+| `pubkey` | string | Base64-standard encoded raw 32-byte Ed25519 public key (44 chars) |
+| `label` | string | Human-readable name supplied at registration |
+| `createdAt` | string | ISO-8601 UTC timestamp |
+| `revokedAt` | string \| null | ISO-8601 UTC revocation timestamp, or `null` while active |
+
+### Register a key
+
+```bash
+curl -X POST http://drydock:3000/api/v1/portwing/keys \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pubkeyBase64": "kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE=",
+    "label": "prod-agent-us-east"
+  }'
+
+HTTP/1.1 201 Created
+
+{
+  "keyId": "3f8a1c2e9b047d56",
+  "label": "prod-agent-us-east",
+  "createdAt": "2026-05-01T09:00:00.000Z"
+}
+```
+
+#### Request body
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `pubkeyBase64` | string | Yes | Standard base64-encoded raw 32-byte Ed25519 public key |
+| `label` | string | Yes | Human-readable identifier for this key |
+
+#### Status codes
+
+| Code | Meaning |
+| --- | --- |
+| `201` | Key registered; response body contains `keyId`, `label`, `createdAt` |
+| `400` | Missing or malformed fields (non-string, empty string, invalid base64, wrong key length) |
+| `409` | A non-revoked key with this `keyId` is already registered |
+
+### Revoke a key
+
+Revoked keys are rejected on the next connection attempt, and any **live** session already authenticated under that key is disconnected immediately (error frame with code `unknown-key`, close code `1008`). Revocation also releases every agent-name [bound](#hello-frame) to that key, so a different key can claim the name on its next hello. The record is retained (with `revokedAt` set) for audit purposes.
+
+```bash
+curl -X DELETE http://drydock:3000/api/v1/portwing/keys/3f8a1c2e9b047d56
+
+HTTP/1.1 204 No Content
+```
+
+#### Status codes
+
+| Code | Meaning |
+| --- | --- |
+| `204` | Key revoked |
+| `400` | Invalid `keyId` format — must be exactly 16 lowercase hex characters |
+| `404` | No key with this `keyId` found |
+
+### Preloading keys at startup
+
+Set `DD_PORTWING_AUTHORIZED_KEYS` to the path of an `authorized_keys`-style file to bootstrap the registry at process startup, instead of (or in addition to) registering keys one at a time through the REST API:
+
+```text
+# ed25519 <base64-standard raw 32-byte pubkey> [optional comment]
+ed25519 kPGd2xqT8vWzN4cRfYbLmJhQ5sUaE7nVwXyZ0AB1CdE= prod-agent-us-east
+```
+
+Blank lines and `#`-prefixed comments are skipped. The file must not be world-readable — drydock refuses to load it and logs a warning otherwise (edge connections then require manual key registration). Loading is idempotent: a `keyId` that's already active is skipped, and a `keyId` present in the file but already revoked is left revoked (with a warning) rather than silently reactivated.
+
+---
+
+## WebSocket endpoint
+
+Edge agents connect to:
+
+```text
+wss://drydock/api/portwing/ws
+```
+
+A versioned alias `/api/v1/portwing/ws` is also accepted and is signature-equivalent — the canonical path `/api/portwing/ws` is always used in signature computation regardless of which path the agent actually dialed. This dual-path acceptance is intentional protocol behavior (unlike the unversioned `/api/log/stream` WebSocket alias, which was removed in v1.6.0): adding or removing the `/v1` prefix never forces a key rotation.
+
+**Subprotocol:** `portwing/1.0`
+
+### Connection flow
+
+1. The agent opens a WebSocket upgrade to `wss://drydock/api/portwing/ws` with the `portwing/1.0` subprotocol header. The upgrade is rejected before any WebSocket frame is read if the `Origin` header doesn't match the server (`403`) or the connection is rate-limited (`429`).
+2. The agent sends a **hello frame** as the first message, within 30 seconds — otherwise the connection is closed (code `1008`, no error frame). The frame carries `pubKeyId`, `timestamp`, `nonce`, and `signature` as described under [Ed25519 authentication model](#ed25519-authentication-model) above, plus `agentId`, `protocol` (must be `portwing/1.0`), and `version`.
+3. drydock verifies the hello. On success it replies with a **welcome frame** carrying poll configuration and server version information.
+4. The connection is then live: the agent multiplexes container-sync, exec, and (for the controller-initiated log/delete actions) request-response frames over the same WebSocket. The server also sends a `ping` frame every 30 seconds; an agent that misses two consecutive pongs (60 seconds of silence) is force-disconnected (close code `1001`, reason `ping timeout`).
+
+### Hello frame
+
+```json
+{
+  "type": "hello",
+  "data": {
+    "agentId": "edge-host-01",
+    "agentName": "edge-host-01",
+    "protocol": "portwing/1.0",
+    "version": "1.5.0",
+    "pubKeyId": "3f8a1c2e9b047d56",
+    "timestamp": 1780329600,
+    "nonce": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+    "signature": "..."
+  }
+}
+```
+
+`agentId` must match `^[a-zA-Z0-9_-]+$` (max 64 chars). `agentName`, if present, must be a string no longer than 256 raw characters — a non-string or oversized value is rejected with `invalid-agent-name` (close code `1008`) before it is ever sanitized or logged. A valid `agentName` is then sanitized to a safe slug (lowercase, `a-z0-9-`, max 63 chars) and used as the agent's display/registry name; an empty, missing, or all-invalid-chars name falls back to `portwing-edge-<agentId>`.
+
+**Identity binding (anti-squat/anti-theft).** A sanitized or fallback name has no cryptographic meaning of its own, so drydock binds each name to the `pubKeyId` that first authenticates a hello under it. A later hello that reuses the same name is admitted only if it authenticates under that *same* key; a hello for a name already bound to a *different* key is rejected with `agent-name-claimed`. The binding is not released on a plain disconnect — it persists so a reconnecting agent keeps its name — but it *is* released the moment the owning key is [revoked](#revoke-a-key), freeing the name for a legitimately re-provisioned agent to reclaim. The binding registry is capped at 10,000 distinct names; once full, drydock first tries evicting bindings that are both idle 24+ hours and not backing a live connection, and only rejects the hello with `registry-full` if that doesn't free up room.
+
+A name collision with an already-connected agent under the same key (or the in-flight reservation for a hello still being processed) is rejected with `agent-already-connected`. The frame also carries `dockerVersion`, `hostname`, and `capabilities` host-descriptor fields (and optionally `drydockCompat`, `watcherTypes`, `triggerTypes`) that aren't yet consumed on this path.
+
+### Welcome frame
+
+```json
+{
+  "type": "welcome",
+  "data": {
+    "pollInterval": 300,
+    "config": {
+      "drydockVersion": "1.5.0",
+      "supportedProtocols": "portwing/1.0",
+      "serverCompatLevel": "1.4.0"
+    }
+  }
+}
+```
+
+`serverCompatLevel` is `1.4.0` — the compatibility level actually implemented by this server, not a target for a future release. If the hello's `drydockCompat` field has a different major version, the connection is still accepted; drydock only logs a warning so operators can check the compat matrix.
+
+### Protocol limits
+
+| Parameter | Value |
+| --- | --- |
+| Clock skew window | ±60 seconds |
+| Nonce format | 32 lowercase hex characters |
+| Max frame payload | 16 MB |
+| Hello timeout | 30 seconds |
+| Ping interval / pong-miss threshold | 30 seconds / 2 missed cycles (60 s of silence) |
+
+### Error frames
+
+If the hello is rejected, drydock sends a JSON error frame before closing:
+
+```json
+{
+  "type": "error",
+  "data": {
+    "message": "Ed25519 signature verification failed",
+    "code": "bad-signature"
+  }
+}
+```
+
+Close code is `1008` for every rejection except an internal signing-library failure (`internal-error`, close code `1011`, distinct from a merely-rejected signature). A bare hello timeout closes with `1008` and sends no error frame at all.
+
+Error codes: `parse-error`, `expected-hello`, `invalid-agent-name`, `protocol-mismatch`, `no-auth`, `ed25519-required`, `unknown-key`, `timestamp-skew`, `bad-nonce`, `replay`, `bad-signature`, `internal-error`, `rate-limited`, `agent-name-claimed`, `registry-full`, `agent-already-connected`.
+
+---
+
+## Enrolling a portwing agent
+
+1. **Generate a keypair** on the agent host:
+
+   ```bash
+   openssl genpkey -algorithm ed25519 -out agent.key
+   openssl pkey -in agent.key -pubout -outform DER | tail -c 32 | base64
+   ```
+
+   The last command prints the 44-character base64 public key to register.
+
+2. **Register the public key** with drydock using `POST /api/v1/portwing/keys` (or add it to the file pointed at by `DD_PORTWING_AUTHORIZED_KEYS`). Save the returned `keyId` — the agent needs it in its configuration.
+
+3. **Configure and start the agent.** Point `portwing` at:
+
+   ```text
+   wss://drydock/api/portwing/ws
+   ```
+
+   and supply the private key file and `keyId`. The agent will dial out and authenticate automatically.

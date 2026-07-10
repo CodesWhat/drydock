@@ -18,9 +18,9 @@ export async function init(): Promise<void> {
       log.warn(`Skipping agent ${name}: Missing host`);
       return;
     }
-    if (config.authMode === 'ed25519') {
-      if (!config.signingKeyId || !config.signingKey) {
-        log.warn(`Skipping agent ${name}: Missing signingKeyId or signingKey for ed25519 authMode`);
+    if (config.authmode === 'ed25519') {
+      if (!config.signingkeyid || !config.signingkey) {
+        log.warn(`Skipping agent ${name}: Missing signingkeyid or signingkey for ed25519 authmode`);
         return;
       }
     } else if (!config.secret) {

@@ -7114,7 +7114,7 @@ describe('AgentClient', () => {
     });
   });
 
-  describe('authMode: ed25519 request signing', () => {
+  describe('authmode: ed25519 request signing', () => {
     const TEST_KEY_ID = 'deadbeefcafef00d';
     let privateKeyPem: string;
     let publicKeyObject: ReturnType<typeof generateKeyPairSync<'ed25519'>>['publicKey'];
@@ -7130,9 +7130,9 @@ describe('AgentClient', () => {
         host: 'ed25519-host',
         port: 3001,
         secret: '',
-        authMode: 'ed25519',
-        signingKeyId: TEST_KEY_ID,
-        signingKey: privateKeyPem,
+        authmode: 'ed25519',
+        signingkeyid: TEST_KEY_ID,
+        signingkey: privateKeyPem,
         ...overrides,
       });
     }
@@ -7181,32 +7181,32 @@ describe('AgentClient', () => {
         expect(() => makeEd25519Client()).not.toThrow();
       });
 
-      test('throws when authMode is ed25519 but signingKeyId is missing', () => {
-        expect(() => makeEd25519Client({ signingKeyId: undefined })).toThrow(
-          /signingKeyId|signingKey/,
+      test('throws when authmode is ed25519 but signingkeyid is missing', () => {
+        expect(() => makeEd25519Client({ signingkeyid: undefined })).toThrow(
+          /signingkeyid|signingkey/,
         );
       });
 
-      test('throws when authMode is ed25519 but signingKey is missing', () => {
-        expect(() => makeEd25519Client({ signingKey: undefined })).toThrow(
-          /signingKeyId|signingKey/,
+      test('throws when authmode is ed25519 but signingkey is missing', () => {
+        expect(() => makeEd25519Client({ signingkey: undefined })).toThrow(
+          /signingkeyid|signingkey/,
         );
       });
 
-      test('throws a descriptive error when signingKey is not a valid Ed25519 key', () => {
+      test('throws a descriptive error when signingkey is not a valid Ed25519 key', () => {
         const { privateKey: rsaPrivateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
         const rsaPem = rsaPrivateKey.export({ type: 'pkcs8', format: 'pem' }) as string;
-        expect(() => makeEd25519Client({ signingKey: rsaPem })).toThrow(/Ed25519/);
+        expect(() => makeEd25519Client({ signingkey: rsaPem })).toThrow(/Ed25519/);
       });
 
-      test('throws for garbage signingKey material', () => {
-        expect(() => makeEd25519Client({ signingKey: 'not a real key' })).toThrow();
+      test('throws for garbage signingkey material', () => {
+        expect(() => makeEd25519Client({ signingkey: 'not a real key' })).toThrow();
       });
 
-      test('token-mode client (authMode omitted) is unaffected by ed25519 fields entirely', () => {
+      test('token-mode client (authmode omitted) is unaffected by ed25519 fields entirely', () => {
         // Existing default construction (used by the shared `client` from
-        // beforeEach) must remain unchanged: no authMode set at all.
-        expect(client.config.authMode).toBeUndefined();
+        // beforeEach) must remain unchanged: no authmode set at all.
+        expect(client.config.authmode).toBeUndefined();
       });
     });
 
