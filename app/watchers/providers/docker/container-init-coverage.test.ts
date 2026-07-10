@@ -40,6 +40,13 @@ vi.mock('../../../registry/index.js', () => ({
   getState: mockGetState,
 }));
 
+// Mocks are not auto-cleared (no clearMocks in vitest.config.ts), and the call-count
+// assertions below are only meaningful against a per-test baseline.
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockGetState.mockReturnValue({ trigger: {} });
+});
+
 describe('container-init coverage', () => {
   test('filterRecreatedContainerAliases covers blank Created and non-array Names fallback', () => {
     const aliasName = '/7ea6b8a42686_termix';
@@ -260,7 +267,7 @@ describe('container-init coverage', () => {
       expect(resolved.triggerInclude).toBe('docker');
     });
 
-    test('the deprecated label fills only the categories without a scoped label, warns once, and records the legacy input', () => {
+    test('the deprecated label fills only the categories without a scoped label, warns once, and records the legacy input once per resolution', () => {
       const warn = vi.fn();
       const warnedLegacyTriggerLabels = new Set<string>();
       const labels = { 'dd.action.include': 'docker', 'dd.trigger.include': 'both' };
@@ -270,11 +277,57 @@ describe('container-init coverage', () => {
       expect(first.notificationTriggerInclude).toBe('both');
       expect(first.triggerInclude).toBe('docker');
 
+      // One legacy label, one direction, one metric increment — not one per category.
+      expect(recordLegacyInput).toHaveBeenCalledTimes(1);
+      expect(recordLegacyInput).toHaveBeenCalledWith('label', 'dd.trigger.include');
+
       resolveTriggerLabelOverrides(labels, {}, { warn, warnedLegacyTriggerLabels });
 
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn.mock.calls[0][0]).toContain('dd.trigger.include');
+    });
+
+    test('records a legacy input per direction when both deprecated labels are present', () => {
+      resolveTriggerLabelOverrides(
+        { 'dd.trigger.include': 'both', 'dd.trigger.exclude': 'both' },
+        {},
+        { warn: vi.fn(), warnedLegacyTriggerLabels: new Set() },
+      );
+
+      expect(recordLegacyInput).toHaveBeenCalledTimes(2);
       expect(recordLegacyInput).toHaveBeenCalledWith('label', 'dd.trigger.include');
+      expect(recordLegacyInput).toHaveBeenCalledWith('label', 'dd.trigger.exclude');
+    });
+
+    test('reuses fully-resolved overrides instead of re-reading the labels a second time', () => {
+      const warn = vi.fn();
+      const labels = { 'dd.trigger.include': 'both', 'dd.trigger.exclude': 'both' };
+
+      // Docker.ts resolves these labels once to build the override bag; resolveLabelsFromContainer
+      // then resolves the same labels again. The second pass must not re-fire the side effects.
+      const overrides = resolveTriggerLabelOverrides(
+        labels,
+        {},
+        { warn, warnedLegacyTriggerLabels: new Set() },
+      );
+      expect(recordLegacyInput).toHaveBeenCalledTimes(2);
+
+      const second = resolveTriggerLabelOverrides(labels, overrides, {
+        warn,
+        warnedLegacyTriggerLabels: new Set(),
+      });
+
+      expect(second).toEqual(overrides);
+      expect(recordLegacyInput).toHaveBeenCalledTimes(2);
+    });
+
+    test('still re-reads a direction whose overrides are only partially resolved', () => {
+      const resolved = resolveTriggerLabelOverrides(
+        { 'dd.action.include': 'docker', 'dd.notification.include': 'slack' },
+        { actionTriggerInclude: 'docker', triggerInclude: 'docker' },
+      );
+
+      expect(resolved.notificationTriggerInclude).toBe('slack');
     });
 
     test('warns naming the exclude aliases for a deprecated dd.trigger.exclude label', () => {
@@ -522,6 +575,32 @@ describe('container-init coverage', () => {
       const container = makeContainer();
       applyDerivedLabelFieldsToContainer(container, { 'dd.tag.family': 'loose' });
       expect(container.tagFamily).toBe('loose');
+    });
+
+    test('derives the four category-scoped trigger fields from the labels', () => {
+      const container = makeContainer();
+
+      applyDerivedLabelFieldsToContainer(container, {
+        'dd.action.include': 'docker',
+        'dd.notification.exclude': 'ntfy',
+      });
+
+      expect(container.actionTriggerInclude).toBe('docker');
+      expect(container.notificationTriggerExclude).toBe('ntfy');
+      expect(container.notificationTriggerInclude).toBeUndefined();
+      expect(container.triggerInclude).toBe('docker');
+    });
+
+    test('never emits the category-scope warning on the event path (labels here are imgset-blind)', () => {
+      mockGetState.mockReturnValue({ trigger: { 'slack.notify': { type: 'slack' } } });
+      const container = makeContainer({ name: 'imgset-backed' });
+
+      // A lone dd.action.include looks asymmetric from labels alone, but a matching imgset
+      // may well supply the notification filter. Warning here would be a false positive that
+      // latches for the life of the process.
+      applyDerivedLabelFieldsToContainer(container, { 'dd.action.include': 'docker' });
+
+      expect(log.warn).not.toHaveBeenCalled();
     });
 
     test('derives includeTags from dd.tag.include label', () => {

@@ -119,7 +119,16 @@ Example:
 dd.action.exclude=update
 ```
 
-This applies to all triggers named `update` (for example `docker.update`, `discord.update`). The legacy labels `dd.trigger.include` / `dd.trigger.exclude` still work as aliases until v1.7.0.
+This applies to every **action** trigger named `update` (for example `docker.update` and `dockercompose.update`).
+
+Each label filters only its own trigger category. `dd.action.include` / `dd.action.exclude` never filter notification triggers, and `dd.notification.include` / `dd.notification.exclude` never filter action triggers. To exclude both `docker.update` and `discord.update`, set both labels:
+
+```bash
+dd.action.exclude=update
+dd.notification.exclude=update
+```
+
+The legacy labels `dd.trigger.include` / `dd.trigger.exclude` still work as aliases until v1.7.0, and apply to both categories — but only for a category whose own scoped label is absent.
 
 #### 3. Shared threshold by trigger name
 

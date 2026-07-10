@@ -270,6 +270,50 @@ function resolveTriggerLabelValues(
 }
 
 /**
+ * Resolve one direction, reusing already-resolved `overrides` rather than
+ * re-reading the labels when every value for that direction is present.
+ *
+ * The skip is load-bearing, not an optimization. A newly-discovered container is
+ * resolved twice over the same labels — once in Docker.ts to build the override
+ * bag, then again here via resolveLabelsFromContainer — and resolveTriggerLabelValues
+ * has side effects (recordLegacyInput, deprecation warn). Without the short-circuit
+ * a deprecated dd.trigger.* label increments the legacy-input metric twice per
+ * container. The old per-key `override || getLabel(...)` loop skipped the second
+ * read for exactly this reason.
+ */
+function resolveTriggerLabelDirection(
+  containerLabels: Record<string, string>,
+  direction: 'include' | 'exclude',
+  overrides: ContainerLabelOverrides,
+  options: GetLabelOptions,
+): ResolvedTriggerLabelValues {
+  const [actionOverride, notificationOverride, mirrorOverride] =
+    direction === 'include'
+      ? [
+          overrides.actionTriggerInclude,
+          overrides.notificationTriggerInclude,
+          overrides.triggerInclude,
+        ]
+      : [
+          overrides.actionTriggerExclude,
+          overrides.notificationTriggerExclude,
+          overrides.triggerExclude,
+        ];
+
+  if (actionOverride && notificationOverride && mirrorOverride) {
+    return { action: actionOverride, notification: notificationOverride, mirror: mirrorOverride };
+  }
+
+  const resolved = resolveTriggerLabelValues(containerLabels, direction, options);
+
+  return {
+    action: actionOverride || resolved.action,
+    notification: notificationOverride || resolved.notification,
+    mirror: mirrorOverride || resolved.mirror,
+  };
+}
+
+/**
  * Resolve the four category-scoped trigger label fields plus the deprecated
  * triggerInclude/triggerExclude mirror. `overrides` (already-resolved values
  * from an earlier pass over the same labels) take priority, matching the
@@ -288,18 +332,26 @@ export function resolveTriggerLabelOverrides(
   | 'triggerInclude'
   | 'triggerExclude'
 > {
-  const includeResolved = resolveTriggerLabelValues(containerLabels, 'include', options);
-  const excludeResolved = resolveTriggerLabelValues(containerLabels, 'exclude', options);
+  const includeResolved = resolveTriggerLabelDirection(
+    containerLabels,
+    'include',
+    overrides,
+    options,
+  );
+  const excludeResolved = resolveTriggerLabelDirection(
+    containerLabels,
+    'exclude',
+    overrides,
+    options,
+  );
 
   return {
-    actionTriggerInclude: overrides.actionTriggerInclude || includeResolved.action,
-    actionTriggerExclude: overrides.actionTriggerExclude || excludeResolved.action,
-    notificationTriggerInclude:
-      overrides.notificationTriggerInclude || includeResolved.notification,
-    notificationTriggerExclude:
-      overrides.notificationTriggerExclude || excludeResolved.notification,
-    triggerInclude: overrides.triggerInclude || includeResolved.mirror,
-    triggerExclude: overrides.triggerExclude || excludeResolved.mirror,
+    actionTriggerInclude: includeResolved.action,
+    actionTriggerExclude: excludeResolved.action,
+    notificationTriggerInclude: includeResolved.notification,
+    notificationTriggerExclude: excludeResolved.notification,
+    triggerInclude: includeResolved.mirror,
+    triggerExclude: excludeResolved.mirror,
   };
 }
 
@@ -804,7 +856,11 @@ export function applyDerivedLabelFieldsToContainer(
   container.notificationTriggerExclude = resolved.notificationTriggerExclude;
   container.triggerInclude = resolved.triggerInclude;
   container.triggerExclude = resolved.triggerExclude;
-  warnTriggerCategoryScopeChangeIfNeeded(container.name, resolved);
+  // The category-scope warning is deliberately NOT emitted here. `resolved` comes from
+  // labels alone (no imgset pass, see above), so a container whose other-category filter
+  // is supplied by a matching imgset looks falsely asymmetric on this path and would
+  // latch a bogus one-time warning for the rest of the process. The full watch cycle
+  // evaluates the warning against the imgset-merged config instead.
   // displayName is managed separately by updateContainerFromInspect via
   // getCustomDisplayNameFromLabels, which handles the "no custom name →
   // fall back to container name" logic. We do not overwrite it here.
