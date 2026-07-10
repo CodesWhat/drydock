@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Container update policy is no longer lost when a container is recreated** ([#496](https://github.com/CodesWhat/drydock/issues/496)). Container documents are keyed by Docker's container ID, which changes every time a container is recreated (image pull, `docker compose up -d`, or an update trigger firing). The replacement was stored as a brand-new document and the per-container update policy — maturity gate, skipped tags/digests, snooze — was silently dropped along with the old one. Because an absent policy means "no gating" rather than "default gating", affected containers then updated immediately instead of respecting their maturity soak. The policy now survives a recreate, for containers watched locally and through a remote agent alike. Present since `1.4.1`, when per-container maturity policies were introduced.
+- The remote-agent prune path now distinguishes a recreated container from a removed one, so a container that reappears under a new ID keeps its update policy and its Home Assistant state topic, while a genuinely deleted container still has its discovery topics cleaned up.
+
 ## [1.5.1] — 2026-07-09
 
 Consolidates the `1.5.1-rc.1` … `1.5.1-rc.6` prereleases. Users upgrading from `1.5.0`

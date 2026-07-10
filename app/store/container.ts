@@ -27,6 +27,10 @@ const DEFAULT_CACHE_MAX_ENTRIES = getDefaultCacheMaxEntries();
 const DEFAULT_CONTAINERS_QUERY_CACHE_MAX_ENTRIES = DEFAULT_CACHE_MAX_ENTRIES;
 const DEFAULT_SECURITY_STATE_CACHE_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_UPDATE_LIFECYCLE_CACHE_TTL_MS = 30 * 60 * 1000;
+// Deliberately far longer than the lifecycle cache's 30 min: a maturity soak encodes
+// days-long user intent, and a replacement container can lag its predecessor by a long
+// image pull. A short TTL here would only narrow the #496 repro window, not close it.
+const DEFAULT_UPDATE_POLICY_RETENTION_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_SECURITY_STATE_CACHE_MAX_ENTRIES = DEFAULT_CACHE_MAX_ENTRIES;
 const SECURITY_STATE_CACHE_PRUNE_SCAN_BUDGET = 10;
 const CONTAINER_COLLECTION_INDICES = ['data.watcher', 'data.status', 'data.updateAvailable'];
@@ -56,6 +60,24 @@ type UpdateLifecycleCacheEntry = {
 };
 
 const updateLifecycleCache = new Map<string, UpdateLifecycleCacheEntry>();
+
+// #496: updatePolicy is durable, user-set configuration (maturity gate, skips, snooze) that
+// lives on the container document, which is keyed by Docker's ephemeral container id. A
+// recreate mints a new id, so ingestion takes insertContainer (which cannot merge from a
+// predecessor) rather than updateContainer (which can). Without this cache the policy is
+// dropped, and isUpdateSuppressed() reads an absent policy as "no gating" rather than
+// "default gating", so the very next update fires with no soak at all.
+//
+// Unlike the security-state and lifecycle caches this is deliberately NOT gated behind
+// isLocalContainer: the #386 exclusion exists because runtime state is meaningless across
+// agents, whereas updatePolicy is set on the controller and must survive for agent-owned
+// containers too — that is precisely the topology #496 was reported against.
+type UpdatePolicyRetentionCacheEntry = {
+  updatePolicy: unknown;
+  expiresAt: number;
+};
+
+const updatePolicyRetentionCache = new Map<string, UpdatePolicyRetentionCacheEntry>();
 
 interface ContainerListPaginationOptions {
   limit?: number;
@@ -93,6 +115,14 @@ export const UPDATE_LIFECYCLE_CACHE_TTL_MS = toPositiveInteger(
 );
 export const UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES = toPositiveInteger(
   process.env.DD_UPDATE_LIFECYCLE_CACHE_MAX_ENTRIES,
+  DEFAULT_CACHE_MAX_ENTRIES,
+);
+export const UPDATE_POLICY_RETENTION_CACHE_TTL_MS = toPositiveInteger(
+  process.env.DD_UPDATE_POLICY_RETENTION_CACHE_TTL_MS,
+  DEFAULT_UPDATE_POLICY_RETENTION_CACHE_TTL_MS,
+);
+export const UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES = toPositiveInteger(
+  process.env.DD_UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES,
   DEFAULT_CACHE_MAX_ENTRIES,
 );
 
@@ -744,10 +774,67 @@ export function createCollections(db) {
 }
 
 /**
+ * #496: stash a soon-to-be-replaced container's updatePolicy so the replacement (which
+ * arrives under a fresh Docker id, hence via insertContainer) can inherit it.
+ */
+function stashUpdatePolicyForReplacement(containerRaw) {
+  const updatePolicy = containerRaw?.updatePolicy;
+  if (updatePolicy === undefined || updatePolicy === null) {
+    return;
+  }
+  if (isRollbackContainerName(containerRaw?.name)) {
+    return;
+  }
+  const cacheKey = toCacheKey(containerRaw.watcher, containerRaw.name);
+  updatePolicyRetentionCache.delete(cacheKey);
+  updatePolicyRetentionCache.set(cacheKey, {
+    updatePolicy,
+    expiresAt: Date.now() + UPDATE_POLICY_RETENTION_CACHE_TTL_MS,
+  });
+  if (updatePolicyRetentionCache.size > UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES) {
+    const nowMs = Date.now();
+    for (const [expiredKey, expiredEntry] of updatePolicyRetentionCache.entries()) {
+      if (expiredEntry.expiresAt <= nowMs) {
+        updatePolicyRetentionCache.delete(expiredKey);
+      }
+    }
+  }
+  while (updatePolicyRetentionCache.size > UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES) {
+    const oldestKey = updatePolicyRetentionCache.keys().next().value;
+    /* istanbul ignore next */
+    if (oldestKey === undefined) {
+      break;
+    }
+    updatePolicyRetentionCache.delete(oldestKey);
+  }
+}
+
+/**
+ * #496: restore a retained updatePolicy onto a replacement container. The entry is consumed
+ * either way, so a stale policy can never attach to a later, unrelated container.
+ */
+function restoreRetainedUpdatePolicy(container) {
+  const cacheKey = toCacheKey(container.watcher, container.name);
+  const entry = updatePolicyRetentionCache.get(cacheKey);
+  if (!entry) {
+    return;
+  }
+  updatePolicyRetentionCache.delete(cacheKey);
+  if (entry.expiresAt <= Date.now()) {
+    return;
+  }
+  // A policy carried on the incoming payload is authoritative; the cache only fills a hole.
+  if (container.updatePolicy === undefined) {
+    container.updatePolicy = entry.updatePolicy;
+  }
+}
+
+/**
  * Insert new Container.
  * @param container
  */
 export function insertContainer(container) {
+  restoreRetainedUpdatePolicy(container);
   // #386: skip the security-state cache entirely for remote-agent containers;
   // the cache is only written by the controller's local Docker trigger and is
   // meaningless (and cross-contaminating) for containers owned by an agent.
@@ -1072,6 +1159,9 @@ export function deleteContainer(id, options: DeleteContainerOptions = {}) {
       .remove();
     invalidateContainersCacheForMutation(containerRaw, undefined);
     containerSecurityStateHashCache.delete(id);
+    if (options.replacementExpected === true) {
+      stashUpdatePolicyForReplacement(containerRaw);
+    }
     if (
       options.replacementExpected === true &&
       !(typeof containerRaw?.agent === 'string' && containerRaw.agent !== '') &&
@@ -1120,6 +1210,7 @@ export function _resetContainerStoreStateForTests() {
   clearContainersQueryCacheState();
   securityStateCache.clear();
   updateLifecycleCache.clear();
+  updatePolicyRetentionCache.clear();
   pendingFreshStateAfterManualUpdate.clear();
   containerSecurityStateHashCache.clear();
   securityStateObjectHashCache = new WeakMap<object, string>();
@@ -1161,6 +1252,10 @@ export function _setContainersQueryCacheEntriesForTests(
 
 export function _getContainersQueryCacheForTests() {
   return containersQueryCache;
+}
+
+export function _getUpdatePolicyRetentionCacheForTests() {
+  return updatePolicyRetentionCache;
 }
 
 export function _invalidateContainersCacheForMutationForTests(containerBefore, containerAfter) {

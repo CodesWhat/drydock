@@ -6408,6 +6408,42 @@ describe('AgentClient', () => {
       expect(mockLogChild.info).toHaveBeenCalledWith(expect.stringContaining('old-nginx'));
       expect(mockLogChild.info).toHaveBeenCalledWith(expect.stringContaining('Pruning'));
     });
+
+    // #496: the agent prune path deleted with no replacement signal at all, so a recreated
+    // agent-owned container lost its updatePolicy. The local watcher paths already pass this.
+    test('flags replacementExpected when a same-named container is in the new list', () => {
+      storeContainer.getContainers.mockReturnValue([
+        { id: 'old-id', name: 'nginx', agent: 'test-agent' },
+      ]);
+      (client as any).pruneOldContainers([{ id: 'new-id', name: 'nginx' }]);
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-id', {
+        replacementExpected: true,
+      });
+    });
+
+    // A genuinely removed container must stay unflagged, otherwise Hass keeps its discovery
+    // state topic alive forever (Hass.ts reads replacementExpected off the removed event).
+    test('does not flag replacementExpected when the container is genuinely gone', () => {
+      storeContainer.getContainers.mockReturnValue([
+        { id: 'c2', name: 'old-nginx', agent: 'test-agent' },
+      ]);
+      (client as any).pruneOldContainers([{ id: 'other-id', name: 'something-else' }]);
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c2');
+    });
+
+    test('does not flag replacementExpected for an unnamed stale entry', () => {
+      storeContainer.getContainers.mockReturnValue([{ id: 'c3', agent: 'test-agent' }]);
+      (client as any).pruneOldContainers([{ id: 'new-id', name: 'nginx' }]);
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('c3');
+    });
+
+    test('ignores unnamed containers in the authoritative list when matching names', () => {
+      storeContainer.getContainers.mockReturnValue([
+        { id: 'old-id', name: 'nginx', agent: 'test-agent' },
+      ]);
+      (client as any).pruneOldContainers([{ id: 'new-id' }, { id: 'n2', name: '' }]);
+      expect(storeContainer.deleteContainer).toHaveBeenCalledWith('old-id');
+    });
   });
 
   describe('buildContainerReport: clearPendingFreshState on updateAvailable === false', () => {

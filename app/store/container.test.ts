@@ -3997,3 +3997,218 @@ describe('updateLifecycleCache carry-forward', () => {
     expect(inserted.firstSeenAt).toBe(incomingFirstSeenAt);
   });
 });
+
+// #496: a container recreate mints a new Docker container id, so ingestion falls to
+// insertContainer instead of updateContainer. updateContainer merges updatePolicy
+// forward; insertContainer historically did not, so the user's maturity gate was
+// silently dropped and isUpdateSuppressed() then failed open (no policy == no gating).
+describe('updatePolicyRetentionCache carry-forward (#496)', () => {
+  const MATURITY_POLICY = { maturityMode: 'mature', maturityMinAgeDays: 5 };
+
+  function makePolicyFixture(overrides: Record<string, unknown> = {}) {
+    return {
+      ...createContainerFixture(),
+      watcher: 'local',
+      name: 'myapp',
+      ...overrides,
+    };
+  }
+
+  function mountWith(docs: Array<{ data: unknown }>) {
+    const collection = createFilterableCollection(docs);
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    return collection;
+  }
+
+  test('carries updatePolicy forward across a container recreate (new id, same watcher+name)', () => {
+    const oldFixture = makePolicyFixture({
+      id: 'policy-old-1',
+      updatePolicy: MATURITY_POLICY,
+    });
+    mountWith([{ data: oldFixture }]);
+
+    container.deleteContainer('policy-old-1', { replacementExpected: true });
+    const inserted = container.insertContainer(makePolicyFixture({ id: 'policy-new-1' }));
+
+    expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+  });
+
+  // The reported topology. insertContainer's security/lifecycle restores are gated behind
+  // isLocalContainer (#386) because runtime state is meaningless cross-agent. updatePolicy is
+  // durable controller-set config, so it must survive for agent-owned containers too.
+  test('carries updatePolicy forward for agent-owned containers', () => {
+    const oldFixture = makePolicyFixture({
+      id: 'policy-agent-old',
+      agent: 'remote1',
+      updatePolicy: MATURITY_POLICY,
+    });
+    mountWith([{ data: oldFixture }]);
+
+    container.deleteContainer('policy-agent-old', { replacementExpected: true });
+    const inserted = container.insertContainer(
+      makePolicyFixture({ id: 'policy-agent-new', agent: 'remote1' }),
+    );
+
+    expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+  });
+
+  test('does not stash updatePolicy when the delete is not a replacement', () => {
+    const oldFixture = makePolicyFixture({
+      id: 'policy-perm-old',
+      updatePolicy: MATURITY_POLICY,
+    });
+    mountWith([{ data: oldFixture }]);
+
+    container.deleteContainer('policy-perm-old');
+    const inserted = container.insertContainer(makePolicyFixture({ id: 'policy-perm-new' }));
+
+    expect(inserted.updatePolicy).toBeUndefined();
+  });
+
+  test('does not stash when the deleted container had no updatePolicy', () => {
+    mountWith([{ data: makePolicyFixture({ id: 'policy-none-old' }) }]);
+
+    container.deleteContainer('policy-none-old', { replacementExpected: true });
+
+    expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+  });
+
+  test('does not stash for rollback containers', () => {
+    // rollback containers are named "<name>-old-<epoch>" (OLD_ROLLBACK_CONTAINER_NAME_PATTERN)
+    const oldFixture = makePolicyFixture({
+      id: 'policy-rb-old',
+      name: 'myapp-old-1752019200',
+      updatePolicy: MATURITY_POLICY,
+    });
+    mountWith([{ data: oldFixture }]);
+
+    container.deleteContainer('policy-rb-old', { replacementExpected: true });
+
+    expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+  });
+
+  test('an explicit incoming updatePolicy wins over the retained one', () => {
+    const incoming = { maturityMode: 'all', maturityMinAgeDays: 1 };
+    const oldFixture = makePolicyFixture({
+      id: 'policy-explicit-old',
+      updatePolicy: MATURITY_POLICY,
+    });
+    mountWith([{ data: oldFixture }]);
+
+    container.deleteContainer('policy-explicit-old', { replacementExpected: true });
+    const inserted = container.insertContainer(
+      makePolicyFixture({ id: 'policy-explicit-new', updatePolicy: incoming }),
+    );
+
+    expect(inserted.updatePolicy).toEqual(incoming);
+    // consumed either way, so a later unrelated insert cannot inherit it
+    expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+  });
+
+  test('does not apply a retained policy to an unrelated container name', () => {
+    const oldFixture = makePolicyFixture({
+      id: 'policy-other-old',
+      updatePolicy: MATURITY_POLICY,
+    });
+    mountWith([{ data: oldFixture }]);
+
+    container.deleteContainer('policy-other-old', { replacementExpected: true });
+    const inserted = container.insertContainer(
+      makePolicyFixture({ id: 'policy-other-new', name: 'someone-else' }),
+    );
+
+    expect(inserted.updatePolicy).toBeUndefined();
+  });
+
+  test('does not apply an expired retained policy', () => {
+    vi.useFakeTimers();
+    try {
+      const oldFixture = makePolicyFixture({
+        id: 'policy-ttl-old',
+        updatePolicy: MATURITY_POLICY,
+      });
+      mountWith([{ data: oldFixture }]);
+
+      container.deleteContainer('policy-ttl-old', { replacementExpected: true });
+      vi.advanceTimersByTime(container.UPDATE_POLICY_RETENTION_CACHE_TTL_MS + 1);
+      const inserted = container.insertContainer(makePolicyFixture({ id: 'policy-ttl-new' }));
+
+      expect(inserted.updatePolicy).toBeUndefined();
+      expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('evicts oldest retained policies when the size cap is exceeded', () => {
+    const maxEntries = container.UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES;
+    const fixtures = [];
+    for (let i = 0; i <= maxEntries; i++) {
+      fixtures.push({
+        data: makePolicyFixture({
+          id: `policy-evict-${i}`,
+          name: `evict-app-${i}`,
+          updatePolicy: MATURITY_POLICY,
+        }),
+      });
+    }
+    mountWith(fixtures);
+
+    for (let i = 0; i <= maxEntries; i++) {
+      container.deleteContainer(`policy-evict-${i}`, { replacementExpected: true });
+    }
+
+    const cache = container._getUpdatePolicyRetentionCacheForTests();
+    expect(cache.size).toBeLessThanOrEqual(maxEntries);
+    expect(cache.has('local::evict-app-0')).toBe(false);
+  });
+
+  test('prunes expired entries before evicting live ones when the cap is hit', () => {
+    vi.useFakeTimers();
+    try {
+      const maxEntries = container.UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES;
+      const fixtures = [];
+      for (let i = 0; i <= maxEntries; i++) {
+        fixtures.push({
+          data: makePolicyFixture({
+            id: `policy-expfirst-${i}`,
+            name: `expfirst-app-${i}`,
+            updatePolicy: MATURITY_POLICY,
+          }),
+        });
+      }
+      mountWith(fixtures);
+
+      for (let i = 0; i < maxEntries; i++) {
+        container.deleteContainer(`policy-expfirst-${i}`, { replacementExpected: true });
+      }
+      const cache = container._getUpdatePolicyRetentionCacheForTests();
+      expect(cache.size).toBe(maxEntries);
+
+      vi.advanceTimersByTime(container.UPDATE_POLICY_RETENTION_CACHE_TTL_MS + 1);
+      container.deleteContainer(`policy-expfirst-${maxEntries}`, { replacementExpected: true });
+
+      expect(cache.has(`local::expfirst-app-${maxEntries}`)).toBe(true);
+      expect(cache.has('local::expfirst-app-0')).toBe(false);
+      expect(cache.size).toBeLessThanOrEqual(maxEntries);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('retained policy is consumed, so a second recreate does not resurrect it', () => {
+    const oldFixture = makePolicyFixture({
+      id: 'policy-once-old',
+      updatePolicy: MATURITY_POLICY,
+    });
+    mountWith([{ data: oldFixture }]);
+
+    container.deleteContainer('policy-once-old', { replacementExpected: true });
+    container.insertContainer(makePolicyFixture({ id: 'policy-once-new' }));
+
+    // the doc that now holds the policy is 'policy-once-new'; a fresh insert with no
+    // preceding replacement-delete must not inherit anything
+    const later = container.insertContainer(makePolicyFixture({ id: 'policy-once-later' }));
+    expect(later.updatePolicy).toBeUndefined();
+  });
+});
