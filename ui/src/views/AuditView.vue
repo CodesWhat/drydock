@@ -42,6 +42,7 @@ const actionTypes = [
   'hook-post-success',
   'hook-post-failed',
   'auto-rollback',
+  'mqtt-command-update',
 ];
 
 const route = useRoute();

@@ -1,3 +1,5 @@
+import type { MqttClient } from 'mqtt';
+import { recordAuditEvent } from '../../../api/audit-events.js';
 import { getVersion } from '../../../configuration/index.js';
 import { getPreferredLabelValue } from '../../../docker/legacy-label.js';
 import {
@@ -7,7 +9,19 @@ import {
   registerWatcherStart,
   registerWatcherStop,
 } from '../../../event/index.js';
+import type { Container } from '../../../model/container.js';
 import * as containerStore from '../../../store/container.js';
+import { requestContainerUpdate, UpdateRequestError } from '../../../updates/request-update.js';
+import { HassCommandRateLimiter } from './hass-command-rate-limiter.js';
+import {
+  getHassCommandTopicFilters,
+  getHassCommandTopicFromStateTopic,
+  getStateTopicFromCommandTopic,
+  HASS_COMMAND_QOS,
+  HASS_INSTALL_PAYLOAD,
+  isHassInstallPayload,
+  resolveHassCommandContainer,
+} from './hass-commands.js';
 import {
   getSanitizedCanonicalContainerName,
   getStaleSanitizedContainerNameCandidates,
@@ -29,6 +43,8 @@ const HASS_LATEST_VERSION_TEMPLATE =
 const HASS_DEFAULT_ENTITY_PICTURE =
   'https://raw.githubusercontent.com/CodesWhat/drydock/main/docs/assets/whale-logo.png';
 export const HASS_CONTAINER_STATE_TOPIC_TRACK_LIMIT = 10_000;
+// #210 — per-container hardcoded v1 rate limit for hass install commands
+const HASS_COMMAND_RATE_LIMIT_MS = 30_000;
 
 interface HassClient {
   publish: (
@@ -38,6 +54,33 @@ interface HassClient {
       retain?: boolean;
     },
   ) => Promise<unknown> | unknown;
+  // #210 — optional: only the real mqtt.MqttClient (or a fully-capable test
+  // double) needs to satisfy these; hass.commands=false should not force
+  // every caller's client to support subscriptions.
+  subscribeAsync?: (topic: string | string[], opts?: { qos?: 0 | 1 | 2 }) => Promise<unknown>;
+  unsubscribeAsync?: (topic: string | string[]) => Promise<unknown>;
+  on?: (
+    event: 'message',
+    listener: (topic: string, payload: Buffer, packet: { retain: boolean }) => void,
+  ) => unknown;
+  removeListener?: (
+    event: 'message',
+    listener: (topic: string, payload: Buffer, packet: { retain: boolean }) => void,
+  ) => unknown;
+}
+
+// #210 — the subset of the real mqtt.MqttClient needed to run hass install commands
+type HassCommandCapableClient = HassClient &
+  Pick<MqttClient, 'subscribeAsync' | 'unsubscribeAsync' | 'on' | 'removeListener'>;
+
+function hasHassCommandCapableClient(client: HassClient): client is HassCommandCapableClient {
+  const c = client as Partial<HassCommandCapableClient>;
+  return (
+    typeof c.subscribeAsync === 'function' &&
+    typeof c.unsubscribeAsync === 'function' &&
+    typeof c.on === 'function' &&
+    typeof c.removeListener === 'function'
+  );
 }
 
 interface HassConfiguration {
@@ -46,6 +89,7 @@ interface HassConfiguration {
     prefix: string;
     discovery: boolean;
     agenttopicsegment?: boolean;
+    commands?: boolean;
   };
 }
 
@@ -66,6 +110,7 @@ const warnedAgentlessHassTopicLayoutWatchers = new Set<string>();
 interface HassLogger {
   info: (message: string) => void;
   warn: (message: string) => void;
+  debug: (message: string) => void;
 }
 
 /**
@@ -198,6 +243,22 @@ class Hass {
   private unregisterWatcherStart?: () => void;
   private unregisterWatcherStop?: () => void;
 
+  // #210
+  private commandTopicFilters?: string[];
+  private commandMessageHandler?: (
+    topic: string,
+    payload: Buffer,
+    packet: { retain: boolean },
+  ) => void;
+  private commandRateLimiter = new HassCommandRateLimiter({
+    minIntervalMs: HASS_COMMAND_RATE_LIMIT_MS,
+  });
+  // #210 — true only while a command subscription is actually live. The
+  // discovery payload gates the Install button on this (not just the config
+  // flag) so we never advertise a button we are not listening for — e.g. a
+  // publish-only broker ACL where subscribeAsync rejects.
+  private commandSubscriptionActive = false;
+
   constructor({
     client,
     configuration,
@@ -231,7 +292,7 @@ class Hass {
     );
   }
 
-  deregister() {
+  async deregister(): Promise<void> {
     this.unregisterContainerAdded?.();
     this.unregisterContainerAdded = undefined;
 
@@ -247,7 +308,165 @@ class Hass {
     this.unregisterWatcherStop?.();
     this.unregisterWatcherStop = undefined;
 
+    // #210 — unwind the command subscription, if one was ever established
+    if (this.commandMessageHandler && hasHassCommandCapableClient(this.client)) {
+      this.client.removeListener('message', this.commandMessageHandler);
+    }
+    this.commandMessageHandler = undefined;
+
+    if (this.commandTopicFilters && hasHassCommandCapableClient(this.client)) {
+      try {
+        await this.client.unsubscribeAsync(this.commandTopicFilters);
+      } catch (error: unknown) {
+        this.log.warn(
+          `Failed to unsubscribe hass command topics (${error instanceof Error ? error.message : String(error)})`,
+        );
+      }
+    }
+    this.commandTopicFilters = undefined;
+    this.commandSubscriptionActive = false;
+    this.commandRateLimiter.clear();
+
     this.containerStateTopicById.clear();
+  }
+
+  /**
+   * Subscribe to the fixed-depth hass install-command topic filters. No-op
+   * when `hass.commands` is off, or when the configured client does not
+   * support subscriptions (e.g. `hass.enabled=true` with a publish-only
+   * client). Called explicitly by Mqtt.ts after constructing this instance —
+   * not from the constructor — so a broker ACL that denies subscribe (but
+   * allows publish) degrades to "commands don't work" instead of failing
+   * `initTrigger()` outright.
+   * @returns {Promise<void>}
+   */
+  async initCommandSubscription(): Promise<void> {
+    if (!this.configuration.hass.commands) {
+      return;
+    }
+    if (!hasHassCommandCapableClient(this.client)) {
+      this.log.warn(
+        'Home Assistant install commands are enabled but the MQTT client does not support subscriptions; skipping.',
+      );
+      return;
+    }
+    try {
+      this.commandMessageHandler = (topic, payload, packet) => {
+        void this.handleCommandMessage(topic, payload, packet).catch((error: Error) => {
+          this.log.warn(`Error handling hass command message on [${topic}] (${error.message})`);
+        });
+      };
+      this.client.on('message', this.commandMessageHandler);
+      const filters = getHassCommandTopicFilters(this.configuration.topic);
+      await this.client.subscribeAsync(filters, { qos: HASS_COMMAND_QOS });
+      this.commandTopicFilters = filters;
+      this.commandSubscriptionActive = true;
+    } catch (error: unknown) {
+      this.log.warn(
+        `Failed to subscribe to Home Assistant command topics (${error instanceof Error ? error.message : String(error)})`,
+      );
+      if (this.commandMessageHandler && hasHassCommandCapableClient(this.client)) {
+        this.client.removeListener('message', this.commandMessageHandler);
+      }
+      this.commandMessageHandler = undefined;
+      this.commandSubscriptionActive = false;
+    }
+  }
+
+  /**
+   * Handle an inbound hass install-command message. Resolves the state topic
+   * back to a live container via a fresh `containerStore.getContainers({})`
+   * scan (see #210 plan Gotcha B — the event-driven `containerStateTopicById`
+   * cache is deliberately not reused here, since it starts empty on every
+   * trigger re-init and would silently drop commands until the next full
+   * watch cycle) and, on a clean resolve, delegates to the same
+   * `requestContainerUpdate()` used by the webhook trigger.
+   * @param topic
+   * @param payload
+   * @param packet
+   * @returns {Promise<void>}
+   */
+  private async handleCommandMessage(
+    topic: string,
+    payload: Buffer,
+    packet: { retain: boolean },
+  ): Promise<void> {
+    if (packet.retain) {
+      this.log.debug(`Ignoring retained hass command message on [${topic}]`);
+      return;
+    }
+    const stateTopic = getStateTopicFromCommandTopic(topic, this.configuration.topic);
+    if (!stateTopic) {
+      return;
+    }
+    if (!isHassInstallPayload(payload)) {
+      this.log.debug(`Ignoring hass command message on [${topic}] with unexpected payload`);
+      return;
+    }
+
+    // Explicit `Container` annotation on the callback param pins the generic
+    // inference for `resolveHassCommandContainer<C>` — `getContainers()`'s
+    // return type is itself inferred (no explicit annotation upstream in
+    // store/container.ts), and leaving this callback's parameter untyped
+    // causes TS to fall back to `C = unknown` here.
+    const resolution = resolveHassCommandContainer(
+      containerStore.getContainers({}),
+      stateTopic,
+      (container: Container) => this.getContainerStateTopic({ container }),
+    );
+    if (resolution.status === 'not-found') {
+      this.log.debug(`No tracked container for hass command topic [${topic}]`);
+      return;
+    }
+    if (resolution.status === 'ambiguous') {
+      this.log.warn(
+        `Ambiguous hass command topic [${topic}] matches ${resolution.containers.length} containers; ignoring.`,
+      );
+      return;
+    }
+
+    const container = resolution.container;
+    const rateLimitKey = this.getContainerId(container) ?? stateTopic;
+    if (!this.commandRateLimiter.tryConsume(rateLimitKey)) {
+      this.log.warn(`Ignoring hass command for [${container.name}]: rate limited`);
+      return;
+    }
+
+    try {
+      const accepted = await requestContainerUpdate(container);
+      this.log.info(
+        `Accepted hass install command for container [${container.name}] (operation ${accepted.operationId})`,
+      );
+      recordAuditEvent({
+        action: 'mqtt-command-update',
+        container,
+        status: 'success',
+        details: `operation ${accepted.operationId}`,
+      });
+    } catch (error: unknown) {
+      if (error instanceof UpdateRequestError) {
+        this.log.info(
+          `Hass install command rejected for container [${container.name}] (${error.message})`,
+        );
+        recordAuditEvent({
+          action: 'mqtt-command-update',
+          container,
+          status: 'error',
+          details: error.message,
+        });
+        return;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      this.log.warn(
+        `Unexpected error handling hass install command for container [${container.name}] (${message})`,
+      );
+      recordAuditEvent({
+        action: 'mqtt-command-update',
+        container,
+        status: 'error',
+        details: 'Unexpected error',
+      });
+    }
   }
 
   private getContainerId(container: { id?: unknown }) {
@@ -502,6 +721,21 @@ class Hass {
           latest_version_template: HASS_LATEST_VERSION_TEMPLATE,
           release_url: container.result ? container.result.link : undefined,
           json_attributes_topic: containerStateSensor.topic,
+          // #210 — advertise the Install button ONLY when a command subscription
+          // is actually live (commandSubscriptionActive), not merely when the config
+          // flag is on: otherwise a broker that rejects subscribe would leave a
+          // clickable button whose clicks go to a topic we never listen on.
+          // command_topic and payload_install are always published together (HA has
+          // no default for payload_install, so command_topic alone renders a broken
+          // button); retain/qos are pinned explicitly since users can override them.
+          ...(this.configuration.hass.commands && this.commandSubscriptionActive
+            ? {
+                command_topic: getHassCommandTopicFromStateTopic(containerStateSensor.topic),
+                payload_install: HASS_INSTALL_PAYLOAD,
+                qos: HASS_COMMAND_QOS,
+                retain: false,
+              }
+            : {}),
         },
       });
     }

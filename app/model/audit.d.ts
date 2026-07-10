@@ -28,7 +28,8 @@ export interface AuditEntry {
     | 'auto-rollback'
     | 'auth-login'
     | 'env-reveal'
-    | 'auto-update-blocked';
+    | 'auto-update-blocked'
+    | 'mqtt-command-update';
   containerName: string;
   containerIdentityKey?: string;
   containerImage?: string;
