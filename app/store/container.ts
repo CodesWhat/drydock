@@ -12,7 +12,11 @@ import { toPositiveInteger } from '../util/parse.js';
 const { validate: validateContainer } = container;
 
 import { emitContainerAdded, emitContainerRemoved, emitContainerUpdated } from '../event/index.js';
-import { hasRawUpdate, isRollbackContainerName } from '../model/container.js';
+import {
+  deriveContainerIdentityKey,
+  hasRawUpdate,
+  isRollbackContainerName,
+} from '../model/container.js';
 import { initCollection } from './util.js';
 
 let containers: ReturnType<typeof initCollection> | undefined;
@@ -72,6 +76,13 @@ const updateLifecycleCache = new Map<string, UpdateLifecycleCacheEntry>();
 // isLocalContainer: the #386 exclusion exists because runtime state is meaningless across
 // agents, whereas updatePolicy is set on the controller and must survive for agent-owned
 // containers too — that is precisely the topology #496 was reported against.
+//
+// Because it does hold agent-owned containers it must key on deriveContainerIdentityKey
+// (`${agent}::${watcher}::${name}`, or the compose project/service form), not on the
+// `watcher::name` toCacheKey the other two caches use. Those can get away with the shorter
+// key precisely because they only ever hold local containers; here, two agents each running
+// a `local` watcher with a container named `myapp` would otherwise share one slot and leak
+// one deployment's update policy into another's.
 type UpdatePolicyRetentionCacheEntry = {
   updatePolicy: unknown;
   expiresAt: number;
@@ -785,7 +796,12 @@ function stashUpdatePolicyForReplacement(containerRaw) {
   if (isRollbackContainerName(containerRaw?.name)) {
     return;
   }
-  const cacheKey = toCacheKey(containerRaw.watcher, containerRaw.name);
+  const cacheKey = deriveContainerIdentityKey(containerRaw);
+  /* istanbul ignore next -- unreachable: deleteContainer validates the stored document before
+     calling this, and the schema rejects an empty watcher or name, so a key always derives. */
+  if (cacheKey === undefined) {
+    return;
+  }
   updatePolicyRetentionCache.delete(cacheKey);
   updatePolicyRetentionCache.set(cacheKey, {
     updatePolicy,
@@ -814,7 +830,10 @@ function stashUpdatePolicyForReplacement(containerRaw) {
  * either way, so a stale policy can never attach to a later, unrelated container.
  */
 function restoreRetainedUpdatePolicy(container) {
-  const cacheKey = toCacheKey(container.watcher, container.name);
+  const cacheKey = deriveContainerIdentityKey(container);
+  if (cacheKey === undefined) {
+    return;
+  }
   const entry = updatePolicyRetentionCache.get(cacheKey);
   if (!entry) {
     return;

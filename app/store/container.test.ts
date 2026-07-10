@@ -4160,7 +4160,7 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
 
     const cache = container._getUpdatePolicyRetentionCacheForTests();
     expect(cache.size).toBeLessThanOrEqual(maxEntries);
-    expect(cache.has('local::evict-app-0')).toBe(false);
+    expect(cache.has('::local::evict-app-0')).toBe(false);
   });
 
   test('prunes expired entries before evicting live ones when the cap is hit', () => {
@@ -4188,12 +4188,91 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
       vi.advanceTimersByTime(container.UPDATE_POLICY_RETENTION_CACHE_TTL_MS + 1);
       container.deleteContainer(`policy-expfirst-${maxEntries}`, { replacementExpected: true });
 
-      expect(cache.has(`local::expfirst-app-${maxEntries}`)).toBe(true);
-      expect(cache.has('local::expfirst-app-0')).toBe(false);
+      expect(cache.has(`::local::expfirst-app-${maxEntries}`)).toBe(true);
+      expect(cache.has('::local::expfirst-app-0')).toBe(false);
       expect(cache.size).toBeLessThanOrEqual(maxEntries);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // The cache holds agent-owned containers, so it must key on the agent-scoped identity key.
+  // Keyed on watcher::name alone, two agents each running a 'local' watcher with a container
+  // named 'myapp' would share one slot and leak one deployment's policy into the other's.
+  test('does not leak a retained policy across agents with the same watcher and name', () => {
+    const oldFixture = makePolicyFixture({
+      id: 'policy-agentA-old',
+      agent: 'agent-a',
+      updatePolicy: MATURITY_POLICY,
+    });
+    mountWith([{ data: oldFixture }]);
+
+    container.deleteContainer('policy-agentA-old', { replacementExpected: true });
+    const otherAgent = container.insertContainer(
+      makePolicyFixture({ id: 'policy-agentB-new', agent: 'agent-b' }),
+    );
+
+    expect(otherAgent.updatePolicy).toBeUndefined();
+  });
+
+  test('does not leak a retained policy from an agent container to a local one', () => {
+    const oldFixture = makePolicyFixture({
+      id: 'policy-agent-leak-old',
+      agent: 'agent-a',
+      updatePolicy: MATURITY_POLICY,
+    });
+    mountWith([{ data: oldFixture }]);
+
+    container.deleteContainer('policy-agent-leak-old', { replacementExpected: true });
+    const local = container.insertContainer(makePolicyFixture({ id: 'policy-local-new' }));
+
+    expect(local.updatePolicy).toBeUndefined();
+  });
+
+  // deriveContainerIdentityKey prefers the compose project/service, which also survives a
+  // recreate, so a compose-managed container must still inherit its policy.
+  test('carries updatePolicy forward for compose-managed containers', () => {
+    const labels = {
+      'com.docker.compose.project': 'stack',
+      'com.docker.compose.service': 'web',
+    };
+    const oldFixture = makePolicyFixture({
+      id: 'policy-compose-old',
+      labels,
+      updatePolicy: MATURITY_POLICY,
+    });
+    mountWith([{ data: oldFixture }]);
+
+    container.deleteContainer('policy-compose-old', { replacementExpected: true });
+    // compose renames the container on recreate, but project/service are stable
+    const inserted = container.insertContainer(
+      makePolicyFixture({ id: 'policy-compose-new', name: 'stack-web-2', labels }),
+    );
+
+    expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
+  });
+
+  // restoreRetainedUpdatePolicy runs before validateContainer, so it can be handed a container
+  // with no derivable identity. It must leave the cache alone rather than key off undefined.
+  test('does not consume the retained policy when the incoming identity is not derivable', () => {
+    const oldFixture = makePolicyFixture({
+      id: 'policy-noident-old',
+      updatePolicy: MATURITY_POLICY,
+    });
+    mountWith([{ data: oldFixture }]);
+
+    container.deleteContainer('policy-noident-old', { replacementExpected: true });
+    expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(1);
+
+    // an unnamed container derives no key; the schema then rejects it outright
+    expect(() =>
+      container.insertContainer(makePolicyFixture({ id: 'policy-noident-new', name: '' })),
+    ).toThrow();
+
+    // the retained entry survives for the real replacement
+    expect(container._getUpdatePolicyRetentionCacheForTests().size).toBe(1);
+    const inserted = container.insertContainer(makePolicyFixture({ id: 'policy-noident-real' }));
+    expect(inserted.updatePolicy).toEqual(MATURITY_POLICY);
   });
 
   test('retained policy is consumed, so a second recreate does not resurrect it', () => {
