@@ -15,7 +15,7 @@
       "viewMode": "Modo de vista",
       "viewModeLabel": "Vista {label}",
       "viewModes": {
-        "table": "Table",
+        "table": "Tabla",
         "cards": "Cards"
       }
     },
