@@ -9,10 +9,27 @@ export const dataViewStubs: Record<string, any> = {
     template: '<div class="data-view-layout"><slot /><slot name="panel" /></div>',
   }),
   DataFilterBar: defineComponent({
-    props: ['showFilters', 'filteredCount', 'totalCount', 'activeFilterCount'],
-    emits: ['update:showFilters'],
+    props: [
+      'modelValue',
+      'viewModes',
+      'showFilters',
+      'filteredCount',
+      'totalCount',
+      'activeFilterCount',
+    ],
+    emits: ['update:modelValue', 'update:showFilters'],
     template: `
       <div class="data-filter-bar">
+        <template v-if="modelValue !== undefined">
+          <button
+            v-for="mode in (viewModes || [{ id: 'table' }, { id: 'cards' }])"
+            :key="mode.id"
+            :class="'mode-' + mode.id"
+            :data-active="String(modelValue === mode.id)"
+            @click="$emit('update:modelValue', mode.id)">
+            {{ mode.id }}
+          </button>
+        </template>
         <slot name="left" />
         <slot name="filters" />
         <slot name="extra-buttons" />

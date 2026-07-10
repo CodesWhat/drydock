@@ -6,6 +6,7 @@ import AppBadge from '../components/AppBadge.vue';
 import AppIconButton from '../components/AppIconButton.vue';
 import AppStatusIndicator from '../components/AppStatusIndicator.vue';
 import ContainerUpdateDialog from '../components/containers/ContainerUpdateDialog.vue';
+import DataSortControl from '../components/DataSortControl.vue';
 import DataTableColumnPicker from '../components/DataTableColumnPicker.vue';
 import ProjectLink from '../components/containers/ProjectLink.vue';
 import ReleaseNotesLink from '../components/containers/ReleaseNotesLink.vue';
@@ -18,6 +19,7 @@ import { useVulnerabilities, type ImageSummary } from '../composables/useVulnera
 import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
+import { useViewMode } from '../preferences/useViewMode';
 import { getAllContainers } from '../services/container';
 import { getSecurityRuntime } from '../services/server';
 import type { Container, UpdateEligibility } from '../types/container';
@@ -92,6 +94,17 @@ function severityTone(severity: string) {
   return 'info';
 }
 
+function severityBadgeLabel(severity: string): string {
+  if (severity === 'CRITICAL') return t('securityView.badge.critical');
+  if (severity === 'HIGH') return t('securityView.badge.high');
+  if (severity === 'MEDIUM') return t('securityView.badge.medium');
+  return t('securityView.badge.low');
+}
+
+function sourceRepoHost(sourceRepo?: string): string | undefined {
+  return sourceRepo?.split('/')[0];
+}
+
 async function fetchContainers() {
   try {
     const apiContainers = await getAllContainers();
@@ -149,6 +162,12 @@ async function fetchSecurityRuntimeStatus() {
     runtimeLoading.value = false;
   }
 }
+
+const securityViewMode = useViewMode('security');
+// Set by DataTable's measured-width reflow (< 640px): hides the table/cards toggle when the
+// width has already forced cards, so the switcher isn't a dead control at that size.
+const cardReflowForced = ref(false);
+const inCardMode = computed(() => cardReflowForced.value || securityViewMode.value === 'cards');
 
 const securitySortField = usePreference(
   () => preferences.views.security.sortField,
@@ -455,6 +474,13 @@ const tableColumns = computed(() => [
   },
 ]);
 
+// Card-mode sort options, hoisted into the filter bar (table mode sorts via headers).
+const sortableColumns = computed(() =>
+  tableColumns.value
+    .filter((column) => column.sortable && !column.icon)
+    .map((column) => ({ key: column.key, label: column.label })),
+);
+
 const pickerColumns = computed<PickerColumn[]>(() =>
   tableColumns.value.map((column) => ({
     key: column.key,
@@ -527,11 +553,21 @@ onUnmounted(() => {
 
       <!-- Filter bar -->
       <DataFilterBar
+        v-model="securityViewMode"
         v-model:showFilters="showSecFilters"
         :filtered-count="displayFilteredCount"
         :total-count="displayTotalCount"
         :active-filter-count="activeSecFilterCount"
-        :count-label="displayCountLabel">
+        :count-label="displayCountLabel"
+        :hide-view-toggle="cardReflowForced">
+        <template v-if="inCardMode && sortableColumns.length > 0" #sort>
+          <DataSortControl
+            :columns="sortableColumns"
+            :sort-key="securitySortField"
+            :sort-asc="securitySortAsc"
+            @update:sort-key="securitySortField = $event"
+            @update:sort-asc="securitySortAsc = $event" />
+        </template>
         <template #filters>
           <select v-model="secFilterSeverity"
                   class="px-2 py-1.5 dd-rounded text-2xs-plus font-semibold uppercase tracking-wide outline-none cursor-pointer dd-bg dd-text">
@@ -644,8 +680,11 @@ onUnmounted(() => {
                  row-key="image"
                  :hidden-column-keys="hiddenColumnKeys"
                  :selected-key="selectedImage?.image"
+                 :prefer-cards="securityViewMode === 'cards'"
+                 :hoist-card-sort="inCardMode"
                  v-model:sort-key="securitySortField"
                  v-model:sort-asc="securitySortAsc"
+                 @update:card-reflow-forced="cardReflowForced = $event"
                  @row-click="openDetail($event)">
         <template #cell-image="{ row }">
           <div class="flex items-center gap-2 min-w-0">
@@ -734,6 +773,117 @@ onUnmounted(() => {
         </template>
         <template #cell-total="{ row }">
           <span class="text-2xs-plus font-semibold dd-text">{{ row.total }}</span>
+        </template>
+        <template #card="{ row }">
+          <div class="relative flex flex-col flex-1">
+            <!-- Header: image name + source host subtitle, severity badge top-right -->
+            <div class="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="text-sm-plus font-semibold truncate dd-text">{{ row.image }}</div>
+                <div v-if="sourceRepoHost(row.sourceRepo)" class="text-2xs-plus truncate mt-0.5 dd-text-muted">
+                  {{ sourceRepoHost(row.sourceRepo) }}
+                </div>
+              </div>
+              <AppBadge v-if="row.total > 0" :tone="severityTone(highestSeverity(row))" size="xs" class="shrink-0">
+                {{ severityBadgeLabel(highestSeverity(row)) }}
+              </AppBadge>
+              <AppBadge v-else tone="success" size="xs" class="shrink-0">
+                {{ t('securityView.badge.clean') }}
+              </AppBadge>
+            </div>
+
+            <!-- Body: per-severity chips + total + fixable percent, delta badges -->
+            <div class="px-4 py-3">
+              <div class="flex items-center gap-2 flex-wrap min-w-0">
+                <AppBadge v-if="row.critical > 0" tone="danger" size="xs">
+                  {{ row.critical }} {{ t('securityView.badge.critical') }}
+                </AppBadge>
+                <AppBadge v-if="row.high > 0" tone="warning" size="xs">
+                  {{ row.high }} {{ t('securityView.badge.high') }}
+                </AppBadge>
+                <AppBadge v-if="row.medium > 0" tone="caution" size="xs">
+                  {{ row.medium }} {{ t('securityView.badge.medium') }}
+                </AppBadge>
+                <AppBadge v-if="row.low > 0" tone="info" size="xs">
+                  {{ row.low }} {{ t('securityView.badge.low') }}
+                </AppBadge>
+                <span class="text-2xs dd-text-muted ml-auto shrink-0">{{ row.total }} {{ t('securityView.card.total') }}</span>
+                <span v-if="row.fixable > 0" class="text-2xs font-medium shrink-0"
+                      :style="{ color: fixableColor(row.fixable, row.total) }">
+                  {{ fixablePercent(row.fixable, row.total) }}%
+                </span>
+                <span v-else class="text-2xs dd-text-muted shrink-0">0%</span>
+              </div>
+              <div v-if="row.delta && (row.delta.fixed > 0 || row.delta.new > 0)" class="flex items-center gap-2 flex-wrap mt-2">
+                <AppBadge v-if="row.delta.fixed > 0 && row.delta.new === 0"
+                      tone="success" size="xs" class="px-1.5 py-0 shrink-0"
+                      v-tooltip.top="row.delta.fixed === 1 ? t('securityView.deltaTooltips.fixedSingle', { count: row.delta.fixed }) : t('securityView.deltaTooltips.fixedMultiple', { count: row.delta.fixed })">
+                  <AppIcon name="trending-down" :size="9" class="mr-0.5" />{{ t('securityView.delta.fixed', { count: row.delta.fixed }) }}
+                </AppBadge>
+                <AppBadge v-else-if="row.delta.new > 0 && row.delta.fixed === 0"
+                      tone="warning" size="xs" class="px-1.5 py-0 shrink-0"
+                      v-tooltip.top="row.delta.new === 1 ? t('securityView.deltaTooltips.newSingle', { count: row.delta.new }) : t('securityView.deltaTooltips.newMultiple', { count: row.delta.new })">
+                  <AppIcon name="trending-up" :size="9" class="mr-0.5" />{{ t('securityView.delta.new', { count: row.delta.new }) }}
+                </AppBadge>
+                <AppBadge v-else
+                      tone="caution" size="xs" class="px-1.5 py-0 shrink-0"
+                      v-tooltip.top="t('securityView.deltaTooltips.both', { fixed: row.delta.fixed, new: row.delta.new })">
+                  {{ t('securityView.delta.both', { fixed: row.delta.fixed, new: row.delta.new }) }}
+                </AppBadge>
+              </div>
+            </div>
+
+            <!-- Footer: fixable state + action cluster (mirrors #cell-image's buttons/handlers) -->
+            <div class="px-4 py-2.5 flex items-center justify-between mt-auto"
+                 :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+              <span v-if="row.fixable > 0" class="text-2xs-plus font-semibold"
+                    :style="{ color: fixableColor(row.fixable, row.total) }">
+                {{ fixablePercent(row.fixable, row.total) }}% {{ t('securityView.columns.fixable') }}
+              </span>
+              <span v-else class="text-2xs-plus font-medium dd-text-muted">{{ t('securityView.columns.fixable') }}</span>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <template v-if="row.hasUpdate">
+                  <AppButton
+                    size="xs"
+                    :variant="isSummaryUpdateBlocked(row) ? 'danger-subtle' : 'info-subtle'"
+                    weight="semibold"
+                    class="inline-flex items-center gap-1 shrink-0 uppercase tracking-wide"
+                    :class="isSummaryUpdateBlocked(row) ? 'opacity-60 cursor-not-allowed' : ''"
+                    data-test="security-card-update-btn"
+                    :disabled="isSummaryUpdateBlocked(row)"
+                    v-tooltip.top="getSummaryUpdateTooltip(row)"
+                    @click.stop="openUpdateAction(row)">
+                    <AppIcon :name="isSummaryUpdateBlocked(row) ? 'lock' : 'cloud-download'" :size="9" />
+                    {{ t('securityView.update') }}
+                  </AppButton>
+                  <AppButton
+                    size="xs"
+                    variant="text-secondary"
+                    weight="medium"
+                    class="inline-flex items-center gap-1 shrink-0"
+                    data-test="security-card-containers-link"
+                    v-tooltip.top="t('securityView.viewInContainers')"
+                    @click.stop="navigateToContainerUpdate(row)">
+                    {{ t('securityView.viewInContainers') }}
+                  </AppButton>
+                </template>
+                <ReleaseNotesLink
+                  v-if="row.releaseNotes || row.currentReleaseNotes || row.releaseLink"
+                  :release-notes="row.releaseNotes"
+                  :current-release-notes="row.currentReleaseNotes"
+                  :release-link="row.releaseLink"
+                  icon-only
+                  icon-size="toolbar"
+                  data-test="security-card-release-notes" />
+                <ProjectLink
+                  v-if="row.sourceRepo"
+                  :source-repo="row.sourceRepo"
+                  icon-only
+                  icon-size="toolbar"
+                  data-test="security-card-project-link" />
+              </div>
+            </div>
+          </div>
         </template>
         <template #empty>
           <SecurityEmptyState

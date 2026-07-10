@@ -6,6 +6,7 @@ import AppBadge from '@/components/AppBadge.vue';
 import AppIconButton from '@/components/AppIconButton.vue';
 import DetailField from '@/components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { useViewMode } from '../preferences/useViewMode';
 import { getAllTriggers, getTrigger, runTrigger } from '../services/trigger';
 import type { ApiComponent } from '../types/api';
 
@@ -94,6 +95,10 @@ function triggerTypeBadge(type: string) {
 
 const searchQuery = ref('');
 const showFilters = ref(false);
+const triggerViewMode = useViewMode('triggers');
+// Set by DataTable's measured-width reflow (< 640px): hides the table/cards toggle when the
+// width has already forced cards, so the switcher isn't a dead control at that size.
+const cardReflowForced = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
 function applySearchFromQuery(queryValue: unknown) {
@@ -221,10 +226,12 @@ onMounted(async () => {
 
     <!-- Filter bar -->
     <DataFilterBar
+      v-model="triggerViewMode"
       v-model:showFilters="showFilters"
       :filtered-count="filteredTriggers.length"
       :total-count="triggersData.length"
       :active-filter-count="activeFilterCount"
+      :hide-view-toggle="cardReflowForced"
     >
       <template #filters>
         <input v-model="searchQuery"
@@ -248,6 +255,8 @@ onMounted(async () => {
       row-key="id"
       :active-row="selectedTrigger?.id"
       show-actions
+      :prefer-cards="triggerViewMode === 'cards'"
+      @update:card-reflow-forced="cardReflowForced = $event"
       @row-click="openDetail($event)"
     >
       <template #cell-name="{ row }">
@@ -276,6 +285,44 @@ onMounted(async () => {
           v-tooltip.top="testingTrigger === row.id ? t('triggersView.test.testing') : testResult?.id === row.id ? (testResult.success ? t('triggersView.test.testPassed') : t('triggersView.test.testFailed')) : t('triggersView.test.runTest')"
           @click.stop="testTrigger(row)"
         />
+      </template>
+      <template #card="{ row }">
+        <div class="relative flex flex-col flex-1">
+          <!-- Header: name + status badge top-right -->
+          <div class="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="text-sm-plus font-semibold truncate dd-text">{{ row.name }}</div>
+              <div v-if="row.agent" class="text-2xs-plus truncate mt-0.5 dd-text-muted">{{ row.agent }}</div>
+            </div>
+            <span
+              class="inline-flex items-center gap-1.5 shrink-0 text-2xs-plus font-semibold"
+              :style="{ color: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)' }"
+            >
+              <span class="h-2 w-2 shrink-0 rounded-full"
+                    :style="{ backgroundColor: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-danger)' }"></span>
+              {{ row.status === 'active' ? t('triggersView.status.active') : t('triggersView.status.inactive') }}
+            </span>
+          </div>
+          <!-- Body: provider type -->
+          <div class="px-4 py-3">
+            <AppBadge :custom="{ bg: triggerTypeBadge(row.type).bg, text: triggerTypeBadge(row.type).text }" size="xs">
+              {{ triggerTypeBadge(row.type).label }}
+            </AppBadge>
+          </div>
+          <!-- Footer: test action -->
+          <div class="px-4 py-2.5 flex items-center justify-end mt-auto"
+               :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+            <AppIconButton
+              :icon="testingTrigger === row.id ? 'pending' : testResult?.id === row.id ? (testResult.success ? 'check' : 'xmark') : 'play'"
+              size="sm"
+              variant="plain"
+              :aria-label="t('triggersView.test.runTest')"
+              :disabled="testingTrigger !== null"
+              v-tooltip.top="testingTrigger === row.id ? t('triggersView.test.testing') : testResult?.id === row.id ? (testResult.success ? t('triggersView.test.testPassed') : t('triggersView.test.testFailed')) : t('triggersView.test.runTest')"
+              @click.stop="testTrigger(row)"
+            />
+          </div>
+        </div>
       </template>
       <template #empty>
         <EmptyState icon="triggers" :message="t('triggersView.emptyFiltered')" show-clear @clear="clearFilters" />

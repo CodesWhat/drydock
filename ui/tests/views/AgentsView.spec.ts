@@ -106,12 +106,119 @@ const richDataTableStub = defineComponent({
   `,
 });
 
+const agentCardFilterBarStub = defineComponent({
+  props: [
+    'modelValue',
+    'viewModes',
+    'showFilters',
+    'filteredCount',
+    'totalCount',
+    'activeFilterCount',
+    'hideViewToggle',
+  ],
+  emits: ['update:modelValue', 'update:showFilters'],
+  template: `
+    <div
+      class="data-filter-bar agent-card-filter"
+      :data-mode="modelValue"
+      :data-hide-view-toggle="String(hideViewToggle)">
+      <button
+        v-for="mode in (viewModes || [{ id: 'table' }, { id: 'cards' }])"
+        :key="mode.id"
+        :class="'mode-' + mode.id"
+        :data-active="String(modelValue === mode.id)"
+        @click="$emit('update:modelValue', mode.id)">
+        {{ mode.id }}
+      </button>
+      <slot name="sort" />
+      <slot name="filters" />
+      <slot name="extra-buttons" />
+    </div>
+  `,
+});
+
+const agentCardDataTableStub = defineComponent({
+  props: [
+    'columns',
+    'rows',
+    'rowKey',
+    'sortKey',
+    'sortAsc',
+    'selectedKey',
+    'hiddenColumnKeys',
+    'preferCards',
+    'hoistCardSort',
+  ],
+  emits: ['row-click', 'update:sortKey', 'update:sortAsc', 'update:cardReflowForced'],
+  template: `
+    <div
+      class="data-table agent-card-table"
+      :data-row-count="rows?.length ?? 0"
+      :data-sort-key="sortKey"
+      :data-sort-asc="String(sortAsc)"
+      :data-prefer-cards="String(preferCards)"
+      :data-hoist-card-sort="String(hoistCardSort)"
+      :data-hidden-keys="JSON.stringify(hiddenColumnKeys || [])"
+      :data-selected-key="selectedKey || ''">
+      <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
+        Force cards
+      </button>
+      <button class="clear-card-reflow" @click="$emit('update:cardReflowForced', false)">
+        Clear cards
+      </button>
+      <article
+        v-for="row in rows || []"
+        :key="row[rowKey || 'id']"
+        class="agent-card"
+        :data-card-id="row[rowKey || 'id']">
+        <slot name="card" :row="row" />
+      </article>
+      <slot name="empty" v-if="!rows || rows.length === 0" />
+    </div>
+  `,
+});
+
+const dataSortControlStub = defineComponent({
+  props: ['columns', 'sortKey', 'sortAsc'],
+  emits: ['update:sortKey', 'update:sortAsc'],
+  template: `
+    <div
+      class="agent-sort-control"
+      :data-columns="columns.map((column) => column.key).join(',')"
+      :data-sort-key="sortKey"
+      :data-sort-asc="String(sortAsc)">
+      <button class="sort-by-status" @click="$emit('update:sortKey', 'status')">
+        Sort status
+      </button>
+      <button class="sort-desc" @click="$emit('update:sortAsc', false)">
+        Desc
+      </button>
+    </div>
+  `,
+});
+
 async function mountAgentsView() {
   const wrapper = mountWithPlugins(AgentsView, {
     global: {
       stubs: {
         ...dataViewStubs,
         DataTable: richDataTableStub,
+      },
+    },
+  });
+  mountedWrappers.push(wrapper);
+  await flushPromises();
+  return wrapper;
+}
+
+async function mountAgentsCardView() {
+  const wrapper = mountWithPlugins(AgentsView, {
+    global: {
+      stubs: {
+        ...dataViewStubs,
+        DataFilterBar: agentCardFilterBarStub,
+        DataTable: agentCardDataTableStub,
+        DataSortControl: dataSortControlStub,
       },
     },
   });
@@ -412,5 +519,92 @@ describe('AgentsView', () => {
     expect(detailContent).not.toContain('Memory');
     expect(detailContent).not.toContain('Architecture');
     expect(detailContent).not.toContain('Docker');
+  });
+
+  it('renders agent cards and wires card-mode sort controls', async () => {
+    preferences.views.agents.mode = 'cards';
+    mockGetAgents.mockResolvedValue([
+      makeAgent({ name: 'edge-1' }),
+      makeAgent({
+        name: 'edge-2',
+        host: 'unix:///var/run/docker.sock',
+        port: undefined,
+        connected: false,
+        dockerVersion: undefined,
+        os: undefined,
+        version: undefined,
+        containers: { total: 3, running: 0, stopped: 3 },
+        lastSeen: '5 minutes ago',
+      }),
+    ]);
+
+    const wrapper = await mountAgentsCardView();
+
+    const table = wrapper.get('.agent-card-table');
+    expect(table.attributes('data-prefer-cards')).toBe('true');
+    expect(table.attributes('data-hoist-card-sort')).toBe('true');
+    expect(table.attributes('data-sort-key')).toBe('name');
+    expect(wrapper.get('.agent-card-filter').attributes('data-mode')).toBe('cards');
+    expect(wrapper.get('.agent-card-filter').attributes('data-hide-view-toggle')).toBe('false');
+
+    const sort = wrapper.get('.agent-sort-control');
+    expect(sort.attributes('data-columns')).toBe(
+      'name,status,containers,docker,os,version,lastSeen',
+    );
+    expect(sort.attributes('data-sort-key')).toBe('name');
+    expect(sort.attributes('data-sort-asc')).toBe('true');
+
+    const connectedCard = wrapper.get('[data-card-id="edge-1"]');
+    expect(connectedCard.text()).toContain('edge-1');
+    expect(connectedCard.text()).toContain('10.0.0.31:2376');
+    expect(connectedCard.text()).toContain('Connected');
+    expect(connectedCard.text()).toContain('10/12');
+    expect(connectedCard.text()).toContain('v1.4.0');
+    expect(connectedCard.text()).toContain('27.0.0');
+    expect(connectedCard.text()).toContain('linux');
+    expect(connectedCard.text()).toContain('Just now');
+
+    const disconnectedCard = wrapper.get('[data-card-id="edge-2"]');
+    expect(disconnectedCard.text()).toContain('edge-2');
+    expect(disconnectedCard.text()).toContain('unix:///var/run/docker.sock');
+    expect(disconnectedCard.text()).toContain('Disconnected');
+    expect(disconnectedCard.text()).toContain('0/3');
+    expect(disconnectedCard.text()).toContain('5 minutes ago');
+
+    await sort.get('.sort-by-status').trigger('click');
+    await nextTick();
+    expect(preferences.views.agents.sortKey).toBe('status');
+    expect(wrapper.get('.agent-card-table').attributes('data-sort-key')).toBe('status');
+
+    await wrapper.get('.agent-sort-control .sort-desc').trigger('click');
+    await nextTick();
+    expect(preferences.views.agents.sortAsc).toBe(false);
+    expect(wrapper.get('.agent-card-table').attributes('data-sort-asc')).toBe('false');
+  });
+
+  it('hoists agent sorting when card reflow is forced in table mode', async () => {
+    mockGetAgents.mockResolvedValue([makeAgent({ name: 'edge-1' })]);
+
+    const wrapper = await mountAgentsCardView();
+
+    expect(wrapper.find('.agent-sort-control').exists()).toBe(false);
+    expect(wrapper.get('.agent-card-table').attributes('data-prefer-cards')).toBe('false');
+    expect(wrapper.get('.agent-card-table').attributes('data-hoist-card-sort')).toBe('false');
+    expect(wrapper.get('.agent-card-filter').attributes('data-hide-view-toggle')).toBe('false');
+
+    await wrapper.get('.force-card-reflow').trigger('click');
+    await nextTick();
+
+    expect(wrapper.get('.agent-sort-control').exists()).toBe(true);
+    expect(wrapper.get('.agent-card-table').attributes('data-prefer-cards')).toBe('false');
+    expect(wrapper.get('.agent-card-table').attributes('data-hoist-card-sort')).toBe('true');
+    expect(wrapper.get('.agent-card-filter').attributes('data-hide-view-toggle')).toBe('true');
+
+    await wrapper.get('.clear-card-reflow').trigger('click');
+    await nextTick();
+
+    expect(wrapper.find('.agent-sort-control').exists()).toBe(false);
+    expect(wrapper.get('.agent-card-table').attributes('data-hoist-card-sort')).toBe('false');
+    expect(wrapper.get('.agent-card-filter').attributes('data-hide-view-toggle')).toBe('false');
   });
 });

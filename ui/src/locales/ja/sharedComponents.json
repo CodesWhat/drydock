@@ -11,7 +11,13 @@
     },
     "dataFilterBar": {
       "filters": "フィルター",
-      "toggleFilters": "フィルターの切替"
+      "toggleFilters": "フィルターの切替",
+      "viewMode": "表示モード",
+      "viewModeLabel": "{label} 表示",
+      "viewModes": {
+        "table": "Table",
+        "cards": "Cards"
+      }
     },
     "dataTable": {
       "actions": "アクション",

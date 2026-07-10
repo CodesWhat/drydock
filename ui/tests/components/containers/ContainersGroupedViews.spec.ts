@@ -1,5 +1,7 @@
 import { defineComponent, nextTick, onMounted, ref } from 'vue';
+import CopyableTag from '@/components/CopyableTag.vue';
 import ContainersGroupedViews from '@/components/containers/ContainersGroupedViews.vue';
+import DataTable from '@/components/DataTable.vue';
 import { useToast } from '@/composables/useToast';
 import { useUpdateBatches } from '@/composables/useUpdateBatches';
 import type { Container } from '@/types/container';
@@ -26,8 +28,10 @@ const DataTableStub = defineComponent({
     'virtualMaxHeight',
     'rowHeight',
     'maxHeight',
+    'preferCards',
+    'hoistCardSort',
   ],
-  emits: ['update:sort-key', 'update:sort-asc', 'row-click'],
+  emits: ['update:sort-key', 'update:sort-asc', 'update:card-reflow-forced', 'row-click'],
   setup(props, { emit }) {
     const isFullWidth = (row: Record<string, unknown>) =>
       typeof props.fullWidthRow === 'function' ? props.fullWidthRow(row) : false;
@@ -132,6 +136,8 @@ function makeContext(overrides: Record<string, unknown> = {}) {
   const groupUpdateQueue = ref(new Set<string>());
   const containerActionsEnabled = ref(true);
   const actionInProgress = ref(new Map<string, 'update' | 'scan' | 'lifecycle' | 'delete'>());
+  const containerViewMode = ref<'table' | 'cards'>('table');
+  const containerCardReflowForced = ref(false);
   const tableColumns = ref([
     { key: 'icon', label: '', align: 'text-center' },
     { key: 'name', label: 'Container', align: 'text-left' },
@@ -202,6 +208,8 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     filteredContainers,
     renderGroups,
     groupByStack,
+    containerViewMode,
+    containerCardReflowForced,
     toggleGroupCollapse: spies.toggleGroupCollapse,
     collapsedGroups,
     groupUpdateInProgress,
@@ -303,6 +311,8 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       groupByStack,
       groupUpdateInProgress,
       groupUpdateQueue,
+      containerViewMode,
+      containerCardReflowForced,
       tableActionStyle,
       openActionsMenu,
       displayContainers,
@@ -333,6 +343,30 @@ function rowByName(wrapper: any, name: string) {
 }
 
 let activeWrapper: ReturnType<typeof mountWithPlugins> | null = null;
+let restoreClientWidthMock: (() => void) | null = null;
+
+function mockElementClientWidth(width: number) {
+  if (!restoreClientWidthMock) {
+    const originalDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'clientWidth',
+    );
+    restoreClientWidthMock = () => {
+      if (originalDescriptor) {
+        Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalDescriptor);
+      } else {
+        delete (HTMLElement.prototype as any).clientWidth;
+      }
+      restoreClientWidthMock = null;
+    };
+  }
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+    configurable: true,
+    get() {
+      return width;
+    },
+  });
+}
 
 function mountSubject() {
   const wrapper = mountWithPlugins(ContainersGroupedViews, {
@@ -352,6 +386,68 @@ function mountSubject() {
   return wrapper;
 }
 
+function mountSubjectWithRealDataTable(width = 800) {
+  mockElementClientWidth(width);
+  const wrapper = mountWithPlugins(ContainersGroupedViews, {
+    global: {
+      components: { CopyableTag, DataTable },
+      stubs: {
+        EmptyState: {
+          props: ['showClear'],
+          template:
+            '<div class="empty-state-stub"><button v-if="showClear" class="empty-clear" @click="$emit(\'clear\')">clear</button></div>',
+        },
+        Teleport: true,
+      },
+    },
+  });
+  activeWrapper = wrapper as any;
+  return wrapper;
+}
+
+async function mountCardsWithContainers(containers: Container[], width = 800) {
+  const { context, refs, spies } = makeContext();
+  refs.containerViewMode.value = 'cards';
+  refs.filteredContainers.value = containers;
+  refs.displayContainers.value = containers;
+  refs.renderGroups.value = [
+    {
+      key: '__flat__',
+      name: null,
+      containers,
+      containerCount: containers.length,
+      updatesAvailable: containers.filter((container) => Boolean(container.newTag)).length,
+      updatableCount: containers.filter((container) => Boolean(container.newTag)).length,
+    },
+  ];
+  mocked.context = context;
+  const wrapper = mountSubjectWithRealDataTable(width);
+  await nextTick();
+  return { wrapper, context, refs, spies };
+}
+
+function cardByName(wrapper: any, name: string) {
+  const card = wrapper
+    .findAll('[data-test="dd-card"]')
+    .find((candidate: any) => candidate.text().includes(name));
+  expect(card).toBeDefined();
+  return card!;
+}
+
+function cardIconButton(card: any, icon: string) {
+  const matches = card
+    .findAll('button, a')
+    .filter((candidate: any) => candidate.find(`[data-icon="${icon}"]`).exists());
+  const button =
+    matches.find((candidate: any) => candidate.classes().includes('min-w-8')) ?? matches[0];
+  expect(button).toBeDefined();
+  return button!;
+}
+
+function shortDigest(digest: string) {
+  return `${digest.slice(0, 'sha256:'.length + 12)}…`;
+}
+
 describe('ContainersGroupedViews', () => {
   afterEach(() => {
     if (activeWrapper) {
@@ -362,6 +458,7 @@ describe('ContainersGroupedViews', () => {
       }
       activeWrapper = null;
     }
+    restoreClientWidthMock?.();
   });
 
   beforeEach(() => {
@@ -395,6 +492,309 @@ describe('ContainersGroupedViews', () => {
       'registry',
       'uptime',
     ]);
+  });
+
+  it('hoists card sorting when cards are selected or measured card reflow is forced', async () => {
+    const container = makeContainer({ id: 'c-hoist', name: 'alpha' });
+    const { context, refs } = makeContext();
+    refs.filteredContainers.value = [container];
+    refs.displayContainers.value = [container];
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers: [container],
+        containerCount: 1,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+    const dataTable = wrapper.findComponent(DataTableStub);
+
+    expect(dataTable.props('hoistCardSort')).toBe(false);
+
+    dataTable.vm.$emit('update:card-reflow-forced', true);
+    await nextTick();
+
+    expect(refs.containerCardReflowForced.value).toBe(true);
+    expect(wrapper.findComponent(DataTableStub).props('hoistCardSort')).toBe(true);
+
+    dataTable.vm.$emit('update:card-reflow-forced', false);
+    refs.containerViewMode.value = 'cards';
+    await nextTick();
+
+    expect(refs.containerCardReflowForced.value).toBe(false);
+    expect(wrapper.findComponent(DataTableStub).props('hoistCardSort')).toBe(true);
+  });
+
+  it('renders container cards through DataTable preferCards at wide container widths', async () => {
+    const container = makeContainer({ id: 'c-card-path', name: 'alpha', newTag: '1.1.0' });
+
+    const { wrapper } = await mountCardsWithContainers([container], 800);
+
+    expect(wrapper.find('table').exists()).toBe(false);
+    expect(wrapper.findAll('[data-test="dd-card"]')).toHaveLength(1);
+    expect(cardByName(wrapper, 'alpha').text()).toContain('nginx:1.0.0');
+  });
+
+  it('keeps the #356/#370 digest guard in card mode for floating tags and digest-pinned rows', async () => {
+    const currentDigest = 'sha256:111111111111aaaaaaaaaaaa';
+    const newDigest = 'sha256:222222222222bbbbbbbbbbbb';
+    const floatingDigest = makeContainer({
+      id: 'c-floating-digest',
+      name: 'floating',
+      currentTag: 'v8.13.2',
+      newTag: null,
+      updateKind: 'digest',
+      currentDigest,
+      newDigest,
+      isDigestPinned: false,
+    } as Partial<Container>);
+    const pinnedDigest = makeContainer({
+      id: 'c-pinned-digest',
+      name: 'pinned',
+      currentTag: currentDigest,
+      newTag: null,
+      updateKind: 'digest',
+      currentDigest,
+      newDigest,
+      isDigestPinned: true,
+    } as Partial<Container>);
+
+    const { wrapper } = await mountCardsWithContainers([floatingDigest, pinnedDigest], 800);
+    const floatingCard = cardByName(wrapper, 'floating');
+    const pinnedCard = cardByName(wrapper, 'pinned');
+
+    expect(floatingCard.text()).toContain('v8.13.2');
+    expect(floatingCard.text()).not.toContain(shortDigest(currentDigest));
+    expect(floatingCard.text()).not.toContain(shortDigest(newDigest));
+    expect(floatingCard.text()).not.toContain('→');
+
+    const floatingTag = floatingCard
+      .findAll('[title]')
+      .find((candidate: any) =>
+        candidate
+          .attributes('title')
+          ?.includes(`v8.13.2 — ${shortDigest(currentDigest)} → ${shortDigest(newDigest)}`),
+      );
+    expect(floatingTag).toBeDefined();
+    expect(floatingTag!.text()).toContain('v8.13.2');
+
+    expect(pinnedCard.text()).toContain(shortDigest(currentDigest));
+    expect(pinnedCard.text()).toContain(shortDigest(newDigest));
+  });
+
+  it('renders card update states for new tags, no-update reasons, and up-to-date containers', async () => {
+    const available = makeContainer({
+      id: 'c-available',
+      name: 'available',
+      currentTag: '1.0.0',
+      newTag: '1.1.0',
+      updateKind: 'minor',
+      updateMaturity: 'fresh',
+    });
+    const noUpdate = makeContainer({
+      id: 'c-no-update',
+      name: 'no-update',
+      newTag: null,
+      updateKind: null,
+      noUpdateReason: 'Pinned by policy',
+    });
+    const current = makeContainer({
+      id: 'c-current',
+      name: 'current',
+      newTag: null,
+      updateKind: null,
+    });
+
+    const { wrapper } = await mountCardsWithContainers([available, noUpdate, current], 800);
+
+    const availableCard = cardByName(wrapper, 'available');
+    expect(availableCard.text()).toContain('1.0.0');
+    expect(availableCard.text()).toContain('1.1.0');
+    expect(availableCard.get('[data-test="container-card-update-state"]').text()).toContain(
+      'Minor',
+    );
+    expect(availableCard.text()).toContain('NEW');
+
+    const noUpdateCard = cardByName(wrapper, 'no-update');
+    expect(noUpdateCard.get('[data-test="no-update-reason-badge"]').attributes('aria-label')).toBe(
+      'Pinned by policy',
+    );
+
+    const currentCard = cardByName(wrapper, 'current');
+    expect(currentCard.get('[data-test="container-card-update-state"]').text()).toContain(
+      'Current',
+    );
+  });
+
+  it('renders card overlays and header registry/policy indicators', async () => {
+    const updating = makeContainer({
+      id: 'c-updating-card',
+      name: 'updating',
+      newTag: '2.0.0',
+      updateKind: 'major',
+    });
+    const registryError = makeContainer({
+      id: 'c-registry-error-card',
+      name: 'alpha',
+      registryError: '401 unauthorized',
+    });
+    const snoozed = makeContainer({ id: 'c-snoozed-card', name: 'beta' });
+    const skipped = makeContainer({ id: 'c-skipped-card', name: 'gamma' });
+    const maturityBlocked = makeContainer({ id: 'c-maturity-card', name: 'epsilon' });
+
+    const { wrapper, refs } = await mountCardsWithContainers(
+      [updating, registryError, snoozed, skipped, maturityBlocked],
+      800,
+    );
+    refs.actionInProgress.value = new Map([['c-updating-card', 'update']]);
+    await nextTick();
+
+    const updatingCard = cardByName(wrapper, 'updating');
+    expect(updatingCard.classes()).toContain('dd-row-updating');
+    expect(updatingCard.text()).toContain('Updating');
+    expect(updatingCard.find('.dd-spin').exists()).toBe(true);
+
+    expect(cardByName(wrapper, 'alpha').find('[aria-label="Registry error"]').exists()).toBe(true);
+    expect(cardByName(wrapper, 'beta').find('[aria-label="Snoozed updates"]').exists()).toBe(true);
+    expect(cardByName(wrapper, 'gamma').find('[aria-label="Skipped updates"]').exists()).toBe(true);
+    expect(
+      cardByName(wrapper, 'epsilon').find('[aria-label="Maturity-blocked updates"]').exists(),
+    ).toBe(true);
+  });
+
+  it('renders card footer links and 44px action targets, with recheck reachable from the kebab', async () => {
+    const linked = makeContainer({
+      id: 'c-linked-card',
+      name: 'linked',
+      currentTag: 'latest',
+      newTag: '1.2.0',
+      updateKind: 'minor',
+      suggestedTag: '1.2.0',
+      releaseLink: 'https://example.test/releases/1.2.0',
+      sourceRepo: 'github.com/example/project',
+    });
+
+    const { wrapper, spies } = await mountCardsWithContainers([linked], 800);
+    const card = cardByName(wrapper, 'linked');
+
+    expect(card.find('[data-test="suggested-tag-badge"]').exists()).toBe(true);
+    expect(card.findAll('[data-test="release-link"]').length).toBeGreaterThan(0);
+    expect(card.find('[data-test="project-link"]').exists()).toBe(true);
+
+    for (const icon of ['file-text', 'github', 'cloud-download', 'more']) {
+      const action = cardIconButton(card, icon);
+      expect(action.classes()).toEqual(expect.arrayContaining(['w-11', 'h-11']));
+    }
+
+    await cardIconButton(card, 'more').trigger('click');
+    await nextTick();
+
+    expect(spies.toggleActionsMenu).toHaveBeenCalledWith('c-linked-card', expect.any(MouseEvent));
+
+    const recheck = wrapper
+      .findAll('button')
+      .find((button) => button.text().trim() === 'Recheck for updates');
+    expect(recheck).toBeDefined();
+    await recheck!.trigger('click');
+    expect(spies.recheckContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c-linked-card' }),
+    );
+  });
+
+  it('keeps registry in the card subtitle, moves update state to the header, and leaves release/project links in the footer', async () => {
+    const linked = makeContainer({
+      id: 'c-card-body-layout',
+      name: 'linked',
+      currentTag: 'latest',
+      newTag: '1.2.0',
+      updateKind: 'minor',
+      updateMaturity: 'fresh',
+      registry: 'custom',
+      registryName: 'Private Registry',
+      releaseLink: 'https://example.test/releases/1.2.0',
+      sourceRepo: 'github.com/example/project',
+      suggestedTag: '1.2.0',
+    });
+
+    const { wrapper } = await mountCardsWithContainers([linked], 800);
+    const card = cardByName(wrapper, 'linked');
+    const header = card.get('.px-4.pt-4.pb-2');
+    const body = card.get('.px-4.py-3.min-w-0');
+    const footer = card.get('.mt-auto');
+
+    expect(header.get('[data-test="container-card-registry-text"]').text()).toBe(
+      'Private Registry',
+    );
+    expect(header.get('[data-test="container-card-update-state"]').text()).toContain('Minor');
+    expect(body.text()).toContain('latest');
+    expect(body.text()).toContain('→');
+    expect(body.text()).toContain('1.2.0');
+    expect(body.text()).not.toContain('Current');
+    expect(body.text()).not.toContain('Latest');
+    expect(body.find('[data-test="suggested-tag-badge"]').exists()).toBe(true);
+    expect(body.find('[data-test="release-link"]').exists()).toBe(false);
+    expect(body.find('[data-test="project-link"]').exists()).toBe(false);
+    expect(footer.find('[data-test="release-link"]').exists()).toBe(true);
+    expect(footer.find('[data-test="project-link"]').exists()).toBe(true);
+  });
+
+  it('suppresses the header update-state badge when the registry is in error', async () => {
+    const registryError = makeContainer({
+      id: 'c-card-registry-error',
+      name: 'registry-error',
+      registryError: '401 unauthorized',
+    });
+
+    const { wrapper } = await mountCardsWithContainers([registryError], 800);
+    const card = cardByName(wrapper, 'registry-error');
+    const header = card.get('.px-4.pt-4.pb-2');
+
+    expect(header.find('[data-test="container-card-update-state"]').exists()).toBe(false);
+    expect(header.find('[aria-label="Registry error"]').exists()).toBe(true);
+  });
+
+  it('renders grouped card headers as full-width rows spanning the card grid', async () => {
+    const alpha = makeContainer({ id: 'c-group-card-a', name: 'alpha', newTag: '2.0.0' });
+    const beta = makeContainer({ id: 'c-group-card-b', name: 'beta', newTag: '1.1.0' });
+    const { context, refs } = makeContext();
+    refs.groupByStack.value = true;
+    refs.containerViewMode.value = 'cards';
+    refs.filteredContainers.value = [alpha, beta];
+    refs.displayContainers.value = [alpha, beta];
+    refs.renderGroups.value = [
+      {
+        key: 'stack-a',
+        name: 'stack-a',
+        containers: [alpha],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+      {
+        key: 'stack-b',
+        name: 'stack-b',
+        containers: [beta],
+        containerCount: 1,
+        updatesAvailable: 1,
+        updatableCount: 1,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubjectWithRealDataTable(800);
+    await nextTick();
+
+    const listItems = wrapper.findAll('ul[role="list"] > li');
+    expect(listItems[0].attributes('style')).toContain('grid-column: 1 / -1');
+    expect(listItems[0].text()).toContain('stack-a');
+    expect(listItems[2].attributes('style')).toContain('grid-column: 1 / -1');
+    expect(listItems[2].text()).toContain('stack-b');
+    expect(wrapper.findAll('[data-test="dd-card"]')).toHaveLength(2);
   });
 
   it('covers grouped table interactions in icon action mode', async () => {

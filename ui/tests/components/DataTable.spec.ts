@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils';
-import { nextTick } from 'vue';
+import { h, nextTick } from 'vue';
 import DataTable from '@/components/DataTable.vue';
 import { useColumnVisibility } from '@/composables/useColumnVisibility';
 
@@ -135,6 +135,45 @@ describe('DataTable', () => {
       const oddBg = trs[1].attributes('style');
       expect(evenBg).toContain('dd-bg-card');
       expect(oddBg).toContain('dd-bg-inset');
+    });
+
+    it('uses grouped table backgrounds and drops zebra striping when full-width rows are present', () => {
+      const mixedRows = [
+        { id: 'group-a', name: 'Group A', status: 'meta', kind: 'group' },
+        ...rows,
+      ];
+      const w = factory(
+        {
+          rows: mixedRows,
+          fullWidthRow: (row: { kind?: string }) => row.kind === 'group',
+          showActions: true,
+        },
+        {
+          'full-row': ({ row }: any) => `<div class="full-row">Header: ${row.name}</div>`,
+        },
+      );
+
+      expect(w.attributes('style')).toContain('background-color: var(--dd-bg)');
+      expect(w.find('thead tr').attributes('style')).toContain('dd-bg-elevated');
+      expect(w.find('thead th[data-col-key="__actions__"]').attributes('style')).toContain(
+        'dd-bg-elevated',
+      );
+
+      const trs = w.findAll('tbody tr');
+      expect(trs[0].attributes('style')).toContain('background-color: transparent');
+      expect(trs[1].attributes('style')).toContain('background-color: var(--dd-bg-card)');
+      expect(trs[2].attributes('style')).toContain('background-color: var(--dd-bg-card)');
+      expect(trs[2].attributes('style')).not.toContain('dd-bg-inset');
+    });
+
+    it('keeps ungrouped tables on the card surface with an inset header', () => {
+      const w = factory({ showActions: true });
+
+      expect(w.attributes('style')).toContain('background-color: var(--dd-bg-card)');
+      expect(w.find('thead tr').attributes('style')).toContain('dd-bg-inset');
+      expect(w.find('thead th[data-col-key="__actions__"]').attributes('style')).toContain(
+        'dd-bg-inset',
+      );
     });
 
     it('renders a full-width row slot when a row is marked full width', () => {
@@ -994,6 +1033,29 @@ describe('DataTable', () => {
       );
     });
 
+    it('emits card reflow state immediately and when measured width crosses the card breakpoint', async () => {
+      mockedClientWidth = 700;
+      const w = mount(DataTable, {
+        props: { columns: resizeColumns, rows: [], rowKey: 'id' },
+        global: { stubs: { AppIcon: { template: '<span />' } } },
+      });
+      await nextTick();
+
+      expect(w.emitted('update:cardReflowForced')).toEqual([[false]]);
+
+      mockedClientWidth = 500;
+      fireResizeObserver();
+      await nextTick();
+
+      expect(w.emitted('update:cardReflowForced')).toEqual([[false], [true]]);
+
+      mockedClientWidth = 640;
+      fireResizeObserver();
+      await nextTick();
+
+      expect(w.emitted('update:cardReflowForced')).toEqual([[false], [true], [false]]);
+    });
+
     it('does not resync viewport width from a plain window resize event (redundant listener removed)', async () => {
       mockedClientWidth = 700;
       const w = mount(DataTable, {
@@ -1445,10 +1507,28 @@ describe('DataTable', () => {
         expect(w.find('ul[role="list"]').exists()).toBe(false);
       });
 
+      it('forces card rendering at wide widths when preferCards is true', async () => {
+        const w = await mountAtWidth(800, { preferCards: true });
+        expect(w.find('table').exists()).toBe(false);
+        expect(w.find('ul[role="list"]').exists()).toBe(true);
+      });
+
       it('switches to card mode when 0 < viewport width < 640', async () => {
         const w = await mountAtWidth(500);
         expect(w.find('table').exists()).toBe(false);
         expect(w.find('ul[role="list"]').exists()).toBe(true);
+      });
+
+      it('still renders cards below 640px when preferCards is false', async () => {
+        const w = await mountAtWidth(500, { preferCards: false });
+        expect(w.find('table').exists()).toBe(false);
+        expect(w.find('ul[role="list"]').exists()).toBe(true);
+      });
+
+      it('uses a transparent wrapper background in card mode', async () => {
+        const w = await mountAtWidth(500);
+
+        expect(w.attributes('style')).toContain('background-color: transparent');
       });
     });
 
@@ -1663,6 +1743,82 @@ describe('DataTable', () => {
       });
     });
 
+    describe('card slot override', () => {
+      it('renders custom card content inside the same interactive wrapper', async () => {
+        const w = await mountAtWidth(
+          800,
+          { preferCards: true, selectedKey: '1' },
+          {
+            card: ({ row, index, selected }: any) =>
+              h(
+                'section',
+                {
+                  class: 'custom-card',
+                  'data-index': String(index),
+                  'data-selected': String(selected),
+                },
+                `Custom ${row.name}`,
+              ),
+          },
+        );
+
+        const firstCard = w.findAll('[data-test="dd-card"]')[0];
+        expect(firstCard.find('.custom-card').exists()).toBe(true);
+        expect(firstCard.find('.custom-card').attributes('data-index')).toBe('0');
+        expect(firstCard.find('.custom-card').attributes('data-selected')).toBe('true');
+        expect(firstCard.find('[data-test="dd-card-title-row"]').exists()).toBe(false);
+        expect(firstCard.find('[data-test="dd-card-body"]').exists()).toBe(false);
+        expect(firstCard.classes()).toContain('dd-data-table-card-selected');
+        expect(firstCard.attributes('tabindex')).toBe('0');
+
+        await firstCard.trigger('click');
+        await firstCard.trigger('keydown', { key: 'Enter' });
+
+        expect(w.emitted('row-click')?.[0]).toEqual([rows[0]]);
+        expect(w.emitted('row-click')?.[1]).toEqual([rows[0]]);
+      });
+    });
+
+    describe('slot cardMode prop', () => {
+      it('passes false from table cell/actions slots and true from card cell/actions slots', async () => {
+        const tableCell = vi.fn(({ cardMode }: any) => `table-cell-${String(cardMode)}`);
+        const tableActions = vi.fn(({ cardMode }: any) => `table-actions-${String(cardMode)}`);
+        await mountAtWidth(
+          800,
+          { showActions: true },
+          { 'cell-name': tableCell, actions: tableActions },
+        );
+
+        expect(tableCell).toHaveBeenCalled();
+        expect(tableActions).toHaveBeenCalled();
+        expect(tableCell.mock.calls.every(([slotProps]) => slotProps.cardMode === false)).toBe(
+          true,
+        );
+        expect(tableActions.mock.calls.every(([slotProps]) => slotProps.cardMode === false)).toBe(
+          true,
+        );
+
+        const cardCell = vi.fn(({ cardMode }: any) => `card-cell-${String(cardMode)}`);
+        const cardActions = vi.fn(({ cardMode }: any) => `card-actions-${String(cardMode)}`);
+        const cardWrapper = await mountAtWidth(
+          500,
+          { showActions: true },
+          { 'cell-name': cardCell, actions: cardActions },
+        );
+        cardCell.mockClear();
+        cardActions.mockClear();
+        await cardWrapper.setProps({ selectedKey: '1' });
+        await nextTick();
+
+        expect(cardCell).toHaveBeenCalled();
+        expect(cardActions).toHaveBeenCalled();
+        expect(cardCell.mock.calls.every(([slotProps]) => slotProps.cardMode === true)).toBe(true);
+        expect(cardActions.mock.calls.every(([slotProps]) => slotProps.cardMode === true)).toBe(
+          true,
+        );
+      });
+    });
+
     describe('interactivity + selection', () => {
       it('gives interactive cards a tabindex and emits row-click on click', async () => {
         const w = await mountAtWidth(500);
@@ -1713,11 +1869,102 @@ describe('DataTable', () => {
         expect(w.findAll('[data-test="dd-card"]')).toHaveLength(rows.length);
       });
 
+      it('spans full-width card rows across the responsive grid', async () => {
+        const mixedRows = [
+          { id: 'group-a', name: 'Group A', status: 'meta', kind: 'group' },
+          ...rows,
+        ];
+        const w = await mountAtWidth(
+          500,
+          { rows: mixedRows, fullWidthRow: (row: { kind?: string }) => row.kind === 'group' },
+          {
+            'full-row': ({ row, cardMode }: any) =>
+              `<div class="full-row">Header: ${row.name}; cardMode=${String(cardMode)}</div>`,
+          },
+        );
+
+        const list = w.get('ul[role="list"]');
+        expect(list.classes()).toContain('grid');
+        expect(list.attributes('style')).toContain('grid-auto-rows: auto');
+
+        const listItems = w.findAll('ul[role="list"] > li');
+        expect(listItems[0].attributes('style')).toContain('grid-column: 1 / -1');
+        expect(listItems[0].text()).toContain('cardMode=true');
+        expect(listItems[1].attributes('style')).toBeUndefined();
+      });
+
       it('applies the selected-state class when selectedKey matches the row', async () => {
         const w = await mountAtWidth(500, { selectedKey: '2' });
         const cards = w.findAll('[data-test="dd-card"]');
         expect(cards[1].classes()).toContain('dd-data-table-card-selected');
         expect(cards[0].classes()).not.toContain('dd-data-table-card-selected');
+      });
+    });
+
+    describe('card chrome', () => {
+      function dataTableStyleText(): string {
+        return Array.from(document.querySelectorAll('style'))
+          .map((style) => style.textContent ?? '')
+          .join('\n');
+      }
+
+      it('uses transparent card borders until selection switches the border to primary', async () => {
+        const w = await mountAtWidth(500, { selectedKey: '2' });
+        const cards = w.findAll('[data-test="dd-card"]');
+
+        expect(cards[0].classes()).not.toContain('border');
+        expect(cards[0].classes()).not.toContain('dd-border-strong');
+        expect(cards[0].classes()).not.toContain('dd-data-table-card-selected');
+        expect(cards[1].classes()).toContain('dd-data-table-card-selected');
+
+        const styleText = dataTableStyleText();
+        expect(styleText).toContain('border: 1.5px solid transparent');
+        expect(styleText).toContain('border-color: var(--dd-primary)');
+      });
+
+      it('uses the same flat card background for every row instead of zebra striping', async () => {
+        const w = await mountAtWidth(500);
+        const cardStyles = w
+          .findAll('[data-test="dd-card"]')
+          .map((card) => card.attributes('style') ?? '');
+
+        expect(cardStyles).toHaveLength(rows.length);
+        expect(
+          cardStyles.every((style) => style.includes('--dd-data-table-row-bg: var(--dd-bg-card)')),
+        ).toBe(true);
+        expect(cardStyles.some((style) => style.includes('--dd-bg-inset'))).toBe(false);
+      });
+
+      it('uses responsive grid columns and full-height cards when card virtualization is off', async () => {
+        const w = await mountAtWidth(800, { preferCards: true, cardMinWidth: '18rem' });
+        const list = w.get('ul[role="list"]');
+
+        expect(list.classes()).toContain('grid');
+        expect(list.classes()).not.toContain('flex');
+        expect(list.attributes('style')).toContain('grid-template-columns');
+        expect(list.attributes('style')).toContain('minmax(18rem, 1fr)');
+        expect(list.attributes('style')).toContain('grid-auto-rows: 1fr');
+        expect(w.findAll('[data-test="dd-card"]')[0].classes()).toContain('h-full');
+      });
+
+      it('uses a vertical flex list and natural card height while virtualized', async () => {
+        const manyRows = Array.from({ length: 20 }, (_, i) => ({
+          id: `${i + 1}`,
+          name: `Container ${i + 1}`,
+          status: 'running',
+        }));
+        const w = await mountAtWidth(500, {
+          rows: manyRows,
+          virtualScroll: true,
+          virtualRowHeight: 40,
+          virtualMaxHeight: '120px',
+        });
+        const list = w.get('ul[role="list"]');
+
+        expect(list.classes()).toEqual(expect.arrayContaining(['flex', 'flex-col']));
+        expect(list.classes()).not.toContain('grid');
+        expect(list.attributes('style') ?? '').not.toContain('grid-template-columns');
+        expect(w.findAll('[data-test="dd-card"]')[0].classes()).not.toContain('h-full');
       });
     });
 
@@ -1847,6 +2094,17 @@ describe('DataTable', () => {
         expect(
           w.find('.dd-data-table-card-sort-bar [data-test="dd-card-sort-select"]').exists(),
         ).toBe(true);
+      });
+
+      it('suppresses the built-in card sort bar when sort is hoisted to an ancestor toolbar', async () => {
+        const w = await mountAtWidth(500, {
+          columns: sortColumns,
+          rows: sortRows,
+          hoistCardSort: true,
+        });
+
+        expect(w.find('.dd-data-table-card-sort-bar').exists()).toBe(false);
+        expect(w.find('[data-test="dd-card-sort-select"]').exists()).toBe(false);
       });
     });
 

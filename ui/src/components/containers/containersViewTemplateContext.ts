@@ -6,6 +6,7 @@ import type { useContainerFilters } from '../../composables/useContainerFilters'
 import type { useDetailPanel } from '../../composables/useDetailPanel';
 import type { LogAutoFetchIntervalOption } from '../../composables/useLogViewerBehavior';
 import type { PreferencesSchema } from '../../preferences/schema';
+import type { useViewMode } from '../../preferences/useViewMode';
 import type { Container } from '../../types/container';
 import type {
   maturityColor,
@@ -110,6 +111,9 @@ export interface ContainersViewTemplateContext
   error: Ref<string | null>;
   loading: Ref<boolean>;
   containers: Ref<Container[]>;
+  containerViewMode: ReturnType<typeof useViewMode>;
+  /** True when the DataTable's measured width (< 640px) forces card reflow. */
+  containerCardReflowForced: Ref<boolean>;
   serverNames: ComputedRef<string[]>;
   tt: (label: string) => { value: string; showDelay: number };
   groupByStack: WritableComputedRef<boolean>;

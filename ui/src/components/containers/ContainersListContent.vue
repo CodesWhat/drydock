@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { PickerColumn } from '../../composables/useViewColumnVisibility';
 import AppIconButton from '../AppIconButton.vue';
+import DataSortControl from '../DataSortControl.vue';
 import DataTableColumnPicker from '../DataTableColumnPicker.vue';
 import ContainersGroupedViews from './ContainersGroupedViews.vue';
 import {
@@ -16,6 +17,11 @@ const { t } = useI18n();
 const {
   error,
   loading,
+  containerViewMode,
+  containerCardReflowForced,
+  containerSortKey,
+  containerSortAsc,
+  tableColumns,
   showFilters,
   filteredContainers,
   containers,
@@ -47,6 +53,18 @@ const {
 // Only catalog entries with a labelKey are user-toggleable table columns (matches the
 // picker's previous bespoke-popover filter — the icon column has no labelKey and is
 // `required` besides).
+// Cards are showing when the user toggled to them OR the width forced the reflow.
+const inCardMode = computed(
+  () => containerCardReflowForced.value || containerViewMode.value === 'cards',
+);
+
+// Card-mode sort options, hoisted into the filter bar (table mode sorts via headers).
+const sortableColumns = computed(() =>
+  tableColumns.value
+    .filter((column) => column.sortable && !column.icon)
+    .map((column) => ({ key: column.key, label: column.label })),
+);
+
 const pickerColumns = computed<PickerColumn[]>(() =>
   allColumns
     .filter((column) => column.labelKey)
@@ -128,10 +146,20 @@ const activeFilterChips = computed(() => {
     <div v-if="loading" class="text-2xs-plus dd-text-muted py-3 px-1">{{ t('containerComponents.listContent.loadingContainers') }}</div>
 
     <DataFilterBar
+      v-model="containerViewMode"
       v-model:showFilters="showFilters"
       :filtered-count="filteredContainers.length"
       :total-count="containers.length"
-      :active-filter-count="activeFilterCount">
+      :active-filter-count="activeFilterCount"
+      :hide-view-toggle="containerCardReflowForced">
+      <template v-if="inCardMode && sortableColumns.length > 0" #sort>
+        <DataSortControl
+          :columns="sortableColumns"
+          :sort-key="containerSortKey"
+          :sort-asc="containerSortAsc"
+          @update:sort-key="containerSortKey = $event"
+          @update:sort-asc="containerSortAsc = $event" />
+      </template>
       <template #filters>
         <input
           v-model="filterSearch"
@@ -202,6 +230,7 @@ const activeFilterChips = computed(() => {
       </template>
       <template #extra-buttons>
         <DataTableColumnPicker
+          v-if="containerViewMode === 'table'"
           :columns="pickerColumns"
           :hidden-keys="pickerHiddenColumnKeys"
           @toggle="toggleColumn"

@@ -11,7 +11,13 @@
     },
     "dataFilterBar": {
       "filters": "Filtres",
-      "toggleFilters": "Afficher/masquer les filtres"
+      "toggleFilters": "Afficher/masquer les filtres",
+      "viewMode": "Mode d'affichage",
+      "viewModeLabel": "Vue {label}",
+      "viewModes": {
+        "table": "Table",
+        "cards": "Cards"
+      }
     },
     "dataTable": {
       "actions": "Actions",

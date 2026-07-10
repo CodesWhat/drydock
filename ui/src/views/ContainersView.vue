@@ -15,6 +15,7 @@ import { useOperationDisplayHold } from '../composables/useOperationDisplayHold'
 import { useToast } from '../composables/useToast';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
+import { useViewMode } from '../preferences/useViewMode';
 import type { ContainerGroup } from '../services/container';
 import { getAllContainers, getContainerGroups, refreshAllContainers } from '../services/container';
 import type { Container, ContainerUpdateOperation } from '../types/container';
@@ -491,6 +492,11 @@ const {
   selectedContainer,
   selectedContainerId,
 });
+
+const containerViewMode = useViewMode('containers');
+// Set by the DataTable's measured-width reflow (< 640px); hides the table/cards toggle and
+// keeps the sort control in the toolbar when the width forces cards.
+const containerCardReflowForced = ref(false);
 
 const tableActionStyle = usePreference(
   () => preferences.containers.tableActions,
@@ -1235,7 +1241,9 @@ const tableColumns = computed(() =>
     maxSize: column.maxSize,
     flex: column.flex,
     priority: column.priority,
-    cardPriority: column.cardPriority,
+    // No cardPriority here — containers ships a hand-authored #card template (see
+    // ContainersGroupedViews.vue), so DataTable's cardPriority-driven generic card
+    // composition is never reached for this view.
     overflow: column.overflow,
     autoSize: column.autoSize,
     px: column.px,
@@ -1383,9 +1391,11 @@ function registryErrorTooltip(container: Container): string {
 }
 
 provide(containersViewTemplateContextKey, {
+  containerCardReflowForced,
   error,
   loading,
   containers,
+  containerViewMode,
   showFilters,
   filteredContainers,
   activeFilterCount,

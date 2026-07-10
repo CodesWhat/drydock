@@ -11,7 +11,13 @@
     },
     "dataFilterBar": {
       "filters": "Фильтры",
-      "toggleFilters": "Переключить фильтры"
+      "toggleFilters": "Переключить фильтры",
+      "viewMode": "Режим просмотра",
+      "viewModeLabel": "Вид {label}",
+      "viewModes": {
+        "table": "Table",
+        "cards": "Cards"
+      }
     },
     "dataTable": {
       "actions": "Действия",
