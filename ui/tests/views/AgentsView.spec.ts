@@ -595,7 +595,7 @@ describe('AgentsView', () => {
     await wrapper.get('.force-card-reflow').trigger('click');
     await nextTick();
 
-    expect(wrapper.get('.agent-sort-control').exists()).toBe(true);
+    expect(wrapper.find('.agent-sort-control').exists()).toBe(true);
     expect(wrapper.get('.agent-card-table').attributes('data-prefer-cards')).toBe('false');
     expect(wrapper.get('.agent-card-table').attributes('data-hoist-card-sort')).toBe('true');
     expect(wrapper.get('.agent-card-filter').attributes('data-hide-view-toggle')).toBe('true');

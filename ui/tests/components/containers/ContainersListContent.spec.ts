@@ -1,5 +1,14 @@
 import type { VueWrapper } from '@vue/test-utils';
-import { computed, defineComponent, h, nextTick, provide, ref } from 'vue';
+import {
+  computed,
+  defineComponent,
+  h,
+  nextTick,
+  provide,
+  type Ref,
+  ref,
+  type WritableComputedRef,
+} from 'vue';
 import ContainersListContent from '@/components/containers/ContainersListContent.vue';
 import {
   type ContainersViewTableColumn,
@@ -56,16 +65,28 @@ const DataFilterBarStub = defineComponent({
   `,
 });
 
+// containerViewMode/containerSortKey/containerSortAsc are writable computeds on the real
+// context, and a plain ref is not assignable to WritableComputedRef.
+function writableRef<T>(initial: T): WritableComputedRef<T> {
+  const inner = ref(initial) as Ref<T>;
+  return computed({
+    get: () => inner.value,
+    set: (value: T) => {
+      inner.value = value;
+    },
+  });
+}
+
 function makeTemplateContext(
   overrides: Partial<ContainersViewTemplateContext> = {},
 ): ContainersViewTemplateContext {
   return {
     error: ref(null),
     loading: ref(false),
-    containerViewMode: ref<ViewMode>('table'),
+    containerViewMode: writableRef<ViewMode>('table'),
     containerCardReflowForced: ref(false),
-    containerSortKey: ref('name'),
-    containerSortAsc: ref(true),
+    containerSortKey: writableRef('name'),
+    containerSortAsc: writableRef(true),
     tableColumns: computed<ContainersViewTableColumn[]>(() => [
       { key: 'icon', label: '', sortable: false, icon: true },
       { key: 'name', label: 'Container', sortable: true, icon: false },
@@ -160,7 +181,7 @@ describe('ContainersListContent', () => {
 
   it('hides the column picker in cards mode and shows it in table mode', async () => {
     const context = makeTemplateContext({
-      containerViewMode: ref<ViewMode>('cards'),
+      containerViewMode: writableRef<ViewMode>('cards'),
     });
     wrapper = mountWithContext(context);
 
@@ -190,9 +211,9 @@ describe('ContainersListContent', () => {
 
   it('renders toolbar sort in card mode with sortable non-icon columns and wires sort updates', async () => {
     const context = makeTemplateContext({
-      containerViewMode: ref<ViewMode>('cards'),
-      containerSortKey: ref('name'),
-      containerSortAsc: ref(false),
+      containerViewMode: writableRef<ViewMode>('cards'),
+      containerSortKey: writableRef('name'),
+      containerSortAsc: writableRef(false),
     });
     wrapper = mountWithContext(context);
 
@@ -213,7 +234,7 @@ describe('ContainersListContent', () => {
 
   it('treats forced card reflow as card mode and hides the view toggle through DataFilterBar', () => {
     const context = makeTemplateContext({
-      containerViewMode: ref<ViewMode>('table'),
+      containerViewMode: writableRef<ViewMode>('table'),
       containerCardReflowForced: ref(true),
       tableColumns: computed<ContainersViewTableColumn[]>(() => [
         { key: 'icon', label: 'Icon', sortable: true, icon: true },

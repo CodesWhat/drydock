@@ -2033,7 +2033,7 @@ describe('SecurityView', () => {
       await w.get('.force-card-reflow').trigger('click');
       await nextTick();
 
-      expect(w.get('.security-sort-control').exists()).toBe(true);
+      expect(w.find('.security-sort-control').exists()).toBe(true);
       expect(w.get('.security-card-table').attributes('data-prefer-cards')).toBe('false');
       expect(w.get('.security-card-table').attributes('data-hoist-card-sort')).toBe('true');
       expect(w.get('.security-card-filter').attributes('data-hide-view-toggle')).toBe('true');
