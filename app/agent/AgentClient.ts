@@ -1567,27 +1567,17 @@ export class AgentClient {
     options: { tail: number; since: number; timestamps: boolean },
   ) {
     if (this.edgeAdapter) {
-      // Known transport gap (punch-list #5): options.timestamps is intentionally
-      // NOT forwarded here. Portwing's `dd:container_log_request` wire message
-      // (protocol.DDContainerLogRequestMessage in portwing's internal/protocol)
-      // has no `timestamps` field, and its handler
-      // (handleContainerLogRequest in internal/adapter/drydock/adapter.go) calls
-      // dockerClient.GetContainerLogs(..., follow=false, timestamps=false)
-      // unconditionally — so even if we invented one, the edge server would
-      // silently ignore it. Result: log downloads routed through an edge agent
-      // never include timestamps, regardless of what the caller (or the UI's
-      // "show timestamps" toggle) requests, while the SSE/axios agent fallback
-      // below does honor it via `&timestamps=`. The message does carry `until`
-      // and `follow` fields (EdgeAgentAdapter#requestContainerLogs accepts
-      // both), but no current drydock caller populates either — and portwing's
-      // handler ignores `follow` server-side the same way. Threading
-      // timestamps/until/follow through properly is joint protocol work with
-      // portwing (new wire fields + honoring them), tracked as a follow-up, not
-      // done here. See content/docs/current/configuration/agents/index.mdx for
-      // the user-facing note.
+      // Punch-list #5 (resolved): forward `timestamps` over the edge path so a
+      // log download routed through an edge agent honors the caller's request
+      // (and the UI "show timestamps" toggle) the same as the SSE/axios fallback
+      // below. Portwing's `dd:container_log_request` now carries a `timestamps`
+      // field and its handler (handleContainerLogRequest in
+      // internal/adapter/drydock/adapter.go) reads it. `follow`/`until` also work
+      // end to end but the one-shot download path never sets them.
       return this.edgeAdapter.requestContainerLogs(containerId, {
         tail: options.tail,
         since: String(options.since),
+        timestamps: options.timestamps,
       });
     }
     try {

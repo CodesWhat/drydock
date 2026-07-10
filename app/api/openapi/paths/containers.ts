@@ -695,6 +695,8 @@ export const containerPaths = {
           name: 'timestamps',
           in: 'query',
           required: false,
+          description:
+            'Prefix each log line with its RFC3339 timestamp. Honored for both local containers and containers behind an edge (Portwing) agent.',
           schema: { type: 'boolean' },
         },
       ],

@@ -2238,9 +2238,12 @@ describe('EdgeAgentAdapter — Bug 4 regressions (concurrent per-container reque
     expect(sentFrames[0].data.requestId).toBeTruthy();
     expect(sentFrames[0].data.requestId).not.toBe(sentFrames[1].data.requestId);
 
-    // portwing's dd:container_log_response frame carries no requestId, so
-    // responses are correlated in FIFO order — the fix under test is that
-    // BOTH resolve, not that either is silently dropped as a spurious timeout.
+    // These response frames deliberately omit requestId to exercise the legacy
+    // no-echo fallback (dequeueOldestContainerRequest), where responses are
+    // correlated in FIFO order. A current portwing agent echoes requestId for
+    // exact correlation (covered in the 'requestId echo correlation' block); the
+    // fix under test here is that BOTH resolve, not that either is silently
+    // dropped as a spurious timeout.
     sendFrame(ws, 'dd:container_log_response', { containerId, logs: 'first-response' });
     await new Promise((r) => setTimeout(r, 0));
     sendFrame(ws, 'dd:container_log_response', { containerId, logs: 'second-response' });
@@ -2359,5 +2362,243 @@ describe('EdgeAgentAdapter — Bug 4 regressions (concurrent per-container reque
     await new Promise((r) => setTimeout(r, 10));
 
     expect(ws.close).not.toHaveBeenCalled();
+  });
+});
+
+describe('EdgeAgentAdapter — requestId echo correlation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('requestContainerLogs forwards timestamps:true on the wire when passed, and omits the key entirely when not passed', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const onPromise = adapter.requestContainerLogs('container-ts-on', {
+      tail: 50,
+      timestamps: true,
+    });
+
+    const onFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      type: string;
+      data: { containerId: string; requestId: string; tail: number; timestamps?: boolean };
+    };
+    expect(onFrame.type).toBe('dd:container_log_request');
+    expect(onFrame.data.timestamps).toBe(true);
+    expect(onFrame.data.tail).toBe(50);
+
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId: 'container-ts-on',
+      requestId: onFrame.data.requestId,
+      logs: 'x',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    await onPromise;
+
+    const offPromise = adapter.requestContainerLogs('container-ts-off', { tail: 50 });
+
+    const offRaw = ws.sentMessages[ws.sentMessages.length - 1];
+    const offFrame = JSON.parse(offRaw) as {
+      data: { containerId: string; requestId: string; timestamps?: boolean };
+    };
+    expect(offFrame.data.timestamps).toBeUndefined();
+    expect(offRaw).not.toContain('timestamps');
+
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId: 'container-ts-off',
+      requestId: offFrame.data.requestId,
+      logs: 'y',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    await offPromise;
+  });
+
+  test('two concurrent requestContainerLogs calls for the same container: responses arrive in REVERSE completion order, each still resolves with its OWN logs (exact echo, not FIFO)', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-ooo-logs';
+    const first = adapter.requestContainerLogs(containerId, { tail: 10 });
+    const second = adapter.requestContainerLogs(containerId, { tail: 20 });
+
+    const sentFrames = ws.sentMessages.map((m) => JSON.parse(m) as { data: { requestId: string } });
+    const firstRequestId = sentFrames[0].data.requestId;
+    const secondRequestId = sentFrames[1].data.requestId;
+    expect(firstRequestId).not.toBe(secondRequestId);
+
+    // Respond to SECOND's request first, echoing its id.
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId,
+      requestId: secondRequestId,
+      logs: 'second-logs',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Then respond to FIRST's request, echoing its id.
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId,
+      requestId: firstRequestId,
+      logs: 'first-logs',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    await expect(first).resolves.toBe('first-logs');
+    await expect(second).resolves.toBe('second-logs');
+  });
+
+  test('two concurrent deleteContainer calls for the same container: responses arrive in REVERSE completion order (one success, one failure), each resolves/rejects according to its OWN echoed requestId', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-ooo-delete';
+    const first = adapter.deleteContainer(containerId).catch((err: Error) => err.message);
+    const second = adapter.deleteContainer(containerId);
+
+    const sentFrames = ws.sentMessages.map((m) => JSON.parse(m) as { data: { requestId: string } });
+    const firstRequestId = sentFrames[0].data.requestId;
+    const secondRequestId = sentFrames[1].data.requestId;
+
+    // Respond to SECOND first (success), echoing its id.
+    sendFrame(ws, 'dd:container_delete_response', {
+      containerId,
+      requestId: secondRequestId,
+      success: true,
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    // Then respond to FIRST (failure), echoing its id.
+    sendFrame(ws, 'dd:container_delete_response', {
+      containerId,
+      requestId: firstRequestId,
+      success: false,
+      error: 'first-error',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(await first).toBe('first-error');
+    await expect(second).resolves.toBeUndefined();
+  });
+
+  test('an echoed requestId that matches no pending entry does not resolve/steal a different pending request for the same container, leaves it pending, and does not close the socket; a subsequent correctly-echoed response still resolves it', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-miss';
+    let resolved = false;
+    const pending = adapter.requestContainerLogs(containerId, { tail: 5 });
+    pending
+      .then(() => {
+        resolved = true;
+      })
+      .catch(() => {});
+
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      data: { requestId: string };
+    };
+    const realRequestId = sentFrame.data.requestId;
+
+    // Echoed id that matches nothing pending — must NOT fall back to FIFO.
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId,
+      requestId: 'bogus-unknown-request-id',
+      logs: 'stolen-logs',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(resolved).toBe(false);
+    expect(ws.close).not.toHaveBeenCalled();
+    const adapterInternal = adapter as unknown as { pendingRequests: Map<string, unknown> };
+    expect(adapterInternal.pendingRequests.has(`log:${containerId}:${realRequestId}`)).toBe(true);
+
+    // Correct echo still resolves it.
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId,
+      requestId: realRequestId,
+      logs: 'real-logs',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    await expect(pending).resolves.toBe('real-logs');
+    expect(resolved).toBe(true);
+  });
+
+  test('a response carrying a present-but-empty requestId is treated as an echoed miss (not a legacy no-echo frame): it does not FIFO-resolve the oldest pending request, and a correct echo still resolves it', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-empty-id';
+    let resolved = false;
+    const pending = adapter.requestContainerLogs(containerId, { tail: 5 });
+    pending
+      .then(() => {
+        resolved = true;
+      })
+      .catch(() => {});
+
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      data: { requestId: string };
+    };
+    const realRequestId = sentFrame.data.requestId;
+
+    // requestId present but empty — must be treated as an exact-match miss, NOT
+    // as a legacy no-requestId frame that would FIFO-resolve the oldest request.
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId,
+      requestId: '',
+      logs: 'should-not-steal',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(resolved).toBe(false);
+    expect(ws.close).not.toHaveBeenCalled();
+    const adapterInternal = adapter as unknown as { pendingRequests: Map<string, unknown> };
+    expect(adapterInternal.pendingRequests.has(`log:${containerId}:${realRequestId}`)).toBe(true);
+
+    // The correctly-echoed response still resolves it.
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId,
+      requestId: realRequestId,
+      logs: 'real-logs',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    await expect(pending).resolves.toBe('real-logs');
+    expect(resolved).toBe(true);
+  });
+
+  test('three concurrent requestContainerLogs calls for the same container: an exact-echo response for the MIDDLE request removes it from the FIFO queue without disturbing order, and two subsequent legacy (no-requestId) responses still resolve the two remaining requests oldest-first', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-mixed-fifo';
+    const first = adapter.requestContainerLogs(containerId, { tail: 1 });
+    const second = adapter.requestContainerLogs(containerId, { tail: 2 });
+    const third = adapter.requestContainerLogs(containerId, { tail: 3 });
+
+    const sentFrames = ws.sentMessages.map((m) => JSON.parse(m) as { data: { requestId: string } });
+    const secondRequestId = sentFrames[1].data.requestId;
+
+    // Resolve the MIDDLE request first via exact echo (removes it from the
+    // middle of the FIFO queue via removeContainerRequestFromQueue).
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId,
+      requestId: secondRequestId,
+      logs: 'second-logs',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    await expect(second).resolves.toBe('second-logs');
+
+    // Legacy response with NO requestId — must fall back to oldest-outstanding,
+    // which after the removal above is `first`.
+    sendFrame(ws, 'dd:container_log_response', { containerId, logs: 'first-logs' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    // A second legacy response with NO requestId — the only one left is `third`.
+    sendFrame(ws, 'dd:container_log_response', { containerId, logs: 'third-logs' });
+    await new Promise((r) => setTimeout(r, 0));
+
+    await expect(first).resolves.toBe('first-logs');
+    await expect(third).resolves.toBe('third-logs');
   });
 });
