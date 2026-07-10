@@ -328,9 +328,24 @@ export class AgentClient {
       (containerInStore) => !newContainerIds.has(containerInStore.id),
     );
 
+    // #496: a recreated container reappears under a fresh Docker id but keeps its name, so a
+    // stale-id entry whose name is still in the authoritative list is a replacement, not a
+    // removal. Flagging it lets the store retain the user's updatePolicy for the incoming doc
+    // (and, as before, lets Hass keep the state topic alive across the swap). A name that is
+    // genuinely gone stays unflagged so its HA discovery topics are still cleaned up.
+    const newContainerNames = new Set(
+      newContainers
+        .map((container) => container.name)
+        .filter((name): name is string => typeof name === 'string' && name !== ''),
+    );
+
     containersToRemove.forEach((c) => {
       this.log.info(`Pruning container ${c.name} (removed on Agent)`);
       this.pendingFreshStateAfterRemoteUpdate.delete(c.id);
+      if (typeof c.name === 'string' && newContainerNames.has(c.name)) {
+        storeContainer.deleteContainer(c.id, { replacementExpected: true });
+        return;
+      }
       storeContainer.deleteContainer(c.id);
     });
   }
