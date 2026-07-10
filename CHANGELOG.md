@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Base image bumped to Alpine 3.24.** The `healthcheck-build` stage in the `Dockerfile` moves from `alpine:3.21` to `alpine:3.24`.
 
+- **Every list view toggles between table and cards, and the choice sticks per view.** The v1.6 UI refactor rebuilt all list views on a shared `DataTable`, and each filter bar's view switch is now table⇄cards across Containers, Agents, Notifications, Security, Triggers, Watchers, Servers, Registries, Audit, and Auth. The selected mode is persisted per view; below ~640px the layout automatically reflows to cards and the now-redundant toggle is hidden. The old three-way `list` (accordion) mode has been removed — it's table or cards.
+
 - **`dd.action.*` and `dd.notification.*` trigger labels are now strictly category-scoped.** A container's `dd.action.include`/`dd.action.exclude` labels now gate **only** action triggers (`docker`, `dockercompose`, `command`); `dd.notification.include`/`dd.notification.exclude` gate **only** notification triggers. Previously, whichever of the two was set on a container silently won for both categories, so a lone `dd.action.include` also filtered notification triggers (and vice versa) — see the Fixed entry below. The deprecated `dd.trigger.include`/`dd.trigger.exclude` labels still apply to both categories as a shared fallback beneath the scoped labels, unchanged. See the Upgrade Notes entry below before upgrading if you rely on a single scoped label to gate both trigger categories.
 
 ### Deprecated
