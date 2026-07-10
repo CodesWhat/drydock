@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router';
 import AppBadge from '../components/AppBadge.vue';
 import DetailField from '../components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { useViewMode } from '../preferences/useViewMode';
 import { getAllAuthentications, getAuthentication } from '../services/authentication';
 import type { ApiComponent } from '../types/api';
 
@@ -40,6 +41,10 @@ function authTypeBadge(type: string) {
 
 const searchQuery = ref('');
 const showFilters = ref(false);
+const authViewMode = useViewMode('auth');
+// Set by DataTable's measured-width reflow (< 640px): hides the table/cards toggle when the
+// width has already forced cards, so the switcher isn't a dead control at that size.
+const cardReflowForced = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
 function applySearchFromQuery(queryValue: unknown) {
@@ -150,10 +155,12 @@ onMounted(async () => {
 
       <!-- Filter bar -->
       <DataFilterBar
+        v-model="authViewMode"
         v-model:showFilters="showFilters"
         :filtered-count="filteredAuth.length"
         :total-count="authData.length"
-        :active-filter-count="activeFilterCount">
+        :active-filter-count="activeFilterCount"
+        :hide-view-toggle="cardReflowForced">
         <template #filters>
           <input v-model="searchQuery"
                  type="text"
@@ -175,6 +182,8 @@ onMounted(async () => {
         :rows="filteredAuth"
         row-key="id"
         :active-row="selectedAuth?.id"
+        :prefer-cards="authViewMode === 'cards'"
+        @update:card-reflow-forced="cardReflowForced = $event"
         @row-click="openDetail($event)">
         <template #cell-name="{ row }">
           <span class="font-medium dd-text">{{ row.name }}</span>
@@ -190,6 +199,37 @@ onMounted(async () => {
           <AppBadge :tone="row.status === 'active' ? 'success' : 'neutral'" size="xs" class="max-md:!hidden">
             {{ row.status }}
           </AppBadge>
+        </template>
+        <template #card="{ row }">
+          <div class="relative flex flex-col flex-1">
+            <!-- Header: provider name + type badge -->
+            <div class="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="text-sm-plus font-semibold truncate dd-text">{{ row.name }}</div>
+              </div>
+              <AppBadge :custom="{ bg: authTypeBadge(row.type).bg, text: authTypeBadge(row.type).text }" size="xs" class="shrink-0 ml-2">
+                {{ authTypeBadge(row.type).label }}
+              </AppBadge>
+            </div>
+            <!-- Body: config entries -->
+            <div class="px-4 py-3">
+              <div class="grid grid-cols-1 gap-2 text-2xs-plus">
+                <div v-for="(val, key) in row.config" :key="key">
+                  <span class="dd-text-muted">{{ key }}</span>
+                  <div class="font-semibold truncate dd-text font-mono text-2xs">{{ val }}</div>
+                </div>
+              </div>
+            </div>
+            <!-- Footer: status -->
+            <div class="px-4 py-2.5 mt-auto"
+                 :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+              <AppIcon :name="row.status === 'active' ? 'check' : 'xmark'" :size="13" class="shrink-0 md:!hidden"
+                       :style="{ color: row.status === 'active' ? 'var(--dd-success)' : 'var(--dd-neutral)' }" />
+              <AppBadge :tone="row.status === 'active' ? 'success' : 'neutral'" size="xs" class="max-md:!hidden">
+                {{ row.status }}
+              </AppBadge>
+            </div>
+          </div>
         </template>
         <template #empty>
           <EmptyState icon="filter" :message="t('authView.emptyFiltered')" :show-clear="activeFilterCount > 0" @clear="searchQuery = ''" />

@@ -79,6 +79,87 @@ async function mountServersView() {
   return wrapper;
 }
 
+const serverCardFilterBarStub = defineComponent({
+  props: [
+    'modelValue',
+    'viewModes',
+    'showFilters',
+    'filteredCount',
+    'totalCount',
+    'activeFilterCount',
+    'hideViewToggle',
+  ],
+  emits: ['update:modelValue', 'update:showFilters'],
+  template: `
+    <div
+      class="data-filter-bar server-card-filter"
+      :data-mode="modelValue"
+      :data-hide-view-toggle="String(hideViewToggle)">
+      <button
+        v-for="mode in (viewModes || [{ id: 'table' }, { id: 'cards' }])"
+        :key="mode.id"
+        :class="'mode-' + mode.id"
+        :data-active="String(modelValue === mode.id)"
+        @click="$emit('update:modelValue', mode.id)">
+        {{ mode.id }}
+      </button>
+      <slot name="filters" />
+      <slot name="extra-buttons" />
+    </div>
+  `,
+});
+
+const serverCardDataTableStub = defineComponent({
+  props: [
+    'columns',
+    'rows',
+    'rowKey',
+    'activeRow',
+    'selectedKey',
+    'sortKey',
+    'sortAsc',
+    'preferCards',
+    'hiddenColumnKeys',
+  ],
+  emits: ['row-click', 'update:cardReflowForced'],
+  template: `
+    <div
+      class="data-table server-card-table"
+      :data-row-count="rows?.length ?? 0"
+      :data-prefer-cards="String(preferCards)"
+      :data-selected-key="selectedKey || activeRow || ''">
+      <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
+        Force cards
+      </button>
+      <button class="clear-card-reflow" @click="$emit('update:cardReflowForced', false)">
+        Clear cards
+      </button>
+      <article
+        v-for="row in rows || []"
+        :key="row[rowKey || 'id']"
+        class="server-card"
+        :data-card-id="row[rowKey || 'id']">
+        <slot name="card" :row="row" />
+      </article>
+      <slot name="empty" v-if="!rows || rows.length === 0" />
+    </div>
+  `,
+});
+
+async function mountServersCardView() {
+  const wrapper = mountWithPlugins(ServersView, {
+    global: {
+      stubs: {
+        ...dataViewStubs,
+        DataFilterBar: serverCardFilterBarStub,
+        DataTable: serverCardDataTableStub,
+      },
+    },
+  });
+  await flushPromises();
+  return wrapper;
+}
+
 describe('ServersView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -426,5 +507,61 @@ describe('ServersView', () => {
     const agentRow = rows.find((r) => r.name === 'Edge-1') as any;
 
     expect(agentRow.containers).toEqual({ total: 4, running: 3, stopped: 1 });
+  });
+
+  it('renders server cards and wires the card-mode reflow controls', async () => {
+    preferences.views.servers.mode = 'cards';
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'docker.local',
+        type: 'docker',
+        name: 'local',
+        configuration: { socket: '/var/run/docker.sock', host: '', port: 2375, protocol: 'http' },
+        metadata: { containers: { total: 4, running: 3, stopped: 1 }, images: 6 },
+      },
+    ]);
+    mockGetAgents.mockResolvedValue([
+      {
+        name: 'Edge-1',
+        connected: false,
+        host: '10.0.0.21',
+        port: 2376,
+        containers: { total: 2, running: 0, stopped: 2, updatesAvailable: 0 },
+        images: 3,
+      },
+    ]);
+
+    const wrapper = await mountServersCardView();
+
+    expect(wrapper.get('.server-card-table').attributes('data-prefer-cards')).toBe('true');
+    expect(wrapper.get('.server-card-filter').attributes('data-mode')).toBe('cards');
+    expect(wrapper.get('.server-card-filter').attributes('data-hide-view-toggle')).toBe('false');
+
+    const localCard = wrapper.get('[data-card-id="docker.local"]');
+    expect(localCard.text()).toContain('Local');
+    expect(localCard.text()).toContain('unix:///var/run/docker.sock');
+    expect(localCard.text()).toContain('Connected');
+    expect(localCard.text()).toContain('Containers');
+    expect(localCard.text()).toContain('Running');
+    expect(localCard.text()).toContain('Images');
+    expect(localCard.text()).toContain('Last seen');
+    expect(localCard.text()).toContain('4');
+    expect(localCard.text()).toContain('6');
+    expect(localCard.text()).toContain('Just now');
+    expect(localCard.text()).toContain('3/4 running');
+
+    const edgeCard = wrapper.get('[data-card-id="Edge-1"]');
+    expect(edgeCard.text()).toContain('Edge-1');
+    expect(edgeCard.text()).toContain('Disconnected');
+    expect(edgeCard.text()).toContain('Never');
+    expect(edgeCard.text()).toContain('0/2 running');
+
+    await wrapper.get('.force-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.server-card-filter').attributes('data-hide-view-toggle')).toBe('true');
+
+    await wrapper.get('.clear-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.server-card-filter').attributes('data-hide-view-toggle')).toBe('false');
   });
 });

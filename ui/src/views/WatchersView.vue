@@ -8,6 +8,7 @@ import DetailField from '@/components/DetailField.vue';
 import StatusDot from '@/components/StatusDot.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
+import { useViewMode } from '../preferences/useViewMode';
 import { getAllWatchers, getWatcher } from '../services/watcher';
 import type { ApiComponent } from '../types/api';
 import { ROUTES } from '../router/routes';
@@ -58,6 +59,10 @@ function timeUntil(isoString: string): string {
 
 const searchQuery = ref('');
 const showFilters = ref(false);
+const watcherViewMode = useViewMode('watchers');
+// Set by DataTable's measured-width reflow (< 640px): hides the table/cards toggle when the
+// width has already forced cards, so the switcher isn't a dead control at that size.
+const cardReflowForced = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
 function applySearchFromQuery(queryValue: unknown) {
@@ -236,10 +241,12 @@ onMounted(async () => {
 
     <!-- Filter bar -->
     <DataFilterBar
+      v-model="watcherViewMode"
       v-model:showFilters="showFilters"
       :filtered-count="filteredWatchers.length"
       :total-count="watchersData.length"
       :active-filter-count="activeFilterCount"
+      :hide-view-toggle="cardReflowForced"
     >
       <template #filters>
         <input v-model="searchQuery"
@@ -270,6 +277,8 @@ onMounted(async () => {
       row-key="id"
       :hidden-column-keys="hiddenColumnKeys"
       :active-row="selectedWatcher?.id"
+      :prefer-cards="watcherViewMode === 'cards'"
+      @update:card-reflow-forced="cardReflowForced = $event"
       @row-click="openDetail($event)"
     >
       <template #cell-name="{ row }">
@@ -299,6 +308,51 @@ onMounted(async () => {
       </template>
       <template #cell-lastRun="{ row }">
         <span class="dd-text-muted">{{ row.lastRun }}</span>
+      </template>
+      <template #card="{ row }">
+        <div class="flex flex-col flex-1">
+          <!-- Header: status dot + name + cron -->
+          <div class="px-4 pt-4 pb-2 flex items-start justify-between">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <StatusDot :color="watcherStatusColor(row.status)" size="lg" class="mt-1"
+                         v-tooltip.top="row.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')" />
+              <div class="min-w-0">
+                <div class="text-sm-plus font-semibold truncate dd-text">{{ row.name }}</div>
+                <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono max-w-[180px]" v-tooltip.top="row.cron">
+                  {{ row.cron }}
+                </div>
+              </div>
+            </div>
+            <AppIcon :name="row.status === 'watching' ? 'watchers' : 'pause'" :size="13" class="shrink-0 ml-2 md:!hidden"
+                     v-tooltip.top="row.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused')"
+                     :style="{ color: watcherStatusColor(row.status) }" />
+            <AppBadge :tone="row.status === 'watching' ? 'success' : 'warning'" size="xs" class="shrink-0 ml-2 max-md:!hidden">
+              {{ row.status === 'watching' ? t('watchersView.status.watching') : t('watchersView.status.paused') }}
+            </AppBadge>
+          </div>
+          <!-- Body: containers / next run / last run -->
+          <div class="px-4 py-3">
+            <div class="grid grid-cols-2 gap-2 text-2xs-plus">
+              <div>
+                <span class="dd-text-muted">{{ t('watchersView.card.containers') }}</span>
+                <span class="ml-1 font-semibold dd-text">{{ row.containers }}</span>
+              </div>
+              <div>
+                <span class="dd-text-muted">{{ t('watchersView.card.nextRun') }}</span>
+                <span class="ml-1 font-semibold dd-text" v-tooltip.top="row.nextRunAt ? formatAbsoluteTime(row.nextRunAt) : ''">{{ row.nextRun }}</span>
+              </div>
+              <div>
+                <span class="dd-text-muted">{{ t('watchersView.card.lastRun') }}</span>
+                <span class="ml-1 font-semibold dd-text">{{ row.lastRun }}</span>
+              </div>
+            </div>
+          </div>
+          <!-- Footer: containers watched -->
+          <div class="px-4 py-2.5 mt-auto"
+               :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+            <span class="text-2xs dd-text-muted">{{ t('watchersView.card.containersWatched', { count: row.containers }) }}</span>
+          </div>
+        </div>
       </template>
     </DataTable>
 

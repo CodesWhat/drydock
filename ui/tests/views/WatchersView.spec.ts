@@ -77,6 +77,87 @@ async function mountWatchersView() {
   return wrapper;
 }
 
+const watcherCardFilterBarStub = defineComponent({
+  props: [
+    'modelValue',
+    'viewModes',
+    'showFilters',
+    'filteredCount',
+    'totalCount',
+    'activeFilterCount',
+    'hideViewToggle',
+  ],
+  emits: ['update:modelValue', 'update:showFilters'],
+  template: `
+    <div
+      class="data-filter-bar watcher-card-filter"
+      :data-mode="modelValue"
+      :data-hide-view-toggle="String(hideViewToggle)">
+      <button
+        v-for="mode in (viewModes || [{ id: 'table' }, { id: 'cards' }])"
+        :key="mode.id"
+        :class="'mode-' + mode.id"
+        :data-active="String(modelValue === mode.id)"
+        @click="$emit('update:modelValue', mode.id)">
+        {{ mode.id }}
+      </button>
+      <slot name="filters" />
+      <slot name="extra-buttons" />
+    </div>
+  `,
+});
+
+const watcherCardDataTableStub = defineComponent({
+  props: [
+    'columns',
+    'rows',
+    'rowKey',
+    'activeRow',
+    'selectedKey',
+    'sortKey',
+    'sortAsc',
+    'preferCards',
+    'hiddenColumnKeys',
+  ],
+  emits: ['row-click', 'update:cardReflowForced'],
+  template: `
+    <div
+      class="data-table watcher-card-table"
+      :data-row-count="rows?.length ?? 0"
+      :data-prefer-cards="String(preferCards)"
+      :data-selected-key="selectedKey || activeRow || ''">
+      <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
+        Force cards
+      </button>
+      <button class="clear-card-reflow" @click="$emit('update:cardReflowForced', false)">
+        Clear cards
+      </button>
+      <article
+        v-for="row in rows || []"
+        :key="row[rowKey || 'id']"
+        class="watcher-card"
+        :data-card-id="row[rowKey || 'id']">
+        <slot name="card" :row="row" />
+      </article>
+      <slot name="empty" v-if="!rows || rows.length === 0" />
+    </div>
+  `,
+});
+
+async function mountWatchersCardView() {
+  const wrapper = mountWithPlugins(WatchersView, {
+    global: {
+      stubs: {
+        ...dataViewStubs,
+        DataFilterBar: watcherCardFilterBarStub,
+        DataTable: watcherCardDataTableStub,
+      },
+    },
+  });
+  await flushPromises();
+  return wrapper;
+}
+
 describe('WatchersView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -560,5 +641,42 @@ describe('WatchersView', () => {
     const detailHeader = wrapper.find('.detail-header');
     const badge = detailHeader.findAll('span.badge').find((b) => b.text().trim() === 'Paused');
     expect(badge).toBeDefined();
+  });
+
+  it('renders watcher cards and wires the card-mode reflow controls', async () => {
+    preferences.views.watchers.mode = 'cards';
+    mockGetAllWatchers.mockResolvedValue([
+      {
+        id: 'watcher-alpha',
+        name: 'Alpha Watcher',
+        type: 'docker',
+        configuration: { cron: '*/5 * * * *' },
+        ...withStats(3),
+      },
+    ]);
+
+    const wrapper = await mountWatchersCardView();
+
+    expect(wrapper.get('.watcher-card-table').attributes('data-prefer-cards')).toBe('true');
+    expect(wrapper.get('.watcher-card-filter').attributes('data-mode')).toBe('cards');
+    expect(wrapper.get('.watcher-card-filter').attributes('data-hide-view-toggle')).toBe('false');
+
+    const card = wrapper.get('[data-card-id="watcher-alpha"]');
+    expect(card.text()).toContain('Alpha Watcher');
+    expect(card.text()).toContain('*/5 * * * *');
+    expect(card.text()).toContain('Watching');
+    expect(card.text()).toContain('Containers');
+    expect(card.text()).toContain('3');
+    expect(card.text()).toContain('Next run');
+    expect(card.text()).toContain('Last run');
+    expect(card.text()).toContain('containers watched');
+
+    await wrapper.get('.force-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.watcher-card-filter').attributes('data-hide-view-toggle')).toBe('true');
+
+    await wrapper.get('.clear-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.watcher-card-filter').attributes('data-hide-view-toggle')).toBe('false');
   });
 });

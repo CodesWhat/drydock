@@ -93,6 +93,87 @@ const stubs: Record<string, any> = {
   }),
 };
 
+const auditCardFilterBarStub = defineComponent({
+  props: [
+    'modelValue',
+    'viewModes',
+    'showFilters',
+    'filteredCount',
+    'totalCount',
+    'activeFilterCount',
+    'hideViewToggle',
+  ],
+  emits: ['update:modelValue', 'update:showFilters'],
+  template: `
+    <div
+      class="data-filter-bar audit-card-filter"
+      :data-mode="modelValue"
+      :data-hide-view-toggle="String(hideViewToggle)">
+      <button
+        v-for="mode in (viewModes || [{ id: 'table' }, { id: 'cards' }])"
+        :key="mode.id"
+        :class="'mode-' + mode.id"
+        :data-active="String(modelValue === mode.id)"
+        @click="$emit('update:modelValue', mode.id)">
+        {{ mode.id }}
+      </button>
+      <slot name="filters" />
+      <slot name="extra-buttons" />
+    </div>
+  `,
+});
+
+const auditCardDataTableStub = defineComponent({
+  props: [
+    'columns',
+    'rows',
+    'rowKey',
+    'activeRow',
+    'selectedKey',
+    'sortKey',
+    'sortAsc',
+    'preferCards',
+    'hiddenColumnKeys',
+  ],
+  emits: ['row-click', 'update:cardReflowForced'],
+  template: `
+    <div
+      class="data-table audit-card-table"
+      :data-row-count="rows?.length ?? 0"
+      :data-prefer-cards="String(preferCards)"
+      :data-selected-key="selectedKey || activeRow || ''">
+      <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
+        Force cards
+      </button>
+      <button class="clear-card-reflow" @click="$emit('update:cardReflowForced', false)">
+        Clear cards
+      </button>
+      <article
+        v-for="row in rows || []"
+        :key="row[rowKey || 'id']"
+        class="audit-card"
+        :data-card-id="row[rowKey || 'id']">
+        <slot name="card" :row="row" />
+      </article>
+      <slot name="empty" v-if="!rows || rows.length === 0" />
+    </div>
+  `,
+});
+
+async function mountAuditCardView() {
+  const wrapper = mountWithPlugins(AuditView, {
+    global: {
+      stubs: {
+        ...dataViewStubs,
+        DataFilterBar: auditCardFilterBarStub,
+        DataTable: auditCardDataTableStub,
+      },
+    },
+  });
+  await flushPromises();
+  return wrapper;
+}
+
 const mockGetAuditLog = getAuditLog as ReturnType<typeof vi.fn>;
 
 function makeEntry(overrides: Record<string, any> = {}) {
@@ -736,5 +817,58 @@ describe('AuditView', () => {
       expect(wrapper.find('.detail-panel').attributes('data-open')).toBe('false');
       expect(wrapper.find('.data-table').attributes('data-active-row')).toBe('');
     });
+  });
+
+  it('renders audit cards and wires the card-mode reflow controls', async () => {
+    preferences.views.audit.mode = 'cards';
+    mockGetAuditLog.mockResolvedValue({
+      entries: [
+        makeEntry({
+          id: 'e1',
+          action: 'update-applied',
+          containerName: 'nginx',
+          status: 'success',
+          fromVersion: '1.0.0',
+          toVersion: '1.1.0',
+        }),
+        makeEntry({
+          id: 'e2',
+          action: 'container-added',
+          containerName: 'redis',
+          status: 'info',
+          fromVersion: undefined,
+          toVersion: undefined,
+        }),
+      ],
+      total: 2,
+    });
+
+    const wrapper = await mountAuditCardView();
+
+    expect(wrapper.get('.audit-card-table').attributes('data-prefer-cards')).toBe('true');
+    expect(wrapper.get('.audit-card-filter').attributes('data-mode')).toBe('cards');
+    expect(wrapper.get('.audit-card-filter').attributes('data-hide-view-toggle')).toBe('false');
+
+    const firstCard = wrapper.get('[data-card-id="e1"]');
+    expect(firstCard.text()).toContain('Update Applied');
+    expect(firstCard.text()).toContain('nginx');
+    expect(firstCard.text()).toContain('Time');
+    expect(firstCard.text()).toContain('Version');
+    expect(firstCard.text()).toContain('1.0.0');
+    expect(firstCard.text()).toContain('1.1.0');
+    expect(firstCard.text()).toContain('success');
+
+    const secondCard = wrapper.get('[data-card-id="e2"]');
+    expect(secondCard.text()).toContain('Container Added');
+    expect(secondCard.text()).toContain('redis');
+    expect(secondCard.text()).not.toContain('Version');
+
+    await wrapper.get('.force-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.audit-card-filter').attributes('data-hide-view-toggle')).toBe('true');
+
+    await wrapper.get('.clear-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.audit-card-filter').attributes('data-hide-view-toggle')).toBe('false');
   });
 });

@@ -8,6 +8,7 @@ import DataTableColumnPicker from '../components/DataTableColumnPicker.vue';
 import DetailField from '../components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
+import { useViewMode } from '../preferences/useViewMode';
 import { getAuditLog } from '../services/audit';
 import type { AuditEntry } from '../utils/audit-helpers';
 import {
@@ -120,6 +121,10 @@ const fromDateFilter = ref(parseDateQuery(route.query.from));
 const toDateFilter = ref(parseDateQuery(route.query.to));
 const showFilters = ref(false);
 const showEventPicker = ref(false);
+const auditViewMode = useViewMode('audit');
+// Set by DataTable's measured-width reflow (< 640px): hides the table/cards toggle when the
+// width has already forced cards, so the switcher isn't a dead control at that size.
+const cardReflowForced = ref(false);
 const activeFilterCount = computed(() => {
   let count = 0;
   if (searchQuery.value) count++;
@@ -324,10 +329,12 @@ onUnmounted(() => {
 
     <!-- Filter bar -->
     <DataFilterBar
+      v-model="auditViewMode"
       v-model:showFilters="showFilters"
       :filtered-count="filteredEntries.length"
       :total-count="total"
       :active-filter-count="activeFilterCount"
+      :hide-view-toggle="cardReflowForced"
     >
       <template #filters>
         <input v-model="searchQuery"
@@ -421,6 +428,8 @@ onUnmounted(() => {
       row-key="id"
       :hidden-column-keys="hiddenColumnKeys"
       :active-row="selectedEntry?.id"
+      :prefer-cards="auditViewMode === 'cards'"
+      @update:card-reflow-forced="cardReflowForced = $event"
       @row-click="openDetail($event)"
     >
       <template #cell-timestamp="{ row }">
@@ -455,6 +464,46 @@ onUnmounted(() => {
         </span>
         <span v-else-if="row.details" class="text-2xs dd-text-muted truncate max-w-[200px] inline-block">{{ row.details }}</span>
         <span v-else class="dd-text-muted">—</span>
+      </template>
+      <template #card="{ row }">
+        <div class="relative flex flex-col flex-1">
+          <!-- Header: action icon + label, container name, status badge -->
+          <div class="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <AppIcon :name="actionIcon(row.action)" :size="14" class="dd-text-secondary shrink-0 mt-0.5" />
+              <div class="min-w-0">
+                <div class="text-sm font-semibold truncate dd-text">{{ actionLabel(row.action, { t, te }) }}</div>
+                <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono">{{ row.containerName }}</div>
+              </div>
+            </div>
+            <AppBadge :custom="{ bg: statusBg(row.status), text: statusColor(row.status) }" size="xs" class="shrink-0 ml-2">
+              {{ row.status }}
+            </AppBadge>
+          </div>
+          <!-- Body: time / version -->
+          <div class="px-4 py-3">
+            <div class="grid grid-cols-2 gap-2 text-2xs-plus">
+              <div>
+                <span class="dd-text-muted">{{ t('auditView.card.time') }}</span>
+                <span class="ml-1 font-semibold dd-text">{{ formatTimestamp(row.timestamp) }}</span>
+              </div>
+              <div v-if="row.fromVersion || row.toVersion">
+                <span class="dd-text-muted">{{ t('auditView.card.version') }}</span>
+                <span
+                  class="ml-1 max-w-[180px] truncate font-mono dd-text inline-block"
+                  v-tooltip.top="`${row.fromVersion || '—'} → ${row.toVersion || '—'}`"
+                >
+                  {{ row.fromVersion || '—' }} → {{ row.toVersion || '—' }}
+                </span>
+              </div>
+            </div>
+          </div>
+          <!-- Footer: timestamp -->
+          <div class="px-4 py-2.5 mt-auto"
+               :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+            <span class="text-2xs dd-text-muted font-mono">{{ formatTimestamp(row.timestamp) }}</span>
+          </div>
+        </div>
       </template>
     </DataTable>
 

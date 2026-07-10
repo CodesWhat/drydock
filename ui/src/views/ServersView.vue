@@ -6,6 +6,7 @@ import DataTableColumnPicker from '@/components/DataTableColumnPicker.vue';
 import DetailField from '@/components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
+import { useViewMode } from '../preferences/useViewMode';
 import { getAgents } from '../services/agent';
 import { getServer } from '../services/server';
 import { getAllWatchers } from '../services/watcher';
@@ -28,6 +29,10 @@ const servers = ref<ServerEntry[]>([]);
 
 const searchQuery = ref('');
 const showFilters = ref(false);
+const serverViewMode = useViewMode('servers');
+// Set by DataTable's measured-width reflow (< 640px): hides the table/cards toggle when the
+// width has already forced cards, so the switcher isn't a dead control at that size.
+const cardReflowForced = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
 const filteredServers = computed(() => {
@@ -232,10 +237,12 @@ onMounted(fetchServers);
 
     <!-- Filter bar -->
     <DataFilterBar
+      v-model="serverViewMode"
       v-model:showFilters="showFilters"
       :filtered-count="filteredServers.length"
       :total-count="servers.length"
       :active-filter-count="activeFilterCount"
+      :hide-view-toggle="cardReflowForced"
     >
       <template #filters>
         <input v-model="searchQuery"
@@ -266,6 +273,8 @@ onMounted(fetchServers);
           row-key="id"
           :hidden-column-keys="hiddenColumnKeys"
           :active-row="selectedServer?.id"
+          :prefer-cards="serverViewMode === 'cards'"
+          @update:card-reflow-forced="cardReflowForced = $event"
           @row-click="openDetail($event)"
         >
           <template #cell-name="{ row }">
@@ -301,6 +310,63 @@ onMounted(fetchServers);
             <span :class="row.status === 'connected' ? 'dd-text-muted' : 'dd-text-danger'">
               {{ row.lastSeen }}
             </span>
+          </template>
+          <template #card="{ row }">
+            <div class="relative flex flex-col flex-1">
+              <!-- Header: servers icon + name + host address + status badge -->
+              <div class="px-4 pt-4 pb-2 flex items-start justify-between">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <AppIcon name="servers" :size="14" class="dd-text-secondary shrink-0 mt-1" />
+                  <div class="min-w-0">
+                    <div class="text-sm-plus font-semibold truncate dd-text">{{ row.name }}</div>
+                    <div class="text-2xs-plus truncate mt-0.5 dd-text-muted font-mono"
+                         :title="row.host"
+                         v-tooltip.top="row.host">
+                      {{ row.host }}
+                    </div>
+                  </div>
+                </div>
+                <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="px-1.5 py-0 shrink-0 ml-2 md:!hidden" v-tooltip.top="serverStatusLabel(row.status)">
+                  <AppIcon :name="row.status === 'connected' ? 'check' : 'xmark'" :size="12" />
+                </AppBadge>
+                <AppBadge :tone="row.status === 'connected' ? 'success' : 'danger'" size="xs" class="shrink-0 ml-2 max-md:!hidden">
+                  {{ serverStatusLabel(row.status) }}
+                </AppBadge>
+              </div>
+              <!-- Body: containers / running / images / last seen grid -->
+              <div class="px-4 py-3">
+                <div class="grid grid-cols-2 gap-2 text-2xs-plus">
+                  <div>
+                    <span class="dd-text-muted">{{ t('serversView.card.containers') }}</span>
+                    <span class="ml-1 font-semibold dd-text">{{ row.containers.total }}</span>
+                  </div>
+                  <div>
+                    <span class="dd-text-muted">{{ t('serversView.card.running') }}</span>
+                    <span class="ml-1 font-semibold" :style="{ color: row.containers.running > 0 ? 'var(--dd-success)' : 'var(--dd-text-muted)' }">
+                      {{ row.containers.running }}
+                    </span>
+                  </div>
+                  <div>
+                    <span class="dd-text-muted">{{ t('serversView.card.images') }}</span>
+                    <span class="ml-1 font-semibold dd-text">{{ row.images }}</span>
+                  </div>
+                  <div>
+                    <span class="dd-text-muted">{{ t('serversView.card.lastSeen') }}</span>
+                    <span class="ml-1 font-semibold" :class="row.status === 'connected' ? 'dd-text' : 'dd-text-danger'">
+                      {{ row.lastSeen }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <!-- Footer: running/total count -->
+              <div class="px-4 py-2.5 mt-auto"
+                   :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+                <span class="text-2xs"
+                      :style="{ color: row.containers.running > 0 ? 'var(--dd-success)' : 'var(--dd-text-muted)' }">
+                  {{ row.containers.running }}/{{ row.containers.total }} {{ t('serversView.detail.running') }}
+                </span>
+              </div>
+            </div>
           </template>
         </DataTable>
 

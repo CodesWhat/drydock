@@ -5,6 +5,7 @@ import { useRoute } from 'vue-router';
 import AppBadge from '@/components/AppBadge.vue';
 import DetailField from '@/components/DetailField.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
+import { useViewMode } from '../preferences/useViewMode';
 import { getAllRegistries, getRegistry } from '../services/registry';
 import type { ApiComponent } from '../types/api';
 
@@ -123,6 +124,10 @@ async function openDetail(reg: Record<string, unknown>) {
 
 const searchQuery = ref('');
 const showFilters = ref(false);
+const registryViewMode = useViewMode('registries');
+// Set by DataTable's measured-width reflow (< 640px): hides the table/cards toggle when the
+// width has already forced cards, so the switcher isn't a dead control at that size.
+const cardReflowForced = ref(false);
 const activeFilterCount = computed(() => (searchQuery.value ? 1 : 0));
 
 function applySearchFromQuery(queryValue: unknown) {
@@ -206,10 +211,12 @@ onMounted(async () => {
 
       <!-- Filter bar -->
       <DataFilterBar
+        v-model="registryViewMode"
         v-model:showFilters="showFilters"
         :filtered-count="filteredRegistries.length"
         :total-count="registriesData.length"
-        :active-filter-count="activeFilterCount">
+        :active-filter-count="activeFilterCount"
+        :hide-view-toggle="cardReflowForced">
         <template #filters>
           <input v-model="searchQuery"
                  type="text"
@@ -230,6 +237,8 @@ onMounted(async () => {
                  :rows="filteredRegistries"
                  row-key="id"
                  :active-row="selectedRegistry?.id"
+                 :prefer-cards="registryViewMode === 'cards'"
+                 @update:card-reflow-forced="cardReflowForced = $event"
                  @row-click="openDetail($event)">
         <template #cell-name="{ row }">
           <span class="font-medium dd-text">{{ registryTypeBadge(row.type).label }}</span>
@@ -254,6 +263,50 @@ onMounted(async () => {
                 v-tooltip.top="resolveUrl(row)">
             {{ resolveUrl(row) }}
           </span>
+        </template>
+        <template #card="{ row }">
+          <div class="relative flex flex-col flex-1">
+            <!-- Header: name + resolved URL + type badge -->
+            <div class="px-4 pt-4 pb-2 flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="text-sm-plus font-semibold truncate dd-text">{{ row.name }}</div>
+                <div class="text-2xs truncate mt-0.5 dd-text-muted font-mono"
+                     :title="resolveUrl(row)"
+                     v-tooltip.top="resolveUrl(row)">
+                  {{ resolveUrl(row) }}
+                </div>
+              </div>
+              <AppBadge :custom="{ bg: registryTypeBadge(row.type).bg, text: registryTypeBadge(row.type).text }" size="xs" class="shrink-0">
+                {{ registryTypeBadge(row.type).label }}
+              </AppBadge>
+            </div>
+            <!-- Body: auth / status -->
+            <div class="px-4 py-3">
+              <div class="grid grid-cols-2 gap-2 text-2xs-plus">
+                <div>
+                  <span class="dd-text-muted">{{ t('registriesView.card.auth') }}</span>
+                  <span class="ml-1 font-semibold" :style="{ color: isPrivate(row) ? 'var(--dd-warning)' : 'var(--dd-text-muted)' }">
+                    {{ isPrivate(row) ? t('registriesView.badge.private') : t('registriesView.badge.public') }}
+                  </span>
+                </div>
+                <div>
+                  <span class="dd-text-muted">{{ t('registriesView.card.status') }}</span>
+                  <span class="ml-1 font-semibold" :style="{ color: row.status === 'connected' ? 'var(--dd-success)' : 'var(--dd-danger)' }">
+                    {{ registryStatusLabel(row.status) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <!-- Footer: URL repeated -->
+            <div class="px-4 py-2.5 mt-auto"
+                 :style="{ backgroundColor: 'var(--dd-bg-elevated)' }">
+              <span class="block truncate text-2xs dd-text-muted font-mono"
+                    :title="resolveUrl(row)"
+                    v-tooltip.top="resolveUrl(row)">
+                {{ resolveUrl(row) }}
+              </span>
+            </div>
+          </div>
         </template>
         <template #empty>
           <EmptyState icon="registries"

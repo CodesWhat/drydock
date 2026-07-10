@@ -1,4 +1,6 @@
 import { flushPromises } from '@vue/test-utils';
+import { defineComponent, nextTick } from 'vue';
+import { preferences, resetPreferences } from '@/preferences/store';
 import { getAllAuthentications, getAuthentication } from '@/services/authentication';
 import AuthView from '@/views/AuthView.vue';
 import { dataViewStubs } from '../helpers/data-view-stubs';
@@ -46,9 +48,89 @@ async function mountAuthView() {
   return wrapper;
 }
 
+const authCardFilterBarStub = defineComponent({
+  props: [
+    'modelValue',
+    'viewModes',
+    'showFilters',
+    'filteredCount',
+    'totalCount',
+    'activeFilterCount',
+    'hideViewToggle',
+  ],
+  emits: ['update:modelValue', 'update:showFilters'],
+  template: `
+    <div
+      class="data-filter-bar auth-card-filter"
+      :data-mode="modelValue"
+      :data-hide-view-toggle="String(hideViewToggle)">
+      <button
+        v-for="mode in (viewModes || [{ id: 'table' }, { id: 'cards' }])"
+        :key="mode.id"
+        :class="'mode-' + mode.id"
+        :data-active="String(modelValue === mode.id)"
+        @click="$emit('update:modelValue', mode.id)">
+        {{ mode.id }}
+      </button>
+      <slot name="filters" />
+    </div>
+  `,
+});
+
+const authCardDataTableStub = defineComponent({
+  props: [
+    'columns',
+    'rows',
+    'rowKey',
+    'activeRow',
+    'selectedKey',
+    'sortKey',
+    'sortAsc',
+    'preferCards',
+  ],
+  emits: ['row-click', 'update:cardReflowForced'],
+  template: `
+    <div
+      class="data-table auth-card-table"
+      :data-row-count="rows?.length ?? 0"
+      :data-prefer-cards="String(preferCards)"
+      :data-selected-key="selectedKey || activeRow || ''">
+      <button class="force-card-reflow" @click="$emit('update:cardReflowForced', true)">
+        Force cards
+      </button>
+      <button class="clear-card-reflow" @click="$emit('update:cardReflowForced', false)">
+        Clear cards
+      </button>
+      <article
+        v-for="row in rows || []"
+        :key="row[rowKey || 'id']"
+        class="auth-card"
+        :data-card-id="row[rowKey || 'id']">
+        <slot name="card" :row="row" />
+      </article>
+      <slot name="empty" v-if="!rows || rows.length === 0" />
+    </div>
+  `,
+});
+
+async function mountAuthCardView() {
+  const wrapper = mountWithPlugins(AuthView, {
+    global: {
+      stubs: {
+        ...dataViewStubs,
+        DataFilterBar: authCardFilterBarStub,
+        DataTable: authCardDataTableStub,
+      },
+    },
+  });
+  await flushPromises();
+  return wrapper;
+}
+
 describe('AuthView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetPreferences();
     mockRoute.query = {};
     mockGetAllAuthentications.mockResolvedValue([makeAuthentication()]);
     mockGetAuthentication.mockResolvedValue(makeAuthentication());
@@ -152,5 +234,50 @@ describe('AuthView', () => {
     });
     expect(wrapper.text()).toContain('issuer');
     expect(wrapper.text()).toContain('https://issuer.example');
+  });
+
+  it('renders auth provider cards and wires the card-mode reflow controls', async () => {
+    preferences.views.auth.mode = 'cards';
+    mockGetAllAuthentications.mockResolvedValue([
+      makeAuthentication({
+        id: 'auth-basic',
+        name: 'Local Basic',
+        type: 'basic',
+        configuration: { users: 'local' },
+      }),
+      makeAuthentication({
+        id: 'auth-github',
+        name: 'GitHub OIDC',
+        type: 'oidc',
+        configuration: { issuer: 'https://token.actions.githubusercontent.com' },
+      }),
+    ]);
+
+    const wrapper = await mountAuthCardView();
+
+    expect(wrapper.get('.auth-card-table').attributes('data-prefer-cards')).toBe('true');
+    expect(wrapper.get('.auth-card-filter').attributes('data-mode')).toBe('cards');
+    expect(wrapper.get('.auth-card-filter').attributes('data-hide-view-toggle')).toBe('false');
+
+    const basicCard = wrapper.get('[data-card-id="auth-basic"]');
+    expect(basicCard.text()).toContain('Local Basic');
+    expect(basicCard.text()).toContain('Basic');
+    expect(basicCard.text()).toContain('users');
+    expect(basicCard.text()).toContain('local');
+    expect(basicCard.text()).toContain('active');
+
+    const oidcCard = wrapper.get('[data-card-id="auth-github"]');
+    expect(oidcCard.text()).toContain('GitHub OIDC');
+    expect(oidcCard.text()).toContain('OIDC');
+    expect(oidcCard.text()).toContain('issuer');
+    expect(oidcCard.text()).toContain('https://token.actions.githubusercontent.com');
+
+    await wrapper.get('.force-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.auth-card-filter').attributes('data-hide-view-toggle')).toBe('true');
+
+    await wrapper.get('.clear-card-reflow').trigger('click');
+    await nextTick();
+    expect(wrapper.get('.auth-card-filter').attributes('data-hide-view-toggle')).toBe('false');
   });
 });
