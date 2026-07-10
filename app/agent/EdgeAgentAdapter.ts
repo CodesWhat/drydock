@@ -110,15 +110,16 @@ export class EdgeAgentAdapter {
   // would re-execute cleanup (including the registry removal below) a second
   // time for what may by then be a totally different agent occupying this name.
   private disconnected = false;
-  // Track FIFO order of in-flight requestContainerLogs()/deleteContainer() calls
-  // per containerId (Bug 4). portwing's dd:container_log_response /
-  // dd:container_delete_response frames only echo back containerId, never a
-  // request id, so — even though each request now gets its own unique
-  // pendingRequests entry — a response can only be correlated to "the oldest
-  // still-outstanding request for this containerId", not to a specific one.
-  // Keyed the same way pendingRequests used to be (`log:${containerId}` /
-  // `delete:${containerId}`); values are ordered arrays of the corresponding
-  // unique pendingRequests keys.
+  // FIFO fallback for correlating dd:container_log_response /
+  // dd:container_delete_response frames from a *legacy* portwing agent that does
+  // not echo our requestId (Bug 4). A current portwing agent echoes the
+  // requestId back on both frames, so takePendingContainerResponse() resolves
+  // the exact originating request and never consults these queues — correct even
+  // when two requests for the same container finish out of order. Only when the
+  // echo is absent does a response fall back to "the oldest still-outstanding
+  // request for this containerId". Keyed the same way pendingRequests used to be
+  // (`log:${containerId}` / `delete:${containerId}`); values are ordered arrays
+  // of the corresponding unique pendingRequests keys.
   private readonly containerRequestQueues: Map<string, string[]>;
   // Bound listener references (Bug 3, leg 2) so checkLivenessAndPing() can
   // detach them from the real WebSocket before forcing a close — see there.
@@ -385,9 +386,9 @@ export class EdgeAgentAdapter {
 
   /**
    * Removes and returns the OLDEST pendingRequests key queued for queueKey, or
-   * undefined if none are outstanding. Used when a response frame arrives —
-   * portwing's response frames only carry containerId, so the oldest
-   * still-outstanding request is the best available correlation.
+   * undefined if none are outstanding. Legacy fallback used only when a response
+   * frame carries no echoed requestId (older portwing agent); the oldest
+   * still-outstanding request is then the best available correlation.
    */
   private dequeueOldestContainerRequest(queueKey: string): string | undefined {
     const queue = this.containerRequestQueues.get(queueKey);
@@ -421,44 +422,87 @@ export class EdgeAgentAdapter {
     }
   }
 
+  /**
+   * Correlate a dd:container_{log,delete}_response frame to the pendingRequests
+   * entry that originated it, remove that entry from pendingRequests and its
+   * container queue, and return it (timer already cleared). Returns undefined
+   * when nothing matches.
+   *
+   * A current portwing agent echoes back the requestId we sent, so when
+   * `data.requestId` is present we resolve that exact request — correct even
+   * when two requests for the same container complete out of order. A miss on an
+   * echoed id means that specific request already timed out; we do NOT then fall
+   * back to FIFO, because that would steal a different still-outstanding
+   * request's response. Only a legacy agent that omits the echo falls back to
+   * oldest-outstanding-by-containerId (Bug 4).
+   */
+  private takePendingContainerResponse(
+    kind: 'log' | 'delete',
+    containerId: string,
+    data: Record<string, unknown>,
+  ): PendingRequest | undefined {
+    const queueKey = `${kind}:${containerId}`;
+    // Distinguish "requestId field absent" (legacy agent → FIFO fallback) from
+    // "field present but empty or non-string" (a current/malformed agent →
+    // exact-match miss, never FIFO). A present-but-unusable id collapses to ''
+    // so it takes the exact-match branch and misses, rather than stealing a
+    // different in-flight request via the oldest-outstanding fallback.
+    const echoedId = Object.hasOwn(data, 'requestId')
+      ? typeof data.requestId === 'string'
+        ? data.requestId
+        : ''
+      : undefined;
+
+    let pendingKey: string | undefined;
+    if (echoedId !== undefined) {
+      // A requestId field is present (echo-capable agent), including the
+      // degenerate empty/non-string case coerced to '': correlate strictly by
+      // exact key and, on a miss, drop rather than fall back to FIFO — falling
+      // back could resolve a different still-outstanding request for this
+      // container. Only a truly absent requestId (legacy agent) uses the
+      // oldest-outstanding fallback.
+      const exactKey = `${queueKey}:${echoedId}`;
+      if (this.pendingRequests.has(exactKey)) {
+        pendingKey = exactKey;
+        this.removeContainerRequestFromQueue(queueKey, exactKey);
+      }
+    } else {
+      pendingKey = this.dequeueOldestContainerRequest(queueKey);
+    }
+
+    if (!pendingKey) {
+      return undefined;
+    }
+    const pending = this.pendingRequests.get(pendingKey);
+    if (!pending) {
+      return undefined;
+    }
+    clearTimeout(pending.timer);
+    this.pendingRequests.delete(pendingKey);
+    return pending;
+  }
+
   private handleContainerLogResponse(data: Record<string, unknown>): void {
-    // Resolve the oldest pending log request for this containerId (Bug 4: the
-    // dd:container_log_response wire frame only carries containerId, never a
-    // request id, so multiple concurrent requests for the same container can
-    // only be correlated in FIFO order — see containerRequestQueues).
     const containerId = typeof data.containerId === 'string' ? data.containerId : undefined;
     if (!containerId) {
       return;
     }
-    const pendingKey = this.dequeueOldestContainerRequest(`log:${containerId}`);
-    if (!pendingKey) {
-      return;
-    }
-    const pending = this.pendingRequests.get(pendingKey);
+    const pending = this.takePendingContainerResponse('log', containerId, data);
     if (!pending) {
       return;
     }
-    clearTimeout(pending.timer);
-    this.pendingRequests.delete(pendingKey);
     pending.resolve(data.logs);
   }
 
   private handleContainerDeleteResponse(data: Record<string, unknown>): void {
-    // Same FIFO correlation caveat as handleContainerLogResponse (Bug 4).
     const containerId = typeof data.containerId === 'string' ? data.containerId : undefined;
     if (!containerId) {
       return;
     }
-    const pendingKey = this.dequeueOldestContainerRequest(`delete:${containerId}`);
-    if (!pendingKey) {
-      return;
-    }
-    const pending = this.pendingRequests.get(pendingKey);
+    const pending = this.takePendingContainerResponse('delete', containerId, data);
     if (!pending) {
       return;
     }
-    clearTimeout(pending.timer);
-    this.pendingRequests.delete(pendingKey);
     if (data.success === true) {
       pending.resolve(undefined);
     } else {
@@ -644,32 +688,30 @@ export class EdgeAgentAdapter {
    * Bug 4: a unique per-call requestId is embedded in the pendingRequests key
    * (`log:${containerId}:${requestId}`) so a second concurrent request for the
    * same containerId gets its own entry instead of clobbering the first's. The
-   * requestId is also sent on the wire (harmless extra field portwing ignores
-   * today — see adapter.go's json.Unmarshal, which drops unknown fields), so
-   * this is forward-compatible if portwing ever starts echoing it back.
-   * portwing's dd:container_log_response frame currently only carries
-   * containerId, though, so the response is still only correlated to the
-   * OLDEST outstanding request for that containerId (FIFO, via
-   * containerRequestQueues) — genuine out-of-order resolution between two
-   * concurrent requests for the same container is not distinguishable until
-   * portwing's wire format grows a requestId/echo field.
+   * requestId is sent on the wire and a current portwing agent echoes it back on
+   * dd:container_log_response, so takePendingContainerResponse() correlates the
+   * exact originating request (see there). A legacy agent that omits the echo
+   * falls back to oldest-outstanding-by-containerId (containerRequestQueues).
    *
-   * Punch-list #5: `until` and `follow` are accepted here (portwing's
-   * protocol.DDContainerLogRequestMessage has matching fields) but no current
-   * drydock caller populates them — AgentClient.getContainerLogs() only ever
-   * forwards `tail`/`since`. Also note portwing's own handler
-   * (handleContainerLogRequest in internal/adapter/drydock/adapter.go) accepts
-   * `follow` on the wire but never reads it, always calling
-   * dockerClient.GetContainerLogs(..., follow=false, ...) — so `follow`
-   * requests would be silently dropped server-side even if a caller sent one.
-   * There is no `timestamps` field on the wire message at all (see
-   * AgentClient.getContainerLogs() for that gap). Real support for
-   * timestamps/until/follow over the edge path needs coordinated protocol
-   * work with portwing, not a drydock-only fix.
+   * Punch-list #5: `timestamps` is now honored end to end.
+   * AgentClient.getContainerLogs() forwards `timestamps` from the caller's query,
+   * portwing's protocol.DDContainerLogRequestMessage carries the field, and its
+   * handler (handleContainerLogRequest in internal/adapter/drydock/adapter.go)
+   * reads it — so the UI "show timestamps" toggle reaches the edge agent.
+   * `until`/`follow` are wire-protocol-capable (the message carries them and
+   * portwing's handler will honor `follow` as a bounded live window if sent) but
+   * no current drydock caller populates them: the one-shot log download path
+   * never sets them, and they remain here for a future streaming caller.
    */
   requestContainerLogs(
     containerId: string,
-    options: { tail?: number; since?: string; until?: string; follow?: boolean } = {},
+    options: {
+      tail?: number;
+      since?: string;
+      until?: string;
+      follow?: boolean;
+      timestamps?: boolean;
+    } = {},
   ): Promise<string> {
     if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) {
       return Promise.reject(new Error('concurrent request limit reached'));
@@ -718,9 +760,10 @@ export class EdgeAgentAdapter {
    * Returns a promise that resolves once the agent confirms deletion, or
    * rejects after 30s / on an error response.
    *
-   * Bug 4: same unique-requestId-per-call + FIFO containerId correlation as
-   * requestContainerLogs() above — see that doc comment for the full
-   * explanation and the portwing wire-format limitation it works around.
+   * Bug 4: same unique-requestId-per-call correlation as requestContainerLogs()
+   * above — a current portwing agent echoes the requestId on
+   * dd:container_delete_response for exact matching, with FIFO-by-containerId as
+   * the legacy fallback. See that doc comment for the full explanation.
    */
   deleteContainer(containerId: string): Promise<void> {
     if (this.pendingRequests.size >= MAX_PENDING_REQUESTS) {
