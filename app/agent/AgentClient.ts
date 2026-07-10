@@ -1,3 +1,4 @@
+import type { KeyObject } from 'node:crypto';
 import fs from 'node:fs';
 import https from 'node:https';
 import { StringDecoder } from 'node:string_decoder';
@@ -47,15 +48,27 @@ import * as updateOperationStore from '../store/update-operation.js';
 import { getRequestedOperationId } from '../triggers/providers/docker/update-runtime-context.js';
 import { getErrorMessage } from '../util/error.js';
 import { uuidv7 } from '../util/uuid.js';
+import type { AgentAuthMode } from './components/Agent.js';
 import type { EdgeAgentAdapter } from './EdgeAgentAdapter.js';
+import { loadEd25519PrivateKey, signRequest } from './ed25519-signer.js';
 
 export interface AgentClientConfig {
   host: string;
   port: number;
+  // Required when authMode is 'token' (the default).
   secret: string;
   cafile?: string;
   certfile?: string;
   keyfile?: string;
+  // Selects how requests to this agent are authenticated. Defaults to 'token'
+  // (X-Dd-Agent-Secret header, unchanged). 'ed25519' signs each request with
+  // the four X-Portwing-* headers per Portwing's verifier instead — see
+  // app/agent/ed25519-signer.ts and app/agent/components/Agent.ts.
+  authMode?: AgentAuthMode;
+  // Required when authMode is 'ed25519'.
+  signingKeyId?: string;
+  // Required when authMode is 'ed25519': PEM-encoded PKCS#8 Ed25519 private key.
+  signingKey?: string;
 }
 
 interface AgentClientRuntimeInfo {
@@ -188,6 +201,8 @@ export class AgentClient {
   private readonly log: Logger;
   private readonly baseUrl: string;
   private readonly axiosOptions: AxiosRequestConfig;
+  // Parsed once at construction when authMode is 'ed25519'; undefined in token mode.
+  private readonly ed25519PrivateKey?: KeyObject;
   public isConnected: boolean;
   public info: AgentClientRuntimeInfo;
   private reconnectTimer: NodeJS.Timeout | null;
@@ -215,6 +230,9 @@ export class AgentClient {
     this.baseUrl = parsedBaseUrl.origin;
     this.rejectSecretConfiguredOverHttp(parsedBaseUrl.protocol);
     this.axiosOptions = this.buildAxiosOptions();
+    if (this.config.authMode === 'ed25519') {
+      this.ed25519PrivateKey = this.loadSigningKey();
+    }
 
     this.isConnected = false;
     this.info = {};
@@ -276,17 +294,87 @@ export class AgentClient {
   }
 
   private buildAxiosOptions(): AxiosRequestConfig {
-    const options: AxiosRequestConfig = {
-      headers: {
+    const options: AxiosRequestConfig = {};
+
+    // Token mode (default): static X-Dd-Agent-Secret header, unchanged from
+    // pre-ed25519 behavior. Ed25519 mode signs each request individually (see
+    // buildRequestConfig) and sends no token header at all.
+    if (this.config.authMode !== 'ed25519') {
+      options.headers = {
         'X-Dd-Agent-Secret': this.config.secret,
-      },
-    };
+      };
+    }
 
     if (this.shouldBuildHttpsAgent()) {
       options.httpsAgent = this.buildHttpsAgent();
     }
 
     return options;
+  }
+
+  /**
+   * Parses and validates the configured Ed25519 signing key at construction
+   * time (fail fast, matching the style of rejectSecretConfiguredOverHttp /
+   * validateProtocol above) so a misconfigured agent never silently sends
+   * unsigned or malformed requests.
+   */
+  private loadSigningKey(): KeyObject {
+    if (!this.config.signingKeyId || !this.config.signingKey) {
+      throw new Error(
+        `Agent ${this.name} has authMode 'ed25519' but is missing signingKeyId/signingKey`,
+      );
+    }
+    try {
+      return loadEd25519PrivateKey(this.config.signingKey);
+    } catch (error: unknown) {
+      throw new Error(
+        `Agent ${this.name} has an invalid Ed25519 signingKey: ${getErrorMessage(error)}`,
+      );
+    }
+  }
+
+  /**
+   * Serializes a request body exactly the way axios's default
+   * transformRequest serializes a plain object (JSON.stringify), so the
+   * Ed25519 body hash matches the bytes actually placed on the wire. Returns
+   * an empty buffer for `undefined` (no body), matching Portwing's
+   * empty-body hash rule — note this is NOT the same as an empty object: a
+   * POST with body `{}` hashes `'{}'`, not the empty-body constant.
+   */
+  private serializeBodyForSigning(data?: unknown): Buffer {
+    if (data === undefined) {
+      return Buffer.alloc(0);
+    }
+    return Buffer.from(JSON.stringify(data), 'utf8');
+  }
+
+  /**
+   * Builds the AxiosRequestConfig for a single request to this agent.
+   * `path` must be the *unescaped* canonical request path (no query string,
+   * not percent-encoded) — it is signed as-is and must match what Portwing's
+   * router reconstructs as r.URL.Path, which is percent-decoded. Callers that
+   * embed encodeURIComponent()'d segments in the request URL must pass the
+   * corresponding plain (un-encoded) segments here instead.
+   * In token mode this just returns the static axiosOptions, unchanged.
+   */
+  private buildRequestConfig(method: string, path: string, data?: unknown): AxiosRequestConfig {
+    if (!this.ed25519PrivateKey || !this.config.signingKeyId) {
+      return this.axiosOptions;
+    }
+    const signedHeaders = signRequest({
+      method,
+      path,
+      body: this.serializeBodyForSigning(data),
+      keyId: this.config.signingKeyId,
+      privateKey: this.ed25519PrivateKey,
+    });
+    return {
+      ...this.axiosOptions,
+      headers: {
+        ...this.axiosOptions.headers,
+        ...signedHeaders,
+      },
+    };
   }
 
   private shouldBuildHttpsAgent(): boolean {
@@ -552,7 +640,7 @@ export class AgentClient {
     const reconnected = this.hasConnectedOnce;
     const response = await axios.get<Container[]>(
       `${this.baseUrl}/api/containers`,
-      this.axiosOptions,
+      this.buildRequestConfig('GET', '/api/containers'),
     );
     const containers = response.data;
     this.log.info(`Handshake successful. Received ${containers.length} containers.`);
@@ -581,7 +669,7 @@ export class AgentClient {
     try {
       const responseWatchers = await axios.get<AgentComponentDescriptor[]>(
         `${this.baseUrl}/api/watchers`,
-        this.axiosOptions,
+        this.buildRequestConfig('GET', '/api/watchers'),
       );
       await this.registerAgentComponents('watcher', responseWatchers.data);
       this.seedWatcherSnapshotCacheFromHandshake(responseWatchers.data);
@@ -593,7 +681,7 @@ export class AgentClient {
     try {
       const responseTriggers = await axios.get<AgentComponentDescriptor[]>(
         `${this.baseUrl}/api/triggers`,
-        this.axiosOptions,
+        this.buildRequestConfig('GET', '/api/triggers'),
       );
       await this.registerAgentComponents('trigger', responseTriggers.data);
     } catch (error: unknown) {
@@ -757,7 +845,7 @@ export class AgentClient {
       method: 'get',
       url: `${this.baseUrl}/api/events`,
       responseType: 'stream',
-      ...this.axiosOptions,
+      ...this.buildRequestConfig('GET', '/api/events'),
     })
       .then((response) => {
         // Reset the backoff only after the stream stays open long enough to be
@@ -1495,7 +1583,7 @@ export class AgentClient {
       await axios.post(
         `${this.baseUrl}/api/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}`,
         payload,
-        this.axiosOptions,
+        this.buildRequestConfig('POST', `/api/triggers/${triggerType}/${triggerName}`, payload),
       );
       if (REMOTE_UPDATE_TRIGGER_TYPES.has(triggerType)) {
         this.markPendingFreshState(container.id);
@@ -1529,7 +1617,7 @@ export class AgentClient {
       await axios.post(
         `${this.baseUrl}/api/triggers/${encodeURIComponent(triggerType)}/${encodeURIComponent(triggerName)}/batch`,
         body,
-        this.axiosOptions,
+        this.buildRequestConfig('POST', `/api/triggers/${triggerType}/${triggerName}/batch`, body),
       );
       if (REMOTE_UPDATE_TRIGGER_TYPES.has(triggerType)) {
         containers.forEach(({ id }) => this.markPendingFreshState(id));
@@ -1554,7 +1642,10 @@ export class AgentClient {
       const query = params.toString();
       const logEntriesUrl = `${this.baseUrl}/api/log/entries`;
       const requestUrl = query ? `${logEntriesUrl}?${query}` : logEntriesUrl;
-      const response = await axios.get(requestUrl, this.axiosOptions);
+      const response = await axios.get(
+        requestUrl,
+        this.buildRequestConfig('GET', '/api/log/entries'),
+      );
       return response.data;
     } catch (error: unknown) {
       this.log.error(`Error fetching log entries from agent: ${getErrorMessage(error)}`);
@@ -1583,7 +1674,7 @@ export class AgentClient {
     try {
       const response = await axios.get(
         `${this.baseUrl}/api/containers/${encodeURIComponent(containerId)}/logs?tail=${options.tail}&since=${options.since}&timestamps=${options.timestamps}`,
-        this.axiosOptions,
+        this.buildRequestConfig('GET', `/api/containers/${containerId}/logs`),
       );
       return response.data;
     } catch (error: unknown) {
@@ -1600,7 +1691,7 @@ export class AgentClient {
       this.log.debug(`Deleting container ${sanitizeLogParam(containerId)} on agent`);
       await axios.delete(
         `${this.baseUrl}/api/containers/${encodeURIComponent(containerId)}`,
-        this.axiosOptions,
+        this.buildRequestConfig('DELETE', `/api/containers/${containerId}`),
       );
     } catch (error: unknown) {
       this.log.error(`Error deleting container on agent: ${getErrorMessage(error)}`);
@@ -1612,7 +1703,7 @@ export class AgentClient {
     try {
       const response = await axios.get<AgentComponentDescriptor>(
         `${this.baseUrl}/api/watchers/${encodeURIComponent(watcherType)}/${encodeURIComponent(watcherName)}`,
-        this.axiosOptions,
+        this.buildRequestConfig('GET', `/api/watchers/${watcherType}/${watcherName}`),
       );
       return response.data;
     } catch (error: unknown) {
@@ -1628,7 +1719,7 @@ export class AgentClient {
       const response = await axios.post<ContainerReport[]>(
         `${this.baseUrl}/api/watchers/${encodeURIComponent(watcherType)}/${encodeURIComponent(watcherName)}`,
         {},
-        this.axiosOptions,
+        this.buildRequestConfig('POST', `/api/watchers/${watcherType}/${watcherName}`, {}),
       );
       const reports = response.data;
       await this.processAuthoritativeContainers(reports.map((report) => report.container));
@@ -1647,7 +1738,11 @@ export class AgentClient {
       const response = await axios.post<ContainerReport>(
         `${this.baseUrl}/api/watchers/${encodeURIComponent(watcherType)}/${encodeURIComponent(watcherName)}/container/${encodeURIComponent(container.id)}`,
         {},
-        this.axiosOptions,
+        this.buildRequestConfig(
+          'POST',
+          `/api/watchers/${watcherType}/${watcherName}/container/${container.id}`,
+          {},
+        ),
       );
       const report = response.data;
 

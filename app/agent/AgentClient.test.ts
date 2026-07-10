@@ -1,7 +1,8 @@
+import { verify as cryptoVerify, generateKeyPairSync } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import axios from 'axios';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 
 vi.mock('axios');
 vi.mock('node:fs', () => ({
@@ -64,6 +65,7 @@ import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import { AgentClient } from './AgentClient.js';
+import { bodySha256Hex, buildCanonicalMessage, EMPTY_BODY_SHA256_HEX } from './ed25519-signer.js';
 
 describe('AgentClient', () => {
   let client;
@@ -7109,6 +7111,254 @@ describe('AgentClient', () => {
       vi.advanceTimersByTime(1000);
       // emitAgentStatsChanged is scheduled by the debounce; no assertion needed
       // beyond not throwing — the debounce fires async on its own timer.
+    });
+  });
+
+  describe('authMode: ed25519 request signing', () => {
+    const TEST_KEY_ID = 'deadbeefcafef00d';
+    let privateKeyPem: string;
+    let publicKeyObject: ReturnType<typeof generateKeyPairSync<'ed25519'>>['publicKey'];
+
+    beforeAll(() => {
+      const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+      publicKeyObject = publicKey;
+      privateKeyPem = privateKey.export({ type: 'pkcs8', format: 'pem' }) as string;
+    });
+
+    function makeEd25519Client(overrides: Record<string, unknown> = {}) {
+      return new AgentClient('ed25519-agent', {
+        host: 'ed25519-host',
+        port: 3001,
+        secret: '',
+        authMode: 'ed25519',
+        signingKeyId: TEST_KEY_ID,
+        signingKey: privateKeyPem,
+        ...overrides,
+      });
+    }
+
+    /** Extracts the headers object axios was called with for call index `n`. */
+    function headersFromGetOrDeleteCall(mockFn: { mock: { calls: unknown[][] } }, n = 0) {
+      return (mockFn.mock.calls[n][1] as { headers: Record<string, string> }).headers;
+    }
+
+    function headersFromPostCall(mockFn: { mock: { calls: unknown[][] } }, n = 0) {
+      return (mockFn.mock.calls[n][2] as { headers: Record<string, string> }).headers;
+    }
+
+    /**
+     * Cross-check: reconstructs Portwing's canonical message from the sent
+     * headers + known method/path/body and verifies the signature against the
+     * real Ed25519 public key — mirrors internal/auth/verify.go byte for byte.
+     */
+    function expectHeadersVerify(
+      headers: Record<string, string>,
+      method: string,
+      path: string,
+      bodyBytes: Buffer,
+    ) {
+      expect(headers['X-Portwing-Key-ID']).toBe(TEST_KEY_ID);
+      expect(headers['X-Portwing-Timestamp']).toMatch(/^[0-9]+$/);
+      expect(headers['X-Portwing-Nonce']).toMatch(/^[0-9a-f]{32}$/);
+      expect(headers['X-Portwing-Signature']).not.toMatch(/[+/=]/);
+
+      const bodyHashHex = bodySha256Hex(bodyBytes);
+      const canonicalMessage = buildCanonicalMessage(
+        method,
+        path,
+        bodyHashHex,
+        Number(headers['X-Portwing-Timestamp']),
+        headers['X-Portwing-Nonce'],
+      );
+      const signatureBuf = Buffer.from(headers['X-Portwing-Signature'], 'base64url');
+      expect(
+        cryptoVerify(null, Buffer.from(canonicalMessage, 'utf8'), publicKeyObject, signatureBuf),
+      ).toBe(true);
+    }
+
+    describe('construction / key loading', () => {
+      test('constructs successfully with a valid PEM signing key', () => {
+        expect(() => makeEd25519Client()).not.toThrow();
+      });
+
+      test('throws when authMode is ed25519 but signingKeyId is missing', () => {
+        expect(() => makeEd25519Client({ signingKeyId: undefined })).toThrow(
+          /signingKeyId|signingKey/,
+        );
+      });
+
+      test('throws when authMode is ed25519 but signingKey is missing', () => {
+        expect(() => makeEd25519Client({ signingKey: undefined })).toThrow(
+          /signingKeyId|signingKey/,
+        );
+      });
+
+      test('throws a descriptive error when signingKey is not a valid Ed25519 key', () => {
+        const { privateKey: rsaPrivateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+        const rsaPem = rsaPrivateKey.export({ type: 'pkcs8', format: 'pem' }) as string;
+        expect(() => makeEd25519Client({ signingKey: rsaPem })).toThrow(/Ed25519/);
+      });
+
+      test('throws for garbage signingKey material', () => {
+        expect(() => makeEd25519Client({ signingKey: 'not a real key' })).toThrow();
+      });
+
+      test('token-mode client (authMode omitted) is unaffected by ed25519 fields entirely', () => {
+        // Existing default construction (used by the shared `client` from
+        // beforeEach) must remain unchanged: no authMode set at all.
+        expect(client.config.authMode).toBeUndefined();
+      });
+    });
+
+    describe('token mode is unaffected (regression guard)', () => {
+      test('default (token) client never sends X-Portwing-* headers', async () => {
+        axios.get.mockResolvedValue({ data: {} });
+        await client.getWatcher('docker', 'local');
+        const headers = headersFromGetOrDeleteCall(axios.get);
+        expect(headers['X-Dd-Agent-Secret']).toBe('test-secret');
+        expect(headers['X-Portwing-Key-ID']).toBeUndefined();
+        expect(headers['X-Portwing-Signature']).toBeUndefined();
+      });
+    });
+
+    describe('per-endpoint signing', () => {
+      test('ed25519-mode client sends no X-Dd-Agent-Secret header', async () => {
+        const edClient = makeEd25519Client();
+        axios.get.mockResolvedValue({ data: {} });
+        await edClient.getWatcher('docker', 'local');
+        const headers = headersFromGetOrDeleteCall(axios.get);
+        expect(headers['X-Dd-Agent-Secret']).toBeUndefined();
+      });
+
+      test('getWatcher (GET, empty body) signs with the empty-body hash', async () => {
+        const edClient = makeEd25519Client();
+        axios.get.mockResolvedValue({ data: {} });
+        await edClient.getWatcher('docker', 'local');
+        const headers = headersFromGetOrDeleteCall(axios.get);
+        expectHeadersVerify(headers, 'GET', '/api/watchers/docker/local', Buffer.alloc(0));
+        // Sanity: empty body hashes to the well-known constant.
+        expect(bodySha256Hex(Buffer.alloc(0))).toBe(EMPTY_BODY_SHA256_HEX);
+      });
+
+      test('deleteContainer (DELETE, empty body) signs correctly', async () => {
+        const edClient = makeEd25519Client();
+        axios.delete.mockResolvedValue({ data: {} });
+        await edClient.deleteContainer('c1');
+        const headers = headersFromGetOrDeleteCall(axios.delete);
+        expectHeadersVerify(headers, 'DELETE', '/api/containers/c1', Buffer.alloc(0));
+      });
+
+      test('runRemoteTrigger (POST with JSON body) signs the exact serialized body bytes', async () => {
+        const edClient = makeEd25519Client();
+        axios.post.mockResolvedValue({ data: {} });
+        const container = { id: 'c1', name: 'my-container' };
+        await edClient.runRemoteTrigger(container, 'docker', 'update');
+        const headers = headersFromPostCall(axios.post);
+        const [, postedPayload] = axios.post.mock.calls[0];
+        expectHeadersVerify(
+          headers,
+          'POST',
+          '/api/triggers/docker/update',
+          Buffer.from(JSON.stringify(postedPayload), 'utf8'),
+        );
+      });
+
+      test('runRemoteTriggerBatch (POST) signs correctly', async () => {
+        const edClient = makeEd25519Client();
+        axios.post.mockResolvedValue({ data: {} });
+        const containers = [{ id: 'c1', name: 'a' }];
+        await edClient.runRemoteTriggerBatch(containers, 'smtp', 'notify');
+        const headers = headersFromPostCall(axios.post);
+        const [, postedPayload] = axios.post.mock.calls[0];
+        expectHeadersVerify(
+          headers,
+          'POST',
+          '/api/triggers/smtp/notify/batch',
+          Buffer.from(JSON.stringify(postedPayload), 'utf8'),
+        );
+      });
+
+      test('watch (POST with {} body) hashes "{}" — NOT the empty-body constant', async () => {
+        const edClient = makeEd25519Client();
+        axios.post.mockResolvedValue({ data: [] });
+        storeContainer.getContainers.mockReturnValue([]);
+        await edClient.watch('docker', 'local');
+        const headers = headersFromPostCall(axios.post);
+        const emptyObjectBody = Buffer.from('{}', 'utf8');
+        expectHeadersVerify(headers, 'POST', '/api/watchers/docker/local', emptyObjectBody);
+        // A {} body must NOT be treated as an empty body.
+        expect(bodySha256Hex(emptyObjectBody)).not.toBe(EMPTY_BODY_SHA256_HEX);
+      });
+
+      test('watchContainer (POST with {} body) signs the nested container path correctly', async () => {
+        const edClient = makeEd25519Client();
+        axios.post.mockResolvedValue({ data: { container: { id: 'c1' } } });
+        storeContainer.getContainer.mockReturnValue(undefined);
+        storeContainer.insertContainer.mockReturnValue({ id: 'c1' });
+        await edClient.watchContainer('docker', 'local', { id: 'c1', name: 'test' });
+        const headers = headersFromPostCall(axios.post);
+        expectHeadersVerify(
+          headers,
+          'POST',
+          '/api/watchers/docker/local/container/c1',
+          Buffer.from('{}', 'utf8'),
+        );
+      });
+
+      test('getContainerLogs (GET with query string) signs the bare path, not the query string', async () => {
+        const edClient = makeEd25519Client();
+        axios.get.mockResolvedValue({ data: {} });
+        await edClient.getContainerLogs('cid', { tail: 100, since: 0, timestamps: false });
+        const url = axios.get.mock.calls[0][0];
+        // The wire URL still carries the query string...
+        expect(url).toContain('?tail=100');
+        // ...but the signed canonical path must be query-free.
+        const headers = headersFromGetOrDeleteCall(axios.get);
+        expectHeadersVerify(headers, 'GET', '/api/containers/cid/logs', Buffer.alloc(0));
+      });
+
+      test('getLogEntries (GET with query string) signs the bare path, not the query string', async () => {
+        const edClient = makeEd25519Client();
+        axios.get.mockResolvedValue({ data: [] });
+        await edClient.getLogEntries({ level: 'error', tail: 50 });
+        const url = axios.get.mock.calls[0][0];
+        expect(url).toContain('?level=error');
+        const headers = headersFromGetOrDeleteCall(axios.get);
+        expectHeadersVerify(headers, 'GET', '/api/log/entries', Buffer.alloc(0));
+      });
+
+      test('startSse (GET /api/events) signs an empty-body GET request', async () => {
+        const edClient = makeEd25519Client();
+        axios.mockResolvedValue({ data: new EventEmitter() });
+        edClient.startSse();
+        await vi.advanceTimersByTimeAsync(0);
+        const axiosCallArg = (axios as unknown as { mock: { calls: unknown[][] } }).mock
+          .calls[0][0] as {
+          headers: Record<string, string>;
+        };
+        expectHeadersVerify(axiosCallArg.headers, 'GET', '/api/events', Buffer.alloc(0));
+      });
+    });
+
+    describe('nonce and timestamp hygiene', () => {
+      test('two consecutive signed requests use different nonces', async () => {
+        const edClient = makeEd25519Client();
+        axios.get.mockResolvedValue({ data: {} });
+        await edClient.getWatcher('docker', 'local');
+        await edClient.getWatcher('docker', 'local');
+        const first = headersFromGetOrDeleteCall(axios.get, 0);
+        const second = headersFromGetOrDeleteCall(axios.get, 1);
+        expect(first['X-Portwing-Nonce']).not.toBe(second['X-Portwing-Nonce']);
+      });
+
+      test('X-Portwing-Timestamp is an integer-seconds string (no fractional/ms component)', async () => {
+        const edClient = makeEd25519Client();
+        axios.get.mockResolvedValue({ data: {} });
+        await edClient.getWatcher('docker', 'local');
+        const headers = headersFromGetOrDeleteCall(axios.get);
+        expect(headers['X-Portwing-Timestamp']).toMatch(/^[0-9]+$/);
+        expect(Number.isInteger(Number(headers['X-Portwing-Timestamp']))).toBe(true);
+      });
     });
   });
 });

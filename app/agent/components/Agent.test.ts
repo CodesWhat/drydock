@@ -97,4 +97,110 @@ describe('Agent component', () => {
     expect(masked.host).toBe('myhost');
     expect(masked.secret).toBeUndefined();
   });
+
+  describe('authMode defaulting (token behavior unchanged)', () => {
+    test('authMode defaults to token when omitted', () => {
+      const agent = new Agent();
+      const schema = agent.getConfigurationSchema();
+      const result = schema.validate({ host: 'localhost', secret: 'my-secret' });
+      expect(result.error).toBeUndefined();
+      expect(result.value.authMode).toBe('token');
+    });
+
+    test('secret remains required by default (authMode omitted)', () => {
+      const agent = new Agent();
+      const schema = agent.getConfigurationSchema();
+      const result = schema.validate({ host: 'localhost' });
+      expect(result.error).toBeDefined();
+    });
+
+    test('signingKeyId/signingKey are not required by default (authMode omitted)', () => {
+      const agent = new Agent();
+      const schema = agent.getConfigurationSchema();
+      const result = schema.validate({ host: 'localhost', secret: 'my-secret' });
+      expect(result.error).toBeUndefined();
+    });
+
+    test('explicit authMode: token behaves identically to omitted authMode', () => {
+      const agent = new Agent();
+      const schema = agent.getConfigurationSchema();
+      const result = schema.validate({ host: 'localhost', authMode: 'token', secret: 'my-secret' });
+      expect(result.error).toBeUndefined();
+      expect(result.value.authMode).toBe('token');
+    });
+  });
+
+  describe('authMode: ed25519', () => {
+    test('accepts a valid ed25519 config without a secret', () => {
+      const agent = new Agent();
+      const schema = agent.getConfigurationSchema();
+      const result = schema.validate({
+        host: 'localhost',
+        authMode: 'ed25519',
+        signingKeyId: 'deadbeefcafef00d',
+        signingKey: '-----BEGIN PRIVATE KEY-----\nMC4CAQ...\n-----END PRIVATE KEY-----\n',
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.value.authMode).toBe('ed25519');
+      expect(result.value.secret).toBeUndefined();
+    });
+
+    test('rejects ed25519 config missing signingKeyId', () => {
+      const agent = new Agent();
+      const schema = agent.getConfigurationSchema();
+      const result = schema.validate({
+        host: 'localhost',
+        authMode: 'ed25519',
+        signingKey: '-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n',
+      });
+      expect(result.error).toBeDefined();
+    });
+
+    test('rejects ed25519 config missing signingKey', () => {
+      const agent = new Agent();
+      const schema = agent.getConfigurationSchema();
+      const result = schema.validate({
+        host: 'localhost',
+        authMode: 'ed25519',
+        signingKeyId: 'deadbeefcafef00d',
+      });
+      expect(result.error).toBeDefined();
+    });
+
+    test('rejects an unknown authMode value', () => {
+      const agent = new Agent();
+      const schema = agent.getConfigurationSchema();
+      const result = schema.validate({
+        host: 'localhost',
+        authMode: 'bogus',
+        secret: 'my-secret',
+      });
+      expect(result.error).toBeDefined();
+    });
+
+    test('maskConfiguration masks signingKey when present', () => {
+      const agent = new Agent();
+      const masked = agent.maskConfiguration({
+        host: 'localhost',
+        port: 3000,
+        secret: '',
+        authMode: 'ed25519',
+        signingKeyId: 'deadbeefcafef00d',
+        signingKey:
+          '-----BEGIN PRIVATE KEY-----\nSUPERSECRETKEYMATERIAL\n-----END PRIVATE KEY-----\n',
+      });
+      expect(masked.signingKey).toBe('[REDACTED]');
+      expect(masked.signingKeyId).toBe('deadbeefcafef00d');
+    });
+
+    test('maskConfiguration leaves signingKey undefined when not configured', () => {
+      const agent = new Agent();
+      const masked = agent.maskConfiguration({
+        host: 'localhost',
+        port: 3000,
+        secret: 'supersecret',
+      });
+      expect(masked.signingKey).toBeUndefined();
+    });
+  });
 });
