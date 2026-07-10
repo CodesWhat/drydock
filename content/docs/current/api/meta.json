@@ -3,6 +3,7 @@
   "pages": [
     "index",
     "agent",
+    "portwing",
     "app",
     "authentication",
     "container",

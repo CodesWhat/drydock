@@ -190,16 +190,22 @@ To connect a Controller to an Agent, use the `DD_AGENT_{name}_*` environment var
 
 | Env var | Required | Description | Default |
 | :--- | :---: | :--- | :--- |
-| `DD_AGENT_{name}_SECRET` | 🔴 | Secret token to authenticate with the Agent | |
+| `DD_AGENT_{name}_SECRET` | 🔴 | Secret token to authenticate with the Agent. Required in the default `token` auth mode; not used when `AUTHMODE=ed25519`. | |
 | `DD_AGENT_{name}_SECRET__FILE` | ⚪ | Path to file containing the secret token. Note the **double** underscore, which follows the general [`DD_*__FILE`](/docs/configuration#secret-management) secret-file convention. | |
 | `DD_AGENT_{name}_HOST` | 🔴 | Hostname or IP of the Agent | |
 | `DD_AGENT_{name}_PORT` | ⚪ | Port of the Agent | `3000` |
+| `DD_AGENT_{name}_AUTHMODE` | ⚪ | How the controller authenticates each request to this agent: `token` (sends the shared `X-Dd-Agent-Secret`) or `ed25519` (signs each request with an Ed25519 key using Portwing's per-request signature scheme). See [Ed25519 request signing](#ed25519-request-signing-standard-mode). | `token` |
+| `DD_AGENT_{name}_SIGNINGKEYID` | 🔴¹ | **Required when `AUTHMODE=ed25519`.** The key id sent as the `X-Portwing-Key-ID` header — the 16-hex-char id Portwing derived from the public key at registration (`hex(SHA-256(pubkey)[:8])`). | |
+| `DD_AGENT_{name}_SIGNINGKEY` | 🔴¹ | **Required when `AUTHMODE=ed25519`.** PEM-encoded PKCS#8 Ed25519 private key (the format Portwing's keygen produces). | |
+| `DD_AGENT_{name}_SIGNINGKEY__FILE` | ⚪ | Path to a file containing the PEM Ed25519 private key, instead of inlining it. Note the **double** underscore, per the [secret-file convention](/docs/configuration#secret-management). | |
 | `DD_AGENT_{name}_CAFILE` | ⚪ | CA certificate path for TLS connection | |
 | `DD_AGENT_{name}_CERTFILE` | ⚪ | Client certificate path for TLS connection | |
 | `DD_AGENT_{name}_KEYFILE` | ⚪ | Client key path for TLS connection | |
 | `DD_AGENT_ALLOW_INSECURE_SECRET` | ⚪ | **Insecure.** When `true`, allows configuring agents with a `secret` over plain HTTP. Drydock will log a warning on every startup but won't refuse to boot. Only enable on trusted private networks where you accept that the agent secret is sent in cleartext. | `false` |
 
-If `HOST` or `SECRET` is missing for an agent, the controller logs `Skipping agent {name}: Missing host or secret` and starts without that agent rather than failing to boot. So a typo'd agent name shows up as a missing agent in the UI, not a startup crash. Check the controller log for `Skipping agent` warnings if an agent never appears.
+¹ Required only when `AUTHMODE=ed25519`; ignored otherwise.
+
+If an agent's required config is missing, the controller logs a `Skipping agent {name}: …` warning and starts without that agent rather than failing to boot — `Missing host` when the host is absent, `Missing secret` in the default `token` mode, or `Missing signingkeyid or signingkey for ed25519 authmode` in `ed25519` mode. So a typo'd agent name shows up as a missing agent in the UI, not a startup crash. Check the controller log for `Skipping agent` warnings if an agent never appears.
 
 <Callout type="warn">Setting `DD_AGENT_ALLOW_INSECURE_SECRET=true` means your agent secret is transmitted over the network in cleartext on every request. An attacker with network access can capture it and impersonate the controller. Prefer HTTPS (configure `DD_AGENT_{name}_CERTFILE`/`DD_AGENT_{name}_CAFILE`) or terminate TLS at a reverse proxy. Only use this flag on isolated private networks where you explicitly accept that risk.</Callout>
 
@@ -230,6 +236,33 @@ services:
 ```
 
 <Callout type="info">By default, the controller also watches its own local Docker socket. If you're running the controller as a pure aggregator with no local containers to monitor, set `DD_LOCAL_WATCHER=false` to disable the default local watcher.</Callout>
+
+### Ed25519 request signing (standard-mode)
+
+By default the controller authenticates to each agent with a shared secret token (the `X-Dd-Agent-Secret` header). Setting `DD_AGENT_{name}_AUTHMODE=ed25519` switches that agent to **per-request Ed25519 signing** instead: every request the controller sends carries four `X-Portwing-*` headers — `X-Portwing-Key-ID`, `X-Portwing-Timestamp` (unix seconds), `X-Portwing-Nonce`, and a base64url `X-Portwing-Signature` over the canonical `METHOD\nPATH\nSHA-256-hex(body)\ntimestamp\nnonce` message — matching [Portwing's verifier](/docs/api/portwing). No `X-Dd-Agent-Secret` is sent.
+
+Use it when the remote agent verifies requests with a registered Ed25519 public key (Portwing's scheme) rather than a shared secret. Unlike a static token, a captured signature can't be replayed and there's no long-lived shared secret on the wire.
+
+```yaml
+services:
+  drydock-controller:
+    image: codeswhat/drydock
+    environment:
+      - DD_AGENT_EDGE_HOST=edge.example.com
+      - DD_AGENT_EDGE_AUTHMODE=ed25519
+      - DD_AGENT_EDGE_SIGNINGKEYID=3f8a1c2e9b047d56
+      - DD_AGENT_EDGE_SIGNINGKEY__FILE=/run/secrets/agent_ed25519_key
+    secrets:
+      - agent_ed25519_key
+
+secrets:
+  agent_ed25519_key:
+    file: ./agent_ed25519.pem
+```
+
+The signing key is parsed and validated once at startup — a missing or malformed key skips that agent with a warning rather than crashing the controller — and is masked in configuration dumps the same way the secret token is.
+
+<Callout type="info">The insecure-secret hard error above only applies to `token` mode. An `ed25519` agent transmits no secret, so it will connect over plain HTTP without `DD_AGENT_ALLOW_INSECURE_SECRET` — though HTTPS is still recommended to protect the request and response payloads themselves.</Callout>
 
 ## Complete Multi-Host Example
 
