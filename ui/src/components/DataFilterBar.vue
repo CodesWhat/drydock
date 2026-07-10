@@ -7,8 +7,8 @@ const { t } = useI18n();
 defineProps<{
   /**
    * Current view mode ('table' | 'cards'). Optional — the switcher only renders when a
-   * caller binds this (`v-model`). Views without a v-model (audit/watchers/servers/
-   * registries/auth) stay table-only and must not grow a dead toggle.
+   * caller binds this (`v-model`). A view that doesn't bind it stays table-only and won't
+   * grow a dead toggle. As of v1.6 every list view binds it.
    */
   modelValue?: string;
   filteredCount: number;

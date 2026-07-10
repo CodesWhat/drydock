@@ -964,8 +964,8 @@ describe('preferences migration', () => {
     });
   });
 
-  describe('v8 -> v9 migration', () => {
-    it('should bump schema v8 preferences to v9 and backfill table modes', () => {
+  describe('v8 -> current migration', () => {
+    it('should bump schema v8 preferences to the current version and backfill table modes', () => {
       const result = migrate({
         schemaVersion: 8,
         containers: { tableActions: 'buttons' },
@@ -977,7 +977,7 @@ describe('preferences migration', () => {
         },
       });
       expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
-      expect(result.schemaVersion).toBe(9);
+      expect(result.schemaVersion).toBe(10);
       expect(result.containers.viewMode).toBe('table');
       expect(result.views.agents.mode).toBe('table');
       expect(result.views.notifications.mode).toBe('table');
@@ -1003,7 +1003,7 @@ describe('preferences migration', () => {
       });
       const second = migrate(first as unknown as Record<string, unknown>);
 
-      expect(first.schemaVersion).toBe(9);
+      expect(first.schemaVersion).toBe(10);
       expect(first.containers.viewMode).toBe('table');
       expect(first.views.agents.mode).toBe('table');
       expect(first.views.notifications.mode).toBe('table');
@@ -1012,6 +1012,60 @@ describe('preferences migration', () => {
       expect(first.containers.groupByStack).toBe(true);
       expect(first.views.agents.sortKey).toBe('lastSeen');
       expect(first.views.security.sortField).toBe('high');
+      expect(second).toEqual(first);
+    });
+  });
+
+  describe('v9 -> v10 migration', () => {
+    it('bumps schema v9 preferences to v10 and backfills the newly card-enabled view modes', () => {
+      const result = migrate({
+        schemaVersion: 9,
+        views: {
+          agents: { mode: 'cards', sortKey: 'status', sortAsc: false, hiddenColumns: ['status'] },
+          notifications: { mode: 'cards' },
+          security: { mode: 'cards', sortField: 'high', sortAsc: false, hiddenColumns: [] },
+          triggers: { mode: 'cards' },
+          audit: { hiddenColumns: ['details'] },
+          watchers: { hiddenColumns: ['cron'] },
+          servers: { hiddenColumns: ['host'] },
+          registries: {},
+          auth: {},
+        },
+      });
+      expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      expect(result.schemaVersion).toBe(10);
+      // Views that gained a card view in v1.6 backfill to table mode for existing users.
+      expect(result.views.audit.mode).toBe('table');
+      expect(result.views.watchers.mode).toBe('table');
+      expect(result.views.servers.mode).toBe('table');
+      expect(result.views.registries.mode).toBe('table');
+      expect(result.views.auth.mode).toBe('table');
+      // Pre-existing view modes and other fields are preserved untouched.
+      expect(result.views.agents.mode).toBe('cards');
+      expect(result.views.notifications.mode).toBe('cards');
+      expect(result.views.security.mode).toBe('cards');
+      expect(result.views.triggers.mode).toBe('cards');
+      expect(result.views.audit.hiddenColumns).toEqual(['details']);
+      expect(result.views.watchers.hiddenColumns).toEqual(['cron']);
+      expect(result.views.servers.hiddenColumns).toEqual(['host']);
+    });
+
+    it('should upgrade a v9 payload without the new mode keys and stay idempotent', () => {
+      const first = migrate({
+        schemaVersion: 9,
+        views: {
+          watchers: { mode: 'cards', hiddenColumns: [] },
+          registries: { mode: 'cards' },
+        },
+      });
+      const second = migrate(first as unknown as Record<string, unknown>);
+
+      expect(first.schemaVersion).toBe(10);
+      expect(first.views.watchers.mode).toBe('cards');
+      expect(first.views.registries.mode).toBe('cards');
+      expect(first.views.audit.mode).toBe('table');
+      expect(first.views.servers.mode).toBe('table');
+      expect(first.views.auth.mode).toBe('table');
       expect(second).toEqual(first);
     });
   });

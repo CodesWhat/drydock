@@ -2,7 +2,18 @@ import { DEFAULTS, type ViewMode } from '@/preferences/schema';
 import { preferences, resetPreferences } from '@/preferences/store';
 import { useViewMode } from '@/preferences/useViewMode';
 
-const viewKeys = ['containers', 'agents', 'notifications', 'security', 'triggers'] as const;
+const viewKeys = [
+  'containers',
+  'agents',
+  'notifications',
+  'security',
+  'triggers',
+  'audit',
+  'watchers',
+  'servers',
+  'registries',
+  'auth',
+] as const;
 type ViewKey = (typeof viewKeys)[number];
 
 interface ViewCase {
@@ -51,6 +62,46 @@ const viewCases: ViewCase[] = [
     read: () => preferences.views.triggers.mode,
     write: (mode) => {
       preferences.views.triggers.mode = mode;
+    },
+  },
+  {
+    key: 'audit',
+    defaultMode: DEFAULTS.views.audit.mode,
+    read: () => preferences.views.audit.mode,
+    write: (mode) => {
+      preferences.views.audit.mode = mode;
+    },
+  },
+  {
+    key: 'watchers',
+    defaultMode: DEFAULTS.views.watchers.mode,
+    read: () => preferences.views.watchers.mode,
+    write: (mode) => {
+      preferences.views.watchers.mode = mode;
+    },
+  },
+  {
+    key: 'servers',
+    defaultMode: DEFAULTS.views.servers.mode,
+    read: () => preferences.views.servers.mode,
+    write: (mode) => {
+      preferences.views.servers.mode = mode;
+    },
+  },
+  {
+    key: 'registries',
+    defaultMode: DEFAULTS.views.registries.mode,
+    read: () => preferences.views.registries.mode,
+    write: (mode) => {
+      preferences.views.registries.mode = mode;
+    },
+  },
+  {
+    key: 'auth',
+    defaultMode: DEFAULTS.views.auth.mode,
+    read: () => preferences.views.auth.mode,
+    write: (mode) => {
+      preferences.views.auth.mode = mode;
     },
   },
 ];
@@ -102,15 +153,26 @@ describe('useViewMode', () => {
       const notifications = useViewMode('notifications');
       const security = useViewMode('security');
       const triggers = useViewMode('triggers');
+      const audit = useViewMode('audit');
+      const watchers = useViewMode('watchers');
+      const servers = useViewMode('servers');
+      const registries = useViewMode('registries');
+      const auth = useViewMode('auth');
 
       containers.value = 'cards';
       security.value = 'cards';
+      watchers.value = 'cards';
 
       expect(containers.value).toBe('cards');
       expect(agents.value).toBe('table');
       expect(notifications.value).toBe('table');
       expect(security.value).toBe('cards');
       expect(triggers.value).toBe('table');
+      expect(audit.value).toBe('table');
+      expect(watchers.value).toBe('cards');
+      expect(servers.value).toBe('table');
+      expect(registries.value).toBe('table');
+      expect(auth.value).toBe('table');
     });
   });
 });

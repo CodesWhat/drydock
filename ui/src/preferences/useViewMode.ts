@@ -3,9 +3,20 @@ import type { ViewMode } from './schema';
 import { preferences } from './store';
 import { isViewMode } from './validators';
 
-/** The 5 views wired into the v1.6 table/cards toggle. `audit`/`watchers`/`servers`/
- * `registries`/`auth` stay table-only and have no `mode` field to bind to. */
-type ViewKey = 'containers' | 'agents' | 'notifications' | 'security' | 'triggers';
+/** Every list view wired into the table/cards toggle. As of v1.6 this covers all of
+ * them — `audit`, `watchers`, `servers`, `registries`, and `auth` each gained a `mode`
+ * field and a card view too. */
+type ViewKey =
+  | 'containers'
+  | 'agents'
+  | 'notifications'
+  | 'security'
+  | 'triggers'
+  | 'audit'
+  | 'watchers'
+  | 'servers'
+  | 'registries'
+  | 'auth';
 
 /**
  * Shorthand for binding a view's mode preference.

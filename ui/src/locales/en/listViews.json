@@ -22,6 +22,10 @@
       "status": "Status",
       "details": "Details"
     },
+    "card": {
+      "time": "Time",
+      "version": "Version"
+    },
     "detail": {
       "timestamp": "Timestamp",
       "event": "Event",
@@ -243,6 +247,10 @@
       "status": "Status",
       "url": "URL"
     },
+    "card": {
+      "auth": "Auth",
+      "status": "Status"
+    },
     "badge": {
       "private": "Private",
       "public": "Public"
@@ -278,6 +286,12 @@
       "status": "Status",
       "containers": "Containers",
       "lastSeen": "Last Seen"
+    },
+    "card": {
+      "containers": "Containers",
+      "running": "Running",
+      "images": "Images",
+      "lastSeen": "Last seen"
     },
     "detail": {
       "containers": "Containers",
@@ -336,6 +350,12 @@
       "schedule": "Schedule",
       "nextRun": "Next Run",
       "lastRun": "Last Run"
+    },
+    "card": {
+      "containers": "Containers",
+      "nextRun": "Next run",
+      "lastRun": "Last run",
+      "containersWatched": "{count} containers watched"
     },
     "status": {
       "watching": "Watching",

@@ -55,18 +55,18 @@ export interface PreferencesSchema {
   views: {
     logs: { newestFirst: boolean };
     security: { mode: ViewMode; sortField: string; sortAsc: boolean; hiddenColumns: string[] };
-    audit: { hiddenColumns: string[] };
+    audit: { mode: ViewMode; hiddenColumns: string[] };
     agents: { mode: ViewMode; sortKey: string; sortAsc: boolean; hiddenColumns: string[] };
     triggers: { mode: ViewMode };
-    watchers: { hiddenColumns: string[] };
-    servers: { hiddenColumns: string[] };
-    registries: Record<string, never>;
+    watchers: { mode: ViewMode; hiddenColumns: string[] };
+    servers: { mode: ViewMode; hiddenColumns: string[] };
+    registries: { mode: ViewMode };
     notifications: { mode: ViewMode };
-    auth: Record<string, never>;
+    auth: { mode: ViewMode };
   };
 }
 
-export const CURRENT_SCHEMA_VERSION = 9;
+export const CURRENT_SCHEMA_VERSION = 10;
 
 /**
  * Table-mode column keys for the five views that share the `DataTableColumnPicker`
@@ -158,13 +158,13 @@ export const DEFAULTS: PreferencesSchema = {
   views: {
     logs: { newestFirst: false },
     security: { mode: 'table', sortField: 'critical', sortAsc: false, hiddenColumns: [] },
-    audit: { hiddenColumns: [] },
+    audit: { mode: 'table', hiddenColumns: [] },
     agents: { mode: 'table', sortKey: 'name', sortAsc: true, hiddenColumns: [] },
     triggers: { mode: 'table' },
-    watchers: { hiddenColumns: [] },
-    servers: { hiddenColumns: [] },
-    registries: {},
+    watchers: { mode: 'table', hiddenColumns: [] },
+    servers: { mode: 'table', hiddenColumns: [] },
+    registries: { mode: 'table' },
     notifications: { mode: 'table' },
-    auth: {},
+    auth: { mode: 'table' },
   },
 };
