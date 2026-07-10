@@ -442,15 +442,25 @@ export class EdgeAgentAdapter {
     data: Record<string, unknown>,
   ): PendingRequest | undefined {
     const queueKey = `${kind}:${containerId}`;
-    const echoedId = typeof data.requestId === 'string' ? data.requestId : undefined;
+    // Distinguish "requestId field absent" (legacy agent → FIFO fallback) from
+    // "field present but empty or non-string" (a current/malformed agent →
+    // exact-match miss, never FIFO). A present-but-unusable id collapses to ''
+    // so it takes the exact-match branch and misses, rather than stealing a
+    // different in-flight request via the oldest-outstanding fallback.
+    const echoedId = Object.hasOwn(data, 'requestId')
+      ? typeof data.requestId === 'string'
+        ? data.requestId
+        : ''
+      : undefined;
 
     let pendingKey: string | undefined;
     if (echoedId !== undefined) {
       // A requestId field is present (echo-capable agent), including the
-      // degenerate empty-string case: correlate strictly by exact key and, on a
-      // miss, drop rather than fall back to FIFO — falling back could resolve a
-      // different still-outstanding request for this container. Only a truly
-      // absent requestId (legacy agent) uses the oldest-outstanding fallback.
+      // degenerate empty/non-string case coerced to '': correlate strictly by
+      // exact key and, on a miss, drop rather than fall back to FIFO — falling
+      // back could resolve a different still-outstanding request for this
+      // container. Only a truly absent requestId (legacy agent) uses the
+      // oldest-outstanding fallback.
       const exactKey = `${queueKey}:${echoedId}`;
       if (this.pendingRequests.has(exactKey)) {
         pendingKey = exactKey;

@@ -2566,6 +2566,50 @@ describe('EdgeAgentAdapter — requestId echo correlation', () => {
     expect(resolved).toBe(true);
   });
 
+  test('a response carrying a present-but-non-string requestId (malformed frame) is treated as an exact-match miss, not a legacy FIFO frame: it does not steal the oldest pending request', async () => {
+    const { adapter, ws } = createAdapter();
+    adapter.activate();
+
+    const containerId = 'container-nonstring-id';
+    let resolved = false;
+    const pending = adapter.requestContainerLogs(containerId, { tail: 5 });
+    pending
+      .then(() => {
+        resolved = true;
+      })
+      .catch(() => {});
+
+    const sentFrame = JSON.parse(ws.sentMessages[ws.sentMessages.length - 1]) as {
+      data: { requestId: string };
+    };
+    const realRequestId = sentFrame.data.requestId;
+
+    // requestId present but a number, not a string — must NOT FIFO-resolve the
+    // oldest request (only a truly absent field takes the legacy fallback).
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId,
+      requestId: 12345,
+      logs: 'should-not-steal',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(resolved).toBe(false);
+    expect(ws.close).not.toHaveBeenCalled();
+    const adapterInternal = adapter as unknown as { pendingRequests: Map<string, unknown> };
+    expect(adapterInternal.pendingRequests.has(`log:${containerId}:${realRequestId}`)).toBe(true);
+
+    // The correctly-echoed response still resolves it.
+    sendFrame(ws, 'dd:container_log_response', {
+      containerId,
+      requestId: realRequestId,
+      logs: 'real-logs',
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    await expect(pending).resolves.toBe('real-logs');
+    expect(resolved).toBe(true);
+  });
+
   test('three concurrent requestContainerLogs calls for the same container: an exact-echo response for the MIDDLE request removes it from the FIFO queue without disturbing order, and two subsequent legacy (no-requestId) responses still resolve the two remaining requests oldest-first', async () => {
     const { adapter, ws } = createAdapter();
     adapter.activate();
