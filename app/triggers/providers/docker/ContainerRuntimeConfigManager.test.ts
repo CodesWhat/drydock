@@ -154,6 +154,33 @@ describe('ContainerRuntimeConfigManager', () => {
     ).toBe('bridge');
   });
 
+  test('getPrimaryNetworkName should translate NetworkMode "default" to "bridge" when present', () => {
+    const manager = createManager();
+
+    // A container created on the default bridge network reports
+    // HostConfig.NetworkMode: "default" in docker inspect, not "bridge" (moby
+    // special-cases this at create time). Without the translation, the
+    // alphabetically-first network name would win instead — which for an
+    // 'app-net' + 'bridge' container is 'app-net', the wrong network.
+    expect(
+      manager.getPrimaryNetworkName({ HostConfig: { NetworkMode: 'default' } }, [
+        'app-net',
+        'bridge',
+      ]),
+    ).toBe('bridge');
+  });
+
+  test('getPrimaryNetworkName should fall back to the first network when NetworkMode "default" has no bridge network', () => {
+    const manager = createManager();
+
+    expect(
+      manager.getPrimaryNetworkName({ HostConfig: { NetworkMode: 'default' } }, [
+        'app-net',
+        'other-net',
+      ]),
+    ).toBe('app-net');
+  });
+
   test('normalizeContainerProcessArgs and areContainerProcessArgsEqual should normalize scalar and array values', () => {
     const manager = createManager();
 

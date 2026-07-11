@@ -221,6 +221,17 @@ class ContainerRuntimeConfigManager {
     if (networkMode && networkNames.includes(networkMode)) {
       return networkMode;
     }
+    // A container created on the default bridge network reports
+    // `HostConfig.NetworkMode: "default"` in `docker inspect`, not "bridge" —
+    // moby itself special-cases this at create time
+    // (`if nwm.IsDefault() { name = daemon.netController.Config().DefaultNetwork }`,
+    // daemon/create.go). Without this translation the exact-match branch
+    // above misses and we'd fall through to networkNames[0], which for a
+    // bridge+macvlan container is whichever network name sorts first
+    // alphabetically — sometimes the macvlan network.
+    if (networkMode === 'default' && networkNames.includes('bridge')) {
+      return 'bridge';
+    }
     return networkNames[0];
   }
 
