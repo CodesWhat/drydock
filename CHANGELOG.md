@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.3-rc.1] — 2026-07-16
+
+### Fixed
+
+- **Orphaned replacement container after a failed post-create network connect.** `createContainer` created the replacement container and then connected it to any additional networks in the same `try`; if a network connect failed (for example a static-IP endpoint config rejected by a socket proxy), the error was rethrown without exposing the created container, so nothing could clean it up. The renamed original (`<name>-old-<timestamp>`) stayed parked while the orphaned `Created`-state replacement squatted the real name. All four rollback paths — manual rollback, self-update, health-monitor auto-rollback, and the backup-restore API — now recover the created container from the error and best-effort stop + force-remove it before restoring the original container's name, tolerating cleanup failures with a warning rather than masking the original error.
+- **Repeated failed updates could cascade into a second rename.** If a container was already left renamed `-old-<timestamp>` by a prior failed update, a subsequent update attempt against it now fails immediately with a clear "needs manual cleanup" error instead of renaming and recreating again on top of the unresolved failure.
+- **Locally-built images no longer spam nightly error counts.** Containers running an image with no registry-hosted digest (built locally or `docker load`ed) were still queried against the registry on every watch cycle, producing a 401 that got counted as a watch error. Drydock now detects images with no `RepoDigests` at discovery/refresh time and skips the registry lookup for them entirely.
+- The digest-watch throttling warning no longer prints `with domain undefined` for unprefixed Docker Hub image references (e.g. `nginx`); it now shows `docker.io`.
+
+### Changed
+
+- **Docs:** documented the socket-proxy requirements for recreating containers on more than one network (macvlan, static IPs). Tecnativa/docker-socket-proxy needs both `POST=1` and `NETWORKS=1`; sockguard needs `request_body.network.allow_endpoint_config: true` to permit endpoint configs that specify a static IP or MAC address. Added a matching FAQ entry for containers left renamed `-old-<timestamp>` after a failed update.
+
 ## [1.5.2-rc.3] — 2026-07-11
 
 ### Added
