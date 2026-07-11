@@ -8,6 +8,7 @@ import {
   verifyContainerStillRunning,
 } from '../../../updates/post-start-liveness.js';
 import { getErrorMessage } from '../../../util/error.js';
+import { getCreatedContainerCandidate } from './created-container-candidate.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
 import { getRequestedOperationId } from './update-runtime-context.js';
 
@@ -973,8 +974,12 @@ class ContainerUpdateExecutor {
       lastError: getErrorMessage(error),
     });
 
+    // If createContainer itself rejected (e.g. a post-create network.connect
+    // failure), attemptState.newContainer never got assigned — but the created
+    // handle may still be recoverable off the error (see created-container-candidate.ts),
+    // so it doesn't get orphaned squatting the canonical container name.
     await this.cleanupNewContainerBestEffort(
-      attemptState.newContainer,
+      attemptState.newContainer ?? getCreatedContainerCandidate(error),
       preparedExecution.oldName,
       logContainer,
     );

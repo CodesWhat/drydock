@@ -1,5 +1,6 @@
 import joi from 'joi';
 import log from '../../../log/index.js';
+import { getCreatedContainerCandidate } from './created-container-candidate.js';
 import {
   configurationValid,
   createMockLog,
@@ -246,6 +247,49 @@ test('createContainer should connect additional networks after create', async ()
     Container: 'container-name',
     EndpointConfig: { Aliases: ['container-name'] },
   });
+});
+
+test('createContainer attaches the created container as a candidate when a network connect fails', async () => {
+  const createdContainer = {
+    start: vi.fn().mockResolvedValue(undefined),
+    stop: vi.fn().mockResolvedValue(undefined),
+    remove: vi.fn().mockResolvedValue(undefined),
+  };
+  const connectError = new Error('connect EACCES: denied by socket proxy');
+  const connect = vi.fn().mockRejectedValue(connectError);
+  const getNetwork = vi.fn().mockReturnValue({ connect });
+  const createContainer = vi.fn().mockResolvedValue(createdContainer);
+  const logContainer = createMockLog('info', 'warn');
+
+  const containerToCreate = {
+    name: 'container-name',
+    NetworkingConfig: {
+      EndpointsConfig: {
+        cloud_default: { Aliases: ['container-name'] },
+        macvlan_default: { Aliases: ['container-name'] },
+      },
+    },
+  };
+
+  const thrown = await docker
+    .createContainer(
+      { createContainer, getNetwork },
+      containerToCreate,
+      'container-name',
+      logContainer,
+    )
+    .catch((e) => e);
+
+  expect(thrown).toBe(connectError);
+  expect(getCreatedContainerCandidate(thrown)).toBe(createdContainer);
+});
+
+test('createContainer does not attach a candidate when create itself fails', async () => {
+  const thrown = await docker
+    .createContainer(docker.getWatcher({ watcher: 'test' }).dockerApi, { name: 'ko' }, 'name', log)
+    .catch((e) => e);
+
+  expect(getCreatedContainerCandidate(thrown)).toBeUndefined();
 });
 
 test('getSecurityGate should provide trivy database and scan interval callbacks', async () => {

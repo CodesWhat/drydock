@@ -37,6 +37,7 @@ import Trigger, { type TriggerConfiguration } from '../Trigger.js';
 import ContainerRuntimeConfigManager from './ContainerRuntimeConfigManager.js';
 import ContainerUpdateExecutor from './ContainerUpdateExecutor.js';
 import { syncComposeFileTag } from './compose-file-sync.js';
+import { attachCreatedContainerCandidate } from './created-container-candidate.js';
 import { startHealthMonitor } from './HealthMonitor.js';
 import HookExecutor from './HookExecutor.js';
 import RegistryResolver from './RegistryResolver.js';
@@ -922,6 +923,7 @@ class Docker<
    */
   async createContainer(dockerApi, containerToCreate, containerName, logContainer) {
     logContainer.info(`Create container ${containerName}`);
+    let newContainer: unknown;
     try {
       let containerToCreatePayload = containerToCreate;
       const endpointsConfig = containerToCreate.NetworkingConfig?.EndpointsConfig || {};
@@ -947,7 +949,7 @@ class Docker<
         );
       }
 
-      const newContainer = await dockerApi.createContainer(containerToCreatePayload);
+      newContainer = await dockerApi.createContainer(containerToCreatePayload);
 
       for (const networkName of additionalNetworkNames) {
         logContainer.info(`Connect container ${containerName} to network ${networkName}`);
@@ -964,6 +966,11 @@ class Docker<
       logContainer.info(`Container ${containerName} recreated on new image with success`);
       return newContainer;
     } catch (e: unknown) {
+      // #macvlan incident: if the container was created but a later network
+      // connect failed, stash the handle on the error so callers up the stack
+      // (rollback/reconciliation paths) can stop+force-remove the orphan
+      // instead of losing it — see created-container-candidate.ts.
+      attachCreatedContainerCandidate(e, newContainer);
       logContainer.warn(`Error when creating container ${containerName} (${getErrorMessage(e)})`);
       throw e;
     }
