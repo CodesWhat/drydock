@@ -638,6 +638,50 @@ export const openApiPaths = {
       },
     },
   },
+  '/api/v1/preferences': {
+    get: {
+      tags: ['System'],
+      summary: 'Get synced UI preferences for the current user',
+      operationId: 'getPreferences',
+      responses: {
+        200: jsonResponse('Preferences payload', { $ref: '#/components/schemas/Preferences' }),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('Sync is not available in anonymous mode'),
+      },
+    },
+    patch: {
+      tags: ['System'],
+      summary: 'Replace synced UI preferences for the current user (full-replace semantics)',
+      operationId: 'updatePreferences',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                apiVersion: { type: 'integer', minimum: 1 },
+                schemaVersion: { type: 'integer', minimum: 1 },
+                preferences: { type: 'object', additionalProperties: true },
+              },
+              required: ['apiVersion', 'schemaVersion', 'preferences'],
+              additionalProperties: false,
+            },
+          },
+        },
+      },
+      responses: {
+        200: jsonResponse('Updated preferences', { $ref: '#/components/schemas/Preferences' }),
+        400: errorResponse('Invalid preferences payload'),
+        401: errorResponse('Authentication required'),
+        403: errorResponse('Sync is not available in anonymous mode'),
+        409: errorResponse('Preferences API version mismatch (apiVersion !== supported version)'),
+        413: errorResponse(
+          'Payload exceeds the global 256kb request body limit applied to all mutating /api/v1/* routes (app/api/api.ts) — no per-route override exists for this endpoint',
+        ),
+      },
+    },
+  },
   '/api/v1/notifications': {
     get: {
       tags: ['Notifications'],

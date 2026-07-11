@@ -509,6 +509,16 @@ export function broadcastScanCompleted(containerId: string, status: string): voi
   broadcastWithId('dd:scan-completed', { containerId, status });
 }
 
+// Payload is username-only by design (#220 — see scope-220-pref-sync.md §3):
+// broadcastWithId has zero per-client identity filtering, so this reaches
+// every connected client of every logged-in user, not just the originating
+// user's other devices/tabs. Never put preference values in this payload.
+// Non-ephemeral (id-stamped, replayable from the ring buffer) so a brief
+// disconnect/reconnect doesn't silently drop the notification.
+export function broadcastPreferencesUpdated(username: string): void {
+  broadcastWithId('dd:preferences-updated', { username });
+}
+
 function broadcastContainerEvent(eventName: string, payload: unknown): void {
   if (!ALLOWED_CONTAINER_EVENT_NAMES.has(eventName)) {
     log.child({ component: 'sse' }).warn(`Dropping invalid SSE container event name: ${eventName}`);

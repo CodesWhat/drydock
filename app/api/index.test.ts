@@ -232,6 +232,7 @@ function mockActualApiRouterStatsLifecycle() {
     './notification-outbox.js',
     './operation.js',
     './preview.js',
+    './preferences.js',
     './registry.js',
     './server.js',
     './settings.js',

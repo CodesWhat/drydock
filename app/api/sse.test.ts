@@ -1910,4 +1910,20 @@ describe('SSE Router', () => {
       expect(mockRegisterAgentStatsChanged).toHaveBeenCalledWith(expect.any(Function));
     });
   });
+
+  test('broadcasts buffered preference updates with an id and username-only payload', () => {
+    const handler = getHandler();
+    const { res } = connectSseClient(handler);
+    sseRouter.broadcastPreferencesUpdated('alice');
+    const frame = res.write.mock.calls.at(-1)?.[0] as string;
+    expect(frame).toContain('id: test-boot-id:');
+    expect(frame).toContain('event: dd:preferences-updated');
+    expect(JSON.parse(frame.match(/data: (.+)\n/)?.[1] ?? '')).toEqual({ username: 'alice' });
+    expect(mockSseEventBuffer.push).toHaveBeenCalledWith(
+      expect.any(String),
+      'dd:preferences-updated',
+      { username: 'alice' },
+      expect.any(Number),
+    );
+  });
 });

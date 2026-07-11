@@ -22,6 +22,7 @@ import * as notificationRouter from './notification.js';
 import * as notificationOutboxRouter from './notification-outbox.js';
 import * as operationRouter from './operation.js';
 import * as portwingRouter from './portwing.js';
+import * as preferencesRouter from './preferences.js';
 import * as previewRouter from './preview.js';
 import {
   createAuthenticatedRouteRateLimitKeyGenerator,
@@ -186,6 +187,9 @@ export function init(): express.Router {
 
   // Mount settings
   router.use('/settings', settingsRouter.init());
+
+  // Mount preferences (per-user synced UI preferences, #220)
+  router.use('/preferences', preferencesRouter.init());
 
   // All other API routes => 404
   router.get('/{*path}', (_req: Request, res: Response) => {
