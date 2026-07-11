@@ -979,6 +979,20 @@ export function isRollbackContainer(container: { name?: unknown }) {
   return isRollbackContainerName(container?.name);
 }
 
+// Strip a trailing "-old-<epoch-ms>" rollback rename suffix repeatedly, not
+// just once — a container that was renamed, recreated, and failed again
+// (nesting a second rollback rename on top of the first, e.g.
+// "app-old-<ms1>-old-<ms2>") would otherwise resolve to "app-old-<ms1>",
+// which still matches isRollbackContainerName and just trips the same guard
+// again on the next attempt.
+export function getCanonicalContainerName(name: string): string {
+  let canonicalName = name;
+  while (isRollbackContainerName(canonicalName)) {
+    canonicalName = canonicalName.replace(OLD_ROLLBACK_CONTAINER_NAME_PATTERN, '');
+  }
+  return canonicalName;
+}
+
 // Production export: needed by store/container.ts to gate lifecycle timestamps
 // on raw-update presence rather than the suppression-aware updateAvailable getter.
 // The following exports are meant for testing only

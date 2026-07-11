@@ -11,6 +11,7 @@ import {
 import { getErrorMessage } from '../../../util/error.js';
 import { getCreatedContainerCandidate } from './created-container-candidate.js';
 import { resolveFunctionDependencies } from './dependency-constructor.js';
+import { buildRollbackCascadeGuardError } from './rollback-cascade-guard.js';
 import { getRequestedOperationId } from './update-runtime-context.js';
 
 type ContainerUpdateLogger = {
@@ -694,13 +695,7 @@ class ContainerUpdateExecutor {
     // renaming/pulling/creating so the operator gets an explanatory error and
     // can clean up the orphan manually.
     if (isRollbackContainerName(oldName)) {
-      const canonicalName = oldName.replace(/-old-\d{10,}$/, '');
-      const cascadeError = new Error(
-        `Container ${oldName} is already renamed from a previous failed update and was never restored. ` +
-          `Refusing to recreate from this name to avoid nesting another rollback rename — manually remove ` +
-          `any orphaned "Created" container squatting ${canonicalName} and rename ${oldName} back to ` +
-          `${canonicalName} (or recreate it from your compose file) before retrying.`,
-      );
+      const cascadeError = buildRollbackCascadeGuardError(oldName);
       updateOperationStore.markOperationTerminal(operation.id, {
         status: 'failed',
         phase: 'failed',

@@ -635,6 +635,37 @@ describe('ContainerUpdateExecutor', () => {
     expect(executor.pullImage).not.toHaveBeenCalled();
   });
 
+  test('execute resolves the true canonical name through a doubly-nested rollback rename', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        Name: '/web-old-1781107685468-old-1781107699999',
+      }),
+    });
+    const executor = createExecutor();
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+      /web-old-1781107685468-old-1781107699999/,
+    );
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'failed',
+        lastError: expect.stringContaining('squatting web '),
+      }),
+    );
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        lastError: expect.not.stringContaining('squatting web-old-1781107685468 '),
+      }),
+    );
+    expect(context.currentContainer.rename).not.toHaveBeenCalled();
+    expect(executor.createContainer).not.toHaveBeenCalled();
+    expect(executor.pullImage).not.toHaveBeenCalled();
+  });
+
   test('execute returns false for dry-run mode after image pull', async () => {
     const pullImage = vi.fn().mockResolvedValue(undefined);
     const executor = createExecutor({
