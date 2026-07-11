@@ -1,8 +1,10 @@
+import { isRollbackContainerName } from '../../../model/container.js';
 import { getErrorMessage } from '../../../util/error.js';
 import {
   cleanupCreatedContainerCandidate,
   getCreatedContainerCandidate,
 } from './created-container-candidate.js';
+import { buildRollbackCascadeGuardError } from './rollback-cascade-guard.js';
 import {
   SELF_UPDATE_HEALTH_TIMEOUT_MS,
   SELF_UPDATE_POLL_INTERVAL_MS,
@@ -154,6 +156,20 @@ async function executeSelfUpdateTransition(
     return false;
   }
 
+  const oldName = currentContainerSpec.Name.replace(/^\//, '');
+
+  // Cascade guard: a container already carries the "-old-<epoch-ms>" rollback
+  // rename suffix, meaning a previous self-update attempt failed mid-transition
+  // and was never restored (see created-container-candidate.ts / the macvlan
+  // incident). Renaming again from this name would nest a second rollback
+  // rename on top of the first and could strand drydock's own updater.
+  // Fail terminally — before any rename, pull, or create — instead of
+  // compounding the mess, mirroring ContainerUpdateExecutor's guard for
+  // regular (non-self) updates.
+  if (isRollbackContainerName(oldName)) {
+    throw buildRollbackCascadeGuardError(oldName);
+  }
+
   const connection = resolveHelperDockerConnection(dependencies, dockerApi, currentContainerSpec);
   if (connection.mode === 'tcp') {
     logContainer.info(
@@ -171,7 +187,6 @@ async function executeSelfUpdateTransition(
     logContainer,
   );
 
-  const oldName = currentContainerSpec.Name.replace(/^\//, '');
   const tempName = `${oldName}-old-${Date.now()}`;
 
   logContainer.info(`Rename container ${oldName} to ${tempName}`);

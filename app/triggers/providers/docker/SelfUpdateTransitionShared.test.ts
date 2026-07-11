@@ -123,6 +123,40 @@ describe('SelfUpdateTransitionShared', () => {
     );
   });
 
+  test('cascade guard: throws before any rename, pull, or create when the container is already a rollback-orphan name', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        Name: '/drydock-old-1781107685468',
+      }),
+    });
+    const dependencies = createDependencies();
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), log),
+    ).rejects.toThrow(/drydock-old-1781107685468/);
+
+    expect(context.currentContainer.rename).not.toHaveBeenCalled();
+    expect(dependencies.insertContainerImageBackup).not.toHaveBeenCalled();
+    expect(dependencies.pullImage).not.toHaveBeenCalled();
+    expect(dependencies.cloneContainer).not.toHaveBeenCalled();
+    expect(dependencies.createContainer).not.toHaveBeenCalled();
+  });
+
+  test('cascade guard: resolves the true canonical name through a doubly-nested rollback rename', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        Name: '/drydock-old-1781107685468-old-1781107699999',
+      }),
+    });
+    const dependencies = createDependencies();
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), log),
+    ).rejects.toThrow(/squatting drydock /);
+  });
+
   test('getErrorMessage coerces non-Error thrown values to string', async () => {
     const context = createContext();
     const dependencies = createDependencies({
