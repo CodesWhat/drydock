@@ -8,6 +8,7 @@ import log from '../../../log/index.js';
 import * as registryStore from '../../../registry';
 import * as backupStore from '../../../store/backup';
 import { createMockRequest, createMockResponse } from '../../../test/helpers.js';
+import { getCreatedContainerCandidate } from './created-container-candidate.js';
 import Docker from './Docker.js';
 
 const configurationValid = {
@@ -5115,6 +5116,46 @@ describe('additional direct wrapper coverage', () => {
     );
 
     expect(startSpy).not.toHaveBeenCalled();
+  });
+
+  test('recreateContainer attaches the created container to the error when start fails after a successful create', async () => {
+    vi.spyOn(docker, 'cloneContainer').mockReturnValue({} as any);
+    const createdContainer = { start: vi.fn(), stop: vi.fn(), remove: vi.fn() };
+    vi.spyOn(docker, 'createContainer').mockResolvedValue(createdContainer as any);
+    const startError = new Error('start failed: denied by socket proxy');
+    vi.spyOn(docker, 'startContainer').mockRejectedValue(startError);
+
+    await expect(
+      docker.recreateContainer(
+        {} as any,
+        { State: { Running: true } } as any,
+        'repo/image:new',
+        { name: 'c1' } as any,
+        createMockLog('info', 'warn', 'debug'),
+      ),
+    ).rejects.toBe(startError);
+
+    expect(getCreatedContainerCandidate(startError)).toBe(createdContainer);
+  });
+
+  test('recreateContainer does not double-attach when createContainer itself fails', async () => {
+    vi.spyOn(docker, 'cloneContainer').mockReturnValue({} as any);
+    const createError = new Error('create failed');
+    vi.spyOn(docker, 'createContainer').mockRejectedValue(createError);
+    const startSpy = vi.spyOn(docker, 'startContainer').mockResolvedValue();
+
+    await expect(
+      docker.recreateContainer(
+        {} as any,
+        { State: { Running: true } } as any,
+        'repo/image:new',
+        { name: 'c1' } as any,
+        createMockLog('info', 'warn', 'debug'),
+      ),
+    ).rejects.toBe(createError);
+
+    expect(startSpy).not.toHaveBeenCalled();
+    expect(getCreatedContainerCandidate(createError)).toBeUndefined();
   });
 
   test('waitForContainerHealthy should wait when health state is initially unavailable', async () => {

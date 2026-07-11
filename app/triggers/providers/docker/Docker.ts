@@ -1154,7 +1154,20 @@ class Docker<
     );
 
     if (currentContainerSpec.State.Running) {
-      await this.startContainer(newContainer, container.name, logContainer);
+      try {
+        await this.startContainer(newContainer, container.name, logContainer);
+      } catch (e: unknown) {
+        // #macvlan incident: createContainer already succeeded here, so the
+        // handle isn't lost the way an in-flight create failure is — but
+        // startContainer's own catch only logs+rethrows, so without this the
+        // created-but-unstarted container would still squat the canonical
+        // name with nothing recovering it. Attach it the same way
+        // createContainer does so every consumer that recovers orphans via
+        // getCreatedContainerCandidate(error) (HealthMonitor, backup
+        // rollback, Dockercompose) picks it up too.
+        attachCreatedContainerCandidate(e, newContainer);
+        throw e;
+      }
     }
   }
 

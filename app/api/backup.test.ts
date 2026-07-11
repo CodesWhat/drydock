@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
 import { attachCreatedContainerCandidate } from '../triggers/providers/docker/created-container-candidate.js';
+import Docker from '../triggers/providers/docker/Docker.js';
 
 const {
   mockRouter,
@@ -32,6 +33,7 @@ vi.mock('../store/backup', () => ({
   getBackupsByName: mockGetBackupsByName,
   getAllBackups: mockGetAllBackups,
   getBackup: mockGetBackup,
+  pruneOldBackups: vi.fn(),
 }));
 
 vi.mock('../registry', () => ({
@@ -615,6 +617,65 @@ describe('Backup Router', () => {
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({
         error: 'connect EACCES: denied by socket proxy',
+      });
+    });
+
+    test('recovers the orphan through the REAL Docker.recreateContainer create-then-start path when start fails', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { registry: { name: 'hub' } },
+      };
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([
+        {
+          id: 'b1',
+          containerId: 'c1',
+          imageName: 'library/nginx',
+          imageTag: '1.24',
+        },
+      ]);
+
+      const realDocker = new Docker();
+      vi.spyOn(realDocker, 'cloneContainer').mockReturnValue({ Name: '/nginx' });
+
+      const newContainerHandle = {
+        start: vi.fn().mockRejectedValue(new Error('start failed: denied by socket proxy')),
+        stop: vi.fn().mockResolvedValue(undefined),
+        remove: vi.fn().mockResolvedValue(undefined),
+      };
+      const dockerApi = {
+        createContainer: vi.fn().mockResolvedValue(newContainerHandle),
+      };
+
+      const mockCurrentContainer = {};
+      const mockContainerSpec = { State: { Running: true } };
+      const mockTrigger = {
+        type: 'docker',
+        getWatcher: vi.fn(() => ({ dockerApi })),
+        pullImage: vi.fn().mockResolvedValue(undefined),
+        getCurrentContainer: vi.fn().mockResolvedValue(mockCurrentContainer),
+        inspectContainer: vi.fn().mockResolvedValue(mockContainerSpec),
+        stopAndRemoveContainer: vi.fn().mockResolvedValue(undefined),
+        recreateContainer: realDocker.recreateContainer.bind(realDocker),
+      };
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.default': mockTrigger },
+        registry: { hub: { getAuthPull: vi.fn().mockResolvedValue({}) } },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(dockerApi.createContainer).toHaveBeenCalledTimes(1);
+      expect(newContainerHandle.start).toHaveBeenCalledTimes(1);
+      expect(newContainerHandle.stop).toHaveBeenCalledTimes(1);
+      expect(newContainerHandle.remove).toHaveBeenCalledWith({ force: true });
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'start failed: denied by socket proxy',
       });
     });
   });
