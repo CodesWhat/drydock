@@ -2,6 +2,10 @@ import { getAuditCounter } from '../../../prometheus/audit.js';
 import * as auditStore from '../../../store/audit.js';
 import * as backupStore from '../../../store/backup.js';
 import { getErrorMessage } from '../../../util/error.js';
+import {
+  cleanupCreatedContainerCandidate,
+  getCreatedContainerCandidate,
+} from './created-container-candidate.js';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -175,6 +179,11 @@ async function performRollback(context: RollbackContext): Promise<void> {
     recordRollbackSuccess(containerName, backupImageTag, latestBackup.imageTag);
     log.info(`Auto-rollback of container ${containerName} completed successfully`);
   } catch (error: unknown) {
+    // recreateContainer may have created a replacement before a later step
+    // (e.g. an additional-network connect) failed. The original container was
+    // already stopped/removed above, so there's no name to rename back to —
+    // just reclaim the orphan so it doesn't squat the container name.
+    await cleanupCreatedContainerCandidate(getCreatedContainerCandidate(error), containerName, log);
     const message = getErrorMessage(error);
     log.error(`Auto-rollback failed for container ${containerName}: ${message}`);
     recordRollbackError(containerName, message);

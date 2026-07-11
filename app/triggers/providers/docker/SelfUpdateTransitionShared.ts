@@ -1,5 +1,9 @@
 import { getErrorMessage } from '../../../util/error.js';
 import {
+  cleanupCreatedContainerCandidate,
+  getCreatedContainerCandidate,
+} from './created-container-candidate.js';
+import {
   SELF_UPDATE_HEALTH_TIMEOUT_MS,
   SELF_UPDATE_POLL_INTERVAL_MS,
   SELF_UPDATE_START_TIMEOUT_MS,
@@ -190,6 +194,10 @@ async function executeSelfUpdateTransition(
     logContainer.warn(
       `Failed to create new container, rolling back rename: ${getErrorMessage(e, String(e))}`,
     );
+    // The container may have been created before a later step (e.g. an
+    // additional-network connect) failed — reclaim it off the error before
+    // renaming back so it doesn't orphan and squat the canonical name.
+    await cleanupCreatedContainerCandidate(getCreatedContainerCandidate(e), oldName, logContainer);
     await currentContainer.rename({ name: oldName });
     throw e;
   }

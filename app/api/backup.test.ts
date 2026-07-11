@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createMockRequest, createMockResponse } from '../test/helpers.js';
+import { attachCreatedContainerCandidate } from '../triggers/providers/docker/created-container-candidate.js';
 
 const {
   mockRouter,
@@ -37,8 +38,11 @@ vi.mock('../registry', () => ({
   getState: mockGetState,
 }));
 
+const { mockBackupLog } = vi.hoisted(() => ({
+  mockBackupLog: { info: vi.fn(), warn: vi.fn(), debug: vi.fn() },
+}));
 vi.mock('../log', () => ({
-  default: { child: vi.fn(() => ({ info: vi.fn(), warn: vi.fn(), debug: vi.fn() })) },
+  default: { child: vi.fn(() => mockBackupLog) },
 }));
 
 import * as backupRouter from './backup.js';
@@ -504,6 +508,114 @@ describe('Backup Router', () => {
 
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ error: 'pull failed as string' });
+    });
+
+    test('cleans up an orphaned candidate attached to a recreateContainer failure', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { registry: { name: 'hub' } },
+      };
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([
+        {
+          id: 'b1',
+          containerId: 'c1',
+          imageName: 'library/nginx',
+          imageTag: '1.24',
+        },
+      ]);
+
+      const orphanCandidate = {
+        stop: vi.fn().mockResolvedValue(undefined),
+        remove: vi.fn().mockResolvedValue(undefined),
+      };
+      const connectError = new Error('connect EACCES: denied by socket proxy');
+      attachCreatedContainerCandidate(connectError, orphanCandidate);
+
+      const mockCurrentContainer = {};
+      const mockContainerSpec = { State: { Running: true } };
+      const mockTrigger = {
+        type: 'docker',
+        getWatcher: vi.fn(() => ({ dockerApi: {} })),
+        pullImage: vi.fn().mockResolvedValue(undefined),
+        getCurrentContainer: vi.fn().mockResolvedValue(mockCurrentContainer),
+        inspectContainer: vi.fn().mockResolvedValue(mockContainerSpec),
+        stopAndRemoveContainer: vi.fn().mockResolvedValue(undefined),
+        recreateContainer: vi.fn().mockRejectedValue(connectError),
+      };
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.default': mockTrigger },
+        registry: { hub: { getAuthPull: vi.fn().mockResolvedValue({}) } },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(orphanCandidate.stop).toHaveBeenCalledTimes(1);
+      expect(orphanCandidate.remove).toHaveBeenCalledWith({ force: true });
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'connect EACCES: denied by socket proxy',
+      });
+    });
+
+    test('warns but still reports rollback error when orphaned-candidate cleanup itself fails', async () => {
+      const handler = getHandler('post', '/:id/rollback');
+      const container = {
+        id: 'c1',
+        name: 'nginx',
+        image: { registry: { name: 'hub' } },
+      };
+      mockGetContainer.mockReturnValue(container);
+      mockGetBackupsByName.mockReturnValue([
+        {
+          id: 'b1',
+          containerId: 'c1',
+          imageName: 'library/nginx',
+          imageTag: '1.24',
+        },
+      ]);
+
+      const orphanCandidate = {
+        stop: vi.fn().mockRejectedValue(new Error('stop exploded')),
+        remove: vi.fn().mockRejectedValue('remove exploded as string'),
+      };
+      const connectError = new Error('connect EACCES: denied by socket proxy');
+      attachCreatedContainerCandidate(connectError, orphanCandidate);
+
+      const mockCurrentContainer = {};
+      const mockContainerSpec = { State: { Running: true } };
+      const mockTrigger = {
+        type: 'docker',
+        getWatcher: vi.fn(() => ({ dockerApi: {} })),
+        pullImage: vi.fn().mockResolvedValue(undefined),
+        getCurrentContainer: vi.fn().mockResolvedValue(mockCurrentContainer),
+        inspectContainer: vi.fn().mockResolvedValue(mockContainerSpec),
+        stopAndRemoveContainer: vi.fn().mockResolvedValue(undefined),
+        recreateContainer: vi.fn().mockRejectedValue(connectError),
+      };
+      mockGetState.mockReturnValue({
+        trigger: { 'docker.default': mockTrigger },
+        registry: { hub: { getAuthPull: vi.fn().mockResolvedValue({}) } },
+      });
+
+      const req = createMockRequest({ params: { id: 'c1' } });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(mockBackupLog.warn).toHaveBeenCalledWith(
+        'Unable to stop orphaned replacement container nginx (stop exploded)',
+      );
+      expect(mockBackupLog.warn).toHaveBeenCalledWith(
+        'Unable to remove orphaned replacement container nginx (remove exploded as string)',
+      );
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'connect EACCES: denied by socket proxy',
+      });
     });
   });
 });
