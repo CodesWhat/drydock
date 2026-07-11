@@ -998,7 +998,7 @@ class ContainerUpdateExecutor {
     // handle may still be recoverable off the error (see created-container-candidate.ts),
     // so it doesn't get orphaned squatting the canonical container name.
     await this.cleanupNewContainerBestEffort(
-      attemptState.newContainer ?? getCreatedContainerCandidate(error),
+      attemptState.newContainer ?? getCreatedContainerCandidate<DockerContainerHandle>(error),
       preparedExecution.oldName,
       logContainer,
     );

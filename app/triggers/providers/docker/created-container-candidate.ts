@@ -25,11 +25,11 @@ export function attachCreatedContainerCandidate(error: unknown, candidateContain
   (error as CreatedContainerCandidateError).createdContainerCandidate = candidateContainer;
 }
 
-export function getCreatedContainerCandidate(error: unknown): unknown {
+export function getCreatedContainerCandidate<T = unknown>(error: unknown): T | undefined {
   if (!error || typeof error !== 'object') {
     return undefined;
   }
-  return (error as CreatedContainerCandidateError).createdContainerCandidate;
+  return (error as CreatedContainerCandidateError).createdContainerCandidate as T | undefined;
 }
 
 /**

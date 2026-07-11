@@ -923,7 +923,7 @@ class Docker<
    */
   async createContainer(dockerApi, containerToCreate, containerName, logContainer) {
     logContainer.info(`Create container ${containerName}`);
-    let newContainer: unknown;
+    let newContainer;
     try {
       let containerToCreatePayload = containerToCreate;
       const endpointsConfig = containerToCreate.NetworkingConfig?.EndpointsConfig || {};
