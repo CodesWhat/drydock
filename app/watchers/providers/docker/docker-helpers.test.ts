@@ -369,7 +369,9 @@ describe('docker helper extraction module', () => {
     expect(
       isDigestToWatch('true', { domain: undefined, path: 'library/nginx' }, false, 'floating'),
     ).toBe(true);
-    expect(warnSpy).toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Watching digest for image library/nginx with domain docker.io may result in throttled requests',
+    );
 
     warnSpy.mockRestore();
   });
