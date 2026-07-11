@@ -157,6 +157,27 @@ describe('SelfUpdateTransitionShared', () => {
     ).rejects.toThrow(/squatting drydock /);
   });
 
+  test('cascade guard: throws even in dry-run mode when the container is already a rollback-orphan name', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        Name: '/drydock-old-1781107685468',
+      }),
+    });
+    const dependencies = createDependencies({ getConfiguration: () => ({ dryrun: true }) });
+    const log = { info: vi.fn(), warn: vi.fn() };
+
+    await expect(
+      executeSelfUpdateTransition(dependencies, context, createContainer(), log),
+    ).rejects.toThrow(/drydock-old-1781107685468/);
+
+    expect(context.currentContainer.rename).not.toHaveBeenCalled();
+    expect(dependencies.insertContainerImageBackup).not.toHaveBeenCalled();
+    expect(dependencies.pullImage).not.toHaveBeenCalled();
+    expect(log.info).not.toHaveBeenCalledWith(
+      'Do not replace the existing container because dry-run mode is enabled',
+    );
+  });
+
   test('getErrorMessage coerces non-Error thrown values to string', async () => {
     const context = createContext();
     const dependencies = createDependencies({

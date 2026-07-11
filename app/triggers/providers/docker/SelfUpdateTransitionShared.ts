@@ -151,11 +151,6 @@ async function executeSelfUpdateTransition(
 ) {
   const { dockerApi, auth, newImage, currentContainer, currentContainerSpec } = context;
 
-  if (dependencies.getConfiguration()?.dryrun) {
-    logContainer.info('Do not replace the existing container because dry-run mode is enabled');
-    return false;
-  }
-
   const oldName = currentContainerSpec.Name.replace(/^\//, '');
 
   // Cascade guard: a container already carries the "-old-<epoch-ms>" rollback
@@ -163,11 +158,17 @@ async function executeSelfUpdateTransition(
   // and was never restored (see created-container-candidate.ts / the macvlan
   // incident). Renaming again from this name would nest a second rollback
   // rename on top of the first and could strand drydock's own updater.
-  // Fail terminally — before any rename, pull, or create — instead of
-  // compounding the mess, mirroring ContainerUpdateExecutor's guard for
-  // regular (non-self) updates.
+  // Fail terminally — before the dry-run short-circuit, or any rename, pull,
+  // or create — instead of compounding the mess, mirroring
+  // ContainerUpdateExecutor's guard for regular (non-self) updates, which
+  // also runs its cascade check ahead of its dry-run check.
   if (isRollbackContainerName(oldName)) {
     throw buildRollbackCascadeGuardError(oldName);
+  }
+
+  if (dependencies.getConfiguration()?.dryrun) {
+    logContainer.info('Do not replace the existing container because dry-run mode is enabled');
+    return false;
   }
 
   const connection = resolveHelperDockerConnection(dependencies, dockerApi, currentContainerSpec);
