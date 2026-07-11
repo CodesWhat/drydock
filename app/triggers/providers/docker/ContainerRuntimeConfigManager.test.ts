@@ -46,7 +46,7 @@ describe('ContainerRuntimeConfigManager', () => {
     ).toEqual({});
   });
 
-  test('sanitizeEndpointConfig should keep supported fields and remove self aliases', () => {
+  test('sanitizeEndpointConfig should keep supported fields, drop the auto-assigned MacAddress, and remove self aliases', () => {
     const manager = createManager();
 
     const sanitized = manager.sanitizeEndpointConfig(
@@ -65,9 +65,78 @@ describe('ContainerRuntimeConfigManager', () => {
       IPAMConfig: { IPv4Address: '10.0.0.8' },
       Links: ['a:b'],
       DriverOpts: { mtu: '1450' },
-      MacAddress: '02:42:ac:11:00:02',
       Aliases: ['peer'],
     });
+  });
+
+  test('sanitizeEndpointConfig should drop an auto-assigned-only MacAddress (no DesiredMacAddress, no legacy Config.MacAddress)', () => {
+    const manager = createManager();
+
+    const sanitized = manager.sanitizeEndpointConfig(
+      {
+        MacAddress: '02:42:ac:11:00:02',
+      },
+      'container-123',
+    );
+
+    expect(sanitized).not.toHaveProperty('MacAddress');
+  });
+
+  test('sanitizeEndpointConfig should forward DesiredMacAddress when present', () => {
+    const manager = createManager();
+
+    const sanitized = manager.sanitizeEndpointConfig(
+      {
+        MacAddress: '02:42:ac:11:00:02',
+        DesiredMacAddress: '02:42:ac:11:00:99',
+      },
+      'container-123',
+    );
+
+    expect(sanitized.MacAddress).toBe('02:42:ac:11:00:99');
+  });
+
+  test('sanitizeEndpointConfig should fall back to the legacy container-wide Config.MacAddress when non-empty', () => {
+    const manager = createManager();
+
+    const sanitized = manager.sanitizeEndpointConfig(
+      {
+        MacAddress: '02:42:ac:11:00:02',
+      },
+      'container-123',
+      '02:42:ac:11:00:77',
+    );
+
+    expect(sanitized.MacAddress).toBe('02:42:ac:11:00:77');
+  });
+
+  test('sanitizeEndpointConfig should prefer DesiredMacAddress over the legacy Config.MacAddress when both are present', () => {
+    const manager = createManager();
+
+    const sanitized = manager.sanitizeEndpointConfig(
+      {
+        MacAddress: '02:42:ac:11:00:02',
+        DesiredMacAddress: '02:42:ac:11:00:99',
+      },
+      'container-123',
+      '02:42:ac:11:00:77',
+    );
+
+    expect(sanitized.MacAddress).toBe('02:42:ac:11:00:99');
+  });
+
+  test('sanitizeEndpointConfig should drop MacAddress when legacy Config.MacAddress is an empty string', () => {
+    const manager = createManager();
+
+    const sanitized = manager.sanitizeEndpointConfig(
+      {
+        MacAddress: '02:42:ac:11:00:02',
+      },
+      'container-123',
+      '',
+    );
+
+    expect(sanitized).not.toHaveProperty('MacAddress');
   });
 
   test('getPrimaryNetworkName should honor explicit network mode and fallback to first network', () => {

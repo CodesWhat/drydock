@@ -1029,11 +1029,13 @@ class Docker<
     } = this.runtimeConfigManager.buildCloneRuntimeConfigOptions(runtimeOptionsOrLogContainer);
     const containerName = currentContainer.Name.replace('/', '');
     const currentContainerNetworks = currentContainer.NetworkSettings?.Networks || {};
+    const legacyContainerMacAddress = currentContainer.Config?.MacAddress;
     const endpointsConfig = Object.entries(currentContainerNetworks).reduce(
       (acc: Record<string, unknown>, [networkName, endpointConfig]) => {
         acc[networkName] = this.runtimeConfigManager.sanitizeEndpointConfig(
           endpointConfig as Record<string, unknown> | null | undefined,
           currentContainer.Id,
+          legacyContainerMacAddress,
         );
         return acc;
       },

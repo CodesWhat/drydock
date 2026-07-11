@@ -909,6 +909,50 @@ test('clone should remove dynamic network endpoint fields and stale aliases', as
   });
 });
 
+test('cloneContainer should drop the auto-assigned endpoint MacAddress when Config.MacAddress is not set', () => {
+  const clone = docker.cloneContainer(
+    {
+      Name: '/macvlan-app',
+      Id: 'abc123',
+      HostConfig: { NetworkMode: 'macvlan_net' },
+      Config: { configA: 'a' },
+      NetworkSettings: {
+        Networks: {
+          macvlan_net: {
+            IPAMConfig: { IPv4Address: '192.168.1.50' },
+            MacAddress: '02:42:c0:a8:01:32',
+          },
+        },
+      },
+    },
+    'test/test:2.0.0',
+  );
+
+  expect(clone.NetworkingConfig.EndpointsConfig.macvlan_net).not.toHaveProperty('MacAddress');
+});
+
+test('cloneContainer should forward the legacy container-wide Config.MacAddress to the endpoint config', () => {
+  const clone = docker.cloneContainer(
+    {
+      Name: '/macvlan-app',
+      Id: 'abc123',
+      HostConfig: { NetworkMode: 'macvlan_net' },
+      Config: { configA: 'a', MacAddress: '02:42:c0:a8:01:99' },
+      NetworkSettings: {
+        Networks: {
+          macvlan_net: {
+            IPAMConfig: { IPv4Address: '192.168.1.50' },
+            MacAddress: '02:42:c0:a8:01:32',
+          },
+        },
+      },
+    },
+    'test/test:2.0.0',
+  );
+
+  expect(clone.NetworkingConfig.EndpointsConfig.macvlan_net.MacAddress).toBe('02:42:c0:a8:01:99');
+});
+
 test('cloneContainer should remove Hostname and ExposedPorts when NetworkMode starts with container:', () => {
   const clone = docker.cloneContainer(
     {
