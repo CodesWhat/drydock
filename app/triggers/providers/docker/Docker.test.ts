@@ -931,7 +931,7 @@ test('cloneContainer should drop the auto-assigned endpoint MacAddress when Conf
   expect(clone.NetworkingConfig.EndpointsConfig.macvlan_net).not.toHaveProperty('MacAddress');
 });
 
-test('cloneContainer should forward the legacy container-wide Config.MacAddress to the endpoint config', () => {
+test('cloneContainer should forward the legacy container-wide Config.MacAddress to the endpoint config and retain the root field for API < 1.44 back-compat', () => {
   const clone = docker.cloneContainer(
     {
       Name: '/macvlan-app',
@@ -951,10 +951,14 @@ test('cloneContainer should forward the legacy container-wide Config.MacAddress 
   );
 
   expect(clone.NetworkingConfig.EndpointsConfig.macvlan_net.MacAddress).toBe('02:42:c0:a8:01:99');
-  expect(clone.MacAddress).toBeUndefined();
+  // Root MacAddress is intentionally retained (equal to the primary
+  // endpoint's) when the MAC was explicitly configured, since moby's
+  // handleMACAddressBC discards the EndpointsConfig MacAddress on daemons
+  // older than API 1.44 when the root field is empty.
+  expect(clone.MacAddress).toBe('02:42:c0:a8:01:99');
 });
 
-test('cloneContainer should only forward legacy Config.MacAddress to the primary network on a multi-network container', () => {
+test('cloneContainer should only forward legacy Config.MacAddress to the primary network on a multi-network container, retaining the matching root field', () => {
   const clone = docker.cloneContainer(
     {
       Name: '/macvlan-app',
@@ -973,7 +977,29 @@ test('cloneContainer should only forward legacy Config.MacAddress to the primary
 
   expect(clone.NetworkingConfig.EndpointsConfig.macvlan_net.MacAddress).toBe('02:42:c0:a8:01:99');
   expect(clone.NetworkingConfig.EndpointsConfig.bridge).not.toHaveProperty('MacAddress');
-  expect(clone.MacAddress).toBeUndefined();
+  expect(clone.MacAddress).toBe('02:42:c0:a8:01:99');
+});
+
+test('cloneContainer should attribute the legacy Config.MacAddress to "bridge" when NetworkMode is "default"', () => {
+  const clone = docker.cloneContainer(
+    {
+      Name: '/bridge-app',
+      Id: 'abc123',
+      HostConfig: { NetworkMode: 'default' },
+      Config: { configA: 'a', MacAddress: '02:42:c0:a8:01:99' },
+      NetworkSettings: {
+        Networks: {
+          'app-net': { IPAMConfig: { IPv4Address: '192.168.1.50' } },
+          bridge: { IPAMConfig: { IPv4Address: '172.17.0.2' } },
+        },
+      },
+    },
+    'test/test:2.0.0',
+  );
+
+  expect(clone.NetworkingConfig.EndpointsConfig.bridge.MacAddress).toBe('02:42:c0:a8:01:99');
+  expect(clone.NetworkingConfig.EndpointsConfig['app-net']).not.toHaveProperty('MacAddress');
+  expect(clone.MacAddress).toBe('02:42:c0:a8:01:99');
 });
 
 test('cloneContainer should drop the auto-assigned endpoint MacAddress on every network of a multi-network container when Config.MacAddress is not set', () => {

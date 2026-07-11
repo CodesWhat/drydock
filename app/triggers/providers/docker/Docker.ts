@@ -1088,10 +1088,22 @@ class Docker<
     // clonedContainerConfig, which carries Config.MacAddress verbatim) is
     // superseded by the primary network's endpoint-level MacAddress set
     // above via sanitizeEndpointConfig — that's now the canonical carrier.
-    // Leaving the root-level copy in place would re-pin the OLD container's
-    // MAC a second time and trips MAC-denying socket proxies (e.g.
-    // sockguard) that reject an explicit root MacAddress on create.
-    delete containerClone.MacAddress;
+    // But on daemons older than API 1.44, moby's handleMACAddressBC discards
+    // an EndpointsConfig MacAddress entirely when the root field is empty
+    // ("If a MAC address is supplied in EndpointsConfig, discard it because
+    // the old API would have ignored it") — so clearing the root field
+    // unconditionally would silently drop an explicitly-configured MAC on
+    // those daemons. On API >= 1.44 a root field that matches the primary
+    // endpoint's MAC is accepted (the 400 only fires on a mismatch), and it
+    // always does match here since both are set from legacyContainerMacAddress
+    // via sanitizeEndpointConfig above. So: keep the root field as a
+    // back-compat carrier when the MAC was explicitly configured, and delete
+    // it otherwise so a daemon-assigned MAC regenerates and doesn't trip
+    // MAC-denying socket proxies (e.g. sockguard) that reject an explicit
+    // root MacAddress on create.
+    if (!legacyContainerMacAddress) {
+      delete containerClone.MacAddress;
+    }
     // Handle situation when container is using network_mode: service:other_service
     if (containerClone.HostConfig?.NetworkMode?.startsWith('container:')) {
       delete containerClone.Hostname;
