@@ -539,8 +539,8 @@ describe('image-comparison', () => {
 
     const result = await findNewVersion(container as never, log);
 
-    // The pinned tag itself is what gets queried — no semver climbing.
-    expect(getImageManifestDigest.mock.calls[0][0].tag.value).toBe('1.2.3');
+    // The pinned tag itself is the only digest query — no semver climbing.
+    expect(getImageManifestDigest.mock.calls.map(([image]) => image.tag.value)).toEqual(['1.2.3']);
     expect(result.digest).toBe('sha256:newmanifest');
     expect(result.noUpdateReason).toBeUndefined();
     expect(result.tag).toBe('1.2.3');
