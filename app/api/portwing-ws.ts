@@ -273,6 +273,7 @@ export function disconnectByKeyId(keyId: string): number {
       // the close window can't be dispatched under a just-revoked key — see
       // EdgeAgentAdapter.terminate().
       adapter.terminate('unknown-key', 'key revoked', 1008);
+      /* v8 ignore start -- defensive: processHello registers every live session with an adapter in lockstep, so this fallback only fires on an impossible session/adapter registry desync */
     } else {
       // Defensive fallback: shouldn't happen post-hello (every live session
       // gets an adapter registered alongside it in processHello), but never
@@ -280,6 +281,7 @@ export function disconnectByKeyId(keyId: string): number {
       // desynced from the session registry.
       sendErrorAndClose(ws, 'unknown-key', 'key revoked', 1008);
     }
+    /* v8 ignore stop */
     count++;
   }
   liveSessionsByKeyId.delete(keyId);
