@@ -3,6 +3,7 @@ import mockCron from 'node-cron';
 import * as configuration from '../../configuration/index.js';
 import * as event from '../../event/index.js';
 import log from '../../log/index.js';
+import { validate as validateContainer } from '../../model/container.js';
 import * as auditStore from '../../store/audit.js';
 import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
@@ -529,6 +530,24 @@ const handleContainerReportTestCases = [
     kind: 'tag',
     semverDiff: 'major',
   },
+  // #498: this row is shape-identical to what a pinned container's report
+  // looks like once an informational updateInsight is populated —
+  // updateAvailable stays false and updateKind stays 'unknown'. threshold=
+  // 'all' alone would otherwise let an unknown-kind update through (see
+  // trigger-threshold.ts isAllThreshold), so this shows the updateAvailable
+  // gate — not the threshold check — is what stops it. It does NOT itself
+  // exercise result.updateInsight (this container literal has no result at
+  // all); for the real end-to-end proof, built through container.validate()
+  // with a populated result.updateInsight, see the dedicated test below.
+  {
+    shouldTrigger: false,
+    threshold: 'all',
+    once: true,
+    changed: true,
+    updateAvailable: false,
+    kind: 'unknown',
+    semverDiff: undefined,
+  },
 ];
 
 test.each(
@@ -565,6 +584,52 @@ test.each(
   } else {
     expect(spy).not.toHaveBeenCalled();
   }
+});
+
+// #498: authoritative end-to-end regression. Builds a container through the
+// real model validator (not a hand-rolled literal) with result.updateInsight
+// populated and result.tag equal to the pinned tag so updateAvailable derives
+// false naturally — exactly what findNewVersion() produces for a container
+// caught by the pin gate. Proves the whole pipeline (container.validate() ->
+// handleContainerReport() -> trigger()) never fires for an insight-only
+// container, not just that the underlying predicates would say so in
+// isolation.
+test('handleContainerReport never triggers for a pinned container whose only signal is an informational updateInsight (#498)', async () => {
+  const insightOnlyContainer = validateContainer({
+    id: 'container-498',
+    name: 'container1',
+    watcher: 'test',
+    image: {
+      id: 'image-498',
+      registry: { name: 'hub', url: 'https://hub' },
+      name: 'organization/image',
+      tag: { value: 'v1.13.3', semver: true, tagPrecision: 'specific' },
+      digest: { watch: false },
+      architecture: 'arch',
+      os: 'os',
+    },
+    result: {
+      tag: 'v1.13.3',
+      updateInsight: { tag: 'v1.46.1', kind: 'minor' },
+    },
+  });
+
+  // Sanity-check the fixture actually represents the pin-gate shape this
+  // test claims to exercise, before asserting on the trigger dispatch.
+  expect(insightOnlyContainer.updateAvailable).toBe(false);
+  expect(insightOnlyContainer.result?.updateInsight).toEqual({ tag: 'v1.46.1', kind: 'minor' });
+
+  trigger.configuration = {
+    threshold: 'all',
+    once: true,
+    mode: 'simple',
+  };
+  await trigger.init();
+
+  const spy = vi.spyOn(trigger, 'trigger');
+  await trigger.handleContainerReport({ changed: true, container: insightOnlyContainer });
+
+  expect(spy).not.toHaveBeenCalled();
 });
 
 test('handleContainerReport should warn when trigger method of the trigger fails', async () => {

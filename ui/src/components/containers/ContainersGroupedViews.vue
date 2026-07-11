@@ -23,6 +23,7 @@ import {
 } from '../../utils/update-eligibility';
 import type { Container } from '../../types/container';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
+import UpdateInsightBadge from './UpdateInsightBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
 import ProjectLink from './ProjectLink.vue';
 import ContainersGroupHeader from './ContainersGroupHeader.vue';
@@ -695,6 +696,7 @@ onScopeDispose(() => {
               {{ getUpdateMaturityLabel(c.updateMaturity) }}
             </span>
             <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
+            <UpdateInsightBadge :insight="c.updateInsight" />
           </div>
         </template>
         <!-- Status -->
@@ -1052,8 +1054,9 @@ onScopeDispose(() => {
                  (see the footer actions row below); rendering the full non-icon-only
                  ReleaseNotesLink inline here dumped the entire intermediate-release tree into the
                  card and blew its height out. Body keeps only the small suggested-tag pill. -->
-            <div v-if="c.suggestedTag" class="flex items-center gap-2 flex-wrap mt-2">
+            <div v-if="c.suggestedTag || c.updateInsight" class="flex items-center gap-2 flex-wrap mt-2">
               <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
+              <UpdateInsightBadge :insight="c.updateInsight" />
             </div>
           </div>
 

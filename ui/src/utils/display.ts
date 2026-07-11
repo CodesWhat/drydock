@@ -111,3 +111,14 @@ export function maturityColor(maturity: string | null) {
 export function suggestedTagColor() {
   return { bg: 'var(--dd-alt-muted)', text: 'var(--dd-alt)' };
 }
+
+/**
+ * Color for the pin-gate informational insight badge (#498). Uses the `info`
+ * token, which none of the four `updateKindColor()` kinds use (major=danger,
+ * minor=warning, patch=primary, digest=neutral) — this badge must never
+ * share a color with any of them, since an insight badge and an actionable
+ * update-kind badge can legitimately render side by side on the same row.
+ */
+export function updateInsightColor() {
+  return { bg: 'var(--dd-info-muted)', text: 'var(--dd-info)' };
+}

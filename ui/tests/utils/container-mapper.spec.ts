@@ -1509,6 +1509,61 @@ describe('container-mapper', () => {
     });
   });
 
+  describe('updateInsight (#498)', () => {
+    it('maps updateInsight from result when tag and kind are valid', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          result: { tag: '1.13.3', updateInsight: { tag: '1.46.1', kind: 'minor' } },
+        }),
+      );
+      expect(c.updateInsight).toEqual({ tag: '1.46.1', kind: 'minor' });
+    });
+
+    it('returns undefined when result.updateInsight is missing', () => {
+      const c = mapApiContainer(makeApiContainer({ result: { tag: '1.13.3' } }));
+      expect(c.updateInsight).toBeUndefined();
+    });
+
+    it('returns undefined when result is null', () => {
+      const c = mapApiContainer(makeApiContainer({ result: null }));
+      expect(c.updateInsight).toBeUndefined();
+    });
+
+    it('returns undefined when updateInsight is not an object', () => {
+      const c = mapApiContainer(
+        makeApiContainer({ result: { tag: '1.13.3', updateInsight: 'nope' } }),
+      );
+      expect(c.updateInsight).toBeUndefined();
+    });
+
+    it('returns undefined when updateInsight.tag is missing or blank', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          result: { tag: '1.13.3', updateInsight: { tag: '   ', kind: 'minor' } },
+        }),
+      );
+      expect(c.updateInsight).toBeUndefined();
+    });
+
+    it('returns undefined when updateInsight.kind is not one of major/minor/patch', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          result: { tag: '1.13.3', updateInsight: { tag: '1.46.1', kind: 'prerelease' } },
+        }),
+      );
+      expect(c.updateInsight).toBeUndefined();
+    });
+
+    it('returns undefined when updateInsight.kind is missing (non-string)', () => {
+      const c = mapApiContainer(
+        makeApiContainer({
+          result: { tag: '1.13.3', updateInsight: { tag: '1.46.1' } },
+        }),
+      );
+      expect(c.updateInsight).toBeUndefined();
+    });
+  });
+
   describe('sourceRepo', () => {
     it('maps sourceRepo from API container', () => {
       const c = mapApiContainer(makeApiContainer({ sourceRepo: 'https://github.com/nginx/nginx' }));

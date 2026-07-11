@@ -83,6 +83,13 @@ export interface ContainerResult {
   link?: string;
   noUpdateReason?: string;
   releaseNotes?: ContainerReleaseNotes;
+  // #498: pure information about the best newer same-family tag for a
+  // container caught by the pin gate. Additive only — never consulted by
+  // updateAvailable/updateKind or trigger dispatch.
+  updateInsight?: {
+    tag: string;
+    kind: 'major' | 'minor' | 'patch';
+  };
 }
 
 export interface ContainerReleaseNotes {
@@ -360,6 +367,10 @@ const schema = joi.object({
       url: joi.string().required(),
       publishedAt: joi.string().isoDate().required(),
       provider: joi.string().valid('github', 'gitlab', 'gitea').required(),
+    }),
+    updateInsight: joi.object({
+      tag: joi.string().min(1).required(),
+      kind: joi.string().valid('major', 'minor', 'patch').required(),
     }),
   }),
   error: joi.object({

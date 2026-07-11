@@ -9,6 +9,7 @@ import {
   getFirstDigitIndex,
   getNumericTagShape,
   getTagCandidates,
+  isPrereleaseSuffix,
 } from './tag-candidates.js';
 
 function createContainer(overrides: Record<string, unknown> = {}) {
@@ -1052,5 +1053,546 @@ describe('docker tag candidates module', () => {
     expect(log.warn).toHaveBeenCalledWith(
       expect.stringContaining('No tags found in the same inferred family'),
     );
+  });
+
+  // #498: loose mode previously bypassed the suffix/variant guard entirely
+  // (isSemverFamilyMatch returned true before isStrictFamilyMatch/isSuffixCompatible
+  // ever ran). Fixed so loose still requires a compatible suffix; it only relaxes
+  // prefix equality and leading-zero rules.
+  test('loose mode still enforces the suffix/variant guard — a bare tag is not a candidate for a suffixed reference (#498)', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '1.2.3-ls132',
+          semver: true,
+        },
+      },
+      tagFamily: 'loose',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const result = getTagCandidates(container, ['1.2.3-ls132', '1.2.4', '1.2.4-ls133'], log);
+
+    // '1.2.4' (bare) is rejected — only the same-variant '1.2.4-ls133' remains.
+    expect(result.tags).toEqual(['1.2.4-ls133']);
+  });
+
+  // #498: sortSemverDescending() previously ranked by raw semver precedence, where
+  // semver treats a suffix as a prerelease — so a bare "3.0.2" would outrank
+  // "3.0.2-alpine" even for an "-alpine" reference. Fixed to prefer the candidate
+  // whose suffix template exactly matches the reference's when numeric segments tie.
+  test('actionable path sort prefers the exact-suffix-match candidate at the same numeric version (#498)', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '1.2.3-alpine',
+          semver: true,
+        },
+      },
+      tagFamily: 'strict',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const result = getTagCandidates(
+      container,
+      ['1.2.3-alpine', '1.2.5-alpine3.21', '1.2.5-alpine'],
+      log,
+    );
+
+    expect(result.tags[0]).toBe('1.2.5-alpine');
+  });
+
+  // #498: when the current tag itself has no numeric shape (e.g. a rolling
+  // alias like "nightly"), sortSemverDescending has no reference suffix
+  // template to tie-break against, so numeric-segment ties fall through to
+  // plain semver ordering unchanged.
+  test('falls back to plain semver ordering for numeric-segment ties when the current tag has no numeric shape (#498)', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: 'nightly',
+          semver: false,
+        },
+      },
+      includeTags: '^v',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const result = getTagCandidates(container, ['v1.0.0-rc1', 'v1.0.0-rc2'], log);
+
+    expect(result.tags[0]).toBe('v1.0.0-rc2');
+  });
+
+  // #498: mirrors the exact-suffix-match test above with the exact-match
+  // candidate appearing first in tag order instead of second. Array.sort's
+  // comparator argument order depends on element position, so this exercises
+  // the branch of the tie-break that the other ordering does not reach.
+  test('actionable path sort prefers the exact-suffix-match candidate regardless of input tag order (#498)', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '1.2.3-alpine',
+          semver: true,
+        },
+      },
+      tagFamily: 'strict',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const result = getTagCandidates(
+      container,
+      ['1.2.3-alpine', '1.2.5-alpine', '1.2.5-alpine3.21'],
+      log,
+    );
+
+    expect(result.tags[0]).toBe('1.2.5-alpine');
+  });
+
+  // #498: a fallback-path (non-semver current tag + includeTags) candidate
+  // pair with different numeric-segment counts exercises the missing-segment
+  // "?? '0'" padding in compareNumericSegmentsDescending — the family filter
+  // that normally guarantees equal segment counts does not apply here.
+  test('pads missing numeric segments as 0 when comparing candidates of different precision (#498)', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: 'nightly',
+          semver: false,
+        },
+      },
+      includeTags: '^v',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const result = getTagCandidates(container, ['v1.2.3', 'v1.2'], log);
+
+    expect(result.tags[0]).toBe('v1.2.3');
+  });
+
+  // #498: mirrors the padding test above with the shorter-precision tag
+  // first in input order instead of second, exercising the '?? 0' fallback
+  // for the other comparator argument (see the input-order note above).
+  test('pads missing numeric segments as 0 regardless of which candidate is shorter (#498)', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: 'nightly',
+          semver: false,
+        },
+      },
+      includeTags: '^v',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const result = getTagCandidates(container, ['v1.2', 'v1.2.3'], log);
+
+    expect(result.tags[0]).toBe('v1.2.3');
+  });
+
+  // #498: a transform formula can mangle a tag into a string containing an
+  // embedded newline. getNumericTagShapeFromTransformedTag defensively
+  // refuses such strings (returns null) while the app's semver parser still
+  // recovers a version via its coerce() fallback, so filterSemverOnly still
+  // admits the tag. sortSemverDescending must fall back to plain semver
+  // comparison rather than crash when a candidate's shape is null.
+  test('falls back to plain semver comparison when a transform mangles a tag beyond shape parsing (#498)', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: 'nightly',
+          semver: false,
+        },
+      },
+      includeTags: '^v',
+      transformTags: '(.+) => $1\nx',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const result = getTagCandidates(container, ['v1.2.3', 'v5.0.0'], log);
+
+    expect(result.tags[0]).toBe('v5.0.0');
+  });
+
+  describe('pin-gate informational insight (#498)', () => {
+    test('computes the informational insight tag for a pinned specific-precision tag', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: 'v1.13.3',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['v1.13.3', 'v1.13.4', 'v1.14.0', 'v1.46.1'], log);
+
+      expect(result.tags).toEqual([]);
+      expect(result.insight).toEqual({ tag: 'v1.46.1', kind: 'minor' });
+    });
+
+    test('allows a cross-major jump — that is the whole point of the informational channel', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: '1.13.3',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['1.13.3', '2.0.0'], log);
+
+      expect(result.insight).toEqual({ tag: '2.0.0', kind: 'major' });
+    });
+
+    test('never crosses the suffix/variant boundary — bare candidate is rejected for a suffixed pin', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: '2.7.5-openvino',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(
+        container,
+        ['2.7.5-openvino', '2.7.6-openvino', '3.0.2-openvino', '3.0.2'],
+        log,
+      );
+
+      expect(result.insight).toEqual({ tag: '3.0.2-openvino', kind: 'major' });
+    });
+
+    test('prefers the exact-suffix-match candidate over a merely-compatible one at the same version', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: '1.2.3-alpine',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(
+        container,
+        ['1.2.3-alpine', '1.2.5-alpine3.21', '1.2.5-alpine'],
+        log,
+      );
+
+      expect(result.insight).toEqual({ tag: '1.2.5-alpine', kind: 'patch' });
+    });
+
+    test('omits insight when no strictly-newer same-family candidate exists', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: '1.13.3',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['1.13.3', '1.13.2'], log);
+
+      expect(result.insight).toBeUndefined();
+    });
+
+    test('is never computed for the floating pin gate', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: '16-alpine',
+            semver: true,
+            tagPrecision: 'floating',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['16-alpine', '17-alpine'], log);
+
+      expect(result.insight).toBeUndefined();
+    });
+
+    test('is skipped entirely when the computeInsight flag is false (opt-out)', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: 'v1.13.3',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['v1.13.3', 'v1.46.1'], log, false);
+
+      expect(result.tags).toEqual([]);
+      expect(result.insight).toBeUndefined();
+    });
+
+    // #498: isSuffixCompatible() previously rejected every bare candidate
+    // whenever the reference had a suffix, so a prerelease pin (e.g.
+    // "1.5.2-rc.1") could never see its own GA release ("1.5.2") — and worse,
+    // with both an older prerelease and a newer prerelease of the *next*
+    // release in the registry, it would surface the wrong one while hiding
+    // the GA it should have shown. Fixed narrowly: a bare candidate is now
+    // accepted only when the reference suffix is a conventional prerelease
+    // identifier (isPrereleaseSuffix) — variant suffixes are unaffected.
+    describe('prerelease-pinned tags see their own GA release (#498)', () => {
+      test('a prerelease pin sees its own bare GA release as insight', () => {
+        const container = createContainer({
+          image: {
+            tag: {
+              value: '1.5.2-rc.1',
+              semver: true,
+              tagPrecision: 'specific',
+            },
+          },
+          tagFamily: 'strict',
+        });
+        const log = { warn: vi.fn(), debug: vi.fn() };
+
+        const result = getTagCandidates(container, ['1.5.2-rc.1', '1.5.2'], log);
+
+        // diffSemver('1.5.2-rc.1', '1.5.2') reports 'patch' (semver treats
+        // resolving a prerelease to its release as a patch-level change here
+        // since the core version doesn't change) — toPinInfoKind maps that
+        // straight through.
+        expect(result.insight).toEqual({ tag: '1.5.2', kind: 'patch' });
+      });
+
+      test('a same-template prerelease progression still wins over the bare GA of an older release', () => {
+        const container = createContainer({
+          image: {
+            tag: {
+              value: '1.5.2-rc.1',
+              semver: true,
+              tagPrecision: 'specific',
+            },
+          },
+          tagFamily: 'strict',
+        });
+        const log = { warn: vi.fn(), debug: vi.fn() };
+
+        const result = getTagCandidates(container, ['1.5.2-rc.1', '1.5.2-rc.2'], log);
+
+        expect(result.insight).toEqual({ tag: '1.5.2-rc.2', kind: 'patch' });
+      });
+
+      test('a variant-suffixed pin still never gets a bare candidate as insight — the widening is prerelease-only', () => {
+        const container = createContainer({
+          image: {
+            tag: {
+              value: 'v2.7.5-openvino',
+              semver: true,
+              tagPrecision: 'specific',
+            },
+          },
+          tagFamily: 'strict',
+        });
+        const log = { warn: vi.fn(), debug: vi.fn() };
+
+        const result = getTagCandidates(container, ['v2.7.5-openvino', 'v3.0.2'], log);
+
+        expect(result.insight).toBeUndefined();
+      });
+
+      test('a bare-tag pin still never gets a suffixed candidate as insight', () => {
+        const container = createContainer({
+          image: {
+            tag: {
+              value: '1.5.2',
+              semver: true,
+              tagPrecision: 'specific',
+            },
+          },
+          tagFamily: 'strict',
+        });
+        const log = { warn: vi.fn(), debug: vi.fn() };
+
+        const result = getTagCandidates(container, ['1.5.2', '1.6.0-rc.1'], log);
+
+        expect(result.insight).toBeUndefined();
+      });
+    });
+
+    // #501: the #498 prerelease->GA widening in isSuffixCompatible() must be
+    // scoped to the informational insight path only. A container pinned to a
+    // prerelease tag with dd.tag.family=loose (or an includeTags filter) can
+    // reach the same isSuffixCompatible() check via the *actionable* path
+    // (isSemverFamilyMatch -> shouldIncludeSemverCandidate), which must never
+    // treat a bare GA release as an actionable update candidate — only the
+    // insight badge is allowed to surface it.
+    describe('prerelease->GA widening does not leak into the actionable path (#501)', () => {
+      test('actionable candidates exclude the bare GA release but still include a newer same-template prerelease', () => {
+        const container = createContainer({
+          image: {
+            tag: {
+              value: '1.5.2-rc.1',
+              semver: true,
+              tagPrecision: 'specific',
+            },
+          },
+          tagFamily: 'loose',
+        });
+        const log = { warn: vi.fn(), debug: vi.fn() };
+
+        const result = getTagCandidates(container, ['1.5.2', '1.5.3-rc.1'], log);
+
+        expect(result.tags).toContain('1.5.3-rc.1');
+        expect(result.tags).not.toContain('1.5.2');
+      });
+    });
+
+    // #498 (nit): when the current tag's transformed value has no derivable
+    // numeric shape (here via a transform that mangles it beyond shape
+    // parsing, same trick as the actionable-path coverage above), the
+    // same-core guard has nothing to compare against and must not filter —
+    // candidates pass through unchanged.
+    test('does not filter insight candidates when the current tag has no numeric shape', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: 'v1.2.3',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'strict',
+        transformTags: '(.+) => $1\nx',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['v1.2.3', 'v1.3.0'], log);
+
+      expect(result.insight).toEqual({ tag: 'v1.3.0', kind: 'minor' });
+    });
+
+    // #498 (nit): a candidate whose numeric core matches the current tag's
+    // and whose suffix merely grows more *precise* (e.g. "-alpine" ->
+    // "-alpine3.21") is the same version described more specifically, not a
+    // newer one. Without this guard, semver's lexical prerelease-string
+    // comparison ("alpine3.21" > "alpine") fabricated a "newer patch".
+    test('same-core suffix-precision growth is not reported as an insight', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: '1.2.3-alpine',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['1.2.3-alpine', '1.2.3-alpine3.21'], log);
+
+      expect(result.insight).toBeUndefined();
+    });
+
+    // #498: the pin gate's digest-disabled noUpdateReason must not contradict
+    // a rendered updateInsight badge. When an insight will still be shown,
+    // the wording is narrowed to "no actionable update detection" rather than
+    // claiming no update detection of any kind is running.
+    describe('digest-disabled noUpdateReason wording stays accurate alongside insight (#498)', () => {
+      test('keeps the original stronger wording when the insight is also disabled (opt-out)', () => {
+        const container = createContainer({
+          image: {
+            tag: { value: 'v1.13.3', semver: true, tagPrecision: 'specific' },
+            digest: { watch: false },
+          },
+          tagFamily: 'strict',
+        });
+        const log = { warn: vi.fn(), debug: vi.fn() };
+
+        const result = getTagCandidates(container, ['v1.13.3', 'v1.46.1'], log, false);
+
+        expect(result.insight).toBeUndefined();
+        expect(result.noUpdateReason).toContain('digest watching is disabled');
+        expect(result.noUpdateReason).toContain('no update detection is running');
+        expect(result.noUpdateReason).not.toContain('actionable');
+      });
+
+      test('keeps the original stronger wording when no insight candidate exists', () => {
+        const container = createContainer({
+          image: {
+            tag: { value: 'v1.13.3', semver: true, tagPrecision: 'specific' },
+            digest: { watch: false },
+          },
+          tagFamily: 'strict',
+        });
+        const log = { warn: vi.fn(), debug: vi.fn() };
+
+        const result = getTagCandidates(container, ['v1.13.3', 'v1.13.2'], log);
+
+        expect(result.insight).toBeUndefined();
+        expect(result.noUpdateReason).toContain('no update detection is running');
+        expect(result.noUpdateReason).not.toContain('actionable');
+      });
+
+      test('narrows the wording to "no actionable update detection" when an insight is still shown', () => {
+        const container = createContainer({
+          image: {
+            tag: { value: 'v1.13.3', semver: true, tagPrecision: 'specific' },
+            digest: { watch: false },
+          },
+          tagFamily: 'strict',
+        });
+        const log = { warn: vi.fn(), debug: vi.fn() };
+
+        const result = getTagCandidates(container, ['v1.13.3', 'v1.46.1'], log);
+
+        expect(result.insight).toEqual({ tag: 'v1.46.1', kind: 'minor' });
+        expect(result.noUpdateReason).toContain('digest watching is disabled');
+        expect(result.noUpdateReason).toContain('no actionable update detection is running');
+        expect(result.noUpdateReason).toContain('still shown for information');
+      });
+    });
+  });
+});
+
+describe('isPrereleaseSuffix (#498)', () => {
+  test.each([
+    ['-rc.1', true],
+    ['-rc1', true],
+    ['rc', true],
+    ['-beta2', true],
+    ['-alpha', true],
+    ['-PRE', true],
+    ['-RC.3', true],
+    ['-preview.4', true],
+    ['-dev', true],
+    ['-next.1', true],
+    ['-canary', true],
+    ['-snapshot.20260101', true],
+    ['-openvino', false],
+    ['-cuda', false],
+    ['-alpine3.19', false],
+    ['-ls132', false],
+    ['-bookworm', false],
+    ['', false],
+  ])('isPrereleaseSuffix(%s) → %s', (suffix, expected) => {
+    expect(isPrereleaseSuffix(suffix)).toBe(expected);
   });
 });

@@ -7,6 +7,7 @@ import {
   registryLabel,
   serverBadgeColor,
   suggestedTagColor,
+  updateInsightColor,
   updateKindColor,
 } from '@/utils/display';
 
@@ -193,6 +194,21 @@ describe('display utilities', () => {
         bg: 'var(--dd-alt-muted)',
         text: 'var(--dd-alt)',
       });
+    });
+  });
+
+  describe('updateInsightColor', () => {
+    it('returns info colors, distinct from every updateKindColor() kind (#498)', () => {
+      const insightColor = updateInsightColor();
+      expect(insightColor).toEqual({
+        bg: 'var(--dd-info-muted)',
+        text: 'var(--dd-info)',
+      });
+      for (const kind of ['major', 'minor', 'patch', 'digest'] as const) {
+        const kindColor = updateKindColor(kind);
+        expect(insightColor.bg).not.toBe(kindColor.bg);
+        expect(insightColor.text).not.toBe(kindColor.text);
+      }
     });
   });
 
