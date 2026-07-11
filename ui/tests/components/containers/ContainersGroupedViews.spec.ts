@@ -93,7 +93,7 @@ const DataTableStub = defineComponent({
 });
 
 const DataCardGridStub = defineComponent({
-  props: ['items'],
+  props: ['items', 'itemMemo'],
   emits: ['item-click'],
   template: `
     <div class="data-card-grid-stub">
@@ -848,6 +848,61 @@ describe('ContainersGroupedViews', () => {
     const listBadge = listItem!.get('[data-test="update-insight-badge"]');
     expect(listBadge.text()).toBe('Newer available');
     expect(listItem!.text()).not.toContain('v1.46.1');
+  });
+
+  it('includes updateInsight in the card/list memo so a container that only gains an insight is not skipped (#501)', async () => {
+    const withoutInsight = makeContainer({
+      id: 'c-memo-insight',
+      name: 'alpha',
+      currentTag: 'v1.13.3',
+      newTag: null,
+      updateKind: null,
+      status: 'running',
+      server: 'local-main',
+      registry: 'dockerhub',
+    });
+
+    const { context, refs } = makeContext();
+    const containers = [withoutInsight];
+    refs.containerViewMode.value = 'cards';
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    // The DataCardGrid stub declares 'itemMemo' as a real prop, so this pulls
+    // the exact function ContainersGroupedViews wires up as :item-memo — the
+    // v-memo dependency array DataCardGrid/DataListAccordion use to decide
+    // whether a card/list row needs to re-render at all.
+    const cardGrid = wrapper.findComponent(DataCardGridStub);
+    const itemMemo = cardGrid.props('itemMemo') as (item: Record<string, unknown>) => unknown[];
+    expect(typeof itemMemo).toBe('function');
+
+    const memoWithoutInsight = itemMemo(withoutInsight as unknown as Record<string, unknown>);
+    const withInsight = {
+      ...withoutInsight,
+      updateInsight: { tag: 'v1.46.1', kind: 'minor' as const },
+    };
+    const memoWithInsight = itemMemo(withInsight as unknown as Record<string, unknown>);
+
+    // Before the fix, the memo array is identical for both containers (the
+    // insight fields are missing entirely), so v-memo would skip re-rendering
+    // the card/list row even though the insight badge should now appear.
+    expect(memoWithInsight).not.toEqual(memoWithoutInsight);
+    expect(memoWithInsight).toContain('v1.46.1');
+    expect(memoWithInsight).toContain('minor');
+    expect(memoWithoutInsight).not.toContain('v1.46.1');
   });
 
   it('renders the no-update-reason and update-insight badges together without contradictory copy when digest watching is off (#498)', async () => {

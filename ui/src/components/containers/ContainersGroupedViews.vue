@@ -192,6 +192,8 @@ function getContainerViewMemo(containerInput: Record<string, unknown>): unknown[
     container.updatePolicyState ?? '',
     container.suggestedTag ?? '',
     container.noUpdateReason ?? '',
+    container.updateInsight?.tag ?? '',
+    container.updateInsight?.kind ?? '',
     container.bouncer,
     container.updateEligibility,
     container.updateSecuritySummary?.critical ?? 0,
