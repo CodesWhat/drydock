@@ -890,6 +890,66 @@ describe('Docker Watcher', () => {
     });
   });
 
+  describe('pin-gate updateInsight opt-out (#498)', () => {
+    test('does not populate updateInsight when tag.pin.info is disabled', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        tag: { pin: { info: false } },
+      });
+
+      const container = {
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: 'v1.13.3', semver: true, tagPrecision: 'specific' },
+          digest: { watch: true },
+        },
+      };
+      const mockRegistry = {
+        normalizeImage: (img) => img,
+        getTags: vi.fn().mockResolvedValue(['v1.13.3', 'v1.46.1']),
+      };
+      hRegistry.getState.mockReturnValue({
+        registry: { hub: mockRegistry },
+      });
+
+      const rank = { 'v1.13.3': 100, 'v1.46.1': 200 };
+      hMockTag.isGreater.mockImplementation(
+        (version1, version2) => (rank[version1] || 0) > (rank[version2] || 0),
+      );
+
+      const mockLogChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+      const result = await docker.findNewVersion(container, mockLogChild);
+
+      expect(result.updateInsight).toBeUndefined();
+    });
+
+    test('populates updateInsight for a pinned tag when tag.pin.info is left at its default', async () => {
+      const container = {
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: 'v1.13.3', semver: true, tagPrecision: 'specific' },
+          digest: { watch: true },
+        },
+      };
+      const mockRegistry = {
+        normalizeImage: (img) => img,
+        getTags: vi.fn().mockResolvedValue(['v1.13.3', 'v1.46.1']),
+      };
+      hRegistry.getState.mockReturnValue({
+        registry: { hub: mockRegistry },
+      });
+
+      const rank = { 'v1.13.3': 100, 'v1.46.1': 200 };
+      hMockTag.isGreater.mockImplementation(
+        (version1, version2) => (rank[version1] || 0) > (rank[version2] || 0),
+      );
+
+      const mockLogChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+      const result = await docker.findNewVersion(container, mockLogChild);
+
+      expect(result.updateInsight).toEqual({ tag: 'v1.46.1', kind: 'patch' });
+    });
+  });
+
   describe('dd.inspect.tag.version-only label', () => {
     test('testable_getLabel returns the value when dd.inspect.tag.version-only is present', () => {
       const labels = { 'dd.inspect.tag.version-only': 'true' };
