@@ -443,13 +443,16 @@ export function getTagCandidates(
   const tagFamilyPolicy = getTagFamilyPolicy(container, logContainer);
 
   if (container.image.tag.tagPrecision === 'floating' && tagFamilyPolicy === 'strict') {
-    const noUpdateReason = `Floating tag alias "${container.image.tag.value}" is compared by digest in strict tag-family mode. Set dd.tag.family=loose to allow cross-tag semver updates.`;
+    const digestWatchEnabled = Boolean(container.image.digest?.watch);
+    const noUpdateReason = digestWatchEnabled
+      ? `Floating tag alias "${container.image.tag.value}" is compared by digest in strict tag-family mode. Set dd.tag.family=loose to allow cross-tag semver updates.`
+      : `Floating tag alias "${container.image.tag.value}": digest watching is disabled for this container, so no update detection is running. Remove the dd.watch.digest=false override to detect same-tag rebuilds, or set dd.tag.family=loose to allow cross-tag semver updates.`;
     if (typeof logContainer?.debug === 'function') {
       logContainer.debug(noUpdateReason);
     }
     return {
       tags: [],
-      noUpdateReason: container.image.digest?.watch ? undefined : noUpdateReason,
+      noUpdateReason: digestWatchEnabled ? undefined : noUpdateReason,
     };
   }
 
@@ -460,13 +463,16 @@ export function getTagCandidates(
     !container.includeTags &&
     tagFamilyPolicy !== 'loose'
   ) {
-    const noUpdateReason = `Pinned tag "${container.image.tag.value}" is compared by digest only. Set dd.tag.family=loose or add a dd.tag.include filter to allow semver version climbing.`;
+    const digestWatchEnabled = Boolean(container.image.digest?.watch);
+    const noUpdateReason = digestWatchEnabled
+      ? `Pinned tag "${container.image.tag.value}" is compared by digest only. Set dd.tag.family=loose or add a dd.tag.include filter to allow semver version climbing.`
+      : `Pinned tag "${container.image.tag.value}": digest watching is disabled for this container, so no update detection is running. Remove the dd.watch.digest=false override to detect same-tag rebuilds, or set dd.tag.family=loose or add a dd.tag.include filter to allow semver version climbing.`;
     if (typeof logContainer?.debug === 'function') {
       logContainer.debug(noUpdateReason);
     }
     return {
       tags: [],
-      noUpdateReason: container.image.digest?.watch ? undefined : noUpdateReason,
+      noUpdateReason: digestWatchEnabled ? undefined : noUpdateReason,
     };
   }
 

@@ -199,7 +199,7 @@ describe('docker helper extraction module', () => {
         includeTags: 'first',
         exclude: 'second',
         transform: 'third',
-        tagFamily: 'family',
+        tag: { family: 'family' },
         linkTemplate: 'link',
         displayName: 'display',
         displayIcon: 'icon',
@@ -231,6 +231,20 @@ describe('docker helper extraction module', () => {
 
     expect(getContainerConfigValue('  label ', 'fallback')).toBe('label');
     expect(getContainerConfigValue(undefined, ' fallback ')).toBe('fallback');
+  });
+
+  test('dead flat imgset tagFamily alias no longer resolves; only nested tag.family works (#498)', () => {
+    expect(
+      getResolvedImgsetConfiguration('service', {
+        tagFamily: 'loose',
+      }).tagFamily,
+    ).toBeUndefined();
+
+    expect(
+      getResolvedImgsetConfiguration('service', {
+        tag: { family: 'loose' },
+      }).tagFamily,
+    ).toBe('loose');
   });
 
   test('numeric and inspect helpers should handle empty and missing inputs', () => {
@@ -442,11 +456,16 @@ describe('docker helper extraction module', () => {
       isDigestToWatch(undefined as any, { domain: 'ghcr.io' }, false, 'floating', 'latest'),
     ).toBe(true);
 
-    // Specific semver releases: digest watching disabled regardless of registry
-    expect(isDigestToWatch(undefined as any, { domain: 'ghcr.io' }, true, 'specific')).toBe(false);
-    expect(isDigestToWatch(undefined as any, { domain: 'docker.io' }, true, 'specific')).toBe(
-      false,
-    );
+    // Specific (fully-pinned) semver releases with a meaningful current tag now
+    // default to digest watching, same as floating tags — pinned tags are
+    // immutable by name but the underlying image can still be rebuilt in place
+    // under the same tag, so digest watching is the only way to detect that (#498).
+    expect(
+      isDigestToWatch(undefined as any, { domain: 'ghcr.io' }, true, 'specific', '1.4.5'),
+    ).toBe(true);
+    expect(
+      isDigestToWatch(undefined as any, { domain: 'docker.io' }, true, 'specific', '1.4.5'),
+    ).toBe(true);
 
     // Floating semver aliases (v3, 1.4): same-tag digest comparison is the safe default.
     expect(isDigestToWatch(undefined as any, { domain: 'ghcr.io' }, true, 'floating', '1.4')).toBe(
@@ -500,6 +519,80 @@ describe('docker helper extraction module', () => {
 
     expect(shouldUpdateDisplayNameFromContainerName('new', 'old', 'old')).toBe(true);
     expect(shouldUpdateDisplayNameFromContainerName('new', 'old', 'custom')).toBe(false);
+  });
+
+  test('pinned specific semver tags default to digest watching when a meaningful current tag exists (#498)', () => {
+    // Docker Hub domain
+    expect(
+      isDigestToWatch(
+        undefined as any,
+        { domain: 'docker.io', path: 'library/nginx' },
+        true,
+        'specific',
+        '1.4.5',
+      ),
+    ).toBe(true);
+    // Non-Hub domain
+    expect(
+      isDigestToWatch(
+        undefined as any,
+        { domain: 'ghcr.io', path: 'acme/service' },
+        true,
+        'specific',
+        '1.4.5',
+      ),
+    ).toBe(true);
+  });
+
+  test('explicit dd.watch.digest=false override still wins for pinned specific semver tags', () => {
+    expect(
+      isDigestToWatch(
+        'false',
+        { domain: 'docker.io', path: 'library/nginx' },
+        true,
+        'specific',
+        '1.4.5',
+      ),
+    ).toBe(false);
+    expect(
+      isDigestToWatch(
+        'false',
+        { domain: 'ghcr.io', path: 'acme/service' },
+        true,
+        'specific',
+        '1.4.5',
+      ),
+    ).toBe(false);
+  });
+
+  test('pinned specific semver tags without a meaningful current tag still default to no digest watch', () => {
+    expect(
+      isDigestToWatch(
+        undefined as any,
+        { domain: 'docker.io', path: 'library/nginx' },
+        true,
+        'specific',
+        undefined,
+      ),
+    ).toBe(false);
+    expect(
+      isDigestToWatch(
+        undefined as any,
+        { domain: 'docker.io', path: 'library/nginx' },
+        true,
+        'specific',
+        '',
+      ),
+    ).toBe(false);
+    expect(
+      isDigestToWatch(
+        undefined as any,
+        { domain: 'docker.io', path: 'library/nginx' },
+        true,
+        'specific',
+        'unknown',
+      ),
+    ).toBe(false);
   });
 
   test('returns fallback message when error payload is empty', () => {

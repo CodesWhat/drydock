@@ -298,7 +298,9 @@ This usually happens when the registry has tags from different naming families (
 
 Since v1.4.0, **tag family detection** (`dd.tag.family`) defaults to `strict`, which infers the current tag's prefix, suffix, and segment structure and only considers candidates within the same family.
 
-If you still see cross-family false positives, verify that your `dd.tag.include` regex is specific enough. If you intentionally want cross-family updates (e.g. you want to jump from one naming scheme to another), set:
+This applies to floating tags (`latest`, `v3`, `16-alpine`) as well as fully-pinned specific tags (e.g. `1.4.5`, `v1.13.3`) — a pinned container compares by digest by default so a rebuilt image republished under the same tag is still detected, but it will not climb to a different tag on its own.
+
+If you still see cross-family false positives, verify that your `dd.tag.include` regex is specific enough. If you intentionally want cross-family updates (e.g. you want to jump from one naming scheme to another, or let a pinned tag climb to a newer version), set:
 
 ```yaml
 labels:

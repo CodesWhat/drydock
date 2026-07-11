@@ -10,6 +10,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.2-rc.2] — 2026-07-10
+
+### Fixed
+
+- Pinned semver tags (e.g. `nginx:1.25.3`) are now compared by digest by default, as originally announced in v1.5.0-rc.36 — a rebuilt image republished under the same tag is detected again. Previously digest watching was silently disabled for fully-pinned tags, leaving them with no update detection at all and a misleading "compared by digest only" notice on every pinned container ([#498](https://github.com/CodesWhat/drydock/issues/498)). Version climbing for pinned tags remains opt-in via `dd.tag.include` or `dd.tag.family=loose`. Note: in agent deployments, agents perform the registry checks — update agents alongside the controller to restore digest detection for agent-watched containers.
+- The "no update detection" notice shown when `dd.watch.digest=false` is explicitly set no longer claims digest comparison is happening.
+- Removed the unreachable flat `tagFamily` imgset config key (env-derived keys are lowercased, so it could never match); the documented `DD_WATCHER_{watcher}_IMGSET_{name}_TAG_FAMILY` form is unaffected.
+
 ## [1.5.2-rc.1] — 2026-07-10
 
 ### Fixed

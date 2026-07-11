@@ -295,6 +295,31 @@ describe('docker tag candidates module', () => {
     expect(result.noUpdateReason).toBeUndefined();
   });
 
+  test('floating alias with digest.watch=false → noUpdateReason explains digest watching is disabled, no false digest-comparison claim (#498)', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '16-alpine',
+          semver: true,
+          tagPrecision: 'floating',
+        },
+        digest: { watch: false },
+      },
+      tagFamily: 'strict',
+    });
+    const log = {
+      warn: vi.fn(),
+      debug: vi.fn(),
+    };
+
+    const result = getTagCandidates(container, ['16-alpine', '16.1-alpine', '17-alpine'], log);
+
+    expect(result.tags).toEqual([]);
+    expect(result.noUpdateReason).toContain('Floating tag alias');
+    expect(result.noUpdateReason).toContain('digest watching is disabled');
+    expect(result.noUpdateReason).not.toContain('is compared by digest in strict tag-family mode');
+  });
+
   test('handles floating strict-mode without a debug-capable log container', () => {
     const container = createContainer({
       image: {
@@ -670,6 +695,28 @@ describe('docker tag candidates module', () => {
 
       expect(result.tags).toEqual([]);
       expect(result.noUpdateReason).toBeUndefined();
+    });
+
+    test('specific pin with digest.watch=false → noUpdateReason explains digest watching is disabled, no false digest-comparison claim (#498)', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: 'v1.13.3',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+          digest: { watch: false },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['v1.13.3', 'v1.13.4', 'v1.46.1'], log);
+
+      expect(result.tags).toEqual([]);
+      expect(result.noUpdateReason).toContain('Pinned tag');
+      expect(result.noUpdateReason).toContain('digest watching is disabled');
+      expect(result.noUpdateReason).not.toContain('is compared by digest only');
     });
 
     test('specific suffixed 3-segment 1.13.3-bookworm, no labels → digest-only, no semver climb', () => {
