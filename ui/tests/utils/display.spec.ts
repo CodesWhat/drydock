@@ -7,6 +7,7 @@ import {
   registryLabel,
   serverBadgeColor,
   suggestedTagColor,
+  updateInsightColor,
   updateKindColor,
 } from '@/utils/display';
 
@@ -192,6 +193,15 @@ describe('display utilities', () => {
       expect(suggestedTagColor()).toEqual({
         bg: 'var(--dd-alt-muted)',
         text: 'var(--dd-alt)',
+      });
+    });
+  });
+
+  describe('updateInsightColor', () => {
+    it('returns neutral colors (#498)', () => {
+      expect(updateInsightColor()).toEqual({
+        bg: 'var(--dd-neutral-muted)',
+        text: 'var(--dd-neutral)',
       });
     });
   });

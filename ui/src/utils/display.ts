@@ -111,3 +111,13 @@ export function maturityColor(maturity: string | null) {
 export function suggestedTagColor() {
   return { bg: 'var(--dd-alt-muted)', text: 'var(--dd-alt)' };
 }
+
+/**
+ * Color for the pin-gate informational insight badge (#498). Deliberately
+ * neutral/gray — the same "informational, not actionable" treatment used for
+ * the digest updateKind — to stay visually distinct from the actionable
+ * major/minor/patch badge colors above.
+ */
+export function updateInsightColor() {
+  return { bg: 'var(--dd-neutral-muted)', text: 'var(--dd-neutral)' };
+}

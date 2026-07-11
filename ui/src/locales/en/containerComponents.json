@@ -338,6 +338,12 @@
       "tooltip": "Best stable semver tag available — consider pinning",
       "tooltipWithTag": "Suggested: {tag}\n{hint}"
     },
+    "updateInsight": {
+      "badgeText": "Newer available",
+      "tooltipMajor": "Newer major version available: {tag} (outside this pinned tag's family — informational only)",
+      "tooltipMinor": "Newer minor version available: {tag} (outside this pinned tag's family — informational only)",
+      "tooltipPatch": "Newer patch version available: {tag} (outside this pinned tag's family — informational only)"
+    },
     "eligibilityBadges": {
       "securityBlocked": "Security blocked",
       "rolledBack": "Rolled back",

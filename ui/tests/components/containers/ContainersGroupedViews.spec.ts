@@ -758,6 +758,46 @@ describe('ContainersGroupedViews', () => {
     expect(updateState.text()).not.toContain('v1.3.0');
   });
 
+  it('renders the informational update-insight badge for a pinned container (#498)', async () => {
+    const pinned = makeContainer({
+      id: 'c-insight',
+      name: 'alpha',
+      currentTag: 'v1.13.3',
+      newTag: null,
+      updateKind: null,
+      status: 'running',
+      server: 'local-main',
+      registry: 'dockerhub',
+      updateInsight: { tag: 'v1.46.1', kind: 'minor' },
+    });
+
+    const { context, refs } = makeContext();
+    const containers = [pinned];
+    refs.containerViewMode.value = 'table';
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    const updateState = rowByName(wrapper, 'alpha').get('[data-test="container-update-state"]');
+    const badge = updateState.get('[data-test="update-insight-badge"]');
+    expect(badge.text()).toBe('Newer available');
+    // The insight tag must only surface via the badge's tooltip binding, never as
+    // bare unlabeled text — it is pure information, not an actionable update.
+    expect(updateState.text()).not.toContain('v1.46.1');
+  });
+
   it('renders normal card and list metadata quietly with concise update labels', async () => {
     const current = makeContainer({
       id: 'c-quiet-card-current',

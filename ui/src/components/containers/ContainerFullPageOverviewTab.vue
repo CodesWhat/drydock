@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n';
 import AppButton from '../AppButton.vue';
 import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
+import UpdateInsightBadge from './UpdateInsightBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
 import ProjectLink from './ProjectLink.vue';
 import NoUpdateReasonBadge from './NoUpdateReasonBadge.vue';
@@ -144,9 +145,10 @@ const {
           :reason="selectedContainer.noUpdateReason"
           variant="inline"
         />
-        <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag" class="flex items-center gap-1.5 flex-wrap">
+        <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag || selectedContainer.updateInsight" class="flex items-center gap-1.5 flex-wrap">
           <UpdateMaturityBadge :maturity="selectedContainer.updateMaturity" :tooltip="selectedContainer.updateMaturityTooltip" />
           <SuggestedTagBadge :tag="selectedContainer.suggestedTag" :current-tag="selectedContainer.currentTag" />
+          <UpdateInsightBadge :insight="selectedContainer.updateInsight" />
         </div>
         <ReleaseNotesLink
           :release-notes="selectedContainer.releaseNotes"
