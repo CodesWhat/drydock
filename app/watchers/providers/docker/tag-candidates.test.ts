@@ -1436,6 +1436,34 @@ describe('docker tag candidates module', () => {
       });
     });
 
+    // #501: the #498 prerelease->GA widening in isSuffixCompatible() must be
+    // scoped to the informational insight path only. A container pinned to a
+    // prerelease tag with dd.tag.family=loose (or an includeTags filter) can
+    // reach the same isSuffixCompatible() check via the *actionable* path
+    // (isSemverFamilyMatch -> shouldIncludeSemverCandidate), which must never
+    // treat a bare GA release as an actionable update candidate — only the
+    // insight badge is allowed to surface it.
+    describe('prerelease->GA widening does not leak into the actionable path (#501)', () => {
+      test('actionable candidates exclude the bare GA release but still include a newer same-template prerelease', () => {
+        const container = createContainer({
+          image: {
+            tag: {
+              value: '1.5.2-rc.1',
+              semver: true,
+              tagPrecision: 'specific',
+            },
+          },
+          tagFamily: 'loose',
+        });
+        const log = { warn: vi.fn(), debug: vi.fn() };
+
+        const result = getTagCandidates(container, ['1.5.2', '1.5.3-rc.1'], log);
+
+        expect(result.tags).toContain('1.5.3-rc.1');
+        expect(result.tags).not.toContain('1.5.2');
+      });
+    });
+
     // #498 (nit): when the current tag's transformed value has no derivable
     // numeric shape (here via a transform that mangles it beyond shape
     // parsing, same trick as the actionable-path coverage above), the

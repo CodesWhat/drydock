@@ -162,17 +162,29 @@ export function isPrereleaseSuffix(suffix: string): boolean {
   return PRERELEASE_SUFFIX_PATTERN.matches(suffix.toLowerCase());
 }
 
-function isSuffixCompatible(referenceSuffix: string, candidateSuffix: string): boolean {
+/**
+ * #501: `allowPrereleaseToGA` scopes the #498 prerelease->GA widening to the
+ * informational insight path only (computePinGateInsight). It defaults to
+ * false, so the actionable path — which shares this function via
+ * isSemverFamilyMatch/isStrictFamilyMatch — never treats a bare GA release as
+ * an actionable update candidate for a prerelease-pinned container, even
+ * under dd.tag.family=loose or a permissive includeTags filter.
+ */
+function isSuffixCompatible(
+  referenceSuffix: string,
+  candidateSuffix: string,
+  allowPrereleaseToGA = false,
+): boolean {
   if (referenceSuffix === '') {
     return candidateSuffix === '';
   }
   if (candidateSuffix === '') {
-    // #498: a prerelease-pinned reference (e.g. "1.5.2-rc.1") must still be
-    // able to see its own GA release ("1.5.2") — accept a bare candidate only
-    // when the reference suffix is a conventional prerelease identifier.
+    // #498/#501: a prerelease-pinned reference (e.g. "1.5.2-rc.1") can see its
+    // own GA release ("1.5.2") only when the caller opts in (the insight path)
+    // and the reference suffix is a conventional prerelease identifier.
     // Variant suffixes (e.g. "-openvino", "-alpine") never accept a bare
     // candidate; a bare tag says nothing about which variant it belongs to.
-    return isPrereleaseSuffix(referenceSuffix);
+    return allowPrereleaseToGA && isPrereleaseSuffix(referenceSuffix);
   }
   const referenceTemplate = normalizeSuffixTemplate(referenceSuffix);
   const candidateTemplate = normalizeSuffixTemplate(candidateSuffix);
@@ -201,12 +213,13 @@ function getTagFamilyPolicy(
 function isStrictFamilyMatch(
   referenceShape: NumericTagShape,
   candidateShape: NumericTagShape,
+  allowPrereleaseToGA = false,
 ): boolean {
   if (candidateShape.prefix !== referenceShape.prefix) {
     return false;
   }
 
-  if (!isSuffixCompatible(referenceShape.suffix, candidateShape.suffix)) {
+  if (!isSuffixCompatible(referenceShape.suffix, candidateShape.suffix, allowPrereleaseToGA)) {
     return false;
   }
 
@@ -233,6 +246,7 @@ function isSemverFamilyMatch(
   referenceShape: NumericTagShape | null,
   referenceGroups: number | undefined,
   tagFamilyPolicy: TagFamilyPolicy,
+  allowPrereleaseToGA = false,
 ): boolean {
   if (!referenceShape || referenceGroups === undefined) {
     return true;
@@ -246,7 +260,10 @@ function isSemverFamilyMatch(
   // #498: the suffix/variant guard must hold regardless of tag-family policy.
   // Loose mode only relaxes prefix equality and leading-zero rules — it must
   // never let a bare tag or a different variant cross a suffixed reference.
-  if (!isSuffixCompatible(referenceShape.suffix, candidateShape.suffix)) {
+  // #501: allowPrereleaseToGA defaults to false here, so the actionable path
+  // never treats a bare GA release as a match for a prerelease-pinned
+  // reference — only computePinGateInsight opts in.
+  if (!isSuffixCompatible(referenceShape.suffix, candidateShape.suffix, allowPrereleaseToGA)) {
     return false;
   }
 
@@ -254,7 +271,7 @@ function isSemverFamilyMatch(
     return true;
   }
 
-  return isStrictFamilyMatch(referenceShape, candidateShape);
+  return isStrictFamilyMatch(referenceShape, candidateShape, allowPrereleaseToGA);
 }
 
 function isGreaterCandidateTag(
@@ -297,6 +314,9 @@ interface SemverCandidateFilterContext {
   tagFamilyPolicy: TagFamilyPolicy;
   applyPrefixFilter: boolean;
   allowIncludeFilterRecovery: boolean;
+  // #501: only true for the computePinGateInsight() call chain — never for
+  // the actionable candidate path.
+  allowPrereleaseToGA: boolean;
 }
 
 function shouldIncludeSemverCandidate(
@@ -320,6 +340,7 @@ function shouldIncludeSemverCandidate(
     context.referenceShape,
     context.referenceGroups,
     context.tagFamilyPolicy,
+    context.allowPrereleaseToGA,
   );
   const greaterThanCurrent = isGreaterCandidateTag(
     transformedTag,
@@ -347,6 +368,7 @@ function filterSemverCandidatesOnePass(
   tagFamilyPolicy: TagFamilyPolicy,
   applyPrefixFilter: boolean,
   allowIncludeFilterRecovery: boolean,
+  allowPrereleaseToGA = false,
 ): { filteredTags: string[]; currentPrefix: string; stats: SemverCandidateFilterStats } {
   const currentTag = container.image.tag.value;
   const currentPrefix = getCurrentPrefix(currentTag);
@@ -362,6 +384,7 @@ function filterSemverCandidatesOnePass(
     tagFamilyPolicy,
     applyPrefixFilter,
     allowIncludeFilterRecovery,
+    allowPrereleaseToGA,
   };
 
   const stats: SemverCandidateFilterStats = {
@@ -608,6 +631,12 @@ function filterMeaningfulInsightCandidates(
  * policy rather than overriding it. Cross-MAJOR jumps are allowed (that is
  * the entire point of the informational channel); crossing a suffix/variant
  * boundary is not.
+ *
+ * #501: this is the *only* call site that passes allowPrereleaseToGA=true —
+ * a prerelease-pinned reference (e.g. "1.5.2-rc.1") sees its own bare GA
+ * release ("1.5.2") here, for information only. The actionable path never
+ * sets this flag, so the same widening cannot make a bare GA release an
+ * actionable update candidate.
  */
 function computePinGateInsight(
   container: Container,
@@ -619,6 +648,7 @@ function computePinGateInsight(
     'strict',
     true,
     false,
+    true,
   );
 
   if (insightCandidates.length === 0) {
