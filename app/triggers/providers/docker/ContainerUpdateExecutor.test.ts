@@ -610,6 +610,31 @@ describe('ContainerUpdateExecutor', () => {
     );
   });
 
+  test('execute fails cleanly without renaming or creating when the container is already a rollback-orphan name', async () => {
+    const context = createContext({
+      currentContainerSpec: createCurrentContainerSpec({
+        Name: '/web-old-1781107685468',
+      }),
+    });
+    const executor = createExecutor();
+
+    await expect(executor.execute(context, createContainer(), createLog())).rejects.toThrow(
+      /web-old-1781107685468/,
+    );
+
+    expect(mockMarkOperationTerminal).toHaveBeenCalledWith(
+      'op-1',
+      expect.objectContaining({
+        status: 'failed',
+        phase: 'failed',
+        lastError: expect.stringContaining('web'),
+      }),
+    );
+    expect(context.currentContainer.rename).not.toHaveBeenCalled();
+    expect(executor.createContainer).not.toHaveBeenCalled();
+    expect(executor.pullImage).not.toHaveBeenCalled();
+  });
+
   test('execute returns false for dry-run mode after image pull', async () => {
     const pullImage = vi.fn().mockResolvedValue(undefined);
     const executor = createExecutor({

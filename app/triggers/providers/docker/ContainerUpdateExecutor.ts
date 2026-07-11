@@ -1,3 +1,4 @@
+import { isRollbackContainerName } from '../../../model/container.js';
 import type { ContainerIdentityFilter } from '../../../store/update-operation.js';
 import * as updateOperationStore from '../../../store/update-operation.js';
 import { OperationCancelledError } from '../../../store/update-operation.js';
@@ -684,6 +685,29 @@ class ContainerUpdateExecutor {
     // so the original operationId stays stable even if queued TTL expiry
     // already transitioned it to a terminal state before execution begins.
     const operation = this.resolveOrCreateOperation(requestedOperationId, operationFields);
+
+    // Cascade guard: a container already carries the "-old-<epoch-ms>" rollback
+    // rename suffix, meaning a previous update attempt failed mid-recreate and
+    // was never restored (see created-container-candidate.ts / the macvlan
+    // incident). Recreating from this name would nest a second rollback rename
+    // on top of the first, compounding the mess. Fail terminally instead of
+    // renaming/pulling/creating so the operator gets an explanatory error and
+    // can clean up the orphan manually.
+    if (isRollbackContainerName(oldName)) {
+      const canonicalName = oldName.replace(/-old-\d{10,}$/, '');
+      const cascadeError = new Error(
+        `Container ${oldName} is already renamed from a previous failed update and was never restored. ` +
+          `Refusing to recreate from this name to avoid nesting another rollback rename — manually remove ` +
+          `any orphaned "Created" container squatting ${canonicalName} and rename ${oldName} back to ` +
+          `${canonicalName} (or recreate it from your compose file) before retrying.`,
+      );
+      updateOperationStore.markOperationTerminal(operation.id, {
+        status: 'failed',
+        phase: 'failed',
+        lastError: getErrorMessage(cascadeError),
+      });
+      throw cascadeError;
+    }
 
     try {
       await this.pullImage(dockerApi, auth, newImage, logContainer);
