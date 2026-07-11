@@ -1,5 +1,5 @@
 {
-  "version": "1.5.2",
+  "version": "1.5.3",
   "scripts": {
     "prepare": "lefthook install",
     "release:precheck": "node scripts/release-precut-check.mjs",
