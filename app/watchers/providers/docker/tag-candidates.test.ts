@@ -1053,4 +1053,300 @@ describe('docker tag candidates module', () => {
       expect.stringContaining('No tags found in the same inferred family'),
     );
   });
+
+  // #498: loose mode previously bypassed the suffix/variant guard entirely
+  // (isSemverFamilyMatch returned true before isStrictFamilyMatch/isSuffixCompatible
+  // ever ran). Fixed so loose still requires a compatible suffix; it only relaxes
+  // prefix equality and leading-zero rules.
+  test('loose mode still enforces the suffix/variant guard — a bare tag is not a candidate for a suffixed reference (#498)', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '1.2.3-ls132',
+          semver: true,
+        },
+      },
+      tagFamily: 'loose',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const result = getTagCandidates(container, ['1.2.3-ls132', '1.2.4', '1.2.4-ls133'], log);
+
+    // '1.2.4' (bare) is rejected — only the same-variant '1.2.4-ls133' remains.
+    expect(result.tags).toEqual(['1.2.4-ls133']);
+  });
+
+  // #498: sortSemverDescending() previously ranked by raw semver precedence, where
+  // semver treats a suffix as a prerelease — so a bare "3.0.2" would outrank
+  // "3.0.2-alpine" even for an "-alpine" reference. Fixed to prefer the candidate
+  // whose suffix template exactly matches the reference's when numeric segments tie.
+  test('actionable path sort prefers the exact-suffix-match candidate at the same numeric version (#498)', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '1.2.3-alpine',
+          semver: true,
+        },
+      },
+      tagFamily: 'strict',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const result = getTagCandidates(
+      container,
+      ['1.2.3-alpine', '1.2.5-alpine3.21', '1.2.5-alpine'],
+      log,
+    );
+
+    expect(result.tags[0]).toBe('1.2.5-alpine');
+  });
+
+  // #498: when the current tag itself has no numeric shape (e.g. a rolling
+  // alias like "nightly"), sortSemverDescending has no reference suffix
+  // template to tie-break against, so numeric-segment ties fall through to
+  // plain semver ordering unchanged.
+  test('falls back to plain semver ordering for numeric-segment ties when the current tag has no numeric shape (#498)', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: 'nightly',
+          semver: false,
+        },
+      },
+      includeTags: '^v',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const result = getTagCandidates(container, ['v1.0.0-rc1', 'v1.0.0-rc2'], log);
+
+    expect(result.tags[0]).toBe('v1.0.0-rc2');
+  });
+
+  // #498: mirrors the exact-suffix-match test above with the exact-match
+  // candidate appearing first in tag order instead of second. Array.sort's
+  // comparator argument order depends on element position, so this exercises
+  // the branch of the tie-break that the other ordering does not reach.
+  test('actionable path sort prefers the exact-suffix-match candidate regardless of input tag order (#498)', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: '1.2.3-alpine',
+          semver: true,
+        },
+      },
+      tagFamily: 'strict',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const result = getTagCandidates(
+      container,
+      ['1.2.3-alpine', '1.2.5-alpine', '1.2.5-alpine3.21'],
+      log,
+    );
+
+    expect(result.tags[0]).toBe('1.2.5-alpine');
+  });
+
+  // #498: a fallback-path (non-semver current tag + includeTags) candidate
+  // pair with different numeric-segment counts exercises the missing-segment
+  // "?? '0'" padding in compareNumericSegmentsDescending — the family filter
+  // that normally guarantees equal segment counts does not apply here.
+  test('pads missing numeric segments as 0 when comparing candidates of different precision (#498)', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: 'nightly',
+          semver: false,
+        },
+      },
+      includeTags: '^v',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const result = getTagCandidates(container, ['v1.2.3', 'v1.2'], log);
+
+    expect(result.tags[0]).toBe('v1.2.3');
+  });
+
+  // #498: mirrors the padding test above with the shorter-precision tag
+  // first in input order instead of second, exercising the '?? 0' fallback
+  // for the other comparator argument (see the input-order note above).
+  test('pads missing numeric segments as 0 regardless of which candidate is shorter (#498)', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: 'nightly',
+          semver: false,
+        },
+      },
+      includeTags: '^v',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const result = getTagCandidates(container, ['v1.2', 'v1.2.3'], log);
+
+    expect(result.tags[0]).toBe('v1.2.3');
+  });
+
+  // #498: a transform formula can mangle a tag into a string containing an
+  // embedded newline. getNumericTagShapeFromTransformedTag defensively
+  // refuses such strings (returns null) while the app's semver parser still
+  // recovers a version via its coerce() fallback, so filterSemverOnly still
+  // admits the tag. sortSemverDescending must fall back to plain semver
+  // comparison rather than crash when a candidate's shape is null.
+  test('falls back to plain semver comparison when a transform mangles a tag beyond shape parsing (#498)', () => {
+    const container = createContainer({
+      image: {
+        tag: {
+          value: 'nightly',
+          semver: false,
+        },
+      },
+      includeTags: '^v',
+      transformTags: '(.+) => $1\nx',
+    });
+    const log = { warn: vi.fn(), debug: vi.fn() };
+
+    const result = getTagCandidates(container, ['v1.2.3', 'v5.0.0'], log);
+
+    expect(result.tags[0]).toBe('v5.0.0');
+  });
+
+  describe('pin-gate informational insight (#498)', () => {
+    test('computes the informational insight tag for a pinned specific-precision tag', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: 'v1.13.3',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['v1.13.3', 'v1.13.4', 'v1.14.0', 'v1.46.1'], log);
+
+      expect(result.tags).toEqual([]);
+      expect(result.insight).toEqual({ tag: 'v1.46.1', kind: 'minor' });
+    });
+
+    test('allows a cross-major jump — that is the whole point of the informational channel', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: '1.13.3',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['1.13.3', '2.0.0'], log);
+
+      expect(result.insight).toEqual({ tag: '2.0.0', kind: 'major' });
+    });
+
+    test('never crosses the suffix/variant boundary — bare candidate is rejected for a suffixed pin', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: '2.7.5-openvino',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(
+        container,
+        ['2.7.5-openvino', '2.7.6-openvino', '3.0.2-openvino', '3.0.2'],
+        log,
+      );
+
+      expect(result.insight).toEqual({ tag: '3.0.2-openvino', kind: 'major' });
+    });
+
+    test('prefers the exact-suffix-match candidate over a merely-compatible one at the same version', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: '1.2.3-alpine',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(
+        container,
+        ['1.2.3-alpine', '1.2.5-alpine3.21', '1.2.5-alpine'],
+        log,
+      );
+
+      expect(result.insight).toEqual({ tag: '1.2.5-alpine', kind: 'patch' });
+    });
+
+    test('omits insight when no strictly-newer same-family candidate exists', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: '1.13.3',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['1.13.3', '1.13.2'], log);
+
+      expect(result.insight).toBeUndefined();
+    });
+
+    test('is never computed for the floating pin gate', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: '16-alpine',
+            semver: true,
+            tagPrecision: 'floating',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['16-alpine', '17-alpine'], log);
+
+      expect(result.insight).toBeUndefined();
+    });
+
+    test('is skipped entirely when the computeInsight flag is false (opt-out)', () => {
+      const container = createContainer({
+        image: {
+          tag: {
+            value: 'v1.13.3',
+            semver: true,
+            tagPrecision: 'specific',
+          },
+        },
+        tagFamily: 'strict',
+      });
+      const log = { warn: vi.fn(), debug: vi.fn() };
+
+      const result = getTagCandidates(container, ['v1.13.3', 'v1.46.1'], log, false);
+
+      expect(result.tags).toEqual([]);
+      expect(result.insight).toBeUndefined();
+    });
+  });
 });

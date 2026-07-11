@@ -558,7 +558,12 @@ describe('Docker Watcher', () => {
       );
     });
 
-    test('should allow cross-family updates in loose mode when no higher same-family tag exists', async () => {
+    // #498: this test previously asserted the buggy behavior where loose mode
+    // bypassed the suffix/variant guard entirely, letting a bare "1.2.4" win
+    // over the "-ls132"-suffixed reference. Loose still relaxes prefix equality
+    // and leading-zero rules, but it must never cross a suffix/variant boundary.
+    // With "1.2.4" (bare) now correctly rejected, no candidate remains.
+    test('loose mode still enforces the suffix/variant guard even when no same-variant tag is higher (#498)', async () => {
       const container = {
         tagFamily: 'loose',
         image: {
@@ -586,10 +591,14 @@ describe('Docker Watcher', () => {
       const mockLogChild = { error: vi.fn(), warn: vi.fn() };
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(result).toEqual({ tag: '1.2.4' });
+      expect(result).toEqual({ tag: '1.2.3-ls132' });
     });
 
-    test('should allow cross-family semver updates when tagFamily is loose', async () => {
+    // #498: previously expected the buggy cross-variant "1.2.4" (bare). Loose mode
+    // still allows crossing MAJOR/MINOR versions, but only within the same suffix
+    // family — "1.2.4-ls133" shares the "-ls###" template with the reference, so
+    // it (not the bare "1.2.4") is the correct winner.
+    test('loose mode allows cross-version updates within the same suffix family (#498)', async () => {
       const container = {
         tagFamily: 'loose',
         image: {
@@ -618,7 +627,7 @@ describe('Docker Watcher', () => {
       const mockLogChild = { error: vi.fn(), warn: vi.fn() };
       const result = await docker.findNewVersion(container, mockLogChild);
 
-      expect(result).toEqual({ tag: '1.2.4' });
+      expect(result).toEqual({ tag: '1.2.4-ls133' });
     });
 
     test('should fall back to strict mode when tagFamily is invalid', async () => {

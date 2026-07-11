@@ -2,6 +2,7 @@ import { RE2JS } from 're2js';
 
 import type { Container } from '../../../model/container.js';
 import {
+  diff as diffSemver,
   isGreater as isGreaterSemver,
   parse as parseSemver,
   transform as transformTag,
@@ -124,9 +125,15 @@ interface SemverCandidateFilterStats {
   greaterSkipped: boolean;
 }
 
+export interface TagInsight {
+  tag: string;
+  kind: 'major' | 'minor' | 'patch';
+}
+
 interface TagCandidatesResult {
   tags: string[];
   noUpdateReason?: string;
+  insight?: TagInsight;
 }
 
 function normalizeSuffixTemplate(suffix: string): string {
@@ -206,6 +213,13 @@ function isSemverFamilyMatch(
 
   const candidateShape = getNumericTagShapeFromTransformedTag(transformedTag);
   if (!candidateShape || candidateShape.numericSegments.length !== referenceGroups) {
+    return false;
+  }
+
+  // #498: the suffix/variant guard must hold regardless of tag-family policy.
+  // Loose mode only relaxes prefix equality and leading-zero rules — it must
+  // never let a bare tag or a different variant cross a suffixed reference.
+  if (!isSuffixCompatible(referenceShape.suffix, candidateShape.suffix)) {
     return false;
   }
 
@@ -385,13 +399,84 @@ export function filterBySegmentCount(tags: string[], container: Container): stri
 }
 
 /**
+ * Compare two numeric-tag shapes by their numeric segments only (descending),
+ * matching semver major/minor/patch precedence but ignoring the suffix.
+ * Missing trailing segments are treated as 0. Returns 0 when all segments tie.
+ */
+function compareNumericSegmentsDescending(a: NumericTagShape, b: NumericTagShape): number {
+  const segmentCount = Math.max(a.numericSegments.length, b.numericSegments.length);
+  for (let i = 0; i < segmentCount; i += 1) {
+    const aSegment = Number.parseInt(a.numericSegments[i] ?? '0', 10);
+    const bSegment = Number.parseInt(b.numericSegments[i] ?? '0', 10);
+    if (aSegment !== bSegment) {
+      return bSegment - aSegment;
+    }
+  }
+  return 0;
+}
+
+/**
+ * #498: when numeric segments tie, prefer the candidate whose suffix template
+ * exactly matches the reference's over one that is merely suffix-compatible.
+ * Without this, semver treats the suffix as a prerelease field, so a bare tag
+ * or a differently-precise variant (e.g. "-alpine3.21") can outrank the exact
+ * match (e.g. "-alpine") at the same numeric version.
+ */
+function compareExactSuffixMatch(
+  a: NumericTagShape,
+  b: NumericTagShape,
+  referenceSuffixTemplate: string | undefined,
+): number {
+  if (referenceSuffixTemplate === undefined) {
+    return 0;
+  }
+  const aExact = normalizeSuffixTemplate(a.suffix) === referenceSuffixTemplate;
+  const bExact = normalizeSuffixTemplate(b.suffix) === referenceSuffixTemplate;
+  if (aExact === bExact) {
+    return 0;
+  }
+  return aExact ? -1 : 1;
+}
+
+/**
  * Sort tags by semver in descending order (mutates the array).
  * Pre-computes transformed tags to avoid recompiling the transform formula
  * on every comparator call (O(n log n) calls for an n-element array).
+ * Ties on numeric segments are broken in favor of the candidate whose suffix
+ * template exactly matches referenceTag's (#498) — when referenceTag has no
+ * derivable numeric shape (e.g. a rolling alias), the tie-break is skipped.
  */
-function sortSemverDescending(tags: string[], transformTags: string | undefined): void {
-  const transformed = tags.map((tag) => ({ tag, transformed: transformTag(transformTags, tag) }));
+function sortSemverDescending(
+  tags: string[],
+  transformTags: string | undefined,
+  referenceTag: string,
+): void {
+  const referenceShape = getNumericTagShapeFromTransformedTag(
+    transformTag(transformTags, referenceTag),
+  );
+  const referenceSuffixTemplate = referenceShape
+    ? normalizeSuffixTemplate(referenceShape.suffix)
+    : undefined;
+
+  const transformed = tags.map((tag) => {
+    const transformedTag = transformTag(transformTags, tag);
+    return {
+      tag,
+      transformed: transformedTag,
+      shape: getNumericTagShapeFromTransformedTag(transformedTag),
+    };
+  });
   transformed.sort((a, b) => {
+    if (a.shape && b.shape) {
+      const numericComparison = compareNumericSegmentsDescending(a.shape, b.shape);
+      if (numericComparison !== 0) {
+        return numericComparison;
+      }
+      const suffixComparison = compareExactSuffixMatch(a.shape, b.shape, referenceSuffixTemplate);
+      if (suffixComparison !== 0) {
+        return suffixComparison;
+      }
+    }
     const greater = isGreaterSemver(b.transformed, a.transformed);
     return greater ? 1 : -1;
   });
@@ -408,15 +493,82 @@ function filterSemverOnly(tags: string[], transformTags: string | undefined): st
 }
 
 /**
+ * #498: classify a pin-gate insight's version bump as major/minor/patch.
+ * diffSemver() treats a shared suffix as a semver prerelease field, so a
+ * cross-major bump between two same-suffix tags reports as "premajor" (not
+ * "major") — fold the pre-* variants into their release counterpart. Any
+ * other outcome (e.g. a pure suffix/variant change with no numeric bump)
+ * collapses to "patch", the least severe of the three reported kinds.
+ */
+function toPinInfoKind(
+  currentTransformedTag: string,
+  candidateTransformedTag: string,
+): TagInsight['kind'] {
+  const semverDiffResult = diffSemver(currentTransformedTag, candidateTransformedTag);
+  switch (semverDiffResult) {
+    case 'major':
+    case 'premajor':
+      return 'major';
+    case 'minor':
+    case 'preminor':
+      return 'minor';
+    default:
+      return 'patch';
+  }
+}
+
+/**
+ * #498: compute the informational "what's newer" insight for a container
+ * caught by the pin gate (specific-precision, unlabeled, non-loose). Reuses
+ * the same one-pass semver-family filter as the actionable path, but always
+ * under strict-style family matching — the pin gate is only ever entered
+ * when the container's own policy is already non-loose, so this mirrors that
+ * policy rather than overriding it. Cross-MAJOR jumps are allowed (that is
+ * the entire point of the informational channel); crossing a suffix/variant
+ * boundary is not.
+ */
+function computePinGateInsight(
+  container: Container,
+  filteredTags: string[],
+): TagInsight | undefined {
+  const { filteredTags: insightCandidates } = filterSemverCandidatesOnePass(
+    filteredTags,
+    container,
+    'strict',
+    true,
+    false,
+  );
+
+  if (insightCandidates.length === 0) {
+    return undefined;
+  }
+
+  sortSemverDescending(insightCandidates, container.transformTags, container.image.tag.value);
+
+  const winningTag = insightCandidates[0];
+  const currentTransformedTag = transformTag(container.transformTags, container.image.tag.value);
+  const winningTransformedTag = transformTag(container.transformTags, winningTag);
+
+  return {
+    tag: winningTag,
+    kind: toPinInfoKind(currentTransformedTag, winningTransformedTag),
+  };
+}
+
+/**
  * Filter candidate tags (based on tag name).
  * @param container
  * @param tags
+ * @param logContainer
+ * @param computeInsight when true (default), also compute the pin-gate
+ *   informational insight (#498). Watchers can opt out via tag.pin.info=false.
  * @returns {*}
  */
 export function getTagCandidates(
   container: Container,
   tags: string[],
   logContainer: TagCandidatesLogger,
+  computeInsight = true,
 ): TagCandidatesResult {
   const { filteredTags: baseTags, allowIncludeFilterRecovery } = applyIncludeExcludeFilters(
     container,
@@ -434,7 +586,7 @@ export function getTagCandidates(
       `Current tag "${container.image.tag.value}" is not semver but includeTags filter "${container.includeTags}" is set. Advising best semver tag from filtered candidates.`,
     );
     const semverTags = filterSemverOnly(baseTags, container.transformTags);
-    sortSemverDescending(semverTags, container.transformTags);
+    sortSemverDescending(semverTags, container.transformTags, container.image.tag.value);
     return { tags: semverTags };
   }
 
@@ -473,6 +625,7 @@ export function getTagCandidates(
     return {
       tags: [],
       noUpdateReason: digestWatchEnabled ? undefined : noUpdateReason,
+      insight: computeInsight ? computePinGateInsight(container, filteredTags) : undefined,
     };
   }
 
@@ -511,6 +664,6 @@ export function getTagCandidates(
 
   logSemverCandidateFilterStats(logContainer, tagFamilyPolicy, stats);
 
-  sortSemverDescending(filteredTags, container.transformTags);
+  sortSemverDescending(filteredTags, container.transformTags, container.image.tag.value);
   return { tags: filteredTags, noUpdateReason };
 }

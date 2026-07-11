@@ -1081,6 +1081,77 @@ test('model should not flag updateAvailable when tag is equal', async () => {
   expect(containerValidated.updateAvailable).toBeFalsy();
 });
 
+// #498 canonical regression: a pinned container with an informational
+// updateInsight populated must NOT look like an update. updateAvailable is
+// derived solely from image/result tag+digest+created comparisons, so an
+// additive result.updateInsight field must never flip it to true, and
+// updateKind must stay 'unknown' — the state trigger-threshold.isThresholdReached
+// and Trigger.ts's `if (!container.updateAvailable) return` gate both key off.
+test('model should not flag updateAvailable when a pinned tag only has updateInsight populated (#498)', async () => {
+  const containerValidated = container.validate({
+    id: 'container-123456789',
+    name: 'test',
+    watcher: 'test',
+    image: {
+      id: 'image-123456789',
+      registry: {
+        name: 'hub',
+        url: 'https://hub',
+      },
+      name: 'organization/image',
+      tag: {
+        value: 'v1.13.3',
+        semver: true,
+        tagPrecision: 'specific',
+      },
+      digest: {
+        watch: false,
+      },
+      architecture: 'arch',
+      os: 'os',
+    },
+    result: {
+      tag: 'v1.13.3',
+      updateInsight: { tag: 'v1.46.1', kind: 'minor' },
+    },
+  });
+  expect(containerValidated.updateAvailable).toBeFalsy();
+  expect(containerValidated.updateKind.kind).toBe('unknown');
+  expect(containerValidated.result?.updateInsight).toEqual({ tag: 'v1.46.1', kind: 'minor' });
+});
+
+test('model should reject an invalid result.updateInsight.kind value (#498)', async () => {
+  expect(() =>
+    container.validate({
+      id: 'container-123456789',
+      name: 'test',
+      watcher: 'test',
+      image: {
+        id: 'image-123456789',
+        registry: {
+          name: 'hub',
+          url: 'https://hub',
+        },
+        name: 'organization/image',
+        tag: {
+          value: 'v1.13.3',
+          semver: true,
+          tagPrecision: 'specific',
+        },
+        digest: {
+          watch: false,
+        },
+        architecture: 'arch',
+        os: 'os',
+      },
+      result: {
+        tag: 'v1.13.3',
+        updateInsight: { tag: 'v1.46.1', kind: 'prerelease' },
+      },
+    }),
+  ).toThrow();
+});
+
 test('model should flag updateAvailable when digest is different', async () => {
   const containerValidated = container.validate({
     id: 'container-123456789',

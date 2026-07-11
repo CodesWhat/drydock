@@ -529,6 +529,21 @@ const handleContainerReportTestCases = [
     kind: 'tag',
     semverDiff: 'major',
   },
+  // #498 canonical regression: a pinned container carrying an informational
+  // updateInsight looks exactly like this — updateAvailable stays false and
+  // updateKind stays 'unknown'. threshold='all' alone would otherwise let an
+  // unknown-kind update through (see trigger-threshold.ts isAllThreshold), so
+  // this proves the updateAvailable gate — not the threshold check — is what
+  // keeps insight-only containers from firing triggers.
+  {
+    shouldTrigger: false,
+    threshold: 'all',
+    once: true,
+    changed: true,
+    updateAvailable: false,
+    kind: 'unknown',
+    semverDiff: undefined,
+  },
 ];
 
 test.each(
