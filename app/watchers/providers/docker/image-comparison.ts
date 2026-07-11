@@ -333,6 +333,20 @@ export async function findNewVersion(
     return result;
   }
 
+  // Locally-built images (docker build / docker load) have no RepoDigests, so
+  // there's no registry-hosted reference to query — calling getTags would just
+  // 401/404 against an anonymous token and get counted as a watch error (the
+  // macvlan-incident nightly-error-count spam). isLocalImage is derived once at
+  // discovery/refresh time from the live Docker image inspect (empty
+  // RepoDigests), NOT from digest.repo directly: many registry-backed
+  // containers simply have digest watching disabled and never populate
+  // digest.repo, so gating on its absence would wrongly skip real registries.
+  if (container.image.isLocalImage) {
+    logContainer.debug('Locally-built image (no repository digest) — registry not queried');
+    result.noUpdateReason = 'Locally-built image (no repository digest) — registry not queried';
+    return result;
+  }
+
   // Get all available tags
   const tags = await registryProvider.getTags(
     getImageForRegistryQuery(container.image, registryProvider),

@@ -286,6 +286,10 @@ async function refreshStoredContainerImageFields(
     const currentImage = await watcher.dockerApi.getImage(container.Image).inspect();
     const freshDigestRepo = getRepoDigest(currentImage);
     const freshImageId = currentImage.Id;
+    // Keep isLocalImage in sync with the live Docker image inspect every
+    // cycle — independent of shouldRepairStoredImageReference below, and
+    // spread forward by the repair branch's `...containerInStore.image`.
+    containerInStore.image.isLocalImage = freshDigestRepo === undefined;
 
     if (shouldRepairStoredImageReference(containerInStore)) {
       const resolvedImageState = resolveContainerImageState({
@@ -760,6 +764,10 @@ export async function addImageDetailsToContainerOrchestration(
         repo: repoDigest,
         value: repoDigest,
       },
+      // True when the live image inspect had no RepoDigests (built locally or
+      // `docker load`ed) — lets findNewVersion skip a registry lookup that
+      // would otherwise 401/404 and get counted as a watch error.
+      isLocalImage: repoDigest === undefined,
       architecture: image.Architecture,
       os: image.Os,
       variant: image.Variant,

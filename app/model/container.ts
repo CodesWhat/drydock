@@ -66,6 +66,11 @@ export interface ContainerImage {
     value?: string;
     repo?: string;
   };
+  // True when the live Docker image inspect had no RepoDigests (built locally
+  // or `docker load`ed) — derived once at discovery/refresh time, independent
+  // of digest.repo/digest.watch, so watchContainer can skip registry lookups
+  // that would otherwise 401/404 and get counted as watch errors.
+  isLocalImage?: boolean;
   architecture: string;
   os: string;
   variant?: string;
@@ -333,6 +338,7 @@ const schema = joi.object({
           repo: joi.string(),
         })
         .required(),
+      isLocalImage: joi.boolean(),
       architecture: joi.string().min(1).required(),
       os: joi.string().min(1).required(),
       variant: joi.string(),
