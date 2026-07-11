@@ -48,6 +48,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Pinned semver tags are now compared by digest by default, as originally announced in v1.5.0-rc.36.** A rebuilt image republished under the same tag is detected again. Previously digest watching was silently disabled for fully-pinned tags (e.g. `nginx:1.25.3`), leaving them with no update detection at all and a misleading "compared by digest only" notice on every pinned container. Version climbing for pinned tags remains opt-in via `dd.tag.include` or `dd.tag.family=loose`. In agent deployments, agents perform the registry checks — update agents alongside the controller to restore digest detection for agent-watched containers. ([#498](https://github.com/CodesWhat/drydock/issues/498))
+
+- **The "no update detection" notice is honest when digest watching is explicitly disabled.** When `dd.watch.digest=false` (or an imgset `watch.digest=false`) is set on a pinned or floating tag, the notice no longer claims a digest comparison is happening. (#498)
+
+- **Removed the unreachable flat `tagFamily` imgset config key.** Env-derived config keys are lowercased, so the camelCase key could never match any real configuration; the documented `DD_WATCHER_{watcher}_IMGSET_{name}_TAG_FAMILY` form is unaffected. (#498)
+
 - **`GET /api/v1/containers/backups` (list all backups) is now reachable.** The route was previously registered as `router.get('/', getBackups)` in the backup router, which was mounted at `/containers` after the container router — so the container router's own `GET /` handler shadowed it and the list-backups endpoint was never reachable. The route is now `router.get('/backups', getBackups)` and the backup router is mounted before the container router, making `GET /api/v1/containers/backups` accessible. The per-container backup endpoints (`GET /api/v1/containers/:id/backups`) were not affected.
 
 - **App favicon now matches the refreshed website branding.** The v1.5.1 brand refresh (#439) updated the website to the cropped whale "headshot" icon but left the in-app tab icon, Apple touch icon, and PWA manifest icons on the old full-body whale. The app now ships the same icon set as the website. The stale `favicon.svg` — which modern browsers preferred over the PNGs, so it kept showing the old mark — was removed, and the icon links carry a `?v=2` cache-buster so existing installs re-fetch instead of serving the aggressively cached old icon. (#439)

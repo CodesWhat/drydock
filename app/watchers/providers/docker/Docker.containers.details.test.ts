@@ -790,6 +790,30 @@ describe('Docker Watcher', () => {
       expect(() => docker.validateConfiguration(config)).not.toThrow();
     });
 
+    test('rejects the dead flat imgset tagFamily key while nested tag.family still validates (#498)', () => {
+      const configWithFlatKey = {
+        socket: '/var/run/docker.sock',
+        imgset: {
+          nginx: {
+            image: 'library/nginx',
+            tagFamily: 'loose',
+          },
+        },
+      };
+      expect(() => docker.validateConfiguration(configWithFlatKey)).toThrow();
+
+      const configWithNestedKey = {
+        socket: '/var/run/docker.sock',
+        imgset: {
+          nginx: {
+            image: 'library/nginx',
+            tag: { family: 'loose' },
+          },
+        },
+      };
+      expect(() => docker.validateConfiguration(configWithNestedKey)).not.toThrow();
+    });
+
     test('should use lookup image label for registry matching', async () => {
       const harborHubState = createHarborHubRegistryState();
       const container = await setupContainerDetailTest(docker, {

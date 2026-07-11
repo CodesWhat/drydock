@@ -3113,14 +3113,15 @@ describe('isDigestToWatch Logic', () => {
     expect(result.image.digest.watch).toBe(expected);
   });
 
-  // Case 2: Semver (no label) -> default false
+  // Case 2: Pinned specific semver (no label) -> default true, so same-tag
+  // rebuilds are detected by digest (#498).
   test.each([
     ['my.registry', 'Custom Registry'],
     ['docker.io', 'Docker Hub'],
-  ])('should NOT watch digest by default for semver images (%s)', async (domain) => {
+  ])('should watch digest by default for pinned specific semver images (%s)', async (domain) => {
     const container = await setupTest({}, domain, '1.0.0', true);
     const result = await docker.addImageDetailsToContainer(container);
-    expect(result.image.digest.watch).toBe(false);
+    expect(result.image.digest.watch).toBe(true);
   });
 
   // Case 3: Non-Semver (no label) -> default true, including Docker Hub mutable aliases.
