@@ -798,6 +798,106 @@ describe('ContainersGroupedViews', () => {
     expect(updateState.text()).not.toContain('v1.46.1');
   });
 
+  it('renders the informational update-insight badge in card and list modes (#498)', async () => {
+    const pinned = makeContainer({
+      id: 'c-insight-card-list',
+      name: 'alpha',
+      currentTag: 'v1.13.3',
+      newTag: null,
+      updateKind: null,
+      status: 'running',
+      server: 'local-main',
+      registry: 'dockerhub',
+      updateInsight: { tag: 'v1.46.1', kind: 'minor' },
+    });
+
+    const { context, refs } = makeContext();
+    const containers = [pinned];
+    refs.containerViewMode.value = 'cards';
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    const card = wrapper
+      .findAll('.card-item-stub')
+      .find((candidate) => candidate.text().includes('alpha'));
+    expect(card).toBeDefined();
+    const cardBadge = card!.get('[data-test="update-insight-badge"]');
+    expect(cardBadge.text()).toBe('Newer available');
+    expect(card!.text()).not.toContain('v1.46.1');
+
+    refs.containerViewMode.value = 'list';
+    await nextTick();
+
+    const listItem = wrapper
+      .findAll('.list-item-stub')
+      .find((candidate) => candidate.text().includes('alpha'));
+    expect(listItem).toBeDefined();
+    const listBadge = listItem!.get('[data-test="update-insight-badge"]');
+    expect(listBadge.text()).toBe('Newer available');
+    expect(listItem!.text()).not.toContain('v1.46.1');
+  });
+
+  it('renders the no-update-reason and update-insight badges together without contradictory copy when digest watching is off (#498)', async () => {
+    const remedy =
+      'Remove the digest-watch override (dd.watch.digest=false label or imgset watch.digest=false) to detect same-tag rebuilds, or set dd.tag.family=loose or add a dd.tag.include filter to allow semver version climbing.';
+    const pinnedDigestOff = makeContainer({
+      id: 'c-insight-plus-reason',
+      name: 'alpha',
+      currentTag: 'v1.13.3',
+      newTag: null,
+      updateKind: null,
+      status: 'running',
+      server: 'local-main',
+      registry: 'dockerhub',
+      noUpdateReason: `Pinned tag "v1.13.3": digest watching is disabled for this container, so no actionable update detection is running (a newer same-family tag is still shown for information). ${remedy}`,
+      updateInsight: { tag: 'v1.46.1', kind: 'minor' },
+    });
+
+    const { context, refs } = makeContext();
+    const containers = [pinnedDigestOff];
+    refs.containerViewMode.value = 'table';
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    const row = rowByName(wrapper, 'alpha');
+
+    const insightBadge = row.get('[data-test="update-insight-badge"]');
+    expect(insightBadge.text()).toBe('Newer available');
+
+    const reasonBadge = row.get('[data-test="no-update-reason-badge"]');
+    const reasonText = reasonBadge.attributes('aria-label');
+    // Only ACTIONABLE update detection is off — the insight badge above is
+    // still real, so the reason copy must not claim no detection at all runs.
+    expect(reasonText).toContain('no actionable update detection is running');
+    expect(reasonText).not.toContain('so no update detection is running');
+  });
+
   it('renders normal card and list metadata quietly with concise update labels', async () => {
     const current = makeContainer({
       id: 'c-quiet-card-current',
