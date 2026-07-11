@@ -140,12 +140,39 @@ function normalizeSuffixTemplate(suffix: string): string {
   return suffix.toLowerCase().replace(/\d+/g, '#');
 }
 
+/**
+ * #498: pre-compiled RE2 pattern for isPrereleaseSuffix(). Matches only
+ * conventional prerelease identifiers, optionally followed by a numeric
+ * qualifier (e.g. "-rc.1", "-beta2") — never a variant/build suffix like
+ * "-openvino" or "-alpine3.19". Compiled once at module load, mirroring the
+ * REJECTED_CREDENTIAL_DEFAULT_PATTERN pattern in BaseRegistry.ts.
+ */
+const PRERELEASE_SUFFIX_PATTERN = RE2JS.compile(
+  '^[-._]?(rc|alpha|beta|pre|preview|dev|next|canary|snapshot)([._-]?[0-9]+)*$',
+);
+
+/**
+ * #498: true when `suffix` is a conventional prerelease identifier (rc,
+ * alpha, beta, pre, preview, dev, next, canary, snapshot — optionally
+ * followed by a numeric qualifier). Lets a prerelease-pinned tag (e.g.
+ * "1.5.2-rc.1") see its own bare GA release ("1.5.2") in isSuffixCompatible,
+ * without opening the door to unrelated variant suffixes.
+ */
+export function isPrereleaseSuffix(suffix: string): boolean {
+  return PRERELEASE_SUFFIX_PATTERN.matches(suffix.toLowerCase());
+}
+
 function isSuffixCompatible(referenceSuffix: string, candidateSuffix: string): boolean {
   if (referenceSuffix === '') {
     return candidateSuffix === '';
   }
   if (candidateSuffix === '') {
-    return false;
+    // #498: a prerelease-pinned reference (e.g. "1.5.2-rc.1") must still be
+    // able to see its own GA release ("1.5.2") — accept a bare candidate only
+    // when the reference suffix is a conventional prerelease identifier.
+    // Variant suffixes (e.g. "-openvino", "-alpine") never accept a bare
+    // candidate; a bare tag says nothing about which variant it belongs to.
+    return isPrereleaseSuffix(referenceSuffix);
   }
   const referenceTemplate = normalizeSuffixTemplate(referenceSuffix);
   const candidateTemplate = normalizeSuffixTemplate(candidateSuffix);
@@ -518,6 +545,61 @@ function toPinInfoKind(
 }
 
 /**
+ * #498 (nit): true when a same-numeric-core candidate represents a genuine
+ * version step rather than the same version described with a more precise
+ * suffix. Two cases count as genuine: the suffix template is unchanged and
+ * only its digit qualifier moved (e.g. "-rc.1" -> "-rc.2"), or the reference
+ * suffix is a conventional prerelease identifier and the candidate is its
+ * bare GA release (e.g. "-rc.1" -> ""). Anything else at the same core
+ * version — most notably a suffix template growing more precise, e.g.
+ * "-alpine" -> "-alpine3.21" — describes the same version, not a newer one.
+ */
+function isMeaningfulSameCoreCandidate(
+  currentShape: NumericTagShape,
+  candidateShape: NumericTagShape,
+): boolean {
+  if (candidateShape.suffix === '' && isPrereleaseSuffix(currentShape.suffix)) {
+    return true;
+  }
+  return (
+    normalizeSuffixTemplate(currentShape.suffix) === normalizeSuffixTemplate(candidateShape.suffix)
+  );
+}
+
+/**
+ * #498 (nit): drop pin-gate candidates that only grow the current tag's
+ * suffix precision at the same numeric core version (see
+ * isMeaningfulSameCoreCandidate above) — those describe the same version,
+ * not an update, and must never be reported as an insight.
+ */
+function filterMeaningfulInsightCandidates(
+  candidates: string[],
+  container: Container,
+  currentShape: NumericTagShape | null,
+): string[] {
+  if (!currentShape) {
+    return candidates;
+  }
+  return candidates.filter((candidateTag) => {
+    const candidateTransformedTag = transformTag(container.transformTags, candidateTag);
+    const candidateShape = getNumericTagShapeFromTransformedTag(candidateTransformedTag);
+    // #498: defensive only. A candidate only reaches this array by surviving
+    // isSemverFamilyMatch, which (whenever currentShape here is non-null,
+    // i.e. its own reference-shape computation was non-null) requires that
+    // same candidate to have produced a non-null shape there too — computed
+    // from the exact same (container.transformTags, candidateTag) inputs.
+    /* v8 ignore next 3 -- unreachable given the invariant above; kept for type-safety and defense-in-depth */
+    if (!candidateShape) {
+      return true;
+    }
+    if (compareNumericSegmentsDescending(currentShape, candidateShape) !== 0) {
+      return true;
+    }
+    return isMeaningfulSameCoreCandidate(currentShape, candidateShape);
+  });
+}
+
+/**
  * #498: compute the informational "what's newer" insight for a container
  * caught by the pin gate (specific-precision, unlabeled, non-loose). Reuses
  * the same one-pass semver-family filter as the actionable path, but always
@@ -543,16 +625,49 @@ function computePinGateInsight(
     return undefined;
   }
 
-  sortSemverDescending(insightCandidates, container.transformTags, container.image.tag.value);
-
-  const winningTag = insightCandidates[0];
   const currentTransformedTag = transformTag(container.transformTags, container.image.tag.value);
+  const currentShape = getNumericTagShapeFromTransformedTag(currentTransformedTag);
+
+  const meaningfulCandidates = filterMeaningfulInsightCandidates(
+    insightCandidates,
+    container,
+    currentShape,
+  );
+
+  if (meaningfulCandidates.length === 0) {
+    return undefined;
+  }
+
+  sortSemverDescending(meaningfulCandidates, container.transformTags, container.image.tag.value);
+
+  const winningTag = meaningfulCandidates[0];
   const winningTransformedTag = transformTag(container.transformTags, winningTag);
 
   return {
     tag: winningTag,
     kind: toPinInfoKind(currentTransformedTag, winningTransformedTag),
   };
+}
+
+/**
+ * #498: the pin gate's digest-disabled noUpdateReason must never contradict a
+ * rendered updateInsight badge. When digest watching is off and no insight
+ * will be shown either (opt-out via tag.pin.info=false, or no newer
+ * same-family tag exists), no update detection of any kind is running — the
+ * original, stronger wording. But when an insight *will* still be shown,
+ * only actionable update detection (anything that could fire a trigger) is
+ * off; the newer-tag badge is still real and still worth surfacing.
+ */
+function getPinGateDigestDisabledNoUpdateReason(
+  currentTagValue: string,
+  hasInsight: boolean,
+): string {
+  const remedy =
+    'Remove the digest-watch override (dd.watch.digest=false label or imgset watch.digest=false) to detect same-tag rebuilds, or set dd.tag.family=loose or add a dd.tag.include filter to allow semver version climbing.';
+  if (hasInsight) {
+    return `Pinned tag "${currentTagValue}": digest watching is disabled for this container, so no actionable update detection is running (a newer same-family tag is still shown for information). ${remedy}`;
+  }
+  return `Pinned tag "${currentTagValue}": digest watching is disabled for this container, so no update detection is running. ${remedy}`;
 }
 
 /**
@@ -616,16 +731,17 @@ export function getTagCandidates(
     tagFamilyPolicy !== 'loose'
   ) {
     const digestWatchEnabled = Boolean(container.image.digest?.watch);
+    const insight = computeInsight ? computePinGateInsight(container, filteredTags) : undefined;
     const noUpdateReason = digestWatchEnabled
       ? `Pinned tag "${container.image.tag.value}" is compared by digest only. Set dd.tag.family=loose or add a dd.tag.include filter to allow semver version climbing.`
-      : `Pinned tag "${container.image.tag.value}": digest watching is disabled for this container, so no update detection is running. Remove the digest-watch override (dd.watch.digest=false label or imgset watch.digest=false) to detect same-tag rebuilds, or set dd.tag.family=loose or add a dd.tag.include filter to allow semver version climbing.`;
+      : getPinGateDigestDisabledNoUpdateReason(container.image.tag.value, Boolean(insight));
     if (typeof logContainer?.debug === 'function') {
       logContainer.debug(noUpdateReason);
     }
     return {
       tags: [],
       noUpdateReason: digestWatchEnabled ? undefined : noUpdateReason,
-      insight: computeInsight ? computePinGateInsight(container, filteredTags) : undefined,
+      insight,
     };
   }
 
