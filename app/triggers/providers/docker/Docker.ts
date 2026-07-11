@@ -1029,13 +1029,23 @@ class Docker<
     } = this.runtimeConfigManager.buildCloneRuntimeConfigOptions(runtimeOptionsOrLogContainer);
     const containerName = currentContainer.Name.replace('/', '');
     const currentContainerNetworks = currentContainer.NetworkSettings?.Networks || {};
+    const currentContainerNetworkNames = Object.keys(currentContainerNetworks);
+    // Config.MacAddress is container-wide legacy data that Docker only ever
+    // applies to the container's primary/create-time network (the one named
+    // by HostConfig.NetworkMode, or the sole network for a single-network
+    // container). Forwarding it to every network in a multi-network
+    // container would re-pin the same MAC onto endpoints that never had it.
     const legacyContainerMacAddress = currentContainer.Config?.MacAddress;
+    const primaryNetworkName = this.runtimeConfigManager.getPrimaryNetworkName(
+      currentContainer,
+      currentContainerNetworkNames,
+    );
     const endpointsConfig = Object.entries(currentContainerNetworks).reduce(
       (acc: Record<string, unknown>, [networkName, endpointConfig]) => {
         acc[networkName] = this.runtimeConfigManager.sanitizeEndpointConfig(
           endpointConfig as Record<string, unknown> | null | undefined,
           currentContainer.Id,
-          legacyContainerMacAddress,
+          networkName === primaryNetworkName ? legacyContainerMacAddress : undefined,
         );
         return acc;
       },
@@ -1074,6 +1084,14 @@ class Docker<
         EndpointsConfig: endpointsConfig,
       },
     };
+    // The deprecated root-level `MacAddress` field (spread in above via
+    // clonedContainerConfig, which carries Config.MacAddress verbatim) is
+    // superseded by the primary network's endpoint-level MacAddress set
+    // above via sanitizeEndpointConfig — that's now the canonical carrier.
+    // Leaving the root-level copy in place would re-pin the OLD container's
+    // MAC a second time and trips MAC-denying socket proxies (e.g.
+    // sockguard) that reject an explicit root MacAddress on create.
+    delete containerClone.MacAddress;
     // Handle situation when container is using network_mode: service:other_service
     if (containerClone.HostConfig?.NetworkMode?.startsWith('container:')) {
       delete containerClone.Hostname;
