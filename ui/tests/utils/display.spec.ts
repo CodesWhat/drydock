@@ -198,11 +198,17 @@ describe('display utilities', () => {
   });
 
   describe('updateInsightColor', () => {
-    it('returns neutral colors (#498)', () => {
-      expect(updateInsightColor()).toEqual({
-        bg: 'var(--dd-neutral-muted)',
-        text: 'var(--dd-neutral)',
+    it('returns info colors, distinct from every updateKindColor() kind (#498)', () => {
+      const insightColor = updateInsightColor();
+      expect(insightColor).toEqual({
+        bg: 'var(--dd-info-muted)',
+        text: 'var(--dd-info)',
       });
+      for (const kind of ['major', 'minor', 'patch', 'digest'] as const) {
+        const kindColor = updateKindColor(kind);
+        expect(insightColor.bg).not.toBe(kindColor.bg);
+        expect(insightColor.text).not.toBe(kindColor.text);
+      }
     });
   });
 

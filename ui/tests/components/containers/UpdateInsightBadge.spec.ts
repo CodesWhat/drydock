@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils';
 import UpdateInsightBadge from '@/components/containers/UpdateInsightBadge.vue';
+import { updateInsightColor, updateKindColor } from '@/utils/display';
 
 describe('UpdateInsightBadge (#498)', () => {
   const globalConfig = {
@@ -43,14 +44,27 @@ describe('UpdateInsightBadge (#498)', () => {
     expect(wrapper.find('[data-test="update-insight-badge"]').exists()).toBe(true);
   });
 
-  it('uses the neutral/informational color, distinct from actionable update-kind colors', () => {
+  it('uses the informational color, and it renders on the badge itself', () => {
     const wrapper = mount(UpdateInsightBadge, {
       props: { insight: { tag: 'v1.46.1', kind: 'minor' } },
       global: globalConfig,
     });
     const badge = wrapper.find('[data-test="update-insight-badge"]');
     const style = badge.attributes('style');
-    expect(style).toContain('var(--dd-neutral-muted)');
-    expect(style).toContain('var(--dd-neutral)');
+    const insightColor = updateInsightColor();
+    expect(style).toContain(insightColor.bg);
+    expect(style).toContain(insightColor.text);
+  });
+
+  it.each([
+    'major',
+    'minor',
+    'patch',
+    'digest',
+  ] as const)('is distinct from the actionable updateKindColor(%s) badge color', (kind) => {
+    const insightColor = updateInsightColor();
+    const kindColor = updateKindColor(kind);
+    expect(insightColor.bg).not.toBe(kindColor.bg);
+    expect(insightColor.text).not.toBe(kindColor.text);
   });
 });
