@@ -73,6 +73,26 @@ describe('preferences migration', () => {
   });
 
   describe('migrate', () => {
+    it('adds disabled sync preferences when migrating schema version 10', () => {
+      const result = migrate({ schemaVersion: 10, sync: undefined });
+      expect(result.schemaVersion).toBe(11);
+      expect(result.sync).toEqual({ enabled: false });
+    });
+
+    it('preserves an existing sync object while migrating schema version 10', () => {
+      expect(migrate({ schemaVersion: 10, sync: { enabled: true } }).sync).toEqual({
+        enabled: true,
+      });
+    });
+
+    it('preserves an already-current sync preference', () => {
+      const result = migrate({ schemaVersion: 11, sync: { enabled: true } });
+      expect(result.sync).toEqual({ enabled: true });
+    });
+
+    it('backfills disabled sync preferences from older schemas', () => {
+      expect(migrate({ schemaVersion: 9 }).sync).toEqual({ enabled: false });
+    });
     it('should return merged defaults for schemaVersion 1 data and upgrade the schema version', () => {
       const result = migrate({ schemaVersion: 1, theme: { family: 'dracula' } });
       expect(result.schemaVersion).toBe(DEFAULTS.schemaVersion);
@@ -120,6 +140,21 @@ describe('preferences migration', () => {
     it('should replace invalid radius with default', () => {
       const result = migrate({ schemaVersion: 1, appearance: { radius: 'huge' } });
       expect(result.appearance.radius).toBe(DEFAULTS.appearance.radius);
+    });
+
+    it.each([
+      {},
+      [],
+      42,
+      null,
+    ])('should delete non-string allow-listed fields and restore defaults for %j', (invalid) => {
+      const result = migrate({
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+        appearance: { radius: invalid },
+        theme: { family: invalid },
+      });
+      expect(result.appearance.radius).toBe(DEFAULTS.appearance.radius);
+      expect(result.theme.family).toBe(DEFAULTS.theme.family);
     });
 
     it('should replace invalid fontSize with default', () => {
@@ -977,7 +1012,7 @@ describe('preferences migration', () => {
         },
       });
       expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
-      expect(result.schemaVersion).toBe(10);
+      expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
       expect(result.containers.viewMode).toBe('table');
       expect(result.views.agents.mode).toBe('table');
       expect(result.views.notifications.mode).toBe('table');
@@ -1003,7 +1038,7 @@ describe('preferences migration', () => {
       });
       const second = migrate(first as unknown as Record<string, unknown>);
 
-      expect(first.schemaVersion).toBe(10);
+      expect(first.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
       expect(first.containers.viewMode).toBe('table');
       expect(first.views.agents.mode).toBe('table');
       expect(first.views.notifications.mode).toBe('table');
@@ -1033,7 +1068,7 @@ describe('preferences migration', () => {
         },
       });
       expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
-      expect(result.schemaVersion).toBe(10);
+      expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
       // Views that gained a card view in v1.6 backfill to table mode for existing users.
       expect(result.views.audit.mode).toBe('table');
       expect(result.views.watchers.mode).toBe('table');
@@ -1060,7 +1095,7 @@ describe('preferences migration', () => {
       });
       const second = migrate(first as unknown as Record<string, unknown>);
 
-      expect(first.schemaVersion).toBe(10);
+      expect(first.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
       expect(first.views.watchers.mode).toBe('cards');
       expect(first.views.registries.mode).toBe('cards');
       expect(first.views.audit.mode).toBe('table');

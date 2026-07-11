@@ -16,7 +16,8 @@ export type SseBusEvent =
   | 'agent-status-changed'
   | 'scan-started'
   | 'scan-completed'
-  | 'resync-required';
+  | 'resync-required'
+  | 'preferences-updated';
 
 export type EventStreamConnectionStatus = 'connecting' | 'open' | 'closed' | 'error';
 
@@ -359,6 +360,15 @@ export const useEventStreamStore = defineStore('eventStream', () => {
     source.addEventListener('dd:batch-update-completed', (event: MessageEvent) => {
       emit(
         'batch-update-completed',
+        parseJsonPayload(event?.data),
+        event?.lastEventId || undefined,
+        true,
+      );
+    });
+
+    source.addEventListener('dd:preferences-updated', (event: MessageEvent) => {
+      emit(
+        'preferences-updated',
         parseJsonPayload(event?.data),
         event?.lastEventId || undefined,
         true,

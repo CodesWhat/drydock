@@ -22,6 +22,7 @@ import { getStore } from '../services/store';
 import { applyFontSize } from '../preferences/font-size';
 import { applyRadius, type RadiusPresetId, RADIUS_PRESET_VALUES } from '../preferences/radius';
 import { preferences } from '../preferences/store';
+import { pushInitialSync } from '../preferences/sync';
 import { usePreference } from '../preferences/usePreference';
 import { useTheme } from '../theme/useTheme';
 import { errorMessage } from '../utils/error';
@@ -161,6 +162,10 @@ const internetlessMode = ref(false);
 const settingsLoading = ref(false);
 const settingsError = ref('');
 
+// Preference sync state
+const syncLoading = ref(false);
+const syncError = ref('');
+
 // Profile state
 interface ProfileData {
   username: string;
@@ -194,6 +199,9 @@ const profileDisplayName = computed(
     t('configView.profile.unknownUser'),
 );
 const profileInitials = computed(() => profileDisplayName.value.slice(0, 2).toUpperCase());
+const showSyncToggle = computed(
+  () => !profileLoading.value && profileData.value.username !== 'anonymous',
+);
 
 function formatProfileLastLogin(rawValue: unknown): string {
   if (rawValue === undefined || rawValue === null || rawValue === '') {
@@ -332,6 +340,19 @@ async function toggleInternetlessMode() {
   }
 }
 
+async function toggleSync() {
+  syncError.value = '';
+  syncLoading.value = true;
+  try {
+    preferences.sync.enabled = !preferences.sync.enabled;
+    await pushInitialSync(profileData.value.username);
+  } catch (e: unknown) {
+    syncError.value = errorMessage(e, t('configView.appearance.errors.updateSyncSettings'));
+  } finally {
+    syncLoading.value = false;
+  }
+}
+
 const cacheClearing = ref(false);
 const cacheCleared = ref<number | null>(null);
 const debugDumpDownloading = ref(false);
@@ -454,6 +475,11 @@ function handleSelectIconLibrary(library: string) {
       :active-radius="activeRadius"
       :radius-presets="radiusPresets"
       :on-select-radius="setRadius"
+      :sync-enabled="preferences.sync.enabled"
+      :sync-loading="syncLoading"
+      :sync-error="syncError"
+      :show-sync-toggle="showSyncToggle"
+      :on-toggle-sync="toggleSync"
     />
 
     <ConfigProfileTab

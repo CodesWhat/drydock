@@ -219,6 +219,7 @@ function isStaticTableRow() {
             </div>
           </div>
           <ToggleSwitch
+            data-test="internetless-mode-toggle"
             :model-value="props.internetlessMode"
             :disabled="props.settingsLoading"
             @update:model-value="emit('toggle-internetless-mode')"

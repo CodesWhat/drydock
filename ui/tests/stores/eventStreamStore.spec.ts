@@ -218,6 +218,50 @@ describe('SSE event listener: dd:agent-stats-changed', () => {
   });
 });
 
+describe('SSE event listener: dd:preferences-updated', () => {
+  let originalEventSource: typeof EventSource;
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    MockEventSource.instances = [];
+    originalEventSource = globalThis.EventSource;
+    globalThis.EventSource = MockEventSource as unknown as typeof EventSource;
+  });
+  afterEach(() => {
+    globalThis.EventSource = originalEventSource;
+  });
+
+  it('maps the server event to the sibling bus event with parsed payload and id', () => {
+    const store = useEventStreamStore();
+    const bus = { emit: vi.fn() };
+    store.connect(bus);
+    const call = MockEventSource.instances[0].addEventListener.mock.calls.find(
+      ([name]) => name === 'dd:preferences-updated',
+    );
+    expect(call).toBeDefined();
+    call![1]({ data: '{"username":"alice"}', lastEventId: 'boot:7' });
+    expect(bus.emit).toHaveBeenCalledWith('preferences-updated', { username: 'alice' });
+    expect(store.recentEvents.at(-1)).toMatchObject({
+      id: 'boot:7',
+      event: 'preferences-updated',
+      payload: { username: 'alice' },
+    });
+  });
+
+  it('maps a preference event without a last-event id', () => {
+    const store = useEventStreamStore();
+    const bus = { emit: vi.fn() };
+    store.connect(bus);
+    const call = MockEventSource.instances[0].addEventListener.mock.calls.find(
+      ([name]) => name === 'dd:preferences-updated',
+    );
+    call![1]({ data: '{"username":"alice"}', lastEventId: '' });
+    expect(store.recentEvents.at(-1)).toMatchObject({
+      id: undefined,
+      event: 'preferences-updated',
+    });
+  });
+});
+
 describe('SSE reconnect backoff', () => {
   let originalEventSource: typeof EventSource;
   let setTimeoutSpy: ReturnType<typeof vi.spyOn>;

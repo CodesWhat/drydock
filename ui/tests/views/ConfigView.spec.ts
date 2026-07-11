@@ -8,6 +8,7 @@ const mockUpdateSettings = vi.fn();
 const mockClearIconCache = vi.fn();
 const mockDownloadDebugDump = vi.fn();
 const mockGetUser = vi.fn();
+const mockPushInitialSync = vi.fn();
 
 vi.mock('@/services/app', () => ({
   getAppInfos: (...args: any[]) => mockGetAppInfos(...args),
@@ -33,6 +34,9 @@ vi.mock('@/services/debug', () => ({
 
 vi.mock('@/services/auth', () => ({
   getUser: (...args: any[]) => mockGetUser(...args),
+}));
+vi.mock('@/preferences/sync', () => ({
+  pushInitialSync: (...args: any[]) => mockPushInitialSync(...args),
 }));
 
 const mockDisableIconifyApi = vi.fn();
@@ -518,10 +522,9 @@ describe('ConfigView', () => {
       await nextTick();
 
       // Find the toggle button (the one inside the Network section)
-      const allButtons = w.findAll('button');
-      const toggleBtn = allButtons.find((b) => b.classes().some((c) => c.includes('w-10')));
+      const toggleBtn = w.find('[data-test="internetless-mode-toggle"]');
       expect(toggleBtn).toBeDefined();
-      await toggleBtn?.trigger('click');
+      await toggleBtn.trigger('click');
 
       await vi.waitFor(() => {
         expect(mockUpdateSettings).toHaveBeenCalledWith({ internetlessMode: true });
@@ -538,13 +541,86 @@ describe('ConfigView', () => {
       await nextTick();
       await nextTick();
 
-      const allButtons = w.findAll('button');
-      const toggleBtn = allButtons.find((b) => b.classes().some((c) => c.includes('w-10')));
-      await toggleBtn?.trigger('click');
+      const toggleBtn = w.find('[data-test="internetless-mode-toggle"]');
+      await toggleBtn.trigger('click');
 
       await vi.waitFor(() => {
         expect(mockDisableIconifyApi).toHaveBeenCalled();
       });
+    });
+  });
+
+  describe('cross-device sync toggle', () => {
+    async function mountAppearance(username = 'admin') {
+      mockRouteQuery.value = { tab: 'appearance' };
+      mockGetUser.mockResolvedValue({ username });
+      mockGetServer.mockResolvedValue({ configuration: {} });
+      mockGetSettings.mockResolvedValue({ internetlessMode: false });
+      mockPushInitialSync.mockResolvedValue(undefined);
+      const wrapper = factory();
+      await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalled());
+      await nextTick();
+      return wrapper;
+    }
+
+    it('is hidden for anonymous users and visible for authenticated users', async () => {
+      expect((await mountAppearance('anonymous')).find('[data-test="sync-toggle"]').exists()).toBe(
+        false,
+      );
+      expect((await mountAppearance('alice')).find('[data-test="sync-toggle"]').exists()).toBe(
+        true,
+      );
+    });
+
+    it('stays hidden while the profile is loading and appears after authentication resolves', async () => {
+      mockRouteQuery.value = { tab: 'appearance' };
+      mockGetServer.mockResolvedValue({ configuration: {} });
+      mockGetSettings.mockResolvedValue({ internetlessMode: false });
+      let resolveProfile!: (user: { username: string }) => void;
+      mockGetUser.mockReturnValue(
+        new Promise((resolve) => {
+          resolveProfile = resolve;
+        }),
+      );
+
+      const wrapper = factory();
+      await nextTick();
+      expect(wrapper.find('[data-test="sync-toggle"]').exists()).toBe(false);
+
+      resolveProfile({ username: 'alice' });
+      await vi.waitFor(() => expect(wrapper.find('[data-test="sync-toggle"]').exists()).toBe(true));
+    });
+
+    it('pushes both enabled and disabled blobs explicitly', async () => {
+      const wrapper = await mountAppearance('alice');
+      const pushedStates: boolean[] = [];
+      mockPushInitialSync.mockImplementation(async () => {
+        pushedStates.push(preferences.sync.enabled);
+      });
+      const toggle = wrapper.find('[data-test="sync-toggle"]');
+      await toggle.trigger('click');
+      await vi.waitFor(() => expect(mockPushInitialSync).toHaveBeenCalledWith('alice'));
+      expect(preferences.sync.enabled).toBe(true);
+      await toggle.trigger('click');
+      await vi.waitFor(() => expect(mockPushInitialSync).toHaveBeenCalledTimes(2));
+      expect(preferences.sync.enabled).toBe(false);
+      expect(pushedStates).toEqual([true, false]);
+    });
+
+    it('disables during a push and shows an inline error on failure', async () => {
+      let reject!: (error: Error) => void;
+      const wrapper = await mountAppearance('alice');
+      mockPushInitialSync.mockReturnValue(
+        new Promise((_resolve, rejectPromise) => {
+          reject = rejectPromise;
+        }),
+      );
+      const toggle = wrapper.find('[data-test="sync-toggle"]');
+      await toggle.trigger('click');
+      await nextTick();
+      expect(wrapper.find('[data-test="sync-toggle"]').attributes('disabled')).toBeDefined();
+      reject(new Error('sync failed'));
+      await vi.waitFor(() => expect(wrapper.text()).toContain('sync failed'));
     });
   });
 

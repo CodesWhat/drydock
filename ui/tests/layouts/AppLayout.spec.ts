@@ -265,6 +265,22 @@ describe('AppLayout', () => {
     }
   });
 
+  it('forwards preference update bus events to a window CustomEvent', async () => {
+    const listener = vi.fn();
+    window.addEventListener('dd:sse-preferences-updated', listener);
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+    const emit = mockSseConnect.mock.calls[0]?.[0]?.emit as (
+      event: string,
+      payload: unknown,
+    ) => void;
+    emit('preferences-updated', { username: 'alice' });
+    expect(listener).toHaveBeenCalledOnce();
+    expect((listener.mock.calls[0][0] as CustomEvent).detail).toEqual({ username: 'alice' });
+    window.removeEventListener('dd:sse-preferences-updated', listener);
+  });
+
   it('stops connectivity polling when SSE reconnects', async () => {
     vi.useFakeTimers();
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
