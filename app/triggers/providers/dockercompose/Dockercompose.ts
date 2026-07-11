@@ -8,6 +8,7 @@ import { getState } from '../../../registry/index.js';
 import { resolveConfiguredPath, resolveConfiguredPathWithinBase } from '../../../runtime/paths.js';
 import { buildComposeProjectLockKey } from '../../../updates/update-locks.js';
 import { sleep } from '../../../util/sleep.js';
+import { getCreatedContainerCandidate } from '../docker/created-container-candidate.js';
 import Docker, { type DockerTriggerConfiguration } from '../docker/Docker.js';
 import { getRequestedOperationId } from '../docker/update-runtime-context.js';
 import ComposeFileLockManager from './ComposeFileLockManager.js';
@@ -2319,6 +2320,18 @@ class Dockercompose extends Docker<DockercomposeTriggerConfiguration> {
         `Failed to restore original container ${containerName} after failed update ` +
           `(${getErrorMessage(rollbackError)}). Manual intervention may be required.`,
       );
+      // #macvlan incident: super.recreateContainer (Docker.recreateContainer)
+      // attaches a created-but-unstarted/unconnected container handle to the
+      // thrown error when create succeeds but start (or a network connect)
+      // fails. Without recovering and cleaning it up here, that orphan is
+      // dropped on the floor and squats the canonical container name.
+      // Cleanup is best-effort (cleanupFailedReplacementCandidate swallows
+      // its own stop/remove errors) so it never changes the rollback-failed
+      // status returned below.
+      const orphanCandidate =
+        getCreatedContainerCandidate(rollbackError) ??
+        Dockercompose.getComposeCreatedContainerCandidate(rollbackError);
+      await this.cleanupFailedReplacementCandidate(orphanCandidate, containerName, logContainer);
       return {
         status: 'rollback-failed',
         phase: 'rollback-failed',
