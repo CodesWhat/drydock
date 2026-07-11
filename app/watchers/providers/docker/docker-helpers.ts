@@ -296,7 +296,7 @@ export function getResolvedImgsetConfiguration(
       'transformTags',
       'transform',
     ]),
-    tagFamily: getFirstConfigString(imgsetConfiguration, ['tag.family', 'tagFamily']),
+    tagFamily: getFirstConfigString(imgsetConfiguration, ['tag.family']),
     linkTemplate: getFirstConfigString(imgsetConfiguration, ['link.template', 'linkTemplate']),
     displayName: getFirstConfigString(imgsetConfiguration, ['display.name', 'displayName']),
     displayIcon: getFirstConfigString(imgsetConfiguration, ['display.icon', 'displayIcon']),
@@ -454,12 +454,7 @@ function hasMeaningfulDigestComparisonTag(currentTag?: string) {
 }
 
 function shouldWatchDigestForUnlabeledImage(context: DigestWatchContext) {
-  const { isSemver, tagPrecision, currentTag, summaryImageReference } = context;
-
-  // Specific semver releases (1.4.5) — immutable, no digest watching needed
-  if (isSemver && tagPrecision === 'specific') {
-    return false;
-  }
+  const { currentTag, summaryImageReference } = context;
 
   // Digest-pinned images have no meaningful tag-comparison path, so enable
   // digest watching even on Docker Hub when the current ref is already sha256-based.
@@ -475,8 +470,11 @@ function shouldWatchDigestForUnlabeledImage(context: DigestWatchContext) {
     return true;
   }
 
-  // Floating tags (v3, 1, 1.4, latest, stable)
-  // compare by digest so mutable tag aliases stay on their configured tag.
+  // Floating tags (v3, 1, 1.4, latest, stable) AND fully-pinned specific tags
+  // (1.4.5, v1.13.3) both compare by digest by default so a rebuilt image
+  // republished under the same tag is detected. Cross-version climbing for
+  // pinned tags stays opt-in via dd.tag.include / dd.tag.family=loose (see
+  // the specific-tag pin gate in tag-candidates.ts).
   return hasMeaningfulDigestComparisonTag(currentTag);
 }
 

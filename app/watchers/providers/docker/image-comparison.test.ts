@@ -510,6 +510,42 @@ describe('image-comparison', () => {
     expect(result.noUpdateReason).toContain('Pinned tag');
   });
 
+  test('specific pin + digest.watch=true detects a same-tag rebuild via digest, no semver climb (#498)', async () => {
+    const getImageManifestDigest = vi.fn().mockResolvedValue({
+      digest: 'sha256:newmanifest',
+      created: '2026-07-01T00:00:00.000Z',
+      version: 1,
+    });
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['1.2.3', '1.2.4', '2.0.0']),
+          getImageManifestDigest,
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+    const container = {
+      image: {
+        id: 'image-1',
+        registry: { name: 'hub' },
+        name: 'library/nginx',
+        tag: { value: '1.2.3', semver: true, tagPrecision: 'specific' },
+        digest: { watch: true, repo: 'sha256:oldmanifest' },
+      },
+      tagFamily: 'strict',
+    };
+
+    const result = await findNewVersion(container as never, log);
+
+    // The pinned tag itself is the only digest query — no semver climbing.
+    expect(getImageManifestDigest.mock.calls.map(([image]) => image.tag.value)).toEqual(['1.2.3']);
+    expect(result.digest).toBe('sha256:newmanifest');
+    expect(result.noUpdateReason).toBeUndefined();
+    expect(result.tag).toBe('1.2.3');
+  });
+
   test('sets result.suggestedTag and result.tag from tagsCandidates on semver container', async () => {
     const getImageManifestDigest = createManifestLookup();
     mockGetState.mockReturnValue({

@@ -1078,6 +1078,26 @@ describe('docker image details orchestration module', () => {
     expect(result?.image.digest.watch).toBe(true);
   });
 
+  test('resolves digest.watch=true end-to-end for a fresh container with a pinned specific semver tag and no dd.watch.digest label (#498)', async () => {
+    vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
+
+    const { watcher } = createWatcher();
+    const helpers = createHelpers({
+      resolveTagName: vi.fn().mockReturnValue('1.4.5'),
+    });
+
+    const result = await addImageDetailsToContainerOrchestration(
+      watcher as any,
+      createDockerSummaryContainer({ Image: 'ghcr.io/acme/service:1.4.5' }),
+      {},
+      helpers as any,
+    );
+
+    expect(result?.image.tag.value).toBe('1.4.5');
+    expect(result?.image.tag.tagPrecision).toBe('specific');
+    expect(result?.image.digest.watch).toBe(true);
+  });
+
   test('falls back to the summary image reference when inspect image reference is blank', async () => {
     vi.spyOn(storeContainer, 'getContainer').mockReturnValue(undefined);
 

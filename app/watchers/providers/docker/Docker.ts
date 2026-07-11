@@ -416,7 +416,6 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
             include: this.joi.string(),
             exclude: this.joi.string(),
             transform: this.joi.string(),
-            tagFamily: this.joi.string().valid('strict', 'loose'),
             tag: this.joi.object({
               include: this.joi.string(),
               exclude: this.joi.string(),
