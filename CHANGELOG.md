@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.2-rc.3] — 2026-07-11
+
+### Added
+
+- **Informational version visibility for pinned tags** ([#498](https://github.com/CodesWhat/drydock/issues/498)). A specific-precision, unlabeled, non-loose pinned tag (e.g. `nginx:1.25.3`) still gets digest-only comparison for update *actions* — that pin-gate behavior from rc.2 is unchanged — but the container result now carries a new `updateInsight: { tag, kind }` field showing the best newer same-family tag that exists in the registry, purely as information. It is computed with the same strict-style family matching used for actionable updates (prefix + suffix/variant compatibility + matching numeric-segment count + CalVer leading-zero rules), except that crossing a MAJOR version is allowed — that's the point of the informational channel, since the pin gate itself already blocks acting on it. Ties at the same numeric version prefer the tag whose suffix template exactly matches the pinned tag's. This is additive only: `updateAvailable`, `updateKind`, and trigger dispatch are all unaffected, so nothing new fires because of it. On by default; opt out per watcher with `DD_WATCHER_{name}_TAG_PIN_INFO=false`. Surfaced in the UI as a neutral "Newer available" badge next to the existing update-state badges.
+
+### Fixed
+
+- `dd.tag.family=loose` no longer bypasses the suffix/variant guard in `isSemverFamilyMatch()`. A pinned `nginx:1.2.3-ls132` container could previously be offered a bare `1.2.4` (wrong variant) as an update candidate under loose policy — loose mode was only ever meant to relax prefix equality and CalVer leading-zero rules, not let updates cross a suffix/variant boundary entirely. The guard now applies unconditionally regardless of policy.
+- The candidate sort in `sortSemverDescending()` now prefers the exact-suffix-template match over a merely-compatible one when two candidates tie at the same numeric version (e.g. preferring `1.2.5-alpine` over `1.2.5-alpine3.21` for a `1.2.3-alpine` reference). Semver treats the suffix as a prerelease field, so without this fix the wrong variant could outrank the exact match purely on prerelease-string ordering.
+
 ## [1.5.2-rc.2] — 2026-07-10
 
 ### Fixed
