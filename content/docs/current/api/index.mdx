@@ -79,6 +79,7 @@ If the header is missing or does not match the expected token, the API responds 
 | `/api/v1/notifications` | `GET`, `PATCH /:id` | [Notification rules](#notification-rules) (per-event enable/disable and trigger assignments) |
 | `/api/v1/notifications/outbox` | `GET`, `POST /:id/retry`, `DELETE /:id` | [Notification outbox](#notification-outbox) (admin retry/discard for failed deliveries) |
 | `/api/v1/settings` | `GET`, `PATCH` | [UI settings](#settings) (internetless mode; `PUT` compatibility alias is deprecated) |
+| `/api/v1/preferences` | `GET`, `PATCH` | [Synced UI preferences](#preferences) (opt-in cross-device sync; `403` for anonymous sessions) |
 | `/api/v1/server` | `GET` | Server configuration and compatibility info (see [App API](/docs/api/app)) |
 | `/api/v1/server/security/runtime` | `GET` | Security tools availability (see [App API](/docs/api/app)) |
 | `/api/v1/containers/groups` | `GET` | [Container groups](#container-groups) (by stack/compose project) |
@@ -381,6 +382,54 @@ curl -X PATCH http://drydock:3000/api/v1/settings \
 | `internetlessMode` | boolean | `false` | When enabled, disables registry icon lookups and other external requests |
 
 Returns 200 with the updated settings, or 400 if the body is invalid. `PUT /api/v1/settings` is still accepted as a temporary compatibility alias but is deprecated.
+
+## Preferences
+
+Cross-device sync of UI preferences (theme, layout, dashboard, language, and more) for signed-in users. Opt-in via the **Sync across devices** toggle in **Config > Appearance** — see [UI Customization](/docs/configuration/ui#sync-across-devices) for the feature overview. Requires a real, non-anonymous user identity; there is no `PUT` alias for this endpoint. The examples below assume an authenticated, non-anonymous session (see [Authentication](#authentication)); anonymous sessions receive `403`.
+
+### Get preferences
+
+```bash
+curl http://drydock:3000/api/v1/preferences
+
+{
+  "apiVersion": 1,
+  "username": "alice",
+  "schemaVersion": null,
+  "preferences": null,
+  "updatedAt": null
+}
+```
+
+`schemaVersion`, `preferences`, and `updatedAt` are `null` until the user has synced at least once.
+
+### Update preferences
+
+Replaces the full stored preferences blob — this is a full replace, not a partial merge.
+
+```bash
+curl -X PATCH http://drydock:3000/api/v1/preferences \
+  -H 'Content-Type: application/json' \
+  -d '{"apiVersion": 1, "schemaVersion": 11, "preferences": {"theme": {"family": "dracula"}, "appearance": {"fontSize": 1.1}}}'
+
+{
+  "apiVersion": 1,
+  "username": "alice",
+  "schemaVersion": 11,
+  "preferences": {"theme": {"family": "dracula"}, "appearance": {"fontSize": 1.1}},
+  "updatedAt": "2026-07-11T12:00:00.000Z"
+}
+```
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `apiVersion` | integer | API contract version; must match the server's supported version (currently `1`) |
+| `username` | string | The signed-in username the preferences are keyed to |
+| `schemaVersion` | integer \| null | The client preference schema version at time of write; `null` if never synced |
+| `preferences` | object \| null | The full preferences blob, opaque to the server; `null` if never synced |
+| `updatedAt` | string \| null | ISO 8601 timestamp of the last server-side write; `null` if never synced |
+
+Returns 200 with the preferences envelope, 400 if the body is malformed, 401 if there is no session, 403 if the session is anonymous (sync requires a real user identity), 409 if `apiVersion` does not match the server's supported version, or 413 if the request body exceeds the global 256 kb JSON body limit.
 
 ## Container groups
 

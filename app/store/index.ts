@@ -20,6 +20,7 @@ import * as notificationHistory from './notification-history.js';
 import * as notificationOutbox from './notification-outbox.js';
 import * as secrets from './secrets.js';
 import * as settings from './settings.js';
+import * as uiPreferences from './ui-preferences.js';
 import * as updateOperation from './update-operation.js';
 
 // Store Configuration Schema
@@ -52,6 +53,7 @@ function createCollections() {
   notificationHistory.createCollections(db);
   notificationOutbox.createCollections(db);
   secrets.createCollections(db);
+  uiPreferences.createCollections(db);
   settings.createCollections(db);
   updateOperation.createCollections(db);
   app.completeStartupInitialization();

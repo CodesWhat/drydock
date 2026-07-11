@@ -7,6 +7,10 @@ describe('useIcons', () => {
     vi.resetModules();
   });
 
+  afterEach(() => {
+    vi.doUnmock('@/preferences/store');
+  });
+
   async function loadUseIcons() {
     const mod = await import('@/composables/useIcons');
     return mod.useIcons();
@@ -38,6 +42,14 @@ describe('useIcons', () => {
           icons: { library: 123 },
         }),
       );
+      const { iconLibrary } = await loadUseIcons();
+      expect(iconLibrary.value).toBe('ph-duotone');
+    });
+
+    it('defensively falls back when the live preference store contains an invalid library', async () => {
+      vi.doMock('@/preferences/store', () => ({
+        preferences: { icons: { library: 42, scale: 1 } },
+      }));
       const { iconLibrary } = await loadUseIcons();
       expect(iconLibrary.value).toBe('ph-duotone');
     });

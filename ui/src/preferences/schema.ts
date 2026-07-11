@@ -64,9 +64,10 @@ export interface PreferencesSchema {
     notifications: { mode: ViewMode };
     auth: { mode: ViewMode };
   };
+  sync: { enabled: boolean };
 }
 
-export const CURRENT_SCHEMA_VERSION = 10;
+export const CURRENT_SCHEMA_VERSION = 11;
 
 /**
  * Table-mode column keys for the five views that share the `DataTableColumnPicker`
@@ -167,4 +168,5 @@ export const DEFAULTS: PreferencesSchema = {
     notifications: { mode: 'table' },
     auth: { mode: 'table' },
   },
+  sync: { enabled: false },
 };

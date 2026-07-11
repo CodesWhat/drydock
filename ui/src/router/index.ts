@@ -5,6 +5,7 @@ import {
   type RouteRecordRaw,
 } from 'vue-router';
 import AppLayout from '@/layouts/AppLayout.vue';
+import { hydrateFromServer } from '@/preferences/sync';
 import { getUser } from '@/services/auth';
 import { ROUTES } from './routes';
 
@@ -93,6 +94,10 @@ function createLoginRedirect(to: RouteLocationNormalized) {
   };
 }
 
+interface AuthenticatedUser {
+  username?: string;
+}
+
 /**
  * Apply authentication navigation guard.
  */
@@ -101,9 +106,14 @@ async function applyAuthNavigationGuard(to: RouteLocationNormalized) {
     return true;
   }
 
-  const user = await getUser();
+  const user = (await getUser()) as AuthenticatedUser | undefined;
 
   if (user !== undefined) {
+    if (user.username && user.username !== 'anonymous') {
+      // Fire-and-forget — the preference fetch has no timeout, and navigation
+      // must never block on it; hydrateFromServer swallows its own errors.
+      void hydrateFromServer(user.username);
+    }
     return validateAndGetNextRoute(to);
   }
 

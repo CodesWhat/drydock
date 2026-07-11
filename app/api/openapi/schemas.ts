@@ -783,6 +783,22 @@ export const openApiSchemas = {
     required: ['internetlessMode'],
     additionalProperties: false,
   },
+  Preferences: {
+    type: 'object',
+    properties: {
+      apiVersion: { type: 'integer', minimum: 1 },
+      username: { type: 'string' },
+      schemaVersion: { type: ['integer', 'null'], minimum: 1 },
+      // Deliberately open — the server stores the client's PreferencesSchema
+      // blob opaquely and never validates its inner shape (same "opaque
+      // object" precedent as genericObjectSchema in common.ts). null when no
+      // synced document exists yet for this user.
+      preferences: { type: ['object', 'null'], additionalProperties: true },
+      updatedAt: { type: ['string', 'null'], format: 'date-time' },
+    },
+    required: ['apiVersion', 'username', 'schemaVersion', 'preferences', 'updatedAt'],
+    additionalProperties: false,
+  },
   NotificationRule: {
     type: 'object',
     properties: {

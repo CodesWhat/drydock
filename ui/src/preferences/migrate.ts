@@ -38,7 +38,12 @@ export function mergeDefaults(source: Record<string, unknown>): PreferencesSchem
 // ─── Sanitize persisted data ─────────────────────────────────
 
 function deleteIfInvalid(obj: Record<string, unknown>, key: string, allow: Set<string>): void {
-  if (typeof obj[key] === 'string' && !allow.has(obj[key] as string)) {
+  // Delete unless the value is a string AND in the allow-list — a non-string
+  // value (object, array, number, null) is just as invalid as an unknown
+  // string and must not survive to reach deepMerge/applyRadius etc. verbatim.
+  // An absent key stays absent either way (delete on a missing key is a
+  // no-op) — mergeDefaults fills in the default for absent keys.
+  if (!(typeof obj[key] === 'string' && allow.has(obj[key] as string))) {
     delete obj[key];
   }
 }
@@ -135,6 +140,7 @@ function sanitize(data: Record<string, unknown>): void {
   sanitizeContainers(data);
   sanitizeTables(data);
   sanitizeViews(data);
+  sanitizeSync(data);
 }
 
 function sanitizeLocale(data: Record<string, unknown>): void {
@@ -298,6 +304,20 @@ function sanitizeViews(data: Record<string, unknown>): void {
         sanitizeViewHiddenColumns(v[viewKey] as Record<string, unknown>, viewKey);
       }
     }
+  }
+}
+
+function sanitizeSync(data: Record<string, unknown>): void {
+  const sync = data.sync;
+  if (sync === undefined) {
+    return;
+  }
+  if (!isRecord(sync)) {
+    delete data.sync;
+    return;
+  }
+  if ('enabled' in sync && typeof sync.enabled !== 'boolean') {
+    delete sync.enabled;
   }
 }
 
@@ -681,6 +701,17 @@ export function migrate(data: Record<string, unknown>): PreferencesSchema {
       }
     }
     data = { ...data, schemaVersion: 7 };
+  }
+
+  if (data.schemaVersion === 10) {
+    data = {
+      ...data,
+      schemaVersion: 11,
+      sync: {
+        enabled: DEFAULTS.sync.enabled,
+        ...(isRecord(data.sync) ? data.sync : {}),
+      },
+    };
   }
 
   if (typeof data.schemaVersion === 'number' && data.schemaVersion < CURRENT_SCHEMA_VERSION) {

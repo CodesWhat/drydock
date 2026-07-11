@@ -509,6 +509,19 @@ export function broadcastScanCompleted(containerId: string, status: string): voi
   broadcastWithId('dd:scan-completed', { containerId, status });
 }
 
+// Payload is a username-free invalidation signal by design (#220 — see
+// scope-220-pref-sync.md §3): broadcastWithId has zero per-client identity
+// filtering, so this reaches every connected client of every logged-in user,
+// not just the originating user's other devices/tabs, and is retained in the
+// replay ring buffer — it must carry no identity. Clients react by
+// re-fetching their own session-scoped preferences. Never put preference
+// values in this payload.
+// Non-ephemeral (id-stamped, replayable from the ring buffer) so a brief
+// disconnect/reconnect doesn't silently drop the notification.
+export function broadcastPreferencesUpdated(): void {
+  broadcastWithId('dd:preferences-updated', {});
+}
+
 function broadcastContainerEvent(eventName: string, payload: unknown): void {
   if (!ALLOWED_CONTAINER_EVENT_NAMES.has(eventName)) {
     log.child({ component: 'sse' }).warn(`Dropping invalid SSE container event name: ${eventName}`);

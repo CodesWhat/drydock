@@ -81,6 +81,11 @@
       }
     },
     "appearance": {
+      "sync": {
+        "title": "Sync",
+        "label": "Sync Across Devices",
+        "description": "Keep your appearance and layout preferences in sync across every device you sign in from"
+      },
       "language": {
         "title": "Language"
       },
@@ -118,6 +123,9 @@
           "soft": "Soft",
           "round": "Round"
         }
+      },
+      "errors": {
+        "updateSyncSettings": "Failed to update sync settings"
       }
     },
     "profile": {

@@ -86,6 +86,7 @@ const {
     vi.doMock('./notification-outbox', createCollectionsMock);
     vi.doMock('./secrets', createCollectionsMock);
     vi.doMock('./settings', createCollectionsMock);
+    vi.doMock('./ui-preferences', createCollectionsMock);
     vi.doMock('./update-operation', createCollectionsMock);
     vi.doMock('../log', createLogMock);
   }
@@ -121,6 +122,7 @@ vi.mock('./agent-keys', createAgentKeysMock);
 vi.mock('./notification-outbox', createCollectionsMock);
 vi.mock('./secrets', createCollectionsMock);
 vi.mock('./settings', createCollectionsMock);
+vi.mock('./ui-preferences', createCollectionsMock);
 vi.mock('./update-operation', createCollectionsMock);
 vi.mock('../log', createLogMock);
 
@@ -144,12 +146,14 @@ describe('Store Module', () => {
     const container = await import('./container.js');
     const notification = await import('./notification.js');
     const settings = await import('./settings.js');
+    const uiPreferences = await import('./ui-preferences.js');
     const updateOperation = await import('./update-operation.js');
 
     expect(app.createCollections).toHaveBeenCalled();
     expect(container.createCollections).toHaveBeenCalled();
     expect(notification.createCollections).toHaveBeenCalled();
     expect(settings.createCollections).toHaveBeenCalled();
+    expect(uiPreferences.createCollections).toHaveBeenCalled();
     expect(updateOperation.createCollections).toHaveBeenCalled();
     expect(app.completeStartupInitialization).toHaveBeenCalled();
     expect(container.createCollections.mock.invocationCallOrder[0]).toBeLessThan(
@@ -198,11 +202,13 @@ describe('Store Module', () => {
     const container = await import('./container.js');
     const notification = await import('./notification.js');
     const settings = await import('./settings.js');
+    const uiPreferences = await import('./ui-preferences.js');
     const updateOperation = await import('./update-operation.js');
     expect(app.createCollections).toHaveBeenCalled();
     expect(container.createCollections).toHaveBeenCalled();
     expect(notification.createCollections).toHaveBeenCalled();
     expect(settings.createCollections).toHaveBeenCalled();
+    expect(uiPreferences.createCollections).toHaveBeenCalled();
     expect(updateOperation.createCollections).toHaveBeenCalled();
     expect(app.completeStartupInitialization).toHaveBeenCalled();
   });

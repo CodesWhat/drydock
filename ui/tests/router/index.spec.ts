@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => {
     }),
     createWebHistory: vi.fn(() => ({ kind: 'history' })),
     getUser: vi.fn(),
+    hydrateFromServer: vi.fn(),
   };
 });
 
@@ -26,12 +27,14 @@ vi.mock('vue-router', () => ({
 vi.mock('@/services/auth', () => ({
   getUser: mocks.getUser,
 }));
+vi.mock('@/preferences/sync', () => ({ hydrateFromServer: mocks.hydrateFromServer }));
 
 import router from '@/router';
 
 describe('router auth guard', () => {
   beforeEach(() => {
     mocks.getUser.mockReset();
+    mocks.hydrateFromServer.mockReset();
   });
 
   it('registers a beforeEach guard', () => {
@@ -86,12 +89,23 @@ describe('router auth guard', () => {
       name: 'login',
       query: { next: '/containers' },
     });
+    expect(mocks.hydrateFromServer).not.toHaveBeenCalled();
+  });
+
+  it('does not hydrate preferences for the anonymous sentinel user', async () => {
+    const guard = mocks.getGuard();
+    if (!guard) throw new Error('Missing route guard');
+    mocks.getUser.mockResolvedValue({ username: 'anonymous' });
+
+    await guard({ name: 'dashboard', query: {}, path: '/' });
+
+    expect(mocks.hydrateFromServer).not.toHaveBeenCalled();
   });
 
   it('allows authenticated users to follow a safe next query path', async () => {
     const guard = mocks.getGuard();
     if (!guard) throw new Error('Missing route guard');
-    mocks.getUser.mockResolvedValue({ id: 'u-1' });
+    mocks.getUser.mockResolvedValue({ id: 'u-1', username: 'alice' });
 
     const result = await guard({
       name: 'dashboard',
@@ -100,12 +114,13 @@ describe('router auth guard', () => {
     });
 
     expect(result).toBe('/security');
+    expect(mocks.hydrateFromServer).toHaveBeenCalledWith('alice');
   });
 
   it('ignores unsafe next query values for authenticated users', async () => {
     const guard = mocks.getGuard();
     if (!guard) throw new Error('Missing route guard');
-    mocks.getUser.mockResolvedValue({ id: 'u-1' });
+    mocks.getUser.mockResolvedValue({ id: 'u-1', username: 'alice' });
 
     const result = await guard({
       name: 'dashboard',
@@ -119,7 +134,7 @@ describe('router auth guard', () => {
   it('allows authenticated users without next query to continue normally', async () => {
     const guard = mocks.getGuard();
     if (!guard) throw new Error('Missing route guard');
-    mocks.getUser.mockResolvedValue({ id: 'u-1' });
+    mocks.getUser.mockResolvedValue({ id: 'u-1', username: 'alice' });
 
     const result = await guard({
       name: 'dashboard',
@@ -128,5 +143,15 @@ describe('router auth guard', () => {
     });
 
     expect(result).toBe(true);
+  });
+
+  it('does not wait for preference hydration before resolving navigation', async () => {
+    const guard = mocks.getGuard();
+    if (!guard) throw new Error('Missing route guard');
+    mocks.getUser.mockResolvedValue({ username: 'alice' });
+    mocks.hydrateFromServer.mockReturnValue(new Promise(() => {}));
+
+    await expect(guard({ name: 'dashboard', query: {}, path: '/' })).resolves.toBe(true);
+    expect(mocks.hydrateFromServer).toHaveBeenCalledWith('alice');
   });
 });

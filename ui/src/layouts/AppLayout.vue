@@ -1411,6 +1411,10 @@ function handleSseEvent(event: string, payload?: unknown) {
     emitUiSseEvent('dd:sse-batch-update-completed', payload);
     return;
   }
+  if (event === 'preferences-updated') {
+    emitUiSseEvent('dd:sse-preferences-updated', payload);
+    return;
+  }
   if (event === 'connection-lost') {
     connectionLost.value = true;
     startConnectivityPolling();
