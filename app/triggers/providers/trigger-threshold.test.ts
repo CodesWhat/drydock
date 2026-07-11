@@ -172,4 +172,20 @@ describe('trigger-threshold', () => {
       true,
     );
   });
+
+  // #498: a pinned container with only an informational updateInsight populated
+  // has updateKind.kind === 'unknown' (result.tag is untouched, so no raw update
+  // is detected). isThresholdReached('all') on its own would still return true
+  // for that shape — isAllThreshold short-circuits before the updateKind==='unknown'
+  // check. This is expected and intentional: isThresholdReached is a pure
+  // predicate over updateKind, not the actual dispatch gate. It is
+  // container.updateAvailable (false for an insight-only container — see
+  // model/container.test.ts's #498 test and Trigger.test.ts's
+  // handleContainerReportTestCases #498 row) that stops triggers from firing,
+  // checked by callers *before* isThresholdReached is ever invoked.
+  test('isThresholdReached: unknown-kind update (the updateInsight-only shape) still passes threshold=all — the real gate is container.updateAvailable, checked upstream (#498)', () => {
+    expect(
+      isThresholdReached({ updateKind: { kind: 'unknown', semverDiff: undefined } }, 'all'),
+    ).toBe(true);
+  });
 });

@@ -510,6 +510,59 @@ describe('image-comparison', () => {
     expect(result.noUpdateReason).toContain('Pinned tag');
   });
 
+  test('populates result.updateInsight for a pinned specific tag when a newer same-family tag exists (#498)', async () => {
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['1.2.3', '1.2.4', '2.0.0']),
+          getImageManifestDigest: createManifestLookup(),
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+    const container = {
+      image: {
+        id: 'image-1',
+        registry: { name: 'hub' },
+        name: 'library/nginx',
+        tag: { value: '1.2.3', semver: true, tagPrecision: 'specific' },
+        digest: { watch: false },
+      },
+      tagFamily: 'strict',
+    };
+    const result = await findNewVersion(container as never, log);
+    // The pin gate still blocks the actionable path — updateAvailable-affecting fields
+    // are untouched — but the insight is surfaced as pure information.
+    expect(result.tag).toBe('1.2.3');
+    expect(result.updateInsight).toEqual({ tag: '2.0.0', kind: 'major' });
+  });
+
+  test('does not populate result.updateInsight when pinInfoEnabled option is false (#498)', async () => {
+    mockGetState.mockReturnValue({
+      registry: {
+        hub: {
+          getTags: vi.fn().mockResolvedValue(['1.2.3', '1.2.4', '2.0.0']),
+          getImageManifestDigest: createManifestLookup(),
+          normalizeImage: identityNormalizeImage,
+        },
+      },
+    });
+    const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
+    const container = {
+      image: {
+        id: 'image-1',
+        registry: { name: 'hub' },
+        name: 'library/nginx',
+        tag: { value: '1.2.3', semver: true, tagPrecision: 'specific' },
+        digest: { watch: false },
+      },
+      tagFamily: 'strict',
+    };
+    const result = await findNewVersion(container as never, log, { pinInfoEnabled: false });
+    expect(result.updateInsight).toBeUndefined();
+  });
+
   test('specific pin + digest.watch=true detects a same-tag rebuild via digest, no semver climb (#498)', async () => {
     const getImageManifestDigest = vi.fn().mockResolvedValue({
       digest: 'sha256:newmanifest',

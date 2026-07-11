@@ -160,6 +160,11 @@ export interface DockerWatcherConfiguration extends ComponentConfiguration {
   maintenancewindow?: string;
   maintenancewindowtz: string;
   imgset?: Record<string, Record<string, unknown>>;
+  tag?: {
+    pin?: {
+      info?: boolean;
+    };
+  };
 }
 
 // The delay before starting the watcher when the app is started
@@ -407,6 +412,14 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       watchatstart: this.joi.boolean().default(true),
       maintenancewindow: joi.string().cron().optional(),
       maintenancewindowtz: this.joi.string().default('UTC'),
+      // #498: DD_WATCHER_{name}_TAG_PIN_INFO=false opts a watcher out of the
+      // informational pin-gate insight (dd.tag.pin.info label has no
+      // per-container equivalent — this is a watcher-level default).
+      tag: this.joi.object({
+        pin: this.joi.object({
+          info: this.joi.boolean().default(true),
+        }),
+      }),
       imgset: this.joi
         .object()
         .pattern(
@@ -1410,7 +1423,9 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
    */
 
   async findNewVersion(container: Container, logContainer: ContainerWatchLogger) {
-    return findNewVersionState(container, logContainer);
+    return findNewVersionState(container, logContainer, {
+      pinInfoEnabled: this.configuration.tag?.pin?.info ?? true,
+    });
   }
 
   /**

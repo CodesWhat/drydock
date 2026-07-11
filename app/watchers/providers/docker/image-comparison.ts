@@ -264,10 +264,16 @@ async function handleDigestWatch(
   }
 }
 
+export interface FindNewVersionOptions {
+  pinInfoEnabled?: boolean;
+}
+
 export async function findNewVersion(
   container: Container,
   logContainer: ContainerWatchLogger,
+  options: FindNewVersionOptions = {},
 ): Promise<ContainerResult> {
+  const { pinInfoEnabled = true } = options;
   let registryProvider: ContainerTagLookupProvider;
   try {
     registryProvider = getRegistry(container.image.registry.name);
@@ -333,9 +339,18 @@ export async function findNewVersion(
   );
 
   // Get candidate tags (based on tag name)
-  const { tags: tagsCandidates, noUpdateReason } = getTagCandidates(container, tags, logContainer);
+  const {
+    tags: tagsCandidates,
+    noUpdateReason,
+    insight,
+  } = getTagCandidates(container, tags, logContainer, pinInfoEnabled);
   if (noUpdateReason) {
     result.noUpdateReason = noUpdateReason;
+  }
+  // #498: the pin-gate informational insight is additive only — it must never
+  // affect result.tag/updateAvailable/updateKind or trigger dispatch.
+  if (insight) {
+    result.updateInsight = insight;
   }
 
   const suggestedTag = suggestTag(container, tags, logContainer);

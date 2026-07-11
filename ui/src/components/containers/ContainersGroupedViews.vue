@@ -23,6 +23,7 @@ import {
 } from '../../utils/update-eligibility';
 import type { Container } from '../../types/container';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
+import UpdateInsightBadge from './UpdateInsightBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
 import ProjectLink from './ProjectLink.vue';
 import ContainersGroupHeader from './ContainersGroupHeader.vue';
@@ -191,6 +192,8 @@ function getContainerViewMemo(containerInput: Record<string, unknown>): unknown[
     container.updatePolicyState ?? '',
     container.suggestedTag ?? '',
     container.noUpdateReason ?? '',
+    container.updateInsight?.tag ?? '',
+    container.updateInsight?.kind ?? '',
     container.bouncer,
     container.updateEligibility,
     container.updateSecuritySummary?.critical ?? 0,
@@ -748,6 +751,7 @@ onScopeDispose(() => {
               {{ getUpdateMaturityLabel(c.updateMaturity) }}
             </span>
             <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
+            <UpdateInsightBadge :insight="c.updateInsight" />
           </div>
         </template>
         <!-- Status -->
@@ -1165,8 +1169,9 @@ onScopeDispose(() => {
                 </template>
               </template>
             </div>
-            <div v-if="c.suggestedTag || c.releaseNotes || c.currentReleaseNotes || c.releaseLink || c.sourceRepo" class="flex items-center gap-2 flex-wrap mt-2">
+            <div v-if="c.suggestedTag || c.updateInsight || c.releaseNotes || c.currentReleaseNotes || c.releaseLink || c.sourceRepo" class="flex items-center gap-2 flex-wrap mt-2">
               <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
+              <UpdateInsightBadge :insight="c.updateInsight" />
               <ReleaseNotesLink
                 :release-notes="c.releaseNotes"
                 :current-release-notes="c.currentReleaseNotes"
@@ -1317,10 +1322,11 @@ onScopeDispose(() => {
               <NoUpdateReasonBadge :reason="c.noUpdateReason" />
             </div>
             <div
-              v-if="c.suggestedTag || c.releaseNotes || c.currentReleaseNotes || c.releaseLink || c.sourceRepo"
+              v-if="c.suggestedTag || c.updateInsight || c.releaseNotes || c.currentReleaseNotes || c.releaseLink || c.sourceRepo"
               class="flex items-center gap-2 flex-wrap mt-1"
             >
               <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
+              <UpdateInsightBadge :insight="c.updateInsight" />
               <ReleaseNotesLink
                 :release-notes="c.releaseNotes"
                 :current-release-notes="c.currentReleaseNotes"

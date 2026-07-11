@@ -361,6 +361,23 @@ describe('Docker Watcher', () => {
       expect(() => docker.validateConfiguration(config)).not.toThrow();
     });
 
+    test('should validate configuration with tag.pin.info override (#498)', async () => {
+      const config = {
+        socket: '/var/run/docker.sock',
+        tag: { pin: { info: false } },
+      };
+      expect(() => docker.validateConfiguration(config)).not.toThrow();
+    });
+
+    test('should coerce DD_WATCHER_*_TAG_PIN_INFO string to a boolean via validateConfiguration (#498)', async () => {
+      const config = {
+        socket: '/var/run/docker.sock',
+        tag: { pin: { info: 'false' } },
+      };
+      const validated = docker.validateConfiguration(config);
+      expect(validated.tag.pin.info).toBe(false);
+    });
+
     test('should validate configuration with oidc remote auth', async () => {
       const config = createOidcConfig(
         {

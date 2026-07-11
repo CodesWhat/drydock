@@ -338,6 +338,12 @@
       "tooltip": "Best stable semver tag available — consider pinning",
       "tooltipWithTag": "Suggested: {tag}\n{hint}"
     },
+    "updateInsight": {
+      "badgeText": "Newer available",
+      "tooltipMajor": "Newer major version available: {tag}. This tag is pinned, so drydock won't act on it automatically — shown for information only.",
+      "tooltipMinor": "Newer minor version available: {tag}. This tag is pinned, so drydock won't act on it automatically — shown for information only.",
+      "tooltipPatch": "Newer patch version available: {tag}. This tag is pinned, so drydock won't act on it automatically — shown for information only."
+    },
     "eligibilityBadges": {
       "securityBlocked": "Security blocked",
       "rolledBack": "Rolled back",

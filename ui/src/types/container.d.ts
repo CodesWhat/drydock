@@ -149,6 +149,12 @@ export interface Container {
   registryError?: string;
   registryErrorKind?: 'rate-limited' | 'auth' | 'not-found' | 'transient' | 'unknown';
   noUpdateReason?: string;
+  /**
+   * Pure information (#498): the best newer same-family tag for a container
+   * caught by the pin gate. Additive only — never implies an actionable
+   * update (see updateKind/updateEligibility for that).
+   */
+  updateInsight?: { tag: string; kind: 'major' | 'minor' | 'patch' };
   bouncer: 'safe' | 'unsafe' | 'blocked';
   securityScanState?: 'scanned' | 'not-scanned';
   securitySummary?: ContainerSecuritySummary;

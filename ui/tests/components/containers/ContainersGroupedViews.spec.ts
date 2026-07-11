@@ -93,7 +93,7 @@ const DataTableStub = defineComponent({
 });
 
 const DataCardGridStub = defineComponent({
-  props: ['items'],
+  props: ['items', 'itemMemo'],
   emits: ['item-click'],
   template: `
     <div class="data-card-grid-stub">
@@ -756,6 +756,201 @@ describe('ContainersGroupedViews', () => {
     // The raw tag value must only surface via the badge's tooltip binding, never as
     // bare unlabeled text alongside the Digest/NEW badges.
     expect(updateState.text()).not.toContain('v1.3.0');
+  });
+
+  it('renders the informational update-insight badge for a pinned container (#498)', async () => {
+    const pinned = makeContainer({
+      id: 'c-insight',
+      name: 'alpha',
+      currentTag: 'v1.13.3',
+      newTag: null,
+      updateKind: null,
+      status: 'running',
+      server: 'local-main',
+      registry: 'dockerhub',
+      updateInsight: { tag: 'v1.46.1', kind: 'minor' },
+    });
+
+    const { context, refs } = makeContext();
+    const containers = [pinned];
+    refs.containerViewMode.value = 'table';
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    const updateState = rowByName(wrapper, 'alpha').get('[data-test="container-update-state"]');
+    const badge = updateState.get('[data-test="update-insight-badge"]');
+    expect(badge.text()).toBe('Newer available');
+    // The insight tag must only surface via the badge's tooltip binding, never as
+    // bare unlabeled text — it is pure information, not an actionable update.
+    expect(updateState.text()).not.toContain('v1.46.1');
+  });
+
+  it('renders the informational update-insight badge in card and list modes (#498)', async () => {
+    const pinned = makeContainer({
+      id: 'c-insight-card-list',
+      name: 'alpha',
+      currentTag: 'v1.13.3',
+      newTag: null,
+      updateKind: null,
+      status: 'running',
+      server: 'local-main',
+      registry: 'dockerhub',
+      updateInsight: { tag: 'v1.46.1', kind: 'minor' },
+    });
+
+    const { context, refs } = makeContext();
+    const containers = [pinned];
+    refs.containerViewMode.value = 'cards';
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    const card = wrapper
+      .findAll('.card-item-stub')
+      .find((candidate) => candidate.text().includes('alpha'));
+    expect(card).toBeDefined();
+    const cardBadge = card!.get('[data-test="update-insight-badge"]');
+    expect(cardBadge.text()).toBe('Newer available');
+    expect(card!.text()).not.toContain('v1.46.1');
+
+    refs.containerViewMode.value = 'list';
+    await nextTick();
+
+    const listItem = wrapper
+      .findAll('.list-item-stub')
+      .find((candidate) => candidate.text().includes('alpha'));
+    expect(listItem).toBeDefined();
+    const listBadge = listItem!.get('[data-test="update-insight-badge"]');
+    expect(listBadge.text()).toBe('Newer available');
+    expect(listItem!.text()).not.toContain('v1.46.1');
+  });
+
+  it('includes updateInsight in the card/list memo so a container that only gains an insight is not skipped (#501)', async () => {
+    const withoutInsight = makeContainer({
+      id: 'c-memo-insight',
+      name: 'alpha',
+      currentTag: 'v1.13.3',
+      newTag: null,
+      updateKind: null,
+      status: 'running',
+      server: 'local-main',
+      registry: 'dockerhub',
+    });
+
+    const { context, refs } = makeContext();
+    const containers = [withoutInsight];
+    refs.containerViewMode.value = 'cards';
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    // The DataCardGrid stub declares 'itemMemo' as a real prop, so this pulls
+    // the exact function ContainersGroupedViews wires up as :item-memo — the
+    // v-memo dependency array DataCardGrid/DataListAccordion use to decide
+    // whether a card/list row needs to re-render at all.
+    const cardGrid = wrapper.findComponent(DataCardGridStub);
+    const itemMemo = cardGrid.props('itemMemo') as (item: Record<string, unknown>) => unknown[];
+    expect(typeof itemMemo).toBe('function');
+
+    const memoWithoutInsight = itemMemo(withoutInsight as unknown as Record<string, unknown>);
+    const withInsight = {
+      ...withoutInsight,
+      updateInsight: { tag: 'v1.46.1', kind: 'minor' as const },
+    };
+    const memoWithInsight = itemMemo(withInsight as unknown as Record<string, unknown>);
+
+    // Before the fix, the memo array is identical for both containers (the
+    // insight fields are missing entirely), so v-memo would skip re-rendering
+    // the card/list row even though the insight badge should now appear.
+    expect(memoWithInsight).not.toEqual(memoWithoutInsight);
+    expect(memoWithInsight).toContain('v1.46.1');
+    expect(memoWithInsight).toContain('minor');
+    expect(memoWithoutInsight).not.toContain('v1.46.1');
+  });
+
+  it('renders the no-update-reason and update-insight badges together without contradictory copy when digest watching is off (#498)', async () => {
+    const remedy =
+      'Remove the digest-watch override (dd.watch.digest=false label or imgset watch.digest=false) to detect same-tag rebuilds, or set dd.tag.family=loose or add a dd.tag.include filter to allow semver version climbing.';
+    const pinnedDigestOff = makeContainer({
+      id: 'c-insight-plus-reason',
+      name: 'alpha',
+      currentTag: 'v1.13.3',
+      newTag: null,
+      updateKind: null,
+      status: 'running',
+      server: 'local-main',
+      registry: 'dockerhub',
+      noUpdateReason: `Pinned tag "v1.13.3": digest watching is disabled for this container, so no actionable update detection is running (a newer same-family tag is still shown for information). ${remedy}`,
+      updateInsight: { tag: 'v1.46.1', kind: 'minor' },
+    });
+
+    const { context, refs } = makeContext();
+    const containers = [pinnedDigestOff];
+    refs.containerViewMode.value = 'table';
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    const row = rowByName(wrapper, 'alpha');
+
+    const insightBadge = row.get('[data-test="update-insight-badge"]');
+    expect(insightBadge.text()).toBe('Newer available');
+
+    const reasonBadge = row.get('[data-test="no-update-reason-badge"]');
+    const reasonText = reasonBadge.attributes('aria-label');
+    // Only ACTIONABLE update detection is off — the insight badge above is
+    // still real, so the reason copy must not claim no detection at all runs.
+    expect(reasonText).toContain('no actionable update detection is running');
+    expect(reasonText).not.toContain('so no update detection is running');
   });
 
   it('renders normal card and list metadata quietly with concise update labels', async () => {
