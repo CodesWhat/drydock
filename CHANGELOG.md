@@ -21,7 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Docs:** documented the socket-proxy requirements for recreating containers on more than one network (macvlan, static IPs). Tecnativa/docker-socket-proxy needs both `POST=1` and `NETWORKS=1`; sockguard needs `request_body.network.allow_endpoint_config: true` to permit endpoint configs that specify a static IP or MAC address. Added a matching FAQ entry for containers left renamed `-old-<timestamp>` after a failed update.
+- **Docs:** documented the socket-proxy requirements for recreating containers with a static IP or MAC address (macvlan, custom networks). Tecnativa/docker-socket-proxy needs both `POST=1` and `NETWORKS=1` for containers on more than one network (the extra `POST /networks/{id}/connect` calls); sockguard needs `request_body.network.allow_endpoint_config: true` to permit endpoint configs that specify a static IP or MAC address — and as of sockguard's symmetric-enforcement release, that requirement also applies to `POST /containers/create`, so single-network macvlan/static-IP containers need the policy set too, not just multi-network ones. Added a matching FAQ entry for containers left renamed `-old-<timestamp>` after a failed update, including a note for operators who intentionally name a container in a way that collides with drydock's own rollback naming convention.
+
+### Known limitations
+
+- If the rollback itself fails (for example the backup image can't be pulled, or the replacement container never becomes healthy), that failure is recorded in the update-operations store and audit log but does not yet trigger a push notification — check the container's operation history or the audit log after a failed update to confirm whether the rollback actually succeeded.
 
 ## [1.5.2-rc.3] — 2026-07-11
 

@@ -422,7 +422,7 @@ As of 1.5.3, Drydock detects and removes the orphaned replacement container as p
 3. Rename the `-old-<timestamp>` container back: `docker rename <name>-old-<timestamp> <name>`
 4. If the container was started from Compose, `docker compose up -d` will also recreate it cleanly once the name is free.
 
-Upgrading to 1.5.3 or later prevents this from happening again.
+Upgrading to 1.5.3 or later prevents this from happening again. Note that if you intentionally gave a container a name matching this pattern (`<name>-old-<10+ digit number>`), Drydock can't tell it apart from its own rollback rename and will refuse to update it — rename the container to something outside that pattern to make it updatable again.
 
 ## Legacy WUD environment variables or labels
 
