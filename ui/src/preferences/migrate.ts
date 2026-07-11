@@ -140,6 +140,7 @@ function sanitize(data: Record<string, unknown>): void {
   sanitizeContainers(data);
   sanitizeTables(data);
   sanitizeViews(data);
+  sanitizeSync(data);
 }
 
 function sanitizeLocale(data: Record<string, unknown>): void {
@@ -303,6 +304,20 @@ function sanitizeViews(data: Record<string, unknown>): void {
         sanitizeViewHiddenColumns(v[viewKey] as Record<string, unknown>, viewKey);
       }
     }
+  }
+}
+
+function sanitizeSync(data: Record<string, unknown>): void {
+  const sync = data.sync;
+  if (sync === undefined) {
+    return;
+  }
+  if (!isRecord(sync)) {
+    delete data.sync;
+    return;
+  }
+  if ('enabled' in sync && typeof sync.enabled !== 'boolean') {
+    delete sync.enabled;
   }
 }
 

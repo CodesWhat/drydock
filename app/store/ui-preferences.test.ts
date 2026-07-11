@@ -87,4 +87,31 @@ describe('UI preferences store', () => {
     expect(result).not.toHaveProperty('$loki');
     expect(result).not.toHaveProperty('meta');
   });
+
+  it('isolates persisted preferences from later input mutations', () => {
+    const c = collection();
+    uiPreferences.createCollections({ getCollection: vi.fn(() => c), addCollection: vi.fn() });
+    const input = { appearance: { fontSize: 1 } };
+    uiPreferences.replacePreferences('alice', 11, input);
+
+    input.appearance.fontSize = 1.3;
+
+    expect(uiPreferences.getPreferences('alice')?.preferences).toEqual({
+      appearance: { fontSize: 1 },
+    });
+  });
+
+  it('isolates persisted preferences from mutations to returned records', () => {
+    const c = collection();
+    uiPreferences.createCollections({ getCollection: vi.fn(() => c), addCollection: vi.fn() });
+    const returned = uiPreferences.replacePreferences('alice', 11, {
+      appearance: { fontSize: 1 },
+    });
+
+    (returned.preferences.appearance as { fontSize: number }).fontSize = 1.3;
+
+    expect(uiPreferences.getPreferences('alice')?.preferences).toEqual({
+      appearance: { fontSize: 1 },
+    });
+  });
 });

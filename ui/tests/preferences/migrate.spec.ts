@@ -90,6 +90,16 @@ describe('preferences migration', () => {
       expect(result.sync).toEqual({ enabled: true });
     });
 
+    it('sanitizes malformed sync values on every load, including current schema data', () => {
+      expect(migrate({ schemaVersion: 11, sync: { enabled: 'false' } }).sync).toEqual({
+        enabled: false,
+      });
+      expect(migrate({ schemaVersion: 11, sync: 42 }).sync).toEqual({ enabled: false });
+      expect(migrate({ schemaVersion: 11, sync: { enabled: true } }).sync).toEqual({
+        enabled: true,
+      });
+    });
+
     it('backfills disabled sync preferences from older schemas', () => {
       expect(migrate({ schemaVersion: 9 }).sync).toEqual({ enabled: false });
     });

@@ -144,4 +144,14 @@ describe('router auth guard', () => {
 
     expect(result).toBe(true);
   });
+
+  it('does not wait for preference hydration before resolving navigation', async () => {
+    const guard = mocks.getGuard();
+    if (!guard) throw new Error('Missing route guard');
+    mocks.getUser.mockResolvedValue({ username: 'alice' });
+    mocks.hydrateFromServer.mockReturnValue(new Promise(() => {}));
+
+    await expect(guard({ name: 'dashboard', query: {}, path: '/' })).resolves.toBe(true);
+    expect(mocks.hydrateFromServer).toHaveBeenCalledWith('alice');
+  });
 });

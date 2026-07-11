@@ -110,7 +110,9 @@ async function applyAuthNavigationGuard(to: RouteLocationNormalized) {
 
   if (user !== undefined) {
     if (user.username && user.username !== 'anonymous') {
-      await hydrateFromServer(user.username);
+      // Fire-and-forget — the preference fetch has no timeout, and navigation
+      // must never block on it; hydrateFromServer swallows its own errors.
+      void hydrateFromServer(user.username);
     }
     return validateAndGetNextRoute(to);
   }

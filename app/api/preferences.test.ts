@@ -1,4 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { createMockResponse } from '../test/helpers.js';
+import { openApiPaths } from './openapi/paths/index.js';
 import { validateOpenApiJsonResponse } from './openapi-contract.js';
 
 const { router, getStored, replaceStored, broadcast } = vi.hoisted(() => ({
@@ -98,7 +100,7 @@ describe('preferences router', () => {
     const body = { apiVersion: 1, schemaVersion: 11, preferences: record.preferences };
     handler('patch')({ user: { username: 'alice' }, body }, res);
     expect(replaceStored).toHaveBeenCalledWith('alice', 11, record.preferences);
-    expect(broadcast).toHaveBeenCalledWith('alice');
+    expect(broadcast).toHaveBeenCalledWith();
     expect(res.status).toHaveBeenCalledWith(200);
     assertContract('patch', res);
   });
@@ -160,5 +162,20 @@ describe('preferences router', () => {
     expect(res.status).toHaveBeenCalledWith(403);
     expect(replaceStored).not.toHaveBeenCalled();
     expect(broadcast).not.toHaveBeenCalled();
+  });
+
+  it('keeps server, client, and OpenAPI preference API versions in lockstep', () => {
+    const clientSource = readFileSync(
+      new URL('../../ui/src/preferences/index.ts', import.meta.url),
+      'utf8',
+    );
+    const clientVersion = Number(clientSource.match(/PREFERENCES_API_VERSION\s*=\s*(\d+)/)?.[1]);
+    const patch = openApiPaths['/api/v1/preferences'].patch;
+    const requestSchema = patch.requestBody.content['application/json'].schema;
+    const openApiVersion = requestSchema.properties.apiVersion.enum[0];
+
+    expect(preferencesRouter.PREFERENCES_API_VERSION).toBe(1);
+    expect(clientVersion).toBe(preferencesRouter.PREFERENCES_API_VERSION);
+    expect(openApiVersion).toBe(preferencesRouter.PREFERENCES_API_VERSION);
   });
 });

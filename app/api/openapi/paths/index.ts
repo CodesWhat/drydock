@@ -660,7 +660,7 @@ export const openApiPaths = {
             schema: {
               type: 'object',
               properties: {
-                apiVersion: { type: 'integer', minimum: 1 },
+                apiVersion: { type: 'integer', enum: [1] },
                 schemaVersion: { type: 'integer', minimum: 1 },
                 preferences: { type: 'object', additionalProperties: true },
               },

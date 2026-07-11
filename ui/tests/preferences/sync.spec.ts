@@ -56,10 +56,24 @@ function response(
   return { apiVersion: 1, username: 'alice', schemaVersion, preferences, updatedAt: 'now' };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('preference sync engine', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    mocks.getPreferences.mockReset();
+    mocks.updatePreferences.mockReset();
+    mocks.migrate.mockReset();
+    mocks.nextTick.mockReset();
     mocks.migrate.mockImplementation((value) => value);
     mocks.nextTick.mockResolvedValue(undefined);
   });
@@ -220,26 +234,26 @@ describe('preference sync engine', () => {
     expect(mocks.updatePreferences).toHaveBeenCalledTimes(1);
   });
 
-  it('self-filters preference SSE events and gates the fetched blob', async () => {
+  it('refetches on an empty preference invalidation and gates a disabled blob', async () => {
     const { sync, preferences } = await load();
     mocks.getPreferences.mockResolvedValue(response(null));
     await sync.hydrateFromServer('alice');
     mocks.getPreferences.mockClear();
-    mocks.listeners.get('dd:sse-preferences-updated')!(
-      new CustomEvent('x', { detail: { username: 'bob' } }),
-    );
-    expect(mocks.getPreferences).not.toHaveBeenCalled();
     const localFontSize = preferences.appearance.fontSize;
     const disabled = structuredClone(preferences);
     disabled.sync.enabled = false;
     disabled.appearance.fontSize = 1.3;
     mocks.getPreferences.mockResolvedValue(response(disabled));
-    mocks.listeners.get('dd:sse-preferences-updated')!(
-      new CustomEvent('x', { detail: { username: 'alice' } }),
-    );
+    mocks.listeners.get('dd:sse-preferences-updated')!(new CustomEvent('x', { detail: {} }));
     await vi.waitFor(() => expect(mocks.getPreferences).toHaveBeenCalledTimes(1));
     expect(preferences.sync.enabled).toBe(false);
     expect(preferences.appearance.fontSize).toBe(localFontSize);
+  });
+
+  it('ignores preference invalidations before any user hydrates', async () => {
+    await load();
+    mocks.listeners.get('dd:sse-preferences-updated')!(new CustomEvent('x', { detail: {} }));
+    expect(mocks.getPreferences).not.toHaveBeenCalled();
   });
 
   it('protects a pending local edit from SSE and allows refetch after its flush', async () => {
@@ -280,11 +294,111 @@ describe('preference sync engine', () => {
     await vi.waitFor(() => expect(mocks.getPreferences).toHaveBeenCalled());
   });
 
-  it('ignores malformed remote events', async () => {
-    const { sync } = await load();
+  it.each([
+    'resolve',
+    'reject',
+  ] as const)('blocks SSE refetch during an in-flight debounced write, then resumes after %s', async (outcome) => {
+    const { sync, preferences } = await load();
+    mocks.getPreferences.mockResolvedValue(response(null));
     await sync.hydrateFromServer('alice');
     mocks.getPreferences.mockClear();
-    mocks.listeners.get('dd:sse-preferences-updated')!(new Event('x'));
+    const write = deferred<ReturnType<typeof response>>();
+    mocks.updatePreferences.mockReturnValue(write.promise);
+    preferences.sync.enabled = true;
+    mocks.watchCallbacks[0]();
+    await vi.advanceTimersByTimeAsync(3000);
+
+    mocks.listeners.get('dd:sse-preferences-updated')!(new CustomEvent('x', { detail: {} }));
     expect(mocks.getPreferences).not.toHaveBeenCalled();
+
+    if (outcome === 'resolve') write.resolve(response(preferences));
+    else write.reject(new Error('write failed'));
+    await Promise.resolve();
+    await Promise.resolve();
+    mocks.listeners.get('dd:sse-preferences-updated')!(new CustomEvent('x', { detail: {} }));
+    await vi.waitFor(() => expect(mocks.getPreferences).toHaveBeenCalledTimes(1));
+  });
+
+  it.each([
+    'resolve',
+    'reject',
+  ] as const)('blocks SSE refetch during an explicit push, then resumes after %s', async (outcome) => {
+    const { sync, preferences } = await load();
+    mocks.getPreferences.mockResolvedValue(response(null));
+    await sync.hydrateFromServer('alice');
+    mocks.getPreferences.mockClear();
+    const write = deferred<ReturnType<typeof response>>();
+    mocks.updatePreferences.mockReturnValue(write.promise);
+    const push = sync.pushInitialSync('alice');
+
+    mocks.listeners.get('dd:sse-preferences-updated')!(new CustomEvent('x', { detail: {} }));
+    expect(mocks.getPreferences).not.toHaveBeenCalled();
+
+    if (outcome === 'resolve') {
+      write.resolve(response(preferences));
+      await push;
+    } else {
+      write.reject(new Error('push failed'));
+      await expect(push).rejects.toThrow('push failed');
+    }
+    mocks.listeners.get('dd:sse-preferences-updated')!(new CustomEvent('x', { detail: {} }));
+    await vi.waitFor(() => expect(mocks.getPreferences).toHaveBeenCalledTimes(1));
+  });
+
+  it('cancels the previous user debounce and hydrates a switched user', async () => {
+    const { sync, preferences } = await load();
+    mocks.getPreferences.mockResolvedValue(response(null));
+    await sync.hydrateFromServer('alice');
+    preferences.sync.enabled = true;
+    mocks.watchCallbacks[0]();
+    expect(vi.getTimerCount()).toBe(1);
+    mocks.getPreferences.mockClear();
+
+    await sync.hydrateFromServer('bob');
+
+    expect(mocks.getPreferences).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(mocks.updatePreferences).not.toHaveBeenCalled();
+  });
+
+  it('discards a stale hydration completion after switching users', async () => {
+    const { sync, preferences } = await load();
+    const aliceFetch = deferred<ReturnType<typeof response>>();
+    mocks.getPreferences
+      .mockReturnValueOnce(aliceFetch.promise)
+      .mockResolvedValueOnce(response(null));
+    const aliceHydration = sync.hydrateFromServer('alice');
+    await sync.hydrateFromServer('bob');
+    const aliceServer = structuredClone(preferences);
+    aliceServer.sync.enabled = true;
+    aliceServer.appearance.fontSize = 1.3;
+
+    aliceFetch.resolve(response(aliceServer));
+    await aliceHydration;
+
+    expect(preferences.appearance.fontSize).not.toBe(1.3);
+    expect(mocks.applyFontSize).not.toHaveBeenCalled();
+  });
+
+  it('consumes the ambient debounce after a successful explicit push', async () => {
+    const { sync, preferences } = await load();
+    preferences.sync.enabled = true;
+    mocks.watchCallbacks[0]();
+    await sync.pushInitialSync('alice');
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(mocks.updatePreferences).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves the ambient debounce when an explicit push rejects', async () => {
+    const { sync, preferences } = await load();
+    preferences.sync.enabled = true;
+    mocks.watchCallbacks[0]();
+    mocks.updatePreferences.mockRejectedValueOnce(new Error('push failed')).mockResolvedValue({});
+
+    await expect(sync.pushInitialSync('alice')).rejects.toThrow('push failed');
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(mocks.updatePreferences).toHaveBeenCalledTimes(2);
   });
 });

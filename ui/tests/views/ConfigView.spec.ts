@@ -553,6 +553,7 @@ describe('ConfigView', () => {
   describe('cross-device sync toggle', () => {
     async function mountAppearance(username = 'admin') {
       mockRouteQuery.value = { tab: 'appearance' };
+      mockGetUser.mockClear();
       mockGetUser.mockResolvedValue({ username });
       mockGetServer.mockResolvedValue({ configuration: {} });
       mockGetSettings.mockResolvedValue({ internetlessMode: false });
@@ -593,6 +594,8 @@ describe('ConfigView', () => {
 
     it('pushes both enabled and disabled blobs explicitly', async () => {
       const wrapper = await mountAppearance('alice');
+      preferences.sync.enabled = false;
+      mockPushInitialSync.mockClear();
       const pushedStates: boolean[] = [];
       mockPushInitialSync.mockImplementation(async () => {
         pushedStates.push(preferences.sync.enabled);
@@ -607,9 +610,16 @@ describe('ConfigView', () => {
       expect(pushedStates).toEqual([true, false]);
     });
 
-    it('disables during a push and shows an inline error on failure', async () => {
+    it.each([
+      { initial: false, expected: false, label: 'ON' },
+      { initial: true, expected: true, label: 'OFF' },
+    ])('restores the prior state and shows an error after a failed $label push', async ({
+      initial,
+      expected,
+    }) => {
       let reject!: (error: Error) => void;
       const wrapper = await mountAppearance('alice');
+      preferences.sync.enabled = initial;
       mockPushInitialSync.mockReturnValue(
         new Promise((_resolve, rejectPromise) => {
           reject = rejectPromise;
@@ -621,6 +631,25 @@ describe('ConfigView', () => {
       expect(wrapper.find('[data-test="sync-toggle"]').attributes('disabled')).toBeDefined();
       reject(new Error('sync failed'));
       await vi.waitFor(() => expect(wrapper.text()).toContain('sync failed'));
+      expect(preferences.sync.enabled).toBe(expected);
+    });
+
+    it('hides the toggle when the profile load fails', async () => {
+      mockRouteQuery.value = { tab: 'appearance' };
+      mockGetServer.mockResolvedValue({ configuration: {} });
+      mockGetSettings.mockResolvedValue({ internetlessMode: false });
+      mockGetUser.mockClear();
+      mockGetUser.mockRejectedValue(new Error('profile failed'));
+      const wrapper = factory();
+      await vi.waitFor(() => expect(mockGetUser).toHaveBeenCalledOnce());
+      await nextTick();
+      await nextTick();
+      expect(wrapper.find('[data-test="sync-toggle"]').exists()).toBe(false);
+    });
+
+    it('hides the toggle when the loaded profile has an empty username', async () => {
+      const wrapper = await mountAppearance('');
+      expect(wrapper.find('[data-test="sync-toggle"]').exists()).toBe(false);
     });
   });
 

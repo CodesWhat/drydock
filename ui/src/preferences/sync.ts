@@ -18,6 +18,7 @@ let currentUsername: string | undefined;
 let suppressOutboundSync = false;
 let syncDirty = false;
 let syncFlushTimer: ReturnType<typeof setTimeout> | undefined;
+let syncWriteInFlight = false;
 
 /**
  * Diff-and-apply the server's migrated blob onto the reactive preferences
@@ -52,12 +53,21 @@ async function fetchAndMergeFromServer(username: string): Promise<void> {
   // window, and the next flush would then push the reverted value back out.
   // Skipping is safe under last-write-wins — the pending flush PATCHes
   // within the debounce window and every device converges on it via the
-  // resulting broadcast.
-  if (syncDirty || syncFlushTimer !== undefined) {
+  // resulting broadcast. An in-flight PATCH must also block fetches —
+  // `flushSyncWrite` clears `syncDirty` before awaiting, so without this flag
+  // an SSE-triggered fetch landing mid-write could merge an older server
+  // snapshot over the newer values mid-flight to the server (the skipped
+  // snapshot is superseded by our own full-replace write under last-write-wins).
+  if (syncDirty || syncFlushTimer !== undefined || syncWriteInFlight) {
     return;
   }
   try {
     const response = await getPreferences();
+    // A user switch happened while the fetch was in flight — discard the
+    // stale completion.
+    if (username !== currentUsername) {
+      return;
+    }
     if (!response.preferences) {
       return;
     }
@@ -77,14 +87,29 @@ async function fetchAndMergeFromServer(username: string): Promise<void> {
   }
 }
 
+function resetSyncSessionState(): void {
+  clearSyncFlushTimer();
+  syncDirty = false;
+  hydrated = false;
+  currentUsername = undefined;
+}
+
 /**
  * Merge the server's synced preferences into localStorage. Runs at most once
- * per app session (module-level guard) and never throws — safe to await
- * unconditionally from the router guard without blocking navigation.
+ * per app session (module-level guard) and never throws — it is intentionally
+ * NOT awaited by the router guard (fire-and-forget) so navigation is never
+ * coupled to API responsiveness.
  */
 export async function hydrateFromServer(username: string): Promise<void> {
   if (username === 'anonymous') {
     return;
+  }
+  // Logout is SPA navigation (no reload), so module state survives a
+  // same-tab user switch; without this reset the new user's hydration is
+  // skipped by the stale `hydrated` flag and a still-armed flush timer could
+  // PATCH the previous user's blob into the new user's server record.
+  if (currentUsername !== undefined && currentUsername !== username) {
+    resetSyncSessionState();
   }
   currentUsername = username;
   if (hydrated) {
@@ -100,13 +125,24 @@ export async function hydrateFromServer(username: string): Promise<void> {
  * so the off-state reaches the server (the ambient debounce is gated on
  * `sync.enabled` and therefore cannot record its own flip to false). Unlike
  * hydrateFromServer, errors propagate to the caller so ConfigView can show an
- * inline error banner.
+ * inline error banner. On success, consumes any pending ambient debounce so
+ * the toggle flip doesn't also trigger a redundant follow-up PATCH.
  */
 export async function pushInitialSync(username: string): Promise<void> {
   if (username === 'anonymous') {
     return;
   }
-  await updatePreferences(preferences.schemaVersion, preferences);
+  syncWriteInFlight = true;
+  try {
+    await updatePreferences(preferences.schemaVersion, preferences);
+  } finally {
+    syncWriteInFlight = false;
+  }
+  // The toggle flip itself trips the deep `sync` watcher and arms the
+  // ambient debounce; this explicit push already carried that state, so
+  // consume the pending flush or an identical PATCH + broadcast fires 3s later.
+  syncDirty = false;
+  clearSyncFlushTimer();
 }
 
 function clearSyncFlushTimer(): void {
@@ -125,9 +161,12 @@ async function flushSyncWrite(): Promise<void> {
     return;
   }
   try {
+    syncWriteInFlight = true;
     await updatePreferences(preferences.schemaVersion, preferences);
   } catch (error) {
     console.debug(`Preferences sync: server write failed: ${errorMessage(error)}`);
+  } finally {
+    syncWriteInFlight = false;
   }
 }
 
@@ -151,9 +190,11 @@ for (const section of DEEP_WATCH_SECTIONS) {
   watch(() => preferences[section], markSyncDirty, { deep: true });
 }
 
-function handleRemotePreferencesUpdated(event: Event): void {
-  const detail = (event as CustomEvent<{ username?: string }>).detail;
-  if (!detail || !currentUsername || detail.username !== currentUsername) {
+// The invalidation event carries no username by design (§3) — every client
+// just re-fetches its own session-scoped preferences; the fetch guards make
+// self-echo and foreign updates safe.
+function handleRemotePreferencesUpdated(): void {
+  if (!currentUsername) {
     return;
   }
   void fetchAndMergeFromServer(currentUsername);

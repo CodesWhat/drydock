@@ -31,7 +31,7 @@ function cloneRecord(record: UiPreferencesRecord): UiPreferencesRecord {
   return {
     username: record.username,
     schemaVersion: record.schemaVersion,
-    preferences: record.preferences,
+    preferences: structuredClone(record.preferences),
     updatedAt: record.updatedAt,
   };
 }
@@ -84,7 +84,7 @@ export function replacePreferences(
   const record: UiPreferencesRecord = {
     username,
     schemaVersion,
-    preferences: preferencesBlob,
+    preferences: structuredClone(preferencesBlob),
     updatedAt: new Date().toISOString(),
   };
   uiPreferencesCollection.insert(record);

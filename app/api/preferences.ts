@@ -12,9 +12,10 @@ const router = express.Router();
 // Server-side API contract version for /api/v1/preferences. This is a
 // distinct symbol from ui/src/preferences/index.ts's client-side
 // PREFERENCES_API_VERSION constant of the same name/value — app/ and ui/
-// share no runtime code, so the two are kept in sync by convention/comment,
-// not by import.
-const PREFERENCES_API_VERSION = 1;
+// share no runtime code, so a contract tripwire test in preferences.test.ts
+// asserts the two constants (and the OpenAPI enum) agree; a one-sided bump
+// fails CI instead of 409ing every sync write at runtime.
+export const PREFERENCES_API_VERSION = 1;
 
 const preferencesPatchSchema = joi.object({
   apiVersion: joi.number().valid(PREFERENCES_API_VERSION).required(),
@@ -111,7 +112,7 @@ function updatePreferences(req: AuthRequest, res: Response): void {
     validated.value.schemaVersion,
     validated.value.preferences,
   );
-  broadcastPreferencesUpdated(username);
+  broadcastPreferencesUpdated();
   res.status(200).json(buildEnvelope(username, record));
 }
 

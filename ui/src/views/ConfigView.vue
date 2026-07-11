@@ -200,7 +200,11 @@ const profileDisplayName = computed(
 );
 const profileInitials = computed(() => profileDisplayName.value.slice(0, 2).toUpperCase());
 const showSyncToggle = computed(
-  () => !profileLoading.value && profileData.value.username !== 'anonymous',
+  () =>
+    !profileLoading.value &&
+    !profileError.value &&
+    Boolean(profileData.value.username) &&
+    profileData.value.username !== 'anonymous',
 );
 
 function formatProfileLastLogin(rawValue: unknown): string {
@@ -343,10 +347,12 @@ async function toggleInternetlessMode() {
 async function toggleSync() {
   syncError.value = '';
   syncLoading.value = true;
+  const previousEnabled = preferences.sync.enabled;
   try {
-    preferences.sync.enabled = !preferences.sync.enabled;
+    preferences.sync.enabled = !previousEnabled;
     await pushInitialSync(profileData.value.username);
   } catch (e: unknown) {
+    preferences.sync.enabled = previousEnabled;
     syncError.value = errorMessage(e, t('configView.appearance.errors.updateSyncSettings'));
   } finally {
     syncLoading.value = false;
