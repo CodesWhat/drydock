@@ -8,6 +8,7 @@ import {
   getContainerDisplayName,
   getContainerName,
   getErrorMessage,
+  getFirstConfigBoolean,
   getFirstConfigNumber,
   getFirstConfigString,
   getImageForRegistryLookup,
@@ -245,6 +246,24 @@ describe('docker helper extraction module', () => {
         tag: { family: 'loose' },
       }).tagFamily,
     ).toBe('loose');
+  });
+
+  test('resolves nested imgset tag.pin.info booleans without reviving flat aliases (#498)', () => {
+    expect(
+      getResolvedImgsetConfiguration('service', {
+        tag: { pin: { info: 'false' } },
+        tagPinInfo: true,
+      }).tagPinInfo,
+    ).toBe(false);
+    expect(
+      getResolvedImgsetConfiguration('service', {
+        tagPinInfo: false,
+      }).tagPinInfo,
+    ).toBeUndefined();
+
+    expect(getFirstConfigBoolean({ value: true }, ['value'])).toBe(true);
+    expect(getFirstConfigBoolean({ value: ' FALSE ' }, ['value'])).toBe(false);
+    expect(getFirstConfigBoolean({ value: 'invalid' }, ['value'])).toBeUndefined();
   });
 
   test('numeric and inspect helpers should handle empty and missing inputs', () => {

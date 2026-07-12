@@ -177,6 +177,7 @@ export interface Container {
   excludeTags?: string;
   transformTags?: string;
   tagFamily?: string;
+  tagPinInfo?: boolean;
   linkTemplate?: string;
   link?: string;
   actionTriggerInclude?: string;
@@ -287,6 +288,7 @@ const schema = joi.object({
   excludeTags: joi.string(),
   transformTags: joi.string(),
   tagFamily: joi.string(),
+  tagPinInfo: joi.boolean(),
   linkTemplate: joi.string(),
   link: joi.string(),
   actionTriggerInclude: joi.string(),

@@ -32,6 +32,11 @@ export const wudTagTransform = 'wud.tag.transform';
 export const ddTagFamily = 'dd.tag.family';
 
 /**
+ * Whether to expose informational newer-tag insight for a pinned tag.
+ */
+export const ddTagPinInfo = 'dd.tag.pin.info';
+
+/**
  * Optional path in Docker inspect JSON to derive the running tag value.
  */
 export const ddInspectTagPath = 'dd.inspect.tag.path';

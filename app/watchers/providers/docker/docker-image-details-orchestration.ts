@@ -39,6 +39,7 @@ export interface ContainerLabelOverrides {
   excludeTags?: string;
   transformTags?: string;
   tagFamily?: string;
+  tagPinInfo?: string;
   linkTemplate?: string;
   displayName?: string;
   displayIcon?: string;
@@ -104,6 +105,7 @@ interface ResolvedContainerLabelOverrides {
   excludeTags?: string;
   transformTags?: string;
   tagFamily?: string;
+  tagPinInfo?: string;
   linkTemplate?: string;
   displayName?: string;
   displayIcon?: string;
@@ -123,6 +125,7 @@ interface ResolvedContainerConfig {
   excludeTags?: string;
   transformTags?: string;
   tagFamily?: string;
+  tagPinInfo?: boolean;
   linkTemplate?: string;
   displayName?: string;
   displayIcon?: string;
@@ -157,6 +160,12 @@ interface DockerImageDetailsWatcher {
     socket?: string;
     protocol?: string;
     port?: number;
+    tag?: {
+      family?: string;
+      pin?: {
+        info?: boolean;
+      };
+    };
   };
   dockerApi: {
     getContainer: (id: string) => { inspect: () => Promise<DockerContainerInspectPayload> };
@@ -179,6 +188,10 @@ interface DockerImageDetailsHelpers {
     labelOverrides: ResolvedContainerLabelOverrides,
     matchingImgset: ResolvedImgset | undefined,
     containerLabels: Record<string, string>,
+    watcherTagDefaults?: {
+      family?: string;
+      pin?: { info?: boolean };
+    },
   ) => ResolvedContainerConfig;
   normalizeContainer: (container: Container) => Container;
   resolveImageName: (
@@ -551,6 +564,7 @@ function resolveContainerImageState(
     resolvedLabelOverrides,
     matchingImgset,
     containerLabels,
+    watcher.configuration.tag,
   );
   const tagName = helpers.resolveTagName(
     parsedImage,
@@ -758,6 +772,7 @@ export async function addImageDetailsToContainerOrchestration(
     excludeTags: resolvedConfig.excludeTags,
     transformTags: resolvedConfig.transformTags,
     tagFamily: resolvedConfig.tagFamily,
+    tagPinInfo: resolvedConfig.tagPinInfo,
     linkTemplate: resolvedConfig.linkTemplate,
     displayName: getContainerDisplayName(
       dockerContainerName,

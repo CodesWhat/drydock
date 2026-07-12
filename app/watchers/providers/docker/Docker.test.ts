@@ -378,6 +378,35 @@ describe('Docker Watcher', () => {
       expect(validated.tag.pin.info).toBe(false);
     });
 
+    test('should validate watcher-level tag.family defaults and reject unknown policies (#498)', () => {
+      const validated = docker.validateConfiguration({
+        socket: '/var/run/docker.sock',
+        tag: { family: 'loose' },
+      });
+
+      expect(validated.tag.family).toBe('loose');
+      expect(() =>
+        docker.validateConfiguration({
+          socket: '/var/run/docker.sock',
+          tag: { family: 'unsupported' },
+        }),
+      ).toThrow();
+    });
+
+    test('should validate imgset tag.pin.info and coerce environment strings (#498)', () => {
+      const validated = docker.validateConfiguration({
+        socket: '/var/run/docker.sock',
+        imgset: {
+          service: {
+            image: 'ghcr.io/team/service',
+            tag: { pin: { info: 'false' } },
+          },
+        },
+      });
+
+      expect(validated.imgset.service.tag.pin.info).toBe(false);
+    });
+
     test('should validate configuration with oidc remote auth', async () => {
       const config = createOidcConfig(
         {

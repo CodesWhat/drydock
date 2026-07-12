@@ -37,7 +37,7 @@ import Watcher from '../../Watcher.js';
 import { updateContainerFromInspect as updateContainerFromInspectState } from './container-event-update.js';
 import {
   type AliasFilterDecision,
-  applyDerivedLabelFieldsToContainer,
+  applyEffectiveTagPolicyFromLabels,
   filterRecreatedContainerAliases,
   getDockerWatcherRegistryId,
   getDockerWatcherSourceKey,
@@ -46,6 +46,7 @@ import {
   isDockerWatcher,
   mergeConfigWithImgset,
   pruneOldContainers,
+  resolveEffectiveContainerTagPolicy,
   resolveLabelsFromContainer,
   resolveTriggerLabelOverrides,
 } from './container-init.js';
@@ -112,6 +113,7 @@ import {
   ddTagExclude,
   ddTagFamily,
   ddTagInclude,
+  ddTagPinInfo,
   ddTagTransform,
   ddWatch,
   wudDisplayIcon,
@@ -158,6 +160,7 @@ export interface DockerWatcherConfiguration extends ComponentConfiguration {
   maintenancewindowtz: string;
   imgset?: Record<string, Record<string, unknown>>;
   tag?: {
+    family?: 'strict' | 'loose';
     pin?: {
       info?: boolean;
     };
@@ -409,10 +412,10 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       watchatstart: this.joi.boolean().default(true),
       maintenancewindow: joi.string().cron().optional(),
       maintenancewindowtz: this.joi.string().default('UTC'),
-      // #498: DD_WATCHER_{name}_TAG_PIN_INFO=false opts a watcher out of the
-      // informational pin-gate insight (dd.tag.pin.info label has no
-      // per-container equivalent — this is a watcher-level default).
+      // #498: watcher defaults are the lowest-priority tag-policy layer;
+      // matching imgsets and dd.tag.* container labels may override them.
       tag: this.joi.object({
+        family: this.joi.string().valid('strict', 'loose').default('strict'),
         pin: this.joi.object({
           info: this.joi.boolean().default(true),
         }),
@@ -431,6 +434,9 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
               exclude: this.joi.string(),
               transform: this.joi.string(),
               family: this.joi.string().valid('strict', 'loose'),
+              pin: this.joi.object({
+                info: this.joi.boolean(),
+              }),
             }),
             link: this.joi.object({
               template: this.joi.string(),
@@ -1018,7 +1024,10 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       getCustomDisplayNameFromLabels: (labels) => getLabel(labels, ddDisplayName, wudDisplayName),
       updateContainer: (container) => storeContainer.updateContainer(container),
       logInfo: (message) => logContainer.info(message),
-      applyDerivedLabelFieldsToContainer,
+      applyDerivedLabelFieldsToContainer: (container, labels) =>
+        applyEffectiveTagPolicyFromLabels(container, labels, this.configuration.tag, (image) =>
+          this.getMatchingImgsetConfiguration(image),
+        ),
     });
   }
 
@@ -1281,6 +1290,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         excludeTags: getLabel(container.Labels, ddTagExclude, wudTagExclude),
         transformTags: getLabel(container.Labels, ddTagTransform, wudTagTransform),
         tagFamily: getLabel(container.Labels, ddTagFamily),
+        tagPinInfo: getLabel(container.Labels, ddTagPinInfo),
         linkTemplate: getLabel(container.Labels, ddLinkTemplate, wudLinkTemplate),
         displayName: getLabel(container.Labels, ddDisplayName, wudDisplayName),
         displayIcon: getLabel(container.Labels, ddDisplayIcon, wudDisplayIcon),
@@ -1419,8 +1429,13 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
    */
 
   async findNewVersion(container: Container, logContainer: ContainerWatchLogger) {
-    return findNewVersionState(container, logContainer, {
-      pinInfoEnabled: this.configuration.tag?.pin?.info ?? true,
+    const tagPolicy = resolveEffectiveContainerTagPolicy(
+      container,
+      this.configuration.tag,
+      (image) => this.getMatchingImgsetConfiguration(image),
+    );
+    return findNewVersionState({ ...container, tagFamily: tagPolicy.tagFamily }, logContainer, {
+      pinInfoEnabled: tagPolicy.tagPinInfo,
     });
   }
 

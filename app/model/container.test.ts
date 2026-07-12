@@ -86,6 +86,10 @@ test.each(['starting', 'healthy', 'unhealthy'])('validate round-trips health=%s'
   expect(container.validate(createValidContainer({ health })).health).toBe(health);
 });
 
+test.each([true, false])('validate round-trips effective tagPinInfo=%s (#498)', (tagPinInfo) => {
+  expect(container.validate(createValidContainer({ tagPinInfo })).tagPinInfo).toBe(tagPinInfo);
+});
+
 test('validate accepts absent health and degrades an unknown health without mutating its input', () => {
   expect(container.validate(createValidContainer())).not.toHaveProperty('health');
   const input = createValidContainer({ health: 'bogus' });

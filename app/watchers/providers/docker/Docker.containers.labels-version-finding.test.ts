@@ -630,6 +630,35 @@ describe('Docker Watcher', () => {
       expect(result).toEqual({ tag: '1.2.4-ls133' });
     });
 
+    test('watcher tag.family=loose supplies the actionable default when no narrower override exists (#498)', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        tag: { family: 'loose' },
+      });
+      const container = {
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: '1.2.3-ls132', semver: true },
+          digest: { watch: false },
+        },
+      };
+      const mockRegistry = {
+        normalizeImage: (img) => img,
+        getTags: vi.fn().mockResolvedValue(['1.2.4-ls133', '1.2.3-ls132']),
+      };
+      hRegistry.getState.mockReturnValue({ registry: { hub: mockRegistry } });
+      const rank = { '1.2.3-ls132': 1230, '1.2.4-ls133': 1240 };
+      hMockTag.isGreater.mockImplementation(
+        (version1, version2) => rank[version1] >= rank[version2],
+      );
+
+      const result = await docker.findNewVersion(container, {
+        error: vi.fn(),
+        warn: vi.fn(),
+      });
+
+      expect(result).toEqual({ tag: '1.2.4-ls133' });
+    });
+
     test('should fall back to strict mode when tagFamily is invalid', async () => {
       const container = {
         tagFamily: 'unsupported',
@@ -945,6 +974,77 @@ describe('Docker Watcher', () => {
 
       const mockLogChild = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() };
       const result = await docker.findNewVersion(container, mockLogChild);
+
+      expect(result.updateInsight).toEqual({ tag: 'v1.46.1', kind: 'patch' });
+    });
+
+    test('uses the resolved per-container tag.pin.info value above the watcher default', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        tag: { pin: { info: false } },
+      });
+
+      const container = {
+        tagPinInfo: true,
+        image: {
+          registry: { name: 'hub' },
+          tag: { value: 'v1.13.3', semver: true, tagPrecision: 'specific' },
+          digest: { watch: true },
+        },
+      };
+      const mockRegistry = {
+        normalizeImage: (img) => img,
+        getTags: vi.fn().mockResolvedValue(['v1.13.3', 'v1.46.1']),
+      };
+      hRegistry.getState.mockReturnValue({ registry: { hub: mockRegistry } });
+      const rank = { 'v1.13.3': 100, 'v1.46.1': 200 };
+      hMockTag.isGreater.mockImplementation(
+        (version1, version2) => (rank[version1] || 0) > (rank[version2] || 0),
+      );
+
+      const result = await docker.findNewVersion(container, {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      });
+
+      expect(result.updateInsight).toEqual({ tag: 'v1.46.1', kind: 'patch' });
+    });
+
+    test('re-resolves dd.tag.pin.info above an imgset and watcher default for persisted containers', async () => {
+      await docker.register('watcher', 'docker', 'test', {
+        tag: { pin: { info: false } },
+        imgset: {
+          service: {
+            image: 'ghcr.io/team/service',
+            tag: { pin: { info: false } },
+          },
+        },
+      });
+
+      const container = {
+        labels: { 'dd.tag.pin.info': 'true' },
+        image: {
+          name: 'team/service',
+          registry: { name: 'hub', url: 'ghcr.io' },
+          tag: { value: 'v1.13.3', semver: true, tagPrecision: 'specific' },
+          digest: { watch: true },
+        },
+      };
+      const mockRegistry = {
+        normalizeImage: (img) => img,
+        getTags: vi.fn().mockResolvedValue(['v1.13.3', 'v1.46.1']),
+      };
+      hRegistry.getState.mockReturnValue({ registry: { hub: mockRegistry } });
+      const rank = { 'v1.13.3': 100, 'v1.46.1': 200 };
+      hMockTag.isGreater.mockImplementation(
+        (version1, version2) => (rank[version1] || 0) > (rank[version2] || 0),
+      );
+
+      const result = await docker.findNewVersion(container, {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      });
 
       expect(result.updateInsight).toEqual({ tag: 'v1.46.1', kind: 'patch' });
     });

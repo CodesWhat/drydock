@@ -5,6 +5,7 @@ import {
   applyDerivedLabelFieldsToContainer,
   filterRecreatedContainerAliases,
   getMatchingImgsetConfiguration,
+  mergeConfigWithImgset,
   resolveTriggerLabelOverrides,
   warnTriggerCategoryScopeChangeIfNeeded,
 } from './container-init.js';
@@ -577,6 +578,19 @@ describe('container-init coverage', () => {
       expect(container.tagFamily).toBe('loose');
     });
 
+    test('derives tagPinInfo from dd.tag.pin.info label', () => {
+      const container = makeContainer();
+      applyDerivedLabelFieldsToContainer(container, { 'dd.tag.pin.info': 'false' });
+      expect(container.tagPinInfo).toBe(false);
+    });
+
+    test('restores supplied imgset/watcher tag-policy fallbacks when labels are removed', () => {
+      const container = makeContainer({ tagFamily: 'loose', tagPinInfo: false });
+      applyDerivedLabelFieldsToContainer(container, {}, { tagFamily: 'strict', tagPinInfo: true });
+      expect(container.tagFamily).toBe('strict');
+      expect(container.tagPinInfo).toBe(true);
+    });
+
     test('derives the four category-scoped trigger fields from the labels', () => {
       const container = makeContainer();
 
@@ -671,6 +685,49 @@ describe('container-init coverage', () => {
       applyDerivedLabelFieldsToContainer(container, { 'dd.display.name': 'New Display Name' });
       // displayName is intentionally NOT updated by applyDerivedLabelFieldsToContainer
       expect(container.displayName).toBe('My Custom App');
+    });
+  });
+
+  describe('tag policy precedence (#498)', () => {
+    test('resolves labels above imgsets above watcher defaults', () => {
+      expect(
+        mergeConfigWithImgset(
+          { tagFamily: 'loose', tagPinInfo: 'true' },
+          { name: 'service', tagFamily: 'strict', tagPinInfo: false },
+          {},
+          { family: 'strict', pin: { info: false } },
+        ),
+      ).toEqual(
+        expect.objectContaining({
+          tagFamily: 'loose',
+          tagPinInfo: true,
+        }),
+      );
+    });
+
+    test('uses imgset values above watcher defaults when labels are absent', () => {
+      expect(
+        mergeConfigWithImgset(
+          {},
+          { name: 'service', tagFamily: 'strict', tagPinInfo: false },
+          {},
+          { family: 'loose', pin: { info: true } },
+        ),
+      ).toEqual(
+        expect.objectContaining({
+          tagFamily: 'strict',
+          tagPinInfo: false,
+        }),
+      );
+    });
+
+    test('falls back to watcher values and then built-in defaults', () => {
+      expect(
+        mergeConfigWithImgset({}, undefined, {}, { family: 'loose', pin: { info: false } }),
+      ).toEqual(expect.objectContaining({ tagFamily: 'loose', tagPinInfo: false }));
+      expect(mergeConfigWithImgset({}, undefined, {})).toEqual(
+        expect.objectContaining({ tagFamily: 'strict', tagPinInfo: true }),
+      );
     });
   });
 

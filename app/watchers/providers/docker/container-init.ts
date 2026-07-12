@@ -8,6 +8,7 @@ import { getTriggerCategoryForType } from '../../../triggers/trigger-category.js
 import type Watcher from '../../Watcher.js';
 import {
   canonicalizeContainerName,
+  getContainerConfigBooleanValue,
   getContainerConfigValue,
   getContainerName,
   getFirstConfigString,
@@ -33,6 +34,7 @@ import {
   ddTagExclude,
   ddTagFamily,
   ddTagInclude,
+  ddTagPinInfo,
   ddTagTransform,
   ddTriggerExclude,
   ddTriggerInclude,
@@ -71,6 +73,7 @@ interface ResolvedContainerLabelOverrides {
   excludeTags?: string;
   transformTags?: string;
   tagFamily?: string;
+  tagPinInfo?: string;
   inspectTagPath?: string;
   inspectTagVersionOnly?: string;
   linkTemplate?: string;
@@ -137,6 +140,16 @@ interface DockerWatcherSourceLike {
   configuration?: DockerWatcherSourceConfiguration;
 }
 
+interface WatcherTagDefaults {
+  family?: string;
+  pin?: { info?: boolean };
+}
+
+interface TagPolicyImageReference {
+  path: string;
+  domain?: string;
+}
+
 interface GetLabelOptions {
   warn?: (message: string) => void;
   warnedLegacyTriggerLabels?: Set<string>;
@@ -156,6 +169,12 @@ const containerLabelOverrideMappings = [
     ddKey: ddTagFamily,
     wudKey: undefined,
     overrideKey: 'tagFamily',
+  },
+  {
+    key: 'tagPinInfo',
+    ddKey: ddTagPinInfo,
+    wudKey: undefined,
+    overrideKey: 'tagPinInfo',
   },
   {
     key: 'inspectTagPath',
@@ -835,20 +854,22 @@ export function resolveLabelsFromContainer(
  * it was first registered — e.g. after `docker compose up -d` recreates a
  * service with a new `dd.tag.family` label.
  *
- * Note: imgset configuration is intentionally NOT re-applied here because
- * imgset matching requires a parsed image reference that is not available on
- * the event path. The imgset defaults established during the last full watch
- * cycle remain in effect; only direct label values are refreshed.
+ * The caller may supply already-resolved tag-policy fallbacks so removing a
+ * direct tag label restores the matching imgset/watcher value on event paths.
+ * Other imgset-derived fields remain outside this lightweight label refresh.
  */
 export function applyDerivedLabelFieldsToContainer(
   container: Container,
   labels: Record<string, string>,
+  tagPolicyFallbacks: { tagFamily?: string; tagPinInfo?: boolean } = {},
 ): void {
   const resolved = resolveLabelsFromContainer(labels);
   container.includeTags = resolved.includeTags;
   container.excludeTags = resolved.excludeTags;
   container.transformTags = resolved.transformTags;
-  container.tagFamily = resolved.tagFamily;
+  container.tagFamily = resolved.tagFamily ?? tagPolicyFallbacks.tagFamily;
+  const tagPinInfo = getContainerConfigBooleanValue(resolved.tagPinInfo);
+  container.tagPinInfo = tagPinInfo ?? tagPolicyFallbacks.tagPinInfo;
   container.linkTemplate = resolved.linkTemplate;
   container.actionTriggerInclude = resolved.actionTriggerInclude;
   container.actionTriggerExclude = resolved.actionTriggerExclude;
@@ -874,6 +895,49 @@ export function applyDerivedLabelFieldsToContainer(
   // full addImageDetailsToContainer pass, not on lightweight event updates.
 }
 
+export function resolveEffectiveContainerTagPolicy(
+  container: Container,
+  watcherTagDefaults: WatcherTagDefaults | undefined,
+  getMatchingImgset: (image: TagPolicyImageReference) => ResolvedImgset | undefined,
+) {
+  const watcherDefaults = watcherTagDefaults ?? {};
+  const fallback = {
+    tagFamily: container.tagFamily ?? watcherDefaults.family ?? 'strict',
+    tagPinInfo: container.tagPinInfo ?? watcherDefaults.pin?.info ?? true,
+  };
+  if (!container.labels) {
+    return fallback;
+  }
+
+  const labels = container.labels as Record<string, string>;
+  return mergeConfigWithImgset(
+    resolveLabelsFromContainer(labels),
+    getMatchingImgset({
+      path: container.image.name,
+      domain: container.image.registry?.url,
+    }),
+    labels,
+    watcherDefaults,
+  );
+}
+
+export function applyEffectiveTagPolicyFromLabels(
+  container: Container,
+  labels: Record<string, string>,
+  watcherTagDefaults: WatcherTagDefaults | undefined,
+  getMatchingImgset: (image: TagPolicyImageReference) => ResolvedImgset | undefined,
+) {
+  const tagPolicy = resolveEffectiveContainerTagPolicy(
+    { ...container, labels },
+    watcherTagDefaults,
+    getMatchingImgset,
+  );
+  applyDerivedLabelFieldsToContainer(container, labels, {
+    tagFamily: tagPolicy.tagFamily,
+    tagPinInfo: tagPolicy.tagPinInfo,
+  });
+}
+
 function resolveLookupImageFromContainerLabels(
   containerLabels: Record<string, string>,
   overrides: ContainerLabelOverrides,
@@ -890,6 +954,7 @@ export function mergeConfigWithImgset(
   labelOverrides: ResolvedContainerLabelOverrides,
   matchingImgset: ResolvedImgset | undefined,
   containerLabels: Record<string, string>,
+  watcherTagDefaults: WatcherTagDefaults = {},
 ) {
   return {
     includeTags: getContainerConfigValue(labelOverrides.includeTags, matchingImgset?.includeTags),
@@ -898,7 +963,16 @@ export function mergeConfigWithImgset(
       labelOverrides.transformTags,
       matchingImgset?.transformTags,
     ),
-    tagFamily: getContainerConfigValue(labelOverrides.tagFamily, matchingImgset?.tagFamily),
+    tagFamily:
+      getContainerConfigValue(labelOverrides.tagFamily, matchingImgset?.tagFamily) ||
+      getContainerConfigValue(undefined, watcherTagDefaults.family) ||
+      'strict',
+    tagPinInfo:
+      getContainerConfigBooleanValue(
+        labelOverrides.tagPinInfo,
+        matchingImgset?.tagPinInfo,
+        watcherTagDefaults.pin?.info,
+      ) ?? true,
     linkTemplate: getContainerConfigValue(
       labelOverrides.linkTemplate,
       matchingImgset?.linkTemplate,

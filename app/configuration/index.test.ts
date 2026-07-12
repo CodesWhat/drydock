@@ -233,6 +233,26 @@ test('getWatcherConfiguration should surface DD_WATCHER_*_TAG_PIN_INFO as a nest
   delete configuration.ddEnvVars.DD_WATCHER_TEST_TAG_PIN_INFO;
 });
 
+test('getWatcherConfiguration should surface DD_WATCHER_*_TAG_FAMILY as a nested lowercase path (#498)', async () => {
+  configuration.ddEnvVars.DD_WATCHER_TEST_TAG_FAMILY = 'loose';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+  expect(watcherConfigurations.test.tag.family).toBe('loose');
+
+  delete configuration.ddEnvVars.DD_WATCHER_TEST_TAG_FAMILY;
+});
+
+test('getWatcherConfiguration should surface IMGSET tag.pin.info as a nested lowercase path (#498)', async () => {
+  configuration.ddEnvVars.DD_WATCHER_TEST_IMGSET_SERVICE_IMAGE = 'ghcr.io/team/service';
+  configuration.ddEnvVars.DD_WATCHER_TEST_IMGSET_SERVICE_TAG_PIN_INFO = 'false';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+  expect(watcherConfigurations.test.imgset.service.tag.pin.info).toBe('false');
+
+  delete configuration.ddEnvVars.DD_WATCHER_TEST_IMGSET_SERVICE_IMAGE;
+  delete configuration.ddEnvVars.DD_WATCHER_TEST_IMGSET_SERVICE_TAG_PIN_INFO;
+});
+
 test('getWatcherConfiguration should map MAINTENANCE_WINDOW aliases', async () => {
   configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW = '0 2 * * *';
   configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_TZ = 'Europe/Paris';
