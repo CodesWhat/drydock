@@ -1842,6 +1842,56 @@ test('previewNotificationTemplates safely renders draft variables without persis
   expect(notificationStore.getNotificationTemplate).not.toHaveBeenCalled();
 });
 
+test('previewNotificationTemplates supports every notification rule and rejects unknown rules', () => {
+  const ruleIds = [
+    'update-available',
+    'update-applied',
+    'update-failed',
+    'security-alert',
+    'agent-disconnect',
+    'agent-reconnect',
+    'container-unhealthy',
+  ];
+
+  for (const ruleId of ruleIds) {
+    expect(
+      trigger.previewNotificationTemplates(ruleId, {
+        simpleTitle: `${ruleId} title`,
+        simpleBody: `${ruleId} body`,
+        batchTitle: `${ruleId} batch`,
+      }),
+    ).toEqual({
+      simpleTitle: `${ruleId} title`,
+      simpleBody: `${ruleId} body`,
+      batchTitle: `${ruleId} batch`,
+    });
+  }
+
+  expect(() => trigger.previewNotificationTemplates('unknown-rule')).toThrow(
+    'Unsupported notification rule: unknown-rule',
+  );
+});
+
+test('previewNotificationTemplates falls back through stored, configured, and event defaults', () => {
+  trigger.type = 'slack';
+  trigger.name = 'ops';
+  const configuredPreview = trigger.previewNotificationTemplates('update-available');
+  expect(configuredPreview.simpleTitle).toContain('drydock-preview');
+  expect(configuredPreview.simpleBody).toContain('1.0.0');
+  expect(configuredPreview.batchTitle).toBe('2 updates available');
+
+  trigger.configuration.simpletitle = undefined;
+  trigger.configuration.simplebody = undefined;
+  trigger.configuration.batchtitle = undefined;
+  const eventDefaultPreview = trigger.previewNotificationTemplates('update-applied');
+  expect(eventDefaultPreview).toEqual({
+    simpleTitle: 'Container drydock-preview updated successfully',
+    simpleBody: 'Container drydock-preview updated successfully',
+    batchTitle: '2 updates applied',
+  });
+  expect(notificationStore.getNotificationTemplate).toHaveBeenCalledTimes(6);
+});
+
 test('renderSimpleTitle should use notification templates when simpletitle is unset', () => {
   trigger.configuration.simpletitle = undefined;
 

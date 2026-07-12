@@ -176,5 +176,41 @@ describe('Notification Service', () => {
         }),
       });
     });
+
+    it('surfaces a backend preview error', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: vi.fn().mockResolvedValue({ error: 'Invalid template' }),
+      });
+
+      await expect(
+        previewNotificationTemplates('update-available', 'slack.ops', {}),
+      ).rejects.toThrow('Invalid template');
+    });
+
+    it('handles non-JSON preview error responses', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: vi.fn().mockRejectedValue(new Error('not json')),
+      });
+
+      await expect(
+        previewNotificationTemplates('update-available', 'slack.ops', {}),
+      ).rejects.toThrow('Unknown error');
+    });
+
+    it('falls back to the preview HTTP status when no backend error is provided', async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: false,
+        status: 503,
+        json: vi.fn().mockResolvedValue({}),
+      });
+
+      await expect(
+        previewNotificationTemplates('update-available', 'slack.ops', {}),
+      ).rejects.toThrow('HTTP 503');
+    });
   });
 });

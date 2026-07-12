@@ -93,6 +93,39 @@ describe('useNotificationStore', () => {
     expect(store.visibleEntries.map((entry) => entry.id)).toEqual(['major', '2']);
   });
 
+  it.each([
+    ['all', ['unknown', 'major', 'minor', 'patch']],
+    ['minor', ['major', 'minor']],
+    ['patch', ['major', 'minor', 'patch']],
+  ] as const)('applies the %s update severity threshold', async (bellThreshold, expectedIds) => {
+    mockGetAllNotificationRules.mockResolvedValueOnce([
+      { id: 'update-available', bellEnabled: true, bellThreshold },
+    ]);
+    mockGetAuditLog.mockResolvedValueOnce({
+      entries: [
+        { ...entries[0], id: 'unknown', action: 'update-available' },
+        { ...entries[0], id: 'major', action: 'update-available', semverDiff: 'major' },
+        { ...entries[0], id: 'minor', action: 'update-available', semverDiff: 'minor' },
+        { ...entries[0], id: 'patch', action: 'update-available', semverDiff: 'patch' },
+      ],
+    });
+    const store = useNotificationStore();
+
+    await store.fetchEntries();
+
+    expect(store.visibleEntries.map((entry) => entry.id)).toEqual(expectedIds);
+  });
+
+  it('falls back to the default bell actions when notification preferences cannot load', async () => {
+    mockGetAllNotificationRules.mockRejectedValueOnce(new Error('preferences unavailable'));
+    const store = useNotificationStore();
+
+    await store.fetchEntries();
+
+    expect(mockGetAuditLog).toHaveBeenCalledWith({ limit: 20, actions: BELL_ACTIONS });
+    expect(store.visibleEntries).toHaveLength(2);
+  });
+
   it('records string refresh failures without clearing entries', async () => {
     const store = useNotificationStore();
     await store.fetchEntries();

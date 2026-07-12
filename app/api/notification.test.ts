@@ -147,6 +147,28 @@ describe('Notification Router', () => {
     expect(res.json).toHaveBeenCalledWith({ data: [undefined], total: 1 });
   });
 
+  test('should normalize missing template maps in legacy response rows', () => {
+    mockGetNotificationRules.mockReturnValueOnce([
+      {
+        id: 'update-available',
+        name: 'Update Available',
+        enabled: true,
+        triggers: [],
+        description: '',
+      },
+    ]);
+    notificationRouter.init();
+    const handler = mockRouter.get.mock.calls.find((call) => call[0] === '/')[1];
+    const res = createMockResponse();
+
+    handler({}, res);
+
+    expect(res.json).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ templates: {} })],
+      total: 1,
+    });
+  });
+
   test('should update a notification rule when payload is valid', () => {
     notificationRouter.init();
     const handler = mockRouter.patch.mock.calls.find((call) => call[0] === '/:id')[1];
@@ -366,6 +388,51 @@ describe('Notification Router', () => {
     expect(mockPreviewNotificationTemplates).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(404);
     expect(res.json).toHaveBeenCalledWith({ error: 'Notification rule not found' });
+  });
+
+  test('should validate preview payloads and trigger resolution', () => {
+    notificationRouter.init();
+    const handler = mockRouter.post.mock.calls.find((call) => call[0] === '/:id/preview')[1];
+
+    const invalidResponse = createMockResponse();
+    handler({ params: { id: 'update-available' }, body: {} }, invalidResponse);
+    expect(invalidResponse.status).toHaveBeenCalledWith(400);
+
+    const missingBodyResponse = createMockResponse();
+    handler({ params: { id: 'update-available' } }, missingBodyResponse);
+    expect(missingBodyResponse.status).toHaveBeenCalledWith(400);
+
+    const unsupportedResponse = createMockResponse();
+    handler(
+      { params: { id: 'update-available' }, body: { triggerId: 'docker.update' } },
+      unsupportedResponse,
+    );
+    expect(unsupportedResponse.json).toHaveBeenCalledWith({
+      error: 'Unsupported notification trigger: docker.update',
+    });
+
+    const incapableResponse = createMockResponse();
+    handler(
+      { params: { id: 'update-available' }, body: { triggerId: 'smtp.ops' } },
+      incapableResponse,
+    );
+    expect(incapableResponse.json).toHaveBeenCalledWith({
+      error: 'Notification trigger cannot render previews: smtp.ops',
+    });
+  });
+
+  test('should return 500 when preview rendering throws', () => {
+    mockPreviewNotificationTemplates.mockImplementationOnce(() => {
+      throw new Error('preview failed');
+    });
+    notificationRouter.init();
+    const handler = mockRouter.post.mock.calls.find((call) => call[0] === '/:id/preview')[1];
+    const res = createMockResponse();
+
+    handler({ params: { id: 'update-available' }, body: { triggerId: 'slack.ops' } }, res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Internal server error' });
   });
 
   test('should reject invalid notification update payload', () => {
