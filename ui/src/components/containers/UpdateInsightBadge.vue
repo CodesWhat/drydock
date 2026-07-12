@@ -28,12 +28,12 @@ const colors = updateInsightColor();
 <template>
   <span
     v-if="shouldShow"
-    class="badge text-3xs font-bold inline-flex items-center gap-1"
+    class="badge text-3xs font-bold inline-flex items-center gap-1 min-w-0 max-w-full"
     :style="{ backgroundColor: colors.bg, color: colors.text }"
     v-tooltip.top="tooltip"
     data-test="update-insight-badge"
   >
     <AppIcon name="info" :size="10" class="shrink-0" />
-    <span>{{ t('containerComponents.updateInsight.badgeText') }}</span>
+    <span class="truncate">{{ t('containerComponents.updateInsight.badgeText') }}</span>
   </span>
 </template>
