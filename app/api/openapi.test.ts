@@ -215,6 +215,21 @@ describe('OpenAPI document', () => {
     expect(openApiDocument.paths['/api/v1/settings']?.patch).toBeDefined();
     expect(openApiDocument.paths['/api/v1/settings']?.put).toBeDefined();
     expect(openApiDocument.paths['/api/v1/settings']?.put?.deprecated).toBe(true);
+    expect(openApiDocument.components.schemas.Settings).toMatchObject({
+      properties: {
+        internetlessMode: { type: 'boolean' },
+        updateMode: { type: 'string', enum: ['notify', 'manual', 'auto'] },
+      },
+      required: ['internetlessMode', 'updateMode'],
+    });
+    expect(
+      openApiDocument.paths['/api/v1/settings']?.patch?.requestBody?.content?.['application/json']
+        ?.schema,
+    ).toMatchObject({
+      properties: {
+        updateMode: { type: 'string', enum: ['notify', 'manual', 'auto'] },
+      },
+    });
   });
 
   test('should document the bulk container update endpoint', () => {

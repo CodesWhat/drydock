@@ -825,8 +825,9 @@ export const openApiSchemas = {
     type: 'object',
     properties: {
       internetlessMode: { type: 'boolean' },
+      updateMode: { type: 'string', enum: ['notify', 'manual', 'auto'] },
     },
-    required: ['internetlessMode'],
+    required: ['internetlessMode', 'updateMode'],
     additionalProperties: false,
   },
   Preferences: {

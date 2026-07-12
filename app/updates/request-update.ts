@@ -13,6 +13,7 @@ import {
   type UpdateBlockerReason,
 } from '../model/update-eligibility.js';
 import * as registry from '../registry/index.js';
+import { getUpdateMode } from '../store/settings.js';
 import * as updateOperationStore from '../store/update-operation.js';
 import { isSelfUpdateAvailable } from '../triggers/providers/docker/self-update-availability.js';
 import { getErrorMessage } from '../util/error.js';
@@ -77,10 +78,11 @@ interface EnqueueContainerUpdateOptions {
   triggerTypes?: UpdateTriggerType[];
   operationId?: string;
   allowSoftPolicyOverride?: boolean;
+  source?: 'automatic' | 'manual';
 }
 
 export interface RequestContainerUpdateOptions
-  extends Omit<EnqueueContainerUpdateOptions, 'allowSoftPolicyOverride'> {}
+  extends Omit<EnqueueContainerUpdateOptions, 'allowSoftPolicyOverride' | 'source'> {}
 
 const DEFAULT_UPDATE_TRIGGER_TYPES: UpdateTriggerType[] = ['docker', 'dockercompose'];
 const log = logger.child({ component: 'updates.request-update' });
@@ -246,6 +248,19 @@ function prepareContainerUpdateRequest(
       409,
       `Container update already ${activeOperation.status === 'queued' ? 'queued' : 'in progress'}`,
     );
+  }
+
+  const updateMode = getUpdateMode();
+  // The lower-level enqueue path is used by watcher-driven action triggers.
+  // Manual/API callers go through requestContainerUpdate(s), which explicitly
+  // override this to manual. Defaulting to automatic keeps future internal
+  // callers fail-closed when the global mode is manual.
+  const source = options.source ?? 'automatic';
+  if (updateMode === 'notify') {
+    throw new UpdateRequestError(409, 'Update mode is notify; Drydock will not apply updates');
+  }
+  if (updateMode === 'manual' && source === 'automatic') {
+    throw new UpdateRequestError(409, 'Update mode is manual; automatic updates are disabled');
   }
 
   // A user-initiated request may intentionally override a soft policy gate. Those
@@ -452,6 +467,7 @@ export async function requestContainerUpdate(
   const accepted = await enqueueContainerUpdate(container, {
     ...options,
     allowSoftPolicyOverride: true,
+    source: 'manual',
   });
   dispatchAccepted([accepted]);
   return accepted;
@@ -464,6 +480,7 @@ export async function requestContainerUpdates(
   const result = await enqueueContainerUpdates(containers, {
     ...options,
     allowSoftPolicyOverride: true,
+    source: 'manual',
   });
   dispatchAccepted(result.accepted);
   return result;

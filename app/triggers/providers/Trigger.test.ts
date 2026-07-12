@@ -22,6 +22,7 @@ const mockTriggerCounterInc = vi.hoisted(() => vi.fn());
 const mockGetAgents = vi.hoisted(() => vi.fn(() => []));
 const mockGetServerName = vi.hoisted(() => vi.fn(() => 'controller-host'));
 const forceRejectedUpdateBatch = vi.hoisted(() => ({ enabled: false }));
+const mockGetUpdateMode = vi.hoisted(() => vi.fn(() => 'auto' as const));
 const mockRegistryGetState = vi.hoisted(() =>
   vi.fn(() => ({
     watcher: {} as Record<string, unknown>,
@@ -50,6 +51,9 @@ vi.mock('../../configuration/index.js', async (importOriginal) => {
 });
 vi.mock('../../store/audit.js', () => ({
   insertAudit: vi.fn(),
+}));
+vi.mock('../../store/settings.js', () => ({
+  getUpdateMode: mockGetUpdateMode,
 }));
 vi.mock('../../store/notification.js', () => ({
   isTriggerEnabledForRule: vi.fn(() => true),
@@ -210,6 +214,7 @@ beforeEach(async () => {
   );
   updateOperationStore.listRecentSucceededOperations.mockReturnValue([]);
   notificationHistoryStore.resetForTesting();
+  mockGetUpdateMode.mockReturnValue('auto');
   trigger = new Trigger();
   trigger.log = log;
   trigger.configuration = { ...configurationValid };
@@ -586,6 +591,50 @@ test.each(
   } else {
     expect(spy).not.toHaveBeenCalled();
   }
+});
+
+test.each([
+  'manual',
+  'notify',
+] as const)('%s mode suppresses automatic action triggers without suppressing notification triggers', async (updateMode) => {
+  mockGetUpdateMode.mockReturnValue(updateMode);
+  const report = {
+    changed: true,
+    container: {
+      id: 'c1',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+  } as any;
+
+  trigger.type = 'docker';
+  const actionSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+  await trigger.handleContainerReport(report);
+  expect(actionSpy).not.toHaveBeenCalled();
+
+  trigger.type = 'slack';
+  const notificationSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+  await trigger.handleContainerReport(report);
+  expect(notificationSpy).toHaveBeenCalledWith(report.container);
+});
+
+test('simple action dispatch rechecks mode before enqueueing when mode changes mid-report', async () => {
+  mockGetUpdateMode.mockReturnValueOnce('auto').mockReturnValueOnce('manual');
+  trigger.type = 'docker';
+  const actionSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+  await trigger.handleContainerReport({
+    changed: true,
+    container: {
+      id: 'c1',
+      name: 'container1',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', semverDiff: 'major' },
+    },
+  } as any);
+
+  expect(actionSpy).not.toHaveBeenCalled();
 });
 
 // #498: authoritative end-to-end regression. Builds a container through the
@@ -6533,7 +6582,7 @@ describe('digest mode', () => {
     actionTrigger.pruneDigestBuffer = vi.fn();
     actionTrigger.incrementTriggerCounter = vi.fn();
     actionTrigger.isUpdateActionTrigger = () => true;
-    const runAcceptedUpdateBatch = vi.fn().mockResolvedValue(undefined);
+    const runAcceptedUpdateBatch = vi.fn().mockResolvedValue(true);
     actionTrigger.runAcceptedUpdateBatch = runAcceptedUpdateBatch;
     actionTrigger.triggerBatch = vi.fn();
 
@@ -6556,12 +6605,73 @@ describe('digest mode', () => {
     expect(actionTrigger.digestBufferUpdatedAt.size).toBe(0);
   });
 
+  test('action digest preserves buffered updates across a runtime switch out of auto mode', async () => {
+    const actionTrigger = new Trigger() as any;
+    actionTrigger.configuration = { ...configurationValid, mode: 'digest' };
+    actionTrigger.type = 'docker';
+    actionTrigger.name = 'update';
+    actionTrigger.log = trigger.log;
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+    actionTrigger.digestBuffer.set('c1', container as any);
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+    const runAcceptedUpdateBatchSpy = vi
+      .spyOn(actionTrigger, 'runAcceptedUpdateBatch')
+      .mockResolvedValue(true);
+
+    mockGetUpdateMode.mockReturnValue('manual');
+    await actionTrigger.flushDigestBuffer();
+
+    expect(runAcceptedUpdateBatchSpy).not.toHaveBeenCalled();
+    expect(actionTrigger.digestBuffer.size).toBe(1);
+    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+
+    mockGetUpdateMode.mockReturnValue('auto');
+    runAcceptedUpdateBatchSpy.mockResolvedValueOnce(false);
+    await actionTrigger.flushDigestBuffer();
+
+    expect(runAcceptedUpdateBatchSpy).toHaveBeenCalledWith([expect.objectContaining({ id: 'c1' })]);
+    expect(actionTrigger.digestBuffer.size).toBe(1);
+    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+
+    runAcceptedUpdateBatchSpy.mockClear();
+    await actionTrigger.flushDigestBuffer();
+
+    expect(runAcceptedUpdateBatchSpy).toHaveBeenCalledWith([expect.objectContaining({ id: 'c1' })]);
+    expect(actionTrigger.digestBuffer.size).toBe(0);
+    expect(notificationHistoryStore.recordNotification).toHaveBeenCalled();
+  });
+
+  test('action digest reports are not buffered outside auto mode', async () => {
+    mockGetUpdateMode.mockReturnValue('notify');
+    trigger.type = 'docker';
+    trigger.configuration.mode = 'digest';
+
+    await trigger.handleContainerReportDigest({
+      changed: true,
+      container: {
+        id: 'c1',
+        name: 'app',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+    } as any);
+
+    expect((trigger as any).digestBuffer.size).toBe(0);
+  });
+
   test('handleContainerReports should use the accepted update batch path for action triggers', async () => {
     trigger.configuration.mode = 'batch';
     vi.spyOn(trigger as any, 'isUpdateActionTrigger').mockReturnValue(true);
     const runAcceptedUpdateBatchSpy = vi
       .spyOn(trigger as any, 'runAcceptedUpdateBatch')
-      .mockResolvedValue(undefined);
+      .mockResolvedValue(true);
 
     await trigger.handleContainerReports([
       {
@@ -6579,6 +6689,63 @@ describe('digest mode', () => {
     expect(runAcceptedUpdateBatchSpy).toHaveBeenCalledWith([expect.objectContaining({ id: 'c1' })]);
   });
 
+  test.each([
+    'manual',
+    'notify',
+  ] as const)('handleContainerReports should not dispatch or record automatic action batches in %s mode', async (updateMode) => {
+    mockGetUpdateMode.mockReturnValue(updateMode);
+    trigger.type = 'docker';
+    trigger.configuration.mode = 'batch';
+    const runAcceptedUpdateBatchSpy = vi.spyOn(trigger as any, 'runAcceptedUpdateBatch');
+
+    await trigger.handleContainerReports([
+      {
+        container: {
+          id: 'c1',
+          name: 'app',
+          watcher: 'test',
+          updateAvailable: true,
+          updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+        },
+        changed: true,
+      } as any,
+    ]);
+
+    expect(runAcceptedUpdateBatchSpy).not.toHaveBeenCalled();
+    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+  });
+
+  test('runAcceptedUpdateBatch should fail closed when mode changes before admission', async () => {
+    mockGetUpdateMode.mockReturnValue('manual');
+
+    await expect(
+      (trigger as any).runAcceptedUpdateBatch([
+        { id: 'c1', name: 'app', watcher: 'test', updateAvailable: true },
+      ]),
+    ).resolves.toBe(false);
+  });
+
+  test('handleContainerReports should not record a batch when mode changes before admission', async () => {
+    mockGetUpdateMode.mockReturnValueOnce('auto').mockReturnValueOnce('manual');
+    trigger.type = 'docker';
+    trigger.configuration.mode = 'batch';
+
+    await trigger.handleContainerReports([
+      {
+        container: {
+          id: 'c1',
+          name: 'app',
+          watcher: 'test',
+          updateAvailable: true,
+          updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+        },
+        changed: true,
+      } as any,
+    ]);
+
+    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+  });
+
   test('runAcceptedUpdateBatch should skip rejected-only batches', async () => {
     forceRejectedUpdateBatch.enabled = true;
     const debugSpy = vi.spyOn(trigger.log, 'debug').mockImplementation(() => undefined);
@@ -6592,7 +6759,7 @@ describe('digest mode', () => {
             updateAvailable: false,
           },
         ]),
-      ).resolves.toBeUndefined();
+      ).resolves.toBe(true);
       expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('Skipped batched auto update'));
     } finally {
       debugSpy.mockRestore();
@@ -6613,7 +6780,7 @@ describe('digest mode', () => {
             updateAvailable: false,
           },
         ]),
-      ).resolves.toBeUndefined();
+      ).resolves.toBe(true);
       expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('Skipped batched auto update'));
     } finally {
       debugSpy.mockRestore();
@@ -6630,7 +6797,7 @@ describe('digest mode', () => {
             updateAvailable: false,
           } as any,
         ]),
-      ).resolves.toBeUndefined();
+      ).resolves.toBe(true);
       expect(debugSpy).toHaveBeenCalledWith(
         expect.stringContaining('Skipped batched auto update for undefined_undefined'),
       );
@@ -6666,7 +6833,7 @@ describe('digest mode', () => {
           updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
         },
       ]),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(true);
   });
 
   test('digest cron callback should invoke flushDigestBuffer', async () => {

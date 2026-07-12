@@ -598,6 +598,7 @@ export const openApiPaths = {
               type: 'object',
               properties: {
                 internetlessMode: { type: 'boolean' },
+                updateMode: { type: 'string', enum: ['notify', 'manual', 'auto'] },
               },
               minProperties: 1,
               additionalProperties: false,
@@ -624,6 +625,7 @@ export const openApiPaths = {
               type: 'object',
               properties: {
                 internetlessMode: { type: 'boolean' },
+                updateMode: { type: 'string', enum: ['notify', 'manual', 'auto'] },
               },
               minProperties: 1,
               additionalProperties: false,

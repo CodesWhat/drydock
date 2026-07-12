@@ -11,6 +11,7 @@ const {
   mockGetState,
   mockLogWarn,
   mockStatSync,
+  mockGetUpdateMode,
 } = vi.hoisted(() => ({
   mockGetOperationById: vi.fn(),
   mockGetActiveOperationByContainerId: vi.fn(),
@@ -22,6 +23,11 @@ const {
   mockGetState: vi.fn(() => ({ trigger: {}, watcher: {} })),
   mockLogWarn: vi.fn(),
   mockStatSync: vi.fn(() => ({ isSocket: () => false })),
+  mockGetUpdateMode: vi.fn(() => 'auto' as const),
+}));
+
+vi.mock('../store/settings.js', () => ({
+  getUpdateMode: mockGetUpdateMode,
 }));
 
 vi.mock('../store/update-operation.js', () => ({
@@ -99,10 +105,61 @@ describe('request-update', () => {
     mockGetActiveOperationByContainerName.mockReturnValue(undefined);
     mockGetState.mockReturnValue({ trigger: {}, watcher: {} });
     mockStatSync.mockReturnValue({ isSocket: () => false });
+    mockGetUpdateMode.mockReturnValue('auto');
     mockInsertOperation.mockImplementation((operation) => ({
       id: operation.id || 'op-1',
       ...operation,
     }));
+  });
+
+  test('notify mode rejects user-initiated updates before creating an operation', async () => {
+    mockGetUpdateMode.mockReturnValue('notify');
+    const trigger = { type: 'docker', trigger: vi.fn() };
+
+    await expect(requestContainerUpdate(createContainer(), { trigger })).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Update mode is notify; Drydock will not apply updates',
+    });
+    expect(mockInsertOperation).not.toHaveBeenCalled();
+    expect(trigger.trigger).not.toHaveBeenCalled();
+  });
+
+  test('active-operation rejection keeps precedence over update-mode rejection', async () => {
+    mockGetUpdateMode.mockReturnValue('notify');
+    mockGetActiveOperationByContainerId.mockReturnValue({ status: 'queued' });
+
+    await expect(
+      requestContainerUpdate(createContainer(), {
+        trigger: { type: 'docker', trigger: vi.fn() },
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Container update already queued',
+    });
+  });
+
+  test('manual mode rejects automatic update admission but allows manual requests', async () => {
+    mockGetUpdateMode.mockReturnValue('manual');
+    const trigger = { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) };
+
+    await expect(enqueueContainerUpdate(createContainer(), { trigger })).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Update mode is manual; automatic updates are disabled',
+    });
+    const accepted = await requestContainerUpdate(createContainer(), { trigger });
+    expect(accepted.operationId).toEqual(expect.any(String));
+  });
+
+  test('auto mode allows automatic update admission', async () => {
+    mockGetUpdateMode.mockReturnValue('auto');
+    const trigger = { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) };
+
+    const accepted = await enqueueContainerUpdate(createContainer(), {
+      trigger,
+      source: 'automatic',
+    });
+
+    expect(accepted.operationId).toEqual(expect.any(String));
   });
 
   test('requestContainerUpdate enqueues an operation and runs the provided trigger with the operation id', async () => {

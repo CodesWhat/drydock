@@ -21,6 +21,7 @@ const deprecatedPutSunset = 'Fri, 01 Jan 2027 00:00:00 GMT';
 const settingsSchema = joi
   .object({
     internetlessMode: joi.boolean(),
+    updateMode: joi.string().valid(...settingsStore.UPDATE_MODES),
   })
   .min(1);
 

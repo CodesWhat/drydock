@@ -20,6 +20,7 @@ import * as storeContainer from '../../store/container.js';
 import * as notificationStore from '../../store/notification.js';
 import * as notificationHistoryStore from '../../store/notification-history.js';
 import { enqueueOutboxEntry } from '../../store/notification-outbox.js';
+import { getUpdateMode } from '../../store/settings.js';
 import { listRecentSucceededOperations } from '../../store/update-operation.js';
 import {
   dispatchAccepted,
@@ -1877,6 +1878,10 @@ class Trigger<
 
     logContainer.debug('Run');
     if (this.isUpdateActionTrigger()) {
+      if (getUpdateMode() !== 'auto') {
+        logContainer.debug('Global update mode does not allow automatic updates => ignore');
+        return;
+      }
       if (this.isAutoUpdateDeferredByMaintenanceWindow(container)) {
         logContainer.debug(
           'Outside maintenance window, deferring auto update until the window opens',
@@ -1888,6 +1893,7 @@ class Trigger<
           type: string;
           trigger: (container: Container, runtimeContext?: unknown) => Promise<unknown>;
         },
+        source: 'automatic',
       });
       dispatchAccepted([accepted]);
       return;
@@ -1939,6 +1945,11 @@ class Trigger<
   async handleContainerReport(containerReport: ContainerReport) {
     // Strip Docker recreate alias prefixes before any trigger processing
     Trigger.canonicalizeReportName(containerReport);
+
+    if (this.isUpdateActionTrigger() && getUpdateMode() !== 'auto') {
+      this.log.debug('Global update mode does not allow automatic updates => ignore');
+      return;
+    }
 
     const dispatchDecision = this.getUpdateAvailableAutoTriggerDispatchDecision();
     if (!dispatchDecision.enabled) {
@@ -1999,6 +2010,11 @@ class Trigger<
       }
     }
 
+    if (this.isUpdateActionTrigger() && getUpdateMode() !== 'auto') {
+      this.log.debug('Global update mode does not allow automatic batch updates => ignore');
+      return;
+    }
+
     // Filter on containers with update available and passing trigger threshold
     const containersToSendByBusinessId = new Map<string, Container>();
     for (const container of this.getBatchRetryContainers(containerReports)) {
@@ -2025,7 +2041,10 @@ class Trigger<
     try {
       this.log.debug('Run batch');
       if (this.isUpdateActionTrigger()) {
-        await this.runAcceptedUpdateBatch(containersToSend);
+        const dispatched = await this.runAcceptedUpdateBatch(containersToSend);
+        if (!dispatched) {
+          return;
+        }
       } else {
         await this.triggerBatch(containersToSend);
       }
@@ -2096,6 +2115,10 @@ class Trigger<
     }
 
     if (!this.isUpdateAvailableAutoTriggerEnabled()) {
+      return;
+    }
+    if (this.isUpdateActionTrigger() && getUpdateMode() !== 'auto') {
+      this.log.debug('Global update mode does not allow automatic digest updates => ignore');
       return;
     }
     if (!this.shouldHandleDigestContainerReport(containerReport)) {
@@ -2191,6 +2214,12 @@ class Trigger<
       this.log.debug('Digest cron fired — buffer empty, nothing to send');
       return;
     }
+    if (this.isUpdateActionTrigger() && getUpdateMode() !== 'auto') {
+      this.log.debug(
+        'Global update mode does not allow automatic digest flushes => preserve buffer',
+      );
+      return;
+    }
     this.pruneDigestBuffer();
     if (this.digestBuffer.size === 0) {
       this.log.debug('Digest cron fired — no buffered updates remain after eviction');
@@ -2249,7 +2278,10 @@ class Trigger<
     this.isDigestFlushInProgress = true;
     try {
       if (this.isUpdateActionTrigger()) {
-        await this.runAcceptedUpdateBatch(containers);
+        const dispatched = await this.runAcceptedUpdateBatch(containers);
+        if (!dispatched) {
+          return;
+        }
       } else {
         await this.triggerBatch(containers);
       }
@@ -2743,7 +2775,12 @@ class Trigger<
     return !watcher.isMaintenanceWindowOpen();
   }
 
-  private async runAcceptedUpdateBatch(containers: Container[]): Promise<void> {
+  private async runAcceptedUpdateBatch(containers: Container[]): Promise<boolean> {
+    if (getUpdateMode() !== 'auto') {
+      this.log.debug('Global update mode does not allow automatic batch updates => ignore');
+      return false;
+    }
+
     const deferred: Container[] = [];
     const ready = containers.filter((container) => {
       if (this.isAutoUpdateDeferredByMaintenanceWindow(container)) {
@@ -2760,7 +2797,7 @@ class Trigger<
     }
 
     if (ready.length === 0) {
-      return;
+      return true;
     }
 
     const { accepted, rejected } = await enqueueContainerUpdates(ready, {
@@ -2768,6 +2805,7 @@ class Trigger<
         type: string;
         trigger: (container: Container, runtimeContext?: unknown) => Promise<unknown>;
       },
+      source: 'automatic',
     });
 
     for (const entry of rejected) {
@@ -2782,10 +2820,11 @@ class Trigger<
     }
 
     if (accepted.length === 0) {
-      return;
+      return true;
     }
 
     dispatchAccepted(accepted);
+    return true;
   }
 
   getMetadata(): Record<string, unknown> {
