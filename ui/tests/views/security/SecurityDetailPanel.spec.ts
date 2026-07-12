@@ -74,6 +74,7 @@ function factory(overrides: Partial<InstanceType<typeof SecurityDetailPanel>['$p
     isMobile: false,
     selectedImage,
     selectedImageUpdateBlocked: false,
+    updatesAllowed: true,
     selectedImageVulns: vulnerabilities,
     selectedImageVulnsWithSafeUrl: vulnerabilities,
     sbomState,

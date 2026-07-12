@@ -97,6 +97,7 @@ function mountWidget(
       getUpdateKindMutedColor: vi.fn(() => 'var(--dd-warning-muted)'),
       pendingUpdatesCount: 1,
       recentUpdates: [makeRecentUpdate()],
+      updatesAllowed: true,
       ...overrides,
     },
     global: {

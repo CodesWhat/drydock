@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
-import { nextTick } from 'vue';
+import { nextTick, ref } from 'vue';
 import DataTable from '@/components/DataTable.vue';
 import { useToast } from '@/composables/useToast';
 import type { Container } from '@/types/container';
@@ -28,6 +28,7 @@ const {
   mockUpdateContainer: vi.fn(),
   mockUpdateContainers: vi.fn(),
 }));
+const mockUpdateMode = ref<'notify' | 'manual' | 'auto'>('manual');
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: mockRouterPush }),
@@ -68,6 +69,10 @@ vi.mock('@/services/registry', () => ({
 vi.mock('@/services/container-actions', () => ({
   updateContainer: mockUpdateContainer,
   updateContainers: mockUpdateContainers,
+}));
+
+vi.mock('@/composables/useUpdateMode', () => ({
+  useUpdateMode: () => ({ updateMode: mockUpdateMode }),
 }));
 
 vi.mock('@/utils/container-mapper', () => ({
@@ -233,6 +238,7 @@ describe('DashboardView', () => {
     vi.clearAllMocks();
     mockRouterPush.mockClear();
     mockBuildDashboardContainerMetrics.mockClear();
+    mockUpdateMode.value = 'manual';
     // Default stats mocks (overridden per-test via mountDashboard overrides.statsSummary)
     mockGetStatsSummary.mockResolvedValue({
       timestamp: '2026-04-30T00:00:00.000Z',
@@ -1661,6 +1667,69 @@ describe('DashboardView', () => {
       );
       const updateAllBtn = wrapper.find('[data-test="dashboard-update-all-btn"]');
       expect(updateAllBtn.exists()).toBe(true);
+    });
+
+    it('hides managed update controls and guards dashboard handlers in notify mode', async () => {
+      mockUpdateMode.value = 'notify';
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        {
+          recentStatuses: { nginx: 'pending' },
+        },
+      );
+
+      expect(wrapper.find('[data-test="dashboard-update-btn"]').exists()).toBe(false);
+      expect(wrapper.find('[data-test="dashboard-update-all-btn"]').exists()).toBe(false);
+
+      const row = (wrapper.vm as any).recentUpdates[0];
+      (wrapper.vm as any).confirmDashboardUpdate(row);
+      (wrapper.vm as any).confirmDashboardUpdateAll();
+      await flushPromises();
+
+      expect(mockUpdateContainer).not.toHaveBeenCalled();
+      expect(mockUpdateContainers).not.toHaveBeenCalled();
+      expect((wrapper.vm as any).dashboardUpdateInProgress).toBeNull();
+      expect((wrapper.vm as any).dashboardUpdateAllInProgress).toBe(false);
+    });
+
+    it('does not start a single dashboard update when mode changes to notify before confirmation', async () => {
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        { recentStatuses: { nginx: 'pending' } },
+      );
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+      mockUpdateMode.value = 'notify';
+      await confirm.accept();
+      await flushPromises();
+
+      expect(mockUpdateContainer).not.toHaveBeenCalled();
+      expect((wrapper.vm as any).dashboardUpdateInProgress).toBeNull();
+    });
+
+    it('does not start dashboard update-all when mode changes to notify before confirmation', async () => {
+      const wrapper = await mountDashboard(
+        [pendingContainer],
+        [],
+        {},
+        { recentStatuses: { nginx: 'pending' } },
+      );
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      await wrapper.find('[data-test="dashboard-update-all-btn"]').trigger('click');
+      mockUpdateMode.value = 'notify';
+      await confirm.accept();
+      await flushPromises();
+
+      expect(mockUpdateContainers).not.toHaveBeenCalled();
+      expect((wrapper.vm as any).dashboardUpdateAllInProgress).toBe(false);
     });
 
     it('does not show Update All button when no pending updates', async () => {

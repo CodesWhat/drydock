@@ -16,6 +16,7 @@ import { useBreakpoints } from '../composables/useBreakpoints';
 import { useSbomDetail } from '../composables/useSbomDetail';
 import { useScanProgress } from '../composables/useScanProgress';
 import { useVulnerabilities, type ImageSummary } from '../composables/useVulnerabilities';
+import { useUpdateMode } from '../composables/useUpdateMode';
 import { type PickerColumn, useViewColumnVisibility } from '../composables/useViewColumnVisibility';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
@@ -49,6 +50,8 @@ function localizedSeverity(sev: string): string {
   return severityLabel(sev, t);
 }
 const router = useRouter();
+const { updateMode } = useUpdateMode();
+const managedUpdatesAllowed = computed(() => updateMode.value !== 'notify');
 
 const updateDialogContainerId = ref<string | null>(null);
 const updateDialogContainerName = ref<string | undefined>(undefined);
@@ -329,6 +332,9 @@ function resolveContainerChoices(summary: ImageSummary): ContainerChoice[] {
 }
 
 function openUpdateAction(summary: ImageSummary) {
+  if (!managedUpdatesAllowed.value) {
+    return;
+  }
   const ids = summary.containersWithUpdate ?? [];
   if (ids.length === 0) {
     return;
@@ -355,7 +361,7 @@ function openUpdateAction(summary: ImageSummary) {
 }
 
 function openUpdateFromChooser(choice: ContainerChoice) {
-  if (choice.blocked) {
+  if (!managedUpdatesAllowed.value || choice.blocked) {
     return;
   }
   updateDialogContainerId.value = choice.id;
@@ -709,6 +715,7 @@ onUnmounted(() => {
             </AppBadge>
             <template v-if="row.hasUpdate">
               <AppButton
+                v-if="managedUpdatesAllowed"
                 size="xs"
                 :variant="isSummaryUpdateBlocked(row) ? 'danger-subtle' : 'info-subtle'"
                 weight="semibold"
@@ -844,6 +851,7 @@ onUnmounted(() => {
               <div class="flex items-center gap-1.5 shrink-0">
                 <template v-if="row.hasUpdate">
                   <AppButton
+                    v-if="managedUpdatesAllowed"
                     size="xs"
                     :variant="isSummaryUpdateBlocked(row) ? 'danger-subtle' : 'info-subtle'"
                     weight="semibold"
@@ -912,6 +920,7 @@ onUnmounted(() => {
         :is-mobile="isMobile"
         :selected-image="selectedImage"
         :selected-image-update-blocked="isSummaryUpdateBlocked(selectedImage)"
+        :updates-allowed="managedUpdatesAllowed"
         :selected-image-vulns="selectedImageVulns"
         :selected-image-vulns-with-safe-url="selectedImageVulnsWithSafeUrl"
         :sbom-state="sbomState"

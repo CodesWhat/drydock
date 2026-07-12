@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils';
-import { nextTick } from 'vue';
+import { nextTick, ref } from 'vue';
 
 const mockUpdateContainer = vi.fn();
 const mockGetContainerUpdateStartedMessage = vi.fn().mockReturnValue('Update started');
@@ -10,6 +10,7 @@ const mockToast = {
   success: vi.fn(),
   warning: vi.fn(),
 };
+const mockUpdateMode = ref<'notify' | 'manual' | 'auto'>('manual');
 
 vi.mock('@/services/container-actions', () => ({
   updateContainer: (...args: any[]) => mockUpdateContainer(...args),
@@ -42,6 +43,10 @@ vi.mock('@/composables/useToast', () => ({
   useToast: () => mockToast,
 }));
 
+vi.mock('@/composables/useUpdateMode', () => ({
+  useUpdateMode: () => ({ updateMode: mockUpdateMode }),
+}));
+
 import ContainerUpdateDialog from '@/components/containers/ContainerUpdateDialog.vue';
 
 function factory(props: Record<string, any> = {}) {
@@ -57,6 +62,7 @@ function factory(props: Record<string, any> = {}) {
 describe('ContainerUpdateDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUpdateMode.value = 'manual';
   });
 
   describe('open / close via prop', () => {
@@ -270,6 +276,32 @@ describe('ContainerUpdateDialog', () => {
       expect(mockUpdateContainer).not.toHaveBeenCalled();
       expect(mockToast.warning).toHaveBeenCalledWith('Last update attempt rolled back.');
       w.unmount();
+    });
+
+    it('disables click and Enter submission in notify mode', async () => {
+      mockUpdateMode.value = 'notify';
+      mockUpdateContainer.mockResolvedValue(undefined);
+      const w = factory({ containerId: 'abc123', containerName: 'my-nginx' });
+      try {
+        await nextTick();
+
+        const updateBtn = [...document.body.querySelectorAll('button')].find(
+          (button) => button.textContent?.trim() === 'Update',
+        );
+        expect(updateBtn?.hasAttribute('disabled')).toBe(true);
+
+        updateBtn!.click();
+        const overlay = document.body.querySelector('.fixed') as HTMLElement;
+        overlay.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: false }));
+        await flushPromises();
+
+        expect(mockUpdateContainer).not.toHaveBeenCalled();
+        expect(w.emitted('updated')).toBeUndefined();
+        expect(w.emitted('update:containerId')).toBeUndefined();
+        expect(mockToast.warning).toHaveBeenCalled();
+      } finally {
+        w.unmount();
+      }
     });
 
     it('clears error when containerId prop changes', async () => {

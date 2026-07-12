@@ -15,6 +15,7 @@ import AppIconButton from '@/components/AppIconButton.vue';
 import { useBreakpoints } from '../composables/useBreakpoints';
 import { useConfirmDialog } from '../composables/useConfirmDialog';
 import { useToast } from '../composables/useToast';
+import { useUpdateMode } from '../composables/useUpdateMode';
 import { preferences } from '../preferences/store';
 import { ROUTES } from '../router/routes';
 import { updateContainer, updateContainers } from '../services/container-actions';
@@ -55,6 +56,8 @@ const { t } = useI18n();
 const router = useRouter();
 const confirm = useConfirmDialog();
 const toast = useToast();
+const { updateMode } = useUpdateMode();
+const managedUpdatesAllowed = computed(() => updateMode.value !== 'notify');
 const {
   clearAllOperationDisplayHolds,
   heldOperations,
@@ -584,6 +587,10 @@ function isStatWidget(id: string): boolean {
 }
 
 function confirmDashboardUpdate(row: RecentUpdateRow) {
+  if (!managedUpdatesAllowed.value) {
+    toast.warning(t('containerComponents.updateStatus.summary.notify'));
+    return;
+  }
   const hardBlocker = getPrimaryHardBlocker(row.updateEligibility);
   if (row.blocked || hardBlocker) {
     toast.warning(hardBlocker?.message ?? t('dashboardView.recentUpdates.securityBlocked'));
@@ -605,6 +612,10 @@ function confirmDashboardUpdate(row: RecentUpdateRow) {
         : t('dashboardView.confirm.updateContainer.accept'),
     rejectLabel: t('common.cancel'),
     accept: async () => {
+      if (!managedUpdatesAllowed.value) {
+        toast.warning(t('containerComponents.updateStatus.summary.notify'));
+        return;
+      }
       dashboardUpdateInProgress.value = row.id;
       dashboardUpdateError.value = null;
       // Optimistic state: mark this row as updating immediately, before the API
@@ -653,6 +664,10 @@ function confirmDashboardUpdate(row: RecentUpdateRow) {
 }
 
 function confirmDashboardUpdateAll() {
+  if (!managedUpdatesAllowed.value) {
+    toast.warning(t('containerComponents.updateStatus.summary.notify'));
+    return;
+  }
   confirm.require({
     header: t('dashboardView.confirm.updateAll.header'),
     message: t('dashboardView.confirm.updateAll.message', { count: pendingUpdates.value.length }),
@@ -660,6 +675,10 @@ function confirmDashboardUpdateAll() {
     acceptLabel: t('dashboardView.confirm.updateAll.accept'),
     rejectLabel: t('common.cancel'),
     accept: async () => {
+      if (!managedUpdatesAllowed.value) {
+        toast.warning(t('containerComponents.updateStatus.summary.notify'));
+        return;
+      }
       const pendingRowsSnapshot = pendingUpdates.value.filter((row) => !row.blocked);
       dashboardUpdateAllInProgress.value = true;
       dashboardUpdateError.value = null;
@@ -838,6 +857,7 @@ function confirmDashboardUpdateAll() {
               :get-update-kind-icon="getUpdateKindIcon"
               :get-update-kind-muted-color="getUpdateKindMutedColor"
               :edit-mode="editMode"
+              :updates-allowed="managedUpdatesAllowed"
               @confirm-update="confirmDashboardUpdate"
               @confirm-update-all="confirmDashboardUpdateAll"
               @open-container="navigateTo({ path: ROUTES.CONTAINERS, query: { containerIds: $event.id } })"

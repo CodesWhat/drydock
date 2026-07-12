@@ -12,6 +12,7 @@ const mockRouterPush = vi.fn().mockResolvedValue(undefined);
 // auto-unwraps for genuine Vue refs. A plain object would be constant-truthy there.
 const mockIsMobile = ref(false);
 const mockWindowNarrow = ref(false);
+const mockUpdateMode = ref<'notify' | 'manual' | 'auto'>('manual');
 const { mockComputeSecurityDelta, mockToSafeExternalUrl } = vi.hoisted(() => ({
   mockComputeSecurityDelta: vi.fn(),
   mockToSafeExternalUrl: vi.fn(),
@@ -35,6 +36,10 @@ vi.mock('@/services/server', () => ({
 
 vi.mock('@/composables/useBreakpoints', () => ({
   useBreakpoints: () => ({ isMobile: mockIsMobile, windowNarrow: mockWindowNarrow }),
+}));
+
+vi.mock('@/composables/useUpdateMode', () => ({
+  useUpdateMode: () => ({ updateMode: mockUpdateMode }),
 }));
 
 vi.mock('@/utils/container-mapper', async () => {
@@ -442,6 +447,7 @@ describe('SecurityView', () => {
     containerIdCounter = 0;
     mockIsMobile.value = false;
     mockWindowNarrow.value = false;
+    mockUpdateMode.value = 'manual';
     mockGetSecurityRuntime.mockResolvedValue(readyRuntimeStatus());
     mockGetAllContainers.mockResolvedValue([]);
     mockRouterPush.mockResolvedValue(undefined);
@@ -1537,6 +1543,53 @@ describe('SecurityView', () => {
       expect(vm.isSummaryUpdateBlocked(summary)).toBe(true);
 
       vm.openUpdateAction(summary);
+      await nextTick();
+
+      expect(vm.updateDialogContainerId).toBeNull();
+    });
+
+    it('hides and guards managed security updates in notify mode', async () => {
+      mockUpdateMode.value = 'notify';
+      mockContainers([
+        makeContainer({
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          security: {
+            scan: {
+              vulnerabilities: [{ id: 'CVE-1', severity: 'HIGH', packageName: 'openssl' }],
+            },
+          },
+        }),
+      ]);
+      mockGetAllContainers.mockResolvedValue([
+        {
+          id: 'c1',
+          name: 'nginx',
+          displayName: 'nginx',
+          image: { name: 'nginx', tag: { value: '1.25' } },
+          currentTag: '1.25',
+          newTag: '1.26',
+          status: 'running',
+          registry: 'dockerhub',
+          updateKind: 'patch',
+          updateMaturity: null,
+          bouncer: 'safe',
+          server: 'Local',
+        },
+      ]);
+
+      const w = factory(securityCardStubs());
+      await vi.waitFor(() => expect(mockGetSecurityVulnerabilityOverview).toHaveBeenCalledOnce());
+      await flushPromises();
+
+      const vm = w.vm as any;
+      const summary = vm.filteredSummaries[0];
+      expect(w.find('[data-test="security-card-update-btn"]').exists()).toBe(false);
+
+      vm.openUpdateAction(summary);
+      const choice = vm.resolveContainerChoices(summary)[0];
+      vm.openUpdateFromChooser(choice);
       await nextTick();
 
       expect(vm.updateDialogContainerId).toBeNull();

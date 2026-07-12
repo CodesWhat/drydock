@@ -22,6 +22,7 @@ const props = defineProps<{
   isMobile: boolean;
   selectedImage: ImageSummary | null;
   selectedImageUpdateBlocked: boolean;
+  updatesAllowed: boolean;
   selectedImageVulns: Vulnerability[];
   selectedImageVulnsWithSafeUrl: VulnerabilityWithSafeUrl[];
   sbomState: SbomState;
@@ -93,6 +94,7 @@ const showSbomDocumentModel = computed({
            class="mt-2 flex items-center gap-2 flex-wrap">
         <template v-if="selectedImage.hasUpdate">
           <AppButton
+            v-if="updatesAllowed"
             size="xs"
             variant="secondary"
             class="inline-flex items-center gap-1.5"

@@ -115,6 +115,7 @@ interface Props {
   getUpdateKindMutedColor: (kind: UpdateKind | null) => string;
   pendingUpdatesCount: number;
   recentUpdates: RecentUpdateRow[];
+  updatesAllowed: boolean;
 }
 
 const props = defineProps<Props>();
@@ -284,7 +285,7 @@ function updateKindInitial(kind?: string): string {
       </div>
       <div class="flex items-center gap-3">
         <AppButton
-          v-if="pendingUpdatesCount > 0"
+          v-if="updatesAllowed && pendingUpdatesCount > 0"
           data-test="dashboard-update-all-btn"
           size="compact"
           :variant="isDashboardBulkUpdateLocked ? 'muted-subtle' : 'success'"
@@ -456,7 +457,7 @@ function updateKindInitial(kind?: string): string {
               <AppIcon name="lock" :size="14" />
             </span>
             <AppIconButton
-              v-else-if="row.status === 'pending' || row.status === 'maturity-blocked'"
+              v-else-if="updatesAllowed && (row.status === 'pending' || row.status === 'maturity-blocked')"
               icon="cloud-download"
               size="toolbar"
               :variant="row.status === 'maturity-blocked' ? 'warning' : 'plain'"

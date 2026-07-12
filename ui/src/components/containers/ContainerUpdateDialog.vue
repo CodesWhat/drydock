@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useToast } from '../../composables/useToast';
+import { useUpdateMode } from '../../composables/useUpdateMode';
 import {
   getContainerAlreadyUpToDateMessage,
   getContainerUpdateStartedMessage,
@@ -15,6 +16,7 @@ import { getPrimaryHardBlocker } from '../../utils/update-eligibility';
 
 const { t } = useI18n();
 const toast = useToast();
+const { updateMode } = useUpdateMode();
 
 const props = defineProps<{
   containerId: string | null;
@@ -35,7 +37,10 @@ const actionError = ref<string | null>(null);
 
 const isOpen = computed(() => props.containerId !== null);
 const hardBlocker = computed(() => getPrimaryHardBlocker(props.updateEligibility));
-const updateBlocked = computed(() => hardBlocker.value !== undefined);
+const managedUpdatesAllowed = computed(() => updateMode.value !== 'notify');
+const updateBlocked = computed(
+  () => !managedUpdatesAllowed.value || hardBlocker.value !== undefined,
+);
 
 const confirmMessage = computed(() => {
   const name =
@@ -74,6 +79,11 @@ function close() {
 async function confirm() {
   const id = props.containerId;
   if (!id || inProgress.value) {
+    return;
+  }
+  if (!managedUpdatesAllowed.value) {
+    actionError.value = t('containerComponents.updateStatus.summary.notify');
+    toast.warning(actionError.value);
     return;
   }
   if (hardBlocker.value) {
