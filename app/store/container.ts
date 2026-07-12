@@ -22,6 +22,11 @@ import {
   hasRawUpdate,
   isRollbackContainerName,
 } from '../model/container.js';
+import {
+  applyDeclarativeUpdatePolicy,
+  applyUpdatePolicyOverrides,
+  getUpdatePolicyOverrides,
+} from '../model/update-policy.js';
 import { resolveTriggerLabelValuesPure } from '../watchers/providers/docker/trigger-label-resolution.js';
 import { initCollection } from './util.js';
 
@@ -90,7 +95,7 @@ const updateLifecycleCache = new Map<string, UpdateLifecycleCacheEntry>();
 // a `local` watcher with a container named `myapp` would otherwise share one slot and leak
 // one deployment's update policy into another's.
 type UpdatePolicyRetentionCacheEntry = {
-  updatePolicy: unknown;
+  updatePolicyOverrides: container.ContainerUpdatePolicy;
   expiresAt: number;
 };
 
@@ -702,10 +707,42 @@ function hasContainerChangedWithSecurityHashes(
   if (existing.image?.tag?.value !== incoming.image?.tag?.value) {
     return true;
   }
+  if (getUpdatePolicyComparisonKey(existing) !== getUpdatePolicyComparisonKey(incoming)) {
+    return true;
+  }
   if (existingSecurityHash !== incomingSecurityHash) {
     return true;
   }
   return false;
+}
+
+function getUpdatePolicyComparisonKey(containerToCompare: container.Container): string {
+  const normalizePolicy = (policy: container.ContainerUpdatePolicy | undefined) => ({
+    maturityMode: policy?.maturityMode ?? null,
+    maturityMinAgeDays: policy?.maturityMinAgeDays ?? null,
+    skipTags: policy?.skipTags ? [...policy.skipTags].sort() : null,
+    skipDigests: policy?.skipDigests ? [...policy.skipDigests].sort() : null,
+    snoozeUntil: policy?.snoozeUntil ?? null,
+  });
+  const normalizeDeclarative = (
+    policy: container.ContainerDeclarativeUpdatePolicy | undefined,
+  ) => ({
+    maturityMode: policy?.maturityMode ?? null,
+    maturityMinAgeDays: policy?.maturityMinAgeDays ?? null,
+    skipTags: policy?.skipTags ? [...policy.skipTags].sort() : null,
+    skipDigests: policy?.skipDigests ? [...policy.skipDigests].sort() : null,
+  });
+  return JSON.stringify({
+    effective: normalizePolicy(containerToCompare.updatePolicy),
+    hasDeclarative: containerToCompare.updatePolicyDeclarative !== undefined,
+    declarative: {
+      env: normalizeDeclarative(containerToCompare.updatePolicyDeclarative?.env),
+      label: normalizeDeclarative(containerToCompare.updatePolicyDeclarative?.label),
+    },
+    hasOverrides: containerToCompare.updatePolicyOverrides !== undefined,
+    overrides: normalizePolicy(containerToCompare.updatePolicyOverrides),
+    sources: containerToCompare.updatePolicySources ?? {},
+  });
 }
 
 /**
@@ -879,8 +916,11 @@ function normalizeContainerTriggerLabelFields<T extends Partial<container.Contai
  * arrives under a fresh Docker id, hence via insertContainer) can inherit it.
  */
 function stashUpdatePolicyForReplacement(containerRaw) {
-  const updatePolicy = containerRaw?.updatePolicy;
-  if (updatePolicy === undefined || updatePolicy === null) {
+  if (!containerRaw) {
+    return;
+  }
+  const updatePolicyOverrides = getUpdatePolicyOverrides(containerRaw);
+  if (Object.keys(updatePolicyOverrides).length === 0) {
     return;
   }
   if (isRollbackContainerName(containerRaw?.name)) {
@@ -894,7 +934,7 @@ function stashUpdatePolicyForReplacement(containerRaw) {
   }
   updatePolicyRetentionCache.delete(cacheKey);
   updatePolicyRetentionCache.set(cacheKey, {
-    updatePolicy,
+    updatePolicyOverrides,
     expiresAt: Date.now() + UPDATE_POLICY_RETENTION_CACHE_TTL_MS,
   });
   if (updatePolicyRetentionCache.size > UPDATE_POLICY_RETENTION_CACHE_MAX_ENTRIES) {
@@ -932,9 +972,15 @@ function restoreRetainedUpdatePolicy(container) {
   if (entry.expiresAt <= Date.now()) {
     return;
   }
-  // A policy carried on the incoming payload is authoritative; the cache only fills a hole.
-  if (container.updatePolicy === undefined) {
-    container.updatePolicy = entry.updatePolicy;
+  // An explicit incoming controller layer is authoritative. A fresh watcher declaration is not:
+  // merge the retained controller state onto it and derive a new effective policy.
+  if (Object.hasOwn(container, 'updatePolicyOverrides')) {
+    return;
+  }
+  if (container.updatePolicyDeclarative !== undefined) {
+    applyUpdatePolicyOverrides(container, entry.updatePolicyOverrides);
+  } else if (!Object.hasOwn(container, 'updatePolicy')) {
+    container.updatePolicy = structuredClone(entry.updatePolicyOverrides);
   }
 }
 
@@ -1006,6 +1052,8 @@ export function insertContainer(container) {
  */
 export function updateContainer(container) {
   const hasUpdatePolicy = Object.hasOwn(container, 'updatePolicy');
+  const hasUpdatePolicyDeclarative = Object.hasOwn(container, 'updatePolicyDeclarative');
+  const hasUpdatePolicyOverrides = Object.hasOwn(container, 'updatePolicyOverrides');
   const hasUpdateRollback = Object.hasOwn(container, 'updateRollback');
   const hasSecurity = Object.hasOwn(container, 'security');
   const hasDetails = Object.hasOwn(container, 'details');
@@ -1021,6 +1069,16 @@ export function updateContainer(container) {
   const containerMerged = {
     ...container,
     updatePolicy: hasUpdatePolicy ? container.updatePolicy : containerCurrent?.updatePolicy,
+    updatePolicyDeclarative: hasUpdatePolicyDeclarative
+      ? container.updatePolicyDeclarative
+      : containerCurrent?.updatePolicyDeclarative,
+    updatePolicyOverrides: hasUpdatePolicyOverrides
+      ? container.updatePolicyOverrides
+      : containerCurrent?.updatePolicyOverrides,
+    updatePolicySources:
+      hasUpdatePolicy || hasUpdatePolicyDeclarative || hasUpdatePolicyOverrides
+        ? container.updatePolicySources
+        : containerCurrent?.updatePolicySources,
     updateRollback: hasUpdateRollback ? container.updateRollback : containerCurrent?.updateRollback,
     security: hasSecurity ? container.security : containerCurrent?.security,
     details: shouldRestoreCurrentDetails
@@ -1029,6 +1087,19 @@ export function updateContainer(container) {
         ? container.details
         : containerCurrent?.details,
   };
+  if (hasUpdatePolicyDeclarative && containerMerged.updatePolicyDeclarative) {
+    const overrides = hasUpdatePolicyOverrides
+      ? (containerMerged.updatePolicyOverrides ?? {})
+      : containerCurrent
+        ? getUpdatePolicyOverrides(containerCurrent)
+        : {};
+    applyDeclarativeUpdatePolicy(containerMerged, containerMerged.updatePolicyDeclarative);
+    applyUpdatePolicyOverrides(containerMerged, overrides);
+  } else if (hasUpdatePolicy && container.updatePolicy === undefined) {
+    containerMerged.updatePolicyDeclarative = undefined;
+    containerMerged.updatePolicyOverrides = undefined;
+    containerMerged.updatePolicySources = undefined;
+  }
   const containerToReturn = validateContainer(containerMerged);
   normalizeContainerTriggerLabelFields(containerToReturn);
   containerToReturn.updateDetectedAt = getUpdateDetectedAt(containerCurrent, containerToReturn);

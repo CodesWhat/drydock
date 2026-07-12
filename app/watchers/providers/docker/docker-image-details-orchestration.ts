@@ -33,6 +33,7 @@ import {
   mergeRuntimeDetails,
   normalizeRuntimeDetails,
 } from './runtime-details.js';
+import { applyDockerDeclarativeUpdatePolicy } from './update-policy.js';
 
 export interface ContainerLabelOverrides {
   includeTags?: string;
@@ -160,6 +161,8 @@ interface DockerImageDetailsWatcher {
     socket?: string;
     protocol?: string;
     port?: number;
+    maturitymode?: 'all' | 'mature';
+    maturityminagedays?: number;
     tag?: {
       family?: string;
       pin?: {
@@ -430,6 +433,11 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
   watcher.log.debug(`Container ${containerInStore.id} already in store`);
 
   refreshContainerIdentityFromSummary(containerInStore, dockerContainerName);
+  applyDockerDeclarativeUpdatePolicy(
+    containerInStore,
+    container.Labels || {},
+    watcher.configuration,
+  );
 
   // Health is read unconditionally (decoupled from shouldInspectContainer /
   // tag-repair gating) so the cron leg is an actual fallback for the
@@ -838,6 +846,7 @@ export async function addImageDetailsToContainerOrchestration(
     updateAvailable: false,
     updateKind: { kind: 'unknown' },
   } as Container);
+  applyDockerDeclarativeUpdatePolicy(containerToReturn, containerLabels, watcher.configuration);
   removeStaleContainerEntriesWithSameName(watcher, containerToReturn);
 
   return containerToReturn;

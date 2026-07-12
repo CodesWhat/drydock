@@ -253,6 +253,19 @@ test('getWatcherConfiguration should surface IMGSET tag.pin.info as a nested low
   delete configuration.ddEnvVars.DD_WATCHER_TEST_IMGSET_SERVICE_TAG_PIN_INFO;
 });
 
+test('getWatcherConfiguration should normalize declarative maturity defaults to watcher runtime keys', () => {
+  configuration.ddEnvVars.DD_WATCHER_LOCAL_MATURITY_MODE = 'mature';
+  configuration.ddEnvVars.DD_WATCHER_LOCAL_MATURITY_MIN_AGE_DAYS = '14';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+  expect(watcherConfigurations.local.maturitymode).toBe('mature');
+  expect(watcherConfigurations.local.maturityminagedays).toBe('14');
+  expect(watcherConfigurations.local.maturity).toBeUndefined();
+
+  delete configuration.ddEnvVars.DD_WATCHER_LOCAL_MATURITY_MODE;
+  delete configuration.ddEnvVars.DD_WATCHER_LOCAL_MATURITY_MIN_AGE_DAYS;
+});
+
 test('getWatcherConfiguration should map MAINTENANCE_WINDOW aliases', async () => {
   configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW = '0 2 * * *';
   configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_TZ = 'Europe/Paris';

@@ -407,6 +407,23 @@ describe('Docker Watcher', () => {
       expect(validated.imgset.service.tag.pin.info).toBe(false);
     });
 
+    test('validates declarative maturity watcher defaults', () => {
+      const validated = docker.validateConfiguration({
+        socket: '/var/run/docker.sock',
+        maturitymode: 'mature',
+        maturityminagedays: '14',
+      });
+
+      expect(validated.maturitymode).toBe('mature');
+      expect(validated.maturityminagedays).toBe(14);
+      expect(() =>
+        docker.validateConfiguration({
+          socket: '/var/run/docker.sock',
+          maturitymode: 'invalid',
+        }),
+      ).toThrow();
+    });
+
     test('should validate configuration with oidc remote auth', async () => {
       const config = createOidcConfig(
         {

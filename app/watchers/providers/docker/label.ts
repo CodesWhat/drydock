@@ -36,6 +36,11 @@ export const ddTagFamily = 'dd.tag.family';
  */
 export const ddTagPinInfo = 'dd.tag.pin.info';
 
+export const ddUpdatePolicyMaturityMode = 'dd.updatePolicy.maturityMode';
+export const ddUpdatePolicyMaturityMinAgeDays = 'dd.updatePolicy.maturityMinAgeDays';
+export const ddUpdatePolicySkipTags = 'dd.updatePolicy.skipTags';
+export const ddUpdatePolicySkipDigests = 'dd.updatePolicy.skipDigests';
+
 /**
  * Optional path in Docker inspect JSON to derive the running tag value.
  */

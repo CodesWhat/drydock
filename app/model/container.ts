@@ -107,12 +107,24 @@ export interface ContainerUpdateKind {
   semverDiff?: 'major' | 'minor' | 'patch' | 'prerelease' | 'unknown';
 }
 
-export interface ContainerUpdatePolicy {
+export interface ContainerDeclarativeUpdatePolicy {
   skipTags?: string[];
   skipDigests?: string[];
-  snoozeUntil?: string;
   maturityMode?: 'all' | 'mature';
   maturityMinAgeDays?: number;
+}
+
+export interface ContainerUpdatePolicy extends ContainerDeclarativeUpdatePolicy {
+  snoozeUntil?: string;
+}
+
+export type ContainerUpdatePolicySource = 'env' | 'label' | 'override';
+export type ContainerUpdatePolicySources = Partial<
+  Record<keyof ContainerDeclarativeUpdatePolicy, ContainerUpdatePolicySource>
+>;
+export interface ContainerUpdatePolicyDeclarative {
+  env: ContainerDeclarativeUpdatePolicy;
+  label: ContainerDeclarativeUpdatePolicy;
 }
 
 export interface ContainerSecurityState {
@@ -190,6 +202,9 @@ export interface Container {
   triggerExclude?: string;
   tagPinned?: boolean;
   updatePolicy?: ContainerUpdatePolicy;
+  updatePolicyDeclarative?: ContainerUpdatePolicyDeclarative;
+  updatePolicyOverrides?: ContainerUpdatePolicy;
+  updatePolicySources?: ContainerUpdatePolicySources;
   security?: ContainerSecurityState;
   updateRollback?: ContainerUpdateRollbackState;
   image: ContainerImage;
@@ -308,6 +323,33 @@ const schema = joi.object({
       .integer()
       .min(MATURITY_MIN_AGE_DAYS_MIN)
       .max(MATURITY_MIN_AGE_DAYS_MAX),
+  }),
+  updatePolicyDeclarative: joi.object({
+    env: joi.object({
+      skipTags: joi.array().items(joi.string()),
+      skipDigests: joi.array().items(joi.string()),
+      maturityMode: joi.string().valid('all', 'mature'),
+      maturityMinAgeDays: joi.number().integer().min(1).max(365),
+    }),
+    label: joi.object({
+      skipTags: joi.array().items(joi.string()),
+      skipDigests: joi.array().items(joi.string()),
+      maturityMode: joi.string().valid('all', 'mature'),
+      maturityMinAgeDays: joi.number().integer().min(1).max(365),
+    }),
+  }),
+  updatePolicyOverrides: joi.object({
+    skipTags: joi.array().items(joi.string()),
+    skipDigests: joi.array().items(joi.string()),
+    snoozeUntil: joi.string().isoDate(),
+    maturityMode: joi.string().valid('all', 'mature'),
+    maturityMinAgeDays: joi.number().integer().min(1).max(365),
+  }),
+  updatePolicySources: joi.object({
+    skipTags: joi.string().valid('env', 'label', 'override'),
+    skipDigests: joi.string().valid('env', 'label', 'override'),
+    maturityMode: joi.string().valid('env', 'label', 'override'),
+    maturityMinAgeDays: joi.string().valid('env', 'label', 'override'),
   }),
   security: joi.object({
     scan: containerSecurityScanSchema,

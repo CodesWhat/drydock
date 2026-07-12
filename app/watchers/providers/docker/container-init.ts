@@ -56,6 +56,7 @@ import {
   type ResolvedTriggerLabelValues,
   resolveTriggerLabelValuesPure,
 } from './trigger-label-resolution.js';
+import { applyDockerDeclarativeUpdatePolicy } from './update-policy.js';
 
 const warnedLegacyLabelFallbacks = new Set<string>();
 const warnedLegacyTriggerLabelFallbacks = new Set<string>();
@@ -936,6 +937,20 @@ export function applyEffectiveTagPolicyFromLabels(
     tagFamily: tagPolicy.tagFamily,
     tagPinInfo: tagPolicy.tagPinInfo,
   });
+}
+
+export function applyEffectiveDockerConfigFromLabels(
+  container: Container,
+  labels: Record<string, string>,
+  configuration: {
+    tag?: WatcherTagDefaults;
+    maturitymode?: 'all' | 'mature';
+    maturityminagedays?: number;
+  },
+  getMatchingImgset: (image: TagPolicyImageReference) => ResolvedImgset | undefined,
+) {
+  applyEffectiveTagPolicyFromLabels(container, labels, configuration.tag, getMatchingImgset);
+  applyDockerDeclarativeUpdatePolicy(container, labels, configuration);
 }
 
 function resolveLookupImageFromContainerLabels(

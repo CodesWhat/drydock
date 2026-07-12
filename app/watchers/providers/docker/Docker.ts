@@ -37,7 +37,7 @@ import Watcher from '../../Watcher.js';
 import { updateContainerFromInspect as updateContainerFromInspectState } from './container-event-update.js';
 import {
   type AliasFilterDecision,
-  applyEffectiveTagPolicyFromLabels,
+  applyEffectiveDockerConfigFromLabels,
   filterRecreatedContainerAliases,
   getDockerWatcherRegistryId,
   getDockerWatcherSourceKey,
@@ -158,6 +158,8 @@ export interface DockerWatcherConfiguration extends ComponentConfiguration {
   watchatstart: boolean;
   maintenancewindow?: string;
   maintenancewindowtz: string;
+  maturitymode?: 'all' | 'mature';
+  maturityminagedays?: number;
   imgset?: Record<string, Record<string, unknown>>;
   tag?: {
     family?: 'strict' | 'loose';
@@ -167,7 +169,6 @@ export interface DockerWatcherConfiguration extends ComponentConfiguration {
   };
 }
 
-// The delay before starting the watcher when the app is started
 const START_WATCHER_DELAY_MS = 1000;
 
 // Debounce delay used when performing a watch after a docker event has been received
@@ -412,8 +413,8 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       watchatstart: this.joi.boolean().default(true),
       maintenancewindow: joi.string().cron().optional(),
       maintenancewindowtz: this.joi.string().default('UTC'),
-      // #498: watcher defaults are the lowest-priority tag-policy layer;
-      // matching imgsets and dd.tag.* container labels may override them.
+      maturitymode: this.joi.string().valid('all', 'mature'),
+      maturityminagedays: this.joi.number().integer().min(1).max(365),
       tag: this.joi.object({
         family: this.joi.string().valid('strict', 'loose').default('strict'),
         pin: this.joi.object({
@@ -1025,7 +1026,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       updateContainer: (container) => storeContainer.updateContainer(container),
       logInfo: (message) => logContainer.info(message),
       applyDerivedLabelFieldsToContainer: (container, labels) =>
-        applyEffectiveTagPolicyFromLabels(container, labels, this.configuration.tag, (image) =>
+        applyEffectiveDockerConfigFromLabels(container, labels, this.configuration, (image) =>
           this.getMatchingImgsetConfiguration(image),
         ),
     });

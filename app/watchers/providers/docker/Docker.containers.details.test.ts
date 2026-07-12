@@ -614,6 +614,48 @@ describe('Docker Watcher', () => {
       expect(result.tagFamily).toBe('loose');
     });
 
+    test('resolves declarative update policy with labels above watcher defaults', async () => {
+      const container = await setupContainerDetailTest(docker, {
+        registerConfig: {
+          maturitymode: 'mature',
+          maturityminagedays: 7,
+        },
+        container: {
+          Image: 'docker.io/library/nginx:1.0.0',
+          Names: ['/nginx'],
+          Labels: {
+            'dd.updatePolicy.maturityMinAgeDays': '14',
+            'dd.updatePolicy.skipTags': '2.0.0, 3.0.0,2.0.0',
+            'dd.updatePolicy.skipDigests': 'sha256:abc,sha256:def',
+          },
+        },
+        parsedImage: { domain: 'docker.io', path: 'library/nginx', tag: '1.0.0' },
+      });
+
+      const result = await docker.addImageDetailsToContainer(container);
+
+      expect(result.updatePolicy).toEqual({
+        maturityMode: 'mature',
+        maturityMinAgeDays: 14,
+        skipTags: ['2.0.0', '3.0.0'],
+        skipDigests: ['sha256:abc', 'sha256:def'],
+      });
+      expect(result.updatePolicyDeclarative).toEqual({
+        env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        label: {
+          maturityMinAgeDays: 14,
+          skipTags: ['2.0.0', '3.0.0'],
+          skipDigests: ['sha256:abc', 'sha256:def'],
+        },
+      });
+      expect(result.updatePolicySources).toEqual({
+        maturityMode: 'env',
+        maturityMinAgeDays: 'label',
+        skipTags: 'label',
+        skipDigests: 'label',
+      });
+    });
+
     test('should apply imgset watchDigest when label is missing', async () => {
       const watchDigestImgset = {
         customregistry: {
