@@ -7,43 +7,54 @@ import { Callout } from 'fumadocs-ui/components/callout';
 
 ## Overview
 
-When a container has an available update, drydock evaluates it against a stack of policy and trigger gates before the matching `docker` / `dockercompose` action trigger fires. Any active gate becomes a **blocker**. The result is exposed on every container payload as `updateEligibility` and rendered in the UI as a colored pill on the container row.
+When a container has an available update, drydock evaluates it against a stack of policy and trigger gates before the matching `docker` / `dockercompose` action trigger fires. Any active gate becomes a **blocker**. The result is exposed on every container payload as `updateEligibility`; the UI summarizes it on the Update action and explains it in the container's **Update Status** panel.
 
-A container is **eligible** when an update exists *and* no blocker applies. Eligible containers are auto-updated on the next watcher run by the action trigger that matches them.
+A container is **eligible** when an update exists *and* no blocker applies. What happens next also depends on the server-wide [Update mode](#global-update-mode).
+
+## Global update mode
+
+Choose the mode under **Settings → General → Update mode**. The setting applies to the whole Drydock server, not just the current browser or user.
+
+| Mode | Detection and notifications | Manual UI/API updates | Automatic action triggers |
+| --- | --- | --- | --- |
+| `notify` | Enabled | Refused | Suppressed |
+| `manual` | Enabled | Enabled, subject to eligibility | Suppressed |
+| `auto` | Enabled | Enabled, subject to eligibility | Enabled, subject to trigger configuration and eligibility |
+
+Fresh installations default to `manual`. When an existing installation upgrades from a version with no `updateMode` setting, Drydock migrates it to `auto` so configured automatic updates do not silently stop. Changing the mode later takes effect server-wide.
+
+In `notify` mode the Update Status panel leads with **Notifications only — Drydock won't apply updates** and keeps diagnostic conditions behind **Show details**. Attempts to update through Drydock are rejected; continue to use your external update tooling.
 
 ## Where blockers appear
 
-- **List / accordion / card views** — primary blocker as a pill in the row's badge cluster (next to the major/minor/patch tag). If multiple blockers are active, a `+N` chip shows the extra count.
-- **Side panel — Overview tab → Version section** — the same pills, with the full message and action hint visible on hover.
-- **Container full-page view** — every active blocker as its own card, with full message text, action hint, and `Lifts at` date when the blocker is time-limited.
-- **Dashboard — Recent Updates widget** — same pills next to each row.
+- **Container table and cards** — the Update action carries one compact state: ready, soft-blocked (manual override available), or hard-blocked (locked). It does not repeat every reason on the row.
+- **Side panel and container full-page view** — the **Update Status** panel shows one plain-language summary followed by the active conditions. Actionable conditions link to the relevant trigger, update-policy, security, audit, or documentation surface. Time-limited conditions retain their countdown and exact lift time.
+- **Dashboard — Recent Updates widget** — uses the same compact Update-action state as the container list.
 
-If a container has an available update but **no pill**, it is eligible and the next watcher run will fire the action trigger.
-
-<Callout type="info">If a container that's not auto-updating shows no pill *and* `eligible: true` on the payload, the issue is upstream of the eligibility check — usually no `docker` / `dockercompose` action trigger configured at all (which itself surfaces as the **No trigger** pill once a trigger of any matching type is added).</Callout>
+If a container is eligible but an automatic update does not run, check that the global mode is `auto` and that a matching `docker` / `dockercompose` action trigger is configured to fire for that container.
 
 ## Reasons reference
 
-| Reason code | Pill label | Severity | Why it fires | How to clear it |
+| Reason code | Condition label | Severity | Why it fires | How to clear it |
 | --- | --- | --- | --- | --- |
-| `security-scan-blocked` | **Security blocked** | Red | The candidate image scan **or** the current container's existing scan detected critical/high vulnerabilities exceeding the configured threshold. Both the "what we'd pull" scan and the "what we're already running" scan are evaluated — either being blocked halts the update. | Lower the scan severity threshold, fix the vulnerability upstream, or use force-update to override for one cycle. |
-| `last-update-rolled-back` | **Rolled back** | Red | The previous update attempt for this container was rolled back, and the same candidate image (digest if available, otherwise tag) is still the pending target. Drydock blocks re-applying the identical target so a known-bad update isn't retried automatically; a different, newer image is never blocked. | Wait for a newer image to be released, or set `dd.update.rollback-gate=off` on the container to override the gate. |
-| `snoozed` | **Snoozed** | Amber | Container's update policy has `snoozeUntil` set to a future timestamp. | Clear the snooze from the container row's **Update policy** menu, or wait for the lift date shown in the tooltip. |
-| `skip-tag` | **Tag skipped** | Amber | The remote tag is in the container's `skipTags` list. | Remove the tag from the skip list in the **Update policy** menu. |
-| `skip-digest` | **Digest skipped** | Amber | The remote digest is in the container's `skipDigests` list. | Remove the digest from the skip list in the **Update policy** menu. |
-| `maturity-not-reached` | **Maturing** | Amber | Container's effective `maturityMode` is `mature` and the update has not yet aged past `maturityMinAgeDays` days. The blocker message identifies the active policy tier (`env`, `label`, or `override`). The gate measures elapsed time from the earliest known point the update existed: for Docker Hub and GHCR (including lscr.io), Drydock uses the registry's real publish timestamp (`last_updated` / `updated_at`), so an image already soaked in the registry longer than the threshold clears immediately on first detection. For all other registries (ACR, ECR, GCR, Quay, Harbor, etc.) the OCI image-config `created` field is a build date, not a reliable push date, so the gate falls back to `updateDetectedAt` — Drydock's own wall-clock time when it first recorded the pending update. The gate clock survives container recreation as long as the same candidate remains pending; a changed tag, digest, or mutable-tag image restarts the soak. The candidate remains visible while held, and the detail view shows a live countdown plus the exact local `liftableAt` date and time. | Wait for the gate to lift, use **Update Now**, change the active label/watcher setting, add a UI override, or **Revert** an override to the declarative value. |
-| `threshold-not-reached` | **Below threshold** | Amber | The matching trigger's `threshold` (e.g. `major`) is more restrictive than the detected update kind (e.g. `minor`). | Lower the trigger's `THRESHOLD` env var, or wait for an update that meets it. |
-| `trigger-excluded` | **Trigger excluded** | Amber | Container's `dd.action.exclude` (or legacy `dd.trigger.exclude`) label matches the candidate trigger. | Remove the exclusion from the container label, or rename the trigger so the rule no longer matches. |
-| `trigger-not-included` | **Trigger filtered** | Amber | Action triggers default to `AUTO=oninclude`, so the container needs an explicit `dd.action.include` label naming the trigger. The label is missing or doesn't list this trigger. | Add `dd.action.include=<trigger-name>` to the container's labels, or set `DD_ACTION_DOCKER[COMPOSE]_<NAME>_AUTO=true` on the trigger to fire on every matching container. |
-| `agent-mismatch` | **Agent mismatch** | Neutral | A `docker` / `dockercompose` trigger exists, but its `agent` doesn't match the container's agent. | Configure a trigger on the container's agent, or move the container to the trigger's agent. |
-| `no-update-trigger-configured` | **No trigger** | Neutral | No `docker` or `dockercompose` action trigger is configured at all. | Configure `DD_ACTION_DOCKER_<NAME>_*` or `DD_ACTION_DOCKERCOMPOSE_<NAME>_*`. See [Triggers — Docker](/docs/configuration/triggers/docker) and [Triggers — Docker Compose](/docs/configuration/triggers/docker-compose). |
-| `self-update-unavailable` | **Self-update unavailable** | Neutral | The container is Drydock itself and an update is available, but self-update can run neither over a bind-mounted Docker socket nor a TCP Docker host. | Bind-mount `/var/run/docker.sock` into the Drydock container, or point the watcher at a TCP Docker host. See [Self-Update](/docs/configuration/self-update). |
-| `rollback-container` | **Rollback** | Neutral | Container was created during a previous update as a rollback artifact and isn't itself updateable. | Not actionable — remove the rollback container manually if no longer needed. |
-| `active-operation` | **In progress** | Blue | An update is queued or already running for this container. | Wait for completion. |
-| `no-update-available` | *no pill* | — | No newer image was detected. Internal short-circuit; never rendered as a pill. | N/A |
-| `maintenance-window-closed` | `maintenance-window-closed` | Soft | Automatic-update dispatch evaluated the container while its watcher's maintenance window was closed. Drydock defers automatic updates outside the window regardless of whether the update was found by cron, manual watch, webhook, or post-update fast resync. Manual UI/API updates pass no maintenance-window state and are not gated by this blocker. | Wait for the next maintenance window or adjust `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW` / `_TZ`. |
+| `security-scan-blocked` | **Security blocked** | Hard | The candidate image scan **or** the current container's existing scan detected critical/high vulnerabilities exceeding the configured threshold. Both the "what we'd pull" scan and the "what we're already running" scan are evaluated — either being blocked halts the update. | Lower the scan severity threshold, fix the vulnerability upstream, or use force-update to override for one cycle. |
+| `last-update-rolled-back` | **Rolled back** | Hard | The previous update attempt for this container was rolled back, and the same candidate image (digest if available, otherwise tag) is still the pending target. Drydock blocks re-applying the identical target so a known-bad update isn't retried automatically; a different, newer image is never blocked. | Wait for a newer image to be released, or set `dd.update.rollback-gate=off` on the container to override the gate. |
+| `snoozed` | **Snoozed** | Soft | Container's update policy has `snoozeUntil` set to a future timestamp. | Clear the snooze from the container row's **Update policy** menu, or wait for the lift date shown in the panel. |
+| `skip-tag` | **Tag skipped** | Soft | The remote tag is in the container's `skipTags` list. | Remove the tag from the skip list in the **Update policy** menu. |
+| `skip-digest` | **Digest skipped** | Soft | The remote digest is in the container's `skipDigests` list. | Remove the digest from the skip list in the **Update policy** menu. |
+| `maturity-not-reached` | **Maturing** | Soft | Container's effective `maturityMode` is `mature` and the update has not yet aged past `maturityMinAgeDays` days. The blocker message identifies the active policy tier (`env`, `label`, or `override`). The gate measures elapsed time from the earliest known point the update existed: for Docker Hub and GHCR (including lscr.io), Drydock uses the registry's real publish timestamp (`last_updated` / `updated_at`), so an image already soaked in the registry longer than the threshold clears immediately on first detection. For all other registries (ACR, ECR, GCR, Quay, Harbor, etc.) the OCI image-config `created` field is a build date, not a reliable push date, so the gate falls back to `updateDetectedAt` — Drydock's own wall-clock time when it first recorded the pending update. The gate clock survives container recreation as long as the same candidate remains pending; a changed tag, digest, or mutable-tag image restarts the soak. The candidate remains visible while held, and the detail view shows a live countdown plus the exact local `liftableAt` date and time. | Wait for the gate to lift, use **Update Now**, change the active label/watcher setting, add a UI override, or **Revert** an override to the declarative value. |
+| `threshold-not-reached` | **Below threshold** | Soft | The matching trigger's `threshold` (e.g. `major`) is more restrictive than the detected update kind (e.g. `minor`). | Lower the trigger's `THRESHOLD` env var, or wait for an update that meets it. |
+| `trigger-excluded` | **Trigger excluded** | Soft | Container's `dd.action.exclude` (or legacy `dd.trigger.exclude`) label matches the candidate trigger. | Remove the exclusion from the container label, or rename the trigger so the rule no longer matches. |
+| `trigger-not-included` | **Trigger filtered** | Soft | Action triggers default to `AUTO=oninclude`, so the container needs an explicit `dd.action.include` label naming the trigger. The label is missing or doesn't list this trigger. | Add `dd.action.include=<trigger-name>` to the container's labels, or set `DD_ACTION_DOCKER[COMPOSE]_<NAME>_AUTO=true` on the trigger to fire on every matching container. |
+| `agent-mismatch` | **Agent mismatch** | Hard | A `docker` / `dockercompose` trigger exists, but its `agent` doesn't match the container's agent. | Configure a trigger on the container's agent, or move the container to the trigger's agent. |
+| `no-update-trigger-configured` | **No trigger** | Hard | No `docker` or `dockercompose` action trigger is configured at all. | Configure `DD_ACTION_DOCKER_<NAME>_*` or `DD_ACTION_DOCKERCOMPOSE_<NAME>_*`. See [Triggers — Docker](/docs/configuration/triggers/docker) and [Triggers — Docker Compose](/docs/configuration/triggers/docker-compose). |
+| `self-update-unavailable` | **Self-update unavailable** | Hard | The container is Drydock itself and an update is available, but self-update can run neither over a bind-mounted Docker socket nor a TCP Docker host. | Bind-mount `/var/run/docker.sock` into the Drydock container, or point the watcher at a TCP Docker host. See [Self-Update](/docs/configuration/self-update). |
+| `rollback-container` | **Rollback** | Hard | Container was created during a previous update as a rollback artifact and isn't itself updateable. | Not actionable — remove the rollback container manually if no longer needed. |
+| `active-operation` | **In progress** | Hard | An update is queued or already running for this container. | Wait for completion. |
+| `no-update-available` | **Up to date** | Hard/internal | No newer image was detected. Internal short-circuit; shown as the panel's summary rather than as an actionable condition. | N/A |
+| `maintenance-window-closed` | **Maintenance window closed** | Soft | Automatic-update dispatch evaluated the container while its watcher's maintenance window was closed. Drydock defers automatic updates outside the window regardless of whether the update was found by cron, manual watch, webhook, or post-update fast resync. Manual UI/API updates pass no maintenance-window state and are not gated by this blocker. | Wait for the next maintenance window or adjust `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW` / `_TZ`. |
 
-<Callout type="info">The pill component hides `no-update-available` and (when an "in progress" badge is already shown elsewhere on the row) `active-operation`, to avoid duplicate signals. All other reasons render whenever active.</Callout>
+<Callout type="info">The Update Status panel keeps `no-update-available` as the top-level **Up to date** state and avoids duplicating `active-operation` when an in-progress operation badge already communicates the same state elsewhere.</Callout>
 
 ## Common scenarios
 
@@ -76,7 +87,7 @@ Likely **`threshold-not-reached`** — the trigger's `THRESHOLD` is set to somet
 
 That blocker only fires when the effective `maturityMode === 'mature'`. Check the blocker text and policy editor for its source: a `dd.updatePolicy.maturityMode=mature` container label, the watcher's `DD_WATCHER_{watcher_name}_MATURITY_MODE=mature` default, or a UI/API override. With none of those configured, the built-in mode is `all` and no maturity gate applies.
 
-### "Pill says 'Agent mismatch'"
+### "Update Status says 'Agent mismatch'"
 
 The trigger and the container are bound to different agents. In the controller-agent topology, an action trigger only updates containers on the agent it runs on. Either configure an additional trigger on the container's agent, or merge the topology.
 

@@ -421,7 +421,7 @@ data: { "id": "31a61a...", "name": "homeassistant", ... }
 
 ## Settings
 
-Persistent UI preferences stored in the drydock database.
+Persistent server-wide application settings stored in the Drydock database. Unlike [Preferences](#preferences), these values apply to every user and browser.
 
 ### Get settings
 
@@ -429,7 +429,8 @@ Persistent UI preferences stored in the drydock database.
 curl http://drydock:3000/api/v1/settings
 
 {
-  "internetlessMode": false
+  "internetlessMode": false,
+  "updateMode": "manual"
 }
 ```
 
@@ -438,16 +439,18 @@ curl http://drydock:3000/api/v1/settings
 ```bash
 curl -X PATCH http://drydock:3000/api/v1/settings \
   -H 'Content-Type: application/json' \
-  -d '{"internetlessMode": true}'
+  -d '{"updateMode": "notify"}'
 
 {
-  "internetlessMode": true
+  "internetlessMode": false,
+  "updateMode": "notify"
 }
 ```
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `internetlessMode` | boolean | `false` | When enabled, disables registry icon lookups and other external requests |
+| `updateMode` | `notify` \| `manual` \| `auto` | `manual` on a fresh install | `notify` detects and notifies but refuses Drydock-managed updates; `manual` allows UI/API updates but suppresses automatic action triggers; `auto` permits both. Existing pre-setting installs migrate to `auto` once to preserve their previous automatic-update behavior. |
 
 Returns 200 with the updated settings, or 400 if the body is invalid. `PUT /api/v1/settings` remains a deprecated compatibility alias; because `/api/v1` is frozen, removal is deferred to API v2. New integrations should use `PATCH`.
 

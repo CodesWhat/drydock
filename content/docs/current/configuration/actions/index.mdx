@@ -155,7 +155,7 @@ services:
 
 ## Why isn't my container auto-updating?
 
-Drydock evaluates each container against a stack of policy and trigger gates and reports the result as a pill on the row (and as `updateEligibility` on the API payload). When auto-update doesn't fire on a container with an available update, the pill identifies the active blocker — `Below threshold`, `Trigger filtered`, `No trigger`, `Agent mismatch`, `Snoozed`, etc. See [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the full reason reference and how to clear each gate.
+Drydock evaluates each container against a stack of policy and trigger gates and reports the result on the Update action and as `updateEligibility` on the API payload. Open the container's **Update Status** panel for the plain-language summary, active conditions, and direct links to clear actionable blockers such as `Below threshold`, `Trigger filtered`, `No trigger`, `Agent mismatch`, or `Snoozed`. The server-wide **Settings → General → Update mode** chooses notifier-only, manual-only, or automatic application. See [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the complete reason and mode reference.
 
 ## Preview
 

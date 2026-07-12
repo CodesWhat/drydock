@@ -49,7 +49,7 @@ Next release targets:
        - **#498 follow-up — tag-policy inheritance:** watcher-level `TAG_FAMILY` actionable default plus label → imgset → watcher → built-in chains for `tag.pin.info`. `strict` and informational insight-on remain the safe built-ins.
     7. **#232 — Multi-select "Update Selected" (Low — KEEP in v1.7 Phase 6.1.1):** checkbox bulk-update for an arbitrary subset. Depends on the v1.6 action-routing layer; build on solid ground in v1.7 rather than on in-flight foundations.
     8. **#219 — Dependency labels + topological update ordering (Low — KEEP in v1.7 Phase 6.1):** `dd.depends_on`, child-before-parent guard, hierarchy view. Large; `dd.hook.post` covers the common case today; competitors already ship it (the reason it sits in v1.7).
-- `v1.6.0`: **Notifications, Policy & Release Intel — implemented and verified locally on `dev/v1.6`:** zero-dependency custom dashboard grid (#281), per-rule/per-trigger notification templates + preview, audit-backed notification-bell preferences, cross-device preference sync, software-version visibility, bidirectional MQTT for HA, notification/action label coexistence (#494), declarative update-policy precedence and revert UX (#320 / #307), maturity stabilization countdown, pinned-tag policy inheritance (#498), health-status notifications (#198), Trivy long-scan correctness + local DB warm-up (#490), trigger-taxonomy Phase 3 error-level warnings, responsive table/card list views including the #242 mobile/touch-target pass and #473 column-readability fix, Bucket C hardening, and v1.6 compatibility removals. Compose-file matching robustness (#365) shipped earlier in v1.5.1-rc.4 and is only forward-ported baseline here. **Still open before GA or explicit re-laning:** #325 Update Status panel plus global `notify | manual | auto` mode, #498's stacked at-a-glance tag insight UI, #295 cross-view link/action icon consistency, scanner runtime decoupling/Grype, SBOM off-heap storage, and the remaining #321 UX/storage slices. Do not call those shipped.
+- `v1.6.0`: **Notifications, Policy & Release Intel — implemented and verified locally on `dev/v1.6`:** zero-dependency custom dashboard grid (#281), per-rule/per-trigger notification templates + preview, audit-backed notification-bell preferences, cross-device preference sync, software-version visibility, bidirectional MQTT for HA, notification/action label coexistence (#494), declarative update-policy precedence and revert UX (#320 / #307), maturity stabilization countdown, actionable Update Status panel + global `notify | manual | auto` update mode (#325), pinned-tag policy inheritance (#498), health-status notifications (#198), Trivy long-scan correctness + local DB warm-up (#490), trigger-taxonomy Phase 3 error-level warnings, responsive table/card list views including the #242 mobile/touch-target pass and #473 column-readability fix, Bucket C hardening, and v1.6 compatibility removals. Compose-file matching robustness (#365) shipped earlier in v1.5.1-rc.4 and is only forward-ported baseline here. **Still open before GA or explicit re-laning:** #498's stacked at-a-glance tag insight UI, #295 cross-view link/action icon consistency, scanner runtime decoupling/Grype, SBOM off-heap storage, and the remaining #321 UX/storage slices. Do not call those shipped.
   - **✅ DONE — Declarative update policy detail** (implemented on `dev/v1.6` 2026-07-12; motivation: discussion #307; v1.4 docs aspirationally claimed `dd.updatePolicy.*` labels worked, never wired — `1093ca1b` corrected docs to UI-only; this work actually wires them):
     - **Declarative fields:** all four fields support labels + UI; maturity mode/minimum age also support the explicitly specified watcher env defaults. `dd.updatePolicy.maturityMode` (`all|mature`), `dd.updatePolicy.maturityMinAgeDays` (int ≥1), `dd.updatePolicy.skipTags` (csv), `dd.updatePolicy.skipDigests` (csv).
     - **UI-only fields:** `snoozeUntil` stays operational/ephemeral — does not belong in a deployment manifest.
@@ -605,7 +605,7 @@ Surface container-update actions directly on the Security view so reviewers can 
 
 **Goal:** Richer, customizable notifications with embedded release context.
 **Timeline target:** v1.6.0
-**Status (2026-07-12):** Core scope is implemented and verified locally on `dev/v1.6`: deprecation removals/deferrals, notification templates + preview, notification-bell preferences, cross-device preference sync, release-note context, digest delivery, bidirectional MQTT, and health-status events. It is not released yet. Ntfy enhancements remain backlog; #325 and the #321 storage/dry-run/preview slices are explicit open scope decisions rather than completed work.
+**Status (2026-07-12):** Core scope is implemented and verified locally on `dev/v1.6`: deprecation removals/deferrals, notification templates + preview, notification-bell preferences, cross-device preference sync, release-note context, digest delivery, bidirectional MQTT, health-status events, and #325's Update Status panel/global update mode. It is not released yet. Ntfy enhancements remain backlog; the #321 storage/dry-run/preview slices are explicit open scope decisions rather than completed work.
 
 ### 5.0 Deprecation Removals
 
@@ -781,13 +781,13 @@ A drydock-native HA dashboard card (container list + update status + update butt
 
 ### 5.9 Security Scan Digest — ✅ Shipped in v1.5.0 ([archive](roadmap/archive.md#59-security-scan-digest--shipped-in-v150))
 
-### 5.10 Update Status Panel — Slide-In Redesign + Update Mode Setting — 🚧 Open v1.6 promise
+### 5.10 Update Status Panel — Slide-In Redesign + Update Mode Setting — ✅ Implemented locally
 
-**Audit status (2026-07-12): not implemented on `dev/v1.6`.** Neither `UpdateStatusPanel.vue`, its composable, nor the `notify | manual | auto` preference exists; the detail panes still use the legacy full eligibility badges. Discussion #325 contains an explicit public v1.6 commitment, so this must either be implemented before GA or re-laned with a clear public follow-up. It is a release decision, not shipped scope.
+**Status (2026-07-12): implemented on `dev/v1.6`, not released.** The side-panel and full-page detail surfaces now use an actionable Update Status panel, and the server has a global `notify | manual | auto` mode. Discussion #325's public v1.6 commitment is code-complete pending release convergence and the normal GA follow-up.
 
-**Context:** v1.5.0-rc.16 dropped the eligibility-pill column from the table view (the "Trigger Filtered" / "Agent Mismatch" / etc. badges that surfaced as noise on every row — see [Discussion #325](https://github.com/CodesWhat/drydock/discussions/325)). State now rides on the Update action button: ☁️ ready, ☁️⚠️ soft-blocked (manual still works), 🔒 hard-blocked. The slide-in / full-page detail panes still show the legacy pill stack and that's the next thing to redesign.
+**Context:** v1.5.0-rc.16 dropped the eligibility-pill column from the table view (the "Trigger Filtered" / "Agent Mismatch" / etc. badges that surfaced as noise on every row — see [Discussion #325](https://github.com/CodesWhat/drydock/discussions/325)). State moved onto the Update action button: ☁️ ready, ☁️⚠️ soft-blocked (manual still works), 🔒 hard-blocked. The v1.6 work then replaced the remaining legacy stack in both detail panes with the structured panel described below.
 
-The pill stack maps 1:1 to backend reasons (13 of them). Pattern across modern tools (Vercel, GitHub, ArgoCD, Datadog, k9s) is one summary state in the row + a structured "conditions" panel in the detail view. This is the promised target, not current behavior.
+The former pill stack mapped 1:1 to backend reasons. The implemented panel covers all 16 current reason codes with one summary state plus a structured conditions list in the detail view.
 
 **Components:**
 
@@ -801,19 +801,20 @@ The pill stack maps 1:1 to backend reasons (13 of them). Pattern across modern t
     - `security-scan-blocked` → "Review scan results" → security tab
     - `rollback-container` → "View rollback context" → audit log
   - **Manual update CTA** — explicit button, separate from auto-update story. Disabled when hard-blocked; warn-and-confirm when soft-blocked.
-- **Update mode global setting** — `containers.updateMode: 'notify' | 'manual' | 'auto'` (default: `manual`).
-  - `notify` — drydock detects + notifies; never dispatches. Update Status Panel collapses to "Notifications only — drydock won't apply updates." Conditions list hidden behind a "Show details" disclosure. Soft-warning on the action button is suppressed (only hard-block lock remains, since clicking Update would still 404). Settles begunfx's "are you trying to force users to auto-update" complaint without changing dispatch behavior.
-  - `manual` — current default behavior. Hard blockers lock the button; soft blockers warn-and-confirm.
+- **Update mode global setting** — persisted server-side as `updateMode: 'notify' | 'manual' | 'auto'`.
+  - `notify` — drydock detects + notifies but refuses both automatic and manual update admission with a clear 409 response. The Update Status Panel collapses to "Notifications only — drydock won't apply updates," with conditions behind a "Show details" disclosure and update actions disabled.
+  - `manual` — the fresh-install default and the existing manual-interaction behavior. Automatic action-trigger dispatch is suppressed; manual updates remain available, hard blockers lock the button, and soft blockers warn-and-confirm.
   - `auto` — full eligibility model surfaced; conditions are actionable.
-  - Surfaced in Settings → General (or Containers tab — TBD during design pass).
-- **Severity-color cleanup** — `agent-mismatch` / `no-update-trigger-configured` / `rollback-container` currently render gray (default fallback in `reasonColor()`) which is *less* loud than the soft amber/yellow of `trigger-not-included`. Inverted from severity. Fix: hard reasons get a distinct color (orange-red or similar), soft stays amber, security stays red.
+  - Surfaced in Settings → General.
+  - Fresh installs default to `manual`. Existing settings records with no mode migrate to `auto`, preserving pre-v1.6 automatic action-trigger behavior instead of silently disabling it on upgrade.
+- **Severity-color cleanup** — hard conditions now use danger styling instead of rendering quieter than soft warnings; soft conditions remain amber and security remains red.
 - **i18n** — all status verbs and condition action labels go through vue-i18n.
 
-**Files touched (estimate):**
+**Implementation:**
 
-- New: `ui/src/components/containers/UpdateStatusPanel.vue`, `ui/src/composables/useUpdateStatus.ts`, locale strings under `containerComponents.updateStatus.*`
-- Modified: `ContainerSideTabContent.vue`, `ContainerFullPageTabContent.vue` (replace pill stack), `ConfigGeneralTab.vue` or `ConfigContainersTab.vue` (add Update mode toggle), `preferences/schema.ts` + `migrate.ts` (schema bump for `updateMode`), `update-eligibility.ts` (severity-color helpers), `ContainersGroupedViews.vue` (suppress soft-warning button when mode = notify), tests across the board.
-- Removed: legacy full-variant pill rendering in `UpdateEligibilityBadges.vue` (component itself goes away once detail panes migrate).
+- `UpdateStatusPanel.vue` and its status derivation replace the detail badge stack in both container detail surfaces.
+- `ConfigGeneralTab.vue` exposes the server-wide mode through `/api/v1/settings`; backend trigger dispatch and manual update admission enforce it.
+- Locale catalogs, update-button presentation, settings/OpenAPI contracts, compatibility migration, and regression tests are updated together.
 
 **Effort:** Medium
 **Dependencies:** none — independent of declarative update policy (Phase 5.x), but condition action links land more cleanly once that policy editor exists.
