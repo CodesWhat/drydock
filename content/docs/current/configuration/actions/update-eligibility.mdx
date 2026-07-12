@@ -28,7 +28,7 @@ In `notify` mode the Update Status panel leads with **Notifications only — Dry
 ## Where blockers appear
 
 - **Container table and cards** — the Update action carries one compact state: ready, soft-blocked (manual override available), or hard-blocked (locked). It does not repeat every reason on the row.
-- **Side panel and container full-page view** — the **Update Status** panel shows one plain-language summary followed by the active conditions. Actionable conditions link to the relevant trigger, update-policy, security, audit, or documentation surface. Time-limited conditions retain their countdown and exact lift time.
+- **Side panel and container full-page view** — the **Update Status** panel shows one plain-language summary followed by the active conditions. Actionable conditions link to the relevant trigger, update-policy, security, audit, or watcher surface. Time-limited conditions retain their countdown and exact lift time.
 - **Dashboard — Recent Updates widget** — uses the same compact Update-action state as the container list.
 
 If a container is eligible but an automatic update does not run, check that the global mode is `auto` and that a matching `docker` / `dockercompose` action trigger is configured to fire for that container.
