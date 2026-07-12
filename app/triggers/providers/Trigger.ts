@@ -1947,6 +1947,15 @@ class Trigger<
     // Strip Docker recreate alias prefixes before any trigger processing
     Trigger.canonicalizeReportName(containerReport);
 
+    // Confirmation cleanup must run regardless of the current global mode or
+    // notification-rule routing. Otherwise an auto -> manual/notify -> auto
+    // cycle can retain the recently-applied key forever and suppress the next
+    // genuine update. shouldHandleSimpleContainerReport repeats this cleanup
+    // on the normal auto-enabled path; liftSuppressionIfConfirmed is idempotent.
+    if (!containerReport.container.updateAvailable) {
+      this.liftSuppressionIfConfirmed(containerReport.container, 'update confirmed');
+    }
+
     if (this.isUpdateActionTrigger() && getUpdateMode() !== 'auto') {
       this.log.debug('Global update mode does not allow automatic updates => ignore');
       return;

@@ -11101,6 +11101,28 @@ describe('bug #408: spurious update-available after update-applied', () => {
     );
     expect(updateAvailableCalls).toHaveLength(2);
   });
+
+  test('simple action suppression lifts while global mode is manual before auto is restored', async () => {
+    trigger.type = 'docker';
+    trigger.name = 'update';
+    (trigger as any).recentlyAppliedContainerKeys.set(container.id, Date.now());
+    mockGetUpdateMode.mockReturnValue('manual');
+
+    await trigger.handleContainerReport({
+      container: { ...container, updateAvailable: false },
+      changed: true,
+    } as any);
+
+    expect((trigger as any).recentlyAppliedContainerKeys.has(container.id)).toBe(false);
+
+    mockGetUpdateMode.mockReturnValue('auto');
+    expect(
+      (trigger as any).isSuppressedByRecentApplication(
+        { ...container, updateAvailable: true },
+        'test',
+      ),
+    ).toBe(false);
+  });
 });
 
 describe('bug #408 (latent): lifecycle notifications bypass threshold so update-applied/failed are not silently dropped for unknown updateKind', () => {
