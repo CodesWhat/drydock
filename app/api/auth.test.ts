@@ -1353,7 +1353,7 @@ describe('Auth Router', () => {
       handler({}, res);
 
       expect(log.warn).toHaveBeenCalledWith(
-        'GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /auth/strategies instead.',
+        'GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /api/v1/auth/status instead.',
       );
       expect(res.setHeader).toHaveBeenCalledWith('Deprecation', '@1783123200');
       expect(res.setHeader).toHaveBeenCalledWith('Sunset', 'Thu, 01 Jul 2027 00:00:00 GMT');
@@ -1379,6 +1379,24 @@ describe('Auth Router', () => {
       handler({}, res);
 
       expect(log.warn).toHaveBeenCalledTimes(1);
+      expect(res.json).toHaveBeenCalledWith({ strategies: [], warnings: [] });
+    });
+
+    test('should emit deprecation headers and warnings for the legacy strategies response shape', () => {
+      registry.getState.mockReturnValue({ authentication: {} });
+      const app = createApp();
+      auth.init(app);
+      const call = mockRouter.get.mock.calls.find((c) => c[0] === '/strategies');
+      const handler = call[1];
+      const res = createResponse();
+
+      handler({}, res);
+
+      expect(log.warn).toHaveBeenCalledWith(
+        'GET /auth/strategies is deprecated and will be removed in v1.8.0. Use GET /api/v1/auth/status instead.',
+      );
+      expect(res.setHeader).toHaveBeenCalledWith('Deprecation', '@1783123200');
+      expect(res.setHeader).toHaveBeenCalledWith('Sunset', 'Sat, 01 Jul 2028 00:00:00 GMT');
       expect(res.json).toHaveBeenCalledWith({ strategies: [], warnings: [] });
     });
 

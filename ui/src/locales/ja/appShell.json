@@ -155,20 +155,16 @@
       "defaultLinkLabel": "移行ガイドを表示"
     },
     "banners": {
-      "legacyConfigTitleSingular": "{total} 件のレガシー設定エイリアスを検出しました",
-      "legacyConfigTitlePlural": "{total} 件のレガシー設定エイリアスを検出しました",
+      "legacyConfigTitleSingular": "{total} legacy trigger input detected",
+      "legacyConfigTitlePlural": "{total} legacy trigger inputs detected",
       "legacyApiPathTitle": "{total} requests to the removed API path detected",
       "dontShowAgain": "今後表示しない",
-      "oidcHttpTitle": "HTTP OIDC ディスカバリーを検出しました",
-      "legacyHashTitle": "レガシーパスワードハッシュを検出しました",
       "curlHealthcheckTitle": "カスタム curl ヘルスチェックのオーバーライドを検出しました",
       "envKeysLabel": "環境変数キー（{count} 件）：{keys}",
       "labelKeysLabel": "ラベルキー（{count} 件）：{keys}",
       "apiPathsLabel": "API パス（{count} 件）：{keys}",
       "healthcheckCommandLabel": "ヘルスチェックコマンド：{command}",
-      "oidcHttpBody": "One or more OIDC providers use an insecure {httpCode} discovery URL. HTTP discovery is deprecated and will be removed in v1.6.0. Update your Identity Provider to serve its discovery endpoint over {httpsCode}, then update the {discoveryEnv} environment variable to match.",
-      "legacyHashBody": "Your basic authentication uses a legacy password hash format. Legacy v1.3.9 formats are deprecated and will be removed in v1.6.0. Re-hash your admin password with {argon} (see the migration guide for the one-liner).",
-      "legacyConfigBody": "Deprecated configuration aliases are in use. Rename {wudEnv} env vars to {ddEnv} and {wudLabel} Docker labels to {ddLabel}. {triggerEnv} variables should also migrate to {actionEnv} or {notificationEnv} (see the migration guide for the full rename map).",
+      "legacyConfigBody": "Legacy trigger inputs are still active for v1.6 compatibility. Rename {triggerEnv} variables to {actionEnv} or {notificationEnv}, and replace {triggerLabel} labels with {actionLabel} or {notificationLabel} before v1.7.",
       "legacyApiBody": "Clients on this instance recently called the removed unversioned {oldPrefix} path and are receiving {statusCode} errors. Migrate them to the {v1Prefix} prefix. WUD-era integrations like wud-card or Homepage's whatsupdocker widget can set {compatFlag} instead of migrating.",
       "curlHealthcheckBody": "Your Drydock container uses a custom curl-based healthcheck override. curl remains available for backward compatibility in v1.5.x and v1.6.x; v1.6.0 is the final warning release, and curl will be removed from the image in v1.7.0. Prefer the built-in image healthcheck, or update your override to {bin}.",
       "hiddenMore": "(+{count} more)"

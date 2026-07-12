@@ -407,96 +407,17 @@ describe('AppLayout', () => {
     }
   });
 
-  it('shows an OIDC HTTP compatibility banner when an OIDC provider uses HTTP discovery', async () => {
+  it('does not render retired OIDC or password-hash banners from stale metadata', async () => {
     mockGetAllAuthentications.mockResolvedValue([
       {
-        id: 'oidc.local-idp',
+        id: 'oidc.legacy',
         type: 'oidc',
-        name: 'local-idp',
-        configuration: {
-          discovery: 'http://dex:5556/.well-known/openid-configuration',
-        },
+        configuration: { discovery: 'http://legacy.example.com' },
       },
-    ]);
-
-    const wrapper = mountLayout();
-    mountedWrappers.push(wrapper);
-    await flushPromises();
-
-    const banner = wrapper.find('[data-testid="oidc-http-compat-banner"]');
-    expect(banner.exists()).toBe(true);
-    expect(banner.text()).toContain('View migration guide');
-    expect(banner.text()).toContain('https://');
-    expect(banner.text()).toContain('DD_AUTH_OIDC_<name>_DISCOVERY');
-
-    const link = wrapper.find('[data-testid="oidc-http-compat-banner-link"]');
-    expect(link.attributes('href')).toBe(
-      'https://getdrydock.com/docs/deprecations#oidc-http-discovery',
-    );
-  });
-
-  it('supports dismissing OIDC HTTP compatibility banner for current session', async () => {
-    mockGetAllAuthentications.mockResolvedValue([
       {
-        id: 'oidc.local-idp',
-        type: 'oidc',
-        name: 'local-idp',
-        configuration: {
-          discovery: 'http://dex:5556/.well-known/openid-configuration',
-        },
-      },
-    ]);
-
-    const wrapper = mountLayout();
-    mountedWrappers.push(wrapper);
-    await flushPromises();
-
-    expect(wrapper.find('[data-testid="oidc-http-compat-banner"]').exists()).toBe(true);
-
-    await wrapper.find('[data-testid="oidc-http-compat-banner-dismiss-session"]').trigger('click');
-    await flushPromises();
-
-    expect(wrapper.find('[data-testid="oidc-http-compat-banner"]').exists()).toBe(false);
-  });
-
-  it('supports permanently dismissing OIDC HTTP compatibility banner', async () => {
-    mockGetAllAuthentications.mockResolvedValue([
-      {
-        id: 'oidc.local-idp',
-        type: 'oidc',
-        name: 'local-idp',
-        configuration: {
-          discovery: 'http://dex:5556/.well-known/openid-configuration',
-        },
-      },
-    ]);
-
-    const wrapper = mountLayout();
-    mountedWrappers.push(wrapper);
-    await flushPromises();
-
-    expect(wrapper.find('[data-testid="oidc-http-compat-banner"]').exists()).toBe(true);
-
-    await wrapper
-      .find('[data-testid="oidc-http-compat-banner-dismiss-forever"] input[type="checkbox"]')
-      .setValue(true);
-    await wrapper.find('[data-testid="oidc-http-compat-banner-dismiss-session"]').trigger('click');
-    await flushPromises();
-
-    expect(wrapper.find('[data-testid="oidc-http-compat-banner"]').exists()).toBe(false);
-    expect(localStorage.getItem('dd-banner-oidc-http-discovery-v1')).toBe('true');
-  });
-
-  it('does not show OIDC HTTP compatibility banner after permanent dismissal is persisted', async () => {
-    localStorage.setItem('dd-banner-oidc-http-discovery-v1', 'true');
-    mockGetAllAuthentications.mockResolvedValue([
-      {
-        id: 'oidc.local-idp',
-        type: 'oidc',
-        name: 'local-idp',
-        configuration: {
-          discovery: 'http://dex:5556/.well-known/openid-configuration',
-        },
+        id: 'basic.legacy',
+        type: 'basic',
+        metadata: { usesLegacyHash: true },
       },
     ]);
 
@@ -505,127 +426,10 @@ describe('AppLayout', () => {
     await flushPromises();
 
     expect(wrapper.find('[data-testid="oidc-http-compat-banner"]').exists()).toBe(false);
-  });
-
-  it('shows a legacy hash deprecation banner when basic auth uses non-argon hash', async () => {
-    mockGetAllAuthentications.mockResolvedValue([
-      {
-        id: 'basic.admin',
-        type: 'basic',
-        name: 'admin',
-        configuration: { user: 'admin', hash: '[REDACTED]' },
-        metadata: { usesLegacyHash: true },
-      },
-    ]);
-
-    const wrapper = mountLayout();
-    mountedWrappers.push(wrapper);
-    await flushPromises();
-
-    const banner = wrapper.find('[data-testid="sha-hash-deprecation-banner"]');
-    expect(banner.exists()).toBe(true);
-    expect(banner.text()).toContain('legacy password hash format');
-    expect(banner.text()).toContain('argon2id');
-    expect(banner.text()).toContain('View migration guide');
-
-    const link = wrapper.find('[data-testid="sha-hash-deprecation-banner-link"]');
-    expect(link.attributes('href')).toBe(
-      'https://getdrydock.com/docs/deprecations#legacy-password-hashes',
-    );
-  });
-
-  it('supports dismissing legacy hash deprecation banner for current session', async () => {
-    mockGetAllAuthentications.mockResolvedValue([
-      {
-        id: 'basic.admin',
-        type: 'basic',
-        name: 'admin',
-        configuration: { user: 'admin', hash: '[REDACTED]' },
-        metadata: { usesLegacyHash: true },
-      },
-    ]);
-
-    const wrapper = mountLayout();
-    mountedWrappers.push(wrapper);
-    await flushPromises();
-
-    expect(wrapper.find('[data-testid="sha-hash-deprecation-banner"]').exists()).toBe(true);
-
-    await wrapper
-      .find('[data-testid="sha-hash-deprecation-banner-dismiss-session"]')
-      .trigger('click');
-    await flushPromises();
-
     expect(wrapper.find('[data-testid="sha-hash-deprecation-banner"]').exists()).toBe(false);
   });
 
-  it('supports permanently dismissing legacy hash deprecation banner', async () => {
-    mockGetAllAuthentications.mockResolvedValue([
-      {
-        id: 'basic.admin',
-        type: 'basic',
-        name: 'admin',
-        configuration: { user: 'admin', hash: '[REDACTED]' },
-        metadata: { usesLegacyHash: true },
-      },
-    ]);
-
-    const wrapper = mountLayout();
-    mountedWrappers.push(wrapper);
-    await flushPromises();
-
-    expect(wrapper.find('[data-testid="sha-hash-deprecation-banner"]').exists()).toBe(true);
-
-    await wrapper
-      .find('[data-testid="sha-hash-deprecation-banner-dismiss-forever"] input[type="checkbox"]')
-      .setValue(true);
-    await wrapper
-      .find('[data-testid="sha-hash-deprecation-banner-dismiss-session"]')
-      .trigger('click');
-    await flushPromises();
-
-    expect(wrapper.find('[data-testid="sha-hash-deprecation-banner"]').exists()).toBe(false);
-    expect(localStorage.getItem('dd-banner-sha-hash-v1')).toBe('true');
-  });
-
-  it('does not show legacy hash deprecation banner after permanent dismissal is persisted', async () => {
-    localStorage.setItem('dd-banner-sha-hash-v1', 'true');
-    mockGetAllAuthentications.mockResolvedValue([
-      {
-        id: 'basic.admin',
-        type: 'basic',
-        name: 'admin',
-        configuration: { user: 'admin', hash: '[REDACTED]' },
-        metadata: { usesLegacyHash: true },
-      },
-    ]);
-
-    const wrapper = mountLayout();
-    mountedWrappers.push(wrapper);
-    await flushPromises();
-
-    expect(wrapper.find('[data-testid="sha-hash-deprecation-banner"]').exists()).toBe(false);
-  });
-
-  it('does not show legacy hash deprecation banner when basic auth uses argon2id hash', async () => {
-    mockGetAllAuthentications.mockResolvedValue([
-      {
-        id: 'basic.admin',
-        type: 'basic',
-        name: 'admin',
-        configuration: { user: 'admin', hash: '[REDACTED]' },
-        metadata: { usesLegacyHash: false },
-      },
-    ]);
-
-    const wrapper = mountLayout();
-    mountedWrappers.push(wrapper);
-    await flushPromises();
-
-    expect(wrapper.find('[data-testid="sha-hash-deprecation-banner"]').exists()).toBe(false);
-  });
-
-  it('shows a legacy env deprecation banner with truncated key preview', async () => {
+  it('shows a legacy trigger env banner with truncated key preview', async () => {
     mockGetServer.mockResolvedValue({
       compatibility: {
         legacyInputs: {
@@ -639,8 +443,8 @@ describe('AppLayout', () => {
               'DD_TRIGGER_DOCKER_LOCAL_EXCLUDE',
               'DD_TRIGGER_DOCKER_LOCAL_NOTIFY',
               'DD_TRIGGER_DOCKER_LOCAL_INTERVAL',
-              'WUD_SERVER_PORT',
-              'WUD_WATCHER_LOCAL_WATCHBYDEFAULT',
+              'DD_TRIGGER_DOCKER_LOCAL_TIMEOUT',
+              'DD_TRIGGER_DOCKER_LOCAL_MODE',
             ],
           },
           label: { total: 0, keys: [] },
@@ -654,17 +458,17 @@ describe('AppLayout', () => {
 
     const banner = wrapper.find('[data-testid="legacy-config-deprecation-banner"]');
     expect(banner.exists()).toBe(true);
-    expect(banner.text()).toContain('20 legacy configuration aliases detected');
+    expect(banner.text()).toContain('20 legacy trigger inputs detected');
     expect(banner.text()).toContain('Env keys (20):');
     expect(banner.text()).toContain('DD_TRIGGER_DOCKER_LOCAL_AUTO');
     expect(banner.text()).toContain('(+2 more)');
-    expect(banner.text()).toContain('DD_*');
-    expect(banner.text()).toContain('dd.*');
+    expect(banner.text()).toContain('DD_ACTION_*');
+    expect(banner.text()).toContain('DD_NOTIFICATION_*');
     expect(banner.text()).toContain('View migration guide');
 
     const link = wrapper.find('[data-testid="legacy-config-deprecation-banner-link"]');
     expect(link.attributes('href')).toBe(
-      'https://getdrydock.com/docs/deprecations#legacy-env-vars',
+      'https://getdrydock.com/docs/deprecations#legacy-trigger-prefix',
     );
   });
 
@@ -676,7 +480,7 @@ describe('AppLayout', () => {
           env: { total: 0, keys: [] },
           label: {
             total: 3,
-            keys: ['wud.tag.include', 'wud.tag.exclude', 'wud.watch'],
+            keys: ['dd.trigger.include', 'dd.trigger.exclude'],
           },
         },
       },
@@ -688,9 +492,9 @@ describe('AppLayout', () => {
 
     const banner = wrapper.find('[data-testid="legacy-config-deprecation-banner"]');
     expect(banner.exists()).toBe(true);
-    expect(banner.text()).toContain('3 legacy configuration aliases detected');
+    expect(banner.text()).toContain('3 legacy trigger inputs detected');
     expect(banner.text()).toContain('Label keys (3):');
-    expect(banner.text()).toContain('wud.watch');
+    expect(banner.text()).toContain('dd.trigger.include');
   });
 
   it('shows a legacy API path deprecation banner when server reports API path usage', async () => {

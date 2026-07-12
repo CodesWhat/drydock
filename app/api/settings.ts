@@ -9,7 +9,7 @@ import { sanitizeApiError } from './helpers.js';
 const router = express.Router();
 const log = logger.child({ component: 'settings' });
 const deprecatedPutWarning =
-  'PUT /api/settings is deprecated and will be removed in v1.6.0. Use PATCH /api/settings instead.';
+  'PUT /api/settings is deprecated and will be removed in API v2. Use PATCH /api/settings instead.';
 // '@1772236800' = 2026-02-28T00:00:00Z, the v1.4.0 GA date (see CHANGELOG.md
 // and the "PUT /api/settings" entry in DEPRECATIONS.md) — the date this
 // route actually became deprecated. Per RFC 9745 the Deprecation value must
