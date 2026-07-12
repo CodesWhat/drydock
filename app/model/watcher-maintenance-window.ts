@@ -1,6 +1,9 @@
 import type { Container } from './container.js';
 
 interface MaintenanceWindowWatcher {
+  configuration?: {
+    maintenancewindowopen?: unknown;
+  };
   isMaintenanceWindowOpen?: () => boolean;
 }
 
@@ -20,9 +23,10 @@ export function getContainerMaintenanceWindowOpen(
   const agentName = typeof container.agent === 'string' ? container.agent.trim() : '';
   const watcherId = `${agentName ? `${agentName}.` : ''}docker.${watcherName}`;
   const watcher = watchers?.[watcherId] as MaintenanceWindowWatcher | undefined;
-  if (!watcher || typeof watcher.isMaintenanceWindowOpen !== 'function') {
-    return undefined;
+  if (typeof watcher?.isMaintenanceWindowOpen === 'function') {
+    return watcher.isMaintenanceWindowOpen();
   }
 
-  return watcher.isMaintenanceWindowOpen();
+  const maskedState = watcher?.configuration?.maintenancewindowopen;
+  return typeof maskedState === 'boolean' ? maskedState : undefined;
 }

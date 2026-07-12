@@ -155,6 +155,27 @@ describe('enrichContainerLifecyclePayloadWithEligibility', () => {
       ).toBe(false);
     });
 
+    test('reports masked maintenance-window state from a remote agent watcher', () => {
+      mockGetState.mockReturnValueOnce({
+        trigger: {},
+        watcher: {
+          'edge.docker.local': { configuration: { maintenancewindowopen: false } },
+        },
+      });
+
+      const result = enrichContainerLifecyclePayloadWithEligibility({
+        ...updatePayload(),
+        agent: 'edge',
+        watcher: 'local',
+      }) as any;
+
+      expect(
+        result.updateEligibility.blockers.some(
+          (blocker: { reason: string }) => blocker.reason === 'maintenance-window-closed',
+        ),
+      ).toBe(true);
+    });
+
     test('byId returns valid in-progress operation → active-operation blocker added', () => {
       mockGetActiveOperationByContainerId.mockReturnValueOnce({
         id: 'op-1',

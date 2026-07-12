@@ -1362,6 +1362,46 @@ describe('attachUpdateEligibility / buildEligibilityContext', () => {
     ).toBe(true);
   });
 
+  test('uses masked maintenance-window state from a remote agent watcher', () => {
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getWatchers: vi.fn().mockReturnValue({
+        'edge.docker.local': { configuration: { maintenancewindowopen: false } },
+      }),
+    };
+
+    const result = attachUpdateEligibility(
+      context,
+      createContainerWithUpdate({ agent: 'edge', watcher: 'local' }),
+    );
+
+    expect(
+      (result as any).updateEligibility.blockers.some(
+        (blocker: any) => blocker.reason === 'maintenance-window-closed',
+      ),
+    ).toBe(true);
+  });
+
+  test('prefers the live watcher method over masked configuration', () => {
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getWatchers: vi.fn().mockReturnValue({
+        'docker.local': {
+          configuration: { maintenancewindowopen: false },
+          isMaintenanceWindowOpen: vi.fn().mockReturnValue(true),
+        },
+      }),
+    };
+
+    const result = attachUpdateEligibility(context, createContainerWithUpdate());
+
+    expect(
+      (result as any).updateEligibility.blockers.some(
+        (blocker: any) => blocker.reason === 'maintenance-window-closed',
+      ),
+    ).toBe(false);
+  });
+
   test.each([
     ['watcher is unavailable', {}],
     ['watcher method is unavailable', { 'docker.local': {} }],
