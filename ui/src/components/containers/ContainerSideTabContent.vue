@@ -21,6 +21,7 @@ import { getPrimaryHardBlocker } from '../../utils/update-eligibility';
 import { useContainersViewTemplateContext } from './containersViewTemplateContext';
 import { formatShortDigest } from '../../utils/digest-format';
 import { imageAge } from '../../utils/audit-helpers';
+import { updateInsightColor } from '../../utils/display';
 
 const revealedEnvCache = reactive(new Map<string, Map<string, string>>());
 const revealedKeys = reactive(new Set<string>());
@@ -250,6 +251,14 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                   <AppIcon name="arrow-right" :size="8" class="dd-text-muted" />
                   <CopyableTag :tag="selectedContainer.newTag" class="font-bold" style="color: var(--dd-success);">{{ selectedContainer.newTag }}</CopyableTag>
                 </template>
+                <!-- Pinned-tag informational insight (#498): pure information, never
+                     actionable — same current→newer shape as the newTag branch above,
+                     info palette instead of green. Kind pill lives in the badge row
+                     below, mirroring how the updateKind badge is positioned there. -->
+                <template v-else-if="selectedContainer.updateInsight">
+                  <AppIcon name="arrow-right" :size="8" class="dd-text-muted" />
+                  <CopyableTag :tag="selectedContainer.updateInsight.tag" class="font-bold" :style="{ color: updateInsightColor().text }">{{ selectedContainer.updateInsight.tag }}</CopyableTag>
+                </template>
               </div>
               <div v-if="!selectedContainer.isDigestPinned && selectedContainer.updateKind === 'digest' && selectedContainer.newDigest && selectedContainer.currentDigest"
                    class="mt-1.5 flex items-center gap-2 px-2.5 py-1 dd-rounded text-3xs font-mono dd-text-muted"
@@ -282,6 +291,9 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
               <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag || selectedContainer.updateInsight || (selectedContainer.tagPrecision === 'floating' && !selectedContainer.imageDigestWatch)" class="mt-2 flex items-center gap-1.5 flex-wrap">
                 <AppBadge v-if="selectedContainer.updateKind" size="xs" :custom="updateKindColor(selectedContainer.updateKind)">
                   {{ getUpdateKindLabel(selectedContainer.updateKind) }}
+                </AppBadge>
+                <AppBadge v-else-if="selectedContainer.updateInsight" size="xs" :custom="updateInsightColor()">
+                  {{ getUpdateKindLabel(selectedContainer.updateInsight.kind) }}
                 </AppBadge>
                 <UpdateMaturityBadge :maturity="selectedContainer.updateMaturity" :tooltip="selectedContainer.updateMaturityTooltip" />
                 <SuggestedTagBadge :tag="selectedContainer.suggestedTag" :current-tag="selectedContainer.currentTag" />

@@ -13,6 +13,7 @@ import {
 } from '../../utils/container-update';
 import { formatShortDigest } from '../../utils/digest-format';
 import { formatUptimeFromIso } from '../../utils/uptime';
+import { updateInsightColor } from '../../utils/display';
 import { useNow } from '../../composables/useNow';
 import { useColumnVisibility } from '../../composables/useColumnVisibility';
 import {
@@ -387,26 +388,45 @@ function getUpdateMaturityLabel(maturity: Container['updateMaturity']) {
   return '';
 }
 
+// Same key-selection pattern as UpdateInsightBadge.vue — kept in sync since both
+// surface the same #498 informational tooltip copy for a pinned-tag insight.
+const UPDATE_INSIGHT_TOOLTIP_KEY_BY_KIND: Record<'major' | 'minor' | 'patch', string> = {
+  major: 'containerComponents.updateInsight.tooltipMajor',
+  minor: 'containerComponents.updateInsight.tooltipMinor',
+  patch: 'containerComponents.updateInsight.tooltipPatch',
+};
+
+function updateInsightTooltip(insight: Container['updateInsight']): string {
+  if (!insight) return '';
+  return t(UPDATE_INSIGHT_TOOLTIP_KEY_BY_KIND[insight.kind], { tag: insight.tag });
+}
+
 function getContainerUpdateStateLabel(
-  container: Pick<Container, 'updateKind'> & { name?: string },
+  container: Pick<Container, 'updateKind' | 'updateInsight'> & { name?: string },
 ) {
   if (container.updateKind) {
     return getUpdateKindLabel(container.updateKind);
   }
   if (getContainerListPolicyState(container).skipped) {
-    return t('containerComponents.groupedViews.pinnedTooltip');
+    return t('containerComponents.groupedViews.skippedLabel');
+  }
+  if (container.updateInsight) {
+    return t('containerComponents.groupedViews.pinnedLabel');
   }
   return t('containerComponents.groupedViews.currentLabel');
 }
 
 function getContainerUpdateStateColor(
-  container: Pick<Container, 'updateKind'> & { name?: string },
+  container: Pick<Container, 'updateKind' | 'updateInsight'> & { name?: string },
 ) {
   if (container.updateKind) {
     return updateKindColor(container.updateKind).text;
   }
   if (getContainerListPolicyState(container).skipped) {
     return 'var(--dd-warning)';
+  }
+  if (container.updateInsight) {
+    return updateInsightColor().text;
   }
   return 'var(--dd-success)';
 }
@@ -619,6 +639,21 @@ onScopeDispose(() => {
               <CopyableTag :tag="c.newTag" class="container-version-tag container-version-tag-target text-2xs-plus font-semibold" style="color: var(--dd-primary);" @click.stop>{{ c.newTag }}</CopyableTag>
             </div>
           </div>
+          <!-- Pinned-tag informational insight (#498): pure information, never actionable —
+               same current→newer stacked shape as the newTag branch above, but rendered in
+               the info palette (updateInsightColor()) instead of --dd-primary, with the
+               newer-version tooltip carried on the target tag itself. -->
+          <div v-else-if="c.updateInsight" class="container-version-query">
+            <div class="container-version-flow">
+              <span class="container-version-tag text-2xs-plus dd-text-secondary" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
+              <AppIcon name="arrow-right" :size="8" class="container-version-arrow dd-text-muted shrink-0" />
+              <CopyableTag :tag="c.updateInsight.tag" class="container-version-tag container-version-tag-target text-2xs-plus font-semibold" :style="{ color: updateInsightColor().text }" v-tooltip.top="tt(updateInsightTooltip(c.updateInsight))" @click.stop>{{ c.updateInsight.tag }}</CopyableTag>
+              <!-- Actionable-detection reason (e.g. digest watch disabled) can still apply
+                   even though the pin-gate insight above is real — carry it forward here so
+                   it isn't silently dropped now that this branch has its own slot (#498). -->
+              <NoUpdateReasonBadge v-if="c.noUpdateReason" :reason="c.noUpdateReason" />
+            </div>
+          </div>
           <div v-else class="text-center">
             <div v-if="c.registryError" class="inline-flex items-center justify-center gap-1 px-1.5 py-0.5 dd-rounded" style="background-color: var(--dd-danger-muted);" v-tooltip.top="tt(registryErrorTooltip(c))">
               <AppIcon name="warning" :size="10" style="color: var(--dd-danger);" class="shrink-0" />
@@ -696,7 +731,18 @@ onScopeDispose(() => {
               {{ getUpdateMaturityLabel(c.updateMaturity) }}
             </span>
             <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
-            <UpdateInsightBadge :insight="c.updateInsight" />
+            <!-- #498: the list column is narrow enough that the "Newer available" text
+                 badge clips — show just the kind word (Major/Minor/Patch) in the info
+                 palette instead. Full tag + explanation still live in the tooltip. -->
+            <AppBadge
+              v-if="c.updateInsight"
+              size="xs"
+              :custom="updateInsightColor()"
+              v-tooltip.top="tt(updateInsightTooltip(c.updateInsight))"
+              data-test="update-insight-kind-badge"
+            >
+              {{ getUpdateKindLabel(c.updateInsight.kind) }}
+            </AppBadge>
           </div>
         </template>
         <!-- Status -->
@@ -1038,6 +1084,18 @@ onScopeDispose(() => {
                   {{ c.newTag }}
                 </CopyableTag>
                 <span v-if="c.updateMaturity" class="text-2xs dd-text-muted">{{ getUpdateMaturityLabel(c.updateMaturity) }}</span>
+              </template>
+              <!-- Pinned-tag informational insight (#498): same current→newer stacked shape
+                   as the newTag branch above, info palette instead of the kind color. -->
+              <template v-else-if="c.updateInsight">
+                <CopyableTag :tag="c.currentTag" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
+                  {{ c.currentTag }}
+                </CopyableTag>
+                <span class="text-2xs-plus mx-0.5 dd-text-muted shrink-0" aria-hidden="true">&rarr;</span>
+                <CopyableTag :tag="c.updateInsight.tag" class="text-xs font-bold truncate max-w-[140px]"
+                      :style="{ color: updateInsightColor().text }" @click.stop>
+                  {{ c.updateInsight.tag }}
+                </CopyableTag>
               </template>
               <template v-else>
                 <CopyableTag :tag="c.currentTag" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>

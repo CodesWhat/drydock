@@ -186,6 +186,8 @@
       "rollbackAction": "Rollback",
       "deleteAction": "Delete",
       "pinnedTooltip": "Pinned",
+      "skippedLabel": "Skipped",
+      "pinnedLabel": "Pinned",
       "upToDateTooltip": "Up to date",
       "blockedTooltip": "Blocked",
       "actionsDisabled": "Actions disabled",

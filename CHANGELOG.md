@@ -40,6 +40,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`dd.action.*` and `dd.notification.*` trigger labels are now strictly category-scoped.** A container's `dd.action.include`/`dd.action.exclude` labels now gate **only** action triggers (`docker`, `dockercompose`, `command`); `dd.notification.include`/`dd.notification.exclude` gate **only** notification triggers. Previously, whichever of the two was set on a container silently won for both categories, so a lone `dd.action.include` also filtered notification triggers (and vice versa) — see the Fixed entry below. The deprecated `dd.trigger.include`/`dd.trigger.exclude` labels still apply to both categories as a shared fallback beneath the scoped labels, unchanged. See the Upgrade Notes entry below before upgrading if you rely on a single scoped label to gate both trigger categories.
 
+- **Pinned-tag newer-version insight now renders as a stacked current→newer tag view in the info palette across list/card/detail views instead of a hover-only badge.** ([#498](https://github.com/CodesWhat/drydock/issues/498))
+
+- **Pinned containers with a newer version show a "Pinned" state instead of a contradictory "Current" + "Newer available" pair.** ([#498](https://github.com/CodesWhat/drydock/issues/498))
+
+- **Version-skip state label renamed from "Pinned" to "Skipped"** to free the word "Pinned" for tag pinning. ([#498](https://github.com/CodesWhat/drydock/issues/498))
+
 ### Deprecated
 
 - **`GET /api/auth/methods`.** This unversioned alias for `GET /auth/strategies` had zero documentation and emitted no deprecation signal at all. It now logs "GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /auth/strategies instead." on every request, and is documented in [DEPRECATIONS.md](./DEPRECATIONS.md) — deprecated in v1.6.0, removed in v1.7.0.

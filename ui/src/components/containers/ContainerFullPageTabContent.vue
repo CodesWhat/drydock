@@ -24,6 +24,7 @@ import { formatShortDigest } from '../../utils/digest-format';
 import { imageAge } from '../../utils/audit-helpers';
 import { useNow } from '../../composables/useNow';
 import { formatUptimeFromIso } from '../../utils/uptime';
+import { updateInsightColor } from '../../utils/display';
 
 interface RevealEnvResponse {
   env?: Array<{ key: string; value: string }>;
@@ -315,6 +316,18 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 <CopyableTag :tag="selectedContainer.currentDigest" class="dd-text-muted">{{ formatShortDigest(selectedContainer.currentDigest) }}</CopyableTag>
                 <AppIcon name="arrow-right" :size="8" class="dd-text-muted" />
                 <CopyableTag :tag="selectedContainer.newDigest" class="font-semibold" style="color: var(--dd-success);">{{ formatShortDigest(selectedContainer.newDigest) }}</CopyableTag>
+              </div>
+              <!-- Pinned-tag informational insight (#498): pure information, never
+                   actionable — same shape as the "Latest" row above, info palette
+                   instead of green, in place of the "Up to date" pill it would
+                   otherwise contradict. -->
+              <div v-else-if="selectedContainer.updateInsight" class="flex items-center gap-3 px-3 py-2 dd-rounded text-xs font-mono"
+                   :style="{ backgroundColor: updateInsightColor().bg }">
+                <span :style="{ color: updateInsightColor().text }">{{ t('containerComponents.fullPageOverview.latestLabel') }}</span>
+                <CopyableTag :tag="selectedContainer.updateInsight.tag" class="font-bold" :style="{ color: updateInsightColor().text }">{{ selectedContainer.updateInsight.tag }}</CopyableTag>
+                <AppBadge size="xs" :custom="updateInsightColor()">
+                  {{ getUpdateKindLabel(selectedContainer.updateInsight.kind) }}
+                </AppBadge>
               </div>
               <div v-else class="flex items-center gap-2 px-3 py-2 dd-rounded text-xs"
                    :style="{ backgroundColor: 'var(--dd-success-muted)' }">
