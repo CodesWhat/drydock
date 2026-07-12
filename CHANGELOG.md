@@ -38,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Registry polling and hot container summaries do less duplicate work.** Tag-list requests for the same registry repository are now shared across containers within a poll, including concurrent lookups, without leaking mutable cached arrays to callers. Dashboard summary uses the lightweight stats projection, and security overview reads the collection without deep-cloning every container before building its aggregate response.
+
+- **The shared application log viewer stays responsive with large histories.** JSON highlighting now uses the existing bounded tokenizer cache, and collections above 200 entries render through a measured, overscanned virtual window while preserving search navigation, wrapping, line numbers, auto-scroll, and live row-height changes.
+
 - **Base image bumped to Alpine 3.24.** The `healthcheck-build` stage in the `Dockerfile` moves from `alpine:3.21` to `alpine:3.24`.
 
 - **Every list view toggles between table and cards, and the choice sticks per view.** The v1.6 UI refactor rebuilt all list views on a shared `DataTable`, and each filter bar's view switch is now table⇄cards across Containers, Agents, Notifications, Security, Triggers, Watchers, Servers, Registries, Audit, and Auth. The selected mode is persisted per view; below ~640px the layout automatically reflows to cards and the now-redundant toggle is hidden. The old three-way `list` (accordion) mode has been removed — it's table or cards.
@@ -57,6 +61,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Unversioned WebSocket alias `WS /api/log/stream` removed.** Same removal as the REST `/api/*` alias above, applied to the log-stream upgrade: connecting to the unversioned path now fails fast with a 410-style upgrade rejection instead of completing the WebSocket handshake. Use the canonical `WS /api/v1/log/stream` endpoint.
 
 ### Fixed
+
+- **A stalled auth bootstrap request no longer leaves the app blank indefinitely.** The `/auth/user` request times out after eight seconds and falls through to the existing logged-out redirect path.
+
+- **Old preference schemas no longer skip intermediate migrations.** Schema-v3 data now advances through each numbered migration, so later additions such as the `softwareVersion` column are applied before reaching the current schema.
+
+- **Open tabs recover from stale lazy-loaded chunks after an upgrade.** Vite preload errors and matching Vue Router dynamic-import failures request one guarded page reload; successful navigation clears the session guard so a future upgrade can recover independently.
 
 - `dd.tag.family=loose` no longer bypasses the suffix/variant guard in `isSemverFamilyMatch()`. A pinned `nginx:1.2.3-ls132` container could previously be offered a bare `1.2.4` (wrong variant) as an update candidate under loose policy — loose mode was only ever meant to relax prefix equality and CalVer leading-zero rules, not let updates cross a suffix/variant boundary entirely. The guard now applies unconditionally regardless of policy.
 - The candidate sort in `sortSemverDescending()` now prefers the exact-suffix-template match over a merely-compatible one when two candidates tie at the same numeric version (e.g. preferring `1.2.5-alpine` over `1.2.5-alpine3.21` for a `1.2.3-alpine` reference). Semver treats the suffix as a prerelease field, so without this fix the wrong variant could outrank the exact match purely on prerelease-string ordering.
