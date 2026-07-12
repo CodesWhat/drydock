@@ -1442,7 +1442,7 @@ test('renderSimpleBody should include watcher context for non-local watchers by 
 
 test('renderSimpleBody should replace placeholders when template is a customized one', async () => {
   trigger.configuration.simplebody =
-    'Watcher ${watcher} reports container ${name} available update';
+    'Watcher ${container.watcher} reports container ${container.name} available update';
   expect(
     trigger.renderSimpleBody({
       name: 'container-name',
@@ -2082,7 +2082,7 @@ test('renderSimpleBody should fall back to the standard template when agent disc
 
 test('renderSimpleBody should evaluate js functions when template is a customized one', async () => {
   trigger.configuration.simplebody =
-    'Container ${name} update from ${local.substring(0, 15)} to ${remote.substring(0, 15)}';
+    'Container ${container.name} update from ${container.updateKind.localValue.substring(0, 15)} to ${container.updateKind.remoteValue.substring(0, 15)}';
   expect(
     trigger.renderSimpleBody({
       name: 'container-name',
@@ -4762,7 +4762,7 @@ test('renderSimpleBody should handle empty segments in property path', async () 
 });
 
 test('renderSimpleBody should handle templates with single-quoted strings in expressions', async () => {
-  trigger.configuration.simplebody = "Container ${name} status is ${'running'}";
+  trigger.configuration.simplebody = "Container ${container.name} status is ${'running'}";
   expect(
     trigger.renderSimpleBody({
       name: 'test-container',

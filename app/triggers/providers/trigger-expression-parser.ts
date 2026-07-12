@@ -1,10 +1,4 @@
-import logger from '../../log/index.js';
 import type { Container } from '../../model/container.js';
-
-const log = logger.child({ component: 'trigger-expression-parser' });
-const warnedLegacyTemplateVars = new Set<string>();
-const LEGACY_SIMPLE_VARS = ['id', 'name', 'watcher', 'kind', 'semver', 'local', 'remote', 'link'];
-const LEGACY_BATCH_VARS = ['count'];
 
 type TemplateVars = Record<string, unknown>;
 
@@ -346,27 +340,10 @@ function safeInterpolate(template: string | undefined, vars: TemplateVars): stri
   });
 }
 
-function warnLegacyTemplateVars(template: string, legacyVars: string[], replacementPrefix: string) {
-  for (const varName of legacyVars) {
-    if (warnedLegacyTemplateVars.has(varName)) continue;
-    if (template.includes(`\${${varName}}`)) {
-      warnedLegacyTemplateVars.add(varName);
-      const replacement =
-        varName === 'count'
-          ? `\${${replacementPrefix}.length}`
-          : `\${${replacementPrefix}.${varName}}`;
-      log.warn(
-        `Legacy trigger template variable "\${${varName}}" is deprecated and will be removed in v1.6.0. Use "${replacement}" instead.`,
-      );
-    }
-  }
-}
-
 /**
  * Render body or title simple template.
  */
 export function renderSimple(template: string, container: Container): string {
-  if (template) warnLegacyTemplateVars(template, LEGACY_SIMPLE_VARS, 'container');
   const event = Reflect.get(new Object(container), 'notificationEvent');
   const isDigest = container.updateKind?.kind === 'digest';
   const vars: TemplateVars = {
@@ -377,26 +354,12 @@ export function renderSimple(template: string, container: Container): string {
     suggestedTag: container.result?.suggestedTag ?? container.result?.tag ?? '',
     currentTag: container.image?.tag?.value ?? '',
     isDigestUpdate: isDigest,
-    // Deprecated vars for backward compatibility
-    id: container.id,
-    name: container.name,
-    watcher: container.watcher,
-    kind: container.updateKind?.kind ?? '',
-    semver: container.updateKind?.semverDiff ?? '',
-    local: container.updateKind?.localValue ?? '',
-    remote: container.updateKind?.remoteValue ?? '',
-    link: container.result?.link ?? '',
   };
   return safeInterpolate(template, vars);
 }
 
 export function renderBatch(template: string, containers: Container[]): string {
-  if (template) warnLegacyTemplateVars(template, LEGACY_BATCH_VARS, 'containers');
-  const vars: TemplateVars = {
-    containers,
-    // Deprecated var for backward compatibility
-    count: containers.length,
-  };
+  const vars: TemplateVars = { containers };
   return safeInterpolate(template, vars);
 }
 
