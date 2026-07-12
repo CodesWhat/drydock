@@ -64,6 +64,20 @@ describe('buildDashboardContainerMetrics', () => {
     expect(metrics.securityByImage).toHaveLength(3);
   });
 
+  it('#498: does not count an updateInsight-only container toward updatesAvailable', () => {
+    const metrics = buildDashboardContainerMetrics([
+      makeContainer({
+        id: 'c1',
+        name: 'pinned',
+        updateKind: null,
+        newTag: null,
+        updateInsight: { tag: 'v2.0.0', kind: 'minor' },
+      }),
+    ]);
+
+    expect(metrics.updatesAvailable).toBe(0);
+  });
+
   it('uses max severity per image across multiple containers', () => {
     const metrics = buildDashboardContainerMetrics([
       makeContainer({

@@ -877,6 +877,36 @@ describe('ContainerFullPageTabContent', () => {
     expect(errorWrapper.text()).toContain('SBOM refresh failed');
   });
 
+  it('shows the pinned-tag informational insight instead of the up-to-date pill in overview (#498)', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer({
+      newTag: undefined,
+      updateKind: null,
+      updateInsight: { tag: 'v2.0.0', kind: 'minor' },
+    });
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.text()).not.toContain('Up to date');
+    expect(wrapper.text()).toContain('v2.0.0');
+    expect(wrapper.text()).toContain('Minor');
+    // The badge row keeps its own UpdateInsightBadge as-is (#498).
+    expect(wrapper.find('[data-test="update-insight-badge"]').exists()).toBe(true);
+  });
+
+  it('keeps the up-to-date pill when there is no newTag and no updateInsight', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer({
+      newTag: undefined,
+      updateKind: null,
+      updateInsight: undefined,
+    });
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.text()).toContain('Up to date');
+  });
+
   it('shows floating tag badge in overview when tag precision is floating and digest watch is disabled', () => {
     activeDetailTab.value = 'overview';
     selectedContainer.value = makeContainer({

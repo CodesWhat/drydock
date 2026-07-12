@@ -1172,12 +1172,20 @@ describe('ContainersGroupedViews', () => {
 
     const wrapper = mountSubject();
 
-    const updateState = rowByName(wrapper, 'alpha').get('[data-test="container-update-state"]');
-    const badge = updateState.get('[data-test="update-insight-badge"]');
-    expect(badge.text()).toBe('Newer available');
-    // The insight tag must only surface via the badge'''s tooltip binding, never as
-    // bare unlabeled text — it is pure information, not an actionable update.
+    const row = rowByName(wrapper, 'alpha');
+    const updateState = row.get('[data-test="container-update-state"]');
+    // The list column no longer shows the "Newer available" text badge (it clipped);
+    // the state label becomes the neutral "Pinned" state and the kind word moves to
+    // a small info-palette pill instead of UpdateInsightBadge.
+    expect(updateState.text()).toContain('Pinned');
+    expect(updateState.find('[data-test="update-insight-badge"]').exists()).toBe(false);
+    const kindBadge = updateState.get('[data-test="update-insight-kind-badge"]');
+    expect(kindBadge.text()).toBe('Minor');
+    // The kind pill carries only the kind word, never the bare tag.
     expect(updateState.text()).not.toContain('v1.46.1');
+    // The full newer tag is now visible (not hover-only) in the stacked
+    // current→newer version column.
+    expect(row.text()).toContain('v1.46.1');
   });
 
   it('renders the informational update-insight badge in card mode (#498)', async () => {
@@ -1196,9 +1204,15 @@ describe('ContainersGroupedViews', () => {
     const { wrapper } = await mountCardsWithContainers([pinned], 800);
     const card = cardByName(wrapper, 'alpha');
 
+    // Card view keeps UpdateInsightBadge as-is (#498) — it now sits alongside the
+    // stacked current→newer tag view rather than being the only place the newer
+    // tag surfaces.
     const cardBadge = card.get('[data-test="update-insight-badge"]');
     expect(cardBadge.text()).toBe('Newer available');
-    expect(card.text()).not.toContain('v1.46.1');
+    expect(card.text()).toContain('v1.13.3');
+    expect(card.text()).toContain('v1.46.1');
+    // Header state badge becomes the neutral "Pinned" state, not the green "Current".
+    expect(card.get('[data-test="container-card-update-state"]').text()).toContain('Pinned');
   });
 
   it('renders the no-update-reason and update-insight badges together without contradictory copy when digest watching is off (#498)', async () => {
@@ -1237,8 +1251,11 @@ describe('ContainersGroupedViews', () => {
 
     const row = rowByName(wrapper, 'alpha');
 
-    const insightBadge = row.get('[data-test="update-insight-badge"]');
-    expect(insightBadge.text()).toBe('Newer available');
+    // List view no longer shows the "Newer available" text badge (#498) — the
+    // kind pill and the visible current→newer tag stack replace it.
+    const kindBadge = row.get('[data-test="update-insight-kind-badge"]');
+    expect(kindBadge.text()).toBe('Minor');
+    expect(row.text()).toContain('v1.46.1');
 
     const reasonBadge = row.get('[data-test="no-update-reason-badge"]');
     const reasonText = reasonBadge.attributes('aria-label');
@@ -1246,6 +1263,53 @@ describe('ContainersGroupedViews', () => {
     // still real, so the reason copy must not claim no detection at all runs.
     expect(reasonText).toContain('no actionable update detection is running');
     expect(reasonText).not.toContain('so no update detection is running');
+  });
+
+  it('renders "Skipped" (not "Pinned") for the version-skip policy state, and reserves the neutral "Pinned" state for updateInsight (#498)', async () => {
+    // gamma is wired to policyMap.skipped = true by the shared makeContext() helper.
+    const skipped = makeContainer({
+      id: 'c-skip-label',
+      name: 'gamma',
+      newTag: null,
+      updateKind: null,
+    });
+    const pinnedInsight = makeContainer({
+      id: 'c-pin-label',
+      name: 'alpha',
+      newTag: null,
+      updateKind: null,
+      updateInsight: { tag: 'v2.0.0', kind: 'patch' },
+    });
+
+    const { context, refs } = makeContext();
+    const containers = [skipped, pinnedInsight];
+    refs.filteredContainers.value = containers;
+    refs.displayContainers.value = containers;
+    refs.renderGroups.value = [
+      {
+        key: '__flat__',
+        name: null,
+        containers,
+        containerCount: containers.length,
+        updatesAvailable: 0,
+        updatableCount: 0,
+      },
+    ];
+    mocked.context = context;
+
+    const wrapper = mountSubject();
+
+    const skippedState = rowByName(wrapper, 'gamma').get('[data-test="container-update-state"]');
+    expect(skippedState.text()).toContain('Skipped');
+    expect(skippedState.text()).not.toContain('Pinned');
+
+    const pinnedState = rowByName(wrapper, 'alpha').get('[data-test="container-update-state"]');
+    expect(pinnedState.text()).toContain('Pinned');
+    // Neutral info color — never the skip-state amber or the plain-current green.
+    const pinnedLabel = pinnedState.find('.font-semibold');
+    expect(pinnedLabel.attributes('style')).toContain('var(--dd-info)');
+    expect(pinnedLabel.attributes('style')).not.toContain('var(--dd-warning)');
+    expect(pinnedLabel.attributes('style')).not.toContain('var(--dd-success)');
   });
 
   it('covers dropdown menu actions across blocked/updateable states', async () => {

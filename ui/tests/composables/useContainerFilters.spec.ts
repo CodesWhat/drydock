@@ -196,6 +196,25 @@ describe('useContainerFilters', () => {
       ]);
     });
 
+    it('#498: does not treat an updateInsight-only container as having an update for "any"', async () => {
+      const insightOnly = makeContainer({
+        id: 'c5',
+        name: 'insight-only',
+        newTag: null,
+        updateKind: null,
+        updateInsight: { tag: 'v2.0.0', kind: 'minor' },
+      });
+      const mod = await import('@/composables/useContainerFilters');
+      const localContainers = ref([...containers.value, insightOnly]);
+      const filters = mod.useContainerFilters(localContainers);
+      filters.filterKind.value = 'any';
+
+      expect(filters.filteredContainers.value.map((c) => c.name).sort()).toEqual([
+        'nginx',
+        'postgres',
+      ]);
+    });
+
     it('should filter blocked containers only when they have a newTag', async () => {
       const blockedWithTag = makeContainer({
         id: 'c4',

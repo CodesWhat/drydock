@@ -933,6 +933,24 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.text()).toContain('Pinned image digest has no newer tag');
   });
 
+  it('shows the pinned-tag informational insight in the version row instead of no arrow at all (#498)', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = {
+      ...createSelectedContainer(),
+      newTag: null,
+      updateKind: null,
+      updateInsight: { tag: 'v2.0.0', kind: 'minor' },
+    };
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.text()).toContain('v2.0.0');
+    // Kind pill mirrors how the updateKind badge is positioned in the badge row (#498).
+    expect(wrapper.text()).toContain('Minor');
+    // The badge row keeps its own UpdateInsightBadge as-is (#498).
+    expect(wrapper.find('[data-test="update-insight-badge"]').exists()).toBe(true);
+  });
+
   it('shows floating tag badge in overview when tag precision is floating and digest watch is disabled', () => {
     activeDetailTab.value = 'overview';
     selectedContainer.value = {

@@ -227,6 +227,18 @@ describe('updateButtonState', () => {
     expect(updateButtonState(withSoft, false)).toBe('none');
   });
 
+  it('#498: stays "none" for a pinned container that only carries an informational updateInsight — the update button must never react to updateInsight, only to newTag', () => {
+    const pinnedWithInsight = {
+      newTag: null as string | null,
+      updateKind: null,
+      updateInsight: { tag: 'v2.0.0', kind: 'minor' as const },
+      updateEligibility: undefined,
+    };
+    expect(
+      updateButtonState(pinnedWithInsight.updateEligibility, Boolean(pinnedWithInsight.newTag)),
+    ).toBe('none');
+  });
+
   it('returns ready when eligibility is undefined and there is a new tag', () => {
     expect(updateButtonState(undefined, true)).toBe('ready');
   });
