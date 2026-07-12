@@ -6647,6 +6647,34 @@ describe('digest mode', () => {
     expect(notificationHistoryStore.recordNotification).toHaveBeenCalled();
   });
 
+  test('action digest preserves its buffer when mode changes during update admission', async () => {
+    const actionTrigger = new Trigger() as any;
+    actionTrigger.configuration = { ...configurationValid, mode: 'digest' };
+    actionTrigger.type = 'docker';
+    actionTrigger.name = 'update';
+    actionTrigger.log = trigger.log;
+    const container = {
+      id: 'c1',
+      name: 'app',
+      watcher: 'test',
+      image: { name: 'library/app' },
+      updateAvailable: true,
+      updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+    };
+    actionTrigger.digestBuffer.set('c1', container as any);
+    storeContainer.getContainersRaw.mockReturnValue([container]);
+    // flush gate -> runAccepted gate -> prepareContainerUpdateRequest gate
+    mockGetUpdateMode
+      .mockReturnValueOnce('auto')
+      .mockReturnValueOnce('auto')
+      .mockReturnValue('manual');
+
+    await actionTrigger.flushDigestBuffer();
+
+    expect(actionTrigger.digestBuffer.size).toBe(1);
+    expect(notificationHistoryStore.recordNotification).not.toHaveBeenCalled();
+  });
+
   test('action digest reports are not buffered outside auto mode', async () => {
     mockGetUpdateMode.mockReturnValue('notify');
     trigger.type = 'docker';
@@ -6723,6 +6751,41 @@ describe('digest mode', () => {
         { id: 'c1', name: 'app', watcher: 'test', updateAvailable: true },
       ]),
     ).resolves.toBe(false);
+  });
+
+  test('runAcceptedUpdateBatch dispatches an accepted prefix but preserves caller state after a mid-batch mode switch', async () => {
+    mockGetUpdateMode
+      .mockReturnValueOnce('auto')
+      .mockReturnValueOnce('auto')
+      .mockReturnValue('manual');
+    trigger.type = 'docker';
+    const triggerSpy = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+
+    const dispatched = await (trigger as any).runAcceptedUpdateBatch([
+      {
+        id: 'c1',
+        name: 'app-1',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+      {
+        id: 'c2',
+        name: 'app-2',
+        watcher: 'test',
+        updateAvailable: true,
+        updateKind: { kind: 'tag', localValue: '1.0', remoteValue: '2.0' },
+      },
+    ]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(dispatched).toBe(false);
+    expect(triggerSpy).toHaveBeenCalledTimes(1);
+    expect(triggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c1' }),
+      expect.objectContaining({ operationId: expect.any(String) }),
+    );
   });
 
   test('handleContainerReports should not record a batch when mode changes before admission', async () => {

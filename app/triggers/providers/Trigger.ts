@@ -26,6 +26,7 @@ import {
   dispatchAccepted,
   enqueueContainerUpdate,
   enqueueContainerUpdates,
+  isUpdateModeAdmissionRejection,
   UpdateRequestError,
 } from '../../updates/request-update.js';
 import {
@@ -2807,6 +2808,7 @@ class Trigger<
       },
       source: 'automatic',
     });
+    const modeChangedDuringAdmission = rejected.some(isUpdateModeAdmissionRejection);
 
     for (const entry of rejected) {
       this.log.debug(
@@ -2820,11 +2822,16 @@ class Trigger<
     }
 
     if (accepted.length === 0) {
-      return true;
+      return !modeChangedDuringAdmission;
     }
 
+    // A mode switch can happen midway through a multi-container admission
+    // pass. Dispatch the prefix that was already accepted, but return false so
+    // callers retain the complete batch/digest state and do not mark rejected
+    // suffix entries as notified. Subsequent watcher state reconciles accepted
+    // operations normally while preserving the unaccepted entries for later.
     dispatchAccepted(accepted);
-    return true;
+    return !modeChangedDuringAdmission;
   }
 
   getMetadata(): Record<string, unknown> {

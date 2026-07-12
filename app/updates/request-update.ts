@@ -86,6 +86,8 @@ export interface RequestContainerUpdateOptions
 
 const DEFAULT_UPDATE_TRIGGER_TYPES: UpdateTriggerType[] = ['docker', 'dockercompose'];
 const log = logger.child({ component: 'updates.request-update' });
+const NOTIFY_MODE_REJECTION_MESSAGE = 'Update mode is notify; Drydock will not apply updates';
+const MANUAL_MODE_REJECTION_MESSAGE = 'Update mode is manual; automatic updates are disabled';
 
 export class UpdateRequestError extends Error {
   statusCode: number;
@@ -95,6 +97,16 @@ export class UpdateRequestError extends Error {
     this.name = 'UpdateRequestError';
     this.statusCode = statusCode;
   }
+}
+
+export function isUpdateModeAdmissionRejection(
+  rejection: Pick<RejectedContainerUpdateRequest, 'message' | 'statusCode'>,
+): boolean {
+  return (
+    rejection.statusCode === 409 &&
+    (rejection.message === NOTIFY_MODE_REJECTION_MESSAGE ||
+      rejection.message === MANUAL_MODE_REJECTION_MESSAGE)
+  );
 }
 
 function toRejectedContainerUpdateRequest(
@@ -257,10 +269,10 @@ function prepareContainerUpdateRequest(
   // callers fail-closed when the global mode is manual.
   const source = options.source ?? 'automatic';
   if (updateMode === 'notify') {
-    throw new UpdateRequestError(409, 'Update mode is notify; Drydock will not apply updates');
+    throw new UpdateRequestError(409, NOTIFY_MODE_REJECTION_MESSAGE);
   }
   if (updateMode === 'manual' && source === 'automatic') {
-    throw new UpdateRequestError(409, 'Update mode is manual; automatic updates are disabled');
+    throw new UpdateRequestError(409, MANUAL_MODE_REJECTION_MESSAGE);
   }
 
   // A user-initiated request may intentionally override a soft policy gate. Those
