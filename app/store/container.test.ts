@@ -1786,9 +1786,14 @@ test('getContainersForStats should return projected stat fields only', async () 
   expect(typeof projection.updateAvailable).toBe('boolean');
   expect(projection.image.id).toBe(containerExample.image.id);
   expect(projection.image.name).toBe(containerExample.image.name);
+  expect(projection.security).toEqual({
+    scan: {
+      summary: { critical: 0, high: 0 },
+    },
+  });
 
   // Heavy fields are NOT present on the projection
-  expect((projection as Record<string, unknown>).security).toBeUndefined();
+  expect((projection.security?.scan as Record<string, unknown>).vulnerabilities).toBeUndefined();
   expect((projection as Record<string, unknown>).details).toBeUndefined();
   expect((projection as Record<string, unknown>).labels).toBeUndefined();
   expect((projection as Record<string, unknown>).result).toBeUndefined();

@@ -1179,6 +1179,98 @@ test('getImageManifestDigest should deduplicate sequential lookups within a poll
   expect(first).toEqual(second);
 });
 
+test('getTags should deduplicate sequential repository lookups within a poll cycle', async () => {
+  const superGetTagsSpy = vi
+    .spyOn(Registry.prototype, 'getTags')
+    .mockResolvedValue(['2.0.0', '1.0.0']);
+
+  baseRegistry.startDigestCachePollCycle();
+
+  const first = await baseRegistry.getTags({
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'https://registry-1.docker.io/v2' },
+  });
+  const second = await baseRegistry.getTags({
+    name: 'postgres',
+    tag: { value: '17' },
+    architecture: 'arm64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  });
+
+  expect(superGetTagsSpy).toHaveBeenCalledTimes(1);
+  expect(first).toEqual(['2.0.0', '1.0.0']);
+  expect(second).toEqual(first);
+});
+
+test('getTags should deduplicate concurrent repository lookups within a poll cycle', async () => {
+  let resolveTags: (tags: string[]) => void = () => {};
+  const pendingTags = new Promise<string[]>((resolve) => {
+    resolveTags = resolve;
+  });
+  const superGetTagsSpy = vi
+    .spyOn(Registry.prototype, 'getTags')
+    .mockImplementation(() => pendingTags);
+
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    architecture: 'amd64',
+    os: 'linux',
+    registry: { url: 'docker.io' },
+  };
+
+  const firstLookup = baseRegistry.getTags(image);
+  const secondLookup = baseRegistry.getTags(image);
+  resolveTags(['17', '16']);
+
+  await expect(Promise.all([firstLookup, secondLookup])).resolves.toEqual([
+    ['17', '16'],
+    ['17', '16'],
+  ]);
+  expect(superGetTagsSpy).toHaveBeenCalledTimes(1);
+});
+
+test('getTags should return isolated arrays for cached results', async () => {
+  vi.spyOn(Registry.prototype, 'getTags').mockResolvedValue(['2.0.0', '1.0.0']);
+  baseRegistry.startDigestCachePollCycle();
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    registry: { url: 'docker.io' },
+  };
+
+  const first = await baseRegistry.getTags(image);
+  first.pop();
+  const second = await baseRegistry.getTags(image);
+
+  expect(second).toEqual(['2.0.0', '1.0.0']);
+  expect(second).not.toBe(first);
+});
+
+test('startDigestCachePollCycle should clear previous tag-list cache entries', async () => {
+  const superGetTagsSpy = vi
+    .spyOn(Registry.prototype, 'getTags')
+    .mockResolvedValue(['2.0.0', '1.0.0']);
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    registry: { url: 'docker.io' },
+  };
+
+  baseRegistry.startDigestCachePollCycle();
+  await baseRegistry.getTags(image);
+  await baseRegistry.getTags(image);
+  baseRegistry.startDigestCachePollCycle();
+  await baseRegistry.getTags(image);
+
+  expect(superGetTagsSpy).toHaveBeenCalledTimes(2);
+});
+
 test('getImageManifestDigest should deduplicate concurrent lookups within a poll cycle', async () => {
   let resolveDigest: (manifest: { digest: string; created: string; version: number }) => void;
   const superGetImageManifestDigestSpy = vi

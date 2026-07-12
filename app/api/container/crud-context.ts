@@ -1,6 +1,7 @@
 import type { AgentClient } from '../../agent/AgentClient.js';
 import type { Container, ContainerReport } from '../../model/container.js';
 import type Trigger from '../../triggers/providers/Trigger.js';
+import type { ContainerDashboardLike } from '../../util/container-summary.js';
 import type { PaginationLinks } from '../pagination-links.js';
 
 export interface CrudStoreContainerApi {
@@ -73,6 +74,8 @@ export interface CrudHandlerDependencies {
       query: Record<string, unknown>,
       pagination?: ContainerListPagination,
     ) => Container[];
+    getContainersForStats: (query: Record<string, unknown>) => ContainerDashboardLike[];
+    getContainersRawFromStore: (query: Record<string, unknown>) => Container[];
     getContainerCountFromStore: (query: Record<string, unknown>) => number;
     storeContainer: CrudStoreContainerApi;
     updateOperationStore: UpdateOperationStoreApi;
@@ -97,6 +100,8 @@ export interface CrudHandlerDependencies {
 
 export interface CrudHandlerContext {
   getContainersFromStore: CrudHandlerDependencies['storeApi']['getContainersFromStore'];
+  getContainersForStats: CrudHandlerDependencies['storeApi']['getContainersForStats'];
+  getContainersRawFromStore: CrudHandlerDependencies['storeApi']['getContainersRawFromStore'];
   getContainerCountFromStore: CrudHandlerDependencies['storeApi']['getContainerCountFromStore'];
   storeContainer: CrudStoreContainerApi;
   updateOperationStore: UpdateOperationStoreApi;
@@ -120,6 +125,8 @@ export interface WatchTarget {
 export function buildCrudHandlerContext({
   storeApi: {
     getContainersFromStore,
+    getContainersForStats,
+    getContainersRawFromStore,
     getContainerCountFromStore,
     storeContainer,
     updateOperationStore,
@@ -131,6 +138,8 @@ export function buildCrudHandlerContext({
 }: CrudHandlerDependencies): CrudHandlerContext {
   return {
     getContainersFromStore,
+    getContainersForStats,
+    getContainersRawFromStore,
     getContainerCountFromStore,
     storeContainer,
     updateOperationStore,

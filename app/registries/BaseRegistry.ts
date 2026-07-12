@@ -66,6 +66,8 @@ class BaseRegistry<
   private bearerTokenCache = new Map<string, { token: string; expiresAt: number }>();
   private digestManifestCache = new Map<string, DigestCacheEntry>();
   private digestManifestCacheInFlight = new Map<string, Promise<RegistryManifestLookupResult>>();
+  private tagListCache = new Map<string, string[]>();
+  private tagListCacheInFlight = new Map<string, Promise<string[]>>();
   private digestCacheHits = 0;
   private digestCacheMisses = 0;
 
@@ -135,6 +137,26 @@ class BaseRegistry<
     return `${registryHost}/${repository}:${tagOrDigest}|${os}/${architecture}${variant}`;
   }
 
+  private buildTagListCacheKey(image: ContainerImage): string {
+    let normalizedImage: ContainerImage;
+    try {
+      normalizedImage = this.normalizeImage(structuredClone(image));
+    } catch (error) {
+      this.log.warn(
+        `Unable to normalize image metadata for tag-list cache key generation: ${sanitizeLogParam(this.getDigestCacheImageLabel(image))} (${sanitizeLogParam(getErrorMessage(error))})`,
+      );
+      normalizedImage = image;
+    }
+
+    const registryHost = this.getCanonicalRegistryHost(normalizedImage?.registry?.url);
+    const imageName = normalizedImage?.name || '';
+    const repository =
+      registryHost === 'docker.io' && imageName.length > 0 && !imageName.includes('/')
+        ? `library/${imageName}`
+        : imageName;
+    return `${registryHost}/${repository}`;
+  }
+
   private recordDigestCacheHit() {
     this.digestCacheHits += 1;
     const counter = registryPrometheus.getDigestCacheHitsCounter?.();
@@ -154,8 +176,35 @@ class BaseRegistry<
   public startDigestCachePollCycle() {
     this.digestManifestCache.clear();
     this.digestManifestCacheInFlight.clear();
+    this.tagListCache.clear();
+    this.tagListCacheInFlight.clear();
     this.digestCacheHits = 0;
     this.digestCacheMisses = 0;
+  }
+
+  override async getTags(image: ContainerImage): Promise<string[]> {
+    const cacheKey = this.buildTagListCacheKey(image);
+    const cachedTags = this.tagListCache.get(cacheKey);
+    if (cachedTags) {
+      return [...cachedTags];
+    }
+
+    const inFlightLookup = this.tagListCacheInFlight.get(cacheKey);
+    if (inFlightLookup) {
+      return [...(await inFlightLookup)];
+    }
+
+    const tagLookup = super.getTags(image).then((tags) => {
+      const cachedCopy = [...tags];
+      this.tagListCache.set(cacheKey, cachedCopy);
+      return cachedCopy;
+    });
+    this.tagListCacheInFlight.set(cacheKey, tagLookup);
+    try {
+      return [...(await tagLookup)];
+    } finally {
+      this.tagListCacheInFlight.delete(cacheKey);
+    }
   }
 
   public endDigestCachePollCycle() {

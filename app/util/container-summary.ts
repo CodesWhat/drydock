@@ -3,7 +3,7 @@ interface ContainerStatusLike {
   updateAvailable?: boolean;
 }
 
-interface ContainerDashboardLike extends ContainerStatusLike {
+export interface ContainerDashboardLike extends ContainerStatusLike {
   updateMaturityLevel?: unknown;
   security?: {
     scan?: {

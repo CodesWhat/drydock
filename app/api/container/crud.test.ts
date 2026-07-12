@@ -19,6 +19,8 @@ type CrudDependencies = Parameters<typeof createCrudHandlers>[0];
 
 type GroupedCrudDepsInput = {
   getContainersFromStore: CrudDependencies['storeApi']['getContainersFromStore'];
+  getContainersForStats: CrudDependencies['storeApi']['getContainersForStats'];
+  getContainersRawFromStore: CrudDependencies['storeApi']['getContainersRawFromStore'];
   getContainerCountFromStore: CrudDependencies['storeApi']['getContainerCountFromStore'];
   storeContainer: CrudDependencies['storeApi']['storeContainer'];
   updateOperationStore: CrudDependencies['storeApi']['updateOperationStore'];
@@ -55,6 +57,8 @@ function groupCrudDeps(deps: GroupedCrudDepsInput): CrudDependencies {
   return {
     storeApi: {
       getContainersFromStore: deps.getContainersFromStore,
+      getContainersForStats: deps.getContainersForStats,
+      getContainersRawFromStore: deps.getContainersRawFromStore,
       getContainerCountFromStore: deps.getContainerCountFromStore,
       storeContainer: deps.storeContainer,
       updateOperationStore: deps.updateOperationStore,
@@ -150,6 +154,12 @@ function createHarness(options: { containers?: any[] } = {}) {
       }
       return matchingContainers.slice(offset, offset + limit);
     }),
+    getContainersForStats: vi.fn((query: Record<string, unknown> = {}) =>
+      filterAndSortContainers(containers, query),
+    ),
+    getContainersRawFromStore: vi.fn((query: Record<string, unknown> = {}) =>
+      filterAndSortContainers(containers, query),
+    ),
     getContainerCountFromStore: vi.fn(
       (query: Record<string, unknown> = {}) => filterAndSortContainers(containers, query).length,
     ),
@@ -1599,7 +1609,8 @@ describe('api/container/crud', () => {
 
       const res = callGetContainerSummary(harness.handlers);
 
-      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({});
+      expect(harness.deps.getContainersForStats).toHaveBeenCalledWith({});
+      expect(harness.deps.getContainersFromStore).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         containers: {
@@ -1778,7 +1789,8 @@ describe('api/container/crud', () => {
 
       const res = callGetContainerSecurityVulnerabilities(harness.handlers);
 
-      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({});
+      expect(harness.deps.getContainersRawFromStore).toHaveBeenCalledWith({});
+      expect(harness.deps.getContainersFromStore).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         totalContainers: 3,
@@ -1855,7 +1867,8 @@ describe('api/container/crud', () => {
 
       const res = callGetContainerSecurityVulnerabilities(harness.handlers);
 
-      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({});
+      expect(harness.deps.getContainersRawFromStore).toHaveBeenCalledWith({});
+      expect(harness.deps.getContainersFromStore).not.toHaveBeenCalled();
       expect(harness.deps.getContainerCountFromStore).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
@@ -1929,7 +1942,8 @@ describe('api/container/crud', () => {
         offset: '1',
       });
 
-      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({});
+      expect(harness.deps.getContainersRawFromStore).toHaveBeenCalledWith({});
+      expect(harness.deps.getContainersFromStore).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         totalContainers: 2,
@@ -2360,7 +2374,8 @@ describe('api/container/crud', () => {
         total: 0,
         images: [],
       });
-      expect(harness.deps.getContainersFromStore).toHaveBeenCalledWith({});
+      expect(harness.deps.getContainersRawFromStore).toHaveBeenCalledWith({});
+      expect(harness.deps.getContainersFromStore).not.toHaveBeenCalled();
       expect(harness.deps.getContainerCountFromStore).not.toHaveBeenCalled();
     });
 

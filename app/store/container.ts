@@ -1242,6 +1242,14 @@ export interface ContainerStatProjection {
     id: string;
     name: string;
   };
+  security: {
+    scan: {
+      summary: {
+        critical: number;
+        high: number;
+      };
+    };
+  };
 }
 
 function projectContainerForStats(c: container.Container): ContainerStatProjection {
@@ -1255,6 +1263,14 @@ function projectContainerForStats(c: container.Container): ContainerStatProjecti
     image: {
       id: c.image.id,
       name: c.image.name,
+    },
+    security: {
+      scan: {
+        summary: {
+          critical: Number(c.security?.scan?.summary?.critical ?? 0),
+          high: Number(c.security?.scan?.summary?.high ?? 0),
+        },
+      },
     },
   };
 }

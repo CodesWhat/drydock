@@ -158,6 +158,8 @@ async function getContainerRegistryAuth(container) {
 const crudHandlers = createCrudHandlers({
   storeApi: {
     getContainersFromStore,
+    getContainersForStats: storeContainer.getContainersForStats,
+    getContainersRawFromStore: storeContainer.getContainersRaw,
     getContainerCountFromStore,
     storeContainer,
     updateOperationStore,
