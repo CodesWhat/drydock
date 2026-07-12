@@ -381,6 +381,47 @@ test('updateContainer should keep overrides when a declarative label is removed'
   expect(updated.updatePolicySources).toEqual({ skipTags: 'override' });
 });
 
+test('updateContainer should honor an explicit empty override layer', () => {
+  const existingContainer = {
+    data: createContainerFixture({
+      updatePolicy: { maturityMode: 'all' },
+      updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+      updatePolicyOverrides: { maturityMode: 'all' },
+      updatePolicySources: { maturityMode: 'override' },
+    }),
+  };
+  const collection = { findOne: () => existingContainer, update: vi.fn() };
+  container.createCollections({ getCollection: () => collection, addCollection: () => null });
+
+  const updated = container.updateContainer(
+    createContainerFixture({
+      updatePolicy: { maturityMode: 'mature' },
+      updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+      updatePolicyOverrides: undefined,
+      updatePolicySources: { maturityMode: 'env' },
+    }),
+  );
+
+  expect(updated.updatePolicyOverrides).toEqual({});
+  expect(updated.updatePolicy).toEqual({ maturityMode: 'mature' });
+});
+
+test('updateContainer should resolve a declarative policy without a current stored container', () => {
+  const collection = createFilterableCollection([]);
+  container.createCollections({ getCollection: () => collection, addCollection: () => null });
+
+  const updated = container.updateContainer(
+    createContainerFixture({
+      updatePolicy: { maturityMode: 'mature' },
+      updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+      updatePolicySources: { maturityMode: 'env' },
+    }),
+  );
+
+  expect(updated.updatePolicyOverrides).toEqual({});
+  expect(updated.updatePolicySources).toEqual({ maturityMode: 'env' });
+});
+
 test('updateContainer should preserve updateRollback when omitted from payload', async () => {
   const existingContainer = {
     data: createContainerFixture({
@@ -3062,20 +3103,30 @@ describe('hasContainerChanged', () => {
 
   test('should return true when declarative update policy metadata changes', () => {
     const a = createContainerFixture({
-      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      updatePolicy: {
+        maturityMode: 'mature',
+        maturityMinAgeDays: 7,
+        skipDigests: ['sha256:a'],
+      },
       updatePolicyDeclarative: {
-        env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        env: { maturityMode: 'mature', maturityMinAgeDays: 7, skipDigests: ['sha256:a'] },
         label: {},
       },
       updatePolicySources: { maturityMode: 'env', maturityMinAgeDays: 'env' },
+      updatePolicyOverrides: { skipDigests: ['sha256:a'] },
     });
     const b = createContainerFixture({
-      updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 14 },
+      updatePolicy: {
+        maturityMode: 'mature',
+        maturityMinAgeDays: 14,
+        skipDigests: ['sha256:a'],
+      },
       updatePolicyDeclarative: {
-        env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        env: { maturityMode: 'mature', maturityMinAgeDays: 7, skipDigests: ['sha256:a'] },
         label: { maturityMinAgeDays: 14 },
       },
       updatePolicySources: { maturityMode: 'env', maturityMinAgeDays: 'label' },
+      updatePolicyOverrides: { skipDigests: ['sha256:a'] },
     });
 
     expect(container.hasContainerChanged(a, b)).toBe(true);
@@ -4455,6 +4506,30 @@ describe('updatePolicyRetentionCache carry-forward (#496)', () => {
       maturityMinAgeDays: 14,
       skipTags: ['new-label'],
     });
+  });
+
+  test('uses an explicit replacement override instead of the retained controller override', () => {
+    const oldFixture = makePolicyFixture({
+      id: 'policy-layered-explicit-old',
+      updatePolicy: { maturityMode: 'all' },
+      updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+      updatePolicyOverrides: { maturityMode: 'all' },
+      updatePolicySources: { maturityMode: 'override' },
+    });
+    mountWith([{ data: oldFixture }]);
+
+    container.deleteContainer('policy-layered-explicit-old', { replacementExpected: true });
+    const inserted = container.insertContainer(
+      makePolicyFixture({
+        id: 'policy-layered-explicit-new',
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 21 },
+        updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+        updatePolicyOverrides: { maturityMinAgeDays: 21 },
+        updatePolicySources: { maturityMode: 'env', maturityMinAgeDays: 'override' },
+      }),
+    );
+
+    expect(inserted.updatePolicyOverrides).toEqual({ maturityMinAgeDays: 21 });
   });
 
   // The reported topology. insertContainer's security/lifecycle restores are gated behind

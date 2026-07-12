@@ -266,6 +266,15 @@ test('getWatcherConfiguration should normalize declarative maturity defaults to 
   delete configuration.ddEnvVars.DD_WATCHER_LOCAL_MATURITY_MIN_AGE_DAYS;
 });
 
+test('getWatcherConfiguration should not apply maturity aliases without a watcher name', () => {
+  configuration.ddEnvVars.DD_WATCHER__MATURITY_MODE = 'mature';
+
+  const watcherConfigurations = configuration.getWatcherConfigurations();
+
+  expect(watcherConfigurations['']).toEqual({});
+  delete configuration.ddEnvVars.DD_WATCHER__MATURITY_MODE;
+});
+
 test('getWatcherConfiguration should map MAINTENANCE_WINDOW aliases', async () => {
   configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW = '0 2 * * *';
   configuration.ddEnvVars.DD_WATCHER_LOCAL_MAINTENANCE_WINDOW_TZ = 'Europe/Paris';

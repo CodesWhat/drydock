@@ -44,6 +44,19 @@ function getUpdatedPolicy(storeContainer: { updateContainer: ReturnType<typeof v
   return storeContainer.updateContainer.mock.calls[0]?.[0]?.updatePolicy;
 }
 
+function createLayeredHarness(containerOverrides: Record<string, unknown> = {}) {
+  return createHarness({
+    updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+    updatePolicyDeclarative: {
+      env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+      label: {},
+    },
+    updatePolicyOverrides: {},
+    updatePolicySources: { maturityMode: 'env', maturityMinAgeDays: 'env' },
+    ...containerOverrides,
+  });
+}
+
 describe('api/container/update-policy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -51,6 +64,13 @@ describe('api/container/update-policy', () => {
   });
 
   describe('request validation', () => {
+    test('returns 400 when the body is missing', () => {
+      const harness = createHarness();
+      const res = callPatchContainerUpdatePolicy(harness.handlers, undefined);
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Action is required' });
+    });
+
     test('returns 400 when body is a primitive and action cannot be read', () => {
       const harness = createHarness();
 
@@ -417,7 +437,221 @@ describe('api/container/update-policy', () => {
     });
   });
 
+  describe('layered policy actions', () => {
+    test.each([
+      ['tag', '2.0.0', 'skipTags'],
+      ['digest', 'sha256:new', 'skipDigests'],
+    ] as const)('skips the current %s using the effective list as the override base', (kind, value, field) => {
+      const harness = createLayeredHarness({
+        updateKind: { kind, remoteValue: value },
+        updatePolicy: {
+          maturityMode: 'mature',
+          maturityMinAgeDays: 7,
+          [field]: ['existing'],
+        },
+      });
+
+      const res = callPatchContainerUpdatePolicy(harness.handlers, { action: 'skip-current' });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(
+        harness.storeContainer.updateContainer.mock.calls[0][0].updatePolicyOverrides[field],
+      ).toEqual(['existing', value]);
+    });
+
+    test('skips the current value when neither effective nor override skip lists exist', () => {
+      const harness = createLayeredHarness({
+        updateKind: { kind: 'tag', remoteValue: '2.0.0' },
+      });
+      callPatchContainerUpdatePolicy(harness.handlers, { action: 'skip-current' });
+      expect(harness.storeContainer.updateContainer.mock.calls[0][0].updatePolicyOverrides).toEqual(
+        {
+          skipTags: ['2.0.0'],
+        },
+      );
+    });
+
+    test.each([
+      [{ action: 'skip-current' }, {}, 'No current update available to skip'],
+      [
+        { action: 'skip-current' },
+        { updateKind: { kind: 'tag' } },
+        'No update value available to skip',
+      ],
+      [
+        { action: 'remove-skip', kind: 'version', value: 'x' },
+        {},
+        'Invalid remove-skip kind; expected "tag" or "digest"',
+      ],
+      [
+        { action: 'remove-skip', kind: 'tag', value: ' ' },
+        {},
+        'Invalid remove-skip value; expected a non-empty string',
+      ],
+      [
+        { action: 'remove-skip', kind: 'tag', value: 42 },
+        {},
+        'Invalid remove-skip value; expected a non-empty string',
+      ],
+      [
+        { action: 'set-maturity-policy', mode: 'fresh' },
+        {},
+        'Invalid maturity mode; expected "all" or "mature"',
+      ],
+      [
+        { action: 'revert-to-declarative', field: 'unknown' },
+        {},
+        'Invalid declarative policy field',
+      ],
+      [{ action: 'not-real' }, {}, 'Unknown action not-real'],
+    ])('rejects invalid layered action %#', (body, overrides, error) => {
+      const harness = createLayeredHarness(overrides);
+      const res = callPatchContainerUpdatePolicy(harness.handlers, body);
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error });
+    });
+
+    test.each([
+      ['tag', 'skipTags'],
+      ['digest', 'skipDigests'],
+    ] as const)('removes a layered %s skip', (kind, field) => {
+      const harness = createLayeredHarness({
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7, [field]: ['old', 'keep'] },
+        updatePolicyOverrides: { [field]: ['old', 'keep'] },
+      });
+      callPatchContainerUpdatePolicy(harness.handlers, {
+        action: 'remove-skip',
+        kind,
+        value: 'old',
+      });
+      expect(
+        harness.storeContainer.updateContainer.mock.calls[0][0].updatePolicyOverrides[field],
+      ).toEqual(['keep']);
+    });
+
+    test('supports layered clear, snooze, unsnooze, maturity-clear, and whole revert actions', () => {
+      const clearSkips = createLayeredHarness();
+      callPatchContainerUpdatePolicy(clearSkips.handlers, { action: 'clear-skips' });
+      expect(
+        clearSkips.storeContainer.updateContainer.mock.calls[0][0].updatePolicyOverrides,
+      ).toMatchObject({
+        skipTags: [],
+        skipDigests: [],
+      });
+
+      const snooze = createLayeredHarness();
+      callPatchContainerUpdatePolicy(snooze.handlers, {
+        action: 'snooze',
+        snoozeUntil: '2030-01-01T00:00:00.000Z',
+      });
+      expect(
+        snooze.storeContainer.updateContainer.mock.calls[0][0].updatePolicyOverrides.snoozeUntil,
+      ).toBe('2030-01-01T00:00:00.000Z');
+
+      const unsnooze = createLayeredHarness({
+        updatePolicyOverrides: { snoozeUntil: '2030-01-01T00:00:00.000Z' },
+      });
+      callPatchContainerUpdatePolicy(unsnooze.handlers, { action: 'unsnooze' });
+      expect(
+        unsnooze.storeContainer.updateContainer.mock.calls[0][0].updatePolicyOverrides,
+      ).toEqual({});
+
+      const clearMaturity = createLayeredHarness({
+        updatePolicyOverrides: { maturityMode: 'mature', maturityMinAgeDays: 21 },
+      });
+      callPatchContainerUpdatePolicy(clearMaturity.handlers, { action: 'clear-maturity-policy' });
+      expect(
+        clearMaturity.storeContainer.updateContainer.mock.calls[0][0].updatePolicyOverrides,
+      ).toEqual({
+        maturityMode: 'all',
+      });
+
+      const revertAll = createLayeredHarness({
+        updatePolicyOverrides: {
+          maturityMode: 'all',
+          skipTags: [],
+          snoozeUntil: '2030-01-01T00:00:00.000Z',
+        },
+      });
+      callPatchContainerUpdatePolicy(revertAll.handlers, { action: 'revert-to-declarative' });
+      expect(
+        revertAll.storeContainer.updateContainer.mock.calls[0][0].updatePolicyOverrides,
+      ).toEqual({
+        snoozeUntil: '2030-01-01T00:00:00.000Z',
+      });
+
+      const clear = createLayeredHarness({ updatePolicyOverrides: { maturityMode: 'all' } });
+      callPatchContainerUpdatePolicy(clear.handlers, { action: 'clear' });
+      expect(clear.storeContainer.updateContainer.mock.calls[0][0].updatePolicyOverrides).toEqual(
+        {},
+      );
+    });
+
+    test('does not audit setting an override to the same normalized value', () => {
+      const harness = createLayeredHarness({
+        updatePolicy: { maturityMode: 'all', maturityMinAgeDays: 7 },
+        updatePolicyOverrides: { maturityMode: 'all', maturityMinAgeDays: 7 },
+      });
+      callPatchContainerUpdatePolicy(harness.handlers, {
+        action: 'set-maturity-policy',
+        mode: 'all',
+        minAgeDays: 7,
+      });
+      expect(harness.deps.recordAuditEvent).not.toHaveBeenCalled();
+    });
+
+    test('removes a skip from an empty effective layered list', () => {
+      const harness = createLayeredHarness();
+      callPatchContainerUpdatePolicy(harness.handlers, {
+        action: 'remove-skip',
+        kind: 'digest',
+        value: 'sha256:none',
+      });
+      expect(harness.storeContainer.updateContainer.mock.calls[0][0].updatePolicyOverrides).toEqual(
+        {
+          skipDigests: [],
+        },
+      );
+    });
+
+    test('serializes absent and undefined audit tier values as null', () => {
+      const harness = createLayeredHarness({
+        updatePolicyDeclarative: { env: { maturityMode: undefined }, label: {} },
+      });
+      harness.storeContainer.updateContainer.mockImplementation((value) => {
+        delete value.updatePolicySources;
+        return value;
+      });
+
+      callPatchContainerUpdatePolicy(harness.handlers, {
+        action: 'set-maturity-policy',
+        mode: 'mature',
+        minAgeDays: 7,
+      });
+
+      const details = JSON.parse(harness.deps.recordAuditEvent.mock.calls[0][0].details);
+      expect(details.fields.maturityMode).toMatchObject({ env: null, label: null, source: null });
+    });
+  });
+
   describe('error handling', () => {
+    test('returns 404 when the container does not exist', () => {
+      const harness = createHarness();
+      harness.storeContainer.getContainer.mockReturnValue(undefined);
+
+      const res = callPatchContainerUpdatePolicy(harness.handlers, { action: 'clear' });
+
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Container not found' });
+    });
+
+    test('returns 400 for an unknown legacy action', () => {
+      const harness = createHarness();
+      const res = callPatchContainerUpdatePolicy(harness.handlers, { action: 'not-real' });
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: 'Unknown action not-real' });
+    });
+
     test('returns a generic error when unexpected failures occur', () => {
       const harness = createHarness();
       harness.storeContainer.updateContainer.mockImplementation(() => {

@@ -152,7 +152,10 @@ function applyLayeredPolicyAction(
         }
         delete overrides[body.field];
       } else {
-        for (const field of DECLARATIVE_UPDATE_POLICY_FIELDS) delete overrides[field];
+        delete overrides.maturityMode;
+        delete overrides.maturityMinAgeDays;
+        delete overrides.skipTags;
+        delete overrides.skipDigests;
       }
       return { policy: overrides };
     case 'clear':

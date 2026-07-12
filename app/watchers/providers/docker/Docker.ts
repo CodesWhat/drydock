@@ -171,7 +171,6 @@ export interface DockerWatcherConfiguration extends ComponentConfiguration {
 
 const START_WATCHER_DELAY_MS = 1000;
 
-// Debounce delay used when performing a watch after a docker event has been received
 const DEBOUNCED_WATCH_CRON_MS = 5000;
 const DOCKER_EVENTS_BUFFER_MAX_BYTES = 1024 * 1024;
 const MAINTENANCE_WINDOW_QUEUE_POLL_MS = 60 * 1000;

@@ -916,9 +916,6 @@ function normalizeContainerTriggerLabelFields<T extends Partial<container.Contai
  * arrives under a fresh Docker id, hence via insertContainer) can inherit it.
  */
 function stashUpdatePolicyForReplacement(containerRaw) {
-  if (!containerRaw) {
-    return;
-  }
   const updatePolicyOverrides = getUpdatePolicyOverrides(containerRaw);
   if (Object.keys(updatePolicyOverrides).length === 0) {
     return;

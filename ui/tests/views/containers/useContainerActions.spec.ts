@@ -624,6 +624,22 @@ describe('useContainerActions', () => {
     );
   });
 
+  it('normalizes an invalid maturity override to the allow-all comparison fallback', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      containerMetaMap: {
+        'container-1': {
+          updatePolicyDeclarative: { env: {}, label: {} },
+          updatePolicyOverrides: { maturityMode: 'invalid' },
+        },
+      },
+    });
+
+    expect(composable.selectedPolicyOverrideFields.value).toEqual(new Set(['maturityMode']));
+    expect(composable.selectedPolicyOverriddenFields.value).toEqual(new Set());
+  });
+
   it('reverts one field or all declarative overrides', async () => {
     const container = makeContainer({ id: 'container-1', name: 'web' });
     const { composable } = await mountActionsHarness({
