@@ -307,6 +307,32 @@ describe('DashboardRecentUpdatesWidget', () => {
     expect(updateBtn.attributes('disabled')).toBeUndefined();
   });
 
+  it('offers a manual Update Now action for a maturity-blocked row', async () => {
+    const row = makeRecentUpdate({
+      id: 'c-maturing',
+      status: 'maturity-blocked',
+      updateEligibility: {
+        eligible: false,
+        evaluatedAt: '2026-07-12T12:00:00.000Z',
+        blockers: [
+          {
+            reason: 'maturity-not-reached',
+            severity: 'soft',
+            message: 'Update is still maturing.',
+            actionable: true,
+            liftableAt: '2026-07-15T12:00:00.000Z',
+          },
+        ],
+      },
+    });
+    const wrapper = mountWidget({ recentUpdates: [row] });
+
+    const updateBtn = wrapper.get('[data-test="dashboard-update-btn"]');
+    await updateBtn.trigger('click');
+
+    expect(wrapper.emitted('confirmUpdate')?.[0]?.[0]).toEqual(row);
+  });
+
   it('emits openContainer with the row payload when a data table row is clicked', async () => {
     const row = makeRecentUpdate({ id: 'c1', name: 'nginx' });
     const wrapper = mountWidget({ recentUpdates: [row] });

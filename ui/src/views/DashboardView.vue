@@ -28,7 +28,7 @@ import {
   runContainerUpdateRequest,
 } from '../utils/container-update';
 import { errorMessage } from '../utils/error';
-import { getPrimaryHardBlocker } from '../utils/update-eligibility';
+import { getPrimaryHardBlocker, getSoftBlockers } from '../utils/update-eligibility';
 import type { ContainerStatsSummarySnapshot } from '../services/stats';
 import DashboardHostStatusWidget from './dashboard/components/DashboardHostStatusWidget.vue';
 import DashboardRecentUpdatesWidget from './dashboard/components/DashboardRecentUpdatesWidget.vue';
@@ -589,11 +589,20 @@ function confirmDashboardUpdate(row: RecentUpdateRow) {
     toast.warning(hardBlocker?.message ?? t('dashboardView.recentUpdates.securityBlocked'));
     return;
   }
+  const softBlockers = getSoftBlockers(row.updateEligibility);
+  let message = t('dashboardView.confirm.updateContainer.message', { name: row.name });
+  if (softBlockers.length > 0) {
+    const list = softBlockers.map((blocker) => `• ${blocker.message}`).join('\n');
+    message += t('containerComponents.confirmDialogs.update.softBlockerSuffix', { list });
+  }
   confirm.require({
     header: t('dashboardView.confirm.updateContainer.header'),
-    message: t('dashboardView.confirm.updateContainer.message', { name: row.name }),
+    message,
     severity: 'warn',
-    acceptLabel: t('dashboardView.confirm.updateContainer.accept'),
+    acceptLabel:
+      softBlockers.length > 0
+        ? t('containerComponents.confirmDialogs.update.acceptLabelOverride')
+        : t('dashboardView.confirm.updateContainer.accept'),
     rejectLabel: t('common.cancel'),
     accept: async () => {
       dashboardUpdateInProgress.value = row.id;

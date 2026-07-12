@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useNow } from '../../composables/useNow';
 import type { UpdateBlocker, UpdateBlockerReason, UpdateEligibility } from '../../types/container';
 import { severityOf } from '../../utils/update-eligibility';
 
@@ -32,6 +33,30 @@ const activeBlockers = computed<UpdateBlocker[]>(() => {
 });
 
 const shouldRender = computed(() => activeBlockers.value.length > 0);
+const nowMs = useNow(60_000, () =>
+  activeBlockers.value.some(
+    (blocker) =>
+      blocker.reason === 'maturity-not-reached' &&
+      blocker.liftableAt !== undefined &&
+      Number.isFinite(Date.parse(blocker.liftableAt)),
+  ),
+);
+
+function formatMaturityCountdown(blocker: UpdateBlocker): string | undefined {
+  if (blocker.reason !== 'maturity-not-reached' || !blocker.liftableAt) return undefined;
+
+  const liftableAtMs = Date.parse(blocker.liftableAt);
+  if (!Number.isFinite(liftableAtMs)) return undefined;
+
+  const totalMinutes = Math.max(0, Math.ceil((liftableAtMs - nowMs.value) / 60_000));
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
 
 function reasonIcon(reason: UpdateBlockerReason): string {
   switch (reason) {
@@ -138,10 +163,13 @@ function blockerTooltip(blocker: UpdateBlocker): string {
 
 function formatLiftableAt(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString(undefined, {
+    return new Date(iso).toLocaleString(undefined, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
     });
   } catch {
     return iso;
@@ -169,8 +197,16 @@ function formatLiftableAt(iso: string): string {
         <span class="font-semibold block">{{ reasonLabel(blocker.reason) }}</span>
         <span class="block whitespace-normal break-words">{{ blocker.message }}</span>
         <span v-if="blocker.actionHint" class="block mt-0.5 opacity-80">{{ blocker.actionHint }}</span>
-        <span v-if="blocker.liftableAt" class="block mt-0.5 opacity-80">
-          {{ t('containerComponents.eligibilityBadges.liftsLabel') }} {{ formatLiftableAt(blocker.liftableAt) }}
+        <span
+          v-if="blocker.liftableAt"
+          class="block mt-0.5 opacity-80"
+          :data-test="blocker.reason === 'maturity-not-reached' ? 'maturity-countdown' : undefined"
+        >
+          {{ t('containerComponents.eligibilityBadges.liftsLabel') }}
+          <template v-if="formatMaturityCountdown(blocker)">
+            {{ formatMaturityCountdown(blocker) }} ·
+          </template>
+          {{ formatLiftableAt(blocker.liftableAt) }}
         </span>
       </div>
     </div>

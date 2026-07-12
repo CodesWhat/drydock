@@ -915,6 +915,48 @@ describe('request-update', () => {
       expect(mockInsertOperation).toHaveBeenCalled();
     });
 
+    test('allows manual Update Now for a raw candidate suppressed by the maturity gate', async () => {
+      const trigger = {
+        type: 'docker',
+        trigger: vi.fn().mockResolvedValue(undefined),
+        agent: undefined,
+        configuration: { threshold: 'all' },
+        getId: () => 'docker.update',
+        isTriggerIncluded: () => true,
+        isTriggerExcluded: () => false,
+      };
+      mockGetState.mockReturnValue({ trigger: { 'docker.update': trigger } });
+
+      const maturitySuppressed = createContainerWithRawUpdate({
+        updateAvailable: false,
+        updateDetectedAt: '2026-07-12T12:00:00.000Z',
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 3 },
+      });
+
+      const accepted = await requestContainerUpdate(maturitySuppressed, {
+        trigger: { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) },
+      });
+
+      expect(accepted.operationId).toBeDefined();
+      expect(mockInsertOperation).toHaveBeenCalled();
+    });
+
+    test('keeps automatic enqueue blocked for a raw candidate suppressed by maturity', async () => {
+      await expect(
+        enqueueContainerUpdate(
+          createContainerWithRawUpdate({
+            updateAvailable: false,
+            updateDetectedAt: '2026-07-12T12:00:00.000Z',
+            updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 3 },
+          }),
+          { trigger: { type: 'docker', trigger: vi.fn().mockResolvedValue(undefined) } },
+        ),
+      ).rejects.toMatchObject<Partial<UpdateRequestError>>({
+        statusCode: 400,
+        message: 'No update available for this container',
+      });
+    });
+
     test('allows manual update when only soft blockers (trigger-excluded) are present', async () => {
       const trigger = {
         type: 'docker',

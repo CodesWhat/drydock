@@ -4070,6 +4070,42 @@ describe('updateLifecycleCache carry-forward', () => {
     }
   });
 
+  test('restarts recreated-container soak when a mutable tag candidate changes by created time', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-06-03T12:00:00.000Z'));
+      const oldDetectedAt = '2026-06-01T12:00:00.000Z';
+      const oldFixture = makeDigestUpdateFixture({
+        id: 'lifecycle-created-old',
+        image: {
+          ...createContainerFixture().image,
+          digest: { watch: false, repo: undefined },
+        },
+        result: { tag: 'version', created: '2026-06-01T00:00:00.000Z' },
+        updateDetectedAt: oldDetectedAt,
+        firstSeenAt: oldDetectedAt,
+      });
+      const collection = createFilterableCollection([{ data: oldFixture }]);
+      container.createCollections({ getCollection: () => collection, addCollection: () => null });
+      container.deleteContainer('lifecycle-created-old', { replacementExpected: true });
+
+      const newFixture = makeDigestUpdateFixture({
+        id: 'lifecycle-created-new',
+        image: {
+          ...createContainerFixture().image,
+          digest: { watch: false, repo: undefined },
+        },
+        result: { tag: 'version', created: '2026-06-02T00:00:00.000Z' },
+      });
+      const inserted = container.insertContainer(newFixture);
+
+      expect(inserted.updateDetectedAt).toBe('2026-06-03T12:00:00.000Z');
+      expect(inserted.updateDetectedAt).not.toBe(oldDetectedAt);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('mature-mode soak clock survives container recreation', () => {
     const twelveHoursAgo = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
     const oldFixture = makeDigestUpdateFixture({

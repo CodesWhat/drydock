@@ -456,15 +456,19 @@ function updateKindInitial(kind?: string): string {
               <AppIcon name="lock" :size="14" />
             </span>
             <AppIconButton
-              v-else-if="row.status === 'pending'"
+              v-else-if="row.status === 'pending' || row.status === 'maturity-blocked'"
               icon="cloud-download"
               size="toolbar"
-              variant="plain"
+              :variant="row.status === 'maturity-blocked' ? 'warning' : 'plain'"
               data-test="dashboard-update-btn"
               class="dd-rounded-sm transition-colors"
-              :class="dashboardUpdateInProgress === row.id
-                ? 'dd-text-muted opacity-50 cursor-not-allowed'
-                : 'dd-text-muted hover:dd-text-success hover:dd-bg-elevated'"
+              :class="
+                dashboardUpdateInProgress === row.id
+                  ? 'dd-text-muted opacity-50 cursor-not-allowed'
+                  : row.status === 'maturity-blocked'
+                    ? 'dd-text-warning hover:dd-bg-elevated'
+                    : 'dd-text-muted hover:dd-text-success hover:dd-bg-elevated'
+              "
               :disabled="dashboardUpdateInProgress === row.id"
               :loading="dashboardUpdateInProgress === row.id"
               :tooltip="t('dashboardView.recentUpdates.updateContainer')"

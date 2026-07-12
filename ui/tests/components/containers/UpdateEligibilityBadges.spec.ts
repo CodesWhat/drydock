@@ -310,9 +310,114 @@ describe('UpdateEligibilityBadges', () => {
   });
 
   describe('liftableAt formatting', () => {
+    it('shows a live ETA countdown for a maturing update', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-12T12:00:00.000Z'));
+
+      try {
+        const wrapper = mount(UpdateEligibilityBadges, {
+          props: {
+            eligibility: makeEligibility({
+              blockers: [
+                makeBlocker({
+                  reason: 'maturity-not-reached',
+                  message: 'Update is still maturing.',
+                  liftableAt: '2026-07-13T14:30:00.000Z',
+                }),
+              ],
+            }),
+          },
+          global: globalConfig,
+        });
+
+        expect(wrapper.get('[data-test="maturity-countdown"]').text()).toContain('1d 2h 30m');
+
+        await vi.advanceTimersByTimeAsync(60_000);
+
+        expect(wrapper.get('[data-test="maturity-countdown"]').text()).toContain('1d 2h 29m');
+        wrapper.unmount();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('restarts the visible ETA when a new candidate supplies a later lift time', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-07-12T12:00:00.000Z'));
+
+      try {
+        const wrapper = mount(UpdateEligibilityBadges, {
+          props: {
+            eligibility: makeEligibility({
+              blockers: [
+                makeBlocker({
+                  reason: 'maturity-not-reached',
+                  message: 'Update is still maturing.',
+                  liftableAt: '2026-07-12T14:00:00.000Z',
+                }),
+              ],
+            }),
+          },
+          global: globalConfig,
+        });
+
+        expect(wrapper.get('[data-test="maturity-countdown"]').text()).toContain('2h 0m');
+
+        await wrapper.setProps({
+          eligibility: makeEligibility({
+            blockers: [
+              makeBlocker({
+                reason: 'maturity-not-reached',
+                message: 'A newer update restarted the maturity window.',
+                liftableAt: '2026-07-13T12:00:00.000Z',
+              }),
+            ],
+          }),
+        });
+
+        expect(wrapper.get('[data-test="maturity-countdown"]').text()).toContain('1d 0h 0m');
+        wrapper.unmount();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('keeps non-maturity lift times static and does not start a countdown timer', () => {
+      vi.useFakeTimers();
+      const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+
+      try {
+        const wrapper = mount(UpdateEligibilityBadges, {
+          props: {
+            eligibility: makeEligibility({
+              blockers: [
+                makeBlocker({
+                  reason: 'snoozed',
+                  message: 'Snoozed.',
+                  liftableAt: '2026-07-13T12:00:00.000Z',
+                }),
+              ],
+            }),
+          },
+          global: globalConfig,
+        });
+
+        expect(wrapper.find('[data-test="maturity-countdown"]').exists()).toBe(false);
+        expect(setIntervalSpy).not.toHaveBeenCalled();
+        wrapper.unmount();
+      } finally {
+        setIntervalSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    });
+
     it('formats a valid ISO date without throwing', () => {
-      expect(() =>
-        mount(UpdateEligibilityBadges, {
+      const toLocaleStringSpy = vi
+        .spyOn(Date.prototype, 'toLocaleString')
+        .mockReturnValue('Jul 4, 2026, 12:00 AM UTC');
+
+      try {
+        const wrapper = mount(UpdateEligibilityBadges, {
           props: {
             eligibility: makeEligibility({
               blockers: [
@@ -325,8 +430,16 @@ describe('UpdateEligibilityBadges', () => {
             }),
           },
           global: globalConfig,
-        }),
-      ).not.toThrow();
+        });
+
+        expect(wrapper.text()).toContain('Jul 4, 2026, 12:00 AM UTC');
+        expect(toLocaleStringSpy).toHaveBeenCalledWith(
+          undefined,
+          expect.objectContaining({ hour: 'numeric', minute: '2-digit' }),
+        );
+      } finally {
+        toLocaleStringSpy.mockRestore();
+      }
     });
 
     it('handles invalid ISO date gracefully without throwing', () => {

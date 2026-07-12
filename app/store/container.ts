@@ -106,11 +106,12 @@ function toCacheKey(watcher, name) {
 }
 
 function getResultSignature(
-  c: { result?: { tag?: unknown; digest?: unknown } } | undefined,
+  c: { result?: { tag?: unknown; digest?: unknown; created?: unknown } } | undefined,
 ): string {
   return JSON.stringify({
     tag: c?.result?.tag ?? null,
     digest: c?.result?.digest ?? null,
+    created: c?.result?.created ?? null,
   });
 }
 

@@ -2058,6 +2058,37 @@ describe('DashboardView', () => {
       expect(mockUpdateContainer).not.toHaveBeenCalled();
     });
 
+    it('warns before manually overriding a maturity-blocked update from the dashboard', async () => {
+      const maturingContainer = makeContainer({
+        id: 'c-maturing',
+        name: 'maturing-nginx',
+        newTag: '2.0.0',
+        updateKind: 'major',
+        updatePolicyState: 'maturity-blocked',
+        updateEligibility: {
+          eligible: false,
+          evaluatedAt: '2026-07-12T12:00:00.000Z',
+          blockers: [
+            {
+              reason: 'maturity-not-reached',
+              severity: 'soft',
+              message: 'Update is still maturing for 3 more days.',
+              actionable: true,
+              liftableAt: '2026-07-15T12:00:00.000Z',
+            },
+          ],
+        },
+      });
+      const wrapper = await mountDashboard([maturingContainer]);
+      const { useConfirmDialog } = await import('@/composables/useConfirmDialog');
+      const confirm = useConfirmDialog();
+
+      await wrapper.find('[data-test="dashboard-update-btn"]').trigger('click');
+
+      expect(confirm.current.value?.message).toContain('Update is still maturing for 3 more days.');
+      expect(confirm.current.value?.acceptLabel).toBe('Update anyway');
+    });
+
     it('shows the shared update-started toast when a single dashboard update starts successfully', async () => {
       mockUpdateContainer.mockResolvedValueOnce({});
       const wrapper = await mountDashboard(

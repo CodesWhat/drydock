@@ -5,7 +5,7 @@ import {
 } from '../api/docker-trigger.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
-import type { Container } from '../model/container.js';
+import { type Container, hasRawUpdate } from '../model/container.js';
 import {
   computeUpdateEligibility,
   getPrimaryHardBlocker,
@@ -76,9 +76,11 @@ interface EnqueueContainerUpdateOptions {
   trigger?: UpdateTriggerLike;
   triggerTypes?: UpdateTriggerType[];
   operationId?: string;
+  allowSoftPolicyOverride?: boolean;
 }
 
-export interface RequestContainerUpdateOptions extends EnqueueContainerUpdateOptions {}
+export interface RequestContainerUpdateOptions
+  extends Omit<EnqueueContainerUpdateOptions, 'allowSoftPolicyOverride'> {}
 
 const DEFAULT_UPDATE_TRIGGER_TYPES: UpdateTriggerType[] = ['docker', 'dockercompose'];
 const log = logger.child({ component: 'updates.request-update' });
@@ -246,7 +248,14 @@ function prepareContainerUpdateRequest(
     );
   }
 
-  if (!container.updateAvailable) {
+  // A user-initiated request may intentionally override a soft policy gate. Those
+  // gates suppress the public updateAvailable getter, but the raw candidate is
+  // still present in image/result and remains safe to pass through hard-blocker
+  // enforcement below. Reject only when there is genuinely no candidate.
+  if (
+    !container.updateAvailable &&
+    !(options.allowSoftPolicyOverride === true && hasRawUpdate(container))
+  ) {
     throw new UpdateRequestError(400, 'No update available for this container');
   }
 
@@ -254,9 +263,8 @@ function prepareContainerUpdateRequest(
   // skip-tag/digest, trigger-not-included/excluded) still allow manual update — that
   // mirrors the badge layer's "warn but allow" stance for user-policy gates.
   //
-  // We trust container.updateAvailable (checked above) as the source of truth for
-  // "an update exists" and ignore eligibility's no-update-available short-circuit, which
-  // uses a stricter raw-tag/digest comparison meant for the watch loop.
+  // The raw-candidate check above is the source of truth for "an update exists"
+  // when a soft gate deliberately makes updateAvailable false.
   const eligibility = computeUpdateEligibility(container, {
     triggers: registry.getState().trigger,
     getActiveOperation: () => undefined,
@@ -441,7 +449,10 @@ export async function requestContainerUpdate(
   container: Container,
   options: RequestContainerUpdateOptions = {},
 ): Promise<AcceptedContainerUpdateRequest> {
-  const accepted = await enqueueContainerUpdate(container, options);
+  const accepted = await enqueueContainerUpdate(container, {
+    ...options,
+    allowSoftPolicyOverride: true,
+  });
   dispatchAccepted([accepted]);
   return accepted;
 }
@@ -450,7 +461,10 @@ export async function requestContainerUpdates(
   containers: Container[],
   options: RequestContainerUpdateOptions = {},
 ): Promise<ContainerUpdateRequestBatchResult> {
-  const result = await enqueueContainerUpdates(containers, options);
+  const result = await enqueueContainerUpdates(containers, {
+    ...options,
+    allowSoftPolicyOverride: true,
+  });
   dispatchAccepted(result.accepted);
   return result;
 }
