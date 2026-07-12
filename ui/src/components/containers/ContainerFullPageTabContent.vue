@@ -9,7 +9,6 @@ import ContainerStats from './ContainerStats.vue';
 import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
 import UpdateEligibilityBadges from './UpdateEligibilityBadges.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
-import UpdateInsightBadge from './UpdateInsightBadge.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
 import ProjectLink from './ProjectLink.vue';
@@ -339,10 +338,9 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 :reason="selectedContainer.noUpdateReason"
                 variant="inline"
               />
-              <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag || selectedContainer.updateInsight || (selectedContainer.tagPrecision === 'floating' && !selectedContainer.imageDigestWatch)" class="flex items-center gap-1.5 flex-wrap">
+              <div v-if="selectedContainer.updateKind || selectedContainer.updateMaturity || selectedContainer.suggestedTag || (selectedContainer.tagPrecision === 'floating' && !selectedContainer.imageDigestWatch)" class="flex items-center gap-1.5 flex-wrap">
                 <UpdateMaturityBadge :maturity="selectedContainer.updateMaturity" :tooltip="selectedContainer.updateMaturityTooltip" />
                 <SuggestedTagBadge :tag="selectedContainer.suggestedTag" :current-tag="selectedContainer.currentTag" />
-                <UpdateInsightBadge :insight="selectedContainer.updateInsight" />
                 <FloatingTagBadge
                   :tag-precision="selectedContainer.tagPrecision"
                   :image-digest-watch="selectedContainer.imageDigestWatch"

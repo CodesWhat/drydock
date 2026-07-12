@@ -1176,7 +1176,7 @@ describe('ContainersGroupedViews', () => {
     const updateState = row.get('[data-test="container-update-state"]');
     // The list column no longer shows the "Newer available" text badge (it clipped);
     // the state label becomes the neutral "Pinned" state and the kind word moves to
-    // a small info-palette pill instead of UpdateInsightBadge.
+    // a small info-palette pill instead.
     expect(updateState.text()).toContain('Pinned');
     expect(updateState.find('[data-test="update-insight-badge"]').exists()).toBe(false);
     const kindBadge = updateState.get('[data-test="update-insight-kind-badge"]');
@@ -1204,15 +1204,51 @@ describe('ContainersGroupedViews', () => {
     const { wrapper } = await mountCardsWithContainers([pinned], 800);
     const card = cardByName(wrapper, 'alpha');
 
-    // Card view keeps UpdateInsightBadge as-is (#498) — it now sits alongside the
-    // stacked current→newer tag view rather than being the only place the newer
-    // tag surfaces.
-    const cardBadge = card.get('[data-test="update-insight-badge"]');
-    expect(cardBadge.text()).toBe('Newer available');
+    // Card view mirrors the list column (#498): the old "Newer available" text
+    // badge is gone, replaced by the same kind-word pill sitting under the
+    // stacked current→newer tag view.
+    expect(card.find('[data-test="update-insight-badge"]').exists()).toBe(false);
+    const cardBadge = card.get('[data-test="update-insight-kind-badge"]');
+    expect(cardBadge.text()).toBe('Minor');
     expect(card.text()).toContain('v1.13.3');
     expect(card.text()).toContain('v1.46.1');
     // Header state badge becomes the neutral "Pinned" state, not the green "Current".
     expect(card.get('[data-test="container-card-update-state"]').text()).toContain('Pinned');
+  });
+
+  it('renders the no-update-reason and update-insight badges together in card mode without contradictory copy (#498)', async () => {
+    const remedy =
+      'Remove the digest-watch override (dd.watch.digest=false label or imgset watch.digest=false) to detect same-tag rebuilds, or set dd.tag.family=loose or add a dd.tag.include filter to allow semver version climbing.';
+    const pinnedDigestOff = makeContainer({
+      id: 'c-insight-plus-reason-card',
+      name: 'alpha',
+      currentTag: 'v1.13.3',
+      newTag: null,
+      updateKind: null,
+      status: 'running',
+      server: 'local-main',
+      registry: 'dockerhub',
+      noUpdateReason: `Pinned tag "v1.13.3": digest watching is disabled for this container, so no actionable update detection is running (a newer same-family tag is still shown for information). ${remedy}`,
+      updateInsight: { tag: 'v1.46.1', kind: 'minor' },
+    });
+
+    const { wrapper } = await mountCardsWithContainers([pinnedDigestOff], 800);
+    const card = cardByName(wrapper, 'alpha');
+
+    // Card view no longer shows the "Newer available" text badge (#498) — the
+    // kind pill and the visible current→newer tag stack replace it, and the
+    // no-update-reason badge still forwards alongside it (backend sets both
+    // together for a pinned tag with digest watching disabled).
+    const kindBadge = card.get('[data-test="update-insight-kind-badge"]');
+    expect(kindBadge.text()).toBe('Minor');
+    expect(card.text()).toContain('v1.46.1');
+
+    const reasonBadge = card.get('[data-test="no-update-reason-badge"]');
+    const reasonText = reasonBadge.attributes('aria-label');
+    // Only ACTIONABLE update detection is off — the insight badge above is
+    // still real, so the reason copy must not claim no detection at all runs.
+    expect(reasonText).toContain('no actionable update detection is running');
+    expect(reasonText).not.toContain('so no update detection is running');
   });
 
   it('renders the no-update-reason and update-insight badges together without contradictory copy when digest watching is off (#498)', async () => {

@@ -947,8 +947,9 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(wrapper.text()).toContain('v2.0.0');
     // Kind pill mirrors how the updateKind badge is positioned in the badge row (#498).
     expect(wrapper.text()).toContain('Minor');
-    // The badge row keeps its own UpdateInsightBadge as-is (#498).
-    expect(wrapper.find('[data-test="update-insight-badge"]').exists()).toBe(true);
+    // The old "Newer available" text badge is gone (#498) — the kind pill above
+    // is now the only signal in that row.
+    expect(wrapper.find('[data-test="update-insight-badge"]').exists()).toBe(false);
   });
 
   it('shows floating tag badge in overview when tag precision is floating and digest watch is disabled', () => {

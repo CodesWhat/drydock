@@ -24,7 +24,6 @@ import {
 } from '../../utils/update-eligibility';
 import type { Container } from '../../types/container';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
-import UpdateInsightBadge from './UpdateInsightBadge.vue';
 import ReleaseNotesLink from './ReleaseNotesLink.vue';
 import ProjectLink from './ProjectLink.vue';
 import ContainersGroupHeader from './ContainersGroupHeader.vue';
@@ -388,8 +387,8 @@ function getUpdateMaturityLabel(maturity: Container['updateMaturity']) {
   return '';
 }
 
-// Same key-selection pattern as UpdateInsightBadge.vue — kept in sync since both
-// surface the same #498 informational tooltip copy for a pinned-tag insight.
+// Shared key-selection pattern for the #498 informational tooltip copy used by
+// every pinned-tag insight pill (list, card, and detail-tab views).
 const UPDATE_INSIGHT_TOOLTIP_KEY_BY_KIND: Record<'major' | 'minor' | 'patch', string> = {
   major: 'containerComponents.updateInsight.tooltipMajor',
   minor: 'containerComponents.updateInsight.tooltipMinor',
@@ -647,7 +646,7 @@ onScopeDispose(() => {
             <div class="container-version-flow">
               <span class="container-version-tag text-2xs-plus dd-text-secondary" v-tooltip.top="c.currentTag">{{ c.currentTag }}</span>
               <AppIcon name="arrow-right" :size="8" class="container-version-arrow dd-text-muted shrink-0" />
-              <CopyableTag :tag="c.updateInsight.tag" class="container-version-tag container-version-tag-target text-2xs-plus font-semibold" :style="{ color: updateInsightColor().text }" v-tooltip.top="tt(updateInsightTooltip(c.updateInsight))" @click.stop>{{ c.updateInsight.tag }}</CopyableTag>
+              <CopyableTag :tag="c.updateInsight.tag" class="container-version-tag container-version-tag-target text-2xs-plus font-semibold" :style="{ color: updateInsightColor().text }" :idle-tooltip="tt(updateInsightTooltip(c.updateInsight))" @click.stop>{{ c.updateInsight.tag }}</CopyableTag>
               <!-- Actionable-detection reason (e.g. digest watch disabled) can still apply
                    even though the pin-gate insight above is real — carry it forward here so
                    it isn't silently dropped now that this branch has its own slot (#498). -->
@@ -1096,6 +1095,7 @@ onScopeDispose(() => {
                       :style="{ color: updateInsightColor().text }" @click.stop>
                   {{ c.updateInsight.tag }}
                 </CopyableTag>
+                <NoUpdateReasonBadge v-if="c.noUpdateReason" :reason="c.noUpdateReason" class="ml-1" />
               </template>
               <template v-else>
                 <CopyableTag :tag="c.currentTag" class="text-xs font-bold dd-text truncate max-w-[120px]" @click.stop>
@@ -1114,7 +1114,17 @@ onScopeDispose(() => {
                  card and blew its height out. Body keeps only the small suggested-tag pill. -->
             <div v-if="c.suggestedTag || c.updateInsight" class="flex items-center gap-2 flex-wrap mt-2">
               <SuggestedTagBadge :tag="c.suggestedTag" :current-tag="c.currentTag" />
-              <UpdateInsightBadge :insight="c.updateInsight" />
+              <!-- #498: mirror the list column's kind-word pill instead of the old
+                   "Newer available" text badge. Full tag + explanation live in the tooltip. -->
+              <AppBadge
+                v-if="c.updateInsight"
+                size="xs"
+                :custom="updateInsightColor()"
+                v-tooltip.top="tt(updateInsightTooltip(c.updateInsight))"
+                data-test="update-insight-kind-badge"
+              >
+                {{ getUpdateKindLabel(c.updateInsight.kind) }}
+              </AppBadge>
             </div>
           </div>
 

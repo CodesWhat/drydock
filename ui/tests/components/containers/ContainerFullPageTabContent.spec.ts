@@ -890,8 +890,9 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.text()).not.toContain('Up to date');
     expect(wrapper.text()).toContain('v2.0.0');
     expect(wrapper.text()).toContain('Minor');
-    // The badge row keeps its own UpdateInsightBadge as-is (#498).
-    expect(wrapper.find('[data-test="update-insight-badge"]').exists()).toBe(true);
+    // The old "Newer available" text badge is gone (#498) — the new Latest row
+    // above already carries the kind pill, so the badge row has nothing left to add.
+    expect(wrapper.find('[data-test="update-insight-badge"]').exists()).toBe(false);
   });
 
   it('keeps the up-to-date pill when there is no newTag and no updateInsight', () => {
