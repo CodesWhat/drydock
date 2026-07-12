@@ -226,6 +226,7 @@ describe('Docker Watcher', () => {
               'die',
               'update',
               'rename',
+              'health_status',
             ],
           },
         },

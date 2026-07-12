@@ -10,6 +10,7 @@ export interface AuditEntry {
     | 'security-alert'
     | 'security-scan-skipped'
     | 'agent-disconnect'
+    | 'container-unhealthy'
     | 'container-added'
     | 'container-removed'
     | 'rollback'

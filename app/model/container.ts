@@ -169,6 +169,7 @@ export interface Container {
   displayName: string;
   displayIcon: string;
   status: string;
+  health?: 'starting' | 'healthy' | 'unhealthy';
   watcher: string;
   agent?: string;
   identityKey?: string;
@@ -278,6 +279,7 @@ const schema = joi.object({
   displayName: joi.string().default(joi.ref('name')),
   displayIcon: joi.string().default('mdi:docker'),
   status: joi.string().default('unknown'),
+  health: joi.string().valid('starting', 'healthy', 'unhealthy').optional(),
   watcher: joi.string().min(1).required(),
   agent: joi.string().optional(),
   identityKey: joi.string().optional(),
@@ -833,12 +835,32 @@ function addResultChangedFunction(container: Container) {
 }
 
 /**
+ * Normalize a raw health value to the known `Container['health']` enum.
+ * The three known Docker health strings pass through unchanged; anything
+ * else — undefined, null, numbers, or a future Docker value like `'none'` —
+ * degrades to `undefined` instead of being treated as a failure state.
+ * @param value
+ * @returns {Container['health']}
+ */
+export function normalizeContainerHealth(value: unknown): Container['health'] {
+  return value === 'starting' || value === 'healthy' || value === 'unhealthy' ? value : undefined;
+}
+
+/**
  * Apply validation to the container object.
  * @param container
  * @returns {*}
  */
 export function validate(container: unknown): Container {
-  const validation = schema.validate(container, { allowUnknown: true });
+  const rawHealth =
+    container && typeof container === 'object'
+      ? (container as { health?: unknown }).health
+      : undefined;
+  const containerToValidate =
+    rawHealth !== undefined && normalizeContainerHealth(rawHealth) === undefined
+      ? { ...(container as Record<string, unknown>), health: undefined }
+      : container;
+  const validation = schema.validate(containerToValidate, { allowUnknown: true });
   if (validation.error) {
     throw new Error(`Error when validating container properties ${validation.error}`);
   }

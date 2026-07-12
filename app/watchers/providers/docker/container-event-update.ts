@@ -1,4 +1,4 @@
-import type { Container } from '../../../model/container.js';
+import { type Container, normalizeContainerHealth } from '../../../model/container.js';
 import { getErrorMessage } from '../../../util/error.js';
 
 import {
@@ -13,6 +13,9 @@ type UnknownRecord = Record<string, unknown>;
 interface DockerContainerInspectLike {
   State: {
     Status: string;
+    Health?: {
+      Status?: string;
+    };
   };
   Name?: string;
   Config?: {
@@ -210,6 +213,8 @@ export function updateContainerFromInspect(
 ) {
   const dockerContainerInspect = containerInspect as DockerContainerInspectLike;
   const newStatus = dockerContainerInspect.State.Status;
+  const newHealth = normalizeContainerHealth(dockerContainerInspect.State.Health?.Status);
+  const oldHealth = containerFound.health;
   const rawName = (dockerContainerInspect.Name || '').replace(/^\//, '');
   const newName = canonicalizeContainerName(rawName, containerFound.id);
   const oldStatus = containerFound.status;
@@ -236,6 +241,12 @@ export function updateContainerFromInspect(
     containerFound.status = newStatus;
     changed = true;
     dependencies.logInfo?.(`Status changed from ${oldStatus} to ${newStatus}`);
+  }
+
+  if (oldHealth !== newHealth) {
+    containerFound.health = newHealth;
+    changed = true;
+    dependencies.logInfo?.(`Health changed from ${oldHealth} to ${newHealth}`);
   }
 
   if (newName !== '' && oldName !== newName) {

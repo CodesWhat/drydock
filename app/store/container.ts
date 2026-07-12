@@ -11,7 +11,12 @@ import { toPositiveInteger } from '../util/parse.js';
 
 const { validate: validateContainer } = container;
 
-import { emitContainerAdded, emitContainerRemoved, emitContainerUpdated } from '../event/index.js';
+import {
+  emitContainerAdded,
+  emitContainerHealthTransition,
+  emitContainerRemoved,
+  emitContainerUpdated,
+} from '../event/index.js';
 import {
   deriveContainerIdentityKey,
   hasRawUpdate,
@@ -703,6 +708,47 @@ function hasContainerChangedWithSecurityHashes(
 }
 
 /**
+ * Determine whether an incoming container health read represents a fresh
+ * "entered unhealthy" transition worth notifying about. Edge-triggered: once
+ * a container's stored health is 'unhealthy', later polls/events that still
+ * read 'unhealthy' do not re-fire. A restart is only inferable when BOTH the
+ * existing and incoming records carry `details.startedAt` — a `startedAt`
+ * appearing for the first time on a pre-existing record (e.g. a store
+ * written by an older version that never inspected on the cron leg) is
+ * first-capture, not a restart. When both sides do carry it and it differs,
+ * the restart is always eligible to fire its own transition, even if the
+ * previous observation was also 'unhealthy' (fast-crash-loop, two distinct
+ * episodes). A container with no prior baseline (first observation, e.g. a
+ * fresh `insertContainer`) never fires, and neither does one whose existing
+ * health was never observed (`undefined` — a record predating health
+ * tracking) — "entered unhealthy" implies a transition that was actually
+ * observed, so a record with no observed baseline has none to transition
+ * from.
+ */
+function getHealthTransition(
+  existing: container.Container | undefined,
+  incoming: container.Container,
+): 'entered-unhealthy' | undefined {
+  if (incoming.health !== 'unhealthy') {
+    return undefined;
+  }
+  if (!existing) {
+    return undefined;
+  }
+  const restarted =
+    Boolean(incoming.details?.startedAt) &&
+    Boolean(existing.details?.startedAt) &&
+    existing.details?.startedAt !== incoming.details?.startedAt;
+  if (restarted) {
+    return 'entered-unhealthy';
+  }
+  if (existing.health === undefined) {
+    return undefined;
+  }
+  return existing.health !== 'unhealthy' ? 'entered-unhealthy' : undefined;
+}
+
+/**
  * Check whether meaningful container state changed between the existing record
  * and the incoming update.  Returns false when nothing actionable changed
  * (e.g. same data re-polled with only LokiJS timestamp metadata differing).
@@ -1010,6 +1056,18 @@ export function updateContainer(container) {
   invalidateContainersCacheForMutation(containerCurrent, containerToReturn);
   const wasRollback = isRollbackContainerName(containerCurrent?.name);
   const isRollback = isRollbackContainerName(containerToReturn.name);
+  const healthTransition = getHealthTransition(containerCurrent, containerToReturn);
+  if (healthTransition && !isRollback) {
+    // Independent of hasContainerChangedWithSecurityHashes below — a
+    // health-only transition (status/name/labels/details all unchanged) may
+    // be the only thing that changed, and must still notify.
+    void emitContainerHealthTransition({
+      containerName: containerToReturn.name,
+      container: redactContainerRuntimeEnv({ ...containerToReturn }),
+      previousHealth: containerCurrent?.health,
+      health: 'unhealthy',
+    });
+  }
   if (isRollback && containerCurrent && !wasRollback) {
     // Container just transitioned into a rollback — it disappears from the
     // user-visible list, so let subscribers prune the row instead of leaving

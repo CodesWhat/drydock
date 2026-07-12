@@ -95,6 +95,13 @@ export const DEFAULT_NOTIFICATION_RULES: NotificationRule[] = [
     triggers: [],
     description: 'When a remote agent reconnects after losing connection',
   },
+  {
+    id: 'container-unhealthy',
+    name: 'Container Unhealthy',
+    enabled: false,
+    triggers: [],
+    description: "When a container's Docker health check enters the unhealthy state",
+  },
 ];
 
 const notificationRuleSchema = joi.object({

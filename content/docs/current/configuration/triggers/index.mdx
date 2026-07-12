@@ -160,12 +160,14 @@ Notification rules control which events fire which triggers. Each rule correspon
 | `security-alert` | Yes | Critical/high vulnerability detected during pre-update scan |
 | `agent-disconnect` | No | A remote agent lost its connection |
 | `agent-reconnect` | No | A remote agent reconnected after losing connection |
+| `container-unhealthy` | No | A container's Docker health check entered the unhealthy state |
 
 **Dispatch behavior:**
 
 - **`update-available`** -- when its trigger list is empty, all notification triggers fire (legacy default). Once you assign specific triggers, only those fire.
 - **`update-applied`**, **`update-failed`**, **`security-alert`** -- when their trigger list is empty, all notification triggers fire (same permissive default as `update-available`). Once you assign specific triggers, only those fire.
 - **`agent-disconnect`**, **`agent-reconnect`** -- disabled by default. Enable them and assign triggers to receive disconnect/reconnect alerts. When their trigger list is empty, all notification triggers fire. These events always fire regardless of the threshold setting.
+- **`container-unhealthy`** -- disabled by default. Enable it and assign triggers to receive container health alerts. When its trigger list is empty, all notification triggers fire. This event always fires regardless of the threshold setting.
 
 Rules are managed via `GET /api/v1/notifications` and `PATCH /api/v1/notifications/:id` (update `enabled` and/or `triggers` fields), or through the **Notifications** view in the UI.
 
@@ -180,6 +182,7 @@ Beyond the classic `update-available` event, triggers can fire on additional eve
 - **`security-alert`** -- fires when the [Update Bouncer](/docs/configuration/security) detects critical or high vulnerabilities during a pre-update scan. Includes a vulnerability summary.
 - **`agent-disconnect`** -- fires when a remote agent loses its connection. This event **skips threshold checks** (always fires).
 - **`agent-reconnect`** -- fires when a remote agent reconnects after losing connection. Only fires on true reconnects, not the initial startup connection. This event **skips threshold checks** (always fires).
+- **`container-unhealthy`** -- fires when a container's Docker health check transitions into the `unhealthy` state. Does not fire for containers with no `HEALTHCHECK` configured, and does not fire again while the container remains continuously unhealthy. This event **skips threshold checks** (always fires).
 
 <Callout type="info">To receive notifications for these events, add the desired trigger IDs to the corresponding notification rule via the API or UI.</Callout>
 

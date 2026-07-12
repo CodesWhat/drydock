@@ -234,6 +234,56 @@ describe('Notification Store', () => {
     });
   });
 
+  test('fresh stores expose the disabled container unhealthy rule with an empty allow-list', () => {
+    const collection = createCollection();
+    notification.createCollections({
+      getCollection: vi.fn(() => null),
+      addCollection: vi.fn(() => collection),
+    });
+    expect(notification.getNotificationRule('container-unhealthy')).toEqual({
+      id: 'container-unhealthy',
+      name: 'Container Unhealthy',
+      description: "When a container's Docker health check enters the unhealthy state",
+      enabled: false,
+      triggers: [],
+    });
+  });
+
+  test('normalization adds container unhealthy to a persisted pre-feature catalog', () => {
+    const collection = createCollection([
+      {
+        id: 'update-available',
+        name: 'Update Available',
+        description: '',
+        enabled: true,
+        triggers: [],
+      },
+    ]);
+    notification.createCollections({
+      getCollection: vi.fn(() => collection),
+      addCollection: vi.fn(),
+    });
+    expect(notification.getNotificationRules().map((rule) => rule.id)).toContain(
+      'container-unhealthy',
+    );
+  });
+
+  test('container unhealthy rule updates persist and round-trip', () => {
+    const collection = createCollection();
+    notification.createCollections({
+      getCollection: vi.fn(() => null),
+      addCollection: vi.fn(() => collection),
+    });
+    notification.updateNotificationRule('container-unhealthy', {
+      enabled: true,
+      triggers: ['slack.myslack'],
+    });
+    expect(notification.getNotificationRule('container-unhealthy')).toMatchObject({
+      enabled: true,
+      triggers: ['slack.myslack'],
+    });
+  });
+
   test('getNotificationRule should return undefined for unknown rule', () => {
     const collection = createCollection();
     const db = {

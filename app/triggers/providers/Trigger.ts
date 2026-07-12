@@ -80,7 +80,8 @@ type NotificationRuleId =
   | 'update-failed'
   | 'security-alert'
   | 'agent-disconnect'
-  | 'agent-reconnect';
+  | 'agent-reconnect'
+  | 'container-unhealthy';
 
 type ContainerUpdateFailedPayload = event.ContainerUpdateFailedEventPayload;
 
@@ -142,12 +143,18 @@ interface AgentReconnectedNotificationEvent {
   agentName: string;
 }
 
+interface ContainerUnhealthyNotificationEvent {
+  kind: 'container-unhealthy';
+  previousHealth?: string;
+}
+
 type TriggerNotificationEvent =
   | UpdateAppliedNotificationEvent
   | UpdateFailedNotificationEvent
   | SecurityAlertNotificationEvent
   | AgentDisconnectedNotificationEvent
-  | AgentReconnectedNotificationEvent;
+  | AgentReconnectedNotificationEvent
+  | ContainerUnhealthyNotificationEvent;
 
 type TriggerContainer = Container & {
   notificationEvent?: TriggerNotificationEvent;
@@ -291,6 +298,8 @@ const UPDATE_FAILED_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('c
 const UPDATE_FAILED_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} update failed${buildLiteralTemplateExpression('event.error ? ": " + event.error : ""')}`;
 const SECURITY_ALERT_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Security alert for container ${buildLiteralTemplateExpression('container.name')}`;
 const SECURITY_ALERT_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Security alert for container ${buildLiteralTemplateExpression('container.name')}${buildLiteralTemplateExpression('event.blockingCount ? " (" + event.blockingCount + " blocking vulnerabilities)" : ""')}${buildLiteralTemplateExpression('event.details ? "\\n" + event.details : ""')}`;
+const CONTAINER_UNHEALTHY_SIMPLE_TITLE_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} is unhealthy`;
+const CONTAINER_UNHEALTHY_SIMPLE_BODY_TEMPLATE = `${buildLiteralTemplateExpression('container.notificationAgentPrefix')}Container ${buildLiteralTemplateExpression('container.name')} has entered the unhealthy state${buildLiteralTemplateExpression('event.previousHealth ? " (was " + event.previousHealth + ")" : ""')}`;
 const NOTIFICATION_SIMPLE_TITLE_TEMPLATES: Partial<
   Record<TriggerNotificationEvent['kind'], string>
 > = {
@@ -299,6 +308,7 @@ const NOTIFICATION_SIMPLE_TITLE_TEMPLATES: Partial<
   'security-alert': SECURITY_ALERT_SIMPLE_TITLE_TEMPLATE,
   'agent-disconnect': AGENT_DISCONNECT_SIMPLE_TITLE_TEMPLATE,
   'agent-reconnect': AGENT_RECONNECT_SIMPLE_TITLE_TEMPLATE,
+  'container-unhealthy': CONTAINER_UNHEALTHY_SIMPLE_TITLE_TEMPLATE,
 };
 const NOTIFICATION_SIMPLE_BODY_TEMPLATES: Partial<
   Record<TriggerNotificationEvent['kind'], string>
@@ -308,6 +318,7 @@ const NOTIFICATION_SIMPLE_BODY_TEMPLATES: Partial<
   'security-alert': SECURITY_ALERT_SIMPLE_BODY_TEMPLATE,
   'agent-disconnect': AGENT_DISCONNECT_SIMPLE_BODY_TEMPLATE,
   'agent-reconnect': AGENT_RECONNECT_SIMPLE_BODY_TEMPLATE,
+  'container-unhealthy': CONTAINER_UNHEALTHY_SIMPLE_BODY_TEMPLATE,
 };
 const NOTIFICATION_BATCH_TITLE_TEMPLATES: Partial<
   Record<TriggerNotificationEvent['kind'], string>
@@ -315,6 +326,7 @@ const NOTIFICATION_BATCH_TITLE_TEMPLATES: Partial<
   'update-applied': `${buildLiteralTemplateExpression('containers.length')} updates applied`,
   'update-failed': `${buildLiteralTemplateExpression('containers.length')} updates failed`,
   'security-alert': `${buildLiteralTemplateExpression('containers.length')} security alerts`,
+  'container-unhealthy': `${buildLiteralTemplateExpression('containers.length')} containers became unhealthy`,
 };
 
 /** Per-container row used in the security digest body template. */
@@ -481,6 +493,15 @@ function getSecurityAlertNotificationEvent(
   };
 }
 
+function getContainerUnhealthyNotificationEvent(
+  notificationEvent: unknown,
+): ContainerUnhealthyNotificationEvent {
+  return {
+    kind: 'container-unhealthy',
+    previousHealth: getNonEmptyString(notificationEvent, 'previousHealth'),
+  };
+}
+
 function getAgentNotificationEvent(
   kind: unknown,
   notificationEvent: unknown,
@@ -524,6 +545,10 @@ export function getNotificationEvent(
 
   if (kind === 'security-alert') {
     return getSecurityAlertNotificationEvent(notificationEvent);
+  }
+
+  if (kind === 'container-unhealthy') {
+    return getContainerUnhealthyNotificationEvent(notificationEvent);
   }
 
   return getAgentNotificationEvent(kind, notificationEvent);
@@ -599,6 +624,7 @@ class Trigger<
   private unregisterSecurityAlert?: () => void;
   private unregisterAgentConnected?: () => void;
   private unregisterAgentDisconnected?: () => void;
+  private unregisterContainerHealthTransition?: () => void;
   private unregisterContainerUpdateAppliedForResolution?: () => void;
   private readonly notificationResults: Map<string, unknown> = new Map();
   /**
@@ -1239,6 +1265,22 @@ class Trigger<
         skipThreshold: true,
       },
     );
+  }
+
+  async handleContainerHealthTransitionEvent(payload: event.ContainerHealthTransitionEventPayload) {
+    const container = payload.container || this.findContainerByBusinessId(payload.containerName);
+    const notificationContainer = container
+      ? withNotificationEvent(container, {
+          kind: 'container-unhealthy',
+          previousHealth: payload.previousHealth,
+        })
+      : undefined;
+
+    await this.dispatchContainerForEvent('container-unhealthy', notificationContainer, {
+      allowAllWhenNoTriggers: true,
+      defaultWhenRuleMissing: true,
+      skipThreshold: true,
+    });
   }
 
   private isUpdateAvailableAutoTriggerEnabled() {
@@ -2498,6 +2540,13 @@ class Trigger<
         order: this.configuration.order,
       },
     );
+    this.unregisterContainerHealthTransition = event.registerContainerHealthTransition(
+      async (payload) => this.handleContainerHealthTransitionEvent(payload),
+      {
+        id: this.getId(),
+        order: this.configuration.order,
+      },
+    );
 
     if (this.configuration.resolvenotifications) {
       this.log.info('Registering for notification resolution');
@@ -2534,6 +2583,9 @@ class Trigger<
 
     this.unregisterAgentDisconnected?.();
     this.unregisterAgentDisconnected = undefined;
+
+    this.unregisterContainerHealthTransition?.();
+    this.unregisterContainerHealthTransition = undefined;
 
     this.unregisterContainerUpdateAppliedForResolution?.();
     this.unregisterContainerUpdateAppliedForResolution = undefined;
