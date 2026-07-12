@@ -247,6 +247,7 @@ class Mqtt extends Trigger<MqttConfiguration> {
         client: this.client,
         configuration: this.configuration,
         log: this.log,
+        isContainerAllowed: (container) => this.mustTrigger(container),
       });
       await this.hass.initCommandSubscription(); // #210
     }

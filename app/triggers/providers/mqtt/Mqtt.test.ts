@@ -1014,3 +1014,42 @@ describe('hass command lifecycle ordering (#210)', () => {
     ]);
   });
 });
+
+describe('hass isContainerAllowed wiring (#491)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test('initTrigger wires Hass isContainerAllowed to this.mustTrigger', async () => {
+    mqtt.configuration = {
+      ...configurationValid,
+      clientid: 'dd',
+      hass: {
+        enabled: true,
+        discovery: true,
+        prefix: 'homeassistant',
+        attributes: 'short',
+        filter: { include: '', exclude: '' },
+      },
+    };
+    vi.spyOn(mqttClient, 'connectAsync').mockResolvedValue({ publish: vi.fn() });
+    vi.spyOn(Hass.prototype, 'initCommandSubscription').mockResolvedValue(undefined);
+    const mustTriggerSpy = vi.spyOn(mqtt, 'mustTrigger');
+
+    await mqtt.initTrigger();
+
+    const hassInstance = (
+      mqtt as unknown as { hass: { isContainerAllowed: (container: unknown) => boolean } }
+    ).hass;
+    expect(hassInstance).toBeDefined();
+
+    const container = { name: 'container-name' };
+
+    mustTriggerSpy.mockReturnValueOnce(true);
+    expect(hassInstance.isContainerAllowed(container)).toBe(true);
+    expect(mustTriggerSpy).toHaveBeenCalledWith(container);
+
+    mustTriggerSpy.mockReturnValueOnce(false);
+    expect(hassInstance.isContainerAllowed(container)).toBe(false);
+  });
+});
