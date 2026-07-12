@@ -604,7 +604,7 @@ body.dd-col-resizing {
   z-index: 9999;
   pointer-events: none;
   opacity: 0;
-  white-space: normal;
+  white-space: pre-line;
   max-width: min(var(--dd-layout-filter-max-width), calc(100vw - 16px));
   overflow-wrap: break-word;
   font-size: var(--dd-font-tooltip);
