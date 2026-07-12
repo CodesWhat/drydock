@@ -113,11 +113,16 @@ describe('useSystemLogStream', () => {
 
       connect();
 
-      for (let i = 0; i < 2010; i++) {
+      for (let i = 0; i < 2000; i++) {
+        connections[0].onMessage(makeEntry({ msg: `msg-${i}` }));
+      }
+      const fullBuffer = entries.value;
+      for (let i = 2000; i < 2010; i++) {
         connections[0].onMessage(makeEntry({ msg: `msg-${i}` }));
       }
 
       expect(entries.value).toHaveLength(2000);
+      expect(entries.value).not.toBe(fullBuffer);
       expect(entries.value[0].msg).toBe('msg-10');
       expect(entries.value[entries.value.length - 1].msg).toBe('msg-2009');
     });

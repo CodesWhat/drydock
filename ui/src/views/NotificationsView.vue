@@ -22,6 +22,7 @@ import {
   updateNotificationRule,
 } from '../services/notification';
 import { getAllTriggers } from '../services/trigger';
+import { isBellRuleSupported } from '../stores/notifications';
 import type { ApiComponent } from '../types/api';
 import { errorMessage } from '../utils/error';
 
@@ -185,14 +186,22 @@ function hasTemplateChanges() {
   );
 }
 
+const detailBellSupported = computed(
+  () => !!selectedRule.value && isBellRuleSupported(selectedRule.value.id),
+);
+const detailBellThresholdSupported = computed(
+  () => detailBellSupported.value && selectedRule.value?.id === 'update-available',
+);
+
 const detailHasChanges = computed(() => {
   if (!selectedRule.value) {
     return false;
   }
   return (
     detailEnabled.value !== selectedRule.value.enabled ||
-    detailBellEnabled.value !== selectedRule.value.bellEnabled ||
-    detailBellThreshold.value !== selectedRule.value.bellThreshold ||
+    (detailBellSupported.value && detailBellEnabled.value !== selectedRule.value.bellEnabled) ||
+    (detailBellThresholdSupported.value &&
+      detailBellThreshold.value !== selectedRule.value.bellThreshold) ||
     hasTriggerChanges() ||
     hasTemplateChanges()
   );
@@ -422,10 +431,13 @@ async function saveSelectedRule() {
   if (hasTriggerChanges()) {
     update.triggers = normalizeTriggerIds(detailTriggers.value);
   }
-  if (detailBellEnabled.value !== selectedRule.value.bellEnabled) {
+  if (detailBellSupported.value && detailBellEnabled.value !== selectedRule.value.bellEnabled) {
     update.bellEnabled = detailBellEnabled.value;
   }
-  if (detailBellThreshold.value !== selectedRule.value.bellThreshold) {
+  if (
+    detailBellThresholdSupported.value &&
+    detailBellThreshold.value !== selectedRule.value.bellThreshold
+  ) {
     update.bellThreshold = detailBellThreshold.value;
   }
   if (hasTemplateChanges()) {
@@ -690,7 +702,7 @@ onMounted(async () => {
               </div>
             </div>
 
-            <div>
+            <div v-if="detailBellSupported">
               <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">
                 {{ t('notificationsView.detail.bellLabel') }}
               </div>
@@ -704,6 +716,7 @@ onMounted(async () => {
                   @update:model-value="detailBellEnabled = $event"
                 />
                 <select
+                  v-if="detailBellThresholdSupported"
                   v-model="detailBellThreshold"
                   :disabled="detailSaving"
                   :aria-label="t('notificationsView.detail.bellThresholdAriaLabel')"

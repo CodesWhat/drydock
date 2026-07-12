@@ -18,9 +18,14 @@ export const BELL_ACTIONS = [
   'notification-delivery-failed',
   'security-alert',
   'agent-disconnect',
+  'container-unhealthy',
 ];
 
 const ALWAYS_BELL_ACTIONS = ['notification-delivery-failed'];
+
+export function isBellRuleSupported(ruleId: string): boolean {
+  return BELL_ACTIONS.includes(ruleId) && !ALWAYS_BELL_ACTIONS.includes(ruleId);
+}
 
 function updateMeetsBellThreshold(
   semverDiff: AuditEntry['semverDiff'],
@@ -47,6 +52,7 @@ const BELL_REFRESH_EVENTS: SseBusEvent[] = [
   'update-operation-changed',
   'update-applied',
   'update-failed',
+  'agent-status-changed',
 ];
 
 export const useNotificationStore = defineStore('notifications', () => {

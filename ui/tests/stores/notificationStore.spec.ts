@@ -93,6 +93,20 @@ describe('useNotificationStore', () => {
     expect(store.visibleEntries.map((entry) => entry.id)).toEqual(['major', '2']);
   });
 
+  it('queries container health audit entries when that bell rule is enabled', async () => {
+    mockGetAllNotificationRules.mockResolvedValueOnce([
+      { id: 'container-unhealthy', bellEnabled: true, bellThreshold: 'all' },
+    ]);
+    const store = useNotificationStore();
+
+    await store.fetchEntries();
+
+    expect(mockGetAuditLog).toHaveBeenCalledWith({
+      limit: 20,
+      actions: ['notification-delivery-failed', 'container-unhealthy'],
+    });
+  });
+
   it.each([
     ['all', ['unknown', 'major', 'minor', 'patch']],
     ['minor', ['major', 'minor']],
@@ -192,8 +206,7 @@ describe('useNotificationStore', () => {
       await Promise.resolve();
       expect(mockGetAuditLog).toHaveBeenCalledTimes(1);
 
-      eventStream.publish('update-failed');
-      eventStream.publish('container-changed');
+      eventStream.publish('agent-status-changed');
       vi.advanceTimersByTime(799);
       await Promise.resolve();
       expect(mockGetAuditLog).toHaveBeenCalledTimes(1);

@@ -295,7 +295,7 @@ describe('NotificationsView', () => {
     await flushPromises();
 
     await wrapper.get('button[aria-label="Notification bell"]')?.trigger('click');
-    await wrapper.get('select[aria-label="Bell severity threshold"]').setValue('major');
+    expect(wrapper.find('select[aria-label="Bell severity threshold"]').exists()).toBe(false);
     await wrapper
       .get('textarea[aria-label="Simple notification title"]')
       .setValue('Alert ${container.name}');
@@ -322,7 +322,6 @@ describe('NotificationsView', () => {
     await flushPromises();
     expect(mockUpdateNotificationRule).toHaveBeenCalledWith('security-alert', {
       bellEnabled: false,
-      bellThreshold: 'major',
       templates: {
         'trigger:slack-alerts': {
           simpleTitle: 'Alert ${container.name}',
@@ -330,6 +329,24 @@ describe('NotificationsView', () => {
         },
       },
     });
+  });
+
+  it('hides bell controls for rules without audit-backed bell events', async () => {
+    mockGetAllNotificationRules.mockResolvedValue([
+      makeRule({
+        id: 'agent-reconnect',
+        name: 'Agent Reconnected',
+        description: 'When an agent reconnects',
+        bellEnabled: false,
+      }),
+    ]);
+    const wrapper = await mountNotificationsView({ ToggleSwitch: notificationToggleSwitchStub });
+
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('button[aria-label="Notification bell"]').exists()).toBe(false);
+    expect(wrapper.find('select[aria-label="Bell severity threshold"]').exists()).toBe(false);
   });
 
   it('treats empty update-available assignments as all notification triggers in the UI', async () => {

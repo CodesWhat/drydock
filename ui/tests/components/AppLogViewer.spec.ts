@@ -694,6 +694,36 @@ describe('AppLogViewer', () => {
       expect(rows[2].text()).toContain('first');
     });
 
+    it('refreshes newest-first rows when a full ring buffer rolls over at constant length', async () => {
+      const entries = ref([
+        makeEntry(1, { plainLine: 'first' }),
+        makeEntry(2, { plainLine: 'second' }),
+      ]);
+      const Harness = defineComponent({
+        components: { AppLogViewer },
+        setup() {
+          return { entries };
+        },
+        template: '<AppLogViewer :entries="entries" :newest-first="true" />',
+      });
+      const wrapper = mount(Harness, {
+        global: {
+          stubs: {
+            AppIcon: { template: '<span class="app-icon-stub" />' },
+          },
+        },
+      });
+
+      entries.value = [entries.value[1], makeEntry(3, { plainLine: 'third' })];
+      await nextTick();
+
+      const rows = wrapper.findAll('[data-test="container-log-row"]');
+      expect(rows).toHaveLength(2);
+      expect(rows[0].text()).toContain('third');
+      expect(rows[1].text()).toContain('second');
+      expect(wrapper.text()).not.toContain('first');
+    });
+
     it('emits newestFirst updates when sort toggle is clicked', async () => {
       const wrapper = mountViewer({
         entries: [makeEntry(1, { plainLine: 'first' }), makeEntry(2, { plainLine: 'second' })],
