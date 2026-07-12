@@ -62,6 +62,7 @@ type SecurityGateUpdateContext = {
 type SecurityScannerRequest = {
   image: string;
   auth: unknown;
+  retryTransient?: boolean;
 };
 
 type SignatureScanResult = ContainerSignatureVerification;
@@ -81,7 +82,13 @@ type SecurityAlertPayload = {
 type AuthLike = SecurityScannerRequest['auth'];
 
 type ScanImageWithDedupFn = (
-  options: { image: string; auth?: AuthLike; digest: string; trivyDbUpdatedAt?: string },
+  options: {
+    image: string;
+    auth?: AuthLike;
+    digest: string;
+    trivyDbUpdatedAt?: string;
+    retryTransient?: boolean;
+  },
   scanIntervalMs: number,
 ) => Promise<{ scanResult: VulnerabilityScanResult; fromCache: boolean }>;
 
@@ -399,7 +406,13 @@ class SecurityGate {
         const trivyDbUpdatedAt = getTrivyDbUpdatedAt ? await getTrivyDbUpdatedAt() : undefined;
         const scanIntervalMs = getScanIntervalMs ? getScanIntervalMs() : DEFAULT_SCAN_INTERVAL_MS;
         const { scanResult, fromCache } = await scanImageWithDedup(
-          { image: context.newImage, auth: context.auth, digest, trivyDbUpdatedAt },
+          {
+            image: context.newImage,
+            auth: context.auth,
+            digest,
+            trivyDbUpdatedAt,
+            retryTransient: true,
+          },
           scanIntervalMs,
         );
         if (fromCache) {
@@ -417,6 +430,7 @@ class SecurityGate {
     const scanResult = await this.scanners.scanImageForVulnerabilities({
       image: context.newImage,
       auth: context.auth,
+      retryTransient: true,
     });
     await this.persistSecurityState(container, { slot: 'update', scan: scanResult }, logContainer);
     return scanResult;
@@ -592,8 +606,12 @@ class SecurityGate {
       await this.evaluateScanOutcome(container, scanResult);
     } catch (error: unknown) {
       if (TriggerPipelineError.isTriggerPipelineError(error)) {
-        this.recordSecurityFailure(container, error as { code: string; message: string });
-        if (securityConfiguration.prune?.onBlock) {
+        const pipelineError = error as TriggerPipelineError;
+        this.recordSecurityFailure(container, pipelineError);
+        if (
+          pipelineError.code === 'security-scan-blocked' &&
+          securityConfiguration.prune?.onBlock
+        ) {
           try {
             await this.scanCache.pruneImage?.(context.newImage, context.dockerApi);
           } catch {

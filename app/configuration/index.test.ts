@@ -644,7 +644,7 @@ describe('getSecurityConfiguration', () => {
       trivy: {
         server: '',
         command: 'trivy',
-        timeout: 120000,
+        timeout: 600000,
         imageSrc: '',
       },
       signature: {
@@ -2184,11 +2184,11 @@ describe('getSecurityConfiguration – trivy/sbom/scan/prune field coverage', ()
     delete configuration.ddEnvVars.DD_SECURITY_TRIVY_COMMAND;
   });
 
-  test('trivy timeout defaults to 120000', () => {
+  test('trivy timeout defaults to 600000', () => {
     // Kills 662:36 [StringLiteral]
     delete configuration.ddEnvVars.DD_SECURITY_TRIVY_TIMEOUT;
     const result = configuration.getSecurityConfiguration();
-    expect(result.trivy.timeout).toBe(120000);
+    expect(result.trivy.timeout).toBe(600000);
   });
 
   test('trivy image src defaults to empty string', () => {
@@ -2324,11 +2324,11 @@ describe('getSecurityConfiguration – trivy/sbom/scan/prune field coverage', ()
     expect(result.trivy.command).toBe('trivy');
   });
 
-  test('getSecurityConfiguration optional chain on trivy.timeout returns 120000 when not set', () => {
+  test('getSecurityConfiguration optional chain on trivy.timeout returns 600000 when not set', () => {
     // Kills 742:16 [OptionalChaining]
     delete configuration.ddEnvVars.DD_SECURITY_TRIVY_TIMEOUT;
     const result = configuration.getSecurityConfiguration();
-    expect(result.trivy.timeout).toBe(120000);
+    expect(result.trivy.timeout).toBe(600000);
   });
 
   test('getSecurityConfiguration optional chain on verify.signatures returns false when not set', () => {

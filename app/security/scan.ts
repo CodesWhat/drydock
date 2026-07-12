@@ -11,6 +11,7 @@ import log from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { toPositiveInteger } from '../util/parse.js';
 import { hasValidCommandPath } from './runtime.js';
+import { createTrivyDatabaseWarmup } from './trivy-warmup.js';
 
 export { SECURITY_SBOM_FORMATS, type SecuritySbomFormat, type SecuritySeverity, toPositiveInteger };
 export type SecurityScanStatus = 'passed' | 'blocked' | 'error';
@@ -70,6 +71,7 @@ export interface ContainerSecuritySbom {
 
 interface ScanImageOptions {
   image: string;
+  retryTransient?: boolean;
   auth?: {
     username?: string;
     password?: string;
@@ -103,6 +105,9 @@ const MAX_TRIVY_OUTPUT_BYTES = 50 * 1024 * 1024; // 50 MB
 const MAX_TRIVY_PARSE_BYTES = 20 * 1024 * 1024; // 20 MB
 const MAX_COSIGN_OUTPUT_BYTES = 2 * 1024 * 1024; // 2 MB
 const MAX_STORED_VULNERABILITIES = 500;
+const TRIVY_PROCESS_TIMEOUT_GRACE_MS = 30_000;
+const TRIVY_DB_WARMUP_TIMEOUT_MS = 10 * 60 * 1000;
+const TRIVY_DB_WARMUP_MAX_BUFFER_BYTES = 512 * 1024;
 const DEFAULT_DIGEST_SCAN_CACHE_MAX_ENTRIES = getDefaultCacheMaxEntries();
 const COSIGN_UNVERIFIED_PATTERNS = [
   'no matching signatures',
@@ -224,6 +229,7 @@ function runCommand(options: {
   command: string;
   args: string[];
   timeout: number;
+  reportedTimeout?: number;
   maxBuffer: number;
   env: NodeJS.ProcessEnv;
   commandName: string;
@@ -239,14 +245,49 @@ function runCommand(options: {
       },
       (error, stdout, stderr) => {
         if (error) {
-          const exitCode = (error as NodeJS.ErrnoException)?.code ?? child.exitCode ?? 'unknown';
+          const commandError = error as NodeJS.ErrnoException & {
+            killed?: boolean;
+            signal?: string;
+          };
+          const exitCode = commandError.code ?? child.exitCode ?? 'unknown';
           const stderrValue = `${stderr || ''}`.trim();
           const errorMessage = stderrValue || error.message;
+          const maxBufferExceeded = commandError.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
+          const processTimedOut =
+            !maxBufferExceeded &&
+            (commandError.code === 'ETIMEDOUT' ||
+              (commandError.killed === true && commandError.signal === 'SIGTERM'));
+          const commandTimedOut =
+            !maxBufferExceeded &&
+            /(?:context deadline exceeded|i\/o timeout|tls handshake timeout|client\.timeout exceeded|(?:request|operation) timed out)/i.test(
+              errorMessage,
+            );
+          if (processTimedOut || commandTimedOut) {
+            const configuredTimeout = options.reportedTimeout ?? options.timeout;
+            const timeoutMessage = processTimedOut
+              ? `${options.commandName} process timed out after ${options.timeout}ms (configured timeout ${configuredTimeout}ms)`
+              : `${options.commandName} command timed out after ${configuredTimeout}ms`;
+            reject(
+              new CommandExecutionError(
+                `${timeoutMessage}${errorMessage ? `: ${errorMessage}` : ''}`,
+                true,
+              ),
+            );
+            return;
+          }
+          const transient =
+            commandError.code === 'ECONNRESET' ||
+            commandError.code === 'EAI_AGAIN' ||
+            commandError.code === 'ECONNREFUSED' ||
+            /(?:temporary|temporarily unavailable|connection (?:reset|refused)|no such host|temporary failure in name resolution|database.*(?:download|update|lock)|failed to download.*db)/i.test(
+              errorMessage,
+            );
           reject(
-            new Error(
+            new CommandExecutionError(
               `${options.commandName} command failed (exit=${exitCode}): ${
                 errorMessage || 'unknown error'
               }`,
+              transient,
             ),
           );
           return;
@@ -256,6 +297,52 @@ function runCommand(options: {
     );
   });
 }
+
+class CommandExecutionError extends Error {
+  readonly transient: boolean;
+
+  constructor(message: string, transient: boolean) {
+    super(message);
+    this.name = 'CommandExecutionError';
+    this.transient = transient;
+  }
+}
+
+function isTransientCommandError(error: unknown): boolean {
+  return error instanceof CommandExecutionError && error.transient;
+}
+
+const logTrivyWarmup = log.child({ component: 'security.trivy-warmup' });
+
+export const warmTrivyDatabase = createTrivyDatabaseWarmup({
+  getConfiguration: () => getSecurityConfiguration(),
+  timeoutMs: TRIVY_DB_WARMUP_TIMEOUT_MS,
+  failureCooldownMs: 15 * 60 * 1000,
+  execute: (operation) => enqueueTrivy(operation),
+  run: async ({ command, args, timeoutMs }) => {
+    if (!hasValidCommandPath(command)) {
+      throw new Error(
+        `Trivy command "${sanitizeLogParam(command)}" is invalid; use a command name or absolute path`,
+      );
+    }
+    await runCommand({
+      command,
+      args,
+      timeout: timeoutMs + TRIVY_PROCESS_TIMEOUT_GRACE_MS,
+      reportedTimeout: timeoutMs,
+      maxBuffer: TRIVY_DB_WARMUP_MAX_BUFFER_BYTES,
+      env: process.env,
+      commandName: 'Trivy database warm-up',
+    });
+  },
+  onFailure: (error) => {
+    logTrivyWarmup.warn(
+      `Trivy database warm-up failed (${sanitizeLogParam(
+        getErrorMessage(error, 'Unknown Trivy database warm-up error'),
+      )}); the scan will continue with Trivy's normal database handling`,
+    );
+  },
+});
 
 function buildTrivyEnvironment(options: ScanImageOptions) {
   const env = { ...process.env };
@@ -319,7 +406,8 @@ function runTrivyVulnerabilityCommand(
     return runCommand({
       command: trivyCommand,
       args,
-      timeout: configuration.trivy.timeout,
+      timeout: configuration.trivy.timeout + TRIVY_PROCESS_TIMEOUT_GRACE_MS,
+      reportedTimeout: configuration.trivy.timeout,
       maxBuffer: MAX_TRIVY_OUTPUT_BYTES,
       env: buildTrivyEnvironment(options),
       commandName: 'Trivy',
@@ -344,12 +432,27 @@ function runTrivySbomCommand(
     return runCommand({
       command: trivyCommand,
       args,
-      timeout: configuration.trivy.timeout,
+      timeout: configuration.trivy.timeout + TRIVY_PROCESS_TIMEOUT_GRACE_MS,
+      reportedTimeout: configuration.trivy.timeout,
       maxBuffer: MAX_TRIVY_OUTPUT_BYTES,
       env: buildTrivyEnvironment(options),
       commandName: 'Trivy',
     });
   });
+}
+
+async function runTrivyVulnerabilityCommandWithRetry(
+  options: ScanImageOptions,
+  configuration: ReturnType<typeof getSecurityConfiguration>,
+): Promise<string> {
+  try {
+    return await runTrivyVulnerabilityCommand(options, configuration);
+  } catch (error: unknown) {
+    if (!options.retryTransient || !isTransientCommandError(error)) {
+      throw error;
+    }
+    return runTrivyVulnerabilityCommand(options, configuration);
+  }
 }
 
 function buildCosignEnvironment(options: ScanImageOptions) {
@@ -558,7 +661,8 @@ export async function scanImageForVulnerabilities(
   });
 
   try {
-    const trivyOutput = await runTrivyVulnerabilityCommand(options, configuration);
+    await warmTrivyDatabase();
+    const trivyOutput = await runTrivyVulnerabilityCommandWithRetry(options, configuration);
     const vulnerabilities = parseTrivyOutput(trivyOutput);
     const blockingCount = getBlockingCount(vulnerabilities, blockSeverities);
     const summary = buildSummary(vulnerabilities);

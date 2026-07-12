@@ -1207,7 +1207,11 @@ describe('SecurityGate', () => {
 
       expect(scanImageWithDedup).toHaveBeenCalledTimes(1);
       expect(scanImageWithDedup).toHaveBeenCalledWith(
-        expect.objectContaining({ digest: 'sha256:abc123', image: 'ghcr.io/acme/web:2.0.0' }),
+        expect.objectContaining({
+          digest: 'sha256:abc123',
+          image: 'ghcr.io/acme/web:2.0.0',
+          retryTransient: true,
+        }),
         86400000,
       );
       expect(scanImageForVulnerabilities).not.toHaveBeenCalled();
@@ -1224,7 +1228,9 @@ describe('SecurityGate', () => {
       await gate.scanImageForUpdate(context, createContainer(), createLog());
 
       expect(scanImageWithDedup).not.toHaveBeenCalled();
-      expect(scanImageForVulnerabilities).toHaveBeenCalledTimes(1);
+      expect(scanImageForVulnerabilities).toHaveBeenCalledWith(
+        expect.objectContaining({ retryTransient: true }),
+      );
     });
 
     test('falls back to scanImageForVulnerabilities when scanImageWithDedup is not provided', async () => {
@@ -1516,6 +1522,33 @@ describe('SecurityGate', () => {
         gate.scanAndGatePostPull(createContext(), createContainer(), createLog()),
       ).rejects.toThrow();
       expect(pruneImage).toHaveBeenCalledWith('ghcr.io/acme/web:2.0.0', undefined);
+    });
+
+    test('should retain the pulled image when the security scan fails', async () => {
+      const pruneImage = vi.fn().mockResolvedValue(undefined);
+      const { gate } = createGateHarness({
+        securityConfiguration: {
+          enabled: true,
+          scanner: 'trivy',
+          signature: { verify: false },
+          sbom: { enabled: false, formats: ['spdx-json'] },
+          gate: { mode: 'on' },
+          prune: { onBlock: true },
+        },
+        scanImageForVulnerabilities: vi.fn().mockResolvedValue({
+          status: 'error',
+          error: 'Trivy timed out',
+          summary: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
+          blockingCount: 0,
+          blockSeverities: ['CRITICAL'],
+        }),
+        pruneImage,
+      });
+
+      await expect(
+        gate.scanAndGatePostPull(createContext(), createContainer(), createLog()),
+      ).rejects.toMatchObject({ code: 'security-scan-failed' });
+      expect(pruneImage).not.toHaveBeenCalled();
     });
 
     test('should not call pruneImage on block when prune.onBlock is false', async () => {

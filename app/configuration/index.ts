@@ -712,7 +712,7 @@ export function getSecurityConfiguration() {
       .object({
         server: joi.string().allow('').default(''),
         command: joi.string().default('trivy'),
-        timeout: joi.number().integer().min(1000).default(120000),
+        timeout: joi.number().integer().min(1000).default(600000),
         image: joi
           .object({
             src: joi.string().allow('').default(''),
@@ -790,7 +790,7 @@ export function getSecurityConfiguration() {
     trivy: {
       server: configuration.trivy?.server || '',
       command: configuration.trivy?.command || 'trivy',
-      timeout: configuration.trivy?.timeout || 120000,
+      timeout: configuration.trivy?.timeout || 600000,
       imageSrc: configuration.trivy?.image?.src || '',
     },
     signature: {

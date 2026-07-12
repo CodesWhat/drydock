@@ -3,6 +3,17 @@ import { vi } from 'vitest';
 const mockGetSecurityConfiguration = vi.hoisted(() => vi.fn());
 
 const mockHasValidCommandPath = vi.hoisted(() => vi.fn());
+const mockWarmTrivyDatabase = vi.hoisted(() => vi.fn(async () => 'ready'));
+const warmupFactoryControl = vi.hoisted(() => ({
+  options: undefined as
+    | {
+        execute: (operation: () => Promise<void>) => Promise<void>;
+        getConfiguration: () => unknown;
+        run: (command: { command: string; args: string[]; timeoutMs: number }) => Promise<void>;
+        onFailure: (error: unknown) => void;
+      }
+    | undefined,
+}));
 
 const childProcessControl = vi.hoisted(() => ({
   execFileImpl: null as null | ((...args: unknown[]) => unknown),
@@ -25,6 +36,17 @@ vi.mock('../log/index.js', () => ({
 vi.mock('./runtime.js', () => ({
   hasValidCommandPath: (...args: unknown[]) => mockHasValidCommandPath(...args),
 }));
+
+vi.mock('./trivy-warmup.js', async () => {
+  const actual = await vi.importActual<typeof import('./trivy-warmup.js')>('./trivy-warmup.js');
+  return {
+    ...actual,
+    createTrivyDatabaseWarmup: (options: NonNullable<typeof warmupFactoryControl.options>) => {
+      warmupFactoryControl.options = options;
+      return mockWarmTrivyDatabase;
+    },
+  };
+});
 
 vi.mock('node:child_process', async () => {
   const actual = await vi.importActual<typeof import('node:child_process')>('node:child_process');
@@ -89,6 +111,7 @@ beforeEach(() => {
   clearDigestScanCache();
   _resetErrorRetryFloorForTesting();
   mockHasValidCommandPath.mockReturnValue(true);
+  mockWarmTrivyDatabase.mockResolvedValue('ready');
   mockGetSecurityConfiguration.mockReturnValue(createEnabledConfiguration());
 });
 
@@ -109,6 +132,63 @@ test('scanImageForVulnerabilities should return error result when scanner disabl
 
   expect(scanResult.status).toBe('error');
   expect(scanResult.error).toContain('disabled');
+});
+
+test('scanImageForVulnerabilities should await database warm-up before starting Trivy', async () => {
+  const events: string[] = [];
+  mockWarmTrivyDatabase.mockImplementationOnce(async () => {
+    events.push('warmup-started');
+    await Promise.resolve();
+    events.push('warmup-finished');
+    return 'ready';
+  });
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    events.push('scan-started');
+    callback(null, JSON.stringify({ Results: [] }), '');
+    return { exitCode: 0 };
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).toBe('passed');
+  expect(events).toEqual(['warmup-started', 'warmup-finished', 'scan-started']);
+});
+
+test('Trivy warm-up adapter should serialize and run the database command with process grace', async () => {
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, '', '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+  const adapter = warmupFactoryControl.options;
+  expect(adapter).toBeDefined();
+  expect(adapter?.getConfiguration()).toEqual(createEnabledConfiguration());
+
+  await adapter?.execute(() =>
+    adapter.run({
+      command: 'trivy',
+      args: ['image', '--download-db-only', '--timeout', '600s'],
+      timeoutMs: 600_000,
+    }),
+  );
+
+  expect(execFileMock).toHaveBeenCalledWith(
+    'trivy',
+    ['image', '--download-db-only', '--timeout', '600s'],
+    expect.objectContaining({ timeout: 630_000 }),
+    expect.any(Function),
+  );
+});
+
+test('Trivy warm-up adapter should reject an invalid command path and tolerate failure logging', async () => {
+  const adapter = warmupFactoryControl.options;
+  expect(adapter).toBeDefined();
+  mockHasValidCommandPath.mockReturnValueOnce(false);
+
+  await expect(adapter?.run({ command: '../trivy', args: [], timeoutMs: 600_000 })).rejects.toThrow(
+    'invalid',
+  );
+  expect(() => adapter?.onFailure(new Error('registry unavailable'))).not.toThrow();
 });
 
 test('scanImageForVulnerabilities should parse trivy output and block by severity', async () => {
@@ -539,6 +619,19 @@ test('scanImageForVulnerabilities should pass json format through unchanged in t
   );
 });
 
+test('Trivy process timeout should include grace beyond the configured scan timeout', async () => {
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, JSON.stringify({ Results: [] }), '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  await scanImageForVulnerabilities({ image: 'registry.example.com/app:1.2.3' });
+
+  expect(execFileMock.mock.calls[0][1]).toEqual(expect.arrayContaining(['--timeout', '120s']));
+  expect(execFileMock.mock.calls[0][2]).toEqual(expect.objectContaining({ timeout: 150000 }));
+});
+
 test('buildTrivyArgs should NOT pass --image-src when imageSrc is empty so Trivy falls back to registry when docker.sock is unreachable', async () => {
   // imageSrc is '' in createEnabledConfiguration() — flag must be absent
   const execFileMock = vi.fn((command, args, options, callback) => {
@@ -826,6 +919,200 @@ test('runCommand should handle failure with empty error message and empty stderr
   expect(result.status).toBe('error');
   // stderr is whitespace only -> trims to '' -> falls back to error.message '' -> falls back to 'unknown error'
   expect(result.error).toContain('unknown error');
+});
+
+test('runCommand should report an honest timeout when Node kills Trivy', async () => {
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    const error = new Error('Command failed') as NodeJS.ErrnoException & {
+      killed: boolean;
+      signal: string;
+    };
+    error.code = undefined;
+    error.killed = true;
+    error.signal = 'SIGTERM';
+    const child = { exitCode: null };
+    setTimeout(() => callback(error, '', ''), 0);
+    return child;
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('process timed out after 150000ms');
+  expect(result.error).toContain('configured timeout 120000ms');
+  expect(result.error).not.toContain('exit=unknown');
+});
+
+test('runCommand should report the configured deadline when Trivy times itself out', async () => {
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    const error = new Error('Command failed') as NodeJS.ErrnoException;
+    error.code = '1';
+    const child = { exitCode: 1 };
+    setTimeout(() => callback(error, '', 'context deadline exceeded'), 0);
+    return child;
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toContain('timed out after 120000ms');
+  expect(result.error).not.toContain('150000ms');
+});
+
+test('runCommand should report a process timeout without optional timeout metadata', async () => {
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    const error = new Error('') as NodeJS.ErrnoException & {
+      killed: boolean;
+      signal: string;
+    };
+    error.code = undefined;
+    error.killed = true;
+    error.signal = 'SIGTERM';
+    const child = { exitCode: null };
+    setTimeout(() => callback(error, '', ''), 0);
+    return child;
+  };
+
+  const result = await verifyImageSignature({ image: 'img:test' });
+
+  expect(result.status).toBe('error');
+  expect(result.error).toBe('Cosign process timed out after 60000ms (configured timeout 60000ms)');
+});
+
+test('scanImageForVulnerabilities should retry one transient Trivy failure when requested', async () => {
+  let invocations = 0;
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    invocations += 1;
+    const child = { exitCode: invocations === 1 ? 1 : 0 };
+    if (invocations === 1) {
+      const error = new Error('temporary registry timeout') as NodeJS.ErrnoException;
+      error.code = 'ETIMEDOUT';
+      setTimeout(() => callback(error, '', 'request timed out'), 0);
+    } else {
+      setTimeout(() => callback(null, JSON.stringify({ Results: [] }), ''), 0);
+    }
+    return child;
+  };
+
+  const options = { image: 'img:test', retryTransient: true };
+  const result = await scanImageForVulnerabilities(options);
+
+  expect(result.status).toBe('passed');
+  expect(invocations).toBe(2);
+});
+
+test('scanImageForVulnerabilities should not retry permanent Trivy failures', async () => {
+  let invocations = 0;
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    invocations += 1;
+    const error = new Error('authentication failed') as NodeJS.ErrnoException;
+    error.code = 'EACCES';
+    const child = { exitCode: 1 };
+    setTimeout(() => callback(error, '', 'unauthorized'), 0);
+    return child;
+  };
+
+  const options = { image: 'img:test', retryTransient: true };
+  const result = await scanImageForVulnerabilities(options);
+
+  expect(result.status).toBe('error');
+  expect(invocations).toBe(1);
+});
+
+test('scanImageForVulnerabilities should not retry invalid timeout configuration errors', async () => {
+  let invocations = 0;
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    invocations += 1;
+    const error = new Error('invalid timeout configuration') as NodeJS.ErrnoException;
+    error.code = 'EINVAL';
+    const child = { exitCode: 1 };
+    setTimeout(() => callback(error, '', 'invalid timeout value'), 0);
+    return child;
+  };
+
+  const options = { image: 'img:test', retryTransient: true };
+  const result = await scanImageForVulnerabilities(options);
+
+  expect(result.status).toBe('error');
+  expect(invocations).toBe(1);
+});
+
+test.each([
+  'dial tcp 10.0.0.2:443: i/o timeout',
+  'net/http: TLS handshake timeout',
+  'dial tcp 10.0.0.2:443: connect: connection refused',
+  'lookup registry.example.com: no such host',
+])('scanImageForVulnerabilities should retry realistic transient Trivy stderr: %s', async (stderr) => {
+  let invocations = 0;
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    invocations += 1;
+    const child = { exitCode: invocations === 1 ? 1 : 0 };
+    if (invocations === 1) {
+      const error = new Error('Trivy failed') as NodeJS.ErrnoException;
+      error.code = '1';
+      setTimeout(() => callback(error, '', stderr), 0);
+    } else {
+      setTimeout(() => callback(null, JSON.stringify({ Results: [] }), ''), 0);
+    }
+    return child;
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test', retryTransient: true });
+
+  expect(result.status).toBe('passed');
+  expect(invocations).toBe(2);
+});
+
+test('scanImageForVulnerabilities should stop after two transient failures', async () => {
+  let invocations = 0;
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    invocations += 1;
+    const error = new Error('Trivy failed') as NodeJS.ErrnoException;
+    error.code = '1';
+    const child = { exitCode: 1 };
+    setTimeout(() => callback(error, '', 'dial tcp: i/o timeout'), 0);
+    return child;
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test', retryTransient: true });
+
+  expect(result.status).toBe('error');
+  expect(invocations).toBe(2);
+});
+
+test('scanImageForVulnerabilities should not retry max-buffer kills', async () => {
+  let invocations = 0;
+  childProcessControl.execFileImpl = (_command, _args, _options, callback) => {
+    invocations += 1;
+    const error = new Error('stdout maxBuffer length exceeded') as NodeJS.ErrnoException & {
+      killed: boolean;
+      signal: string;
+    };
+    error.code = 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
+    error.killed = true;
+    error.signal = 'SIGTERM';
+    const child = { exitCode: null };
+    setTimeout(() => callback(error, '', ''), 0);
+    return child;
+  };
+
+  const result = await scanImageForVulnerabilities({ image: 'img:test', retryTransient: true });
+
+  expect(result.status).toBe('error');
+  expect(invocations).toBe(1);
+});
+
+test('Trivy SBOM process timeout should include grace beyond the configured timeout', async () => {
+  const execFileMock = vi.fn((_command, _args, _options, callback) => {
+    callback(null, JSON.stringify({ spdxVersion: 'SPDX-2.3' }), '');
+    return { exitCode: 0 };
+  });
+  childProcessControl.execFileImpl = execFileMock;
+
+  await generateImageSbom({ image: 'img:test', formats: ['spdx-json'] });
+
+  expect(execFileMock.mock.calls[0][1]).toEqual(expect.arrayContaining(['--timeout', '120s']));
+  expect(execFileMock.mock.calls[0][2]).toEqual(expect.objectContaining({ timeout: 150000 }));
 });
 
 test('buildTrivyEnvironment should not set auth env when password is undefined', async () => {
