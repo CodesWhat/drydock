@@ -469,7 +469,7 @@ describe('useDashboardWidgetOrder', () => {
     state.resetAll();
     await nextTick();
 
-    // Every responsive breakpoint must have a default layout so grid-layout-plus
+    // Every responsive breakpoint must have a default layout so the dashboard grid
     // never falls back to deriving from lg (which produces wrong positions).
     const breakpoints = ['xxs', 'xs', 'sm', 'md', 'lg'] as const;
     for (const bp of breakpoints) {

@@ -28,7 +28,6 @@
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "5.2.7",
-    "grid-layout-plus": "1.1.1",
     "iconify-icon": "3.0.2",
     "pinia": "3.0.4",
     "tailwindcss": "4.3.2",

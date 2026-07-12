@@ -3,6 +3,7 @@
     "loading": "Loading dashboard...",
     "loadFailed": "Failed to load dashboard",
     "dragToReorder": "Drag to reorder",
+    "resizeWidget": "Resize dashboard widget",
     "viewAll": "View all →",
     "editToggle": {
       "showWidgetPanel": "Show widget panel",

@@ -315,9 +315,10 @@ describe('DashboardView', () => {
       expect(scrollArea.classes()).toContain('sm:pr-6');
     });
 
-    it('limits edit-mode dragging to explicit drag handles', async () => {
+    it('uses the zero-dependency custom dashboard grid', async () => {
       await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
-      expect(dashboardViewSource).toContain('drag-allow-from=".drag-handle"');
+      expect(dashboardViewSource).toContain('<DashboardGrid');
+      expect(dashboardViewSource).not.toContain('grid-layout-plus');
     });
 
     it('keeps editable widgets vertically pannable while customizing', async () => {
@@ -1455,6 +1456,8 @@ describe('DashboardView', () => {
 
     it('reorders widgets on drop and persists the new order', async () => {
       const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
+      (document.querySelector('[data-test="dashboard-edit-toggle"]') as HTMLButtonElement).click();
+      await flushPromises();
 
       const draggedWidget = wrapper.find('[data-widget-id="update-breakdown"]');
       const targetWidget = wrapper.find('[data-widget-id="recent-updates"]');
@@ -1465,6 +1468,7 @@ describe('DashboardView', () => {
         dropEffect: 'move',
       };
 
+      await draggedWidget.get('.drag-handle').trigger('pointerdown');
       await draggedWidget.trigger('dragstart', { dataTransfer });
       await targetWidget.trigger('dragover', { dataTransfer });
       await targetWidget.trigger('drop', { dataTransfer });
@@ -1472,10 +1476,10 @@ describe('DashboardView', () => {
 
       expect(
         wrapper.find('[data-widget-id="update-breakdown"]').attributes('data-widget-order'),
-      ).toBe('8');
+      ).toBe('4');
       expect(
         wrapper.find('[data-widget-id="recent-updates"]').attributes('data-widget-order'),
-      ).toBe('4');
+      ).toBe('5');
       const { flushPreferences } = await import('@/preferences/store');
       flushPreferences();
       const prefs = JSON.parse(localStorage.getItem(PREFERENCES_STORAGE_KEY) || '{}');
@@ -1484,16 +1488,18 @@ describe('DashboardView', () => {
         'stat-updates',
         'stat-security',
         'stat-registries',
+        'update-breakdown',
         'recent-updates',
         'security-overview',
         'resource-usage',
         'host-status',
-        'update-breakdown',
       ]);
     });
 
     it('reorders stat cards on drop', async () => {
       const wrapper = await mountDashboard([makeContainer({ newTag: '2.0.0' })]);
+      (document.querySelector('[data-test="dashboard-edit-toggle"]') as HTMLButtonElement).click();
+      await flushPromises();
 
       const draggedStat = wrapper.find('[data-widget-id="stat-registries"]');
       const targetStat = wrapper.find('[data-widget-id="stat-containers"]');
@@ -1504,6 +1510,7 @@ describe('DashboardView', () => {
         dropEffect: 'move',
       };
 
+      await draggedStat.get('.drag-handle').trigger('pointerdown');
       await draggedStat.trigger('dragstart', { dataTransfer });
       await targetStat.trigger('dragover', { dataTransfer });
       await targetStat.trigger('drop', { dataTransfer });
@@ -1511,10 +1518,10 @@ describe('DashboardView', () => {
 
       expect(
         wrapper.find('[data-widget-id="stat-registries"]').attributes('data-widget-order'),
-      ).toBe('3');
+      ).toBe('0');
       expect(
         wrapper.find('[data-widget-id="stat-containers"]').attributes('data-widget-order'),
-      ).toBe('0');
+      ).toBe('1');
     });
   });
 
