@@ -3,6 +3,17 @@ import { defineComponent, nextTick, ref } from 'vue';
 import AppLogViewer from '@/components/AppLogViewer.vue';
 import type { AppLogEntry } from '@/types/log-entry';
 
+const mockTokenizeJson = vi.hoisted(() => vi.fn());
+
+vi.mock('@/utils/json-tokenizer', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/utils/json-tokenizer')>();
+  mockTokenizeJson.mockImplementation(actual.tokenizeJson);
+  return {
+    ...actual,
+    tokenizeJson: mockTokenizeJson,
+  };
+});
+
 function makeEntry(id: number, overrides: Partial<AppLogEntry> = {}): AppLogEntry {
   const plainLine = overrides.plainLine ?? `line-${id}`;
 
@@ -62,6 +73,7 @@ describe('AppLogViewer', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
+    mockTokenizeJson.mockClear();
   });
 
   it('renders empty state and custom footer status details', () => {
@@ -136,6 +148,70 @@ describe('AppLogViewer', () => {
     expect(wrapper.find('.json-boolean').text()).toContain('true');
     expect(wrapper.find('.json-null').text()).toContain('null');
     expect(wrapper.findAll('.json-punctuation').length).toBeGreaterThan(0);
+    expect(mockTokenizeJson).toHaveBeenCalledWith(
+      '{\n  "msg": "ok",\n  "count": 3,\n  "enabled": true,\n  "data": null\n}',
+    );
+  });
+
+  it('virtualizes large log streams and keeps absolute line numbers while scrolling', async () => {
+    const wrapper = mountViewer({
+      autoScrollPinned: false,
+      entries: Array.from({ length: 1000 }, (_, index) =>
+        makeEntry(index + 1, { plainLine: `stream-line-${index + 1}` }),
+      ),
+    });
+    const viewport = wrapper.get('[data-test="app-log-viewport"]');
+    setViewportMetrics(viewport.element as HTMLElement, {
+      scrollHeight: 28_000,
+      clientHeight: 140,
+      scrollTop: 0,
+    });
+    await viewport.trigger('scroll');
+    await nextTick();
+
+    const initialRows = wrapper.findAll('[data-test="container-log-row"]');
+    expect(initialRows.length).toBeGreaterThan(0);
+    expect(initialRows.length).toBeLessThan(100);
+    expect(wrapper.find('[data-test="app-log-bottom-spacer"]').exists()).toBe(true);
+
+    (viewport.element as HTMLElement).scrollTop = 14_000;
+    await viewport.trigger('scroll');
+    await nextTick();
+
+    const scrolledRows = wrapper.findAll('[data-test="container-log-row"]');
+    expect(scrolledRows.length).toBeLessThan(100);
+    expect(scrolledRows[0].text()).toContain('stream-line-');
+    expect(
+      Number(scrolledRows[0].find('[data-test="container-log-line-number"]').text()),
+    ).toBeGreaterThan(400);
+    expect(wrapper.find('[data-test="app-log-top-spacer"]').exists()).toBe(true);
+  });
+
+  it('scrolls a virtualized off-screen search match into the rendered window', async () => {
+    const wrapper = mountViewer({
+      autoScrollPinned: false,
+      entries: Array.from({ length: 1000 }, (_, index) =>
+        makeEntry(index + 1, {
+          plainLine: index === 899 ? 'unique-offscreen-match' : `line-${index + 1}`,
+        }),
+      ),
+    });
+    const viewport = wrapper.get('[data-test="app-log-viewport"]');
+    setViewportMetrics(viewport.element as HTMLElement, {
+      scrollHeight: 28_000,
+      clientHeight: 140,
+      scrollTop: 0,
+    });
+    await viewport.trigger('scroll');
+    await wrapper
+      .get('[data-test="container-log-search-input"]')
+      .setValue('unique-offscreen-match');
+    await wrapper.get('[data-test="container-log-next-match"]').trigger('click');
+    await nextTick();
+    await nextTick();
+
+    expect(viewport.element.scrollTop).toBeGreaterThan(20_000);
+    expect(wrapper.text()).toContain('unique-offscreen-match');
   });
 
   it('keeps JSON strings with trailing escaped backslashes intact', () => {
