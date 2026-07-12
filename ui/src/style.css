@@ -604,9 +604,11 @@ body.dd-col-resizing {
   z-index: 9999;
   pointer-events: none;
   opacity: 0;
-  white-space: nowrap;
+  white-space: normal;
+  max-width: min(var(--dd-layout-filter-max-width), calc(100vw - 16px));
+  overflow-wrap: break-word;
   font-size: var(--dd-font-tooltip);
-  line-height: 1.1;
+  line-height: 1.35;
   padding: var(--dd-space-4) var(--dd-space-8);
   border-radius: var(--dd-radius-sm);
   border: 1px solid var(--dd-border-strong);
