@@ -32,7 +32,7 @@ Older drydock releases allowed `DD_SERVER_CORS_ENABLED=true` without `DD_SERVER_
 | **Removed since** | v1.5.0-rc.9 |
 | **Migration** | Set `DD_SERVER_CORS_ORIGIN` to your trusted origin(s), e.g. `DD_SERVER_CORS_ORIGIN=https://drydock.example.com` |
 
-## Removal in v1.6.0
+## v1.6.0 removals and deferrals
 
 ### Unversioned API paths (`/api/*`) {#unversioned-api-paths}
 
@@ -46,32 +46,32 @@ The unversioned `/api/*` path was a backward-compatible alias for `/api/v1/*`. A
 
 ### Legacy `WUD_*` environment variables {#legacy-env-vars}
 
-`WUD_*` prefixed environment variables (from the upstream WUD project) are accepted as fallbacks for their `DD_*` equivalents.
+`WUD_*` prefixed environment variables are ignored as of v1.6.0. Only `DD_*` variables are loaded at runtime; the migration CLI still recognizes old names so it can rewrite existing files.
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.4.0 |
-| **Detection** | Startup console warning; Prometheus counter `dd_legacy_input_total{source="env"}`; UI deprecation banner |
+| **Removed since** | v1.6.0 |
 | **Migration** | Rename all `WUD_*` vars to `DD_*`. Run `node dist/index.js config migrate --dry-run` to preview changes |
 
 ### Legacy `wud.*` container labels {#legacy-labels}
 
-`wud.*` prefixed Docker labels are accepted as fallbacks for their `dd.*` equivalents (24 labels total including `wud.watch`, `wud.tag.include`, `wud.tag.exclude`, etc.).
+`wud.*` prefixed Docker labels are ignored as of v1.6.0. Only `dd.*` labels affect container discovery, display, grouping, hooks, rollback, webhooks, and trigger behavior.
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.4.0 |
-| **Detection** | Per-label log warning on container init; Prometheus counter `dd_legacy_input_total{source="label"}`; UI deprecation banner |
+| **Removed since** | v1.6.0 |
 | **Migration** | Rename all `wud.*` labels to `dd.*` in your compose files. Run `node dist/index.js config migrate --file /path/to/compose.yml` |
 
 ### Legacy template variable aliases {#legacy-template-variables}
 
-Simple template variables (`id`, `name`, `watcher`, `kind`, `semver`, `local`, `remote`, `link`) and batch variable `count` resolve to single container properties.
+Simple template aliases (`id`, `name`, `watcher`, `kind`, `semver`, `local`, `remote`, `link`) and the batch alias `count` are no longer supplied to templates.
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.4.0 |
-| **Detection** | Log warning when `${variable}` syntax is used in trigger templates |
+| **Removed since** | v1.6.0 |
 | **Migration** | Replace with `container.*` equivalents: `id` &rarr; `container.id`, `name` &rarr; `container.name`, `count` &rarr; `containers.length`, etc. See [Trigger templates](/docs/configuration/triggers#template-variable-reference) |
 
 ### `PUT /api/settings` {#put-api-settings}
@@ -87,63 +87,63 @@ The `PUT` method on `/api/settings` is a compatibility alias for `PATCH`. Respon
 
 ### HTTP OIDC discovery URLs {#oidc-http-discovery}
 
-OIDC providers configured with `http://` discovery URLs are deprecated. Identity Providers must support HTTPS.
+OIDC providers configured with `http://` discovery URLs are rejected. Identity Providers must serve discovery over HTTPS.
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.4.0 |
-| **Detection** | Startup log warning; UI deprecation banner |
+| **Removed since** | v1.6.0 |
 | **Migration** | Update your IdP discovery URL to use `https://`. If your IdP uses a self-signed certificate, set `DD_AUTH_OIDC_{name}_INSECURE=true` |
 
 ### Legacy password hash formats {#legacy-password-hashes}
 
-SHA-1, APR1/MD5 (Apache), crypt, and plain text password hashes from v1.3.9 are deprecated.
+SHA-1, APR1/MD5 (Apache), crypt, and plain-text password hashes are rejected. Basic authentication accepts only the documented argon2id hash format.
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.4.0 |
-| **Detection** | Startup log warning; UI deprecation banner |
+| **Removed since** | v1.6.0 |
 | **Migration** | Regenerate your password hash with argon2id. See [Basic authentication](/docs/configuration/authentications/basic) |
 
 ### Kafka `clientId` configuration key {#kafka-clientid}
 
-The camelCase `clientId` key in Kafka trigger configuration is deprecated.
+The camelCase `clientId` key is rejected by Kafka trigger validation.
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.4.5 |
-| **Detection** | Startup log warning |
+| **Removed since** | v1.6.0 |
 | **Migration** | Rename `clientId` to `clientid` (lowercase) in your Kafka trigger configuration |
 
 ### `DD_WATCHER_*_WATCHDIGEST` environment variable {#watchdigest}
 
-Per-watcher digest watching via environment variable is deprecated.
+Per-watcher digest watching via environment variable has been removed.
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.4.0 |
-| **Detection** | Startup log warning |
+| **Removed since** | v1.6.0 |
 | **Migration** | Use the `dd.watch.digest=true` label on individual containers instead |
 
 ### `DD_WATCHER_*_WATCHATSTART` environment variable {#watchatstart}
 
-Redundant when `true` or unset — watching at startup has been the default since v1.3. An explicit `false` still suppresses the initial startup scan today, but that will stop working once this variable is removed.
+Watching at startup is always scheduled. `WATCHATSTART` is no longer part of watcher configuration, including the former `false` suppression behavior.
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.4.0 |
-| **Detection** | Startup log warning |
+| **Removed since** | v1.6.0 |
 | **Migration** | Remove the variable from your configuration. If you need to delay the first scan, use `DD_WATCHER_{name}_CRON` to control the schedule instead |
 
-### Registry `PUBLIC_TOKEN` configuration {#registry-public-token}
+### Token-only Hub/DHI `PUBLIC_TOKEN` configuration {#registry-public-token}
 
-Token-based authentication for public registries has been replaced by password-based authentication for consistency.
+Hub/DHI public instances that provide `PUBLIC_TOKEN` without the matching `PUBLIC_LOGIN` are rejected instead of silently falling back to anonymous access. The `TOKEN` key itself remains supported as part of a complete `LOGIN`+`TOKEN` pair.
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.4.0 |
-| **Detection** | Startup log warning when fallback to anonymous is triggered |
-| **Migration** | Replace `DD_REGISTRY_HUB_PUBLIC_TOKEN` with `DD_REGISTRY_HUB_PUBLIC_PASSWORD`. Replace `DD_REGISTRY_DHI_PUBLIC_TOKEN` with `DD_REGISTRY_DHI_PUBLIC_PASSWORD` |
+| **Removed since** | v1.6.0 |
+| **Migration** | Add the matching login and use `LOGIN`+`TOKEN`, use `LOGIN`+`PASSWORD`, use `AUTH`, or remove credentials for intentional anonymous access |
 
 ## Removal in v1.7.0
 
@@ -191,13 +191,13 @@ In v1.5.x, the `trigger-not-included` and `trigger-excluded` eligibility reasons
 
 ### Unversioned `GET /api/auth/methods` alias {#api-auth-methods}
 
-`GET /api/auth/methods` is a legacy, unversioned alias for `GET /auth/strategies`, kept unauthenticated so the login screen can render before a session exists. It's registered directly on the app, ahead of the `/api` mounts, so it survived the [`/api/*` path removal](#unversioned-api-paths) in v1.6.0 and keeps working on its own separate v1.7.0 timeline.
+`GET /api/auth/methods` is a legacy, unversioned auth-discovery alias kept unauthenticated so the login screen can render before a session exists. It's registered directly on the app, ahead of the `/api` mounts, so it survived the [`/api/*` path removal](#unversioned-api-paths) in v1.6.0 and keeps working on its own separate v1.7.0 timeline.
 
 | | |
 | --- | --- |
 | **Deprecated since** | v1.6.0 |
-| **Detection** | Log warning on each request ("GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /auth/strategies instead.") plus RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers |
-| **Migration** | Replace `GET /api/auth/methods` with `GET /auth/strategies` |
+| **Detection** | Log warning on each request plus RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers |
+| **Migration** | Replace `GET /api/auth/methods` with `GET /api/v1/auth/status` |
 
 ### Agent-less Home Assistant MQTT topic layout (multi-agent) {#hass-agent-topic-layout}
 
@@ -219,7 +219,7 @@ The current Home Assistant MQTT topic layout (`<topic>/<watcher>/<container>` an
 | | |
 | --- | --- |
 | **Deprecated since** | v1.6.0 |
-| **Detection** | None currently — `GET /auth/strategies` does not yet emit a warning, header, counter, or banner for its response shape |
+| **Detection** | Log warning on each request plus RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers |
 | **Migration** | Read `providers`/`errors` from `GET /api/v1/auth/status` instead of `strategies`/`warnings` from `GET /auth/strategies` |
 
 ## Enforced security changes (no deprecation window)
@@ -254,7 +254,7 @@ Drydock provides multiple channels for discovering deprecated feature usage:
 | Channel | Covers |
 | --- | --- |
 | **Startup log warnings** | All runtime-detectable deprecations |
-| **UI deprecation banners** | Legacy config, legacy API paths, OIDC HTTP, legacy password hashes, detected curl healthcheck overrides |
-| **Prometheus counters** | `dd_legacy_input_total{source,key}` for env vars, labels, and API paths |
-| **HTTP response headers** | `Deprecation` and `Sunset` on `PUT /api/settings` and `GET /api/auth/methods` |
+| **UI deprecation banners** | Active v1.7 trigger-prefix inputs |
+| **Prometheus counters** | `dd_legacy_input_total{source,key}` for active trigger-prefix inputs, API tombstones, and historical observations |
+| **HTTP response headers** | `Deprecation` and `Sunset` on `PUT /api/settings`, `GET /api/auth/methods`, and `GET /auth/strategies` |
 | **Migration CLI** | `node dist/index.js config migrate --dry-run` previews all env var and label renames |

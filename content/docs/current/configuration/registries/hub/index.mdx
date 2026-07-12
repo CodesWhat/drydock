@@ -10,11 +10,11 @@ import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 
 The `hub` registry lets you configure [Docker Hub](https://hub.docker.com/) integration.
 
-Currently, the supported credentials are:
+Supported credential shapes are:
 
-- Docker Hub auth + Docker Hub Access Token
+- Docker Hub login + access token (`LOGIN` + `TOKEN`)
 - Docker Base64 credentials (like in [.docker/config.json](https://docs.docker.com/reference/cli/docker/login/))
-- Docker Hub auth + Docker Hub password (not recommended)
+- Docker Hub login + password or access token through `PASSWORD`
 
 <Callout type="warn">By default, if you don't configure any registries, drydock will configure a default one with anonymous access.
 Don't forget to configure authentication if you're using [Docker Hub Private Repositories](https://docs.docker.com/docker-hub/repos/#private-repositories).</Callout>
@@ -23,12 +23,12 @@ Don't forget to configure authentication if you're using [Docker Hub Private Rep
 
 | Env var | Required | Description | Supported values | Default value when missing |
 | --- | :---: | --- | --- | --- |
-| `DD_REGISTRY_HUB_{REGISTRY_NAME}_LOGIN` | ⚪ | A valid Docker Hub Login (required with `PASSWORD`) | Docker Hub username | |
+| `DD_REGISTRY_HUB_{REGISTRY_NAME}_LOGIN` | ⚪ | A valid Docker Hub login (required with `PASSWORD` or `TOKEN`) | Docker Hub username | |
 | `DD_REGISTRY_HUB_{REGISTRY_NAME}_PASSWORD` | ⚪ | A valid Docker Hub password or access token (`LOGIN` must be defined) | Docker Hub password or [access token](https://docs.docker.com/security/access-tokens/) | |
-| `DD_REGISTRY_HUB_{REGISTRY_NAME}_TOKEN` | ⚪ | **Deprecated** — use `PASSWORD` instead (accepted as an alias until v1.6.0) | Docker Hub [access token](https://docs.docker.com/security/access-tokens/) | |
+| `DD_REGISTRY_HUB_{REGISTRY_NAME}_TOKEN` | ⚪ | A Docker Hub access token (`LOGIN` must be defined; cannot be combined with `PASSWORD`) | Docker Hub [access token](https://docs.docker.com/security/access-tokens/) | |
 | `DD_REGISTRY_HUB_{REGISTRY_NAME}_AUTH` | ⚪ | A valid Docker Hub Base64 Auth String (cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN`) | Base64 encoded `username:password` string | |
 
-<Callout type="warn">Registry auth now fails closed for invalid combinations. `LOGIN` must be paired with `PASSWORD`, and `AUTH` cannot be combined with `LOGIN`/`PASSWORD`/`TOKEN`. The `TOKEN` key is a deprecated alias for `PASSWORD` (removed in v1.6.0) — use `PASSWORD` for new configs.</Callout>
+<Callout type="warn">Registry auth fails closed for invalid combinations. Use exactly one complete shape: `LOGIN`+`PASSWORD`, `LOGIN`+`TOKEN`, `AUTH`, or no credentials. In particular, the former token-only `DD_REGISTRY_HUB_PUBLIC_TOKEN` compatibility configuration is rejected in v1.6 instead of silently falling back to anonymous access; pair it with `DD_REGISTRY_HUB_PUBLIC_LOGIN` or remove it for intentional anonymous pulls.</Callout>
 
 ## Examples
 
@@ -41,7 +41,7 @@ Don't forget to configure authentication if you're using [Docker Hub Private Rep
 #### 2. Go to your&nbsp;[Security Settings](https://hub.docker.com/settings/security)
 
 - Create a new Access Token
-- Copy it and use it as the `DD_REGISTRY_HUB_PUBLIC_PASSWORD` value
+- Copy it and use it as the `DD_REGISTRY_HUB_PUBLIC_TOKEN` value alongside your login
 
 ![image](/docs/assets/configuration/registries/hub/hub_token.png)
 
@@ -55,7 +55,7 @@ services:
     ...
     environment:
       - DD_REGISTRY_HUB_PUBLIC_LOGIN=mylogin
-      - DD_REGISTRY_HUB_PUBLIC_PASSWORD=fb4d5db9-e64d-3648-8846-74d0846e55de
+      - DD_REGISTRY_HUB_PUBLIC_TOKEN=fb4d5db9-e64d-3648-8846-74d0846e55de
 ```
 
 </Tab>
@@ -63,7 +63,7 @@ services:
 ```bash
 docker run \
   -e DD_REGISTRY_HUB_PUBLIC_LOGIN="mylogin" \
-  -e DD_REGISTRY_HUB_PUBLIC_PASSWORD="fb4d5db9-e64d-3648-8846-74d0846e55de" \
+  -e DD_REGISTRY_HUB_PUBLIC_TOKEN="fb4d5db9-e64d-3648-8846-74d0846e55de" \
   ...
   codeswhat/drydock
 ```
@@ -78,11 +78,11 @@ docker run \
 
 #### 2. Encode with Base64
 
-Concatenate `$auth:$password` and [encode with Base64](https://www.base64encode.org/).
+Concatenate `$username:$password` and [encode with Base64](https://www.base64encode.org/).
 
 For example,
 
-- if your auth is `johndoe`
+- if your username is `johndoe`
 - and your password is `2c1bd872-efb6-4f3a-81aa-724518a0a592`
 - the resulting encoded string would be `am9obmRvZToyYzFiZDg3Mi1lZmI2LTRmM2EtODFhYS03MjQ1MThhMGE1OTI=`
 

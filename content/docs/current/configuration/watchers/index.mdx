@@ -35,14 +35,13 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 | `DD_WATCHER_{watcher_name}_TAG_FAMILY` | ⚪ | Default actionable tag-family policy for this watcher; imgsets and labels can override it | `strict`, `loose` | `strict` |
 | `DD_WATCHER_{watcher_name}_TAG_PIN_INFO` | ⚪ | Default for computing informational `updateInsight` on pinned containers; imgsets and labels can override it | `true`, `false` | `true` |
 | `DD_WATCHER_{watcher_name}_WATCHALL` | ⚪ | Include containers in **every** state (created, paused, exited, restarting, etc.) — not just running ones | `true`, `false` | `false` |
-| `DD_WATCHER_{watcher_name}_WATCHATSTART` (deprecated) | ⚪ | If drydock must check for image updates during startup | `true`, `false` | `true` |
 | `DD_WATCHER_{watcher_name}_WATCHBYDEFAULT` | ⚪ | Watch containers that don't have an explicit `dd.watch` label | `true`, `false` | `true` |
 | `DD_WATCHER_{watcher_name}_WATCHEVENTS` | ⚪ | If drydock must monitor docker events | `true`, `false` | `true` |
 | `DD_WATCHER_{watcher_name}_IMGSET_{imgset_name}_*` | ⚪ | Shared per-image defaults (image match + include/exclude/transform/link/display/trigger/lookup) | See **Image Set Presets** section below | |
 
 `WATCHALL` and `WATCHBYDEFAULT` are independent and operate at different stages. `WATCHALL` controls **which container states** Docker returns (running-only vs all states). `WATCHBYDEFAULT` controls **whether unlabeled containers are watched** — the `dd.watch` label always takes precedence when set. See the [behavior matrix](#watchall--watchbydefault-behavior-matrix) below for details.
 
-<Callout type="warn">`DD_WATCHER_{watcher_name}_WATCHDIGEST` is deprecated and will be removed in v1.6.0. Use the `dd.watch.digest` container label instead.</Callout>
+<Callout type="warn">The former `DD_WATCHER_{watcher_name}_WATCHDIGEST` and `WATCHATSTART` settings were removed in v1.6. Use the `dd.watch.digest` container label for per-container digest watching; startup scans are always scheduled.</Callout>
 
 <Callout type="warn" title="Watcher frequency and registry rate limits">
 The default cron is `0 */6 * * *` (every 6 hours). With many watched containers and tag lists that paginate to thousands of entries (a single GHCR image can take 20+ paginated calls), polling more often can saturate anonymous Docker Hub limits (100 pulls / 6h) and trigger `429` responses. Drydock honors `Retry-After` on 429s and rate-limits its own outbound calls with a per-host token bucket. Set `DD_WATCHER_{watcher_name}_CRON` to change the interval — use `0 * * * *` for near-real-time detection or `0 1 * * *` for once-daily polling. An explicit `CRON` you set is always preserved.
@@ -54,7 +53,7 @@ The default cron is `0 */6 * * *` (every 6 hours). With many watched containers 
 - Multiple watchers can be configured (if you have multiple Docker hosts to watch). Give them different names.
 - Socket configuration and host/port configuration are mutually exclusive.
 - When `MAINTENANCE_WINDOW` is configured and a check is skipped outside the allowed schedule, drydock queues one pending check and runs it automatically when the next maintenance window opens.
-- Legacy compatibility: `wud.*` labels are still accepted as fallback to `dd.*`. When a fallback is used, drydock emits a one-time warning for that key and increments `dd_legacy_input_total{source="label",key="<legacy_key>"}`. To rewrite configs in place, run `node dist/index.js config migrate --dry-run` then `node dist/index.js config migrate --file <path>`.
+- `wud.*` labels are ignored as of v1.6. To rewrite old compose files, run `node dist/index.js config migrate --dry-run` then `node dist/index.js config migrate --file <path>`.
 - If watcher logger initialization fails, drydock automatically falls back to structured stderr JSON logs and increments `dd_watcher_logger_init_failures_total{type,name}`. Alert on non-zero increases to catch degraded logging early.
 - The watcher fan-out is capped at **10 concurrent `watchContainer` invocations** per cron cycle. On inventories with 40–200 containers this prevents a burst of simultaneous registry calls that would trigger rate limits despite the token bucket.
 - Hybrid `image:tag@sha256:digest` references (e.g. `docker.io/valkey/valkey:9@sha256:bcf6…`) are handled correctly: drydock preserves both the tag and the digest rather than falling back to digest-only mode, so the human-readable tag is displayed in the UI and the registry router resolves the provider cleanly.

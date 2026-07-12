@@ -28,7 +28,7 @@ The callback URL (to configure in the IDP) is built as `${DD_PUBLIC_URL}/auth/oi
 **OIDC configuration requirements:**
 
 - **`DD_PUBLIC_URL` is required** — Without it, the OIDC provider will fail to register at startup and the login page will show "No authentication methods configured". Check startup logs for the exact error.
-- **HTTP discovery is deprecated** — `http://` OIDC discovery URLs will be removed in v1.6.0. When the discovery URL uses `http:`, drydock passes `allowInsecureRequests` to the OIDC client. Migrate your IdP to HTTPS before upgrading.
+- **HTTPS discovery is required** — `http://` OIDC discovery URLs are rejected as of v1.6. Migrate your IdP to HTTPS; `INSECURE` only relaxes certificate verification for HTTPS and does not re-enable HTTP.
 - **`INSECURE` is for dev only** — `DD_AUTH_OIDC_{auth_name}_INSECURE=true` disables TLS certificate verification for OIDC HTTPS calls (discovery, token, userinfo, JWKS). Use only for local/dev troubleshooting.
 </Callout>
 

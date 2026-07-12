@@ -43,18 +43,20 @@ This trigger also supports the [common configuration variables](/docs/configurat
 **Notes:**
 
 - The env var keys for `COMPOSEFILEONCE`, `COMPOSEFILELABEL`, `RECONCILIATIONMODE`, `DIGESTPINNING`, and `MOUNTPREFIXFALLBACK` are case-insensitive — both the lowercased form (e.g. `composefileonce`) and the camelCase form (e.g. `composeFileOnce`) are accepted.
-- Legacy compatibility: compose file label fallback `wud.compose.file` is still accepted when `dd.compose.file` is not present. Prefer `dd.compose.file` for new configs, and use `node dist/index.js config migrate` to rewrite existing labels.
+- The removed `wud.compose.file` label is ignored as of v1.6. Use `dd.compose.file`, or run `node dist/index.js config migrate` to rewrite existing compose files.
 
 ## Auto-detection
 
-When no explicit `FILE` env var or `dd.compose.file` label is set, Drydock auto-detects the compose file path for each container. The detection chain is evaluated in order, and the first match wins:
+For every update, Drydock resolves the active compose-file chain in this order, and the first non-empty source wins:
 
-1. **`dd.compose.file` label** (or legacy `wud.compose.file`) on the container.
-2. **`com.docker.compose.project.config_files`** Docker label — set automatically by Docker Compose on every container it creates.
-3. **Docker inspect fallback** — re-reads the `config_files` label from the Docker inspect API (covers containers whose labels were not available at watcher sync time).
-4. **Trigger-level `FILE` configuration** — the `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_FILE` env var, used as a last resort default.
+1. **Configured compose-file label** on the watched container — `dd.compose.file` by default, or the label named by `COMPOSEFILELABEL`.
+2. **`com.docker.compose.project.config_files`** from the watched container, resolved relative to `com.docker.compose.project.working_dir` when needed. Multi-file Compose chains are preserved in their declared order and host paths are mapped through Drydock's bind mounts.
+3. **Docker inspect fallback** — re-reads those standard Compose project labels from the live container when they were absent from the watcher snapshot.
+4. **Trigger-level `FILE` configuration** — `DD_ACTION_DOCKERCOMPOSE_{trigger_name}_FILE` is the last-resort default. If it names a directory, Drydock probes `compose.yaml`, `compose.yml`, `docker-compose.yaml`, then `docker-compose.yml`.
 
 Most Docker Compose users do not need to configure the file path at all. As long as containers were started with `docker compose up`, the `config_files` label is present and Drydock resolves the path automatically.
+
+The removed `wud.compose.file` label is not part of this chain and is ignored in v1.6.
 
 ## Mount-prefix fallback
 

@@ -6,43 +6,6 @@ Active deprecations and their removal timeline. Each entry includes the version 
 
 ## Active
 
-### HTTP OIDC Discovery URLs
-
-| | |
-| --- | --- |
-| **Deprecated in** | v1.4.0 |
-| **Removed in** | v1.6.0 |
-| **Affects** | `DD_AUTH_OIDC_*_DISCOVERY` values using `http://` |
-
-OIDC providers configured with an `http://` discovery URL trigger `allowInsecureRequests` in the openid-client library. This workaround is deprecated.
-
-**Migration:** Update your Identity Provider to serve its OIDC discovery endpoint over HTTPS, then update your `DD_AUTH_OIDC_<name>_DISCOVERY` environment variable to the `https://` URL.
-
----
-
-### Legacy Basic Auth Password Hashes
-
-| | |
-| --- | --- |
-| **Deprecated in** | v1.4.0 |
-| **Removed in** | v1.6.0 |
-| **Affects** | `DD_AUTH_BASIC_*_HASH` values using `{SHA}`, `$apr1$`/`$1$` (MD5), `crypt`, or plain-text formats |
-
-Legacy password hash formats inherited from the upstream WUD project (`{SHA}`, APR1/MD5, crypt, and plain-text) are accepted with deprecation warnings. These formats are cryptographically weak and unsuitable for password hashing.
-
-**Migration:** Generate a new argon2id hash using the Drydock container and update your `DD_AUTH_BASIC_<name>_HASH` environment variable:
-
-```bash
-docker run --rm codeswhat/drydock node -e '
-  const c = require("node:crypto");
-  const s = c.randomBytes(32);
-  const h = c.argon2Sync("argon2id", { message: process.argv[1], nonce: s, memory: 65536, passes: 3, parallelism: 4, tagLength: 64 });
-  console.log("argon2id$65536$3$4$" + s.toString("base64") + "$" + h.toString("base64"));
-' "YOUR_PASSWORD_HERE"
-```
-
----
-
 ### PUT /api/settings
 
 | | |
@@ -65,9 +28,9 @@ docker run --rm codeswhat/drydock node -e '
 | **Removed in** | v1.7.0 |
 | **Affects** | API consumers using `GET /api/auth/methods` |
 
-`GET /api/auth/methods` is a legacy, unversioned alias for `GET /auth/strategies` (`app/api/auth.ts`), kept unauthenticated so the login screen can render before a session exists. It logs a deprecation warning on each request ("GET /api/auth/methods is deprecated and will be removed in v1.7.0. Use GET /auth/strategies instead.") and returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers — the same treatment as the deprecated `PUT /api/settings` alias. It is registered directly on the app, before the `/api` mounts, rather than living inside the `/api` alias router — so it is unaffected by and survives the unversioned `/api/*` path removal below, and keeps working on its own separate v1.7.0 timeline. `GET /api/auth/status` (also `app/api/auth.ts`) is registered the same way, directly on the app before the `/api` mounts, and survives the same removal for the same reason — but unlike `GET /api/auth/methods` it currently emits no deprecation warning and has no removal timeline of its own; it is a standing compatibility alias for `GET /api/v1/auth/status`.
+`GET /api/auth/methods` is a legacy, unversioned auth-discovery alias kept unauthenticated so the login screen can render before a session exists. It logs a deprecation warning on each request, returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` response headers, and points callers directly to `GET /api/v1/auth/status`. It is registered directly on the app, so it survives the general unversioned `/api/*` removal on its own v1.7.0 timeline. `GET /api/auth/status` is a standing compatibility alias for `GET /api/v1/auth/status` with no removal scheduled.
 
-**Migration:** Replace `GET /api/auth/methods` with `GET /auth/strategies`.
+**Migration:** Replace `GET /api/auth/methods` with `GET /api/v1/auth/status`.
 
 ---
 
@@ -79,37 +42,9 @@ docker run --rm codeswhat/drydock node -e '
 | **Removed in** | v1.8.0 |
 | **Affects** | Clients reading `{ strategies, warnings }` from `GET /auth/strategies` |
 
-`GET /auth/strategies` returns the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }` — the same provider list plus structured startup registration errors instead of ad hoc warning strings. Its unversioned alias, `GET /api/auth/methods` (see above), is deprecated on a separate, earlier timeline and is removed outright in v1.7.0, ahead of this response-shape migration deadline. Unlike other entries in this file, `GET /auth/strategies` currently emits no deprecation signal for its response shape — no log warning, no `Deprecation`/`Sunset` header, no Prometheus counter, no UI banner — so usage is invisible until removal.
+`GET /auth/strategies` returns the older `{ strategies, warnings }` response shape. The canonical replacement, `GET /api/v1/auth/status` (also available at `/api/auth/status` and `/auth/status`), returns `{ providers, errors }`. Each request now logs a deprecation warning and returns RFC 9745 `Deprecation` and RFC 8594 `Sunset` headers for its v1.8.0 removal.
 
 **Migration:** Read `providers`/`errors` from `GET /api/v1/auth/status` instead of `strategies`/`warnings` from `GET /auth/strategies`.
-
----
-
-### Legacy `wud.*` Docker labels
-
-| | |
-| --- | --- |
-| **Deprecated in** | v1.4.0 |
-| **Removed in** | v1.6.0 |
-| **Affects** | Containers using `wud.*` labels (e.g., `wud.watch`, `wud.tag.include`) |
-
-Legacy `wud.*` labels from the upstream WUD project are accepted as fallbacks for their `dd.*` equivalents. Each fallback logs a deprecation warning on first use.
-
-**Migration:** Rename all `wud.*` labels to `dd.*` on your containers (e.g., `wud.watch=true` becomes `dd.watch=true`). Use `node dist/index.js config migrate` to automate the conversion across compose files and `.env` files.
-
----
-
-### Legacy `WUD_*` environment variables
-
-| | |
-| --- | --- |
-| **Deprecated in** | v1.4.0 |
-| **Removed in** | v1.6.0 |
-| **Affects** | Configurations using `WUD_*` env vars (e.g., `WUD_AGENT_SECRET`) |
-
-Legacy `WUD_*` environment variables are accepted as fallbacks for their `DD_*` equivalents. Usage is tracked via the `dd_legacy_input_total` Prometheus counter.
-
-**Migration:** Rename all `WUD_*` environment variables to `DD_*` (e.g., `WUD_AGENT_SECRET` becomes `DD_AGENT_SECRET`). Use `node dist/index.js config migrate` for automated conversion.
 
 ---
 
@@ -173,76 +108,6 @@ The CLI rewrites legacy trigger keys to action-prefixed aliases by default (`DD_
 
 ---
 
-### `DD_WATCHER_{name}_WATCHDIGEST` environment variable
-
-| | |
-| --- | --- |
-| **Deprecated in** | v1.4.0 |
-| **Removed in** | v1.6.0 |
-| **Affects** | Configurations using `DD_WATCHER_{name}_WATCHDIGEST` |
-
-The `WATCHDIGEST` env var is deprecated. Use the `dd.watch.digest=true` container label for per-container digest watching instead.
-
-**Migration:** Remove `DD_WATCHER_{name}_WATCHDIGEST` from your environment and add `dd.watch.digest=true` as a label on individual containers that need digest-level monitoring.
-
----
-
-### `DD_WATCHER_{name}_WATCHATSTART` environment variable
-
-| | |
-| --- | --- |
-| **Deprecated in** | v1.4.0 |
-| **Removed in** | v1.6.0 |
-| **Affects** | Configurations using `DD_WATCHER_{name}_WATCHATSTART` |
-
-The `WATCHATSTART` env var is deprecated. Drydock watches at startup by default.
-
-**Migration:** Remove `DD_WATCHER_{name}_WATCHATSTART` from your environment. If you need to delay the first scan, use `DD_WATCHER_{name}_CRON` to control the schedule.
-
----
-
-### Legacy trigger template variables
-
-| | |
-| --- | --- |
-| **Deprecated in** | v1.4.0 |
-| **Removed in** | v1.6.0 |
-| **Affects** | Trigger templates using `$id`, `$name`, `$watcher`, `$kind`, `$semver`, `$local`, `$remote`, `$link`, `$count`, `$raw` |
-
-Several trigger template variable names have been replaced with more descriptive equivalents. The old names are retained as aliases.
-
-**Migration:** Update trigger templates to use the new variable names. See the [trigger configuration docs](https://getdrydock.com/docs/configuration/triggers) for the full variable reference.
-
----
-
-### Kafka trigger `clientId` configuration key
-
-| | |
-| --- | --- |
-| **Deprecated in** | v1.4.5 |
-| **Removed in** | v1.6.0 |
-| **Affects** | Kafka trigger configurations using `clientId` |
-
-Kafka trigger configuration now uses `clientid` (lowercase) as the canonical key. The legacy `clientId` key is accepted as a compatibility alias and logs a deprecation warning.
-
-**Migration:** Rename Kafka trigger config key `clientId` to `clientid`.
-
----
-
-### Registry `PUBLIC_TOKEN` configuration
-
-| | |
-| --- | --- |
-| **Deprecated in** | v1.4.0 |
-| **Removed in** | v1.6.0 |
-| **Affects** | `DD_REGISTRY_HUB_PUBLIC_TOKEN`, `DD_REGISTRY_DHI_PUBLIC_TOKEN`, and similar token-auth env vars |
-
-Token-based authentication for public registries has been replaced by password-based authentication for consistency.
-
-**Migration:** Replace `DD_REGISTRY_HUB_PUBLIC_TOKEN` with `DD_REGISTRY_HUB_PUBLIC_PASSWORD`. Replace `DD_REGISTRY_DHI_PUBLIC_TOKEN` with `DD_REGISTRY_DHI_PUBLIC_PASSWORD`. Both registries require the instance-name segment (`PUBLIC` in these examples) between the provider and the credential key.
-
----
-
 ### Agent-less Home Assistant MQTT topic layout (multi-agent)
 
 | | |
@@ -260,6 +125,26 @@ Setting `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true` opts into the 
 **Migration:** Multi-agent deployments should set `DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true` and re-point any affected Home Assistant references before v1.7.0 makes it the default.
 
 ## Removed compatibility behaviors
+
+### v1.6.0 configuration and authentication removals
+
+The following v1.4-era compatibility inputs are no longer executed in v1.6.0:
+
+| Removed input | v1.6.0 behavior | Migration |
+| --- | --- | --- |
+| HTTP OIDC discovery URLs | Authentication registration rejects non-HTTPS discovery URLs. | Serve discovery over HTTPS and update `DD_AUTH_OIDC_<name>_DISCOVERY`. |
+| `{SHA}`, `$apr1$`/`$1$`, `crypt`, and plain-text Basic hashes | Authentication registration accepts only the documented argon2id hash schema. | Generate an argon2id hash and update `DD_AUTH_BASIC_<name>_HASH`. |
+| `WUD_*` environment variables | Ignored; only `DD_*` variables are loaded. | Rename them manually or with `node dist/index.js config migrate`. |
+| `wud.*` Docker labels | Ignored; only `dd.*` labels affect runtime behavior. | Rename them manually or with `node dist/index.js config migrate`. |
+| `DD_WATCHER_<name>_WATCHDIGEST` | Rejected as an unknown watcher setting. | Use `dd.watch.digest=true` per container. |
+| `DD_WATCHER_<name>_WATCHATSTART` | Rejected as an unknown watcher setting; startup scans are always scheduled. | Remove it and use `CRON` to control later scans. |
+| Legacy trigger template variables (`$id`, `$name`, `$watcher`, `$kind`, `$semver`, `$local`, `$remote`, `$link`, `$count`) | No alias values are supplied to templates. | Use `$container.*`, canonical update fields, and `$containers.length`. |
+| Kafka trigger `clientId` | Trigger validation rejects the camel-case key. | Rename it to `clientid`. |
+| Token-only Hub/DHI public instance configuration (for example `DD_REGISTRY_HUB_PUBLIC_TOKEN` without `..._PUBLIC_LOGIN`) | Registry validation fails closed instead of silently switching to anonymous access. The `TOKEN` key itself remains valid when paired with `LOGIN`. | Configure the named instance with `LOGIN`+`PASSWORD`, `LOGIN`+`TOKEN`, or `AUTH`; remove credentials entirely for intentional anonymous access. |
+
+The migration CLI intentionally retains knowledge of the removed WUD names so it can rewrite old configuration files; this is migration support, not runtime compatibility.
+
+---
 
 ### Legacy aggregate container stats endpoint
 

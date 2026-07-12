@@ -139,7 +139,7 @@ Returns `202 Accepted` with registry dispatch counts, `401` for a missing or inv
 
 ## Notification rules
 
-Notification rules control which events trigger notifications and which triggers receive them. Five default rules are created automatically.
+Notification rules control which events trigger notifications, which triggers receive them, the in-app bell filters, and optional per-provider message templates. Seven default rules are created automatically.
 
 ### Get all notification rules
 
@@ -153,38 +153,73 @@ curl http://drydock:3000/api/v1/notifications
       "name": "Update Available",
       "description": "When a container has a new version",
       "enabled": true,
-      "triggers": []
+      "triggers": [],
+      "bellEnabled": true,
+      "bellThreshold": "all",
+      "templates": {}
     },
     {
       "id": "update-applied",
       "name": "Update Applied",
       "description": "After a container is successfully updated",
       "enabled": true,
-      "triggers": []
+      "triggers": [],
+      "bellEnabled": true,
+      "bellThreshold": "all",
+      "templates": {}
     },
     {
       "id": "update-failed",
       "name": "Update Failed",
       "description": "When an update fails or is rolled back",
       "enabled": true,
-      "triggers": []
+      "triggers": [],
+      "bellEnabled": true,
+      "bellThreshold": "all",
+      "templates": {}
     },
     {
       "id": "security-alert",
       "name": "Security Alert",
       "description": "Critical/High vulnerability detected",
       "enabled": true,
-      "triggers": []
+      "triggers": [],
+      "bellEnabled": true,
+      "bellThreshold": "all",
+      "templates": {}
     },
     {
       "id": "agent-disconnect",
       "name": "Agent Disconnected",
       "description": "When a remote agent loses connection",
       "enabled": false,
-      "triggers": []
+      "triggers": [],
+      "bellEnabled": true,
+      "bellThreshold": "all",
+      "templates": {}
+    },
+    {
+      "id": "agent-reconnect",
+      "name": "Agent Reconnected",
+      "description": "When a remote agent reconnects after losing connection",
+      "enabled": false,
+      "triggers": [],
+      "bellEnabled": false,
+      "bellThreshold": "all",
+      "templates": {}
+    },
+    {
+      "id": "container-unhealthy",
+      "name": "Container Unhealthy",
+      "description": "When a container's Docker health check enters the unhealthy state",
+      "enabled": false,
+      "triggers": [],
+      "bellEnabled": false,
+      "bellThreshold": "all",
+      "templates": {}
     }
   ],
-  "total": 5
+  "total": 7
 }
 ```
 
@@ -199,18 +234,51 @@ curl http://drydock:3000/api/v1/notifications
 | `data[].description` | string | What this rule covers |
 | `data[].enabled` | boolean | Whether the rule is active |
 | `data[].triggers` | string[] | Trigger IDs that receive this notification (empty = all triggers) |
+| `data[].bellEnabled` | boolean | Whether this rule is included in the in-app bell when its event has audit-backed bell support |
+| `data[].bellThreshold` | string | Bell threshold: `all`, `major`, `minor`, or `patch`; threshold filtering applies only to `update-available` entries |
+| `data[].templates` | object | Per-trigger overrides keyed by canonical trigger ID; each value may contain `simpleTitle`, `simpleBody`, and/or `batchTitle` |
 
 ### Update a notification rule
 
-Update the `enabled` status and/or `triggers` list for a rule. Only the fields you include are changed.
+Update delivery routing, bell preferences, and/or template overrides for a rule. Only the fields you include are changed. Template keys must resolve to configured notification triggers; action triggers are rejected.
 
 ```bash
 curl -X PATCH http://drydock:3000/api/v1/notifications/update-available \
   -H 'Content-Type: application/json' \
-  -d '{"enabled": true, "triggers": ["slack.alerts", "ntfy.one"]}'
+  -d '{
+    "enabled": true,
+    "triggers": ["slack.alerts", "ntfy.one"],
+    "bellEnabled": true,
+    "bellThreshold": "minor",
+    "templates": {
+      "slack.alerts": {
+        "simpleTitle": "${container.name}: ${container.updateKind.remoteValue}",
+        "simpleBody": "${container.result.releaseNotes.body}"
+      }
+    }
+  }'
 ```
 
 Returns 200 with the updated rule, 400 if the body is invalid or a trigger ID is not recognized, or 404 if the rule ID does not exist.
+
+### Preview notification templates
+
+Render draft overrides against representative data without saving them:
+
+```bash
+curl -X POST http://drydock:3000/api/v1/notifications/update-available/preview \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "triggerId": "slack.alerts",
+    "templates": {
+      "simpleTitle": "${container.name}: ${container.updateKind.remoteValue}",
+      "simpleBody": "${container.result.releaseNotes.body}",
+      "batchTitle": "${containers.length} updates available"
+    }
+  }'
+```
+
+The response contains rendered `simpleTitle`, `simpleBody`, and `batchTitle` strings. Omitted draft fields fall back to the saved rule override, then to the trigger's configured/default template. The endpoint returns 404 for an unknown rule and 400 for an unknown trigger or one that cannot render previews.
 
 ## Notification outbox
 
@@ -381,7 +449,7 @@ curl -X PATCH http://drydock:3000/api/v1/settings \
 | --- | --- | --- | --- |
 | `internetlessMode` | boolean | `false` | When enabled, disables registry icon lookups and other external requests |
 
-Returns 200 with the updated settings, or 400 if the body is invalid. `PUT /api/v1/settings` is still accepted as a temporary compatibility alias but is deprecated.
+Returns 200 with the updated settings, or 400 if the body is invalid. `PUT /api/v1/settings` remains a deprecated compatibility alias; because `/api/v1` is frozen, removal is deferred to API v2. New integrations should use `PATCH`.
 
 ## Preferences
 
@@ -433,7 +501,7 @@ Returns 200 with the preferences envelope, 400 if the body is malformed, 401 if 
 
 ## Container groups
 
-Returns containers grouped by stack or group label. Group priority: `dd.group` > `wud.group` > `com.docker.compose.project` > `com.docker.stack.namespace` > ungrouped.
+Returns containers grouped by stack or group label. Group priority: `dd.group` > `com.docker.compose.project` > `com.docker.stack.namespace` > ungrouped.
 
 ```bash
 curl http://drydock:3000/api/v1/containers/groups

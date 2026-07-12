@@ -104,7 +104,7 @@ The official image is published on Docker Hub and GitHub Container Registry.
 
 ## Migrating from WUD
 
-If you are coming from What's Up Docker, you can switch images and keep your existing config (`WUD_*` env vars and `wud.*` labels still work).
+If you are coming from What's Up Docker, migrate `WUD_*` environment variables and `wud.*` labels before starting v1.6; those runtime aliases have been removed.
 
 To rewrite your local config to drydock naming (`DD_*` and `dd.*`), run:
 
@@ -132,8 +132,8 @@ If you use the Home Assistant [wud-card](https://github.com/angryvoegi/wud-card)
    - `@` runtime resources (containers, agents, triggers, watchers)
    - `#` config resources (registries, auth, notifications, settings)
 3. Leave the query empty to use recent results.
-4. Open **Notifications** and tune event rules (`update-available`, `update-applied`, `update-failed`, `security-alert`, `agent-disconnect`) plus trigger assignments.
-5. Reorder dashboard widgets by drag/drop; layout persists locally and can be reset.
+4. Open **Notifications** and tune all seven delivery rules, trigger assignments, audit-backed in-app bell categories, and per-provider templates. The update-available bell rule also offers a severity threshold; use **Preview** to render template drafts before saving.
+5. Reorder or resize dashboard widgets in edit mode; the custom grid persists responsive layouts locally (and across devices when signed-in preference sync is enabled) and can be reset.
 
 Keyboard shortcuts: `Enter` confirms action dialogs, `Escape` cancels dialogs and closes detail panels.
 

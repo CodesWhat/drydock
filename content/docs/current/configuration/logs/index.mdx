@@ -80,6 +80,8 @@ By default, this view opens a live WebSocket stream to `WS /api/v1/log/stream` a
 When enabled, logs are stored in an in-memory ring buffer (last 1,000 entries) and are not persisted to disk.  
 If `DD_LOG_BUFFER_ENABLED=false`, buffered-entry API responses are empty.
 
+The browser keeps up to 2,000 live application-log entries for sorting, search, and virtualization. When that client buffer fills, the oldest row is discarded and the collection rolls forward immutably, so newest-first views continue advancing as new WebSocket frames arrive.
+
 ### Toolbar controls
 
 | Control | Description |

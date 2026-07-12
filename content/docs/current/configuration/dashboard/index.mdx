@@ -51,7 +51,9 @@ While in edit mode, interactive widget content is disabled and three controls be
 - **Widget visibility** — a sidebar panel slides in from the right listing every widget with a checkbox. Toggle any widget on or off. Size capability badges (S / M / L) indicate how each widget can be resized. On mobile, the panel is opt-in — tap the **sliders icon** to open it.
 - **Reset to Default** — a button at the bottom of the sidebar restores the original layout, order, and visibility.
 
-All changes are saved automatically to `localStorage` and persist across page reloads.
+The v1.6 grid is implemented directly with CSS Grid rather than `grid-layout-plus`. Reordering repacks widgets into the earliest available cells, including natural same-row moves; mouse and touch drag gestures show the active drop target, and resize handles clamp every widget to its documented minimum and maximum size.
+
+All changes are saved automatically to `localStorage` and persist across page reloads. Signed-in users who enable **Sync across devices** in **Config > Appearance** also store dashboard layouts server-side with the rest of their UI preferences.
 
 ### Default layout
 
@@ -96,4 +98,4 @@ Dashboard preferences are stored under the `dd-preferences` key in the browser's
 - **Hidden widgets** — which widgets are toggled off.
 - **Grid layout** — each widget's position (x, y) and size (width, height).
 
-<Callout type="info">Dashboard preferences are per-browser. They are not synced across devices or shared between users.</Callout>
+<Callout type="info">Dashboard preferences are per-browser by default. Signed-in users can opt into per-account cross-device synchronization in **Config > Appearance**; anonymous sessions remain local-only.</Callout>

@@ -442,7 +442,7 @@ If the container ends up stopped, check `docker logs drydock-old-*` for the help
 
 ## Legacy WUD environment variables or labels
 
-Drydock accepts legacy `WUD_*` environment variables and `wud.*` container labels as fallback, but emits deprecation warnings when they are used. Each legacy fallback increments the `dd_legacy_input_total{source,key}` Prometheus counter.
+Drydock v1.6 ignores legacy `WUD_*` environment variables and `wud.*` container labels. Convert them to `DD_*` and `dd.*` before starting the upgraded service.
 
 To convert your configuration in place, use the built-in migration CLI:
 

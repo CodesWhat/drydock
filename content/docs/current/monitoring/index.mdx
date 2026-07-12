@@ -135,10 +135,9 @@ dd_watcher_total{type="docker",name="local"} 6
 # TYPE dd_watcher_logger_init_failures_total counter
 dd_watcher_logger_init_failures_total{type="docker",name="local"} 0
 
-# HELP dd_legacy_input_total Total number of legacy compatibility fallbacks consumed
+# HELP dd_legacy_input_total Total number of legacy compatibility inputs observed
 # TYPE dd_legacy_input_total counter
-dd_legacy_input_total{source="env",key="WUD_SERVER_PORT"} 1
-dd_legacy_input_total{source="label",key="wud.watch"} 3
+dd_legacy_input_total{source="env",key="DD_TRIGGER_SLACK_LOCAL_URL"} 1
 
 # HELP dd_watcher_maintenance_skip_total The number of watch cycles skipped due to maintenance window
 # TYPE dd_watcher_maintenance_skip_total counter
@@ -175,7 +174,7 @@ drydock_digest_cache_misses_total 3
 
 When a watcher logger cannot be initialized, drydock falls back to structured stderr JSON logs and increments `dd_watcher_logger_init_failures_total`.
 
-`dd_legacy_input_total` tracks local fallback usage of legacy `WUD_*` env vars and `wud.*` labels so you can monitor migration progress in your own Prometheus/Grafana stack. No data is sent to external services.
+`dd_legacy_input_total` tracks active compatibility inputs such as deprecated `DD_TRIGGER_*` variables, plus historical observations retained for the lifetime of the process. Removed `WUD_*` variables and `wud.*` labels no longer increment it because they are ignored. No data is sent to external services.
 
 ### Auth Abuse Observability
 
