@@ -3,6 +3,7 @@ import { getAuditCounter } from '../prometheus/audit.js';
 import * as auditStore from '../store/audit.js';
 import type {
   AgentDisconnectedEventPayload,
+  ContainerHealthTransitionEventPayload,
   ContainerLifecycleEventPayload,
   ContainerUpdateAppliedEvent,
   ContainerUpdateFailedEventPayload,
@@ -12,6 +13,7 @@ import type {
 const AUDIT_HANDLER_OPTIONS = { id: 'audit', order: 200 };
 const SECURITY_ALERT_AUDIT_DEDUPE_WINDOW_MS = 5 * 60 * 1000;
 const AGENT_DISCONNECT_AUDIT_DEDUPE_WINDOW_MS = 60 * 1000;
+const CONTAINER_UNHEALTHY_AUDIT_DEDUPE_WINDOW_MS = 5 * 60 * 1000;
 
 type OrderedEventHandlerFn<TPayload> = (payload: TPayload) => void | Promise<void>;
 
@@ -30,6 +32,7 @@ export interface AuditSubscriptionRegistrars {
   registerContainerUpdateApplied: OrderedEventRegistrarFn<ContainerUpdateAppliedEvent>;
   registerContainerUpdateFailed: OrderedEventRegistrarFn<ContainerUpdateFailedEventPayload>;
   registerSecurityAlert: OrderedEventRegistrarFn<SecurityAlertEventPayload>;
+  registerContainerHealthTransition: OrderedEventRegistrarFn<ContainerHealthTransitionEventPayload>;
   registerAgentDisconnected: OrderedEventRegistrarFn<AgentDisconnectedEventPayload>;
   registerContainerAdded: EventRegistrarFn<ContainerLifecycleEventPayload>;
   registerContainerUpdated: EventRegistrarFn<ContainerLifecycleEventPayload>;
@@ -38,6 +41,7 @@ export interface AuditSubscriptionRegistrars {
 
 const securityAlertAuditSeenAt = new Map<string, number>();
 const agentDisconnectedAuditSeenAt = new Map<string, number>();
+const containerUnhealthyAuditSeenAt = new Map<string, number>();
 
 function getContainerUpdateAppliedEventContainerName(
   payload: ContainerUpdateAppliedEvent,
@@ -153,6 +157,28 @@ export function registerAuditLogSubscriptions(registrars: AuditSubscriptionRegis
     getAuditCounter()?.inc({ action: 'security-alert' });
   }, AUDIT_HANDLER_OPTIONS);
 
+  registrars.registerContainerHealthTransition(async (payload) => {
+    const dedupeKey = payload.containerName;
+    if (
+      isDuplicateAuditEvent(
+        containerUnhealthyAuditSeenAt,
+        dedupeKey,
+        CONTAINER_UNHEALTHY_AUDIT_DEDUPE_WINDOW_MS,
+      )
+    ) {
+      return;
+    }
+    auditStore.insertAudit({
+      id: '',
+      timestamp: new Date().toISOString(),
+      action: 'container-unhealthy',
+      containerName: payload.containerName,
+      status: 'error',
+      details: payload.previousHealth ? `(was ${payload.previousHealth})` : undefined,
+    });
+    getAuditCounter()?.inc({ action: 'container-unhealthy' });
+  }, AUDIT_HANDLER_OPTIONS);
+
   registrars.registerAgentDisconnected(async (payload) => {
     const dedupeKey = `${payload.agentName}|${payload.reason || ''}`;
     if (
@@ -225,4 +251,5 @@ export function pruneAuditDedupeCacheForTests(
 export function clearAuditSubscriptionCachesForTests(): void {
   securityAlertAuditSeenAt.clear();
   agentDisconnectedAuditSeenAt.clear();
+  containerUnhealthyAuditSeenAt.clear();
 }

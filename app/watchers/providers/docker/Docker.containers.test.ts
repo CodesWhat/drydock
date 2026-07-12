@@ -227,6 +227,13 @@ describe('Docker Watcher', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     _resetRegistryWebhookFreshStateForTests();
+    const containerModule = await import('../../../model/container.js');
+    const realContainerModule = await vi.importActual<typeof import('../../../model/container.js')>(
+      '../../../model/container.js',
+    );
+    vi.mocked(containerModule.normalizeContainerHealth).mockImplementation(
+      realContainerModule.normalizeContainerHealth,
+    );
 
     // Setup dockerode mock
     mockDockerApi = {
@@ -1734,7 +1741,7 @@ describe('Docker Watcher', () => {
       expect(result).toBe(existingContainer);
     });
 
-    test('should skip container inspect for store container when watch events are enabled', async () => {
+    test('should inspect store container health when watch events are enabled', async () => {
       await docker.register('watcher', 'docker', 'test', {});
       docker.log = createMockLog(['debug']);
       const existingContainer = {
@@ -1757,6 +1764,9 @@ describe('Docker Watcher', () => {
         RepoDigests: ['nginx@sha256:abc'],
         Created: '2023-01-01',
       });
+      mockContainer.inspect.mockResolvedValue({
+        State: { Health: { Status: 'healthy' } },
+      });
 
       const result = await docker.addImageDetailsToContainer({
         Id: '123',
@@ -1766,7 +1776,8 @@ describe('Docker Watcher', () => {
       });
 
       expect(result).toBe(existingContainer);
-      expect(mockContainer.inspect).not.toHaveBeenCalled();
+      expect(mockContainer.inspect).toHaveBeenCalledTimes(1);
+      expect(result.health).toBe('healthy');
       expect(result.details).toEqual({
         ports: ['0.0.0.0:18080->8080/tcp'],
         volumes: ['/host/data:/data:ro'],

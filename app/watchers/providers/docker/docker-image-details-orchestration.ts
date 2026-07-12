@@ -1,4 +1,4 @@
-import type { Container } from '../../../model/container.js';
+import { type Container, normalizeContainerHealth } from '../../../model/container.js';
 import * as registry from '../../../registry/index.js';
 import { detectSourceRepoFromImageMetadata } from '../../../release-notes/index.js';
 import * as storeContainer from '../../../store/container.js';
@@ -67,6 +67,12 @@ interface DockerContainerSummary {
 interface DockerContainerInspectPayload {
   Config?: {
     Image?: string;
+    [key: string]: unknown;
+  };
+  State?: {
+    Health?: {
+      Status?: string;
+    };
     [key: string]: unknown;
   };
   [key: string]: unknown;
@@ -215,7 +221,8 @@ interface RefreshStoredContainerImageFieldsContext {
   containerInspect: DockerContainerInspectPayload | undefined;
 }
 
-interface RefreshContainerAlreadyInStoreContext extends RefreshStoredContainerImageFieldsContext {
+interface RefreshContainerAlreadyInStoreContext
+  extends Omit<RefreshStoredContainerImageFieldsContext, 'containerInspect'> {
   runtimeDetailsFromSummary: RuntimeDetails;
 }
 
@@ -411,11 +418,17 @@ async function refreshContainerAlreadyInStore(context: RefreshContainerAlreadyIn
 
   refreshContainerIdentityFromSummary(containerInStore, dockerContainerName);
 
-  const shouldInspectContainer =
-    !watcher.configuration.watchevents || shouldRepairStoredImageReference(containerInStore);
-  const containerInspect = shouldInspectContainer
-    ? await inspectDiscoveredContainer(watcher, container.Id)
-    : undefined;
+  // Health is read unconditionally (decoupled from shouldInspectContainer /
+  // tag-repair gating) so the cron leg is an actual fallback for the
+  // events-disconnected/backoff/reconnect-window case, not a no-op in the
+  // default watchevents=true steady state (#198). inspectDiscoveredContainer
+  // swallows failures and resolves undefined, so only overwrite health when
+  // the inspect actually succeeded — a failed inspect degrades gracefully by
+  // leaving the previously stored health value untouched.
+  const containerInspect = await inspectDiscoveredContainer(watcher, container.Id);
+  if (containerInspect) {
+    containerInStore.health = normalizeContainerHealth(containerInspect.State?.Health?.Status);
+  }
 
   const runtimeDetailsToApply = await resolveRuntimeDetailsForStoredContainer(
     runtimeDetailsFromSummary,
@@ -708,7 +721,6 @@ export async function addImageDetailsToContainerOrchestration(
       helpers,
       runtimeDetailsFromSummary,
       containerInStore,
-      containerInspect: undefined,
     });
   }
 
@@ -740,6 +752,7 @@ export async function addImageDetailsToContainerOrchestration(
     id: containerId,
     name: dockerContainerName,
     status: container.State,
+    health: normalizeContainerHealth(containerInspect?.State?.Health?.Status),
     watcher: watcher.name,
     includeTags: resolvedConfig.includeTags,
     excludeTags: resolvedConfig.excludeTags,

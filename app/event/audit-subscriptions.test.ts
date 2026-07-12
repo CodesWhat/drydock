@@ -7,6 +7,7 @@ import {
 } from './audit-subscriptions.js';
 import type {
   AgentDisconnectedEventPayload,
+  ContainerHealthTransitionEventPayload,
   ContainerLifecycleEventPayload,
   ContainerUpdateAppliedEvent,
   ContainerUpdateFailedEventPayload,
@@ -32,12 +33,14 @@ type OrderedEventHandlerFn<TPayload> = (payload: TPayload) => void | Promise<voi
 function setupAuditSubscriptions(): {
   containerUpdateAppliedHandler: OrderedEventHandlerFn<ContainerUpdateAppliedEvent>;
   securityAlertHandler: OrderedEventHandlerFn<SecurityAlertEventPayload>;
+  containerHealthTransitionHandler: OrderedEventHandlerFn<ContainerHealthTransitionEventPayload>;
   agentDisconnectedHandler: OrderedEventHandlerFn<AgentDisconnectedEventPayload>;
   containerUpdatedHandler: (payload: ContainerLifecycleEventPayload) => void;
 } {
   const handlers: {
     containerUpdateApplied?: OrderedEventHandlerFn<ContainerUpdateAppliedEvent>;
     securityAlert?: OrderedEventHandlerFn<SecurityAlertEventPayload>;
+    containerHealthTransition?: OrderedEventHandlerFn<ContainerHealthTransitionEventPayload>;
     agentDisconnected?: OrderedEventHandlerFn<AgentDisconnectedEventPayload>;
     containerUpdated?: (payload: ContainerLifecycleEventPayload) => void;
   } = {};
@@ -64,6 +67,11 @@ function setupAuditSubscriptions(): {
     registerSecurityAlert: registerOrdered<SecurityAlertEventPayload>((handler) => {
       handlers.securityAlert = handler;
     }),
+    registerContainerHealthTransition: registerOrdered<ContainerHealthTransitionEventPayload>(
+      (handler) => {
+        handlers.containerHealthTransition = handler;
+      },
+    ),
     registerAgentDisconnected: registerOrdered<AgentDisconnectedEventPayload>((handler) => {
       handlers.agentDisconnected = handler;
     }),
@@ -79,6 +87,7 @@ function setupAuditSubscriptions(): {
   if (
     !handlers.containerUpdateApplied ||
     !handlers.securityAlert ||
+    !handlers.containerHealthTransition ||
     !handlers.agentDisconnected ||
     !handlers.containerUpdated
   ) {
@@ -88,6 +97,7 @@ function setupAuditSubscriptions(): {
   return {
     containerUpdateAppliedHandler: handlers.containerUpdateApplied,
     securityAlertHandler: handlers.securityAlert,
+    containerHealthTransitionHandler: handlers.containerHealthTransition,
     agentDisconnectedHandler: handlers.agentDisconnected,
     containerUpdatedHandler: handlers.containerUpdated,
   };
@@ -138,6 +148,52 @@ describe('audit-subscriptions dedupe windows', () => {
 
     expect(mockInsertAudit).toHaveBeenCalledTimes(2);
     expect(mockInc).toHaveBeenCalledTimes(2);
+  });
+
+  test('records container unhealthy audits, deduplicates per container, and expires after 5 minutes', async () => {
+    const { containerHealthTransitionHandler } = setupAuditSubscriptions();
+    await containerHealthTransitionHandler({ containerName: 'web', health: 'unhealthy' });
+
+    expect(mockInsertAudit).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        action: 'container-unhealthy',
+        status: 'error',
+        containerName: 'web',
+        details: undefined,
+      }),
+    );
+    expect(mockInc).toHaveBeenLastCalledWith({ action: 'container-unhealthy' });
+
+    vi.advanceTimersByTime(5 * 60 * 1000 - 1);
+    await containerHealthTransitionHandler({ containerName: 'web', health: 'unhealthy' });
+    expect(mockInsertAudit).toHaveBeenCalledTimes(1);
+
+    await containerHealthTransitionHandler({ containerName: 'api', health: 'unhealthy' });
+    expect(mockInsertAudit).toHaveBeenCalledTimes(2);
+
+    vi.advanceTimersByTime(1);
+    await containerHealthTransitionHandler({ containerName: 'web', health: 'unhealthy' });
+    expect(mockInsertAudit).toHaveBeenCalledTimes(3);
+    expect(mockInc).toHaveBeenCalledTimes(3);
+  });
+
+  test('records the previous health in container unhealthy audit details', async () => {
+    const { containerHealthTransitionHandler } = setupAuditSubscriptions();
+
+    await containerHealthTransitionHandler({
+      containerName: 'web',
+      previousHealth: 'healthy',
+      health: 'unhealthy',
+    });
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'container-unhealthy',
+        containerName: 'web',
+        status: 'error',
+        details: '(was healthy)',
+      }),
+    );
   });
 
   test('deduplicates agent disconnects that repeat before 60 seconds', async () => {

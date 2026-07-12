@@ -1612,6 +1612,46 @@ test('getNotificationEvent should return reconnect metadata for agent reconnect 
   });
 });
 
+test('getNotificationEvent preserves container unhealthy metadata', () => {
+  expect(
+    getNotificationEvent({
+      notificationEvent: { kind: 'container-unhealthy', previousHealth: 'healthy' },
+    } as any),
+  ).toEqual({ kind: 'container-unhealthy', previousHealth: 'healthy' });
+});
+
+test('container unhealthy uses dedicated simple templates with and without previous health', () => {
+  trigger.configuration.simpletitle = 'custom title';
+  trigger.configuration.simplebody = 'custom body';
+  const base = {
+    name: 'web',
+    watcher: 'local',
+    notificationEvent: { kind: 'container-unhealthy' },
+  };
+  expect(
+    trigger.renderSimpleTitle({
+      ...base,
+      notificationEvent: { ...base.notificationEvent, previousHealth: 'healthy' },
+    }),
+  ).toBe('Container web is unhealthy');
+  expect(
+    trigger.renderSimpleBody({
+      ...base,
+      notificationEvent: { ...base.notificationEvent, previousHealth: 'healthy' },
+    }),
+  ).toBe('Container web has entered the unhealthy state (was healthy)');
+  expect(trigger.renderSimpleBody(base)).toBe('Container web has entered the unhealthy state');
+});
+
+test('container unhealthy batch title uses its dedicated template', () => {
+  expect(
+    trigger.renderBatchTitle([
+      { name: 'web', notificationEvent: { kind: 'container-unhealthy' } },
+      { name: 'api', notificationEvent: { kind: 'container-unhealthy' } },
+    ]),
+  ).toBe('2 containers became unhealthy');
+});
+
 test('getNotificationEvent should return undefined when notification metadata is missing', () => {
   expect(getNotificationEvent({} as any)).toBeUndefined();
 });
@@ -3890,6 +3930,158 @@ test('handleAgentDisconnectedEvent should bypass threshold filtering', async () 
       },
     }),
   );
+});
+
+describe('handleContainerHealthTransitionEvent', () => {
+  const healthContainer = {
+    id: 'health-1',
+    watcher: 'local',
+    name: 'web',
+    labels: {},
+    updateAvailable: false,
+    updateKind: { kind: 'unknown' },
+  };
+
+  test('dispatches an allow-listed event and bypasses threshold filtering', async () => {
+    trigger.configuration.threshold = 'major';
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleContainerHealthTransitionEvent({
+      containerName: 'local_web',
+      container: healthContainer,
+      previousHealth: 'healthy',
+      health: 'unhealthy',
+    });
+    expect(provider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notificationEvent: { kind: 'container-unhealthy', previousHealth: 'healthy' },
+      }),
+    );
+  });
+
+  test.each([
+    { decision: { enabled: false, reason: 'rule-disabled' }, label: 'disabled rule' },
+    {
+      decision: { enabled: false, reason: 'excluded-from-allow-list' },
+      label: 'different allow-list',
+    },
+  ])('does not dispatch for $label', async ({ decision }) => {
+    notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue(decision as any);
+    notificationStore.isTriggerEnabledForRule.mockReturnValue(false);
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleContainerHealthTransitionEvent({
+      containerName: 'local_web',
+      container: healthContainer,
+      health: 'unhealthy',
+    });
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  test('enabled empty allow-list dispatches via allow-all policy', async () => {
+    notificationStore.getTriggerDispatchDecisionForRule.mockReturnValue({
+      enabled: true,
+      reason: 'allow-all-when-empty',
+    });
+    notificationStore.isTriggerEnabledForRule.mockReturnValue(true);
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleContainerHealthTransitionEvent({
+      containerName: 'local_web',
+      container: healthContainer,
+      health: 'unhealthy',
+    });
+    expect(provider).toHaveBeenCalledTimes(1);
+    expect(notificationStore.isTriggerEnabledForRule).toHaveBeenCalledWith(
+      'container-unhealthy',
+      trigger.getId(),
+      expect.objectContaining({ allowAllWhenNoTriggers: true }),
+    );
+  });
+
+  test('missing container returns without dispatch', async () => {
+    storeContainer.getContainers.mockReturnValue([]);
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleContainerHealthTransitionEvent({
+      containerName: 'missing',
+      health: 'unhealthy',
+    });
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  test('container notification exclude label-derived field prevents dispatch', async () => {
+    trigger.type = 'slack';
+    trigger.name = 'ops';
+    const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+    await trigger.handleContainerHealthTransitionEvent({
+      containerName: 'local_web',
+      container: { ...healthContainer, notificationTriggerExclude: trigger.getId() },
+      health: 'unhealthy',
+    });
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  test('provider failure is queued in the outbox with the health event name', async () => {
+    const { enqueueOutboxEntry } = await import('../../store/notification-outbox.js');
+    vi.mocked(enqueueOutboxEntry).mockClear();
+    vi.spyOn(trigger, 'trigger').mockRejectedValue(new Error('provider exploded'));
+    await trigger.handleContainerHealthTransitionEvent({
+      containerName: 'local_web',
+      container: healthContainer,
+      health: 'unhealthy',
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(enqueueOutboxEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventName: 'container-unhealthy',
+        containerId: 'health-1',
+      }),
+    );
+  });
+
+  test('batch mode queues the event for batch dispatch', async () => {
+    vi.useFakeTimers();
+    try {
+      trigger.configuration.mode = 'batch';
+      const provider = vi.spyOn(trigger, 'trigger').mockResolvedValue(undefined);
+      const batch = vi.spyOn(trigger, 'triggerBatch').mockResolvedValue(undefined);
+      await trigger.handleContainerHealthTransitionEvent({
+        containerName: 'local_web',
+        container: healthContainer,
+        health: 'unhealthy',
+      });
+      expect(provider).not.toHaveBeenCalled();
+      expect(batch).not.toHaveBeenCalled();
+      await vi.runOnlyPendingTimersAsync();
+      expect(batch).toHaveBeenCalledWith([
+        expect.objectContaining({
+          notificationEvent: { kind: 'container-unhealthy', previousHealth: undefined },
+        }),
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+test('component lifecycle registers and unregisters container health transition handling', async () => {
+  const unregister = vi.fn();
+  let callback: any;
+  vi.spyOn(event, 'registerContainerHealthTransition').mockImplementation((handler) => {
+    callback = handler;
+    return unregister;
+  });
+  const handler = vi
+    .spyOn(trigger, 'handleContainerHealthTransitionEvent')
+    .mockResolvedValue(undefined);
+  trigger.configuration.auto = true;
+  trigger.configuration.mode = 'simple';
+
+  await trigger.init();
+  await callback({ containerName: 'web', health: 'unhealthy' });
+  expect(handler).toHaveBeenCalledWith({ containerName: 'web', health: 'unhealthy' });
+
+  await trigger.deregisterComponent();
+  expect(unregister).toHaveBeenCalledTimes(1);
 });
 
 test('handleAgentDisconnectedEvent should omit agent disconnect reason when it is missing', async () => {

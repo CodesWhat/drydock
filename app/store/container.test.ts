@@ -3342,6 +3342,159 @@ test('updateContainer where a rollback-named container is renamed back to a norm
   expect(spyUpdated.mock.calls[0][0]).toMatchObject({ name: 'service' });
 });
 
+describe('container unhealthy transition emission', () => {
+  function healthFixture(overrides: Record<string, any>) {
+    const fixture = createContainerFixture(overrides);
+    return {
+      ...fixture,
+      details: {
+        ports: [],
+        volumes: [],
+        env: [],
+        ...fixture.details,
+        ...(overrides.details ?? {}),
+      },
+    };
+  }
+  function initialize(existing?: any) {
+    const doc = existing ? { data: existing } : undefined;
+    const collection = {
+      findOne: vi.fn(() => doc),
+      update: vi.fn(),
+      insert: vi.fn(),
+      chain: vi.fn(() => ({ find: () => ({ remove: () => ({}) }) })),
+    };
+    container.createCollections({ getCollection: () => collection, addCollection: () => null });
+    return collection;
+  }
+
+  test('fresh unhealthy insert has no previous baseline and does not emit', () => {
+    initialize();
+    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+    container.insertContainer(createContainerFixture({ health: 'unhealthy' }));
+    expect(emitted).not.toHaveBeenCalled();
+  });
+
+  test('update fallback stores first-observation unhealthy without emitting a transition', () => {
+    const collection = initialize();
+    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+    const incoming = healthFixture({ id: 'unknown-unhealthy', health: 'unhealthy' });
+
+    const result = container.updateContainer(incoming);
+
+    expect(result).toMatchObject({ id: 'unknown-unhealthy', health: 'unhealthy' });
+    expect(collection.insert).toHaveBeenCalledWith({ data: result });
+    expect(emitted).not.toHaveBeenCalled();
+  });
+
+  test('healthy to unhealthy emits even when health is the only changed field', () => {
+    const existing = healthFixture({ health: 'healthy', details: { startedAt: '2026-01-01' } });
+    initialize(existing);
+    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+    container.updateContainer({ ...existing, health: 'unhealthy' });
+    expect(emitted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        containerName: existing.name,
+        previousHealth: 'healthy',
+        health: 'unhealthy',
+      }),
+    );
+  });
+
+  test.each([
+    {
+      title: 'health was never observed and startedAt is unchanged',
+      existingDetails: { startedAt: '2026-01-01T00:00:00.000Z' },
+      incomingDetails: { startedAt: '2026-01-01T00:00:00.000Z' },
+    },
+    {
+      title: 'health was never observed and startedAt is absent on both sides',
+      existingDetails: {},
+      incomingDetails: {},
+    },
+    {
+      title: 'startedAt appears for the first time on a record without observed health',
+      existingDetails: {},
+      incomingDetails: { startedAt: '2026-01-01T00:00:00.000Z' },
+    },
+  ])('does not emit when $title', ({ existingDetails, incomingDetails }) => {
+    const existing = healthFixture({ health: undefined, details: existingDetails });
+    initialize(existing);
+    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+
+    container.updateContainer({
+      ...existing,
+      health: 'unhealthy',
+      details: { ...existing.details, ...incomingDetails },
+    });
+
+    expect(emitted).not.toHaveBeenCalled();
+  });
+
+  test('does not treat differing startedAt values as a restart without an observed health baseline', () => {
+    const existing = healthFixture({
+      health: undefined,
+      details: { startedAt: '2026-01-01T00:00:00.000Z' },
+    });
+    initialize(existing);
+    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+
+    container.updateContainer({
+      ...existing,
+      health: 'unhealthy',
+      details: { ...existing.details, startedAt: '2026-01-02T00:00:00.000Z' },
+    });
+
+    expect(emitted).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    { previous: 'unhealthy', incoming: 'unhealthy', change: { status: 'stopped' } },
+    { previous: 'unhealthy', incoming: 'healthy', change: {} },
+    { previous: 'unhealthy', incoming: undefined, change: {} },
+  ])('does not emit for previous=$previous incoming=$incoming', ({
+    previous,
+    incoming,
+    change,
+  }) => {
+    const existing = healthFixture({
+      health: previous,
+      status: 'running',
+      details: { startedAt: '2026-01-01T00:00:00.000Z' },
+    });
+    initialize(existing);
+    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+    container.updateContainer({ ...existing, ...change, health: incoming });
+    expect(emitted).not.toHaveBeenCalled();
+  });
+
+  test('consecutive unhealthy observations emit again when startedAt changes', () => {
+    const existing = healthFixture({
+      health: 'unhealthy',
+      details: { startedAt: '2026-01-01T00:00:00.000Z' },
+    });
+    initialize(existing);
+    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+    container.updateContainer({
+      ...existing,
+      details: { ...existing.details, startedAt: '2026-01-02T00:00:00.000Z' },
+    });
+    expect(emitted).toHaveBeenCalledWith(expect.objectContaining({ previousHealth: 'unhealthy' }));
+  });
+
+  test('rollback tracking containers suppress otherwise valid unhealthy transitions', () => {
+    const existing = healthFixture({
+      name: 'foo-old-1234567890',
+      health: 'healthy',
+      details: { startedAt: '2026-01-01T00:00:00.000Z' },
+    });
+    initialize(existing);
+    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+    container.updateContainer({ ...existing, health: 'unhealthy' });
+    expect(emitted).not.toHaveBeenCalled();
+  });
+});
+
 test('deleteContainer with a rollback-named container does NOT emit emitContainerRemoved', () => {
   const rollbackFixture = createContainerFixture({
     id: 'rollback-to-delete',

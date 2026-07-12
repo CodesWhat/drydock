@@ -523,6 +523,96 @@ describe('container event update helpers', () => {
     expect(updateContainer).not.toHaveBeenCalled();
   });
 
+  test.each([
+    { previous: undefined, next: 'starting' },
+    { previous: 'healthy', next: 'unhealthy' },
+  ])('persists a health-only change from $previous to $next', ({ previous, next }) => {
+    const found = createMockContainer({
+      name: 'same-name',
+      displayName: 'same-name',
+      status: 'running',
+      health: previous,
+    });
+    const updateContainer = vi.fn();
+    const logInfo = vi.fn();
+
+    updateContainerFromInspect(
+      found as any,
+      { Name: '/same-name', State: { Status: 'running', Health: { Status: next } } },
+      { getCustomDisplayNameFromLabels: () => undefined, updateContainer, logInfo },
+    );
+
+    expect(found.health).toBe(next);
+    expect(updateContainer).toHaveBeenCalledWith(found);
+    expect(logInfo).toHaveBeenCalledWith(`Health changed from ${previous} to ${next}`);
+  });
+
+  test('does not persist when unhealthy health is unchanged and nothing else changes', () => {
+    const found = createMockContainer({
+      name: 'same-name',
+      displayName: 'same-name',
+      status: 'running',
+      health: 'unhealthy',
+    });
+    const updateContainer = vi.fn();
+    updateContainerFromInspect(
+      found as any,
+      { Name: '/same-name', State: { Status: 'running', Health: { Status: 'unhealthy' } } },
+      { getCustomDisplayNameFromLabels: () => undefined, updateContainer },
+    );
+    expect(updateContainer).not.toHaveBeenCalled();
+  });
+
+  test('an inspect without State.Health leaves absent health unchanged', () => {
+    const found = createMockContainer({
+      name: 'same-name',
+      displayName: 'same-name',
+      status: 'running',
+    });
+    const updateContainer = vi.fn();
+    updateContainerFromInspect(
+      found as any,
+      { Name: '/same-name', State: { Status: 'running' } },
+      { getCustomDisplayNameFromLabels: () => undefined, updateContainer },
+    );
+    expect(found.health).toBeUndefined();
+    expect(updateContainer).not.toHaveBeenCalled();
+  });
+
+  test('an unknown inspect health normalizes to absent without marking an absent stored health changed', () => {
+    const found = createMockContainer({
+      name: 'same-name',
+      displayName: 'same-name',
+      status: 'running',
+      health: undefined,
+    });
+    const updateContainer = vi.fn();
+    updateContainerFromInspect(
+      found as any,
+      { Name: '/same-name', State: { Status: 'running', Health: { Status: 'bogus' } } },
+      { getCustomDisplayNameFromLabels: () => undefined, updateContainer },
+    );
+    expect(found.health).toBeUndefined();
+    expect(updateContainer).not.toHaveBeenCalled();
+  });
+
+  test('updates both status and health in one inspect and persists once', () => {
+    const found = createMockContainer({
+      name: 'same-name',
+      displayName: 'same-name',
+      status: 'stopped',
+      health: 'healthy',
+    });
+    const updateContainer = vi.fn();
+    updateContainerFromInspect(
+      found as any,
+      { Name: '/same-name', State: { Status: 'running', Health: { Status: 'unhealthy' } } },
+      { getCustomDisplayNameFromLabels: () => undefined, updateContainer },
+    );
+    expect(found).toMatchObject({ status: 'running', health: 'unhealthy' });
+    expect(updateContainer).toHaveBeenCalledTimes(1);
+  });
+
   test('processDockerEvent includes string error message when inspect rejects with a string', async () => {
     const debug = vi.fn();
 

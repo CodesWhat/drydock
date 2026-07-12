@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-
+import { processDockerEvent } from './container-event-update.js';
 import {
   cleanupDockerEventsStream,
   DOCKER_EVENTS_RECONNECT_BASE_DELAY_MS,
@@ -371,8 +371,37 @@ describe('docker events helpers extraction', () => {
           'die',
           'update',
           'rename',
+          'health_status',
         ],
       },
     });
+  });
+
+  test('a buffered health_status event reaches the generic container event dispatch path', async () => {
+    const { payloads } = splitDockerEventChunk(
+      '',
+      '{"Action":"health_status: unhealthy","id":"container-1"}\n',
+    );
+    const inspect = vi.fn().mockResolvedValue({
+      Name: '/web',
+      State: { Status: 'running', Health: { Status: 'unhealthy' } },
+    });
+    const found = { id: 'container-1' };
+    const update = vi.fn();
+    await processDockerEvent(JSON.parse(payloads[0]), {
+      watchCronDebounced: vi.fn(),
+      ensureRemoteAuthHeaders: vi.fn(),
+      inspectContainer: inspect,
+      getContainerFromStore: vi.fn(() => found),
+      updateContainerFromInspect: update,
+      debug: vi.fn(),
+    });
+    expect(inspect).toHaveBeenCalledWith('container-1');
+    expect(update).toHaveBeenCalledWith(
+      found,
+      expect.objectContaining({
+        State: expect.objectContaining({ Health: { Status: 'unhealthy' } }),
+      }),
+    );
   });
 });

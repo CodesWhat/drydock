@@ -82,6 +82,29 @@ function createValidContainer(overrides: Record<string, unknown> = {}) {
   };
 }
 
+test.each(['starting', 'healthy', 'unhealthy'])('validate round-trips health=%s', (health) => {
+  expect(container.validate(createValidContainer({ health })).health).toBe(health);
+});
+
+test('validate accepts absent health and degrades an unknown health without mutating its input', () => {
+  expect(container.validate(createValidContainer())).not.toHaveProperty('health');
+  const input = createValidContainer({ health: 'bogus' });
+  expect(container.validate(input).health).toBeUndefined();
+  expect(input.health).toBe('bogus');
+});
+
+test.each([
+  ['starting', 'starting'],
+  ['healthy', 'healthy'],
+  ['unhealthy', 'unhealthy'],
+  [undefined, undefined],
+  [null, undefined],
+  ['none', undefined],
+  [42, undefined],
+])('normalizeContainerHealth(%s) returns %s', (value, expected) => {
+  expect(container.normalizeContainerHealth(value)).toBe(expected);
+});
+
 const UNKNOWN_UPDATE_KIND = {
   kind: 'unknown',
   localValue: undefined,
