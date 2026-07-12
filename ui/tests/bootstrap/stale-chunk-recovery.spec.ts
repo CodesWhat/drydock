@@ -24,7 +24,21 @@ describe('stale chunk recovery', () => {
     const reload = vi.fn();
 
     expect(requestStaleChunkReload(new Error('navigation cancelled'), reload)).toBe(false);
+    expect(requestStaleChunkReload(null, reload)).toBe(false);
     expect(reload).not.toHaveBeenCalled();
+  });
+
+  it('uses the browser reload defaults for direct and Vite recovery paths', () => {
+    expect(requestStaleChunkReload(new Error('Loading chunk 9 failed'))).toBe(true);
+
+    clearStaleChunkReloadGuard();
+    const event = new Event('vite:preloadError', { cancelable: true });
+    expect(handleVitePreloadError(event)).toBe(true);
+    expect(event.defaultPrevented).toBe(true);
+
+    clearStaleChunkReloadGuard();
+    installVitePreloadErrorHandler();
+    globalThis.dispatchEvent(new Event('vite:preloadError', { cancelable: true }));
   });
 
   it('honors the session guard left by a previous page load', () => {

@@ -520,6 +520,10 @@ describe('preferences migration', () => {
   });
 
   describe('schema v6 → v7 migration (softwareVersion column)', () => {
+    it('normalizes an unsupported pre-v1 numeric schema after known migrations', () => {
+      expect(migrate({ schemaVersion: 0 }).schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+    });
+
     it('cascades schema v3 data through the v6 column migration', () => {
       const result = migrate({
         schemaVersion: 3,

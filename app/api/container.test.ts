@@ -49,6 +49,8 @@ vi.mock('express-rate-limit', () => ({ default: vi.fn(() => 'rate-limit-middlewa
 
 vi.mock('../store/container', () => ({
   getContainers: vi.fn(() => []),
+  getContainersForStats: vi.fn(() => []),
+  getContainersRaw: vi.fn(() => []),
   getContainerCount: vi.fn(() => 0),
   getContainer: vi.fn(),
   getContainerRaw: vi.fn(),
@@ -707,7 +709,7 @@ describe('Container Router', () => {
 
   describe('getContainerSummary', () => {
     test('should return lightweight sidebar badge summary without vulnerability arrays', () => {
-      storeContainer.getContainers.mockReturnValue([
+      storeContainer.getContainersForStats.mockReturnValue([
         {
           id: 'c1',
           status: 'running',
@@ -744,7 +746,7 @@ describe('Container Router', () => {
       const res = createResponse();
       handler({ query: {} }, res);
 
-      expect(storeContainer.getContainers).toHaveBeenCalledWith({});
+      expect(storeContainer.getContainersForStats).toHaveBeenCalledWith({});
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({
         containers: {
@@ -763,7 +765,7 @@ describe('Container Router', () => {
     });
 
     test('should treat missing status and missing scan summary as zero values', () => {
-      storeContainer.getContainers.mockReturnValue([
+      storeContainer.getContainersForStats.mockReturnValue([
         {
           id: 'c1',
         },

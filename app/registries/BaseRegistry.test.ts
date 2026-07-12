@@ -1252,6 +1252,39 @@ test('getTags should return isolated arrays for cached results', async () => {
   expect(second).not.toBe(first);
 });
 
+test('getTags should fall back to the original image when cache-key normalization fails', async () => {
+  const superGetTagsSpy = vi
+    .spyOn(Registry.prototype, 'getTags')
+    .mockResolvedValue(['2.0.0', '1.0.0']);
+  const normalizeImageSpy = vi.spyOn(baseRegistry, 'normalizeImage').mockImplementation(() => {
+    throw new Error('normalize failed');
+  });
+  const warnSpy = vi.spyOn(baseRegistry.log, 'warn').mockImplementation(() => undefined);
+  const image = {
+    name: 'library/postgres',
+    tag: { value: '16' },
+    registry: { url: 'docker.io' },
+  };
+
+  baseRegistry.startDigestCachePollCycle();
+  await baseRegistry.getTags(image);
+  await baseRegistry.getTags(image);
+  const imageWithoutName = {
+    tag: { value: '16' },
+    registry: { url: 'docker.io' },
+  } as any;
+  await baseRegistry.getTags(imageWithoutName);
+  await baseRegistry.getTags(imageWithoutName);
+
+  expect(superGetTagsSpy).toHaveBeenCalledTimes(2);
+  expect(warnSpy).toHaveBeenCalledWith(
+    expect.stringContaining(
+      'Unable to normalize image metadata for tag-list cache key generation: docker.io/library/postgres:16 (normalize failed)',
+    ),
+  );
+  normalizeImageSpy.mockRestore();
+});
+
 test('startDigestCachePollCycle should clear previous tag-list cache entries', async () => {
   const superGetTagsSpy = vi
     .spyOn(Registry.prototype, 'getTags')
