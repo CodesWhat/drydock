@@ -1,7 +1,7 @@
 var { mockGetState, mockGetActiveOperationByContainerId, mockGetActiveOperationByContainerName } =
   vi.hoisted(() => {
     return {
-      mockGetState: vi.fn(() => ({ trigger: {} })),
+      mockGetState: vi.fn(() => ({ trigger: {}, watcher: {} })),
       mockGetActiveOperationByContainerId: vi.fn(() => undefined),
       mockGetActiveOperationByContainerName: vi.fn(() => undefined),
     };
@@ -20,7 +20,10 @@ import { enrichContainerLifecyclePayloadWithEligibility } from './sse-container-
 
 describe('enrichContainerLifecyclePayloadWithEligibility', () => {
   beforeEach(() => {
-    mockGetState.mockReturnValue({ trigger: {} });
+    mockGetState.mockClear();
+    mockGetActiveOperationByContainerId.mockClear();
+    mockGetActiveOperationByContainerName.mockClear();
+    mockGetState.mockReturnValue({ trigger: {}, watcher: {} });
     mockGetActiveOperationByContainerId.mockReturnValue(undefined);
     mockGetActiveOperationByContainerName.mockReturnValue(undefined);
   });
@@ -112,6 +115,44 @@ describe('enrichContainerLifecyclePayloadWithEligibility', () => {
       name: 'mysql',
       image: { tag: { value: '9.6.0' } },
       result: { tag: '9.7.0' },
+    });
+
+    test('reports a closed maintenance window from the owning watcher', () => {
+      mockGetState.mockReturnValueOnce({
+        trigger: {},
+        watcher: {
+          'docker.local': { isMaintenanceWindowOpen: vi.fn().mockReturnValue(false) },
+        },
+      });
+
+      const result = enrichContainerLifecyclePayloadWithEligibility({
+        ...updatePayload(),
+        watcher: 'local',
+      }) as any;
+
+      expect(
+        result.updateEligibility.blockers.some(
+          (blocker: { reason: string }) => blocker.reason === 'maintenance-window-closed',
+        ),
+      ).toBe(true);
+    });
+
+    test('fails open when the watcher does not expose maintenance-window state', () => {
+      mockGetState.mockReturnValueOnce({
+        trigger: {},
+        watcher: { 'docker.local': {} },
+      });
+
+      const result = enrichContainerLifecyclePayloadWithEligibility({
+        ...updatePayload(),
+        watcher: 'local',
+      }) as any;
+
+      expect(
+        result.updateEligibility.blockers.some(
+          (blocker: { reason: string }) => blocker.reason === 'maintenance-window-closed',
+        ),
+      ).toBe(false);
     });
 
     test('byId returns valid in-progress operation → active-operation blocker added', () => {

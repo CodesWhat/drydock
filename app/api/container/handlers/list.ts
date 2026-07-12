@@ -10,6 +10,7 @@ import {
   type UpdateEligibility,
   type UpdateEligibilityContext,
 } from '../../../model/update-eligibility.js';
+import { getContainerMaintenanceWindowOpen } from '../../../model/watcher-maintenance-window.js';
 import { isSelfUpdateAvailable } from '../../../triggers/providers/docker/self-update-availability.js';
 import { sendErrorResponse } from '../../error-response.js';
 import { buildPaginationLinks } from '../../pagination-links.js';
@@ -239,6 +240,7 @@ export function attachUpdateEligibility(
   context: CrudHandlerContext,
   container: Container,
   eligibilityContext?: UpdateEligibilityContext,
+  watchers: Readonly<Record<string, unknown>> = context.getWatchers(),
 ): Container {
   // isSelfUpdateAvailable is always resolved per-container regardless of whether
   // a pre-built eligibilityContext was supplied, because it depends on the
@@ -246,6 +248,7 @@ export function attachUpdateEligibility(
   const ctx: UpdateEligibilityContext = {
     ...(eligibilityContext ?? buildEligibilityContext(context)),
     isSelfUpdateAvailable: isSelfUpdateAvailable(container),
+    maintenanceWindowOpen: getContainerMaintenanceWindowOpen(container, watchers),
   };
   const updateEligibility: UpdateEligibility = computeUpdateEligibility(container, ctx);
   return createProjectionView(container, [['updateEligibility', updateEligibility]]);
@@ -487,11 +490,12 @@ export function buildContainerListResponse(
     context.updateOperationStore.listActiveOperations?.() ?? [],
   );
   const eligibilityContext = buildEligibilityContext(context);
+  const watchers = context.getWatchers();
   const data = strippedContainers.map((container) => {
     const withOperation = preloadedActiveOperationLookup
       ? attachPreloadedActiveUpdateOperation(preloadedActiveOperationLookup, container)
       : attachInProgressUpdateOperation(context, container);
-    return attachUpdateEligibility(context, withOperation, eligibilityContext);
+    return attachUpdateEligibility(context, withOperation, eligibilityContext, watchers);
   });
   const hasMore = pagination.limit > 0 && pagination.offset + data.length < total;
   const links = buildPaginationLinks({

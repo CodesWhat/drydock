@@ -1306,10 +1306,11 @@ describe('buildContainerListResponse', () => {
 
 describe('attachUpdateEligibility / buildEligibilityContext', () => {
   // Helper: container with a raw tag update so computeUpdateEligibility reaches getActiveOperation
-  function createContainerWithUpdate(): Container {
+  function createContainerWithUpdate(overrides: Partial<Container> = {}): Container {
     return createContainer({
       result: { tag: '1.1.0' },
       updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '1.1.0', semverDiff: 'minor' },
+      ...overrides,
     });
   }
 
@@ -1322,6 +1323,61 @@ describe('attachUpdateEligibility / buildEligibilityContext', () => {
     const container = createContainerWithUpdate();
     attachUpdateEligibility(context, container);
     expect(getTriggers).toHaveBeenCalled();
+  });
+
+  test('reports a closed maintenance window from the owning watcher', () => {
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getWatchers: vi.fn().mockReturnValue({
+        'docker.local': { isMaintenanceWindowOpen: vi.fn().mockReturnValue(false) },
+      }),
+    };
+
+    const result = attachUpdateEligibility(context, createContainerWithUpdate());
+
+    expect(
+      (result as any).updateEligibility.blockers.find(
+        (blocker: any) => blocker.reason === 'maintenance-window-closed',
+      ),
+    ).toBeDefined();
+  });
+
+  test('uses the agent-prefixed watcher id for maintenance-window state', () => {
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getWatchers: vi.fn().mockReturnValue({
+        'edge.docker.local': { isMaintenanceWindowOpen: vi.fn().mockReturnValue(false) },
+      }),
+    };
+
+    const result = attachUpdateEligibility(
+      context,
+      createContainerWithUpdate({ agent: 'edge', watcher: 'local' }),
+    );
+
+    expect(
+      (result as any).updateEligibility.blockers.some(
+        (blocker: any) => blocker.reason === 'maintenance-window-closed',
+      ),
+    ).toBe(true);
+  });
+
+  test.each([
+    ['watcher is unavailable', {}],
+    ['watcher method is unavailable', { 'docker.local': {} }],
+  ])('fails open when the %s', (_scenario, watchers) => {
+    const context: CrudHandlerContext = {
+      ...createMockContext(),
+      getWatchers: vi.fn().mockReturnValue(watchers),
+    };
+
+    const result = attachUpdateEligibility(context, createContainerWithUpdate());
+
+    expect(
+      (result as any).updateEligibility.blockers.some(
+        (blocker: any) => blocker.reason === 'maintenance-window-closed',
+      ),
+    ).toBe(false);
   });
 
   test('returns active-operation from legacy byName operation when byId is missing', () => {
