@@ -31,6 +31,7 @@ vi.mock('../prometheus/audit.js', () => ({
 type OrderedEventHandlerFn<TPayload> = (payload: TPayload) => void | Promise<void>;
 
 function setupAuditSubscriptions(): {
+  containerReportHandler: OrderedEventHandlerFn<ContainerReport>;
   containerUpdateAppliedHandler: OrderedEventHandlerFn<ContainerUpdateAppliedEvent>;
   securityAlertHandler: OrderedEventHandlerFn<SecurityAlertEventPayload>;
   containerHealthTransitionHandler: OrderedEventHandlerFn<ContainerHealthTransitionEventPayload>;
@@ -38,6 +39,7 @@ function setupAuditSubscriptions(): {
   containerUpdatedHandler: (payload: ContainerLifecycleEventPayload) => void;
 } {
   const handlers: {
+    containerReport?: OrderedEventHandlerFn<ContainerReport>;
     containerUpdateApplied?: OrderedEventHandlerFn<ContainerUpdateAppliedEvent>;
     securityAlert?: OrderedEventHandlerFn<SecurityAlertEventPayload>;
     containerHealthTransition?: OrderedEventHandlerFn<ContainerHealthTransitionEventPayload>;
@@ -59,7 +61,9 @@ function setupAuditSubscriptions(): {
     };
 
   const registrars: AuditSubscriptionRegistrars = {
-    registerContainerReport: registerOrdered<ContainerReport>(() => {}),
+    registerContainerReport: registerOrdered<ContainerReport>((handler) => {
+      handlers.containerReport = handler;
+    }),
     registerContainerUpdateApplied: registerOrdered<ContainerUpdateAppliedEvent>((handler) => {
       handlers.containerUpdateApplied = handler;
     }),
@@ -85,6 +89,7 @@ function setupAuditSubscriptions(): {
   registerAuditLogSubscriptions(registrars);
 
   if (
+    !handlers.containerReport ||
     !handlers.containerUpdateApplied ||
     !handlers.securityAlert ||
     !handlers.containerHealthTransition ||
@@ -95,6 +100,7 @@ function setupAuditSubscriptions(): {
   }
 
   return {
+    containerReportHandler: handlers.containerReport,
     containerUpdateAppliedHandler: handlers.containerUpdateApplied,
     securityAlertHandler: handlers.securityAlert,
     containerHealthTransitionHandler: handlers.containerHealthTransition,
@@ -115,6 +121,28 @@ describe('audit-subscriptions dedupe windows', () => {
   afterEach(() => {
     vi.useRealTimers();
     clearAuditSubscriptionCachesForTests();
+  });
+
+  test('records update severity for notification bell thresholds', async () => {
+    const { containerReportHandler } = setupAuditSubscriptions();
+    await containerReportHandler({
+      container: {
+        name: 'api',
+        image: { name: 'acme/api' },
+        updateAvailable: true,
+        updateKind: {
+          kind: 'tag',
+          localValue: '1.0.0',
+          remoteValue: '2.0.0',
+          semverDiff: 'major',
+        },
+      },
+      changed: true,
+    } as ContainerReport);
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'update-available', semverDiff: 'major' }),
+    );
   });
 
   test('deduplicates security alerts that repeat before 5 minutes', async () => {

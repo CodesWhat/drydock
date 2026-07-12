@@ -4,6 +4,7 @@ import { preferences, resetPreferences } from '@/preferences/store';
 import {
   getAllNotificationRules,
   type NotificationRule,
+  previewNotificationTemplates,
   updateNotificationRule,
 } from '@/services/notification';
 import { getAllTriggers } from '@/services/trigger';
@@ -27,6 +28,7 @@ vi.mock('@/composables/useBreakpoints', () => ({
 
 vi.mock('@/services/notification', () => ({
   getAllNotificationRules: vi.fn(),
+  previewNotificationTemplates: vi.fn(),
   updateNotificationRule: vi.fn(),
 }));
 
@@ -35,6 +37,7 @@ vi.mock('@/services/trigger', () => ({
 }));
 
 const mockGetAllNotificationRules = getAllNotificationRules as ReturnType<typeof vi.fn>;
+const mockPreviewNotificationTemplates = previewNotificationTemplates as ReturnType<typeof vi.fn>;
 const mockUpdateNotificationRule = updateNotificationRule as ReturnType<typeof vi.fn>;
 const mockGetAllTriggers = getAllTriggers as ReturnType<typeof vi.fn>;
 
@@ -45,6 +48,9 @@ function makeRule(overrides: Partial<NotificationRule> = {}): NotificationRule {
     description: 'Critical vulnerabilities detected',
     enabled: true,
     triggers: ['trigger:slack-alerts'],
+    bellEnabled: true,
+    bellThreshold: 'all',
+    templates: {},
     ...overrides,
   };
 }
@@ -161,6 +167,11 @@ describe('NotificationsView', () => {
       { id: 'trigger:slack-alerts', name: 'Slack Alerts', type: 'slack' },
       { id: 'trigger:docker-policy', name: 'Docker Policy', type: 'docker' },
     ]);
+    mockPreviewNotificationTemplates.mockResolvedValue({
+      simpleTitle: 'Preview title',
+      simpleBody: 'Preview body',
+      batchTitle: 'Preview batch',
+    });
 
     mockUpdateNotificationRule.mockResolvedValue(
       makeRule({
@@ -278,6 +289,49 @@ describe('NotificationsView', () => {
     });
   });
 
+  it('edits bell preferences and previews per-trigger notification templates', async () => {
+    const wrapper = await mountNotificationsView({ ToggleSwitch: notificationToggleSwitchStub });
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    await wrapper.get('button[aria-label="Notification bell"]')?.trigger('click');
+    await wrapper.get('select[aria-label="Bell severity threshold"]').setValue('major');
+    await wrapper
+      .get('textarea[aria-label="Simple notification title"]')
+      .setValue('Alert ${container.name}');
+    await wrapper
+      .get('textarea[aria-label="Simple notification body"]')
+      .setValue('${container.result.releaseNotes.body}');
+    await wrapper.get('button[aria-label="Preview notification template"]').trigger('click');
+    await flushPromises();
+
+    expect(mockPreviewNotificationTemplates).toHaveBeenCalledWith(
+      'security-alert',
+      'trigger:slack-alerts',
+      {
+        simpleTitle: 'Alert ${container.name}',
+        simpleBody: '${container.result.releaseNotes.body}',
+      },
+    );
+    expect(wrapper.text()).toContain('Preview title');
+
+    const saveButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('Save changes'));
+    await saveButton?.trigger('click');
+    await flushPromises();
+    expect(mockUpdateNotificationRule).toHaveBeenCalledWith('security-alert', {
+      bellEnabled: false,
+      bellThreshold: 'major',
+      templates: {
+        'trigger:slack-alerts': {
+          simpleTitle: 'Alert ${container.name}',
+          simpleBody: '${container.result.releaseNotes.body}',
+        },
+      },
+    });
+  });
+
   it('treats empty update-available assignments as all notification triggers in the UI', async () => {
     mockGetAllNotificationRules.mockResolvedValue([
       makeRule({
@@ -349,7 +403,7 @@ describe('NotificationsView', () => {
 
     await wrapper.find('.row-click-first').trigger('click');
     await flushPromises();
-    expect(wrapper.findAll('button[role="switch"]')).toHaveLength(2);
+    expect(wrapper.findAll('button[role="switch"]')).toHaveLength(3);
 
     const detailSwitch = wrapper.find('button[aria-label="Rule status"]');
     expect(detailSwitch.exists()).toBe(true);

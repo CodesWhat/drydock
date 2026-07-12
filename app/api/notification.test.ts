@@ -1,32 +1,57 @@
 import { createMockResponse } from '../test/helpers.js';
 
-const { mockRouter, mockGetNotificationRules, mockUpdateNotificationRule, mockGetRegistryState } =
-  vi.hoisted(() => ({
-    mockRouter: { use: vi.fn(), get: vi.fn(), patch: vi.fn(), put: vi.fn() },
+const {
+  mockRouter,
+  mockGetNotificationRules,
+  mockGetNotificationRule,
+  mockUpdateNotificationRule,
+  mockGetRegistryState,
+  mockPreviewNotificationTemplates,
+} = vi.hoisted(() => {
+  const previewNotificationTemplates = vi.fn((ruleId, templates) => ({
+    simpleTitle: templates.simpleTitle ?? `Default ${ruleId}`,
+    simpleBody: templates.simpleBody ?? 'Default body',
+    batchTitle: templates.batchTitle ?? 'Default batch',
+  }));
+  return {
+    mockRouter: { use: vi.fn(), get: vi.fn(), post: vi.fn(), patch: vi.fn(), put: vi.fn() },
     mockGetNotificationRules: vi.fn(() => [
       {
         id: 'update-available',
         name: 'Update Available',
         enabled: true,
         triggers: ['slack.ops', 'docker.update'],
+        bellEnabled: true,
+        bellThreshold: 'all',
+        templates: {},
         description: 'When a container has a new version',
       },
     ]),
+    mockGetNotificationRule: vi.fn((id) => (id === 'missing' ? undefined : { id })),
     mockUpdateNotificationRule: vi.fn((id, update) => ({
       id,
       name: 'Update Available',
       enabled: update.enabled ?? true,
       triggers: update.triggers ?? [],
+      bellEnabled: update.bellEnabled ?? true,
+      bellThreshold: update.bellThreshold ?? 'all',
+      templates: update.templates ?? {},
       description: 'When a container has a new version',
     })),
     mockGetRegistryState: vi.fn(() => ({
       trigger: {
-        'slack.ops': { type: 'slack', name: 'ops' },
+        'slack.ops': {
+          type: 'slack',
+          name: 'ops',
+          previewNotificationTemplates,
+        },
         'smtp.ops': { type: 'smtp', name: 'ops' },
         'docker.update': { type: 'docker', name: 'update' },
       },
     })),
-  }));
+    mockPreviewNotificationTemplates: previewNotificationTemplates,
+  };
+});
 
 vi.mock('express', () => ({
   default: { Router: vi.fn(() => mockRouter) },
@@ -35,7 +60,9 @@ vi.mock('express', () => ({
 vi.mock('nocache', () => ({ default: vi.fn(() => 'nocache-middleware') }));
 
 vi.mock('../store/notification', () => ({
+  NOTIFICATION_BELL_THRESHOLDS: ['all', 'major', 'minor', 'patch'],
   getNotificationRules: mockGetNotificationRules,
+  getNotificationRule: mockGetNotificationRule,
   updateNotificationRule: mockUpdateNotificationRule,
 }));
 
@@ -56,6 +83,7 @@ describe('Notification Router', () => {
     expect(router.use).toHaveBeenCalledWith('nocache-middleware');
     expect(router.get).toHaveBeenCalledWith('/', expect.any(Function));
     expect(router.patch).toHaveBeenCalledWith('/:id', expect.any(Function));
+    expect(router.post).toHaveBeenCalledWith('/:id/preview', expect.any(Function));
     expect(router.get).toHaveBeenCalledTimes(1);
     expect(router.patch).toHaveBeenCalledTimes(1);
     expect(router.put).not.toHaveBeenCalled();
@@ -77,6 +105,9 @@ describe('Notification Router', () => {
           name: 'Update Available',
           enabled: true,
           triggers: ['slack.ops'],
+          bellEnabled: true,
+          bellThreshold: 'all',
+          templates: {},
           description: 'When a container has a new version',
         },
       ],
@@ -142,6 +173,9 @@ describe('Notification Router', () => {
       name: 'Update Available',
       enabled: false,
       triggers: ['slack.ops', 'smtp.ops'],
+      bellEnabled: true,
+      bellThreshold: 'all',
+      templates: {},
       description: 'When a container has a new version',
     });
   });
@@ -176,6 +210,9 @@ describe('Notification Router', () => {
       name: 'Update Available',
       enabled: true,
       triggers: ['edge.pushover.mobile', 'smtp.gmail'],
+      bellEnabled: true,
+      bellThreshold: 'all',
+      templates: {},
       description: 'When a container has a new version',
     });
   });
@@ -193,6 +230,9 @@ describe('Notification Router', () => {
         name: 'Update Available',
         enabled: true,
         triggers: ['mobile'],
+        bellEnabled: true,
+        bellThreshold: 'all',
+        templates: {},
         description: 'When a container has a new version',
       },
     ]);
@@ -210,6 +250,9 @@ describe('Notification Router', () => {
           name: 'Update Available',
           enabled: true,
           triggers: ['edge.pushover.mobile', 'fallback.pushover.mobile'],
+          bellEnabled: true,
+          bellThreshold: 'all',
+          templates: {},
           description: 'When a container has a new version',
         },
       ],
@@ -237,6 +280,92 @@ describe('Notification Router', () => {
     expect(res.json).toHaveBeenCalledWith({
       error: 'Unsupported notification triggers: docker.update',
     });
+  });
+
+  test('should update bell preferences and per-trigger templates', () => {
+    notificationRouter.init();
+    const handler = mockRouter.patch.mock.calls.find((call) => call[0] === '/:id')[1];
+    const res = createMockResponse();
+    const templates = {
+      'slack.ops': {
+        simpleTitle: 'Update for ${container.name}',
+        simpleBody: '${container.result.releaseNotes.body}',
+      },
+    };
+
+    handler(
+      {
+        params: { id: 'update-available' },
+        body: { bellEnabled: false, bellThreshold: 'major', templates },
+      },
+      res,
+    );
+
+    expect(mockUpdateNotificationRule).toHaveBeenCalledWith('update-available', {
+      bellEnabled: false,
+      bellThreshold: 'major',
+      templates,
+    });
+    expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  test('should reject template overrides for action or unknown triggers', () => {
+    notificationRouter.init();
+    const handler = mockRouter.patch.mock.calls.find((call) => call[0] === '/:id')[1];
+    const res = createMockResponse();
+
+    handler(
+      {
+        params: { id: 'update-available' },
+        body: { templates: { 'docker.update': { simpleTitle: 'Nope' } } },
+      },
+      res,
+    );
+
+    expect(mockUpdateNotificationRule).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      error: 'Unsupported notification triggers: docker.update',
+    });
+  });
+
+  test('should preview draft templates with the selected notification trigger', () => {
+    notificationRouter.init();
+    const handler = mockRouter.post.mock.calls.find((call) => call[0] === '/:id/preview')[1];
+    const res = createMockResponse();
+
+    handler(
+      {
+        params: { id: 'update-available' },
+        body: {
+          triggerId: 'slack.ops',
+          templates: { simpleTitle: 'Preview ${container.name}' },
+        },
+      },
+      res,
+    );
+
+    expect(mockPreviewNotificationTemplates).toHaveBeenCalledWith('update-available', {
+      simpleTitle: 'Preview ${container.name}',
+    });
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      simpleTitle: 'Preview ${container.name}',
+      simpleBody: 'Default body',
+      batchTitle: 'Default batch',
+    });
+  });
+
+  test('should return 404 when previewing an unknown notification rule', () => {
+    notificationRouter.init();
+    const handler = mockRouter.post.mock.calls.find((call) => call[0] === '/:id/preview')[1];
+    const res = createMockResponse();
+
+    handler({ params: { id: 'missing' }, body: { triggerId: 'slack.ops', templates: {} } }, res);
+
+    expect(mockPreviewNotificationTemplates).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Notification rule not found' });
   });
 
   test('should reject invalid notification update payload', () => {

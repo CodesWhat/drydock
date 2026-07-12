@@ -4,9 +4,14 @@ import { useEventStreamStore } from '@/stores/eventStream';
 import { BELL_ACTIONS, useNotificationStore } from '@/stores/notifications';
 
 const mockGetAuditLog = vi.fn();
+const mockGetAllNotificationRules = vi.fn();
 
 vi.mock('@/services/audit', () => ({
   getAuditLog: (...args: unknown[]) => mockGetAuditLog(...args),
+}));
+
+vi.mock('@/services/notification', () => ({
+  getAllNotificationRules: (...args: unknown[]) => mockGetAllNotificationRules(...args),
 }));
 
 const entries = [
@@ -31,6 +36,13 @@ describe('useNotificationStore', () => {
     setActivePinia(createPinia());
     localStorage.clear();
     mockGetAuditLog.mockReset().mockResolvedValue({ entries });
+    mockGetAllNotificationRules.mockReset().mockResolvedValue(
+      BELL_ACTIONS.filter((action) => action !== 'notification-delivery-failed').map((id) => ({
+        id,
+        bellEnabled: true,
+        bellThreshold: 'all',
+      })),
+    );
   });
 
   it('fetches bell entries with the actionable action filter', async () => {
@@ -55,6 +67,30 @@ describe('useNotificationStore', () => {
     expect(store.unreadCount).toBe(2);
     expect(store.error).toBe('network unavailable');
     expect(store.loading).toBe(false);
+  });
+
+  it('uses saved bell categories and update severity thresholds', async () => {
+    mockGetAllNotificationRules.mockResolvedValueOnce([
+      { id: 'update-available', bellEnabled: true, bellThreshold: 'major' },
+      { id: 'update-applied', bellEnabled: false, bellThreshold: 'all' },
+      { id: 'update-failed', bellEnabled: true, bellThreshold: 'all' },
+    ]);
+    mockGetAuditLog.mockResolvedValueOnce({
+      entries: [
+        { ...entries[0], id: 'minor', action: 'update-available', semverDiff: 'minor' },
+        { ...entries[0], id: 'major', action: 'update-available', semverDiff: 'major' },
+        entries[1],
+      ],
+    });
+    const store = useNotificationStore();
+
+    await store.fetchEntries();
+
+    expect(mockGetAuditLog).toHaveBeenCalledWith({
+      limit: 20,
+      actions: ['update-available', 'update-failed', 'notification-delivery-failed'],
+    });
+    expect(store.visibleEntries.map((entry) => entry.id)).toEqual(['major', '2']);
   });
 
   it('records string refresh failures without clearing entries', async () => {
@@ -120,6 +156,7 @@ describe('useNotificationStore', () => {
       store.start();
       store.start();
       await Promise.resolve();
+      await Promise.resolve();
       expect(mockGetAuditLog).toHaveBeenCalledTimes(1);
 
       eventStream.publish('update-failed');
@@ -129,6 +166,7 @@ describe('useNotificationStore', () => {
       expect(mockGetAuditLog).toHaveBeenCalledTimes(1);
 
       vi.advanceTimersByTime(1);
+      await Promise.resolve();
       await Promise.resolve();
       expect(mockGetAuditLog).toHaveBeenCalledTimes(2);
 

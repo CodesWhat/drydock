@@ -307,6 +307,23 @@ describe('openApiPaths', () => {
                       items: { type: 'string' },
                       uniqueItems: true,
                     },
+                    bellEnabled: { type: 'boolean' },
+                    bellThreshold: {
+                      type: 'string',
+                      enum: ['all', 'major', 'minor', 'patch'],
+                    },
+                    templates: {
+                      type: 'object',
+                      additionalProperties: {
+                        type: 'object',
+                        properties: {
+                          simpleTitle: { type: 'string' },
+                          simpleBody: { type: 'string' },
+                          batchTitle: { type: 'string' },
+                        },
+                        additionalProperties: false,
+                      },
+                    },
                   },
                   minProperties: 1,
                   additionalProperties: false,

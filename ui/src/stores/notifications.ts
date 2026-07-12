@@ -3,6 +3,11 @@ import { computed, ref } from 'vue';
 import { i18n } from '@/boot/i18n';
 import { useStorageRef } from '@/composables/useStorageRef';
 import { getAuditLog } from '@/services/audit';
+import {
+  getAllNotificationRules,
+  type NotificationBellThreshold,
+  type NotificationRule,
+} from '@/services/notification';
 import type { AuditEntry } from '@/utils/audit-helpers';
 import { type SseBusEvent, useEventStreamStore } from './eventStream';
 
@@ -14,6 +19,25 @@ export const BELL_ACTIONS = [
   'security-alert',
   'agent-disconnect',
 ];
+
+const ALWAYS_BELL_ACTIONS = ['notification-delivery-failed'];
+
+function updateMeetsBellThreshold(
+  semverDiff: AuditEntry['semverDiff'],
+  threshold: NotificationBellThreshold,
+): boolean {
+  if (threshold === 'all') return true;
+  if (threshold === 'major') return semverDiff === 'major';
+  if (threshold === 'minor') return semverDiff === 'major' || semverDiff === 'minor';
+  return semverDiff === 'major' || semverDiff === 'minor' || semverDiff === 'patch';
+}
+
+function bellActionsForRules(rules: NotificationRule[]): string[] {
+  const enabledActions = new Set(rules.filter((rule) => rule.bellEnabled).map((rule) => rule.id));
+  return BELL_ACTIONS.filter(
+    (action) => ALWAYS_BELL_ACTIONS.includes(action) || enabledActions.has(action),
+  );
+}
 
 const BELL_REFRESH_EVENTS: SseBusEvent[] = [
   'container-changed',
@@ -65,8 +89,16 @@ export const useNotificationStore = defineStore('notifications', () => {
   async function fetchEntries(): Promise<void> {
     loading.value = true;
     try {
-      const data = await getAuditLog({ limit: 20, actions: BELL_ACTIONS });
-      entries.value = data.entries ?? [];
+      const rules = await getAllNotificationRules().catch(() => null);
+      const actions = rules ? bellActionsForRules(rules) : BELL_ACTIONS;
+      const data = await getAuditLog({ limit: 20, actions });
+      const updateAvailableRule = rules?.find((rule) => rule.id === 'update-available');
+      entries.value = (data.entries ?? []).filter(
+        (entry: AuditEntry) =>
+          entry.action !== 'update-available' ||
+          !updateAvailableRule ||
+          updateMeetsBellThreshold(entry.semverDiff, updateAvailableRule.bellThreshold),
+      );
       error.value = null;
     } catch (caught) {
       error.value = normalizeFetchError(caught);

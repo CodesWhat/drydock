@@ -8,8 +8,19 @@ import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 
 const { t, te } = useI18n();
-import type { NotificationRule, NotificationRuleUpdate } from '../services/notification';
-import { getAllNotificationRules, updateNotificationRule } from '../services/notification';
+import type {
+  NotificationBellThreshold,
+  NotificationRule,
+  NotificationRuleUpdate,
+  NotificationTemplateOverride,
+  NotificationTemplateOverrides,
+  NotificationTemplatePreview,
+} from '../services/notification';
+import {
+  getAllNotificationRules,
+  previewNotificationTemplates,
+  updateNotificationRule,
+} from '../services/notification';
 import { getAllTriggers } from '../services/trigger';
 import type { ApiComponent } from '../types/api';
 import { errorMessage } from '../utils/error';
@@ -20,7 +31,7 @@ interface TriggerSummary {
   type: string;
 }
 
-const NON_NOTIFICATION_TRIGGER_TYPES = new Set(['docker', 'dockercompose']);
+const NON_NOTIFICATION_TRIGGER_TYPES = new Set(['command', 'docker', 'dockercompose']);
 
 function isNotificationTriggerType(type: string) {
   return !NON_NOTIFICATION_TRIGGER_TYPES.has(type.toLowerCase());
@@ -55,6 +66,13 @@ const selectedRuleId = ref<string | null>(null);
 const detailOpen = ref(false);
 const detailEnabled = ref(true);
 const detailTriggers = ref<string[]>([]);
+const detailBellEnabled = ref(true);
+const detailBellThreshold = ref<NotificationBellThreshold>('all');
+const detailTemplates = ref<NotificationTemplateOverrides>({});
+const detailTemplateTriggerId = ref('');
+const templatePreview = ref<NotificationTemplatePreview | null>(null);
+const templatePreviewError = ref('');
+const templatePreviewLoading = ref(false);
 
 function triggerTypeBadge(type: string) {
   if (type === 'slack')
@@ -145,11 +163,39 @@ function hasTriggerChanges() {
   return currentTriggers.some((triggerId, index) => triggerId !== draftTriggers[index]);
 }
 
+function normalizedTemplates(templates: NotificationTemplateOverrides) {
+  return Object.fromEntries(
+    Object.entries(templates)
+      .filter(([, template]) => Object.keys(template).length > 0)
+      .sort(([triggerA], [triggerB]) => triggerA.localeCompare(triggerB)),
+  );
+}
+
+function cloneTemplates(templates: NotificationTemplateOverrides): NotificationTemplateOverrides {
+  return Object.fromEntries(
+    Object.entries(templates).map(([triggerId, template]) => [triggerId, { ...template }]),
+  );
+}
+
+function hasTemplateChanges() {
+  if (!selectedRule.value) return false;
+  return (
+    JSON.stringify(normalizedTemplates(detailTemplates.value)) !==
+    JSON.stringify(normalizedTemplates(selectedRule.value.templates))
+  );
+}
+
 const detailHasChanges = computed(() => {
   if (!selectedRule.value) {
     return false;
   }
-  return detailEnabled.value !== selectedRule.value.enabled || hasTriggerChanges();
+  return (
+    detailEnabled.value !== selectedRule.value.enabled ||
+    detailBellEnabled.value !== selectedRule.value.bellEnabled ||
+    detailBellThreshold.value !== selectedRule.value.bellThreshold ||
+    hasTriggerChanges() ||
+    hasTemplateChanges()
+  );
 });
 
 const detailSaving = computed(
@@ -225,10 +271,26 @@ function syncDetailDraftFromRule() {
   if (!selectedRule.value) {
     detailEnabled.value = true;
     detailTriggers.value = [];
+    detailBellEnabled.value = true;
+    detailBellThreshold.value = 'all';
+    detailTemplates.value = {};
+    detailTemplateTriggerId.value = '';
     return;
   }
   detailEnabled.value = selectedRule.value.enabled;
   detailTriggers.value = [...selectedRule.value.triggers];
+  detailBellEnabled.value = selectedRule.value.bellEnabled;
+  detailBellThreshold.value = selectedRule.value.bellThreshold;
+  detailTemplates.value = cloneTemplates(selectedRule.value.templates);
+  const availableTriggerIds = new Set(triggersData.value.map((trigger) => trigger.id));
+  if (!availableTriggerIds.has(detailTemplateTriggerId.value)) {
+    detailTemplateTriggerId.value =
+      detailTriggers.value.find((triggerId) => availableTriggerIds.has(triggerId)) ??
+      triggersSorted.value[0]?.id ??
+      '';
+  }
+  templatePreview.value = null;
+  templatePreviewError.value = '';
 }
 
 function openDetail(rule: NotificationRule) {
@@ -254,6 +316,7 @@ function updateRuleInList(updatedRule: NotificationRule) {
     ...notificationsData.value[ruleIndex],
     ...updatedRule,
     triggers: [...updatedRule.triggers],
+    templates: cloneTemplates(updatedRule.templates),
   };
 }
 
@@ -310,6 +373,43 @@ function toggleDetailTrigger(triggerId: string) {
   detailTriggers.value = [...detailTriggers.value, triggerId].sort();
 }
 
+function currentTemplate(): NotificationTemplateOverride {
+  return detailTemplates.value[detailTemplateTriggerId.value] ?? {};
+}
+
+function templateFieldValue(field: keyof NotificationTemplateOverride): string {
+  return currentTemplate()[field] ?? '';
+}
+
+function setTemplateField(field: keyof NotificationTemplateOverride, value: string) {
+  const triggerId = detailTemplateTriggerId.value;
+  if (!triggerId) return;
+  const template = { ...currentTemplate() };
+  if (value === '') delete template[field];
+  else template[field] = value;
+  if (Object.keys(template).length === 0) delete detailTemplates.value[triggerId];
+  else detailTemplates.value[triggerId] = template;
+  templatePreview.value = null;
+  templatePreviewError.value = '';
+}
+
+async function previewSelectedTemplate() {
+  if (!selectedRule.value || !detailTemplateTriggerId.value || templatePreviewLoading.value) return;
+  templatePreviewLoading.value = true;
+  templatePreviewError.value = '';
+  try {
+    templatePreview.value = await previewNotificationTemplates(
+      selectedRule.value.id,
+      detailTemplateTriggerId.value,
+      currentTemplate(),
+    );
+  } catch (e: unknown) {
+    templatePreviewError.value = errorMessage(e, t('notificationsView.detail.previewError'));
+  } finally {
+    templatePreviewLoading.value = false;
+  }
+}
+
 async function saveSelectedRule() {
   if (!selectedRule.value || !detailHasChanges.value || detailSaving.value) {
     return;
@@ -321,6 +421,15 @@ async function saveSelectedRule() {
   }
   if (hasTriggerChanges()) {
     update.triggers = normalizeTriggerIds(detailTriggers.value);
+  }
+  if (detailBellEnabled.value !== selectedRule.value.bellEnabled) {
+    update.bellEnabled = detailBellEnabled.value;
+  }
+  if (detailBellThreshold.value !== selectedRule.value.bellThreshold) {
+    update.bellThreshold = detailBellThreshold.value;
+  }
+  if (hasTemplateChanges()) {
+    update.templates = normalizedTemplates(detailTemplates.value);
   }
 
   await persistRule(selectedRule.value.id, update);
@@ -347,6 +456,9 @@ onMounted(async () => {
       triggers: normalizeTriggerIds(
         rule.triggers.filter((triggerId) => allowedTriggerIds.has(triggerId)),
       ),
+      bellEnabled: rule.bellEnabled ?? false,
+      bellThreshold: rule.bellThreshold ?? 'all',
+      templates: rule.templates ?? {},
     }));
     triggersData.value = notificationTriggers;
   } catch (e: unknown) {
@@ -575,6 +687,106 @@ onMounted(async () => {
                     {{ triggerTypeBadge(trigger.type).label }}
                   </AppBadge>
                 </label>
+              </div>
+            </div>
+
+            <div>
+              <div class="text-2xs font-semibold uppercase tracking-wider mb-2 dd-text-muted">
+                {{ t('notificationsView.detail.bellLabel') }}
+              </div>
+              <div class="flex items-center gap-3">
+                <ToggleSwitch
+                  :model-value="detailBellEnabled"
+                  :disabled="detailSaving"
+                  :aria-label="t('notificationsView.detail.bellAriaLabel')"
+                  on-color="var(--dd-success)"
+                  off-color="var(--dd-border-strong)"
+                  @update:model-value="detailBellEnabled = $event"
+                />
+                <select
+                  v-model="detailBellThreshold"
+                  :disabled="detailSaving"
+                  :aria-label="t('notificationsView.detail.bellThresholdAriaLabel')"
+                  class="px-2.5 py-1.5 dd-rounded text-2xs-plus dd-bg dd-text"
+                >
+                  <option value="all">{{ t('notificationsView.detail.thresholdAll') }}</option>
+                  <option value="major">{{ t('notificationsView.detail.thresholdMajor') }}</option>
+                  <option value="minor">{{ t('notificationsView.detail.thresholdMinor') }}</option>
+                  <option value="patch">{{ t('notificationsView.detail.thresholdPatch') }}</option>
+                </select>
+              </div>
+              <div class="text-2xs mt-1 dd-text-muted">{{ t('notificationsView.detail.bellHelp') }}</div>
+            </div>
+
+            <div v-if="triggersSorted.length > 0" class="space-y-2">
+              <div class="text-2xs font-semibold uppercase tracking-wider dd-text-muted">
+                {{ t('notificationsView.detail.templatesLabel') }}
+              </div>
+              <div class="text-2xs dd-text-muted">{{ t('notificationsView.detail.templatesHelp') }}</div>
+              <select
+                v-model="detailTemplateTriggerId"
+                :aria-label="t('notificationsView.detail.templateTriggerAriaLabel')"
+                class="w-full px-2.5 py-1.5 dd-rounded text-2xs-plus dd-bg dd-text"
+              >
+                <option v-for="trigger in triggersSorted" :key="trigger.id" :value="trigger.id">
+                  {{ trigger.name }} ({{ trigger.id }})
+                </option>
+              </select>
+              <label class="block text-2xs dd-text-muted">
+                {{ t('notificationsView.detail.simpleTitle') }}
+                <textarea
+                  :value="templateFieldValue('simpleTitle')"
+                  :aria-label="t('notificationsView.detail.simpleTitleAriaLabel')"
+                  rows="2"
+                  class="mt-1 w-full px-2.5 py-2 dd-rounded text-2xs font-mono dd-bg dd-text"
+                  @input="setTemplateField('simpleTitle', ($event.target as HTMLTextAreaElement).value)"
+                />
+              </label>
+              <label class="block text-2xs dd-text-muted">
+                {{ t('notificationsView.detail.simpleBody') }}
+                <textarea
+                  :value="templateFieldValue('simpleBody')"
+                  :aria-label="t('notificationsView.detail.simpleBodyAriaLabel')"
+                  rows="4"
+                  class="mt-1 w-full px-2.5 py-2 dd-rounded text-2xs font-mono dd-bg dd-text"
+                  @input="setTemplateField('simpleBody', ($event.target as HTMLTextAreaElement).value)"
+                />
+              </label>
+              <label class="block text-2xs dd-text-muted">
+                {{ t('notificationsView.detail.batchTitle') }}
+                <textarea
+                  :value="templateFieldValue('batchTitle')"
+                  :aria-label="t('notificationsView.detail.batchTitleAriaLabel')"
+                  rows="2"
+                  class="mt-1 w-full px-2.5 py-2 dd-rounded text-2xs font-mono dd-bg dd-text"
+                  @input="setTemplateField('batchTitle', ($event.target as HTMLTextAreaElement).value)"
+                />
+              </label>
+              <div class="flex items-center gap-2">
+                <AppButton
+                  size="none"
+                  variant="plain"
+                  class="px-3 py-1.5 dd-rounded text-2xs-plus font-semibold"
+                  :aria-label="t('notificationsView.detail.previewAriaLabel')"
+                  :disabled="templatePreviewLoading"
+                  @click="previewSelectedTemplate"
+                >
+                  {{ templatePreviewLoading ? t('notificationsView.detail.previewing') : t('notificationsView.detail.preview') }}
+                </AppButton>
+                <AppButton
+                  size="none"
+                  variant="text-muted"
+                  class="px-3 py-1.5 text-2xs-plus"
+                  @click="delete detailTemplates[detailTemplateTriggerId]"
+                >
+                  {{ t('notificationsView.detail.resetTemplate') }}
+                </AppButton>
+              </div>
+              <div v-if="templatePreviewError" class="text-2xs dd-text-danger">{{ templatePreviewError }}</div>
+              <div v-if="templatePreview" class="space-y-1 p-2.5 dd-rounded text-2xs dd-bg-elevated">
+                <div><strong>{{ t('notificationsView.detail.simpleTitle') }}:</strong> {{ templatePreview.simpleTitle }}</div>
+                <div class="whitespace-pre-wrap"><strong>{{ t('notificationsView.detail.simpleBody') }}:</strong> {{ templatePreview.simpleBody }}</div>
+                <div><strong>{{ t('notificationsView.detail.batchTitle') }}:</strong> {{ templatePreview.batchTitle }}</div>
               </div>
             </div>
 

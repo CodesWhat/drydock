@@ -1,6 +1,7 @@
 import {
   getAllNotificationRules,
   type NotificationRule,
+  previewNotificationTemplates,
   updateNotificationRule,
 } from '@/services/notification';
 
@@ -22,6 +23,9 @@ describe('Notification Service', () => {
           description: 'When a container has a new version',
           enabled: true,
           triggers: ['slack.ops'],
+          bellEnabled: true,
+          bellThreshold: 'all',
+          templates: {},
         },
       ];
 
@@ -46,6 +50,9 @@ describe('Notification Service', () => {
           description: 'When a container has a new version',
           enabled: true,
           triggers: ['slack.ops'],
+          bellEnabled: true,
+          bellThreshold: 'all',
+          templates: {},
         },
       ];
 
@@ -78,6 +85,9 @@ describe('Notification Service', () => {
         description: 'When a container has a new version',
         enabled: false,
         triggers: ['smtp.ops'],
+        bellEnabled: false,
+        bellThreshold: 'major',
+        templates: {},
       };
 
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -136,6 +146,35 @@ describe('Notification Service', () => {
       await expect(updateNotificationRule('update-available', { enabled: true })).rejects.toThrow(
         'HTTP 503',
       );
+    });
+  });
+
+  describe('previewNotificationTemplates', () => {
+    it('posts a draft template for the selected rule and trigger', async () => {
+      const preview = {
+        simpleTitle: 'Preview drydock-preview',
+        simpleBody: 'Release notes',
+        batchTitle: '2 updates',
+      };
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue(preview),
+      });
+
+      await expect(
+        previewNotificationTemplates('update-available', 'slack.ops', {
+          simpleTitle: 'Preview ${container.name}',
+        }),
+      ).resolves.toEqual(preview);
+      expect(global.fetch).toHaveBeenCalledWith('/api/v1/notifications/update-available/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          triggerId: 'slack.ops',
+          templates: { simpleTitle: 'Preview ${container.name}' },
+        }),
+      });
     });
   });
 });

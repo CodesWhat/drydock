@@ -53,6 +53,7 @@ vi.mock('../../store/audit.js', () => ({
 }));
 vi.mock('../../store/notification.js', () => ({
   isTriggerEnabledForRule: vi.fn(() => true),
+  getNotificationTemplate: vi.fn(() => undefined),
   getTriggerDispatchDecisionForRule: vi.fn(() => ({
     enabled: true,
     reason: 'matched-allow-list',
@@ -202,6 +203,7 @@ beforeEach(async () => {
     enabled: true,
     reason: 'matched-allow-list',
   });
+  notificationStore.getNotificationTemplate.mockReturnValue(undefined);
   storeContainer.getContainers.mockReturnValue([]);
   storeContainer.getContainersRaw.mockImplementation((query, pagination) =>
     storeContainer.getContainers(query, pagination),
@@ -1790,6 +1792,54 @@ test('renderSimpleTitle should use dedicated template for update-applied events'
   } as any;
 
   expect(trigger.renderSimpleTitle(container)).toBe('Container servicevault updated successfully');
+});
+
+test('persisted templates override one notification rule and trigger without changing defaults', () => {
+  trigger.type = 'slack';
+  trigger.name = 'ops';
+  notificationStore.getNotificationTemplate.mockImplementation((ruleId, triggerId, field) => {
+    if (ruleId === 'update-applied' && triggerId === 'slack.ops') {
+      return {
+        simpleTitle: 'Deployed ${container.name}',
+        simpleBody: '${container.updateKind.localValue} -> ${container.updateKind.remoteValue}',
+        batchTitle: '${containers.length} deployments',
+      }[field];
+    }
+    return undefined;
+  });
+
+  const container = {
+    name: 'servicevault',
+    updateKind: { kind: 'tag', localValue: '1.0.0', remoteValue: '1.1.0' },
+    notificationEvent: { kind: 'update-applied' },
+  } as any;
+
+  expect(trigger.renderSimpleTitle(container)).toBe('Deployed servicevault');
+  expect(trigger.renderSimpleBody(container)).toBe('1.0.0 -> 1.1.0');
+  expect(trigger.renderBatchTitle([container, container])).toBe('2 deployments');
+  expect(notificationStore.getNotificationTemplate).toHaveBeenCalledWith(
+    'update-applied',
+    'slack.ops',
+    'simpleTitle',
+  );
+});
+
+test('previewNotificationTemplates safely renders draft variables without persisting them', () => {
+  trigger.type = 'slack';
+  trigger.name = 'ops';
+
+  expect(
+    trigger.previewNotificationTemplates('update-available', {
+      simpleTitle: 'Preview ${container.name} ${container.image.tag.value}',
+      simpleBody: '${container.result.releaseNotes.body}',
+      batchTitle: '${containers.length} preview updates',
+    }),
+  ).toEqual({
+    simpleTitle: 'Preview drydock-preview 1.0.0',
+    simpleBody: 'Example release notes for the notification preview.',
+    batchTitle: '2 preview updates',
+  });
+  expect(notificationStore.getNotificationTemplate).not.toHaveBeenCalled();
 });
 
 test('renderSimpleTitle should use notification templates when simpletitle is unset', () => {

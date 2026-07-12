@@ -715,6 +715,20 @@ export const openApiPaths = {
                   items: { type: 'string' },
                   uniqueItems: true,
                 },
+                bellEnabled: { type: 'boolean' },
+                bellThreshold: { type: 'string', enum: ['all', 'major', 'minor', 'patch'] },
+                templates: {
+                  type: 'object',
+                  additionalProperties: {
+                    type: 'object',
+                    properties: {
+                      simpleTitle: { type: 'string' },
+                      simpleBody: { type: 'string' },
+                      batchTitle: { type: 'string' },
+                    },
+                    additionalProperties: false,
+                  },
+                },
               },
               minProperties: 1,
               additionalProperties: false,
@@ -727,6 +741,53 @@ export const openApiPaths = {
           $ref: '#/components/schemas/NotificationRule',
         }),
         400: errorResponse('Invalid notification rule update'),
+        401: errorResponse('Authentication required'),
+        404: errorResponse('Notification rule not found'),
+      },
+    },
+  },
+  '/api/v1/notifications/{id}/preview': {
+    post: {
+      tags: ['Notifications'],
+      summary: 'Preview notification templates',
+      operationId: 'previewNotificationTemplates',
+      parameters: [notificationRuleIdPathParam],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                triggerId: { type: 'string' },
+                templates: {
+                  type: 'object',
+                  properties: {
+                    simpleTitle: { type: 'string' },
+                    simpleBody: { type: 'string' },
+                    batchTitle: { type: 'string' },
+                  },
+                  additionalProperties: false,
+                },
+              },
+              required: ['triggerId'],
+              additionalProperties: false,
+            },
+          },
+        },
+      },
+      responses: {
+        200: jsonResponse('Rendered notification template preview', {
+          type: 'object',
+          properties: {
+            simpleTitle: { type: 'string' },
+            simpleBody: { type: 'string' },
+            batchTitle: { type: 'string' },
+          },
+          required: ['simpleTitle', 'simpleBody', 'batchTitle'],
+          additionalProperties: false,
+        }),
+        400: errorResponse('Invalid notification template preview'),
         401: errorResponse('Authentication required'),
         404: errorResponse('Notification rule not found'),
       },

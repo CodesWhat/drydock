@@ -83,6 +83,16 @@ type NotificationRuleId =
   | 'agent-reconnect'
   | 'container-unhealthy';
 
+const NOTIFICATION_RULE_IDS = new Set<NotificationRuleId>([
+  'update-available',
+  'update-applied',
+  'update-failed',
+  'security-alert',
+  'agent-disconnect',
+  'agent-reconnect',
+  'container-unhealthy',
+]);
+
 type ContainerUpdateFailedPayload = event.ContainerUpdateFailedEventPayload;
 
 interface SecurityAlertSummary {
@@ -2966,6 +2976,148 @@ class Trigger<
     };
   }
 
+  private getStoredNotificationTemplate(
+    notificationEvent: TriggerNotificationEvent | undefined,
+    field: notificationStore.NotificationTemplateField,
+    fallback: string,
+  ): string {
+    const ruleId: NotificationRuleId = notificationEvent?.kind ?? 'update-available';
+    return notificationStore.getNotificationTemplate(ruleId, this.getId(), field) ?? fallback;
+  }
+
+  private buildNotificationPreviewContainer(ruleId: NotificationRuleId): Container {
+    const notificationEvent =
+      ruleId === 'update-available'
+        ? undefined
+        : ruleId === 'update-failed'
+          ? { kind: ruleId, error: 'Example update failure', rollbackAttempted: true }
+          : ruleId === 'security-alert'
+            ? {
+                kind: ruleId,
+                details: '1 critical vulnerability',
+                summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 1 },
+                blockingCount: 1,
+              }
+            : ruleId === 'agent-disconnect'
+              ? { kind: ruleId, agentName: 'preview-agent', reason: 'Connection timed out' }
+              : ruleId === 'agent-reconnect'
+                ? { kind: ruleId, agentName: 'preview-agent' }
+                : ruleId === 'container-unhealthy'
+                  ? { kind: ruleId, health: 'unhealthy', previousHealth: 'healthy' }
+                  : { kind: ruleId };
+
+    return {
+      id: 'drydock-preview',
+      name: 'drydock-preview',
+      displayName: 'Drydock Preview',
+      displayIcon: '',
+      watcher: 'local',
+      status: 'running',
+      image: {
+        id: 'sha256:preview',
+        registry: { name: 'ghcr', url: 'https://ghcr.io' },
+        name: 'getwud/drydock',
+        tag: { value: '1.0.0', semver: true },
+        digest: { watch: true, value: 'sha256:current' },
+        architecture: 'amd64',
+        os: 'linux',
+      },
+      result: {
+        tag: '1.1.0',
+        digest: 'sha256:updated',
+        link: 'https://github.com/getwud/drydock/releases/tag/v1.1.0',
+        releaseNotes: {
+          title: 'Drydock 1.1.0',
+          body: 'Example release notes for the notification preview.',
+          url: 'https://github.com/getwud/drydock/releases/tag/v1.1.0',
+          publishedAt: '2026-01-01T00:00:00.000Z',
+          provider: 'github',
+        },
+      },
+      security: {
+        updateScan: {
+          scanner: 'trivy',
+          image: 'ghcr.io/getwud/drydock:1.1.0',
+          scannedAt: '2026-01-01T00:00:00.000Z',
+          status: 'blocked',
+          blockSeverities: ['CRITICAL'],
+          blockingCount: 1,
+          summary: { unknown: 0, low: 0, medium: 0, high: 0, critical: 1 },
+          vulnerabilities: [
+            {
+              id: 'CVE-2026-0001',
+              packageName: 'example-package',
+              installedVersion: '1.0.0',
+              fixedVersion: '1.0.1',
+              severity: 'CRITICAL',
+            },
+          ],
+        },
+      },
+      updateAvailable: true,
+      updateKind: {
+        kind: 'tag',
+        localValue: '1.0.0',
+        remoteValue: '1.1.0',
+        semverDiff: 'minor',
+      },
+      notificationEvent,
+    } as Container;
+  }
+
+  previewNotificationTemplates(
+    ruleId: string,
+    templates: notificationStore.NotificationTemplateOverride = {},
+  ): Required<notificationStore.NotificationTemplateOverride> {
+    if (!NOTIFICATION_RULE_IDS.has(ruleId as NotificationRuleId)) {
+      throw new Error(`Unsupported notification rule: ${ruleId}`);
+    }
+    const previewContainer = this.buildNotificationPreviewContainer(ruleId as NotificationRuleId);
+    const previewContainers = [
+      previewContainer,
+      { ...previewContainer, id: 'drydock-preview-2', name: 'drydock-preview-2' },
+    ];
+    const notificationEvent = getNotificationEvent(previewContainer);
+    const resolvePreviewTemplate = (
+      field: notificationStore.NotificationTemplateField,
+      defaults: Partial<Record<TriggerNotificationEvent['kind'], string>>,
+      fallback: string,
+    ) =>
+      templates[field] ??
+      this.getStoredNotificationTemplate(
+        notificationEvent,
+        field,
+        resolveNotificationTemplate(notificationEvent, defaults, fallback),
+      );
+
+    return {
+      simpleTitle: renderSimple(
+        resolvePreviewTemplate(
+          'simpleTitle',
+          NOTIFICATION_SIMPLE_TITLE_TEMPLATES,
+          this.configuration.simpletitle ?? '',
+        ),
+        this.getTemplateContainer(previewContainer),
+      ),
+      simpleBody: renderSimple(
+        resolvePreviewTemplate(
+          'simpleBody',
+          NOTIFICATION_SIMPLE_BODY_TEMPLATES,
+          this.configuration.simplebody ?? '',
+        ),
+        this.getTemplateContainer(previewContainer),
+      ),
+      batchTitle: renderBatch(
+        resolvePreviewTemplate(
+          'batchTitle',
+          NOTIFICATION_BATCH_TITLE_TEMPLATES,
+          this.configuration.batchtitle ?? '',
+        ),
+        previewContainers,
+      ),
+    };
+  }
+
   /**
    * Render trigger title simple.
    * @param container
@@ -2973,10 +3125,15 @@ class Trigger<
    */
   renderSimpleTitle(container: Container) {
     const notificationEvent = getNotificationEvent(container);
-    const template = resolveNotificationTemplate(
+    const defaultTemplate = resolveNotificationTemplate(
       notificationEvent,
       NOTIFICATION_SIMPLE_TITLE_TEMPLATES,
       this.configuration.simpletitle ?? '',
+    );
+    const template = this.getStoredNotificationTemplate(
+      notificationEvent,
+      'simpleTitle',
+      defaultTemplate,
     );
     return renderSimple(template, this.getTemplateContainer(container));
   }
@@ -2988,10 +3145,15 @@ class Trigger<
    */
   renderSimpleBody(container: Container) {
     const notificationEvent = getNotificationEvent(container);
-    const template = resolveNotificationTemplate(
+    const defaultTemplate = resolveNotificationTemplate(
       notificationEvent,
       NOTIFICATION_SIMPLE_BODY_TEMPLATES,
       this.configuration.simplebody ?? '',
+    );
+    const template = this.getStoredNotificationTemplate(
+      notificationEvent,
+      'simpleBody',
+      defaultTemplate,
     );
     return renderSimple(template, this.getTemplateContainer(container));
   }
@@ -3009,10 +3171,15 @@ class Trigger<
     }
     const notificationEvent =
       containers.length > 0 ? getNotificationEvent(containers[0]) : undefined;
-    const template = resolveNotificationTemplate(
+    const defaultTemplate = resolveNotificationTemplate(
       notificationEvent,
       NOTIFICATION_BATCH_TITLE_TEMPLATES,
       this.configuration.batchtitle ?? '',
+    );
+    const template = this.getStoredNotificationTemplate(
+      notificationEvent,
+      'batchTitle',
+      defaultTemplate,
     );
     return renderBatch(template, containers);
   }

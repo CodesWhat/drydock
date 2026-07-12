@@ -98,6 +98,7 @@ export function registerAuditLogSubscriptions(registrars: AuditSubscriptionRegis
         containerImage: containerReport.container.image?.name,
         fromVersion: containerReport.container.updateKind?.localValue,
         toVersion: containerReport.container.updateKind?.remoteValue,
+        semverDiff: containerReport.container.updateKind?.semverDiff,
         status: 'info',
       });
       getAuditCounter()?.inc({ action: 'update-available' });
