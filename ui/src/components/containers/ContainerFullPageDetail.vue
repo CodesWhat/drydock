@@ -45,6 +45,7 @@ const {
   updateKindColor,
   detailTabs,
   activeDetailTab,
+  updateMode,
 } = useContainersViewTemplateContext();
 
 function isActionQueued(container: { id?: unknown; name?: unknown }) {
@@ -239,7 +240,7 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             {{ t('containerComponents.fullPageDetail.recheckButton') }}
           </AppButton>
 	          <AppButton
-	            v-if="selectedContainer.newTag && isUpdateHardBlocked(selectedContainer)"
+	            v-if="updateMode !== 'notify' && selectedContainer.newTag && isUpdateHardBlocked(selectedContainer)"
 	            size="md"
 	            variant="danger"
 	            weight="bold"
@@ -250,7 +251,7 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
 	            {{ t('containerComponents.fullPageDetail.blockedButton') }}
 	          </AppButton>
 	          <AppButton
-	            v-else-if="selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
+	            v-else-if="updateMode !== 'notify' && selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
 	            size="md"
 	            variant="danger"
 	            weight="bold"
@@ -262,7 +263,7 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             {{ t('containerComponents.fullPageDetail.blockedButton') }}
           </AppButton>
           <AppButton
-            v-else-if="selectedContainer.newTag"
+            v-else-if="updateMode !== 'notify' && selectedContainer.newTag"
             size="md"
             variant="success"
             weight="bold"

@@ -17,6 +17,7 @@ const detailPanelOpen = ref(true);
 const isMobile = ref(false);
 const panelSize = ref<'sm' | 'md' | 'lg'>('sm');
 const activeDetailTab = ref('overview');
+const updateMode = ref<'notify' | 'manual' | 'auto'>('manual');
 
 const closePanel = vi.fn();
 const openFullPage = vi.fn();
@@ -43,6 +44,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     openFullPage,
     detailTabs: [{ id: 'overview', label: 'Overview', icon: 'info' }],
     activeDetailTab,
+    updateMode,
     confirmStop,
     startContainer,
     confirmRestart,
@@ -64,6 +66,7 @@ describe('ContainerSideDetail', () => {
     detailPanelOpen.value = true;
     panelSize.value = 'sm';
     activeDetailTab.value = 'overview';
+    updateMode.value = 'manual';
     selectedContainer.value = {
       id: 'container-1',
       name: 'nginx',
@@ -145,6 +148,29 @@ describe('ContainerSideDetail', () => {
     expect(title).toBeDefined();
     expect(title?.classes()).toContain('text-sm');
     expect(title?.classes()).toContain('font-bold');
+  });
+
+  it('hides header update and force-update controls in notify mode', () => {
+    updateMode.value = 'notify';
+    (selectedContainer as any).value = {
+      ...selectedContainer.value,
+      newTag: '1.2.3',
+      bouncer: 'blocked',
+    };
+
+    const wrapper = mount(ContainerSideDetail, {
+      global: {
+        components: { DetailPanel },
+        stubs: {
+          AppIcon: { template: '<span class="app-icon-stub" />' },
+          ContainerSideTabContent: { template: '<div />' },
+        },
+        directives: { tooltip: {} },
+      },
+    });
+
+    expect(wrapper.find('button[aria-label="Update"]').exists()).toBe(false);
+    expect(wrapper.find('button[aria-label="Blocked — Force Update"]').exists()).toBe(false);
   });
 
   it('caps the subtitle and server badge so long values do not widen the panel', () => {

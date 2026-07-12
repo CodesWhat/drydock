@@ -79,7 +79,9 @@ const {
   activeFilterCount,
   filterSearch,
   clearFilters,
+  updateMode: configuredUpdateMode,
 } = useContainersViewTemplateContext();
+const updateMode = computed(() => configuredUpdateMode?.value ?? 'manual');
 const { visibleColumns } = useColumnVisibility();
 const nowMs = useNow(30_000, () => visibleColumns.value.has('uptime'));
 const { t, te } = useI18n();
@@ -265,6 +267,7 @@ function updateBtnState(c: {
     c.updateEligibility,
     Boolean(c.newTag),
     isContainerUpdateInProgress(c) || isContainerUpdateQueued(c),
+    updateMode.value,
   );
 }
 
@@ -554,6 +557,7 @@ onScopeDispose(() => {
             :frozen-total="getGroupFrozenTotal(row.group)"
             :done-count="getGroupDoneCount(row.group)"
             :tt="tt"
+            :show-update-controls="updateMode !== 'notify'"
             @toggle="toggleGroupCollapse"
             @update-all="updateAllInGroup($event)"
           />
@@ -851,7 +855,7 @@ onScopeDispose(() => {
                       @click.stop="cancelUpdate(c)">
                 <AppIcon name="x" :size="12" class="mr-1" /> {{ t('containerComponents.groupedViews.cancelButton') }}
               </AppButton>
-            <div v-if="c.newTag" class="inline-flex items-center gap-1">
+            <div v-if="c.newTag && updateBtnState(c) !== 'none'" class="inline-flex items-center gap-1">
               <!-- Blocked: muted split button (any hard eligibility blocker) -->
               <div v-if="updateBtnState(c) === 'hard'" class="inline-flex min-w-[110px] dd-rounded overflow-hidden border dd-border-strong"
                    v-tooltip.top="tt(updateBtnTooltip(c))">
@@ -1214,14 +1218,14 @@ onScopeDispose(() => {
             {{ t('containerComponents.groupedViews.recheckAction') }}
           </AppButton>
           <!-- Force update for blocked containers (even without newTag) -->
-          <template v-if="openActionsContainer.bouncer === 'blocked' && !openActionsContainer.newTag">
+          <template v-if="updateMode !== 'notify' && openActionsContainer.bouncer === 'blocked' && !openActionsContainer.newTag">
             <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
             <AppButton size="md" variant="plain" weight="medium" class="w-full text-left flex items-center gap-2 dd-text" @click="confirmForceUpdate(openActionsContainer); closeActionsMenu()">
               <AppIcon name="bolt" :size="12" class="w-3 text-center inline-flex justify-center" :style="{ color: 'var(--dd-warning)' }" />
               {{ t('containerComponents.groupedViews.forceUpdateAction') }}
             </AppButton>
           </template>
-          <template v-if="openActionsContainer.newTag">
+          <template v-if="openActionsContainer.newTag && updateBtnState(openActionsContainer) !== 'none'">
             <div class="my-1" :style="{ borderTop: '1px solid var(--dd-border)' }" />
             <AppButton
                     v-if="isUpdateHardBlocked(openActionsContainer)"

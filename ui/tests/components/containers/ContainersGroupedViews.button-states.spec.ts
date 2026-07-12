@@ -144,6 +144,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
   });
   const activeFilterCount = ref(0);
   const filterSearch = ref('');
+  const updateMode = ref<'notify' | 'manual' | 'auto'>('manual');
 
   const context = {
     filteredContainers,
@@ -226,6 +227,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     activeFilterCount,
     filterSearch,
     clearFilters: vi.fn(),
+    updateMode,
   } as any;
 
   Object.assign(context, overrides);
@@ -249,6 +251,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       selectedContainer,
       activeDetailTab,
       isCompact,
+      updateMode,
     },
     spies: {
       confirmUpdate: context.confirmUpdate as ReturnType<typeof vi.fn>,
@@ -324,9 +327,11 @@ function rowByName(wrapper: any, name: string) {
 function mountWithSingleContainer(
   container: Container,
   actionStyle: 'icons' | 'buttons' = 'icons',
+  updateMode: 'notify' | 'manual' | 'auto' = 'manual',
 ) {
   const { context, refs, spies } = makeContext();
   refs.tableActionStyle.value = actionStyle;
+  refs.updateMode.value = updateMode;
   refs.filteredContainers.value = [container];
   refs.displayContainers.value = [container];
   refs.renderGroups.value = [
@@ -620,6 +625,27 @@ describe('ContainersGroupedViews — update button states', () => {
     const row = rowByName(wrapper, 'alpha');
     expect(row.find('[data-icon="cloud-download"]').exists()).toBe(true);
     expect(row.find('[data-icon="lock"]').exists()).toBe(false);
+  });
+
+  it.each([
+    'icons',
+    'buttons',
+  ] as const)('%s mode: notify mode renders no update or blocker control', async (actionStyle) => {
+    const container = makeContainer({
+      id: `c-notify-${actionStyle}`,
+      name: 'alpha',
+      newTag: '2.0.0',
+      updateEligibility: makeEligibility([
+        { reason: 'agent-mismatch', message: 'Agent mismatch.', actionable: true },
+      ]),
+    });
+    const { wrapper } = mountWithSingleContainer(container, actionStyle, 'notify');
+    await nextTick();
+
+    const row = rowByName(wrapper, 'alpha');
+    expect(row.find('[data-icon="cloud-download"]').exists()).toBe(false);
+    expect(row.find('[data-icon="lock"]').exists()).toBe(false);
+    expect(row.find('[data-icon="stop"]').exists()).toBe(true);
   });
 
   // -------------------------------------------------------------------------

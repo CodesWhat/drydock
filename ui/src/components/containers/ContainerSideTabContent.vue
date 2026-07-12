@@ -6,7 +6,7 @@ import AppIconButton from '../AppIconButton.vue';
 import ContainerLogs from './ContainerLogs.vue';
 import ContainerStats from './ContainerStats.vue';
 import UpdateMaturityBadge from './UpdateMaturityBadge.vue';
-import UpdateEligibilityBadges from './UpdateEligibilityBadges.vue';
+import UpdateStatusPanel from './UpdateStatusPanel.vue';
 import SuggestedTagBadge from './SuggestedTagBadge.vue';
 import UpdateInsightBadge from './UpdateInsightBadge.vue';
 import FloatingTagBadge from './FloatingTagBadge.vue';
@@ -158,7 +158,17 @@ const {
   registryColorBg,
   registryColorText,
   registryLabel,
+  updateMode,
 } = useContainersViewTemplateContext();
+
+function openUpdateStatusTab(tab: string, section?: string) {
+  activeDetailTab.value = tab;
+  if (section) {
+    requestAnimationFrame(() =>
+      document.getElementById(section)?.scrollIntoView({ block: 'start' }),
+    );
+  }
+}
 
 const { t } = useI18n();
 
@@ -168,6 +178,10 @@ function isActionInProgress(container: { id?: unknown; name?: unknown }) {
 
 function isUpdateHardBlocked(container: { updateEligibility?: UpdateEligibility }) {
   return getPrimaryHardBlocker(container.updateEligibility) !== undefined;
+}
+
+function isManagedUpdateTrigger(trigger: { type: string }) {
+  return trigger.type === 'docker' || trigger.type === 'dockercompose';
 }
 
 const updateKindLabels = computed(
@@ -308,11 +322,14 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                   {{ formatTimestamp(selectedContainer.imageCreated || selectedImageMetadata.created) }}
                 </span>
               </div>
-              <UpdateEligibilityBadges
-                v-if="selectedContainer.updateEligibility"
-                :eligibility="selectedContainer.updateEligibility"
+              <UpdateStatusPanel
+                :container="selectedContainer"
+                :mode="updateMode"
                 :has-active-operation-badge="Boolean(selectedContainer.updateOperation)"
                 class="mt-2"
+                :busy="isActionInProgress(selectedContainer)"
+                @update="confirmUpdate(selectedContainer)"
+                @open-tab="openUpdateStatusTab"
               />
               <div class="mt-2">
                 <ReleaseNotesLink
@@ -681,16 +698,16 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                           @click="runContainerPreview">
                     {{ previewLoading ? t('containerComponents.fullPageActions.previewing') : t('containerComponents.fullPageActions.previewUpdate') }}
                   </AppButton>
-	                  <AppButton v-if="isUpdateHardBlocked(selectedContainer)" size="sm" variant="danger"
+	                  <AppButton v-if="updateMode !== 'notify' && isUpdateHardBlocked(selectedContainer)" size="sm" variant="danger"
 	                          :disabled="true">
 	                    <AppIcon name="lock" :size="10" class="mr-1 inline" />{{ t('containerComponents.fullPageDetail.blockedButton') }}
 	                  </AppButton>
-	                  <AppButton v-else-if="selectedContainer.bouncer === 'blocked'" size="sm" variant="danger"
+	                  <AppButton v-else-if="updateMode !== 'notify' && selectedContainer.bouncer === 'blocked'" size="sm" variant="danger"
 	                          :disabled="isActionInProgress(selectedContainer)"
 	                          @click="confirmForceUpdate(selectedContainer)">
 	                    <AppIcon name="lock" :size="10" class="mr-1 inline" />{{ t('containerComponents.fullPageActions.forceUpdate') }}
                   </AppButton>
-                  <AppButton v-else
+                  <AppButton v-else-if="updateMode !== 'notify'"
                           size="sm" variant="outlined"
                           :disabled="!selectedContainer.newTag || isActionInProgress(selectedContainer)"
                           @click="confirmUpdate(selectedContainer)">
@@ -710,7 +727,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
               </div>
               <!-- Skip & Snooze group -->
               <div>
-                <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">{{ t('containerComponents.fullPageActions.skipSnoozeGroup') }}</div>
+                <div id="update-policy" class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">{{ t('containerComponents.fullPageActions.skipSnoozeGroup') }}</div>
                 <div class="flex flex-wrap gap-1.5">
                   <AppButton size="sm" variant="outlined"
                           :disabled="!selectedContainer.newTag || policyInProgress !== null"
@@ -929,6 +946,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
               <div v-if="triggersLoading" class="text-2xs-plus dd-text-muted">{{ t('containerComponents.fullPageActions.loadingTriggers') }}</div>
               <div v-else-if="detailTriggers.length > 0" class="space-y-1.5">
                 <div v-for="trigger in detailTriggers" :key="getTriggerKey(trigger)"
+                     :data-trigger-key="getTriggerKey(trigger)"
                      class="flex items-center justify-between gap-2 px-2.5 py-2 dd-rounded text-2xs-plus"
                      :style="{ backgroundColor: 'var(--dd-bg-inset)' }">
                   <div class="min-w-0">
@@ -936,7 +954,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                     <div v-if="trigger.agent" class="text-2xs dd-text-muted">{{ t('containerComponents.triggers.agentLabel') }} {{ trigger.agent }}</div>
                   </div>
                   <AppButton size="xs"
-                          :disabled="triggerRunInProgress !== null"
+                          :disabled="triggerRunInProgress !== null || (updateMode === 'notify' && isManagedUpdateTrigger(trigger))"
                           @click="runAssociatedTrigger(trigger)">
                     {{ triggerRunInProgress === getTriggerKey(trigger) ? t('containerComponents.fullPageActions.runningButton') : t('containerComponents.fullPageActions.runButton') }}
                   </AppButton>
@@ -977,7 +995,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
             </div>
 
             <div>
-              <div class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageActions.updateOperationHistory') }}</div>
+              <div id="update-operation-history" class="dd-text-label mb-2 dd-text-muted">{{ t('containerComponents.fullPageActions.updateOperationHistory') }}</div>
               <div v-if="updateOperationsLoading" class="text-2xs-plus dd-text-muted">{{ t('containerComponents.fullPageActions.loadingOperationHistory') }}</div>
               <div v-else-if="detailUpdateOperations.length > 0" class="space-y-1.5">
                 <div v-for="operation in detailUpdateOperations" :key="operation.id"

@@ -155,6 +155,7 @@ async function mountActionsHarness(
     containers?: Container[];
     selectedContainer?: Container | null;
     selectedContainerId?: string;
+    updateMode?: 'notify' | 'manual' | 'auto';
   } = {},
 ) {
   let state: ActionsHarnessState | undefined;
@@ -173,6 +174,7 @@ async function mountActionsHarness(
       const selectedContainerId = ref(
         options.selectedContainerId ?? options.selectedContainer?.id ?? undefined,
       );
+      const updateMode = ref(options.updateMode ?? 'manual');
       const composable = useContainerActions({
         activeDetailTab,
         closeFullPage,
@@ -184,6 +186,7 @@ async function mountActionsHarness(
         loadContainers,
         selectedContainer,
         selectedContainerId,
+        updateMode,
       });
       state = {
         activeDetailTab,
@@ -1815,6 +1818,41 @@ describe('useContainerActions', () => {
 
     expect(mocks.confirmRequire).not.toHaveBeenCalled();
     expect(mocks.toastWarning).toHaveBeenCalledWith('Last update attempt rolled back.');
+  });
+
+  it('does not initiate a manual update in notify mode', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+      updateMode: 'notify',
+    });
+
+    composable.confirmUpdate('web');
+
+    expect(mocks.confirmRequire).not.toHaveBeenCalled();
+    expect(mocks.toastWarning).toHaveBeenCalledWith(
+      "Notifications only — Drydock won't apply updates.",
+    );
+  });
+
+  it('does not open force-update confirmation in notify mode', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web', newTag: '1.1.0' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+      containerIdMap: { web: 'container-1' },
+      updateMode: 'notify',
+    });
+
+    composable.confirmForceUpdate('web');
+
+    expect(mocks.confirmRequire).not.toHaveBeenCalled();
+    expect(mocks.updateContainerPolicy).not.toHaveBeenCalled();
+    expect(mocks.toastWarning).toHaveBeenCalledWith(
+      "Notifications only — Drydock won't apply updates.",
+    );
   });
 
   it('shows tag change details in update confirmation for tag updates', async () => {

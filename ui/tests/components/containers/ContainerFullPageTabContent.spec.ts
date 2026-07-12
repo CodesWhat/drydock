@@ -168,6 +168,7 @@ const mockRecheckContainer = vi.fn();
 const mockRecheckingContainerId = ref<string | null>(null);
 const mockConfirmUpdate = vi.fn();
 const mockConfirmForceUpdate = vi.fn();
+const updateMode = ref<'notify' | 'manual' | 'auto'>('manual');
 
 const LOG_AUTO_FETCH_INTERVALS = [
   { value: 0, label: 'Paused' },
@@ -272,6 +273,7 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     scanContainer: mockScanContainer,
     confirmUpdate: mockConfirmUpdate,
     confirmForceUpdate: mockConfirmForceUpdate,
+    updateMode,
     registryColorBg: () => 'var(--dd-bg-inset)',
     registryColorText: () => 'var(--dd-text)',
     registryLabel: () => 'Docker Hub',
@@ -407,6 +409,11 @@ function mountComponent() {
           template: '<span class="app-icon-stub" />',
           props: ['name', 'size'],
         },
+        UpdateStatusPanel: {
+          props: ['container', 'mode'],
+          emits: ['update', 'open-tab'],
+          template: '<div data-test="update-status-panel-stub" :data-mode="mode" />',
+        },
       },
     },
   });
@@ -419,6 +426,54 @@ function findButtonByText(wrapper: ReturnType<typeof mountComponent>, text: stri
 describe('ContainerFullPageTabContent', () => {
   afterEach(() => {
     resetState();
+    updateMode.value = 'manual';
+  });
+
+  it('replaces the legacy eligibility stack with the update status panel', () => {
+    activeDetailTab.value = 'overview';
+    selectedContainer.value = makeContainer({
+      updateEligibility: {
+        eligible: true,
+        blockers: [],
+        evaluatedAt: '2026-07-12T00:00:00.000Z',
+      },
+    });
+
+    const wrapper = mountComponent();
+
+    expect(wrapper.find('[data-test="update-status-panel-stub"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="eligibility-badge-full"]').exists()).toBe(false);
+  });
+
+  it('does not render managed update actions in notify mode', () => {
+    activeDetailTab.value = 'actions';
+    updateMode.value = 'notify';
+    selectedContainer.value = makeContainer({ newTag: '1.2.3', bouncer: 'blocked' });
+
+    const wrapper = mountComponent();
+    const actionLabels = wrapper.findAll('button').map((button) => button.text().trim());
+
+    expect(actionLabels).not.toContain('Update Now');
+    expect(actionLabels).not.toContain('Force Update');
+    expect(actionLabels).not.toContain('Blocked');
+  });
+
+  it('disables docker trigger runs but keeps notification trigger runs enabled in notify mode', () => {
+    activeDetailTab.value = 'actions';
+    updateMode.value = 'notify';
+    detailTriggers.value = [
+      { type: 'docker', name: 'local' },
+      { type: 'slack', name: 'ops' },
+    ];
+
+    const wrapper = mountComponent();
+
+    expect(
+      wrapper.get('[data-trigger-key="docker.local"] button').attributes('disabled'),
+    ).toBeDefined();
+    expect(
+      wrapper.get('[data-trigger-key="slack.ops"] button').attributes('disabled'),
+    ).toBeUndefined();
   });
 
   it('wires standard action buttons in the non-blocked update branch', async () => {

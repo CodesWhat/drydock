@@ -1,3 +1,4 @@
+import type { UpdateMode } from '../services/settings';
 import type {
   UpdateBlocker,
   UpdateBlockerReason,
@@ -84,8 +85,10 @@ export function updateButtonState(
   eligibility: UpdateEligibility | undefined,
   hasNewTag: boolean,
   hasActiveOperationBadge = false,
+  updateMode: UpdateMode = 'manual',
 ): UpdateButtonState {
   if (!hasNewTag) return 'none';
+  if (updateMode === 'notify') return 'none';
   if (hasHardBlocker(eligibility)) return 'hard';
   if (!hasActiveOperationBadge && hasSoftBlocker(eligibility)) return 'soft';
   return 'ready';

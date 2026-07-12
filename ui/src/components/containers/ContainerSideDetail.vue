@@ -43,6 +43,7 @@ const {
   confirmUpdate,
   confirmForceUpdate,
   confirmDelete,
+  updateMode,
 } = useContainersViewTemplateContext();
 
 function isActionQueued(container: { id?: unknown; name?: unknown }) {
@@ -154,14 +155,14 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             :tooltip="t('containerComponents.sideDetail.recheckTooltip')"
             @click="recheckContainer(selectedContainer)" />
 	          <AppIconButton
-	            v-if="selectedContainer.newTag && isUpdateHardBlocked(selectedContainer)"
+	            v-if="updateMode !== 'notify' && selectedContainer.newTag && isUpdateHardBlocked(selectedContainer)"
 	            icon="lock"
 	            size="xs"
 	            variant="danger"
 	            :disabled="true"
 	            :tooltip="getUpdateBlockedTooltip(selectedContainer)" />
 	          <AppIconButton
-	            v-else-if="selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
+	            v-else-if="updateMode !== 'notify' && selectedContainer.newTag && selectedContainer.bouncer === 'blocked'"
 	            icon="lock"
 	            size="xs"
 	            variant="danger"
@@ -169,7 +170,7 @@ function getStatusTone(container: { id?: unknown; name?: unknown; status?: strin
             :tooltip="t('containerComponents.sideDetail.blockedForceUpdateTooltip')"
             @click="confirmForceUpdate(selectedContainer)" />
           <AppIconButton
-            v-else-if="selectedContainer.newTag"
+            v-else-if="updateMode !== 'notify' && selectedContainer.newTag"
             icon="cloud-download"
             size="xs"
             variant="success"

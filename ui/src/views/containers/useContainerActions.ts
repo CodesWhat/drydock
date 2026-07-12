@@ -19,6 +19,7 @@ import {
   updateContainer as apiUpdateContainer,
   updateContainers as apiUpdateContainers,
 } from '../../services/container-actions';
+import type { UpdateMode } from '../../services/settings';
 import type { Container } from '../../types/container';
 import type { ContainerActionKind } from '../../utils/container-action-key';
 import {
@@ -67,6 +68,7 @@ interface UseContainerActionsInput {
   loadContainers: () => Promise<void>;
   selectedContainer: Readonly<Ref<Container | null | undefined>>;
   selectedContainerId: Readonly<Ref<string | undefined>>;
+  updateMode: Readonly<Ref<UpdateMode>>;
 }
 
 export const ACTION_TAB_DETAIL_REFRESH_DEBOUNCE_MS = 250;
@@ -681,6 +683,7 @@ function createConfirmHandlers(args: {
   clearPolicySelected: () => Promise<void>;
   selectedContainer: Readonly<Ref<Container | null | undefined>>;
   rollbackToBackup: (backupId?: string) => Promise<void>;
+  updateMode: Readonly<Ref<UpdateMode>>;
   t: TranslateFn;
 }) {
   function confirmStop(target: ContainerActionTarget) {
@@ -720,6 +723,10 @@ function createConfirmHandlers(args: {
   }
 
   function confirmForceUpdate(target: ContainerActionTarget) {
+    if (args.updateMode.value === 'notify') {
+      useToast().warning(args.t('containerComponents.updateStatus.summary.notify'));
+      return;
+    }
     const name = typeof target === 'string' ? target : target.name;
     args.confirm.require({
       header: args.t('containerComponents.confirmDialogs.forceUpdate.header'),
@@ -732,6 +739,10 @@ function createConfirmHandlers(args: {
   }
 
   function confirmUpdate(target: ContainerActionTarget) {
+    if (args.updateMode.value === 'notify') {
+      useToast().warning(args.t('containerComponents.updateStatus.summary.notify'));
+      return;
+    }
     const name = typeof target === 'string' ? target : target.name;
     const container = args.selectedContainer.value;
     // Prefer the explicit target's eligibility (from the row) over the side-panel's
@@ -1444,6 +1455,7 @@ export function useContainerActions(input: UseContainerActionsInput) {
     clearPolicySelected: policy.clearPolicySelected,
     selectedContainer: input.selectedContainer,
     rollbackToBackup: backups.rollbackToBackup,
+    updateMode: input.updateMode,
     t: t as TranslateFn,
   });
 

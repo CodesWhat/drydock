@@ -7,17 +7,21 @@ import type { ContainersViewRenderGroup } from './containersViewTemplateContext'
 
 const { t } = useI18n();
 
-defineProps<{
-  group: ContainersViewRenderGroup;
-  isFirst?: boolean;
-  collapsed: boolean;
-  containerActionsEnabled: boolean;
-  containerActionsDisabledReason: string;
-  inProgress: boolean;
-  frozenTotal?: number;
-  doneCount?: number;
-  tt: (label: string) => { value: string; showDelay: number };
-}>();
+withDefaults(
+  defineProps<{
+    group: ContainersViewRenderGroup;
+    isFirst?: boolean;
+    collapsed: boolean;
+    containerActionsEnabled: boolean;
+    containerActionsDisabledReason: string;
+    inProgress: boolean;
+    frozenTotal?: number;
+    doneCount?: number;
+    tt: (label: string) => { value: string; showDelay: number };
+    showUpdateControls?: boolean;
+  }>(),
+  { showUpdateControls: true },
+);
 
 const emit = defineEmits<{
   toggle: [groupKey: string];
@@ -48,11 +52,11 @@ const emit = defineEmits<{
     >
       {{ group.containerCount }}
     </AppBadge>
-    <AppBadge v-if="group.updatesAvailable > 0" tone="success" size="xs">
+    <AppBadge v-if="showUpdateControls && group.updatesAvailable > 0" tone="success" size="xs">
       {{ group.updatesAvailable }} {{ group.updatesAvailable === 1 ? t('containerComponents.groupHeader.updateSingular') : t('containerComponents.groupHeader.updatePlural') }}
     </AppBadge>
     <div
-      v-if="group.updatesAvailable > 0 || !containerActionsEnabled"
+      v-if="showUpdateControls && (group.updatesAvailable > 0 || !containerActionsEnabled)"
       data-test="group-header-update-all-sticky"
       class="ms-auto sticky end-0 z-10 flex items-center"
     >

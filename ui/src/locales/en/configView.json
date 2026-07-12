@@ -6,6 +6,24 @@
       "profile": "Profile"
     },
     "general": {
+      "updateMode": {
+        "title": "Global update mode",
+        "description": "Choose whether Drydock only reports updates, waits for a manual action, or dispatches eligible updates automatically.",
+        "options": {
+          "notify": {
+            "label": "Notify",
+            "description": "Detect and notify only; never apply updates."
+          },
+          "manual": {
+            "label": "Manual",
+            "description": "Apply updates only when you request them."
+          },
+          "auto": {
+            "label": "Auto",
+            "description": "Dispatch eligible updates automatically."
+          }
+        }
+      },
       "application": {
         "title": "Application",
         "loadingServerInfo": "Loading server info"
@@ -72,6 +90,7 @@
         "no": "No"
       },
       "errors": {
+        "updateMode": "Failed to update global update mode",
         "loadServerInfo": "Failed to load server info",
         "loadProfileData": "Failed to load profile data",
         "updateNetworkSettings": "Failed to update network settings",

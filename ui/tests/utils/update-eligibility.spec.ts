@@ -270,6 +270,17 @@ describe('updateButtonState', () => {
     });
     expect(updateButtonState(eligibility, true, true)).toBe('hard');
   });
+
+  it('suppresses every update action in notify mode', () => {
+    const soft = makeEligibility({
+      blockers: [makeBlocker({ reason: 'trigger-not-included' })],
+    });
+    const hard = makeEligibility({ blockers: [makeBlocker({ reason: 'agent-mismatch' })] });
+
+    expect(updateButtonState(undefined, true, false, 'notify')).toBe('none');
+    expect(updateButtonState(soft, true, false, 'notify')).toBe('none');
+    expect(updateButtonState(hard, true, false, 'notify')).toBe('none');
+  });
 });
 
 describe('primaryBlockerForButton', () => {

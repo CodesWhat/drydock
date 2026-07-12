@@ -113,4 +113,12 @@ describe('ContainersGroupHeader', () => {
     expect(wrapper.classes()).toContain('mt-9');
     expect(wrapper.classes()).not.toContain('mt-2');
   });
+
+  it('silences update counts and update-all controls in notify mode', () => {
+    const wrapper = mountHeader({ showUpdateControls: false });
+
+    expect(wrapper.text()).not.toContain('3 updates');
+    expect(wrapper.text()).not.toContain('Update all');
+    expect(wrapper.find('[data-test="group-header-update-all-sticky"]').exists()).toBe(false);
+  });
 });

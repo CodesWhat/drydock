@@ -7,6 +7,7 @@ import type { useDetailPanel } from '../../composables/useDetailPanel';
 import type { LogAutoFetchIntervalOption } from '../../composables/useLogViewerBehavior';
 import type { PreferencesSchema } from '../../preferences/schema';
 import type { useViewMode } from '../../preferences/useViewMode';
+import type { UpdateMode } from '../../services/settings';
 import type { Container } from '../../types/container';
 import type {
   maturityColor,
@@ -148,6 +149,7 @@ export interface ContainersViewTemplateContext
   LOG_AUTO_FETCH_INTERVALS: ReadonlyArray<LogAutoFetchIntervalOption>;
   filterContainerIds: Ref<Set<string>>;
   clearContainerIdsFilter: () => void;
+  updateMode: Readonly<Ref<UpdateMode>>;
 }
 
 export const containersViewTemplateContextKey: InjectionKey<ContainersViewTemplateContext> = Symbol(

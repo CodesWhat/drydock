@@ -6,6 +6,7 @@ import { setI18nLocale } from '../boot/i18n';
 import { disableIconifyApi } from '../boot/icons';
 import { type FontId, fontOptions, useFont } from '../composables/useFont';
 import { useIcons } from '../composables/useIcons';
+import { useUpdateMode } from '../composables/useUpdateMode';
 import AppTabBar from '../components/AppTabBar.vue';
 import ConfigAppearanceTab from '../components/config/ConfigAppearanceTab.vue';
 import ConfigGeneralTab from '../components/config/ConfigGeneralTab.vue';
@@ -161,6 +162,7 @@ const webhookExample = computed(
 const internetlessMode = ref(false);
 const settingsLoading = ref(false);
 const settingsError = ref('');
+const { updateMode, saving: updateModeSaving, setUpdateMode } = useUpdateMode();
 
 // Preference sync state
 const syncLoading = ref(false);
@@ -344,6 +346,15 @@ async function toggleInternetlessMode() {
   }
 }
 
+async function handleUpdateMode(mode: 'notify' | 'manual' | 'auto') {
+  settingsError.value = '';
+  try {
+    await setUpdateMode(mode);
+  } catch (e: unknown) {
+    settingsError.value = errorMessage(e, t('configView.general.errors.updateMode'));
+  }
+}
+
 async function toggleSync() {
   syncError.value = '';
   syncLoading.value = true;
@@ -446,12 +457,14 @@ function handleSelectIconLibrary(library: string) {
       :webhook-endpoints="webhookEndpoints"
       :webhook-example="webhookExample"
       :internetless-mode="internetlessMode"
-      :settings-loading="settingsLoading"
+      :update-mode="updateMode"
+      :settings-loading="settingsLoading || updateModeSaving"
       :cache-clearing="cacheClearing"
       :cache-cleared="cacheCleared"
       :debug-dump-downloading="debugDumpDownloading"
       :debug-dump-error="debugDumpError"
       @toggle-internetless-mode="toggleInternetlessMode"
+      @update-mode="handleUpdateMode"
       @clear-icon-cache="handleClearIconCache"
       @download-debug-dump="handleDownloadDebugDump"
     />

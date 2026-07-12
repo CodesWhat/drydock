@@ -13,6 +13,7 @@ import { useDetailPanel, useDetailPanelStorage } from '../composables/useDetailP
 import { LOG_AUTO_FETCH_INTERVALS } from '../composables/useLogViewerBehavior';
 import { useOperationDisplayHold } from '../composables/useOperationDisplayHold';
 import { useToast } from '../composables/useToast';
+import { useUpdateMode } from '../composables/useUpdateMode';
 import { preferences } from '../preferences/store';
 import { usePreference } from '../preferences/usePreference';
 import { useViewMode } from '../preferences/useViewMode';
@@ -62,6 +63,7 @@ const {
   reconcileHoldsAgainstContainers,
 } = useOperationDisplayHold();
 const toast = useToast();
+const { updateMode } = useUpdateMode();
 
 function buildContainerLookupMaps(apiContainers: Record<string, unknown>[]) {
   const idMap: Record<string, string> = {};
@@ -518,6 +520,7 @@ const {
   loadContainers,
   selectedContainer,
   selectedContainerId,
+  updateMode,
 });
 
 const containerViewMode = useViewMode('containers');
@@ -1589,6 +1592,7 @@ provide(containersViewTemplateContextKey, {
   closeFullPage,
   filterContainerIds,
   clearContainerIdsFilter,
+  updateMode,
 });
 </script>
 
