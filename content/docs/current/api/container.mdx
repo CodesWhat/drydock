@@ -58,7 +58,7 @@ Display age is computed as `now − min(firstSeenAt, result.publishedAt)`. For D
 
 #### Policy gate (holds updates)
 
-The policy gate is a per-container setting that suppresses an update until the image has aged past a minimum threshold. Configure it from the UI (Update policy menu) or via the API — there is no `dd.*` container label for this.
+The policy gate suppresses an update until the image has aged past a minimum threshold. Configure it declaratively with `dd.updatePolicy.maturityMode` / `dd.updatePolicy.maturityMinAgeDays`, set watcher defaults with `DD_WATCHER_{watcher_name}_MATURITY_MODE` / `_MATURITY_MIN_AGE_DAYS`, or create a persistent UI/API override.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -348,9 +348,9 @@ curl -X POST http://drydock:3000/api/v1/containers/update \
 
 Returns 200 with `accepted` and `rejected` arrays, 400 when `containerIds` is missing or empty, 403 if container actions are disabled, or 500 if the update requests cannot be accepted.
 
-## Update container update policy (skip/snooze)
+## Update container update policy
 
-This operation lets you control per-container update suppression policy (stored in drydock DB):
+This operation controls the UI/API override tier of per-container update policy. Effective fields resolve independently as built-in → watcher environment → container label → UI/API override. Responses expose `updatePolicy` (effective), `updatePolicyDeclarative.env`, `updatePolicyDeclarative.label`, `updatePolicyOverrides`, and `updatePolicySources` (`env`, `label`, or `override`).
 
 - `skip-current`: skip the currently detected remote tag or digest
 - `remove-skip`: remove a single previously skipped tag or digest (requires `kind` and `value`)
@@ -360,6 +360,9 @@ This operation lets you control per-container update suppression policy (stored 
 - `clear`: remove all update policy
 - `set-maturity-policy`: require updates to be at least N days old before triggering (requires `mode` and optionally `minAgeDays`)
 - `clear-maturity-policy`: remove `maturityMode` and `maturityMinAgeDays`
+- `revert-to-declarative`: remove one override (`field`) or all declarative-field overrides when `field` is omitted
+
+`clear-skips`, `clear-maturity-policy`, and `clear` express operational UI choices. They are not the same as reverting: an explicit empty skip-list override can hide a label-provided list, while `revert-to-declarative` reveals the current label, watcher, or built-in value. `snoozeUntil` is always UI/API-only.
 
 ```bash
 curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
@@ -399,6 +402,20 @@ curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68
 curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
   -H 'Content-Type: application/json' \
   -d '{"action":"clear-maturity-policy"}'
+```
+
+```bash
+# Revert only the skipTags override to its label/watcher/built-in value
+curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"revert-to-declarative","field":"skipTags"}'
+```
+
+```bash
+# Revert all maturity and skip overrides; snoozeUntil is left unchanged
+curl -X PATCH http://drydock:3000/api/v1/containers/31a61a8305ef1fc9a71fa4f20a68d7ec88b28e32303bbc4a5f192e851165b816/update-policy \
+  -H 'Content-Type: application/json' \
+  -d '{"action":"revert-to-declarative"}'
 ```
 
 ## Get security vulnerability overview

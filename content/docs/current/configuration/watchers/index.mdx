@@ -27,6 +27,8 @@ The `docker` watcher lets you configure the Docker hosts you want to watch.
 | `DD_WATCHER_{watcher_name}_KEYFILE` | ⚪ | Key pem file path (only for TLS connection) | | |
 | `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW` | ⚪ | Allowed update schedule (checks outside this window are skipped) | [Valid CRON expression](https://crontab.guru/) | |
 | `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW_TZ` | ⚪ | Timezone used to evaluate `MAINTENANCE_WINDOW` | IANA timezone (e.g. `UTC`, `Europe/Paris`) | `UTC` |
+| `DD_WATCHER_{watcher_name}_MATURITY_MODE` | ⚪ | Default maturity policy for containers discovered by this watcher; a container label or UI/API override can replace it | `all`, `mature` | `all` (no gate) |
+| `DD_WATCHER_{watcher_name}_MATURITY_MIN_AGE_DAYS` | ⚪ | Default minimum image age when `MATURITY_MODE=mature`; a container label or UI/API override can replace it | integer (`1` to `365`) | `7` |
 | `DD_WATCHER_{watcher_name}_PORT` | ⚪ | Docker port of the host to watch | | `2375` |
 | `DD_WATCHER_{watcher_name}_PROTOCOL` | ⚪ | Docker remote API protocol | `http`, `https` | `http` |
 | `DD_WATCHER_{watcher_name}_SOCKET` | ⚪ | Docker socket to watch | Valid unix socket | `/var/run/docker.sock` |
@@ -738,6 +740,10 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 | `dd.tag.transform` | ⚪ | Transform function to apply to the tag | `$valid_regex => $valid_string_with_placeholders` (see below) | |
 | `dd.tag.family` | ⚪ | Actionable tag-family policy. Overrides matching imgset and watcher defaults; `loose` allows cross-tag semver moves such as `16-alpine` → `17-alpine` and can fire action triggers. | `strict` or `loose` | Matching imgset → watcher default → `strict` |
 | `dd.tag.pin.info` | ⚪ | Whether to compute informational newer-tag insight for a pinned tag. This never makes an update actionable. | `true`, `false` | Matching imgset → watcher default → `true` |
+| `dd.updatePolicy.maturityMode` | ⚪ | Declarative maturity gate for this container | `all`, `mature` | Watcher default → `all` |
+| `dd.updatePolicy.maturityMinAgeDays` | ⚪ | Declarative minimum image age for mature-only updates | integer (`1` to `365`) | Watcher default → `7` |
+| `dd.updatePolicy.skipTags` | ⚪ | Declarative comma-separated list of remote tags to suppress | CSV tags | Empty list |
+| `dd.updatePolicy.skipDigests` | ⚪ | Declarative comma-separated list of remote digests to suppress | CSV digests | Empty list |
 | `dd.action.exclude` | ⚪ | Exclude specific action triggers from automatic execution for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.action.include` | ⚪ | Only allow specific action triggers to automatically execute for this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
 | `dd.notification.exclude` | ⚪ | Exclude specific notification triggers from this container | `$trigger_1_id_or_name,$trigger_2_id_or_name:$threshold` | |
@@ -790,7 +796,20 @@ To fine-tune the behaviour of drydock _per container_, you can add labels on the
 
 <Callout type="info">**Infrastructure update mode** (`dd.update.mode=infrastructure`) is for containers that Drydock depends on for its Docker API connection, such as a socket proxy. When set, the container is updated through a helper-container path that connects directly to `/var/run/docker.sock`, bypassing the proxy so the connection isn't severed mid-update. See [Infrastructure Update Mode](/docs/configuration/triggers/docker#infrastructure-update-mode) for details.</Callout>
 
-<Callout type="info">**Per-container update policy** (maturity gate, snooze, skip-tag, skip-digest) is set from the UI rather than via labels. Open a container row → **Update policy** menu, or call `PATCH /api/v1/containers/:id/update-policy`. Policies are stored with the container record and persist across Drydock restarts. There is no `dd.updatePolicy.*` label — earlier drafts of the v1.4 docs listed label equivalents that were never implemented. When a policy gate fires, it surfaces as a pill on the container row — see [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the full reason reference.</Callout>
+<Callout type="info">**Declarative per-container update policy** is supported through the four `dd.updatePolicy.*` labels above. Watcher environment defaults are available for the two maturity fields. `snoozeUntil` remains UI/API-only because it is an operational timer rather than deployment configuration. When a policy gate fires, it surfaces as a pill on the container row — see [Update Eligibility & Blockers](/docs/configuration/actions/update-eligibility) for the full reason reference.</Callout>
+
+### Update-policy precedence
+
+Each field resolves independently. A missing value falls through to the next tier; skip lists replace the lower-tier list rather than being concatenated.
+
+| Priority | Tier | Examples |
+| :---: | --- | --- |
+| 1 (highest) | UI/API override | Update policy editor or `PATCH /api/v1/containers/:id/update-policy` |
+| 2 | Container label | `dd.updatePolicy.maturityMode=mature`, `dd.updatePolicy.skipTags=latest,stable` |
+| 3 | Watcher environment | `DD_WATCHER_LOCAL_MATURITY_MODE`, `DD_WATCHER_LOCAL_MATURITY_MIN_AGE_DAYS` |
+| 4 | Built-in | `maturityMode=all`; minimum age `7` when mature mode is active; empty skip lists |
+
+UI/API overrides persist across Drydock restarts, container recreation, and later label changes. Removing a label does not silently remove an override. The policy editor shows an **Overridden** badge when an override materially differs from the declarative value; **Revert** clears the selected override and immediately reveals the current label, watcher, or built-in value. Empty skip-list overrides are intentional: **Clear Skips** can suppress a declarative skip list without deleting the declaration, while **Revert** restores it.
 
 ## Label examples
 
