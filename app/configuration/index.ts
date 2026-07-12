@@ -4,7 +4,7 @@ import os from 'node:os';
 import type { Request } from 'express';
 import joi from 'joi';
 import setValue from 'set-value';
-import { logWarn } from '../log/warn.js';
+import { logError, logWarn } from '../log/warn.js';
 import { recordLegacyInput } from '../prometheus/compatibility.js';
 import { resolveConfiguredPath } from '../runtime/paths.js';
 
@@ -359,7 +359,7 @@ function collectLegacyTriggerUsage() {
       if (!warnedLegacyTriggerEnvVars.has(envKeyUpper)) {
         warnedLegacyTriggerEnvVars.add(envKeyUpper);
         recordLegacyInput('env', envKeyUpper);
-        logWarn(
+        logError(
           `Legacy trigger environment variable "${envKeyUpper}" is deprecated and will be removed in v1.7.0. Use DD_ACTION_* or DD_NOTIFICATION_* instead.`,
         );
       }

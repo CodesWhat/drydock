@@ -164,7 +164,7 @@ The `DD_TRIGGER_*` prefix is being replaced by semantic prefixes that distinguis
 | | |
 | --- | --- |
 | **Deprecated since** | v1.5.0 |
-| **Detection** | Startup log warning; Prometheus counter `dd_legacy_input_total`; UI deprecation banner |
+| **Detection** | Error-level startup log for every legacy key; Prometheus counter `dd_legacy_input_total`; UI deprecation banner |
 | **Migration** | Rename `DD_TRIGGER_*` to `DD_ACTION_*` (for Docker/Compose/Command triggers) or `DD_NOTIFICATION_*` (for Slack/email/Pushover/etc.). Run `node dist/index.js config migrate --source trigger` to auto-rewrite. See [Triggers](/docs/configuration/triggers) |
 
 ### `dd.trigger.include` / `dd.trigger.exclude` container labels {#legacy-trigger-labels}
@@ -174,7 +174,7 @@ These labels are being replaced by semantic equivalents.
 | | |
 | --- | --- |
 | **Deprecated since** | v1.5.0 |
-| **Detection** | Log warning during container initialization |
+| **Detection** | Error-level log during container initialization |
 | **Migration** | Replace `dd.trigger.include` with `dd.action.include` or `dd.notification.include`. Replace `dd.trigger.exclude` with `dd.action.exclude` or `dd.notification.exclude` |
 
 A legacy label applies to both trigger categories, but only as a fallback: for a given category it is consulted only when that category's own scoped label is absent from the container. It is never merged with a scoped label that is present. So `dd.action.include=docker` plus `dd.trigger.include=slack` filters action triggers by `docker` and notification triggers by `slack`.

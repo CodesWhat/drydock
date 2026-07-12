@@ -13,6 +13,7 @@ import {
 vi.mock('../../../log/index.js', () => ({
   default: {
     warn: vi.fn(),
+    error: vi.fn(),
     child: () => ({
       info: vi.fn(),
       warn: vi.fn(),
@@ -345,6 +346,17 @@ describe('container-init coverage', () => {
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn.mock.calls[0][0]).toContain('dd.action.exclude');
       expect(warn.mock.calls[0][0]).toContain('dd.notification.exclude');
+    });
+
+    test('logs deprecated dd.trigger labels at error level by default', () => {
+      resolveTriggerLabelOverrides(
+        { 'dd.trigger.include': 'both' },
+        {},
+        { warnedLegacyTriggerLabels: new Set() },
+      );
+
+      expect(log.error).toHaveBeenCalledWith(expect.stringContaining('dd.trigger.include'));
+      expect(log.warn).not.toHaveBeenCalled();
     });
 
     test('falls back to the wud.* label for both categories when no dd.* trigger label is present', () => {

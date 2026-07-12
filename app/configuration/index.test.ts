@@ -362,6 +362,22 @@ test('getTriggerConfigurations should return configured triggers when overridden
   });
 });
 
+test('getTriggerConfigurations logs every legacy DD_TRIGGER key at error level', () => {
+  const errorSpy = vi.spyOn(log, 'error').mockImplementation(() => log);
+  const legacyKey = 'DD_TRIGGER_PHASE3ERROR_UNIQUE_ENABLED';
+  configuration.ddEnvVars[legacyKey] = 'true';
+
+  try {
+    configuration.getTriggerConfigurations();
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`Legacy trigger environment variable "${legacyKey}"`),
+    );
+  } finally {
+    delete configuration.ddEnvVars[legacyKey];
+    errorSpy.mockRestore();
+  }
+});
+
 test('getRegistryConfigurations should return empty object by default', async () => {
   delete configuration.ddEnvVars.DD_REGISTRY_REGISTRY1_X;
   delete configuration.ddEnvVars.DD_REGISTRY_REGISTRY1_Y;
@@ -1495,10 +1511,10 @@ describe('trigger env aliases', () => {
     });
   });
 
-  test('should warn once per legacy DD_TRIGGER key and record legacy env usage', async () => {
+  test('should log one error per legacy DD_TRIGGER key and record legacy env usage', async () => {
     const freshConfiguration = await importFreshConfiguration();
     const freshLegacyInput = await import('../prometheus/compatibility.js');
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const legacyKey = 'DD_TRIGGER_DISCORD_NOTIFY_URL';
     freshConfiguration.ddEnvVars[legacyKey] = 'https://example.invalid/webhook';
     freshConfiguration.ddEnvVars.DD_NOTIFICATION_DISCORD_NOTIFY_ENABLED = 'true';
@@ -1508,15 +1524,15 @@ describe('trigger env aliases', () => {
     freshConfiguration.getTriggerConfigurations();
     freshConfiguration.getTriggerConfigurations();
 
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy).toHaveBeenCalledWith(
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining('Legacy trigger environment variable'),
     );
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('v1.7.0'));
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('v1.7.0'));
     expect(freshLegacyInput.getLegacyInputSummary().env.total).toBeGreaterThan(summaryBefore);
     expect(freshLegacyInput.getLegacyInputSummary().env.keys).toContain(legacyKey);
 
-    warnSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 });
 

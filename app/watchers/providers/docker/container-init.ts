@@ -267,7 +267,7 @@ function resolveTriggerLabelValues(
   const notificationValue =
     labels[direction === 'include' ? ddNotificationInclude : ddNotificationExclude];
   const legacyValue = labels[ddLegacyKey];
-  const warn = options.warn || ((message) => log.warn(message));
+  const warn = options.warn || ((message) => log.error(message));
 
   if (actionValue === undefined && notificationValue === undefined && legacyValue === undefined) {
     const wudValue = getPreferredLabelValue(labels, ddLegacyKey, wudLegacyKey, {
