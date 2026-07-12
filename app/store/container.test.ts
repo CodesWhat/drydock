@@ -3431,6 +3431,23 @@ describe('container unhealthy transition emission', () => {
     expect(emitted).not.toHaveBeenCalled();
   });
 
+  test('does not treat differing startedAt values as a restart without an observed health baseline', () => {
+    const existing = healthFixture({
+      health: undefined,
+      details: { startedAt: '2026-01-01T00:00:00.000Z' },
+    });
+    initialize(existing);
+    const emitted = vi.spyOn(event, 'emitContainerHealthTransition');
+
+    container.updateContainer({
+      ...existing,
+      health: 'unhealthy',
+      details: { ...existing.details, startedAt: '2026-01-02T00:00:00.000Z' },
+    });
+
+    expect(emitted).not.toHaveBeenCalled();
+  });
+
   test.each([
     { previous: 'unhealthy', incoming: 'unhealthy', change: { status: 'stopped' } },
     { previous: 'unhealthy', incoming: 'healthy', change: {} },

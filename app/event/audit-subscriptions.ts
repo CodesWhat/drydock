@@ -174,6 +174,7 @@ export function registerAuditLogSubscriptions(registrars: AuditSubscriptionRegis
       action: 'container-unhealthy',
       containerName: payload.containerName,
       status: 'error',
+      details: payload.previousHealth ? `(was ${payload.previousHealth})` : undefined,
     });
     getAuditCounter()?.inc({ action: 'container-unhealthy' });
   }, AUDIT_HANDLER_OPTIONS);

@@ -221,7 +221,8 @@ interface RefreshStoredContainerImageFieldsContext {
   containerInspect: DockerContainerInspectPayload | undefined;
 }
 
-interface RefreshContainerAlreadyInStoreContext extends RefreshStoredContainerImageFieldsContext {
+interface RefreshContainerAlreadyInStoreContext
+  extends Omit<RefreshStoredContainerImageFieldsContext, 'containerInspect'> {
   runtimeDetailsFromSummary: RuntimeDetails;
 }
 
@@ -720,7 +721,6 @@ export async function addImageDetailsToContainerOrchestration(
       helpers,
       runtimeDetailsFromSummary,
       containerInStore,
-      containerInspect: undefined,
     });
   }
 

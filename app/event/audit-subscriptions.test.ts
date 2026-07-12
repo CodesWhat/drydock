@@ -159,6 +159,7 @@ describe('audit-subscriptions dedupe windows', () => {
         action: 'container-unhealthy',
         status: 'error',
         containerName: 'web',
+        details: undefined,
       }),
     );
     expect(mockInc).toHaveBeenLastCalledWith({ action: 'container-unhealthy' });
@@ -174,6 +175,25 @@ describe('audit-subscriptions dedupe windows', () => {
     await containerHealthTransitionHandler({ containerName: 'web', health: 'unhealthy' });
     expect(mockInsertAudit).toHaveBeenCalledTimes(3);
     expect(mockInc).toHaveBeenCalledTimes(3);
+  });
+
+  test('records the previous health in container unhealthy audit details', async () => {
+    const { containerHealthTransitionHandler } = setupAuditSubscriptions();
+
+    await containerHealthTransitionHandler({
+      containerName: 'web',
+      previousHealth: 'healthy',
+      health: 'unhealthy',
+    });
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'container-unhealthy',
+        containerName: 'web',
+        status: 'error',
+        details: '(was healthy)',
+      }),
+    );
   });
 
   test('deduplicates agent disconnects that repeat before 60 seconds', async () => {

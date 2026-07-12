@@ -711,19 +711,21 @@ function hasContainerChangedWithSecurityHashes(
  * Determine whether an incoming container health read represents a fresh
  * "entered unhealthy" transition worth notifying about. Edge-triggered: once
  * a container's stored health is 'unhealthy', later polls/events that still
- * read 'unhealthy' do not re-fire. A restart is only inferable when BOTH the
- * existing and incoming records carry `details.startedAt` — a `startedAt`
- * appearing for the first time on a pre-existing record (e.g. a store
- * written by an older version that never inspected on the cron leg) is
- * first-capture, not a restart. When both sides do carry it and it differs,
- * the restart is always eligible to fire its own transition, even if the
- * previous observation was also 'unhealthy' (fast-crash-loop, two distinct
- * episodes). A container with no prior baseline (first observation, e.g. a
- * fresh `insertContainer`) never fires, and neither does one whose existing
- * health was never observed (`undefined` — a record predating health
- * tracking) — "entered unhealthy" implies a transition that was actually
- * observed, so a record with no observed baseline has none to transition
- * from.
+ * read 'unhealthy' do not re-fire. A container with no prior baseline (first
+ * observation, e.g. a fresh `insertContainer`) never fires, and neither does
+ * one whose existing health was never observed (`undefined` — a record
+ * predating health tracking) — "entered unhealthy" implies a transition that
+ * was actually observed, so a record with no observed baseline has none to
+ * transition from. This baseline check runs before the restart exception
+ * below: a restart can only re-fire a NEW episode of an OBSERVED unhealthy
+ * baseline, so it must not fire on the first-ever observed unhealthy either.
+ * Once a baseline exists, a restart is only inferable when BOTH the existing
+ * and incoming records carry `details.startedAt` — a `startedAt` appearing
+ * for the first time on a pre-existing record (e.g. a store written by an
+ * older version that never inspected on the cron leg) is first-capture, not
+ * a restart. When both sides do carry it and it differs, the restart is
+ * always eligible to fire its own transition, even if the previous
+ * observation was also 'unhealthy' (fast-crash-loop, two distinct episodes).
  */
 function getHealthTransition(
   existing: container.Container | undefined,
@@ -735,15 +737,15 @@ function getHealthTransition(
   if (!existing) {
     return undefined;
   }
+  if (existing.health === undefined) {
+    return undefined;
+  }
   const restarted =
     Boolean(incoming.details?.startedAt) &&
     Boolean(existing.details?.startedAt) &&
     existing.details?.startedAt !== incoming.details?.startedAt;
   if (restarted) {
     return 'entered-unhealthy';
-  }
-  if (existing.health === undefined) {
-    return undefined;
   }
   return existing.health !== 'unhealthy' ? 'entered-unhealthy' : undefined;
 }

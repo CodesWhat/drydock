@@ -182,7 +182,7 @@ Beyond the classic `update-available` event, triggers can fire on additional eve
 - **`security-alert`** -- fires when the [Update Bouncer](/docs/configuration/security) detects critical or high vulnerabilities during a pre-update scan. Includes a vulnerability summary.
 - **`agent-disconnect`** -- fires when a remote agent loses its connection. This event **skips threshold checks** (always fires).
 - **`agent-reconnect`** -- fires when a remote agent reconnects after losing connection. Only fires on true reconnects, not the initial startup connection. This event **skips threshold checks** (always fires).
-- **`container-unhealthy`** -- fires when a container's Docker health check transitions into the `unhealthy` state. Does not fire for containers with no `HEALTHCHECK` configured, and does not fire again while the container remains continuously unhealthy. This event **skips threshold checks** (always fires).
+- **`container-unhealthy`** -- fires when a container's Docker health check transitions into the `unhealthy` state. Does not fire for containers with no `HEALTHCHECK` configured, and does not fire again while the container remains continuously unhealthy -- except when the container restarts (new boot) while unhealthy, which counts as a new episode and fires again. This event **skips threshold checks** (always fires).
 
 <Callout type="info">To receive notifications for these events, add the desired trigger IDs to the corresponding notification rule via the API or UI.</Callout>
 
