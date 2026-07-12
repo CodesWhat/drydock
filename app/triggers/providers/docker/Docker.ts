@@ -3,7 +3,6 @@ import pLimit from 'p-limit';
 import parse from 'parse-docker-image-name';
 import { getSelfUpdateFinalizeSecretForOperation } from '../../../api/internal-self-update.js';
 import { getSecurityConfiguration, getServerConfiguration } from '../../../configuration/index.js';
-import { getPreferredLabelValue as resolvePreferredLabelValue } from '../../../docker/legacy-label.js';
 import {
   emitContainerUpdateApplied,
   emitContainerUpdateFailed,
@@ -77,18 +76,13 @@ export interface DockerTriggerConfiguration extends TriggerConfiguration {
   backupcount: number;
 }
 
-const warnedLegacyTriggerLabelFallbacks = new Set<string>();
-
 type ContainerFullNameReference = {
   name: string;
   watcher?: unknown;
 };
 
-function getPreferredLabelValue(labels, ddKey, wudKey, logger) {
-  return resolvePreferredLabelValue(labels, ddKey, wudKey, {
-    warnedFallbacks: warnedLegacyTriggerLabelFallbacks,
-    warn: (message) => logger?.warn?.(message),
-  });
+function getPreferredLabelValue(labels, ddKey, _logger?) {
+  return labels?.[ddKey];
 }
 
 function hasRepoTags(image) {

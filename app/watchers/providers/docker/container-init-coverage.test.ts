@@ -359,16 +359,16 @@ describe('container-init coverage', () => {
       expect(log.warn).not.toHaveBeenCalled();
     });
 
-    test('falls back to the wud.* label for both categories when no dd.* trigger label is present', () => {
+    test('ignores removed wud.* trigger labels', () => {
       const resolved = resolveTriggerLabelOverrides(
         { 'wud.trigger.exclude': 'legacy' },
         {},
         { warn: vi.fn() },
       );
 
-      expect(resolved.actionTriggerExclude).toBe('legacy');
-      expect(resolved.notificationTriggerExclude).toBe('legacy');
-      expect(resolved.triggerExclude).toBe('legacy');
+      expect(resolved.actionTriggerExclude).toBeUndefined();
+      expect(resolved.notificationTriggerExclude).toBeUndefined();
+      expect(resolved.triggerExclude).toBeUndefined();
     });
 
     test('explicit overrides take priority over the labels', () => {
@@ -667,10 +667,10 @@ describe('container-init coverage', () => {
       expect(container.triggerExclude).toBe('slack');
     });
 
-    test('falls back to wud.* label when dd.* label is absent', () => {
+    test('ignores removed wud.* labels', () => {
       const container = makeContainer();
       applyDerivedLabelFieldsToContainer(container, { 'wud.tag.include': '^v' });
-      expect(container.includeTags).toBe('^v');
+      expect(container.includeTags).toBeUndefined();
     });
 
     test('clears derived fields when labels are removed', () => {

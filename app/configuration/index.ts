@@ -81,38 +81,14 @@ export async function replaceSecrets(ddEnvVars: Record<string, string | undefine
   }
 }
 
-// 1. Get a copy of all dd-related env vars (DD_ primary, WUD_ legacy fallback)
+// 1. Get a copy of all DD_ environment variables.
 export const ddEnvVars: Record<string, string | undefined> = {};
-const mappedLegacyEnvVars = new Set<string>();
 const warnedLegacyTriggerEnvVars = new Set<string>();
 const triggerLegacyPrefixUsage = new Set<string>();
 let packageVersionCache: string | undefined;
 let packageVersionResolved = false;
 let detectedServerName: string | undefined;
 
-// First, collect legacy WUD_ vars and remap to DD_ keys
-Object.keys(process.env)
-  .filter((envVar) => envVar.toUpperCase().startsWith('WUD_'))
-  .forEach((envVar) => {
-    const ddKey = `DD_${envVar.substring(4)}`; // WUD_FOO → DD_FOO
-    ddEnvVars[ddKey] = process.env[envVar];
-    const envVarUpper = envVar.toUpperCase();
-    mappedLegacyEnvVars.add(envVarUpper);
-    recordLegacyInput('env', envVarUpper);
-  });
-
-if (mappedLegacyEnvVars.size > 0) {
-  const legacyEnvVarNames = Array.from(mappedLegacyEnvVars).sort();
-  const MAX_LEGACY_ENV_WARNING_KEYS = 10;
-  const envVarPreview = legacyEnvVarNames.slice(0, MAX_LEGACY_ENV_WARNING_KEYS).join(', ');
-  const additionalCount = legacyEnvVarNames.length - MAX_LEGACY_ENV_WARNING_KEYS;
-  const suffix = additionalCount > 0 ? ` (+${additionalCount} more)` : '';
-  console.warn(
-    `Detected legacy WUD_* environment variables, deprecated and scheduled for removal in v1.6.0. Please migrate to DD_* equivalents: ${envVarPreview}${suffix}`,
-  );
-}
-
-// Then, collect DD_ vars (overrides WUD_ if both set)
 Object.keys(process.env)
   .filter((envVar) => envVar.toUpperCase().startsWith('DD_'))
   .forEach((envVar) => {

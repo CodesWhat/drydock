@@ -3440,14 +3440,14 @@ describe('Dockercompose Trigger', () => {
     expect(result).toBe('/opt/compose.yml');
   });
 
-  test('getComposeFileForContainer should use wud fallback label', () => {
+  test('getComposeFileForContainer should ignore removed wud label', () => {
     const container = {
       labels: { 'wud.compose.file': '/opt/wud-compose.yml' },
     };
 
     const result = trigger.getComposeFileForContainer(container);
 
-    expect(result).toBe('/opt/wud-compose.yml');
+    expect(result).toBeNull();
   });
 
   test('getComposeFileForContainer should use the first compose config file from compose labels', () => {

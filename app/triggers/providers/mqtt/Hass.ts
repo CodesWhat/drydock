@@ -1,7 +1,6 @@
 import type { MqttClient } from 'mqtt';
 import { recordAuditEvent } from '../../../api/audit-events.js';
 import { getVersion } from '../../../configuration/index.js';
-import { getPreferredLabelValue } from '../../../docker/legacy-label.js';
 import {
   registerContainerAdded,
   registerContainerRemoved,
@@ -196,25 +195,11 @@ function resolveEntityPicture(icon?: string): string {
   return `${cdn.base}/${slug}.${cdn.ext}`;
 }
 
-function resolveEntityPictureOverride(
-  container: {
-    displayPicture?: string;
-    labels?: Record<string, string>;
-  },
-  warn?: (message: string) => void,
-): string | undefined {
-  // This call site previously read `dd.display.picture || wud.display.picture`,
-  // which falls through to the wud.* label on an explicit empty dd.* value
-  // (e.g. an unset compose-file env-substitution default), not just when
-  // dd.* is absent. treatEmptyAsAbsent preserves that behavior so a
-  // container that still relies on wud.display.picture doesn't silently
-  // lose it.
-  const configuredPicture =
-    container.displayPicture ||
-    getPreferredLabelValue(container.labels, 'dd.display.picture', 'wud.display.picture', {
-      warn,
-      treatEmptyAsAbsent: true,
-    });
+function resolveEntityPictureOverride(container: {
+  displayPicture?: string;
+  labels?: Record<string, string>;
+}): string | undefined {
+  const configuredPicture = container.displayPicture || container.labels?.['dd.display.picture'];
   if (typeof configuredPicture !== 'string') {
     return undefined;
   }
@@ -763,9 +748,7 @@ class Hass {
       container,
       currentStateTopic: containerStateSensor.topic,
     });
-    const entityPictureOverride = resolveEntityPictureOverride(container, (message) =>
-      this.log.warn(message),
-    );
+    const entityPictureOverride = resolveEntityPictureOverride(container);
     this.log.info(`Add hass container update sensor [${containerStateSensor.topic}]`);
     if (this.configuration.hass.discovery) {
       await this.removeDiscoveryTopics({

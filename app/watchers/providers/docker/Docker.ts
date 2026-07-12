@@ -18,7 +18,6 @@ type DebounceFn = <T extends (...args: any[]) => void>(
 const debounceModule = debounceImport as unknown as { default?: DebounceFn };
 const debounce: DebounceFn = debounceModule.default || (debounceImport as unknown as DebounceFn);
 
-import { ddEnvVars } from '../../../configuration/index.js';
 import * as event from '../../../event/index.js';
 import log from '../../../log/index.js';
 import { type Container, type ContainerReport, fullName } from '../../../model/container.js';
@@ -116,15 +115,6 @@ import {
   ddTagPinInfo,
   ddTagTransform,
   ddWatch,
-  wudDisplayIcon,
-  wudDisplayName,
-  wudLinkTemplate,
-  wudRegistryLookupImage,
-  wudRegistryLookupUrl,
-  wudTagExclude,
-  wudTagInclude,
-  wudTagTransform,
-  wudWatch,
 } from './label.js';
 import { getNextMaintenanceWindow, isInMaintenanceWindow } from './maintenance.js';
 import {
@@ -153,9 +143,7 @@ export interface DockerWatcherConfiguration extends ComponentConfiguration {
   jitter: number;
   watchbydefault: boolean;
   watchall: boolean;
-  watchdigest?: unknown;
   watchevents: boolean;
-  watchatstart: boolean;
   maintenancewindow?: string;
   maintenancewindowtz: string;
   maturitymode?: 'all' | 'mature';
@@ -178,9 +166,6 @@ const SWARM_SERVICE_ID_LABEL = 'com.docker.swarm.service.id';
 const RECENT_DOCKER_EVENT_LIMIT = 1000;
 const RECENT_ALIAS_FILTER_DECISION_LIMIT = 1000;
 const DOCKER_WATCH_CONCURRENCY = 10;
-const joiWildcardSchema = (joi as unknown as Record<string, () => Joi.Schema>)[`a${'ny'}`].bind(
-  joi,
-);
 
 function mapWithDockerWatchConcurrency<T, R>(
   items: T[],
@@ -407,9 +392,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       jitter: this.joi.number().integer().min(0).default(60000),
       watchbydefault: this.joi.boolean().default(true),
       watchall: this.joi.boolean().default(false),
-      watchdigest: joiWildcardSchema(),
       watchevents: this.joi.boolean().default(true),
-      watchatstart: this.joi.boolean().default(true),
       maintenancewindow: joi.string().cron().optional(),
       maintenancewindowtz: this.joi.string().default('UTC'),
       maturitymode: this.joi.string().valid('all', 'mature'),
@@ -634,17 +617,6 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     this.ensureLogger();
     this.isWatcherDeregistered = false;
     await this.initWatcher();
-    if (this.configuration.watchdigest !== undefined) {
-      this.log.warn(
-        'DD_WATCHER_{watcher_name}_WATCHDIGEST environment variable is deprecated and will be removed in v1.6.0. Use the dd.watch.digest=true container label instead.',
-      );
-    }
-    const watchAtStartEnvKey = `DD_WATCHER_${this.name.toUpperCase()}_WATCHATSTART`;
-    if (Object.hasOwn(ddEnvVars, watchAtStartEnvKey)) {
-      this.log.warn(
-        `${watchAtStartEnvKey} environment variable is deprecated and will be removed in v1.6.0. Drydock watches at startup by default. If you need to delay the first scan, use DD_WATCHER_${this.name.toUpperCase()}_CRON to control the schedule.`,
-      );
-    }
     this.log.info(`Cron scheduled (${this.configuration.cron})`);
     this.watchCron = cron.schedule(this.configuration.cron, () => this.watchFromCron(), {
       maxRandomDelay: this.configuration.jitter,
@@ -657,10 +629,8 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
       { id: this.getId(), order: 0 },
     );
 
-    // watch at startup if enabled (after all components have been registered)
-    if (this.configuration.watchatstart) {
-      this.watchCronTimeout = setTimeout(this.watchFromCron.bind(this), START_WATCHER_DELAY_MS);
-    }
+    // Watch at startup after all components have been registered.
+    this.watchCronTimeout = setTimeout(this.watchFromCron.bind(this), START_WATCHER_DELAY_MS);
 
     // listen to docker events
     if (this.configuration.watchevents) {
@@ -1021,7 +991,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
     });
 
     updateContainerFromInspectState(containerFound, containerInspect, {
-      getCustomDisplayNameFromLabels: (labels) => getLabel(labels, ddDisplayName, wudDisplayName),
+      getCustomDisplayNameFromLabels: (labels) => getLabel(labels, ddDisplayName),
       updateContainer: (container) => storeContainer.updateContainer(container),
       logInfo: (message) => logContainer.info(message),
       applyDerivedLabelFieldsToContainer: (container, labels) =>
@@ -1273,10 +1243,7 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
 
     // Filter on containers to watch
     const filteredContainers = containersWithResolvedLabels.filter((container) =>
-      isContainerToWatch(
-        getLabel(container.Labels, ddWatch, wudWatch),
-        this.configuration.watchbydefault,
-      ),
+      isContainerToWatch(getLabel(container.Labels, ddWatch), this.configuration.watchbydefault),
     );
     const { containersToWatch, skippedContainerIds, decisions } = filterRecreatedContainerAliases(
       filteredContainers,
@@ -1286,21 +1253,17 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
 
     const enrichmentResults = await mapWithDockerWatchConcurrency(containersToWatch, (container) =>
       this.addImageDetailsToContainer(container, {
-        includeTags: getLabel(container.Labels, ddTagInclude, wudTagInclude),
-        excludeTags: getLabel(container.Labels, ddTagExclude, wudTagExclude),
-        transformTags: getLabel(container.Labels, ddTagTransform, wudTagTransform),
+        includeTags: getLabel(container.Labels, ddTagInclude),
+        excludeTags: getLabel(container.Labels, ddTagExclude),
+        transformTags: getLabel(container.Labels, ddTagTransform),
         tagFamily: getLabel(container.Labels, ddTagFamily),
         tagPinInfo: getLabel(container.Labels, ddTagPinInfo),
-        linkTemplate: getLabel(container.Labels, ddLinkTemplate, wudLinkTemplate),
-        displayName: getLabel(container.Labels, ddDisplayName, wudDisplayName),
-        displayIcon: getLabel(container.Labels, ddDisplayIcon, wudDisplayIcon),
+        linkTemplate: getLabel(container.Labels, ddLinkTemplate),
+        displayName: getLabel(container.Labels, ddDisplayName),
+        displayIcon: getLabel(container.Labels, ddDisplayIcon),
         ...resolveTriggerLabelOverrides(container.Labels),
-        registryLookupImage: getLabel(
-          container.Labels,
-          ddRegistryLookupImage,
-          wudRegistryLookupImage,
-        ),
-        registryLookupUrl: getLabel(container.Labels, ddRegistryLookupUrl, wudRegistryLookupUrl),
+        registryLookupImage: getLabel(container.Labels, ddRegistryLookupImage),
+        registryLookupUrl: getLabel(container.Labels, ddRegistryLookupUrl),
       }).catch((error: unknown) => {
         const errorMessage = getErrorMessage(error);
         this.log.warn(
@@ -1371,11 +1334,11 @@ class Docker extends Watcher<DockerWatcherConfiguration> {
         this.log.debug(
           `Swarm service ${serviceId} (container ${containerId}): deploy labels=${
             Object.keys(serviceLabels)
-              .filter((k) => k.startsWith('dd.') || k.startsWith('wud.'))
+              .filter((k) => k.startsWith('dd.'))
               .join(',') || 'none'
           }, task labels=${
             Object.keys(taskContainerLabels)
-              .filter((k) => k.startsWith('dd.') || k.startsWith('wud.'))
+              .filter((k) => k.startsWith('dd.'))
               .join(',') || 'none'
           }`,
         );

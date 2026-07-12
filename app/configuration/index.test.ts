@@ -179,32 +179,6 @@ test('getDnsMode should trim whitespace', () => {
   delete configuration.ddEnvVars.DD_DNS_MODE;
 });
 
-test('should include additional legacy env count in warning suffix when more than 10 WUD vars are present', async () => {
-  const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-  const legacyKeys = Array.from({ length: 12 }, (_, index) => `WUD_LEGACY_${index}`);
-  const previousValues = new Map<string, string | undefined>();
-  for (const key of legacyKeys) {
-    previousValues.set(key, process.env[key]);
-    process.env[key] = '1';
-  }
-
-  try {
-    vi.resetModules();
-    await import('./index.js');
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('(+2 more)'));
-  } finally {
-    for (const key of legacyKeys) {
-      const previousValue = previousValues.get(key);
-      if (previousValue === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = previousValue;
-      }
-    }
-    warnSpy.mockRestore();
-  }
-});
-
 test('getWatcherConfiguration should return empty object by default', async () => {
   delete configuration.ddEnvVars.DD_WATCHER_WATCHER1_X;
   delete configuration.ddEnvVars.DD_WATCHER_WATCHER1_Y;
@@ -996,32 +970,6 @@ describe('getSecurityConfiguration', () => {
   });
 });
 
-describe('WUD_ legacy dual-prefix support', () => {
-  test('WUD_ env vars should be remapped to DD_ keys in ddEnvVars', () => {
-    // Simulate WUD_ var being set at module init time by directly inserting
-    configuration.ddEnvVars.DD_TEST_DUAL = 'from-wud';
-    expect(configuration.ddEnvVars.DD_TEST_DUAL).toBe('from-wud');
-    delete configuration.ddEnvVars.DD_TEST_DUAL;
-  });
-
-  test('DD_ prefix should take precedence over WUD_ when both present', () => {
-    // Set DD_ directly
-    configuration.ddEnvVars.DD_LOG_LEVEL = 'warn';
-    expect(configuration.getLogLevel()).toBe('warn');
-    // Override with a new DD_ value
-    configuration.ddEnvVars.DD_LOG_LEVEL = 'error';
-    expect(configuration.getLogLevel()).toBe('error');
-    delete configuration.ddEnvVars.DD_LOG_LEVEL;
-  });
-
-  test('get() should work with remapped WUD_ vars', () => {
-    configuration.ddEnvVars.DD_WATCHER_DUALTEST_HOST = 'example.com';
-    const result = configuration.getWatcherConfigurations();
-    expect(result.dualtest).toStrictEqual({ host: 'example.com' });
-    delete configuration.ddEnvVars.DD_WATCHER_DUALTEST_HOST;
-  });
-});
-
 describe('getPublicUrl', () => {
   test('should return DD_PUBLIC_URL when set', () => {
     configuration.ddEnvVars.DD_PUBLIC_URL = 'https://my.public.url';
@@ -1460,7 +1408,7 @@ describe('module bootstrap env mapping', () => {
     delete process.env[DD_KEY];
   });
 
-  test('should remap WUD_ vars and let DD_ override them at module init', async () => {
+  test('should load DD_ vars and ignore removed WUD_ aliases at module init', async () => {
     process.env[WUD_KEY] = 'legacy-value';
     process.env[DD_KEY] = 'new-value';
 
@@ -1468,6 +1416,17 @@ describe('module bootstrap env mapping', () => {
     const freshConfiguration = await import('./index.js');
 
     expect(freshConfiguration.ddEnvVars.DD_TEST_BOOTSTRAP_VAR).toBe('new-value');
+    expect(freshConfiguration.ddEnvVars.WUD_TEST_BOOTSTRAP_VAR).toBeUndefined();
+  });
+
+  test('should not remap a removed WUD_ variable when no DD_ variable exists', async () => {
+    process.env[WUD_KEY] = 'legacy-value';
+
+    vi.resetModules();
+    const freshConfiguration = await import('./index.js');
+
+    expect(freshConfiguration.ddEnvVars.DD_TEST_BOOTSTRAP_VAR).toBeUndefined();
+    expect(freshConfiguration.ddEnvVars.WUD_TEST_BOOTSTRAP_VAR).toBeUndefined();
   });
 });
 
@@ -1632,253 +1591,6 @@ describe('replaceSecrets – boundary and label coverage', () => {
       expect(vars.DD_SOME_VAL).toBe('hello-world');
     } finally {
       fs.rmSync(tempDirectory, { recursive: true, force: true });
-    }
-  });
-});
-
-describe('WUD_ legacy env-var remapping bootstrap coverage', () => {
-  test('legacy warning message contains the DD_* prefix migration hint', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const keys = ['WUD_BOOTSTRAP_A', 'WUD_BOOTSTRAP_B'];
-    for (const k of keys) process.env[k] = '1';
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('DD_*'));
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('v1.6.0'));
-    } finally {
-      for (const k of keys) delete process.env[k];
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('legacy warning includes the first env var name (not empty)', async () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    process.env.WUD_HELLO_WORLD = 'test';
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('WUD_HELLO_WORLD'));
-    } finally {
-      delete process.env.WUD_HELLO_WORLD;
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('legacy warning uses the uppercased env var name in the preview', async () => {
-    // Kills 80:25 [MethodExpression] envVar.toUpperCase()
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    process.env.wud_lower_case_key = 'val';
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      // If the uppercase conversion is mutated to lowercase/empty the warning won't contain the uppercased key
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('WUD_LOWER_CASE_KEY'));
-    } finally {
-      delete process.env.wud_lower_case_key;
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('WUD_ vars are remapped to DD_ keys (not raw WUD_ keys) in ddEnvVars', async () => {
-    // Kills 78:19 [StringLiteral] `` (the 'DD_' prefix)
-    // and 78:25 [MethodExpression] envVar (the substring(4) call)
-    process.env.WUD_REMAP_TEST_VAR = 'wud-value';
-    delete process.env.DD_REMAP_TEST_VAR;
-    try {
-      vi.resetModules();
-      const fresh = await import('./index.js');
-      // Should be stored under DD_REMAP_TEST_VAR, not WUD_REMAP_TEST_VAR or DD_WUD_REMAP_TEST_VAR
-      expect(fresh.ddEnvVars.DD_REMAP_TEST_VAR).toBe('wud-value');
-      expect(fresh.ddEnvVars.WUD_REMAP_TEST_VAR).toBeUndefined();
-    } finally {
-      delete process.env.WUD_REMAP_TEST_VAR;
-    }
-  });
-
-  test('WUD_ remapped key strips exactly the 3-char WUD prefix (not more)', async () => {
-    // Kills 78:25 [MethodExpression] envVar – if envVar used instead of envVar.substring(4),
-    // the key would be DD_WUD_X instead of DD_X
-    process.env.WUD_X = 'x-value';
-    delete process.env.DD_X;
-    try {
-      vi.resetModules();
-      const fresh = await import('./index.js');
-      expect(fresh.ddEnvVars.DD_X).toBe('x-value');
-      expect(fresh.ddEnvVars.DD_WUD_X).toBeUndefined();
-    } finally {
-      delete process.env.WUD_X;
-    }
-  });
-
-  test('legacy warning key preview uses comma-space separator between keys', async () => {
-    // Kills 88:86 [StringLiteral] "" – the join separator
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    process.env.WUD_JOIN_A = '1';
-    process.env.WUD_JOIN_B = '2';
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      // With "" separator mutant, 'WUD_JOIN_A, WUD_JOIN_B' → 'WUD_JOIN_AWUD_JOIN_B'
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(', '));
-    } finally {
-      delete process.env.WUD_JOIN_A;
-      delete process.env.WUD_JOIN_B;
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('legacy warning key preview sorts the env var names', async () => {
-    // Kills 86:29 [MethodExpression] Array.from(mappedLegacyEnvVars) – removes sort
-    // and 88:25 [MethodExpression] legacyEnvVarNames
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    process.env.WUD_Z_FIRST = '1';
-    process.env.WUD_A_FIRST = '2';
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      const call = warnSpy.mock.calls.find((c) => c[0]?.includes('WUD_'));
-      expect(call).toBeDefined();
-      const msg = call![0] as string;
-      // A should appear before Z in sorted order
-      const aIndex = msg.indexOf('WUD_A_FIRST');
-      const zIndex = msg.indexOf('WUD_Z_FIRST');
-      expect(aIndex).toBeGreaterThan(-1);
-      expect(zIndex).toBeGreaterThan(-1);
-      expect(aIndex).toBeLessThan(zIndex);
-    } finally {
-      delete process.env.WUD_Z_FIRST;
-      delete process.env.WUD_A_FIRST;
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('legacy warning suffix uses the actual additional count, not >= 0 form', async () => {
-    // Kills 90:18 [ConditionalExpression] true and 90:18 [EqualityOperator] additionalCount >= 0
-    // With mutation to `true`, suffix always shows even when additionalCount <= 0
-    // With >= 0, suffix shows even when count is 0
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    // Set exactly 1 WUD_ key (no overflow)
-    process.env.WUD_ONLY_ONE = '1';
-    const existing = Object.keys(process.env).filter(
-      (k) => k.toUpperCase().startsWith('WUD_') && k !== 'WUD_ONLY_ONE',
-    );
-    const saved = new Map(existing.map((k) => [k, process.env[k]]));
-    for (const k of existing) delete process.env[k];
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      const call = warnSpy.mock.calls.find((c) => c[0]?.includes('WUD_'));
-      if (call) {
-        // With 1 WUD_ key, there should be NO "(+N more)" suffix
-        expect(call[0]).not.toMatch(/\(\+\d+ more\)/);
-      }
-    } finally {
-      delete process.env.WUD_ONLY_ONE;
-      for (const [k, v] of saved) process.env[k] = v;
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('legacy warning suffix "more" string is not empty or replaced', async () => {
-    // Kills 90:72 [StringLiteral] "Stryker was here!" – the more suffix string
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const legacyKeys = Array.from({ length: 12 }, (_, i) => `WUD_SUFFIX_${i}`);
-    for (const k of legacyKeys) process.env[k] = '1';
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      // The suffix must be " (+2 more)" not " (+2 Stryker was here!)"
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining(' more)'));
-    } finally {
-      for (const k of legacyKeys) delete process.env[k];
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('legacy warning key preview is capped at first 10 keys', async () => {
-    // Kills 88:25 [MethodExpression] legacyEnvVarNames – removes .slice(0, 10)
-    // Without the slice mutant, all 12 keys appear in the preview instead of just the first 10
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    // Use keys that sort deterministically: WUD_CAP_00 through WUD_CAP_11
-    const legacyKeys = Array.from(
-      { length: 12 },
-      (_, i) => `WUD_CAP_${String(i).padStart(2, '0')}`,
-    );
-    for (const k of legacyKeys) process.env[k] = '1';
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      const call = warnSpy.mock.calls.find((c) => c[0]?.includes('WUD_CAP_'));
-      expect(call).toBeDefined();
-      const msg = call![0] as string;
-      // First 10 keys (WUD_CAP_00..WUD_CAP_09) should be in the preview
-      expect(msg).toContain('WUD_CAP_00');
-      expect(msg).toContain('WUD_CAP_09');
-      // Keys 11th and 12th (WUD_CAP_10, WUD_CAP_11) must NOT appear – they are truncated
-      expect(msg).not.toContain('WUD_CAP_10');
-      expect(msg).not.toContain('WUD_CAP_11');
-      // The (+2 more) suffix should appear
-      expect(msg).toContain('(+2 more)');
-    } finally {
-      for (const k of legacyKeys) delete process.env[k];
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('legacy warning shows no suffix when exactly 10 WUD_ keys are set', async () => {
-    // Kills 90:18 [ConditionalExpression] true / 90:18 [EqualityOperator] additionalCount >= 0
-    // With exactly 10 keys, additionalCount = 0. With >= 0 mutant: shows "(+0 more)" suffix.
-    // With "true" mutant: always shows suffix.
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const legacyKeys = Array.from(
-      { length: 10 },
-      (_, i) => `WUD_EXACT_${String(i).padStart(2, '0')}`,
-    );
-    for (const k of legacyKeys) process.env[k] = '1';
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      const call = warnSpy.mock.calls.find((c) => c[0]?.includes('WUD_EXACT_'));
-      expect(call).toBeDefined();
-      const msg = call![0] as string;
-      // With exactly 10 keys no overflow suffix should appear
-      expect(msg).not.toMatch(/\(\+\d+ more\)/);
-      // All 10 keys should appear
-      expect(msg).toContain('WUD_EXACT_00');
-      expect(msg).toContain('WUD_EXACT_09');
-    } finally {
-      for (const k of legacyKeys) delete process.env[k];
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('should not emit legacy warning when no WUD_ vars are set', async () => {
-    // Remove all WUD_ keys from process.env first
-    const existing = Object.keys(process.env).filter((k) => k.toUpperCase().startsWith('WUD_'));
-    const saved = new Map(existing.map((k) => [k, process.env[k]]));
-    for (const k of existing) delete process.env[k];
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    try {
-      vi.resetModules();
-      await import('./index.js');
-      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('WUD_'));
-    } finally {
-      for (const [k, v] of saved) process.env[k] = v;
-      warnSpy.mockRestore();
-    }
-  });
-
-  test('DD_ env vars are included in ddEnvVars at module init', async () => {
-    process.env.DD_BOOTSTRAP_TEST_UNIQUE = 'sentinel';
-    try {
-      vi.resetModules();
-      const fresh = await import('./index.js');
-      // Kills 97:1 [MethodExpression] Object.keys(process.env)
-      // and 98:55 [StringLiteral] ""
-      expect(fresh.ddEnvVars.DD_BOOTSTRAP_TEST_UNIQUE).toBe('sentinel');
-    } finally {
-      delete process.env.DD_BOOTSTRAP_TEST_UNIQUE;
     }
   });
 });

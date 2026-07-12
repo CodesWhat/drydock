@@ -96,7 +96,7 @@ describe('Group Router', () => {
       expect(groups[0].containers).toHaveLength(2);
     });
 
-    test('should group containers by wud.group label as fallback', () => {
+    test('should ignore removed wud.group labels', () => {
       mockGetContainers.mockReturnValue([
         makeContainer('c1', 'nginx', { 'wud.group': 'legacy-stack' }),
         makeContainer('c2', 'redis', { 'wud.group': 'legacy-stack' }),
@@ -110,12 +110,9 @@ describe('Group Router', () => {
       const { data: groups, total } = getGroupsPayload(res);
       expect(groups).toHaveLength(1);
       expect(total).toBe(1);
-      expect(groups[0].name).toBe('legacy-stack');
+      expect(groups[0].name).toBeNull();
       expect(groups[0].containerCount).toBe(2);
-      expect(mockRecordLegacyInput).toHaveBeenCalledWith('label', 'wud.group');
-      expect(mockLogWarn).toHaveBeenCalledWith(
-        'Legacy Docker label "wud.group" is deprecated. Please migrate to "dd.group" before removal in v1.6.0.',
-      );
+      expect(mockRecordLegacyInput).not.toHaveBeenCalled();
     });
 
     test('should auto-detect com.docker.compose.project as group', () => {
@@ -214,8 +211,8 @@ describe('Group Router', () => {
       const ungrouped = groups.find((g) => g.name === null);
 
       expect(frontend.containerCount).toBe(1);
-      expect(backend.containerCount).toBe(2);
-      expect(ungrouped.containerCount).toBe(1);
+      expect(backend.containerCount).toBe(1);
+      expect(ungrouped.containerCount).toBe(2);
     });
 
     test('should return proper container summary format within groups', () => {
@@ -239,7 +236,7 @@ describe('Group Router', () => {
       });
     });
 
-    test('should prefer wud.group over compose project when dd.group is absent', () => {
+    test('should ignore wud.group and use compose project when dd.group is absent', () => {
       mockGetContainers.mockReturnValue([
         makeContainer('c1', 'nginx', {
           'wud.group': 'wud-group',
@@ -254,7 +251,7 @@ describe('Group Router', () => {
 
       const { data: groups, total } = getGroupsPayload(res);
       expect(total).toBe(1);
-      expect(groups[0].name).toBe('wud-group');
+      expect(groups[0].name).toBe('compose-project');
     });
 
     test('should auto-detect com.docker.stack.namespace (Swarm stack) as group', () => {
@@ -314,7 +311,6 @@ describe('Group Router', () => {
 
     test.each([
       ['dd.group', 'constructor'],
-      ['wud.group', 'toString'],
       ['com.docker.compose.project', 'hasOwnProperty'],
       ['com.docker.stack.namespace', '__proto__'],
     ])('should group %s value %s without colliding with object prototype keys', (label, groupName) => {

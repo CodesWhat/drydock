@@ -3,7 +3,6 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import rateLimit from 'express-rate-limit';
 import nocache from 'nocache';
 import { getWebhookConfiguration } from '../configuration/index.js';
-import { getPreferredLabelValue } from '../docker/legacy-label.js';
 import logger from '../log/index.js';
 import { sanitizeLogParam } from '../log/sanitize.js';
 import { getWebhookCounter } from '../prometheus/webhook.js';
@@ -11,7 +10,7 @@ import * as registry from '../registry/index.js';
 import * as storeContainer from '../store/container.js';
 import { requestContainerUpdate, UpdateRequestError } from '../updates/request-update.js';
 import { getErrorMessage } from '../util/error.js';
-import { ddWebhookEnabled, wudWebhookEnabled } from '../watchers/providers/docker/label.js';
+import { ddWebhookEnabled } from '../watchers/providers/docker/label.js';
 import { recordAuditEvent } from './audit-events.js';
 import { resolveWatcherIdForContainer } from './container/handlers/common.js';
 import { sendErrorResponse } from './error-response.js';
@@ -181,14 +180,12 @@ const CONTAINER_WEBHOOK_DISABLED_ERROR = 'Webhooks are disabled for this contain
 
 /**
  * Check whether webhooks are enabled for the given container.
- * Returns true unless the container has dd.webhook.enabled (or wud.webhook.enabled) set to 'false'.
+ * Returns true unless the container has dd.webhook.enabled set to 'false'.
  */
 function isWebhookEnabledForContainer(container: StoreContainer): boolean {
   const labels = container.labels;
   if (!labels) return true;
-  const value = getPreferredLabelValue(labels, ddWebhookEnabled, wudWebhookEnabled, {
-    warn: (message) => log.warn(message),
-  });
+  const value = labels[ddWebhookEnabled];
   if (value === undefined) return true;
   return value.toLowerCase() !== 'false';
 }

@@ -706,24 +706,26 @@ describe('Webhook Router', () => {
       });
     });
 
-    test('should return 403 when container has wud.webhook.enabled=false (legacy)', async () => {
+    test('should ignore removed wud.webhook.enabled on watch', async () => {
       const container = {
         name: 'my-nginx',
+        watcher: 'local',
         image: { name: 'nginx' },
         labels: { 'wud.webhook.enabled': 'false' },
       };
       mockGetContainers.mockReturnValue([container]);
+      mockGetState.mockReturnValue({
+        watcher: { 'docker.local': { watchContainer: vi.fn().mockResolvedValue(undefined) } },
+        trigger: {},
+      });
 
       const handler = getHandler('post', '/watch/:containerName');
       const req = createMockRequest({ params: { containerName: 'my-nginx' } });
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(403);
-      expect(mockRecordLegacyInput).toHaveBeenCalledWith('label', 'wud.webhook.enabled');
-      expect(mockLogWarn).toHaveBeenCalledWith(
-        'Legacy Docker label "wud.webhook.enabled" is deprecated. Please migrate to "dd.webhook.enabled" before removal in v1.6.0.',
-      );
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(mockRecordLegacyInput).not.toHaveBeenCalled();
     });
 
     test('should allow watch when dd.webhook.enabled=true', async () => {
@@ -1201,21 +1203,38 @@ describe('Webhook Router', () => {
       });
     });
 
-    test('should return 403 when container has wud.webhook.enabled=false (legacy)', async () => {
+    test('should ignore removed wud.webhook.enabled on update', async () => {
       const container = {
+        id: 'c1',
         name: 'my-nginx',
         image: { name: 'nginx' },
+        updateAvailable: true,
         labels: { 'wud.webhook.enabled': 'false' },
       };
       mockGetContainers.mockReturnValue([container]);
+      const mockTrigger = vi.fn().mockResolvedValue(undefined);
+      mockGetState.mockReturnValue({
+        watcher: {},
+        trigger: {
+          'docker.default': {
+            type: 'docker',
+            trigger: mockTrigger,
+            agent: undefined,
+            configuration: { threshold: 'all' },
+            getId: () => 'docker.default',
+            isTriggerIncluded: () => true,
+            isTriggerExcluded: () => false,
+          },
+        },
+      });
 
       const handler = getHandler('post', '/update/:containerName');
       const req = createMockRequest({ params: { containerName: 'my-nginx' } });
       const res = createMockResponse();
       await handler(req, res);
 
-      expect(res.status).toHaveBeenCalledWith(403);
-      expect(mockRecordLegacyInput).toHaveBeenCalledWith('label', 'wud.webhook.enabled');
+      expect(res.status).toHaveBeenCalledWith(202);
+      expect(mockRecordLegacyInput).not.toHaveBeenCalled();
     });
 
     test('should return 404 when no docker trigger found', async () => {

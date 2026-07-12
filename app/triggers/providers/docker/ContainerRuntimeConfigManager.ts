@@ -44,7 +44,6 @@ type RuntimeConfigManagerDependencies = {
   getPreferredLabelValue: (
     labels: Record<string, string> | undefined,
     ddKey: string,
-    wudKey: string,
     logger?: RuntimeConfigLogger,
   ) => string | undefined;
   getLogger: () => RuntimeConfigLogger | undefined;
@@ -69,14 +68,8 @@ type EndpointConfig = {
 };
 
 const RUNTIME_FIELD_ORIGIN_LABELS = {
-  Entrypoint: {
-    dd: 'dd.runtime.entrypoint.origin',
-    wud: 'wud.runtime.entrypoint.origin',
-  },
-  Cmd: {
-    dd: 'dd.runtime.cmd.origin',
-    wud: 'wud.runtime.cmd.origin',
-  },
+  Entrypoint: 'dd.runtime.entrypoint.origin',
+  Cmd: 'dd.runtime.cmd.origin',
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -229,8 +222,7 @@ class ContainerRuntimeConfigManager {
     const runtimeOriginLabels = RUNTIME_FIELD_ORIGIN_LABELS[runtimeField];
     const originFromLabel = this.getPreferredLabelValue(
       containerConfig?.Labels,
-      runtimeOriginLabels.dd,
-      runtimeOriginLabels.wud,
+      runtimeOriginLabels,
       this.getLogger(),
     );
     const normalizedOrigin = this.normalizeRuntimeFieldOrigin(originFromLabel);
@@ -284,7 +276,7 @@ class ContainerRuntimeConfigManager {
         }
       }
 
-      labels[RUNTIME_FIELD_ORIGIN_LABELS[runtimeField].dd] = nextRuntimeOrigin;
+      labels[RUNTIME_FIELD_ORIGIN_LABELS[runtimeField]] = nextRuntimeOrigin;
     }
 
     return {

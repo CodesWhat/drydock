@@ -71,11 +71,11 @@ describe('Docker Watcher', () => {
   });
 
   describe('Additional Coverage - Docker helper functions', () => {
-    test('getLabel should fallback to wud key when dd key is absent', () => {
+    test('getLabel should ignore removed wud keys', () => {
       const labels = {
         'wud.display.name': 'Legacy Name',
       };
-      expect(testable_getLabel(labels, 'dd.display.name', 'wud.display.name')).toBe('Legacy Name');
+      expect(testable_getLabel(labels, 'dd.display.name')).toBeUndefined();
     });
 
     test('getLabel should prefer dd key when both dd and wud keys are present', () => {
@@ -83,7 +83,7 @@ describe('Docker Watcher', () => {
         'dd.display.name': 'Preferred',
         'wud.display.name': 'Legacy Name',
       };
-      expect(testable_getLabel(labels, 'dd.display.name', 'wud.display.name')).toBe('Preferred');
+      expect(testable_getLabel(labels, 'dd.display.name')).toBe('Preferred');
     });
 
     test('getLabel should return undefined when fallback key is not provided', () => {

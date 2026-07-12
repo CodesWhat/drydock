@@ -61,12 +61,8 @@ describe('resolveTriggerLabelValuesPure', () => {
       ).toEqual({ action: 'docker', notification: 'slack', mirror: 'docker' });
     });
 
-    test('wud legacy label applies to both categories when no dd label is present', () => {
-      expect(resolveTriggerLabelValuesPure({ [wud]: 'legacy' }, direction)).toEqual({
-        action: 'legacy',
-        notification: 'legacy',
-        mirror: 'legacy',
-      });
+    test('removed wud legacy label is ignored', () => {
+      expect(resolveTriggerLabelValuesPure({ [wud]: 'legacy' }, direction)).toEqual({});
     });
 
     test.each([

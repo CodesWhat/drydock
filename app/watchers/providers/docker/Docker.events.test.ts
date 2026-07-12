@@ -462,7 +462,7 @@ describe('Docker Watcher', () => {
       expect(storeContainer.updateContainer).toHaveBeenCalledWith(existingContainer);
     });
 
-    test('should apply custom display name from labels when processing events', async () => {
+    test('should ignore removed wud display-name labels when processing events', async () => {
       await docker.register('watcher', 'docker', 'test', {});
       docker.log = createMockLogWithChild(['info']);
       mockContainer.inspect.mockResolvedValue({
@@ -482,7 +482,7 @@ describe('Docker Watcher', () => {
 
       await docker.onDockerEvent(Buffer.from('{"Action":"rename","id":"container123"}\n'));
 
-      expect(existingContainer.displayName).toBe('Custom Label Name');
+      expect(existingContainer.displayName).toBe('renamed-container');
       expect(storeContainer.updateContainer).toHaveBeenCalledWith(existingContainer);
     });
 

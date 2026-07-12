@@ -451,7 +451,7 @@ describe('container event update helpers', () => {
       {
         Name: '/renamed-container',
         State: { Status: 'running' },
-        Config: { Labels: { 'wud.display.name': 'Custom Label Name' } },
+        Config: { Labels: { 'dd.display.name': 'Custom Label Name' } },
       },
       {
         getCustomDisplayNameFromLabels: () => 'Custom Label Name',

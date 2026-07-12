@@ -28,15 +28,10 @@ import {
   getFirstDigitIndex as testable_getFirstDigitIndex,
 } from './tag-candidates.js';
 
-const mockDdEnvVars = vi.hoisted(() => ({}) as Record<string, string | undefined>);
 const mockDetectSourceRepoFromImageMetadata = vi.hoisted(() => vi.fn());
 const mockResolveSourceRepoForContainer = vi.hoisted(() => vi.fn());
 const mockGetFullReleaseNotesForContainer = vi.hoisted(() => vi.fn());
 const mockToContainerReleaseNotes = vi.hoisted(() => vi.fn((notes) => notes));
-vi.mock('../../../configuration/index.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../configuration/index.js')>()),
-  ddEnvVars: mockDdEnvVars,
-}));
 vi.mock('../../../release-notes/index.js', () => ({
   detectSourceRepoFromImageMetadata: (...args: unknown[]) =>
     mockDetectSourceRepoFromImageMetadata(...args),
@@ -250,6 +245,7 @@ describe('Docker Watcher', () => {
 
     // Setup store mock
     storeContainer.getContainers.mockReturnValue([]);
+    storeContainer.getContainersRaw.mockReturnValue([]);
     storeContainer.getContainer.mockReturnValue(undefined);
     storeContainer.insertContainer.mockImplementation((c) => c);
     storeContainer.updateContainer.mockImplementation((c) => c);
@@ -325,6 +321,12 @@ describe('Docker Watcher', () => {
     test('should validate configuration', async () => {
       const config = { socket: '/var/run/docker.sock' };
       expect(() => docker.validateConfiguration(config)).not.toThrow();
+    });
+
+    test.each(['watchdigest', 'watchatstart'])('should reject removed %s configuration', (key) => {
+      expect(() => docker.validateConfiguration({ [key]: false })).toThrow(
+        new RegExp(`${key}.*not allowed`, 'i'),
+      );
     });
 
     test('should validate configuration with watchall option', async () => {
@@ -649,52 +651,6 @@ describe('Docker Watcher', () => {
       });
     });
 
-    test('should warn about deprecated watchdigest', async () => {
-      await docker.register('watcher', 'docker', 'test', {
-        watchdigest: true,
-      });
-      const mockLog = { warn: vi.fn(), info: vi.fn() };
-      docker.log = mockLog;
-      await docker.init();
-      expect(mockLog.warn).toHaveBeenCalledWith(expect.stringContaining('deprecated'));
-    });
-
-    test('should warn about deprecated watchatstart when env var is explicitly set', async () => {
-      mockDdEnvVars.DD_WATCHER_TEST_WATCHATSTART = 'true';
-      try {
-        await docker.register('watcher', 'docker', 'test', {
-          watchatstart: true,
-        });
-        const mockLog = { warn: vi.fn(), info: vi.fn() };
-        docker.log = mockLog;
-        await docker.init();
-        expect(mockLog.warn).toHaveBeenCalledWith(
-          expect.stringContaining(
-            'DD_WATCHER_TEST_WATCHATSTART environment variable is deprecated',
-          ),
-        );
-        expect(mockLog.warn).toHaveBeenCalledWith(
-          expect.stringContaining(
-            'If you need to delay the first scan, use DD_WATCHER_TEST_CRON to control the schedule.',
-          ),
-        );
-      } finally {
-        delete mockDdEnvVars.DD_WATCHER_TEST_WATCHATSTART;
-      }
-    });
-
-    test('should not warn about watchatstart when env var is not explicitly set', async () => {
-      await docker.register('watcher', 'docker', 'test', {
-        watchatstart: true,
-      });
-      const mockLog = { warn: vi.fn(), info: vi.fn() };
-      docker.log = mockLog;
-      await docker.init();
-      expect(mockLog.warn).not.toHaveBeenCalledWith(
-        expect.stringContaining('WATCHATSTART environment variable is deprecated'),
-      );
-    });
-
     test('should setup docker events listener', async () => {
       await docker.register('watcher', 'docker', 'test', {
         watchevents: true,
@@ -711,31 +667,18 @@ describe('Docker Watcher', () => {
       expect(mockDebounce).not.toHaveBeenCalled();
     });
 
-    test('should keep watchatstart enabled when watcher state already exists in store', async () => {
+    test('should always schedule the startup watch when watcher state already exists', async () => {
       storeContainer.getContainers.mockReturnValue([{ id: 'existing' }]);
       await docker.register('watcher', 'docker', 'test', {
-        watchatstart: true,
         watchevents: false,
       });
       await docker.init();
-      expect(docker.configuration.watchatstart).toBe(true);
       expect(docker.watchCronTimeout).toBeDefined();
-    });
-
-    test('should keep watchatstart disabled when explicitly set to false', async () => {
-      storeContainer.getContainers.mockReturnValue([]);
-      await docker.register('watcher', 'docker', 'test', {
-        watchatstart: false,
-      });
-      await docker.init();
-      expect(docker.configuration.watchatstart).toBe(false);
     });
 
     test('should execute scheduled cron callback by delegating to watchFromCron', async () => {
       storeContainer.getContainers.mockReturnValue([]);
-      await docker.register('watcher', 'docker', 'test', {
-        watchatstart: false,
-      });
+      await docker.register('watcher', 'docker', 'test', {});
       docker.watchFromCron = vi.fn().mockResolvedValue([]);
 
       await docker.init();
@@ -2007,11 +1950,11 @@ describe('Docker Watcher', () => {
   });
 
   describe('Additional Coverage - Docker helper functions', () => {
-    test('getLabel should fallback to wud key when dd key is absent', () => {
+    test('getLabel should ignore a removed wud key when dd key is absent', () => {
       const labels = {
         'wud.display.name': 'Legacy Name',
       };
-      expect(testable_getLabel(labels, 'dd.display.name', 'wud.display.name')).toBe('Legacy Name');
+      expect(testable_getLabel(labels, 'dd.display.name')).toBeUndefined();
     });
 
     test('getLabel should prefer dd key when both dd and wud keys are present', () => {
@@ -2019,7 +1962,7 @@ describe('Docker Watcher', () => {
         'dd.display.name': 'Preferred',
         'wud.display.name': 'Legacy Name',
       };
-      expect(testable_getLabel(labels, 'dd.display.name', 'wud.display.name')).toBe('Preferred');
+      expect(testable_getLabel(labels, 'dd.display.name')).toBe('Preferred');
     });
 
     test('getLabel should return undefined when fallback key is not provided', () => {

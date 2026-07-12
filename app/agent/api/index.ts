@@ -91,8 +91,8 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
  */
 export async function init() {
   cachedSecret = undefined;
-  const agentSecret = process.env.DD_AGENT_SECRET ?? process.env.WUD_AGENT_SECRET;
-  const agentSecretFile = process.env.DD_AGENT_SECRET_FILE ?? process.env.WUD_AGENT_SECRET_FILE;
+  const agentSecret = process.env.DD_AGENT_SECRET;
+  const agentSecretFile = process.env.DD_AGENT_SECRET_FILE;
 
   if (agentSecret) {
     cachedSecret = agentSecret;
@@ -107,12 +107,8 @@ export async function init() {
   }
 
   if (!cachedSecret) {
-    log.error(
-      'Agent mode requires DD_AGENT_SECRET (or WUD_AGENT_SECRET) / DD_AGENT_SECRET_FILE (or WUD_AGENT_SECRET_FILE) to be defined.',
-    );
-    throw new Error(
-      'Agent mode requires DD_AGENT_SECRET or DD_AGENT_SECRET_FILE (WUD_ prefix also accepted)',
-    );
+    log.error('Agent mode requires DD_AGENT_SECRET or DD_AGENT_SECRET_FILE to be defined.');
+    throw new Error('Agent mode requires DD_AGENT_SECRET or DD_AGENT_SECRET_FILE');
   }
 
   const configuration = getServerConfiguration();

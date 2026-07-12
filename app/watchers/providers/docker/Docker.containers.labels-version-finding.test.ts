@@ -17,8 +17,8 @@ describe('Docker Watcher', () => {
     hMockTag = await import('../../../tag/index.js');
   });
 
-  describe('Dual-prefix dd.*/wud.* label support', () => {
-    test('should prefer dd.watch over wud.watch label', async () => {
+  describe('canonical dd.* label support', () => {
+    test('should use dd.watch and ignore wud.watch', async () => {
       const containers = [
         {
           Id: 'dd-label-1',
@@ -34,11 +34,10 @@ describe('Docker Watcher', () => {
       });
       const result = await docker.getContainers();
 
-      // dd.watch=true should override wud.watch=false
       expect(result).toHaveLength(1);
     });
 
-    test('should fall back to wud.watch when dd.watch is not set', async () => {
+    test('should ignore wud.watch when dd.watch is not set', async () => {
       const containers = [
         {
           Id: 'wud-fallback-1',
@@ -54,7 +53,7 @@ describe('Docker Watcher', () => {
       });
       const result = await docker.getContainers();
 
-      expect(result).toHaveLength(1);
+      expect(result).toHaveLength(0);
     });
 
     test('should prefer dd.tag.include over wud.tag.include label', async () => {
@@ -83,7 +82,7 @@ describe('Docker Watcher', () => {
       );
     });
 
-    describe('getLabel dual-prefix fallback for all label pairs', () => {
+    describe('getLabel canonical resolution for removed label pairs', () => {
       const labelPairs = [
         ['dd.watch', 'wud.watch'],
         ['dd.tag.include', 'wud.tag.include'],
@@ -108,20 +107,22 @@ describe('Docker Watcher', () => {
         ['dd.rollback.interval', 'wud.rollback.interval'],
       ];
 
-      test.each(labelPairs)('should prefer %s over %s when both are present', (ddKey, wudKey) => {
+      test.each(
+        labelPairs,
+      )('should use %s and ignore %s when both are present', (ddKey, wudKey) => {
         const labels = { [ddKey]: 'dd-value', [wudKey]: 'wud-value' };
-        expect(testable_getLabel(labels, ddKey, wudKey)).toBe('dd-value');
+        expect(testable_getLabel(labels, ddKey)).toBe('dd-value');
       });
 
-      test.each(labelPairs)('should fall back to %s when %s is absent', (ddKey, wudKey) => {
+      test.each(labelPairs)('should ignore %s when %s is absent', (ddKey, wudKey) => {
         const labels = { [wudKey]: 'legacy-value' };
-        expect(testable_getLabel(labels, ddKey, wudKey)).toBe('legacy-value');
+        expect(testable_getLabel(labels, ddKey)).toBeUndefined();
       });
 
       test.each(
         labelPairs,
       )('should return undefined when neither %s nor %s is set', (ddKey, wudKey) => {
-        expect(testable_getLabel({}, ddKey, wudKey)).toBeUndefined();
+        expect(testable_getLabel({}, ddKey)).toBeUndefined();
       });
     });
   });

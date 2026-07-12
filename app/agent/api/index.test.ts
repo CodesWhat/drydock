@@ -194,10 +194,10 @@ describe('Agent API index', () => {
       expect(mockApp.listen).toHaveBeenCalled();
     });
 
-    test('should use WUD_AGENT_SECRET as fallback', async () => {
+    test('should reject removed WUD_AGENT_SECRET fallback', async () => {
       process.env.WUD_AGENT_SECRET = 'wud-secret';
-      await init();
-      expect(mockApp.listen).toHaveBeenCalled();
+      await expect(init()).rejects.toThrow(/DD_AGENT_SECRET/);
+      expect(mockApp.listen).not.toHaveBeenCalled();
     });
 
     test('should use DD_AGENT_SECRET_FILE env var', async () => {
@@ -223,14 +223,6 @@ describe('Agent API index', () => {
       authenticate(req, resObj, next);
       expect(next).toHaveBeenCalled();
       expect(resObj.status).not.toHaveBeenCalledWith(401);
-    });
-
-    test('should use WUD_AGENT_SECRET_FILE as fallback', async () => {
-      process.env.WUD_AGENT_SECRET_FILE = '/opt/drydock/test/secret';
-      const fs = await import('node:fs');
-      fs.default.readFileSync.mockReturnValue('file-secret\n');
-      await init();
-      expect(mockApp.listen).toHaveBeenCalled();
     });
 
     test('should throw when secret file cannot be read', async () => {

@@ -2083,7 +2083,7 @@ describe('lifecycle hooks', () => {
     ).rejects.toThrowError('Pre-update hook timed out after 500ms');
   });
 
-  test('trigger should use wud.* labels as fallback', async () => {
+  test('trigger should ignore removed wud.* hook labels', async () => {
     mockRunHook.mockResolvedValue({ exitCode: 0, stdout: 'ok', stderr: '', timedOut: false });
 
     await docker.trigger(
@@ -2092,14 +2092,7 @@ describe('lifecycle hooks', () => {
       }),
     );
 
-    expect(mockRunHook).toHaveBeenCalledWith(
-      'echo legacy-pre',
-      expect.objectContaining({ label: 'pre-update' }),
-    );
-    expect(mockRunHook).toHaveBeenCalledWith(
-      'echo legacy-post',
-      expect.objectContaining({ label: 'post-update' }),
-    );
+    expect(mockRunHook).not.toHaveBeenCalled();
   });
 
   test('trigger should not abort on post-hook failure', async () => {
@@ -2265,7 +2258,7 @@ describe('auto-rollback health monitor integration', () => {
     );
   });
 
-  test('trigger should use wud.* labels as fallback for auto-rollback', async () => {
+  test('trigger should ignore removed wud.* auto-rollback labels', async () => {
     stubTriggerFlow({
       running: true,
       inspectOverrides: { State: { Running: true, Health: { Status: 'healthy' } } },
@@ -2281,12 +2274,7 @@ describe('auto-rollback health monitor integration', () => {
       }),
     );
 
-    expect(mockStartHealthMonitor).toHaveBeenCalledWith(
-      expect.objectContaining({
-        window: 120000,
-        interval: 3000,
-      }),
-    );
+    expect(mockStartHealthMonitor).not.toHaveBeenCalled();
   });
 });
 

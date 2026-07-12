@@ -6,7 +6,6 @@ import {
   registerWatcherStop,
 } from '../../../event/index.js';
 import log from '../../../log/index.js';
-import * as compatibility from '../../../prometheus/compatibility.js';
 import * as containerStore from '../../../store/container.js';
 import * as requestUpdateModule from '../../../updates/request-update.js';
 import { UpdateRequestError } from '../../../updates/request-update.js';
@@ -396,10 +395,7 @@ test('addContainerSensor should prefer dd.display.picture over icon-derived enti
   expect(discoveryPayload.entity_picture).toBe('https://images.example.com/nextcloud.png');
 });
 
-test('addContainerSensor should fall back to wud.display.picture and warn about the legacy label', async () => {
-  const recordLegacyInputSpy = vi.spyOn(compatibility, 'recordLegacyInput');
-  const logWarnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
-
+test('addContainerSensor should ignore removed wud.display.picture', async () => {
   await hass.addContainerSensor({
     name: 'container-name',
     watcher: 'watcher-name',
@@ -411,24 +407,12 @@ test('addContainerSensor should fall back to wud.display.picture and warn about 
 
   const discoveryCall = mqttClientMock.publish.mock.calls[0];
   const discoveryPayload = JSON.parse(discoveryCall[1]);
-  expect(discoveryPayload.entity_picture).toBe('https://images.example.com/legacy-nextcloud.png');
-  expect(recordLegacyInputSpy).toHaveBeenCalledWith('label', 'wud.display.picture');
-  expect(logWarnSpy).toHaveBeenCalledWith(
-    'Legacy Docker label "wud.display.picture" is deprecated. Please migrate to "dd.display.picture" before removal in v1.6.0.',
+  expect(discoveryPayload.entity_picture).toBe(
+    'https://cdn.jsdelivr.net/gh/selfhst/icons/png/nextcloud.png',
   );
 });
 
-test('addContainerSensor should fall through to wud.display.picture when dd.display.picture is an explicit empty string', async () => {
-  // This call site previously read `dd.display.picture || wud.display.picture`,
-  // which falls through to the wud.* label on an explicit empty dd.* value
-  // (e.g. an unset compose-file env-substitution default), not just when
-  // dd.* is absent. treatEmptyAsAbsent preserves that behavior so a
-  // container that still relies on wud.display.picture doesn't silently
-  // lose it. (The warn-message assertion is covered by the preceding test —
-  // the legacy-label warned-fallback registry is deduped per key, so
-  // asserting it again here would be order-dependent.)
-  const recordLegacyInputSpy = vi.spyOn(compatibility, 'recordLegacyInput');
-
+test('addContainerSensor should not fall through to wud.display.picture for an empty dd value', async () => {
   await hass.addContainerSensor({
     name: 'container-name',
     watcher: 'watcher-name',
@@ -441,8 +425,9 @@ test('addContainerSensor should fall through to wud.display.picture when dd.disp
 
   const discoveryCall = mqttClientMock.publish.mock.calls[0];
   const discoveryPayload = JSON.parse(discoveryCall[1]);
-  expect(discoveryPayload.entity_picture).toBe('https://images.example.com/legacy-nextcloud.png');
-  expect(recordLegacyInputSpy).toHaveBeenCalledWith('label', 'wud.display.picture');
+  expect(discoveryPayload.entity_picture).toBe(
+    'https://cdn.jsdelivr.net/gh/selfhst/icons/png/nextcloud.png',
+  );
 });
 
 test('addContainerSensor should warn once when multiple agents share a watcher name and the agent segment flag is disabled', async () => {

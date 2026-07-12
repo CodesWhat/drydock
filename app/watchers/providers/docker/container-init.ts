@@ -1,4 +1,3 @@
-import { getPreferredLabelValue } from '../../../docker/legacy-label.js';
 import log from '../../../log/index.js';
 import type { Container, TriggerCategory } from '../../../model/container.js';
 import { recordLegacyInput } from '../../../prometheus/compatibility.js';
@@ -39,18 +38,6 @@ import {
   ddTriggerExclude,
   ddTriggerInclude,
   ddWatchDigest,
-  wudDisplayIcon,
-  wudDisplayName,
-  wudInspectTagPath,
-  wudLinkTemplate,
-  wudRegistryLookupImage,
-  wudRegistryLookupUrl,
-  wudTagExclude,
-  wudTagInclude,
-  wudTagTransform,
-  wudTriggerExclude,
-  wudTriggerInclude,
-  wudWatchDigest,
 } from './label.js';
 import {
   type ResolvedTriggerLabelValues,
@@ -58,7 +45,6 @@ import {
 } from './trigger-label-resolution.js';
 import { applyDockerDeclarativeUpdatePolicy } from './update-policy.js';
 
-const warnedLegacyLabelFallbacks = new Set<string>();
 const warnedLegacyTriggerLabelFallbacks = new Set<string>();
 const warnedTriggerCategoryScopeChanges = new Set<string>();
 const RECREATED_CONTAINER_NAME_PATTERN = /^([a-f0-9]{12})_(.+)$/i;
@@ -157,69 +143,52 @@ interface GetLabelOptions {
 }
 
 const containerLabelOverrideMappings = [
-  { key: 'includeTags', ddKey: ddTagInclude, wudKey: wudTagInclude, overrideKey: 'includeTags' },
-  { key: 'excludeTags', ddKey: ddTagExclude, wudKey: wudTagExclude, overrideKey: 'excludeTags' },
+  { key: 'includeTags', ddKey: ddTagInclude, overrideKey: 'includeTags' },
+  { key: 'excludeTags', ddKey: ddTagExclude, overrideKey: 'excludeTags' },
   {
     key: 'transformTags',
     ddKey: ddTagTransform,
-    wudKey: wudTagTransform,
     overrideKey: 'transformTags',
   },
   {
     key: 'tagFamily',
     ddKey: ddTagFamily,
-    wudKey: undefined,
     overrideKey: 'tagFamily',
   },
   {
     key: 'tagPinInfo',
     ddKey: ddTagPinInfo,
-    wudKey: undefined,
     overrideKey: 'tagPinInfo',
   },
   {
     key: 'inspectTagPath',
     ddKey: ddInspectTagPath,
-    wudKey: wudInspectTagPath,
     overrideKey: undefined,
   },
   {
     key: 'inspectTagVersionOnly',
     ddKey: ddInspectTagVersionOnly,
-    wudKey: undefined,
     overrideKey: undefined,
   },
   {
     key: 'linkTemplate',
     ddKey: ddLinkTemplate,
-    wudKey: wudLinkTemplate,
     overrideKey: 'linkTemplate',
   },
-  { key: 'displayName', ddKey: ddDisplayName, wudKey: wudDisplayName, overrideKey: 'displayName' },
-  { key: 'displayIcon', ddKey: ddDisplayIcon, wudKey: wudDisplayIcon, overrideKey: 'displayIcon' },
+  { key: 'displayName', ddKey: ddDisplayName, overrideKey: 'displayName' },
+  { key: 'displayIcon', ddKey: ddDisplayIcon, overrideKey: 'displayIcon' },
   // Trigger include/exclude are NOT in this generic table: dd.action.*/dd.notification.*/
   // dd.trigger.* resolve into 4 category-scoped fields plus a deprecated mirror, which
-  // doesn't fit the single dd/wud key-pair shape below. See resolveTriggerLabelOverrides().
+  // doesn't fit the single-key shape below. See resolveTriggerLabelOverrides().
 ] as const satisfies ReadonlyArray<{
   key: keyof ResolvedContainerLabelOverrides;
   ddKey: string;
-  wudKey?: string;
   overrideKey?: ContainerLabelOverrideKey;
 }>;
 
-/**
- * Get a label value, preferring the dd.* key over the wud.* fallback.
- */
-export function getLabel(
-  labels: Record<string, string>,
-  ddKey: string,
-  wudKey?: string,
-  options: GetLabelOptions = {},
-) {
-  return getPreferredLabelValue(labels, ddKey, wudKey, {
-    warnedFallbacks: warnedLegacyLabelFallbacks,
-    warn: options.warn || ((message) => log.warn(message)),
-  });
+/** Get a canonical Docker label value. */
+export function getLabel(labels: Record<string, string>, ddKey: string) {
+  return labels[ddKey];
 }
 
 function warnLegacyTriggerLabel(
@@ -245,15 +214,11 @@ function warnLegacyTriggerLabel(
  *
  * `dd.trigger.<dir>` is a per-category fallback: it only fills in a category
  * whose own scoped label (`dd.action.<dir>` / `dd.notification.<dir>`) is
- * absent — it never overrides a scoped label that is present. `wud.trigger.<dir>`
- * is used only when none of `dd.action.<dir>` / `dd.notification.<dir>` /
- * `dd.trigger.<dir>` are present at all, matching the existing
- * getPreferredLabelValue fallback semantics.
+ * absent — it never overrides a scoped label that is present.
  *
  * The numeric resolution itself is delegated to the dependency-free
  * `resolveTriggerLabelValuesPure()` — this wrapper only adds the
- * warn/telemetry side effects for the legacy `dd.trigger.<dir>` and
- * `wud.trigger.<dir>` labels.
+ * warn/telemetry side effects for the legacy `dd.trigger.<dir>` label.
  */
 function resolveTriggerLabelValues(
   labels: Record<string, string>,
@@ -261,8 +226,6 @@ function resolveTriggerLabelValues(
   options: GetLabelOptions,
 ): ResolvedTriggerLabelValues {
   const ddLegacyKey = direction === 'include' ? ddTriggerInclude : ddTriggerExclude;
-  const wudLegacyKey = direction === 'include' ? wudTriggerInclude : wudTriggerExclude;
-
   const actionValue = labels[direction === 'include' ? ddActionInclude : ddActionExclude];
   const notificationValue =
     labels[direction === 'include' ? ddNotificationInclude : ddNotificationExclude];
@@ -270,13 +233,7 @@ function resolveTriggerLabelValues(
   const warn = options.warn || ((message) => log.error(message));
 
   if (actionValue === undefined && notificationValue === undefined && legacyValue === undefined) {
-    const wudValue = getPreferredLabelValue(labels, ddLegacyKey, wudLegacyKey, {
-      warnedFallbacks: warnedLegacyLabelFallbacks,
-      warn,
-    });
-    return wudValue !== undefined
-      ? { action: wudValue, notification: wudValue, mirror: wudValue }
-      : {};
+    return {};
   }
 
   if (legacyValue !== undefined) {
@@ -838,9 +795,9 @@ export function resolveLabelsFromContainer(
     ...resolveTriggerLabelOverrides(containerLabels, overrides),
   };
 
-  for (const { key, ddKey, wudKey, overrideKey } of containerLabelOverrideMappings) {
+  for (const { key, ddKey, overrideKey } of containerLabelOverrideMappings) {
     const overrideValue = overrideKey ? overrides[overrideKey] : undefined;
-    resolvedOverrides[key] = overrideValue || getLabel(containerLabels, ddKey, wudKey);
+    resolvedOverrides[key] = overrideValue || getLabel(containerLabels, ddKey);
   }
 
   return resolvedOverrides;
@@ -959,9 +916,9 @@ function resolveLookupImageFromContainerLabels(
 ) {
   return (
     overrides.registryLookupImage ||
-    getLabel(containerLabels, ddRegistryLookupImage, wudRegistryLookupImage) ||
+    getLabel(containerLabels, ddRegistryLookupImage) ||
     overrides.registryLookupUrl ||
-    getLabel(containerLabels, ddRegistryLookupUrl, wudRegistryLookupUrl)
+    getLabel(containerLabels, ddRegistryLookupUrl)
   );
 }
 
@@ -1031,7 +988,7 @@ export function mergeConfigWithImgset(
     ),
     inspectTagVersionOnly: labelOverrides.inspectTagVersionOnly,
     watchDigest: getContainerConfigValue(
-      getLabel(containerLabels, ddWatchDigest, wudWatchDigest),
+      getLabel(containerLabels, ddWatchDigest),
       matchingImgset?.watchDigest,
     ),
   };

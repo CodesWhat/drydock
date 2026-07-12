@@ -5,8 +5,6 @@ import {
   ddNotificationInclude,
   ddTriggerExclude,
   ddTriggerInclude,
-  wudTriggerExclude,
-  wudTriggerInclude,
 } from './label.js';
 
 export type TriggerLabelDirection = 'include' | 'exclude';
@@ -14,7 +12,7 @@ export type TriggerLabelDirection = 'include' | 'exclude';
 export interface ResolvedTriggerLabelValues {
   action?: string;
   notification?: string;
-  /** Pre-fix mirror value: getFirstLabelValue([action, notification]) ?? deprecated ?? legacy. */
+  /** Compat mirror: first scoped value, then the deprecated dd.trigger.* fallback. */
   mirror?: string;
 }
 
@@ -41,10 +39,6 @@ function getDdLegacyKey(direction: TriggerLabelDirection): string {
   return direction === 'include' ? ddTriggerInclude : ddTriggerExclude;
 }
 
-function getWudLegacyKey(direction: TriggerLabelDirection): string {
-  return direction === 'include' ? wudTriggerInclude : wudTriggerExclude;
-}
-
 /**
  * Pure (no warn/telemetry side effects) resolution of one direction of the
  * trigger labels into category-scoped values plus the deprecated compat
@@ -69,10 +63,7 @@ export function resolveTriggerLabelValuesPure(
   const legacyValue = labels[getDdLegacyKey(direction)];
 
   if (actionValue === undefined && notificationValue === undefined && legacyValue === undefined) {
-    const wudValue = labels[getWudLegacyKey(direction)];
-    return wudValue !== undefined
-      ? { action: wudValue, notification: wudValue, mirror: wudValue }
-      : {};
+    return {};
   }
 
   return {
