@@ -577,6 +577,47 @@ describe('ContainersView', () => {
         expect(vm.containers).toBe(firstRef);
       });
 
+      it('refreshes raw policy metadata without reassigning an identical mapped list', async () => {
+        const container = makeContainer({ id: 'c1', name: 'nginx', status: 'running' });
+        const wrapper = await mountContainersView(
+          [container],
+          [
+            {
+              ...container,
+              displayName: container.name,
+              updatePolicy: { maturityMode: 'mature' },
+              updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+              updatePolicyOverrides: {},
+              updatePolicySources: { maturityMode: 'env' },
+            },
+          ],
+        );
+        const vm = wrapper.vm as any;
+        const firstRef = vm.containers;
+
+        mockGetAllContainers.mockResolvedValue([
+          {
+            ...container,
+            displayName: container.name,
+            updatePolicy: { maturityMode: 'all' },
+            updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+            updatePolicyOverrides: { maturityMode: 'all' },
+            updatePolicySources: { maturityMode: 'override' },
+          },
+        ]);
+        const { mapApiContainers } = await import('@/utils/container-mapper');
+        (mapApiContainers as ReturnType<typeof vi.fn>).mockReturnValue([{ ...container }]);
+
+        await vm.loadContainers();
+        await flushPromises();
+
+        expect(vm.containers).toBe(firstRef);
+        expect(vm.containerMetaMap.c1).toMatchObject({
+          updatePolicyOverrides: { maturityMode: 'all' },
+          updatePolicySources: { maturityMode: 'override' },
+        });
+      });
+
       it('reassigns containers.value when a field changes', async () => {
         const container = makeContainer({ id: 'c1', name: 'nginx', status: 'running' });
         const wrapper = await mountContainersView([container]);

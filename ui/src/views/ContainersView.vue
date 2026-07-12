@@ -112,6 +112,22 @@ function buildContainerLookupMaps(apiContainers: Record<string, unknown>[]) {
   return { idMap, metaMap };
 }
 
+function updatePolicyMetadataFingerprint(apiContainers: Record<string, unknown>[]): string {
+  return JSON.stringify(
+    apiContainers.map((container) => ({
+      id: container.id,
+      name: container.name,
+      displayName: container.displayName,
+      updatePolicy: container.updatePolicy,
+      updatePolicyDeclarative: container.updatePolicyDeclarative,
+      updatePolicyOverrides: container.updatePolicyOverrides,
+      updatePolicySources: container.updatePolicySources,
+    })),
+  );
+}
+
+let committedUpdatePolicyMetadataFingerprint = '';
+
 /**
  * Produce a stable fingerprint string for a container list so that
  * loadContainers() can skip reassigning `containers.value` — and thereby
@@ -233,22 +249,30 @@ async function loadContainers() {
     const apiContainers = await getAllContainers();
     const mappedRaw = mapApiContainers(apiContainers, t);
     const mapped = preserveTransientUiFields(containers.value, mappedRaw);
+    const nextPolicyMetadataFingerprint = updatePolicyMetadataFingerprint(
+      apiContainers as Record<string, unknown>[],
+    );
+    const policyMetadataChanged =
+      nextPolicyMetadataFingerprint !== committedUpdatePolicyMetadataFingerprint;
+    const listChanged =
+      containers.value.length !== mapped.length ||
+      containerListFingerprint(mapped) !== containerListFingerprint(containers.value);
     // Skip reactive assignment (and downstream chain re-eval) when incoming
     // data is bit-for-bit identical to the current list. Gate the lookup map
     // reassignment on the same guard so unchanged reloads don't churn
     // containerIdMap/containerMetaMap reactivity either.
-    if (
-      containers.value.length !== mapped.length ||
-      containerListFingerprint(mapped) !== containerListFingerprint(containers.value)
-    ) {
+    if (listChanged) {
       containers.value = mapped;
       refreshServerNames(mapped);
+    }
+    if (listChanged || policyMetadataChanged) {
       const { idMap, metaMap } = buildContainerLookupMaps(
         apiContainers as Record<string, unknown>[],
       );
       containerIdMap.value = idMap;
       containerMetaMap.value = metaMap;
     }
+    committedUpdatePolicyMetadataFingerprint = nextPolicyMetadataFingerprint;
     reconcileHoldsAgainstContainers(containers.value);
     if (groupByStack.value) {
       await loadGroups();
@@ -445,6 +469,7 @@ const {
   previewLoading,
   removeSkipDigestSelected,
   removeSkipTagSelected,
+  revertPolicySelected,
   rollbackError,
   rollbackInProgress,
   rollbackMessage,
@@ -457,6 +482,8 @@ const {
   selectedHasMaturityPolicy,
   selectedMaturityMinAgeDays,
   selectedMaturityMode,
+  selectedPolicyOverriddenFields,
+  selectedPolicyOverrideFields,
   selectedSkipDigests,
   selectedSkipTags,
   selectedSnoozeUntil,
@@ -1528,6 +1555,9 @@ provide(containersViewTemplateContextKey, {
   clearMaturityPolicySelected,
   confirmClearPolicy,
   clearPolicySelected,
+  revertPolicySelected,
+  selectedPolicyOverriddenFields,
+  selectedPolicyOverrideFields,
   policyMessage,
   policyError,
   removeSkipTagSelected,

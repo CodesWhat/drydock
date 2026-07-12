@@ -43,6 +43,8 @@ const actionTypes = [
   'hook-post-success',
   'hook-post-failed',
   'auto-rollback',
+  'update-policy-override-set',
+  'update-policy-override-cleared',
   'mqtt-command-update',
 ];
 

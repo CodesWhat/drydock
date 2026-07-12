@@ -590,6 +590,64 @@ describe('useContainerActions', () => {
     expect(mocks.updateContainerPolicy).toHaveBeenCalledTimes(4);
   });
 
+  it('distinguishes override presence from a material declarative difference', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      containerMetaMap: {
+        'container-1': {
+          updatePolicy: {
+            maturityMode: 'all',
+            maturityMinAgeDays: 7,
+            skipTags: ['ui-tag'],
+            skipDigests: [],
+          },
+          updatePolicyDeclarative: {
+            env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+            label: { skipTags: ['label-tag'] },
+          },
+          updatePolicyOverrides: {
+            maturityMode: 'all',
+            maturityMinAgeDays: 7,
+            skipTags: ['ui-tag'],
+            skipDigests: [],
+          },
+        },
+      },
+    });
+
+    expect(composable.selectedPolicyOverrideFields.value).toEqual(
+      new Set(['maturityMode', 'maturityMinAgeDays', 'skipTags', 'skipDigests']),
+    );
+    expect(composable.selectedPolicyOverriddenFields.value).toEqual(
+      new Set(['maturityMode', 'skipTags']),
+    );
+  });
+
+  it('reverts one field or all declarative overrides', async () => {
+    const container = makeContainer({ id: 'container-1', name: 'web' });
+    const { composable } = await mountActionsHarness({
+      selectedContainer: container,
+      selectedContainerId: container.id,
+    });
+
+    await composable.revertPolicySelected('skipTags');
+    await composable.revertPolicySelected();
+
+    expect(mocks.updateContainerPolicy).toHaveBeenNthCalledWith(
+      1,
+      'container-1',
+      'revert-to-declarative',
+      { field: 'skipTags' },
+    );
+    expect(mocks.updateContainerPolicy).toHaveBeenNthCalledWith(
+      2,
+      'container-1',
+      'revert-to-declarative',
+      {},
+    );
+  });
+
   it('deletes selected container and closes detail views', async () => {
     const container = makeContainer({ id: 'container-1', name: 'web' });
     const { composable, closeFullPage, closePanel, loadContainers } = await mountActionsHarness({

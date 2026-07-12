@@ -121,6 +121,11 @@ const selectedMaturityMinAgeDays = ref(7);
 const maturityModeInput = ref('all');
 const maturityMinAgeDaysInput = ref(7);
 const mockClearPolicySelected = vi.fn();
+const mockRevertPolicySelected = vi.fn();
+const selectedPolicyOverrideFields = ref(
+  new Set(['maturityMode', 'maturityMinAgeDays', 'skipTags', 'skipDigests']),
+);
+const selectedPolicyOverriddenFields = ref(new Set(['maturityMode', 'skipTags']));
 const policyMessage = ref<string | null>(null);
 const policyError = ref<string | null>(null);
 const triggersLoading = ref(false);
@@ -207,6 +212,9 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     setMaturityPolicySelected: mockSetMaturityPolicySelected,
     clearMaturityPolicySelected: mockClearMaturityPolicySelected,
     confirmClearPolicy: mockClearPolicySelected,
+    revertPolicySelected: mockRevertPolicySelected,
+    selectedPolicyOverrideFields,
+    selectedPolicyOverriddenFields,
     policyMessage,
     policyError,
     removeSkipTagSelected: mockRemoveSkipTagSelected,
@@ -360,6 +368,14 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     mockUnsnoozeSelected.mockReset();
     mockClearSkipsSelected.mockReset();
     mockClearPolicySelected.mockReset();
+    mockRevertPolicySelected.mockReset();
+    selectedPolicyOverrideFields.value = new Set([
+      'maturityMode',
+      'maturityMinAgeDays',
+      'skipTags',
+      'skipDigests',
+    ]);
+    selectedPolicyOverriddenFields.value = new Set(['maturityMode', 'skipTags']);
     loadDetailSecurityData.mockReset();
     loadDetailSbom.mockReset();
     mockScanContainer.mockReset();
@@ -855,6 +871,24 @@ describe('ContainerSideTabContent - Environment Variables', () => {
     expect(mockClearSkipsSelected).toHaveBeenCalledTimes(1);
     expect(mockClearPolicySelected).toHaveBeenCalledTimes(1);
     expect(mockConfirmRollback).toHaveBeenCalledWith();
+  });
+
+  it('shows material override badges and wires field and whole-policy reverts', async () => {
+    activeDetailTab.value = 'actions';
+    selectedSkipTags.value = ['ui-tag'];
+    selectedSkipDigests.value = [];
+    const wrapper = mountComponent();
+
+    expect(wrapper.find('[data-test="policy-overridden-maturityMode"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="policy-overridden-maturityMinAgeDays"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="policy-overridden-skipTags"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="policy-overridden-skipDigests"]').exists()).toBe(false);
+
+    await wrapper.find('[data-test="policy-revert-maturityMode"]').trigger('click');
+    await wrapper.find('[data-test="policy-revert-all"]').trigger('click');
+
+    expect(mockRevertPolicySelected).toHaveBeenNthCalledWith(1, 'maturityMode');
+    expect(mockRevertPolicySelected).toHaveBeenNthCalledWith(2);
   });
 
   it('fires force update handler for blocked containers', async () => {

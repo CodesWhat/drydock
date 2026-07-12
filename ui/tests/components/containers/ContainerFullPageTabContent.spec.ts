@@ -146,6 +146,11 @@ const mockClearSkipsSelected = vi.fn();
 const mockSetMaturityPolicySelected = vi.fn();
 const mockClearMaturityPolicySelected = vi.fn();
 const mockClearPolicySelected = vi.fn();
+const mockRevertPolicySelected = vi.fn();
+const selectedPolicyOverrideFields = ref(
+  new Set(['maturityMode', 'maturityMinAgeDays', 'skipTags', 'skipDigests']),
+);
+const selectedPolicyOverriddenFields = ref(new Set(['maturityMode', 'skipTags']));
 const mockRemoveSkipTagSelected = vi.fn();
 const mockRemoveSkipDigestSelected = vi.fn();
 const mockGetTriggerKey = vi.fn((trigger: Trigger) => `${trigger.type}.${trigger.name}`);
@@ -232,6 +237,9 @@ vi.mock('@/components/containers/containersViewTemplateContext', () => ({
     setMaturityPolicySelected: mockSetMaturityPolicySelected,
     clearMaturityPolicySelected: mockClearMaturityPolicySelected,
     confirmClearPolicy: mockClearPolicySelected,
+    revertPolicySelected: mockRevertPolicySelected,
+    selectedPolicyOverrideFields,
+    selectedPolicyOverriddenFields,
     policyMessage,
     policyError,
     removeSkipTagSelected: mockRemoveSkipTagSelected,
@@ -362,6 +370,14 @@ function resetState() {
   mockSetMaturityPolicySelected.mockReset();
   mockClearMaturityPolicySelected.mockReset();
   mockClearPolicySelected.mockReset();
+  mockRevertPolicySelected.mockReset();
+  selectedPolicyOverrideFields.value = new Set([
+    'maturityMode',
+    'maturityMinAgeDays',
+    'skipTags',
+    'skipDigests',
+  ]);
+  selectedPolicyOverriddenFields.value = new Set(['maturityMode', 'skipTags']);
   mockRemoveSkipTagSelected.mockReset();
   mockRemoveSkipDigestSelected.mockReset();
   mockGetTriggerKey.mockClear();
@@ -531,6 +547,23 @@ describe('ContainerFullPageTabContent', () => {
 
     expect(mockRemoveSkipTagSelected).toHaveBeenCalledWith('1.2.3');
     expect(mockRemoveSkipDigestSelected).toHaveBeenCalledWith('sha256:abc');
+  });
+
+  it('shows material override badges and wires field and whole-policy reverts', async () => {
+    selectedSkipTags.value = ['ui-tag'];
+    selectedSkipDigests.value = [];
+    const wrapper = mountComponent();
+
+    expect(wrapper.find('[data-test="policy-overridden-maturityMode"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="policy-overridden-maturityMinAgeDays"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="policy-overridden-skipTags"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="policy-overridden-skipDigests"]').exists()).toBe(false);
+
+    await wrapper.find('[data-test="policy-revert-maturityMode"]').trigger('click');
+    await wrapper.find('[data-test="policy-revert-all"]').trigger('click');
+
+    expect(mockRevertPolicySelected).toHaveBeenNthCalledWith(1, 'maturityMode');
+    expect(mockRevertPolicySelected).toHaveBeenNthCalledWith(2);
   });
 
   it('renders detailed preview, trigger, backups, and operation history branches', async () => {

@@ -120,11 +120,14 @@ const {
   selectedHasMaturityPolicy,
   selectedMaturityMode,
   selectedMaturityMinAgeDays,
+  selectedPolicyOverriddenFields,
+  selectedPolicyOverrideFields,
   maturityModeInput,
   maturityMinAgeDaysInput,
   setMaturityPolicySelected,
   clearMaturityPolicySelected,
   confirmClearPolicy,
+  revertPolicySelected,
   policyMessage,
   policyError,
   removeSkipTagSelected,
@@ -790,22 +793,30 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 <div>
                   <div class="text-3xs uppercase tracking-wider mb-1.5 dd-text-muted">{{ t('containerComponents.fullPageActions.maturityGroup') }}</div>
                   <div class="flex flex-wrap gap-2 items-center">
-                    <select
-                      v-model="maturityModeInput"
-                      class="px-2.5 py-1.5 dd-rounded text-2xs-plus outline-none dd-bg dd-text"
-                      :disabled="policyInProgress !== null"
-                    >
-                      <option value="all">{{ t('containerComponents.fullPageActions.allowNewMature') }}</option>
-                      <option value="mature">{{ t('containerComponents.fullPageActions.matureOnly') }}</option>
-                    </select>
-                    <input
-                      v-model.number="maturityMinAgeDaysInput"
-                      type="number"
-                      min="1"
-                      max="365"
-                      class="w-[104px] px-2.5 py-1.5 dd-rounded text-2xs-plus outline-none dd-bg dd-text"
-                      :disabled="policyInProgress !== null"
-                    />
+                    <div class="flex items-center gap-1">
+                      <select
+                        v-model="maturityModeInput"
+                        class="px-2.5 py-1.5 dd-rounded text-2xs-plus outline-none dd-bg dd-text"
+                        :disabled="policyInProgress !== null"
+                      >
+                        <option value="all">{{ t('containerComponents.fullPageActions.allowNewMature') }}</option>
+                        <option value="mature">{{ t('containerComponents.fullPageActions.matureOnly') }}</option>
+                      </select>
+                      <AppBadge v-if="selectedPolicyOverriddenFields.has('maturityMode')" data-test="policy-overridden-maturityMode" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
+                      <AppButton v-if="selectedPolicyOverrideFields.has('maturityMode')" data-test="policy-revert-maturityMode" size="sm" variant="ghost" :disabled="policyInProgress !== null" @click="revertPolicySelected('maturityMode')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
+                    </div>
+                    <div class="flex items-center gap-1">
+                      <input
+                        v-model.number="maturityMinAgeDaysInput"
+                        type="number"
+                        min="1"
+                        max="365"
+                        class="w-[104px] px-2.5 py-1.5 dd-rounded text-2xs-plus outline-none dd-bg dd-text"
+                        :disabled="policyInProgress !== null"
+                      />
+                      <AppBadge v-if="selectedPolicyOverriddenFields.has('maturityMinAgeDays')" data-test="policy-overridden-maturityMinAgeDays" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
+                      <AppButton v-if="selectedPolicyOverrideFields.has('maturityMinAgeDays')" data-test="policy-revert-maturityMinAgeDays" size="sm" variant="ghost" :disabled="policyInProgress !== null" @click="revertPolicySelected('maturityMinAgeDays')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
+                    </div>
                     <AppButton size="md" variant="outlined" :disabled="policyInProgress !== null"
                             @click="setMaturityPolicySelected(maturityModeInput)">
                       {{ t('containerComponents.fullPageActions.applyMaturity') }}
@@ -828,6 +839,10 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                             @click="confirmClearPolicy">
                       {{ t('containerComponents.fullPageActions.clearPolicy') }}
                     </AppButton>
+                    <AppButton data-test="policy-revert-all" size="md" variant="outlined" :disabled="selectedPolicyOverrideFields.size === 0 || policyInProgress !== null"
+                            @click="revertPolicySelected()">
+                      {{ t('containerComponents.fullPageActions.revertAll') }}
+                    </AppButton>
                   </div>
                 </div>
                 <div class="space-y-1 text-2xs-plus dd-text-muted">
@@ -841,8 +856,13 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                       {{ selectedMaturityMode === 'mature' ? t('containerComponents.fullPageActions.matureOnlyMinimum', { days: selectedMaturityMinAgeDays }) : t('containerComponents.fullPageActions.allowAllUpdates') }}
                     </span>
                   </div>
-                  <div v-if="selectedSkipTags.length > 0">
-                    {{ t('containerComponents.fullPageActions.skippedTags') }}
+                  <div v-if="selectedSkipTags.length > 0 || selectedPolicyOverrideFields.has('skipTags')">
+                    <div class="flex items-center gap-1">
+                      {{ t('containerComponents.fullPageActions.skippedTags') }}
+                      <AppBadge v-if="selectedPolicyOverriddenFields.has('skipTags')" data-test="policy-overridden-skipTags" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
+                      <AppButton v-if="selectedPolicyOverrideFields.has('skipTags')" data-test="policy-revert-skipTags" size="sm" variant="ghost" :disabled="policyInProgress !== null" @click="revertPolicySelected('skipTags')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
+                    </div>
+                    <div v-if="selectedSkipTags.length === 0" class="italic">{{ t('containerComponents.fullPageActions.noSkippedEntries') }}</div>
                     <div class="mt-1 flex flex-wrap gap-1.5">
                       <span v-for="tag in selectedSkipTags" :key="`skip-tag-full-${tag}`"
                             class="inline-flex items-center gap-1.5 px-2 py-1 dd-rounded text-2xs-plus font-mono"
@@ -859,8 +879,13 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                       </span>
                     </div>
                   </div>
-                  <div v-if="selectedSkipDigests.length > 0">
-                    {{ t('containerComponents.fullPageActions.skippedDigests') }}
+                  <div v-if="selectedSkipDigests.length > 0 || selectedPolicyOverrideFields.has('skipDigests')">
+                    <div class="flex items-center gap-1">
+                      {{ t('containerComponents.fullPageActions.skippedDigests') }}
+                      <AppBadge v-if="selectedPolicyOverriddenFields.has('skipDigests')" data-test="policy-overridden-skipDigests" tone="warning" size="xs">{{ t('containerComponents.fullPageActions.overridden') }}</AppBadge>
+                      <AppButton v-if="selectedPolicyOverrideFields.has('skipDigests')" data-test="policy-revert-skipDigests" size="sm" variant="ghost" :disabled="policyInProgress !== null" @click="revertPolicySelected('skipDigests')">{{ t('containerComponents.fullPageActions.revert') }}</AppButton>
+                    </div>
+                    <div v-if="selectedSkipDigests.length === 0" class="italic">{{ t('containerComponents.fullPageActions.noSkippedEntries') }}</div>
                     <div class="mt-1 flex flex-wrap gap-1.5">
                       <span v-for="digest in selectedSkipDigests" :key="`skip-digest-full-${digest}`"
                             class="inline-flex items-center gap-1.5 px-2 py-1 dd-rounded text-2xs-plus font-mono"

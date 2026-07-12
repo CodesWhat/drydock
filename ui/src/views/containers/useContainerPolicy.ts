@@ -33,6 +33,14 @@ type ContainerListPolicyState = {
 );
 
 type ContainerPolicyTarget = string | Pick<Container, 'id' | 'name'>;
+type DeclarativePolicyField = 'maturityMode' | 'maturityMinAgeDays' | 'skipTags' | 'skipDigests';
+
+const DECLARATIVE_POLICY_FIELDS: DeclarativePolicyField[] = [
+  'maturityMode',
+  'maturityMinAgeDays',
+  'skipTags',
+  'skipDigests',
+];
 
 interface UseContainerPolicyInput {
   selectedContainer: Readonly<Ref<Container | null | undefined>>;
@@ -449,6 +457,21 @@ function createClearMaturityPolicySelectedAction(args: SelectedPolicyActionsArgs
   };
 }
 
+function createRevertPolicySelectedAction(args: SelectedPolicyActionsArgs) {
+  return async function revertPolicySelected(field?: DeclarativePolicyField) {
+    await runForSelectedContainer(args.selectedContainer, async (container) => {
+      await args.applyPolicy(
+        container,
+        'revert-to-declarative',
+        field ? { field } : {},
+        field
+          ? args.t('containerComponents.policy.toasts.revertField', { field })
+          : args.t('containerComponents.policy.toasts.revertAll'),
+      );
+    });
+  };
+}
+
 function createRemoveSkipSelectedAction(args: SelectedPolicyActionsArgs) {
   return async function removeSkipSelected(kind: 'tag' | 'digest', value: string) {
     if (!value) {
@@ -474,6 +497,7 @@ function createSelectedPolicyActions(args: SelectedPolicyActionsArgs) {
     clearSkipsSelected: createClearSkipsSelectedAction(args),
     removeSkipDigestSelected: async (value: string) => removeSkipSelected('digest', value),
     removeSkipTagSelected: async (value: string) => removeSkipSelected('tag', value),
+    revertPolicySelected: createRevertPolicySelectedAction(args),
     setMaturityPolicySelected: createSetMaturityPolicySelectedAction(args),
     skipCurrentForSelected: createSkipCurrentForSelectedAction(args),
     snoozeSelected: createSnoozeSelectedAction(args),
@@ -483,17 +507,60 @@ function createSelectedPolicyActions(args: SelectedPolicyActionsArgs) {
 }
 
 function createSelectedPolicyState(input: UseContainerPolicyInput) {
-  const selectedUpdatePolicy = computed<Record<string, unknown>>(() => {
+  const selectedPolicyMeta = computed<Record<string, unknown>>(() => {
     const selectedId = input.selectedContainer.value?.id;
     const selectedName = input.selectedContainer.value?.name;
-    if (!selectedId && !selectedName) {
-      return {};
+    if (!selectedId && !selectedName) return {};
+    return (
+      asRecord(
+        (selectedId ? input.containerMetaMap.value[selectedId] : undefined) ??
+          (selectedName ? input.containerMetaMap.value[selectedName] : undefined),
+      ) ?? {}
+    );
+  });
+  const selectedUpdatePolicy = computed<Record<string, unknown>>(() => {
+    return asRecord(selectedPolicyMeta.value.updatePolicy) ?? {};
+  });
+
+  const selectedPolicyOverrides = computed<Record<string, unknown>>(
+    () => asRecord(selectedPolicyMeta.value.updatePolicyOverrides) ?? {},
+  );
+  const selectedPolicyDeclarative = computed<Record<string, unknown>>(
+    () => asRecord(selectedPolicyMeta.value.updatePolicyDeclarative) ?? {},
+  );
+  const selectedPolicyOverrideFields = computed<Set<DeclarativePolicyField>>(
+    () =>
+      new Set(
+        DECLARATIVE_POLICY_FIELDS.filter((field) =>
+          Object.hasOwn(selectedPolicyOverrides.value, field),
+        ),
+      ),
+  );
+  const selectedPolicyOverriddenFields = computed<Set<DeclarativePolicyField>>(() => {
+    const baseline: Record<DeclarativePolicyField, unknown> = {
+      maturityMode: 'all',
+      maturityMinAgeDays: DEFAULT_MATURITY_MIN_AGE_DAYS,
+      skipTags: [],
+      skipDigests: [],
+    };
+    for (const tierName of ['env', 'label']) {
+      const tier = asRecord(selectedPolicyDeclarative.value[tierName]);
+      for (const field of DECLARATIVE_POLICY_FIELDS) {
+        if (tier && Object.hasOwn(tier, field)) baseline[field] = tier[field];
+      }
     }
-    const meta =
-      (selectedId ? input.containerMetaMap.value[selectedId] : undefined) ??
-      (selectedName ? input.containerMetaMap.value[selectedName] : undefined);
-    const updatePolicy = asRecord(meta)?.updatePolicy;
-    return asRecord(updatePolicy) ?? {};
+    const normalizeForComparison = (field: DeclarativePolicyField, value: unknown) => {
+      if (field === 'maturityMode') return normalizeMaturityMode(value) ?? 'all';
+      if (field === 'maturityMinAgeDays') return resolveMaturityMinAgeDays(value);
+      return [...new Set(normalizePolicyEntries(value))].sort();
+    };
+    return new Set(
+      [...selectedPolicyOverrideFields.value].filter(
+        (field) =>
+          JSON.stringify(normalizeForComparison(field, selectedPolicyOverrides.value[field])) !==
+          JSON.stringify(normalizeForComparison(field, baseline[field])),
+      ),
+    );
   });
 
   const selectedSkipTags = computed<string[]>(() =>
@@ -551,6 +618,8 @@ function createSelectedPolicyState(input: UseContainerPolicyInput) {
     selectedHasMaturityPolicy,
     selectedMaturityMinAgeDays,
     selectedMaturityMode,
+    selectedPolicyOverriddenFields,
+    selectedPolicyOverrideFields,
     selectedSkipDigests,
     selectedSkipTags,
     selectedSnoozeUntil,
@@ -641,6 +710,8 @@ export function useContainerPolicy(input: UseContainerPolicyInput) {
     selectedHasMaturityPolicy,
     selectedMaturityMinAgeDays,
     selectedMaturityMode,
+    selectedPolicyOverriddenFields,
+    selectedPolicyOverrideFields,
     selectedSkipDigests,
     selectedSkipTags,
     selectedSnoozeUntil,
@@ -654,6 +725,7 @@ export function useContainerPolicy(input: UseContainerPolicyInput) {
     clearSkipsSelected,
     removeSkipDigestSelected,
     removeSkipTagSelected,
+    revertPolicySelected,
     setMaturityPolicySelected,
     skipCurrentForSelected,
     snoozeSelected,
@@ -692,10 +764,13 @@ export function useContainerPolicy(input: UseContainerPolicyInput) {
     policyMessage,
     removeSkipDigestSelected,
     removeSkipTagSelected,
+    revertPolicySelected,
     resetPolicyMessages,
     selectedHasMaturityPolicy,
     selectedMaturityMinAgeDays,
     selectedMaturityMode,
+    selectedPolicyOverriddenFields,
+    selectedPolicyOverrideFields,
     selectedSkipDigests,
     selectedSkipTags,
     selectedSnoozeUntil,

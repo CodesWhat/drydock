@@ -56,6 +56,8 @@
       "update-applied": "Update Applied",
       "update-failed": "Update Failed",
       "auto-update-blocked": "Auto-Update Blocked",
+      "update-policy-override-set": "Update Policy Override Set",
+      "update-policy-override-cleared": "Update Policy Override Cleared",
       "auto-rollback": "Auto Rollback",
       "rollback": "Rollback",
       "preview": "Preview",
