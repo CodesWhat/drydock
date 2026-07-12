@@ -237,6 +237,17 @@ class Hass {
 
   private containerStateTopicById = new Map<string, string>();
 
+  private isContainerAllowed: (container: Container) => boolean;
+
+  // #491 — containers excluded from the trigger (mustTrigger()=false) must
+  // not keep a stale discovery entity around. Tracks which excluded
+  // containers have already had their sensor cleaned up, so a repeat
+  // containerAdded/containerUpdated event for the same still-excluded
+  // container does not re-publish the (empty) removal payload on every
+  // watch cycle. Cleared when the container is re-included so a later
+  // re-exclusion cleans again.
+  private cleanedExcludedContainerKeys = new Set<string>();
+
   private unregisterContainerAdded?: () => void;
   private unregisterContainerUpdated?: () => void;
   private unregisterContainerRemoved?: () => void;
@@ -263,25 +274,31 @@ class Hass {
     client,
     configuration,
     log,
+    isContainerAllowed,
   }: {
     client: HassClient;
     configuration: HassConfiguration;
     log: HassLogger;
+    isContainerAllowed: (container: Container) => boolean;
   }) {
     this.client = client;
     this.configuration = configuration;
     this.log = log;
+    this.isContainerAllowed = isContainerAllowed;
 
     // Subscribe to container events to sync HA
     this.unregisterContainerAdded = registerContainerAdded((container) =>
-      this.addContainerSensor(container),
+      this.syncContainerSensor(container),
     );
     this.unregisterContainerUpdated = registerContainerUpdated((container) =>
-      this.addContainerSensor(container),
+      this.syncContainerSensor(container),
     );
-    this.unregisterContainerRemoved = registerContainerRemoved((container) =>
-      this.removeContainerSensor(container),
-    );
+    this.unregisterContainerRemoved = registerContainerRemoved((container) => {
+      // #491 — a re-included container starts clean again, so drop its key
+      // here too (not just on re-inclusion in syncContainerSensor).
+      this.cleanedExcludedContainerKeys.delete(this.getContainerSyncKey(container));
+      return this.removeContainerSensor(container);
+    });
 
     // Subscribe to watcher events to sync HA
     this.unregisterWatcherStart = registerWatcherStart((watcher) =>
@@ -328,6 +345,7 @@ class Hass {
     this.commandRateLimiter.clear();
 
     this.containerStateTopicById.clear();
+    this.cleanedExcludedContainerKeys.clear();
   }
 
   /**
@@ -426,6 +444,15 @@ class Hass {
     }
 
     const container = resolution.container;
+    // #491 — a container excluded from this trigger (mustTrigger()=false)
+    // never gets a discovery entity/state publish, so an Install command
+    // addressed to it must not drive an update either.
+    if (!this.isContainerAllowed(container)) {
+      this.log.warn(
+        `Ignoring hass install command for [${container.name}]: container is excluded from this trigger`,
+      );
+      return;
+    }
     const rateLimitKey = this.getContainerId(container) ?? stateTopic;
     if (!this.commandRateLimiter.tryConsume(rateLimitKey)) {
       this.log.warn(`Ignoring hass command for [${container.name}]: rate limited`);
@@ -474,6 +501,13 @@ class Hass {
       return undefined;
     }
     return container.id;
+  }
+
+  // #491 — a stable per-container key for cleanedExcludedContainerKeys.
+  // Falls back to the state topic when the container has no id (mirrors
+  // the rate-limit key fallback in handleCommandMessage).
+  private getContainerSyncKey(container): string {
+    return this.getContainerId(container) ?? this.getContainerStateTopic({ container });
   }
 
   private getContainerStateTopicFromName({
@@ -678,6 +712,34 @@ class Hass {
     this.log.warn(
       `Multiple agents share watcher name "${watcherName}" but the Home Assistant MQTT topic layout has no agent segment, so their topics/sensors will collide. Set DD_NOTIFICATION_MQTT_<name>_HASS_AGENTTOPICSEGMENT=true to opt into the corrected layout before it becomes the default in v1.7.0.`,
     );
+  }
+
+  /**
+   * Sync a container's hass sensor with this trigger's mustTrigger gating
+   * (rollback/agent scoping plus dd.notification.include/exclude). A
+   * container the trigger does not cover must not get a discovery entity
+   * whose state topic never receives a publish — that leaves a permanent
+   * "Unknown" ghost entity in HA (#491). Any entity created before the
+   * container became excluded (including one retained in HA from a
+   * previous run) is cleaned up the first time the container is seen here.
+   * @param container
+   * @returns {Promise<void>}
+   */
+  private syncContainerSensor(container) {
+    if (this.isContainerAllowed(container)) {
+      this.cleanedExcludedContainerKeys.delete(this.getContainerSyncKey(container));
+      return this.addContainerSensor(container);
+    }
+
+    const containerKey = this.getContainerSyncKey(container);
+    if (this.cleanedExcludedContainerKeys.has(containerKey)) {
+      this.log.debug(
+        `Skip hass sensor sync for excluded container [${this.getContainerStateTopic({ container })}]`,
+      );
+      return;
+    }
+    this.cleanedExcludedContainerKeys.add(containerKey);
+    return this.removeContainerSensor(container);
   }
 
   /**

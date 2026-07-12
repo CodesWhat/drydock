@@ -120,6 +120,7 @@ beforeEach(async () => {
       },
     },
     log,
+    isContainerAllowed: () => true,
   });
 });
 
@@ -774,6 +775,7 @@ test('addContainerSensor should skip discovery when discovery is false', async (
       },
     },
     log,
+    isContainerAllowed: () => true,
   });
   vi.spyOn(hassNoDiscovery, 'publishDiscoveryMessage');
   vi.spyOn(hassNoDiscovery, 'updateContainerSensors').mockResolvedValue();
@@ -797,6 +799,7 @@ test('removeContainerSensor should skip discovery when discovery is false', asyn
       },
     },
     log,
+    isContainerAllowed: () => true,
   });
   vi.spyOn(hassNoDiscovery, 'removeSensor');
   vi.spyOn(hassNoDiscovery, 'updateContainerSensors').mockResolvedValue();
@@ -820,6 +823,7 @@ test('updateContainerSensors should skip discovery messages when discovery is fa
       },
     },
     log,
+    isContainerAllowed: () => true,
   });
   await hassNoDiscovery.updateContainerSensors({
     name: 'container-name',
@@ -840,6 +844,7 @@ test('updateWatcherSensors should skip discovery when discovery is false', async
       },
     },
     log,
+    isContainerAllowed: () => true,
   });
   await hassNoDiscovery.updateWatcherSensors({
     watcher: { name: 'watcher-name' },
@@ -1241,6 +1246,7 @@ test('addContainerSensor should enforce a defensive cap on tracked state topics'
       },
     },
     log,
+    isContainerAllowed: () => true,
   });
 
   const hassWithInternalMap = hassNoDiscovery as unknown as {
@@ -1286,6 +1292,7 @@ test('deregister should invoke event unregister callbacks', async () => {
       },
     },
     log,
+    isContainerAllowed: () => true,
   });
 
   hassWithUnregisterCallbacks.deregister();
@@ -1295,6 +1302,180 @@ test('deregister should invoke event unregister callbacks', async () => {
   expect(unregisterContainerRemoved).toHaveBeenCalledTimes(1);
   expect(unregisterWatcherStart).toHaveBeenCalledTimes(1);
   expect(unregisterWatcherStop).toHaveBeenCalledTimes(1);
+});
+
+// ── #491: hass sensor sync respects isContainerAllowed gating ───────────────
+
+describe('hass sensor sync gating by isContainerAllowed (#491)', () => {
+  let mqttClientGatedMock: { publish: ReturnType<typeof vi.fn> };
+  let isContainerAllowedMock: ReturnType<typeof vi.fn>;
+  let gatedHass: Hass;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    mqttClientGatedMock = { publish: vi.fn(() => {}) };
+    isContainerAllowedMock = vi.fn().mockReturnValue(true);
+    gatedHass = new Hass({
+      client: mqttClientGatedMock,
+      configuration: {
+        topic: 'topic',
+        hass: {
+          discovery: true,
+          prefix: 'homeassistant',
+        },
+      },
+      log,
+      isContainerAllowed: (container) => isContainerAllowedMock(container),
+    });
+  });
+
+  test('containerAdded for an excluded container publishes the removal payload, not a discovery add', async () => {
+    isContainerAllowedMock.mockReturnValue(false);
+    const containerAddedCb = registerContainerAdded.mock.calls.at(-1)[0];
+
+    await containerAddedCb({ id: 'ctr-excluded', name: 'nginx', watcher: 'local' });
+
+    expect(mqttClientGatedMock.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_local_nginx/config',
+      '',
+      { retain: true },
+    );
+    const discoveryAddPublishes = mqttClientGatedMock.publish.mock.calls.filter(
+      ([topic, payload]) =>
+        topic === 'homeassistant/update/topic_local_nginx/config' && payload !== '',
+    );
+    expect(discoveryAddPublishes).toHaveLength(0);
+  });
+
+  test('a second event for the same still-excluded container does not repeat the removal; debug skip is logged', async () => {
+    isContainerAllowedMock.mockReturnValue(false);
+    const containerAddedCb = registerContainerAdded.mock.calls.at(-1)[0];
+    const container = { id: 'ctr-excluded-2', name: 'redis', watcher: 'local' };
+
+    await containerAddedCb(container);
+    mqttClientGatedMock.publish.mockClear();
+    const debugSpy = vi.spyOn(log, 'debug').mockImplementation(() => {});
+
+    await containerAddedCb(container);
+
+    expect(mqttClientGatedMock.publish).not.toHaveBeenCalled();
+    expect(debugSpy).toHaveBeenCalledWith(
+      'Skip hass sensor sync for excluded container [topic/local/redis]',
+    );
+  });
+
+  test('flipping a container from excluded to included publishes a discovery add; flipping back publishes removal again', async () => {
+    const containerUpdatedCb = registerContainerUpdated.mock.calls.at(-1)[0];
+    const container = { id: 'ctr-flip', name: 'nginx', watcher: 'local' };
+
+    isContainerAllowedMock.mockReturnValue(false);
+    await containerUpdatedCb(container);
+    mqttClientGatedMock.publish.mockClear();
+
+    isContainerAllowedMock.mockReturnValue(true);
+    await containerUpdatedCb(container);
+    const addCall = mqttClientGatedMock.publish.mock.calls.find(
+      ([topic]) => topic === 'homeassistant/update/topic_local_nginx/config',
+    );
+    expect(addCall?.[1]).not.toBe('');
+    mqttClientGatedMock.publish.mockClear();
+
+    isContainerAllowedMock.mockReturnValue(false);
+    await containerUpdatedCb(container);
+    expect(mqttClientGatedMock.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_local_nginx/config',
+      '',
+      { retain: true },
+    );
+  });
+
+  test('excluded container with no id derives its sync key from the state topic; the dedupe still works', async () => {
+    isContainerAllowedMock.mockReturnValue(false);
+    const containerAddedCb = registerContainerAdded.mock.calls.at(-1)[0];
+    const container = { id: undefined, name: 'no-id-app', watcher: 'local' };
+
+    await containerAddedCb(container);
+    expect(mqttClientGatedMock.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_local_no-id-app/config',
+      '',
+      { retain: true },
+    );
+
+    mqttClientGatedMock.publish.mockClear();
+    await containerAddedCb(container);
+    expect(mqttClientGatedMock.publish).not.toHaveBeenCalled();
+  });
+
+  test('containerRemoved drops a previously-excluded container key so a later add while still excluded cleans again', async () => {
+    isContainerAllowedMock.mockReturnValue(false);
+    const containerAddedCb = registerContainerAdded.mock.calls.at(-1)[0];
+    const containerRemovedCb = registerContainerRemoved.mock.calls.at(-1)[0];
+    const container = { id: 'ctr-removed-flow', name: 'nginx', watcher: 'local' };
+
+    await containerAddedCb(container);
+    mqttClientGatedMock.publish.mockClear();
+
+    // Still excluded — deduped, no publish (sanity check before removal).
+    await containerAddedCb(container);
+    expect(mqttClientGatedMock.publish).not.toHaveBeenCalled();
+
+    await containerRemovedCb(container);
+    mqttClientGatedMock.publish.mockClear();
+
+    // Key was dropped on removal, so the next excluded add cleans again.
+    await containerAddedCb(container);
+    expect(mqttClientGatedMock.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_local_nginx/config',
+      '',
+      { retain: true },
+    );
+  });
+
+  test('deregister clears cleanedExcludedContainerKeys', async () => {
+    isContainerAllowedMock.mockReturnValue(false);
+    const containerAddedCb = registerContainerAdded.mock.calls.at(-1)[0];
+    const container = { id: 'ctr-deregister', name: 'nginx', watcher: 'local' };
+    await containerAddedCb(container);
+
+    const internalSet = (gatedHass as unknown as { cleanedExcludedContainerKeys: Set<string> })
+      .cleanedExcludedContainerKeys;
+    expect(internalSet.size).toBe(1);
+
+    await gatedHass.deregister();
+
+    expect(internalSet.size).toBe(0);
+  });
+
+  test('a command message for a container the predicate rejects is ignored: no update requested, warn logged, no audit event', async () => {
+    const capableClient = makeCapableClientMock();
+    const isContainerAllowedForCommands = vi.fn().mockReturnValue(false);
+    const commandsHass = new Hass({
+      client: capableClient,
+      configuration: {
+        topic: 'topic',
+        hass: { discovery: true, prefix: 'homeassistant', commands: true },
+      },
+      log,
+      isContainerAllowed: isContainerAllowedForCommands,
+    });
+    await commandsHass.initCommandSubscription();
+
+    const container = { id: 'ctr-excluded-cmd', name: 'nginx', watcher: 'local' };
+    vi.spyOn(containerStore, 'getContainers').mockReturnValue([container] as any);
+    const requestSpy = vi.spyOn(requestUpdateModule, 'requestContainerUpdate');
+    const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
+
+    const commandTopic = getHassCommandTopicFromStateTopic(
+      commandsHass.getContainerStateTopic({ container }),
+    );
+    await fireCommandMessage(capableClient, commandTopic, 'install', { retain: false });
+
+    expect(requestSpy).not.toHaveBeenCalled();
+    expect(mockRecordAuditEvent).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Ignoring hass install command for [nginx]: container is excluded from this trigger',
+    );
+  });
 });
 
 // ── #386: agenttopicsegment flag ─────────────────────────────────────────────
@@ -1315,6 +1496,7 @@ describe('agenttopicsegment flag', () => {
         },
       },
       log,
+      isContainerAllowed: () => true,
     });
   }
 
@@ -1803,6 +1985,7 @@ describe('hass install commands (#210)', () => {
           hass: { discovery: true, prefix: 'homeassistant', commands: true },
         },
         log,
+        isContainerAllowed: () => true,
       });
       await commandsHass.initCommandSubscription();
       await commandsHass.addContainerSensor({
@@ -1834,6 +2017,7 @@ describe('hass install commands (#210)', () => {
           hass: { discovery: true, prefix: 'homeassistant', commands: true },
         },
         log,
+        isContainerAllowed: () => true,
       });
       await commandsHass.initCommandSubscription();
       expect(logWarnSpy).toHaveBeenCalledWith(
@@ -1866,6 +2050,7 @@ describe('hass install commands (#210)', () => {
           hass: { discovery: true, prefix: 'homeassistant', commands: true },
         },
         log,
+        isContainerAllowed: () => true,
       });
       await commandsHass.addContainerSensor({
         name: 'container-name',
@@ -1894,6 +2079,7 @@ describe('hass install commands (#210)', () => {
           hass: { discovery: true, prefix: 'homeassistant', commands: true },
         },
         log,
+        isContainerAllowed: () => true,
       });
       await commandsHass.initCommandSubscription();
       await commandsHass.deregister();
@@ -1920,6 +2106,7 @@ describe('hass install commands (#210)', () => {
           hass: { discovery: false, prefix: 'homeassistant', commands: true },
         },
         log,
+        isContainerAllowed: () => true,
       });
       vi.spyOn(commandsNoDiscoveryHass, 'updateContainerSensors').mockResolvedValue(undefined);
       await commandsNoDiscoveryHass.addContainerSensor({
@@ -1947,6 +2134,7 @@ describe('hass install commands (#210)', () => {
           },
         },
         log,
+        isContainerAllowed: () => true,
       });
       await agentCommandsHass.initCommandSubscription();
       await agentCommandsHass.addContainerSensor({
@@ -1982,6 +2170,7 @@ describe('hass install commands (#210)', () => {
           hass: { discovery: true, prefix: 'homeassistant', commands: true, ...configOverrides },
         },
         log,
+        isContainerAllowed: () => true,
       });
     }
 
@@ -2110,6 +2299,7 @@ describe('hass install commands (#210)', () => {
           hass: { discovery: true, prefix: 'homeassistant', commands: true },
         },
         log,
+        isContainerAllowed: () => true,
       });
       await commandsHass.initCommandSubscription();
       // Default spy with no implementation — negative-assertion tests never
@@ -2218,6 +2408,7 @@ describe('hass install commands (#210)', () => {
           },
         },
         log,
+        isContainerAllowed: () => true,
       });
       await agentHass.initCommandSubscription();
       const container = { id: 'ctr-agent-1', name: 'nginx', watcher: 'local', agent: 'ml' };
@@ -2265,6 +2456,7 @@ describe('hass install commands (#210)', () => {
           hass: { discovery: true, prefix: 'homeassistant', commands: true },
         },
         log,
+        isContainerAllowed: () => true,
       });
       await freshHass.initCommandSubscription();
 
@@ -2472,6 +2664,7 @@ describe('hass install commands (#210)', () => {
           },
         },
         log,
+        isContainerAllowed: () => true,
       });
       await agentHass.initCommandSubscription();
       const container = {
@@ -2507,6 +2700,7 @@ describe('hass install commands (#210)', () => {
           },
         },
         log,
+        isContainerAllowed: () => true,
       });
       await agentHass.initCommandSubscription();
       const container = { id: 'ctr-noagent', name: 'nginx', watcher: 'local', agent: undefined };
@@ -2536,6 +2730,7 @@ describe('hass install commands (#210)', () => {
           hass: { discovery: true, prefix: 'homeassistant', commands: true },
         },
         log,
+        isContainerAllowed: () => true,
       });
       await rlHass.initCommandSubscription();
       dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
@@ -2633,6 +2828,7 @@ describe('hass install commands (#210)', () => {
           hass: { discovery: true, prefix: 'homeassistant', commands: true },
         },
         log,
+        isContainerAllowed: () => true,
       });
       await h.initCommandSubscription();
       const registeredListener = clientMock.on.mock.calls[0][1];
@@ -2662,6 +2858,7 @@ describe('hass install commands (#210)', () => {
           hass: { discovery: true, prefix: 'homeassistant', commands: false },
         },
         log,
+        isContainerAllowed: () => true,
       });
       await h.initCommandSubscription(); // no-op since commands:false
 
@@ -2681,6 +2878,7 @@ describe('hass install commands (#210)', () => {
           hass: { discovery: true, prefix: 'homeassistant', commands: true },
         },
         log,
+        isContainerAllowed: () => true,
       });
       await h.initCommandSubscription();
       const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
@@ -2702,6 +2900,7 @@ describe('hass install commands (#210)', () => {
           hass: { discovery: true, prefix: 'homeassistant', commands: true },
         },
         log,
+        isContainerAllowed: () => true,
       });
       await h.initCommandSubscription();
       const warnSpy = vi.spyOn(log, 'warn').mockImplementation(() => {});
@@ -2720,11 +2919,21 @@ describe('hass install commands (#210)', () => {
         hass: { discovery: true, prefix: 'homeassistant', commands: true },
       };
 
-      const first = new Hass({ client: clientMock, configuration: config, log });
+      const first = new Hass({
+        client: clientMock,
+        configuration: config,
+        log,
+        isContainerAllowed: () => true,
+      });
       await first.initCommandSubscription();
       await first.deregister();
 
-      const second = new Hass({ client: clientMock, configuration: config, log });
+      const second = new Hass({
+        client: clientMock,
+        configuration: config,
+        log,
+        isContainerAllowed: () => true,
+      });
       await second.initCommandSubscription();
 
       // 2 registrations total across both instances' lifetimes, 1 removal (from first's deregister).
@@ -2745,6 +2954,7 @@ describe('hass install commands (#210)', () => {
           hass: { discovery: true, prefix: 'homeassistant' },
         },
         log,
+        isContainerAllowed: () => true,
       });
       await h.addContainerSensor({
         id: 'container-regression',

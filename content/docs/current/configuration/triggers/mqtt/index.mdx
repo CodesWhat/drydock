@@ -208,6 +208,8 @@ docker run \
 
 Entities are [binary_sensors](https://www.home-assistant.io/integrations/binary_sensor/) whose state is true when an update is available.
 
+<Callout type="info">**Discovery entities follow the same include/exclude scope as this trigger.** A discovery entity is only created for a container this mqtt trigger actually covers — `dd.notification.include`/`dd.notification.exclude` (and rollback/agent scoping) apply to entity creation, state publishes, and the Install button's commands alike. If a container is excluded, drydock does not create an entity for it, so it never sits stuck on "Unknown" in HA; if a previously-created entity's container becomes excluded later, its discovery config is removed automatically the next time the container is seen.</Callout>
+
 ### Entities
 
 ![image](/docs/assets/configuration/triggers/mqtt/hass_04.png)
