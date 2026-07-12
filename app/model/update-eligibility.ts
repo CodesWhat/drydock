@@ -350,6 +350,9 @@ export function computeUpdateEligibility(
     const maturityMinAgeMs = maturityMinAgeDaysToMilliseconds(maturityMinAgeDays);
 
     if (maturityStartMs === undefined || now - maturityStartMs < maturityMinAgeMs) {
+      const policySource =
+        container.updatePolicySources?.maturityMinAgeDays ??
+        container.updatePolicySources?.maturityMode;
       const remainingMs =
         maturityStartMs !== undefined
           ? Math.max(0, maturityMinAgeMs - (now - maturityStartMs))
@@ -363,12 +366,13 @@ export function computeUpdateEligibility(
       blockers.push(
         makeBlocker({
           reason: 'maturity-not-reached',
-          message: `Maturity policy requires updates to be at least ${maturityMinAgeDays} days old (${remainingDays} day${remainingDays !== 1 ? 's' : ''} remaining).`,
+          message: `Maturity policy requires updates to be at least ${maturityMinAgeDays} days old${policySource ? ` (from ${policySource})` : ''} (${remainingDays} day${remainingDays !== 1 ? 's' : ''} remaining).`,
           actionable: true,
           actionHint: "Change maturity mode to 'all' or wait for the gate to clear.",
           ...(liftableAt ? { liftableAt } : {}),
           details: {
             minAgeDays: maturityMinAgeDays,
+            ...(policySource ? { policySource } : {}),
             remainingMs,
           },
         }),

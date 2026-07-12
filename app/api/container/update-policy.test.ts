@@ -20,6 +20,7 @@ function createHarness(containerOverrides: Record<string, unknown> = {}) {
     uniqStrings: vi.fn((values: string[]) => uniqStrings(values)),
     getErrorMessage: vi.fn((error: unknown) => getErrorMessage(error)),
     redactContainerRuntimeEnv: vi.fn((value) => value),
+    recordAuditEvent: vi.fn(),
   };
 
   return {
@@ -255,6 +256,128 @@ describe('api/container/update-policy', () => {
       expect(getUpdatedPolicy(harness.storeContainer)).toEqual({
         skipTags: ['2.0.0'],
       });
+    });
+
+    test('reverts one UI override field to the declarative label/env value', () => {
+      const harness = createHarness({
+        updatePolicy: {
+          maturityMode: 'all',
+          maturityMinAgeDays: 14,
+        },
+        updatePolicyDeclarative: {
+          env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+          label: { maturityMinAgeDays: 14 },
+        },
+        updatePolicyOverrides: { maturityMode: 'all' },
+        updatePolicySources: {
+          maturityMode: 'override',
+          maturityMinAgeDays: 'label',
+        },
+      });
+
+      const res = callPatchContainerUpdatePolicy(harness.handlers, {
+        action: 'revert-to-declarative',
+        field: 'maturityMode',
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      const updated = harness.storeContainer.updateContainer.mock.calls[0]?.[0];
+      expect(updated.updatePolicy).toEqual({
+        maturityMode: 'mature',
+        maturityMinAgeDays: 14,
+      });
+      expect(updated.updatePolicyOverrides).toEqual({});
+      expect(updated.updatePolicySources).toEqual({
+        maturityMode: 'env',
+        maturityMinAgeDays: 'label',
+      });
+      expect(harness.deps.recordAuditEvent).toHaveBeenCalledWith({
+        action: 'update-policy-override-cleared',
+        status: 'success',
+        container: updated,
+        details: expect.any(String),
+      });
+      expect(JSON.parse(harness.deps.recordAuditEvent.mock.calls[0][0].details)).toEqual({
+        operation: 'revert-to-declarative',
+        fields: {
+          maturityMode: {
+            env: 'mature',
+            label: null,
+            override: null,
+            effective: 'mature',
+            source: 'env',
+          },
+        },
+      });
+    });
+
+    test('audits set overrides with every tier value after persistence succeeds', () => {
+      const harness = createHarness({
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 14 },
+        updatePolicyDeclarative: {
+          env: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+          label: { maturityMinAgeDays: 14 },
+        },
+        updatePolicyOverrides: {},
+        updatePolicySources: { maturityMode: 'env', maturityMinAgeDays: 'label' },
+      });
+
+      callPatchContainerUpdatePolicy(harness.handlers, {
+        action: 'set-maturity-policy',
+        mode: 'all',
+        minAgeDays: 21,
+      });
+
+      expect(harness.deps.recordAuditEvent).toHaveBeenCalledTimes(1);
+      const auditCall = harness.deps.recordAuditEvent.mock.calls[0][0];
+      expect(auditCall.action).toBe('update-policy-override-set');
+      expect(JSON.parse(auditCall.details)).toEqual({
+        operation: 'set-maturity-policy',
+        fields: {
+          maturityMode: {
+            env: 'mature',
+            label: null,
+            override: 'all',
+            effective: 'all',
+            source: 'override',
+          },
+          maturityMinAgeDays: {
+            env: 7,
+            label: 14,
+            override: 21,
+            effective: 21,
+            source: 'override',
+          },
+        },
+      });
+      expect(harness.storeContainer.updateContainer.mock.invocationCallOrder[0]).toBeLessThan(
+        harness.deps.recordAuditEvent.mock.invocationCallOrder[0],
+      );
+    });
+
+    test('does not audit a no-op revert or a failed store update', () => {
+      const noOpHarness = createHarness({
+        updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+        updatePolicyOverrides: {},
+      });
+      callPatchContainerUpdatePolicy(noOpHarness.handlers, {
+        action: 'revert-to-declarative',
+        field: 'maturityMode',
+      });
+      expect(noOpHarness.deps.recordAuditEvent).not.toHaveBeenCalled();
+
+      const failedHarness = createHarness({
+        updatePolicyDeclarative: { env: { maturityMode: 'mature' }, label: {} },
+        updatePolicyOverrides: {},
+      });
+      failedHarness.storeContainer.updateContainer.mockImplementation(() => {
+        throw new Error('write failed');
+      });
+      callPatchContainerUpdatePolicy(failedHarness.handlers, {
+        action: 'set-maturity-policy',
+        mode: 'all',
+      });
+      expect(failedHarness.deps.recordAuditEvent).not.toHaveBeenCalled();
     });
 
     test.each([

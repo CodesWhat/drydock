@@ -23,6 +23,7 @@ import * as updateOperationStore from '../store/update-operation.js';
 import Trigger from '../triggers/providers/Trigger.js';
 import { getErrorMessage } from '../util/error.js';
 import { uniqStrings } from '../util/string-array.js';
+import { recordAuditEvent } from './audit-events.js';
 import { mapComponentsToList } from './component.js';
 import { createBulkSecurityHandlers } from './container/bulk-security.js';
 import { createCrudHandlers } from './container/crud.js';
@@ -199,6 +200,7 @@ const updatePolicyHandlers = createUpdatePolicyHandlers({
   uniqStrings,
   getErrorMessage,
   redactContainerRuntimeEnv,
+  recordAuditEvent,
 });
 
 const securityHandlers = createSecurityHandlers({

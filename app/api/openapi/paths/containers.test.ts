@@ -10,9 +10,42 @@ import {
   triggerNamePathParam,
   triggerTypePathParam,
 } from '../common.js';
+import { openApiSchemas } from '../schemas.js';
 import { containerPaths } from './containers.js';
 
 describe('containerPaths', () => {
+  test('update-policy documents declarative revert actions and field selection', () => {
+    const patch = containerPaths['/api/v1/containers/{id}/update-policy'].patch;
+    const schema = patch.requestBody.content['application/json'].schema;
+
+    expect(schema.properties.action.enum).toContain('revert-to-declarative');
+    expect(schema.properties.field).toEqual({
+      type: 'string',
+      enum: ['maturityMode', 'maturityMinAgeDays', 'skipTags', 'skipDigests'],
+      description: 'Override field to revert; omit to revert all declarative policy overrides.',
+    });
+    expect(schema.properties.minAgeDays).toEqual({
+      type: 'integer',
+      minimum: 1,
+      maximum: 365,
+    });
+  });
+
+  test('ContainerResource documents effective, declarative, override, and source policy layers', () => {
+    const properties = openApiSchemas.ContainerResource.properties;
+
+    expect(properties.updatePolicy).toEqual({ $ref: '#/components/schemas/ContainerUpdatePolicy' });
+    expect(properties.updatePolicyDeclarative).toEqual({
+      $ref: '#/components/schemas/ContainerUpdatePolicyDeclarative',
+    });
+    expect(properties.updatePolicyOverrides).toEqual({
+      $ref: '#/components/schemas/ContainerUpdatePolicy',
+    });
+    expect(properties.updatePolicySources).toEqual({
+      $ref: '#/components/schemas/ContainerUpdatePolicySources',
+    });
+  });
+
   test('CONTAINER_ACTION_TAGS constant: tags array contains Containers and Actions in order', () => {
     // Kills L16:31 ([] mutation) and L16:32 ("" mutation)
     // These tags appear on every path built with createContainerIdActionPost

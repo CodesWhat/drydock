@@ -551,6 +551,19 @@ describe('computeUpdateEligibility', () => {
       expect(blocker?.liftableAt).toBeDefined();
     });
 
+    test('maturity blocker identifies the declarative source tier', () => {
+      const container = makeContainerWithTagUpdate({
+        updateDetectedAt: new Date(FIXED_NOW - 24 * 60 * 60 * 1000).toISOString(),
+        updatePolicy: { maturityMode: 'mature', maturityMinAgeDays: 7 },
+        updatePolicySources: { maturityMode: 'label', maturityMinAgeDays: 'label' },
+      });
+
+      const result = computeUpdateEligibility(container, makeContext({ now: FIXED_NOW }));
+      const blocker = result.blockers.find((b) => b.reason === 'maturity-not-reached');
+      expect(blocker?.message).toContain('from label');
+      expect(blocker?.details?.policySource).toBe('label');
+    });
+
     test('liftableAt is correct ISO date when updateDetectedAt is known', () => {
       const updateDetectedAt = new Date(FIXED_NOW - 2 * 24 * 60 * 60 * 1000).toISOString();
       const container = makeContainerWithTagUpdate({

@@ -7,6 +7,12 @@ import {
   parseMaturityMinAgeDays,
   resolveMaturityMinAgeDays,
 } from '../../model/maturity-policy.js';
+import {
+  applyUpdatePolicyOverrides,
+  DECLARATIVE_UPDATE_POLICY_FIELDS,
+  type DeclarativeUpdatePolicyField,
+  getUpdatePolicyOverrides,
+} from '../../model/update-policy.js';
 import { sendErrorResponse } from '../error-response.js';
 import { getPathParamValue } from './request-helpers.js';
 
@@ -20,6 +26,7 @@ interface UpdatePolicyHandlerDependencies {
   uniqStrings: (values: string[]) => string[];
   getErrorMessage: (error: unknown) => string;
   redactContainerRuntimeEnv: (container: Container) => Container;
+  recordAuditEvent: typeof import('../audit-events.js').recordAuditEvent;
 }
 
 const INVALID_SNOOZE_UNTIL_ERROR = 'Invalid snoozeUntil date';
@@ -40,19 +47,20 @@ type UniqStringsFn = UpdatePolicyHandlerDependencies['uniqStrings'];
 function normalizeUpdatePolicy(
   updatePolicy: ContainerUpdatePolicy = {},
   uniqStrings: UniqStringsFn,
+  preserveEmptyArrays = false,
 ): ContainerUpdatePolicy {
   const normalizedPolicy: ContainerUpdatePolicy = {};
 
   if (Array.isArray(updatePolicy.skipTags)) {
     const skipTags = uniqStrings(updatePolicy.skipTags);
-    if (skipTags.length > 0) {
+    if (skipTags.length > 0 || preserveEmptyArrays) {
       normalizedPolicy.skipTags = skipTags;
     }
   }
 
   if (Array.isArray(updatePolicy.skipDigests)) {
     const skipDigests = uniqStrings(updatePolicy.skipDigests);
-    if (skipDigests.length > 0) {
+    if (skipDigests.length > 0 || preserveEmptyArrays) {
       normalizedPolicy.skipDigests = skipDigests;
     }
   }
@@ -75,6 +83,83 @@ function normalizeUpdatePolicy(
   }
 
   return normalizedPolicy;
+}
+
+function isDeclarativeField(value: unknown): value is DeclarativeUpdatePolicyField {
+  return DECLARATIVE_UPDATE_POLICY_FIELDS.includes(value as DeclarativeUpdatePolicyField);
+}
+
+function applyLayeredPolicyAction(
+  action: string,
+  container: Container,
+  overrides: ContainerUpdatePolicy,
+  body: Record<string, unknown>,
+  uniqStrings: UniqStringsFn,
+): UpdatePolicyActionResult {
+  const effective = normalizeUpdatePolicy(container.updatePolicy || {}, uniqStrings);
+  switch (action) {
+    case 'skip-current': {
+      const kind = container.updateKind?.kind;
+      const value = getCurrentUpdateValue(container);
+      if (kind !== 'tag' && kind !== 'digest') {
+        return { error: 'No current update available to skip' };
+      }
+      if (!value) return { error: 'No update value available to skip' };
+      const field = kind === 'tag' ? 'skipTags' : 'skipDigests';
+      overrides[field] = uniqStrings([...(overrides[field] ?? effective[field] ?? []), value]);
+      return { policy: overrides };
+    }
+    case 'remove-skip': {
+      const kind = body.kind;
+      const value = typeof body.value === 'string' ? body.value.trim() : '';
+      if (kind !== 'tag' && kind !== 'digest')
+        return { error: 'Invalid remove-skip kind; expected "tag" or "digest"' };
+      if (!value) return { error: 'Invalid remove-skip value; expected a non-empty string' };
+      const field = kind === 'tag' ? 'skipTags' : 'skipDigests';
+      overrides[field] = (overrides[field] ?? effective[field] ?? []).filter(
+        (entry) => entry !== value,
+      );
+      return { policy: overrides };
+    }
+    case 'clear-skips':
+      overrides.skipTags = [];
+      overrides.skipDigests = [];
+      return { policy: overrides };
+    case 'snooze':
+      overrides.snoozeUntil = getSnoozeUntilFromActionPayload(body);
+      return { policy: overrides };
+    case 'unsnooze':
+      delete overrides.snoozeUntil;
+      return { policy: overrides };
+    case 'set-maturity-policy': {
+      const mode = normalizeMaturityMode(body.mode);
+      if (!mode) throw new TypeError(INVALID_MATURITY_MODE_ERROR);
+      overrides.maturityMode = mode;
+      overrides.maturityMinAgeDays = getMaturityMinAgeDaysFromActionPayload(
+        body,
+        effective.maturityMinAgeDays ?? DEFAULT_MATURITY_MIN_AGE_DAYS,
+      );
+      return { policy: overrides };
+    }
+    case 'clear-maturity-policy':
+      overrides.maturityMode = 'all';
+      delete overrides.maturityMinAgeDays;
+      return { policy: overrides };
+    case 'revert-to-declarative':
+      if (body.field !== undefined) {
+        if (!isDeclarativeField(body.field)) {
+          return { error: 'Invalid declarative policy field' };
+        }
+        delete overrides[body.field];
+      } else {
+        for (const field of DECLARATIVE_UPDATE_POLICY_FIELDS) delete overrides[field];
+      }
+      return { policy: overrides };
+    case 'clear':
+      return { policy: {} };
+    default:
+      return { error: `Unknown action ${action}` };
+  }
 }
 
 function getCurrentUpdateValue(container: Container): string | undefined {
@@ -223,11 +308,83 @@ function getActionBody(body: unknown): Record<string, unknown> {
   return body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
 }
 
+function policyFieldChanged(
+  before: ContainerUpdatePolicy,
+  after: ContainerUpdatePolicy,
+  field: DeclarativeUpdatePolicyField,
+) {
+  const beforeHasField = Object.hasOwn(before, field);
+  const afterHasField = Object.hasOwn(after, field);
+  if (beforeHasField !== afterHasField) return true;
+  return beforeHasField && JSON.stringify(before[field]) !== JSON.stringify(after[field]);
+}
+
+function getPolicyFieldAuditValue(
+  policy: ContainerUpdatePolicy | undefined,
+  field: DeclarativeUpdatePolicyField,
+) {
+  return policy && Object.hasOwn(policy, field) ? (policy[field] ?? null) : null;
+}
+
+function createOverrideAuditDetails(
+  operation: string,
+  container: Container,
+  overrides: ContainerUpdatePolicy,
+  fields: DeclarativeUpdatePolicyField[],
+) {
+  return JSON.stringify({
+    operation,
+    fields: Object.fromEntries(
+      fields.map((field) => [
+        field,
+        {
+          env: getPolicyFieldAuditValue(container.updatePolicyDeclarative?.env, field),
+          label: getPolicyFieldAuditValue(container.updatePolicyDeclarative?.label, field),
+          override: getPolicyFieldAuditValue(overrides, field),
+          effective: getPolicyFieldAuditValue(container.updatePolicy, field),
+          source: container.updatePolicySources?.[field] ?? null,
+        },
+      ]),
+    ),
+  });
+}
+
+function recordOverrideAuditEvents(
+  recordAuditEvent: UpdatePolicyHandlerDependencies['recordAuditEvent'],
+  operation: string,
+  container: Container,
+  before: ContainerUpdatePolicy,
+  after: ContainerUpdatePolicy,
+) {
+  const changedFields = DECLARATIVE_UPDATE_POLICY_FIELDS.filter((field) =>
+    policyFieldChanged(before, after, field),
+  );
+  const setFields = changedFields.filter((field) => Object.hasOwn(after, field));
+  const clearedFields = changedFields.filter((field) => !Object.hasOwn(after, field));
+  if (setFields.length > 0) {
+    recordAuditEvent({
+      action: 'update-policy-override-set',
+      status: 'success',
+      container,
+      details: createOverrideAuditDetails(operation, container, after, setFields),
+    });
+  }
+  if (clearedFields.length > 0) {
+    recordAuditEvent({
+      action: 'update-policy-override-cleared',
+      status: 'success',
+      container,
+      details: createOverrideAuditDetails(operation, container, after, clearedFields),
+    });
+  }
+}
+
 function createPatchContainerUpdatePolicy({
   storeContainer,
   uniqStrings,
   getErrorMessage,
   redactContainerRuntimeEnv,
+  recordAuditEvent,
 }: UpdatePolicyHandlerDependencies) {
   return function patchContainerUpdatePolicy(req: Request, res: Response) {
     const id = getPathParamValue(req.params.id);
@@ -245,18 +402,37 @@ function createPatchContainerUpdatePolicy({
 
     try {
       const actionBody = getActionBody(req.body);
-      const updatePolicy = normalizeUpdatePolicy(container.updatePolicy || {}, uniqStrings);
-      const result = applyPolicyAction(action, container, updatePolicy, actionBody, uniqStrings);
+      const hasLayeredPolicy = container.updatePolicyDeclarative !== undefined;
+      const updatePolicy = hasLayeredPolicy
+        ? normalizeUpdatePolicy(getUpdatePolicyOverrides(container), uniqStrings, true)
+        : normalizeUpdatePolicy(container.updatePolicy || {}, uniqStrings);
+      const previousOverrides = hasLayeredPolicy ? structuredClone(updatePolicy) : undefined;
+      const result = hasLayeredPolicy
+        ? applyLayeredPolicyAction(action, container, updatePolicy, actionBody, uniqStrings)
+        : applyPolicyAction(action, container, updatePolicy, actionBody, uniqStrings);
 
       if ('error' in result) {
         sendErrorResponse(res, 400, result.error);
         return;
       }
 
-      const normalizedPolicy = normalizeUpdatePolicy(result.policy, uniqStrings);
-      container.updatePolicy =
-        Object.keys(normalizedPolicy).length > 0 ? normalizedPolicy : undefined;
+      const normalizedPolicy = normalizeUpdatePolicy(result.policy, uniqStrings, hasLayeredPolicy);
+      if (hasLayeredPolicy) {
+        applyUpdatePolicyOverrides(container, normalizedPolicy);
+      } else {
+        container.updatePolicy =
+          Object.keys(normalizedPolicy).length > 0 ? normalizedPolicy : undefined;
+      }
       const containerUpdated = storeContainer.updateContainer(container);
+      if (previousOverrides) {
+        recordOverrideAuditEvents(
+          recordAuditEvent,
+          action,
+          containerUpdated,
+          previousOverrides,
+          normalizedPolicy,
+        );
+      }
       res.status(200).json(redactContainerRuntimeEnv(containerUpdated));
     } catch (error: unknown) {
       const errorMessage = getErrorMessage(error);

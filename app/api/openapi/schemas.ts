@@ -436,6 +436,46 @@ export const openApiSchemas = {
     },
     additionalProperties: false,
   },
+  ContainerDeclarativeUpdatePolicy: {
+    type: 'object',
+    properties: {
+      maturityMode: { type: 'string', enum: ['all', 'mature'] },
+      maturityMinAgeDays: { type: 'integer', minimum: 1, maximum: 365 },
+      skipTags: { type: 'array', items: { type: 'string' } },
+      skipDigests: { type: 'array', items: { type: 'string' } },
+    },
+    additionalProperties: false,
+  },
+  ContainerUpdatePolicy: {
+    type: 'object',
+    properties: {
+      maturityMode: { type: 'string', enum: ['all', 'mature'] },
+      maturityMinAgeDays: { type: 'integer', minimum: 1, maximum: 365 },
+      skipTags: { type: 'array', items: { type: 'string' } },
+      skipDigests: { type: 'array', items: { type: 'string' } },
+      snoozeUntil: { type: 'string', format: 'date-time' },
+    },
+    additionalProperties: false,
+  },
+  ContainerUpdatePolicyDeclarative: {
+    type: 'object',
+    properties: {
+      env: { $ref: '#/components/schemas/ContainerDeclarativeUpdatePolicy' },
+      label: { $ref: '#/components/schemas/ContainerDeclarativeUpdatePolicy' },
+    },
+    required: ['env', 'label'],
+    additionalProperties: false,
+  },
+  ContainerUpdatePolicySources: {
+    type: 'object',
+    properties: {
+      maturityMode: { type: 'string', enum: ['env', 'label', 'override'] },
+      maturityMinAgeDays: { type: 'string', enum: ['env', 'label', 'override'] },
+      skipTags: { type: 'string', enum: ['env', 'label', 'override'] },
+      skipDigests: { type: 'string', enum: ['env', 'label', 'override'] },
+    },
+    additionalProperties: false,
+  },
   ContainerResource: {
     type: 'object',
     properties: {
@@ -447,6 +487,12 @@ export const openApiSchemas = {
       identityKey: { type: 'string' },
       updateAvailable: { type: 'boolean' },
       image: { ...genericObjectSchema },
+      updatePolicy: { $ref: '#/components/schemas/ContainerUpdatePolicy' },
+      updatePolicyDeclarative: {
+        $ref: '#/components/schemas/ContainerUpdatePolicyDeclarative',
+      },
+      updatePolicyOverrides: { $ref: '#/components/schemas/ContainerUpdatePolicy' },
+      updatePolicySources: { $ref: '#/components/schemas/ContainerUpdatePolicySources' },
       actionTriggerInclude: {
         type: 'string',
         example: 'dockercompose.local:minor',

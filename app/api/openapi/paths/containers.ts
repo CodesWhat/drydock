@@ -544,6 +544,7 @@ export const containerPaths = {
                     'unsnooze',
                     'set-maturity-policy',
                     'clear-maturity-policy',
+                    'revert-to-declarative',
                     'clear',
                   ],
                 },
@@ -552,7 +553,13 @@ export const containerPaths = {
                 days: { type: 'number' },
                 snoozeUntil: { type: 'string', format: 'date-time' },
                 mode: { type: 'string', enum: ['all', 'mature'] },
-                minAgeDays: { type: 'number' },
+                minAgeDays: { type: 'integer', minimum: 1, maximum: 365 },
+                field: {
+                  type: 'string',
+                  enum: ['maturityMode', 'maturityMinAgeDays', 'skipTags', 'skipDigests'],
+                  description:
+                    'Override field to revert; omit to revert all declarative policy overrides.',
+                },
               },
               additionalProperties: true,
             },

@@ -30,6 +30,8 @@ export interface AuditEntry {
     | 'auth-login'
     | 'env-reveal'
     | 'auto-update-blocked'
+    | 'update-policy-override-set'
+    | 'update-policy-override-cleared'
     | 'mqtt-command-update';
   containerName: string;
   containerIdentityKey?: string;
