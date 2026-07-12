@@ -6,6 +6,7 @@ import {
   getPrimarySoftBlocker,
   getSoftBlockers,
   hasHardBlocker,
+  hasNewTagForUpdateButton,
   hasSoftBlocker,
   primaryBlockerForButton,
   severityOf,
@@ -234,8 +235,15 @@ describe('updateButtonState', () => {
       updateInsight: { tag: 'v2.0.0', kind: 'minor' as const },
       updateEligibility: undefined,
     };
+    // Drive hasNewTag through the same exported derivation the real caller
+    // (ContainersGroupedViews.vue's updateBtnState) uses, feeding it the full
+    // insight-only container — not a hand-computed boolean — so this actually
+    // fails if updateInsight is ever wired into the derivation.
     expect(
-      updateButtonState(pinnedWithInsight.updateEligibility, Boolean(pinnedWithInsight.newTag)),
+      updateButtonState(
+        pinnedWithInsight.updateEligibility,
+        hasNewTagForUpdateButton(pinnedWithInsight),
+      ),
     ).toBe('none');
   });
 

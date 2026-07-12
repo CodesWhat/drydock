@@ -19,6 +19,7 @@ import { useColumnVisibility } from '../../composables/useColumnVisibility';
 import {
   getPrimaryHardBlocker,
   getPrimarySoftBlocker,
+  hasNewTagForUpdateButton,
   updateButtonState,
   type UpdateButtonState,
 } from '../../utils/update-eligibility';
@@ -263,7 +264,7 @@ function updateBtnState(c: {
 }): UpdateButtonState {
   return updateButtonState(
     c.updateEligibility,
-    Boolean(c.newTag),
+    hasNewTagForUpdateButton(c),
     isContainerUpdateInProgress(c) || isContainerUpdateQueued(c),
   );
 }
@@ -428,6 +429,21 @@ function getContainerUpdateStateColor(
     return updateInsightColor().text;
   }
   return 'var(--dd-success)';
+}
+
+function getContainerUpdateStateTooltip(
+  container: Pick<Container, 'updateKind' | 'updateInsight'> & { name?: string },
+) {
+  if (container.updateKind) {
+    return getUpdateKindLabel(container.updateKind);
+  }
+  if (getContainerListPolicyState(container).skipped) {
+    return containerPolicyTooltip(container, 'skipped');
+  }
+  if (container.updateInsight) {
+    return updateInsightTooltip(container.updateInsight);
+  }
+  return t('containerComponents.groupedViews.upToDateTooltip');
 }
 
 function isTableRowFullWidth(row: Record<string, unknown>) {
@@ -709,7 +725,7 @@ onScopeDispose(() => {
             <span
               class="inline-flex min-w-0 items-center gap-1.5 font-semibold"
               :style="{ color: getContainerUpdateStateColor(c) }"
-              v-tooltip.top="tt(c.updateKind ? getUpdateKindLabel(c.updateKind) : t('containerComponents.groupedViews.upToDateTooltip'))"
+              v-tooltip.top="tt(getContainerUpdateStateTooltip(c))"
             >
               <span class="h-2 w-2 shrink-0 rounded-full" :style="{ backgroundColor: getContainerUpdateStateColor(c) }"></span>
               <span class="truncate">{{ getContainerUpdateStateLabel(c) }}</span>
@@ -1092,7 +1108,7 @@ onScopeDispose(() => {
                 </CopyableTag>
                 <span class="text-2xs-plus mx-0.5 dd-text-muted shrink-0" aria-hidden="true">&rarr;</span>
                 <CopyableTag :tag="c.updateInsight.tag" class="text-xs font-bold truncate max-w-[140px]"
-                      :style="{ color: updateInsightColor().text }" @click.stop>
+                      :style="{ color: updateInsightColor().text }" :idle-tooltip="tt(updateInsightTooltip(c.updateInsight))" @click.stop>
                   {{ c.updateInsight.tag }}
                 </CopyableTag>
                 <NoUpdateReasonBadge v-if="c.noUpdateReason" :reason="c.noUpdateReason" class="ml-1" />

@@ -1,4 +1,5 @@
 import type {
+  Container,
   UpdateBlocker,
   UpdateBlockerReason,
   UpdateBlockerSeverity,
@@ -64,6 +65,15 @@ export function getPrimarySoftBlocker(
   eligibility: UpdateEligibility | undefined,
 ): UpdateBlocker | undefined {
   return getSoftBlockers(eligibility)[0];
+}
+
+/**
+ * Derives the `hasNewTag` input to `updateButtonState` from a container. Deliberately
+ * scoped to `newTag` only — the type doesn't even accept `updateInsight` (the #498
+ * pinned-tag informational signal), so the update button can never react to it.
+ */
+export function hasNewTagForUpdateButton(container: Pick<Container, 'newTag'>): boolean {
+  return Boolean(container.newTag);
 }
 
 export type UpdateButtonState = 'none' | 'ready' | 'soft' | 'hard';

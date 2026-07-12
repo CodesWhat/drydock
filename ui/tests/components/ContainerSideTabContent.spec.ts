@@ -944,9 +944,13 @@ describe('ContainerSideTabContent - Environment Variables', () => {
 
     const wrapper = mountComponent();
 
-    expect(wrapper.text()).toContain('v2.0.0');
+    // The version row itself carries the newer tag (not just present somewhere
+    // in the page text) — assert the specific insight CopyableTag renders it.
+    const insightTag = wrapper.get('[data-test="container-side-insight-tag"]');
+    expect(insightTag.text()).toBe('v2.0.0');
     // Kind pill mirrors how the updateKind badge is positioned in the badge row (#498).
-    expect(wrapper.text()).toContain('Minor');
+    const kindBadge = wrapper.get('[data-test="container-side-insight-kind-badge"]');
+    expect(kindBadge.text()).toBe('Minor');
     // The old "Newer available" text badge is gone (#498) — the kind pill above
     // is now the only signal in that row.
     expect(wrapper.find('[data-test="update-insight-badge"]').exists()).toBe(false);

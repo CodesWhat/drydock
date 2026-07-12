@@ -256,7 +256,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                      below, mirroring how the updateKind badge is positioned there. -->
                 <template v-else-if="selectedContainer.updateInsight">
                   <AppIcon name="arrow-right" :size="8" class="dd-text-muted" />
-                  <CopyableTag :tag="selectedContainer.updateInsight.tag" class="font-bold" :style="{ color: updateInsightColor().text }">{{ selectedContainer.updateInsight.tag }}</CopyableTag>
+                  <CopyableTag :tag="selectedContainer.updateInsight.tag" class="font-bold" :style="{ color: updateInsightColor().text }" data-test="container-side-insight-tag">{{ selectedContainer.updateInsight.tag }}</CopyableTag>
                 </template>
               </div>
               <div v-if="!selectedContainer.isDigestPinned && selectedContainer.updateKind === 'digest' && selectedContainer.newDigest && selectedContainer.currentDigest"
@@ -291,7 +291,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 <AppBadge v-if="selectedContainer.updateKind" size="xs" :custom="updateKindColor(selectedContainer.updateKind)">
                   {{ getUpdateKindLabel(selectedContainer.updateKind) }}
                 </AppBadge>
-                <AppBadge v-else-if="selectedContainer.updateInsight" size="xs" :custom="updateInsightColor()">
+                <AppBadge v-else-if="selectedContainer.updateInsight" size="xs" :custom="updateInsightColor()" data-test="container-side-insight-kind-badge">
                   {{ getUpdateKindLabel(selectedContainer.updateInsight.kind) }}
                 </AppBadge>
                 <UpdateMaturityBadge :maturity="selectedContainer.updateMaturity" :tooltip="selectedContainer.updateMaturityTooltip" />
