@@ -416,8 +416,8 @@ The `__FILE` suffix works on any `DD_*` variable. Add `.env` and `secrets/` to y
 
 If scans take a long time or fail with timeout errors:
 
-1. **Increase the timeout:** Set `DD_SECURITY_TRIVY_TIMEOUT=300000` (5 minutes). The default is 2 minutes, which may not be enough for large images on the first scan.
-2. **Use a Trivy server:** A dedicated Trivy server caches the vulnerability database, avoiding repeated downloads. See [Trivy server mode](/docs/configuration/security#server-mode-trivy-server).
+1. **Increase the timeout:** The default is `DD_SECURITY_TRIVY_TIMEOUT=600000` (10 minutes). Increase it further if unusually large images still exceed that budget.
+2. **Use `DD_SECURITY_TRIVY_SERVER`:** A dedicated Trivy server caches the vulnerability database, which is especially useful for large images and repeated scans. See [Trivy server mode](/docs/configuration/security#server-mode-trivy-server).
 3. **Tune concurrency:** For scheduled scans, lower `DD_SECURITY_SCAN_CONCURRENCY` if the host is resource-constrained.
 
 ## Temporary container names during recreation (hex prefix aliases)

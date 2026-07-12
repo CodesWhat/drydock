@@ -80,6 +80,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Large-image Trivy scans no longer race their own timeout or discard the pulled candidate on scanner errors.** The default `DD_SECURITY_TRIVY_TIMEOUT` is now 10 minutes, while Node gives Trivy an additional 30-second process grace so Trivy can report its own deadline instead of being killed as `exit=unknown`. The update gate retries one classified transient scanner failure, retains the pulled image when scanning itself errors, and still prunes images that are genuinely blocked by vulnerability policy. Local Trivy mode performs a serialized, single-flight `--download-db-only` warm-up outside the scan command's budget; server mode skips local warm-up. Scanner failures remain fail-closed. ([#490](https://github.com/CodesWhat/drydock/issues/490))
+
 - **A stalled auth bootstrap request no longer leaves the app blank indefinitely.** The `/auth/user` request times out after eight seconds and falls through to the existing logged-out redirect path.
 
 - **Old preference schemas no longer skip intermediate migrations.** Schema-v3 data now advances through each numbered migration, so later additions such as the `softwareVersion` column are applied before reaching the current schema.
@@ -228,8 +230,6 @@ get everything below; users already on a 1.5.1 release candidate get the `rc.6` 
 - **One-time notification burst on first scan after upgrade (Docker Hub / GHCR containers only).** Containers on Docker Hub or GHCR whose pending update is already older than `maturityMinAgeDays` will clear the maturity gate immediately on the first poll after upgrading. Notification triggers in `always` mode will fire once for each such container. Action triggers (`docker`, `docker-compose`, `command`) will also fire, so containers previously held by the gate may be updated automatically on that first poll. Review your active action-trigger configuration before upgrading if you want to control the timing. This is expected behavior: those images were already mature; the gate was simply unaware of it.
 
 ### Known Issues
-
-- **Intermittent Trivy scan timeout can fail an update on large images.** A security scan that exceeds the internal execution budget reports an `unknown` result, and the error path prunes the pulled image so the next attempt re-pulls it. Workaround: raise `DD_SECURITY_TRIVY_TIMEOUT` (e.g. `600000`) or retry the update. Long-standing since v1.3.0; the fix ships in v1.6. (#490)
 
 - **Home Assistant `update.dd_container` entities can show "Unknown" via the MQTT + HASS trigger.** The `latest_version` template renders empty when a container has no pending update, blanking the entity instead of reporting that it is up to date. Pre-existing; the fix ships in v1.6. (#491)
 

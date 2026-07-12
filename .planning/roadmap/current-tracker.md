@@ -16,8 +16,8 @@ When implementation, release, or live GitHub state changes, update this file in 
 
 - **Latest GA:** `v1.5.1`, released 2026-07-09.
 - **Patch candidate:** `v1.5.2-rc.4`, released 2026-07-12. It includes the #496 maturity-retention fix and the #498 pinned-tag detection/visibility work; the matching v1.6 UI forward-port still needs reconciliation.
-- **v1.6 branch:** local `dev/v1.6` at `2b0a08f9`; `origin/dev/v1.6` at `87baa455`. Local is 24 commits ahead and 0 behind.
-- **Verification:** backend 11,626 tests and UI 4,106 tests at 100% coverage; backend/UI lint, typecheck/build, and website build (262 pages) pass. The `v1.6.0` release precheck now correctly blocks on the four unchecked Discussion follow-ups below instead of passing vacuously.
+- **v1.6 branch:** local `dev/v1.6` contains the unpushed v1.6 stack through the #490 implementation (`14dd3af0`); `origin/dev/v1.6` remains at `87baa455`. Use `git status` for the live ahead/behind count rather than copying a self-invalidating local HEAD here.
+- **Verification:** backend 11,659 tests and UI 4,106 tests at 100% coverage; backend/UI lint, typecheck/build, and website build (262 pages) pass. The `v1.6.0` release precheck now correctly blocks on the four unchecked Discussion follow-ups below instead of passing vacuously.
 - **GitHub metadata:** this repository has no GitHub milestones configured. “v1.6” assignments are release promises and tracker state, not GitHub milestone membership.
 
 ## v1.6 implemented and verified locally
@@ -27,7 +27,7 @@ These are code-complete on the local `dev/v1.6` branch but are not released yet:
 - Notification templates, representative preview, and provider fallback (`512d7cc1`, `cf2c0066`).
 - Audit-backed notification-bell preferences and cross-device preference sync ([#220](https://github.com/CodesWhat/drydock/discussions/220), `4390aef0`, `512d7cc1`, `518851ec`).
 - Zero-dependency custom dashboard grid ([#281](https://github.com/CodesWhat/drydock/issues/281), `e59f1747`).
-- Responsive table/card list views and mobile work ([#242](https://github.com/CodesWhat/drydock/discussions/242)).
+- Responsive table/card list views, column-readability fixes, and the mobile/touch-target pass ([#242](https://github.com/CodesWhat/drydock/discussions/242), [#473](https://github.com/CodesWhat/drydock/discussions/473)).
 - Bidirectional Home Assistant MQTT ([#210](https://github.com/CodesWhat/drydock/discussions/210), `5183e6cb`, `87baa455`).
 - Declarative update-policy precedence, source metadata, override/revert UI, and audit ([#320](https://github.com/CodesWhat/drydock/issues/320), [#307](https://github.com/CodesWhat/drydock/discussions/307), `25c99055`, `1ad12dfb`, `0c3c99d9`).
 - Maturity stabilization countdown and override ([#406](https://github.com/CodesWhat/drydock/discussions/406), `fe6c4a4f`).
@@ -37,15 +37,16 @@ These are code-complete on the local `dev/v1.6` branch but are not released yet:
 - Bucket C named work: registry tag-list dedupe, lightweight aggregate reads, virtualized log viewer with immutable rollover, auth-bootstrap timeout, sequential preference migration, stale-chunk self-heal, and CI nits (`792a3ebc` through `b38a8f6b`, plus `518851ec`).
 - v1.6 compatibility removals and lifecycle signals (`283437b3` through `883cd594`).
 - #491 Home Assistant template fix, #494 category-scoped labels, and #496 forward-port.
+- #490 Trivy long-scan correctness: 600s default, 30s Node grace with honest timeout errors, one transient gate retry, block-only pruning, serialized local DB warm-up, and server-mode guidance.
 
 ## v1.6 release gates — do next
 
-1. **[#490](https://github.com/CodesWhat/drydock/issues/490) Trivy long-scan correctness — OPEN and unimplemented.** Give Node timeout headroom over Trivy, scope prune-on-block away from transient scan errors, retry one transient failure, warm the DB outside the scan budget, and document the server-mode/timeout path. Either land this before GA or explicitly re-lane it and correct the public promise.
-2. **[#325](https://github.com/CodesWhat/drydock/discussions/325) Update Status panel/update mode — public v1.6 promise, unimplemented.** `UpdateStatusPanel`, its composable, and `notify | manual | auto` mode do not exist; detail panes still use the legacy badge stack. Implement it or publish a clear new target before GA.
-3. **[#498](https://github.com/CodesWhat/drydock/issues/498) stacked current→newer Tag-column UI — partial.** Backend insight and inheritance are present. The requested at-a-glance UI and rc.4 polish exist only on `origin/feat/v1.6-pin-insight-view`; rebase/cherry-pick deliberately onto current `dev/v1.6`, rerun full UI gates, and keep the issue open for the reported `v3.0.2 Major` anomaly.
-4. **[#321](https://github.com/CodesWhat/drydock/discussions/321) remaining slices — decision required.** SBOM off-heap storage, collection byte attribution/audit dedupe, dry-run UX, typed preview errors, relative-severity gating, and the rolling-RC-tag decision are not implemented. Explicitly re-lane any item not shipping in v1.6; do not lose them behind the already-fixed original bugs.
-5. **Health/bell integration hardening.** Key `container-unhealthy` audit dedupe by agent + watcher + container, and emit a post-audit SSE invalidation so the bell unread badge live-refreshes after a health-only transition. Add same-name/different-agent and live-refresh tests.
-6. **Release convergence.** Resolve the gates above, push the local 24-commit stack, run the full release cut verification, and perform the GitHub follow-ups below.
+1. **[#325](https://github.com/CodesWhat/drydock/discussions/325) Update Status panel/update mode — public v1.6 promise, unimplemented.** `UpdateStatusPanel`, its composable, and `notify | manual | auto` mode do not exist; detail panes still use the legacy badge stack. Implement it or publish a clear new target before GA.
+2. **[#498](https://github.com/CodesWhat/drydock/issues/498) stacked current→newer Tag-column UI — partial.** Backend insight and inheritance are present. The requested at-a-glance UI and rc.4 polish exist only on `origin/feat/v1.6-pin-insight-view`; rebase/cherry-pick deliberately onto current `dev/v1.6`, rerun full UI gates, and keep the issue open for the reported `v3.0.2 Major` anomaly.
+3. **[#321](https://github.com/CodesWhat/drydock/discussions/321) remaining slices — decision required.** SBOM off-heap storage, collection byte attribution/audit dedupe, dry-run UX, typed preview errors, relative-severity gating, and the rolling-RC-tag decision are not implemented. Explicitly re-lane any item not shipping in v1.6; do not lose them behind the already-fixed original bugs.
+4. **[#295](https://github.com/CodesWhat/drydock/discussions/295) cross-view link/action consistency — partial.** Source/release/registry links already work; the remaining v1.6 promise is consistent icon placement and touch-friendly behavior across card, list, table, and detail surfaces. Finish that design pass or publish a clear re-lane; do not describe the underlying link capability as new.
+5. **Health/bell integration hardening — partial.** The later UI pass added `container-unhealthy` to bell rules and refreshes the bell on agent-status SSE. The backend audit dedupe is still keyed only by container name; scope it by agent + watcher + container and add a same-name/different-agent regression test. Verify the existing agent-status event covers health-only transitions; add a dedicated post-audit invalidation only if that verification fails.
+6. **Release convergence.** Resolve the gates above, push the local commit stack, run the full release cut verification, and perform the GitHub follow-ups below.
 
 Scanner runtime decoupling, Grype, scanner asset lifecycle, and SBOM off-heap storage are not completed v1.6 scope. If they do not land before GA, move them to an explicit later lane in both the roadmap and public summaries.
 
@@ -64,7 +65,7 @@ Scanner runtime decoupling, Grype, scanner asset lifecycle, and SBOM off-heap st
 
 | Item | Status | Next action |
 | --- | --- | --- |
-| [#490](https://github.com/CodesWhat/drydock/issues/490) | OPEN; known issue; v1.6 fix promised but absent | Implement or publicly re-lane before GA |
+| [#490](https://github.com/CodesWhat/drydock/issues/490) | Fix package implemented and verified locally | Reply/close when released |
 | [#491](https://github.com/CodesWhat/drydock/issues/491) | Core template/root-cause fixes implemented locally | Replace the stale debug-output hold with “fixed on v1.6”; close/reply at release if no secondary repro remains |
 | [#494](https://github.com/CodesWhat/drydock/issues/494) | Fix implemented locally (`cd8c11e6`, `f1f040b0`) | Reply/close when released |
 | [#498](https://github.com/CodesWhat/drydock/issues/498) | Partial; backend/policy work landed locally, stacked UI not on current HEAD | Reconcile feature branch, investigate anomaly, keep open |
@@ -73,7 +74,7 @@ Scanner runtime decoupling, Grype, scanner asset lifecycle, and SBOM off-heap st
 
 ### Release follow-ups for resolved threads
 
-Post accurate release follow-ups for #210, #307, and #469. #185 scheduled digest, #209 Tag/Version split, and #299 Security-page update action shipped in earlier releases and belong in archive/history, not active v1.6 work.
+Post accurate release follow-ups for #210, #307, #469, and #473. #185 scheduled digest, #209 Tag/Version split, #299 Security-page update action, #300 security digest, and #329 i18n shipped in earlier releases and belong in archive/history, not active v1.6 work.
 
 ## Correctly deferred
 

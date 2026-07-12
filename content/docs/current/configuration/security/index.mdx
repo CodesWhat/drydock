@@ -28,7 +28,7 @@ DD_SECURITY_SCANNER=trivy
 | `DD_SECURITY_BLOCK_SEVERITY` | ⚪ | Blocking severities (comma-separated). Set to `NONE` for advisory-only mode (scan without blocking updates) | `NONE`, or any of `UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL` | `CRITICAL,HIGH` |
 | `DD_SECURITY_TRIVY_SERVER` | ⚪ | Trivy server URL (enables client/server mode) | URL | empty (local CLI mode) |
 | `DD_SECURITY_TRIVY_COMMAND` | ⚪ | Trivy command path for local CLI mode (must not contain shell metacharacters or `..` path traversal) | executable path | `trivy` |
-| `DD_SECURITY_TRIVY_TIMEOUT` | ⚪ | Trivy command timeout in milliseconds | integer (`>=1000`) | `120000` |
+| `DD_SECURITY_TRIVY_TIMEOUT` | ⚪ | Trivy command timeout in milliseconds | integer (`>=1000`) | `600000` |
 | `DD_SECURITY_TRIVY_IMAGE_SRC` | ⚪ | Override Trivy's image source order. Any value Trivy accepts (e.g. `remote`, `docker`, or comma-separated `remote,docker`). When unset, Trivy uses its default source order (`docker`, `containerd`, `podman`, `remote`) and falls back to a registry pull when the local daemon is unreachable. | string | empty (Trivy auto-detects) |
 | `DD_SECURITY_SCAN_CRON` | ⚪ | Cron expression for scheduled background security scans | cron expression | disabled |
 | `DD_SECURITY_SCAN_JITTER` | ⚪ | Random jitter delay (ms) before each scheduled scan starts | integer (`>=0`) | `60000` |
@@ -57,8 +57,10 @@ services:
       - DD_SECURITY_SCANNER=trivy
       - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
       - DD_SECURITY_TRIVY_COMMAND=trivy
-      - DD_SECURITY_TRIVY_TIMEOUT=120000
+      - DD_SECURITY_TRIVY_TIMEOUT=600000
 ```
+
+The 10-minute scan budget accommodates large-image analysis. In local mode, drydock separately performs a best-effort vulnerability-database warm-up before the first scan, so a successful database download does not consume this scan-command budget. If scans still regularly approach the limit, use [`DD_SECURITY_TRIVY_SERVER`](#server-mode-trivy-server) so a dedicated Trivy server owns and caches the vulnerability database.
 
 ### Server mode (Trivy server)
 
@@ -78,7 +80,7 @@ services:
       - DD_SECURITY_SCANNER=trivy
       - DD_SECURITY_BLOCK_SEVERITY=CRITICAL,HIGH
       - DD_SECURITY_TRIVY_SERVER=http://trivy:4954
-      - DD_SECURITY_TRIVY_TIMEOUT=120000
+      - DD_SECURITY_TRIVY_TIMEOUT=600000
 ```
 
 ## Advisory-Only Mode
