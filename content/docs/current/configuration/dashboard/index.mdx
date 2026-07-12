@@ -83,8 +83,9 @@ On narrow screens stat cards stack vertically and detail widgets fill the full w
 The dashboard refreshes automatically via SSE events from the server:
 
 - **Container change** — triggers a quick summary refresh (debounced to 1 second).
-- **Security scan completed** — triggers a full data refresh.
 - **SSE reconnected** — triggers a full data refresh after a connection drop.
+
+Container-change events patch the affected dashboard data and refresh the summary. Security-scan completion does not force a separate full-dashboard refresh; the security surfaces update through their own data flow.
 
 The **Resource Usage** widget has a dedicated stats SSE stream (`GET /api/v1/stats/summary/stream`) that pushes `dd:stats-summary` events on every aggregator tick (default 10 s). The widget connects to this stream independently of the main UI event channel, so resource stats update even when no container state changes occur.
 

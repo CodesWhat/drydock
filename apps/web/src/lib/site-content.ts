@@ -269,28 +269,28 @@ export const roadmap: Milestone[] = [
   },
   {
     version: "v1.5.2",
-    title: "Docs Refresh & API Hygiene",
+    title: "Maturity & Pinned-Tag Reliability",
     emoji: "\u{1F6E1}️",
     status: "next",
     dotColor:
       "border-orange-400 bg-orange-50 text-orange-500 dark:border-orange-500 dark:bg-orange-950 dark:text-orange-400",
     items: [
-      "Podman Docker-compatible API guidance",
-      "Docker socket and remote watcher security docs",
-      "Config, API, and OpenAPI reference parity",
+      "Recreation-safe maturity policy retention",
+      "Pinned-tag digest detection and informational insights",
+      "Tag-policy inheritance and visibility refinements",
     ],
   },
   {
     version: "v1.6.0",
-    title: "Scanner & Policy Foundations",
+    title: "Notifications, Policy & Release Intel",
     emoji: "\u{1F4E8}",
     status: "planned",
     dotColor:
       "border-orange-400 bg-orange-50 text-orange-500 dark:border-orange-500 dark:bg-orange-950 dark:text-orange-400",
     items: [
-      "Decoupled scanner and provider model",
       "Notification templates and preferences",
-      "Inventory table and dashboard usability pass",
+      "Declarative and maturity policy workflows",
+      "Dashboard, responsive-list, and release hardening",
     ],
   },
   {
