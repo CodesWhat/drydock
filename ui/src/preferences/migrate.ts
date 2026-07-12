@@ -686,7 +686,15 @@ export function migrate(data: Record<string, unknown>): PreferencesSchema {
   }
 
   if (data.schemaVersion === 3) {
-    data = { ...data, schemaVersion: CURRENT_SCHEMA_VERSION };
+    data = { ...data, schemaVersion: 4 };
+  }
+
+  if (data.schemaVersion === 4) {
+    data = { ...data, schemaVersion: 5 };
+  }
+
+  if (data.schemaVersion === 5) {
+    data = { ...data, schemaVersion: 6 };
   }
 
   if (data.schemaVersion === 6) {
@@ -701,6 +709,18 @@ export function migrate(data: Record<string, unknown>): PreferencesSchema {
       }
     }
     data = { ...data, schemaVersion: 7 };
+  }
+
+  if (data.schemaVersion === 7) {
+    data = { ...data, schemaVersion: 8 };
+  }
+
+  if (data.schemaVersion === 8) {
+    data = { ...data, schemaVersion: 9 };
+  }
+
+  if (data.schemaVersion === 9) {
+    data = { ...data, schemaVersion: 10 };
   }
 
   if (data.schemaVersion === 10) {

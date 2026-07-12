@@ -520,6 +520,20 @@ describe('preferences migration', () => {
   });
 
   describe('schema v6 → v7 migration (softwareVersion column)', () => {
+    it('cascades schema v3 data through the v6 column migration', () => {
+      const result = migrate({
+        schemaVersion: 3,
+        containers: {
+          columns: ['icon', 'name', 'version', 'kind', 'status', 'server', 'registry'],
+        },
+      });
+
+      expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      expect(result.containers.columns.indexOf('softwareVersion')).toBe(
+        result.containers.columns.indexOf('version') + 1,
+      );
+    });
+
     it('should add softwareVersion column when migrating from schemaVersion 6', () => {
       const result = migrate({
         schemaVersion: 6,

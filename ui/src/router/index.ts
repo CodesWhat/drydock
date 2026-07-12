@@ -4,6 +4,10 @@ import {
   type RouteLocationNormalized,
   type RouteRecordRaw,
 } from 'vue-router';
+import {
+  clearStaleChunkReloadGuard,
+  requestStaleChunkReload,
+} from '@/bootstrap/stale-chunk-recovery';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { hydrateFromServer } from '@/preferences/sync';
 import { getUser } from '@/services/auth';
@@ -125,6 +129,16 @@ async function applyAuthNavigationGuard(to: RouteLocationNormalized) {
  */
 router.beforeEach(async (to) => {
   return await applyAuthNavigationGuard(to);
+});
+
+router.onError((error) => {
+  requestStaleChunkReload(error);
+});
+
+router.afterEach((_to, _from, failure) => {
+  if (!failure) {
+    clearStaleChunkReloadGuard();
+  }
 });
 
 export default router;

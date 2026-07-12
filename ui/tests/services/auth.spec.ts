@@ -30,6 +30,7 @@ describe('Auth Service', () => {
       expect(fetchMock).toHaveBeenCalledWith('/auth/user', {
         redirect: 'manual',
         credentials: 'include',
+        signal: expect.any(AbortSignal),
       });
       expect(user).toEqual(mockUser);
     });
@@ -53,6 +54,27 @@ describe('Auth Service', () => {
       const user = await getUser();
 
       expect(user).toBeUndefined();
+    });
+
+    it('aborts a stalled bootstrap request after eight seconds and falls back to logged out', async () => {
+      const controller = new AbortController();
+      const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
+      fetchMock.mockImplementationOnce((_url: string, init?: RequestInit) => {
+        return new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+        });
+      });
+      const { getUser } = await loadAuthService();
+
+      try {
+        const userPromise = getUser();
+        expect(timeoutSpy).toHaveBeenCalledWith(8_000);
+        controller.abort(new DOMException('Timed out', 'TimeoutError'));
+
+        await expect(userPromise).resolves.toBeUndefined();
+      } finally {
+        timeoutSpy.mockRestore();
+      }
     });
 
     it('logs fallback error detail when thrown value is not an Error object', async () => {

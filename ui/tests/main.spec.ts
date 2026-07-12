@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => {
     getSettings: vi.fn(),
     loadServerFeatures: vi.fn().mockResolvedValue(undefined),
     registerIcons: vi.fn(),
+    installVitePreloadErrorHandler: vi.fn(),
     router: { __name: 'router' },
   };
 });
@@ -40,6 +41,10 @@ vi.mock('@/composables/useServerFeatures', () => ({
 
 vi.mock('@/router', () => ({
   default: mocks.router,
+}));
+
+vi.mock('@/bootstrap/stale-chunk-recovery', () => ({
+  installVitePreloadErrorHandler: mocks.installVitePreloadErrorHandler,
 }));
 
 async function importMain() {
@@ -79,6 +84,7 @@ describe('main bootstrap', {
     mocks.getSettings.mockReset();
     mocks.loadServerFeatures.mockClear();
     mocks.registerIcons.mockClear();
+    mocks.installVitePreloadErrorHandler.mockClear();
     mocks.app.component.mockClear();
     mocks.app.directive.mockClear();
     mocks.app.use.mockClear();
@@ -94,6 +100,7 @@ describe('main bootstrap', {
     await importMain();
 
     expect(mocks.registerIcons).toHaveBeenCalledTimes(1);
+    expect(mocks.installVitePreloadErrorHandler).toHaveBeenCalledTimes(1);
     expect(mocks.loadServerFeatures).toHaveBeenCalledTimes(1);
     expect(mocks.disableIconifyApi).toHaveBeenCalledTimes(1);
     expect(mocks.createApp).toHaveBeenCalledTimes(1);

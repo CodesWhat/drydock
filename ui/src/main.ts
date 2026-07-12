@@ -3,6 +3,7 @@ import { createApp } from 'vue';
 import App from './App.vue';
 import { i18n, setI18nLocale } from './boot/i18n';
 import { disableIconifyApi, registerIcons } from './boot/icons';
+import { installVitePreloadErrorHandler } from './bootstrap/stale-chunk-recovery';
 import AppButton from './components/AppButton.vue';
 import AppIcon from './components/AppIcon.vue';
 import AppToast from './components/AppToast.vue';
@@ -28,6 +29,8 @@ import { getSettings } from './services/settings';
 import { useOperationStore } from './stores/operations';
 import './theme/tokens.css';
 import './style.css';
+
+installVitePreloadErrorHandler();
 
 // Pre-register only the icons we use so they render offline (no CDN fetch)
 registerIcons();
