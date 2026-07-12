@@ -1364,6 +1364,38 @@ describe('hass sensor sync gating by isContainerAllowed (#491)', () => {
     );
   });
 
+  test('a rejected removal publish drops the dedupe key so the next event retries; success re-establishes the dedupe', async () => {
+    isContainerAllowedMock.mockReturnValue(false);
+    const containerAddedCb = registerContainerAdded.mock.calls.at(-1)[0];
+    const container = { id: 'ctr-removal-retry', name: 'nginx', watcher: 'local' };
+    const internalSet = (gatedHass as unknown as { cleanedExcludedContainerKeys: Set<string> })
+      .cleanedExcludedContainerKeys;
+
+    // First excluded event: the removal publish rejects.
+    mqttClientGatedMock.publish.mockRejectedValueOnce(new Error('mqtt publish failed'));
+    await expect(containerAddedCb(container)).rejects.toThrow('mqtt publish failed');
+    // A failed removal must not be marked cleaned — the key must not stick.
+    expect(internalSet.size).toBe(0);
+
+    mqttClientGatedMock.publish.mockClear();
+
+    // Second excluded event: removal is attempted again (not skipped) and
+    // this time succeeds, so the key is (re-)added.
+    await containerAddedCb(container);
+    expect(mqttClientGatedMock.publish).toHaveBeenCalledWith(
+      'homeassistant/update/topic_local_nginx/config',
+      '',
+      { retain: true },
+    );
+    expect(internalSet.size).toBe(1);
+
+    mqttClientGatedMock.publish.mockClear();
+
+    // Third excluded event: dedupe works again after the successful removal.
+    await containerAddedCb(container);
+    expect(mqttClientGatedMock.publish).not.toHaveBeenCalled();
+  });
+
   test('flipping a container from excluded to included publishes a discovery add; flipping back publishes removal again', async () => {
     const containerUpdatedCb = registerContainerUpdated.mock.calls.at(-1)[0];
     const container = { id: 'ctr-flip', name: 'nginx', watcher: 'local' };

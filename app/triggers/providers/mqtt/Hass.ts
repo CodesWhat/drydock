@@ -739,7 +739,13 @@ class Hass {
       return;
     }
     this.cleanedExcludedContainerKeys.add(containerKey);
-    return this.removeContainerSensor(container);
+    return this.removeContainerSensor(container).catch((error) => {
+      // A failed removal must not mark the container cleaned — leaving the
+      // key in the set here would make every later event skip cleanup
+      // forever, so drop it and let the next event retry.
+      this.cleanedExcludedContainerKeys.delete(containerKey);
+      throw error;
+    });
   }
 
   /**
