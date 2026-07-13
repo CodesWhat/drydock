@@ -113,6 +113,16 @@ describe('preview errors', () => {
     expect(result.payload.details?.registry).toBe('registry.example');
   });
 
+  test.each([
+    'ECONNABORTED',
+    'ECONNRESET',
+    'ENETUNREACH',
+  ])('classifies a network message containing %s without a structured code', (code) => {
+    const result = classifyPreviewError(new Error(`request failed: ${code}`), container());
+    expect(result.status).toBe(503);
+    expect(result.payload.code).toBe('registry-network-error');
+  });
+
   test('uses container-runtime language when a network failure has no registry', () => {
     const result = classifyPreviewError(
       Object.assign(new Error('offline'), { code: 'ECONNRESET' }),
@@ -153,6 +163,7 @@ describe('preview errors', () => {
     expect(result.status).toBe(500);
     expect(result.payload.code).toBe('preview-runtime-error');
     expect(result.payload.message).toBe('Unable to prepare this update preview');
+    expect(result.payload.details).toBeUndefined();
   });
 
   test('sends an exact typed payload', () => {

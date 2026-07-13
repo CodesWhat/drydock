@@ -72,7 +72,7 @@ function getErrorCode(error: unknown): string | undefined {
   return typeof code === 'string' ? code : undefined;
 }
 
-function sanitizeReason(error: unknown): string {
+export function sanitizePreviewErrorReason(error: unknown): string {
   const withScrubbedHeaders = scrubAuthorizationHeaderValues(getErrorMessage(error));
   return withScrubbedHeaders.replace(/(https?:\/\/)[^\s/@]+(?::[^\s/@]*)?@/gi, '$1[REDACTED]@');
 }
@@ -108,7 +108,7 @@ export function classifyPreviewError(
   status: number;
   payload: PreviewErrorPayload;
 } {
-  const reason = sanitizeReason(error);
+  const reason = sanitizePreviewErrorReason(error);
   const registry = getRegistryHost(container);
   const details = { reason, ...(registry ? { registry } : {}) };
   const errorCode = getErrorCode(error);
@@ -145,7 +145,7 @@ export function classifyPreviewError(
 
   if (
     (errorCode && NETWORK_ERROR_CODES.has(errorCode)) ||
-    /\b(?:ECONNREFUSED|ENOTFOUND|ETIMEDOUT)\b/i.test(reason)
+    /\b(?:ECONNABORTED|ECONNREFUSED|ECONNRESET|ENETUNREACH|ENOTFOUND|ETIMEDOUT)\b/i.test(reason)
   ) {
     return {
       status: 503,
@@ -175,7 +175,6 @@ export function classifyPreviewError(
     payload: {
       code: 'preview-runtime-error',
       message: 'Unable to prepare this update preview',
-      details: { reason },
     },
   };
 }

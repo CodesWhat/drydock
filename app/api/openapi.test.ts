@@ -309,7 +309,10 @@ describe('OpenAPI document', () => {
       },
     });
     expect(previewPath.responses[401].content['application/json'].schema).toEqual({
-      $ref: '#/components/schemas/PreviewErrorResponse',
+      oneOf: [
+        { $ref: '#/components/schemas/ErrorResponse' },
+        { $ref: '#/components/schemas/PreviewErrorResponse' },
+      ],
     });
     expect(previewPath.responses[422].content['application/json'].schema).toEqual({
       $ref: '#/components/schemas/PreviewErrorResponse',

@@ -228,7 +228,6 @@ describe('Preview Router', () => {
       expect(res.json).toHaveBeenCalledWith({
         code: 'preview-runtime-error',
         message: 'Unable to prepare this update preview',
-        details: { reason: 'preview failed as string' },
       });
     });
 
@@ -274,7 +273,6 @@ describe('Preview Router', () => {
       expect(res.json).toHaveBeenCalledWith({
         code: 'container-runtime-not-found',
         message: 'Container was not found by the configured Docker watcher',
-        details: { reason: 'Container not found in Docker' },
       });
     });
 

@@ -741,7 +741,10 @@ export const containerPaths = {
           $ref: '#/components/schemas/PreviewResponse',
         }),
         401: jsonResponse('Authentication required or registry credentials rejected', {
-          $ref: '#/components/schemas/PreviewErrorResponse',
+          oneOf: [
+            { $ref: '#/components/schemas/ErrorResponse' },
+            { $ref: '#/components/schemas/PreviewErrorResponse' },
+          ],
         }),
         404: jsonResponse('Container, runtime container, or action trigger not found', {
           $ref: '#/components/schemas/PreviewErrorResponse',
