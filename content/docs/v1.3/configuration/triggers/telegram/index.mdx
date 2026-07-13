@@ -34,7 +34,7 @@ services:
     image: codeswhat/drydock
     ...
     environment:
-      - DD_TRIGGER_TELEGRAM_1_BOTTOKEN=0123456789:AApFzFLD0g0NVg8l0bZf55ex3sajC4Aw84Q
+      - DD_TRIGGER_TELEGRAM_1_BOTTOKEN=replace-with-your-telegram-bot-token
       - DD_TRIGGER_TELEGRAM_1_CHATID=9876543210
 ```
 
@@ -42,7 +42,7 @@ services:
 <Tab value="Docker">
 ```bash
 docker run \
-  -e DD_TRIGGER_TELEGRAM_1_BOTTOKEN="0123456789:AApFzFLD0g0NVg8l0bZf55ex3sajC4Aw84Q" \
+  -e DD_TRIGGER_TELEGRAM_1_BOTTOKEN="replace-with-your-telegram-bot-token" \
   -e DD_TRIGGER_TELEGRAM_1_CHATID="9876543210" \
   ...
   codeswhat/drydock
