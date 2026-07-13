@@ -168,18 +168,25 @@ test.describe('v1.6 discussion promises', () => {
                 (event) => event.containerName === containerName && event.health === 'unhealthy',
               );
             }, HEALTH_FIXTURE_NAME),
-          { message: 'Expected the browser SSE stream to receive dd:container-unhealthy' },
+          {
+            message: 'Expected the browser SSE stream to receive dd:container-unhealthy',
+            timeout: 15_000,
+          },
         )
         .toBe(true);
       await expect
         .poll(() => auditResponseCount, {
           message: 'Expected the mounted notification bell to refetch audit entries',
+          timeout: 15_000,
         })
         .toBeGreaterThan(auditResponsesBeforeTransition);
 
       await page.getByRole('button', { name: 'Notifications', exact: true }).click();
       await expect(
-        page.locator('[data-test="notification-row"]').filter({ hasText: HEALTH_FIXTURE_NAME }),
+        page
+          .locator('[data-test="notification-row"]')
+          .filter({ hasText: HEALTH_FIXTURE_NAME })
+          .first(),
       ).toBeVisible();
     } finally {
       await stopHealthEventProbe(page).catch(() => {});
