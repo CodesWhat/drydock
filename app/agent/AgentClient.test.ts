@@ -1077,6 +1077,8 @@ describe('AgentClient', () => {
 
     test('should ignore an in-flight SSE response that resolves after stop', async () => {
       const stream = new EventEmitter();
+      const destroy = vi.fn();
+      Object.assign(stream, { destroy });
       let resolveConnection: (value: { data: EventEmitter }) => void = () => {};
       axios.mockImplementationOnce(
         () =>
@@ -1094,6 +1096,7 @@ describe('AgentClient', () => {
 
       expect(attachStreamHandlersSpy).not.toHaveBeenCalled();
       expect((client as any).stableConnectionTimer).toBeNull();
+      expect(destroy).toHaveBeenCalledOnce();
     });
 
     test('should clear existing reconnect timer', () => {
@@ -3003,6 +3006,38 @@ describe('AgentClient', () => {
           container: expect.objectContaining({ id: 'c2', agent: 'test-agent' }),
         }),
       ]);
+    });
+
+    test('should isolate SBOM offload failures within a watcher snapshot', async () => {
+      mockOffloadSbomDocuments.mockRejectedValueOnce(new Error('controller storage unavailable'));
+      storeContainer.getContainer.mockReturnValue(undefined);
+      storeContainer.insertContainer.mockImplementation((container) => ({
+        ...container,
+        updateAvailable: true,
+      }));
+      storeContainer.getContainers.mockReturnValue([]);
+
+      await client.handleEvent('dd:watcher-snapshot', {
+        watcher: { type: 'docker', name: 'local' },
+        containers: [
+          {
+            id: 'c1',
+            name: 'broken-sbom',
+            watcher: 'local',
+            security: { sbom: { documents: { 'spdx-json': { broken: true } } } },
+          },
+          { id: 'c2', name: 'healthy', watcher: 'local' },
+        ],
+      });
+
+      expect(event.emitContainerReports).toHaveBeenCalledWith([
+        expect.objectContaining({
+          container: expect.objectContaining({ id: 'c2', agent: 'test-agent' }),
+        }),
+      ]);
+      expect(mockLogChild.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to process watcher snapshot container c1'),
+      );
     });
 
     test('should preserve changed=true for remote container updates when watcher snapshot closes the same cycle', async () => {

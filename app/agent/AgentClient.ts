@@ -902,6 +902,7 @@ export class AgentClient {
     })
       .then((response) => {
         if (this.stopped) {
+          response.data?.destroy?.();
           return;
         }
         // Reset the backoff only after the stream stays open long enough to be
@@ -992,15 +993,21 @@ export class AgentClient {
 
     const containerReports: ContainerReport[] = [];
     for (const container of containers) {
-      const pendingContainerReport = this.takePendingWatcherCycleReport(watcherName, container);
-      if (pendingContainerReport) {
-        this.clearPendingFreshState(container.id);
-        containerReports.push(
-          await this.buildContainerReport(container, pendingContainerReport.changed),
+      try {
+        const pendingContainerReport = this.takePendingWatcherCycleReport(watcherName, container);
+        if (pendingContainerReport) {
+          this.clearPendingFreshState(container.id);
+          containerReports.push(
+            await this.buildContainerReport(container, pendingContainerReport.changed),
+          );
+          continue;
+        }
+        containerReports.push(await this.processAuthoritativeContainer(container));
+      } catch (error: unknown) {
+        this.log.error(
+          `Failed to process watcher snapshot container ${sanitizeLogParam(container.id)} (${sanitizeLogParam(getErrorMessage(error))})`,
         );
-        continue;
       }
-      containerReports.push(await this.processAuthoritativeContainer(container));
     }
     this.clearPendingWatcherCycleReports(watcherName);
     await emitContainerReports(containerReports);
