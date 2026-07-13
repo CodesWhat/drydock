@@ -295,11 +295,10 @@ class Registry<
   ): Promise<string | undefined> {
     const imageToInspect = structuredClone(image);
     const tagToLookup = typeof tag === 'string' && tag.length > 0 ? tag : imageToInspect.tag?.value;
-    if (tagToLookup) {
-      imageToInspect.tag = {
-        ...(imageToInspect.tag || {}),
-        value: tagToLookup,
-      };
+    if (tagToLookup && imageToInspect.tag) {
+      imageToInspect.tag.value = tagToLookup;
+    } else if (tagToLookup) {
+      imageToInspect.tag = { value: tagToLookup, semver: false };
     }
     const manifest = options
       ? await this.getImageManifestDigest(imageToInspect, undefined, options)
