@@ -340,9 +340,9 @@
     },
     "updateInsight": {
       "badgeText": "Newer available",
-      "tooltipMajor": "Newer major version available: {tag}. This tag is pinned, so drydock won't act on it automatically — shown for information only.",
-      "tooltipMinor": "Newer minor version available: {tag}. This tag is pinned, so drydock won't act on it automatically — shown for information only.",
-      "tooltipPatch": "Newer patch version available: {tag}. This tag is pinned, so drydock won't act on it automatically — shown for information only."
+      "tooltipMajor": "Newer major version: {tag}. This tag is pinned — drydock won't update it automatically.",
+      "tooltipMinor": "Newer minor version: {tag}. This tag is pinned — drydock won't update it automatically.",
+      "tooltipPatch": "Newer patch version: {tag}. This tag is pinned — drydock won't update it automatically."
     },
     "eligibilityBadges": {
       "securityBlocked": "Security blocked",

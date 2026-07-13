@@ -29,6 +29,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - If the rollback itself fails (for example the backup image can't be pulled, or the replacement container never becomes healthy), that failure is recorded in the update-operations store and audit log but does not yet trigger a push notification — check the container's operation history or the audit log after a failed update to confirm whether the rollback actually succeeded.
 - A per-network `mac_address` (compose `networks.<net>.mac_address`) set on a non-primary network cannot be distinguished from a daemon-assigned MAC via the Docker API today — the daemon persists the desired MAC internally but never exposes it in `docker inspect` output — so it is not preserved across recreates; the daemon assigns a fresh MAC for that network instead.
 
+## [1.5.2-rc.4] — 2026-07-12
+
+### Fixed
+
+- Tooltip text now wraps inside a bounded popup instead of rendering one screen-wide line — the shared tooltip directive had `white-space: nowrap` and no `max-width`, so the pinned-tag "Newer available" insight tooltip (and any other long tooltip) rendered as a single ~130-character line off the edge of the viewport ([#498](https://github.com/CodesWhat/drydock/issues/498)).
+- The pinned-tag insight badge no longer clips in the containers list. Centered with no `max-width`, it could overflow its narrow table column and get hard-clipped on both sides; it now truncates gracefully with a trailing ellipsis instead ([#498](https://github.com/CodesWhat/drydock/issues/498)).
+- Shortened the pinned-tag insight tooltip copy so it reads cleanly at the tooltip's new bounded width ([#498](https://github.com/CodesWhat/drydock/issues/498)).
+
 ## [1.5.2-rc.3] — 2026-07-11
 
 ### Added
