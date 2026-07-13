@@ -16,8 +16,8 @@ When implementation, release, or live GitHub state changes, update this file in 
 
 - **Latest GA:** `v1.5.1`, released 2026-07-09.
 - **Patch candidate:** `v1.5.2-rc.4`, released 2026-07-12. It includes the #496 maturity-retention fix and the #498 pinned-tag detection/visibility work; the matching v1.6 UI forward-port still needs reconciliation.
-- **v1.6 branch:** local `dev/v1.6` contains the unpushed v1.6 stack through the #490 implementation (`14dd3af0`); `origin/dev/v1.6` remains at `87baa455`. Use `git status` for the live ahead/behind count rather than copying a self-invalidating local HEAD here.
-- **Verification:** backend 11,659 tests and UI 4,106 tests at 100% coverage; backend/UI lint, typecheck/build, and website build (262 pages) pass. The `v1.6.0` release precheck now correctly blocks on the four unchecked Discussion follow-ups below instead of passing vacuously.
+- **v1.6 branch:** local `dev/v1.6` contains the unpushed v1.6 stack through the final #325 review fixes (`3abdfa0c`); `origin/dev/v1.6` remains at `87baa455`. Use `git status` for the live ahead/behind count rather than copying a self-invalidating local HEAD here.
+- **Verification:** backend 11,689 tests and UI 4,136 tests at 100% coverage; backend/UI lint, typecheck/build, and website build (262 pages) pass. The `v1.6.0` release precheck correctly blocks on the four still-open unchecked Discussion follow-ups below instead of passing vacuously.
 - **GitHub metadata:** this repository has no GitHub milestones configured. “v1.6” assignments are release promises and tracker state, not GitHub milestone membership.
 
 ## v1.6 implemented and verified locally
@@ -52,13 +52,14 @@ Scanner runtime decoupling, Grype, scanner asset lifecycle, and SBOM off-heap st
 
 ## GitHub follow-up map
 
-### Open Discussions promised a v1.6 delivery
+### Discussions promised a v1.6 delivery
 
 | # | Topic | Local status | Live state | GA action |
 | --- | --- | --- | --- | --- |
 | #198 | [Health notifications](https://github.com/CodesWhat/drydock/discussions/198) | Promised health-event slice implemented; full auto-heal remains v2.1 | OPEN | ☐ Post the “shipped in v1.6.0” follow-up, then close per policy |
 | #220 | [Preference sync](https://github.com/CodesWhat/drydock/discussions/220) | Implemented locally | OPEN | ☐ Post the “shipped in v1.6.0” follow-up, then close per policy |
 | #242 | [Mobile-friendly views](https://github.com/CodesWhat/drydock/discussions/242) | Promised slice implemented locally | OPEN | ☐ Post the “shipped in v1.6.0” follow-up, then close per policy |
+| #325 | [Update Status and global update mode](https://github.com/CodesWhat/drydock/discussions/325) | Implemented locally, including review hardening | CLOSED / ANSWERED | ☐ Post the “shipped in v1.6.0” follow-up; no close action needed |
 | #406 | [Stabilization/countdown](https://github.com/CodesWhat/drydock/discussions/406) | Implemented locally | OPEN | ☐ Post the “shipped in v1.6.0” follow-up, then close per policy |
 
 ### Issues and PRs pending release convergence

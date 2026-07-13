@@ -792,14 +792,9 @@ The former pill stack mapped 1:1 to backend reasons. The implemented panel cover
 **Components:**
 
 - **`UpdateStatusPanel.vue`** — replaces the `<UpdateEligibilityBadges variant="full">` stack in `ContainerSideTabContent.vue` and `ContainerFullPageTabContent.vue`. Layout:
-  - **Status header** — single plain-language sentence: "Up to date", "Update available — will dispatch automatically", "Update available — auto-dispatch is filtered (manual works)", "Update blocked — fix required". One verb, derived from the highest-severity blocker.
-  - **Conditions list** — typed entries (icon + heading + body + action link), one per active blocker. Each condition gets a deep-link button:
-    - `agent-mismatch` → "Configure trigger for agent `<X>`" → opens `/triggers` with prefilled new-trigger flow
-    - `trigger-not-included` → "Edit container labels" → opens labels editor (or doc anchor when in-app editing isn't available)
-    - `no-update-trigger-configured` → "Add a docker action trigger" → `/triggers/new`
-    - `snoozed` / `skip-tag` / `skip-digest` / `maturity-not-reached` / `threshold-not-reached` → "Edit update policy" → opens the per-container policy editor (depends on Phase 5.x declarative update policy work)
-    - `security-scan-blocked` → "Review scan results" → security tab
-    - `rollback-container` → "View rollback context" → audit log
+  - **Status header** — single plain-language sentence: "Up to date", "Update available — eligible for automatic dispatch", "Update available — auto-dispatch is filtered (manual works)", "Update blocked — fix required". One verb, derived from the highest-severity blocker. Eligibility is not a guarantee of immediate deployment: watcher timing, queues, maintenance windows, security checks, and agent availability can still delay dispatch.
+  - **Conditions list** — typed entries (icon + heading + body + action link), one per active blocker. Actions open the in-app update-policy editor, operation history, Security view, or filtered Audit view where those surfaces exist. Configuration-owned conditions (`agent-mismatch`, trigger labels, missing triggers, thresholds, maintenance windows, and self-update availability) link to the relevant external configuration documentation because drydock has no in-app editor for those environment variables or labels.
+  - **Maintenance-window visibility** — `maintenance-window-closed` is enriched into both container-list and SSE status payloads for local and agent-owned containers, so the panel can explain an automatic deferral without waiting for a separate watcher event. Manual UI/API updates remain outside this automatic-dispatch gate.
   - **Manual update CTA** — explicit button, separate from auto-update story. Disabled when hard-blocked; warn-and-confirm when soft-blocked.
 - **Update mode global setting** — persisted server-side as `updateMode: 'notify' | 'manual' | 'auto'`.
   - `notify` — drydock detects + notifies but refuses both automatic and manual update admission with a clear 409 response. The Update Status Panel collapses to "Notifications only — drydock won't apply updates," with conditions behind a "Show details" disclosure and update actions disabled.

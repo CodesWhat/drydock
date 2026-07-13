@@ -28,7 +28,7 @@ In `notify` mode the Update Status panel leads with **Notifications only — Dry
 ## Where blockers appear
 
 - **Container table and cards** — the Update action carries one compact state: ready, soft-blocked (manual override available), or hard-blocked (locked). It does not repeat every reason on the row.
-- **Side panel and container full-page view** — the **Update Status** panel shows one plain-language summary followed by the active conditions. Actionable conditions link to the relevant trigger, update-policy, security, audit, or watcher surface. Time-limited conditions retain their countdown and exact lift time.
+- **Side panel and container full-page view** — the **Update Status** panel shows one plain-language summary followed by the active conditions. Actionable conditions open the relevant in-app update-policy, operation-history, security, or audit surface. Conditions backed by environment variables or container labels link to the corresponding configuration documentation because those values do not have an in-app editor. Time-limited conditions retain their countdown and exact lift time.
 - **Dashboard — Recent Updates widget** — uses the same compact Update-action state as the container list.
 
 If a container is eligible but an automatic update does not run, check that the global mode is `auto` and that a matching `docker` / `dockercompose` action trigger is configured to fire for that container.
@@ -52,7 +52,7 @@ If a container is eligible but an automatic update does not run, check that the 
 | `rollback-container` | **Rollback** | Hard | Container was created during a previous update as a rollback artifact and isn't itself updateable. | Not actionable — remove the rollback container manually if no longer needed. |
 | `active-operation` | **In progress** | Hard | An update is queued or already running for this container. | Wait for completion. |
 | `no-update-available` | **Up to date** | Hard/internal | No newer image was detected. Internal short-circuit; shown as the panel's summary rather than as an actionable condition. | N/A |
-| `maintenance-window-closed` | **Maintenance window closed** | Soft | Automatic-update dispatch evaluated the container while its watcher's maintenance window was closed. Drydock defers automatic updates outside the window regardless of whether the update was found by cron, manual watch, webhook, or post-update fast resync. Manual UI/API updates pass no maintenance-window state and are not gated by this blocker. | Wait for the next maintenance window or adjust `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW` / `_TZ`. |
+| `maintenance-window-closed` | **Maintenance window closed** | Soft | Automatic-update dispatch evaluated the container while its watcher's maintenance window was closed. Drydock defers automatic updates outside the window regardless of whether the update was found by cron, manual watch, webhook, or post-update fast resync. Container-list and SSE responses enrich this live watcher state for both local and agent-owned containers. Manual UI/API updates pass no maintenance-window state and are not gated by this blocker. | Wait for the next maintenance window or adjust `DD_WATCHER_{watcher_name}_MAINTENANCE_WINDOW` / `_TZ`. |
 
 <Callout type="info">The Update Status panel keeps `no-update-available` as the top-level **Up to date** state and avoids duplicating `active-operation` when an in-progress operation badge already communicates the same state elsewhere.</Callout>
 
@@ -93,7 +93,7 @@ The trigger and the container are bound to different agents. In the controller-a
 
 ## API
 
-The `updateEligibility` object is returned on every container in `GET /api/v1/containers` and pushed via SSE on changes. Shape:
+The `updateEligibility` object is returned on every container in `GET /api/v1/containers` and pushed via SSE on changes. Both paths enrich the owning watcher's live maintenance-window state, including the masked watcher state reported by remote agents. Shape:
 
 ```json
 {
