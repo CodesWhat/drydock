@@ -10,6 +10,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.2] — 2026-07-13
+
+Consolidates the `1.5.2-rc.1` … `1.5.2-rc.5` prereleases. Users upgrading from
+`1.5.1` get everything below; users already on `1.5.2-rc.5` receive no additional
+runtime changes.
+
+### Added
+
+- **Informational version visibility for pinned tags** ([#498](https://github.com/CodesWhat/drydock/issues/498)). A specific-precision, unlabeled, non-loose pinned tag (e.g. `nginx:1.25.3`) still gets digest-only comparison for update *actions* — that pin-gate behavior from rc.2 is unchanged — but the container result now carries a new `updateInsight: { tag, kind }` field showing the best newer same-family tag that exists in the registry, purely as information. It reuses the exact same strict-style family matching used for actionable updates (prefix + suffix/variant compatibility + matching numeric-segment count + CalVer leading-zero rules) — no exception is carved out for major-version jumps; strict matching never restricted those to begin with. One narrow widening is scoped to this informational channel only: a prerelease-pinned tag (e.g. `1.5.2-rc.1`) can see its own bare GA release (`1.5.2`) here, but that never makes the bare GA release an actionable update candidate — the actionable path rejects it just as before, even under `dd.tag.family=loose` or a permissive `dd.tag.include` filter. What's new is exposing this comparison at all for pinned tags, since the pin gate itself already blocks acting on any of it. Ties at the same numeric version prefer the tag whose suffix template exactly matches the pinned tag's. This is additive only: `updateAvailable`, `updateKind`, and trigger dispatch are all unaffected, so nothing new fires because of it. On by default; opt out per watcher with `DD_WATCHER_{name}_TAG_PIN_INFO=false`. Surfaced in the UI as an informational "Newer available" badge next to the existing update-state badges.
+
+### Changed
+
+- **Docs:** documented the socket-proxy requirements for recreating containers with a static IP or MAC address (macvlan, custom networks). Tecnativa/docker-socket-proxy needs both `POST=1` and `NETWORKS=1` for containers on more than one network (the extra `POST /networks/{id}/connect` calls); sockguard needs `request_body.network.allow_endpoint_config: true` to permit endpoint configs that specify a static IP or MAC address — and as of sockguard v1.5.0 and later (forthcoming at the time of this release), that requirement also applies to `POST /containers/create`, so single-network macvlan/static-IP containers need the policy set too, not just multi-network ones (older sockguard versions enforce the policy only at network-connect time). Added a matching FAQ entry for containers left renamed `-old-<timestamp>` after a failed update, including a note for operators who intentionally name a container in a way that collides with drydock's own rollback naming convention.
+
+### Fixed
+
+- **Container update policy is no longer lost when a container is recreated** ([#496](https://github.com/CodesWhat/drydock/issues/496)). Container documents are keyed by Docker's container ID, which changes every time a container is recreated (image pull, `docker compose up -d`, or an update trigger firing). The replacement was stored as a brand-new document and the per-container update policy — maturity gate, skipped tags/digests, snooze — was silently dropped along with the old one. Because an absent policy means "no gating" rather than "default gating", affected containers then updated immediately instead of respecting their maturity soak. The policy now survives a recreate, for containers watched locally and through a remote agent alike. Present since `1.4.1`, when per-container maturity policies were introduced.
+- The remote-agent prune path now distinguishes a recreated container from a removed one, so a container that reappears under a new ID keeps its update policy and its Home Assistant state topic, while a genuinely deleted container still has its discovery topics cleaned up.
+- Pinned semver tags (e.g. `nginx:1.25.3`) are now compared by digest by default, as originally announced in v1.5.0-rc.36 — a rebuilt image republished under the same tag is detected again. Previously digest watching was silently disabled for fully-pinned tags, leaving them with no update detection at all and a misleading "compared by digest only" notice on every pinned container ([#498](https://github.com/CodesWhat/drydock/issues/498)). Version climbing for pinned tags remains opt-in via `dd.tag.include` or `dd.tag.family=loose`. Note: in agent deployments, agents perform the registry checks — update agents alongside the controller to restore digest detection for agent-watched containers.
+- The "no update detection" notice shown when `dd.watch.digest=false` is explicitly set no longer claims digest comparison is happening.
+- Removed the unreachable flat `tagFamily` imgset config key (env-derived keys are lowercased, so it could never match); the documented `DD_WATCHER_{watcher}_IMGSET_{name}_TAG_FAMILY` form is unaffected.
+- `dd.tag.family=loose` no longer bypasses the suffix/variant guard in `isSemverFamilyMatch()`. A pinned `nginx:1.2.3-ls132` container could previously be offered a bare `1.2.4` (wrong variant) as an update candidate under loose policy — loose mode was only ever meant to relax prefix equality and CalVer leading-zero rules, not let updates cross a suffix/variant boundary entirely. The guard now applies unconditionally regardless of policy.
+- The candidate sort in `sortSemverDescending()` now prefers the exact-suffix-template match over a merely-compatible one when two candidates tie at the same numeric version (e.g. preferring `1.2.5-alpine` over `1.2.5-alpine3.21` for a `1.2.3-alpine` reference). Semver treats the suffix as a prerelease field, so without this fix the wrong variant could outrank the exact match purely on prerelease-string ordering.
+- Tooltip text now wraps inside a bounded popup instead of rendering one screen-wide line — the shared tooltip directive had `white-space: nowrap` and no `max-width`, so the pinned-tag "Newer available" insight tooltip (and any other long tooltip) rendered as a single ~130-character line off the edge of the viewport ([#498](https://github.com/CodesWhat/drydock/issues/498)).
+- The pinned-tag insight badge no longer clips in the containers list. Centered with no `max-width`, it could overflow its narrow table column and get hard-clipped on both sides; it now truncates gracefully with a trailing ellipsis instead ([#498](https://github.com/CodesWhat/drydock/issues/498)).
+- Shortened the pinned-tag insight tooltip copy so it reads cleanly at the tooltip's new bounded width ([#498](https://github.com/CodesWhat/drydock/issues/498)).
+- **Orphaned replacement container after a failed post-create network connect.** `createContainer` created the replacement container and then connected it to any additional networks in the same `try`; if a network connect failed (for example a static-IP endpoint config rejected by a socket proxy), the error was rethrown without exposing the created container, so nothing could clean it up. The renamed original (`<name>-old-<timestamp>`) stayed parked while the orphaned `Created`-state replacement squatted the real name. Every rollback consumer — the regular Docker update executor, self-update, health-monitor auto-rollback, the backup-restore API, and Docker Compose rollback restore — now recovers the created container from the error and best-effort stops + force-removes it before restoring the original container's name, tolerating cleanup failures with a warning rather than masking the original error. The same recovery applies when the replacement is created successfully but then fails to start.
+- **Repeated failed updates could cascade into a second rename.** If a container was already left renamed `-old-<timestamp>` by a prior failed update, a subsequent update attempt against it now fails immediately with a clear "needs manual cleanup" error naming the true canonical name (even through nested renames) instead of renaming and recreating again on top of the unresolved failure. The same guard protects drydock's own self-update.
+- **Replacement containers no longer inherit the previous container's auto-assigned MAC address.** The recreate path copied each network endpoint's operational `MacAddress` straight from `docker inspect`, permanently re-pinning a MAC the daemon had generated (stale once the endpoint's IP changes, and rejected outright by MAC-denying socket proxies such as sockguard's default policy). A MAC is now carried over only when it was configured container-wide (`docker run --mac-address` / compose's service-level `mac_address:`, i.e. `Config.MacAddress`), and only onto the container's primary network; daemon-assigned MACs are left for the daemon to regenerate.
+- **Locally-built images no longer spam nightly error counts.** Containers running an image with no registry-hosted digest (built locally or `docker load`ed) were still queried against the registry on every watch cycle, producing a 401 that got counted as a watch error. Drydock now detects images with no `RepoDigests` at discovery/refresh time and skips the registry lookup for them entirely.
+- The digest-watch throttling warning no longer prints `with domain undefined` for unprefixed Docker Hub image references (e.g. `nginx`); it now shows `docker.io`.
+
+### Known limitations
+
+- If the rollback itself fails (for example the backup image can't be pulled, or the replacement container never becomes healthy), that failure is recorded in the update-operations store and audit log but does not yet trigger a push notification — check the container's operation history or the audit log after a failed update to confirm whether the rollback actually succeeded.
+- A per-network `mac_address` (compose `networks.<net>.mac_address`) set on a non-primary network cannot be distinguished from a daemon-assigned MAC via the Docker API today — the daemon persists the desired MAC internally but never exposes it in `docker inspect` output — so it is not preserved across recreates; the daemon assigns a fresh MAC for that network instead.
+
 ## [1.5.2-rc.5] — 2026-07-13
 
 ### Fixed
@@ -1926,7 +1963,20 @@ Remaining upstream-only changes (not ported — not applicable to drydock):
 | Fix codeberg tests | Covered by drydock's own tests |
 | Update changelog | Upstream-specific |
 
-[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/CodesWhat/drydock/compare/v1.5.2...HEAD
+[1.5.2]: https://github.com/CodesWhat/drydock/compare/v1.5.2-rc.5...v1.5.2
+[1.5.2-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.5.2-rc.4...v1.5.2-rc.5
+[1.5.2-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.5.2-rc.3...v1.5.2-rc.4
+[1.5.2-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.5.2-rc.2...v1.5.2-rc.3
+[1.5.2-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.5.2-rc.1...v1.5.2-rc.2
+[1.5.2-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.5.1...v1.5.2-rc.1
+[1.5.1]: https://github.com/CodesWhat/drydock/compare/v1.5.1-rc.6...v1.5.1
+[1.5.1-rc.6]: https://github.com/CodesWhat/drydock/compare/v1.5.1-rc.5...v1.5.1-rc.6
+[1.5.1-rc.5]: https://github.com/CodesWhat/drydock/compare/v1.5.1-rc.4...v1.5.1-rc.5
+[1.5.1-rc.4]: https://github.com/CodesWhat/drydock/compare/v1.5.1-rc.3...v1.5.1-rc.4
+[1.5.1-rc.3]: https://github.com/CodesWhat/drydock/compare/v1.5.1-rc.2...v1.5.1-rc.3
+[1.5.1-rc.2]: https://github.com/CodesWhat/drydock/compare/v1.5.1-rc.1...v1.5.1-rc.2
+[1.5.1-rc.1]: https://github.com/CodesWhat/drydock/compare/v1.5.0...v1.5.1-rc.1
 [1.5.0]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.38...v1.5.0
 [1.5.0-rc.38]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.37...v1.5.0-rc.38
 [1.5.0-rc.37]: https://github.com/CodesWhat/drydock/compare/v1.5.0-rc.36...v1.5.0-rc.37
