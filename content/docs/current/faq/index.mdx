@@ -417,9 +417,9 @@ In versions prior to 1.5.2, a failure that happened *after* the replacement cont
 
 As of 1.5.2, Drydock detects and removes the orphaned replacement container as part of rollback, so the rename back to the original name succeeds automatically. If you're on an older version and hit this:
 
-1. Confirm which container currently holds the original name: `docker ps -a --filter name=<name>`
-2. If a `Created`-state container is squatting the name, remove it: `docker rm <container-id>`
-3. Rename the `-old-<timestamp>` container back: `docker rename <name>-old-<timestamp> <name>`
+1. List every matching container and note the IDs of the `Created` replacement and the stopped rollback container: `docker ps -a --filter name=<name> --format '{{.ID}}\t{{.Names}}\t{{.Status}}'`
+2. If the `Created` replacement is squatting the original name, remove it: `docker rm <replacement-container-id>`
+3. Rename the identified rollback container back by ID: `docker rename <rollback-container-id> <name>`
 4. If the container was started from Compose, `docker compose up -d` will also recreate it cleanly once the name is free.
 
 Upgrading to 1.5.2 or later prevents this from happening again. Note that if you intentionally gave a container a name matching this pattern (`<name>-old-<10+ digit number>`), Drydock can't tell it apart from its own rollback rename and will refuse to update it — rename the container to something outside that pattern to make it updatable again.
