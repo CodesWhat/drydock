@@ -155,8 +155,8 @@
       "defaultLinkLabel": "마이그레이션 가이드 보기"
     },
     "banners": {
-      "legacyConfigTitleSingular": "{total} legacy trigger input detected",
-      "legacyConfigTitlePlural": "{total} legacy trigger inputs detected",
+      "legacyConfigTitleSingular": "레거시 구성 별칭 {total}개 감지됨",
+      "legacyConfigTitlePlural": "레거시 구성 별칭 {total}개 감지됨",
       "legacyApiPathTitle": "{total} requests to the removed API path detected",
       "dontShowAgain": "다시 표시 안 함",
       "curlHealthcheckTitle": "사용자 정의 curl 헬스체크 재정의 감지됨",

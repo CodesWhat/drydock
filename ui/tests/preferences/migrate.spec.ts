@@ -538,6 +538,22 @@ describe('preferences migration', () => {
       );
     });
 
+    it.each([
+      1, 2,
+    ] as const)('cascades released schema v%s preferences through the softwareVersion migration', (schemaVersion) => {
+      const result = migrate({
+        schemaVersion,
+        containers: {
+          columns: ['icon', 'name', 'version', 'kind', 'status', 'server', 'registry'],
+        },
+      });
+
+      expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+      expect(result.containers.columns.indexOf('softwareVersion')).toBe(
+        result.containers.columns.indexOf('version') + 1,
+      );
+    });
+
     it('should add softwareVersion column when migrating from schemaVersion 6', () => {
       const result = migrate({
         schemaVersion: 6,

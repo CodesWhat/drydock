@@ -331,6 +331,50 @@ describe('NotificationsView', () => {
     });
   });
 
+  it('clears a rendered template preview when resetting the trigger template', async () => {
+    const wrapper = await mountNotificationsView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    await wrapper
+      .get('textarea[aria-label="Simple notification title"]')
+      .setValue('Draft preview title');
+    await wrapper.get('button[aria-label="Preview notification template"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('Preview title');
+
+    const resetTemplateButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('Reset template'));
+    expect(resetTemplateButton).toBeDefined();
+    await resetTemplateButton?.trigger('click');
+    await nextTick();
+
+    expect(wrapper.text()).not.toContain('Preview title');
+  });
+
+  it('clears a template preview error when resetting the trigger template', async () => {
+    mockPreviewNotificationTemplates.mockRejectedValueOnce(new Error('Preview request failed'));
+    const wrapper = await mountNotificationsView();
+    await wrapper.find('.row-click-first').trigger('click');
+    await flushPromises();
+
+    await wrapper
+      .get('textarea[aria-label="Simple notification title"]')
+      .setValue('Invalid draft title');
+    await wrapper.get('button[aria-label="Preview notification template"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('Preview request failed');
+
+    const resetTemplateButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('Reset template'));
+    await resetTemplateButton?.trigger('click');
+    await nextTick();
+
+    expect(wrapper.text()).not.toContain('Preview request failed');
+  });
+
   it('hides bell controls for rules without audit-backed bell events', async () => {
     mockGetAllNotificationRules.mockResolvedValue([
       makeRule({

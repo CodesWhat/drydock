@@ -1,4 +1,5 @@
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
+import { setI18nLocale } from '@/boot/i18n';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { mountWithPlugins } from '../helpers/mount';
 
@@ -140,6 +141,7 @@ describe('AppLayout', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    setI18nLocale('en');
     localStorage.clear();
     mockFetch = vi.fn();
     vi.stubGlobal('fetch', mockFetch);
@@ -470,6 +472,27 @@ describe('AppLayout', () => {
     expect(link.attributes('href')).toBe(
       'https://getdrydock.com/docs/deprecations#legacy-trigger-prefix',
     );
+  });
+
+  it('renders the legacy trigger banner title in the active non-English locale', async () => {
+    setI18nLocale('de');
+    mockGetServer.mockResolvedValue({
+      compatibility: {
+        legacyInputs: {
+          total: 2,
+          env: { total: 2, keys: ['DD_TRIGGER_DOCKER_LOCAL_AUTO'] },
+          label: { total: 0, keys: [] },
+        },
+      },
+    });
+
+    const wrapper = mountLayout();
+    mountedWrappers.push(wrapper);
+    await flushPromises();
+
+    const banner = wrapper.find('[data-testid="legacy-config-deprecation-banner"]');
+    expect(banner.text()).toContain('2 Legacy-Konfigurationsaliasse erkannt');
+    expect(banner.text()).not.toContain('2 legacy trigger inputs detected');
   });
 
   it('shows consolidated legacy config banner when only labels are detected', async () => {

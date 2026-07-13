@@ -155,8 +155,8 @@
       "defaultLinkLabel": "Zobacz przewodnik po migracji"
     },
     "banners": {
-      "legacyConfigTitleSingular": "{total} legacy trigger input detected",
-      "legacyConfigTitlePlural": "{total} legacy trigger inputs detected",
+      "legacyConfigTitleSingular": "{total} Wykryto alias starszej konfiguracji",
+      "legacyConfigTitlePlural": "{total} Wykryto starsze aliasy konfiguracji",
       "legacyApiPathTitle": "{total} requests to the removed API path detected",
       "dontShowAgain": "Nie pokazuj więcej",
       "curlHealthcheckTitle": "Wykryto niestandardowe zastąpienie kontroli stanu zwijania",

@@ -105,6 +105,52 @@ describe('DashboardGrid', () => {
     ]);
   });
 
+  it('keeps the first touch drag active when a second pointer presses another handle', async () => {
+    const wrapper = mountGrid();
+    const cells = wrapper.findAll('.dd-grid-item');
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: vi.fn(() => cells[2]!.element),
+    });
+
+    cells[0]!.get('.drag-handle').element.dispatchEvent(
+      pointerEvent('pointerdown', {
+        pointerId: 11,
+        pointerType: 'touch',
+        clientX: 10,
+        clientY: 10,
+      }),
+    );
+    cells[1]!.get('.drag-handle').element.dispatchEvent(
+      pointerEvent('pointerdown', {
+        pointerId: 12,
+        pointerType: 'touch',
+        clientX: 100,
+        clientY: 10,
+      }),
+    );
+    window.dispatchEvent(
+      pointerEvent('pointermove', {
+        pointerId: 11,
+        pointerType: 'touch',
+        clientX: 200,
+        clientY: 10,
+      }),
+    );
+    window.dispatchEvent(pointerEvent('pointerup', { pointerId: 11, pointerType: 'touch' }));
+    window.dispatchEvent(pointerEvent('pointercancel', { pointerId: 12, pointerType: 'touch' }));
+    await wrapper.vm.$nextTick();
+
+    const updatedLayout = wrapper.emitted('update:layout')?.at(-1)?.[0] as
+      | Array<{ i: string }>
+      | undefined;
+    expect(updatedLayout?.map((item) => item.i)).toEqual([
+      'stat-security',
+      'stat-registries',
+      'stat-containers',
+    ]);
+  });
+
   it('keeps read-only and invalid drag interactions inert', async () => {
     const readOnly = mountGrid({
       columns: 0,

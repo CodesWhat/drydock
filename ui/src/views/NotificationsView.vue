@@ -402,6 +402,14 @@ function setTemplateField(field: keyof NotificationTemplateOverride, value: stri
   templatePreviewError.value = '';
 }
 
+function resetTemplate() {
+  const triggerId = detailTemplateTriggerId.value;
+  if (!triggerId) return;
+  delete detailTemplates.value[triggerId];
+  templatePreview.value = null;
+  templatePreviewError.value = '';
+}
+
 async function previewSelectedTemplate() {
   if (!selectedRule.value || !detailTemplateTriggerId.value || templatePreviewLoading.value) return;
   templatePreviewLoading.value = true;
@@ -790,7 +798,7 @@ onMounted(async () => {
                   size="none"
                   variant="text-muted"
                   class="px-3 py-1.5 text-2xs-plus"
-                  @click="delete detailTemplates[detailTemplateTriggerId]"
+                  @click="resetTemplate"
                 >
                   {{ t('notificationsView.detail.resetTemplate') }}
                 </AppButton>
