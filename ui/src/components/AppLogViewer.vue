@@ -701,6 +701,14 @@ function toggleSortOrder(): void {
     </div>
 
     <div class="relative flex-1 min-h-[120px] flex flex-col">
+      <span
+        v-if="virtualizationEnabled"
+        data-test="app-log-virtual-status"
+        class="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >{{ renderedEntries.length }} / {{ displayEntries.length }} {{ t('appShell.logViewer.footer.lines') }}</span>
       <AppIconButton
         :icon="copyFailed ? 'xmark' : copySuccess ? 'check' : 'copy'"
         size="xs"

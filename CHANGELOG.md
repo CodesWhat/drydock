@@ -96,15 +96,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Large-image Trivy scans no longer race their own timeout or discard the pulled candidate on scanner errors.** The default `DD_SECURITY_TRIVY_TIMEOUT` is now 10 minutes, while Node gives Trivy an additional 30-second process grace so Trivy can report its own deadline instead of being killed as `exit=unknown`. The update gate retries one classified transient scanner failure, retains the pulled image when scanning itself errors, and still prunes images that are genuinely blocked by vulnerability policy. Local Trivy mode performs a serialized, single-flight `--download-db-only` warm-up outside the scan command's budget; server mode skips local warm-up. Scanner failures remain fail-closed. ([#490](https://github.com/CodesWhat/drydock/issues/490))
 
+- **The bundled Trivy binary now comes from an immutable official multi-architecture image digest.** The release image, default Docker scanner worker, and release-cut SBOM job use the same pinned Trivy release instead of installing a floating Alpine edge package. Cosign remains version-pinned from Alpine 3.24; `curl` remains in v1.6 for compatibility with user-defined health checks and is scheduled for removal in v1.7.
+
+- **Registry and runtime hardening is consistent across provider-specific paths.** Credential refresh, custom TLS settings, redirect handling, pagination cursors, and Docker Hub metadata requests now use the same bounded/fail-closed rules across supported registries. Secret-file loading, hook command policy, template property access, proxy-aware throttling, and API error responses were hardened in the same review pass.
+
+- **Agent reconnect and security-digest state are bounded and lifecycle-safe.** Removing an agent can no longer leave a reconnect queued, edge reconnect notifications reflect the real reconnect state, and digest notification buffers now expire and enforce configured limits across active and restored state.
+
 - **A stalled auth bootstrap request no longer leaves the app blank indefinitely.** The `/auth/user` request times out after eight seconds and falls through to the existing logged-out redirect path.
 
 - **Old preference schemas no longer skip intermediate migrations.** Schema-v3 data now advances through each numbered migration, so later additions such as the `softwareVersion` column are applied before reaching the current schema.
 
 - **Open tabs recover from stale lazy-loaded chunks after an upgrade.** Vite preload errors and matching Vue Router dynamic-import failures request one guarded page reload; successful navigation clears the session guard so a future upgrade can recover independently.
 
+- **Repeated stale-chunk failures are no longer silently swallowed after the guarded recovery attempt is exhausted.** The first matching preload failure still requests one session-guarded reload; later failures continue through Vite's normal error path so monitoring and the host page can surface them.
+
 - **Notification-bell controls now match their audit-backed event coverage.** `container-unhealthy` joins the bell query, rules without a corresponding bell audit action (currently `agent-reconnect`) no longer show controls that could not take effect, and health-only changes now propagate through local and agent lifecycle events. Unhealthy audit dedupe is scoped by agent + watcher + container, and a replayable health-transition SSE is ordered after audit processing so the bell refetch sees any newly inserted row. Severity thresholds remain scoped to `update-available`; notification-delivery failures remain always visible.
 
+- **Digest-only updates remain visible under every notification-bell severity setting.** Update audit entries now retain whether the change is tag- or digest-based, so `major`, `minor`, and `patch` settings no longer discard digest changes whose semantic-version severity is necessarily unknown. Unrelated unknown-severity tag entries remain filtered as before.
+
 - **The live system-log viewer keeps advancing after its browser buffer fills.** Rolling past the 2,000-entry client cap now replaces the reactive array instead of mutating it in place, so newest-first sorting and virtualization observe every rollover rather than freezing the visible newest row while the WebSocket continues receiving entries.
+
+- **Virtualized log position is stable while reading older entries.** Measured row-height changes and newest-first batch prepends compensate both the virtual window and DOM scroll position; a screen-reader-only status also reports rendered versus total lines without reintroducing thousands of DOM nodes.
 
 - `dd.tag.family=loose` no longer bypasses the suffix/variant guard in `isSemverFamilyMatch()`. A pinned `nginx:1.2.3-ls132` container could previously be offered a bare `1.2.4` (wrong variant) as an update candidate under loose policy — loose mode was only ever meant to relax prefix equality and CalVer leading-zero rules, not let updates cross a suffix/variant boundary entirely. The guard now applies unconditionally regardless of policy.
 - The candidate sort in `sortSemverDescending()` now prefers the exact-suffix-template match over a merely-compatible one when two candidates tie at the same numeric version (e.g. preferring `1.2.5-alpine` over `1.2.5-alpine3.21` for a `1.2.3-alpine` reference). Semver treats the suffix as a prerelease field, so without this fix the wrong variant could outrank the exact match purely on prerelease-string ordering.

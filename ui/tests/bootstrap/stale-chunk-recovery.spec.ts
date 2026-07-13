@@ -45,6 +45,16 @@ describe('stale chunk recovery', () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
+  it('does not swallow a repeated preload error after guarded recovery was exhausted', () => {
+    const reload = vi.fn();
+    sessionStorage.setItem('dd-stale-chunk-reload-pending', '1');
+    const event = new Event('vite:preloadError', { cancelable: true });
+
+    expect(handleVitePreloadError(event, reload)).toBe(false);
+    expect(event.defaultPrevented).toBe(false);
+    expect(reload).not.toHaveBeenCalled();
+  });
+
   it('allows a later recovery after a successful navigation clears the guard', () => {
     const reload = vi.fn();
     const error = new Error('Loading chunk 42 failed');

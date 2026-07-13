@@ -32,8 +32,10 @@ export function isBellRuleSupported(ruleId: string): boolean {
 function updateMeetsBellThreshold(
   semverDiff: AuditEntry['semverDiff'],
   threshold: NotificationBellThreshold,
+  updateKind: AuditEntry['updateKind'],
 ): boolean {
   if (threshold === 'all') return true;
+  if (updateKind === 'digest') return true;
   if (threshold === 'major') return semverDiff === 'major';
   if (threshold === 'minor') return semverDiff === 'major' || semverDiff === 'minor';
   return semverDiff === 'major' || semverDiff === 'minor' || semverDiff === 'patch';
@@ -125,7 +127,11 @@ export const useNotificationStore = defineStore('notifications', () => {
             (entry) =>
               entry.action !== 'update-available' ||
               !updateAvailableRule ||
-              updateMeetsBellThreshold(entry.semverDiff, updateAvailableRule.bellThreshold),
+              updateMeetsBellThreshold(
+                entry.semverDiff,
+                updateAvailableRule.bellThreshold,
+                entry.updateKind,
+              ),
           ),
         );
         if (data.hasMore !== true || pageEntries.length === 0) {

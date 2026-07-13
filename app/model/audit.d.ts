@@ -45,6 +45,7 @@ export interface AuditEntry {
   containerImage?: string;
   fromVersion?: string;
   toVersion?: string;
+  updateKind?: 'tag' | 'digest' | 'unknown';
   semverDiff?: 'major' | 'minor' | 'patch' | 'prerelease' | 'unknown';
   triggerName?: string;
   status: 'success' | 'error' | 'info';

@@ -149,7 +149,37 @@ describe('audit-subscriptions dedupe windows', () => {
     } as ContainerReport);
 
     expect(mockInsertAudit).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'update-available', semverDiff: 'major' }),
+      expect.objectContaining({
+        action: 'update-available',
+        updateKind: 'tag',
+        semverDiff: 'major',
+      }),
+    );
+  });
+
+  test('records digest update kind for notification bell thresholds', async () => {
+    const { containerReportHandler } = setupAuditSubscriptions();
+    await containerReportHandler({
+      container: {
+        name: 'api',
+        image: { name: 'acme/api' },
+        updateAvailable: true,
+        updateKind: {
+          kind: 'digest',
+          localValue: 'sha256:old',
+          remoteValue: 'sha256:new',
+          semverDiff: 'unknown',
+        },
+      },
+      changed: true,
+    } as ContainerReport);
+
+    expect(mockInsertAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'update-available',
+        updateKind: 'digest',
+        semverDiff: 'unknown',
+      }),
     );
   });
 

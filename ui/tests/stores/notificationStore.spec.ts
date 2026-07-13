@@ -202,9 +202,10 @@ describe('useNotificationStore', () => {
   });
 
   it.each([
-    ['all', ['unknown', 'major', 'minor', 'patch']],
-    ['minor', ['major', 'minor']],
-    ['patch', ['major', 'minor', 'patch']],
+    ['all', ['unknown', 'digest', 'major', 'minor', 'patch']],
+    ['major', ['digest', 'major']],
+    ['minor', ['digest', 'major', 'minor']],
+    ['patch', ['digest', 'major', 'minor', 'patch']],
   ] as const)('applies the %s update severity threshold', async (bellThreshold, expectedIds) => {
     mockGetAllNotificationRules.mockResolvedValueOnce([
       { id: 'update-available', bellEnabled: true, bellThreshold },
@@ -212,6 +213,13 @@ describe('useNotificationStore', () => {
     mockGetAuditLog.mockResolvedValueOnce({
       entries: [
         { ...entries[0], id: 'unknown', action: 'update-available' },
+        {
+          ...entries[0],
+          id: 'digest',
+          action: 'update-available',
+          updateKind: 'digest',
+          semverDiff: 'unknown',
+        },
         { ...entries[0], id: 'major', action: 'update-available', semverDiff: 'major' },
         { ...entries[0], id: 'minor', action: 'update-available', semverDiff: 'minor' },
         { ...entries[0], id: 'patch', action: 'update-available', semverDiff: 'patch' },

@@ -173,6 +173,10 @@ describe('AppLogViewer', () => {
     expect(initialRows.length).toBeGreaterThan(0);
     expect(initialRows.length).toBeLessThan(100);
     expect(wrapper.find('[data-test="app-log-bottom-spacer"]').exists()).toBe(true);
+    const virtualStatus = wrapper.get('[data-test="app-log-virtual-status"]');
+    expect(virtualStatus.attributes('role')).toBe('status');
+    expect(virtualStatus.attributes('aria-live')).toBe('polite');
+    expect(virtualStatus.text()).toMatch(/^\d+ \/ 1000 lines$/u);
 
     (viewport.element as HTMLElement).scrollTop = 14_000;
     await viewport.trigger('scroll');
