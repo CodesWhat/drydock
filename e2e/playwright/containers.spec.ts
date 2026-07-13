@@ -103,8 +103,7 @@ test.describe('Containers', () => {
     await page.getByRole('button', { name: 'Table view' }).click();
     await expect(page.locator('th', { hasText: 'Container' })).toBeVisible();
 
-    await page.getByRole('button', { name: 'Cards view' }).click();
-    await expect(page.locator('[data-test="dd-card"]').first()).toBeVisible();
+    await switchToCardsView(page);
     await expect(page.getByRole('button', { name: 'List view' })).toHaveCount(0);
   });
 

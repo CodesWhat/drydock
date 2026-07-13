@@ -78,7 +78,12 @@ async function interceptContainerCollection(route: Route): Promise<void> {
   const payload: unknown = await response.json();
   const collection = collectionFrom(payload);
   if (collection.length < FIXTURE_NAMES.length) {
-    throw new Error('The v1.6 mobile fixture requires at least two QA containers');
+    await route.fulfill({
+      response,
+      status: 503,
+      json: { error: 'The v1.6 mobile fixture requires at least two QA containers' },
+    });
+    return;
   }
   const withFixtures = collection.map((container, index) =>
     index < FIXTURE_NAMES.length ? fixtureContainer(container, index) : container,
@@ -211,7 +216,7 @@ test.describe('v1.6 mobile release promises', () => {
     await expect(releaseButtons[0]).toBeFocused();
 
     await releaseButtons[0].tap();
-    await releaseButtons[1].tap({ force: true });
+    await releaseButtons[1].tap();
     await expect(popover).toHaveCount(1);
     await expect(popover).toContainText(`${FIXTURE_NAMES[1]} release`);
     await expect(page.locator('[data-test="container-side-detail"]')).toHaveCount(0);
