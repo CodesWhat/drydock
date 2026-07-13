@@ -322,6 +322,9 @@ export const useEventStreamStore = defineStore('eventStream', () => {
     });
 
     source.addEventListener('dd:container-unhealthy', (event: MessageEvent) => {
+      if (event?.lastEventId && event.lastEventId === lastEventId.value) {
+        return;
+      }
       emit(
         'container-unhealthy',
         parseJsonPayload(event?.data),

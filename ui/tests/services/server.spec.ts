@@ -96,10 +96,11 @@ describe('Server Service', () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: false,
       statusText: 'Service Unavailable',
+      json: vi.fn().mockResolvedValue({ error: 'pull denied' }),
     } as any);
 
     await expect(manageSecurityAsset('trivy', 'pull')).rejects.toThrow(
-      'Scanner asset operation failed: Service Unavailable',
+      'Scanner asset operation failed: Service Unavailable (pull denied)',
     );
   });
 });

@@ -243,19 +243,28 @@ describe('SSE event listener: dd:container-unhealthy', () => {
     );
     expect(registeredCall).toBeDefined();
 
-    registeredCall![1](
-      new MessageEvent('dd:container-unhealthy', {
-        data: JSON.stringify({ containerName: 'web', health: 'unhealthy' }),
-        lastEventId: 'boot:health-1',
-      }),
-    );
+    const healthEvent = new MessageEvent('dd:container-unhealthy', {
+      data: JSON.stringify({ containerName: 'web', health: 'unhealthy' }),
+      lastEventId: 'boot:health-1',
+    });
+    registeredCall![1](healthEvent);
+    registeredCall![1](healthEvent);
 
     expect(bus.emit).toHaveBeenCalledWith('container-unhealthy', {
       containerName: 'web',
       health: 'unhealthy',
     });
+    expect(bus.emit).toHaveBeenCalledTimes(1);
+    store.connect(bus);
+    expect(MockEventSource.instances[1].url).toBe(
+      '/api/v1/events/ui?last-event-id=boot%3Ahealth-1',
+    );
 
-    registeredCall![1](
+    const replayedSource = MockEventSource.instances[1];
+    const replayedListener = replayedSource.addEventListener.mock.calls.find(
+      (call) => call[0] === 'dd:container-unhealthy',
+    );
+    replayedListener![1](
       new MessageEvent('dd:container-unhealthy', {
         data: JSON.stringify({ containerName: 'api', health: 'unhealthy' }),
       }),

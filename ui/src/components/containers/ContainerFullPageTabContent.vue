@@ -407,7 +407,7 @@ function getUpdateKindLabel(kind: Container['updateKind']) {
                 :release-link="selectedContainer.releaseLink"
                 :container-id="selectedContainer.id"
                 :from-tag="selectedContainer.currentTag"
-                :to-tag="selectedContainer.newTag"
+                :to-tag="selectedContainer.newTag || selectedContainer.updateInsight?.tag"
                 :registry="selectedContainer.registry"
                 :registry-name="selectedContainer.registryName"
                 :registry-url="selectedContainer.registryUrl"

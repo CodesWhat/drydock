@@ -175,8 +175,8 @@ describe('AppLogViewer', () => {
     expect(wrapper.find('[data-test="app-log-bottom-spacer"]').exists()).toBe(true);
     const virtualStatus = wrapper.get('[data-test="app-log-virtual-status"]');
     expect(virtualStatus.attributes('role')).toBe('status');
-    expect(virtualStatus.attributes('aria-live')).toBe('polite');
-    expect(virtualStatus.text()).toMatch(/^\d+ \/ 1000 lines$/u);
+    expect(virtualStatus.attributes('aria-live')).toBeUndefined();
+    expect(virtualStatus.text()).toBe('1000 lines');
 
     (viewport.element as HTMLElement).scrollTop = 14_000;
     await viewport.trigger('scroll');
@@ -247,6 +247,8 @@ describe('AppLogViewer', () => {
       wrapper?.unmount();
       if (originalResizeObserver) {
         Object.defineProperty(globalThis, 'ResizeObserver', originalResizeObserver);
+      } else {
+        delete (globalThis as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
       }
     }
   });

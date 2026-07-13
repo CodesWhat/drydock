@@ -62,6 +62,15 @@ describe('RegistryLink', () => {
     expect(registryLookup(wrapper)).toBe('registry.example.com');
   });
 
+  it('preserves a custom registry port in the lookup', () => {
+    const wrapper = mountRegistryLink({
+      registry: 'custom',
+      registryUrl: 'https://registry.example.com:5000/v2',
+    });
+
+    expect(registryLookup(wrapper)).toBe('registry.example.com:5000');
+  });
+
   it('renders nothing when no registry lookup can be derived', () => {
     const wrapper = mountRegistryLink({});
 

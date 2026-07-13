@@ -86,6 +86,18 @@ function signatureStatusLabel(signature: SecurityRuntimeStatus['signature']): st
   return t('securityView.runtimeTools.signatureReady');
 }
 
+type SecurityAsset = SecurityRuntimeStatus['assets'][number];
+
+function assetLifecycleOperation(asset: SecurityAsset): 'pull' | 'warm' {
+  return asset.state === 'ready' ? 'warm' : 'pull';
+}
+
+function assetLifecycleLabelKey(asset: SecurityAsset): string {
+  return asset.state === 'ready'
+    ? 'securityView.runtimeTools.warmAsset'
+    : 'securityView.runtimeTools.pullAsset';
+}
+
 function severityTone(severity: string) {
   if (severity === 'CRITICAL') return 'danger';
   if (severity === 'HIGH') return 'warning';
@@ -641,15 +653,15 @@ onUnmounted(() => {
                 <AppIconButton
                   v-for="asset in runtimeStatus.assets"
                   :key="`compact-asset-${asset.provider}`"
-                  :icon="asset.state === 'ready' ? 'restart' : 'cloud-download'"
+                  :icon="assetLifecycleOperation(asset) === 'warm' ? 'restart' : 'cloud-download'"
                   size="sm"
                   variant="muted"
                   class="shrink-0"
-                  :tooltip="t(asset.state === 'ready' ? 'securityView.runtimeTools.warmAsset' : 'securityView.runtimeTools.pullAsset', { provider: asset.provider })"
-                  :aria-label="t(asset.state === 'ready' ? 'securityView.runtimeTools.warmAsset' : 'securityView.runtimeTools.pullAsset', { provider: asset.provider })"
-                  :loading="assetOperation === `${asset.provider}:${asset.state === 'ready' ? 'warm' : 'pull'}`"
+                  :tooltip="t(assetLifecycleLabelKey(asset), { provider: asset.provider })"
+                  :aria-label="t(assetLifecycleLabelKey(asset), { provider: asset.provider })"
+                  :loading="assetOperation === `${asset.provider}:${assetLifecycleOperation(asset)}`"
                   :disabled="assetOperation !== null"
-                  @click="runAssetOperation(asset.provider, asset.state === 'ready' ? 'warm' : 'pull')" />
+                  @click="runAssetOperation(asset.provider, assetLifecycleOperation(asset))" />
               </template>
             </div>
             <template v-else>
@@ -682,10 +694,10 @@ onUnmounted(() => {
                   size="md"
                   variant="muted"
                   class="min-h-11"
-                  :loading="assetOperation === `${asset.provider}:${asset.state === 'ready' ? 'warm' : 'pull'}`"
+                  :loading="assetOperation === `${asset.provider}:${assetLifecycleOperation(asset)}`"
                   :disabled="assetOperation !== null"
-                  @click="runAssetOperation(asset.provider, asset.state === 'ready' ? 'warm' : 'pull')">
-                  {{ t(asset.state === 'ready' ? 'securityView.runtimeTools.warmAsset' : 'securityView.runtimeTools.pullAsset', { provider: asset.provider }) }}
+                  @click="runAssetOperation(asset.provider, assetLifecycleOperation(asset))">
+                  {{ t(assetLifecycleLabelKey(asset), { provider: asset.provider }) }}
                 </AppButton>
               </template>
             </template>

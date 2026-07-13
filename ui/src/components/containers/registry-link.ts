@@ -13,7 +13,7 @@ function registryHost(registryUrl?: string): string {
 
   const normalized = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : `https://${value}`;
   try {
-    return new URL(normalized).hostname;
+    return new URL(normalized).host;
   } catch {
     return '';
   }

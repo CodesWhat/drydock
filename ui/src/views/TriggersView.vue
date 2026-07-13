@@ -9,6 +9,7 @@ import { useBreakpoints } from '../composables/useBreakpoints';
 import { useViewMode } from '../preferences/useViewMode';
 import { getAllTriggers, getTrigger, runTrigger } from '../services/trigger';
 import type { ApiComponent } from '../types/api';
+import { isDryRunActionTrigger } from './containers/useContainerTriggers';
 
 const { t } = useI18n();
 const { isMobile } = useBreakpoints();
@@ -158,8 +159,7 @@ function mapTrigger(trigger: ApiComponent, status = 'active') {
     type: trigger.type,
     status,
     config,
-    dryRun:
-      (trigger.type === 'docker' || trigger.type === 'dockercompose') && config.dryrun === true,
+    dryRun: isDryRunActionTrigger(trigger),
     agent: trigger.agent,
   };
 }

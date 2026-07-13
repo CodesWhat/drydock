@@ -1018,6 +1018,7 @@ describe('ContainerFullPageTabContent', () => {
     expect(wrapper.get('[data-test="container-fullpage-insight-kind-badge"]').text()).toBe('Minor');
     expect(wrapper.find('[data-test="update-insight-badge"]').exists()).toBe(false);
     expect(wrapper.find('[data-test="update-status-panel-stub"]').exists()).toBe(true);
+    expect(wrapper.getComponent({ name: 'ContainerLinkActions' }).props('toTag')).toBe('v2.0.0');
   });
 
   it('shows floating tag badge in overview when tag precision is floating and digest watch is disabled', () => {

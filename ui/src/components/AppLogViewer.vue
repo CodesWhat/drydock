@@ -706,9 +706,7 @@ function toggleSortOrder(): void {
         data-test="app-log-virtual-status"
         class="sr-only"
         role="status"
-        aria-live="polite"
-        aria-atomic="true"
-      >{{ renderedEntries.length }} / {{ displayEntries.length }} {{ t('appShell.logViewer.footer.lines') }}</span>
+      >{{ displayEntries.length }} {{ t('appShell.logViewer.footer.lines') }}</span>
       <AppIconButton
         :icon="copyFailed ? 'xmark' : copySuccess ? 'check' : 'copy'"
         size="xs"

@@ -25,10 +25,13 @@ export function getTriggerKey(trigger: ApiContainerTrigger): string {
 export function findDryRunActionTrigger(
   triggers: readonly ApiContainerTrigger[],
 ): ApiContainerTrigger | undefined {
-  return triggers.find(
-    (trigger) =>
-      (trigger.type === 'docker' || trigger.type === 'dockercompose') &&
-      trigger.configuration?.dryrun === true,
+  return triggers.find(isDryRunActionTrigger);
+}
+
+export function isDryRunActionTrigger(trigger: ApiContainerTrigger): boolean {
+  return (
+    (trigger.type === 'docker' || trigger.type === 'dockercompose') &&
+    trigger.configuration?.dryrun === true
   );
 }
 

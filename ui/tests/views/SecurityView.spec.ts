@@ -70,6 +70,7 @@ vi.mock('@/views/security/securityViewUtils', async () => {
 });
 
 import { mount } from '@vue/test-utils';
+import ContainerLinkActions from '@/components/containers/ContainerLinkActions.vue';
 import { VIEW_TABLE_COLUMN_KEYS } from '@/preferences/schema';
 import { preferences, resetPreferences } from '@/preferences/store';
 import { clearIconCache, updateSettings } from '@/services/settings';
@@ -2009,21 +2010,24 @@ describe('SecurityView', () => {
 
       const w = factory({
         DataTable: securityLinkTableStub,
-        ContainerLinkActions: containerLinkActionsStub,
+        ContainerLinkActions,
         ContainerUpdateDialog: containerUpdateDialogStub,
       });
       await flushPromises();
 
-      const cluster = w.get('[data-test="container-link-actions-stub"]');
-      expect(w.findAll('[data-test="container-link-actions-stub"]')).toHaveLength(1);
-      expect(cluster.attributes('data-source-repo')).toBe('github.com/nginx/nginx');
-      expect(cluster.attributes('data-container-id')).toBe('c1');
-      expect(cluster.attributes('data-from-tag')).toBe('1.25');
-      expect(cluster.attributes('data-to-tag')).toBe('1.26');
-      expect(cluster.attributes('data-registry')).toBe('ghcr');
-      expect(cluster.attributes('data-registry-name')).toBe('GitHub Container Registry');
-      expect(cluster.attributes('data-registry-url')).toBe('https://ghcr.io/v2');
-      expect(cluster.attributes('data-icon-size')).toBe('sm');
+      const cluster = w.get('[data-test="container-quick-links"]');
+      const actions = w.getComponent(ContainerLinkActions);
+      expect(w.findAll('[data-test="container-quick-links"]')).toHaveLength(1);
+      expect(actions.props()).toMatchObject({
+        sourceRepo: 'github.com/nginx/nginx',
+        containerId: 'c1',
+        fromTag: '1.25',
+        toTag: '1.26',
+        registry: 'ghcr',
+        registryName: 'GitHub Container Registry',
+        registryUrl: 'https://ghcr.io/v2',
+        iconSize: 'sm',
+      });
 
       const resourceLayout = w.get('[data-test="security-resource-actions"]');
       const tableImageLayout = resourceLayout.element.parentElement;
@@ -2036,7 +2040,7 @@ describe('SecurityView', () => {
           );
       expect(canWrapAtNarrowWidths).toBe(true);
 
-      await cluster.get('[data-link-action="registry"]').trigger('click');
+      await cluster.get('[data-test="registry-link"]').trigger('click');
       expect((w.vm as any).selectedImage).toBeNull();
     });
   });
@@ -2238,19 +2242,22 @@ describe('SecurityView', () => {
         },
       ]);
 
-      const w = factory(securityCardStubs());
+      const w = factory({ ...securityCardStubs(), ContainerLinkActions });
       await flushPromises();
 
-      const cluster = w.get('[data-test="container-link-actions-stub"]');
-      expect(w.findAll('[data-test="container-link-actions-stub"]')).toHaveLength(1);
-      expect(cluster.attributes('data-source-repo')).toBe('github.com/nginx/nginx');
-      expect(cluster.attributes('data-container-id')).toBe('c1');
-      expect(cluster.attributes('data-from-tag')).toBe('1.25');
-      expect(cluster.attributes('data-to-tag')).toBe('1.26');
-      expect(cluster.attributes('data-registry')).toBe('ghcr');
-      expect(cluster.attributes('data-registry-name')).toBe('GitHub Container Registry');
-      expect(cluster.attributes('data-registry-url')).toBe('https://ghcr.io/v2');
-      expect(cluster.attributes('data-icon-size')).toBe('sm');
+      const cluster = w.get('[data-test="container-quick-links"]');
+      const actions = w.getComponent(ContainerLinkActions);
+      expect(w.findAll('[data-test="container-quick-links"]')).toHaveLength(1);
+      expect(actions.props()).toMatchObject({
+        sourceRepo: 'github.com/nginx/nginx',
+        containerId: 'c1',
+        fromTag: '1.25',
+        toTag: '1.26',
+        registry: 'ghcr',
+        registryName: 'GitHub Container Registry',
+        registryUrl: 'https://ghcr.io/v2',
+        iconSize: 'sm',
+      });
 
       const resourceLayout = w.get('[data-test="security-card-resource-actions"]');
       const actionLayout = resourceLayout.element.parentElement;
@@ -2262,7 +2269,7 @@ describe('SecurityView', () => {
         footerLayout?.classList.contains('flex-col');
       expect(canWrapAtNarrowWidths).toBe(true);
 
-      await cluster.get('[data-link-action="registry"]').trigger('click');
+      await cluster.get('[data-test="registry-link"]').trigger('click');
       expect((w.vm as any).selectedImage).toBeNull();
     });
 
